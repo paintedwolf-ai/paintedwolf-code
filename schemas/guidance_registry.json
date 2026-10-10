@@ -566,6 +566,12 @@
       "emit": "guard:tool",
       "summary": "The coverage assessment is missing, incomplete, or stale."
     },
+    "COMPLETE_LEG_REVIEW_ASSIGNMENT_MISSING": {
+      "branch_instruction": "Preserve the evidence already gathered and report this dependency; do not invent a revision.",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "This review has no recorded assignment subject."
+    },
     "COMPLETE_LEG_STATUS_REQUIRED": {
       "branch_instruction": "Correct the report shape and actual status, then submit complete_leg",
       "category": "recoverable",
@@ -2666,7 +2672,7 @@
       "summary": "Some submitted citations do not resolve to the active review evidence union."
     },
     "SUBMIT_VERDICT_INVALID": {
-      "branch_instruction": "Correct only the invalid fields and resubmit the current expected call with observed citations.",
+      "branch_instruction": "Correct the named fields using exact missing_claim_ids and expected_claim_ids when supplied, then resubmit the current expected call with observed citations.",
       "category": "recoverable",
       "emit": "guard:workflow",
       "summary": "The verdict payload does not match the active review phase contract."
@@ -2700,6 +2706,18 @@
       "category": "recoverable",
       "emit": "guard:workflow",
       "summary": "The verdict does not cite these required reviewer envelopes: {{ paintedwolf.review_uncited_reviewers }}."
+    },
+    "SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED": {
+      "branch_instruction": "Refresh the context before dispatching any replacement review.",
+      "category": "recoverable",
+      "emit": "guard:workflow",
+      "summary": "The review context changed after this submission was prepared."
+    },
+    "SUBMIT_VERDICT_REVIEW_REQUIRED": {
+      "branch_instruction": "Reconcile the resulting evidence before resubmitting the verdict.",
+      "category": "recoverable",
+      "emit": "guard:workflow",
+      "summary": "Required review evidence is unavailable for these inputs."
     },
     "SUBMIT_VERDICT_SCANS_PENDING": {
       "branch_instruction": "Do not submit a partial inventory or start another scan to replace one that is still running.",
@@ -2874,6 +2892,12 @@
       "category": "recoverable",
       "emit": "guard:task",
       "summary": "Requested max_tool_loops {{ paintedwolf.max_tool_loops }} falls outside the current host range {{ paintedwolf.min_required }}–{{ paintedwolf.host_max }}."
+    },
+    "TASK_REVIEW_FRESH_WORKSPACE_REQUIRED": {
+      "branch_instruction": "Start a new reviewer with the registered work ID; retain earlier reviews as evidence.",
+      "category": "recoverable",
+      "emit": "guard:workflow",
+      "summary": "A question reassessment requires a fresh worker workspace."
     },
     "TASK_SCOPE_PROFILE_READ_ONLY": {
       "branch_instruction": "Branch on Code: pick a mutation-capable profile for write overlays; keep read-only profiles on read scope.",
@@ -3492,6 +3516,12 @@
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "Tried to deliver the workflow's completion report while the durable run is still in phase `{{ paintedwolf.phase }}`."
+    },
+    "WORKFLOW_REVIEW_VIEW_INVALID": {
+      "branch_instruction": "Correct the named selector; ask the coordinator if no assignment is available.",
+      "category": "recoverable",
+      "emit": "guard:workflow",
+      "summary": "The requested review view is unavailable or invalid."
     },
     "WORKFLOW_SESSION_COMPOSE_REQUIRED": {
       "branch_instruction": "Use the current workflow contract and explicit human start action; do not invent a start or composition API call.",

@@ -1,14 +1,14 @@
 package review
 
 import (
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
+	"time"
 )
 
 func TestQuestionClosureRequiresInvestigationOrBoundedImmateriality(t *testing.T) {
@@ -50,7 +50,7 @@ func TestQuestionClosureRequiresFreshSuccessfulReview(t *testing.T) {
 	questions := []reviewQuestionWork{{ID: "question/c6", ClaimID: "c6"}}
 	review := &api.CoverageReview{Assessments: []api.CoverageAssessment{{ID: "question/c6", Disposition: reviewcoverage.Covered}}}
 	now := time.Now().UTC()
-	tasks := []api.WorkerTask{{WorkflowPhase: "challenge", WorkflowWorkID: "question/c6", Status: api.WorkerStatusComplete, CompletedAt: &now}}
+	tasks := []api.WorkerTask{{ID: "investigation", WorkflowPhase: "challenge", WorkflowWorkID: "question/c6", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, CompletedAt: &now}}
 	if err := checkQuestionClosure(def, claims, questions, tasks, "challenge", review); err == nil {
 		t.Fatal("resolved question bypassed reviewer")
 	}
@@ -59,7 +59,7 @@ func TestQuestionClosureRequiresFreshSuccessfulReview(t *testing.T) {
 	if err := checkQuestionClosure(def, claims, questions, tasks, "challenge", review); err == nil {
 		t.Fatal("stale reviewer accepted")
 	}
-	tasks[1].CreatedAt = now
+	tasks[1].AfterWorkers = []string{"investigation"}
 	if err := checkQuestionClosure(def, claims, questions, tasks, "challenge", review); err != nil {
 		t.Fatalf("fresh reviewer rejected: %v", err)
 	}
@@ -87,6 +87,14 @@ func TestQuestionVerdictsCannotReplenishInvestigationBudget(t *testing.T) {
 		reject := toolrejection.AsToolReject(err)
 		if reject == nil || reject.Data["reason"] != "investigations_exhausted" {
 			t.Fatalf("exhausted questions admitted another follow-up: %v", err)
+		}
+	}
+}
+
+func TestPrerequisiteRefusalsDoNotSpendSubmissionRepairBudget(t *testing.T) {
+	for _, code := range []string{ReviewRequiredCode, ReviewContextChangedCode, SubmitVerdictScansPendingCode} {
+		if runstate.RepairableVerdictCodes([]string{code}) {
+			t.Errorf("prerequisite %s consumes malformed-submission budget", code)
 		}
 	}
 }

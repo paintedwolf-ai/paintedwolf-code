@@ -1,55 +1,55 @@
 {
   "artifact": {
-    "id": "20807509-2f6f-4695-985d-22c064f1f175",
+    "id": "32428765-63cf-4cba-a506-95ed1acaf1e9",
     "mime": "image/png",
     "sha256": "cd08723e6cfd3f359d7994f4e64d439e7f75ec22080e760be1bb993b40fbe900"
   },
   "grant": {
     "category": "host",
     "expires_at": "2099-01-01T00:00:00Z",
-    "granted_at": "2026-10-09T20:13:17.904529928Z",
+    "granted_at": "2026-10-10T06:57:35.013169Z",
     "id": "grant_vZryNRplPGGrAtV-Z93HbKuK3SxTPEYb3EnTg_rEkU0",
     "pattern": "*.example.com",
     "scope": "device"
   },
   "messages": [
     {
-      "content": "",
-      "id": "2502fab8-62e4-459d-a2dd-71f3fb5121dc",
-      "role": "assistant"
-    },
-    {
       "content": "corpus seed",
-      "id": "636bf8ba-ba51-4d5c-b5a0-789bef9316c4",
+      "id": "01294f87-2b85-4658-8c12-17c5dcb49413",
       "role": "user"
     },
     {
       "content": "",
-      "id": "68fef0e3-213c-4df0-8d4d-0fd45e425f0f",
-      "role": "tool"
-    },
-    {
-      "content": "",
-      "id": "90a268a6-03fc-563d-a9dc-641189a56673",
+      "id": "12af10c9-017d-59ab-8faf-ff1438ccacfc",
       "role": "system"
     },
     {
+      "content": "",
+      "id": "2564a2ee-497f-47cc-9fe3-a08d9a632117",
+      "role": "tool"
+    },
+    {
       "content": "Corpus seed turn complete.",
-      "id": "a76fbc61-ea7d-469a-9b5e-68dfd757da8d",
+      "id": "4b433c56-647f-4db1-810d-5597739f4bb8",
+      "role": "assistant"
+    },
+    {
+      "content": "",
+      "id": "9f3d82c4-10f6-44ba-ad54-2b0f196bb3cf",
       "role": "assistant"
     }
   ],
-  "project_id": "166586c2-d4ed-44ed-b17b-662827c489ae",
+  "project_id": "f8c6b828-de71-4007-9d14-0c401b9c73f6",
   "trust_read": {
     "review": {
       "changes": [
         {
           "after": "# Retained configuration change.\nformat: 1\ndisabled: []\n",
           "before": "format: 1\ndisabled: []\n",
-          "id": "ef1e6811-13b8-5903-a29c-1dda6aa56d73",
+          "id": "984f496b-49ac-5a44-861a-16e36e76cc32",
           "kind": "modified",
           "path": ".paintedwolf/extensions.yaml",
-          "root_id": "4d5502e2-7dce-4c4d-a438-40460b7c44f0",
+          "root_id": "963b7bb0-e3ae-4e02-8700-85e53fd81958",
           "root_label": "seed-project",
           "surface_ids": [
             "extension_config",
@@ -57,8 +57,8 @@
           ]
         }
       ],
-      "id": "52d9da48-e072-5455-ba37-384305c1709f",
-      "project_id": "166586c2-d4ed-44ed-b17b-662827c489ae"
+      "id": "d06dcee6-108d-58d3-a0c4-fb4f5a35546c",
+      "project_id": "f8c6b828-de71-4007-9d14-0c401b9c73f6"
     },
     "surfaces": {
       "agents_md": true,

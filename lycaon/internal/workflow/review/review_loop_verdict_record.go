@@ -7,14 +7,14 @@ import (
 	"encoding/json"
 	"fmt"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
-	"strconv"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -83,7 +83,7 @@ func (m *Verdicts) RecordReviewLoopVerdict(
 	case out.Valid && workflowvalidation.ReviewLoopVerdictTerminal(rl, verdict):
 		out.Terminal = true
 		out.Attempt = attemptSoFar
-		committedVars = runstate.StampReviewVerdict(vars, key, verdict)
+		committedVars = runstate.StampReviewVerdict(questionVars, key, verdict)
 		committedVars = runstate.SatisfyGateInVars(committedVars, "evidence_passed:"+key)
 	case out.Valid && rl.FollowupAttempts > 0:
 		committedVars = questionVars
@@ -94,7 +94,7 @@ func (m *Verdicts) RecordReviewLoopVerdict(
 		out.IterationCapExceeded = true
 		out.Attempt = attemptSoFar
 	case out.Valid:
-		committedVars = bumpReviewLoopAttempt(vars, active.CurrentPhase)
+		committedVars = runstate.BumpReviewLoopAttempt(vars, active.CurrentPhase)
 		out.Attempt = runstate.ReviewLoopAttempt(committedVars, active.CurrentPhase)
 	}
 	if out.Valid && committedVars != nil {
@@ -113,23 +113,19 @@ func (m *Verdicts) RecordReviewLoopVerdict(
 		return out, prepareErr
 	}
 	op = *stored
-	if op.Status == "prepared" && out.Valid {
-		// Validated provenance supersedes the raw citation args once the audit ran.
-		persistCited := allVerdictCitations(rl, verdict, citedEvidence)
-		if out.Grounding != nil && len(out.Grounding.CitedEvidence) > 0 {
-			persistCited = out.Grounding.CitedEvidence
-		}
-		if err := m.persistReviewLoopEvidence(ctx, sessionID, active, rl, target.PhaseID, verdict, persistCited, citedURLs, evidenceID, op.CreatedAt); err != nil {
-			return out, err
-		}
-	}
-	if op.Status == "prepared" {
-		if err := m.Records.MarkVerdictEvidenceApplied(ctx, operationID); err != nil {
-			return out, err
-		}
-	}
 	projectDir := m.Resolver.ProjectDirForRun(ctx, active)
 	if err := m.Records.CommitVerdictOperation(ctx, op, active, projectDir, committedVars, out); err != nil {
+		if rejection := toolrejection.AsToolReject(err); rejection != nil && rejection.Code == ReviewContextChangedCode {
+			if resolveErr := m.Records.ResolveVerdictOperationDiverged(ctx, operationID, rejection.Code); resolveErr != nil {
+				return out, resolveErr
+			}
+			out.Valid, out.Terminal, out.CoverageIssue = false, false, rejection
+			return out, nil
+		}
+		return out, err
+	}
+	op.Status = "committed"
+	if err := m.publishVerdictEvidence(ctx, op, out); err != nil {
 		return out, err
 	}
 	unlockVars()
@@ -140,7 +136,9 @@ func (m *Verdicts) RecordReviewLoopVerdict(
 	}
 	if !out.Valid {
 		// Only an exceeded iteration cap requests a decision.
-		m.notifyReviewLoopHeld(ctx, sessionID, out.IterationCapExceeded)
+		if out.IterationCapExceeded {
+			m.notifyReviewLoopHeld(ctx, sessionID, true)
+		}
 		return out, nil
 	}
 	if rl.FollowupAttempts > 0 {
@@ -176,6 +174,9 @@ func (m *Verdicts) resolveVerdictReplay(ctx context.Context, operationID, inputD
 		if err := json.Unmarshal([]byte(existing.ResponseJSON), &replayed); err != nil {
 			return verdictReplay{}, err
 		}
+		if err := m.publishVerdictEvidence(ctx, *existing, replayed); err != nil {
+			return verdictReplay{}, err
+		}
 		if replayed.Terminal {
 			_, _ = m.Phases.TryAutoAdvance(ctx, existing.RunID)
 		}
@@ -192,7 +193,6 @@ func (m *Verdicts) resolveVerdictReplay(ctx context.Context, operationID, inputD
 type verdictTarget struct {
 	Run       *api.WorkflowRun
 	Loop      workflowdef.ReviewLoopDef
-	PhaseID   string
 	Key       string
 	Converged bool
 }
@@ -239,7 +239,7 @@ func (m *Verdicts) resolveVerdictTarget(
 	if key == "" {
 		return converge("phase " + active.CurrentPhase + " review loop has no evidence key")
 	}
-	return verdictTarget{Run: active, Loop: rl, PhaseID: def.ID, Key: key}, nil
+	return verdictTarget{Run: active, Loop: rl, Key: key}, nil
 }
 
 // allVerdictCitations flattens the top-level citation channel with every
@@ -278,6 +278,7 @@ func (m *Verdicts) persistReviewLoopEvidence(
 	citedURLs []string,
 	recordID string,
 	recordedAt time.Time,
+	attempt int,
 ) error {
 	if m == nil || m.EvidenceStore == nil {
 		return nil
@@ -298,10 +299,6 @@ func (m *Verdicts) persistReviewLoopEvidence(
 		return nil
 	}
 	artifacts := verdictArtifacts(verdict, citedEvidence, citedURLs)
-	attempt := 0
-	if vars, err := m.Runs.GetScaffoldVars(ctx, active.ID); err == nil {
-		attempt = runstate.ReviewLoopAttempt(vars, phaseID)
-	}
 	rec := evidence.GateRecord(
 		evidence.GateType(strings.TrimSpace(rl.EvidenceKey)),
 		phaseID,
@@ -414,6 +411,3 @@ func (m *Verdicts) notifyReviewLoopHeld(ctx context.Context, sessionID string, d
 	}
 }
 
-func bumpReviewLoopAttempt(vars map[string]any, phaseID string) map[string]any {
-	return runstate.SetHostVar(vars, runstate.ReviewLoopAttemptPath(phaseID), strconv.Itoa(runstate.ReviewLoopAttempt(vars, phaseID)+1))
-}

@@ -2,6 +2,16 @@ description: "Inspect worker and project state, or read shared findings. Use det
 schema:
   type: object
   properties:
+    review_view:
+      type: string
+      enum: [summary, assignments, subject]
+      description: Read workflow review context; exclusive with findings and detail_level.
+    assignment_id:
+      type: string
+      description: Exact assignment identity for the subject view.
+    cursor:
+      type: string
+      description: Continuation returned by the selected review view.
     finding_id:
       type: integer
       minimum: 1

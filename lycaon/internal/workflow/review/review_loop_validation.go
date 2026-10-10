@@ -79,5 +79,9 @@ func (m *Verdicts) validateReviewSubmission(ctx context.Context, active *api.Wor
 			}
 		}
 	}
-	return reviewValidation{Outcome: out, Vars: questionVars}, nil
+	validated := reviewValidation{Outcome: out, Vars: questionVars}
+	if out.Valid && workflowvalidation.ReviewLoopVerdictTerminal(rl, verdict) && rl.CarriesCoverage() {
+		return m.Assignments.retainAccepted(ctx, active, rl, verdict, validated)
+	}
+	return validated, nil
 }

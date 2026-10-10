@@ -3,6 +3,7 @@ package presentation
 import (
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 
+	"net/url"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -43,6 +44,7 @@ func (a PhaseExitChoiceArm) CoordinatorMayFire() bool {
 // only — the sentences an agent reads are written in the catalog, by
 // guidance/active-workflow.md under "### Phase exit".
 type PhaseExitView struct {
+	ReviewWorkIDs    map[string]string
 	Kind             string
 	AdvanceAuthority string
 	DepthParam       string
@@ -100,6 +102,12 @@ func ProjectPhaseExit(manifest workflowdef.Manifest, phase workflowdef.PhaseDef,
 			reviewAgents = runstate.DedupeReviewAgents(phase.ReviewLoop.RequiredAgents, phase.ReviewLoop.IfSpawnable)
 		}
 		out.ReviewAgents = append([]string(nil), reviewAgents...)
+		if phase.ReviewLoop.AssignmentBinding == "explicit" {
+			out.ReviewWorkIDs = map[string]string{}
+			for _, agent := range reviewAgents {
+				out.ReviewWorkIDs[agent] = "review/" + url.PathEscape(agent)
+			}
+		}
 	case phase.HumanApproval != nil:
 		out.Kind = PhaseExitKindHumanApproval
 		out.HumanApproval = true
@@ -175,6 +183,7 @@ func choiceExitArms(edges []workflowdef.PhaseTransitionDef) []PhaseExitChoiceArm
 func (exit PhaseExitView) InjectView() *inject.PhaseExitView {
 	pe := &inject.PhaseExitView{
 		Kind:                exit.Kind,
+		ReviewWorkIDs:       exit.ReviewWorkIDs,
 		DepthParam:          exit.DepthParam,
 		CoordinatorAdvances: exit.CoordinatorAdvances,
 		OpenGates:           append([]string(nil), exit.OpenGates...),

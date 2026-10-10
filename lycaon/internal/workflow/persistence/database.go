@@ -14,7 +14,8 @@ func New(database db.Handle) *runstate.Repository {
 	blueprints := &Blueprints{transactions: tx}
 	teardowns := &Teardowns{transactions: tx}
 	verdicts := &Verdicts{transactions: tx}
+	assignments := &Assignments{transactions: tx}
 	starts.runs = runs
 	commands.runs = runs
-	return &runstate.Repository{Runs: runs, State: state, Starts: starts, Commands: commands, Blueprints: blueprints, Teardowns: teardowns, Verdicts: verdicts, Transactions: tx}
+	return &runstate.Repository{Assignments: assignments, Runs: runs, State: state, Starts: starts, Commands: commands, Blueprints: blueprints, Teardowns: teardowns, Verdicts: verdicts, Transactions: tx}
 }

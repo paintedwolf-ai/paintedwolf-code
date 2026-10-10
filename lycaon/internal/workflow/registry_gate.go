@@ -33,6 +33,16 @@ func (e RegistryGateEvaluator) PhaseGateMet(ctx context.Context, manifest workfl
 	if !ok {
 		return true, workflowgates.GateCheckResult{}, nil
 	}
+	// Review evidence may be prepared before its command commits. Only the
+	// committed host gate can authorize leaving a review phase.
+	if def.ReviewLoop != nil {
+		gate := "evidence_passed:" + def.ReviewLoop.EvidenceKey
+		gates, _ := vars["gates"].(map[string]any)
+		committed, _ := gates[gate].(bool)
+		if !committed {
+			return false, workflowgates.GateCheckResult{Reason: workflowdef.CompleteWhenGatesSatisfied, FailedGate: gate, FailedLeaves: []string{gate}}, nil
+		}
+	}
 	okPrimary, result, err := e.evaluatePrimaryGate(ctx, def, run, vars)
 	if err != nil || !okPrimary {
 		return okPrimary, result, err

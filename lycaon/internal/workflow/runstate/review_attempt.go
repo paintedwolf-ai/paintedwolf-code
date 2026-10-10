@@ -17,3 +17,7 @@ func ReviewLoopAttempt(vars map[string]any, phaseID string) int {
 	}
 	return 0
 }
+
+func BumpReviewLoopAttempt(vars map[string]any, phaseID string) map[string]any {
+	return SetHostVar(vars, ReviewLoopAttemptPath(phaseID), strconv.Itoa(ReviewLoopAttempt(vars, phaseID)+1))
+}

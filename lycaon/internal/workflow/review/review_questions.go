@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
@@ -18,10 +19,13 @@ import (
 )
 
 type reviewQuestionWork struct {
-	ID      string `json:"id"`
-	ClaimID string `json:"claim_id"`
+	ReviewWorkID string `json:"review_work_id,omitempty"`
+	ID           string `json:"id"`
+	ClaimID      string `json:"claim_id"`
 	workflowvalidation.ReviewQuestion
 }
+
+func questionReviewWorkID(id string) string { return id + "/review" }
 
 func reviewQuestionPath(phase string) string { return "review_questions." + phase }
 
@@ -80,9 +84,30 @@ func (m *Questions) Prepare(ctx context.Context, run *api.WorkflowRun, def workf
 		return vars, err
 	}
 	terminal := workflowvalidation.ReviewLoopVerdictTerminal(def, verdict)
+	if terminal {
+		rules, err := m.Verdicts.VerdictRulesFor(ctx, run)
+		if err != nil {
+			return vars, err
+		}
+		var missing, expected []string
+		for id := range rules.KnownClaims {
+			expected = append(expected, id)
+			if !slices.ContainsFunc(claims, func(c workflowvalidation.VerdictClaim) bool { return c.ID == id }) {
+				missing = append(missing, id)
+			}
+		}
+		if len(missing) > 0 {
+			slices.Sort(missing)
+			slices.Sort(expected)
+			return vars, &toolrejection.ToolReject{Code: workflowvalidation.ReviewLoopVerdictInvalidCode, Data: map[string]any{"action": "edit_submission", "missing_claim_ids": missing, "expected_claim_ids": expected, "reason": "missing_claim_outcomes"}}
+		}
+	}
 	known, err = registerReviewQuestions(def, claims, known, facts, terminal)
 	if err != nil {
 		return vars, err
+	}
+	for i := range known {
+		known[i].ReviewWorkID = questionReviewWorkID(known[i].ID)
 	}
 	if terminal {
 		if m.WorkerTasks == nil {

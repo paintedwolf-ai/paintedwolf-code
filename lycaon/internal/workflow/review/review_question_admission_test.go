@@ -2,12 +2,12 @@ package review
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -15,9 +15,10 @@ func TestQuestionTaskAdmissionUsesDurableAttempts(t *testing.T) {
 	now := time.Now().UTC()
 	def := workflowdef.ReviewLoopDef{FollowupAttempts: 2, RequiredAgents: []string{"skeptic"}}
 	vars := runstate.SetHostVar(nil, reviewQuestionPath("challenge"), `[{"id":"question/c6","claim_id":"c6","missing_fact":"Trace admission","obligations":["execute/leg-1"]}]`)
-	investigation := api.WorkerTask{WorkflowPhase: "challenge", WorkflowWorkID: "question/c6", Status: api.WorkerStatusComplete, CompletedAt: &now}
+	investigation := api.WorkerTask{ID: "investigation", WorkflowPhase: "challenge", WorkflowWorkID: "question/c6", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, CompletedAt: &now}
 	partial := api.WorkerTask{WorkflowPhase: "challenge", WorkflowWorkID: "question/c6/review", AgentType: "skeptic", Status: api.WorkerStatusComplete, CreatedAt: now, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "partial"}}}
 	successful := partial
+	successful.AfterWorkers = []string{investigation.ID}
 	successful.Result = &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}
 	for _, tc := range []struct {
 		name, work, agent, reason string
@@ -29,6 +30,7 @@ func TestQuestionTaskAdmissionUsesDurableAttempts(t *testing.T) {
 		{name: "bounded investigations", work: "question/c6", reason: "review_question_attempts_exhausted", tasks: []api.WorkerTask{investigation, investigation}},
 		{name: "unknown question", work: "question/other", reason: "unknown_review_question"},
 		{name: "review before investigation", work: "question/c6/review", agent: "skeptic", reason: "review_question_investigation_required"},
+		{name: "partial investigation is not review evidence", work: "question/c6/review", agent: "skeptic", reason: "review_question_investigation_required", tasks: []api.WorkerTask{{WorkflowPhase: "challenge", WorkflowWorkID: "question/c6", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "partial"}}}}},
 		{name: "fresh reviewer", work: "question/c6/review", agent: "skeptic", tasks: []api.WorkerTask{investigation}},
 		{name: "partial reviewer can recover", work: "question/c6/review", agent: "skeptic", tasks: []api.WorkerTask{investigation, partial, partial}},
 		{name: "completed review is reused", work: "question/c6/review", agent: "skeptic", reason: "review_question_already_reviewed", tasks: []api.WorkerTask{investigation, successful}},
@@ -48,5 +50,16 @@ func TestQuestionTaskAdmissionUsesDurableAttempts(t *testing.T) {
 				t.Fatalf("rejection = %v, want %s", err, tc.reason)
 			}
 		})
+	}
+}
+
+func TestQuestionReviewRejectsResumeBeforeAddingPrerequisites(t *testing.T) {
+	mgr := &Questions{WorkerTasks: func(context.Context, string) ([]api.WorkerTask, error) { return nil, nil }}
+	vars := runstate.SetHostVar(nil, reviewQuestionPath("challenge"), `[{"id":"question/c6","claim_id":"c6","missing_fact":"Trace admission","obligations":[]}]`)
+	task := &api.WorkerTask{WorkflowWorkID: questionReviewWorkID("question/c6"), AgentType: "skeptic", ChildSessionID: "existing-child"}
+	err := mgr.AssertTask(t.Context(), &api.WorkflowRun{ID: "run", CurrentPhase: "challenge"}, workflowdef.ReviewLoopDef{RequiredAgents: []string{"skeptic"}}, vars, task)
+	rejected := toolrejection.AsToolReject(err)
+	if rejected == nil || rejected.Code != "TASK_REVIEW_FRESH_WORKSPACE_REQUIRED" || len(task.AfterWorkers) != 0 {
+		t.Fatalf("resume failed on an injected prerequisite: %v", err)
 	}
 }

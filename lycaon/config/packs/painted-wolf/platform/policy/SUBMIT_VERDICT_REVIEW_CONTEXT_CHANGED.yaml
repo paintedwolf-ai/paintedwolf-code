@@ -1,0 +1,22 @@
+oar: '1.0'
+id: SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED
+kind: policy
+anchor: tool.rejected
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles: [tool]
+when: paintedwolf.rejection_code == "SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED"
+effect: block
+copy:
+  what: The review context changed after this submission was prepared.
+  cause: The submitted revision does not identify the current reconciliation inputs.
+  why: Existing accepted results remain recorded; their applicability is checked separately.
+  fix: Read pack_board with review_view summary and reconcile the changed inputs before using its revision.
+  instead: Refresh the context before dispatching any replacement review.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:workflow
+x-paintedwolf-message: Refresh the changed review context.
+x-paintedwolf-scenarios:
+- id: refresh
+  vars: {}
+  expect_contains: ['Code: SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED', 'review_view']

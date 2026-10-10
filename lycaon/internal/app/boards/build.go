@@ -118,6 +118,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	})
 
 	if err := board.RegisterBoardTools(r.deps.Execution.Host.Registry, board.ToolDeps{
+		ReviewView:         r.deps.Workflows.Manager.Assignments.View,
 		Builder:            r.Snapshot,
 		Findings:           func() findings.Store { return r.Findings },
 		RootSession:        r.rootSessionKey,

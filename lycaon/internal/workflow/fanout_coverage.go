@@ -38,6 +38,11 @@ func (m *Fanout) WorkflowWork(ctx context.Context, sessionID, workID string) (sp
 	if err != nil {
 		return spawn.WorkflowWork{}, false, err
 	}
+	if def.ReviewLoop != nil {
+		if work, known := m.Assignments.Work(run, *def.ReviewLoop, workID); known {
+			return work, true, nil
+		}
+	}
 	plan, planned := runstate.FanoutPlanForPhase(vars, def)
 	if !planned {
 		if def.ReviewLoop == nil || def.ReviewLoop.FollowupAttempts == 0 {
@@ -77,7 +82,10 @@ func (m *Fanout) BindWorkflowTask(ctx context.Context, tctx tools.ToolContext, w
 		return nil
 	}
 	task.WorkflowRunID, task.WorkflowPhase, task.WorkflowWorkID = run.ID, run.CurrentPhase, strings.TrimSpace(workID)
-	return m.AssertWorkerTask(ctx, task)
+	if err := m.AssertWorkerTask(ctx, task); err != nil {
+		return err
+	}
+	return m.Assignments.Bind(ctx, run, task)
 }
 
 // AssertWorkerTask is called again under queue admission to serialize attempts.
@@ -103,6 +111,11 @@ func (m *Fanout) AssertWorkerTask(ctx context.Context, task *api.WorkerTask) err
 	}
 	plan, planned := runstate.FanoutPlanForPhase(vars, def)
 	if !planned {
+		if def.ReviewLoop != nil {
+			if handled, err := m.Assignments.AssertDeclared(ctx, run, *def.ReviewLoop, task); handled {
+				return err
+			}
+		}
 		if def.ReviewLoop != nil && def.ReviewLoop.FollowupAttempts > 0 && task.WorkflowWorkID != "" {
 			return m.Questions.AssertTask(ctx, run, *def.ReviewLoop, vars, task)
 		}

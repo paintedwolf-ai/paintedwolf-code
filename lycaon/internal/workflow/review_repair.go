@@ -128,7 +128,7 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 	var boundary *api.Message
 	if blocked {
 		episode.State = "blocked"
-		snapshot := m.captureSnapshot(ctx, run, manifest, vars, result.ToolArgs)
+		snapshot := m.CaptureSnapshot(ctx, run, manifest, vars, result.ToolArgs)
 		episode.Snapshot = &snapshot
 		if phase.ReviewLoop.CarriesCoverage() && len(snapshot.Unavailable) == 0 {
 			facts := workflowreview.BuildCoverageFacts(manifest, vars, snapshot.Workers, snapshot.Scans)
@@ -223,7 +223,8 @@ func finalReviewResponseResult(messages []api.Message, candidate api.Message) (b
 	return last == candidate.ID, nil
 }
 
-func (m ReviewRepairs) captureSnapshot(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, vars map[string]any, candidate map[string]any) ReviewSnapshot {
+// CaptureSnapshot retains the inputs shared by review assignments and refusal accounting.
+func (m ReviewRepairs) CaptureSnapshot(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, vars map[string]any, candidate map[string]any) ReviewSnapshot {
 	snapshot := ReviewSnapshot{Vars: map[string]any{}, Candidate: jsonvalue.CloneMap(candidate)}
 	// Only report inputs are copied, excluding repair episodes themselves.
 	for _, key := range []string{"fanout_plans"} {
@@ -285,7 +286,7 @@ func (m ReviewRepairs) BlockContract(ctx context.Context, runID string, cause er
 	if err != nil {
 		return err
 	}
-	snapshot := m.captureSnapshot(ctx, run, manifest, vars, nil)
+	snapshot := m.CaptureSnapshot(ctx, run, manifest, vars, nil)
 	now := time.Now().UTC()
 	repair := ReviewRepair{Snapshot: &snapshot, ID: uuid.NewString(), Phase: run.CurrentPhase, State: "blocked", CreatedAt: now, UpdatedAt: now, Diagnostics: []api.ToolFeedback{{Code: reviewContractInvalidCode, Details: map[string]any{"reason": cause.Error()}}}}
 	if len(snapshot.Unavailable) == 0 {

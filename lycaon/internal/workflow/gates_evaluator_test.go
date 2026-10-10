@@ -94,3 +94,23 @@ func TestCollectFailedLeavesUnknownIgnored(t *testing.T) {
 		t.Fatalf("failed = %v", failed)
 	}
 }
+
+func TestReviewGateRequiresCommittedWorkflowAcceptance(t *testing.T) {
+	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDepsWithEvidence())
+	testutil.FailErr(t, "create successful evidence registry", err)
+	run := &api.WorkflowRun{SessionID: "session", CurrentPhase: "review"}
+	manifest := workflowdef.Manifest{PhaseDefs: []workflowdef.PhaseDef{{ID: "review", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"evidence_passed:rl_key"}, ReviewLoop: &workflowdef.ReviewLoopDef{EvidenceKey: "rl_key"}}}}
+	evaluator := RegistryGateEvaluator{Registry: reg}
+	var vars map[string]any
+	passed, _, err := evaluator.PhaseGateMet(t.Context(), manifest, run, vars)
+	testutil.FailErr(t, "check prepared evidence", err)
+	if passed {
+		t.Fatal("external evidence bypassed verdict commit")
+	}
+	vars = runstate.SetGateSatisfied(vars, "evidence_passed:rl_key", true)
+	passed, _, err = evaluator.PhaseGateMet(t.Context(), manifest, run, vars)
+	testutil.FailErr(t, "check committed acceptance", err)
+	if !passed {
+		t.Fatal("committed review gate did not pass")
+	}
+}

@@ -117,8 +117,18 @@ func (s *Reports) BuildRunReportInput(ctx context.Context, runID string) (report
 		Sources:          sourcesFromGrounding(completion.Grounding, verdicts, verdictURLs),
 	}
 
+	vars, err := s.Runs.Runs.GetScaffoldVars(ctx, run.ID)
+	if err != nil {
+		return report.ReportInput{}, false, err
+	}
+	accepted, err := runstate.AcceptedReviewInputsFromVars(vars, manifest)
+	if err != nil {
+		return report.ReportInput{}, false, err
+	}
 	var scans []wire.CodeScan
-	if s.Scans != nil {
+	if accepted != nil {
+		scans = accepted.Snapshot.Scans
+	} else if s.Scans != nil {
 		scans, err = s.Scans.ListByWorkflowRunID(ctx, run.ID)
 		if err != nil {
 			return report.ReportInput{}, false, err
@@ -131,7 +141,9 @@ func (s *Reports) BuildRunReportInput(ctx context.Context, runID string) (report
 	input.HeadSHA = headSHA
 
 	var account runAccount
-	if err := s.workAccount(ctx, &account, run, manifest); err != nil {
+	if accepted != nil {
+		account.accountWorkers(manifest, accepted.Snapshot.Vars, accepted.Snapshot.Workers)
+	} else if err := s.workAccount(ctx, &account, run, manifest); err != nil {
 		return report.ReportInput{}, false, err
 	}
 	account.claimAccount(manifest, claims)

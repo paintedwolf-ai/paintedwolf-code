@@ -11,7 +11,7 @@ import (
 func decodeCompleteLeg(b *serveBuilder) workertools.CompleteLegDecoder {
 	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (workertools.CompleteLegRecord, error) {
 		return b.delegations.DecodeCompleteLeg(ctx, args, tctx, func(c context.Context, task *wire.WorkerTask, review *wire.CoverageReview) error {
-			return b.workflows.Manager.Coverage.ValidateCoverageCompletion(c, task, review)
+			return b.workflows.Manager.Assignments.ValidateCoverageCompletion(c, task, review)
 		})
 	}
 }

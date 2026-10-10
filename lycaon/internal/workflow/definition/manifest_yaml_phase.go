@@ -265,6 +265,7 @@ func parseReviewLoopYAML(phaseID string, raw reviewLoopYAML) (*ReviewLoopDef, er
 	agents := uniqueAgentIDs(raw.RequiredAgents)
 	spawnable := uniqueAgentIDs(raw.IfSpawnable)
 	def := &ReviewLoopDef{
+		AssignmentBinding:         raw.AssignmentBinding,
 		CoverageReviewers:         uniqueAgentIDs(raw.CoverageReviewers),
 		ReconcilesPhase:           raw.ReconcilesPhase,
 		FollowupAttempts:          raw.FollowupAttempts,
@@ -295,6 +296,12 @@ func parseReviewLoopYAML(phaseID string, raw reviewLoopYAML) (*ReviewLoopDef, er
 	}
 	if def.FollowupAttempts > 0 && (!def.CarriesClaims() || !def.CarriesCoverage() || def.ReconcilesPhase == "" || len(agents) == 0 || len(strings.Split(def.VerdictSchema[VerdictDecisionKey], "|")) < 2) {
 		return nil, fmt.Errorf("phase %q: follow-up requires reconciled claims, coverage, a reviewer, and a non-terminal verdict", phaseID)
+	}
+	if def.AssignmentBinding == "explicit" && (!def.CarriesCoverage() || len(def.RequiredAgents) == 0) {
+		return nil, fmt.Errorf("phase %q: explicit review assignments require coverage and required_agents", phaseID)
+	}
+	if def.AssignmentBinding != "" && def.AssignmentBinding != "explicit" {
+		return nil, fmt.Errorf("invalid review assignment binding %q", def.AssignmentBinding)
 	}
 	for _, agent := range def.CoverageReviewers {
 		if !slices.Contains(agents, agent) || !def.CarriesCoverage() || def.ReconcilesPhase == "" {

@@ -139,3 +139,10 @@ func testWorkflowManager(t *testing.T) (*workflow.RunManager, string, string) {
 	mgr.SetConditionRegistry(reg)
 	return mgr, sess.ID, projectDir
 }
+
+func setReviewWorkerTasks(mgr *workflow.RunManager, query func(context.Context, string) ([]api.WorkerTask, error)) {
+	mgr.Fanout.WorkerTasks = query
+	mgr.Coverage.WorkerTasks = query
+	mgr.Verdicts.WorkerTasks = query
+	mgr.Verdicts.Questions.WorkerTasks = query
+}

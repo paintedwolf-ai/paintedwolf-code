@@ -80,12 +80,6 @@ func (s *Verdicts) RebaseVerdictOperation(ctx context.Context, toolCallID string
 	return err
 }
 
-func (s *Verdicts) MarkVerdictEvidenceApplied(ctx context.Context, toolCallID string) error {
-	return s.transactions.queries.MarkWorkflowVerdictEvidenceApplied(ctx, db.MarkWorkflowVerdictEvidenceAppliedParams{
-		UpdatedAt: db.FormatTime(time.Now().UTC()), ToolCallID: toolCallID,
-	})
-}
-
 func (s *Verdicts) PendingVerdictOperations(ctx context.Context) ([]runstate.VerdictOperation, error) {
 	rows, err := s.transactions.queries.ListPendingWorkflowVerdictOperations(ctx)
 	if err != nil {
@@ -117,6 +111,11 @@ func (s *Verdicts) CommitVerdictOperation(ctx context.Context, op runstate.Verdi
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if outcome.Valid && outcome.Terminal {
+		if err := verifyReviewInputsTx(ctx, tx, run.ID, op.Phase, vars); err != nil {
+			return err
+		}
+	}
 	if vars != nil {
 		now := time.Now().UTC()
 		raw, marshalErr := json.Marshal(vars)
@@ -160,4 +159,9 @@ func (s *Verdicts) CommitVerdictOperation(ctx context.Context, op runstate.Verdi
 		s.transactions.outbox.Notify()
 	}
 	return nil
+}
+func (s *Verdicts) MarkVerdictEvidencePublished(ctx context.Context, toolCallID string) error {
+	return s.transactions.queries.MarkWorkflowVerdictEvidencePublished(ctx, db.MarkWorkflowVerdictEvidencePublishedParams{
+		UpdatedAt: db.FormatTime(time.Now().UTC()), ToolCallID: toolCallID,
+	})
 }

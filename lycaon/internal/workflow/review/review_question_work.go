@@ -3,12 +3,12 @@ package review
 import (
 	"context"
 	"fmt"
-	toolguard "github.com/lycaon/lycaon/internal/workflow/toolguard"
+	"github.com/lycaon/lycaon/internal/workflow/toolguard"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -24,9 +24,17 @@ func checkQuestionClosure(def workflowdef.ReviewLoopDef, claims []workflowvalida
 			return rejectReviewQuestion("claim_outcome_required", q.ID)
 		}
 		completed, active := questionAttempts(tasks, phase, q.ID)
-		_, reviewing := questionAttempts(tasks, phase, q.ID+"/review")
+		_, reviewing := questionAttempts(tasks, phase, questionReviewWorkID(q.ID))
 		if active || reviewing {
-			return rejectReviewQuestion("work_active", q.ID)
+			rejected := toolrejection.AsToolReject(rejectReviewQuestion("work_active", q.ID))
+			var jobs []string
+			for _, task := range tasks {
+				if task.WorkflowPhase == phase && (task.WorkflowWorkID == q.ID || task.WorkflowWorkID == questionReviewWorkID(q.ID)) && !task.Status.IsTerminal() {
+					jobs = append(jobs, task.ID)
+				}
+			}
+			rejected.Data["job_ids"] = jobs
+			return rejected
 		}
 		open := def.ClassOf(claims[index].Status) == workflowdef.ClaimOpen
 		var disposition string
@@ -85,7 +93,7 @@ func (m *Questions) AssertTask(ctx context.Context, run *api.WorkflowRun, def wo
 		return err
 	}
 	if !slices.ContainsFunc(questions, func(q reviewQuestionWork) bool {
-		return q.ID == task.WorkflowWorkID || q.ID+"/review" == task.WorkflowWorkID
+		return q.ID == task.WorkflowWorkID || questionReviewWorkID(q.ID) == task.WorkflowWorkID
 	}) {
 		return toolguard.RejectFanoutTask("unknown_review_question", task)
 	}
@@ -105,6 +113,9 @@ func (m *Questions) AssertTask(ctx context.Context, run *api.WorkflowRun, def wo
 		}
 	}
 	if strings.HasSuffix(task.WorkflowWorkID, "/review") {
+		if task.ChildSessionID != "" || task.EffectiveScope().BaseOverlayID != "" {
+			return &toolrejection.ToolReject{Code: "TASK_REVIEW_FRESH_WORKSPACE_REQUIRED", Data: map[string]any{"workflow_work_id": task.WorkflowWorkID}}
+		}
 		if !slices.Contains(def.RequiredAgents, task.AgentType) {
 			return toolguard.RejectFanoutTask("review_question_requires_declared_reviewer", task)
 		}
@@ -113,10 +124,19 @@ func (m *Questions) AssertTask(ctx context.Context, run *api.WorkflowRun, def wo
 		if active {
 			return toolguard.RejectFanoutTask("review_question_investigation_active", task)
 		}
-		if completed == 0 {
+		if completed == 0 || !slices.ContainsFunc(tasks, func(prior api.WorkerTask) bool {
+			return prior.WorkflowPhase == run.CurrentPhase && prior.WorkflowWorkID == questionID && api.WorkerReviewSucceeded(prior)
+		}) {
 			return toolguard.RejectFanoutTask("review_question_investigation_required", task)
 		}
-		if questionReviewed(tasks, run.CurrentPhase, questionID, []string{task.AgentType}) {
+		reviewed := questionReviewed(tasks, run.CurrentPhase, questionID, []string{task.AgentType})
+		if reviewed && slices.Contains(def.CoverageReviewers, task.AgentType) {
+			reviewed, err = m.Assignments.questionCurrent(ctx, run, def, tasks, questionID, task.AgentType)
+			if err != nil {
+				return err
+			}
+		}
+		if reviewed {
 			return toolguard.RejectFanoutTask("review_question_already_reviewed", task)
 		}
 	}
@@ -134,23 +154,17 @@ func (m *Questions) AssertTask(ctx context.Context, run *api.WorkflowRun, def wo
 }
 
 func questionReviewed(tasks []api.WorkerTask, phase, id string, agents []string) bool {
-	var latest time.Time
+	var investigations []string
 	for _, task := range tasks {
-		if task.WorkflowPhase != phase || task.WorkflowWorkID != id || task.Status != api.WorkerStatusComplete {
-			continue
-		}
-		end := task.CreatedAt
-		if task.CompletedAt != nil {
-			end = *task.CompletedAt
-		}
-		if end.After(latest) {
-			latest = end
+		if task.WorkflowPhase == phase && task.WorkflowWorkID == id && api.WorkerReviewSucceeded(task) {
+			investigations = append(investigations, task.ID)
 		}
 	}
+
 	for _, agent := range agents {
 		found := false
 		for _, task := range tasks {
-			if task.WorkflowPhase == phase && task.WorkflowWorkID == id+"/review" && task.AgentType == agent && api.WorkerReviewSucceeded(task) && !task.CreatedAt.Before(latest) {
+			if task.WorkflowPhase == phase && task.WorkflowWorkID == questionReviewWorkID(id) && task.AgentType == agent && api.WorkerReviewSucceeded(task) && len(investigations) > 0 && !slices.ContainsFunc(investigations, func(job string) bool { return !slices.Contains(task.AfterWorkers, job) }) {
 				found = true
 			}
 		}
@@ -164,11 +178,11 @@ func questionReviewed(tasks []api.WorkerTask, phase, id string, agents []string)
 func questionBlocked(tasks []api.WorkerTask, phase, id string) bool {
 	latest := map[string]api.WorkerTask{}
 	for _, task := range tasks {
-		if task.WorkflowPhase != phase || (task.WorkflowWorkID != id && task.WorkflowWorkID != id+"/review") {
+		if task.WorkflowPhase != phase || (task.WorkflowWorkID != id && task.WorkflowWorkID != questionReviewWorkID(id)) {
 			continue
 		}
 		key := task.WorkflowWorkID
-		if key == id+"/review" {
+		if key == questionReviewWorkID(id) {
 			key += "/" + task.AgentType
 		}
 		prior, exists := latest[key]
@@ -177,7 +191,7 @@ func questionBlocked(tasks []api.WorkerTask, phase, id string) bool {
 		}
 	}
 	for _, task := range latest {
-		if task.Status == api.WorkerStatusFailed || task.Status == api.WorkerStatusCanceled || (task.WorkflowWorkID == id+"/review" && task.Status == api.WorkerStatusComplete && !api.WorkerReviewSucceeded(task)) {
+		if task.Status == api.WorkerStatusFailed || task.Status == api.WorkerStatusCanceled || (task.Status == api.WorkerStatusComplete && !api.WorkerReviewSucceeded(task)) {
 			return true
 		}
 	}
@@ -188,7 +202,7 @@ func questionCoverageFact(q reviewQuestionWork, tasks []api.WorkerTask, phase wo
 	completed, active := questionAttempts(tasks, phase.ID, q.ID)
 	fact := reviewcoverage.Fact{ID: q.ID, Kind: "review_question", Subject: q.ClaimID, Question: q.MissingFact, Obligations: q.Obligations, InvestigationAttempts: completed, FollowupLimit: phase.ReviewLoop.FollowupAttempts, InvestigationActive: active, ReviewRequired: completed > 0 && !questionReviewed(tasks, phase.ID, q.ID, phase.ReviewLoop.RequiredAgents)}
 	for _, task := range tasks {
-		if task.WorkflowPhase == phase.ID && (task.WorkflowWorkID == q.ID || task.WorkflowWorkID == q.ID+"/review") {
+		if task.WorkflowPhase == phase.ID && (task.WorkflowWorkID == q.ID || task.WorkflowWorkID == questionReviewWorkID(q.ID)) {
 			fact.Tasks = append(fact.Tasks, task.ID)
 		}
 	}

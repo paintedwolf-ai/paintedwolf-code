@@ -20,6 +20,9 @@ var namespaceProjection []byte
 //go:embed source_namespace.go
 var namespaceImplementation []byte
 
+//go:embed review_assignments.sql
+var reviewAssignmentsMigration []byte
+
 func migrateSourceNamespace(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, `ALTER TABLE source_branch_heads RENAME TO source_branch_heads_v1`); err != nil {
 		return err
@@ -60,7 +63,10 @@ func migrateSourceNamespace(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, `DROP TABLE source_branch_heads_v1; DROP TABLE source_checkpoint_entries`); err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, string(namespaceProjection))
+	if _, err := tx.ExecContext(ctx, string(namespaceProjection)); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, string(reviewAssignmentsMigration))
 	return err
 }
 

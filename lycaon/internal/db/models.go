@@ -2070,6 +2070,24 @@ type WorkflowCommands struct {
 	CommittedAt    string `json:"committed_at"`
 }
 
+type WorkflowReviewAssignments struct {
+	ID          string `json:"id"`
+	RunID       string `json:"run_id"`
+	SubjectID   string `json:"subject_id"`
+	Phase       string `json:"phase"`
+	WorkID      string `json:"work_id"`
+	Agent       string `json:"agent"`
+	BindingJson string `json:"binding_json"`
+}
+
+type WorkflowReviewSubjects struct {
+	ID          string `json:"id"`
+	RunID       string `json:"run_id"`
+	Phase       string `json:"phase"`
+	Revision    string `json:"revision"`
+	SubjectJson string `json:"subject_json"`
+}
+
 type WorkflowRunPageOrdinals struct {
 	Ordinal int64  `json:"ordinal"`
 	RunID   string `json:"run_id"`
@@ -2097,6 +2115,7 @@ type WorkflowRuns struct {
 	UpdatedAt       string         `json:"updated_at"`
 	PausedAt        sql.NullString `json:"paused_at"`
 	CompletedAt     sql.NullString `json:"completed_at"`
+	ReviewRevision  int64          `json:"review_revision"`
 }
 
 type WorkflowScanBindings struct {
@@ -2130,16 +2149,17 @@ type WorkflowTeardownOperations struct {
 }
 
 type WorkflowVerdictOperations struct {
-	ToolCallID       string         `json:"tool_call_id"`
-	RunID            string         `json:"run_id"`
-	SourceRevision   int64          `json:"source_revision"`
-	Phase            string         `json:"phase"`
-	InputDigest      string         `json:"input_digest"`
-	EvidenceRecordID string         `json:"evidence_record_id"`
-	EvidenceJson     string         `json:"evidence_json"`
-	Status           string         `json:"status"`
-	ResponseJson     sql.NullString `json:"response_json"`
-	Error            string         `json:"error"`
-	CreatedAt        string         `json:"created_at"`
-	UpdatedAt        string         `json:"updated_at"`
+	ToolCallID        string         `json:"tool_call_id"`
+	RunID             string         `json:"run_id"`
+	SourceRevision    int64          `json:"source_revision"`
+	Phase             string         `json:"phase"`
+	InputDigest       string         `json:"input_digest"`
+	EvidenceRecordID  string         `json:"evidence_record_id"`
+	EvidenceJson      string         `json:"evidence_json"`
+	Status            string         `json:"status"`
+	ResponseJson      sql.NullString `json:"response_json"`
+	Error             string         `json:"error"`
+	CreatedAt         string         `json:"created_at"`
+	UpdatedAt         string         `json:"updated_at"`
+	EvidencePublished int64          `json:"evidence_published"`
 }
