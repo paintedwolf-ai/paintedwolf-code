@@ -82,7 +82,7 @@ func TestSourceRecorderAssertionScan(t *testing.T) {
 		t.Run(fixture.name, func(t *testing.T) {
 			file, err := parser.ParseFile(token.NewFileSet(), "fixture.go", "package fixture; func check() {"+fixture.body+"}", 0)
 			if err != nil {
-				t.Fatal(err)
+				contractcheck.FailErr(t, "parse source port fixture", err)
 			}
 			body := file.Decls[0].(*ast.FuncDecl).Body
 			if got := len(sourceRecorderAssertions(body)); got != fixture.count {
