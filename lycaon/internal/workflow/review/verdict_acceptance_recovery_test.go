@@ -55,7 +55,7 @@ func TestReviewInputFenceRejectsConcurrentChange(t *testing.T) {
 	_, _, err = mgr.Store.Verdicts.PrepareVerdictOperation(t.Context(), op)
 	testutil.FailErr(t, "prepare unchanged acceptance", err)
 	testutil.FailErr(t, "accept unchanged inputs", mgr.Store.Verdicts.CommitVerdictOperation(t.Context(), op, run, "", vars, runstate.ReviewOutcome{Valid: true, Terminal: true}))
-	op.ToolCallID, op.SourceRevision = "changed-input", run.Revision
+	op.ToolCallID, op.SourceRevision, op.EvidenceRecordID = "changed-input", run.Revision, "changed-record"
 	_, _, err = mgr.Store.Verdicts.PrepareVerdictOperation(t.Context(), op)
 	testutil.FailErr(t, "prepare changed acceptance", err)
 	_, err = database.ExecContext(t.Context(), "UPDATE workflow_runs SET review_revision=review_revision+1 WHERE id=?", run.ID)
@@ -68,6 +68,11 @@ func TestReviewInputFenceRejectsConcurrentChange(t *testing.T) {
 	testutil.FailErr(t, "read refused receipt", err)
 	if retained.Status != "prepared" {
 		t.Fatalf("refused input committed receipt: %+v", retained)
+	}
+	accepted, found, err := mgr.Store.Verdicts.GetVerdictOperation(t.Context(), "unchanged-input")
+	testutil.FailErr(t, "read prior accepted receipt", err)
+	if !found || accepted.Status != "committed" || accepted.EvidenceRecordID != "record" {
+		t.Fatalf("stale acceptance rewrote prior receipt: %+v", accepted)
 	}
 }
 

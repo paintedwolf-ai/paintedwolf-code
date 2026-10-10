@@ -194,10 +194,15 @@ func TestRecordReviewLoopVerdictInvalidHolds(t *testing.T) {
 		heldCalls = append(heldCalls, decisionRequired)
 	}
 
-	// Off-enum verdict → schema-invalid → holds, re-prompts (continue), does NOT consume the cap.
+	// Invalid submissions retain the round and repair in the admitted turn.
 	verdict := map[string]string{"verdict": "MAYBE", "winner": "B"}
-	if _, err := mgr.Verdicts.RecordReviewLoopVerdict(ctx, "sess-1", verdict, nil, nil); err != nil {
+	out, err := mgr.Verdicts.RecordReviewLoopVerdict(ctx, "sess-1", verdict, nil, nil)
+	if err != nil {
 		testutil.FailErr(t, "RecordReviewLoopVerdict", err)
+	}
+
+	if !out.Applied || out.Valid || out.Terminal || out.IterationCapExceeded {
+		t.Fatalf("invalid review outcome = %+v", out)
 	}
 
 	got, err := mgr.Store.Runs.Get(ctx, run.ID)
@@ -210,8 +215,8 @@ func TestRecordReviewLoopVerdictInvalidHolds(t *testing.T) {
 	if n := runstate.ReviewLoopAttempt(vars, "judge"); n != 0 {
 		t.Fatalf("attempt = %d want 0 (invalid verdict is not a review round)", n)
 	}
-	if len(heldCalls) != 1 || heldCalls[0] != false {
-		t.Fatalf("held calls = %v want [false] (continue, not decision-required)", heldCalls)
+	if len(heldCalls) != 0 {
+		t.Fatalf("invalid submission scheduled a review continuation: %v", heldCalls)
 	}
 }
 
