@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -59,5 +60,20 @@ func TestCanceledOpenPreservesMismatchedCache(t *testing.T) {
 	testutil.FailErr(t, "read retained page", database.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM docs WHERE url = ?", "https://a.example/retained").Scan(&retained))
 	if revision != 99 || retained != 1 {
 		t.Fatalf("canceled startup changed cache: schema=%d retained=%d", revision, retained)
+	}
+}
+
+func TestOpenDoesNotReplaceBlockingParentFile(t *testing.T) {
+	parent := filepath.Join(t.TempDir(), "retained")
+	if err := os.WriteFile(parent, []byte("keep"), 0600); err != nil {
+		testutil.FailErr(t, "create blocking parent file", err)
+	}
+	store, err := Open(t.Context(), filepath.Join(parent, "web-index.db"))
+	if store != nil || err == nil {
+		t.Fatalf("open=%v error=%v", store, err)
+	}
+	raw, err := os.ReadFile(parent)
+	if err != nil || string(raw) != "keep" {
+		t.Fatalf("failed startup changed parent: %q %v", raw, err)
 	}
 }

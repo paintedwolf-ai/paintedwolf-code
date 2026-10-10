@@ -1,7 +1,7 @@
 # Inform Binding. Anchor catalog is lifecycle SSOT.
 'on': feedback.pending
 selector:
-  surface: phase
+  surface: coordinator
 effect: inform
 render: coordinator-feedback-pending
 tier: builtin
