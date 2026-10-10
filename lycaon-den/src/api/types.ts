@@ -10944,10 +10944,16 @@ export interface components {
         WorkerCompletionReport: {
             coverage_gaps?: components["schemas"]["WorkerCoverageGap"][];
             coverage_review?: components["schemas"]["CoverageReview"];
-            /** @description Leg status the worker declared; leg_status is the host-graded status. */
-            declared_leg_status?: string;
-            /** @description Host-graded leg status. */
-            leg_status: string;
+            /**
+             * @description Leg status the worker declared; leg_status is the host-graded status.
+             * @enum {string}
+             */
+            declared_leg_status?: "complete" | "partial" | "blocked";
+            /**
+             * @description Host-graded leg status.
+             * @enum {string}
+             */
+            leg_status: "complete" | "partial" | "blocked";
             files_modified?: string[];
             objectives_met?: string[];
             remaining_risk?: string[];
