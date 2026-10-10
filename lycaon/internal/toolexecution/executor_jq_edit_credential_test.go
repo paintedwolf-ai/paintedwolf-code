@@ -34,7 +34,7 @@ func TestJqEditIntoACredentialFileAsksAsASensitiveWrite(t *testing.T) {
 	testutil.FailErr(t, "register jq_edit", registry.Register("jq_edit", (&native.JqEditTool{Boundary: boundary}).Run))
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvalGate), registry, "implement")
 	manager := &asyncHITL{requested: make(chan struct{}, 1)}
-	executor.Approvals.SetCheckpointManager(manager, approvalGate)
+	executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()

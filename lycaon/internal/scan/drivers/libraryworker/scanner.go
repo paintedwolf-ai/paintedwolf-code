@@ -106,15 +106,17 @@ func (s *Scanner) Run(ctx context.Context, req scan.ScanRequest) (*scanoutput.Re
 func (s *Scanner) Retire(ctx context.Context) error {
 	s.work.Seal()
 	if err := s.work.Wait(ctx); err != nil {
-		return s.Close()
+		return s.Close(ctx)
 	}
-	return s.Close()
+	return s.Close(ctx)
 }
 
 // Close seals scanner admission, cancels active requests, and joins its worker.
-func (s *Scanner) Close() error {
+func (s *Scanner) Close(ctx context.Context) error {
+	// Final shutdown must join owned processes even if the caller is canceled.
+	ctx = context.WithoutCancel(ctx)
 	s.work.Stop()
-	if err := s.work.Wait(context.Background()); err != nil {
+	if err := s.work.Wait(ctx); err != nil {
 		return err
 	}
 	s.mu.Lock()

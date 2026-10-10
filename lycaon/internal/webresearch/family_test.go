@@ -29,7 +29,7 @@ func TestStackExchangeFamilyNeedsOnlyCatalogParams(t *testing.T) {
 	cat, err := catalogFromEntries([]CatalogEntry{entry})
 	testutil.FailErr(t, "catalogFromEntries failed", err)
 	r := NewRegistry(cat)
-	if err := r.registerCatalogEntry(entry); err != nil {
+	if err := r.registerCatalogEntry(t.Context(), entry); err != nil {
 		testutil.FailErr(t, "r.registerCatalogEntry failed", err)
 	}
 	if !r.Has(entry.ID) {
@@ -74,7 +74,7 @@ func TestRegisterCatalogProvidersErrorsWithoutBuilder(t *testing.T) {
 	entry := CatalogEntry{ID: "acme_search", Kind: KindKeyless, Family: FamilyCustom}
 	cat, err := catalogFromEntries([]CatalogEntry{entry})
 	testutil.FailErr(t, "catalogFromEntries failed", err)
-	err = RegisterCatalogProviders(NewRegistry(cat))
+	err = RegisterCatalogProviders(t.Context(), NewRegistry(cat))
 	if err == nil {
 		t.Fatal("expected an error for a custom row with no builder")
 	}

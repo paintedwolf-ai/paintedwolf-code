@@ -21,7 +21,7 @@ func TestCloseStopsResidentWorker(t *testing.T) {
 	s := New(Options{ID: "fixture"})
 	s.worker = &resident{stdin: output, stdout: bufio.NewReader(response), output: response, done: exited}
 
-	if err := s.Close(); err != nil {
+	if err := s.Close(t.Context()); err != nil {
 		t.Fatalf("close: %v", err)
 	}
 	if s.worker != nil {
@@ -30,14 +30,14 @@ func TestCloseStopsResidentWorker(t *testing.T) {
 	if _, err := input.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
 		t.Fatalf("worker stdin read after close = %v, want EOF", err)
 	}
-	if err := s.Close(); err != nil {
+	if err := s.Close(t.Context()); err != nil {
 		t.Fatalf("second close: %v", err)
 	}
 }
 
 func TestCloseJoinsActualResidentAndSealsRestart(t *testing.T) {
 	scanner := New(Options{ID: "resident-close-fixture", Impl: "unknown-fixture-implementation"})
-	t.Cleanup(func() { _ = scanner.Close() })
+	t.Cleanup(func() { _ = scanner.Close(t.Context()) })
 	if _, err := scanner.Run(t.Context(), scan.ScanRequest{}); err == nil {
 		t.Fatal("unsupported implementation unexpectedly succeeded")
 	}
@@ -45,7 +45,9 @@ func TestCloseJoinsActualResidentAndSealsRestart(t *testing.T) {
 	if worker == nil || worker.exited() {
 		t.Fatal("fixture did not leave the actual worker resident")
 	}
-	if err := scanner.Close(); err != nil {
+	closeCtx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := scanner.Close(closeCtx); err != nil {
 		t.Fatalf("close resident scanner: %v", err)
 	}
 	if !worker.exited() {

@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -101,13 +100,6 @@ func testManagerWithRegistry(t *testing.T) (*workflow.RunManager, session.Store,
 	mgr, store, blueprintMgr, projectDir := testManager(t)
 	setTestRegistry(t, mgr, blueprintMgr, conditions.TestRegistryDeps())
 	return mgr, store, blueprintMgr, projectDir
-}
-
-func workflowCaller(t testing.TB, mgr *workflow.RunManager) context.Context {
-	t.Helper()
-	owner, err := mgr.Policy.Sessions.(session.Store).HostOwner(context.Background())
-	testutil.FailErr(t, "host owner", err)
-	return people.WithCaller(context.Background(), owner)
 }
 
 func testWorkflowManager(t *testing.T) (*workflow.RunManager, string, string) {

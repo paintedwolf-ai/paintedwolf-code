@@ -22,10 +22,6 @@ func startRun(ctx context.Context, mgr *workflow.RunManager, sessionID, workflow
 	})
 }
 
-func startPlanRun(ctx context.Context, mgr *workflow.RunManager, sessionID string) (*api.WorkflowRun, error) {
-	return startRun(ctx, mgr, sessionID, "plan", "1.0.0")
-}
-
 func completePlanIntake(ctx context.Context, mgr *workflow.RunManager, run *api.WorkflowRun) (*api.WorkflowRun, error) {
 	return run, nil
 }
@@ -42,13 +38,6 @@ func completePlanResearchAtDepthNone(ctx context.Context, mgr *workflow.RunManag
 		return run, nil
 	}
 	return completePlanDepthPhaseAtNone(ctx, mgr, run, "research_depth")
-}
-
-func completePlanReviewAtDepthNone(ctx context.Context, mgr *workflow.RunManager, run *api.WorkflowRun) (*api.WorkflowRun, error) {
-	if run == nil || run.CurrentPhase != "review" {
-		return run, nil
-	}
-	return completePlanDepthPhaseAtNone(ctx, mgr, run, "review_depth")
 }
 
 func completePlanDepthPhaseAtNone(ctx context.Context, mgr *workflow.RunManager, run *api.WorkflowRun, param string) (*api.WorkflowRun, error) {
@@ -79,30 +68,6 @@ func advancePlanThroughExpand(ctx context.Context, mgr *workflow.RunManager, run
 		return run, nil
 	}
 	return mgr.Phases.Advance(ctx, run.ID)
-}
-
-func advancePlanToApprovePhase(ctx context.Context, mgr *workflow.RunManager, run *api.WorkflowRun) (*api.WorkflowRun, error) {
-	var err error
-	run, err = completePlanIntake(ctx, mgr, run)
-	if err != nil {
-		return nil, err
-	}
-	run, err = completePlanResearchAtDepthNone(ctx, mgr, run)
-	if err != nil {
-		return nil, err
-	}
-	run, err = advancePlanThroughExpand(ctx, mgr, run)
-	if err != nil {
-		return nil, err
-	}
-	run, err = completePlanReviewAtDepthNone(ctx, mgr, run)
-	if err != nil {
-		return nil, err
-	}
-	if run, err = mgr.Store.Runs.Get(ctx, run.ID); err != nil {
-		return nil, err
-	}
-	return run, nil
 }
 
 func walkPlanRunToReview(ctx context.Context, t *testing.T, mgr *workflow.RunManager, blueprintMgr *blueprint.Manager, sessionID string) *api.WorkflowRun {

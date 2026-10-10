@@ -253,7 +253,7 @@ func TestRegistrySkipsMissingBinaryWhenConfigured(t *testing.T) {
 		ID: "missing", Driver: scancatalog.DriverExternal, Engine: "missing", ScopeKind: string(scancatalog.ScopeSourceDriver), Categories: []string{"sast", "security"},
 		Command: []string{"definitely-not-a-scanner-binary-xyz", scancatalog.ArgTokenScanTarget}, OutputParser: scanoutput.OutputParserSARIF,
 	}}}
-	reg, err := registry.NewFromScannerConfig(cfg, registry.Options{ModuleRoot: configlayout.FindModuleRoot()})
+	reg, err := registry.NewFromScannerConfig(t.Context(), cfg, registry.Options{ModuleRoot: configlayout.FindModuleRoot()})
 	testutil.FailErr(t, "registry.NewFromScannerConfig failed", err)
 	if len(reg.List()) != 0 {
 		t.Fatalf("expected skip, got %v", reg.List())

@@ -53,20 +53,6 @@ func testManager(t *testing.T) (*workflow.RunManager, session.Store, *blueprint.
 	return mgr, sessStore, blueprintMgr, projectDir
 }
 
-func seedValidPlanContent(t *testing.T, blueprintMgr *blueprint.Manager, blueprintPath string) {
-	t.Helper()
-	if blueprintMgr == nil || blueprintPath == "" {
-		t.Fatal("blueprint manager and blueprint path required")
-	}
-	ctx := context.Background()
-	bp, err := blueprintMgr.Get(ctx, testdbseed.DefaultProjectID, blueprintPath)
-	testutil.FailErr(t, "blueprintMgr.Get", err)
-	content := conditions.TestPlanContentWithTasks
-	if _, err := blueprintMgr.Store.UpdateContent(ctx, testdbseed.DefaultProjectID, blueprintPath, content, blueprint.ContentDigest(bp.Content)); err != nil {
-		testutil.FailErr(t, "seed blueprint content", err)
-	}
-}
-
 func registryDepsForTests(mgr *workflow.RunManager, blueprintMgr *blueprint.Manager, base conditions.RegistryDeps) conditions.RegistryDeps {
 	if blueprintMgr != nil {
 		base.BlueprintGet = func(ctx context.Context, path string) (*api.Blueprint, error) {

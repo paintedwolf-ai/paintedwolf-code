@@ -120,7 +120,7 @@ func TestHTTPRequestUnixSocketDenialRecordsNoGrantAndRetryAsksAgain(t *testing.T
 	}))
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), registry, "implement")
 	manager := &denySocketHITL{asyncHITL: &asyncHITL{requested: make(chan struct{}, 8)}}
-	executor.Approvals.SetCheckpointManager(manager, gate)
+	executor.Approvals.SetCheckpointManager(t.Context(), manager, gate)
 	runtime := &recordingSocketRuntime{}
 	executor.Capabilities.SetSocketCapabilityRuntime(runtime)
 	rulesBefore := len(store.GlobalRules())

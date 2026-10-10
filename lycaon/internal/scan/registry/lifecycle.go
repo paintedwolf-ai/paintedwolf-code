@@ -37,14 +37,14 @@ func (r *Impl) Reload() error {
 	if err := bundled.ValidateManifest(manifest); err != nil {
 		return err
 	}
-	values, err := buildScannerGeneration(cfg, r.opts, r.home, manifest)
+	values, err := buildScannerGeneration(ctx, cfg, r.opts, r.home, manifest)
 	if err != nil {
 		return err
 	}
 	r.lifecycleMu.Lock()
 	if err := ctx.Err(); err != nil {
 		r.lifecycleMu.Unlock()
-		_ = closeScanners(scannerValues(values))
+		_ = closeScanners(context.WithoutCancel(ctx), scannerValues(values))
 		return err
 	}
 	previous := r.adapters()
@@ -62,7 +62,7 @@ func (r *Impl) Reload() error {
 }
 
 // Close seals catalog changes and joins every current or retiring adapter.
-func (r *Impl) Close() error {
+func (r *Impl) Close(ctx context.Context) error {
 	if r == nil {
 		return nil
 	}
@@ -70,8 +70,8 @@ func (r *Impl) Close() error {
 		r.lifecycleMu.Lock()
 		r.work.Stop()
 		r.lifecycleMu.Unlock()
-		r.closeErr = r.work.Wait(context.Background())
-		r.closeErr = errors.Join(r.closeErr, closeScanners(r.adapters()))
+		r.closeErr = r.work.Wait(context.WithoutCancel(ctx))
+		r.closeErr = errors.Join(r.closeErr, closeScanners(ctx, r.adapters()))
 	})
 	return r.closeErr
 }
@@ -84,10 +84,12 @@ func scannerValues(values map[string]scan.CodeScanner) []scan.CodeScanner {
 	return out
 }
 
-func closeScanners(scanners []scan.CodeScanner) error {
+func closeScanners(ctx context.Context, scanners []scan.CodeScanner) error {
 	var errs []error
 	for _, s := range scanners {
-		if closer, ok := s.(io.Closer); ok {
+		if closer, ok := s.(interface{ Close(context.Context) error }); ok {
+			errs = append(errs, closer.Close(ctx))
+		} else if closer, ok := s.(io.Closer); ok {
 			errs = append(errs, closer.Close())
 		}
 	}

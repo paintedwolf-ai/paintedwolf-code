@@ -50,7 +50,7 @@ func (r *Runtime) Build(completed bgprocess.CompletionPublisher, refused bgproce
 	r.resources.Track("browser-pages", 40, func(ctx context.Context) error { pages.Close(ctx); return nil })
 	r.Preview = preview.NewController(preview.DefaultConfig(), r.publisher.PublishPreview)
 	controller := r.Preview
-	r.resources.Track("preview", 30, func(context.Context) error { controller.Close(); return nil })
+	r.resources.Track("preview", 30, func(ctx context.Context) error { controller.Close(ctx); return nil })
 	if err := cleanup("preview-streams", 40, controller.DisposeSession); err != nil {
 		return fmt.Errorf("register preview cleanup: %w", err)
 	}

@@ -44,7 +44,7 @@ func (r *Runtime) WireGroundingAndFindings(ctx context.Context) error {
 	if err := r.wireFindingAndProgressTools(); err != nil {
 		return err
 	}
-	if err := r.wireVisualAndRenderTools(); err != nil {
+	if err := r.wireVisualAndRenderTools(ctx); err != nil {
 		return err
 	}
 	if err := r.wireDecisionAndCallTools(); err != nil {
@@ -122,7 +122,7 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	return nil
 }
 
-func (r *Runtime) wireVisualAndRenderTools() error {
+func (r *Runtime) wireVisualAndRenderTools(ctx context.Context) error {
 	artifactRecords := visual.NewRecords(r.deps.Storage.Database, r.deps.Events.Outbox, visual.ArtifactProjection{
 		Write: func(ctx context.Context, tx *sql.Tx, projectID string, rec visual.ArtifactRecord) error {
 			return search.ProjectArtifactTx(ctx, tx, projectID, search.ProjectArtifactInput{
@@ -167,8 +167,8 @@ func (r *Runtime) wireVisualAndRenderTools() error {
 	})
 	r.deps.Sessions.Manager.SetVisualStore(r.Visual)
 	releaseVisual := providerwire.SetVisualBytesResolver(func(sessionID, artifactID string) ([]byte, string, bool) {
-		root := sessiontree.RootID(context.Background(), r.deps.Storage.Sessions, sessionID)
-		res := r.Visual.Resolve(context.Background(), root, artifactID)
+		root := sessiontree.RootID(context.WithoutCancel(ctx), r.deps.Storage.Sessions, sessionID)
+		res := r.Visual.Resolve(context.WithoutCancel(ctx), root, artifactID)
 		if !res.IsPresent() {
 			return nil, "", false
 		}
@@ -197,7 +197,7 @@ func (r *Runtime) wireVisualAndRenderTools() error {
 	}); err != nil {
 		return err
 	}
-	matcher, _ := r.deps.Security.LoadMatcher(r.deps.TestSecretMatcher)
+	matcher, _ := r.deps.Security.LoadMatcher(ctx, r.deps.TestSecretMatcher)
 	screen := visualscreen.NewGate(visualscreen.NewScanner(nil).WithRenderedReferences(browser.RenderLoadsReference), matcher, r.deps.Security.Ask(r.deps.Execution.Host.Executor.Secrets, r.deps.Execution.Host.Authority.ApprovalsDisabled))
 	if err := native.RegisterViewImageTool(r.deps.Execution.Host.Registry, page.ViewImageDeps{
 		Boundary:      r.deps.Execution.Host.Boundary,

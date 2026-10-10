@@ -14,7 +14,7 @@ import (
 func neverAskExecutor(t *testing.T, gate *secretReleaseGateStub) *toolexecution.Executor {
 	t.Helper()
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(&secretScreenHITL{status: hitl.DecisionStatusApproved}, gate)
+	exec.Approvals.SetCheckpointManager(t.Context(), &secretScreenHITL{status: hitl.DecisionStatusApproved}, gate)
 	return exec
 }
 

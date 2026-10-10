@@ -306,45 +306,45 @@ func TestProjectWatchKeepsBothCheckoutScopes(t *testing.T) {
 	}
 }
 
-func TestWatchOwnerReplacementPreservesPendingRouting(t *testing.T) {
-	old, current := &WatchOwner{}, &WatchOwner{}
+func TestWatchLifetimeReplacementPreservesPendingRouting(t *testing.T) {
+	old, current := &WatchLifetime{}, &WatchLifetime{}
 	roots := []RootSpec{{ID: "r1", WorkspaceID: "ws", Path: t.TempDir()}}
 	var oldCalls, newCalls atomic.Int32
-	EnsureProjectWatch(t.Context(), old, "owner-replacement", "", roots, func(context.Context, string, ExternalBatch) { oldCalls.Add(1) })
+	EnsureProjectWatch(t.Context(), old, "lifetime-replacement", "", roots, func(context.Context, string, ExternalBatch) { oldCalls.Add(1) })
 	watchRegMu.Lock()
-	watch := watchers[watchKey{"owner-replacement", ""}]
+	watch := watchers[watchKey{"lifetime-replacement", ""}]
 	copied := watch.external
 	watchRegMu.Unlock()
 	watch.changes.queueHeadMoved(t.Context())
-	if EnsureProjectWatch(t.Context(), current, "owner-replacement", "", roots, func(context.Context, string, ExternalBatch) { newCalls.Add(1) }) {
+	if EnsureProjectWatch(t.Context(), current, "lifetime-replacement", "", roots, func(context.Context, string, ExternalBatch) { newCalls.Add(1) }) {
 		t.Fatal("same roots replaced pending window")
 	}
-	old.Stop()
-	testutil.FailErr(t, "drain replaced owner", old.Wait(t.Context()))
-	copied(t.Context(), "owner-replacement", ExternalBatch{HeadMoved: true})
+	old.Stop(t.Context())
+	testutil.FailErr(t, "drain replaced lifetime", old.Wait(t.Context()))
+	copied(t.Context(), "lifetime-replacement", ExternalBatch{HeadMoved: true})
 	watchRegMu.Lock()
-	retained := watchers[watchKey{"owner-replacement", ""}]
+	retained := watchers[watchKey{"lifetime-replacement", ""}]
 	watchRegMu.Unlock()
-	if retained != watch || retained.owner != current {
-		t.Fatal("old owner removed current routing")
+	if retained != watch || retained.lifetime != current {
+		t.Fatal("old lifetime removed current routing")
 	}
 	watch.changes.close(t.Context())
 	if oldCalls.Load() != 0 || newCalls.Load() != 1 {
 		t.Fatalf("callback counts old=%d current=%d", oldCalls.Load(), newCalls.Load())
 	}
 	if !repochange.Coverage(roots[0].Path).Watching {
-		t.Fatal("old owner stopped shared root")
+		t.Fatal("old lifetime stopped shared root")
 	}
-	current.Stop()
-	testutil.FailErr(t, "drain current owner", current.Wait(t.Context()))
+	current.Stop(t.Context())
+	testutil.FailErr(t, "drain current lifetime", current.Wait(t.Context()))
 }
 
-func TestWatchOwnerStopCancelsAndDrainsCopiedCallback(t *testing.T) {
-	owner := &WatchOwner{}
+func TestWatchLifetimeStopCancelsAndDrainsCopiedCallback(t *testing.T) {
+	lifetime := &WatchLifetime{}
 	entered, canceled, release := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	var calls atomic.Int32
 	roots := []RootSpec{{ID: "r1", WorkspaceID: "ws", Path: t.TempDir()}}
-	EnsureProjectWatch(t.Context(), owner, "owner-drain", "", roots, func(ctx context.Context, _ string, _ ExternalBatch) {
+	EnsureProjectWatch(t.Context(), lifetime, "lifetime-drain", "", roots, func(ctx context.Context, _ string, _ ExternalBatch) {
 		calls.Add(1)
 		close(entered)
 		<-ctx.Done()
@@ -352,16 +352,16 @@ func TestWatchOwnerStopCancelsAndDrainsCopiedCallback(t *testing.T) {
 		<-release
 	})
 	watchRegMu.Lock()
-	copied := watchers[watchKey{"owner-drain", ""}].external
+	copied := watchers[watchKey{"lifetime-drain", ""}].external
 	watchRegMu.Unlock()
 	done := make(chan struct{})
-	go func() { defer close(done); copied(t.Context(), "owner-drain", ExternalBatch{Resync: true}) }()
+	go func() { defer close(done); copied(t.Context(), "lifetime-drain", ExternalBatch{Resync: true}) }()
 	select {
 	case <-entered:
 	case <-time.After(5 * time.Second):
 		t.Fatal("copied callback did not enter")
 	}
-	owner.Stop()
+	lifetime.Stop(t.Context())
 	select {
 	case <-canceled:
 	case <-time.After(5 * time.Second):
@@ -369,37 +369,37 @@ func TestWatchOwnerStopCancelsAndDrainsCopiedCallback(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if owner.Wait(ctx) == nil {
-		t.Fatal("owner released while callback was active")
+	if lifetime.Wait(ctx) == nil {
+		t.Fatal("lifetime released while callback was active")
 	}
 	close(release)
 	<-done
-	testutil.FailErr(t, "retry owner drain", owner.Wait(t.Context()))
-	copied(t.Context(), "owner-drain", ExternalBatch{Resync: true})
+	testutil.FailErr(t, "retry lifetime drain", lifetime.Wait(t.Context()))
+	copied(t.Context(), "lifetime-drain", ExternalBatch{Resync: true})
 	if calls.Load() != 1 {
-		t.Fatal("stopped owner admitted copied callback")
+		t.Fatal("stopped lifetime admitted copied callback")
 	}
-	if EnsureProjectWatch(t.Context(), owner, "owner-drain", "", roots, nil) {
-		t.Fatal("stopped owner rebound project")
+	if EnsureProjectWatch(t.Context(), lifetime, "lifetime-drain", "", roots, nil) {
+		t.Fatal("stopped lifetime rebound project")
 	}
-	owner.Stop()
+	lifetime.Stop(t.Context())
 }
 
-func TestWatchOwnerIdleWaitKeepsLiveObserver(t *testing.T) {
-	owner := &WatchOwner{}
+func TestWatchLifetimeIdleWaitKeepsLiveObserver(t *testing.T) {
+	lifetime := &WatchLifetime{}
 	var calls atomic.Int32
 	roots := []RootSpec{{ID: "r1", WorkspaceID: "ws", Path: t.TempDir()}}
-	EnsureProjectWatch(t.Context(), owner, "owner-idle", "", roots, func(context.Context, string, ExternalBatch) { calls.Add(1) })
-	testutil.FailErr(t, "settle live owner", owner.Wait(t.Context()))
+	EnsureProjectWatch(t.Context(), lifetime, "lifetime-idle", "", roots, func(context.Context, string, ExternalBatch) { calls.Add(1) })
+	testutil.FailErr(t, "settle live lifetime", lifetime.Wait(t.Context()))
 	watchRegMu.Lock()
-	callback := watchers[watchKey{"owner-idle", ""}].external
+	callback := watchers[watchKey{"lifetime-idle", ""}].external
 	watchRegMu.Unlock()
-	callback(t.Context(), "owner-idle", ExternalBatch{Resync: true})
+	callback(t.Context(), "lifetime-idle", ExternalBatch{Resync: true})
 	if calls.Load() != 1 {
 		t.Fatal("idle wait cleared live callback")
 	}
-	owner.Stop()
-	testutil.FailErr(t, "release owner", owner.Wait(t.Context()))
+	lifetime.Stop(t.Context())
+	testutil.FailErr(t, "release lifetime", lifetime.Wait(t.Context()))
 }
 
 type watchOwnerBlockingPublisher struct {
@@ -415,14 +415,14 @@ func (p *watchOwnerBlockingPublisher) SourceChanged(ctx context.Context, _ api.S
 	return ctx.Err()
 }
 
-func TestWatchOwnerStopDrainsWholeFlushPublication(t *testing.T) {
-	owner := &WatchOwner{}
+func TestWatchLifetimeStopDrainsWholeFlushPublication(t *testing.T) {
+	lifetime := &WatchLifetime{}
 	pub := &watchOwnerBlockingPublisher{entered: make(chan struct{}), cancelled: make(chan struct{}), release: make(chan struct{})}
 	t.Cleanup(Bind(pub))
 	roots := []RootSpec{{ID: "r1", WorkspaceID: "ws", Path: t.TempDir()}}
-	EnsureProjectWatch(t.Context(), owner, "owner-publish", "", roots, nil)
+	EnsureProjectWatch(t.Context(), lifetime, "lifetime-publish", "", roots, nil)
 	watchRegMu.Lock()
-	watch := watchers[watchKey{"owner-publish", ""}]
+	watch := watchers[watchKey{"lifetime-publish", ""}]
 	watchRegMu.Unlock()
 	done := make(chan struct{})
 	go func() { defer close(done); watch.flushExternalChanges(t.Context(), pendingExternalBatch{resync: true}) }()
@@ -431,7 +431,7 @@ func TestWatchOwnerStopDrainsWholeFlushPublication(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("flush publication did not enter")
 	}
-	owner.Stop()
+	lifetime.Stop(t.Context())
 	select {
 	case <-pub.cancelled:
 	case <-time.After(5 * time.Second):
@@ -439,11 +439,11 @@ func TestWatchOwnerStopDrainsWholeFlushPublication(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if owner.Wait(ctx) == nil {
-		t.Fatal("owner drain ignored active publication")
+	if lifetime.Wait(ctx) == nil {
+		t.Fatal("lifetime drain ignored active publication")
 	}
 	close(pub.release)
 	<-done
-	testutil.FailErr(t, "drain publication", owner.Wait(t.Context()))
+	testutil.FailErr(t, "drain publication", lifetime.Wait(t.Context()))
 	watch.flushExternalChanges(t.Context(), pendingExternalBatch{resync: true})
 }

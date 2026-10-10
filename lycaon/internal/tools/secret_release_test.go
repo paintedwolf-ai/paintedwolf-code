@@ -18,7 +18,7 @@ import (
 func TestSecretScreenOffersTheReleaseLadder(t *testing.T) {
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, nil)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 	fingerprints := []secretmatch.SecretFingerprint{"sf1_second", "sf1_first"}
 	got, askErr := exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
 		SessionID: "worker", RootSessionID: "sess", ProjectID: "project-id", ProjectDir: "/project",
@@ -97,7 +97,7 @@ func TestActiveSecretReleaseSkipsCheckpoint(t *testing.T) {
 	mgr := &secretScreenHITL{}
 	gate := &secretReleaseGateStub{covered: true}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, gate)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	ledger := authzcontext.NewMemoryStore()
 	exec.Approvals.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: ledger}})
 	got, askErr := exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
@@ -131,7 +131,7 @@ func TestActiveSecretReleaseSkipsCheckpoint(t *testing.T) {
 func TestSecretScreenDoesNotOfferPathBoundRelease(t *testing.T) {
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, nil)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 	got, askErr := exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
 		SessionID: "sess", ProjectDir: "/project", Surface: secretmatch.SurfaceMCP, DestinationID: "mcp-server",
 		RuleID: "rule", RuleTitle: "Credential", GenericShape: "a1b2c3a1b2c3a1b2c3a1b2c3a1b2c3a1b2c3a1b2 (40 characters)",
@@ -151,7 +151,7 @@ func TestSecretScreenDoesNotOfferPathBoundRelease(t *testing.T) {
 func TestSecretScreenOffersProjectBoundReleaseWithoutProjectFolder(t *testing.T) {
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, nil)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 	_, _ = exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
 		SessionID: "sess", ProjectID: "project-id", Surface: secretmatch.SurfaceMCP, DestinationID: "mcp-server",
 		RuleID: "rule", RuleTitle: "Credential", GenericShape: "a1b2c3a1b2c3a1b2c3a1 (20 characters)",
@@ -166,7 +166,7 @@ func TestSecretScreenOffersProjectBoundReleaseWithoutProjectFolder(t *testing.T)
 		}
 	}
 	moved := &secretScreenHITL{status: hitl.DecisionStatusApproved}
-	exec.Approvals.SetCheckpointManager(moved, nil)
+	exec.Approvals.SetCheckpointManager(t.Context(), moved, nil)
 	_, _ = exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
 		SessionID: "sess", ProjectID: "project-id", ProjectDir: "/moved/project", Surface: secretmatch.SurfaceMCP, DestinationID: "mcp-server",
 		RuleID: "rule", RuleTitle: "Credential", GenericShape: "a1b2c3a1b2c3a1b2c3a1 (20 characters)",
@@ -186,7 +186,7 @@ func TestReleaseQuietSendsUnchanged(t *testing.T) {
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
 	gate := &secretReleaseGateStub{quiet: true}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, gate)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	got, askErr := exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
 		SessionID: "sess", ProjectID: "project-id", ProjectDir: "/project",
 		Surface:       secretmatch.SurfaceModel,
@@ -207,7 +207,7 @@ func TestQuietedUnredactableSecretScreenSendsUnchanged(t *testing.T) {
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
 	gate := &secretReleaseGateStub{quiet: true}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, gate)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	got, askErr := exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
 		SessionID: "sess", ProjectID: "project-id", ProjectDir: "/project",
 		Surface:       secretmatch.SurfaceCommand,
@@ -280,7 +280,7 @@ func (*secretReleaseGateStub) ForgetSession(string)                          {}
 func TestStandingRedactionStripsWithoutACard(t *testing.T) {
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, &secretReleaseGateStub{standingRedact: true, covered: true})
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, &secretReleaseGateStub{standingRedact: true, covered: true})
 	got, askErr := exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
 		SessionID: "sess", ProjectID: "project-id", ProjectDir: "/project",
 		Surface:       secretmatch.SurfaceModel,
@@ -300,7 +300,7 @@ func TestStandingRedactionStripsWithoutACard(t *testing.T) {
 func TestStandingRedactionOnUnrewritableSurfaceStillAsks(t *testing.T) {
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, &secretReleaseGateStub{standingRedact: true})
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, &secretReleaseGateStub{standingRedact: true})
 	got, askErr := exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
 		SessionID: "sess", ProjectID: "project-id", ProjectDir: "/project",
 		Surface:       secretmatch.SurfaceCommand,
@@ -323,7 +323,7 @@ func TestStandingRedactionOnUnrewritableSurfaceStillAsks(t *testing.T) {
 func TestRedactionContestRequiresReviewDespiteEarlierPermission(t *testing.T) {
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, &secretReleaseGateStub{standingRedact: true, covered: true, quiet: true})
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, &secretReleaseGateStub{standingRedact: true, covered: true, quiet: true})
 	finding := secretmatch.Alert{
 		SessionID: "chat", ProjectID: "project", Surface: secretmatch.SurfaceModel,
 		DestinationID: "provider", DestinationLabel: "Provider", RuleID: "rule", RuleTitle: "Credential",
@@ -349,7 +349,7 @@ func TestServiceRecipientsRequireTheirOwnPermissionDespiteProcessQuiet(t *testin
 	for _, quiet := range []bool{false, true} {
 		mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
 		exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-		exec.Approvals.SetCheckpointManager(mgr, &secretReleaseGateStub{quiet: quiet})
+		exec.Approvals.SetCheckpointManager(t.Context(), mgr, &secretReleaseGateStub{quiet: quiet})
 		_, err := exec.Secrets.AskSecretScreen(t.Context(), secretmatch.Alert{
 			SessionID: "chat", ProjectID: "project", Surface: secretmatch.SurfaceCommand,
 			DestinationID: "proxy", DestinationLabel: "Processes in this chat", RuleID: secretmatch.ManagedRuleID,

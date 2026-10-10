@@ -66,22 +66,28 @@ func TestAgentCommandLaunchInjectsPackageCacheEnv(t *testing.T) {
 func TestCommandPackageNeverImportsNative(t *testing.T) {
 	t.Parallel()
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, ".", nil, parser.ImportsOnly)
+	entries, err := os.ReadDir(".")
 	if err != nil {
-		t.Fatalf("parse command package: %v", err)
+		t.Fatalf("read command package: %v", err)
 	}
 	const forbidden = "github.com/lycaon/lycaon/internal/tools/native"
-	for _, pkg := range pkgs {
-		for fileName, f := range pkg.Files {
-			for _, imp := range f.Imports {
-				path := strings.Trim(imp.Path.Value, `"`)
-				if path == forbidden {
-					t.Errorf("%s imports forbidden native package: %s", fileName, path)
-				}
-				if strings.HasPrefix(path, forbidden+"/") {
-					if path != forbidden+"/toolkit" && path != forbidden+"/terminal" && path != forbidden+"/command" {
-						t.Errorf("%s imports forbidden native subpackage: %s", fileName, path)
-					}
+	for _, entry := range entries {
+		if entry.IsDir() || filepath.Ext(entry.Name()) != ".go" {
+			continue
+		}
+		fileName := entry.Name()
+		f, err := parser.ParseFile(fset, fileName, nil, parser.ImportsOnly)
+		if err != nil {
+			t.Fatalf("parse command source %s: %v", fileName, err)
+		}
+		for _, imp := range f.Imports {
+			path := strings.Trim(imp.Path.Value, `"`)
+			if path == forbidden {
+				t.Errorf("%s imports forbidden native package: %s", fileName, path)
+			}
+			if strings.HasPrefix(path, forbidden+"/") {
+				if path != forbidden+"/toolkit" && path != forbidden+"/terminal" && path != forbidden+"/command" {
+					t.Errorf("%s imports forbidden native subpackage: %s", fileName, path)
 				}
 			}
 		}

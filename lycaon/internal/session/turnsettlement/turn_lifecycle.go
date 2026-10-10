@@ -204,11 +204,6 @@ func (m *Service) Drain(ctx context.Context, sessionID string) error {
 	return m.SettlePending(hostCtx, sessionID)
 }
 
-// idleOutcome is the typed reason carried on the session-idle event.
-type idleOutcome struct {
-	Disposition api.SessionIdleDisposition
-}
-
 // BeginShutdown marks torn-down turns as interrupted.
 func (m *Service) BeginShutdown() {
 	if m == nil {

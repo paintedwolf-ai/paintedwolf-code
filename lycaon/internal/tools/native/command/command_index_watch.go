@@ -23,7 +23,3 @@ func StampIndexWatch(tctx tools.ToolContext, snapshot indexwatch.Snapshot) {
 	}
 	tctx.Effects.Out.Facts.IndexWatch = snapshot
 }
-
-func stampIndexWatch(tctx tools.ToolContext, snapshot indexwatch.Snapshot) {
-	StampIndexWatch(tctx, snapshot)
-}

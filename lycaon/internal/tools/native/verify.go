@@ -183,10 +183,6 @@ func stampSourceRun(tctx tools.ToolContext, res *hostcmd.Result, verdict VerifyO
 	command.StampSourceRun(tctx, res, string(verdict), outcome)
 }
 
-func verificationRequested(args map[string]any) bool {
-	return command.VerificationRequested(args)
-}
-
 // stampUnverifiableFacts records an unverifiable receipt.
 func stampUnverifiableFacts(tctx tools.ToolContext, verdict VerifyOutcome) {
 	if tctx.Effects.Out == nil || verdict != VerifyOutcomeUnverifiable {

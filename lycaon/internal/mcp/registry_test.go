@@ -165,7 +165,7 @@ func newTestRegistry(t *testing.T, conn mcp.SessionConnector, providerIDs ...str
 	if err := reg.Catalog.Load(context.Background()); err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	t.Cleanup(func() { _ = reg.Close() })
+	t.Cleanup(func() { _ = reg.Close(t.Context()) })
 	return reg
 }
 

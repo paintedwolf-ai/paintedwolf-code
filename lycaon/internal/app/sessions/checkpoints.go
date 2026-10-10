@@ -71,7 +71,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	r.Checkpoints = checkpointMgr
 	r.Manager.Stops.SetCheckpointStop(checkpointMgr)
 	r.Manager.Observations.SetExecutionCheckpoints(checkpointMgr)
-	deps.Execution.Host.Authority.SetCheckpointManager(checkpointMgr)
+	deps.Execution.Host.Authority.SetCheckpointManager(ctx, checkpointMgr)
 
 	writeRootRT := approvalstate.NewSandboxPathGrantRuntime()
 	r.SandboxWriteRoot = writeRootRT
@@ -84,7 +84,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	loopbackRT := approvalstate.NewSandboxPortGrantRuntime()
 	r.SandboxLoopback = loopbackRT
 	r.Manager.SetSandboxLoopbackRuntime(loopbackRT)
-	loopbackProv := session.NewLoopbackProvenance()
+	loopbackProv := session.NewLoopbackProvenance(ctx)
 	r.Manager.SetLoopbackProvenance(loopbackProv)
 
 	if err := wireGrantedAccess(r, deps); err != nil {
@@ -115,7 +115,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		sensitivepath.Dir(filepath.Join(deps.Directory, "ask-triggers")),
 	)
 	if locErr != nil {
-		slog.Warn("sensitive locations catalog unavailable", "error", locErr)
+		slog.WarnContext(ctx, "sensitive locations catalog unavailable", "error", locErr)
 	}
 	deps.Execution.Host.Commands.SetSandboxWriteRootGate(&session.WriteRootCheckpointBroker{
 		Checkpoints:       r.Checkpoints,
@@ -164,11 +164,11 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	})
 	toolApprovalRT := wireAskSpamGuards(r, deps.Execution.Host.Authority)
 	if deps.SettingsService != nil {
-		if err := deps.Security.BuildExceptional(deps.Execution.Host.Executor.Capabilities, deps.SettingsService.Approvals, deps.Execution.Host.Authority.ApprovalsDisabled, r.Manager.Resources, deps.Security.Authority.Recorder, r.Manager.Chats.Protection.SetDirectIPReconstructHook); err != nil {
+		if err := deps.Security.BuildExceptional(ctx, deps.Execution.Host.Executor.Capabilities, deps.SettingsService.Approvals, deps.Execution.Host.Authority.ApprovalsDisabled, r.Manager.Resources, deps.Security.Authority.Recorder, r.Manager.Chats.Protection.SetDirectIPReconstructHook); err != nil {
 			return err
 		}
 	}
-	if err := wireToolApprovalCheckpointHooks(checkpointMgr, toolApprovalRT); err != nil {
+	if err := wireToolApprovalCheckpointHooks(ctx, checkpointMgr, toolApprovalRT); err != nil {
 		return err
 	}
 
@@ -188,7 +188,7 @@ func wireAskSpamGuards(r *Runtime, authority *toolhost.AuthorityServices) *appro
 	return toolApprovalRT
 }
 
-func wireToolApprovalCheckpointHooks(mgr *hitl.Checkpoints, toolApprovalRT *approvalstate.ToolApprovalCoalesce) error {
+func wireToolApprovalCheckpointHooks(ctx context.Context, mgr *hitl.Checkpoints, toolApprovalRT *approvalstate.ToolApprovalCoalesce) error {
 	mgr.Authority.SetToolApprovalTerminalHook(func(chatSessionID, grantKey string, status hitl.DecisionStatus) {
 		toolApprovalRT.ClearPending(chatSessionID, grantKey)
 		switch status {
@@ -232,10 +232,10 @@ func wireToolApprovalCheckpointHooks(mgr *hitl.Checkpoints, toolApprovalRT *appr
 			toolApprovalRT.RecordDeny(chat, key)
 		}
 	})
-	if err := mgr.RestorePending(context.Background()); err != nil {
+	if err := mgr.RestorePending(ctx); err != nil {
 		return fmt.Errorf("restore pending checkpoints: %w", err)
 	}
-	if err := mgr.Authority.RestoreRejectedToolApprovalDenials(context.Background()); err != nil {
+	if err := mgr.Authority.RestoreRejectedToolApprovalDenials(ctx); err != nil {
 		return fmt.Errorf("restore rejected tool-approval denials: %w", err)
 	}
 	return nil

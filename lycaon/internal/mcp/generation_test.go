@@ -13,7 +13,7 @@ func generationFixtureRegistry(t *testing.T) *Runtime {
 	t.Helper()
 	reg, err := NewRuntime(RuntimeOptions{Connector: &MockConnector{}})
 	testutil.FailErr(t, "NewRuntime", err)
-	t.Cleanup(func() { _ = reg.Close() })
+	t.Cleanup(func() { _ = reg.Close(t.Context()) })
 	reg.Catalog.deviceCatalog = []MergedMCPProviderEntry{
 		{MCPProviderEntry: MCPProviderEntry{ID: "tracker", Command: "/bin/true", Enabled: true}},
 		{MCPProviderEntry: MCPProviderEntry{ID: "archive", Command: "/bin/true", Enabled: false}},

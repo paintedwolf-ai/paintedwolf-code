@@ -128,12 +128,12 @@ func (r *AuthorityServices) ForgetSessionAuthorization(sessionID string) {
 	}
 }
 
-func (r *AuthorityServices) SetCheckpointManager(mgr hitl.CheckpointManager) {
+func (r *AuthorityServices) SetCheckpointManager(ctx context.Context, mgr hitl.CheckpointManager) {
 	if r == nil {
 		return
 	}
 	if r.reviews != nil {
-		r.reviews.SetCheckpointManager(mgr, r.approvalGate)
+		r.reviews.SetCheckpointManager(ctx, mgr, r.approvalGate)
 	}
 }
 

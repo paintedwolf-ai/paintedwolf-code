@@ -78,7 +78,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 
 	r.RepoProvider.SetOnSettled(func(projectDir string) {
 		if r.deps.Events.Publisher != nil {
-			r.deps.Events.Publisher.PublishBoardForRoot(context.Background(), projectDir)
+			r.deps.Events.Publisher.PublishBoardForRoot(context.WithoutCancel(ctx), projectDir)
 		}
 	})
 
@@ -148,7 +148,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	r.deps.Sessions.Manager.Coordinator.Loading.SetDecider(r.deps.Decisions.Decider)
 	r.deps.Sessions.Manager.Coordinator.Loading.SetSkillBodyRenderer(r.deps.Execution.Host.Skills.RenderSkillBody)
 
-	r.WebRuntime, err = webresearch.WireRuntime()
+	r.WebRuntime, err = webresearch.WireRuntime(ctx)
 	if err != nil {
 		return fmt.Errorf("web research runtime: %w", err)
 	}
@@ -190,7 +190,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 		},
 	}
 
-	if matcher, err := r.deps.Security.LoadMatcher(r.deps.TestSecretMatcher); err != nil {
+	if matcher, err := r.deps.Security.LoadMatcher(ctx, r.deps.TestSecretMatcher); err != nil {
 		return err
 	} else {
 		deps.SecretMatcher = matcher

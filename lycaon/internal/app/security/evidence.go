@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
-func (b *Runtime) LoadMatcher(override *secretmatch.Matcher) (*secretmatch.Matcher, error) {
+func (b *Runtime) LoadMatcher(ctx context.Context, override *secretmatch.Matcher) (*secretmatch.Matcher, error) {
 	if b.Matcher != nil {
 		return b.Matcher, nil
 	}
@@ -23,7 +23,7 @@ func (b *Runtime) LoadMatcher(override *secretmatch.Matcher) (*secretmatch.Match
 			return nil, fmt.Errorf("test secret fingerprint key: %w", err)
 		}
 		b.Matcher.SetFingerprinter(fingerprinter)
-		b.InstallEvidence(b.Matcher, fingerprinter)
+		b.InstallEvidence(ctx, b.Matcher, fingerprinter)
 		return b.Matcher, nil
 	}
 	m, err := secretmatch.BuildMatcher(secretmatch.Bundled())
@@ -35,13 +35,13 @@ func (b *Runtime) LoadMatcher(override *secretmatch.Matcher) (*secretmatch.Match
 		return nil, fmt.Errorf("secret fingerprint key: %w", err)
 	}
 	m.SetFingerprinter(fingerprinter)
-	b.InstallEvidence(m, fingerprinter)
+	b.InstallEvidence(ctx, m, fingerprinter)
 	b.Matcher = m
 	return m, nil
 }
 
 // InstallEvidence binds matcher evidence to the managed secret stores.
-func (b *Runtime) InstallEvidence(m *secretmatch.Matcher, fp *secretmatch.Fingerprinter) {
+func (b *Runtime) InstallEvidence(ctx context.Context, m *secretmatch.Matcher, fp *secretmatch.Fingerprinter) {
 	b.Matcher, b.Fingerprinter = m, fp
 	b.Harvest = secretharvest.NewRuntime(fp)
 	harvest := b.Harvest
@@ -49,7 +49,7 @@ func (b *Runtime) InstallEvidence(m *secretmatch.Matcher, fp *secretmatch.Finger
 		if b.sessions == nil {
 			return ""
 		}
-		sess, err := b.sessions.Get(context.Background(), rootSessionID)
+		sess, err := b.sessions.Get(context.WithoutCancel(ctx), rootSessionID)
 		if err != nil || sess == nil {
 			return ""
 		}
@@ -142,14 +142,14 @@ func (b *Runtime) InstallEvidence(m *secretmatch.Matcher, fp *secretmatch.Finger
 		if b.sweep == nil {
 			return
 		}
-		go b.sweep(context.WithoutCancel(context.Background()), rootSessionID, generation)
+		go b.sweep(context.WithoutCancel(ctx), rootSessionID, generation)
 	})
 	// Capture tags correlate redacted occurrences.
 	if b.releaseCaptureRedactor != nil {
 		b.releaseCaptureRedactor()
 	}
 	b.releaseCaptureRedactor = observability.SetCaptureRedactor(func(text string) string {
-		redacted, spans := m.RedactLabeledSpansWhere(context.Background(), "", text, nil)
+		redacted, spans := m.RedactLabeledSpansWhere(context.WithoutCancel(ctx), "", text, nil)
 		return secretmatch.ApplyPseudonyms(redacted, spans)
 	})
 }
