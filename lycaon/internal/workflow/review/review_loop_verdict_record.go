@@ -411,4 +411,3 @@ func (m *Verdicts) notifyReviewLoopHeld(ctx context.Context, sessionID string, d
 	}
 }
 
-// runstate.ReviewLoopAttempt returns the phase's recorded non-terminal attempt count, 0 when none.
