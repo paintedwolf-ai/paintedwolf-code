@@ -2,7 +2,6 @@ package contractfixture
 
 import (
 	"context"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"io"
 	"net/http"
@@ -79,7 +78,6 @@ func NewTestServerWithWorkflowRegistry(t *testing.T, reg tools.ToolRegistry, opt
 	testutil.FailErr(t, "workflowdef.RegistryFromDirs", err)
 	runs := workflowpersistence.New(sqlDB)
 	workflows := workflow.NewManager(runs, sessions, registry, nil)
-	workflows.Resolver = workflowcatalog.Resolver{}
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: workflows.Store.Runs, Policy: workflows.Policy, Ambient: workflows.Ambient, Blueprints: workflows.Blueprints, Batch: workflows.Batch, Slash: workflows.Slash, Requests: workflows.Requests, Feedback: workflows.Feedback, Transcript: workflows.Transcript, Asks: workflows.Asks, Fanout: workflows.Fanout, Phases: workflows.Phases, Reports: workflows.Reports, Recovery: workflows.Recovery, Cleanup: workflows})
 	return NewServerForTest(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: sessions, PersonActions: personactions.New(sqlDB), Projects: project.NewSQLRegistry(sqlDB), Sessions: mgr}, Workflow: hostapi.WorkflowDependencies{
