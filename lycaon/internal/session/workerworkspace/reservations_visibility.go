@@ -13,7 +13,7 @@ import (
 // maxReservationPromptRunes bounds the one-line brief shown beside a reservation.
 const maxReservationPromptRunes = 48
 
-// ActiveReservationBoardEntries returns handoff reservations for pack_board peer digest.
+// ReservationEntries returns handoff reservations for pack_board peer digest.
 func (m *Service) ReservationEntries(sessionID string) []api.BoardReservationEntry {
 	if m == nil || m.calls == nil {
 		return nil

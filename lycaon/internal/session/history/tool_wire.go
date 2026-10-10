@@ -9,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// prepareToolWireContent spills oversized payloads before storage or publication.
+// ToolWire spills oversized payloads before storage or publication.
 // Failed or unavailable compaction leaves the complete observation intact.
 func (m *Service) ToolWire(ctx context.Context, sess *api.Session, toolName, content string, opts compaction.CompactToolWireOpts) (string, *api.CompactedChunkMeta) {
 	content = strings.TrimSpace(content)

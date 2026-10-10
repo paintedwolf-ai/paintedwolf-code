@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// queueCoordinatorGuidanceNudge queues one dynamic rule code from the hint registry.
+// Queue queues one dynamic rule code from the hint registry.
 func (m *Service) Queue(ctx context.Context, sessionID, code string, data map[string]any, subject *api.FeedbackSubject) {
 	if m == nil || strings.TrimSpace(sessionID) == "" {
 		return
@@ -28,7 +28,7 @@ func (m *Service) Queue(ctx context.Context, sessionID, code string, data map[st
 	})
 }
 
-// queueCoordinatorGuidanceAdvisories queues each advisory in evaluation order.
+// QueueAdvisories queues each advisory in evaluation order.
 func (m *Service) QueueAdvisories(ctx context.Context, sessionID string, items []guidance.GuidanceNudge) {
 	for _, item := range items {
 		if item.Copy == nil {
@@ -47,7 +47,7 @@ func (m *Service) QueueAdvisories(ctx context.Context, sessionID string, items [
 	}
 }
 
-// QueueGuidanceNudge enqueues a structured guidance nudge for the session.
+// QueueNudge enqueues a structured guidance nudge for the session.
 func (m *Service) QueueNudge(ctx context.Context, sessionID, code string, data map[string]any) {
 	m.Queue(ctx, sessionID, code, data, nil)
 }

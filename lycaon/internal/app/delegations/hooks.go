@@ -91,11 +91,7 @@ func (r *Runtime) OnWorkflowPhaseEnter(ctx context.Context, rc *workflowphases.R
 			}
 		}
 	}
-	r.deps.Sessions.Manager.Coordinator.Guidance.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, env, anchor.MatchContext{
-		Surface:  "phase",
-		Phase:    rc.Phase,
-		Workflow: rc.WorkflowID,
-	})
+	r.deps.Sessions.Manager.Coordinator.Guidance.EmitMatch(ctx, rc.SessionID, anchor.PhaseEntered, env, anchor.RunMatch(rc, "phase", rc.Phase))
 	// Host-held phases park the coordinator.
 	heldByHost := false
 	if def.MayHostHold() {

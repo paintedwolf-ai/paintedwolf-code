@@ -46,7 +46,7 @@ func RejectFromGuardErr(ctx context.Context, err error) *guidance.Refusal {
 	return guidance.NewRefusal("", err.Error())
 }
 
-// evaluateOARCloseoutBlock runs coordinator.closeout_check after closeout citation facts.
+// CloseoutBlock runs coordinator.closeout_check after closeout citation facts.
 func (m *Service) CloseoutBlock(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
 	if m == nil || m.Pipeline == nil || !m.Pipeline.AnchorEnforced(oar.AnchorCoordinatorCloseoutCheck) {
 		return nil, fmt.Errorf("closeout citation OAR requires enforced coordinator.closeout_check")
@@ -72,7 +72,7 @@ func (m *Service) CloseoutBlock(ctx context.Context, sess *api.Session, gc *oar.
 	return d, nil
 }
 
-// tryOARFinishBlock evaluates the native provisional report checkpoint.
+// FinishBlock evaluates the native provisional report checkpoint.
 func (m *Service) FinishBlock(ctx context.Context, sess *api.Session, observe func(gc *oar.GuardContext) error) (*guidance.Refusal, bool) {
 	if m == nil {
 		return nil, false
@@ -110,7 +110,7 @@ func (m *Service) renderBlock(ctx context.Context, anchor string, gc *oar.GuardC
 	return m.feedback.RenderResult(ctx, anchor, res)
 }
 
-// formatDoomLoopReject evaluates tool.rejected for DOOM_LOOP_REPEAT.
+// FormatDoomLoopReject evaluates tool.rejected for DOOM_LOOP_REPEAT.
 func (m *Service) FormatDoomLoopReject(ctx context.Context, sessionID, tool string, args map[string]any, count int, repeatedCode string) (*guidance.Refusal, error) {
 	if m == nil {
 		return nil, nil
@@ -141,7 +141,7 @@ func (m *Service) FormatDoomLoopReject(ctx context.Context, sessionID, tool stri
 	return nil, nil
 }
 
-// escalateRepeatedCode preserves the original rejection when no escalation matches.
+// EscalateRepeatedCode preserves the original rejection when no escalation matches.
 func (m *Service) EscalateRepeatedCode(ctx context.Context, sessionID, tool string, original *guidance.Refusal, total int) *guidance.Refusal {
 	if m == nil || total <= 0 || original == nil || original.Code() == "" {
 		return nil
@@ -178,7 +178,7 @@ func (m *Service) CodeRejectResponses(sessionID, tool, code string) int {
 	return m.doomLoop.CodeRejectResponses(sessionID, tool, code)
 }
 
-// appendPostToolGuidance returns rendered guidance and structured result facts.
+// AfterTool returns rendered guidance and structured result facts.
 func (m *Service) AfterTool(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, doomCompletionCountAfter int, raised guidance.ToolResultFacts) (delivered string, facts guidance.ToolResultFacts) {
 	defer raised.IndexWatch.Release()
 	defer func() {
@@ -230,7 +230,7 @@ func (m *Service) fruitlessSearchRun(sess *api.Session, tool string, args map[st
 	return m.doomLoop.FruitlessSearchRun(sess.ID, tool, args), pattern
 }
 
-// tryOARContentBlock returns the content decision and any rendered refusal.
+// ContentBlock returns the content decision and any rendered refusal.
 func (m *Service) ContentBlock(ctx context.Context, sess *api.Session, anchor string, segments []oar.ContentSegment, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool, error) {
 	if m == nil || m.Pipeline == nil || !m.Pipeline.AnchorEnforced(anchor) {
 		return nil, false, "", false, nil
