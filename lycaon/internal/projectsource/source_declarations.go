@@ -41,7 +41,7 @@ type DeclarationSearchRoot struct {
 
 // DeclarationSearchQuery is one content-discovery pass over project roots.
 type DeclarationSearchQuery struct {
-	// Continue requests file nominations from a caller-owned bounded frontier.
+	// Continue requests file nominations from a caller-managed bounded frontier.
 	Continue  bool
 	ProjectID string
 	Roots     []DeclarationSearchRoot
