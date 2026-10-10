@@ -33,7 +33,7 @@ func (s *Handler) approvalConfigResponse(ctx context.Context, scope llm.Settings
 		cfg,
 		s.Service.Approvals.MergedFrom(scope, projectDir),
 	)
-	catalog := s.Sessions.RuleLayers(ctx, ref.ID)
+	catalog := s.Sessions.Catalog.RuleLayers(ctx, ref.ID)
 	managed := append([]settings.ApprovalRule(nil), catalog.Device...)
 	if scope == llm.SettingsScopeProject {
 		managed = append(managed, catalog.Project...)

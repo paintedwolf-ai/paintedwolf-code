@@ -12,7 +12,7 @@ import (
 
 // commitToolResultWithOptionalNote appends the tool row, and its agent note
 // when present, as one AppendMessages batch.
-func (l toolInvocations) commitToolResultWithOptionalNote(
+func (l *toolInvocations) commitToolResultWithOptionalNote(
 	ctx context.Context,
 	sessionID string,
 	history []api.Message,
@@ -23,10 +23,10 @@ func (l toolInvocations) commitToolResultWithOptionalNote(
 	st *promptLoopTurnState,
 ) ([]api.Message, error) {
 	stored, transient := l.classifiedResultRows(ctx, toolMsg, transientToolMsg, note, lastToolTS)
-	return l.appendStorageSafeMessages(ctx, sessionID, history, stored, transient, st)
+	return l.Projection.appendStorageSafeMessages(ctx, sessionID, history, stored, transient, st)
 }
 
-func (l toolInvocations) classifiedResultRows(
+func (l *toolInvocations) classifiedResultRows(
 	ctx context.Context,
 	toolMsg api.Message,
 	transientTool *api.Message,
@@ -50,11 +50,11 @@ func (l toolInvocations) classifiedResultRows(
 		ArtifactIDs:   note.ArtifactIDs,
 	}
 	stampCommitOrderTS(&noteMsg, lastToolTS)
-	storedNote, transientNote := l.storageSafeMessage(ctx, noteMsg)
+	storedNote, transientNote := l.Projection.storageSafeMessage(ctx, noteMsg)
 	return []api.Message{toolMsg, storedNote}, []*api.Message{transientTool, transientNote}
 }
 
-func (l toolInvocations) appendStorageSafeMessages(
+func (l *turnProjection) appendStorageSafeMessages(
 	ctx context.Context,
 	sessionID string,
 	history []api.Message,
@@ -68,8 +68,8 @@ func (l toolInvocations) appendStorageSafeMessages(
 	return foldStorageSafeMessages(history, stored, transient, st), nil
 }
 
-func (l toolInvocations) persistStorageSafeMessages(ctx context.Context, sessionID string, stored []api.Message) error {
-	if l.PromptLoop == nil || l.Deps.AppendMessages == nil {
+func (l *turnProjection) persistStorageSafeMessages(ctx context.Context, sessionID string, stored []api.Message) error {
+	if l == nil || l.Deps.AppendMessages == nil {
 		return fmt.Errorf("append messages not configured")
 	}
 	return l.Deps.AppendMessages(ctx, sessionID, stored...)

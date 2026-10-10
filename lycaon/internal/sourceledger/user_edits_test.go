@@ -27,13 +27,13 @@ func TestCompareScopeUnmarksUserEdits(t *testing.T) {
 	})
 	fileID, _ := mustResolve(t, store, ctx, "notes.txt")
 
-	marked, err := store.CompareScope(ctx, "p1", sourcebranch.Trunk, Baseline{}, fileID, ScopeComparisonOptions{})
+	marked, err := store.Comparisons.CompareScope(ctx, "p1", sourcebranch.Trunk, Baseline{}, fileID, ScopeComparisonOptions{})
 	testutil.FailErr(t, "compare with user edits marked", err)
 	if marked.UserEditsUnmarked || marked.Before.State != "absent" {
 		t.Fatalf("marked comparison = %+v, want the absent pre-image", marked.Before)
 	}
 
-	unmarked, err := store.CompareScope(ctx, "p1", sourcebranch.Trunk, Baseline{}, fileID,
+	unmarked, err := store.Comparisons.CompareScope(ctx, "p1", sourcebranch.Trunk, Baseline{}, fileID,
 		ScopeComparisonOptions{UnmarkUserEdits: true})
 	testutil.FailErr(t, "compare with user edits unmarked", err)
 	if !unmarked.UserEditsUnmarked || unmarked.Attribution == nil {
@@ -68,7 +68,7 @@ func TestWalkWithoutUserEditsDropsFilesOnlyThePersonChanged(t *testing.T) {
 	})
 	paths := func(baseline Baseline) []string {
 		t.Helper()
-		res, err := store.QueryWalk(ctx, "p1", baseline, 100, 0, CommitLens{})
+		res, err := store.Walk.QueryWalk(ctx, "p1", baseline, 100, 0, CommitLens{})
 		testutil.FailErr(t, "query walk", err)
 		out := make([]string, 0, len(res.Files))
 		for _, file := range res.Files {
@@ -107,7 +107,7 @@ func TestRecordedComparisonSelectsChatAndPreservesOtherAuthors(t *testing.T) {
 	}
 	fileID, _ := mustResolve(t, store, ctx, "notes.txt")
 	for _, chat := range []string{"a", "b"} {
-		comparison, err := store.CompareScope(ctx, "p1", sourcebranch.Trunk, Baseline{Kind: BaselineSession, SessionID: chat}, fileID, ScopeComparisonOptions{UnmarkUserEdits: true})
+		comparison, err := store.Comparisons.CompareScope(ctx, "p1", sourcebranch.Trunk, Baseline{Kind: BaselineSession, SessionID: chat}, fileID, ScopeComparisonOptions{UnmarkUserEdits: true})
 		testutil.FailErr(t, "compare recorded chat", err)
 		if comparison.Attribution == nil || comparison.After.Content != previous {
 			t.Fatal("recorded comparison lost endpoints or authorship")

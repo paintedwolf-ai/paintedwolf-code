@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
@@ -34,13 +35,13 @@ func (t *ChownTool) Run(ctx context.Context, args map[string]any, tctx tools.Too
 		return "", err
 	}
 	if recursiveArg(args) {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "CHOWN_RECURSIVE_DENIED",
 			Data: map[string]any{"recursive": true},
 		}
 	}
 	if !chownSupported() {
-		return "", &tools.ToolReject{Code: "CHOWN_UNSUPPORTED", Data: nil}
+		return "", &toolrejection.ToolReject{Code: "CHOWN_UNSUPPORTED", Data: nil}
 	}
 	paths, err := parseChownPaths(args)
 	if err != nil {

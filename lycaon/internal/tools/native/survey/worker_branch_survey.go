@@ -34,7 +34,7 @@ func workerBranchReadDir(
 	fullPath string,
 	opts sandbox.SurveyOptions,
 ) ([]sandbox.SurveyEntry, bool, error) {
-	branch := strings.TrimSpace(tctx.WorkerBranchRoot)
+	branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot)
 	if branch == "" {
 		return nil, false, nil
 	}
@@ -45,7 +45,7 @@ func workerBranchReadDir(
 	if err := tools.RequireBranchWorkspace(tctx); err != nil {
 		return nil, true, err
 	}
-	if err := tctx.BranchWorkspace.ValidateMeta(ctx); err != nil {
+	if err := tctx.Source.BranchWorkspace.ValidateMeta(ctx); err != nil {
 		return nil, true, err
 	}
 	entries, err := workspace.OverlaySurveyReadDir(branch, rel, opts)
@@ -59,7 +59,7 @@ func workerBranchSurveyWalk(
 	opts sandbox.SurveyOptions,
 	fn func(sandbox.SurveyEntry) (sandbox.SurveyAction, error),
 ) (bool, error) {
-	branch := strings.TrimSpace(tctx.WorkerBranchRoot)
+	branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot)
 	if branch == "" {
 		return false, nil
 	}
@@ -70,7 +70,7 @@ func workerBranchSurveyWalk(
 	if err := tools.RequireBranchWorkspace(tctx); err != nil {
 		return true, err
 	}
-	if err := tctx.BranchWorkspace.ValidateMeta(ctx); err != nil {
+	if err := tctx.Source.BranchWorkspace.ValidateMeta(ctx); err != nil {
 		return true, err
 	}
 	branchWalk := branch
@@ -81,13 +81,13 @@ func workerBranchSurveyWalk(
 }
 
 func ensureBranchFileForRead(ctx context.Context, tctx tools.ToolContext, abs string) error {
-	if strings.TrimSpace(tctx.WorkerBranchRoot) == "" {
+	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" {
 		return nil
 	}
 	if err := tools.RequireBranchWorkspace(tctx); err != nil {
 		return err
 	}
-	if err := tctx.BranchWorkspace.ValidateMeta(ctx); err != nil {
+	if err := tctx.Source.BranchWorkspace.ValidateMeta(ctx); err != nil {
 		return err
 	}
 	_, err := os.Lstat(abs)

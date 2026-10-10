@@ -59,8 +59,8 @@ func (permission SecretPermission) validate(action ProposedAction) error {
 			expectedWitness = chatWitness
 		}
 		if grant.Predicate.Category != ApprovalGrantCategorySecret || grant.Predicate.Pattern != pattern ||
-			(!WitnessEqual(grant.Witness, witness) && !WitnessEqual(grant.Witness, expectedWitness)) || grant.ProjectID != action.ProjectID ||
-			(grant.Scope == ApprovalGrantScopeChat && grant.ChatSessionID != action.ChatSession() && grant.ChatSessionID != action.ChatSession()) {
+			(!WitnessEqual(grant.Witness, witness) && !WitnessEqual(grant.Witness, expectedWitness)) || grant.ProjectID != action.Scope.ProjectID ||
+			(grant.Scope == ApprovalGrantScopeChat && grant.ChatSessionID != action.Scope.ChatSession() && grant.ChatSessionID != action.Scope.ChatSession()) {
 			return fmt.Errorf("compound secret permission disagrees with the reviewed handoff")
 		}
 	}

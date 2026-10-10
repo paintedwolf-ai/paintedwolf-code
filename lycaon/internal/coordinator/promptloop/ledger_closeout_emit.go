@@ -14,8 +14,8 @@ import (
 var errCloseoutAssemblerUnavailable = errors.New("closeout assembler unavailable")
 
 // The tool-turn fuse applies only to coordinator closeout surfaces.
-func (l turnCloseout) closeoutFuseTripped(ctx context.Context, sess *api.Session, sessionID, surfaceID string) bool {
-	if l.PromptLoop == nil || l.Deps.NoteCoordinatorToolTurn == nil {
+func (l *turnCloseout) closeoutFuseTripped(ctx context.Context, sess *api.Session, sessionID, surfaceID string) bool {
+	if l == nil || l.Deps.NoteCoordinatorToolTurn == nil {
 		return false
 	}
 	if sess == nil || sess.IsWorkerChild() || !surface.SurfaceDeliversReport(surfaceID) {
@@ -24,7 +24,7 @@ func (l turnCloseout) closeoutFuseTripped(ctx context.Context, sess *api.Session
 	return l.Deps.NoteCoordinatorToolTurn(ctx, sessionID)
 }
 
-func (l turnCloseout) emitStalledCloseout(
+func (l *turnCloseout) emitStalledCloseout(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, userPrompt, surfaceID string,
@@ -42,7 +42,7 @@ func (l turnCloseout) emitStalledCloseout(
 // without accepting still fails: members of the draft the report could not
 // read, from the draft itself or, once retained as an envelope, from its latest
 // refusal, and then the run's document checks.
-func (l turnCloseout) storedReportIssues(ctx context.Context, sessionID, draftedContent string, report guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
+func (l *turnCloseout) storedReportIssues(ctx context.Context, sessionID, draftedContent string, report guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
 	var issues []guidance.ReportDocumentIssue
 	read, _ := guidance.ReadCloseoutReport(draftedContent, "")
 	unread := read.Unread
@@ -62,7 +62,7 @@ func (l turnCloseout) storedReportIssues(ctx context.Context, sessionID, drafted
 	return issues, nil
 }
 
-func (l turnCloseout) emitAssembledCloseout(
+func (l *turnCloseout) emitAssembledCloseout(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, userPrompt, surfaceID, draftedContent string,
@@ -71,7 +71,7 @@ func (l turnCloseout) emitAssembledCloseout(
 	history []api.Message,
 ) (closeoutCommitOutcome, error) {
 	var out closeoutCommitOutcome
-	if l.PromptLoop == nil || l.Deps.AssembleLedgerCloseout == nil {
+	if l == nil || l.Deps.AssembleLedgerCloseout == nil {
 		return out, errCloseoutAssemblerUnavailable
 	}
 	retryCount := min(st.closeoutRetry.attempt, l.maxCitationGroundingRetries())
@@ -129,15 +129,15 @@ func (l turnCloseout) emitAssembledCloseout(
 	// The wire carries narrative; loop history retains the structured report.
 	wire := wireCopy(msg, closeoutWireContent(surfaceID))
 	if appendNew {
-		if l.Deps.AppendMessages != nil {
-			if err := l.Deps.AppendMessages(ctx, sessionID, wire); err != nil {
+		if l.Projection.Deps.AppendMessages != nil {
+			if err := l.Projection.Deps.AppendMessages(ctx, sessionID, wire); err != nil {
 				return out, err
 			}
 		}
 		history = append(history, msg)
 	} else {
-		if l.Deps.UpdateMessage != nil {
-			if err := l.Deps.UpdateMessage(ctx, sessionID, msgID, wire); err != nil {
+		if l.Projection.Deps.UpdateMessage != nil {
+			if err := l.Projection.Deps.UpdateMessage(ctx, sessionID, msgID, wire); err != nil {
 				return out, err
 			}
 		}
@@ -154,7 +154,7 @@ func (l turnCloseout) emitAssembledCloseout(
 		}
 	}
 
-	committed, err := l.commitGuardedAssistantTurn(ctx, sess, sessionID, history, userPrompt, surfaceID, msg)
+	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, userPrompt, surfaceID, msg)
 	if err != nil {
 		return out, err
 	}
@@ -165,7 +165,7 @@ func (l turnCloseout) emitAssembledCloseout(
 		}
 	}
 	if st != nil {
-		if err := turnNudges(l).closeCoordinatorDraftSlot(ctx, sessionID, st, committed.ID); err != nil {
+		if err := l.Nudges.closeCoordinatorDraftSlot(ctx, sessionID, st, committed.ID); err != nil {
 			return out, err
 		}
 		st.lastAssistantID = committed.ID

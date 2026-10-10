@@ -73,10 +73,12 @@ func TestProvisionalCommitPreservesIDAndOrd(t *testing.T) {
 	ordBefore := before.Ord
 
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
-		UpdateMessage:      store.Update,
+		Projection: ProjectionDeps{
+			CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
+			UpdateMessage:      store.Update,
+		},
 	})
-	committed, err := loop.commitGuardedAssistantTurn(
+	committed, err := loop.Projection.commitGuardedAssistantTurn(
 		context.Background(), &api.Session{ID: "s1"}, "s1", store.All(), "go", "", before,
 	)
 	testutil.FailErr(t, "commitGuardedAssistantTurn", err)
@@ -103,8 +105,10 @@ func TestProvisionalCommitPreservesIDAndOrd(t *testing.T) {
 func TestMultiStepTurnLeavesZeroLiveRows(t *testing.T) {
 	store := &inPlaceStore{}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
-		UpdateMessage:      store.Update,
+		Projection: ProjectionDeps{
+			CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
+			UpdateMessage:      store.Update,
+		},
 	})
 
 	steps := []api.Message{
@@ -126,7 +130,7 @@ func TestMultiStepTurnLeavesZeroLiveRows(t *testing.T) {
 	for _, step := range steps {
 		store.Append(step)
 		live := store.Find(step.ID)
-		_, err := loop.commitGuardedAssistantTurn(
+		_, err := loop.Projection.commitGuardedAssistantTurn(
 			context.Background(), &api.Session{ID: "s1"}, "s1", store.All(), "go", "", live,
 		)
 		testutil.FailErr(t, "settle "+step.ID, err)
@@ -161,18 +165,20 @@ func TestNonSlotRejectNeverDeletesRow(t *testing.T) {
 	var updateCalls atomic.Int32
 	var recordedBody, recordedCode string
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		UpdateMessage: func(ctx context.Context, sessionID, id string, msg api.Message) error {
-			updateCalls.Add(1)
-			return store.Update(ctx, sessionID, id, msg)
-		},
-		AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error { return nil },
-		AppendDraftVersion: func(_ context.Context, _, _, body, code string) (int, error) {
-			recordedBody, recordedCode = body, code
-			return 1, nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(ctx context.Context, sessionID, id string, msg api.Message) error {
+				updateCalls.Add(1)
+				return store.Update(ctx, sessionID, id, msg)
+			},
+			AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error { return nil },
+			AppendDraftVersion: func(_ context.Context, _, _, body, code string) (int, error) {
+				recordedBody, recordedCode = body, code
+				return 1, nil
+			},
 		},
 	})
 	history := []api.Message{before}
-	_, err := toolInvocations{loop}.rejectBlockedAssistantTurn(
+	_, err := loop.Tools.rejectBlockedAssistantTurn(
 		context.Background(), "s1", history, "a1", "", refusalForTest("Code: TEST"), nil,
 	)
 	testutil.FailErr(t, "rejectBlockedAssistantTurn", err)
@@ -215,10 +221,12 @@ func TestWithdrawPreservesIDAndOrd(t *testing.T) {
 		lastAssistantContent: "never committed",
 	}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
-		UpdateMessage:      store.Update,
+		Projection: ProjectionDeps{
+			CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
+			UpdateMessage:      store.Update,
+		},
 	})
-	testutil.FailErr(t, "withdraw", turnNudges{loop}.maybeWithdrawCoordinatorDraft(
+	testutil.FailErr(t, "withdraw", loop.Nudges.maybeWithdrawCoordinatorDraft(
 		context.Background(), &api.Session{ID: "s1"}, "s1", st,
 	))
 

@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -10,8 +9,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/jsonvalue"
-	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -24,64 +25,26 @@ func (m *RunManager) RecordReviewToolResult(ctx context.Context, sessionID strin
 	return ReviewRepairs{m}.RecordToolResult(ctx, sessionID, msg)
 }
 
-const reviewRepairsKey = "review_repairs"
+const (
+	reviewRepairsKey        = runstate.ReviewRepairsKey
+	ReviewBlockedReason     = runstate.ReviewBlockedReason
+	reviewRepairMaxAttempts = runstate.ReviewRepairMaxAttempts
+	reviewRepairMaxRepeated = runstate.ReviewRepairMaxRepeated
+)
 
-const ReviewBlockedReason = "review_blocked"
+type (
+	ReviewRepairResponse = runstate.ReviewRepairResponse
+	ReviewRepair         = runstate.ReviewRepair
+	ReviewSnapshot       = runstate.ReviewSnapshot
+)
 
-const reviewRepairMaxAttempts = 8
-
-const reviewRepairMaxRepeated = 3
-
-// ReviewRepairResponse deduplicates results from one model response.
-type ReviewRepairResponse struct {
-	ID          string   `json:"id"`
-	Results     []string `json:"results"`
-	Fingerprint string   `json:"fingerprint"`
-}
-
-// ReviewRepair is committed with workflow state; candidate snapshots are screened.
-type ReviewRepair struct {
-	Snapshot           *ReviewSnapshot        `json:"snapshot,omitempty"`
-	CoverageFacts      *reviewcoverage.Facts  `json:"coverage_facts,omitempty"`
-	ID                 string                 `json:"id"`
-	Phase              string                 `json:"phase"`
-	State              string                 `json:"state"`
-	Responses          []ReviewRepairResponse `json:"responses"`
-	Repeated           int                    `json:"repeated"`
-	Fingerprint        string                 `json:"fingerprint"`
-	CandidateMessageID string                 `json:"candidate_message_id"`
-	Diagnostics        []api.ToolFeedback     `json:"diagnostics"`
-	CreatedAt          time.Time              `json:"created_at"`
-	UpdatedAt          time.Time              `json:"updated_at"`
-}
-
-func readReviewRepairs(vars map[string]any) ([]ReviewRepair, error) {
-	if vars[reviewRepairsKey] == nil {
-		return nil, nil
-	}
-	raw, err := json.Marshal(vars[reviewRepairsKey])
-	if err != nil {
-		return nil, err
-	}
-	var rows []ReviewRepair
-	if err = json.Unmarshal(raw, &rows); err != nil {
-		return nil, fmt.Errorf("decode review repairs: %w", err)
-	}
-	return rows, nil
-}
-
-func CurrentReviewRepair(vars map[string]any, phase string) (*ReviewRepair, error) {
-	rows, err := readReviewRepairs(vars)
-	if err != nil {
-		return nil, err
-	}
-	for i := len(rows) - 1; i >= 0; i-- {
-		if rows[i].Phase == phase {
-			return &rows[i], nil
-		}
-	}
-	return nil, nil
-}
+var (
+	readReviewRepairs      = runstate.ReadReviewRepairs
+	CurrentReviewRepair    = runstate.CurrentReviewRepair
+	resolveReviewRepair    = runstate.ResolveReviewRepair
+	repairableVerdictCodes = runstate.RepairableVerdictCodes
+	reviewIssueFingerprint = runstate.ReviewIssueFingerprint
+)
 
 // RecordToolResult accounts for schema and semantic refusals alike, after the
 // screened result is durable. Transcript replay uses the same response id.
@@ -93,13 +56,13 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 	if !repairableVerdictCodes(result.Codes) {
 		return nil
 	}
-	run, err := m.Store.ActiveBySession(ctx, sessionID)
+	run, err := m.Store.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil || run == nil {
 		return err
 	}
-	unlock := m.lockRunVars(run.ID)
+	unlock := m.Vars.Lock(run.ID)
 	defer unlock()
-	run, err = m.loadRun(ctx, run.ID)
+	run, err = m.Store.Runs.Get(ctx, run.ID)
 	if err != nil {
 		return err
 	}
@@ -122,7 +85,7 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 	if err != nil || !settled {
 		return err
 	}
-	manifest, err := m.manifestForRun(ctx, run)
+	manifest, err := m.Resolver.ForRun(ctx, run)
 	if err != nil {
 		return err
 	}
@@ -130,7 +93,7 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 	if !ok || phase.ReviewLoop == nil {
 		return nil
 	}
-	vars, err := m.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := m.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return err
 	}
@@ -155,7 +118,7 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 		rows = append(rows, ReviewRepair{ID: uuid.NewString(), Phase: run.CurrentPhase, State: "repairing", CreatedAt: now})
 	}
 	episode := &rows[len(rows)-1]
-	if !episode.observeResponse(response, msg.ID, reviewIssueFingerprint(result.Feedback)) {
+	if !episode.ObserveResponse(response, msg.ID, reviewIssueFingerprint(result.Feedback)) {
 		return nil
 	}
 	episode.CandidateMessageID = msg.ID
@@ -168,167 +131,24 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 		snapshot := m.captureSnapshot(ctx, run, manifest, vars, result.ToolArgs)
 		episode.Snapshot = &snapshot
 		if phase.ReviewLoop.CarriesCoverage() && len(snapshot.Unavailable) == 0 {
-			facts := BuildCoverageFacts(manifest, vars, snapshot.Workers, snapshot.Scans)
+			facts := workflowreview.BuildCoverageFacts(manifest, vars, snapshot.Workers, snapshot.Scans)
 			episode.CoverageFacts = &facts
 		}
 
 		run.Status = api.WorkflowRunStatusPaused
 		run.PauseReason = ReviewBlockedReason
 		run.PausedAt = &now
-		b := newCommandBoundary(run, run.Revision, "paused", run.CurrentPhase, ReviewBlockedReason)
+		b := runstate.NewCommandBoundary(run, run.Revision, "paused", run.CurrentPhase, ReviewBlockedReason)
 		boundary = &b
 	}
 	run.UpdatedAt = now
 	vars = maps.Clone(vars)
 	vars[reviewRepairsKey] = rows
-	if err := m.commitCommand(ctx, run, "review_repair", struct{ MessageID string }{msg.ID}, vars, boundary, "", workflowWorkerMutation{HoldPending: blocked}, nil); err != nil {
+	if err := m.Journal.Commit(ctx, run, "review_repair", struct{ MessageID string }{msg.ID}, vars, boundary, "", runstate.WorkerMutation{HoldPending: blocked}, nil); err != nil {
 		return err
 	}
-	m.publishSession(ctx, run)
+	m.Publication.PublishSession(ctx, run)
 	return nil
-}
-
-// observeResponse counts a model response once while retaining its latest result.
-func (r *ReviewRepair) observeResponse(response, result, fingerprint string) bool {
-	for _, attempt := range r.Responses {
-		if slices.Contains(attempt.Results, result) {
-			return false
-		}
-	}
-	if len(r.Responses) == 0 || r.Responses[len(r.Responses)-1].ID != response {
-		if slices.ContainsFunc(r.Responses, func(a ReviewRepairResponse) bool { return a.ID == response }) {
-			return false
-		}
-		r.Responses = append(r.Responses, ReviewRepairResponse{ID: response})
-	}
-	last := &r.Responses[len(r.Responses)-1]
-	last.Results = append(last.Results, result)
-	last.Fingerprint = fingerprint
-	r.Fingerprint = fingerprint
-	r.Repeated = 0
-	for i := len(r.Responses) - 1; fingerprint != "" && i >= 0 && r.Responses[i].Fingerprint == fingerprint; i-- {
-		r.Repeated++
-	}
-	return true
-}
-
-func repairableVerdictCodes(codes []string) bool {
-	for _, code := range codes {
-		switch code {
-		case "TOOL_ARGS_INVALID", ReviewLoopVerdictInvalidCode, SubmitVerdictInventoryUnaccountedCode, SubmitVerdictScanGroupUnknownCode, "SUBMIT_VERDICT_QUESTION_INVALID", "SUBMIT_VERDICT_CITATIONS_REQUIRED", "SUBMIT_VERDICT_CITATION_UNGROUNDED", "SUBMIT_VERDICT_REVIEWER_UNCITED":
-			return true
-		}
-	}
-	return false
-}
-
-func reviewIssueFingerprint(feedback []api.ToolFeedback) string {
-	var signatures []string
-	for _, f := range feedback {
-		identity := reviewDiagnosticIdentity(f.Code, f.Details)
-		if identity == "" {
-			return ""
-		}
-		signatures = append(signatures, identity)
-	}
-	if len(signatures) == 0 {
-		return ""
-	}
-	slices.Sort(signatures)
-	return reviewcoverage.Identity(signatures)
-}
-
-func reviewDiagnosticIdentity(code string, details map[string]any) string {
-	// Stable typed fields exclude wording, examples, and candidate text.
-	sig := map[string]any{"code": code}
-	for _, key := range []string{"field", "field_path", "expected_type", "json_malformed", "json_encoded", "did_you_mean"} {
-		if value, ok := details[key]; ok {
-			sig[key] = value
-		}
-	}
-	for _, key := range []string{"unknown_groups", "unaccounted_group_ids", "ungrounded_sample", "schema_issues", "conflict_keys", "missing_reviewers"} {
-		if value, ok := details[key]; ok {
-			sig[key] = canonicalDiagnosticSet(value)
-		}
-	}
-	if raw, ok := details["issues"]; ok {
-		var issues []reviewcoverage.Issue
-		if decodeDiagnosticRows(raw, &issues) {
-			stable := make([]map[string]any, 0, len(issues))
-			for _, issue := range issues {
-				stable = append(stable, map[string]any{"kind": issue.Kind, "field_path": issue.FieldPath, "fact_id": issue.FactID})
-			}
-			sig["issues"] = canonicalDiagnosticSet(stable)
-		}
-	}
-	if raw, ok := details["repairs"]; ok {
-		var repairs []verdictRepair
-		if decodeDiagnosticRows(raw, &repairs) {
-			stable := make([]string, 0, len(repairs))
-			for _, repair := range repairs {
-				identity := reviewDiagnosticIdentity(repair.Code, repair.Details)
-				if identity == "" {
-					return ""
-				}
-				stable = append(stable, identity)
-			}
-			slices.Sort(stable)
-			sig["repairs"] = stable
-		}
-	}
-	if len(sig) == 1 {
-		return ""
-	}
-	return reviewcoverage.Identity(sig)
-}
-
-// decodeDiagnosticRows reads a feedback detail as typed rows, whether it holds
-// in-process values or JSON decoded on recovery. An unreadable detail
-// contributes nothing to the identity.
-func decodeDiagnosticRows(raw, out any) bool {
-	encoded, err := json.Marshal(raw)
-	if err != nil {
-		return false
-	}
-	return json.Unmarshal(encoded, out) == nil
-}
-
-func canonicalDiagnosticSet(value any) any {
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		return nil
-	}
-	var rows []json.RawMessage
-	if json.Unmarshal(encoded, &rows) != nil {
-		return value
-	}
-	stable := make([]string, len(rows))
-	for i, row := range rows {
-		stable[i] = reviewcoverage.Identity(row)
-	}
-	slices.Sort(stable)
-	return stable
-}
-
-func resolveReviewRepair(vars map[string]any, phase string) (map[string]any, error) {
-	rows, err := readReviewRepairs(vars)
-	if err != nil {
-		return nil, err
-	}
-	changed := false
-	for i := range rows {
-		if rows[i].Phase == phase && (rows[i].State == "repairing" || rows[i].State == "blocked") {
-			rows[i].State = "resolved"
-			rows[i].UpdatedAt = time.Now().UTC()
-			changed = true
-		}
-	}
-	if !changed {
-		return vars, nil
-	}
-	next := maps.Clone(vars)
-	next[reviewRepairsKey] = rows
-	return next, nil
 }
 
 // Recover closes the crash window between transcript commit and repair
@@ -337,7 +157,7 @@ func (m ReviewRepairs) Recover(ctx context.Context) error {
 	if m.Sessions == nil {
 		return nil
 	}
-	runs, err := m.Store.ListRunning(ctx)
+	runs, err := m.Store.Runs.ListRunning(ctx)
 	if err != nil {
 		return err
 	}
@@ -403,17 +223,6 @@ func finalReviewResponseResult(messages []api.Message, candidate api.Message) (b
 	return last == candidate.ID, nil
 }
 
-// ReviewSnapshot freezes the evidence used by an incomplete report at pause.
-// Its candidate remains explicitly separate from accepted verdict records.
-type ReviewSnapshot struct {
-	Vars        map[string]any   `json:"vars"`
-	Workers     []api.WorkerTask `json:"workers"`
-	Scans       []api.CodeScan   `json:"scans"`
-	Verdicts    []PhaseVerdict   `json:"verdicts"`
-	Candidate   map[string]any   `json:"candidate,omitempty"`
-	Unavailable []string         `json:"unavailable,omitempty"`
-}
-
 func (m ReviewRepairs) captureSnapshot(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, vars map[string]any, candidate map[string]any) ReviewSnapshot {
 	snapshot := ReviewSnapshot{Vars: map[string]any{}, Candidate: jsonvalue.CloneMap(candidate)}
 	// Only report inputs are copied, excluding repair episodes themselves.
@@ -422,8 +231,8 @@ func (m ReviewRepairs) captureSnapshot(ctx context.Context, run *api.WorkflowRun
 			snapshot.Vars[key] = value
 		}
 	}
-	if m.WorkerTasks != nil {
-		workers, err := m.WorkerTasks(ctx, run.ID)
+	if m.Coverage != nil && m.Coverage.WorkerTasks != nil {
+		workers, err := m.Coverage.WorkerTasks(ctx, run.ID)
 		if err != nil {
 			snapshot.Unavailable = append(snapshot.Unavailable, "worker ledger")
 		} else {
@@ -432,8 +241,8 @@ func (m ReviewRepairs) captureSnapshot(ctx context.Context, run *api.WorkflowRun
 	} else {
 		snapshot.Unavailable = append(snapshot.Unavailable, "worker ledger")
 	}
-	if m.Inventory != nil {
-		inventory, err := LoadRunInventory(ctx, m.Inventory, run.ID)
+	if m.Coverage != nil && m.Coverage.Inventory != nil {
+		inventory, err := workflowreview.LoadRunInventory(ctx, m.Coverage.Inventory, run.ID)
 		if err != nil {
 			snapshot.Unavailable = append(snapshot.Unavailable, "scan ledger")
 		} else {
@@ -442,7 +251,7 @@ func (m ReviewRepairs) captureSnapshot(ctx context.Context, run *api.WorkflowRun
 	} else {
 		snapshot.Unavailable = append(snapshot.Unavailable, "scan ledger")
 	}
-	verdicts, err := ReviewVerdicts(ctx, m.RunManager, run, manifest)
+	verdicts, err := workflowpresentation.ReviewVerdicts(ctx, m.Verdicts, run, manifest)
 	snapshot.Verdicts = verdicts
 	if err != nil {
 		snapshot.Unavailable = append(snapshot.Unavailable, "review evidence ledger")
@@ -450,23 +259,21 @@ func (m ReviewRepairs) captureSnapshot(ctx context.Context, run *api.WorkflowRun
 	return snapshot
 }
 
-type reviewContractError struct{ error }
-
 const reviewContractInvalidCode = "WORKFLOW_REVIEW_CONTRACT_INVALID"
 
-// blockContract pauses a review whose offered contract cannot accept the
+// BlockContract pauses a review whose offered contract cannot accept the
 // host's own facts, before any model attempt is spent.
-func (m ReviewRepairs) blockContract(ctx context.Context, runID string, cause error) error {
-	unlock := m.lockRunVars(runID)
+func (m ReviewRepairs) BlockContract(ctx context.Context, runID string, cause error) error {
+	unlock := m.Vars.Lock(runID)
 	defer unlock()
-	run, err := m.loadRun(ctx, runID)
+	run, err := m.Store.Runs.Get(ctx, runID)
 	if err != nil {
 		return err
 	}
 	if run.Status != api.WorkflowRunStatusRunning {
 		return nil
 	}
-	vars, err := m.Store.GetScaffoldVars(ctx, runID)
+	vars, err := m.Store.Runs.GetScaffoldVars(ctx, runID)
 	if err != nil {
 		return err
 	}
@@ -474,7 +281,7 @@ func (m ReviewRepairs) blockContract(ctx context.Context, runID string, cause er
 	if err != nil {
 		return err
 	}
-	manifest, err := m.manifestForRun(ctx, run)
+	manifest, err := m.Resolver.ForRun(ctx, run)
 	if err != nil {
 		return err
 	}
@@ -482,7 +289,7 @@ func (m ReviewRepairs) blockContract(ctx context.Context, runID string, cause er
 	now := time.Now().UTC()
 	repair := ReviewRepair{Snapshot: &snapshot, ID: uuid.NewString(), Phase: run.CurrentPhase, State: "blocked", CreatedAt: now, UpdatedAt: now, Diagnostics: []api.ToolFeedback{{Code: reviewContractInvalidCode, Details: map[string]any{"reason": cause.Error()}}}}
 	if len(snapshot.Unavailable) == 0 {
-		facts := BuildCoverageFacts(manifest, vars, snapshot.Workers, snapshot.Scans)
+		facts := workflowreview.BuildCoverageFacts(manifest, vars, snapshot.Workers, snapshot.Scans)
 		repair.CoverageFacts = &facts
 	}
 	repairs = append(repairs, repair)
@@ -493,10 +300,10 @@ func (m ReviewRepairs) blockContract(ctx context.Context, runID string, cause er
 	run.PauseReason = ReviewBlockedReason
 	run.PausedAt = &now
 	run.UpdatedAt = now
-	boundary := newCommandBoundary(run, run.Revision, "paused", run.CurrentPhase, ReviewBlockedReason)
-	if err := m.commitCommand(ctx, run, "review_contract_blocked", struct{ Code string }{reviewContractInvalidCode}, vars, &boundary, "", workflowWorkerMutation{HoldPending: true}, nil); err != nil {
+	boundary := runstate.NewCommandBoundary(run, run.Revision, "paused", run.CurrentPhase, ReviewBlockedReason)
+	if err := m.Journal.Commit(ctx, run, "review_contract_blocked", struct{ Code string }{reviewContractInvalidCode}, vars, &boundary, "", runstate.WorkerMutation{HoldPending: true}, nil); err != nil {
 		return err
 	}
-	m.publishSession(ctx, run)
+	m.Publication.PublishSession(ctx, run)
 	return nil
 }

@@ -33,7 +33,7 @@ func newAgentFixture(t *testing.T, files map[string]string) agentFixture {
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
 	store := NewStore(sqlDB)
 	recorder := &captureRecorder{Store: sourceledger.New(sqlDB, "")}
-	service := New(store, recorder, fixedRoots{p: p})
+	service := New(store, recorder, recorder.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	changes := &[]Change{}
 	service.SetOnChange(func(_ context.Context, c Change) { *changes = append(*changes, c) })
@@ -178,7 +178,7 @@ func newLedgerAgentFixture(t *testing.T, files map[string]string) (agentFixture,
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
 	store := NewStore(sqlDB)
 	ledger := sourceledger.New(sqlDB, t.TempDir())
-	service := New(store, ledger, fixedRoots{p: p})
+	service := New(store, ledger, ledger.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	changes := &[]Change{}
 	service.SetOnChange(func(_ context.Context, c Change) { *changes = append(*changes, c) })
@@ -218,7 +218,7 @@ func TestApplyAgentEditOnDivergedDocumentRetainsTheEdit(t *testing.T) {
 		t.Fatalf("document names %q, want the retained state %q",
 			result.Document.HeldAgentVersionID, result.HeldVersionID)
 	}
-	versions, err := ledger.QueryFileVersions(t.Context(), f.project.ID, result.Document.FileID, 10, 0)
+	versions, err := ledger.History.QueryFileVersions(t.Context(), f.project.ID, result.Document.FileID, 10, 0)
 	testutil.FailErr(t, "versions", err)
 	var held *sourceledger.Version
 	for i := range versions.Versions {
@@ -236,7 +236,7 @@ func TestApplyAgentEditOnDivergedDocumentRetainsTheEdit(t *testing.T) {
 	if held.EffectID != "" || held.Op != "" {
 		t.Fatalf("held state names an effect: %+v — nothing reached the working file", *held)
 	}
-	restorable, err := ledger.ReadRestorableVersion(t.Context(), f.project.ID, result.HeldVersionID)
+	restorable, err := ledger.History.ReadRestorableVersion(t.Context(), f.project.ID, result.HeldVersionID)
 	testutil.FailErr(t, "read restorable", err)
 	if text, ok := restorable.Text(); !ok || text != "typed agent\n" {
 		t.Fatalf("restorable text = %q ok = %v, want the held edit", text, ok)
@@ -255,7 +255,7 @@ func TestDiscardLeavesTheHeldEditRestorable(t *testing.T) {
 	if discarded.HeldAgentVersionID != "" || discarded.Dirty {
 		t.Fatalf("discarded document = %+v, want the draft back at its base", discarded)
 	}
-	restorable, err := ledger.ReadRestorableVersion(t.Context(), f.project.ID, result.HeldVersionID)
+	restorable, err := ledger.History.ReadRestorableVersion(t.Context(), f.project.ID, result.HeldVersionID)
 	testutil.FailErr(t, "read restorable", err)
 	if text, ok := restorable.Text(); !ok || text != "typed agent\n" {
 		t.Fatalf("discard destroyed the held edit: text = %q ok = %v", text, ok)
@@ -278,7 +278,7 @@ func TestAgentPublicationKeepsHumanAuthorshipInOneSave(t *testing.T) {
 	if string(publication.Before) != "one\ntwo\n" || string(publication.After) != "one typed\ntwo agent\n" || publication.TextAfter == nil {
 		t.Fatalf("publication split authors into physical versions: %+v", publication)
 	}
-	contributions, err := f.recorder.DocumentContributions(t.Context(), document.ID, result.Document.Epoch, sourceledger.ContributionSelection{ThroughRevision: publication.TextAfter.Revision, Inserted: publication.TextAfter.Spans})
+	contributions, err := f.recorder.Comparisons.DocumentContributions(t.Context(), document.ID, result.Document.Epoch, sourceledger.ContributionSelection{ThroughRevision: publication.TextAfter.Revision, Inserted: publication.TextAfter.Spans})
 	testutil.FailErr(t, "read authorship", err)
 	if len(contributions) != 2 || contributions[0].Origin != api.SourceChangeOriginUser || contributions[0].SessionID != "person-chat" || contributions[0].Turn != 3 ||
 		contributions[1].Origin != api.SourceChangeOriginAgent || contributions[1].SessionID != "chat-1" {

@@ -13,8 +13,9 @@ func TestHostResourceObservationsUseOARZeroValues(t *testing.T) {
 	}
 
 	gc := &GuardContext{
-		HostResourceStatus: map[string]string{"docker": "available"},
-		HostResourcePolicy: map[string]string{"docker": "ask"},
+		Access: AccessFacts{
+			HostResourceStatus: map[string]string{"docker": "available"},
+			HostResourcePolicy: map[string]string{"docker": "ask"}},
 	}
 	if got := EvalHostResourceStatus(gc, "docker"); got != "available" {
 		t.Fatalf("known status = %q, want available", got)

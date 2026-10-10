@@ -69,7 +69,7 @@ type laneStates struct {
 func (s *laneStates) record(ctx context.Context, c *Catalog, root Root, dirs []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	navigation, err := c.OpenNavigation(ctx, "p", root)
+	navigation, err := c.Directories.OpenNavigation(ctx, "p", root)
 	if err != nil {
 		s.errs = append(s.errs, err)
 		return
@@ -96,10 +96,10 @@ func TestWholeTreePassPublishesOpenedTreesBeforeCollapsedOnes(t *testing.T) {
 	}
 	dirs := []string{".", "src", "src/deep", "output", "output/nested"}
 	var states laneStates
-	unsubscribe := c.SubscribeNavigation(root, func() { states.record(t.Context(), c, root, dirs) })
+	unsubscribe := c.Directories.SubscribeNavigation(root, func() { states.record(t.Context(), c, root, dirs) })
 	defer unsubscribe()
-	testutil.FailErr(t, "start inventory", c.WarmNavigation(t.Context(), "p", root))
-	testutil.FailErr(t, "await inventory", c.AwaitNavigation(t.Context(), "p", root))
+	testutil.FailErr(t, "start inventory", c.Directories.WarmNavigation(t.Context(), "p", root))
+	testutil.FailErr(t, "await inventory", c.Directories.AwaitNavigation(t.Context(), "p", root))
 	states.mu.Lock()
 	defer states.mu.Unlock()
 	for _, err := range states.errs {
@@ -123,14 +123,14 @@ func TestSubtreeDemandSettlesOnTheBoundaryGeneration(t *testing.T) {
 	writeIndexFile(t, root.Path, ".gitignore", "output/\n")
 	writeIndexFile(t, root.Path, "src/deep/file.txt", "content")
 	writeIndexFile(t, root.Path, "output/nested/file.txt", "content")
-	testutil.FailErr(t, "start inventory", c.WarmNavigation(t.Context(), "p", root))
+	testutil.FailErr(t, "start inventory", c.Directories.WarmNavigation(t.Context(), "p", root))
 	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Second)
 	defer cancel()
 	settled := func(ctx context.Context, navigation *Navigation) (bool, error) {
 		return SubtreeCovered(ctx, navigation, "src")
 	}
-	testutil.FailErr(t, "await source subtree", c.AwaitSubtree(ctx, "p", root, "src", settled))
-	navigation, err := c.OpenNavigation(t.Context(), "p", root)
+	testutil.FailErr(t, "await source subtree", c.Directories.AwaitSubtree(ctx, "p", root, "src", settled))
+	navigation, err := c.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open navigation after subtree demand", err)
 	defer func() { _ = navigation.Close() }()
 	state, err := navigation.State(t.Context(), "src/deep")
@@ -138,7 +138,7 @@ func TestSubtreeDemandSettlesOnTheBoundaryGeneration(t *testing.T) {
 	if !state.Complete {
 		t.Fatal("subtree demand settled without complete source coverage")
 	}
-	testutil.FailErr(t, "await inventory", c.AwaitNavigation(t.Context(), "p", root))
+	testutil.FailErr(t, "await inventory", c.Directories.AwaitNavigation(t.Context(), "p", root))
 }
 
 func TestCollapseBoundariesStopAtCollapsedTrees(t *testing.T) {
@@ -153,7 +153,7 @@ func TestCollapseBoundariesStopAtCollapsedTrees(t *testing.T) {
 		t.Helper()
 		var found []string
 		testutil.WaitFor(t, 20*time.Second, func() bool {
-			got, ready, err := c.CollapseBoundaries(t.Context(), "p", root, dir)
+			got, ready, err := c.Directories.CollapseBoundaries(t.Context(), "p", root, dir)
 			testutil.FailErr(t, "list collapse boundaries", err)
 			found = got
 			return ready

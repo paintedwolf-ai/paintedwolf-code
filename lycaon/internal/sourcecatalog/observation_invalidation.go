@@ -4,7 +4,6 @@ import (
 	"errors"
 	"path"
 	"sync/atomic"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
 )
@@ -175,8 +174,5 @@ func (s *indexStore) observationFresh(observation DirectoryObservation) bool {
 	if epoch.BootID != observation.Epoch.BootID {
 		return false
 	}
-	if repochange.DirWatched(s.root.Path, observation.Path) {
-		return true
-	}
-	return repochange.EpochCurrent(s.root.Path, observation.Epoch) && time.Since(observation.Observed) < 2*time.Second
+	return repochange.DirWatched(s.root.Path, observation.Path)
 }

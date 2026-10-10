@@ -51,10 +51,10 @@ func RegisterTestProducer(reg tools.ToolRegistry) error {
 		if err := json.Unmarshal(raw, &in); err != nil {
 			return "", fmt.Errorf("decode visual fixture args: %w", err)
 		}
-		if tctx.Out == nil {
-			tctx.Out = &tools.ToolInvocationOut{}
+		if tctx.Effects.Out == nil {
+			tctx.Effects.Out = &tools.ToolInvocationOut{}
 		}
-		tctx.Out.Visual = &tools.VisualCapture{
+		tctx.Effects.Out.Visual = &tools.VisualCapture{
 			Mime:      "image/png",
 			Bytes:     TestPNG1x1Bytes(),
 			Source:    api.VisualArtifactSourceRender,

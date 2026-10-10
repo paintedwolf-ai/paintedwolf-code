@@ -2,25 +2,16 @@ package app
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/tools"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (b delegationWiring) decodeCompleteLeg(ctx context.Context, args map[string]any, tctx tools.ToolContext) (workertools.CompleteLegRecord, error) {
-	record, err := workercompletion.CompleteLegDecoder(ctx, args, tctx)
-	if err != nil || record.LegStatus != "complete" {
-		return record, err
+func decodeCompleteLeg(b *serveBuilder) workertools.CompleteLegDecoder {
+	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (workertools.CompleteLegRecord, error) {
+		return b.delegations.DecodeCompleteLeg(ctx, args, tctx, func(c context.Context, task *wire.WorkerTask, review *wire.CoverageReview) error {
+			return b.workflows.Manager.Coverage.ValidateCoverageCompletion(c, task, review)
+		})
 	}
-	if tctx.WorkerJobID == "" {
-		return record, nil
-	}
-	task, ok := b.workerQueue.Lookup(ctx, tctx.WorkerJobID)
-	if !ok {
-		return record, fmt.Errorf("worker job %q unavailable", tctx.WorkerJobID)
-	}
-	report, _ := workercompletion.ReportFromCompleteLegArgs(args)
-	return record, b.workflowMgr.ValidateCoverageCompletion(ctx, task, report.CoverageReview)
 }

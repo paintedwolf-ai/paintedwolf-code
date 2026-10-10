@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/session"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -81,12 +82,12 @@ type Workers struct {
 	queue     worker.WorkerQueue
 	verify    VerifyWorker
 	read      ReadWorker
-	decisions session.DecisionStore
+	decisions sessiondecisions.Store
 	fallback  worker.WorkerExecutor
 	locks     sync.Map
 }
 
-func NewWorkers(root string, sessions session.Store, queue worker.WorkerQueue, verify VerifyWorker, read ReadWorker, decisions session.DecisionStore, fallback worker.WorkerExecutor) (*Workers, error) {
+func NewWorkers(root string, sessions session.Store, queue worker.WorkerQueue, verify VerifyWorker, read ReadWorker, decisions sessiondecisions.Store, fallback worker.WorkerExecutor) (*Workers, error) {
 	if !configdir.IsHarnessChannel() || sessions == nil || queue == nil || verify == nil || read == nil || decisions == nil || fallback == nil {
 		return nil, fmt.Errorf("scripted workers require an isolated harness and worker services")
 	}

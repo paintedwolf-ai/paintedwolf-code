@@ -10,12 +10,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/pagecursor"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestSourceSearchCursorBindsScopeGenerationAndAddress(t *testing.T) {
-	address := project.SourceIndexEntry{RootID: "root", Path: "src/a.go"}
+	address := projectsource.SourceIndexEntry{RootID: "root", Path: "src/a.go"}
 	scope := sourceSearchScope("project", "", "query")
 	raw, err := encodeSourceSearchCursor(scope, 42, address)
 	testutil.FailErr(t, "encode source cursor", err)
@@ -32,10 +32,10 @@ func TestSourceSearchCursorBindsScopeGenerationAndAddress(t *testing.T) {
 	}
 }
 
-func declarationQuery(pattern, projectID, root string, match project.DeclarationMatch, hitCap int) project.DeclarationSearchQuery {
-	return project.DeclarationSearchQuery{
+func declarationQuery(pattern, projectID, root string, match projectsource.DeclarationMatch, hitCap int) projectsource.DeclarationSearchQuery {
+	return projectsource.DeclarationSearchQuery{
 		ProjectID: projectID,
-		Roots:     []project.DeclarationSearchRoot{{ID: "root", Path: root}},
+		Roots:     []projectsource.DeclarationSearchRoot{{ID: "root", Path: root}},
 		Pattern:   pattern,
 		Match:     match,
 		HitCap:    hitCap,
@@ -50,7 +50,7 @@ func TestDeclarationSearchUsesExtraRowAsLimitProbe(t *testing.T) {
 			name := filepath.Join(root, fmt.Sprintf("match-%02d.go", i))
 			testutil.FailErr(t, "write definition match", os.WriteFile(name, []byte("package p\n\nfunc Target() {}\n"), 0o644))
 		}
-		hits, limited, err := searchDeclarations(context.Background(), declarationQuery("Target", "p1", root, project.DeclarationMatchWholeWord, 3))
+		hits, limited, err := searchDeclarations(context.Background(), declarationQuery("Target", "p1", root, projectsource.DeclarationMatchWholeWord, 3))
 		return len(hits), limited, err
 	}
 
@@ -75,7 +75,7 @@ func TestDeclarationSearchReportsColdCatalogAsPartial(t *testing.T) {
 	})
 	testutil.FailErr(t, "hold discovery admission", err)
 	defer release()
-	hits, partial, err := searchDeclarations(t.Context(), declarationQuery("Target", "cold-definition", root, project.DeclarationMatchWholeWord, 3))
+	hits, partial, err := searchDeclarations(t.Context(), declarationQuery("Target", "cold-definition", root, projectsource.DeclarationMatchWholeWord, 3))
 	testutil.FailErr(t, "search cold definition", err)
 	if len(hits) != 0 || !partial {
 		t.Fatalf("cold definition hits=%d partial=%v", len(hits), partial)
@@ -86,7 +86,7 @@ func TestDeclarationSearchMatchModes(t *testing.T) {
 	root := t.TempDir()
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(root, "a.go"), []byte(
 		"package a\n\nfunc ParseConfig() {}\n\nfunc parser() {}\n\nvar x = \".+\"\n"), 0o644))
-	lines := func(pattern string, match project.DeclarationMatch) []string {
+	lines := func(pattern string, match projectsource.DeclarationMatch) []string {
 		t.Helper()
 		hits, _, err := searchDeclarations(context.Background(), declarationQuery(pattern, "modes", root, match, 10))
 		testutil.FailErr(t, "search "+pattern, err)
@@ -99,16 +99,16 @@ func TestDeclarationSearchMatchModes(t *testing.T) {
 		}
 		return out
 	}
-	if got := lines("parse", project.DeclarationMatchSubstring); len(got) != 2 {
+	if got := lines("parse", projectsource.DeclarationMatchSubstring); len(got) != 2 {
 		t.Fatalf("substring hits = %q, want both parse lines ignoring case", got)
 	}
-	if got := lines("parse", project.DeclarationMatchWholeWord); len(got) != 0 {
+	if got := lines("parse", projectsource.DeclarationMatchWholeWord); len(got) != 0 {
 		t.Fatalf("whole-word hits = %q, want none", got)
 	}
-	if got := lines(".+", project.DeclarationMatchSubstring); len(got) != 1 {
+	if got := lines(".+", projectsource.DeclarationMatchSubstring); len(got) != 1 {
 		t.Fatalf("literal hits = %q, want the one quoted line", got)
 	}
-	if got := lines(`P\w*C`, project.DeclarationMatchRegexp); len(got) != 1 {
+	if got := lines(`P\w*C`, projectsource.DeclarationMatchRegexp); len(got) != 1 {
 		t.Fatalf("case-sensitive expression hits = %q, want ParseConfig", got)
 	}
 }

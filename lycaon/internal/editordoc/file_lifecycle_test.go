@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -114,7 +114,7 @@ func TestSavingAnAbsentDocumentYieldsToAFileThatReappeared(t *testing.T) {
 	// Someone put a file back before the save published.
 	f.write(t, "a.txt", "theirs\n")
 	_, err = f.service.Save(t.Context(), f.project, d.ID, "window", uuid.NewString(), "", 0, pinned.Revision)
-	if !errors.Is(err, project.ErrSourceWriteConflict) {
+	if !errors.Is(err, projectsource.ErrSourceWriteConflict) {
 		t.Fatalf("save replaced a file it did not expect: %v", err)
 	}
 	if f.disk(t, "a.txt") != "theirs\n" {

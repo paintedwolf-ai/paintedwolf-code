@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -14,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -66,7 +66,7 @@ func TestChownToolRejectsForeignUID(t *testing.T) {
 		"paths": []any{"a.txt"},
 		"owner": "65534",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "CHOWN_TARGET_DENIED" {
 		t.Fatalf("err = %v want CHOWN_TARGET_DENIED", err)
 	}
@@ -85,7 +85,7 @@ func TestChownToolRejectsRootWhenNotRoot(t *testing.T) {
 		"paths": []any{"a.txt"},
 		"owner": "0",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "CHOWN_ROOT_DENIED" {
 		t.Fatalf("err = %v want CHOWN_ROOT_DENIED", err)
 	}
@@ -99,7 +99,7 @@ func TestChownToolRejectsRecursive(t *testing.T) {
 		"owner":     "current",
 		"recursive": true,
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "CHOWN_RECURSIVE_DENIED" {
 		t.Fatalf("err = %v want CHOWN_RECURSIVE_DENIED", err)
 	}
@@ -118,7 +118,7 @@ func TestChownToolRejectsGitPath(t *testing.T) {
 		"paths": []any{".git/config"},
 		"owner": "current",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
 		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED", err)
 	}
@@ -134,7 +134,7 @@ func TestChownToolRejectsUnknownUser(t *testing.T) {
 		"paths": []any{"a.txt"},
 		"owner": fmt.Sprintf("lycaon-no-such-user-%d", os.Getpid()),
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "CHOWN_USER_UNKNOWN" {
 		t.Fatalf("err = %v want CHOWN_USER_UNKNOWN", err)
 	}

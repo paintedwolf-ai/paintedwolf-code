@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -52,12 +53,12 @@ func TestRegistryGateEvaluatorGatesList(t *testing.T) {
 	regPass, err := conditions.NewDefaultRegistry(deps)
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	evalPass := RegistryGateEvaluator{Registry: regPass}
-	vars := SetHumanApprovalIssued(nil, true)
-	vars = SetHumanApprovalReady(vars, true)
-	vars = SetHostVar(vars, "human_approval.blueprint_path", blueprintPath)
-	vars = SetHumanApprovalHash(vars, workflowdef.HashBlueprintContent(planBody))
-	vars = SetGateSatisfied(vars, "delegation_closeout_complete", true)
-	vars = SetGateSatisfied(vars, "evidence_passed:verify", true)
+	vars := runstate.SetHumanApprovalIssued(nil, true)
+	vars = runstate.SetHumanApprovalReady(vars, true)
+	vars = runstate.SetHostVar(vars, "human_approval.blueprint_path", blueprintPath)
+	vars = runstate.SetHumanApprovalHash(vars, workflowdef.HashBlueprintContent(planBody))
+	vars = runstate.SetGateSatisfied(vars, "delegation_closeout_complete", true)
+	vars = runstate.SetGateSatisfied(vars, "evidence_passed:verify", true)
 	ok, result, err = evalPass.PhaseGateMet(context.Background(), manifest, run, vars)
 	if err != nil || !ok {
 		t.Fatalf("all gates should pass: ok=%v result=%+v err=%v", ok, result, err)

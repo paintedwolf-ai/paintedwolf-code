@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -15,20 +16,20 @@ func TestInitialTerminalPhaseCompletesWithoutCoordinatorHooks(t *testing.T) {
 		ID: "already-done", Version: "1.0.0",
 		PhaseDefs: []workflowdef.PhaseDef{{ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"}},
 	})
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{workflowdef.ManifestKey(manifest.ID, manifest.Version): manifest})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{workflowdef.ManifestKey(manifest.ID, manifest.Version): manifest})
 	phaseWakeCount := 0
 	phaseEnterCount := 0
 	completedIDs := []string{}
-	mgr.OnRunCompleted = func(ctx context.Context, run *api.WorkflowRun) {
-		stored, err := mgr.Get(ctx, run.ID)
+	mgr.Children.OnRunCompleted = func(ctx context.Context, run *api.WorkflowRun) {
+		stored, err := mgr.Store.Runs.Get(ctx, run.ID)
 		testutil.FailErr(t, "read notified completion", err)
 		if stored.Status != api.WorkflowRunStatusComplete {
 			t.Fatalf("completion preceded committed state: %s", stored.Status)
 		}
 		completedIDs = append(completedIDs, run.ID)
 	}
-	mgr.OnPhaseAutoAdvanced = func(context.Context, string, string, string, string) { phaseWakeCount++ }
-	mgr.PhaseEnterHook = func(context.Context, *RunContext, workflowdef.PhaseDef) { phaseEnterCount++ }
+	mgr.Publication.OnPhaseAutoAdvanced = func(context.Context, string, string, string, string) { phaseWakeCount++ }
+	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) { phaseEnterCount++ }
 
 	run, err := startRun(context.Background(), mgr, "sess-1", manifest.ID, manifest.Version)
 	testutil.FailErr(t, "start terminal workflow", err)
@@ -59,7 +60,7 @@ func TestInitialTerminalChildCompletesAndResumesParentWithoutCoordinatorHooks(t 
 		ID: "empty-child", Version: "1.0.0",
 		PhaseDefs: []workflowdef.PhaseDef{{ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"}},
 	})
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{
 		workflowdef.ManifestKey(parentManifest.ID, parentManifest.Version): parentManifest,
 		workflowdef.ManifestKey(childManifest.ID, childManifest.Version):   childManifest,
 	})
@@ -67,17 +68,17 @@ func TestInitialTerminalChildCompletesAndResumesParentWithoutCoordinatorHooks(t 
 	testutil.FailErr(t, "start parent", err)
 	phaseEnterCount := 0
 	completedIDs := []string{}
-	mgr.OnRunCompleted = func(ctx context.Context, run *api.WorkflowRun) {
-		stored, err := mgr.Get(ctx, run.ID)
+	mgr.Children.OnRunCompleted = func(ctx context.Context, run *api.WorkflowRun) {
+		stored, err := mgr.Store.Runs.Get(ctx, run.ID)
 		testutil.FailErr(t, "read notified completion", err)
 		if stored.Status != api.WorkflowRunStatusComplete {
 			t.Fatalf("completion preceded committed state: %s", stored.Status)
 		}
 		completedIDs = append(completedIDs, run.ID)
 	}
-	mgr.PhaseEnterHook = func(context.Context, *RunContext, workflowdef.PhaseDef) { phaseEnterCount++ }
+	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) { phaseEnterCount++ }
 
-	child, err := mgr.InvokeChild(context.Background(), parent.ID, workflowdef.InvokeWorkflowSpec{
+	child, err := mgr.Children.InvokeChild(context.Background(), parent.ID, workflowdef.InvokeWorkflowSpec{
 		WorkflowID: childManifest.ID,
 		Version:    childManifest.Version,
 		Blueprint:  workflowdef.ChildBlueprintNone,
@@ -86,7 +87,7 @@ func TestInitialTerminalChildCompletesAndResumesParentWithoutCoordinatorHooks(t 
 	if child.Status != api.WorkflowRunStatusComplete || child.CompletedAt == nil {
 		t.Fatalf("terminal child = status %q completed_at %v", child.Status, child.CompletedAt)
 	}
-	resumed, err := mgr.Get(context.Background(), parent.ID)
+	resumed, err := mgr.Store.Runs.Get(context.Background(), parent.ID)
 	testutil.FailErr(t, "get resumed parent", err)
 	if resumed.Status != api.WorkflowRunStatusRunning || resumed.CurrentPhase != "work" {
 		t.Fatalf("resumed parent = status %q phase %q", resumed.Status, resumed.CurrentPhase)

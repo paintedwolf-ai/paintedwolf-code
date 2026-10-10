@@ -1,18 +1,19 @@
 package surface_test
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestSurfaceDeliversReportMembership(t *testing.T) {
 	// Both closeout surfaces deliver their report as a typed envelope, so the turn's
 	// prose is provisional until commit projects the narrative out of it.
 	for _, surfaceID := range []string{
-		tools.SurfaceImplementInvestigate,
+		toolcontract.SurfaceImplementInvestigate,
 		spawn.SurfaceImplementSynthesis,
 	} {
 		if !surface.SurfaceDeliversReport(surfaceID) {

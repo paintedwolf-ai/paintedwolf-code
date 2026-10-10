@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -57,11 +58,11 @@ func TestSecretIgnoreReviewNeverPersistsValueOrInstallsGrant(t *testing.T) {
 			}
 		}
 	}
-	executor := tools.NewDefaultToolExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	executor.SetCheckpointManager(mgr, nil)
-	executor.SetSecretMatcher(matcher)
-	executor.SetSecretIgnores(service)
-	_, err = executor.AskSecretScreen(t.Context(), secretmatch.Alert{SessionID: "session", ProjectID: "project", Surface: secretmatch.SurfaceCommand, DestinationID: "process", RuleID: "gitleaks:aws-access-token", RuleTitle: "AWS access key", Fingerprints: []secretmatch.SecretFingerprint{fp.Fingerprint(value)}, ReviewValue: value})
+	executor := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
+	executor.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
+	executor.Secrets.SetSecretMatcher(matcher)
+	executor.Secrets.SetSecretIgnores(service)
+	_, err = executor.Secrets.AskSecretScreen(t.Context(), secretmatch.Alert{SessionID: "session", ProjectID: "project", Surface: secretmatch.SurfaceCommand, DestinationID: "process", RuleID: "gitleaks:aws-access-token", RuleTitle: "AWS access key", Fingerprints: []secretmatch.SecretFingerprint{fp.Fingerprint(value)}, ReviewValue: value})
 	testutil.FailErr(t, "resolve held request", err)
 	if _, err := service.Reviews.Value("project", token); !errors.Is(err, projectignore.ErrReviewUnavailable) {
 		t.Fatalf("completed review remained available: %v", err)

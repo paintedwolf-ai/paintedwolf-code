@@ -36,8 +36,8 @@ func grepExecutionError(s *grepSearch, err error) error {
 }
 
 func (s *grepSearch) publishProgress(phase string) {
-	if s.tctx.ReportProgress != nil {
-		s.tctx.ReportProgress(api.ToolProgress{
+	if s.tctx.Effects.ReportProgress != nil {
+		s.tctx.Effects.ReportProgress(api.ToolProgress{
 			Phase: phase, FilesSearched: s.textScanned + s.prefilterSkipped,
 			FilesSkipped: s.binarySkipped + s.unreadable, Matches: s.skipped + len(s.resp.Matches),
 		})

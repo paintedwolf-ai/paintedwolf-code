@@ -16,7 +16,11 @@ func TestExecuteToolCallsInTurnCommitsAssistantBeforeFirstTool(t *testing.T) {
 		return `{"status":"resumed"}`, nil
 	})
 
-	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: reg})
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			Tools: reg,
+		},
+	})
 	sess := &api.Session{ID: "sess-1", Posture: api.SessionPostureBuild}
 	assistantID := "asst-1"
 	history := []api.Message{{
@@ -29,7 +33,7 @@ func TestExecuteToolCallsInTurnCommitsAssistantBeforeFirstTool(t *testing.T) {
 		},
 	}}
 
-	loop.Deps.UpdateMessage = func(_ context.Context, _, _ string, msg api.Message) error {
+	loop.Projection.Deps.UpdateMessage = func(_ context.Context, _, _ string, msg api.Message) error {
 		if msg.Visibility == api.MessageVisibilityTranscript {
 			commitBeforeAppend = true
 		}
@@ -41,7 +45,7 @@ func TestExecuteToolCallsInTurnCommitsAssistantBeforeFirstTool(t *testing.T) {
 		return nil
 	}
 	var appended []api.Message
-	loop.Deps.AppendMessages = func(_ context.Context, _ string, msgs ...api.Message) error {
+	loop.Projection.Deps.AppendMessages = func(_ context.Context, _ string, msgs ...api.Message) error {
 		if !commitBeforeAppend {
 			t.Fatal("assistant must commit to transcript before tool result append")
 		}
@@ -49,12 +53,14 @@ func TestExecuteToolCallsInTurnCommitsAssistantBeforeFirstTool(t *testing.T) {
 		return nil
 	}
 
-	_, turnTools, _, _, _, _, err := toolBatch{loop}.executeToolCallsInTurn(
+	_, turnTools, _, _, _, _, err := loop.Batch.executeToolCallsInTurn(
 		context.Background(),
 		sess,
 		sess.ID,
 		history[0].ToolCalls,
-		tools.ToolContext{SessionID: sess.ID},
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 		history,
 		"dispatch",
 		assistantID,

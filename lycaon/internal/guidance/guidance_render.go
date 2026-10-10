@@ -3,10 +3,9 @@ package guidance
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"strings"
 	"sync"
-
-	"github.com/lycaon/lycaon/internal/prompts"
 )
 
 var (
@@ -34,4 +33,12 @@ func RenderGuidance(ctx context.Context, ref string, data map[string]any) (strin
 		return "", err
 	}
 	return strings.TrimSpace(block), nil
+}
+
+// RenderHintFields renders what/why/fix for a hint from its registered fields.
+func RenderHintFields(code string, entry HintEntry, data map[string]any) (what, why, fix string) {
+	view := NormalizeRejectCodeView(code, entry)
+	return renderFieldTemplate(view.What, data),
+		renderFieldTemplate(view.Cause, data),
+		renderFieldTemplate(view.Fix, data)
 }

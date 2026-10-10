@@ -27,7 +27,7 @@ const literalLineCaptureBytes = 4 << 10
 
 // ProbeGrepRecords scans one survey pattern.
 func ProbeGrepRecords(ctx context.Context, boundary *sandbox.Boundary, catalog *sourcecatalog.Catalog, tctx tools.ToolContext, relPath, pattern, label string, maxMatches int) ([]evidence.Record, int, SurveyGrepBatchStats, error) {
-	batch, stats, err := ProbeGrepBatchRecords(ctx, boundary, catalog, tctx, relPath, []SurveyGrepSpec{{
+	batch, stats, err := ProbeGrepBatchRecords(ctx, boundary, catalogOrProcess(catalog), tctx, relPath, []SurveyGrepSpec{{
 		Label: label, Pattern: pattern,
 	}}, maxMatches)
 	if err != nil {
@@ -38,7 +38,7 @@ func ProbeGrepRecords(ctx context.Context, boundary *sandbox.Boundary, catalog *
 
 // ProbeFindRecords scans one survey glob.
 func ProbeFindRecords(ctx context.Context, boundary *sandbox.Boundary, catalog *sourcecatalog.Catalog, tctx tools.ToolContext, relPath, nameGlob, label string, maxResults int) ([]evidence.Record, int, error) {
-	results, total, err := probeFind(ctx, boundary, catalog, tctx, relPath, nameGlob, label, maxResults)
+	results, total, err := probeFind(ctx, boundary, catalogOrProcess(catalog), tctx, relPath, nameGlob, label, maxResults)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -80,7 +80,7 @@ func scanLiteralMatches(
 		if filterErr != nil {
 			return filterErr
 		}
-		inventory, err := sourceInventoryForScope(ctx, catalog, tctx.ProjectID, target.root, target.fullRoot)
+		inventory, err := sourceInventoryForScope(ctx, catalogOrProcess(catalog), tctx.Identity.ProjectID, target.root, target.fullRoot)
 		if err != nil {
 			return err
 		}
@@ -140,7 +140,7 @@ func (s literalCatalogScan) file(ctx context.Context, entry sourcecatalog.Entry)
 	if s.readFilter != nil && !s.readFilter(entry.Path, false) {
 		return nil
 	}
-	if _, hasDraft := s.drafts.Lookup(abs); !hasDraft && s.catalog != nil && s.catalog.CanPrune(s.root.Path, s.require, entry) {
+	if _, hasDraft := s.drafts.Lookup(abs); !hasDraft && s.catalog != nil && s.catalog.Literals.CanPrune(s.root.Path, s.require, entry) {
 		return nil
 	}
 	fileInfo, err := os.Lstat(abs)

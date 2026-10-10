@@ -2,6 +2,7 @@ package tools_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"path/filepath"
 	"testing"
 
@@ -35,12 +36,12 @@ func TestUnscreenedImageTaskReleaseCoversLaterImagesToTheSameDestination(t *test
 	testutil.FailErr(t, "open approval store", err)
 	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
-	exec := tools.NewDefaultToolExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.SetCheckpointManager(mgr, gate)
+	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	provider := string(secretmatch.DestinationModelProvider)
 	ctx := context.Background()
 
-	first, err := exec.AskSecretScreen(ctx, unscreenedImageAlert("call_1", "one.png", provider, "model provider"))
+	first, err := exec.Secrets.AskSecretScreen(ctx, unscreenedImageAlert("call_1", "one.png", provider, "model provider"))
 	testutil.FailErr(t, "ask first unscreened image", err)
 	if first.Decision != secretmatch.SendUnchanged || mgr.req.SecretScreen == nil {
 		t.Fatalf("first image: decision = %q, card = %+v", first.Decision, mgr.req.SecretScreen)
@@ -61,14 +62,14 @@ func TestUnscreenedImageTaskReleaseCoversLaterImagesToTheSameDestination(t *test
 	}
 
 	mgr.req = hitl.CheckpointRequest{}
-	second, err := exec.AskSecretScreen(ctx, unscreenedImageAlert("call_2", "two.png", provider, "model provider"))
+	second, err := exec.Secrets.AskSecretScreen(ctx, unscreenedImageAlert("call_2", "two.png", provider, "model provider"))
 	testutil.FailErr(t, "ask second unscreened image", err)
 	if second.Decision != secretmatch.SendUnchanged || mgr.req.SecretScreen != nil {
 		t.Fatalf("second image to the same destination asked again: decision = %q, card = %+v", second.Decision, mgr.req.SecretScreen)
 	}
 
 	mgr.req = hitl.CheckpointRequest{}
-	other, err := exec.AskSecretScreen(ctx, unscreenedImageAlert("call_3", "three.png", "other_provider", "Other provider"))
+	other, err := exec.Secrets.AskSecretScreen(ctx, unscreenedImageAlert("call_3", "three.png", "other_provider", "Other provider"))
 	testutil.FailErr(t, "ask unscreened image to another destination", err)
 	if mgr.req.SecretScreen == nil {
 		t.Fatalf("task release crossed destinations: decision = %q raised no card", other.Decision)

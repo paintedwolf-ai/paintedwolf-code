@@ -2,17 +2,16 @@ package loopwake
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func synthesisSiblingHistory() []api.Message {
@@ -34,9 +33,9 @@ func TestLoopSkipTurnRearmsWithoutKickOrPrompt(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.WorkerCycleIdle = func(_ context.Context, _ *api.Session, completingJobID string) (bool, error) {
 		if strings.TrimSpace(completingJobID) == "job-1" {
 			return false, nil // siblings still in flight
@@ -62,11 +61,11 @@ func TestLoopSkipTurnRearmsWithoutKickOrPrompt(t *testing.T) {
 		},
 	})
 	engine.SetDeps(deps)
-	engine.EnterSleep(context.Background(), "s1", time.Now().UTC().Add(30*time.Minute), "batch work", []WaitTrigger{
+	engine.Waits.EnterSleep(context.Background(), "s1", time.Now().UTC().Add(30*time.Minute), "batch work", []WaitTrigger{
 		WaitTriggerTimer,
 		WaitTriggerNextWorkerDone,
 	}, nil, SleepMoverHost)
-	engine.NudgeAfterWorkerJobTerminal(
+	engine.Nudges.NudgeAfterWorkerJobTerminal(
 		context.Background(),
 		"s1",
 		"job-1",
@@ -75,14 +74,14 @@ func TestLoopSkipTurnRearmsWithoutKickOrPrompt(t *testing.T) {
 		"",
 		anchor.Envelope{},
 	)
-	engine.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
+	engine.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, 5*time.Second))
 	if prompts.Load() != 0 {
 		t.Fatalf("prompts = %d want 0 on skip turn", prompts.Load())
 	}
 	if kicks.Load() != 0 {
 		t.Fatalf("kicks = %d want 0 on skip turn", kicks.Load())
 	}
-	if !engine.IsSleeping("s1") {
+	if !engine.Waits.IsSleeping("s1") {
 		t.Fatal("expected sleep re-armed after skip turn")
 	}
 }
@@ -101,9 +100,9 @@ func TestLoopSkipTurnDoesNotApplyToDispatchWake(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: workspaceDir}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.WorkerCycleIdle = func(_ context.Context, _ *api.Session, completingJobID string) (bool, error) {
 		return strings.TrimSpace(completingJobID) == "job-2", nil
 	}
@@ -123,7 +122,7 @@ func TestLoopSkipTurnDoesNotApplyToDispatchWake(t *testing.T) {
 		},
 	})
 	engine.SetDeps(deps)
-	engine.NudgeAfterWorkerJobTerminal(
+	engine.Nudges.NudgeAfterWorkerJobTerminal(
 		context.Background(),
 		"s1",
 		"job-2",

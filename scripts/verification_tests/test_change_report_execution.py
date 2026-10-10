@@ -155,7 +155,7 @@ class ChangedCoverageTests(unittest.TestCase):
                                "example.com/m/internal/a/a.go:3.10,5.2 2 1\n"
                                "example.com/m/internal/a/a.go:7.1,7.9 1 0\n")
             blocks = coverage_changes.read_go_profile(profile, "example.com/m")
-        self.assertEqual(sorted(blocks["lycaon/internal/a/a.go"]), [(3, 5, 2, True), (7, 7, 1, False)])
+        self.assertEqual(sorted(blocks["lycaon/internal/a/a.go"]), [("3.10", "5.2", 2, True), ("7.1", "7.9", 1, False)])
 
     def test_den_changed_run_asks_the_config_not_the_cli_to_ignore_rerun_triggers(self):
         # Vitest's CLI rejects unknown options, so a rerun-trigger override must reach vitest.config.ts.

@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/url"
 	"sort"
 	"strconv"
@@ -11,7 +12,6 @@ import (
 	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/secretmatch"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 type secretScreenKey struct{}
@@ -289,9 +289,9 @@ func webSecretFinding(surface secretmatch.ScreenSurface, destinationID, destinat
 }
 
 // secretScreenReject builds the structured tool reject for a blocked secret screen.
-func secretScreenReject(surface secretmatch.ScreenSurface, host string, m secretmatch.Match, guidance string) *tools.ToolReject {
-	reject := &tools.ToolReject{
-		Code: tools.OutboundSecretDeniedCode,
+func secretScreenReject(surface secretmatch.ScreenSurface, host string, m secretmatch.Match, guidance string) *toolrejection.ToolReject {
+	reject := &toolrejection.ToolReject{
+		Code: toolrejection.OutboundSecretDeniedCode,
 		Data: map[string]any{
 			"surface": string(surface),
 			"rule_id": strings.TrimSpace(m.RuleID),
@@ -299,11 +299,11 @@ func secretScreenReject(surface secretmatch.ScreenSurface, host string, m secret
 			"shape":   strings.TrimSpace(m.GenericShape),
 		},
 	}
-	tools.AttachUserGuidance(reject, guidance)
+	toolrejection.AttachUserGuidance(reject, guidance)
 	return reject
 }
 
-func secretScreenRejectFromErr(err *SecretDeniedError) *tools.ToolReject {
+func secretScreenRejectFromErr(err *SecretDeniedError) *toolrejection.ToolReject {
 	if err == nil {
 		return secretScreenReject("", "", secretmatch.Match{}, "")
 	}
@@ -311,12 +311,12 @@ func secretScreenRejectFromErr(err *SecretDeniedError) *tools.ToolReject {
 }
 
 // Screening failures use a distinct rejection code from human denials.
-func secretScreenFaultReject(err *SecretScreenFaultError) *tools.ToolReject {
+func secretScreenFaultReject(err *SecretScreenFaultError) *toolrejection.ToolReject {
 	if err == nil {
-		return &tools.ToolReject{Code: tools.OutboundSecretScreenFailedCode, Data: map[string]any{}}
+		return &toolrejection.ToolReject{Code: toolrejection.OutboundSecretScreenFailedCode, Data: map[string]any{}}
 	}
-	return &tools.ToolReject{
-		Code: tools.OutboundSecretScreenFailedCode,
+	return &toolrejection.ToolReject{
+		Code: toolrejection.OutboundSecretScreenFailedCode,
 		Data: map[string]any{
 			"surface":     string(err.Surface),
 			"rule_id":     strings.TrimSpace(err.Match.RuleID),

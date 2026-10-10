@@ -17,7 +17,7 @@ func TestSecretMatchDetectorRegistered(t *testing.T) {
 	reg := NewDetectorRegistry()
 	reg.Register(SecretMatchDetector{Matcher: secretmatch.NewInertMatcher()})
 	gc := NewGuardContext()
-	gc.Content = "no secrets here"
+	gc.Content.Content = "no secrets here"
 	findings, err := reg.Dispatch("detector://secretmatch", gc)
 	testutil.FailErr(t, "dispatch secretmatch", err)
 	if len(findings) != 1 || findings[0].Fact != "secret_matches" {

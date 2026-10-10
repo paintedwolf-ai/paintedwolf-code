@@ -1,6 +1,8 @@
 package openaicompat
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"encoding/json"
 	"testing"
 
@@ -49,7 +51,7 @@ func TestOpenRouterFoldsFamilyStyleOntoReasoningObject(t *testing.T) {
 	wire := encodeWire(t, p, modelcall.CompletionRequest{
 		Model: openrouterKimi,
 		Tools: []tools.ToolMeta{{Name: "write"}},
-		Debug: modelcall.RequestDebug{Surface: tools.SurfaceImplementInvestigate, SessionID: "s1"},
+		Debug: modelcall.RequestDebug{Surface: toolcontract.SurfaceImplementInvestigate, SessionID: "s1"},
 	})
 
 	if _, ok := wire["thinking"]; ok {
@@ -81,7 +83,7 @@ func TestOpenRouterNeverSendsBothReasoningControls(t *testing.T) {
 					Model: openrouterKimi,
 					Think: level,
 					Tools: []tools.ToolMeta{{Name: "write"}},
-					Debug: modelcall.RequestDebug{Surface: tools.SurfaceImplementInvestigate},
+					Debug: modelcall.RequestDebug{Surface: toolcontract.SurfaceImplementInvestigate},
 				})
 				_, hasObject := wire["reasoning"]
 				_, hasEffort := wire["reasoning_effort"]
@@ -103,7 +105,7 @@ func TestOpenRouterPinsRoutingToCapableEndpoints(t *testing.T) {
 	wire := encodeWire(t, openrouterProvider(t), modelcall.CompletionRequest{
 		Model: openrouterKimi,
 		Tools: []tools.ToolMeta{{Name: "write"}},
-		Debug: modelcall.RequestDebug{Surface: tools.SurfaceImplementInvestigate},
+		Debug: modelcall.RequestDebug{Surface: toolcontract.SurfaceImplementInvestigate},
 	})
 	provider, ok := wire["provider"].(map[string]any)
 	if !ok {
@@ -122,7 +124,7 @@ func TestDirectHostSendsNoProviderRoutingBlock(t *testing.T) {
 	wire := encodeWire(t, p, modelcall.CompletionRequest{
 		Model: "accounts/fireworks/models/kimi-k2p7-code",
 		Tools: []tools.ToolMeta{{Name: "write"}},
-		Debug: modelcall.RequestDebug{Surface: tools.SurfaceImplementInvestigate},
+		Debug: modelcall.RequestDebug{Surface: toolcontract.SurfaceImplementInvestigate},
 	})
 	if _, ok := wire["provider"]; ok {
 		t.Fatalf("direct host must not send provider routing: %v", wire)

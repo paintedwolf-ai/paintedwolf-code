@@ -21,7 +21,7 @@ import (
 	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -179,7 +179,7 @@ func largestCatalogPhaseInject(t *testing.T, renderer *prompts.InjectRenderer, h
 			rows = append(rows, inject.WorkflowPhaseRow{ID: phase.ID, CompleteWhen: phase.CompleteWhen, Next: phase.Next, Terminal: phase.Terminal})
 		}
 		for _, phase := range manifest.PhaseDefs {
-			exit := workflow.ProjectPhaseExit(manifest, phase, nil, nil).InjectView()
+			exit := workflowpresentation.ProjectPhaseExit(manifest, phase, nil, nil).InjectView()
 			if phase.ReviewLoop != nil {
 				contractcheck.FailErr(t, "attach verdict call", verdictcall.Attach(exit, catalog, *phase.ReviewLoop, manifest.ReportBrief()))
 			}

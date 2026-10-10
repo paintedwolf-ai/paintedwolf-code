@@ -6,20 +6,20 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolsurface"
-	"github.com/lycaon/lycaon/internal/webresearch"
-	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolscope"
+	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/internal/webresearch"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // compileWorkerToolPlan starts from profile-filtered capabilities, never the coordinator roster.
-func (l modelTurn) compileWorkerToolPlan(ctx context.Context, sess *api.Session, metas []tools.ToolMeta, activated map[string]bool) toolsurface.Plan {
+func (l *promptContext) compileWorkerToolPlan(ctx context.Context, sess *api.Session, metas []tools.ToolMeta, activated map[string]bool) toolsurface.Plan {
 	mcp := l.mcpToolPlan(ctx, sess, metas, activated)
 	var immediate, deferred []string
 	for _, meta := range metas {
@@ -50,8 +50,8 @@ func (l modelTurn) compileWorkerToolPlan(ctx context.Context, sess *api.Session,
 	return plan
 }
 
-func (l modelTurn) webSearchEnabled() bool {
-	if l.PromptLoop == nil || l.Deps.WebSearchEnabled == nil {
+func (l *promptContext) webSearchEnabled() bool {
+	if l == nil || l.Deps.WebSearchEnabled == nil {
 		return true
 	}
 	return l.Deps.WebSearchEnabled()
@@ -73,7 +73,7 @@ func offSurfaceCode(toolName string) string {
 	return "COORDINATOR_TOOL_DENIED"
 }
 
-func (l modelTurn) coordinatorToolsForTurn(
+func (l *promptContext) coordinatorToolsForTurn(
 	ctx context.Context,
 	sess *api.Session,
 	profileID string,
@@ -83,7 +83,7 @@ func (l modelTurn) coordinatorToolsForTurn(
 	frame inject.CoordinatorTurnFrame,
 	st *promptLoopTurnState,
 ) ([]tools.ToolMeta, toolsurface.Plan, string, error) {
-	if l.PromptLoop == nil {
+	if l == nil {
 		return nil, toolsurface.Plan{}, "", nil
 	}
 	if st != nil && st.proseTurn(sess, iterIndex, maxIter) {
@@ -185,7 +185,7 @@ func trimCoordinatorToolMetasForPlan(plan toolsurface.Plan, all []tools.ToolMeta
 	return out
 }
 
-func (l modelTurn) compileRuntimeToolPlan(
+func (l *promptContext) compileRuntimeToolPlan(
 	plan toolsurface.Plan,
 	runCtx api.CoordinatorRunContext,
 	metas []tools.ToolMeta,
@@ -222,8 +222,8 @@ func (l modelTurn) compileRuntimeToolPlan(
 	return plan
 }
 
-func (l modelTurn) mcpToolPlan(ctx context.Context, sess *api.Session, metas []tools.ToolMeta, activated map[string]bool) tools.MCPToolPlan {
-	if l.PromptLoop != nil && l.Deps.MCPAlwaysLoad != nil {
+func (l *promptContext) mcpToolPlan(ctx context.Context, sess *api.Session, metas []tools.ToolMeta, activated map[string]bool) tools.MCPToolPlan {
+	if l != nil && l.Deps.MCPAlwaysLoad != nil {
 		modes := l.Deps.MCPAlwaysLoad(ctx, sess)
 		resolved := make([]tools.ToolMeta, len(metas))
 		copy(resolved, metas)
@@ -240,8 +240,8 @@ func (l modelTurn) mcpToolPlan(ctx context.Context, sess *api.Session, metas []t
 }
 
 // appendActivatedOpenWorldMetas adds activated non-catalog tools that ListForPrompt omitted.
-func (l modelTurn) appendActivatedOpenWorldMetas(all []tools.ToolMeta, activated map[string]bool) []tools.ToolMeta {
-	if l.PromptLoop == nil || l.Deps.Tools == nil || len(activated) == 0 {
+func (l *promptContext) appendActivatedOpenWorldMetas(all []tools.ToolMeta, activated map[string]bool) []tools.ToolMeta {
+	if l == nil || l.Deps.Tools == nil || len(activated) == 0 {
 		return all
 	}
 	have := make(map[string]bool, len(all))
@@ -295,15 +295,15 @@ func trimPromptToolMetas(metas []tools.ToolMeta) []tools.ToolMeta {
 	return out
 }
 
-func (l modelTurn) liveResources(sess *api.Session) toolcontract.ResourcePresence {
-	if l.PromptLoop == nil || l.Deps.LiveResources == nil || sess == nil {
+func (l *promptContext) liveResources(sess *api.Session) toolcontract.ResourcePresence {
+	if l == nil || l.Deps.LiveResources == nil || sess == nil {
 		return toolcontract.ResourcePresence{}
 	}
 	return l.Deps.LiveResources(sess.ID)
 }
 
-func (l modelTurn) liveMCPMetas() []tools.ToolMeta {
-	if l.PromptLoop == nil || l.Deps.Tools == nil {
+func (l *promptContext) liveMCPMetas() []tools.ToolMeta {
+	if l == nil || l.Deps.Tools == nil {
 		return nil
 	}
 	out := make([]tools.ToolMeta, 0)
@@ -326,8 +326,8 @@ func taskSpawnAllowlistForTurn(frame inject.CoordinatorTurnFrame) []string {
 	return frame.Roster.Effective
 }
 
-func (l modelTurn) projectRootCount(ctx context.Context, sess *api.Session) int {
-	if l.PromptLoop != nil && l.Deps.ProjectRootCount != nil && sess != nil {
+func (l *promptContext) projectRootCount(ctx context.Context, sess *api.Session) int {
+	if l != nil && l.Deps.ProjectRootCount != nil && sess != nil {
 		return l.Deps.ProjectRootCount(ctx, sess)
 	}
 	if sess != nil && strings.TrimSpace(sess.WorkspacePath) != "" {
@@ -336,14 +336,14 @@ func (l modelTurn) projectRootCount(ctx context.Context, sess *api.Session) int 
 	return 0
 }
 
-func (l modelTurn) activeDeferredTools(sess *api.Session) map[string]bool {
-	if l.PromptLoop == nil || l.Deps.LoadedTools == nil || sess == nil {
+func (l *promptContext) activeDeferredTools(sess *api.Session) map[string]bool {
+	if l == nil || l.Deps.LoadedTools == nil || sess == nil {
 		return nil
 	}
 	return l.Deps.LoadedTools(sess.ID)
 }
 
-func (l modelTurn) resolveTurnProfile(
+func (l *promptContext) resolveTurnProfile(
 	ctx context.Context,
 	sess *api.Session,
 	history []api.Message,
@@ -353,8 +353,8 @@ func (l modelTurn) resolveTurnProfile(
 	return surface.ResolveTurnProfile(frame.RunContext, sess, history, implState)
 }
 
-func (l modelTurn) implementSessionState(ctx context.Context, sess *api.Session) surface.ImplementSessionState {
-	if l.PromptLoop == nil || l.Deps.ImplementSessionState == nil || sess == nil {
+func (l *promptContext) implementSessionState(ctx context.Context, sess *api.Session) surface.ImplementSessionState {
+	if l == nil || l.Deps.ImplementSessionState == nil || sess == nil {
 		return surface.ImplementSessionState{}
 	}
 	return l.Deps.ImplementSessionState(ctx, sess)

@@ -3,19 +3,23 @@
 package workflow
 
 import (
+	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
+
 	"context"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -28,13 +32,12 @@ func TestImplementBuildLoopClosure(t *testing.T) {
 	bundledDir := filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "workflows")
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	wfStore := NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	mgr := NewManager(wfStore, store, reg, nil)
-	mgr.Resolver = ManifestResolver{}
 	q := worker.NewInMemoryQueue(4)
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		WorkerCycleIdle: func(projectID, sessionID, completingJobID string) (bool, error) {
-			return session.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, sessionID, completingJobID)
+			return workeroutcomes.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, sessionID, completingJobID)
 		},
 	})
 	testutil.FailErr(t, "conditions.NewDefaultRegistry", err)
@@ -46,19 +49,19 @@ func TestImplementBuildLoopClosure(t *testing.T) {
 	testutil.FailErr(t, "Create", err)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
-	run, err := mgr.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
+	run, err := mgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 	if run.CurrentPhase != "boot" {
 		t.Fatalf("start phase = %q want boot", run.CurrentPhase)
 	}
 
-	testutil.FailErr(t, "RecordBoardOrientReady", mgr.RecordBoardOrientReady(ctx, sess.ID, "fp-1"))
-	run, err = mgr.Get(ctx, run.ID)
+	testutil.FailErr(t, "RecordBoardOrientReady", mgr.Fanout.RecordBoardOrientReady(ctx, sess.ID, "fp-1"))
+	run, err = mgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get", err)
 	if run.CurrentPhase != "work" {
 		t.Fatalf("after boot: phase = %q want work", run.CurrentPhase)
 	}
-	frame, err := (&CoordinatorTurnFrameLoader{Runs: mgr}).BuildCoordinatorTurnFrame(ctx, sess.ID, sess)
+	frame, err := (&workflowruntime.CoordinatorFrames{Runs: mgr.Store.Runs, Resolver: &mgr.Resolver, Snapshots: mgr.Snapshots, Policy: mgr.Policy, Obligations: mgr.Obligations}).BuildCoordinatorTurnFrame(ctx, sess.ID, sess)
 	testutil.FailErr(t, "BuildCoordinatorTurnFrame", err)
 	for _, phase := range frame.Runtime.Phases {
 		if phase.ID != "work" || len(phase.Gates) != 1 {
@@ -72,16 +75,16 @@ func TestImplementBuildLoopClosure(t *testing.T) {
 		t.Fatalf("idle worker cycle projected as failed gate: %+v", frame.RunContext.FailedLeaves)
 	}
 
-	if err := mgr.RecordWorkerTerminalProof(ctx, sess.ID, "job-1", "complete"); err != nil {
+	if err := mgr.Fanout.RecordWorkerTerminalProof(ctx, sess.ID, "job-1", "complete"); err != nil {
 		testutil.FailErr(t, "RecordWorkerTerminalProof", err)
 	}
-	run, err = mgr.Get(ctx, run.ID)
+	run, err = mgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get", err)
 	if run.CurrentPhase != "work" {
 		t.Fatalf("after worker: phase = %q want work (re-enter)", run.CurrentPhase)
 	}
 
-	vars, err := wfStore.GetScaffoldVars(ctx, run.ID)
+	vars, err := wfStore.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	wc := vars["worker_cycle"]
 	if wc != nil {
@@ -95,11 +98,11 @@ func TestBuildPhaseSamePhaseReenterFiresReenterLeg(t *testing.T) {
 		ID:        "work",
 		OnReenter: workflowdef.PhaseOnReenter{ReenterLeg: "implement-work:{session_id}"},
 	}}}
-	leg, ok := ReenterLegForAdvance(manifest, "work", "work", "sess-1")
+	leg, ok := workflowphases.ReenterLegForAdvance(manifest, "work", "work", "sess-1")
 	if !ok || leg != "implement-work:sess-1" {
-		t.Fatalf("ReenterLegForAdvance = %q ok=%v", leg, ok)
+		t.Fatalf("workflowphases.ReenterLegForAdvance = %q ok=%v", leg, ok)
 	}
-	if leg, ok := ReenterLegForAdvance(manifest, "boot", "work", "sess-1"); ok {
+	if leg, ok := workflowphases.ReenterLegForAdvance(manifest, "boot", "work", "sess-1"); ok {
 		t.Fatalf("boot→work must not schedule leg loop wake, got %q", leg)
 	}
 }

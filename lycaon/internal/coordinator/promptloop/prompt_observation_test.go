@@ -20,13 +20,13 @@ func TestPromptObservationAcknowledgesOnlyDeliveredFrames(t *testing.T) {
 				memory := store.NewMemory()
 				source := &countingCoordinatorFrameSource{}
 				deps := StoreDeps(memory)
-				deps.CoordinatorFrame = source
-				deps.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "done"}}})
+				deps.Context.CoordinatorFrame = source
+				deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "done"}}})
 				if fail {
-					deps.LLM = &immediateFailingStreamLLM{err: errors.New("model unavailable")}
+					deps.Model.LLM = &immediateFailingStreamLLM{err: errors.New("model unavailable")}
 				}
 				captures, acknowledgements := 0, 0
-				deps.ObservePrompt = func(string) func(inject.CoordinatorTurnFrame) {
+				deps.Context.ObservePrompt = func(string) func(inject.CoordinatorTurnFrame) {
 					captures++
 					if source.calls != captures-1 {
 						t.Errorf("capture happened after workflow read: reads=%d captures=%d", source.calls, captures)
@@ -38,7 +38,7 @@ func TestPromptObservationAcknowledgesOnlyDeliveredFrames(t *testing.T) {
 						}
 					}
 				}
-				deps.BuildMessages = func(_ context.Context, _ *api.Session, history []api.Message, frame *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				deps.Context.BuildMessages = func(_ context.Context, _ *api.Session, history []api.Message, frame *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 					if acknowledgements >= captures {
 						t.Error("acknowledged before model execution")
 					}

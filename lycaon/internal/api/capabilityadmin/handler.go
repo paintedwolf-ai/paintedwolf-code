@@ -56,15 +56,95 @@ type Deps struct {
 }
 
 type Handler struct {
-	Deps
-	// options resolves a tool approval by the option the person chose, atomically.
-	authorityMu sync.Mutex
-	options     hitl.ApprovalOptionResolver
-	responses   *httpio.Responder
+	Access            *Access
+	CheckpointActions *CheckpointActions
+	Grants            *Grants
+	Installation      *Installation
+	Inventory         *Inventory
+	HeldValues        *HeldValues
+}
+
+type Access struct {
+	Events    events.ReplayHub
+	Gate      hitl.ApprovalGate
+	Grants    *Grants
+	Inventory *Inventory
+	Projects  project.Registry
+	Settings  *settings.Service
+	Store     session.Store
+	responses *httpio.Responder
+}
+
+type CheckpointActions struct {
+	Checkpoints    hitl.CheckpointManager
+	Events         events.ReplayHub
+	ManagedSecrets *secretcap.Service
+	Projects       project.Registry
+	Store          session.Store
+	options        hitl.ApprovalOptionResolver
+	presence       *hitl.VaultPresence
+	responses      *httpio.Responder
+}
+
+type Grants struct {
+	AuthzRecorder authzledger.Recorder
+	ChatGrants    ChatGrantLedger
+	Events        events.ReplayHub
+	Gate          hitl.ApprovalGate
+	GrantedPaths  *grantedpath.Runtime
+	Inventory     *Inventory
+	Listen        *approvalstate.SandboxPortGrantRuntime
+	Loopback      *approvalstate.SandboxPortGrantRuntime
+	Projects      project.Registry
+	ReadPaths     *approvalstate.SandboxPathGrantRuntime
+	Settings      *settings.Service
+	Sockets       *approvalstate.SocketCapabilityRuntime
+	WriteRoots    *approvalstate.SandboxPathGrantRuntime
+	authorityMu   *sync.Mutex
+	responses     *httpio.Responder
+}
+
+type Installation struct {
+	DirectIP     *approvalstate.DirectIPCapabilityRuntime
+	Gate         hitl.ApprovalGate
+	GrantedPaths *grantedpath.Runtime
+	LLMService   *llm.Service
+	Listen       *approvalstate.SandboxPortGrantRuntime
+	Loopback     *approvalstate.SandboxPortGrantRuntime
+	ReadPaths    *approvalstate.SandboxPathGrantRuntime
+	Sockets      *approvalstate.SocketCapabilityRuntime
+	WriteRoots   *approvalstate.SandboxPathGrantRuntime
+	authorityMu  *sync.Mutex
+}
+
+type Inventory struct {
+	ApprovalDecisions ApprovalDecisionReader
+	AuthzRecorder     authzledger.Recorder
+	DirectIP          *approvalstate.DirectIPCapabilityRuntime
+	Gate              hitl.ApprovalGate
+	HostResources     *hostresources.Service
+	Listen            *approvalstate.SandboxPortGrantRuntime
+	Loopback          *approvalstate.SandboxPortGrantRuntime
+	Sockets           *approvalstate.SocketCapabilityRuntime
+	Store             session.Store
+	WriteRoots        *approvalstate.SandboxPathGrantRuntime
+	responses         *httpio.Responder
+}
+
+type HeldValues struct {
+	Access    *Access
+	Vault     *presence.Unlocks
+	responses *httpio.Responder
 }
 
 func New(responses *httpio.Responder, deps Deps) Handler {
-	options, _ := deps.Checkpoints.(hitl.ApprovalOptionResolver)
+	checkpoints, _ := deps.Checkpoints.(*hitl.Checkpoints)
+	var options hitl.ApprovalOptionResolver
+	var presence *hitl.VaultPresence
+	if checkpoints != nil {
+		options = checkpoints.Authority
+		presence = checkpoints.Presence
+	}
 	httpio.RequireDependencies("capabilityadmin",
 		httpio.Required{Name: "responses", Present: responses != nil},
 		httpio.Required{Name: "Checkpoints", Present: options != nil},
@@ -74,5 +154,17 @@ func New(responses *httpio.Responder, deps Deps) Handler {
 		httpio.Required{Name: "Gate", Present: deps.Gate != nil},
 		httpio.Required{Name: "Settings.Approvals", Present: deps.Settings != nil && deps.Settings.Approvals != nil},
 	)
-	return Handler{Deps: deps, options: options, responses: responses}
+	authorityMu := &sync.Mutex{}
+	h := Handler{}
+	h.Access = &Access{Gate: deps.Gate, Events: deps.Events, Projects: deps.Projects, Settings: deps.Settings, Store: deps.Store, responses: responses}
+	h.CheckpointActions = &CheckpointActions{Checkpoints: deps.Checkpoints, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, Projects: deps.Projects, Store: deps.Store, options: options, presence: presence, responses: responses}
+	h.Grants = &Grants{Gate: deps.Gate, AuthzRecorder: deps.AuthzRecorder, ChatGrants: deps.ChatGrants, Events: deps.Events, GrantedPaths: deps.GrantedPaths, Listen: deps.Listen, Loopback: deps.Loopback, Projects: deps.Projects, ReadPaths: deps.ReadPaths, Settings: deps.Settings, Sockets: deps.Sockets, WriteRoots: deps.WriteRoots, authorityMu: authorityMu, responses: responses}
+	h.Installation = &Installation{Gate: deps.Gate, DirectIP: deps.DirectIP, GrantedPaths: deps.GrantedPaths, LLMService: deps.LLMService, Listen: deps.Listen, Loopback: deps.Loopback, ReadPaths: deps.ReadPaths, Sockets: deps.Sockets, WriteRoots: deps.WriteRoots, authorityMu: authorityMu}
+	h.Inventory = &Inventory{Gate: deps.Gate, ApprovalDecisions: deps.ApprovalDecisions, AuthzRecorder: deps.AuthzRecorder, DirectIP: deps.DirectIP, HostResources: deps.HostResources, Listen: deps.Listen, Loopback: deps.Loopback, Sockets: deps.Sockets, Store: deps.Store, WriteRoots: deps.WriteRoots, responses: responses}
+	h.HeldValues = &HeldValues{Vault: deps.Vault, responses: responses}
+	h.Access.Grants = h.Grants
+	h.Access.Inventory = h.Inventory
+	h.Grants.Inventory = h.Inventory
+	h.HeldValues.Access = h.Access
+	return h
 }

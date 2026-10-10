@@ -16,7 +16,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) streamReplayMessage(w http.ResponseWriter, r *http.Request, sessionID, messageID string) (wire.Message, bool) {
+func (s *Conversation) streamReplayMessage(w http.ResponseWriter, r *http.Request, sessionID, messageID string) (wire.Message, bool) {
 	// The transcript owns message membership, including removals by rewind.
 	msg, err := s.sessionStore.GetMessage(r.Context(), sessionID, messageID)
 	if errors.Is(err, store.ErrMessageNotFound) || errors.Is(err, store.ErrSessionNotFound) {
@@ -30,10 +30,10 @@ func (s *Server) streamReplayMessage(w http.ResponseWriter, r *http.Request, ses
 	return messageview.TranscriptMessage(msg), true
 }
 
-func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
+func (s *Conversation) handleStream(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	messageID := strings.TrimSpace(r.URL.Query().Get("message"))
-	if !requestscope.SessionExists(s.sessionStore, &s.responses, w, r, id) {
+	if !requestscope.SessionExists(s.sessionStore, s.responses, w, r, id) {
 		return
 	}
 	flusher, ok := w.(http.Flusher)
@@ -50,14 +50,14 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.sessions.Streams().ActiveMessageID(id) == messageID {
+	if s.sessions.Runner.Transcript.Streams.ActiveMessageID(id) == messageID {
 		s.followLiveStream(r, w, flusher, id, messageID)
 		return
 	}
 	s.replayStream(w, r, flusher, id, messageID)
 }
 
-func (s *Server) replayStream(w http.ResponseWriter, r *http.Request, flusher http.Flusher, sessionID, messageID string) {
+func (s *Conversation) replayStream(w http.ResponseWriter, r *http.Request, flusher http.Flusher, sessionID, messageID string) {
 	msg, ok := s.streamReplayMessage(w, r, sessionID, messageID)
 	if !ok {
 		return
@@ -69,9 +69,9 @@ func (s *Server) replayStream(w http.ResponseWriter, r *http.Request, flusher ht
 		}
 		return
 	}
-	tokens, found := s.sessions.Streams().Tokens(messageID)
+	tokens, found := s.sessions.Runner.Transcript.Streams.Tokens(messageID)
 	if !found {
-		if cached, cachedOK := s.sessions.Streams().Content(messageID); cachedOK {
+		if cached, cachedOK := s.sessions.Runner.Transcript.Streams.Content(messageID); cachedOK {
 			content = cached
 		}
 		if !writePromptChunk(w, flusher, wire.PromptStreamChunk{Token: content, Reset: true}) {
@@ -86,11 +86,11 @@ func (s *Server) replayStream(w http.ResponseWriter, r *http.Request, flusher ht
 	writePromptChunk(w, flusher, wire.PromptStreamChunk{Done: true})
 }
 
-func (s *Server) followLiveStream(r *http.Request, w http.ResponseWriter, flusher http.Flusher, sessionID, messageID string) {
-	ch, unsub := s.sessions.Streams().Subscribe(messageID)
+func (s *Conversation) followLiveStream(r *http.Request, w http.ResponseWriter, flusher http.Flusher, sessionID, messageID string) {
+	ch, unsub := s.sessions.Runner.Transcript.Streams.Subscribe(messageID)
 	defer unsub()
 
-	if s.sessions.Streams().ActiveMessageID(sessionID) != messageID {
+	if s.sessions.Runner.Transcript.Streams.ActiveMessageID(sessionID) != messageID {
 		s.replayStream(w, r, flusher, sessionID, messageID)
 		return
 	}

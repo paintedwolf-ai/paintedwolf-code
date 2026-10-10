@@ -2,23 +2,15 @@ package wiring
 
 import (
 	"context"
-	"io/fs"
-	"net/netip"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app"
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/delegation"
-	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/mcp"
@@ -37,6 +29,12 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
 )
 
 // Each test supplies its own server catalog.
@@ -64,8 +62,6 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	t.Setenv("LYCAON_API_TOKEN", api.TestAPIToken)
 	t.Setenv("LYCAON_TEST", "1")
 	t.Setenv("LYCAON_LOG_LEVEL", "error")
-	// Destination checks resolve named hosts without DNS; no test reaches the network.
-	egress.TestingResolve(t, egress.StaticLookup(netip.MustParseAddr("1.1.1.1")))
 	// Isolate device configuration for deterministic tests.
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	// The process source catalog caches trees under <config>/cache; its builds
@@ -73,7 +69,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		testutil.FailErr(t, "clear source catalog", sourcecatalog.Process().ClearTreeStores(ctx, nil))
+		testutil.FailErr(t, "clear source catalog", sourcecatalog.Process().Trees.ClearTreeStores(ctx, nil))
 	})
 
 	o := defaultOptions()
@@ -81,7 +77,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 		opt(&o)
 	}
 
-	cfg := app.DefaultConfig()
+	cfg := configuration.Config{}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
 	// Install packs before the builder resolves the catalog.
 	installHarnessPacks(t, o.installedPackDirs)
@@ -115,16 +111,14 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	// Workflow definitions use the bundled catalog; templates use deterministic fixtures.
 	fixturesRoot := filepath.Join(configlayout.FindModuleRoot(), "test", "wiring", "fixtures")
 	cfg.TestWorkflowTemplatesDir = filepath.Join(fixturesRoot, "workflow-templates")
-	if !o.useBundledScanners {
+	if o.useBundledScanners {
+		cfg.TestAdvisoryDatabase = scantest.OSVExport(t)
+	} else {
 		cfg.TestScanRegistry = &scan.MockRegistry{Scanner: &scan.MockScanner{
 			// Match the bundled secret scanner categories.
 			CategoryList: []wire.ScanCategory{wire.ScanCategorySecret, wire.ScanCategorySecurity, wire.ScanCategorySCA},
 			Result:       &scanoutput.Result{FindingsCount: 0},
 		}}
-	}
-	if o.useBundledScanners {
-		// Dependency scanning matches vendored advisories, never the advisory endpoint.
-		cfg.TestAdvisoryDatabase = scantest.OSVExport(t)
 	}
 	if !o.productionCostPricer {
 		cfg.TestCostPricer = testCostPricer{}
@@ -152,7 +146,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	if o.replaceManifests != nil {
-		sa.WorkflowMgr.Manifests = workflowdef.NewRegistry(o.replaceManifests)
+		sa.Workflows.Manager.Resolver.Overlay = workflowdef.NewRegistry(o.replaceManifests)
 	}
 
 	applyTestHarnessRelaxations(sa)
@@ -201,17 +195,17 @@ func (h *Harness) HostProjectDir(t *testing.T, projectID string) string {
 
 // RegisterManifest adds or overrides a workflow manifest on the built registry.
 func (h *Harness) RegisterManifest(manifest workflowdef.Manifest) {
-	if h == nil || h.WorkflowMgr == nil {
+	if h == nil || h.Workflows.Manager == nil {
 		return
 	}
 	m := workflowdef.FinalizeManifest(manifest)
 	key := m.ID + "@" + m.Version
-	all := h.WorkflowMgr.Manifests.All()
+	all := h.Workflows.Manager.Resolver.Overlay.All()
 	if all == nil {
 		all = map[string]workflowdef.Manifest{}
 	}
 	all[key] = m
-	h.WorkflowMgr.Manifests = workflowdef.NewRegistry(all)
+	h.Workflows.Manager.Resolver.Overlay = workflowdef.NewRegistry(all)
 }
 
 // CreateHarnessSession seeds project registry rows and creates a SQL-backed session for wiring tests.
@@ -241,7 +235,9 @@ func (h *Harness) SeedProgress(t *testing.T, ctx context.Context, sessionID stri
 	}
 	if _, err := h.ToolRegistry.Run(ctx, "update_progress", map[string]any{
 		"content": "## Progress\n- [ ] wiring test plan\n",
-	}, tools.ToolContext{SessionID: sessionID}); err != nil {
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sessionID},
+	}); err != nil {
 		t.Fatalf("SeedProgress: %v", err)
 	}
 }
@@ -300,10 +296,10 @@ func (testCostPricer) EstimateCost(_, _ string, usage cost.TokenUsage) (cost.Cos
 }
 
 func applyTestHarnessRelaxations(sa *app.ServeApp) {
-	if sa == nil || sa.DelegationMgr == nil {
+	if sa == nil || sa.Delegations.Manager == nil {
 		return
 	}
-	if g := sa.DelegationMgr.Grounding; g != nil {
+	if g := sa.Delegations.Manager.Grounding; g != nil {
 		cfg := g.Config
 		cfg.Closeout.Mode = "off"
 		g.Config = cfg

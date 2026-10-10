@@ -1,6 +1,8 @@
 package openaicompat
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -16,7 +18,7 @@ func TestResolveControlsOrchestrationTurn(t *testing.T) {
 	req := modelcall.CompletionRequest{
 		Model: "accounts/fireworks/models/kimi-k2p7-code",
 		Tools: []tools.ToolMeta{{Name: "update_progress"}},
-		Debug: modelcall.RequestDebug{Surface: tools.SurfaceImplementInvestigate, SessionID: "s1"},
+		Debug: modelcall.RequestDebug{Surface: toolcontract.SurfaceImplementInvestigate, SessionID: "s1"},
 	}
 	built := provider.resolveRequestControls(req, req.Model, controlOpts{})
 	if built.ReasoningEffort != "medium" {
@@ -64,7 +66,7 @@ func TestResolveControlsOrchestrationGivesThinkingRoom(t *testing.T) {
 	req := modelcall.CompletionRequest{
 		Model: "m",
 		Tools: []tools.ToolMeta{{Name: "task"}},
-		Debug: modelcall.RequestDebug{Surface: tools.SurfaceImplementDispatch, SessionID: "room"},
+		Debug: modelcall.RequestDebug{Surface: toolcontract.SurfaceImplementDispatch, SessionID: "room"},
 	}
 	if built := provider.resolveRequestControls(req, req.Model, controlOpts{}); built.MaxTokens != configured {
 		t.Fatalf("orchestration max_tokens = %d, want configured %d (room preserved)", built.MaxTokens, configured)
@@ -84,7 +86,7 @@ func TestResolveControlsSkipsReasoningWhenUnsupported(t *testing.T) {
 	req := modelcall.CompletionRequest{
 		Model: "gpt-4o",
 		Tools: []tools.ToolMeta{{Name: "task"}},
-		Debug: modelcall.RequestDebug{Surface: tools.SurfaceImplementDispatch},
+		Debug: modelcall.RequestDebug{Surface: toolcontract.SurfaceImplementDispatch},
 	}
 	built := provider.resolveRequestControls(req, req.Model, controlOpts{})
 	if built.ReasoningEffort != "" {

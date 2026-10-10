@@ -42,7 +42,9 @@ WHERE id = sqlc.arg(id);
 UPDATE workflow_runs
 SET blueprint_path = sqlc.arg(to_path), updated_at = sqlc.arg(updated_at), revision = revision + 1
 WHERE project_id = sqlc.arg(project_id) AND blueprint_path = sqlc.arg(from_path)
-RETURNING session_id;
+RETURNING id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
+       blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
+       created_at, updated_at, paused_at, completed_at;
 
 -- name: ActiveWorkflowRunBySession :one
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,

@@ -12,8 +12,8 @@ import (
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -30,7 +30,7 @@ func buildWorkflowHarnessWithManifest(t *testing.T, manifest workflowdef.Manifes
 
 func startHarnessRun(t *testing.T, h *wiring.Harness, sessionID, workflowID, version string) wire.WorkflowRun {
 	t.Helper()
-	run, err := h.WorkflowMgr.StartHuman(context.Background(), sessionID, wire.StartWorkflowRunRequest{
+	run, err := h.Workflows.Manager.Starts.StartHuman(context.Background(), sessionID, wire.StartWorkflowRunRequest{
 		WorkflowID: workflowID, WorkflowVersion: version,
 	})
 	if err != nil {
@@ -54,26 +54,26 @@ func seedPlanStub(t *testing.T, blueprintMgr *blueprint.Manager, projectID, blue
 func completePlanIntakeHTTP(t *testing.T, h *wiring.Harness, runID string) wire.WorkflowRun {
 	t.Helper()
 	ctx := context.Background()
-	run, err := h.WorkflowMgr.Get(ctx, runID)
+	run, err := h.Workflows.Manager.Store.Runs.Get(ctx, runID)
 	if err != nil {
 		testutil.FailErr(t, "get workflow run", err)
 	}
 	if run.CurrentPhase != "intake" {
 		return *run
 	}
-	vars, err := h.WorkflowMgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := h.Workflows.Manager.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		testutil.FailErr(t, "get scaffold vars", err)
 	}
 	vars["hitl_consulted:intake"] = true
 	projectDir := ""
-	if sess, err := h.WorkflowMgr.Sessions.Get(ctx, run.SessionID); err == nil && sess != nil {
+	if sess, err := h.Workflows.Manager.Policy.Sessions.Get(ctx, run.SessionID); err == nil && sess != nil {
 		projectDir = sess.WorkspacePath
 	}
-	if err := h.WorkflowMgr.Store.UpdateVars(ctx, run, projectDir, vars); err != nil {
+	if err := h.Workflows.Manager.Store.State.UpdateVars(ctx, run, projectDir, vars); err != nil {
 		testutil.FailErr(t, "update scaffold vars", err)
 	}
-	out, err := h.WorkflowMgr.Advance(ctx, run.ID)
+	out, err := h.Workflows.Manager.Phases.Advance(ctx, run.ID)
 	if err != nil {
 		testutil.FailErr(t, "advance workflow", err)
 	}
@@ -83,27 +83,27 @@ func completePlanIntakeHTTP(t *testing.T, h *wiring.Harness, runID string) wire.
 func completePlanDepthAtNoneHTTP(t *testing.T, h *wiring.Harness, runID, phaseID string) wire.WorkflowRun {
 	t.Helper()
 	ctx := context.Background()
-	run, err := h.WorkflowMgr.Get(ctx, runID)
+	run, err := h.Workflows.Manager.Store.Runs.Get(ctx, runID)
 	if err != nil {
 		testutil.FailErr(t, "get workflow run", err)
 	}
 	if run.CurrentPhase != phaseID {
 		return *run
 	}
-	vars, err := h.WorkflowMgr.Store.GetScaffoldVars(ctx, runID)
+	vars, err := h.Workflows.Manager.Store.Runs.GetScaffoldVars(ctx, runID)
 	if err != nil {
 		testutil.FailErr(t, "get scaffold vars", err)
 	}
-	vars = workflow.SetHostVar(vars, "params."+phaseID+"_depth", "none")
-	vars = workflow.ResolveDepthSkip(vars, phaseID, phaseID+"_depth")
+	vars = runstate.SetHostVar(vars, "params."+phaseID+"_depth", "none")
+	vars = runstate.ResolveDepthSkip(vars, phaseID, phaseID+"_depth")
 	if phaseID == "review" {
-		vars = workflow.SetGateSatisfied(vars, "evidence_passed:plan_review", true)
+		vars = runstate.SetGateSatisfied(vars, "evidence_passed:plan_review", true)
 	}
 	projectDir := ""
-	if sess, getErr := h.WorkflowMgr.Sessions.Get(ctx, run.SessionID); getErr == nil && sess != nil {
+	if sess, getErr := h.Workflows.Manager.Policy.Sessions.Get(ctx, run.SessionID); getErr == nil && sess != nil {
 		projectDir = sess.WorkspacePath
 	}
-	if err := h.WorkflowMgr.Store.UpdateVars(ctx, run, projectDir, vars); err != nil {
+	if err := h.Workflows.Manager.Store.State.UpdateVars(ctx, run, projectDir, vars); err != nil {
 		testutil.FailErr(t, "persist depth parameter", err)
 	}
 	return advancePlanRunHTTP(t, h.Server, runID)
@@ -263,7 +263,7 @@ func advancePlanRunToExecuteHTTP(t *testing.T, h *wiring.Harness, srv *api.Serve
 		run = completePlanDepthAtNoneHTTP(t, h, run.ID, "review")
 	}
 	if run.CurrentPhase == "approve" {
-		synced, err := h.WorkflowMgr.SyncHumanApproval(h.OwnerCtx(t, context.Background()), run.ID, sess.WorkspacePath)
+		synced, err := h.Workflows.Manager.Approvals.SyncHumanApproval(h.OwnerCtx(t, context.Background()), run.ID, sess.WorkspacePath)
 		if err != nil {
 			testutil.FailErr(t, "sync human approval", err)
 		}

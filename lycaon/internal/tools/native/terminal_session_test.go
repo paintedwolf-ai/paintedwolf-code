@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -35,8 +36,10 @@ func TestTerminalSendReadTools(t *testing.T) {
 	}
 
 	tctx := tools.ToolContext{
-		SessionID: "sess", ProjectID: "proj", Out: &tools.ToolInvocationOut{},
-		Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}},
+		Identity: tools.InvocationIdentity{SessionID: "sess",
+			ProjectID: "proj"},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+		Source:  tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}},
 	}
 	openRaw, err := reg.Run(context.Background(), terminal.OpenToolName, map[string]any{
 		"command": script,
@@ -59,8 +62,8 @@ func TestTerminalSendReadTools(t *testing.T) {
 		"id": handle, "idle_ms": 150.0, "timeout_ms": 2000.0,
 	}, tctx)
 	testutil.FailErr(t, "terminal_read prompt", err)
-	if tctx.Out.DisplaySubject != script {
-		t.Fatalf("terminal target = %q, want %q", tctx.Out.DisplaySubject, script)
+	if tctx.Effects.Out.DisplaySubject != script {
+		t.Fatalf("terminal target = %q, want %q", tctx.Effects.Out.DisplaySubject, script)
 	}
 	if !strings.Contains(promptOut, "PROMPT>") {
 		t.Fatalf("prompt = %s", promptOut)
@@ -86,8 +89,9 @@ func TestTerminalOpenRejectsMetachar(t *testing.T) {
 	testutil.FailErr(t, "register", RegisterTerminalSessionTools(reg, bg))
 	dir := t.TempDir()
 	tctx := tools.ToolContext{
-		SessionID: "s", ProjectID: "p",
-		Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}},
+		Identity: tools.InvocationIdentity{SessionID: "s",
+			ProjectID: "p"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}},
 	}
 	// Substitution never expands, so it stays a metacharacter rejection here.
 	_, err := reg.Run(context.Background(), terminal.OpenToolName, map[string]any{
@@ -116,13 +120,14 @@ func TestTerminalOpenRejectsOversizedWinSize(t *testing.T) {
 	testutil.FailErr(t, "register", RegisterTerminalSessionTools(reg, bg))
 	dir := t.TempDir()
 	tctx := tools.ToolContext{
-		SessionID: "s", ProjectID: "p",
-		Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}},
+		Identity: tools.InvocationIdentity{SessionID: "s",
+			ProjectID: "p"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}},
 	}
 	_, err := reg.Run(context.Background(), terminal.OpenToolName, map[string]any{
 		"command": "echo hi", "winsize": map[string]any{"cols": 241.0, "rows": 24.0},
 	}, tctx)
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" || reject.Data["reason"] != "winsize_out_of_range" {
 		t.Fatalf("oversized winsize reject = %#v (err = %v)", reject, err)
 	}
@@ -144,9 +149,10 @@ func TestTerminalOpenSendDefaultSnapshot(t *testing.T) {
 	}
 	out := &tools.ToolInvocationOut{}
 	tctx := tools.ToolContext{
-		SessionID: "sess-snap", ProjectID: "proj",
-		Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}},
-		Out:   out,
+		Identity: tools.InvocationIdentity{SessionID: "sess-snap",
+			ProjectID: "proj"},
+		Source:  tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}},
+		Effects: tools.InvocationEffects{Out: out},
 	}
 	openRaw, err := reg.Run(context.Background(), terminal.OpenToolName, map[string]any{
 		"command": script,
@@ -208,7 +214,11 @@ func TestTerminalObserveAckDoesNotCaptureScreen(t *testing.T) {
 	if err := os.WriteFile(script, []byte("#!/bin/sh\nprintf 'READY\\n'\nIFS= read -r _\n"), 0o755); err != nil {
 		testutil.FailErr(t, "write script", err)
 	}
-	tctx := tools.ToolContext{SessionID: "ack", ProjectID: "proj", Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "ack",
+			ProjectID: "proj"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}},
+	}
 	raw, err := reg.Run(context.Background(), terminal.OpenToolName, map[string]any{"command": script, "observe": "ack"}, tctx)
 	testutil.FailErr(t, "terminal_open ack", err)
 	var opened terminal.OpenResult

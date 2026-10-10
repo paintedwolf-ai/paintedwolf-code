@@ -29,25 +29,13 @@ type Registry struct {
 var (
 	defaultRegMu sync.RWMutex
 	defaultReg   *Registry
-	anchorsForMu sync.RWMutex
-	anchorsFor   AnchorsForFunc
 )
-
-// AnchorsForFunc resolves a session registry.
-type AnchorsForFunc func(ctx context.Context, sessionID string) *Registry
 
 // SetDefaultRegistry installs the process-wide Binding registry (Emit / ParseID).
 func SetDefaultRegistry(r *Registry) {
 	defaultRegMu.Lock()
 	defaultReg = r
 	defaultRegMu.Unlock()
-}
-
-// SetAnchorsFor installs a per-evaluation registry resolver. Nil clears it.
-func SetAnchorsFor(fn AnchorsForFunc) {
-	anchorsForMu.Lock()
-	anchorsFor = fn
-	anchorsForMu.Unlock()
 }
 
 // DefaultRegistry returns the process-wide Binding registry.
@@ -60,7 +48,10 @@ func DefaultRegistry() *Registry {
 // RegistryFor resolves the session or device registry.
 func RegistryFor(ctx context.Context, sessionID string) *Registry {
 	anchorsForMu.RLock()
-	fn := anchorsFor
+	var fn AnchorsForFunc
+	if anchorsFor != nil {
+		fn = anchorsFor.resolve
+	}
 	anchorsForMu.RUnlock()
 	if fn != nil {
 		if r := fn(ctx, strings.TrimSpace(sessionID)); r != nil {

@@ -6,6 +6,7 @@ import (
 	"os"
 	osexec "os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -67,7 +68,13 @@ func TestProbeAcceptsAnswerWithBackgroundChildHoldingStdout(t *testing.T) {
 		return runErr
 	}
 	snap := p.Resolve(context.Background())
-	if !errors.Is(runErr, osexec.ErrWaitDelay) {
+	// Linux command supervision settles the helper before the shell's wait
+	// returns; elsewhere the helper keeps stdout open until WaitDelay expires.
+	if runtime.GOOS == "linux" {
+		if runErr != nil {
+			t.Fatalf("shell result = %v, want supervision to close stdout by settling the background child", runErr)
+		}
+	} else if !errors.Is(runErr, osexec.ErrWaitDelay) {
 		t.Fatalf("shell result = %v, want the background child to exhaust WaitDelay", runErr)
 	}
 	if snap.Source() != SourceProbe || snap.Value() != "/opt/toolchain/bin:/usr/bin" {

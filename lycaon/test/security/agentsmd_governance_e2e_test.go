@@ -59,14 +59,17 @@ func runAgentsMDWriteApproval(t *testing.T, call llm.MockToolCall, kind wire.Che
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
 	defer cancel()
-	testutil.FailErr(t, "set implementer profile", h.SessionMgr.SetAgentType(ctx, sess.ID, "implementer"))
+	testutil.FailErr(t, "set implementer profile", h.Sessions.Manager.Chats.SetAgentType(ctx, sess.ID, "implementer"))
 	// A checklist lets the write reach the approval gate.
 	h.SeedProgress(t, ctx, sess.ID)
 	done := make(chan error, 1)
-	go func() { _, err := h.SessionMgr.Prompt(ctx, sess.ID, "update agents policy"); done <- err }()
+	go func() {
+		_, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "update agents policy")
+		done <- err
+	}()
 	var checkpoint wire.CheckpointEvent
 	testutil.WaitFor(t, 15*time.Second, func() bool {
-		pending, err := h.CheckpointMgr.ListPending(ctx, sess.ID, nil)
+		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, nil)
 		if err == nil && len(pending) > 0 {
 			checkpoint = pending[0]
 			return true
@@ -84,7 +87,7 @@ func runAgentsMDWriteApproval(t *testing.T, call llm.MockToolCall, kind wire.Che
 	if _, err := os.Stat(filepath.Join(dir, "AGENTS.md")); !os.IsNotExist(err) {
 		t.Fatalf("instructions changed before approval: %v", err)
 	}
-	approveAgentsMDReview(t, h.OwnerCtx(t, ctx), h.CheckpointMgr, sess.ID, checkpoint)
+	approveAgentsMDReview(t, h.OwnerCtx(t, ctx), h.Sessions.Checkpoints, sess.ID, checkpoint)
 	testutil.FailErr(t, "complete prompt without another approval", <-done)
 	content, err := os.ReadFile(filepath.Join(dir, "AGENTS.md"))
 	testutil.FailErr(t, "read approved instructions", err)
@@ -121,11 +124,11 @@ func approveAgentsMDReview(t *testing.T, ctx context.Context, manager hitl.Check
 		testutil.FailErr(t, "approve content review", err)
 		return
 	}
-	resolver, ok := manager.(hitl.ApprovalOptionResolver)
+	resolver, ok := manager.(*hitl.Checkpoints)
 	if !ok {
 		t.Fatal("checkpoint manager lacks approval resolution")
 	}
-	_, err := resolver.ResolveApprovalOption(ctx, sessionID, checkpoint.ID, hitl.CurrentActionOption().ID)
+	_, err := resolver.Authority.ResolveApprovalOption(ctx, sessionID, checkpoint.ID, hitl.CurrentActionOption().ID)
 	testutil.FailErr(t, "approve instruction change", err)
 }
 

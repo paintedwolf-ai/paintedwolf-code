@@ -41,8 +41,8 @@ func TestRecoveryRestoreInstallsConfiguredDatabaseAndRetainsItsJournals(t *testi
 	if string(journal) != "journal bytes" {
 		t.Fatalf("preimage journal=%q", journal)
 	}
-	testutil.FailErr(t, "apply custom store", backup.ApplyPending(targetRoot))
-	testutil.FailErr(t, "repeat custom apply", backup.ApplyPending(targetRoot))
+	testutil.FailErr(t, "apply custom store", backup.ApplyPending(t.Context(), targetRoot))
+	testutil.FailErr(t, "repeat custom apply", backup.ApplyPending(t.Context(), targetRoot))
 	// Opening the restored database can create fresh journals.
 	if _, err := os.Stat(targetPath + "-wal"); !os.IsNotExist(err) {
 		t.Fatalf("stale custom journal survived: %v", err)
@@ -71,7 +71,7 @@ func TestFreshStartReplacesConfiguredCustomStore(t *testing.T) {
 	_, err = backup.StageFreshStart(t.Context(), backup.FreshStartOpts{ConfigDir: root, DBPath: path, SQLDB: database})
 	testutil.FailErr(t, "stage custom fresh start", err)
 	testutil.FailErr(t, "close custom store", database.Close())
-	testutil.FailErr(t, "apply custom fresh start", backup.ApplyPending(root))
+	testutil.FailErr(t, "apply custom fresh start", backup.ApplyPending(t.Context(), root))
 	fresh := testdbfixture.OpenPath(t, path)
 	var count int
 	testutil.FailErr(t, "query fresh custom store", fresh.QueryRowContext(t.Context(), `SELECT count(*) FROM store_meta WHERE key='fresh-probe'`).Scan(&count))

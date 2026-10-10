@@ -21,8 +21,8 @@ func TestListDirUnknownCountUsesShallowMap(t *testing.T) {
 		Boundary: nativefixture.Boundary(t),
 	}
 	tctx := nativefixture.Context(dir)
-	tctx.RepoFileCount = 0
-	tctx.RepoFileCountKnown = false
+	tctx.Source.RepoFileCount = 0
+	tctx.Source.RepoFileCountKnown = false
 	out, err := tool.Run(context.Background(), map[string]any{"path": "."}, tctx)
 	testutil.FailErr(t, "list_dir unknown", err)
 	var resp listDirResponse
@@ -43,7 +43,7 @@ func TestListDirDenseRootShallowMapOnly(t *testing.T) {
 	}
 	tool := &ListDirTool{Boundary: nativefixture.Boundary(t)}
 	tctx := nativefixture.Context(dir)
-	tctx.RepoFileCount = 200_000
+	tctx.Source.RepoFileCount = 200_000
 	out, err := tool.Run(context.Background(), map[string]any{"path": "."}, tctx)
 	testutil.FailErr(t, "list_dir dense", err)
 	var resp listDirResponse
@@ -77,8 +77,8 @@ func TestListDirUsesCatalogCountWhenPublishedCountIsStale(t *testing.T) {
 		Boundary: nativefixture.Boundary(t),
 	}
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID = "p1"
-	tctx.RepoFileCount = 1
+	tctx.Identity.ProjectID = "p1"
+	tctx.Source.RepoFileCount = 1
 
 	out, err := tool.Run(context.Background(), map[string]any{"path": "."}, tctx)
 	testutil.FailErr(t, "list_dir stale count", err)
@@ -109,8 +109,8 @@ func TestListDirReadyDenseCatalogProjectsOnlyImmediateChildren(t *testing.T) {
 		Boundary: nativefixture.Boundary(t), Catalog: catalog,
 	}
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID = "p-ready"
-	tctx.RepoFileCount = 1
+	tctx.Identity.ProjectID = "p-ready"
+	tctx.Source.RepoFileCount = 1
 	out, err := tool.Run(context.Background(), map[string]any{"path": "."}, tctx)
 	testutil.FailErr(t, "list_dir ready catalog", err)
 	var resp listDirResponse

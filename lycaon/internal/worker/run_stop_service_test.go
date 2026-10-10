@@ -9,6 +9,8 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
+	"github.com/lycaon/lycaon/internal/session/workerresults"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -25,14 +27,14 @@ func (allowAllWorkflowRuns) AssertWorkerTask(context.Context, *api.WorkerTask) e
 func TestRunStopServiceCancelProjectsWorkerCard(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	runID := uuid.NewString()
 	jobID := uuid.NewString()
 	queue := NewInMemoryQueue(2)
-	queue.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+	queue.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 	_, err = queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",
@@ -59,7 +61,7 @@ func TestRunStopServiceCancelProjectsWorkerCard(t *testing.T) {
 		ToolResult: &api.ToolResult{Tool: "task", Content: enqueue, Dispatch: &api.WorkerDispatch{WorkerID: jobID}},
 	}))
 
-	svc := &RunStopService{Queue: queue, Sessions: mgr}
+	svc := &RunStopService{Queue: queue, Holds: mgr.Workers.Cards, Cancellations: mgr.Workers.Cancellations}
 	testutil.FailErr(t, "cancel workers by run", svc.CancelWorkersByRunID(ctx, runID, "workflow stopped"))
 
 	msgs, err := store.GetMessages(ctx, sess.ID)
@@ -87,7 +89,7 @@ type poisonRunStopSession struct {
 	held      []string
 }
 
-func (p *poisonRunStopSession) AppendWorkerCancellation(_ context.Context, _ string, in session.WorkerCancellationInput) error {
+func (p *poisonRunStopSession) Append(_ context.Context, _ string, in workeroutcomes.CancellationInput) error {
 	if in.JobID == p.failJobID {
 		return errors.New("poison append")
 	}
@@ -95,7 +97,7 @@ func (p *poisonRunStopSession) AppendWorkerCancellation(_ context.Context, _ str
 	return nil
 }
 
-func (p *poisonRunStopSession) AppendWorkerHold(_ context.Context, _ string, in session.WorkerHoldInput) error {
+func (p *poisonRunStopSession) Hold(_ context.Context, _ string, in workerresults.HoldInput) error {
 	if in.JobID == p.failJobID {
 		return errors.New("poison append")
 	}
@@ -109,7 +111,7 @@ func TestRunStopServiceCancelSettlesRemainingTasksPastPoisonTask(t *testing.T) {
 	poisonID := uuid.NewString()
 	victimID := uuid.NewString()
 	queue := NewInMemoryQueue(2)
-	queue.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+	queue.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 	for _, jobID := range []string{poisonID, victimID} {
 		_, err := queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 			Prompt:          "fixture",
@@ -125,7 +127,7 @@ func TestRunStopServiceCancelSettlesRemainingTasksPastPoisonTask(t *testing.T) {
 	}
 
 	sessions := &poisonRunStopSession{failJobID: poisonID}
-	svc := &RunStopService{Queue: queue, Sessions: sessions}
+	svc := &RunStopService{Queue: queue, Holds: sessions, Cancellations: sessions}
 	err := svc.CancelWorkersByRunID(ctx, runID, "workflow stopped")
 	if err == nil {
 		t.Fatal("cancel workers by run: want joined poison error, got nil")
@@ -147,7 +149,7 @@ func TestRunStopServiceHoldContinuesPastPoisonTask(t *testing.T) {
 	poisonID := uuid.NewString()
 	victimID := uuid.NewString()
 	queue := NewInMemoryQueue(2)
-	queue.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+	queue.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 	for _, jobID := range []string{poisonID, victimID} {
 		_, err := queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 			Prompt:          "fixture",
@@ -163,7 +165,7 @@ func TestRunStopServiceHoldContinuesPastPoisonTask(t *testing.T) {
 	}
 
 	sessions := &poisonRunStopSession{failJobID: poisonID}
-	svc := &RunStopService{Queue: queue, Sessions: sessions}
+	svc := &RunStopService{Queue: queue, Holds: sessions, Cancellations: sessions}
 	err := svc.HoldPendingWorkersByRunID(ctx, runID)
 	if err == nil {
 		t.Fatal("hold workers by run: want joined poison error, got nil")
@@ -182,14 +184,14 @@ func TestRunStopServiceHoldContinuesPastPoisonTask(t *testing.T) {
 func TestRunStopServiceHoldPatchesCanonicalWorkerRow(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	runID := uuid.NewString()
 	jobID := uuid.NewString()
 	queue := NewInMemoryQueue(2)
-	queue.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+	queue.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 	_, err = queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",
@@ -214,7 +216,7 @@ func TestRunStopServiceHoldPatchesCanonicalWorkerRow(t *testing.T) {
 		ToolResult: &api.ToolResult{Tool: "task", Content: enqueue, Dispatch: &api.WorkerDispatch{WorkerID: jobID}},
 	}))
 
-	svc := &RunStopService{Queue: queue, Sessions: mgr}
+	svc := &RunStopService{Queue: queue, Holds: mgr.Workers.Cards, Cancellations: mgr.Workers.Cancellations}
 	testutil.FailErr(t, "hold workers by run", svc.HoldPendingWorkersByRunID(ctx, runID))
 
 	msgs, err := store.GetMessages(ctx, sess.ID)

@@ -55,17 +55,17 @@ func TestReviewResultRetainsOfferedPhaseForReplay(t *testing.T) {
 func TestRejectedVerdictPersistsWithOfferedBinding(t *testing.T) {
 	var persisted []api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		AppendMessages: func(_ context.Context, _ string, rows ...api.Message) error {
+		Projection: ProjectionDeps{AppendMessages: func(_ context.Context, _ string, rows ...api.Message) error {
 			persisted = append(persisted, rows...)
 			return nil
-		},
+		}},
 	})
 	st := &promptLoopTurnState{}
 	st.coordinatorFrame.RunContext.RunID = "run"
 	st.coordinatorFrame.RunContext.CurrentPhase = "claims"
 	msg := api.Message{ID: "result", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "submit_verdict", ToolCallID: "call", AssistantMessageID: "response", Outcome: api.ToolResultOutcomeRejected, Feedback: []api.ToolFeedback{{Code: "TOOL_ARGS_INVALID"}}}}
 	var last time.Time
-	_, err := toolBatch{loop}.persistClassifiedToolOutcome(t.Context(), "session", &api.Session{ID: "session"}, nil, toolCallOutcome{toolMsg: msg, toolName: "submit_verdict"}, &last, st)
+	_, err := loop.Batch.persistClassifiedToolOutcome(t.Context(), "session", &api.Session{ID: "session"}, nil, toolCallOutcome{toolMsg: msg, toolName: "submit_verdict"}, &last, st)
 	testutil.FailErr(t, "persist rejected verdict", err)
 	for _, row := range persisted {
 		if row.ToolResult != nil && row.WorkflowRunID == "run" && row.ToolResult.Feedback[0].Details["workflow_phase"] == "claims" {

@@ -30,7 +30,7 @@ func TestStatusRuntimeDerivedNeverPersisted(t *testing.T) {
 		t.Fatalf("message liveness columns = %d, durable draft columns = %d", liveColumns, draftColumns)
 	}
 	store := store.NewSQL(sqlDB)
-	mgr := session.NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 
 	rapid.Check(t, func(t *rapid.T) {
 		sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -49,7 +49,7 @@ func TestStatusRuntimeDerivedNeverPersisted(t *testing.T) {
 			}))
 		}
 
-		page, err := mgr.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{})
+		page, err := mgr.Runner.Transcript.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{})
 		failErr(t, "hydrate", err)
 		if len(page.Messages) != count {
 			t.Fatalf("hydrate count = %d want %d", len(page.Messages), count)
@@ -65,9 +65,9 @@ func TestStatusRuntimeDerivedNeverPersisted(t *testing.T) {
 		activeIdx := rapid.IntRange(0, count-1).Draw(t, "active")
 		activeID := ids[activeIdx]
 		tokens := rapid.IntRange(0, 4096).Draw(t, "tokens")
-		mgr.Streams().SetActive(sess.ID, activeID, tokens)
+		mgr.Runner.Transcript.Streams.SetActive(sess.ID, activeID, tokens)
 
-		livePage, err := mgr.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{})
+		livePage, err := mgr.Runner.Transcript.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{})
 		failErr(t, "live page", err)
 		if len(livePage.Messages) != count {
 			t.Fatalf("live count = %d want %d (status toggle must not change existence)", len(livePage.Messages), count)
@@ -88,8 +88,8 @@ func TestStatusRuntimeDerivedNeverPersisted(t *testing.T) {
 			}
 		}
 
-		mgr.Streams().Finish(ctx, sess.ID)
-		settled, err := mgr.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{})
+		mgr.Runner.Transcript.Streams.Finish(ctx, sess.ID)
+		settled, err := mgr.Runner.Transcript.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{})
 		failErr(t, "settled page", err)
 		if len(settled.Messages) != count {
 			t.Fatalf("settled count = %d want %d", len(settled.Messages), count)

@@ -599,35 +599,6 @@ func GroundingHintData(offenders []string, ev evidence.Ledger) map[string]any {
 	return data
 }
 
-// citedHandleRangeLimit bounds the handles a refusal describes.
-const citedHandleRangeLimit = 8
-
-// CitedHandleRanges describes the lines each resolved handle observed, for
-// citations whose handle exists but whose line or excerpt did not match.
-func CitedHandleRanges(resolutions []evidence.Resolution, ev evidence.Ledger) string {
-	var parts []string
-	seen := map[string]bool{}
-	for _, res := range resolutions {
-		if res.Verdict != evidence.VerdictUnverifiable || res.Handle == "" || seen[res.Handle] {
-			continue
-		}
-		rec, ok := evidence.ResolveHandle(ev, res.Handle)
-		if !ok || len(rec.LineRanges) == 0 {
-			continue
-		}
-		seen[res.Handle] = true
-		ranges := make([]string, 0, len(rec.LineRanges))
-		for _, r := range rec.LineRanges {
-			ranges = append(ranges, fmt.Sprintf("%d-%d", r.Start, r.End))
-		}
-		parts = append(parts, fmt.Sprintf("%s %s lines %s", res.Handle, rec.Path, strings.Join(ranges, ",")))
-		if len(parts) == citedHandleRangeLimit {
-			break
-		}
-	}
-	return strings.Join(parts, "; ")
-}
-
 // OffenderHintData maps full offender tokens to bounded hint template vars.
 func OffenderHintData(offenders []string) map[string]any {
 	report := FormatOffenderReport(offenders)

@@ -2,12 +2,13 @@ package promptloop
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 	"time"
 
-	"encoding/json"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -18,12 +19,14 @@ import (
 
 func TestCommitToolResultWithOptionalNoteAtomicPair(t *testing.T) {
 	var batches [][]api.Message
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-			batches = append(batches, append([]api.Message(nil), msgs...))
-			return nil
+	loop := NewPromptLoop(PromptLoopDeps{
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				batches = append(batches, append([]api.Message(nil), msgs...))
+				return nil
+			},
 		},
-	}}
+	})
 	last := time.Time{}
 	toolMsg := api.Message{
 		ID: "tool-1", Role: api.MessageRoleTool, Content: `{"status":"noted"}`,
@@ -35,7 +38,7 @@ func TestCommitToolResultWithOptionalNoteAtomicPair(t *testing.T) {
 		Content:   "Grounded fact.",
 		Grounding: &api.CitationGrounding{Traced: true},
 	}
-	history, err := toolInvocations{loop}.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, note, &last, nil)
+	history, err := loop.Tools.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, note, &last, nil)
 	testutil.FailErr(t, "commit", err)
 	if len(batches) != 1 || len(batches[0]) != 2 {
 		t.Fatalf("batches = %+v want one pair", batches)
@@ -58,15 +61,17 @@ func TestCommitToolResultWithOptionalNoteAtomicPair(t *testing.T) {
 }
 
 func TestCommitToolResultWithOptionalNoteAppendFailureCommitsNeither(t *testing.T) {
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error {
-			return errors.New("store down")
+	loop := NewPromptLoop(PromptLoopDeps{
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error {
+				return errors.New("store down")
+			},
 		},
-	}}
+	})
 	last := time.Time{}
 	toolMsg := api.Message{ID: "tool-1", Role: api.MessageRoleTool, Content: "ok"}
 	stampCommitOrderTS(&toolMsg, &last)
-	history, err := toolInvocations{loop}.commitToolResultWithOptionalNote(context.Background(), "sess", []api.Message{{ID: "prior"}}, toolMsg, nil, &tools.AgentNoteCapture{
+	history, err := loop.Tools.commitToolResultWithOptionalNote(context.Background(), "sess", []api.Message{{ID: "prior"}}, toolMsg, nil, &tools.AgentNoteCapture{
 		MessageID: "note-1",
 		Content:   "note",
 	}, &last, nil)
@@ -80,16 +85,18 @@ func TestCommitToolResultWithOptionalNoteAppendFailureCommitsNeither(t *testing.
 
 func TestCommitToolResultNilNoteSingleAppend(t *testing.T) {
 	var sizes []int
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-			sizes = append(sizes, len(msgs))
-			return nil
+	loop := NewPromptLoop(PromptLoopDeps{
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				sizes = append(sizes, len(msgs))
+				return nil
+			},
 		},
-	}}
+	})
 	last := time.Time{}
 	toolMsg := api.Message{ID: "tool-1", Role: api.MessageRoleTool, Content: "ok"}
 	stampCommitOrderTS(&toolMsg, &last)
-	history, err := toolInvocations{loop}.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, nil, &last, nil)
+	history, err := loop.Tools.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, nil, &last, nil)
 	testutil.FailErr(t, "commit", err)
 	if len(sizes) != 1 || sizes[0] != 1 || len(history) != 1 {
 		t.Fatalf("sizes=%v history=%+v", sizes, history)
@@ -99,8 +106,8 @@ func TestCommitToolResultNilNoteSingleAppend(t *testing.T) {
 func TestExecuteOneToolCallDiscardsNoteOnEmitReject(t *testing.T) {
 	reg := tools.NewStubRegistry()
 	_ = reg.Register("surface_note", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
-		if tctx.Out != nil {
-			tctx.Out.AgentNote = &tools.AgentNoteCapture{
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.AgentNote = &tools.AgentNoteCapture{
 				MessageID: "note-should-drop",
 				Content:   "should not land",
 				Grounding: &api.CitationGrounding{Traced: true},
@@ -108,11 +115,18 @@ func TestExecuteOneToolCallDiscardsNoteOnEmitReject(t *testing.T) {
 		}
 		return strings.Repeat("y", tooloutput.DefaultMaxSpillFileBytes+1), nil
 	})
-	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: reg})
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			Tools: reg,
+		},
+	})
 	sess := &api.Session{ID: "s1"}
-	out := toolBatch{loop}.executeOneToolCall(context.Background(), sess, "s1", "", nil, api.ToolCall{
+	out := loop.Batch.executeOneToolCall(context.Background(), sess, "s1", "", nil, api.ToolCall{
 		ID: "tc1", Name: "surface_note", Args: map[string]any{"summary": "x"},
-	}, tools.ToolContext{SessionID: "s1", Agent: "coordinator"}, nil, "", api.CoordinatorRunContext{}, false)
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: "coordinator"},
+	}, nil, "", api.CoordinatorRunContext{}, false)
 	testutil.FailErr(t, "executeOneToolCall", out.endTurn)
 	if out.agentNote != nil {
 		t.Fatalf("note capture must be discarded after emit reject: %+v", out.agentNote)
@@ -129,18 +143,25 @@ func TestExecuteOneToolCallDiscardsNoteOnEmitReject(t *testing.T) {
 func TestExecuteOneToolCallDiscardsNoteOnHandlerReject(t *testing.T) {
 	reg := tools.NewStubRegistry()
 	_ = reg.Register("surface_note", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
-		if tctx.Out != nil {
-			tctx.Out.AgentNote = &tools.AgentNoteCapture{
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.AgentNote = &tools.AgentNoteCapture{
 				MessageID: "note-should-drop",
 				Content:   "should not land",
 			}
 		}
-		return "", &tools.ToolReject{Code: "SURFACE_NOTE_UNGROUNDED", Data: map[string]any{}}
+		return "", &toolrejection.ToolReject{Code: "SURFACE_NOTE_UNGROUNDED", Data: map[string]any{}}
 	})
-	loop := NewPromptLoopForTest(PromptLoopDeps{Tools: reg})
-	out := toolBatch{loop}.executeOneToolCall(context.Background(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Context: ContextDeps{
+			Tools: reg,
+		},
+	})
+	out := loop.Batch.executeOneToolCall(context.Background(), &api.Session{ID: "s1"}, "s1", "", nil, api.ToolCall{
 		ID: "tc1", Name: "surface_note", Args: map[string]any{"summary": "x"},
-	}, tools.ToolContext{SessionID: "s1", Agent: "coordinator"}, nil, "", api.CoordinatorRunContext{}, false)
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1",
+			Agent: "coordinator"},
+	}, nil, "", api.CoordinatorRunContext{}, false)
 	testutil.FailErr(t, "executeOneToolCall", out.endTurn)
 	if out.agentNote != nil {
 		t.Fatalf("note capture must be discarded on handler reject: %+v", out.agentNote)
@@ -150,16 +171,18 @@ func TestExecuteOneToolCallDiscardsNoteOnHandlerReject(t *testing.T) {
 func TestCommitToolResultWithOptionalNoteRetryYieldsOnePair(t *testing.T) {
 	attempts := 0
 	var batches [][]api.Message
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-			attempts++
-			if attempts == 1 {
-				return errors.New("transient store fault")
-			}
-			batches = append(batches, append([]api.Message(nil), msgs...))
-			return nil
+	loop := NewPromptLoop(PromptLoopDeps{
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				attempts++
+				if attempts == 1 {
+					return errors.New("transient store fault")
+				}
+				batches = append(batches, append([]api.Message(nil), msgs...))
+				return nil
+			},
 		},
-	}}
+	})
 	note := &tools.AgentNoteCapture{
 		MessageID: "note-1",
 		Content:   "Grounded fact.",
@@ -168,7 +191,7 @@ func TestCommitToolResultWithOptionalNoteRetryYieldsOnePair(t *testing.T) {
 	last := time.Time{}
 	toolMsg := api.Message{ID: "tool-1", Role: api.MessageRoleTool, Content: `{"status":"noted"}`}
 	stampCommitOrderTS(&toolMsg, &last)
-	history, err := toolInvocations{loop}.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, note, &last, nil)
+	history, err := loop.Tools.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, note, &last, nil)
 	if err == nil {
 		t.Fatal("first attempt must fail")
 	}
@@ -178,7 +201,7 @@ func TestCommitToolResultWithOptionalNoteRetryYieldsOnePair(t *testing.T) {
 	last = time.Time{}
 	toolMsg = api.Message{ID: "tool-1", Role: api.MessageRoleTool, Content: `{"status":"noted"}`}
 	stampCommitOrderTS(&toolMsg, &last)
-	history, err = toolInvocations{loop}.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, note, &last, nil)
+	history, err = loop.Tools.commitToolResultWithOptionalNote(context.Background(), "sess", nil, toolMsg, nil, note, &last, nil)
 	testutil.FailErr(t, "retry commit", err)
 	if len(batches) != 1 || len(batches[0]) != 2 {
 		t.Fatalf("retry batches = %+v want one pair", batches)
@@ -191,8 +214,8 @@ func TestCommitToolResultWithOptionalNoteRetryYieldsOnePair(t *testing.T) {
 func TestSurfaceNoteThenSiblingToolContinues(t *testing.T) {
 	reg := tools.NewStubRegistry()
 	_ = reg.Register("surface_note", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
-		if tctx.Out != nil {
-			tctx.Out.AgentNote = &tools.AgentNoteCapture{
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.AgentNote = &tools.AgentNoteCapture{
 				MessageID: "note-1",
 				Content:   "Auth lives in middleware.go.",
 				Grounding: &api.CitationGrounding{Traced: true},
@@ -206,10 +229,14 @@ func TestSurfaceNoteThenSiblingToolContinues(t *testing.T) {
 	})
 	var appended []api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Tools: reg,
-		AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-			appended = append(appended, msgs...)
-			return nil
+		Context: ContextDeps{
+			Tools: reg,
+		},
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				appended = append(appended, msgs...)
+				return nil
+			},
 		},
 	})
 	sess := &api.Session{ID: "sess-note", Posture: api.SessionPostureBuild}
@@ -225,12 +252,15 @@ func TestSurfaceNoteThenSiblingToolContinues(t *testing.T) {
 	history := []api.Message{{
 		ID: assistantID, Role: api.MessageRoleAssistant, ToolCalls: calls,
 	}}
-	history, turnTools, _, _, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
+	history, turnTools, _, _, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
 		context.Background(),
 		sess,
 		sess.ID,
 		calls,
-		tools.ToolContext{SessionID: sess.ID, Agent: "coordinator"},
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				Agent: "coordinator"},
+		},
 		history,
 		"investigate",
 		assistantID,
@@ -265,26 +295,33 @@ func TestOps8ToolResultPolicyControlsEveryDeliveredCapture(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			reg := tools.NewStubRegistry()
 			testutil.FailErr(t, "register captured tool", reg.Register("surface_note", func(_ context.Context, _ map[string]any, tc tools.ToolContext) (string, error) {
-				tc.Out.AgentNote = &tools.AgentNoteCapture{MessageID: "note", Content: "unreviewed-secret"}
+				tc.Effects.Out.AgentNote = &tools.AgentNoteCapture{MessageID: "note", Content: "unreviewed-secret"}
 				return "unreviewed-secret", nil
 			}))
 			seen := 0
 			loop := NewPromptLoopForTest(PromptLoopDeps{
-				Tools: reg,
-				EvaluateContentAnchor: func(_ context.Context, _ *api.Session, anchor string, segments []oar.ContentSegment, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
-					seen++
-					if anchor != oar.AnchorContentToolResult || tool != "surface_note" || args["summary"] != "observed-input" || len(segments) != 1 || !strings.Contains(segments[0].Content, "unreviewed-secret") {
-						t.Fatalf("[OAR-FACT-21] incomplete result occurrence: anchor=%s tool=%s args=%v segments=%v", anchor, tool, args, segments)
-					}
-					if block {
-						return guidance.NewRefusal("RESULT_POLICY", "Result withheld"), true, "", false
-					}
-					return nil, false, "reviewed replacement", true
+				Context: ContextDeps{
+					Tools: reg,
+				},
+				Closeout: CloseoutDeps{
+					EvaluateContentAnchor: func(_ context.Context, _ *api.Session, anchor string, segments []oar.ContentSegment, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
+						seen++
+						if anchor != oar.AnchorContentToolResult || tool != "surface_note" || args["summary"] != "observed-input" || len(segments) != 1 || !strings.Contains(segments[0].Content, "unreviewed-secret") {
+							t.Fatalf("[OAR-FACT-21] incomplete result occurrence: anchor=%s tool=%s args=%v segments=%v", anchor, tool, args, segments)
+						}
+						if block {
+							return guidance.NewRefusal("RESULT_POLICY", "Result withheld"), true, "", false
+						}
+						return nil, false, "reviewed replacement", true
+					},
 				},
 			})
-			out := toolBatch{loop}.executeOneToolCall(t.Context(), &api.Session{ID: "session"}, "session", "", nil,
+			out := loop.Batch.executeOneToolCall(t.Context(), &api.Session{ID: "session"}, "session", "", nil,
 				api.ToolCall{ID: "call", Name: "surface_note", Args: map[string]any{"summary": "observed-input"}},
-				tools.ToolContext{SessionID: "session", Agent: "coordinator"}, nil, "", api.CoordinatorRunContext{}, false)
+				tools.ToolContext{
+					Identity: tools.InvocationIdentity{SessionID: "session",
+						Agent: "coordinator"},
+				}, nil, "", api.CoordinatorRunContext{}, false)
 			testutil.FailErr(t, "execute tool delivery", out.endTurn)
 			encoded, err := json.Marshal(out.toolMsg)
 			testutil.FailErr(t, "encode delivered result", err)

@@ -20,7 +20,7 @@ func TestCancelServiceReturnsChangeReportAndEnvelope(t *testing.T) {
 	testutil.FailErr(t, "write file", os.WriteFile(filepath.Join(dir, "README.md"), []byte("base\n"), 0o644))
 	gittest.InitCommit(t, dir, "init")
 
-	parent, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
+	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "Create parent", err)
 
 	jobID, err := queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
@@ -40,8 +40,10 @@ func TestCancelServiceReturnsChangeReportAndEnvelope(t *testing.T) {
 	}
 
 	svc := &CancelService{
-		Queue:    queue,
-		Sessions: mgr,
+		Queue:         queue,
+		Events:        mgr.Coordinator.Workers,
+		Graceful:      mgr.Workers.Cancel,
+		Cancellations: mgr.Workers.Cancellations,
 		Reports: ChangeReportDeps{
 			Messages: func(context.Context, string) ([]api.Message, error) { return nil, nil },
 		},
@@ -52,7 +54,7 @@ func TestCancelServiceReturnsChangeReportAndEnvelope(t *testing.T) {
 		t.Fatalf("status = %q", out.Status)
 	}
 
-	msgs, err := mgr.GetMessages(ctx, parent.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) != 2 {
 		t.Fatalf("messages = %d want canonical assistant-call/result pair", len(msgs))
