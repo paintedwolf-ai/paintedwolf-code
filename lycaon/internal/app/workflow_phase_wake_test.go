@@ -159,10 +159,6 @@ func TestPhaseEntryGuidanceUsesTheRunWorkflowVersion(t *testing.T) {
 	host := session.NewHost(sessionsStore, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
 	registry, err := anchor.LoadRegistryFromConfigRoot()
 	testutil.FailErr(t, "load versioned phase guidance bindings", err)
-	kicks := &kick.KickEngine{}
-	bus := anchor.NewBus(kicks)
-	bus.SetRegistry(registry)
-	host.Coordinator.Guidance.Bind(kicks, bus)
 	runtime := delegations.New(sqlDB, nil, worker.WorkersConfig{})
 	runtime.SetDependencies(delegations.Dependencies{Workflows: &workflows.Runtime{Manager: manager}, Sessions: &sessions.Runtime{Manager: host}})
 	for _, tc := range []struct {
@@ -170,6 +166,10 @@ func TestPhaseEntryGuidanceUsesTheRunWorkflowVersion(t *testing.T) {
 		wantGuidance bool
 	}{{"1.0.0", true}, {"9.9.9", false}} {
 		t.Run(tc.version, func(t *testing.T) {
+			kicks := &kick.KickEngine{}
+			bus := anchor.NewBus(kicks)
+			bus.SetRegistry(registry)
+			host.Coordinator.Guidance.Bind(kicks, bus)
 			rc := &workflowphases.RunContext{SessionID: sess.ID, RunID: "phase-guidance-run", WorkflowID: "security-survey", WorkflowVersion: tc.version, Phase: "plan"}
 			runtime.OnWorkflowPhaseEnter(ctx, rc, workflowdef.PhaseDef{ID: "plan"})
 			got := kicks.TakePendingKickID(sess.ID)
