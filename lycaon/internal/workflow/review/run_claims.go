@@ -9,6 +9,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// VerdictRulesFor collects what a verdict in the run's current phase is also
+// checked against: the claim ids earlier records introduced, and the rating
+// questions the manifest declares.
 func (m *Verdicts) VerdictRulesFor(ctx context.Context, run *api.WorkflowRun) (workflowvalidation.VerdictRules, error) {
 	if m == nil || run == nil {
 		return workflowvalidation.VerdictRules{}, nil

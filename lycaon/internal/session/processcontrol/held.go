@@ -29,7 +29,7 @@ func (m *Service) HandleHeldCallSettled(sessionID, handle string) {
 	m.nudgeProcessWait(context.Background(), sessionID, handle, anchor.ProcessFinished, env)
 }
 
-// processHandleState answers for a background handle of either kind.
+// HandleState answers for a background handle of either kind.
 func (m *Service) HandleState(sessionID, handle string) (known, running bool) {
 	if m == nil {
 		return false, false
@@ -40,7 +40,7 @@ func (m *Service) HandleState(sessionID, handle string) (known, running bool) {
 	return m.Held.State(sessionID, handle)
 }
 
-// processHandlesRunning reports whether a listed handle of either kind still runs.
+// HandlesRunning reports whether a listed handle of either kind still runs.
 func (m *Service) HandlesRunning(sessionID string, handles []string) bool {
 	if m == nil {
 		return false

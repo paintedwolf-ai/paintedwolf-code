@@ -7,7 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/detectionpack"
 )
 
-// wireCredentialFloors loads key-material and credential-store paths.
+// LoadFloors loads key-material and credential-store paths.
 func (b *Detections) LoadFloors() error {
 	if err := b.installKeyMaterial(); err != nil {
 		return err
@@ -15,7 +15,7 @@ func (b *Detections) LoadFloors() error {
 	return b.installCredentialStores()
 }
 
-// wireKeyMaterial installs the key-material write floor.
+// installKeyMaterial installs the key-material write floor.
 func (b *Detections) installKeyMaterial() error {
 	paths, err := detectionpack.BundledKeyMaterialPaths()
 	if err != nil {

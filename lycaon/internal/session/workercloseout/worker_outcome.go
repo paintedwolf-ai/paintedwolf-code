@@ -61,7 +61,7 @@ type WorkerSummaryOutcome struct {
 	HostAssembled bool
 }
 
-// WorkerSummaryResolver runs closeout and synthesis after the primary worker Prompt.
+// HostTurnRunner runs closeout and synthesis after the primary worker Prompt.
 type HostTurnRunner interface {
 	PromptHostTurn(ctx context.Context, sessionID string, origin store.PromptSubmissionOrigin, text string) (*promptresult.Result, error)
 }

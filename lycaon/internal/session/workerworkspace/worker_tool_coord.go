@@ -16,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// SetCallManager wires inter-agent reservations for sibling worker coordination.
+// SetCalls wires inter-agent reservations for sibling worker coordination.
 func (m *Service) SetCalls(cm call.CallManager) {
 	if m == nil {
 		return
@@ -24,7 +24,7 @@ func (m *Service) SetCalls(cm call.CallManager) {
 	m.calls = cm
 }
 
-// EnrichWorkerToolContext binds child-session worker state.
+// Enrich binds child-session worker state.
 func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.ToolContext) (tools.ToolContext, error) {
 	if m == nil || sess == nil {
 		return tctx, nil
@@ -143,7 +143,7 @@ func (m *Service) AfterWorkerWrite(ctx context.Context, tctx tools.ToolContext, 
 	m.events.PublishBoard(ctx, strings.TrimSpace(tctx.Identity.ProjectID), strings.TrimSpace(tctx.Identity.HandoffSessionID))
 }
 
-// EnsureWorkerBranch ensures a write worker has an isolated branch.
+// EnsureBranch ensures a write worker has an isolated branch.
 func (m *Service) EnsureBranch(ctx context.Context, tctx tools.ToolContext) (tools.ToolContext, error) {
 	if m == nil {
 		return tctx, nil

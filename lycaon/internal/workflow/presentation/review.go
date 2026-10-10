@@ -181,9 +181,7 @@ func cloneAnswers(in map[string]string) map[string]string {
 	return out
 }
 
-// VerdictRulesFor collects what a verdict in the run's current phase is also
-// checked against: the claim ids earlier records introduced, and the rating
-// questions the manifest declares.
+// SetAsideSelectors projects recorded coordinator set-asides into scan selectors.
 func SetAsideSelectors(in []guidance.CoordinatorSetAside) []scanfindings.SetAside {
 	out := make([]scanfindings.SetAside, 0, len(in))
 	for _, sa := range in {

@@ -6,7 +6,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// workerDecisionRequest reads the assignment from its recorded job binding,
+// WorkerRequest reads the assignment from its recorded job binding,
 // before host-rendered operating instructions consume the model's input budget.
 func (m *Service) WorkerRequest(sess *api.Session, jobID, openingID string, history []api.Message) (string, bool) {
 	if jobID == "" {

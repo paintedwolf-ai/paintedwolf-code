@@ -46,7 +46,7 @@ type Assembly struct {
 	ToolCtx   tools.ToolContext
 }
 
-// assemblePromptRun prepares one prompt run; openingMessageID is the user
+// Build prepares one prompt run; openingMessageID is the user
 // message the turn just recorded, or empty for a continuation.
 func (m *Service) Build(ctx context.Context, sess *api.Session, id string, in promptinput.Input, openingMessageID string) (Assembly, error) {
 	var zero Assembly

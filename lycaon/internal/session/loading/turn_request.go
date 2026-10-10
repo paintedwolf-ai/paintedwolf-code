@@ -13,7 +13,7 @@ import (
 
 // workflowfacts.ResolvedWorkflowRequest binds request text to its workflow start.
 
-// resolvedWorkflowRequest supplies a coordinator's resolved workflow request.
+// ResolvedRequest supplies a coordinator's resolved workflow request.
 func (m *Service) ResolvedRequest(ctx context.Context, sess *api.Session) workflowfacts.ResolvedWorkflowRequest {
 	if m == nil || m.workflows == nil || sess == nil || sess.IsWorkerChild() {
 		return workflowfacts.ResolvedWorkflowRequest{}
