@@ -72,3 +72,48 @@ func hasSearchIssue(result wire.SearchResponse, reason string) bool {
 	}
 	return false
 }
+
+func TestSearchHTTPFederationStopsAtExplicitRetentionBound(t *testing.T) {
+	f := newSearchFixture(t)
+	files := map[string]string{}
+	for i := range symbolsearch.OutlineFileCap + 1 {
+		files[fmt.Sprintf("f%03d.go", i)] = "package p\nfunc Target() {}\n"
+	}
+	origin := ""
+	// The implementation retains 16 project frontiers. The seventeenth must
+	// declare a terminal capacity bound instead of offering an endless retry.
+	for i := range 17 {
+		p := f.addProject(t, fmt.Sprintf("project-%02d", i), fmt.Sprintf("root-%02d", i), files)
+		if i == 0 {
+			origin = p.ID
+		}
+	}
+	server := httptest.NewServer(f.router)
+	defer server.Close()
+	body := jsonBody(t, map[string]any{"query": "kind:symbol Target", "origin_project_id": origin, "budget": "complete", "limit": 500})
+	var result wire.SearchResponse
+	for attempt := range 16 {
+		result = requestSearchHTTP(t, server, body)
+		if hasSearchIssue(result, "executor_error") {
+			t.Fatalf("HTTP federation failed: %+v", result.Issues)
+		}
+		if !hasSearchIssue(result, "symbol_pending") {
+			break
+		}
+		if attempt == 15 {
+			t.Fatalf("HTTP federation endlessly advertised lost progress: %+v", result.Issues)
+		}
+	}
+	terminal := 0
+	for _, issue := range result.Issues {
+		if string(issue.Reason) == "symbol_budget" {
+			if issue.Limit != 16 {
+				t.Fatalf("terminal bound lost its project units: %+v", issue)
+			}
+			terminal++
+		}
+	}
+	if terminal != 1 || result.Exhaustive {
+		t.Fatalf("overflow coverage=%+v exhaustive=%v", result.Issues, result.Exhaustive)
+	}
+}

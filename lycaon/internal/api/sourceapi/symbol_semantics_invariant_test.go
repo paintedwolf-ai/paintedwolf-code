@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -24,7 +25,7 @@ func TestBoundedSymbolSemanticsMatchReferenceBeforeCapacity(t *testing.T) {
 		query search.Node
 		want  []string
 	}{
-		{"negation", search.AndExpr{Exprs: []search.Node{search.TextExpr{Text: "Target"}, search.NotExpr{Expr: search.TextExpr{Text: "Excluded"}}}}, []string{"TargetAllowed"}},
+		{"negation", search.AndExpr{Exprs: []search.Node{search.TextExpr{Text: "Target"}, search.NotExpr{Expr: search.OrExpr{Exprs: []search.Node{search.TextExpr{Text: "Excluded"}, search.TextExpr{Text: "Other"}}}}}}, []string{"TargetAllowed"}},
 		{"nested and or", search.AndExpr{Exprs: []search.Node{search.TextExpr{Text: "Target"}, search.OrExpr{Exprs: []search.Node{search.FilterExpr{Field: "path", Value: "f001.go"}, search.AndExpr{Exprs: []search.Node{search.FilterExpr{Field: "path", Value: "f000.go"}, search.NotExpr{Expr: search.TextExpr{Text: "Excluded"}}}}}}}}, []string{"TargetAllowed", "TargetOther"}},
 	}
 	for _, tc := range cases {
@@ -38,7 +39,7 @@ func TestBoundedSymbolSemanticsMatchReferenceBeforeCapacity(t *testing.T) {
 			body.WriteString("func TargetAllowed() {}\n")
 			replaceSymbolInput(t, p.Roots[0].Path, "f000.go", body.String())
 			replaceSymbolInput(t, p.Roots[0].Path, "f001.go", "package p\nfunc TargetOther() {}\n")
-			leg.Query, leg.Flags.WholeWord, leg.Cap = tc.query, false, 2
+			leg.Query, leg.Flags.WholeWord, leg.Cap = tc.query, false, 3
 			for _, budget := range []search.SearchBudget{search.BudgetInteractive, search.BudgetComplete} {
 				leg.Budget = budget
 				result, err := e.Run(t.Context(), search.PlanLeg{Symbol: leg})
@@ -110,6 +111,8 @@ func TestSymbolRootAndDependencyScopesRefineToReference(t *testing.T) {
 	root := p.Roots[0]
 	testutil.FailErr(t, "create dependency fixture", os.MkdirAll(filepath.Join(root.Path, "node_modules/lib"), 0700))
 	replaceSymbolInput(t, root.Path, "node_modules/lib/dependency.go", "package lib\nfunc TargetDependency() {}\n")
+	sourcecatalog.Process().InvalidateRoot(root.Path, "node_modules/lib/dependency.go")
+	testutil.FailErr(t, "settle dependency membership", catalogtest.AwaitIndex(t.Context(), sourcecatalog.Process(), p.ID, sourcecatalog.Root{ID: root.ID, Path: root.Path}))
 	second := t.TempDir()
 	testutil.FailErr(t, "seed second root", os.WriteFile(filepath.Join(second, "other.go"), []byte("package p\nfunc TargetOtherRoot() {}\n"), 0600))
 	change, err := e.registry.AttachRoot(t.Context(), p.ID, project.AttachRootParams{Path: second})
@@ -118,6 +121,7 @@ func TestSymbolRootAndDependencyScopesRefineToReference(t *testing.T) {
 	if attached == nil {
 		t.Fatal("root fixture not attached")
 	}
+	testutil.FailErr(t, "settle attached root", catalogtest.AwaitIndex(t.Context(), sourcecatalog.Process(), p.ID, sourcecatalog.Root{ID: attached.ID, Path: attached.Path}))
 	leg.Flags.WholeWord = false
 	leg.ExcludeDirs = []string{"node_modules"}
 	for _, tc := range []struct {
@@ -132,6 +136,10 @@ func TestSymbolRootAndDependencyScopesRefineToReference(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			leg.Roots, leg.IncludeDependencies = tc.roots, tc.dependencies
+			leg.ExcludeDirs = []string{"node_modules"}
+			if tc.dependencies {
+				leg.ExcludeDirs = nil
+			}
 			// Refinement increases the result capacity without changing admission.
 			leg.Budget, leg.Cap = search.BudgetInteractive, 1
 			bounded, err := e.Run(t.Context(), search.PlanLeg{Symbol: leg})
