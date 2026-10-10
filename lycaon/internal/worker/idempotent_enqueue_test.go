@@ -71,7 +71,6 @@ func TestMemoryEnqueueReplaysSourceToolCallAndRejectsDifferentArguments(t *testi
 func TestReviewJobInsertionFencesDuplicateReservations(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	root := t.TempDir()
-	testdbseed.InsertSessionWithRoot(t, database, "parent-1", testdbseed.DefaultProjectID, root)
 	testdbseed.InsertWorkflowRun(t, database, "run", "parent-1", testdbseed.DefaultProjectID)
 	queries := db.New(database)
 	testutil.FailErr(t, "record subject", queries.InsertWorkflowReviewSubject(t.Context(), db.InsertWorkflowReviewSubjectParams{ID: "subject", RunID: "run", Phase: "challenge", Revision: "revision", SubjectJson: "{}"}))
