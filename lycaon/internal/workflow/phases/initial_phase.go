@@ -32,11 +32,12 @@ func (m *Service) ActivateInitial(ctx context.Context, run *api.WorkflowRun, man
 		m.Entries.Trigger(ctx, run, projectDir, def)
 		if m.PhaseEnterHook != nil {
 			m.PhaseEnterHook(ctx, &RunContext{
-				SessionID:     run.SessionID,
-				RunID:         run.ID,
-				WorkflowID:    run.WorkflowID,
-				Phase:         run.CurrentPhase,
-				PreviousPhase: "",
+				SessionID:       run.SessionID,
+				RunID:           run.ID,
+				WorkflowID:      run.WorkflowID,
+				WorkflowVersion: run.WorkflowVersion,
+				Phase:           run.CurrentPhase,
+				PreviousPhase:   "",
 			}, def)
 		}
 		if err := m.Settlement.InvokeOnPhaseEnter(ctx, run, def); err != nil {
