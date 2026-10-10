@@ -44,7 +44,7 @@ func TestHTTPRequestUnixSocketAsksForExactSocketAuthority(t *testing.T) {
 	}))
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), registry, "implement")
 	manager := &asyncHITL{requested: make(chan struct{}, 4)}
-	executor.Approvals.SetCheckpointManager(manager, gate)
+	executor.Approvals.SetCheckpointManager(t.Context(), manager, gate)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	tc := tools.ToolContext{

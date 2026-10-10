@@ -16,7 +16,7 @@ func (s *Server) ShuttingDown() <-chan struct{} {
 }
 
 // StopBackground cancels detached work before shutdown drains it.
-func (s *Server) StopBackground() {
+func (s *Server) StopBackground(ctx context.Context) {
 	if s == nil {
 		return
 	}
@@ -24,7 +24,7 @@ func (s *Server) StopBackground() {
 		s.fileBriefings.Stop()
 	}
 	s.background.Stop()
-	s.Sources.Watch.Stop()
+	s.Sources.Watch.Stop(ctx)
 }
 
 // WaitForBackground drains host work together, then settles its attention updates.

@@ -145,7 +145,7 @@ func stopBackgroundOnCleanup(t *testing.T, srv *Server) {
 	t.Helper()
 	t.Cleanup(func() {
 		http.DefaultClient.CloseIdleConnections()
-		srv.StopBackground()
+		srv.StopBackground(t.Context())
 		drainBackground(t, srv)
 		if _, released := sourcesReleased.LoadOrStore(srv, struct{}{}); !released {
 			releaseProjectSources(t, srv)

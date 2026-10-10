@@ -25,6 +25,7 @@ func TestSharedObservationFactsRegistered(t *testing.T) {
 		{"command_not_argv", "paintedwolf.command_not_argv", func(gc *oar.GuardContext) { gc.Invocation.CommandNotArgv = true }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			if !declared[tc.name] {
 				t.Fatalf("catalogue missing %q", tc.name)
 			}

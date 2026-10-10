@@ -128,7 +128,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	}
 
 	runnerCfg := scancfg.DefaultRunnerConfig()
-	scannerReg, err := loadScannerRegistry(deps, runnerCfg.ExecProcessPriority(), appliesPath)
+	scannerReg, err := loadScannerRegistry(ctx, deps, runnerCfg.ExecProcessPriority(), appliesPath)
 	if err != nil {
 		return nil, err
 	}

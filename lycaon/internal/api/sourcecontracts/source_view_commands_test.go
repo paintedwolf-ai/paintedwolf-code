@@ -14,7 +14,7 @@ import (
 
 func TestSourceViewCreateReplayAndComparisonCommands(t *testing.T) {
 	server := contractfixture.NewTestServer(t)
-	t.Cleanup(server.StopBackground)
+	t.Cleanup(func() { server.StopBackground(t.Context()) })
 	p := contractfixture.CreateProjectForTest(t, server, t.TempDir())
 	before, after := "before\n", "after\n"
 	request := wire.SourceComparisonViewCreate{Kind: "comparison", ClientID: "window:main", OperationID: uuid.NewString(),
@@ -66,7 +66,7 @@ func TestSourceViewCreateReplayAndComparisonCommands(t *testing.T) {
 
 func TestSourceViewInvalidationReleasesOnlyChangedProject(t *testing.T) {
 	server := contractfixture.NewTestServer(t)
-	t.Cleanup(server.StopBackground)
+	t.Cleanup(func() { server.StopBackground(t.Context()) })
 	first := contractfixture.CreateProjectForTest(t, server, t.TempDir())
 	second := contractfixture.CreateProjectForTest(t, server, t.TempDir())
 	Text := "source\n"

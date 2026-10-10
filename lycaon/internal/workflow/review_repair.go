@@ -307,7 +307,3 @@ func (m ReviewRepairs) BlockContract(ctx context.Context, runID string, cause er
 	m.Publication.PublishSession(ctx, run)
 	return nil
 }
-
-func (m ReviewRepairs) blockContract(ctx context.Context, runID string, cause error) error {
-	return m.BlockContract(ctx, runID, cause)
-}

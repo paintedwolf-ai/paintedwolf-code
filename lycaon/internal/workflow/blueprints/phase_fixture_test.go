@@ -1,10 +1,6 @@
 package blueprints_test
 
 import (
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-
-	blueprint "github.com/lycaon/lycaon/internal/blueprint"
-
 	"context"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 	"testing"
@@ -79,49 +75,4 @@ func advancePlanThroughExpand(ctx context.Context, mgr *workflow.RunManager, run
 		return run, nil
 	}
 	return mgr.Phases.Advance(ctx, run.ID)
-}
-
-func advancePlanToApprovePhase(ctx context.Context, mgr *workflow.RunManager, run *api.WorkflowRun) (*api.WorkflowRun, error) {
-	var err error
-	run, err = completePlanIntake(ctx, mgr, run)
-	if err != nil {
-		return nil, err
-	}
-	run, err = completePlanResearchAtDepthNone(ctx, mgr, run)
-	if err != nil {
-		return nil, err
-	}
-	run, err = advancePlanThroughExpand(ctx, mgr, run)
-	if err != nil {
-		return nil, err
-	}
-	run, err = completePlanReviewAtDepthNone(ctx, mgr, run)
-	if err != nil {
-		return nil, err
-	}
-	if run, err = mgr.Store.Runs.Get(ctx, run.ID); err != nil {
-		return nil, err
-	}
-	return run, nil
-}
-
-func walkPlanRunToReview(ctx context.Context, t *testing.T, mgr *workflow.RunManager, blueprintMgr *blueprint.Manager, sessionID string) *api.WorkflowRun {
-	t.Helper()
-	run, err := startRun(ctx, mgr, sessionID, "plan", "1.0.0")
-	testutil.FailErr(t, "startRun", err)
-	run = completePlanIntakeT(ctx, t, mgr, run)
-	run, err = completePlanResearchAtDepthNone(ctx, mgr, run)
-	testutil.FailErr(t, "completePlanResearchAtDepthNone", err)
-	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
-	run, err = advancePlanThroughExpand(ctx, mgr, run)
-	testutil.FailErr(t, "advancePlanThroughExpand", err)
-	if run.CurrentPhase != "approve" {
-		t.Fatalf("phase = %q want approve", run.CurrentPhase)
-	}
-	run, err = mgr.Phases.FireTransition(ctx, run.ID, "critique", workflowdef.TransitionActorHuman)
-	testutil.FailErr(t, "FireTransition critique", err)
-	if run.CurrentPhase != "review" {
-		t.Fatalf("phase = %q want review", run.CurrentPhase)
-	}
-	return run
 }

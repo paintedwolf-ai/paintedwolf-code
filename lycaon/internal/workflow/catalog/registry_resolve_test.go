@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -13,15 +12,6 @@ import (
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-func bundledWorkflowsDir(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	return filepath.Join(filepath.Dir(file), "..", "..", "..", "config", "packs", "painted-wolf", "platform", "workflows")
-}
 
 func TestResolveSessionOverridesBundled(t *testing.T) {
 	store := workflowdrafts.NewMemory()

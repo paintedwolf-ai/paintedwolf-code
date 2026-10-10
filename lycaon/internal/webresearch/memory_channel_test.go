@@ -18,7 +18,7 @@ import (
 
 func testIndex(t *testing.T) *webindex.Store {
 	t.Helper()
-	store, err := webindex.Open(filepath.Join(t.TempDir(), "web-index.db"))
+	store, err := webindex.Open(t.Context(), filepath.Join(t.TempDir(), "web-index.db"))
 	testutil.FailErr(t, "open index", err)
 	t.Cleanup(func() { _ = store.Close() })
 	return store
@@ -134,7 +134,7 @@ func TestSearchIndexMemoryDropsLowConfidenceMatch(t *testing.T) {
 	})
 	index.Flush()
 
-	outcome := searchIndexMemory(context.Background(), index, decide.Reranker{},"best web based chess libraries javascript react vue html5", CurrentPeriod(), 5)
+	outcome := searchIndexMemory(context.Background(), index, decide.Reranker{}, "best web based chess libraries javascript react vue html5", CurrentPeriod(), 5)
 	if outcome.ok {
 		t.Fatalf("outcome = %+v want low-confidence memory match dropped", outcome)
 	}
@@ -161,7 +161,7 @@ func TestSearchIndexMemoryKeepsOnTopicMatch(t *testing.T) {
 	})
 	index.Flush()
 
-	outcome := searchIndexMemory(context.Background(), index, decide.Reranker{},"best web based chess libraries javascript react vue html5", CurrentPeriod(), 5)
+	outcome := searchIndexMemory(context.Background(), index, decide.Reranker{}, "best web based chess libraries javascript react vue html5", CurrentPeriod(), 5)
 	if !outcome.ok || len(outcome.hits) == 0 {
 		t.Fatalf("outcome = %+v want on-topic memory hit kept", outcome)
 	}
@@ -178,7 +178,7 @@ func TestSearchIndexMemoryVerifiesAndEvictsDead(t *testing.T) {
 	index.QueuePage(t.Context(), webindex.Page{URL: deadURL, Title: "widget frobnicator guide"})
 	index.Flush()
 
-	outcome := searchIndexMemory(context.Background(), index, decide.Reranker{},"widget frobnicator guide", CurrentPeriod(), 3)
+	outcome := searchIndexMemory(context.Background(), index, decide.Reranker{}, "widget frobnicator guide", CurrentPeriod(), 3)
 	if outcome.ok {
 		t.Fatalf("outcome = %+v want no hits from a dead memory", outcome)
 	}
@@ -192,11 +192,11 @@ func TestSearchIndexMemoryVerifiesAndEvictsDead(t *testing.T) {
 
 func TestSearchIndexMemoryNilAndEmpty(t *testing.T) {
 	resetDirectState(1)
-	if o := searchIndexMemory(context.Background(), nil, decide.Reranker{},"q", CurrentPeriod(), 3); o.ok || o.reason != "not_configured" {
+	if o := searchIndexMemory(context.Background(), nil, decide.Reranker{}, "q", CurrentPeriod(), 3); o.ok || o.reason != "not_configured" {
 		t.Fatalf("nil index outcome = %+v", o)
 	}
 	index := testIndex(t)
-	if o := searchIndexMemory(context.Background(), index, decide.Reranker{},"q", CurrentPeriod(), 3); o.ok || o.reason != "no_results" {
+	if o := searchIndexMemory(context.Background(), index, decide.Reranker{}, "q", CurrentPeriod(), 3); o.ok || o.reason != "no_results" {
 		t.Fatalf("empty index outcome = %+v", o)
 	}
 }

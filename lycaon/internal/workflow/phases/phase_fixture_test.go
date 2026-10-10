@@ -1,10 +1,6 @@
 package phases_test
 
 import (
-	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-
-	blueprint "github.com/lycaon/lycaon/internal/blueprint"
-
 	"context"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 	"testing"
@@ -20,10 +16,6 @@ func startRun(ctx context.Context, mgr *workflow.RunManager, sessionID, workflow
 		WorkflowVersion: version,
 		Request:         "test request",
 	})
-}
-
-func startPlanRun(ctx context.Context, mgr *workflow.RunManager, sessionID string) (*api.WorkflowRun, error) {
-	return startRun(ctx, mgr, sessionID, "plan", "1.0.0")
 }
 
 func completePlanIntake(ctx context.Context, mgr *workflow.RunManager, run *api.WorkflowRun) (*api.WorkflowRun, error) {
@@ -103,25 +95,4 @@ func advancePlanToApprovePhase(ctx context.Context, mgr *workflow.RunManager, ru
 		return nil, err
 	}
 	return run, nil
-}
-
-func walkPlanRunToReview(ctx context.Context, t *testing.T, mgr *workflow.RunManager, blueprintMgr *blueprint.Manager, sessionID string) *api.WorkflowRun {
-	t.Helper()
-	run, err := startRun(ctx, mgr, sessionID, "plan", "1.0.0")
-	testutil.FailErr(t, "startRun", err)
-	run = completePlanIntakeT(ctx, t, mgr, run)
-	run, err = completePlanResearchAtDepthNone(ctx, mgr, run)
-	testutil.FailErr(t, "completePlanResearchAtDepthNone", err)
-	seedValidPlanContent(t, blueprintMgr, run.BlueprintPath)
-	run, err = advancePlanThroughExpand(ctx, mgr, run)
-	testutil.FailErr(t, "advancePlanThroughExpand", err)
-	if run.CurrentPhase != "approve" {
-		t.Fatalf("phase = %q want approve", run.CurrentPhase)
-	}
-	run, err = mgr.Phases.FireTransition(ctx, run.ID, "critique", workflowdef.TransitionActorHuman)
-	testutil.FailErr(t, "FireTransition critique", err)
-	if run.CurrentPhase != "review" {
-		t.Fatalf("phase = %q want review", run.CurrentPhase)
-	}
-	return run
 }

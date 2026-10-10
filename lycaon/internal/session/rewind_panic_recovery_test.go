@@ -111,13 +111,3 @@ func (j *rewindFaultJournal) PrepareEffect(ctx context.Context, p sourceeffect.P
 func (j *rewindFaultJournal) RemoveEntry(ctx context.Context, r sourceeffect.Removal) (string, error) {
 	return j.delegate.RemoveEntry(ctx, r)
 }
-
-func rewindTestDigest(t *testing.T, m *Host, id, anchor string) string {
-	t.Helper()
-	preview, err := m.Chats.Rewinds.PreviewRewind(checkpointCaller(t, m), id, anchor)
-	testutil.FailErr(t, "preview rewind", err)
-	if len(preview.Issues) > 0 {
-		t.Fatalf("preview issues: %+v", preview.Issues)
-	}
-	return preview.PlanDigest
-}

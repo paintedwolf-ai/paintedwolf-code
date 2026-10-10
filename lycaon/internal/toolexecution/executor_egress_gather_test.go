@@ -40,7 +40,7 @@ func gatherExecutor(t *testing.T) (*toolexecution.Executor, *gatherHITL) {
 	mgr := &gatherHITL{coalesceHITL: coalesceHITL{req: make(chan struct{}, 8)}}
 	mgr.approve()
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, nil)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: approvalstate.NewToolApprovalCoalesce()})
 	// The ingestion producer reports "read untrusted content": at Balanced that
 	// is what turns new-host cards on.

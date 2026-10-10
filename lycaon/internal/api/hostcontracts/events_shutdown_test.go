@@ -53,7 +53,7 @@ func TestShutdownReleasesOpenEventStream(t *testing.T) {
 		t.Fatalf("stream preamble = %q, want a connected comment", line)
 	}
 
-	srv.StopBackground()
+	srv.StopBackground(t.Context())
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

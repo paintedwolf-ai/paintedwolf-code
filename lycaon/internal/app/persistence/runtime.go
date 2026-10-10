@@ -23,7 +23,6 @@ import (
 )
 
 type Runtime struct {
-	ctx          context.Context
 	startup      startupprotocol.Sink
 	logger       *slog.Logger
 	resources    ResourceLifetime
@@ -41,7 +40,7 @@ type Runtime struct {
 }
 
 func (b *Runtime) Open(ctx context.Context, dbPath string, startup startupprotocol.Sink, logger *slog.Logger, resources ResourceLifetime) error {
-	b.ctx, b.startup, b.logger, b.resources = ctx, startup, logger, resources
+	b.startup, b.logger, b.resources = startup, logger, resources
 	var err error
 	// Hold the store lease across restore, schema setup, and serving.
 	claim, err := hostlock.AcquireStore(dbPath)
@@ -53,22 +52,22 @@ func (b *Runtime) Open(ctx context.Context, dbPath string, startup startupprotoc
 
 	configDir := filepath.Dir(dbPath)
 	if err := backup.CleanupInterruptedTransfers(configDir); err != nil {
-		b.logger.Warn("could not clean interrupted backup transfers", "error", err)
+		b.logger.WarnContext(ctx, "could not clean interrupted backup transfers", "error", err)
 	}
-	if err := backup.ApplyPending(configDir); err != nil {
+	if err := backup.ApplyPending(ctx, configDir); err != nil {
 		return fmt.Errorf("apply staged restore before open: %w", err)
 	}
 	switch {
 	case db.FreshEnabled():
-		if err := localdata.ResetStoreCoupled(dbPath); err != nil {
+		if err := localdata.ResetStoreCoupled(ctx, dbPath); err != nil {
 			return fmt.Errorf("fresh development state: %w", err)
 		}
-		b.logger.Info("store-coupled development state wiped (LYCAON_DB_FRESH)", "path", dbPath)
+		b.logger.InfoContext(ctx, "store-coupled development state wiped (LYCAON_DB_FRESH)", "path", dbPath)
 	case db.FreshRequested():
-		b.logger.Warn("LYCAON_DB_FRESH ignored on the production channel", "path", dbPath)
+		b.logger.WarnContext(ctx, "LYCAON_DB_FRESH ignored on the production channel", "path", dbPath)
 	}
 	db.SetRunningAppVersion(version.Version)
-	b.Database, err = b.openUpgradeableStore(dbPath)
+	b.Database, err = b.openUpgradeableStore(ctx, dbPath)
 	if err != nil {
 		return fmt.Errorf("open database: %w", err)
 	}
@@ -78,25 +77,25 @@ func (b *Runtime) Open(ctx context.Context, dbPath string, startup startupprotoc
 	}
 	b.Path = dbPath
 	b.Directory = filepath.Dir(dbPath)
-	b.logger.Info("sqlite store", "path", dbPath)
+	b.logger.InfoContext(ctx, "sqlite store", "path", dbPath)
 	// Co-locate the cache with its store data root.
 	indexPath := filepath.Join(filepath.Dir(dbPath), "web-index.db")
-	if idx, ierr := webindex.Open(indexPath); ierr != nil {
-		b.logger.Warn("web index unavailable", "path", indexPath, "error", ierr)
+	if idx, ierr := webindex.Open(ctx, indexPath); ierr != nil {
+		b.logger.WarnContext(ctx, "web index unavailable", "path", indexPath, "error", ierr)
 	} else {
 		b.WebIndex = idx
 		b.resources.Track("web-index", 100, func(context.Context) error { return idx.Close() })
-		b.logger.Info("web index", "path", indexPath)
+		b.logger.InfoContext(ctx, "web index", "path", indexPath)
 	}
 	b.Retention = db.DefaultRetention()
-	b.Revision, err = db.BumpStoreRevision(b.ctx, b.Database)
+	b.Revision, err = db.BumpStoreRevision(ctx, b.Database)
 	if err != nil {
 		return fmt.Errorf("store revision: %w", err)
 	}
 
 	b.Sessions = store.NewSQL(b.Database)
 	b.Projects = project.NewSQLRegistry(b.Database)
-	releasePolicyRoots := wireAgentPolicyRoots(b.ctx, b.Projects)
+	releasePolicyRoots := wireAgentPolicyRoots(ctx, b.Projects)
 	b.resources.Track("agent-policy-roots", 160, func(context.Context) error { releasePolicyRoots(); return nil })
 	b.SourceLedger = sourceledger.New(b.Database, filepath.Join(b.Directory, enginepaths.SourceContentDirName))
 	b.SourceLedger.Content.SetGuard(b.Claim)

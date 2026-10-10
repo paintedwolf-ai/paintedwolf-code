@@ -17,10 +17,6 @@ func startRun(ctx context.Context, mgr *RunManager, sessionID, workflowID, versi
 	})
 }
 
-func startPlanRun(ctx context.Context, mgr *RunManager, sessionID string) (*api.WorkflowRun, error) {
-	return startRun(ctx, mgr, sessionID, "plan", "1.0.0")
-}
-
 func completePlanIntake(ctx context.Context, mgr *RunManager, run *api.WorkflowRun) (*api.WorkflowRun, error) {
 	return run, nil
 }

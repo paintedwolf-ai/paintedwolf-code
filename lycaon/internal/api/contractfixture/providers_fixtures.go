@@ -146,7 +146,7 @@ func NewProviderTestServerWithCatalogs(t *testing.T, shipYAML, localYAML string,
 	creds := providercredentials.NewAt(credPath)
 	policy, err := llm.NewPolicyStoreAt(globalPolicy)
 	testutil.FailErr(t, "load model policy", err)
-	registry, err := llm.NewRegistry(catalog, creds)
+	registry, err := llm.NewRegistry(t.Context(), catalog, creds)
 	testutil.FailErr(t, "build provider registry", err)
 	svc := &llm.Service{
 		Catalog:     catalog,

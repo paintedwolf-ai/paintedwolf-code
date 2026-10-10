@@ -40,7 +40,7 @@ func TestNewProviderForEntryAttachesHTTPRetry(t *testing.T) {
 			}))
 			defer server.Close()
 			entry := CatalogEntry{ID: "p", Kind: kind, BaseURL: server.URL + "/v1", HTTPRetry: policy, Models: []modelinfo.Entry{{ID: "model", ContextLength: 32768, ThinkStyle: "none"}}}
-			reg, err := NewRegistry(mustTestProviderCatalog(t, entry), providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+			reg, err := NewRegistry(t.Context(), mustTestProviderCatalog(t, entry), providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
 			if err != nil {
 				t.Fatalf("NewRegistry: %v", err)
 			}

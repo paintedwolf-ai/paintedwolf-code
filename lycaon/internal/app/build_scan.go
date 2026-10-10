@@ -10,7 +10,7 @@ import (
 )
 
 func (b *serveBuilder) wireScan() error {
-	if _, err := b.security.LoadMatcher(b.startup.cfg.TestSecretMatcher); err != nil {
+	if _, err := b.security.LoadMatcher(b.startup.ctx, b.startup.cfg.TestSecretMatcher); err != nil {
 		return err
 	}
 	b.sessions.Manager.Coordinator.Scans.Wait = coordinatorcontrol.ScanWaitState{

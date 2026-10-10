@@ -2,7 +2,7 @@ package repochange
 
 import "testing"
 
-func TestWatcherLifetimeKeepsStreamsUntilFinalOwner(t *testing.T) {
+func TestWatcherLifetimeKeepsStreamsUntilFinalLease(t *testing.T) {
 	root := t.TempDir()
 	old, current := AcquireWatcherLifetime(), AcquireWatcherLifetime()
 	t.Cleanup(old)

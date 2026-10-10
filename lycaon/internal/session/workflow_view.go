@@ -1,14 +1,11 @@
 package session
 
 import (
-	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"context"
-	"strings"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/closeoutassembly"
 	"github.com/lycaon/lycaon/internal/session/guidancedelivery"
@@ -213,41 +210,4 @@ func (m *Host) SetWorkflowDomains(v *WorkflowDomains) {
 		}
 		return manifest.CoordinatorProfile
 	})
-}
-
-// AcceptsEmptyWorkflowRequest reports whether an empty prompt has active workflow semantics.
-
-func workflowEvaluationFromFrame(frame inject.CoordinatorTurnFrame) feedback.WorkflowEvaluationContext {
-	runCtx := frame.RunContext
-	out := feedback.WorkflowEvaluationContext{
-		WorkflowID:         strings.TrimSpace(runCtx.WorkflowID),
-		CurrentPhase:       strings.TrimSpace(runCtx.CurrentPhase),
-		FailedLeaves:       append([]string(nil), runCtx.FailedLeaves...),
-		RunActive:          strings.TrimSpace(runCtx.RunStatus) == string(api.WorkflowRunStatusRunning),
-		AdvanceWhenGateMet: strings.TrimSpace(runCtx.AdvanceWhenGateMet),
-	}
-	if frame.Runtime.PhaseExit != nil {
-		out.PhaseExitKind = frame.Runtime.PhaseExit.Kind
-	}
-	for _, phase := range frame.Runtime.Phases {
-		if phase.ID != out.CurrentPhase {
-			continue
-		}
-		out.CurrentGatesKnown = false
-		out.CurrentGatesPassed = false
-		out.FailedLeaves = nil
-		for _, gate := range phase.Gates {
-			if gate.Dormant {
-				continue
-			}
-			out.CurrentGatesKnown = true
-			if gate.Satisfied {
-				continue
-			}
-			out.FailedLeaves = append(out.FailedLeaves, gate.ID)
-		}
-		out.CurrentGatesPassed = out.CurrentGatesKnown && len(out.FailedLeaves) == 0
-		break
-	}
-	return out
 }
