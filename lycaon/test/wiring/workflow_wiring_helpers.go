@@ -308,14 +308,10 @@ func completeQueuedFixtureWork(t *testing.T, h *Harness, ctx context.Context, pr
 		}
 		report := &api.WorkerCompletionReport{LegStatus: "complete"}
 		if claimed.WorkflowRunID != "" {
-			run, err := h.WorkflowMgr.Get(ctx, claimed.WorkflowRunID)
-			testutil.FailErr(t, "load fixture review run", err)
-			manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, run.ID)
-			testutil.FailErr(t, "load fixture review manifest", err)
-			assignment, err := h.WorkflowMgr.CoverageAssignment(ctx, run, manifest, claimed.AgentType)
+			assignment, err := h.WorkflowMgr.TaskCoverageAssignment(ctx, claimed)
 			testutil.FailErr(t, "load fixture coverage assignment", err)
 			if assignment != nil {
-				report.CoverageReview = coverageReviewFixture(assignment.Facts)
+				report.CoverageReview = coverageReviewFixture(assignment.Subject.Facts)
 			}
 		}
 		won, err := h.WorkerQueue.Complete(ctx, claimed, api.WorkerResult{Status: "complete", CompletionReport: report})
