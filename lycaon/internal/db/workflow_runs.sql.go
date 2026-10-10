@@ -1228,7 +1228,7 @@ SET blueprint_path = ?1, updated_at = ?2, revision = revision + 1
 WHERE project_id = ?3 AND blueprint_path = ?4
 RETURNING id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 `
 
 type RelocateWorkflowRunBlueprintPathsParams struct {
@@ -1274,6 +1274,7 @@ func (q *Queries) RelocateWorkflowRunBlueprintPaths(ctx context.Context, arg Rel
 			&i.UpdatedAt,
 			&i.PausedAt,
 			&i.CompletedAt,
+			&i.ReviewRevision,
 		); err != nil {
 			return nil, err
 		}
