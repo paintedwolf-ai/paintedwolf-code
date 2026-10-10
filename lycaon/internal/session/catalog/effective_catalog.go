@@ -212,6 +212,12 @@ func (m *Service) reinstallActive(ctx context.Context) {
 	if m == nil {
 		return
 	}
+	resolveCtx, finish, err := m.work.Begin(ctx)
+	if err != nil {
+		return
+	}
+	defer finish()
+
 	root := strings.TrimSpace(m.catalogModuleRoot)
 	if root == "" {
 		return
@@ -221,7 +227,7 @@ func (m *Service) reinstallActive(ctx context.Context) {
 		return
 	}
 	scanners := scan.RequirementChecker{ModuleRoot: root, HomeDir: homeDir}
-	if _, err := extpacks.ApplyCatalog(ctx, nil, scanners); err != nil {
+	if _, err := extpacks.ApplyCatalog(resolveCtx, nil, scanners); err != nil {
 		slog.WarnContext(ctx, "extensions: device desired state changed on disk but does not resolve; keeping the previous catalog",
 			"error", err)
 	}
