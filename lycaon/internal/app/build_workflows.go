@@ -55,7 +55,8 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 	b.git.mgr = git.NewManager()
 	gitexec.SetHostConfig(gitexec.HostConfigResolver())
 	b.git.status = git.NewStatusCache(b.git.mgr)
-	b.git.status.RegisterRepochangeObserver()
+	releaseGitStatus := b.git.status.RegisterRepochangeObserver()
+	b.startup.resources.Track("git-status-observer", 22, func(context.Context) error { releaseGitStatus(); return nil })
 	b.git.repoSets = git.NewRepoSetCache(git.DefaultStatusCacheTTL)
 	if b.execution.Host != nil {
 		b.execution.Host.Survey.SetGitStatusCache(b.git.status)
@@ -190,7 +191,8 @@ func (b *serveBuilder) wireWorkflowConditions() error {
 		b.execution.Host.Mutations.SetContentApply(contentApply)
 	}
 	if b.execution.Host != nil && b.workflows.Manager != nil {
-		b.execution.Host.Mutations.SetBlueprintWriteObserver(b.workflows.Manager.Blueprints)
+		releaseBlueprintObserver := b.execution.Host.Mutations.SetBlueprintWriteObserver(b.workflows.Manager.Blueprints)
+		b.startup.resources.Track("blueprint-write-observer", 22, releaseBlueprintObserver)
 	}
 	b.workflows.Manager.Obligations.Register(b.scanning.Obligation)
 	workflowTaskQuery1 := func(ctx context.Context, runID string) ([]api.WorkerTask, error) {
