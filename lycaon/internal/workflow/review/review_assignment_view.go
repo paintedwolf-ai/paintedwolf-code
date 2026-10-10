@@ -76,7 +76,7 @@ func (m *Assignments) View(ctx context.Context, args map[string]any, tctx tools.
 		if err != nil {
 			return "", err
 		}
-		facts, err := m.CoverageFacts(ctx, run, manifest)
+		facts, err := m.Coverage.CoverageFacts(ctx, run, manifest)
 		if err != nil {
 			return "", err
 		}
