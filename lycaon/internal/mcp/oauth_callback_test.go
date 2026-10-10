@@ -30,7 +30,7 @@ func TestCallbackListenerReceivesCode(t *testing.T) {
 		return nil
 	})
 	testutil.FailErr(t, "startCallbackListener failed", err)
-	t.Cleanup(l.finish)
+	t.Cleanup(func() { l.finish(t.Context()) })
 
 	if !strings.HasPrefix(l.RedirectURI(), "http://127.0.0.1:") {
 		t.Fatalf("redirect = %q want an IPv4 loopback URL", l.RedirectURI())
@@ -60,7 +60,7 @@ func TestCallbackListenerAcceptsFormPost(t *testing.T) {
 		return nil
 	})
 	testutil.FailErr(t, "startCallbackListener failed", err)
-	t.Cleanup(l.finish)
+	t.Cleanup(func() { l.finish(t.Context()) })
 
 	form := url.Values{"code": {"posted"}, "state": {"st-2"}}
 	resp, err := http.Post(l.RedirectURI(), "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
@@ -81,7 +81,7 @@ func TestCallbackListenerSurfacesAuthorizationError(t *testing.T) {
 		return nil
 	})
 	testutil.FailErr(t, "startCallbackListener failed", err)
-	t.Cleanup(l.finish)
+	t.Cleanup(func() { l.finish(t.Context()) })
 
 	resp, err := http.Get(l.RedirectURI() + "?error=access_denied&error_description=user+declined&state=st-3")
 	testutil.FailErr(t, "http.Get failed", err)
@@ -104,7 +104,7 @@ func TestCallbackListenerSurfacesAuthorizationError(t *testing.T) {
 func TestCallbackListenerStopsAfterFirstRedirect(t *testing.T) {
 	l, err := startCallbackListener(t.Context(), func(callbackResult) error { return nil })
 	testutil.FailErr(t, "startCallbackListener failed", err)
-	t.Cleanup(l.finish)
+	t.Cleanup(func() { l.finish(t.Context()) })
 	redirect := l.RedirectURI()
 
 	resp, err := http.Get(redirect + "?code=one&state=st")
@@ -137,7 +137,7 @@ func TestCallbackListenerRejectsStateMismatch(t *testing.T) {
 		completedCalled = true
 	})
 	testutil.FailErr(t, "client.bindCallback failed", err)
-	t.Cleanup(listener.finish)
+	t.Cleanup(func() { listener.finish(t.Context()) })
 
 	resp, err := http.Get(redirect + "?code=abc&state=attacker-state")
 	testutil.FailErr(t, "http.Get failed", err)

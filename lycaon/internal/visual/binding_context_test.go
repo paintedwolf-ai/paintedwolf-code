@@ -3,25 +3,34 @@ package visual
 import (
 	"context"
 	"testing"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type bindingContextKey struct{}
-type bindingContextStore struct {
-	*MemoryStore
-	observed any
-}
-
-func (s *bindingContextStore) BindEvidenceHandle(ctx context.Context, _, _ string) error {
-	s.observed = ctx.Value(bindingContextKey{})
-	return nil
-}
 
 func TestCommittedEvidenceBindingPreservesContext(t *testing.T) {
-	hot := &bindingContextStore{MemoryStore: NewMemoryStore()}
+	hot := NewMemoryStore()
+	artifact, err := hot.Put(t.Context(), "tree", Entry{Meta: api.VisualArtifact{Mime: "image/png", Source: api.VisualArtifactSourceCapture}, Bytes: TestPNG1x1Bytes()})
+	if err != nil {
+		t.Fatal(err)
+	}
 	records := &Records{}
 	NewDurableStore(DurableConfig{DataDir: t.TempDir(), Hot: hot, Records: records})
-	records.EvidenceHandleBound(context.WithValue(t.Context(), bindingContextKey{}, "committed-binding"), "artifact", "evidence")
-	if hot.observed != "committed-binding" {
-		t.Fatalf("hot binding context=%v", hot.observed)
+	bind := records.onHandleBound
+	var observed any
+	records.onHandleBound = func(ctx context.Context, artifactID, handle string) {
+		observed = ctx.Value(bindingContextKey{})
+		bind(ctx, artifactID, handle)
+	}
+	ctx, cancel := context.WithCancel(context.WithValue(t.Context(), bindingContextKey{}, "committed-binding"))
+	cancel()
+	records.EvidenceHandleBound(ctx, artifact.ID, "evidence")
+	if observed != "committed-binding" {
+		t.Fatalf("committed binding context=%v", observed)
+	}
+	got := hot.Resolve(t.Context(), "tree", artifact.ID)
+	if !got.IsPresent() || got.Meta().EvidenceHandle != "evidence" {
+		t.Fatalf("committed hot binding=%+v", got.Meta())
 	}
 }

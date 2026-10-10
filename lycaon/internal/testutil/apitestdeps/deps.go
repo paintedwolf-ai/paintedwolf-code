@@ -499,7 +499,7 @@ func fillExtensions(t *testing.T, d *Deps) {
 			OAuthStore:         mcp.NewOAuthTokenStoreAt(filepath.Join(t.TempDir(), "mcp-oauth.vault")),
 		})
 		testutil.FailErr(t, "mcp registry", err)
-		t.Cleanup(func() { _ = registry.Close() })
+		t.Cleanup(func() { _ = registry.Close(t.Context()) })
 		d.MCP = registry
 	}
 	if d.ExtensionViews == nil {
