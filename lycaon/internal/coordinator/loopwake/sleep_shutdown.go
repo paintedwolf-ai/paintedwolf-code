@@ -1,11 +1,15 @@
 package loopwake
 
 import (
+	"context"
 	"sync"
 )
 
 // sessionSleeps maps a session ID to its *sessionSleep.
-type sessionSleeps struct{ sync.Map }
+type sessionSleeps struct {
+	sync.Map
+	mu sync.Mutex
+}
 
 // state returns the session's sleep state, creating it on first use.
 func (s *sessionSleeps) state(sessionID string) *sessionSleep {
@@ -32,4 +36,12 @@ func (s *sessionSleeps) stopTimers() {
 		}
 		return true
 	})
+}
+
+// WaitSleepTimers joins admitted wait publication and timer delivery.
+func (l *Waits) WaitSleepTimers(ctx context.Context) error {
+	if l == nil {
+		return nil
+	}
+	return l.timerWork.Wait(ctx)
 }
