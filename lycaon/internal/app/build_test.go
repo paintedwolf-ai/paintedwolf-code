@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -237,5 +238,59 @@ func TestBuildCloseReleasesHostWithArmedCoordinatorWait(t *testing.T) {
 	runtime.GC()
 	if host.Value() != nil {
 		t.Fatal("Close retained the host through its armed coordinator timer")
+	}
+}
+
+func closeBuiltHostWithSourceWatch(t *testing.T) weak.Pointer[session.Host] {
+	t.Helper()
+	app, err := Build(t.Context(), testBuildConfig(t, configlayout.FindModuleRoot()))
+	testutil.FailErr(t, "build with source watch", err)
+	root := t.TempDir()
+	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, root)
+	_, exists := app.Server.Sources.Watch.EnsureSourceWatch(t.Context(), testdbseed.DefaultProjectID)
+	if !exists || !repochange.Coverage(root).Watching {
+		t.Fatal("fixture did not bind a live project watch before Close")
+	}
+	host := app.Sessions.Manager
+	testutil.FailErr(t, "close with source watch", app.Close())
+	return weak.Make(host)
+}
+
+func TestBuildCloseReleasesHostWithProjectSourceWatch(t *testing.T) {
+	testutil.SkipIfShort(t, "assembles the full app graph")
+	t.Setenv("LYCAON_LLM_MOCK", "1")
+	t.Setenv("LYCAON_API_TOKEN", "test-token")
+	host := closeBuiltHostWithSourceWatch(t)
+	runtime.GC()
+	if host.Value() != nil {
+		t.Fatal("Close retained the host through its project source watch")
+	}
+}
+
+func TestBuildClosePreservesNewerProjectSourceWatch(t *testing.T) {
+	testutil.SkipIfShort(t, "assembles two app graphs")
+	t.Setenv("LYCAON_LLM_MOCK", "1")
+	t.Setenv("LYCAON_API_TOKEN", "test-token")
+	root := t.TempDir()
+	old, err := Build(t.Context(), testBuildConfig(t, configlayout.FindModuleRoot()))
+	testutil.FailErr(t, "build old watch owner", err)
+	t.Cleanup(func() { _ = old.Close() })
+	testdbseed.InsertProjectRoot(t, old.DB, testdbseed.DefaultProjectID, root)
+	old.Server.Sources.Watch.EnsureSourceWatch(t.Context(), testdbseed.DefaultProjectID)
+	current, err := Build(t.Context(), testBuildConfig(t, configlayout.FindModuleRoot()))
+	testutil.FailErr(t, "build current watch owner", err)
+	t.Cleanup(func() { _ = current.Close() })
+	testdbseed.InsertProjectRoot(t, current.DB, testdbseed.DefaultProjectID, root)
+	current.Server.Sources.Watch.EnsureSourceWatch(t.Context(), testdbseed.DefaultProjectID)
+	if !repochange.Coverage(root).Watching {
+		t.Fatal("fixture did not start shared physical stream")
+	}
+	testutil.FailErr(t, "close replaced app", old.Close())
+	if !repochange.Coverage(root).Watching {
+		t.Fatal("old app closed current app's physical stream")
+	}
+	testutil.FailErr(t, "close final app", current.Close())
+	if repochange.Coverage(root).Watching {
+		t.Fatal("final app left its physical stream alive")
 	}
 }

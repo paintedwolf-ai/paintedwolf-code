@@ -21,9 +21,11 @@ import (
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourcecomparison"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workscope"
 )
 
 type Deps struct {
@@ -185,6 +187,8 @@ type Watch struct {
 	WatchNeedsSeed  func(rootPath string) bool
 	background      *taskgroup.Group
 	responses       *httpio.Responder
+	watches         sourcefeed.WatchOwner
+	watchWork       workscope.Group
 	sourceWatchJobs map[string]*sourceWatchJob
 	sourceWatchMu   sync.Mutex
 }

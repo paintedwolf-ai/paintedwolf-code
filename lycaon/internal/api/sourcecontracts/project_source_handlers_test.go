@@ -309,7 +309,7 @@ func TestSourceWorkspaceReportsWatchCoverage(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 	// Bind by the path the project records, as the server does; the registry
 	// keys watchers by that string.
-	sourcefeed.EnsureProjectWatch(t.Context(), p.ID, "", []sourcefeed.RootSpec{{ID: p.Roots[0].ID, WorkspaceID: p.WorkspaceID(), Path: p.Roots[0].Path}}, nil)
+	sourcefeed.EnsureProjectWatch(t.Context(), nil, p.ID, "", []sourcefeed.RootSpec{{ID: p.Roots[0].ID, WorkspaceID: p.WorkspaceID(), Path: p.Roots[0].Path}}, nil)
 	t.Cleanup(func() { sourcefeed.StopProjectWatch(t.Context(), p.ID) })
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/source/workspace", nil)
