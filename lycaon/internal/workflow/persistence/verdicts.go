@@ -80,12 +80,6 @@ func (s *Verdicts) RebaseVerdictOperation(ctx context.Context, toolCallID string
 	return err
 }
 
-func (s *Verdicts) MarkVerdictEvidenceApplied(ctx context.Context, toolCallID string) error {
-	return s.transactions.queries.MarkWorkflowVerdictEvidenceApplied(ctx, db.MarkWorkflowVerdictEvidenceAppliedParams{
-		UpdatedAt: db.FormatTime(time.Now().UTC()), ToolCallID: toolCallID,
-	})
-}
-
 func (s *Verdicts) PendingVerdictOperations(ctx context.Context) ([]runstate.VerdictOperation, error) {
 	rows, err := s.transactions.queries.ListPendingWorkflowVerdictOperations(ctx)
 	if err != nil {

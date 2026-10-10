@@ -68,7 +68,7 @@ func TestVerdictReceiptsPreserveSubmittedValuesAndPhaseIdentity(t *testing.T) {
 func TestVerdictReceiptsPreserveIncompleteOperations(t *testing.T) {
 	for _, status := range []string{"prepared", "evidence_applied", "diverged"} {
 		t.Run(status, func(t *testing.T) {
-			manager, blueprints, _ := receiptManager(t)
+			manager, blueprints, sqlDB := receiptManager(t)
 			setTestRegistry(t, manager, blueprints, conditions.TestRegistryDeps())
 			run := startReviewLoopRun(t.Context(), t, manager)
 			store := manager.Store
@@ -80,7 +80,8 @@ func TestVerdictReceiptsPreserveIncompleteOperations(t *testing.T) {
 			testutil.FailErr(t, "prepare receipt", err)
 			switch status {
 			case "evidence_applied":
-				testutil.FailErr(t, "apply receipt evidence", store.Verdicts.MarkVerdictEvidenceApplied(t.Context(), "pending-call"))
+				_, err := sqlDB.ExecContext(t.Context(), "UPDATE workflow_verdict_operations SET status='evidence_applied' WHERE tool_call_id='pending-call'")
+				testutil.FailErr(t, "seed released pending receipt", err)
 			case "diverged":
 				testutil.FailErr(t, "resolve divergent receipt", store.Verdicts.ResolveVerdictOperationDiverged(t.Context(), "pending-call", "phase changed"))
 			}
