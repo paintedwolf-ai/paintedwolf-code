@@ -185,6 +185,7 @@ func (s *SourceEffects) applyNativeTrash(ctx context.Context, row *sourceMutatio
 	}
 	plan.DeleteStarted, plan.DeleteIdentity = true, identity
 	plan.NativeTrash.RecoveryKey = row.ID
+	plan.NativeTrash.Receipt = desktoptrash.Receipt{}
 	if err := s.Journal.update(ctx, row); err != nil {
 		return err
 	}
@@ -226,5 +227,5 @@ func (s *SourceEffects) restoreNativeTrash(ctx context.Context, row *sourceMutat
 // A completed native move needs its acknowledged location before recovery can promise Undo.
 func nativeTrashReceiptRecorded(plan *sourceMutationPlan) bool {
 	receipt := plan.NativeTrash.Receipt
-	return receipt.Platform == runtime.GOOS && filepath.IsAbs(receipt.Path) && receipt.Identity != ""
+	return receipt.FormatVersion == 1 && receipt.Platform == runtime.GOOS && filepath.IsAbs(receipt.Path) && receipt.Identity != ""
 }

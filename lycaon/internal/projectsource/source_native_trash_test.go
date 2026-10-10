@@ -56,6 +56,9 @@ func TestNativeTrashRefusesMissingOrReplacedReceipt(t *testing.T) {
 	for _, replace := range []bool{false, true} {
 		t.Run(map[bool]string{false: "emptied", true: "replaced"}[replace], func(t *testing.T) {
 			service, p, root, _ := sourceMutationFixture(t)
+			older := uuid.NewString()
+			_, err := service.Create(t.Context(), older, p, SourceEntryCreateRequest{RootID: p.Roots[0].ID, Path: "older", Kind: SourceEntryFile})
+			testutil.FailErr(t, "create older history", err)
 			testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(root, "file"), []byte("selected"), 0600))
 			id := uuid.NewString()
 			testutil.FailErr(t, "trash", service.Delete(t.Context(), id, p, SourceDeleteRequest{RootID: p.Roots[0].ID, Path: "file"}))
@@ -74,6 +77,14 @@ func TestNativeTrashRefusesMissingOrReplacedReceipt(t *testing.T) {
 			if _, err := os.Lstat(filepath.Join(root, "file")); !os.IsNotExist(err) {
 				t.Fatalf("unavailable item restored: %v", err)
 			}
+			var availability string
+			testutil.FailErr(t, "retained unavailable entry", service.Journal.db.QueryRowContext(t.Context(), `SELECT availability FROM source_history_entries WHERE id=?`, id).Scan(&availability))
+			if availability != "unavailable" {
+				t.Fatalf("availability = %q", availability)
+			}
+			restarted := NewSourceMutationService(service.Journal.db, service.settlement.recorder.(*sourceledger.Store))
+			installTestTrash(t, restarted)
+			undoHistoryHead(t, restarted, p, older)
 			if replace {
 				assertSourceHistoryFile(t, filepath.Dir(path), filepath.Base(path), "someone else")
 			}

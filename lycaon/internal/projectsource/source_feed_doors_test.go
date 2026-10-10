@@ -77,7 +77,7 @@ func TestHostWriteDoorsEmitOnce(t *testing.T) {
 			return desktoptrash.Receipt{}, err
 		}
 		err = os.Rename(path, destination)
-		return desktoptrash.Receipt{Platform: runtime.GOOS, Path: destination, Identity: identity}, err
+		return desktoptrash.Receipt{FormatVersion: 1, Platform: runtime.GOOS, Path: destination, Identity: identity}, err
 	})
 
 	cases := []struct {

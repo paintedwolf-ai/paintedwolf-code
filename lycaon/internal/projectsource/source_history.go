@@ -60,17 +60,18 @@ type SourceHistoryMutationResult struct {
 }
 
 type sourceHistoryEntry struct {
-	Seq       int64
-	ID        string
-	ProjectID string
-	Kind      string
-	State     string
-	UndoLabel string
-	RedoLabel string
-	UndoPlan  sourceMutationPlan
-	RedoPlan  sourceMutationPlan
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	Unavailable bool
+	Seq         int64
+	ID          string
+	ProjectID   string
+	Kind        string
+	State       string
+	UndoLabel   string
+	RedoLabel   string
+	UndoPlan    sourceMutationPlan
+	RedoPlan    sourceMutationPlan
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
 }
 
 func (s *SourceMutationService) Undo(ctx context.Context, operationID string, p ProjectSource, req SourceHistoryMutationRequest) (*SourceHistoryMutationResult, error) {
@@ -142,6 +143,9 @@ func (s *SourceMutationService) applyHistory(ctx context.Context, operationID st
 		return &plan, nil
 	})
 	if err != nil {
+		if errors.Is(err, ErrSourceTrashUnavailable) {
+			err = errors.Join(err, s.History.markUnavailable(context.WithoutCancel(ctx), p.SourceID(), expectedEntryID, direction))
+		}
 		return nil, fmt.Errorf("apply source history %s: %w", direction, err)
 	}
 	var committed SourceHistoryMutationResult
