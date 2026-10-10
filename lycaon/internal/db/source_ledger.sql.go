@@ -1958,30 +1958,41 @@ func (q *Queries) ListSourceBlobReclaimCandidates(ctx context.Context, limit int
 }
 
 const listSourceBranchHeadsUnderPath = `-- name: ListSourceBranchHeadsUnderPath :many
-SELECT project_id, branch_id, file_id, version_id, root_id,
-       path, state, content_sha256, ordinal, observed_ts
-FROM source_branch_heads
-WHERE project_id = ?1
-  AND branch_id = ?2
-  AND root_id = ?3
-  AND state != 'absent'
-  AND substr(path, 1, length(?4) + 1) = ?4 || '/'
-ORDER BY length(path), path
+WITH RECURSIVE location(id, rest) AS (
+    SELECT root.id, CAST(?1 AS TEXT) || '/' FROM source_directories root
+    WHERE root.project_id = ?2 AND root.branch_id = ?3
+      AND root.root_id = ?4 AND root.parent_id IS NULL
+    UNION ALL
+    SELECT d.id, substr(l.rest, instr(l.rest, '/') + 1)
+    FROM location l JOIN source_directories d ON d.parent_id = l.id
+      AND d.name = substr(l.rest, 1, instr(l.rest, '/') - 1) AND d.present = 1
+    WHERE instr(l.rest, '/') > 0
+), subtree(id) AS (
+    SELECT id FROM location WHERE rest = ''
+    UNION ALL
+    SELECT d.id FROM subtree s JOIN source_directories d ON d.parent_id = s.id AND d.present = 1
+)
+SELECT h.project_id, h.branch_id, h.file_id, h.version_id, h.root_id,
+       h.path, h.state, h.content_sha256, h.ordinal, h.observed_ts
+FROM subtree s CROSS JOIN source_head_entries e ON e.directory_id = s.id AND e.state != 'absent'
+CROSS JOIN source_branch_heads h ON h.project_id = e.project_id AND h.branch_id = e.branch_id AND h.file_id = e.file_id
+WHERE h.state != 'absent'
+ORDER BY length(h.path), h.path
 `
 
 type ListSourceBranchHeadsUnderPathParams struct {
-	ProjectID  string      `json:"project_id"`
-	BranchID   string      `json:"branch_id"`
-	RootID     string      `json:"root_id"`
-	ParentPath interface{} `json:"parent_path"`
+	ParentPath string `json:"parent_path"`
+	ProjectID  string `json:"project_id"`
+	BranchID   string `json:"branch_id"`
+	RootID     string `json:"root_id"`
 }
 
 func (q *Queries) ListSourceBranchHeadsUnderPath(ctx context.Context, arg ListSourceBranchHeadsUnderPathParams) ([]SourceBranchHeads, error) {
 	rows, err := q.db.QueryContext(ctx, listSourceBranchHeadsUnderPath,
+		arg.ParentPath,
 		arg.ProjectID,
 		arg.BranchID,
 		arg.RootID,
-		arg.ParentPath,
 	)
 	if err != nil {
 		return nil, err

@@ -72,6 +72,28 @@ jobs:
           echo "cask_token=${token}" >> "${GITHUB_OUTPUT}"
           echo "matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
 
+  publication-credentials:
+    needs: [classify, ship-gates, aggregate-release]
+    if: ${{ needs.classify.outputs.publish == 'true' }}
+    runs-on: ubuntu-latest
+    environment: release-publication
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - name: Install the pinned Tauri CLI for credential validation
+        run: bun install --frozen-lockfile
+        working-directory: lycaon-den
+      - name: Prove all retained feed credentials before publication
+        env:
+          FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
+        run: python3 scripts/feed_signing.py --check-credentials
+
   preflight:
     needs: classify
     runs-on: macos-15
@@ -387,7 +409,7 @@ jobs:
           retention-days: 14
 
   publish-immutable:
-    needs: [classify, ship-gates, build-release, aggregate-release]
+    needs: [classify, publication-credentials, ship-gates, build-release, aggregate-release]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     environment: release-publication

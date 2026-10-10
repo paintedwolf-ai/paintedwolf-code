@@ -462,7 +462,8 @@ CREATE TABLE IF NOT EXISTS source_history_entries (
     undo_plan_json TEXT NOT NULL CHECK (json_valid(undo_plan_json)),
     redo_plan_json TEXT NOT NULL CHECK (json_valid(redo_plan_json)),
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    availability TEXT NOT NULL DEFAULT 'available' CHECK (availability IN ('available', 'unavailable'))
 ) STRICT;
 
 CREATE INDEX IF NOT EXISTS idx_source_history_project_state

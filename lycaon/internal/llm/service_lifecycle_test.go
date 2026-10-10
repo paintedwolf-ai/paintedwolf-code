@@ -118,3 +118,27 @@ func TestCanceledAllocationDrainsInitialProviderDiscovery(t *testing.T) {
 		})
 	}
 }
+
+func TestServiceCloseReportsCanceledJoinAndCanFinishAfterRefreshExits(t *testing.T) {
+	done := make(chan struct{})
+	canceled := false
+	service := &Service{
+		modelFeedRefreshCancel: func() { canceled = true },
+		modelFeedRefreshDone:   done,
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := service.Close(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("unfinished refresh join error=%v, want cancellation", err)
+	}
+	if !canceled {
+		t.Fatal("close did not request refresh cancellation before refusing the join")
+	}
+	select {
+	case <-done:
+		t.Fatal("canceled join invented refresh completion")
+	default:
+	}
+	close(done)
+	testutil.FailErr(t, "finish service shutdown after refresh exits", service.Close(t.Context()))
+}

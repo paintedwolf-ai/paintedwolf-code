@@ -16,6 +16,11 @@
 oar_capability_version: "1.0"
 host: paintedwolf
 
+# Retired: paintedwolf.relocated_field and paintedwolf.nested_under used ambiguous single-field facts.
+# Successors: paintedwolf.misplaced_fields, paintedwolf.found_under, and paintedwolf.belongs_under.
+# Retired: paintedwolf.unparsed_json conflated encoded JSON with malformed JSON.
+# Successors: paintedwolf.json_encoded and paintedwolf.json_malformed.
+# Retired fact names must never be reused.
 # Retired: paintedwolf.high_risk_tool combined policy categories (OAR-FACT-7).
 # Successor: compose paintedwolf.tool_is_state, tool_is_delegation,
 # tool_is_handoff, and tool_is_task explicitly in when. References to the
