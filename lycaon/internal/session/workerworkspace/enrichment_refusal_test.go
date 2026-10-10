@@ -6,8 +6,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/call"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -59,5 +61,36 @@ func TestWorkerBranchClaimFailurePreservesInvocation(t *testing.T) {
 	out, err := service.Enrich(t.Context(), child, input)
 	if !errors.Is(err, cause) || !reflect.DeepEqual(out, input) || jobs.claims != 1 {
 		t.Fatalf("enrichment=%+v error=%v claims=%d", out, err, jobs.claims)
+	}
+}
+
+type writeReservations struct {
+	Calls
+	paths          []string
+	session, agent string
+}
+
+func (c *writeReservations) Reserve(_ context.Context, session string, paths []string, agent string) (*call.ReservationResult, error) {
+	c.session = session
+	c.agent = agent
+	c.paths = append(c.paths, paths...)
+	return &call.ReservationResult{}, nil
+}
+func TestWorkerWriteReservesNormalizedTouchAndRefusesReadScopedMutation(t *testing.T) {
+	service := New(nil, nil, nil)
+	calls := &writeReservations{}
+	service.calls = calls
+	jobs := &enrichmentJobs{task: &api.WorkerTask{ID: "job", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}}
+	service.SetTasks(jobs)
+	ctx := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "job", HandoffSessionID: "parent", HandoffAgentID: "job"}}
+	testutil.FailErr(t, "reserve write", service.BeforeWorkerWrite(t.Context(), ctx, "folder/../item.txt"))
+	if calls.session != "parent" || calls.agent != "job" || !reflect.DeepEqual(calls.paths, []string{"item.txt"}) || !reflect.DeepEqual(service.Touches.Paths("job"), []string{"item.txt"}) {
+		t.Fatalf("reservation=%+v touches=%v", calls, service.Touches.Paths("job"))
+	}
+	jobs.task.Scope = &api.TaskScope{Mode: api.TaskScopeModeRead}
+	err := service.BeforeWorkerWrite(t.Context(), ctx, "other.txt")
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != TaskScopeReadMutationDeniedCode || len(calls.paths) != 1 || len(service.Touches.Paths("job")) != 1 {
+		t.Fatalf("read worker changed touch/reservation err=%v calls=%+v", err, calls)
 	}
 }
