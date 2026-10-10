@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -197,7 +198,7 @@ func investigateSecurityQuestion(t *testing.T, h *Harness, ctx context.Context, 
 	verdict["coverage"] = securityCoverageFixture(t, h, ctx, runID)
 	out, err = h.Workflows.Manager.Verdicts.RecordReviewLoopVerdict(ctx, sess.ID, verdict, nil, nil)
 	testutil.FailErr(t, "reject uninvestigated question", err)
-	if out.Valid || out.QuestionIssue == nil || out.QuestionIssue.Code != workflow.ReviewRequiredCode || out.QuestionIssue.Data["action"] != "dispatch_work" {
+	if out.Valid || out.QuestionIssue == nil || out.QuestionIssue.Code != workflowreview.ReviewRequiredCode || out.QuestionIssue.Data["action"] != "dispatch_work" {
 		t.Fatalf("uninvestigated question outcome = %+v, want investigation-required rejection", out)
 	}
 	appendSucceededReviewAgent(t, h, ctx, sess, "repo-researcher", "question/c1")
