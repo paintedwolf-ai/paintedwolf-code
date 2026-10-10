@@ -40,7 +40,7 @@ func (m *Service) SetIgnoredCredentialCandidate(fn func(context.Context, string,
 	m.ignoredCredentialCandidate = fn
 }
 
-// credentialCandidateContext publishes observations; rules own thresholds and counters.
+// candidateContext publishes observations; rules own thresholds and counters.
 func (m *Service) candidateContext(ctx context.Context, sess *api.Session, tool string, args map[string]any, candidate secretmint.Candidate) *oar.GuardContext {
 	gc := oar.NewGuardContext()
 	m.FillSessionFacts(ctx, gc, sess, tool, args)

@@ -41,7 +41,7 @@ func (m *Service) queuePolicy(_ context.Context, sessionID, anchor string, decis
 	return nil
 }
 
-// takePolicyFeedback persists before acknowledging. A retry reuses the staged
+// TakePolicy persists before acknowledging. A retry reuses the staged
 // message ID, and the loop receives the same screened bytes as durable history.
 func (m *Service) TakePolicy(ctx context.Context, sessionID string) ([]api.Message, error) {
 	kicks := m.kicks

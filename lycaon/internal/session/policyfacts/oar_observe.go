@@ -241,7 +241,7 @@ func ObserveHTTPRequestWebPage(gc *oar.GuardContext, raised guidance.ToolResultF
 	gc.PutRejectData(toolrejection.HTTPRequestWebPageCode, raised.FeedbackFor(toolrejection.HTTPRequestWebPageCode).Details)
 }
 
-// deferredUnactivatedCount is how many of surfaceID's deferred tools this
+// DeferredUnactivatedCount is how many of surfaceID's deferred tools this
 // session has not loaded.
 func (m *Service) DeferredUnactivatedCount(sessionID, surfaceID string) int64 {
 	if m == nil || surfaceID == "" {
@@ -262,7 +262,7 @@ func (m *Service) DeferredUnactivatedCount(sessionID, surfaceID string) int64 {
 	return n
 }
 
-// observeDeferredUnactivated publishes the count for the session's turn surface.
+// ObserveDeferredUnactivated publishes the count for the session's turn surface.
 func (m *Service) ObserveDeferredUnactivated(gc *oar.GuardContext, sessionID string) {
 	if m == nil || gc == nil {
 		return

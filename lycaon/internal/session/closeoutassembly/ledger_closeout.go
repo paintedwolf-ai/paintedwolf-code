@@ -13,7 +13,7 @@ import (
 
 const hostEmptyCloseoutSynthesis = "No grounded findings this batch."
 
-// assembleLedgerCloseout preserves the answer and attaches recorded references,
+// Assemble preserves the answer and attaches recorded references,
 // or builds a report from recorded worker results when no answer is available.
 func (m *Service) Assemble(
 	ctx context.Context,

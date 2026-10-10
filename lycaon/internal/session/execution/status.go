@@ -77,7 +77,7 @@ func LastTurnMessageContent(ctx context.Context, store PreviewStore, sessionID s
 	return content
 }
 
-// beginPreparingContext publishes an idempotent activity lease.
+// Preparing publishes an idempotent activity lease.
 func (m *Status) Preparing(ctx context.Context, sess *api.Session, sessionID string) func() {
 	if m == nil || m.events == nil || sess == nil || strings.TrimSpace(sessionID) == "" {
 		return func() {}

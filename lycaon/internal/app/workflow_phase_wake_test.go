@@ -5,6 +5,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/sessions"
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -17,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 	"time"
@@ -140,5 +142,43 @@ func TestHumanApprovalAdvanceQueuesWakeForRunningChild(t *testing.T) {
 	got, ok := sessionMgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Pending(sess.ID)
 	if !ok || got != anchor.PhaseAdvanced {
 		t.Fatalf("pending child wake = %q, %v want %q, true", got, ok, anchor.PhaseAdvanced)
+	}
+}
+
+func TestPhaseEntryGuidanceUsesTheRunWorkflowVersion(t *testing.T) {
+	ctx := t.Context()
+	sqlDB := testdbfixture.Open(t, "phase-guidance.db")
+	projectDir := t.TempDir()
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
+	sessionsStore := store.NewSQL(sqlDB)
+	sess, err := sessionsStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create phase guidance session", err)
+	manifests, err := workflowdef.RegistryFromDirs("")
+	testutil.FailErr(t, "load phase guidance workflows", err)
+	manager := workflow.NewManager(workflowpersistence.New(sqlDB), sessionsStore, manifests, nil)
+	host := session.NewHost(sessionsStore, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	registry, err := anchor.LoadRegistryFromConfigRoot()
+	testutil.FailErr(t, "load versioned phase guidance bindings", err)
+	runtime := delegations.New(sqlDB, nil, worker.WorkersConfig{})
+	runtime.SetDependencies(delegations.Dependencies{Workflows: &workflows.Runtime{Manager: manager}, Sessions: &sessions.Runtime{Manager: host}})
+	for _, tc := range []struct {
+		version      string
+		wantGuidance bool
+	}{{"1.0.0", true}, {"9.9.9", false}} {
+		t.Run(tc.version, func(t *testing.T) {
+			kicks := &kick.KickEngine{}
+			bus := anchor.NewBus(kicks)
+			bus.SetRegistry(registry)
+			host.Coordinator.Guidance.Bind(kicks, bus)
+			rc := &workflowphases.RunContext{SessionID: sess.ID, RunID: "phase-guidance-run", WorkflowID: "security-survey", WorkflowVersion: tc.version, Phase: "plan"}
+			runtime.OnWorkflowPhaseEnter(ctx, rc, workflowdef.PhaseDef{ID: "plan"})
+			got := kicks.TakePendingKickID(sess.ID)
+			if tc.wantGuidance && got != "coordinator-security-plan" {
+				t.Fatalf("versioned phase guidance = %q", got)
+			}
+			if !tc.wantGuidance && got != "" {
+				t.Fatalf("unregistered workflow version queued %q", got)
+			}
+		})
 	}
 }
