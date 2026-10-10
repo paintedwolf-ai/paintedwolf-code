@@ -1,9 +1,6 @@
 package contract
 
 import (
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/oar"
@@ -12,26 +9,37 @@ import (
 
 func TestSharedObservationFactsRegistered(t *testing.T) {
 	t.Parallel()
-	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "oar")
-	envSrc, err := os.ReadFile(filepath.Join(root, "env.go"))
-	contractcheck.FailErr(t, "read env.go", err)
-	envBody := string(envSrc)
-	// The lazy-assembly set is derived from the declaration table rather than
-	// written out beside it, so ask the live catalogue for membership and keep
-	// the source grep only for the activation map env.go actually builds.
 	declared := map[string]bool{}
-	for _, f := range oar.FactCatalogue() {
-		declared[f.Name] = true
+	for _, fact := range oar.FactCatalogue() {
+		declared[fact.Name] = true
 	}
-	for _, name := range []string{
-		"is_directory", "not_found", "path_denied", "reject_observation",
-		"policy_denied", "command_not_argv",
+	for _, tc := range []struct {
+		name, condition string
+		observe         func(*oar.GuardContext)
+	}{
+		{"is_directory", "is_directory", func(gc *oar.GuardContext) { gc.Rejection.IsDirectory = true }},
+		{"not_found", "not_found", func(gc *oar.GuardContext) { gc.Rejection.NotFound = true }},
+		{"path_denied", "path_denied", func(gc *oar.GuardContext) { gc.Rejection.PathDenied = true }},
+		{"reject_observation", "paintedwolf.reject_observation == 'path_escape'", func(gc *oar.GuardContext) { gc.Rejection.RejectObservation = "path_escape" }},
+		{"policy_denied", "policy_denied", func(gc *oar.GuardContext) { gc.Rejection.PolicyDenied = true }},
+		{"command_not_argv", "paintedwolf.command_not_argv", func(gc *oar.GuardContext) { gc.Invocation.CommandNotArgv = true }},
 	} {
-		if !declared[name] {
-			t.Errorf("catalogue missing %q", name)
-		}
-		if !strings.Contains(envBody, `"`+name+`"`) {
-			t.Errorf("condition environment missing %q", name)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			if !declared[tc.name] {
+				t.Fatalf("catalogue missing %q", tc.name)
+			}
+			gc := oar.NewGuardContext()
+			matched, err := oar.EvaluateCondition(tc.condition, gc)
+			contractcheck.FailErr(t, "evaluate absent observation", err)
+			if matched {
+				t.Fatal("unobserved rejection fact matched")
+			}
+			tc.observe(gc)
+			matched, err = oar.EvaluateCondition(tc.condition, gc)
+			contractcheck.FailErr(t, "evaluate structured observation", err)
+			if !matched {
+				t.Fatal("observed rejection fact is absent from the condition environment")
+			}
+		})
 	}
 }
