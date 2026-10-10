@@ -170,3 +170,31 @@ func (p *delayedStreamProvider) Stream(_ context.Context, _ modelcall.Completion
 	}()
 	return ch, nil
 }
+
+func TestDebugClientKeepsOneCaptureAndLabelsUnknownProvider(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "requests.jsonl")
+	t.Setenv("LYCAON_LLM_DEBUG", "1")
+	t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
+	observability.CloseLLMDebug()
+	t.Cleanup(observability.CloseLLMDebug)
+	inner := &recordingProvider{id: "fixture"}
+	client := WrapLLMClientIfDebug(inner, "")
+	if again := WrapLLMClientIfDebug(client, "replacement"); again != client {
+		t.Fatal("debug wrapper replaced an existing capture boundary")
+	}
+	result, err := client.Complete(t.Context(), modelcall.CompletionRequest{Model: "retained-model"})
+	testutil.FailErr(t, "complete through unknown-provider wrapper", err)
+	if result.Content != "ok" || inner.last.Model != "retained-model" {
+		t.Fatalf("wrapper changed completion or model: result=%+v request=%+v", result, inner.last)
+	}
+	raw, err := os.ReadFile(logPath)
+	testutil.FailErr(t, "read unknown-provider capture", err)
+	var entry struct {
+		ProviderID string `json:"provider_id"`
+		Call       string `json:"call"`
+	}
+	testutil.FailErr(t, "decode single capture", json.Unmarshal(raw, &entry))
+	if entry.ProviderID != "unknown" || entry.Call != "complete" {
+		t.Fatalf("capture lost fallback provider identity: %+v", entry)
+	}
+}
