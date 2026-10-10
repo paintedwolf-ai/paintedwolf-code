@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/people"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -68,5 +69,39 @@ func TestPromptRewindReplaysReceiptWithoutReplacingLaterWork(t *testing.T) {
 	testutil.FailErr(t, "read later work", err)
 	if string(raw) != "later work" {
 		t.Fatalf("replay replaced later bytes=%q", raw)
+	}
+}
+
+func TestRecoveryResolvesPreparedAndAppliedRewindReceipts(t *testing.T) {
+	for _, applied := range []bool{false, true} {
+		t.Run(map[bool]string{false: "prepared rollback", true: "applied completion"}[applied], func(t *testing.T) {
+			mgr, journal, path := prepareJournalFixture(t)
+			if applied {
+				_, err := journal.Apply()
+				testutil.FailErr(t, "apply before interruption", err)
+			}
+			op := sessionstore.RewindOperation{ID: journal.ID, SessionID: journal.TranscriptID, AnchorMessageID: journal.AnchorMessageID, ProjectDir: journal.ProjectDir, JournalPath: journal.Path(), InputDigest: rewindInputDigest(journal.TranscriptID, journal.AnchorMessageID), Status: "prepared"}
+			testutil.FailErr(t, "persist interrupted receipt", mgr.store.PrepareRewind(t.Context(), op))
+			testutil.FailErr(t, "recover session rewind", mgr.RecoverRewindsForSession(t.Context(), op.SessionID))
+			retained, err := mgr.store.GetRewindOperation(t.Context(), op.ID)
+			testutil.FailErr(t, "read recovered receipt", err)
+			raw, err := os.ReadFile(path)
+			testutil.FailErr(t, "read recovered source bytes", err)
+			wantStatus, wantBytes := "rolled_back", "after"
+			if applied {
+				wantStatus, wantBytes = "committed", "before"
+			}
+			if retained == nil || retained.Status != wantStatus || string(raw) != wantBytes {
+				t.Fatalf("recovery receipt=%+v source=%q", retained, raw)
+			}
+			messages, err := mgr.store.GetMessages(t.Context(), op.SessionID)
+			testutil.FailErr(t, "read recovered transcript", err)
+			if applied && (len(messages) != 0 || retained.ResponseJSON == "") {
+				t.Fatalf("applied recovery lost committed transcript receipt=%+v messages=%+v", retained, messages)
+			}
+			if !applied && len(messages) != 1 {
+				t.Fatalf("rollback truncated original prompt=%+v", messages)
+			}
+		})
 	}
 }
