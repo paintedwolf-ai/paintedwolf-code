@@ -32,7 +32,7 @@ func TestPromptRewindReplaysReceiptWithoutReplacingLaterWork(t *testing.T) {
 	testutil.FailErr(t, "resolve project", err)
 	turn, err := repository.UserTurnOrdinal(ctx, id)
 	testutil.FailErr(t, "turn ordinal", err)
-	testutil.FailErr(t, "record effect", ledger.Record(ctx, sourceledger.RecordInput{ProjectID: project.ID, RootID: project.Roots[0].ID, Path: "file.txt", Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, SessionID: id, Turn: turn, Before: []byte("before"), After: []byte("after")}))
+	testutil.FailErr(t, "record effect", ledger.Record(ctx, sourceledger.RecordInput{ProjectID: project.ID, RecordLocation: sourceledger.RecordLocation{RootID: project.Roots[0].ID, Path: "file.txt"}, Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, SessionID: id, Turn: turn, Before: []byte("before"), After: []byte("after")}))
 	resets := 0
 	r.runtime.ResetWorkers = func(_ context.Context, _ *api.Session, _ string) { resets++ }
 	r.runtime.ResetCoordinator = func(context.Context, string) { resets++ }
