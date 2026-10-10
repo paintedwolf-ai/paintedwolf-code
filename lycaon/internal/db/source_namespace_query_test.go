@@ -27,10 +27,8 @@ func TestSourcePathLookupUsesIndexedNamespaceEdges(t *testing.T) {
 		}
 		indexedRoot = indexedRoot || strings.Contains(detail, "SEARCH root USING INDEX idx_source_directories_root")
 		indexedChild = indexedChild || strings.Contains(detail, "SEARCH d USING INDEX idx_source_directories_name")
-		indexedPath = indexedPath || strings.Contains(detail, "SEARCH d USING INDEX idx_source_directories_name")
-		indexedDescendants = indexedDescendants || strings.Contains(detail, "SEARCH d USING INDEX idx_source_directories_parent")
-		indexedEntry = indexedEntry || strings.Contains(detail, "SEARCH e USING INDEX idx_source_head_entries_directory")
-		indexedHead = indexedHead || strings.Contains(detail, "SEARCH h USING INDEX idx_source_head_entries_file")
+		indexedEntry = indexedEntry || strings.Contains(detail, "SEARCH e USING INDEX idx_source_head_entries_live_name")
+		indexedHead = indexedHead || strings.Contains(detail, "SEARCH h USING PRIMARY KEY")
 	}
 	testutil.FailErr(t, "finish lookup plan", rows.Err())
 	if !indexedRoot || !indexedChild || !indexedEntry || !indexedHead {
@@ -57,8 +55,10 @@ func TestSourceSubtreeLookupUsesIndexedNamespaceEdges(t *testing.T) {
 			t.Fatalf("subtree scans unrelated heads: %s", detail)
 		}
 		indexedRoot = indexedRoot || strings.Contains(detail, "SEARCH root USING INDEX idx_source_directories_root")
-		indexedEntry = indexedEntry || strings.Contains(detail, "SEARCH e USING INDEX idx_source_head_entries_live_name")
-		indexedHead = indexedHead || strings.Contains(detail, "SEARCH h USING PRIMARY KEY")
+		indexedPath = indexedPath || strings.Contains(detail, "SEARCH d USING INDEX idx_source_directories_name")
+		indexedDescendants = indexedDescendants || strings.Contains(detail, "SEARCH d USING INDEX idx_source_directories_parent")
+		indexedEntry = indexedEntry || strings.Contains(detail, "SEARCH e USING INDEX idx_source_head_entries_directory")
+		indexedHead = indexedHead || strings.Contains(detail, "SEARCH h USING INDEX idx_source_head_entries_file")
 	}
 	testutil.FailErr(t, "finish subtree plan", rows.Err())
 	if !indexedRoot || !indexedPath || !indexedDescendants || !indexedEntry || !indexedHead {
