@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 	"weak"
 
 	"github.com/lycaon/lycaon/config"
@@ -16,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -202,5 +204,30 @@ func TestBuildCloseWithoutServeReleasesSessionHost(t *testing.T) {
 	runtime.GC()
 	if host.Value() != nil {
 		t.Fatal("Close without Serve retained the session host")
+	}
+}
+
+func closeBuiltHostWithArmedWait(t *testing.T) weak.Pointer[session.Host] {
+	t.Helper()
+	app, err := Build(t.Context(), testBuildConfig(t, configlayout.FindModuleRoot()))
+	testutil.FailErr(t, "build with armed wait", err)
+	projectDir := t.TempDir()
+	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, projectDir)
+	sess, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create waiting session", err)
+	host := app.Sessions.Manager
+	host.Coordinator.Runtime.CoordinatorLoop().Waits.EnterSleep(t.Context(), sess.ID, time.Now().Add(time.Hour), "fixture", []loopwake.WaitTrigger{loopwake.WaitTriggerTimer}, nil, loopwake.SleepMoverHost)
+	testutil.FailErr(t, "close with armed wait", app.Close())
+	return weak.Make(host)
+}
+
+func TestBuildCloseReleasesHostWithArmedCoordinatorWait(t *testing.T) {
+	testutil.SkipIfShort(t, "assembles the full app graph")
+	t.Setenv("LYCAON_LLM_MOCK", "1")
+	t.Setenv("LYCAON_API_TOKEN", "test-token")
+	host := closeBuiltHostWithArmedWait(t)
+	runtime.GC()
+	if host.Value() != nil {
+		t.Fatal("Close retained the host through its armed coordinator timer")
 	}
 }
