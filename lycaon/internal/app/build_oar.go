@@ -85,13 +85,15 @@ func (b *serveBuilder) wireOARBlockPlane() error {
 		}
 		return view.Rules
 	})
-	anchor.SetAnchorsFor(func(ctx context.Context, sessionID string) *anchor.Registry {
+	releaseAnchors := anchor.SetAnchorsFor(func(ctx context.Context, sessionID string) *anchor.Registry {
 		view := mgr.Catalog.ViewForSessionID(ctx, sessionID)
 		if view == nil {
 			return nil
 		}
 		return view.Anchors
 	})
+
+	b.startup.resources.Track("session-anchor-resolver", 22, func(context.Context) error { releaseAnchors(); return nil })
 
 	renderer := oar.NewRenderer(b.execution.Rejections, nudgeFormatter{f: b.execution.Rejections})
 	bp := &toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: renderer}
