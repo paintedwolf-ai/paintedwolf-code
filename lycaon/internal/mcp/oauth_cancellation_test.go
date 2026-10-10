@@ -25,7 +25,7 @@ func cancellationFixture(t *testing.T) (*OAuthClient, *OAuthTokenStore, <-chan s
 	t.Cleanup(unblock)
 	store := NewOAuthTokenStoreAt(t.TempDir() + "/oauth.yaml")
 	client := NewOAuthClient(store, "", srv.Client())
-	t.Cleanup(client.Close)
+	t.Cleanup(func() { client.Close(t.Context()) })
 	client.pending["remote"] = pendingOAuth{
 		ProviderID: "remote", State: "first", ClientID: "fixture", Verifier: "verifier",
 		TokenURL: srv.URL, Resource: srv.URL + "/mcp", CreatedAt: time.Now(),
