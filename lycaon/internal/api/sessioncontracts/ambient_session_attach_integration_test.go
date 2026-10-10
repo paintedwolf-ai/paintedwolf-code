@@ -5,7 +5,6 @@ package sessioncontracts
 import (
 	"context"
 	"encoding/json"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"net/http"
 	"net/http/httptest"
@@ -42,7 +41,6 @@ func TestCreateSessionAttachesAmbientImplementRun(t *testing.T) {
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	runStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(runStore, store, wfReg, nil)
-	wfMgr.Resolver = workflowcatalog.Resolver{}
 
 	dir := t.TempDir()
 	projReg := project.NewSQLRegistry(sqlDB)
@@ -50,7 +48,7 @@ func TestCreateSessionAttachesAmbientImplementRun(t *testing.T) {
 	testutil.FailErr(t, "reg.Create failed", err)
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: projReg}, Workflow: hostapi.WorkflowDependencies{
-		Workflows: wfMgr, WorkflowCatalog: workflowcatalog.Resolver{}, WorkflowRuns: runStore}, Storage: hostapi.StorageDependencies{ModuleRoot: root}}), nil, hostapi.TestAPIToken)
+		Workflows: wfMgr, WorkflowCatalog: wfMgr.Resolver, WorkflowRuns: runStore}, Storage: hostapi.StorageDependencies{ModuleRoot: root}}), nil, hostapi.TestAPIToken)
 
 	body := `{"project_id":"` + p.ID + `","posture":"build"}`
 	req := contractfixture.NewAuthedRequest(http.MethodPost, "/v1/sessions", strings.NewReader(body))
@@ -102,7 +100,6 @@ func TestCreateSessionCatalogOmitsImplement(t *testing.T) {
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	runStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(runStore, store, wfReg, nil)
-	wfMgr.Resolver = workflowcatalog.Resolver{}
 
 	dir := t.TempDir()
 	projReg := project.NewSQLRegistry(sqlDB)
@@ -110,7 +107,7 @@ func TestCreateSessionCatalogOmitsImplement(t *testing.T) {
 	testutil.FailErr(t, "reg.Create failed", err)
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: projReg}, Workflow: hostapi.WorkflowDependencies{
-		Workflows: wfMgr, WorkflowCatalog: workflowcatalog.Resolver{}, WorkflowRuns: runStore}}), nil, hostapi.TestAPIToken)
+		Workflows: wfMgr, WorkflowCatalog: wfMgr.Resolver, WorkflowRuns: runStore}}), nil, hostapi.TestAPIToken)
 
 	body := `{"project_id":"` + p.ID + `","posture":"build"}`
 	req := contractfixture.NewAuthedRequest(http.MethodPost, "/v1/sessions", strings.NewReader(body))
@@ -157,11 +154,9 @@ func TestCreateSessionWithInvalidProjectWorkflowAttachesAmbientImplement(t *test
 	wfReg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	runStore := workflowpersistence.New(sqlDB)
-	resolver := workflowcatalog.Resolver{
-		ProjectTierApplies: func(context.Context, string) bool { return true },
-	}
 	wfMgr := workflow.NewManager(runStore, store, wfReg, nil)
-	wfMgr.Resolver = resolver
+	wfMgr.Resolver.ProjectTierApplies = func(context.Context, string) bool { return true }
+	resolver := wfMgr.Resolver
 
 	dir := t.TempDir()
 	wfDir := filepath.Join(dir, settingsoverlay.DirName(), "workflows", "implement-dispatch")
@@ -209,11 +204,9 @@ func TestAbortSessionWithInvalidProjectWorkflowSucceeds(t *testing.T) {
 	wfReg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	runStore := workflowpersistence.New(sqlDB)
-	resolver := workflowcatalog.Resolver{
-		ProjectTierApplies: func(context.Context, string) bool { return true },
-	}
 	wfMgr := workflow.NewManager(runStore, store, wfReg, nil)
-	wfMgr.Resolver = resolver
+	wfMgr.Resolver.ProjectTierApplies = func(context.Context, string) bool { return true }
+	resolver := wfMgr.Resolver
 
 	dir := t.TempDir()
 	wfDir := filepath.Join(dir, settingsoverlay.DirName(), "workflows", "implement-dispatch")

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"net/http"
@@ -70,7 +69,6 @@ func NewReportTestHarness(t *testing.T, opts ...TestDeps) *ReportTestHarness {
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	runStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(runStore, store, wfReg, nil)
-	wfMgr.Resolver = workflowcatalog.Resolver{}
 	hostDir := t.TempDir()
 	wfMgr.Verdicts.EvidenceStore = inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 	wfMgr.Verdicts.EvidenceProjectDir = func(context.Context, string) (string, error) { return hostDir, nil }
@@ -86,7 +84,7 @@ func NewReportTestHarness(t *testing.T, opts ...TestDeps) *ReportTestHarness {
 
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: projReg}, Workflow: hostapi.WorkflowDependencies{
-		Workflows: wfMgr, WorkflowCatalog: workflowcatalog.Resolver{}, WorkflowRuns: runStore}, Scans: hostapi.ScansDependencies{
+		Workflows: wfMgr, WorkflowCatalog: wfMgr.Resolver, WorkflowRuns: runStore}, Scans: hostapi.ScansDependencies{
 		ScanCoordinator: scantest.Coordinator(t, scanStore, nil)}, Storage: hostapi.StorageDependencies{ModuleRoot: root}}
 	for _, opt := range opts {
 		opt(&deps)
