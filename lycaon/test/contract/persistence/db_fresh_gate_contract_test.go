@@ -29,8 +29,8 @@ func TestFreshWipeProductionGate(t *testing.T) {
 	owner := freshGateSource(t, root, "persistence/runtime.go")
 	open := freshGateFunction(t, owner, "Open")
 	resets := freshGateCalls(open, "localdata.ResetStoreCoupled")
-	if len(resets) != 1 || len(resets[0].Args) != 1 || freshGateSelector(resets[0].Args[0]) != "dbPath" {
-		t.Fatal("storage owner must reset exactly its selected store once")
+	if len(resets) != 1 || len(resets[0].Args) != 2 || freshGateSelector(resets[0].Args[0]) != "ctx" || freshGateSelector(resets[0].Args[1]) != "dbPath" {
+		t.Fatal("storage must reset exactly its selected store once with the startup context")
 	}
 	guarded := false
 	ast.Inspect(open, func(n ast.Node) bool {
@@ -58,8 +58,8 @@ func TestFreshWipeProductionGate(t *testing.T) {
 	}
 	build := freshGateFunction(t, freshGateSource(t, root, "build.go"), "Build")
 	storageOpens := freshGateCalls(build, "b.storage.Open")
-	if len(storageOpens) != 1 || len(storageOpens[0].Args) < 2 || freshGateSelector(storageOpens[0].Args[1]) != "path" {
-		t.Fatal("bootstrap must open the selected path through its storage owner")
+	if len(storageOpens) != 1 || len(storageOpens[0].Args) != 5 || freshGateSelector(storageOpens[0].Args[0]) != "ctx" || freshGateSelector(storageOpens[0].Args[1]) != "path" {
+		t.Fatal("bootstrap must open the selected path with its startup context through storage")
 	}
 }
 
