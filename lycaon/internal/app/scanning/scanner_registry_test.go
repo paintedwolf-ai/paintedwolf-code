@@ -26,7 +26,7 @@ func (r *scannerResources) Track(name string, order int, release func(context.Co
 func TestDefaultScannerRegistryRegistersImmediateOwnedCleanup(t *testing.T) {
 	t.Setenv(configdir.EnvConfigDir, t.TempDir())
 	resources := &scannerResources{}
-	loaded, err := loadScannerRegistry(Dependencies{ModuleRoot: configlayout.FindModuleRoot(), Resources: resources}, exec.ProcessPriorityBelowNormal, nil)
+	loaded, err := loadScannerRegistry(t.Context(), Dependencies{ModuleRoot: configlayout.FindModuleRoot(), Resources: resources}, exec.ProcessPriorityBelowNormal, nil)
 	testutil.FailErr(t, "allocate default registry", err)
 	if resources.name != "scanner-registry" || resources.order >= 130 || resources.release == nil {
 		t.Fatal("default registry has no cleanup before database shutdown")
@@ -40,9 +40,20 @@ func TestDefaultScannerRegistryRegistersImmediateOwnedCleanup(t *testing.T) {
 func TestInjectedScannerRegistryRemainsCallerOwned(t *testing.T) {
 	injected := &scan.MockRegistry{}
 	resources := &scannerResources{}
-	loaded, err := loadScannerRegistry(Dependencies{TestRegistry: injected, Resources: resources}, exec.ProcessPriorityBelowNormal, nil)
+	loaded, err := loadScannerRegistry(t.Context(), Dependencies{TestRegistry: injected, Resources: resources}, exec.ProcessPriorityBelowNormal, nil)
 	testutil.FailErr(t, "bind injected registry", err)
 	if loaded != injected || resources.release != nil {
 		t.Fatal("host took ownership of injected scanner fixture")
+	}
+}
+
+func TestCanceledScannerAllocationRegistersNoOwnedGeneration(t *testing.T) {
+	t.Setenv(configdir.EnvConfigDir, t.TempDir())
+	resources := &scannerResources{}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	loaded, err := loadScannerRegistry(ctx, Dependencies{ModuleRoot: configlayout.FindModuleRoot(), Resources: resources}, exec.ProcessPriorityBelowNormal, nil)
+	if !errors.Is(err, context.Canceled) || loaded != nil || resources.release != nil {
+		t.Fatalf("canceled allocation: registry=%v error=%v cleanup=%v", loaded, err, resources.release != nil)
 	}
 }

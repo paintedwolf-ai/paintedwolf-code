@@ -96,23 +96,23 @@ func (r *Impl) mergedConfig(overlayDir string) (*scancatalog.ScannerConfig, erro
 }
 
 // New loads scanner catalogs and registers available drivers.
-func New(opts Options) (*Impl, error) {
+func New(ctx context.Context, opts Options) (*Impl, error) {
 	cfg, err := scancatalog.LoadMergedScannerConfig(opts.ModuleRoot, "", opts.HomeDir)
 	if err != nil {
 		return nil, err
 	}
-	return newFromScannerConfig(cfg, opts, false)
+	return newFromScannerConfig(ctx, cfg, opts, false)
 }
 
 // NewFromScannerConfig registers scanners from an already-loaded catalog.
-func NewFromScannerConfig(cfg *scancatalog.ScannerConfig, opts Options) (*Impl, error) {
+func NewFromScannerConfig(ctx context.Context, cfg *scancatalog.ScannerConfig, opts Options) (*Impl, error) {
 	if err := scancatalog.ValidateScannerConfig(cfg); err != nil {
 		return nil, err
 	}
-	return newFromScannerConfig(cfg, opts, true)
+	return newFromScannerConfig(ctx, cfg, opts, true)
 }
 
-func newFromScannerConfig(cfg *scancatalog.ScannerConfig, opts Options, static bool) (*Impl, error) {
+func newFromScannerConfig(ctx context.Context, cfg *scancatalog.ScannerConfig, opts Options, static bool) (*Impl, error) {
 	if strings.TrimSpace(opts.ModuleRoot) == "" {
 		return nil, fmt.Errorf("module root required")
 	}
@@ -132,7 +132,7 @@ func newFromScannerConfig(cfg *scancatalog.ScannerConfig, opts Options, static b
 		return nil, err
 	}
 
-	values, err := buildScannerGeneration(cfg, opts, home, manifest)
+	values, err := buildScannerGeneration(ctx, cfg, opts, home, manifest)
 	if err != nil {
 		return nil, err
 	}
@@ -148,8 +148,11 @@ func newFromScannerConfig(cfg *scancatalog.ScannerConfig, opts Options, static b
 	return reg, nil
 }
 
-func buildScannerGeneration(cfg *scancatalog.ScannerConfig, opts Options, home string, manifest *bundled.Manifest) (map[string]scan.CodeScanner, error) {
+func buildScannerGeneration(ctx context.Context, cfg *scancatalog.ScannerConfig, opts Options, home string, manifest *bundled.Manifest) (map[string]scan.CodeScanner, error) {
 	values := make(map[string]scan.CodeScanner, len(cfg.Scanners))
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	for _, entry := range cfg.Scanners {
 		if entry.Driver == scancatalog.DriverExternal && !scancatalog.BinaryOnPath(entry.Command) {
 			if entry.SkipIfBinaryMissingOrDefault() {
@@ -157,7 +160,7 @@ func buildScannerGeneration(cfg *scancatalog.ScannerConfig, opts Options, home s
 			}
 			return nil, fmt.Errorf("scanner %q: binary %q not found", entry.ID, entry.Command[0])
 		}
-		sc, err := newScannerFromEntry(entry, opts.ModuleRoot, home, manifest, opts)
+		sc, err := newScannerFromEntry(ctx, entry, opts.ModuleRoot, home, manifest, opts)
 		if err != nil {
 			return nil, fmt.Errorf("scanner %q: %w", entry.ID, err)
 		}
@@ -180,14 +183,14 @@ func (r *Impl) adapters() []scan.CodeScanner {
 	return out
 }
 
-func newScannerFromEntry(entry scancatalog.ScannerEntry, moduleRoot, home string, manifest *bundled.Manifest, opts Options) (scan.CodeScanner, error) {
+func newScannerFromEntry(ctx context.Context, entry scancatalog.ScannerEntry, moduleRoot, home string, manifest *bundled.Manifest, opts Options) (scan.CodeScanner, error) {
 	policy := entry.RuntimePolicy()
 	jobs := policy.Parallelism
 	prio := opts.ProcessPriority
 	if prio == "" {
 		prio = exec.ProcessPriorityBelowNormal
 	}
-	return scannerFactories.Build(context.Background(), strings.TrimSpace(entry.Driver), scannerBuild{
+	return scannerFactories.Build(ctx, strings.TrimSpace(entry.Driver), scannerBuild{
 		fingerprintKey: opts.ScannerFingerprintKey, advisories: opts.AdvisoryDatabase, entry: entry, moduleRoot: moduleRoot,
 		home: home, manifest: manifest, jobs: jobs, priority: prio,
 	})
