@@ -1,6 +1,7 @@
 package inputs
 
 import (
+	"context"
 	"errors"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -40,5 +41,35 @@ func TestAskReceiptReplayPreservesPromptAndRejectsChangedInput(t *testing.T) {
 	}
 	if pendingAskRejectData(nil) != nil {
 		t.Fatal("absent pending input synthesized refusal context")
+	}
+}
+
+type scaffoldFixture struct{ vars map[string]any }
+
+func (s *scaffoldFixture) GetVars(context.Context, string) (map[string]any, error) {
+	return s.vars, nil
+}
+func (s *scaffoldFixture) UpsertVars(_ context.Context, _ string, vars map[string]any) error {
+	s.vars = vars
+	return nil
+}
+func TestDeferredBlueprintLaunchIsConsumedOnceWithoutLosingScaffold(t *testing.T) {
+	store := &scaffoldFixture{vars: map[string]any{"retained": "fact"}}
+	service := &Scaffold{Store: store}
+	if err := service.NoteWorkflowStartProposal(t.Context(), "session", "catalog", "1.0.0"); err != nil {
+		t.Fatalf("record start proposal: %v", err)
+	}
+	if err := service.SetPendingBlueprintLaunchPath(t.Context(), "session", "plans/launch.md"); err != nil {
+		t.Fatalf("record deferred path: %v", err)
+	}
+	if path := service.TakePendingBlueprintLaunchPath(t.Context(), "session"); path != "plans/launch.md" {
+		t.Fatalf("deferred path=%q", path)
+	}
+	if path := service.TakePendingBlueprintLaunchPath(t.Context(), "session"); path != "" {
+		t.Fatalf("deferred path replay=%q", path)
+	}
+	service.ClearStartState(t.Context(), "session")
+	if store.vars["retained"] != "fact" {
+		t.Fatalf("scaffold clearing lost unrelated fact=%v", store.vars)
 	}
 }

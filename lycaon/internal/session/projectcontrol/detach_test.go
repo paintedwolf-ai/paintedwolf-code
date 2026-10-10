@@ -107,3 +107,15 @@ func TestProjectPromotionWaitsForIdleCompletedRounds(t *testing.T) {
 		})
 	}
 }
+
+func TestRootDependencyMergeKeepsDistinctResourcesAndDeduplicatesSharedWork(t *testing.T) {
+	shared := RootDependents{Workers: []RootDependentWorker{{JobID: "shared", SessionID: "parent"}, {JobID: "shared", SessionID: "parent"}}, Overlays: []RootDependentOverlay{{OverlayID: "overlay", JobID: "shared", SessionID: "parent"}}, Documents: []RootDependentDocument{{DocumentID: "doc", Path: "one"}}}
+	merged := shared.merge(RootDependents{Workers: []RootDependentWorker{{JobID: "shared"}, {JobID: "second"}}, Overlays: []RootDependentOverlay{{OverlayID: "duplicate", JobID: "shared"}, {OverlayID: "second", JobID: "second"}}, Documents: []RootDependentDocument{{DocumentID: "doc", Path: "duplicate"}, {DocumentID: "next", Path: "two"}}})
+	details := merged.Details()
+	if len(merged.Workers) != 2 || len(merged.Overlays) != 2 || len(merged.Documents) != 2 || len(details["workers"].([]map[string]any)) != 2 || len(details["overlays"].([]map[string]any)) != 2 || len(details["documents"].([]map[string]any)) != 2 {
+		t.Fatalf("merged dependencies=%+v details=%v", merged, details)
+	}
+	if merged.Overlays[0].OverlayID != "overlay" || merged.Documents[0].Path != "one" {
+		t.Fatalf("original resource identity replaced=%+v", merged)
+	}
+}
