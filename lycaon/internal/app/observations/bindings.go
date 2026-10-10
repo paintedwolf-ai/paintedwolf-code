@@ -29,14 +29,16 @@ func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progre
 			return
 		}
 		publisher.PublishFindings(ctx, ev.SessionID, findings.BumpRevision(ev.SessionID))
-	}))	releaseRepository := repochange.RegisterObserver(ownedObserver(&work, func(ctx context.Context, ev repochange.Event) {
+	}))
+	releaseRepository := repochange.RegisterObserver(ownedObserver(&work, func(ctx context.Context, ev repochange.Event) {
 		if repository != nil {
 			repository.Changed(ctx, ev.ProjectDir)
 		}
 		if ev.Kind == repochange.HeadMoved {
 			invalidateAge(ev.ProjectDir)
 		}
-	}))	activeRun := activeRunIDFromWorkflow(runs)
+	}))
+	activeRun := activeRunIDFromWorkflow(runs)
 	coalescer := progress.NewCoalescer(progress.DefaultCoalesceWindow, newProgressChangeEmitter(sessions, publisher, activeRun, progressStore))
 	releaseProgress := progress.RegisterWriteObserver(ownedObserver(&work, func(ctx context.Context, ev progress.WriteEvent) {
 		if strings.TrimSpace(ev.SessionID) == "" {
@@ -46,7 +48,8 @@ func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progre
 		coalescer.Record(ev.SessionID, ev.Prev, progressStore.Get(ctx, ev.SessionID))
 		emitProgressCompletion(ctx, sessions, publisher, progressStore, activeRun, ev.SessionID)
 		settled(ctx, ev.SessionID)
-	}))	return func(ctx context.Context) error {
+	}))
+	return func(ctx context.Context) error {
 		work.Stop()
 		releaseProgress()
 		releaseRepository()
@@ -60,10 +63,12 @@ func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progre
 }
 
 func ownedObserver[T any](work *workscope.Group, observe func(context.Context, T)) func(context.Context, T) {
- return func(ctx context.Context, event T) {
-  ctx, finish, err := work.Begin(ctx)
-  if err != nil { return }
-  defer finish()
-  observe(ctx, event)
- }
+	return func(ctx context.Context, event T) {
+		ctx, finish, err := work.Begin(ctx)
+		if err != nil {
+			return
+		}
+		defer finish()
+		observe(ctx, event)
+	}
 }
