@@ -73,7 +73,7 @@ jobs:
           echo "matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
 
   publication-credentials:
-    needs: classify
+    needs: [classify, ship-gates, aggregate-release]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     environment: release-publication
