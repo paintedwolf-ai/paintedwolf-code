@@ -278,3 +278,14 @@ func firstLines(s string, n int) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+func TestRawFetchCacheUsesDeclaredGrammarForExtensionlessAssets(t *testing.T) {
+	for contentType, want := range map[string]string{"application/javascript": "js", "application/json; charset=utf-8": "json", "text/css": "css", "image/svg+xml": "svg", "text/html": "html", "application/xml": "xml", "application/octet-stream": "txt"} {
+		t.Run(contentType, func(t *testing.T) {
+			got := fetchRawCacheExt(FetchRawResult{URL: "https://example.com/asset", ContentType: contentType})
+			if got != want {
+				t.Fatalf("cache grammar=%s want=%s", got, want)
+			}
+		})
+	}
+}

@@ -16,7 +16,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/pkg/api"
+	"slices"
+	"strings"
 )
 
 type evidenceBindingFixture struct {
@@ -107,5 +110,44 @@ func TestBuildEvidenceResolutionFailsBeforePublishing(t *testing.T) {
 	}
 	if dir, err := runtime.Manager.Verdicts.EvidenceProjectDir(t.Context(), "session"); dir != "" || err != nil {
 		t.Fatalf("absent session lookup = %q, %v", dir, err)
+	}
+}
+
+func TestWorkflowRuntimeBlueprintsUseRegisteredRootAndReviewRosterRespectsWebPreference(t *testing.T) {
+	f := buildEvidenceFixture(t)
+	f.deps.Projects = project.NewSQLRegistry(f.deps.Database)
+	webPrefs := webresearch.NewConfigStoreAt(filepath.Join(t.TempDir(), "web-research.yaml"))
+	off := false
+	testutil.FailErr(t, "disable external search", webPrefs.ApplyPrefs(nil, nil, &off, nil))
+	f.deps.WebResearchConfig = webPrefs
+	runtime, err := Build(t.Context(), f.deps, nil)
+	testutil.FailErr(t, "build blueprint runtime", err)
+	blueprint, err := runtime.Blueprints.Create(t.Context(), testdbseed.DefaultProjectID, "Retained review plan", "", "", "explicit plan content")
+	testutil.FailErr(t, "create registered-project blueprint", err)
+	read, err := runtime.Blueprints.Get(t.Context(), testdbseed.DefaultProjectID, blueprint.Path)
+	testutil.FailErr(t, "read registered-project blueprint", err)
+	if !strings.HasSuffix(strings.TrimSpace(read.Content), "explicit plan content") || read.ProjectID != testdbseed.DefaultProjectID || read.Status != api.BlueprintStatusDraft {
+		t.Fatalf("blueprint content crossed project root:%+v", read)
+	}
+	registeredProject, err := f.deps.Projects.Get(t.Context(), testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "resolve registered blueprint destination", err)
+	retained, err := os.ReadFile(filepath.Join(project.PrimaryRootPath(registeredProject), filepath.FromSlash(read.Path)))
+	testutil.FailErr(t, "read retained blueprint from registered root", err)
+	if string(retained) != read.Content {
+		t.Fatal("blueprint read diverged from its registered-project file")
+	}
+	if _, err := runtime.Blueprints.Create(t.Context(), "missing-project", "Rejected plan", "", "", "body"); err == nil {
+		t.Fatal("blueprint persisted without a registered project root")
+	}
+	candidates := []string{"implementer", "web-researcher"}
+	restricted := runtime.Manager.Phases.ReviewSpawnFilter(t.Context(), "session", "phase", candidates)
+	if !slices.Contains(restricted, "implementer") || slices.Contains(restricted, "web-researcher") {
+		t.Fatalf("web preference removed local reviewer:%v", restricted)
+	}
+	on := true
+	testutil.FailErr(t, "enable external search", webPrefs.ApplyPrefs(nil, nil, &on, nil))
+	restored := runtime.Manager.Phases.ReviewSpawnFilter(t.Context(), "session", "phase", candidates)
+	if !slices.Equal(restored, candidates) {
+		t.Fatalf("enabled web search did not restore review candidates:%v", restored)
 	}
 }
