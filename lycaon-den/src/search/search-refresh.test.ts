@@ -65,7 +65,6 @@ it("advances pending symbol discovery and stops at terminal coverage gaps", () =
   expect(vi.getTimerCount()).toBe(0);
 });
 
-
 it("bounds pending symbol refreshes and permits a new explicit search", () => {
   vi.useFakeTimers();
   const refresh = createSearchRefresh();
@@ -79,5 +78,28 @@ it("bounds pending symbol refreshes and permits a new explicit search", () => {
   refresh.schedule(result, rerun);
   vi.advanceTimersByTime(750);
   expect(rerun).toHaveBeenCalledTimes(21);
+  refresh.clear();
+});
+
+it("retains the symbol retry allowance across catalog warming responses", () => {
+  vi.useFakeTimers();
+  const refresh = createSearchRefresh();
+  const pending = { issues: [{ reason: "symbol_pending" }] } as SearchResponse;
+  const warming = { issues: [{ reason: "catalog_warming" }] } as SearchResponse;
+  let symbols = 0;
+  const symbolRetry = vi.fn(() => {
+    symbols++;
+    refresh.schedule(warming, warmingRetry);
+  });
+  const warmingRetry = vi.fn(() => refresh.schedule(pending, symbolRetry));
+  refresh.schedule(pending, symbolRetry);
+  vi.advanceTimersByTime(300_000);
+  expect(symbols).toBe(20);
+  expect(warmingRetry).toHaveBeenCalledTimes(20);
+  expect(vi.getTimerCount()).toBe(0);
+  refresh.reset();
+  refresh.schedule(pending, symbolRetry);
+  vi.advanceTimersByTime(750);
+  expect(symbols).toBe(21);
   refresh.clear();
 });

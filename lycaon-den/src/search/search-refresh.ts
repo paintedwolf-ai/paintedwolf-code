@@ -41,8 +41,6 @@ export function createSearchRefresh() {
     if (pendingSymbols) {
       if (symbolAttempts >= 20) return;
       symbolAttempts++;
-    } else {
-      symbolAttempts = 0;
     }
     const delay = Math.min(750 * 2 ** attempt, 5000);
     attempt = Math.min(attempt + 1, 3);

@@ -62,6 +62,7 @@ export function createSearchResultsController(options: Options) {
     presentation: "foreground" | "background" = "foreground",
   ) => {
     if (!options.residentLive()) return;
+    if (presentation === "foreground") searchRefresh.reset();
     searchController?.abort();
     const controller = new AbortController();
     searchController = controller;
