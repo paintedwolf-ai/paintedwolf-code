@@ -17,15 +17,6 @@ func writeScopeReject(ctx context.Context, boundary *sandbox.Boundary, path, pro
 	return mapWriteScopeDenied(ctx, boundary, path, profileID, tool, err, writeScopeMapOpts{})
 }
 
-// redirectWriteScopeReject maps command/verify redirect write-scope failures to
-// WRITE_SCOPE_DENIED with kind=redirect, including coordinator.
-func redirectWriteScopeReject(ctx context.Context, boundary *sandbox.Boundary, path, profileID, tool string, err error) error {
-	return mapWriteScopeDenied(ctx, boundary, path, profileID, tool, err, writeScopeMapOpts{
-		kind:           "redirect",
-		mapCoordinator: true,
-	})
-}
-
 type writeScopeMapOpts struct {
 	kind           string
 	mapCoordinator bool

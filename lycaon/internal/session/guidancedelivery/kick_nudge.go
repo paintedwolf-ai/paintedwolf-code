@@ -189,7 +189,7 @@ func (m *Service) renderContext(ctx context.Context, sessionID string) kick.Coor
 	if msgErr == nil {
 		rc.PartialWorkerJobs = surface.PartialWorkerSummaryJobIDs(msgs)
 	}
-	if sess != nil && !sess.IsWorkerChild() {
+	if !sess.IsWorkerChild() {
 		paths := workeroutcomes.ParentSessionMergedWriteChangedPaths(ctx, m.workers, sess.ProjectID, sess.ID)
 		if len(paths) > 0 {
 			rc.PromotedPaths = paths
