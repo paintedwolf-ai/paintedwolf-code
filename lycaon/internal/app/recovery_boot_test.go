@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"net/http"
@@ -123,7 +124,8 @@ func TestBuildRecoveryModePreservesSchemaMismatch(t *testing.T) {
 	cfg := recoveryTestConfig(t)
 	sqlDB, err := db.Open(cfg.DBPath)
 	testutil.FailErr(t, "seed Open", err)
-	_, err = sqlDB.ExecContext(t.Context(), `PRAGMA user_version = 2`)
+	unsupportedVersion := db.SchemaVersion + 1
+	_, err = sqlDB.ExecContext(t.Context(), fmt.Sprintf(`PRAGMA user_version = %d`, unsupportedVersion))
 	testutil.FailErr(t, "change baseline marker", err)
 	testutil.FailErr(t, "close seed store", sqlDB.Close())
 
@@ -135,7 +137,7 @@ func TestBuildRecoveryModePreservesSchemaMismatch(t *testing.T) {
 	if body["recovery_reason"] != "schema_mismatch" {
 		t.Fatalf("recovery_reason = %v", body["recovery_reason"])
 	}
-	if int(body["store_schema_version"].(float64)) != 2 {
+	if int(body["store_schema_version"].(float64)) != unsupportedVersion {
 		t.Fatalf("store_schema_version = %v", body["store_schema_version"])
 	}
 	store, err := db.OpenReadOnly(t.Context(), cfg.DBPath)
@@ -143,8 +145,8 @@ func TestBuildRecoveryModePreservesSchemaMismatch(t *testing.T) {
 	version, err := db.ReadUserVersion(t.Context(), store)
 	testutil.FailErr(t, "read preserved baseline marker", err)
 	testutil.FailErr(t, "close preserved store", store.Close())
-	if version != 2 {
-		t.Fatalf("user_version = %d want preserved mismatch 2", version)
+	if version != unsupportedVersion {
+		t.Fatalf("user_version = %d want preserved mismatch %d", version, unsupportedVersion)
 	}
 }
 
