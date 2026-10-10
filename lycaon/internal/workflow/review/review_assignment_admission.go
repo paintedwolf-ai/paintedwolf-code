@@ -26,7 +26,7 @@ func (r Assignments) completed(ctx context.Context, runID, phase, agent string, 
 		if task.WorkflowRunID != runID || task.WorkflowPhase != phase || task.AgentType != agent {
 			continue
 		}
-		binding, err := r.Runs.ReviewBinding(ctx, task.ID)
+		binding, err := r.Records.ReviewBinding(ctx, task.ID)
 		if err != nil {
 			return nil, nil, err
 		}
