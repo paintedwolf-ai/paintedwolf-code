@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -74,6 +75,7 @@ func TestProjectSourceReadsLiveWorkerOverlay(t *testing.T) {
 	})
 
 	t.Run("worker_id serves the file as the worker left it", func(t *testing.T) {
+		assertWorkerSourceOverlay(t, h, project.ID, workerID, overlayDir, abs)
 		got := getJSON[wire.ProjectSourceReadResponse](t, base, sourcePath(url.Values{
 			"path":      {rel},
 			"worker_id": {workerID},
@@ -114,4 +116,33 @@ func TestProjectSourceReadsLiveWorkerOverlay(t *testing.T) {
 			t.Fatalf("content = %q", got.Content)
 		}
 	})
+}
+
+// Overlay reads must retain the claimed branch and its attached root identities.
+func assertWorkerSourceOverlay(t *testing.T, h *wiring.Harness, projectID, workerID, expectedRoot, file string) {
+	t.Helper()
+	task, ok := h.Delegations.Queue.Get(workerID)
+	if !ok || task == nil || filepath.Clean(task.WorkspaceRoot) != filepath.Clean(expectedRoot) {
+		t.Fatalf("claimed worker branch lookup lost its root: found=%t task=%+v want=%q", ok, task, expectedRoot)
+	}
+	roots, err := workspace.BranchRootRefs(expectedRoot)
+	testutil.FailErr(t, "read claimed branch roots", err)
+	current, err := h.Server.Sources.Workspace.ProjectRegistry.Get(t.Context(), projectID)
+	testutil.FailErr(t, "read current project roots", err)
+	if len(roots) != 1 || len(current.Roots) != 1 || roots[0].ID != current.Roots[0].ID {
+		t.Fatalf("branch root identity differs from attached project: branch=%+v project=%+v", roots, current.Roots)
+	}
+	if filepath.Clean(roots[0].Path) != filepath.Clean(expectedRoot) {
+		t.Fatalf("branch root path = %q, want %q", roots[0].Path, expectedRoot)
+	}
+	resolved, release := h.Server.Sources.Workspace.WorkerBranchRoot(t.Context(), projectID, workerID)
+	defer release()
+	if filepath.Clean(resolved) != filepath.Clean(expectedRoot) {
+		t.Fatalf("source reader lost claimed worker branch: got=%q want=%q", resolved, expectedRoot)
+	}
+	info, err := os.Stat(file)
+	testutil.FailErr(t, "stat worker overlay source", err)
+	if !info.Mode().IsRegular() {
+		t.Fatalf("worker overlay source is not a regular file: %v", info.Mode())
+	}
 }
