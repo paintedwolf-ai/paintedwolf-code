@@ -9,10 +9,19 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/localdata"
 )
+
+const fileMode = 0o600
+
+type markerPublishedError struct{ cause error }
+
+func (e *markerPublishedError) Error() string { return e.cause.Error() }
+func (e *markerPublishedError) Unwrap() error { return e.cause }
 
 type pendingReplacement struct {
 	raw    []byte
@@ -106,6 +115,73 @@ func publishPendingMarker(path string, marker PendingMarker, previous *pendingRe
 		if err := os.RemoveAll(staging); err != nil {
 			slog.Warn("could not remove superseded restore staging", "path", staging, "error", err)
 		}
+	}
+	return nil
+}
+
+func (r *pendingRestore) recordApplied(rel string) error {
+	r.applied = append(r.applied, rel)
+	r.appliedSet[rel] = struct{}{}
+	r.marker.Applied = r.applied
+	return writeMarker(r.markerPath, r.marker)
+}
+
+// The failure marker allows an explicit recovery action to replace the transaction.
+func (r *pendingRestore) recordFailure(cause error) {
+	r.marker.Applied = r.applied
+	r.marker.FailedAt = time.Now().UTC().Format(time.RFC3339)
+	r.marker.FailureDetail = cause.Error()
+	_ = writeMarker(r.markerPath, r.marker)
+}
+
+func writeMarker(path string, marker PendingMarker) error {
+	raw, err := json.MarshalIndent(marker, "", "  ")
+	if err != nil {
+		return err
+	}
+	_, err = fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.PathLocation(path),
+		Source:   bytes.NewReader(raw),
+		Mode:     fileMode,
+		DirMode:  0o700,
+	})
+	return err
+}
+
+func writeMarkerExclusive(path string, marker PendingMarker) error {
+	raw, err := json.MarshalIndent(marker, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".restore-marker-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if err := tmp.Chmod(fileMode); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(raw); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := fssync.File(tmp); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Link(tmpPath, path); err != nil {
+		return err
+	}
+	if err := os.Remove(tmpPath); err != nil {
+		return &markerPublishedError{cause: err}
+	}
+	if err := syncDirectory(filepath.Dir(path)); err != nil {
+		return &markerPublishedError{cause: err}
 	}
 	return nil
 }
