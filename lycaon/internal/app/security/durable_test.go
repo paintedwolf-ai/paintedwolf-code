@@ -42,7 +42,7 @@ func managedScreeningFixture(t *testing.T) (*Runtime, *secretmatch.Matcher, *ses
 	b.InstallEvidence(matcher, fp)
 	b.Capabilities = secretcap.NewWithStore(database, values, func(root string, values []secretmatch.Remembered) { b.Harvest.Remember(root, values...) })
 	b.BindTranscript(matcher, nil, nil)
-	t.Cleanup(func() { sessionstore.SetMessageRedactor(nil); observability.SetCaptureRedactor(nil) })
+	t.Cleanup(b.ReleaseRedactors)
 	return b, matcher, sessionstore.NewSQL(database), values
 }
 
