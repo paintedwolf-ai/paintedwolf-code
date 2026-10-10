@@ -24,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -110,7 +111,9 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	// Workflow definitions use the bundled catalog; templates use deterministic fixtures.
 	fixturesRoot := filepath.Join(configlayout.FindModuleRoot(), "test", "wiring", "fixtures")
 	cfg.TestWorkflowTemplatesDir = filepath.Join(fixturesRoot, "workflow-templates")
-	if !o.useBundledScanners {
+	if o.useBundledScanners {
+		cfg.TestAdvisoryDatabase = scantest.OSVExport(t)
+	} else {
 		cfg.TestScanRegistry = &scan.MockRegistry{Scanner: &scan.MockScanner{
 			// Match the bundled secret scanner categories.
 			CategoryList: []wire.ScanCategory{wire.ScanCategorySecret, wire.ScanCategorySecurity, wire.ScanCategorySCA},
