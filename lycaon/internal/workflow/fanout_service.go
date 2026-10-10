@@ -24,6 +24,7 @@ type Fanout struct {
 	Sessions         session.Store
 	Phases           *workflowphases.Service
 	Questions        *workflowreview.Questions
+	Assignments      *workflowreview.Assignments
 	Policy           FanoutRoster
 	Progress         progress.RunScopedStore
 	WorkerTasks      func(context.Context, string) ([]api.WorkerTask, error)

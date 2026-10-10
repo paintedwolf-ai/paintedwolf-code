@@ -96,17 +96,18 @@ func TestCollectFailedLeavesUnknownIgnored(t *testing.T) {
 }
 
 func TestReviewGateRequiresCommittedWorkflowAcceptance(t *testing.T) {
-	mgr, run, manifest := reviewAssignmentFixture(t)
-	vars, err := mgr.Store.GetScaffoldVars(t.Context(), run.ID)
-	testutil.FailErr(t, "read review variables", err)
-	// The fixture's evidence provider reports success even before submission.
-	evaluator := RegistryGateEvaluator{Registry: mgr.Registry}
+	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDepsWithEvidence())
+	testutil.FailErr(t, "create successful evidence registry", err)
+	run := &api.WorkflowRun{SessionID: "session", CurrentPhase: "review"}
+	manifest := workflowdef.Manifest{PhaseDefs: []workflowdef.PhaseDef{{ID: "review", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"evidence_passed:rl_key"}, ReviewLoop: &workflowdef.ReviewLoopDef{EvidenceKey: "rl_key"}}}}
+	evaluator := RegistryGateEvaluator{Registry: reg}
+	var vars map[string]any
 	passed, _, err := evaluator.PhaseGateMet(t.Context(), manifest, run, vars)
 	testutil.FailErr(t, "check prepared evidence", err)
 	if passed {
 		t.Fatal("external evidence bypassed verdict commit")
 	}
-	vars = SetGateSatisfied(vars, "evidence_passed:rl_key", true)
+	vars = runstate.SetGateSatisfied(vars, "evidence_passed:rl_key", true)
 	passed, _, err = evaluator.PhaseGateMet(t.Context(), manifest, run, vars)
 	testutil.FailErr(t, "check committed acceptance", err)
 	if !passed {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/packboard"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -32,7 +33,7 @@ func RegisterBoardTools(reg *tools.DefaultRegistry, deps ToolDeps) error {
 	if err := reg.Register("pack_board", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		if args["review_view"] != nil || args["assignment_id"] != nil || args["cursor"] != nil {
 			if deps.ReviewView == nil {
-				return "", &tools.ToolReject{Code: "WORKFLOW_REVIEW_VIEW_INVALID", Data: map[string]any{"reason": "review_unavailable", "field": "review_view"}}
+				return "", &toolrejection.ToolReject{Code: "WORKFLOW_REVIEW_VIEW_INVALID", Data: map[string]any{"reason": "review_unavailable", "field": "review_view"}}
 			}
 			return deps.ReviewView(ctx, args, tctx)
 		}

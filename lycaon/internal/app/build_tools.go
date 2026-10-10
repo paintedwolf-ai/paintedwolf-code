@@ -8,9 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/boot"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/captureprojection"
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -19,12 +17,10 @@ import (
 	"github.com/lycaon/lycaon/internal/parse"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -192,47 +188,7 @@ func taskToolDeps(b *serveBuilder) worker.TaskToolDeps {
 			}
 			return dec.WorkerID, true, nil
 		},
-		ComposePrompt: func(ctx context.Context, tctx tools.ToolContext, agentType string, brief wire.WorkerTaskCharter, workerJobID string, scope *wire.TaskScope, maxToolLoops int) (string, error) {
-			msgs, err := b.storage.Sessions.GetMessages(ctx, tctx.Identity.SessionID)
-			if err != nil {
-				return brief.Goal, err
-			}
-			in := inject.WorkerTaskAssignmentInput{
-				SessionID:        tctx.Identity.SessionID,
-				ProjectDir:       tctx.ActiveRootPath(),
-				Charter:          brief,
-				AgentType:        agentType,
-				WorkerJobID:      workerJobID,
-				MaxToolLoops:     maxToolLoops,
-				Attachments:      surface.SessionForwardedAttachments(msgs),
-				RecordedVerdicts: recordedVerdictsForLeg(ctx, b.workflows.Manager, tctx.Identity.SessionID),
-			}
-			if scope != nil {
-				in.Scope = *scope
-			}
-			run, err := b.workflows.Store.Runs.ActiveBySession(ctx, tctx.Identity.SessionID)
-			if err != nil {
-				return "", err
-			}
-			if run != nil {
-				manifest, err := b.workflows.Manager.Resolver.ForRunID(ctx, run.ID)
-				if err != nil {
-					return "", err
-				}
-				in.CoverageAssignment, err = b.workflows.Manager.Coverage.CoverageAssignment(ctx, run, manifest, agentType)
-				if err != nil {
-					return "", err
-				}
-				if def, ok := manifest.PhaseByID(run.CurrentPhase); ok && def.ReviewLoop != nil && def.ReviewLoop.IncludeScanInventory {
-					inventory, err := scan.WorkflowAdvisoryInventory(ctx, b.scanning.Store, run.ID)
-					if err != nil {
-						return "", err
-					}
-					in.ScanInventory = inventory
-				}
-			}
-			return inject.RenderWorkerTaskAssignment(ctx, b.delegations.InjectRenderer, in)
-		},
+		ComposePrompt: b.composeWorkerAssignment,
 		WebSearchEnabled: func() bool {
 			if b.boards == nil || b.boards.WebRuntime.Config == nil {
 				return true
@@ -240,29 +196,6 @@ func taskToolDeps(b *serveBuilder) worker.TaskToolDeps {
 			return b.boards.WebRuntime.Config.SearchEnabled()
 		},
 	}
-}
-
-// recordedVerdictsForLeg projects stamped verdicts onto the assignment DTO.
-// The mapping lives here because inject cannot import workflow — workflow
-// already imports inject.
-func recordedVerdictsForLeg(ctx context.Context, mgr *workflow.RunManager, sessionID string) []inject.RecordedVerdict {
-	stamped := mgr.Verdicts.StampedReviewVerdicts(ctx, sessionID)
-	if len(stamped) == 0 {
-		return nil
-	}
-	out := make([]inject.RecordedVerdict, 0, len(stamped))
-	for _, v := range stamped {
-		fields := make([]inject.RecordedVerdictField, 0, len(v.Fields))
-		for _, f := range v.Fields {
-			fields = append(fields, inject.RecordedVerdictField{Name: f.Name, Value: f.Value})
-		}
-		out = append(out, inject.RecordedVerdict{
-			Phase:       v.Phase,
-			EvidenceKey: v.EvidenceKey,
-			Fields:      fields,
-		})
-	}
-	return out
 }
 
 func (b *serveBuilder) wireMCP() error {
