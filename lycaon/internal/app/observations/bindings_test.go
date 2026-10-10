@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workscope"
 )
 
 type repositoryObserver func(context.Context, string)
@@ -26,7 +27,10 @@ func TestObserverReleaseDrainsActiveCallback(t *testing.T) {
 	})
 	release := Bind(&events.Publisher{}, nil, nil, nil, nil, repository, nil, nil)
 	notifyDone := make(chan struct{})
-	go func() { repochange.Notify(t.Context(), repochange.Event{}); close(notifyDone) }()
+	go func() {
+		repochange.Notify(t.Context(), repochange.Event{ProjectDir: t.TempDir(), Kind: repochange.WorktreeChanged})
+		close(notifyDone)
+	}()
 	<-entered
 	released := make(chan error, 1)
 	go func() { released <- release(t.Context()) }()
@@ -39,25 +43,21 @@ func TestObserverReleaseDrainsActiveCallback(t *testing.T) {
 	close(finish)
 	<-notifyDone
 	testutil.FailErr(t, "release observers", <-released)
-	repochange.Notify(t.Context(), repochange.Event{})
+	repochange.Notify(t.Context(), repochange.Event{ProjectDir: t.TempDir(), Kind: repochange.WorktreeChanged})
 	if calls.Load() != 1 {
 		t.Fatalf("closed observer calls = %d", calls.Load())
 	}
 }
 
 func TestObserverReleaseRefusesAlreadyCopiedCallback(t *testing.T) {
-	entered, finish := make(chan struct{}), make(chan struct{})
-	releaseBlocker := repochange.RegisterObserver(func(context.Context, repochange.Event) { close(entered); <-finish })
-	t.Cleanup(releaseBlocker)
+	var work workscope.Group
 	var calls atomic.Int32
-	release := Bind(&events.Publisher{}, nil, nil, nil, nil, repositoryObserver(func(context.Context, string) { calls.Add(1) }), nil, nil)
-	notifyDone := make(chan struct{})
-	go func() { repochange.Notify(t.Context(), repochange.Event{}); close(notifyDone) }()
-	<-entered
-	testutil.FailErr(t, "release copied observer", release(t.Context()))
-	close(finish)
-	<-notifyDone
-	if calls.Load() != 0 {
+	copied := ownedObserver(&work, func(context.Context, repochange.Event) { calls.Add(1) })
+	copied(t.Context(), repochange.Event{})
+	work.Stop()
+	testutil.FailErr(t, "drain observer owner", work.Wait(t.Context()))
+	copied(t.Context(), repochange.Event{})
+	if calls.Load() != 1 {
 		t.Fatalf("copied callback admitted after release: %d", calls.Load())
 	}
 }
