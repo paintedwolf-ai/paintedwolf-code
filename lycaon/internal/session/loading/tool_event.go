@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// observeToolCall records a tool the chat called and, on the turn's first
+// ObserveToolCall records a tool the chat called and, on the turn's first
 // loadable tool, asks the engine which skill that tool's work needs.
 func (m *Service) ObserveToolCall(ctx context.Context, sess *api.Session, tctx tools.ToolContext, tool string) {
 	if m == nil || sess == nil {

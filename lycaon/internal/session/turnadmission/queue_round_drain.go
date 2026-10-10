@@ -102,7 +102,7 @@ func (d *roundEndDrains) wait(ctx context.Context) {
 	<-done
 }
 
-// drainQueuedPromptsAtRoundEnd dispatches receipts the turn-end check left
+// RoundEnd dispatches receipts the turn-end check left
 // queued because the round was still open.
 func (m *Service) RoundEnd(ctx context.Context, sessionID string) {
 	if m == nil || m.store == nil || m.Gate.InProgress(ctx, sessionID) {

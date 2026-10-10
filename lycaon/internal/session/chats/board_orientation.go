@@ -4,7 +4,7 @@ import (
 	"context"
 )
 
-// ReopenBoardOrientationOnRootAttach refreshes open project sessions.
+// ReopenOrientation refreshes open project sessions.
 func (m *Service) ReopenOrientation(ctx context.Context, projectID string, board Orientation) {
 	if m == nil || m.store == nil || projectID == "" {
 		return

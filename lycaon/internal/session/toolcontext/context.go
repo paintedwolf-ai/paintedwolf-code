@@ -87,7 +87,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 	return tctx, nil
 }
 
-// attachSkillReadRoots derives confinement read roots from the compiled machine or effective skills.
+// AttachSkillReadRoots derives confinement read roots from the compiled machine or effective skills.
 func (m *Service) AttachSkillReadRoots(
 	ctx context.Context,
 	sess *api.Session,

@@ -43,18 +43,18 @@ func (m *Service) EmitMatch(ctx context.Context, sessionID string, id anchor.ID,
 	m.anchors.EmitMatch(ctx, sessionID, id, env, match)
 }
 
-// DropCoordinatorKick removes queued or staged guidance.
+// Drop removes queued or staged guidance.
 func (m *Service) Drop(sessionID string, id anchor.ID) {
 	m.anchors.Drop(sessionID, id)
 }
 
-// coordinatorKickIDs drops guidance whose live obligation has cleared and
+// PendingIDs drops guidance whose live obligation has cleared and
 // lists the kicks the turn opening now delivers.
 func (m *Service) PendingIDs(ctx context.Context, sessionID string) []string {
 	return m.kicks.PendingKickIDsUnless(sessionID, m.cleared(ctx, sessionID))
 }
 
-// coordinatorKickCleared reports guidance whose obligation cleared while it waited.
+// cleared reports guidance whose obligation cleared while it waited.
 func (m *Service) cleared(ctx context.Context, sessionID string) kick.KickSkip {
 	feedbackPending := anchor.InformRender(anchor.FeedbackPending)
 	budgetRequested := anchor.InformRender(anchor.WorkerBudgetRequested)
@@ -92,7 +92,7 @@ func (m *Service) EmitEager(ctx context.Context, sessionID string, id anchor.ID,
 	m.anchors.EmitEager(ctx, sessionID, id, data)
 }
 
-// deliverPendingKicks records every kick queued for the turn, oldest first,
+// DeliverPending records every kick queued for the turn, oldest first,
 // so a turn opened for one fact also sees the facts that waited before it.
 func (m *Service) DeliverPending(ctx context.Context, sessionID string) error {
 	kicks := m.kicks
@@ -145,7 +145,7 @@ func (m *Service) appendHostKickMessage(ctx context.Context, sessionID, kickID, 
 	return kickMsg, m.transcript.Append(ctx, sessionID, kickMsg)
 }
 
-// takePhaseGuidance renders and records the guidance of a phase entered since
+// TakePhase renders and records the guidance of a phase entered since
 // the coordinator's last model call. Only a coordinator turn waits on a phase.
 func (m *Service) TakePhase(ctx context.Context, sessionID string) ([]api.Message, error) {
 	kicks := m.kicks
