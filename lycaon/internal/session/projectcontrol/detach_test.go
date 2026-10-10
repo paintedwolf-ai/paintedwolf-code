@@ -69,7 +69,7 @@ func TestProjectDeleteStopsDependenciesAndRetargetsDetachedSessions(t *testing.T
 		t.Fatal("dependency details lost busy session")
 	}
 	if err = s.ForceCancelForProjectDelete(t.Context(), "project", deps); err != nil {
-		t.Fatal(err)
+		t.Fatalf("s.ForceCancelForProjectDelete failed: %v", err)
 	}
 	if !reflect.DeepEqual(actions.stopped, []string{"busy"}) || !reflect.DeepEqual(actions.idle, actions.stopped) || !reflect.DeepEqual(actions.roots, []string{"one", "two"}) || !reflect.DeepEqual(actions.kicks, []string{"busy", "idle"}) {
 		t.Fatalf("actions=%+v", actions)

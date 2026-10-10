@@ -23,7 +23,7 @@ func TestWorkspaceImageReaderValidatesContentAndContainmentBeforeCapture(t *test
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := os.WriteFile(filepath.Join(root, tc.name), tc.body, 0o600); err != nil {
-				t.Fatal(err)
+				t.Fatalf("write file: %v", err)
 			}
 			image, err := reader(t.Context(), tc.name)
 			if (err == nil) != tc.valid {
@@ -36,10 +36,10 @@ func TestWorkspaceImageReaderValidatesContentAndContainmentBeforeCapture(t *test
 	}
 	outside := filepath.Join(t.TempDir(), "private.png")
 	if err := os.WriteFile(outside, png, 0o600); err != nil {
-		t.Fatal(err)
+		t.Fatalf("write file: %v", err)
 	}
 	if err := os.Symlink(outside, filepath.Join(root, "linked.png")); err != nil {
-		t.Fatal(err)
+		t.Fatalf("os.Symlink failed: %v", err)
 	}
 	for _, ref := range []string{"linked.png", "missing.png", "../private.png", "."} {
 		if _, err := reader(t.Context(), ref); err == nil {

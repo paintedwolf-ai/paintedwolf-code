@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -50,7 +51,7 @@ func TestStateQueryReadsActiveScaffoldAndRefusesMissingState(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			reg := tools.NewDefaultRegistry()
 			if err := RegisterStateTools(reg, StateToolDeps{Runs: tc.runs, Sessions: querySessions{root}}); err != nil {
-				t.Fatal(err)
+				t.Fatalf("RegisterStateTools failed: %v", err)
 			}
 			out, err := reg.Run(t.Context(), "state_query", tc.args, tctx)
 			if (err != nil) != tc.refused {
@@ -59,10 +60,13 @@ func TestStateQueryReadsActiveScaffoldAndRefusesMissingState(t *testing.T) {
 			if err == nil {
 				var decoded any
 				if err = json.Unmarshal([]byte(out), &decoded); err != nil {
-					t.Fatal(err)
+					t.Fatalf("unmarshal JSON document: %v", err)
 				}
 				if tc.name == "idle" && out != tc.want {
 					t.Fatalf("idle=%q", out)
+				}
+				if tc.name == "whole state" && decoded.(map[string]any)["answer"] != tc.want {
+					t.Fatalf("retained scaffold=%v", decoded)
 				}
 				if tc.name == "nested" {
 					if decoded.(map[string]any)["value"] != tc.want {
@@ -74,7 +78,7 @@ func TestStateQueryReadsActiveScaffoldAndRefusesMissingState(t *testing.T) {
 	}
 	reg := tools.NewDefaultRegistry()
 	if err := RegisterStateTools(reg, StateToolDeps{Runs: queryRuns{}, Sessions: querySessions{root}}); err != nil {
-		t.Fatal(err)
+		t.Fatalf("RegisterStateTools failed: %v", err)
 	}
 	for _, name := range []string{"state_close", "state_start", "state_update"} {
 		if _, err := reg.Run(t.Context(), name, nil, tctx); err == nil {
@@ -82,8 +86,10 @@ func TestStateQueryReadsActiveScaffoldAndRefusesMissingState(t *testing.T) {
 		}
 	}
 	for _, path := range []string{"review_loop.current", "gates.decision", "hitl_consulted:phase"} {
-		if _, err := reg.Run(t.Context(), "state_update", map[string]any{"path": path, "value": true}, tctx); err == nil {
-			t.Fatalf("agent wrote protected state %s", path)
+		_, err := reg.Run(t.Context(), "state_update", map[string]any{"path": path, "value": true}, tctx)
+		var rejection *toolrejection.ToolReject
+		if !errors.As(err, &rejection) || rejection.Code != "TOOL_ARGS_INVALID" || rejection.Data["reason"] != "host_managed_workflow_state" || rejection.Data["path"] != path {
+			t.Fatalf("protected state %s refusal=%v", path, err)
 		}
 	}
 }

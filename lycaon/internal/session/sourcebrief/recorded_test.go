@@ -22,7 +22,7 @@ func TestRecordedBriefPreservesOpeningAndRejectsCorruptRows(t *testing.T) {
 	brief := inject.SourceChangeBrief{OtherFiles: 2, OtherEffects: 3}
 	raw, err := json.Marshal(brief)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("operation failed: %v", err)
 	}
 	s := New(briefRecords{records: map[string]string{"opening": string(raw), "corrupt": "{", "empty": "{}"}}, nil)
 	got := s.Recorded(t.Context(), &api.Session{ID: "session"})

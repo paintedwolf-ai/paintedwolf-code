@@ -29,7 +29,7 @@ func TestWorkflowStampPreservesExplicitRunAndBoundaryMessages(t *testing.T) {
 	publisher := &Messages{Sessions: sessions, Runs: publicationRuns{}}
 	err := publisher.StampAndAppendMessages(t.Context(), "session", api.Message{ID: "ordinary"}, api.Message{ID: "explicit", WorkflowRunID: "previous"}, api.Message{ID: "boundary", Kind: api.MessageKindWorkflowBoundary})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("operation failed: %v", err)
 	}
 	if len(sessions.rows) != 3 || sessions.rows[0].WorkflowRunID != "active" || sessions.rows[1].WorkflowRunID != "previous" || sessions.rows[2].WorkflowRunID != "" {
 		t.Fatalf("stamped messages=%+v", sessions.rows)

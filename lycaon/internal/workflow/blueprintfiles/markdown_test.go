@@ -13,7 +13,7 @@ func TestBlueprintViewAndContentUsePersistedMarkdown(t *testing.T) {
 	root := t.TempDir()
 	content := "---\ntitle: Release plan\ncount: 2\nprivate: secret\n---\nBody\n"
 	if err := WriteBlueprintFile(root, "plans/release.md", content); err != nil {
-		t.Fatal(err)
+		t.Fatalf("WriteBlueprintFile failed: %v", err)
 	}
 	view, err := LoadBlueprintView(root, &workflowdef.BlueprintDef{Path: "plans/release.md", Frontmatter: []string{" title ", "count", "", "missing"}})
 	if err != nil || !reflect.DeepEqual(view, map[string]string{"title": "Release plan", "count": "2"}) {
@@ -28,7 +28,7 @@ func TestBlueprintViewAndContentUsePersistedMarkdown(t *testing.T) {
 	}
 	outside := t.TempDir()
 	if err := os.Symlink(outside, filepath.Join(root, "linked")); err != nil {
-		t.Fatal(err)
+		t.Fatalf("os.Symlink failed: %v", err)
 	}
 	if err := WriteBlueprintFile(root, "linked/escape.md", content); err == nil {
 		t.Fatal("write followed symlink outside project")

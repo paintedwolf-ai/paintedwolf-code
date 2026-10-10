@@ -35,17 +35,17 @@ func TestStateUpdateCommitsCustomFactOnceUnderOperationReceipt(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	deps := StateToolDeps{Runs: runs, Sessions: querySessions{root}, Vars: runstate.NewVariables(nil, nil, nil), Journal: &runstate.Journal{Commands: commands, Directories: updateDirectories{root}}}
 	if err := RegisterStateTools(reg, deps); err != nil {
-		t.Fatal(err)
+		t.Fatalf("RegisterStateTools failed: %v", err)
 	}
 	ctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session", ToolCallID: "operation"}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}}}
 	args := map[string]any{"path": "custom.answer", "value": "42"}
 	first, err := reg.Run(t.Context(), "state_update", args, ctx)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("operation failed: %v", err)
 	}
 	replay, err := reg.Run(t.Context(), "state_update", args, ctx)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("operation failed: %v", err)
 	}
 	if first != replay || len(commands.commits) != 1 {
 		t.Fatalf("first=%q replay=%q commits=%v", first, replay, commands.commits)

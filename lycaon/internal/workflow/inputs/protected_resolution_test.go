@@ -19,11 +19,11 @@ func TestSecretResolutionRetainsOnlyReferenceAndRollsBackFailedCapture(t *testin
 			ctx := workflowCaller(t, mgr)
 			run, err := startRun(ctx, mgr, "sess-1", "ask-user-host", "1.0.0")
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("operation failed: %v", err)
 			}
 			ask, err := mgr.Asks.RequestUserInput(ctx, "sess-1", workflowinputs.UserInputRequest{Prompt: "Provide registry key", ResponseType: workflowdef.FeedbackResponseSecret, Secret: &workflowdef.SecretInputSpec{Name: "Registry key", Purpose: "Publish artifact", Scope: "chat"}, ToolCallID: "capture-call"})
 			if err != nil {
-				t.Fatal(err)
+				t.Fatalf("operation failed: %v", err)
 			}
 			const raw = "protected-response-never-persisted"
 			const ref = "{{paintedwolf-secret:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa}}"
@@ -47,16 +47,16 @@ func TestSecretResolutionRetainsOnlyReferenceAndRollsBackFailedCapture(t *testin
 			}
 			vars, readErr := mgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 			if readErr != nil {
-				t.Fatal(readErr)
+				t.Fatalf("read retained workflow variables: %v", readErr)
 			}
 			msgs, readErr := store.GetMessages(ctx, "sess-1")
 			if readErr != nil {
-				t.Fatal(readErr)
+				t.Fatalf("read retained transcript: %v", readErr)
 			}
 			for _, value := range []any{vars, msgs} {
 				encoded, e := json.Marshal(value)
 				if e != nil {
-					t.Fatal(e)
+					t.Fatalf("encode retained state: %v", e)
 				}
 				if strings.Contains(string(encoded), raw) {
 					t.Fatal("raw response persisted")

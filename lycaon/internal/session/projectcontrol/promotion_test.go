@@ -43,7 +43,7 @@ func TestPromotionAndRejectionRecordHostEventsAtCurrentTurn(t *testing.T) {
 	}
 	_, err = s.RejectOverlay(t.Context(), "session", "overlay", "human refused")
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("operation failed: %v", err)
 	}
 	if f.reconciles != 4 || f.promotes != 2 || len(f.rows) != 2 {
 		t.Fatalf("effects=%+v", f)
@@ -53,7 +53,7 @@ func TestPromotionAndRejectionRecordHostEventsAtCurrentTurn(t *testing.T) {
 			t.Fatalf("event=%+v", row)
 		}
 	}
-	if !strings.Contains(f.rows[0].Content, `"status":"merged"`) {
+	if !strings.Contains(f.rows[0].Content, `"merge_status":"merged"`) {
 		t.Fatalf("promotion event=%q", f.rows[0].Content)
 	}
 }
