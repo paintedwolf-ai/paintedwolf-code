@@ -3,6 +3,7 @@ package workscope
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"
 	"time"
 )
@@ -50,7 +51,7 @@ func TestSealPreservesWorkUntilShutdown(t *testing.T) {
 	var group Group
 	ctx, finish, err := group.Begin(t.Context())
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "begin work", err)
 	}
 	defer finish()
 	group.Seal()
