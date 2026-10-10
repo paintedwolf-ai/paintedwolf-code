@@ -10,35 +10,25 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/db/migrations"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestReviewAssignmentMigrationPreservesBaseline(t *testing.T) {
-	source, err := sql.Open("sqlite", "file:review-upgrade?mode=memory&cache=private")
-	testutil.FailErr(t, "open source", err)
+	original, err := os.ReadFile(filepath.Join("..", "..", "testdata", "upgrade-corpus", "1.0.1", "store.db"))
+	testutil.FailErr(t, "read released corpus", err)
+	path := filepath.Join(t.TempDir(), "store.db")
+	testutil.FailErr(t, "copy released corpus", os.WriteFile(path, original, 0600))
+	source, err := sql.Open("sqlite", path)
+	testutil.FailErr(t, "open released source", err)
 	defer source.Close()
-	schema, err := schemaFS.ReadFile("schema.sql")
-	testutil.FailErr(t, "read schema", err)
-	_, additions, _ := strings.Cut(string(reviewAssignmentsMigration), "\n")
-	additions, _, _ = strings.Cut(additions, "\nALTER TABLE workflow_verdict_operations")
-	old := strings.TrimSuffix(string(schema), additions)
-	old = strings.Replace(old, "    review_revision INTEGER NOT NULL DEFAULT 0 CHECK (review_revision >= 0),\n", "", 1)
-	old = strings.Replace(old, "    updated_at TEXT NOT NULL,\n    evidence_published INTEGER NOT NULL DEFAULT 0 CHECK (evidence_published IN (0, 1))\n", "    updated_at TEXT NOT NULL\n", 1)
-	old = strings.Replace(old, " OR (status = 'committed' AND evidence_published = 0)", "", 1)
-	if old == string(schema) {
-		t.Fatal("migration is not appended to fresh schema")
-	}
-	_, err = source.ExecContext(t.Context(), old)
-	testutil.FailErr(t, "create previous schema", err)
-	_, err = source.ExecContext(t.Context(), "PRAGMA user_version=1")
-	testutil.FailErr(t, "stamp previous revision", err)
 	baseline, err := inspectSchema(t.Context(), source)
-	testutil.FailErr(t, "read previous baseline", err)
+	testutil.FailErr(t, "read released baseline", err)
 	target, err := CurrentBaseline(t.Context())
 	testutil.FailErr(t, "read current baseline", err)
-	step := reviewAssignmentsStep(target)
+	step := migrations.SourceNamespace(target)
 	if baseline != step.From {
-		t.Fatalf("previous baseline is %+v; registered %+v", baseline, step.From)
+		t.Fatalf("released baseline is %+v; registered %+v", baseline, step.From)
 	}
 	tx, err := source.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin migration", err)
