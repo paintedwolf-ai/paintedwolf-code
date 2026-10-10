@@ -25,7 +25,7 @@ import (
 
 var turnLoadLog = observability.LazyComponent("turn_load")
 
-// SetTurnLoads installs the ledger of loaded schemas shared with request_tools.
+// SetLedger installs the ledger of loaded schemas shared with request_tools.
 func (m *Service) SetLedger(ledger *turnload.Ledger) {
 	if m != nil {
 		m.Ledger = ledger
@@ -126,7 +126,7 @@ func (m *Service) turnToolSets(ctx context.Context, sess *api.Session, profileID
 	return floor, loadable, cards
 }
 
-// beginTurnLoads runs the turn decision once per human request, or per worker
+// Begin runs the turn decision once per human request, or per worker
 // leg's brief, when the governing workflow run declares turn decisions, and
 // records it on the ledger. A host turn decides only for a request that has
 // no decision yet; otherwise it keeps the request's loads. openingMessageID
@@ -225,7 +225,7 @@ func nameSet(names []string) map[string]bool {
 	return out
 }
 
-// finishTurnLoads writes the turn's receipt.
+// Finish writes the turn's receipt.
 func (m *Service) Finish(ctx context.Context, sess *api.Session, sessionID string, tctx tools.ToolContext, decision *Decision) {
 	if m == nil || decision == nil {
 		return

@@ -7,7 +7,7 @@ import (
 
 type promotionHook func(ctx context.Context, projectID string)
 
-// SetPromotionHook wires turn-gated promotion recovery when a project quiesces.
+// SetPromotion wires turn-gated promotion recovery when a project quiesces.
 func (m *Service) SetPromotion(fn promotionHook) {
 	if m == nil {
 		return

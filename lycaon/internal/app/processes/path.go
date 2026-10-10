@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/userpath"
 )
 
-// wireUserPath establishes the shared PATH before executable discovery and child launches.
+// ResolvePath establishes the shared PATH before executable discovery and child launches.
 func (b *Runtime) ResolvePath(ctx context.Context) error {
 	cfg, err := userpath.LoadConfig()
 	if err != nil {

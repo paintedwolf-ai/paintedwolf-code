@@ -29,7 +29,7 @@ func (c *Service) WorkerLegs(ctx context.Context, parentSessionID string, since 
 	return legs, nil
 }
 
-// reviewEvidenceTasks uses workflow ownership when present and intent time otherwise.
+// Tasks uses workflow ownership when present and intent time otherwise.
 func (m *Service) Tasks(ctx context.Context, sessionID string, since time.Time) ([]api.WorkerTask, error) {
 	if m == nil || m.workers == nil || m.store == nil {
 		return nil, nil

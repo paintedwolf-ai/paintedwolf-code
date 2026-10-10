@@ -213,7 +213,7 @@ func (m *Service) StopRuntime(ctx context.Context, sess store.SessionTreeMember,
 	return errors.Join(errs...)
 }
 
-// acquireStoppedTurn takes the session's prompt lock from the turn the stop
+// AcquireStoppedTurn takes the session's prompt lock from the turn the stop
 // already cancelled. A turn still inside a tool after turnReleaseTimeout is
 // abandoned: its context is done, so the stop records the interruption and
 // settles the session without waiting for it. The returned func releases the
