@@ -143,6 +143,7 @@ func TestOutboundSecretFloorJ4WebSearchApprove(t *testing.T) {
 
 	got := rec.snapshot()
 	if len(got) != 1 {
+		dumpSessionFloorDebug(t, h, sess.ID, nil)
 		t.Fatalf("provider HTTP calls=%d want 1: %+v", len(got), got)
 	}
 	u, err := url.Parse(got[0].URL)
@@ -176,6 +177,7 @@ func TestOutboundSecretFloorJ5ReadAloneDoesNotAsk(t *testing.T) {
 	}
 	testutil.FailErr(t, "prompt", awaitOutboundPrompt(t, h, sess.ID, done))
 	if got := rec.snapshot(); len(got) != 1 || !strings.Contains(got[0].URL, "weather") {
+		dumpSessionFloorDebug(t, h, sess.ID, nil)
 		t.Fatalf("unrelated search did not reach provider: %+v", got)
 	}
 }
@@ -300,6 +302,7 @@ func TestOutboundSecretFloorJ6InertMatcherParity(t *testing.T) {
 	}
 	got := rec.snapshot()
 	if len(got) != 1 {
+		dumpSessionFloorDebug(t, h, sess.ID, nil)
 		t.Fatalf("provider HTTP calls=%d want 1 (fail-same-as-absent): %+v", len(got), got)
 	}
 	u, err := url.Parse(got[0].URL)
