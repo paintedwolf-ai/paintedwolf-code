@@ -49,7 +49,7 @@ func TestPhaseAdvanceDeliversOnlyRunningRunTransition(t *testing.T) {
 		t.Fatalf("transition=%v", delivered)
 	}
 	delivered = nil
-	run.Status = api.WorkflowRunStatusCompleted
+	run.Status = api.WorkflowRunStatusComplete
 	publisher.PublishPhaseAdvanced(t.Context(), run, "review")
 	if delivered != nil {
 		t.Fatalf("completed run was resumed: %v", delivered)
