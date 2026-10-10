@@ -12,7 +12,6 @@ func RunCoverageReview(verdicts []PhaseVerdict) *api.CoverageReview {
 			continue
 		}
 		out = nil
-		out = nil
 		if v.Record.GateVerdict != "approved" {
 			continue
 		}
