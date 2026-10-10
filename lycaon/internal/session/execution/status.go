@@ -13,7 +13,6 @@ import (
 
 type PreviewStore interface {
 	LastAssistantMessageContent(context.Context, string) (string, error)
-	LastTurnMessageContent(context.Context, string) (string, error)
 }
 type StatusStore interface {
 	PreviewStore
@@ -58,19 +57,6 @@ func LastAssistantMessageContent(ctx context.Context, store PreviewStore, sessio
 		return ""
 	}
 	content, err := store.LastAssistantMessageContent(ctx, sessionID)
-	if err != nil {
-		return ""
-	}
-	return content
-}
-
-// LastTurnMessageContent returns the latest visible preview.
-
-func LastTurnMessageContent(ctx context.Context, store PreviewStore, sessionID string) string {
-	if store == nil {
-		return ""
-	}
-	content, err := store.LastTurnMessageContent(ctx, sessionID)
 	if err != nil {
 		return ""
 	}

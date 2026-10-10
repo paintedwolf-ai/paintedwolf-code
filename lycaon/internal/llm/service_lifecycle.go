@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/catalogruntime"
 	"github.com/lycaon/lycaon/internal/configdir"
@@ -40,9 +41,12 @@ func NewService(ctx context.Context, mock modelcall.LLMClient) (*Service, error)
 	registry.thinkingPolicy.Store(policy)
 	feed, feedErr := modelfeed.New(modelfeed.Options{})
 	if feedErr != nil {
-		return nil, fmt.Errorf("modelfeed: %w", feedErr)
+		return nil, errors.Join(fmt.Errorf("modelfeed: %w", feedErr), registry.discovery.Close(context.WithoutCancel(ctx)))
 	}
 	registry.SetModelFeed(ctx, feed)
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Join(err, registry.discovery.Close(context.WithoutCancel(ctx)))
+	}
 	var refreshCancel context.CancelFunc
 	var refreshDone <-chan struct{}
 	if ProviderUtilityCallsEnabled() {
@@ -125,7 +129,10 @@ func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *pro
 	}
 	// Initial discovery belongs to the allocating startup.
 	if err := r.rebuild(ctx); err != nil {
-		return nil, err
+		return nil, errors.Join(err, r.discovery.Close(context.WithoutCancel(ctx)))
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, errors.Join(err, r.discovery.Close(context.WithoutCancel(ctx)))
 	}
 	return r, nil
 }

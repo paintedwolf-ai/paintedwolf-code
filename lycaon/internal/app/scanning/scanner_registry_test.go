@@ -43,11 +43,11 @@ func TestInjectedScannerRegistryRemainsCallerOwned(t *testing.T) {
 	loaded, err := loadScannerRegistry(t.Context(), Dependencies{TestRegistry: injected, Resources: resources}, exec.ProcessPriorityBelowNormal, nil)
 	testutil.FailErr(t, "bind injected registry", err)
 	if loaded != injected || resources.release != nil {
-		t.Fatal("host took ownership of injected scanner fixture")
+		t.Fatal("host closed the caller-provided scanner fixture")
 	}
 }
 
-func TestCanceledScannerAllocationRegistersNoOwnedGeneration(t *testing.T) {
+func TestCanceledScannerAllocationRegistersNoGeneration(t *testing.T) {
 	t.Setenv(configdir.EnvConfigDir, t.TempDir())
 	resources := &scannerResources{}
 	ctx, cancel := context.WithCancel(t.Context())
