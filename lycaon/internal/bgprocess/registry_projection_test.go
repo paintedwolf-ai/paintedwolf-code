@@ -45,14 +45,14 @@ func newProjectionHarness(t *testing.T, ringBytes int) *projectionHarness {
 			h.mu.Unlock()
 		},
 	})
-	h.reg.SetCaptureProjector(projectionProjector())
+	h.reg.Output.SetCaptureProjector(projectionProjector())
 	h.proc = &Process{
 		Handle: "h1", SessionID: "s1", ProjectID: "p1", RootSessionID: "s1",
 		buffer: NewRingBuffer(ringBytes), running: true, done: make(chan struct{}),
 	}
-	h.reg.mu.Lock()
-	h.reg.sessions["s1"] = map[string]*Process{"h1": h.proc}
-	h.reg.mu.Unlock()
+	h.reg.jobs.mu.Lock()
+	h.reg.jobs.sessions["s1"] = map[string]*Process{"h1": h.proc}
+	h.reg.jobs.mu.Unlock()
 	// Close the synthetic process before registry cleanup.
 	t.Cleanup(func() { close(h.proc.done) })
 	return h
@@ -60,7 +60,7 @@ func newProjectionHarness(t *testing.T, ringBytes int) *projectionHarness {
 
 func (h *projectionHarness) write(stream, text string) {
 	cursor := h.proc.buffer.Append(stream, []byte(text))
-	h.reg.publishStream(context.Background(), h.proc, stream, cursor)
+	h.reg.Output.publishStream(context.Background(), h.proc, stream, cursor)
 }
 
 func (h *projectionHarness) published() []api.BackgroundProcessEvent {
@@ -96,7 +96,7 @@ func TestReadOutputWithholdsTheTailOfAnEvictedValue(t *testing.T) {
 	h.write("stdout", strings.Repeat("B", 12))
 	h.write("stdout", strings.Repeat("C", 12))
 
-	snapshot, err := h.reg.ReadOutput(context.Background(), "s1", "h1")
+	snapshot, err := h.reg.Output.ReadOutput(context.Background(), "s1", "h1")
 	if err != nil {
 		t.Fatalf("read projected output: %v", err)
 	}
@@ -140,7 +140,7 @@ func TestConcurrentStreamWritersNeverRegressTheProjection(t *testing.T) {
 	if strings.Contains(live, projectionSecret) {
 		t.Fatalf("assembled live stream exposed the value: %q", live)
 	}
-	final, err := h.reg.ReadOutput(context.Background(), "s1", "h1")
+	final, err := h.reg.Output.ReadOutput(context.Background(), "s1", "h1")
 	if err != nil {
 		t.Fatalf("read projected output: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestConcurrentStreamWritersNeverRegressTheProjection(t *testing.T) {
 
 func TestProjectScreenMasksAValueThatWrapsATerminalRow(t *testing.T) {
 	reg := newTestRegistry(t, DefaultConfig(), Hooks{})
-	reg.SetCaptureProjector(projectionProjector())
+	reg.Output.SetCaptureProjector(projectionProjector())
 	screen := ScreenSnapshot{
 		Cols: 12, Rows: 3, CursorCol: 8, CursorRow: 2,
 		Lines: []string{
@@ -162,7 +162,7 @@ func TestProjectScreenMasksAValueThatWrapsATerminalRow(t *testing.T) {
 			projectionSecret[12:] + "    ",
 		},
 	}
-	safe, err := reg.ProjectScreen(context.Background(), captureprojection.Scope{}, screen)
+	safe, err := reg.Output.ProjectScreen(context.Background(), captureprojection.Scope{}, screen)
 	if err != nil {
 		t.Fatalf("project screen: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestForegroundSnapshotTailIsScreenedBeforeItIsCut(t *testing.T) {
 // TestUnwiredProjectorIsAWiringStateNotAFailedScreen covers absent projection.
 func TestUnwiredProjectorIsAWiringStateNotAFailedScreen(t *testing.T) {
 	h := newProjectionHarness(t, DefaultRingBufferBytes)
-	h.reg.SetCaptureProjector(nil)
+	h.reg.Output.SetCaptureProjector(nil)
 	h.write("stdout", "plain output")
 
 	snap, err := h.reg.Snapshot(context.Background(), "s1", "h1", 64)
@@ -224,7 +224,7 @@ func TestFailedScreeningSuppressesTheTail(t *testing.T) {
 		secretmatch.NewInertMatcher(),
 		func(context.Context, string, string) error { return errUnavailablePrimer },
 	)
-	h.reg.SetCaptureProjector(failing)
+	h.reg.Output.SetCaptureProjector(failing)
 	h.proc.ProjectID = "p1"
 	h.proc.RootSessionID = "s1"
 	h.write("stdout", "plain output")

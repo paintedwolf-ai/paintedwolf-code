@@ -18,7 +18,7 @@ type sourceWatchJob struct {
 // CatalogSnapshotFunc reads a complete directory list for watch seeding.
 type CatalogSnapshotFunc func(ctx context.Context, projectID string, roots []sourcecatalog.Root) (sourcecatalog.Snapshot, error)
 
-func (s *Handler) ScheduleSourceWatch(parent context.Context, projectID string) {
+func (s *Watch) ScheduleSourceWatch(parent context.Context, projectID string) {
 	if projectID == "" {
 		return
 	}
@@ -57,7 +57,7 @@ func (s *Handler) ScheduleSourceWatch(parent context.Context, projectID string) 
 }
 
 // Bind the watcher before the catalog walk begins.
-func (s *Handler) EnsureSourceWatch(ctx context.Context, projectID string) (int, bool) {
+func (s *Watch) EnsureSourceWatch(ctx context.Context, projectID string) (int, bool) {
 	p, err := s.ProjectRegistry.Get(ctx, projectID)
 	if err != nil || p == nil {
 		return 0, false
@@ -66,7 +66,7 @@ func (s *Handler) EnsureSourceWatch(ctx context.Context, projectID string) (int,
 	return p.RootsGeneration, true
 }
 
-func (s *Handler) ensureWorkspaceWatch(ctx context.Context, p *project.Project) bool {
+func (s *Watch) ensureWorkspaceWatch(ctx context.Context, p *project.Project) bool {
 	roots := make([]sourcefeed.RootSpec, 0, len(p.Roots))
 	for _, r := range p.Roots {
 		roots = append(roots, sourcefeed.RootSpec{ID: r.ID, WorkspaceID: p.WorkspaceID(), Path: r.Path})
@@ -82,7 +82,7 @@ func (s *Handler) ensureWorkspaceWatch(ctx context.Context, p *project.Project) 
 }
 
 // Platforms with per-directory watches need the catalog to complete coverage.
-func (s *Handler) seedSourceWatch(ctx context.Context, p *project.Project) {
+func (s *Watch) seedSourceWatch(ctx context.Context, p *project.Project) {
 	needsSeed := s.WatchNeedsSeed
 	if needsSeed == nil {
 		needsSeed = sourcefeed.WatchNeedsSeed
@@ -127,7 +127,7 @@ func (s *Handler) seedSourceWatch(ctx context.Context, p *project.Project) {
 // the ledger records the named paths, then open documents fold in the bytes.
 // A window the watcher could not name needs the full inventory pass, which
 // runs on its own.
-func (s *Handler) observeWorkspaceChanges(ctx context.Context, p *project.Project, batch sourcefeed.ExternalBatch) {
+func (s *Watch) observeWorkspaceChanges(ctx context.Context, p *project.Project, batch sourcefeed.ExternalBatch) {
 	if batch.Resync || batch.HeadMoved || len(batch.Changes) == 0 {
 		s.scheduleWorkspaceInventory(ctx, p)
 	} else {
@@ -136,7 +136,7 @@ func (s *Handler) observeWorkspaceChanges(ctx context.Context, p *project.Projec
 	s.RevalidateEditorDocuments(ctx, p, batch)
 }
 
-func (s *Handler) observeLedgerPaths(ctx context.Context, p *project.Project, batch sourcefeed.ExternalBatch) {
+func (s *Watch) observeLedgerPaths(ctx context.Context, p *project.Project, batch sourcefeed.ExternalBatch) {
 	if s.SourceInventory == nil {
 		return
 	}
@@ -155,7 +155,7 @@ func (s *Handler) observeLedgerPaths(ctx context.Context, p *project.Project, ba
 
 // RevalidateEditorDocuments reconciles the open documents a batch names, or
 // every open document when it names none.
-func (s *Handler) RevalidateEditorDocuments(ctx context.Context, p *project.Project, batch sourcefeed.ExternalBatch) {
+func (s *Watch) RevalidateEditorDocuments(ctx context.Context, p *project.Project, batch sourcefeed.ExternalBatch) {
 	var selection []editordoc.PathRef
 	if !batch.Resync && !batch.HeadMoved {
 		selection = make([]editordoc.PathRef, 0, len(batch.Changes))

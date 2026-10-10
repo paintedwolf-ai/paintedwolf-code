@@ -72,7 +72,7 @@ func TestOversizeResponseEchoingAResolvedSecretLandsScrubbed(t *testing.T) {
 	deps, resolved, args := resolvedBearer(t, server, nil)
 	hostData := t.TempDir()
 	tctx := sessionContext(t.TempDir(), "call-1")
-	tctx.HostDataDir, tctx.CanonicalArgs, tctx.Secrets = hostData, args, resolved
+	tctx.Host.HostDataDir, tctx.Effects.CanonicalArgs, tctx.Effects.Secrets = hostData, args, resolved
 
 	got, err := runRequest(t, deps, resolved.Arguments, tctx)
 	testutil.FailErr(t, "oversize echo", err)
@@ -102,7 +102,7 @@ func TestResponsePathEchoingAResolvedSecretIsScrubbed(t *testing.T) {
 	deps, resolved, args := resolvedBearer(t, server, map[string]any{"response_path": "echo.json"})
 	root := t.TempDir()
 	tctx := sessionContext(root, "call-1")
-	tctx.CanonicalArgs, tctx.Secrets = args, resolved
+	tctx.Effects.CanonicalArgs, tctx.Effects.Secrets = args, resolved
 
 	got, err := runRequest(t, deps, resolved.Arguments, tctx)
 	testutil.FailErr(t, "landed echo", err)
@@ -119,7 +119,7 @@ func TestResponseWithoutAnEchoIsNotReportedAsRedacted(t *testing.T) {
 	server := bodyServer(t, "application/json", []byte(`{"ok":true}`))
 	deps, resolved, args := resolvedBearer(t, server, nil)
 	tctx := sessionContext(t.TempDir(), "call-1")
-	tctx.CanonicalArgs, tctx.Secrets = args, resolved
+	tctx.Effects.CanonicalArgs, tctx.Effects.Secrets = args, resolved
 	got, err := runRequest(t, deps, resolved.Arguments, tctx)
 	testutil.FailErr(t, "plain response", err)
 	if got.BodyRedacted || got.Body != `{"ok":true}` {

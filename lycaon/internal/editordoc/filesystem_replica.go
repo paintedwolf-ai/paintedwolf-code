@@ -7,17 +7,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/documentcore"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
 
 // Filesystem edits use the published state, preserving unseen concurrent text.
-func (s *Service) importPublishedText(ctx context.Context, d *Document, read *project.SourceReadResult, actor textActor) error {
+func (s *Service) importPublishedText(ctx context.Context, d *Document, read *projectsource.SourceReadResult, actor textActor) error {
 	return s.importPublishedReplica(ctx, d, read, actor, nil)
 }
 
 // A retained semantic checkpoint preserves character identities across rewind.
-func (s *Service) importPublishedReplica(ctx context.Context, d *Document, read *project.SourceReadResult, actor textActor, checkpoint []byte) error {
+func (s *Service) importPublishedReplica(ctx context.Context, d *Document, read *projectsource.SourceReadResult, actor textActor, checkpoint []byte) error {
 	staged, err := s.stagePublishedReplica(ctx, d, read, actor, checkpoint)
 	if err != nil {
 		return err
@@ -41,7 +41,7 @@ type stagedReplica struct {
 
 // stagePublishedReplica applies published bytes to the live replica. The caller
 // persists next and then settles the stage, which evicts the replica unless the write committed.
-func (s *Service) stagePublishedReplica(ctx context.Context, d *Document, read *project.SourceReadResult, actor textActor, checkpoint []byte) (*stagedReplica, error) {
+func (s *Service) stagePublishedReplica(ctx context.Context, d *Document, read *projectsource.SourceReadResult, actor textActor, checkpoint []byte) (*stagedReplica, error) {
 	s.replicas.mu.Lock()
 	defer s.replicas.mu.Unlock()
 	entry, err := s.loadReplica(ctx, d)
@@ -70,7 +70,7 @@ func (s *Service) stagePublishedReplica(ctx context.Context, d *Document, read *
 	if d.EOL == d.BaseEOL && d.MixedEOL == d.BaseMixedEOL {
 		next.EOL, next.MixedEOL = eol, mixed
 	}
-	if _, err := textfile.EncodeBounded(serializeEOL(next.Draft, next.EOL), next.Encoding, textfile.LimitsForRaw(project.SourceWriteMaxBytes)); err != nil {
+	if _, err := textfile.EncodeBounded(serializeEOL(next.Draft, next.EOL), next.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes)); err != nil {
 		s.replicas.evict(ctx, d.ID)
 		return nil, err
 	}

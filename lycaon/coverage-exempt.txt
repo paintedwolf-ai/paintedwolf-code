@@ -13,6 +13,8 @@
 internal/testutil
 internal/testdbseed
 internal/testtool
+internal/api/apitest
+internal/api/contractfixture
 internal/browser/browsertest
 internal/guidance/ledgertest
 internal/prompts/promptstest

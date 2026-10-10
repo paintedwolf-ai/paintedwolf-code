@@ -2140,6 +2140,12 @@
       "emit": "guard:sandbox_read_path",
       "summary": "{{ tool }} was not granted read access to {{ paintedwolf.path }}."
     },
+    "SANDBOX_REFUSAL_REPORT_SILENT": {
+      "branch_instruction": "Report the uncertainty; no refusal path was observed for this invocation",
+      "category": "recoverable",
+      "emit": "guard:sandbox",
+      "summary": "This confined invocation failed without a kernel refusal report."
+    },
     "SANDBOX_SOCKET_PATH_CHANGED": {
       "branch_instruction": "Branch on Code; re-request after the socket path is stable",
       "category": "recoverable",
@@ -2187,6 +2193,12 @@
       "category": "recoverable",
       "emit": "guard:sandbox_socks_proxy",
       "summary": "The SOCKS proxy environment request was invalid for this action."
+    },
+    "SANDBOX_TERMINAL_PATH_REFUSED": {
+      "branch_instruction": "Continue without these paths; do not request read_path, write_root, or host_execution to bypass this refusal",
+      "category": "control-plane",
+      "emit": "guard:sandbox",
+      "summary": "The sandbox refused terminal paths. Reads {{ paintedwolf.refused_terminal_read_paths }}; writes {{ paintedwolf.refused_terminal_write_paths }}."
     },
     "SANDBOX_TRY_HOST_EXECUTION": {
       "branch_instruction": "Request capability_request.host_execution for the command, or leave the operation out — do not wait on it",
@@ -2435,6 +2447,12 @@
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "The protected secret store is unavailable."
+    },
+    "SECRET_USE_WITHOUT_REFERENCE": {
+      "branch_instruction": "Remove secret_use; do not add a credential to satisfy this field",
+      "category": "recoverable",
+      "emit": "guard:secret",
+      "summary": "This invocation declares secret_use but passes no managed secret reference."
     },
     "SECURITY_DISABLED": {
       "branch_instruction": "Branch on Code; enable Security scanners in Settings before retrying scan tools",

@@ -16,24 +16,28 @@ func TestAssembledCloseoutClearsRetryStateOnlyAfterCommit(t *testing.T) {
 			cleared := 0
 			failure := errors.New("commit failed")
 			loop := NewPromptLoopForTest(PromptLoopDeps{
-				ClearCloseoutStall: func(context.Context, string) { cleared++ },
-				AssembleLedgerCloseout: func(context.Context, string, string, []string, string, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-					text := "retained report"
-					if result == "empty" {
-						text = ""
-					}
-					return guidance.CoordinatorCompletionReport{Synthesis: text}, &api.CitationGrounding{HostAssembled: true}
+				Closeout: CloseoutDeps{
+					ClearCloseoutStall: func(context.Context, string) { cleared++ },
+					AssembleLedgerCloseout: func(context.Context, string, string, []string, string, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+						text := "retained report"
+						if result == "empty" {
+							text = ""
+						}
+						return guidance.CoordinatorCompletionReport{Synthesis: text}, &api.CitationGrounding{HostAssembled: true}
+					},
 				},
-				UpdateMessage: func(context.Context, string, string, api.Message) error {
-					if result == "failed" {
-						return failure
-					}
-					return nil
+				Projection: ProjectionDeps{
+					UpdateMessage: func(context.Context, string, string, api.Message) error {
+						if result == "failed" {
+							return failure
+						}
+						return nil
+					},
 				},
 			})
 			st := &promptLoopTurnState{draftSlotID: "draft", draftSlotAppended: true,
 				closeoutRetry: closeoutRetryState{attempt: 3, prevKey: "offender", codes: []string{"citation"}}}
-			out, err := turnCloseout{loop}.emitAssembledCloseout(t.Context(), &api.Session{ID: "session"}, "session", "", "implement_investigate", "draft", nil, st, nil)
+			out, err := loop.Closeout.emitAssembledCloseout(t.Context(), &api.Session{ID: "session"}, "session", "", "implement_investigate", "draft", nil, st, nil)
 			if result == "failed" {
 				if !errors.Is(err, failure) {
 					t.Fatalf("error = %v, want commit failure", err)
@@ -58,21 +62,25 @@ func TestUserSendStartsCloseoutIntentOnlyOnDelivery(t *testing.T) {
 			resets := 0
 			failure := errors.New("delivery failed")
 			loop := NewPromptLoopForTest(PromptLoopDeps{
-				BeginCloseoutIntent: func(context.Context, string) { resets++ },
-				TakeUserSend: func(context.Context, string) ([]api.Message, error) {
-					switch delivery {
-					case "failed":
-						return nil, failure
-					case "empty":
-						return nil, nil
-					default:
-						return []api.Message{{Role: api.MessageRoleUser, Content: "new direction"}}, nil
-					}
+				Closeout: CloseoutDeps{
+					BeginCloseoutIntent: func(context.Context, string) { resets++ },
+				},
+				Inbox: InboxDeps{
+					TakeUserSend: func(context.Context, string) ([]api.Message, error) {
+						switch delivery {
+						case "failed":
+							return nil, failure
+						case "empty":
+							return nil, nil
+						default:
+							return []api.Message{{Role: api.MessageRoleUser, Content: "new direction"}}, nil
+						}
+					},
 				},
 			})
 			st := &promptLoopTurnState{closeoutRetry: closeoutRetryState{attempt: 3, prevKey: "offender", codes: []string{"citation"}}}
 			prompt := "original"
-			sent, err := loop.takeUserSend(t.Context(), "session", st, &prompt)
+			sent, err := loop.Inbox.takeUserSend(t.Context(), "session", st, &prompt)
 			if delivery == "failed" {
 				if !errors.Is(err, failure) {
 					t.Fatalf("delivery error = %v", err)
@@ -93,8 +101,10 @@ func TestUserSendStartsCloseoutIntentOnlyOnDelivery(t *testing.T) {
 
 func TestCloseoutContinuationRestoresWholeRetryProjection(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
-			return guidance.RetainedCloseout{Active: true, Attempt: 3, PrevKey: "offender", Drafted: "retained draft", ForcedBy: []string{"first", "second"}}
+		Closeout: CloseoutDeps{
+			CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
+				return guidance.RetainedCloseout{Active: true, Attempt: 3, PrevKey: "offender", Drafted: "retained draft", ForcedBy: []string{"first", "second"}}
+			},
 		},
 	})
 	setup, err := loop.preparePromptLoop(t.Context(), PromptRunInput{

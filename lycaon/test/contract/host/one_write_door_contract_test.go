@@ -235,6 +235,7 @@ func skipDoorScanDir(name string) bool {
 func isDoorTestSupport(rel string) bool {
 	return strings.HasPrefix(rel, "lycaon/cmd/codegen-") ||
 		strings.HasPrefix(rel, "lycaon/internal/testutil/") ||
+		strings.HasPrefix(rel, "lycaon/internal/api/contractfixture/") ||
 		strings.HasPrefix(rel, "lycaon/internal/testbaseline/") ||
 		strings.HasPrefix(rel, "lycaon/test/") ||
 		strings.HasSuffix(rel, "_testsupport.go")

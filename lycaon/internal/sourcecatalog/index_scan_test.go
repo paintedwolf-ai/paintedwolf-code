@@ -41,7 +41,7 @@ func waitIndex(t *testing.T, c *Catalog, root Root) *IndexReader {
 	t.Helper()
 	until := time.Now().Add(30 * time.Second)
 	for time.Now().Before(until) {
-		reader, status, err := c.OpenIndex(t.Context(), "p", root, 250*time.Millisecond)
+		reader, status, err := c.Trees.OpenIndex(t.Context(), "p", root, 250*time.Millisecond)
 		testutil.FailErr(t, "open file index", err)
 		if status.State == StateFailed {
 			t.Fatalf("index failed: %s", status.Error)
@@ -67,21 +67,21 @@ func indexedPaths(t *testing.T, r *IndexReader, scope FileScope) []string {
 
 func TestIndexHoldsHiddenAndIgnoredPathsButNotRepositoryMetadata(t *testing.T) {
 	c, root := indexFixture(t)
-	for _, name := range []string{".hidden/generated.txt", "build/generated.txt", "src/main.go", ".git/config"} {
+	for _, name := range []string{".hidden/generated.txt", "ignored/generated.txt", "src/main.go", ".git/config"} {
 		writeIndexFile(t, root.Path, name, "x")
 	}
-	writeIndexFile(t, root.Path, ".gitignore", "build/\n.hidden/\n")
+	writeIndexFile(t, root.Path, ".gitignore", "ignored/\n.hidden/\n")
 	testutil.FailErr(t, "empty folder", os.Mkdir(filepath.Join(root.Path, "empty"), 0o755))
 	reader := waitIndex(t, c, root)
 
 	all := indexedPaths(t, reader, FileScope{Audience: HumanAudience, IncludeHidden: true})
-	want := []string{".gitignore", ".hidden/generated.txt", "build/generated.txt", "src/main.go"}
+	want := []string{".gitignore", ".hidden/generated.txt", "ignored/generated.txt", "src/main.go"}
 	if !slices.Equal(all, want) {
 		t.Fatalf("all files=%v want=%v", all, want)
 	}
 	// Ignored and hidden paths are indexed; projections filter them.
 	visible := indexedPaths(t, reader, FileScope{Audience: HumanAudience})
-	if !slices.Equal(visible, []string{"build/generated.txt", "src/main.go"}) {
+	if !slices.Equal(visible, []string{"ignored/generated.txt", "src/main.go"}) {
 		t.Fatalf("visible files=%v", visible)
 	}
 	files, err := reader.FileCount(t.Context(), FileScope{Audience: HumanAudience, IncludeHidden: true})
@@ -94,10 +94,10 @@ func TestIndexHoldsHiddenAndIgnoredPathsButNotRepositoryMetadata(t *testing.T) {
 // Manual advancement exposes index state between batches.
 func indexWalkFixture(t *testing.T, c *Catalog, root Root) (*indexStore, *indexWalk) {
 	t.Helper()
-	s, err := c.indexStore(t.Context(), "p", root)
+	s, err := c.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "index store", err)
 	// The schema install writes, so it waits its turn behind the catalog's own writers.
-	release, err := s.write(t.Context())
+	release, err := s.writer.Write(t.Context(), s.writable)
 	testutil.FailErr(t, "writer gate", err)
 	s.mu.Lock()
 	err = loadStore(t.Context(), s)
@@ -197,9 +197,9 @@ func TestIndexAnswersFromAPartialGenerationBeforeDiscoveryEnds(t *testing.T) {
 func TestJoinWakesOnFirstGenerationOnlyForPartialProjections(t *testing.T) {
 	c, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "src/main.go", "source")
-	index, err := c.indexStore(t.Context(), "p", root)
+	index, err := c.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "index store", err)
-	summary, err := c.summaryStore(t.Context(), "p", root, TreeScope{Key: "orientation"})
+	summary, err := c.Trees.summaryStore(t.Context(), "p", root, TreeScope{Key: "orientation"})
 	testutil.FailErr(t, "summary store", err)
 	if !index.partial() || summary.partial() {
 		t.Fatalf("partial: index=%v summary=%v", index.partial(), summary.partial())
@@ -210,7 +210,7 @@ func TestJoinWakesOnFirstGenerationOnlyForPartialProjections(t *testing.T) {
 	for _, s := range []projectionStore{index, summary} {
 		core := s.core()
 		core.mu.Lock()
-		core.startRefresh(t.Context(), s, c.broker, core.epoch)
+		core.startRefresh(t.Context(), s, c.Trees.broker, core.epoch)
 		armed := core.readable != nil
 		core.mu.Unlock()
 		if armed != s.partial() {
@@ -227,7 +227,7 @@ func TestIndexJoinReturnsAGenerationOnAColdRoot(t *testing.T) {
 		writeIndexFile(t, root.Path, fmt.Sprintf("dir%02d/file%02d.go", i/8, i%8), "source")
 	}
 	started := time.Now()
-	reader, status, err := c.OpenIndex(t.Context(), "p", root, 20*time.Second)
+	reader, status, err := c.Trees.OpenIndex(t.Context(), "p", root, 20*time.Second)
 	testutil.FailErr(t, "join cold index", err)
 	if reader == nil {
 		t.Fatalf("join returned no generation: %+v", status)
@@ -342,14 +342,14 @@ func TestIndexIncrementalUpdateAndDirectoryDeletion(t *testing.T) {
 	_ = waitIndex(t, c, root)
 
 	writeIndexFile(t, root.Path, ".local.txt", "value")
-	c.invalidateTrees(root.Path, []string{".local.txt"})
+	c.Trees.invalidateTrees(root.Path, []string{".local.txt"})
 	reader := waitIndex(t, c, root)
 	if !slices.Contains(indexedPaths(t, reader, FileScope{Audience: HumanAudience, IncludeHidden: true}), ".local.txt") {
 		t.Fatal("added path missing from the index")
 	}
 
 	testutil.FailErr(t, "remove generated subtree", os.RemoveAll(filepath.Join(root.Path, "generated")))
-	c.invalidateTrees(root.Path, []string{"generated"})
+	c.Trees.invalidateTrees(root.Path, []string{"generated"})
 	reader = waitIndex(t, c, root)
 	if got := indexedPaths(t, reader, FileScope{Audience: HumanAudience, IncludeHidden: true}); !slices.Equal(got, []string{".local.txt"}) {
 		t.Fatalf("after removal=%v", got)
@@ -374,7 +374,7 @@ func TestIndexFileCountFollowsAPathChangingKind(t *testing.T) {
 
 	testutil.FailErr(t, "replace directory with a file", os.RemoveAll(filepath.Join(root.Path, "thing")))
 	writeIndexFile(t, root.Path, "thing", "now a file")
-	c.invalidateTrees(root.Path, []string{"thing"})
+	c.Trees.invalidateTrees(root.Path, []string{"thing"})
 	reader = waitIndex(t, c, root)
 	if got := indexedPaths(t, reader, FileScope{Audience: HumanAudience, IncludeHidden: true}); !slices.Equal(got, []string{"thing"}) {
 		t.Fatalf("after replacement=%v", got)
@@ -387,7 +387,7 @@ func TestIndexFileCountFollowsAPathChangingKind(t *testing.T) {
 
 	testutil.FailErr(t, "replace file with a directory", os.Remove(filepath.Join(root.Path, "thing")))
 	writeIndexFile(t, root.Path, "thing/inner.go", "source")
-	c.invalidateTrees(root.Path, []string{"thing"})
+	c.Trees.invalidateTrees(root.Path, []string{"thing"})
 	reader = waitIndex(t, c, root)
 	files, err = reader.FileCount(t.Context(), FileScope{Audience: HumanAudience, IncludeHidden: true})
 	testutil.FailErr(t, "count after reversal", err)
@@ -403,8 +403,8 @@ func TestIndexIncrementalPassKeepsTheGenerationCovering(t *testing.T) {
 	revision := first.Status.Revision
 
 	// Hidden-file writes preserve completed discovery.
-	writeIndexFile(t, root.Path, ".output/cache/item", "generated")
-	c.invalidateTrees(root.Path, []string{".output/cache/item"})
+	writeIndexFile(t, root.Path, ".hidden/generated/item", "generated")
+	c.Trees.invalidateTrees(root.Path, []string{".hidden/generated/item"})
 	next := waitIndex(t, c, root)
 	if !next.Status.Complete {
 		t.Fatal("an incremental pass left the generation reporting partial coverage")
@@ -412,10 +412,10 @@ func TestIndexIncrementalPassKeepsTheGenerationCovering(t *testing.T) {
 	if next.Status.Revision <= revision {
 		t.Fatal("hidden write never reached the index Files reads")
 	}
-	if !slices.Contains(indexedPaths(t, next, FileScope{Audience: HumanAudience, IncludeHidden: true}), ".output/cache/item") {
+	if !slices.Contains(indexedPaths(t, next, FileScope{Audience: HumanAudience, IncludeHidden: true}), ".hidden/generated/item") {
 		t.Fatal("hidden path missing from the Files projection")
 	}
-	if slices.Contains(indexedPaths(t, next, FileScope{Audience: HumanAudience}), ".output/cache/item") {
+	if slices.Contains(indexedPaths(t, next, FileScope{Audience: HumanAudience}), ".hidden/generated/item") {
 		t.Fatal("hidden path reached the code-search projection")
 	}
 }
@@ -426,7 +426,7 @@ func TestIndexRestartResumesAnInterruptedFrontier(t *testing.T) {
 	_ = waitIndex(t, c, root)
 	testutil.FailErr(t, "drain", c.Drain(t.Context()))
 
-	s, err := c.indexStore(t.Context(), "p", root)
+	s, err := c.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "index store", err)
 	db, err := openTreeDB(t.Context(), s.file)
 	testutil.FailErr(t, "index database", err)
@@ -504,7 +504,7 @@ type indexRefusal struct {
 
 func indexRefusals(t *testing.T, c *Catalog, root Root) []indexRefusal {
 	t.Helper()
-	s, err := c.indexStore(t.Context(), "p", root)
+	s, err := c.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "index store", err)
 	db, err := openTreeDB(t.Context(), s.file)
 	testutil.FailErr(t, "open index", err)

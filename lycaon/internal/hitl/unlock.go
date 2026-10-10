@@ -32,14 +32,14 @@ type vaultUnlock struct {
 
 // SetVaultUnlock wires the presence broker, the chats' unlocks, and their
 // audit. Without them no held value can be approved while its chat is locked.
-func (m *Manager) SetVaultUnlock(broker *presence.Broker, unlocks *presence.Unlocks, recorder UnlockRecorder) {
+func (m *VaultPresence) SetVaultUnlock(broker *presence.Broker, unlocks *presence.Unlocks, recorder UnlockRecorder) {
 	if m != nil {
 		m.vault = vaultUnlock{broker: broker, unlocks: unlocks, recorder: recorder}
 	}
 }
 
 // PresenceAvailable reports whether this device can verify presence.
-func (m *Manager) PresenceAvailable() bool {
+func (m *VaultPresence) PresenceAvailable() bool {
 	return m != nil && m.vault.broker.Available() && m.vault.unlocks != nil && m.vault.recorder != nil
 }
 
@@ -62,7 +62,7 @@ type UnlockSubject struct {
 // BeginUnlockChallenge binds presence to one pending option that sends held
 // values while their chat is locked, the plan that offers it, and the
 // deciding person. An unlocked chat needs no challenge.
-func (m *Manager) BeginUnlockChallenge(ctx context.Context, sessionID, checkpointID, optionID, windowLabel string) (UnlockChallenge, error) {
+func (m *VaultPresence) BeginUnlockChallenge(ctx context.Context, sessionID, checkpointID, optionID, windowLabel string) (UnlockChallenge, error) {
 	// An unknown or settled checkpoint answers as such before presence is consulted.
 	plan, option, err := m.pendingHeldOption(ctx, sessionID, checkpointID, optionID)
 	if err != nil {
@@ -89,14 +89,14 @@ func (m *Manager) BeginUnlockChallenge(ctx context.Context, sessionID, checkpoin
 }
 
 // unlocked reports whether held's chat is unlocked.
-func (m *Manager) unlocked(held *HeldRelease) bool {
+func (m *VaultPresence) unlocked(held *HeldRelease) bool {
 	_, open := m.vault.unlocks.Active(held.ChatSessionID)
 	return open
 }
 
 // pendingHeldOption loads a pending tool approval's plan and an option that
 // would send its held values.
-func (m *Manager) pendingHeldOption(ctx context.Context, sessionID, checkpointID, optionID string) (ApprovalPlan, ApprovalOption, error) {
+func (m *VaultPresence) pendingHeldOption(ctx context.Context, sessionID, checkpointID, optionID string) (ApprovalPlan, ApprovalOption, error) {
 	row, err := m.store.Get(ctx, checkpointID)
 	if err != nil {
 		return ApprovalPlan{}, ApprovalOption{}, err
@@ -145,7 +145,7 @@ func unlockPrompt(held *HeldRelease) string {
 // proceed: an unlocked chat needs nothing more, a locked one needs the
 // resolver's verified presence, which unlocks it. Only a person
 // answers for held values, never a policy.
-func (m *Manager) heldAnswer(
+func (m *VaultPresence) heldAnswer(
 	sessionID, checkpointID string, plan ApprovalPlan, option ApprovalOption, resolver ApprovalResolver, resolution Resolution,
 ) (*presence.Unlock, error) {
 	if resolver.policy != nil || strings.TrimSpace(resolution.PersonID) == "" {
@@ -180,7 +180,7 @@ func (m *Manager) heldAnswer(
 // presence on one approval unlocked it: they asked only that, and the person
 // just answered it, so nobody confirms the same thing twice. Cards that also
 // approve a recipient stay open; their question is still unanswered.
-func (m *Manager) answerUnlockCards(ctx context.Context, unlock presence.Unlock, answeredID string) {
+func (m *VaultPresence) answerUnlockCards(ctx context.Context, unlock presence.Unlock, answeredID string) {
 	kind := api.CheckpointKindToolApproval
 	rows, err := m.store.ListPendingForParent(ctx, unlock.ChatSessionID, &kind)
 	if err != nil {
@@ -198,7 +198,7 @@ func (m *Manager) answerUnlockCards(ctx context.Context, unlock presence.Unlock,
 		}
 		result := DecisionResult{Approved: true, OptionID: unlockOptionID, Comments: "unlocked by confirming another approval in this chat"}
 		resolution := Resolution{By: authzledger.ResolvedByHuman, PersonID: unlock.PersonID}
-		if err := m.settlePending(ctx, row.ID, DecisionStatusApproved, result, resolution); err != nil {
+		if err := m.checkpoints.settlePending(ctx, row.ID, DecisionStatusApproved, result, resolution); err != nil {
 			slog.WarnContext(ctx, "unlock card could not be settled", "checkpoint_id", row.ID, "error", err)
 		}
 	}
@@ -208,4 +208,24 @@ func jsonEqual(a, b any) bool {
 	left, errLeft := json.Marshal(a)
 	right, errRight := json.Marshal(b)
 	return errLeft == nil && errRight == nil && string(left) == string(right)
+}
+
+func (m *VaultPresence) RecordUnlockTx(ctx context.Context, tx *sql.Tx, projectID string, unlock presence.Unlock) error {
+	return m.vault.recorder.RecordUnlockTx(ctx, tx, projectID, unlock)
+}
+
+func (m *VaultPresence) CommitUnlock(ctx context.Context, unlock presence.Unlock, answeredID string) {
+	m.vault.unlocks.Open(unlock)
+	m.answerUnlockCards(ctx, unlock, answeredID)
+}
+
+type VaultPresence struct {
+	store       vaultCheckpointStore
+	checkpoints checkpointSettlement
+	vault       vaultUnlock
+}
+
+type vaultCheckpointStore interface {
+	Get(context.Context, string) (*StoredCheckpoint, error)
+	ListPendingForParent(context.Context, string, *api.CheckpointKind) ([]StoredCheckpoint, error)
 }

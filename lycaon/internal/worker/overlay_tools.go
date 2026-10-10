@@ -8,7 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/projectcontrol"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -47,17 +47,17 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 		in := api.PromoteOverlayInput{
 			Detail:      parsePromoteDetailArg(args["detail"]),
 			Resolutions: resolutions,
-			ToolCallID:  tctx.ToolCallID,
-			UserTurn:    tctx.UserTurn,
+			ToolCallID:  tctx.Identity.ToolCallID,
+			UserTurn:    tctx.Identity.UserTurn,
 		}
-		out, err := deps.Merge.PromoteOverlay(ctx, tctx.SessionID, overlayID, in)
+		out, err := deps.Merge.PromoteOverlay(ctx, tctx.Identity.SessionID, overlayID, in)
 		if err == nil {
 			tools.ReportSyntaxOverride(ctx, tctx, out.Applied...)
 		}
-		if tctx.Out != nil {
-			tctx.Out.OwnerRef = strings.TrimSpace(out.JobID)
-			tctx.Out.Completion = overlayCompletion("overlay_promotion", out, "promoted")
-			tctx.Out.OverlayPromotion = out.OverlayPromotion
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.OwnerRef = strings.TrimSpace(out.JobID)
+			tctx.Effects.Out.Completion = overlayCompletion("overlay_promotion", out, "promoted")
+			tctx.Effects.Out.OverlayPromotion = out.OverlayPromotion
 		}
 		return formatOverlayPromoteHostContent(ctx, overlayID, out, err)
 	}); err != nil {
@@ -70,10 +70,10 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 		}
 		captureWorkerSubject(tctx, deps.Merge.Queue, overlayID)
 		reason := strings.TrimSpace(stringArg(args["reason"]))
-		out, err := deps.Merge.RejectOverlay(ctx, tctx.SessionID, overlayID, reason)
-		if tctx.Out != nil {
-			tctx.Out.OwnerRef = strings.TrimSpace(out.OverlayID)
-			tctx.Out.Completion = &api.ToolCompletion{
+		out, err := deps.Merge.RejectOverlay(ctx, tctx.Identity.SessionID, overlayID, reason)
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.OwnerRef = strings.TrimSpace(out.OverlayID)
+			tctx.Effects.Out.Completion = &api.ToolCompletion{
 				Operation: "overlay_rejection", State: "rejected", ResourceKind: "overlay", ResourceID: strings.TrimSpace(out.OverlayID),
 			}
 		}
@@ -89,13 +89,13 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 		captureWorkerSubject(tctx, deps.Merge.Queue, overlayID)
 		detail := parsePromoteDetailArg(args["detail"])
 		paths := parseOverlayPathFilter(args["path"])
-		out, err := deps.Merge.PreviewForSession(ctx, tctx.SessionID, overlayID, detail, paths)
+		out, err := deps.Merge.PreviewForSession(ctx, tctx.Identity.SessionID, overlayID, detail, paths)
 		if err != nil {
 			return "", err
 		}
-		if tctx.Out != nil {
-			tctx.Out.OwnerRef = strings.TrimSpace(out.JobID)
-			tctx.Out.Completion = overlayCompletion("overlay_preview", out, "previewed")
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.OwnerRef = strings.TrimSpace(out.JobID)
+			tctx.Effects.Out.Completion = overlayCompletion("overlay_preview", out, "previewed")
 		}
 		raw, err := json.Marshal(out)
 		if err != nil {
@@ -232,7 +232,7 @@ func formatOverlayPromoteHostContent(ctx context.Context, overlayID string, out 
 	if err != nil {
 		return "", err
 	}
-	content, err := session.FormatOverlayHostToolContent(hostmarker.OverlayPromoteEventPrefix, out, banners)
+	content, err := projectcontrol.FormatOverlayHostToolContent(hostmarker.OverlayPromoteEventPrefix, out, banners)
 	if err != nil {
 		return "", err
 	}
@@ -250,7 +250,7 @@ func formatOverlayRejectHostContent(ctx context.Context, overlayID string, out a
 	if err != nil {
 		return "", err
 	}
-	content, err := session.FormatOverlayHostToolContent(hostmarker.OverlayRejectEventPrefix, out, banners)
+	content, err := projectcontrol.FormatOverlayHostToolContent(hostmarker.OverlayRejectEventPrefix, out, banners)
 	if err != nil {
 		return "", err
 	}

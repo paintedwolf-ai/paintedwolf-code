@@ -20,8 +20,8 @@ func TestEvalSelectionUsesDeclaredPredicatesDespiteObservedRejection(t *testing.
 		for _, code := range []string{"Z_ORIGINAL_FAILURE", "FUTURE_TOOL_FAILURE", ""} {
 			t.Run(mode+"/"+code, func(t *testing.T) {
 				gc := NewGuardContext()
-				gc.Tool = "future_tool"
-				gc.PolicyDenied = true
+				gc.Invocation.Tool = "future_tool"
+				gc.Rejection.PolicyDenied = true
 				gc.ObservedRejectCode = code
 				var result *PipelineResult
 				var err error
@@ -43,8 +43,8 @@ func TestEvalSelectionUsesDeclaredPredicatesDespiteObservedRejection(t *testing.
 func TestFact21RejectionMetadataCannotReplaceOccurrenceIdentity(t *testing.T) {
 	gc := NewGuardContext()
 	gc.ObserveToolCall("mcp_provider_action", nil)
-	gc.Principal = "person"
-	gc.PermissionProfile = "restricted"
+	gc.Session.Principal = "person"
+	gc.Session.PermissionProfile = "restricted"
 	gc.ObservedRejectCode = "ORIGINAL_FAILURE"
 	gc.PutRejectData("ORIGINAL_FAILURE", map[string]any{
 		"tool": "spoofed", "principal": "spoofed", "permission_profile": "spoofed", "rejection_code": "spoofed",

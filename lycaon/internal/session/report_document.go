@@ -13,8 +13,9 @@ type ReportDocumentChecker interface {
 }
 
 // SetReportDocumentChecker wires the run report document check.
-func (m *Manager) SetReportDocumentChecker(checker ReportDocumentChecker) {
+func (m *Host) SetReportDocumentChecker(checker ReportDocumentChecker) {
 	if m != nil {
-		m.reportDocuments = checker
+		m.Coordinator.Completion.Reports = checker
+
 	}
 }

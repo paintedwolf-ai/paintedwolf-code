@@ -7,7 +7,8 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/rules"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
@@ -15,10 +16,10 @@ import (
 
 func TestPostureRegistryClosure(t *testing.T) {
 	t.Parallel()
-	reg, err := session.LoadPostureRegistry()
-	contractcheck.FailErr(t, "session.LoadPostureRegistry failed", err)
+	reg, err := profiles.LoadPostureRegistry()
+	contractcheck.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 
-	want := session.AllSessionPostures()
+	want := sessionposture.AllSessionPostures()
 	got := reg.List()
 	if len(got) != len(want) {
 		t.Fatalf("registry has %d postures want %d", len(got), len(want))
@@ -60,7 +61,7 @@ func TestComposePolicyPosturesValid(t *testing.T) {
 		t.Fatal("compose-policy.yaml missing posture_required_gates")
 	}
 	for posture, gates := range gatesRaw {
-		if !session.ValidSessionPosture(posture) {
+		if !sessionposture.ValidSessionPosture(posture) {
 			t.Fatalf("compose-policy unknown posture %q", posture)
 		}
 		list, ok := gates.([]any)

@@ -13,10 +13,8 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/tools/docrefs"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// docSeedSurfaces are the target's own doc index files for doc-link seeding.
 var docSeedSurfaces = []string{
 	"README.md",
 	"AGENTS.md",
@@ -24,7 +22,8 @@ var docSeedSurfaces = []string{
 }
 
 // computeSubtreeImportance ranks children from one-hop references.
-func (g *summarizeGatherer) computeSubtreeImportance(
+
+func (g *summaryRelations) computeSubtreeImportance(
 	ctx context.Context,
 	target string,
 	subtree *summarize.SubtreeNode,
@@ -56,7 +55,7 @@ func (g *summarizeGatherer) computeSubtreeImportance(
 	return imp, nil
 }
 
-func (g *summarizeGatherer) seedDocLinkTargets(ctx context.Context, target string, max int) []string {
+func (g *summaryRelations) seedDocLinkTargets(ctx context.Context, target string, max int) []string {
 	if max <= 0 {
 		return nil
 	}
@@ -74,7 +73,7 @@ func (g *summarizeGatherer) seedDocLinkTargets(ctx context.Context, target strin
 		if base != "" {
 			rel = path.Join(base, surface)
 		}
-		resolved, err := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, rel)
+		resolved, err := g.access.reads.Resolve(ctx, rel)
 		if err != nil {
 			continue
 		}
@@ -82,7 +81,7 @@ func (g *summarizeGatherer) seedDocLinkTargets(ctx context.Context, target strin
 		if err != nil || info.IsDir() {
 			continue
 		}
-		content, err := g.readFileCached(ctx, resolved.Abs)
+		content, err := g.sources.readFileCached(ctx, resolved.Abs)
 		if err != nil {
 			continue
 		}
@@ -115,7 +114,8 @@ func (g *summarizeGatherer) seedDocLinkTargets(ctx context.Context, target strin
 }
 
 // resolveDocRefAny resolves file or directory references.
-func (g *summarizeGatherer) resolveDocRefAny(ctx context.Context, docDir, tok string) (string, bool) {
+
+func (g *summaryRelations) resolveDocRefAny(ctx context.Context, docDir, tok string) (string, bool) {
 	tok = strings.TrimPrefix(filepath.ToSlash(tok), "./")
 	candidates := []string{tok}
 	if docDir != "" && docDir != "." {
@@ -126,12 +126,12 @@ func (g *summarizeGatherer) resolveDocRefAny(ctx context.Context, docDir, tok st
 		if cand == "." || strings.HasPrefix(cand, "../") {
 			continue
 		}
-		resolved, err := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, cand)
+		resolved, err := g.access.reads.Resolve(ctx, cand)
 		if err != nil {
 			continue
 		}
-		if g.catalog != nil {
-			current := catalogOrProcess(g.catalog).Current(ctx, g.tctx.ProjectID, []sourcecatalog.Root{{ID: resolved.Root.ID, Path: resolved.Root.Path}})
+		if g.access.catalog != nil {
+			current := g.access.catalog.Current(ctx, g.access.projectID, []sourcecatalog.Root{{ID: resolved.Root.ID, Path: resolved.Root.Path}})
 			if current.State == sourcecatalog.StateReady {
 				rel := projectroot.ScopeRel(resolved.Root, resolved.Abs)
 				if _, ok := current.Entry(resolved.Root.ID, rel); ok {
@@ -148,7 +148,8 @@ func (g *summarizeGatherer) resolveDocRefAny(ctx context.Context, docDir, tok st
 }
 
 // seedFanInTargets maps inbound imports to child representatives.
-func (g *summarizeGatherer) seedFanInTargets(
+
+func (g *summaryRelations) seedFanInTargets(
 	ctx context.Context,
 	target string,
 	subtree *summarize.SubtreeNode,
@@ -196,7 +197,7 @@ func (g *summarizeGatherer) seedFanInTargets(
 	}
 	grepRoot := g.referenceRoot(ctx, target)
 	counts := make(map[string]int, len(packages))
-	err := scanLiteralMatches(ctx, g.boundary, g.catalog, g.tctx, grepRoot, tokens, g.surveyPruneOpts(sandbox.SurveyOptions{}), func(m grepMatch) {
+	err := g.access.literals(ctx, grepRoot, tokens, g.nested.surveyPruneOpts(sandbox.SurveyOptions{}), func(m grepMatch) {
 		if m.Path == "" || m.Match == "" {
 			return
 		}
@@ -227,7 +228,7 @@ func (g *summarizeGatherer) seedFanInTargets(
 	return out, nil
 }
 
-func (g *summarizeGatherer) resolveFanInToken(
+func (g *summaryRelations) resolveFanInToken(
 	ctx context.Context,
 	child *summarize.SubtreeNode,
 	structure []summarize.StructureCandidate,
@@ -248,7 +249,7 @@ func (g *summarizeGatherer) resolveFanInToken(
 			return tok, sc.RelPath, true
 		}
 	}
-	if sc, outlined := g.Outline(ctx, rel); outlined {
+	if sc, outlined := g.sources.Outline(ctx, rel); outlined {
 		tok = strings.TrimSpace(sc.ImportPath)
 		if tok != "" {
 			return tok, sc.RelPath, true
@@ -261,19 +262,20 @@ func (g *summarizeGatherer) resolveFanInToken(
 }
 
 // shallowRepresentativeFile finds a direct child file.
-func (g *summarizeGatherer) shallowRepresentativeFile(ctx context.Context, display string) string {
+
+func (g *summaryRelations) shallowRepresentativeFile(ctx context.Context, display string) string {
 	if g == nil || strings.TrimSpace(display) == "" {
 		return ""
 	}
-	resolved, err := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, display)
+	resolved, err := g.access.reads.Resolve(ctx, display)
 	if err != nil {
 		return ""
 	}
-	inventory, err := sourceInventoryForScope(ctx, g.catalog, g.tctx.ProjectID, resolved.Root, resolved.Abs)
+	inventory, err := sourceInventoryForScope(ctx, g.access.catalog, g.access.projectID, resolved.Root, resolved.Abs)
 	if err != nil {
 		return ""
 	}
-	readFilter, err := g.boundary.CompileReadFilter(ctx, resolved.Root.Path, g.tctx.ProfileID())
+	readFilter, err := g.access.boundary.CompileReadFilter(ctx, resolved.Root.Path, g.access.profileID)
 	if err != nil {
 		return ""
 	}

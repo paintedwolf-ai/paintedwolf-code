@@ -138,8 +138,8 @@ func (s *MergeService) PromoteOverlay(ctx context.Context, sessionID, overlayID 
 		return api.WorkerMergeResult{}, err
 	}
 	revertPending := func() error { return s.releaseMergeClaim(ctx, claim) }
-	if s.Reconcile != nil {
-		s.Reconcile.RecordPromotedPrimaryPaths(ctx, sessionID, promoteMutationPaths(plans))
+	if s.Captures != nil {
+		s.Captures.RecordPromotedPrimaryPaths(ctx, sessionID, promoteMutationPaths(plans))
 	}
 	promote := PromoteRootsForTask(task, roots)
 	tx, err := beginPromoteTransaction(s.hostDataDirFor(task), overlayID, plans)
@@ -321,9 +321,9 @@ func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, 
 		}
 	}
 	if s.Coord != nil {
-		_ = s.Coord.ReleaseWorkerReservations(ctx, sessionID, overlayID)
+		_ = s.Coord.ReleaseReservations(ctx, sessionID, overlayID)
 		for _, childID := range out.Orphaned {
-			_ = s.Coord.ReleaseWorkerReservations(ctx, sessionID, childID)
+			_ = s.Coord.ReleaseReservations(ctx, sessionID, childID)
 		}
 	}
 	sort.Strings(out.Orphaned)

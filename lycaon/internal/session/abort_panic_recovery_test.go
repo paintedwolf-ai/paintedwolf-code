@@ -30,25 +30,25 @@ func (panicSessionWorkerAbort) AbortWorkersForRoot(context.Context, string, stri
 func TestAbortRecoversPanicAndClearsStopState(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetSessionWorkerAbort(panicSessionWorkerAbort{})
 
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark session busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
 
-	if err := mgr.Abort(ctx, sess.ID, "user stopped"); err == nil {
+	if err := mgr.Stops.Abort(ctx, sess.ID, "user stopped"); err == nil {
 		t.Fatal("Abort returned no error; want the panic surfaced as an error, not swallowed or left to crash the process")
 	}
 
-	if mgr.sessionStopInProgress(ctx, sess.ID) {
+	if mgr.Chats.Gate.InProgress(ctx, sess.ID) {
 		t.Fatal("stop state stuck active after panic recovery; finishSessionStop did not run")
 	}
 
 	// A second Abort hangs if the first flight's active[rootID] entry or
 	// flight.done close were skipped.
 	done := make(chan error, 1)
-	go func() { done <- mgr.Abort(ctx, sess.ID, "second stop") }()
+	go func() { done <- mgr.Stops.Abort(ctx, sess.ID, "second stop") }()
 	select {
 	case err2 := <-done:
 		if err2 == nil {

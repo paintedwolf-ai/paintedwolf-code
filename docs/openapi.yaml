@@ -3309,11 +3309,14 @@ paths:
       x-person-action: record
       summary: Move a project file or folder to Trash
       description: |
-        Moves one file or folder into the macOS Trash under the same path jail
+        Moves one file or folder into the host operating system Trash under the same path jail
         as the source read. The entry is never permanently deleted — if the
         Trash move fails the path is left untouched and the call returns 500
         source_trash_failed. Non-empty folders require recursive=true; without
-        it the call returns 409 source_not_empty. Engine and VCS metadata
+        it the call returns 409 source_not_empty. New operations can be undone while
+        the recorded native Trash item remains available; emptying Trash makes
+        restoration unavailable. Existing retained history keeps its recovery data.
+        Engine and VCS metadata
         paths (.git, the project overlay directory) and the root itself are refused.
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -18535,6 +18538,9 @@ components:
           maximum: 500
         budget:
           $ref: '#/components/schemas/SearchBudget'
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
         regex:
           type: boolean
           description: When true, treat the code pattern as a Go regexp
@@ -18827,6 +18833,9 @@ components:
           format: uuid
         format:
           $ref: '#/components/schemas/SearchExportFormat'
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
         regex:
           type: boolean
         case_sensitive:
@@ -25582,6 +25591,7 @@ components:
         - source_path_protected
         - source_move_incomplete
         - source_path_busy
+        - source_trash_recovery_unavailable
         - source_recovery_failed
         - source_not_found
         - source_binary_denied
@@ -28551,6 +28561,9 @@ components:
         group:
           type: string
           description: Optional ladder heading when a card carries a second subject (absorbed predicate or host resources). Absent means the primary ladder.
+        directory_scope:
+          type: string
+          description: Host-minted directory candidate covered by this option; absent for unscoped options.
         title:
           type: string
         coverage:
@@ -28627,6 +28640,11 @@ components:
         - recommended_option_id
       additionalProperties: false
       properties:
+        directory_scopes:
+          type: array
+          description: Host-approved directory candidates, from the containing folder outward; the first is the default.
+          items:
+            type: string
         id:
           type: string
           pattern: ^[A-Za-z0-9_.:-]+$
@@ -30590,6 +30608,10 @@ components:
         recursive:
           type: boolean
           description: One root registration observes every descendant.
+        policy_unwatched:
+          type: integer
+          minimum: 0
+          description: Lazy boundary roots intentionally refreshed on demand, distinct from failed watcher registrations.
         unwatched_directories:
           type: integer
           minimum: 0
@@ -32676,6 +32698,9 @@ components:
         sends the word under the caret; the host narrows whole-word search
         hits to AST-confirmed declarations. Empty symbol is a client no-op.
       properties:
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
         root_id:
           type: string
           format: uuid
@@ -35362,6 +35387,9 @@ components:
         origin_project_id:
           type: string
           format: uuid
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this preview. Omitted means false.
         regex:
           type: boolean
         case_sensitive:

@@ -9,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -69,16 +69,16 @@ func runBudgetHold(t *testing.T, wait time.Duration, answer func(*budgetJob)) bu
 	job := &budgetJob{max: 2}
 	var run budgetHoldRun
 	deps := promptloop.StoreDeps(mem)
-	deps.Limits = func(_ context.Context, sess *api.Session) settings.SessionLimits {
-		return session.ApplyWorkerMaxToolLoops(settings.DefaultSessionLimits(), sess)
+	deps.Context.Limits = func(_ context.Context, sess *api.Session) settings.SessionLimits {
+		return sessionlimits.ApplyWorkerMaxToolLoops(settings.DefaultSessionLimits(), sess)
 	}
-	deps.LLM = client
-	deps.Tools = tools.NewStubRegistry()
-	deps.Policy = &recordingToolPolicy{}
-	deps.WorkerBudgetAnswerWait = wait
-	deps.WorkerJob = func(context.Context, string) (*api.WorkerTask, bool) { return job.task(), true }
+	deps.Model.LLM = client
+	deps.Context.Tools = tools.NewStubRegistry()
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Nudges.WorkerBudgetAnswerWait = wait
+	deps.Nudges.WorkerJob = func(context.Context, string) (*api.WorkerTask, bool) { return job.task(), true }
 	var asked sync.Once
-	deps.PublishWorkerProgress = func(_ context.Context, _ string, snap workerprogress.Snapshot, _ bool) {
+	deps.Nudges.PublishWorkerProgress = func(_ context.Context, _ string, snap workerprogress.Snapshot, _ bool) {
 		if snap.ToolLoopsUsed != 1 {
 			return
 		}
@@ -89,11 +89,11 @@ func runBudgetHold(t *testing.T, wait time.Duration, answer func(*budgetJob)) bu
 			}
 		})
 	}
-	deps.WorkerBudgetRaisedNudge = func(context.Context, *api.Session, int, int) promptloop.HostNudge {
+	deps.Nudges.WorkerBudgetRaisedNudge = func(context.Context, *api.Session, int, int) promptloop.HostNudge {
 		run.raised++
 		return promptloop.HostNudge{Content: "ceiling raised", SignalID: "worker.budget.raised"}
 	}
-	deps.WorkerBudgetDeclinedNudge = func(context.Context, *api.Session, int, int) promptloop.HostNudge {
+	deps.Nudges.WorkerBudgetDeclinedNudge = func(context.Context, *api.Session, int, int) promptloop.HostNudge {
 		run.declined++
 		return promptloop.HostNudge{Content: "request declined", SignalID: "worker.budget.declined"}
 	}
@@ -107,7 +107,10 @@ func runBudgetHold(t *testing.T, wait time.Duration, answer func(*budgetJob)) bu
 	started := time.Now()
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID, Session: sess, History: userHistory("go"), ProfileID: "explore_readonly",
-		ToolCtx: tools.ToolContext{SessionID: sess.ID, WorkerJobID: "job-1"},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				WorkerJobID: "job-1"},
+		},
 	})
 	run.elapsed = time.Since(started)
 	testutil.FailErr(t, "loop.Run failed", err)

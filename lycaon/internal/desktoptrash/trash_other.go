@@ -7,6 +7,6 @@ import (
 	"runtime"
 )
 
-func platformMove(path string) error {
-	return fmt.Errorf("system trash is unavailable on %s", runtime.GOOS)
+func platformMove(path string) (Receipt, error) {
+	return Receipt{}, fmt.Errorf("system trash is unavailable on %s", runtime.GOOS)
 }

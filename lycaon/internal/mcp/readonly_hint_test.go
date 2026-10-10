@@ -22,8 +22,8 @@ func TestRegisterToolPlumbsStructuredMetadata(t *testing.T) {
 	}
 	r := newTestRegistry(t, conn, "docs")
 	reg := tools.NewDefaultRegistry()
-	r.SetToolRegistry(reg)
-	if err := r.SetProviderEnabled(context.Background(), mcp.CallScope{}, "docs", true, ""); err != nil {
+	r.Tools.SetToolRegistry(reg)
+	if err := r.Administration.SetProviderEnabled(context.Background(), mcp.CallScope{}, "docs", true, ""); err != nil {
 		testutil.FailErr(t, "r.SetProviderEnabled failed", err)
 	}
 	meta, ok := reg.Meta("mcp_docs_get")

@@ -49,7 +49,7 @@ func TestPhysicalWorkspacesNeverShareDocumentsOrPublicationTargets(t *testing.T)
 	if string(raw) != "other draft\nagent\n" {
 		t.Fatalf("wrong workspace bytes: %q", raw)
 	}
-	head, err := ledger.ResolveHeadByFile(t.Context(), other.ID, other.SourceBranch, separate.FileID)
+	head, err := ledger.History.ResolveHeadByFile(t.Context(), other.ID, other.SourceBranch, separate.FileID)
 	testutil.FailErr(t, "read independent history", err)
 	if head.VersionID == "" {
 		t.Fatal("workspace publication has no saved history")

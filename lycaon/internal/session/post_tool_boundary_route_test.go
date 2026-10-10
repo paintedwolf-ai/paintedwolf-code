@@ -44,7 +44,7 @@ func TestRefusedWriteGuidanceNamesTheGrant(t *testing.T) {
 		obs := confine.StampRefusal("command", "sess-route", boundary, confine.RefusalContext{
 			FailedStages: tc.failed, Running: tc.running, Refusals: refusals,
 		}).Observation
-		out, facts := mgr.appendPostToolGuidance(t.Context(), &api.Session{ID: "sess-route"}, "command",
+		out, facts := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: "sess-route"}, "command",
 			map[string]any{"command": "touch -f AGENTS.md || true"}, `{"exit_code":0}`, 1, guidance.ToolResultFacts{Confine: obs})
 		fired := strings.Contains(out, "Code: "+isolation.CodeTryWriteRoot)
 		if fired != tc.fires {
@@ -73,7 +73,7 @@ func TestUnsandboxedRefusalRoutesToHostExecution(t *testing.T) {
 		}}},
 	}).Observation
 	mgr := newPostToolGuidanceManager(t)
-	out, facts := mgr.appendPostToolGuidance(t.Context(), &api.Session{ID: "sess-host"}, "command",
+	out, facts := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: "sess-host"}, "command",
 		map[string]any{"command": "colima start"}, `{"running":true}`, 1, guidance.ToolResultFacts{Confine: obs})
 	for _, want := range []string{"Code: " + isolation.CodeTryHostExecution, socket, "command_stop", "capability_request.host_execution"} {
 		if !strings.Contains(out, want) {
@@ -106,7 +106,7 @@ func TestWorktreeBehindIndexRoutesToNativeTools(t *testing.T) {
 	gittest.Run(t, dir, "checkout", "-q", "other")
 
 	mgr := newPostToolGuidanceManager(t)
-	out, facts := mgr.appendPostToolGuidance(t.Context(), &api.Session{ID: "sess-worktree"}, "command",
+	out, facts := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: "sess-worktree"}, "command",
 		map[string]any{"command": "git checkout other"}, `{"exit_code":0}`, 1, guidance.ToolResultFacts{
 			Confine:    confine.Observation{Applied: true},
 			IndexWatch: snapshot,

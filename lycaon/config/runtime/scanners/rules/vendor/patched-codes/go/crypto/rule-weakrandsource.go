@@ -6,7 +6,6 @@ package main
 
 import (
 	"math/rand"
-	mrand "math/rand"
 )
 
 func bad1() {

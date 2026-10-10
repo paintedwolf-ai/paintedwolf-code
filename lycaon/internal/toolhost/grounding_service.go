@@ -2,6 +2,7 @@ package toolhost
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/delegation"
@@ -12,7 +13,7 @@ import (
 
 // GuidanceNudger queues structured coordinator guidance after non-blocking grounding warnings.
 type GuidanceNudger interface {
-	QueueGuidanceNudge(ctx context.Context, sessionID, code string, data map[string]any)
+	QueueNudge(ctx context.Context, sessionID, code string, data map[string]any)
 }
 
 // GroundingService audits record_finding findings against the evidence ledger.
@@ -36,7 +37,7 @@ func (s *GroundingService) AuditFinding(ctx context.Context, summary, ref string
 	if mode == "off" {
 		return nil
 	}
-	sessionID := strings.TrimSpace(tctx.SessionID)
+	sessionID := strings.TrimSpace(tctx.Identity.SessionID)
 	if sessionID == "" {
 		return nil
 	}
@@ -75,11 +76,11 @@ func (s *GroundingService) AuditFinding(ctx context.Context, summary, ref string
 		return s.formatReject(eval.Code, guidance.GroundingHintData(eval.Offenders, ev))
 	}
 	if s.Nudger != nil {
-		s.Nudger.QueueGuidanceNudge(ctx, sessionID, eval.Code, guidance.OffenderHintData(eval.Offenders))
+		s.Nudger.QueueNudge(ctx, sessionID, eval.Code, guidance.OffenderHintData(eval.Offenders))
 	}
 	return nil
 }
 
 func (s *GroundingService) formatReject(code string, data map[string]any) error {
-	return &tools.ToolReject{Code: code, Data: data}
+	return &toolrejection.ToolReject{Code: code, Data: data}
 }

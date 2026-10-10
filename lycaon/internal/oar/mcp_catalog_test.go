@@ -50,14 +50,14 @@ func TestObserveMCPStructuralNonMCPZeros(t *testing.T) {
 	}
 	gc := NewGuardContext()
 	ObserveMCPStructuralPre(gc, "read", cat)
-	if gc.MCPProviderID != "" || gc.MCPToolName != "" || gc.MCPQualifiedTool != "" {
-		t.Fatalf("expected zero identity, got id=%q tool=%q qual=%q", gc.MCPProviderID, gc.MCPToolName, gc.MCPQualifiedTool)
+	if gc.MCP.MCPProviderID != "" || gc.MCP.MCPToolName != "" || gc.MCP.MCPQualifiedTool != "" {
+		t.Fatalf("expected zero identity, got id=%q tool=%q qual=%q", gc.MCP.MCPProviderID, gc.MCP.MCPToolName, gc.MCP.MCPQualifiedTool)
 	}
-	if gc.MCPProviderConfigured || gc.MCPProviderEnabled || gc.MCPCallOK || gc.MCPSchemaMatched {
+	if gc.MCP.MCPProviderConfigured || gc.MCP.MCPProviderEnabled || gc.MCP.MCPCallOK || gc.MCP.MCPSchemaMatched {
 		t.Fatal("expected zero MCP bools for non-MCP tool")
 	}
-	if gc.MCPErrorCode != "" {
-		t.Fatalf("error_code=%q", gc.MCPErrorCode)
+	if gc.MCP.MCPErrorCode != "" {
+		t.Fatalf("error_code=%q", gc.MCP.MCPErrorCode)
 	}
 }
 
@@ -71,13 +71,13 @@ func TestObserveMCPStructuralPre(t *testing.T) {
 	}
 	gc := NewGuardContext()
 	ObserveMCPStructuralPre(gc, "mcp_fixture_echo", cat)
-	if gc.MCPProviderID != "fixture" || gc.MCPToolName != "echo" || gc.MCPQualifiedTool != "mcp_fixture_echo" {
-		t.Fatalf("identity: %+v %+v %+v", gc.MCPProviderID, gc.MCPToolName, gc.MCPQualifiedTool)
+	if gc.MCP.MCPProviderID != "fixture" || gc.MCP.MCPToolName != "echo" || gc.MCP.MCPQualifiedTool != "mcp_fixture_echo" {
+		t.Fatalf("identity: %+v %+v %+v", gc.MCP.MCPProviderID, gc.MCP.MCPToolName, gc.MCP.MCPQualifiedTool)
 	}
-	if !gc.MCPProviderConfigured || !gc.MCPProviderEnabled {
+	if !gc.MCP.MCPProviderConfigured || !gc.MCP.MCPProviderEnabled {
 		t.Fatal("expected configured+enabled")
 	}
-	if gc.MCPCallOK || gc.MCPErrorCode != "" || gc.MCPSchemaMatched {
+	if gc.MCP.MCPCallOK || gc.MCP.MCPErrorCode != "" || gc.MCP.MCPSchemaMatched {
 		t.Fatal("pre must leave call_ok false, error_code empty, schema unmatched")
 	}
 }
@@ -92,11 +92,11 @@ func TestObserveMCPStructuralPostSuccess(t *testing.T) {
 	}
 	gc := NewGuardContext()
 	ObserveMCPStructuralPost(gc, "mcp_fixture_echo", cat, true, "", "")
-	if !gc.MCPCallOK {
+	if !gc.MCP.MCPCallOK {
 		t.Fatal("expected call_ok")
 	}
-	if gc.MCPErrorCode != "" {
-		t.Fatalf("error_code=%q", gc.MCPErrorCode)
+	if gc.MCP.MCPErrorCode != "" {
+		t.Fatalf("error_code=%q", gc.MCP.MCPErrorCode)
 	}
 }
 
@@ -110,13 +110,13 @@ func TestObserveMCPStructuralPostMachineCode(t *testing.T) {
 	}
 	gc := NewGuardContext()
 	ObserveMCPStructuralPost(gc, "mcp_fixture_echo", cat, false, "MCP_TOOL_FAILED", "")
-	if gc.MCPCallOK {
+	if gc.MCP.MCPCallOK {
 		t.Fatal("expected call_ok false")
 	}
-	if gc.MCPErrorCode != "MCP_TOOL_FAILED" {
-		t.Fatalf("error_code=%q", gc.MCPErrorCode)
+	if gc.MCP.MCPErrorCode != "MCP_TOOL_FAILED" {
+		t.Fatalf("error_code=%q", gc.MCP.MCPErrorCode)
 	}
-	if gc.MCPProviderEnabled {
+	if gc.MCP.MCPProviderEnabled {
 		t.Fatal("expected disabled provider flag")
 	}
 }

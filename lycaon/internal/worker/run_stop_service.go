@@ -5,14 +5,14 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
+	"github.com/lycaon/lycaon/internal/session/workerresults"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // WorkerRunStopSession records worker hold/cancel outcomes on the coordinator transcript.
 type WorkerRunStopSession interface {
-	AppendWorkerCancellation(ctx context.Context, parentID string, in session.WorkerCancellationInput) error
-	AppendWorkerHold(ctx context.Context, parentID string, in session.WorkerHoldInput) error
+	Hold(ctx context.Context, parentID string, in workerresults.HoldInput) error
 }
 
 // DelegationRunStopper marks active delegations canceled for a workflow run.
@@ -22,10 +22,11 @@ type DelegationRunStopper interface {
 
 // RunStopService coordinates worker and delegation shutdown.
 type RunStopService struct {
-	Queue       WorkerQueue
-	Sessions    WorkerRunStopSession
-	Reports     ChangeReportDeps
-	Delegations DelegationRunStopper
+	Queue         WorkerQueue
+	Holds         WorkerRunStopSession
+	Cancellations WorkerCancellationProjection
+	Reports       ChangeReportDeps
+	Delegations   DelegationRunStopper
 }
 
 // CancelWorkersByRunID cancels and settles every worker in the run.
@@ -130,8 +131,8 @@ func (s *RunStopService) cancelTask(ctx context.Context, task api.WorkerTask, re
 		return err
 	}
 	sessionID := strings.TrimSpace(task.ParentSessionID)
-	if s.Sessions != nil && sessionID != "" {
-		return s.Sessions.AppendWorkerCancellation(ctx, sessionID, session.WorkerCancellationInput{
+	if s.Cancellations != nil && sessionID != "" {
+		return s.Cancellations.Append(ctx, sessionID, workeroutcomes.CancellationInput{
 			JobID:          jobID,
 			AgentType:      task.AgentType,
 			ChildSessionID: task.ChildSessionID,
@@ -153,11 +154,11 @@ func (s *RunStopService) holdTask(ctx context.Context, task api.WorkerTask) erro
 		}
 	}
 	sessionID := strings.TrimSpace(task.ParentSessionID)
-	if s.Sessions == nil || sessionID == "" {
+	if s.Holds == nil || sessionID == "" {
 		return nil
 	}
 	report := BuildChangeReport(ctx, task, s.reports())
-	return s.Sessions.AppendWorkerHold(ctx, sessionID, session.WorkerHoldInput{
+	return s.Holds.Hold(ctx, sessionID, workerresults.HoldInput{
 		JobID:          task.ID,
 		AgentType:      task.AgentType,
 		ChildSessionID: task.ChildSessionID,

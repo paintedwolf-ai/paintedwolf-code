@@ -2,9 +2,6 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"strings"
 	"testing"
 
@@ -13,8 +10,11 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/oartest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -29,7 +29,7 @@ func (s *stubKickWorkerContext) BuildWorkerPromptContext(_ string, _ *api.Sessio
 
 func TestSpawnChildInjectsWorkerKick(t *testing.T) {
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewManager(store.NewMemory(), rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
@@ -40,15 +40,15 @@ func TestSpawnChildInjectsWorkerKick(t *testing.T) {
 	}})
 
 	ctx := context.Background()
-	parent, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
+	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create failed", err)
-	child, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer,
 		Prompt:    "start leg",
 	})
-	testutil.FailErr(t, "mgr.SpawnChild failed", err)
-	if _, err := mgr.Prompt(ctx, child.ID, ""); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	testutil.FailErr(t, "mgr.Workers.SpawnChild failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, child.ID, ""); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	found := false
 	for _, msg := range rec.LastRequest().Messages {
@@ -64,22 +64,22 @@ func TestSpawnChildInjectsWorkerKick(t *testing.T) {
 
 func TestSpawnChildInjectsImplementModeWorkerKick(t *testing.T) {
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewManager(store.NewMemory(), rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	// No worker context builder — implement-mode task() spawn has empty leg_id.
 
 	ctx := context.Background()
-	parent, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
+	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create failed", err)
-	child, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfilePathExplorer,
 		Prompt:    "survey foo.html structure",
 	})
-	testutil.FailErr(t, "mgr.SpawnChild failed", err)
-	if _, err := mgr.Prompt(ctx, child.ID, ""); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	testutil.FailErr(t, "mgr.Workers.SpawnChild failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, child.ID, ""); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	var kickText, promptText string
 	for _, msg := range rec.LastRequest().Messages {
@@ -99,16 +99,16 @@ func TestSpawnChildInjectsImplementModeWorkerKick(t *testing.T) {
 }
 
 func TestSpawnChildMissingKickTemplateSoftFails(t *testing.T) {
-	mgr := session.NewManager(store.NewMemory(), llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	// No SetPromptEngine — worker kick queue is a no-op.
 	ctx := context.Background()
-	parent, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
+	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create failed", err)
-	child, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "implementer", Prompt: "hi"})
-	testutil.FailErr(t, "mgr.SpawnChild failed", err)
-	if _, err := mgr.Prompt(ctx, child.ID, "hi"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "implementer", Prompt: "hi"})
+	testutil.FailErr(t, "mgr.Workers.SpawnChild failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, child.ID, "hi"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 }
 

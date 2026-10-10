@@ -1226,7 +1226,9 @@ const relocateWorkflowRunBlueprintPaths = `-- name: RelocateWorkflowRunBlueprint
 UPDATE workflow_runs
 SET blueprint_path = ?1, updated_at = ?2, revision = revision + 1
 WHERE project_id = ?3 AND blueprint_path = ?4
-RETURNING session_id
+RETURNING id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
+       blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
+       created_at, updated_at, paused_at, completed_at
 `
 
 type RelocateWorkflowRunBlueprintPathsParams struct {
@@ -1236,7 +1238,7 @@ type RelocateWorkflowRunBlueprintPathsParams struct {
 	FromPath  sql.NullString `json:"from_path"`
 }
 
-func (q *Queries) RelocateWorkflowRunBlueprintPaths(ctx context.Context, arg RelocateWorkflowRunBlueprintPathsParams) ([]string, error) {
+func (q *Queries) RelocateWorkflowRunBlueprintPaths(ctx context.Context, arg RelocateWorkflowRunBlueprintPathsParams) ([]WorkflowRuns, error) {
 	rows, err := q.db.QueryContext(ctx, relocateWorkflowRunBlueprintPaths,
 		arg.ToPath,
 		arg.UpdatedAt,
@@ -1247,13 +1249,35 @@ func (q *Queries) RelocateWorkflowRunBlueprintPaths(ctx context.Context, arg Rel
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []WorkflowRuns
 	for rows.Next() {
-		var session_id string
-		if err := rows.Scan(&session_id); err != nil {
+		var i WorkflowRuns
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.ProjectID,
+			&i.WorkflowID,
+			&i.WorkflowVersion,
+			&i.AttachPolicy,
+			&i.Status,
+			&i.ParentRunID,
+			&i.Revision,
+			&i.CurrentPhase,
+			&i.ProjectDir,
+			&i.VarsJson,
+			&i.BlueprintPath,
+			&i.PauseReason,
+			&i.FailureJson,
+			&i.StartMessageID,
+			&i.EndMessageID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PausedAt,
+			&i.CompletedAt,
+		); err != nil {
 			return nil, err
 		}
-		items = append(items, session_id)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

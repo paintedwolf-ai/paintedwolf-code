@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -157,8 +158,10 @@ func TestFetchURLToolCacheHitPreservesResponseMetadata(t *testing.T) {
 
 	invocation := &tools.ToolInvocationOut{}
 	out, fetched, err := fetchURLTool(context.Background(), fetchURLToolArgs{
-		URL:  requestedURL,
-		Tctx: tools.ToolContext{Out: invocation},
+		URL: requestedURL,
+		Tctx: tools.ToolContext{
+			Effects: tools.InvocationEffects{Out: invocation},
+		},
 	})
 	testutil.FailErr(t, "cached fetch_url", err)
 	if fetched != nil {
@@ -182,7 +185,7 @@ func TestFetchURLToolRejectsIncompleteRange(t *testing.T) {
 	_, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{
 		URL: "https://example.com/docs", Offset: 2,
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("err = %#v want TOOL_ARGS_INVALID", err)
 	}

@@ -306,11 +306,11 @@ values:
   - id: write_root_is_filesystem_root
     status: 400
     comment: >-
-      project root or write_root grant is filesystem root
+      Retired refusal: filesystem root is now permitted; per-path protected floors still apply.
   - id: write_root_is_home
     status: 400
     comment: >-
-      project root or write_root grant is bare $HOME
+      Retired refusal: home directory is now permitted; per-path protected floors still apply.
   - id: write_root_not_absolute
     status: 400
     comment: >-
@@ -663,6 +663,10 @@ values:
     status: 409
     comment: >-
       another file operation reserves this path
+  - id: source_trash_recovery_unavailable
+    status: 410
+    comment: >-
+      the exact native Trash item is no longer available for restoration
   - id: source_recovery_failed
     status: 500
     comment: >-

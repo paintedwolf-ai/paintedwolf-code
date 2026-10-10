@@ -23,7 +23,7 @@ const syncDiscoveryParallelism = 4
 
 // SyncTools refreshes dynamic tool definitions.
 // Provider failures remain isolated and appear in status.
-func (r *RegistryImpl) SyncTools(ctx context.Context) error {
+func (r *ToolDiscovery) SyncTools(ctx context.Context) error {
 	r.syncMu.Lock()
 	defer r.syncMu.Unlock()
 	return r.syncToolsLocked(ctx)
@@ -37,10 +37,10 @@ type providerDiscovery struct {
 	err   error
 }
 
-func (r *RegistryImpl) syncToolsLocked(ctx context.Context) error {
+func (r *ToolDiscovery) syncToolsLocked(ctx context.Context) error {
 	r.mu.RLock()
 	reg := r.toolRegistry
-	catalog := append([]MergedMCPProviderEntry(nil), r.deviceCatalog...)
+	catalog := append([]MergedMCPProviderEntry(nil), r.Catalog.deviceCatalog...)
 	r.mu.RUnlock()
 	if reg == nil {
 		return nil
@@ -52,7 +52,7 @@ func (r *RegistryImpl) syncToolsLocked(ctx context.Context) error {
 			enabled = append(enabled, merged.MCPProviderEntry)
 			continue
 		}
-		r.closeProviderSessions(merged.ID)
+		r.Connections.closeProviderSessions(merged.ID)
 	}
 
 	discoveries := r.discoverAll(ctx, enabled)
@@ -68,7 +68,7 @@ func (r *RegistryImpl) syncToolsLocked(ctx context.Context) error {
 		if d.err != nil {
 			logSyncFailure(d.entry.ID, d.stage, d.err)
 			syncErrors[d.entry.ID] = SyncFailureCode(d.err)
-			r.closeProviderSessions(d.entry.ID)
+			r.Connections.closeProviderSessions(d.entry.ID)
 			continue
 		}
 		providerDefinitions := make([]tools.Definition, 0, len(d.tools))
@@ -139,7 +139,7 @@ func (r *RegistryImpl) syncToolsLocked(ctx context.Context) error {
 }
 
 // discoverAll lists tools in device scope with bounded concurrency.
-func (r *RegistryImpl) discoverAll(ctx context.Context, entries []MCPProviderEntry) []providerDiscovery {
+func (r *ToolDiscovery) discoverAll(ctx context.Context, entries []MCPProviderEntry) []providerDiscovery {
 	out := make([]providerDiscovery, len(entries))
 	sem := make(chan struct{}, syncDiscoveryParallelism)
 	var wg sync.WaitGroup
@@ -156,17 +156,17 @@ func (r *RegistryImpl) discoverAll(ctx context.Context, entries []MCPProviderEnt
 	return out
 }
 
-func (r *RegistryImpl) discoverOne(ctx context.Context, entry MCPProviderEntry) providerDiscovery {
+func (r *ToolDiscovery) discoverOne(ctx context.Context, entry MCPProviderEntry) providerDiscovery {
 	providerCtx, cancel := context.WithTimeout(ctx, perProviderSyncTimeout)
 	defer cancel()
 	scope := CallScope{}
-	sess, err := r.ensureSession(providerCtx, scope, entry)
+	sess, err := r.Connections.ensureSession(providerCtx, scope, entry)
 	if err != nil {
 		return providerDiscovery{entry: entry, stage: "connect", err: err}
 	}
 	list, err := sess.ListTools(providerCtx)
 	if err != nil {
-		r.evictDeadSession(scope, entry.ID, err)
+		r.Connections.evictDeadSession(scope, entry.ID, err)
 		return providerDiscovery{entry: entry, stage: "list_tools", err: err}
 	}
 	return providerDiscovery{entry: entry, tools: list}
@@ -177,7 +177,7 @@ func logSyncFailure(providerID, stage string, err error) {
 		"provider_id", providerID, "stage", stage, "error", err)
 }
 
-func (r *RegistryImpl) buildToolDefinition(entry MCPProviderEntry, tool *sdkmcp.Tool) (tools.Definition, sanitizedToolDefinition, *evidence.MCPToolDeclaration, error) {
+func (r *ToolDiscovery) buildToolDefinition(entry MCPProviderEntry, tool *sdkmcp.Tool) (tools.Definition, sanitizedToolDefinition, *evidence.MCPToolDeclaration, error) {
 	if tool == nil {
 		return tools.Definition{}, sanitizedToolDefinition{}, nil, nil
 	}
@@ -192,14 +192,14 @@ func (r *RegistryImpl) buildToolDefinition(entry MCPProviderEntry, tool *sdkmcp.
 	toolNameCopy := def.Name
 	handler := func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
-			SessionID:     tctx.SessionID,
+			SessionID:     tctx.Identity.SessionID,
 			RootSessionID: tctx.ChatSessionID(),
-			ProjectID:     tctx.ProjectID,
+			ProjectID:     tctx.Identity.ProjectID,
 			ProjectDir:    tctx.ActiveRootPath(),
-			ToolCallID:    tctx.ToolCallID,
+			ToolCallID:    tctx.Identity.ToolCallID,
 		})
 		// Invocation scope selects the project overlay and confinement roots.
-		return r.CallTool(ctx, ScopeFromToolContext(tctx), providerIDCopy, toolNameCopy, cloneToolArgs(args))
+		return r.Calls.CallTool(ctx, ScopeFromToolContext(tctx), providerIDCopy, toolNameCopy, cloneToolArgs(args))
 	}
 	contract := toolcontract.External("mcp:" + providerID)
 	contract.SecretReferenceSurface = toolcontract.SecretSurfaceMCP
@@ -235,15 +235,15 @@ func cloneToolArgs(args map[string]any) map[string]any {
 }
 
 // Resync closes every MCP session and re-registers tools.
-func (r *RegistryImpl) Resync(ctx context.Context) error {
+func (r *ToolDiscovery) Resync(ctx context.Context) error {
 	r.mu.RLock()
-	refs := make([]sessionRef, 0, len(r.sessions))
-	for ref := range r.sessions {
+	refs := make([]sessionRef, 0, len(r.Connections.sessions))
+	for ref := range r.Connections.sessions {
 		refs = append(refs, ref)
 	}
 	r.mu.RUnlock()
 	for _, ref := range refs {
-		r.closeSessionRef(ref)
+		r.Connections.closeSessionRef(ref)
 	}
 	return r.SyncTools(ctx)
 }

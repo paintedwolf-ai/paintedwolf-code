@@ -2,6 +2,7 @@ package contract
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"sort"
@@ -105,13 +106,13 @@ func newMultiRootFixture(t *testing.T) multiRootFixture {
 
 func (f multiRootFixture) tctx(sessionID string) tools.ToolContext {
 	return tools.ToolContext{
-		ProjectID:          "proj-1",
-		SessionID:          sessionID,
-		Roots:              f.roots,
-		ActiveRootID:       f.activeID,
-		Agent:              "implement",
-		RepoFileCount:      100,
-		RepoFileCountKnown: true,
+		Identity: tools.InvocationIdentity{ProjectID: "proj-1",
+			SessionID: sessionID,
+			Agent:     "implement"},
+		Source: tools.InvocationSource{Roots: f.roots,
+			ActiveRootID:       f.activeID,
+			RepoFileCount:      100,
+			RepoFileCountKnown: true},
 	}
 }
 
@@ -119,7 +120,7 @@ func toolRejectCode(err error) string {
 	if err == nil {
 		return ""
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if errors.As(err, &reject) && reject != nil {
 		return reject.Code
 	}

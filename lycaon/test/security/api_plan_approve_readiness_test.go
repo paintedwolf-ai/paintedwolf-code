@@ -14,8 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -41,17 +41,17 @@ func TestApprovePlanHTTPRejectsWhenNotReady(t *testing.T) {
 	}
 	run = completePlanIntakeHTTP(t, h, run.ID)
 	run = completePlanDepthAtNoneHTTP(t, h, run.ID, "research")
-	current, err := h.WorkflowMgr.Get(ctx, run.ID)
+	current, err := h.Workflows.Manager.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get run before forcing approve", err)
 	run = *current
 
-	vars, err := h.WorkflowMgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := h.Workflows.Manager.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
-	vars = workflow.SetHostVar(vars, "phase_skipped.review", true)
+	vars = runstate.SetHostVar(vars, "phase_skipped.review", true)
 	run.CurrentPhase = "approve"
-	testutil.FailErr(t, "CommitState", h.WorkflowMgr.Store.CommitState(ctx, &run, sess.WorkspacePath, vars))
+	testutil.FailErr(t, "CommitState", h.Workflows.Manager.Store.State.CommitState(ctx, &run, sess.WorkspacePath, vars))
 
-	plan, err := h.BlueprintMgr.Get(ctx, run.ProjectID, run.BlueprintPath)
+	plan, err := h.Workflows.Blueprints.Get(ctx, run.ProjectID, run.BlueprintPath)
 	testutil.FailErr(t, "Get plan before reject", err)
 	approveURL := "/v1/projects/" + url.PathEscape(proj.ID) + "/blueprints/" + url.PathEscape(plan.ID) + "/approve"
 	req = authedRequest(t, http.MethodPost, approveURL, strings.NewReader(blueprintApprovalJSON(t, run, plan.Content)))
@@ -69,12 +69,12 @@ func TestApprovePlanHTTPRejectsWhenNotReady(t *testing.T) {
 		t.Fatalf("code = %q want human_approval_not_ready (body = %s)", resp.Code, w.Body.String())
 	}
 
-	plan, err = h.BlueprintMgr.Get(ctx, run.ProjectID, run.BlueprintPath)
+	plan, err = h.Workflows.Blueprints.Get(ctx, run.ProjectID, run.BlueprintPath)
 	testutil.FailErr(t, "Get plan after reject", err)
 	if plan.Status != wire.BlueprintStatusDraft {
 		t.Fatalf("plan status = %q want draft", plan.Status)
 	}
-	active, err := h.WorkflowMgr.Get(ctx, run.ID)
+	active, err := h.Workflows.Manager.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get run after reject", err)
 	if active.CurrentPhase != "approve" {
 		t.Fatalf("phase = %q want approve", active.CurrentPhase)
@@ -84,7 +84,7 @@ func TestApprovePlanHTTPRejectsWhenNotReady(t *testing.T) {
 func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
 	limits := &approvalWakeLimits{}
-	h.SessionMgr.SetLimitsProvider(limits)
+	h.Sessions.Manager.Limits.SetProvider(limits)
 	srv := h.Server
 	proj := createProjectHTTP(t, srv, h.ProjectDir(t, "approval-wake"))
 	sess := createSessionForProjectHTTP(t, srv, proj.ID, wire.SessionPostureBuild)
@@ -101,11 +101,11 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil {
 		testutil.FailErr(t, "unmarshal start run", err)
 	}
-	h.SessionMgr.WaitForCoordinatorAsyncTurns(ctx)
+	h.Sessions.Manager.Coordinator.WaitForTurns(ctx)
 
 	run = completePlanIntakeHTTP(t, h, run.ID)
 	run = completePlanDepthAtNoneHTTP(t, h, run.ID, "research")
-	seedPlanStub(t, h.BlueprintMgr, run.ProjectID, run.BlueprintPath)
+	seedPlanStub(t, h.Workflows.Blueprints, run.ProjectID, run.BlueprintPath)
 	run = advancePlanRunHTTP(t, srv, run.ID)
 	if run.CurrentPhase == "review" {
 		run = completePlanDepthAtNoneHTTP(t, h, run.ID, "review")
@@ -114,11 +114,11 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 		t.Fatalf("phase = %q want approve", run.CurrentPhase)
 	}
 
-	originalAdvanceHook := h.WorkflowMgr.OnHumanApprovalAdvanced
+	originalAdvanceHook := h.Workflows.Manager.Approvals.OnHumanApprovalAdvanced
 	var sawApprovalAdvance atomic.Bool
-	h.WorkflowMgr.OnHumanApprovalAdvanced = func(ctx context.Context, advanced *wire.WorkflowRun) {
+	h.Workflows.Manager.Approvals.OnHumanApprovalAdvanced = func(ctx context.Context, advanced *wire.WorkflowRun) {
 		if advanced.ID == run.ID && advanced.CurrentPhase == "execute" {
-			plan, err := h.BlueprintMgr.Get(ctx, run.ProjectID, run.BlueprintPath)
+			plan, err := h.Workflows.Blueprints.Get(ctx, run.ProjectID, run.BlueprintPath)
 			testutil.FailErr(t, "Get blueprint during workflow advance", err)
 			if plan.Status != wire.BlueprintStatusApproved {
 				t.Fatalf("blueprint status during workflow advance = %q want approved", plan.Status)
@@ -134,9 +134,9 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 		t.Fatalf("fixture preparation started %d model requests before approval", requestCountBeforeApproval)
 	}
 	limits.enabled.Store(true)
-	current, err := h.WorkflowMgr.Get(ctx, run.ID)
+	current, err := h.Workflows.Manager.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get run before approve", err)
-	plan, err := h.BlueprintMgr.Get(ctx, current.ProjectID, current.BlueprintPath)
+	plan, err := h.Workflows.Blueprints.Get(ctx, current.ProjectID, current.BlueprintPath)
 	testutil.FailErr(t, "Get plan before approve", err)
 	approveURL := "/v1/projects/" + url.PathEscape(proj.ID) + "/blueprints/" + url.PathEscape(plan.ID) + "/approve"
 	req = authedRequest(t, http.MethodPost, approveURL, strings.NewReader(blueprintApprovalJSON(t, *current, plan.Content)))
@@ -151,19 +151,19 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	if !testutil.WaitForNoFatal(promptIdleBudget, func() bool {
 		return len(h.Recording.AllRequests()) > requestCountBeforeApproval
 	}) {
-		active, activeErr := h.WorkflowMgr.GetActive(ctx, sess.ID)
+		active, activeErr := h.Workflows.Manager.Store.Runs.ActiveBySession(ctx, sess.ID)
 		testutil.FailErr(t, "get active run after approval wake", activeErr)
 		if active == nil {
 			t.Fatal("approval did not leave an active workflow")
 		}
-		vars, varsErr := h.WorkflowMgr.Store.GetScaffoldVars(ctx, active.ID)
+		vars, varsErr := h.Workflows.Manager.Store.Runs.GetScaffoldVars(ctx, active.ID)
 		messages, messageErr := h.Store.GetMessages(ctx, sess.ID)
-		allowed, reason, wakeErr := h.SessionMgr.ShouldLoopWake(ctx, sess.ID, anchor.PhaseAdvanced)
+		allowed, reason, wakeErr := h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, sess.ID, anchor.PhaseAdvanced)
 		t.Fatalf("approval did not wake coordinator: allowed=%v reason=%q wake_err=%v active=%+v vars=%+v messages=%+v active_err=%v vars_err=%v message_err=%v",
 			allowed, reason, wakeErr, active, vars, messages, activeErr, varsErr, messageErr)
 	}
-	h.SessionMgr.WaitForCoordinatorAsyncTurns(ctx)
-	history, err := h.WorkflowMgr.Store.ListBySession(ctx, sess.ID, 100, nil)
+	h.Sessions.Manager.Coordinator.WaitForTurns(ctx)
+	history, err := h.Workflows.Manager.Store.Runs.ListBySession(ctx, sess.ID, 100, nil)
 	testutil.FailErr(t, "list workflows after approval", err)
 	for _, child := range history {
 		if child.ParentRunID != nil && *child.ParentRunID == run.ID && child.WorkflowID == "implement" {

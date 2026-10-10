@@ -3,6 +3,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"cmp"
 	"context"
 	"fmt"
@@ -17,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/sizebudget"
@@ -157,12 +158,12 @@ func measurePromptBudgets(t *testing.T, root string, reg *PromptBudgetRegistry) 
 	}
 	for _, row := range reg.Tripartite {
 		forced := ""
-		if row.SurfaceID == tools.SurfaceImplementInvestigate {
+		if row.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 			forced = row.SurfaceID
 		}
 		rendered := renderCoordinatorTripartiteForRunContext(t, root, row.RunCtx, row.Sess, row.UserPrompt, row.History, forced, row.State)
 		// Investigate surfaces include the skill-reading procedure.
-		if row.SurfaceID == tools.SurfaceImplementInvestigate && !strings.Contains(rendered, "## Skills") {
+		if row.SurfaceID == toolcontract.SurfaceImplementInvestigate && !strings.Contains(rendered, "## Skills") {
 			t.Fatalf("%s measured without the skill-reading procedure", row.Name)
 		}
 		if !strings.Contains(rendered, "## Host resources") {

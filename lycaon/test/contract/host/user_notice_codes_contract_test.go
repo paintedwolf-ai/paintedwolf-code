@@ -199,7 +199,7 @@ func TestSessionAbortedDocumentedNotUserVisible(t *testing.T) {
 
 func TestAppBuildWiresUserNoticeCatalog(t *testing.T) {
 	text := contractcheck.ServeWireSource(t)
-	if !strings.Contains(text, "deps.UserNotices = ") {
+	if !strings.Contains(text, "deps.Core.UserNotices = ") {
 		t.Fatal("serve build graph must hand the user notice catalog to the HTTP server's dependencies")
 	}
 	if !strings.Contains(text, "LoadEffectiveUserNotices") {

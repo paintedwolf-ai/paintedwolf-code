@@ -54,18 +54,18 @@ func TestEgressUsesEffectiveProjectApprovalConfig(t *testing.T) {
 
 	runtime, err := toolhost.NewRuntime(toolhost.RuntimeConfig{ConfigRoot: root, Approvals: store, Catalog: extpackstest.StockCatalog(t)})
 	testutil.FailErr(t, "toolhost.NewRuntime failed", err)
-	runtime.SetApprovalRuleSource(extensionRuleSource{})
+	runtime.Authority.SetApprovalRuleSource(extensionRuleSource{})
 	authzStore := authzcontext.NewMemoryStore()
-	runtime.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzStore}})
+	runtime.Authority.SetAuthzRecorder(authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzStore}})
 	t.Cleanup(func() {
 		confine.SetEgressRuleEvaluator(nil)
 		confine.SetEgressPostureResolver(nil)
 		confine.SetApprovalsDisabledSource(nil)
 	})
-	if !runtime.ApprovalsDisabled("") {
+	if !runtime.Authority.ApprovalsDisabled("") {
 		t.Fatal("global never-ask was not effective")
 	}
-	if runtime.ApprovalsDisabled(projectDir) {
+	if runtime.Authority.ApprovalsDisabled(projectDir) {
 		t.Fatal("project did not restore its tighter approval layer")
 	}
 

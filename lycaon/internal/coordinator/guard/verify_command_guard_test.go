@@ -23,7 +23,7 @@ func TestObserveVerifyCommandUndeclared_bare(t *testing.T) {
 	guard.ObserveVerifyCommandUndeclared("verify", "  ", args, gc)
 	if !guard.EvaluateObserveHasCode(gc, oar.AnchorCoordinatorPreInvoke, guard.VerifyCommandUndeclaredCode) {
 		t.Fatalf("want VERIFY_COMMAND_UNDECLARED Decision, facts verify_has_command=%v verify_declared=%v",
-			gc.VerifyHasCommand, gc.VerifyDeclared)
+			gc.Progress.VerifyHasCommand, gc.Progress.VerifyDeclared)
 	}
 	if _, ok := args["command"]; ok {
 		t.Fatal("must not invent a command on reject")

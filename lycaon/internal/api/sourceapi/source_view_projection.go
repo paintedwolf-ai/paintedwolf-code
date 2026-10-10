@@ -44,7 +44,7 @@ func (view *sourceView) comparisonProjection(ctx context.Context, document *sour
 	var charge *pagedview.Reservation
 	reserve := func(bytes int64) error {
 		var err error
-		charge, err = view.comparisonBudget.ReserveEvictingIdle(bytes + intentBytes)
+		charge, err = view.comparisonData.comparisonBudget.ReserveEvictingIdle(bytes + intentBytes)
 		return err
 	}
 	projection, err := document.Project(ctx, intent.Mode, folds, reserve)

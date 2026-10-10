@@ -23,8 +23,8 @@ func (f *workspaceInventoryService) InventoryState(context.Context, string, sour
 func TestSourceWatchActivationReconcilesInventory(t *testing.T) {
 	inventory := &workspaceInventoryService{state: sourceledger.InventoryState{Phase: sourceledger.InventoryUninitialized}}
 	srv := newTestServer(t, func(d *Dependencies) {
-		d.WatchNeedsSeed = func(string) bool { return false }
-		d.SourceInventory = inventory
+		d.Source.WatchNeedsSeed = func(string) bool { return false }
+		d.Source.SourceInventory = inventory
 	})
 	p := createProjectForTest(t, srv, t.TempDir())
 	srv.background.Wait(context.Background())
@@ -36,7 +36,7 @@ func TestSourceWatchActivationReconcilesInventory(t *testing.T) {
 	}
 	for attempt := range 2 {
 		sourcefeed.StopProjectWatch(context.Background(), p.ID)
-		srv.Sources.ScheduleSourceWatch(t.Context(), p.ID)
+		srv.Sources.Watch.ScheduleSourceWatch(t.Context(), p.ID)
 		srv.background.Wait(context.Background())
 		if got := len(inventory.snapshot()) - setupStarts; got != attempt+1 {
 			t.Fatalf("inventory starts after watch binding = %d, want %d", got, attempt+1)

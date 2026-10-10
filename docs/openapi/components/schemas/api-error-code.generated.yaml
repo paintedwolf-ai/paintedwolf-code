@@ -168,6 +168,7 @@ components:
         - source_path_protected
         - source_move_incomplete
         - source_path_busy
+        - source_trash_recovery_unavailable
         - source_recovery_failed
         - source_not_found
         - source_binary_denied

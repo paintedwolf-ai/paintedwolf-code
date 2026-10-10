@@ -45,7 +45,7 @@ func TestOverlayChangedPathsFeedWorkerProof(t *testing.T) {
 }
 
 func TestFormatWorkerCompletionEnvelopeIncludesProofAndReportJSON(t *testing.T) {
-	out := session.FormatWorkerCompletionEnvelope(session.WorkerCompletionEnvelope{
+	out := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{
 		JobID:   "job-1",
 		State:   "complete",
 		Summary: "done",

@@ -57,7 +57,7 @@ func TestStampRefusalFillsACodeWhenAttributed(t *testing.T) {
 func TestSandboxPostInvokeCodesCoverBrokerRefusalsAndVerify(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "internal", "session", "oar_observe.go")
+	path := filepath.Join(root, "lycaon", "internal", "session", "policyfacts", "oar_observe.go")
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, path, nil, 0)
 	testutil.FailErr(t, "parse oar_observe.go", err)

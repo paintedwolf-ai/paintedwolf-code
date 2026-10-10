@@ -16,7 +16,7 @@ copy:
   cause: Agents cannot read or rewrite the configuration that defines their own tools, policy, credentials, and authority. No approval covers this path, so none was asked for.
   why: An approval cannot make self-inspection or self-modification of the active control plane coherent.
   fix: >-
-    Continue without that path and tell the user plainly that the app's own state
+    Use `@scratch` for working files. Continue without that path and tell the user plainly that the app's own state
     folder is not reachable by tools. If they need something from it, ask them to
     copy or export it into an attached folder. If the host configuration needs to
     change, ask the user to change it in Settings.

@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,7 +10,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
@@ -53,8 +54,8 @@ func TestCoordinatorAskUserInvariantSurfacesIncludeAskUser(t *testing.T) {
 	t.Parallel()
 	surfaces := loadImplementSurfaces(t)
 	for _, id := range []string{
-		tools.SurfaceImplementInvestigate,
-		tools.SurfaceImplementDispatch,
+		toolcontract.SurfaceImplementInvestigate,
+		toolcontract.SurfaceImplementDispatch,
 		"implement_overlay_promote",
 		"implement_park",
 		"implement_routing",
@@ -78,8 +79,8 @@ func TestCoordinatorAskUserInvariantSyntheticPhasePrefix(t *testing.T) {
 	lycaonRoot := filepath.Join(root, "lycaon")
 	t.Parallel()
 	// Ask ids share the host phase prefix.
-	raw, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "user_input_request.go"))
-	contractcheck.FailErr(t, "read user_input_request.go", err)
+	raw, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "inputs", "asks.go"))
+	contractcheck.FailErr(t, "read inputs/asks.go", err)
 	if !strings.Contains(string(raw), `askUserPhasePrefix = "ask-"`) {
 		t.Fatal("ask_user must mint phase ids with ask- prefix")
 	}
@@ -122,8 +123,8 @@ func TestCoordinatorAskUserInvariantOnePendingRejectCode(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	lycaonRoot := filepath.Join(root, "lycaon")
 	t.Parallel()
-	raw, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "user_input_request.go"))
-	contractcheck.FailErr(t, "read user_input_request.go", err)
+	raw, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "inputs", "asks.go"))
+	contractcheck.FailErr(t, "read inputs/asks.go", err)
 	if !strings.Contains(string(raw), `ASK_USER_ALREADY_PENDING`) {
 		t.Fatal("second ask while pending must reject ASK_USER_ALREADY_PENDING")
 	}
@@ -145,8 +146,8 @@ func TestCoordinatorAskUserInvariantNoLastUserAskResponseScaffoldLatch(t *testin
 	lycaonRoot := filepath.Join(root, "lycaon")
 	t.Parallel()
 	for _, rel := range []string{
-		filepath.Join("internal", "workflow", "user_input_request.go"),
-		filepath.Join("internal", "workflow", "user_interaction.go"),
+		filepath.Join("internal", "workflow", "inputs", "asks.go"),
+		filepath.Join("internal", "workflow", "inputs", "feedback.go"),
 		filepath.Join("internal", "api", "harness_control.go"),
 	} {
 		raw, err := os.ReadFile(filepath.Join(lycaonRoot, rel))
@@ -161,20 +162,27 @@ func TestCoordinatorAskUserInvariantParkOnAskAndAnswerRewrite(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	lycaonRoot := filepath.Join(root, "lycaon")
 	t.Parallel()
-	raw, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "coordinator", "loopwake", "wait_tool.go"))
-	contractcheck.FailErr(t, "read wait_tool", err)
-	if !strings.Contains(string(raw), "AskUserEndsCycle") || !strings.Contains(string(raw), "ParkForPendingUserInput") {
+	raw, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "coordinator", "loopwake", "wait_completion.go"))
+	contractcheck.FailErr(t, "read wait completion", err)
+	park, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "coordinator", "loopwake", "wait_lifecycle.go"))
+	contractcheck.FailErr(t, "read wait lifecycle", err)
+	if !strings.Contains(string(raw), "AskUserEndsCycle") || !strings.Contains(string(park), "ParkForPendingUserInput") {
 		t.Fatal("loopwake must park-on-ask (AskUserEndsCycle + ParkForPendingUserInput)")
 	}
-	ans, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "ask_user_answer.go"))
-	contractcheck.FailErr(t, "read ask_user_answer", err)
-	if !strings.Contains(string(ans), "persistCoordinatorAskAnswer") {
+	ans, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "inputs", "cards.go"))
+	contractcheck.FailErr(t, "read inputs/cards", err)
+	if !strings.Contains(string(ans), "PersistCoordinatorAskAnswer") || !strings.Contains(string(ans), "PersistAskUserAnswerForToolCall") {
 		t.Fatal("coordinator ask result projection required")
 	}
-	ui, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "user_interaction.go"))
-	contractcheck.FailErr(t, "read user_interaction", err)
-	if !strings.Contains(string(ui), "persistCoordinatorAskAnswer") {
+	ui, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "inputs", "feedback.go"))
+	contractcheck.FailErr(t, "read inputs/feedback", err)
+	if !strings.Contains(string(ui), "PersistCoordinatorAskAnswer") {
 		t.Fatal("resolve paths must project the authoritative coordinator ask result")
+	}
+	projection, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "inputs", "ask_projection.go"))
+	contractcheck.FailErr(t, "read ask projection", err)
+	if !strings.Contains(string(projection), "PersistCoordinatorAskAnswer") {
+		t.Fatal("reconciliation must project the authoritative coordinator ask result")
 	}
 }
 
@@ -183,8 +191,8 @@ func TestCoordinatorAskUserInvariantAskUserToolNoCheckpointKind(t *testing.T) {
 	lycaonRoot := filepath.Join(root, "lycaon")
 	t.Parallel()
 	for _, rel := range []string{
-		filepath.Join("internal", "workflow", "ask_user_tool.go"),
-		filepath.Join("internal", "workflow", "user_input_request.go"),
+		filepath.Join("internal", "workflow", "inputs", "ask_tool.go"),
+		filepath.Join("internal", "workflow", "inputs", "asks.go"),
 	} {
 		raw, err := os.ReadFile(filepath.Join(lycaonRoot, rel))
 		contractcheck.FailErr(t, "read "+rel, err)
@@ -205,8 +213,8 @@ func TestCoordinatorAskUserInvariantNoProseBypassOnAskUserTool(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	lycaonRoot := filepath.Join(root, "lycaon")
 	t.Parallel()
-	raw, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "ask_user_tool.go"))
-	contractcheck.FailErr(t, "read ask_user_tool.go", err)
+	raw, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "inputs", "ask_tool.go"))
+	contractcheck.FailErr(t, "read inputs/ask_tool.go", err)
 	src := string(raw)
 	for _, needle := range []string{
 		"TryResolveUserFeedback",
@@ -276,7 +284,7 @@ func TestCoordinatorAskUserInvariantCapturePageRequestableOnInvestigateAndAllowe
 	root := contractcheck.RepoRoot(t)
 	lycaonRoot := filepath.Join(root, "lycaon")
 	t.Parallel()
-	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: tools.SurfaceImplementInvestigate}, 1)
+	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: toolcontract.SurfaceImplementInvestigate}, 1)
 	contractcheck.FailErr(t, "compile investigate tool plan", err)
 	requestable := plan.DeferredNames()
 	for _, tool := range []string{"capture_page", "render_view"} {
@@ -345,8 +353,8 @@ func TestCoordinatorAskUserInvariantCompareSynthesizesLettersNotNeither(t *testi
 	root := contractcheck.RepoRoot(t)
 	lycaonRoot := filepath.Join(root, "lycaon")
 	t.Parallel()
-	raw, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "user_input_request.go"))
-	contractcheck.FailErr(t, "read user_input_request", err)
+	raw, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "inputs", "ask_grammar.go"))
+	contractcheck.FailErr(t, "read inputs/ask grammar", err)
 	src := string(raw)
 	if !strings.Contains(src, "synthesizeCompareOptions") {
 		t.Fatal("compare must synthesize options via synthesizeCompareOptions")
@@ -378,8 +386,8 @@ func TestCoordinatorAskUserInvariantNoToolAskExpiryHelpers(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	lycaonRoot := filepath.Join(root, "lycaon")
 	t.Parallel()
-	raw, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "user_input_request.go"))
-	contractcheck.FailErr(t, "read user_input_request", err)
+	raw, err := os.ReadFile(filepath.Join(lycaonRoot, "internal", "workflow", "inputs", "asks.go"))
+	contractcheck.FailErr(t, "read inputs/asks", err)
 	src := string(raw)
 	for _, needle := range []string{"ExpirePendingToolAsks", "scheduleToolAskExpiry", "ask_user_timeout"} {
 		if strings.Contains(src, needle) {

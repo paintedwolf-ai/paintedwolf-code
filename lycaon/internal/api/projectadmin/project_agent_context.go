@@ -14,7 +14,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleGetProjectAgentContext(w http.ResponseWriter, r *http.Request) {
+func (s *Projects) HandleGetProjectAgentContext(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.Registry, s.responses, w, r)
 	if !ok {
 		return
@@ -56,7 +56,7 @@ func (s *Handler) HandleGetProjectAgentContext(w http.ResponseWriter, r *http.Re
 		}
 	}
 	if result.SkillsEnabled {
-		loaded, _ := s.Sessions.EffectiveSkills(r.Context(), p.ID, project.RootPaths(p))
+		loaded, _ := s.Sessions.Profiles.EffectiveSkills(r.Context(), p.ID, project.RootPaths(p))
 		for _, skill := range loaded {
 			if !skill.Project {
 				continue

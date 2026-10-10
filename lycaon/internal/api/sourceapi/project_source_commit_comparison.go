@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -48,7 +49,7 @@ func readWorkingCommit(p *project.Project, rootID, rootAbs, path string) commitW
 		state.Side = side
 		return state
 	}
-	observation, err := project.ObserveProjectSource(p, project.SourceReadRequest{RootID: rootID, Path: path})
+	observation, err := projectsource.ObserveProjectSource(p, projectsource.SourceReadRequest{RootID: rootID, Path: path})
 	if err != nil {
 		side.Reason = "content_unavailable"
 		state.Side = side
@@ -79,7 +80,7 @@ func readWorkingCommit(p *project.Project, rootID, rootAbs, path string) commitW
 	return state
 }
 
-func (s *Handler) writeCommitPathComparison(w http.ResponseWriter, r *http.Request, p *project.Project) {
+func (s *Review) writeCommitPathComparison(w http.ResponseWriter, r *http.Request, p *project.Project) {
 	q := r.URL.Query()
 	rootID, path := q.Get("root_id"), q.Get("path")
 	if q.Get("baseline") != "commit" || rootID == "" || !filepath.IsLocal(path) || path == "." {
@@ -91,10 +92,10 @@ func (s *Handler) writeCommitPathComparison(w http.ResponseWriter, r *http.Reque
 		value := q.Get("expected_head")
 		expected = &value
 	}
-	diff, err := s.loadCommitComparison(r.Context(), p, wire.CommitComparisonSource{RootID: rootID, Path: path, ExpectedHead: expected}, nil)
+	diff, err := s.Comparisons.loadCommitComparison(r.Context(), p, wire.CommitComparisonSource{RootID: rootID, Path: path, ExpectedHead: expected}, nil)
 	if err != nil {
-		s.writeComparisonError(w, r, err)
+		s.Comparisons.writeComparisonError(w, r, err)
 		return
 	}
-	s.writeSourceComparison(w, r, p.ID, diff)
+	s.Comparisons.writeSourceComparison(w, r, p.ID, diff)
 }

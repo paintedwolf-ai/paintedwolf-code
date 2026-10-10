@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -91,7 +92,7 @@ func (r *SQLDecisionResolver) resolve(ctx context.Context, expected api.WorkerDe
 		if err := queries.ClearWorkerOutcomeDelivery(ctx, jobID); err != nil {
 			return err
 		}
-		if err := EnqueueJobEventTx(ctx, tx, r.queue.store.outbox, jobID); err != nil {
+		if err := jobstate.EnqueueJobEventTx(ctx, tx, r.queue.store.outbox, jobID); err != nil {
 			return err
 		}
 		return queries.DeleteWorkerDecision(ctx, childSessionID)

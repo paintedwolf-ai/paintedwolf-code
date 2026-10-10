@@ -2,6 +2,7 @@ package tools_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"strings"
 	"testing"
 
@@ -16,10 +17,10 @@ import (
 // redacted send visible but disabled.
 func TestUnscreenedImageCardKeepsLadderAndDisablesRedaction(t *testing.T) {
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
-	exec := tools.NewDefaultToolExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.SetCheckpointManager(mgr, nil)
+	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
+	exec.Approvals.SetCheckpointManager(mgr, nil)
 	gap := secretmatch.GapOCRUnavailable
-	_, err := exec.AskSecretScreen(context.Background(), secretmatch.Alert{
+	_, err := exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
 		SessionID: "worker", RootSessionID: "sess", ProjectID: "project-id", ProjectDir: "/project",
 		Surface:       secretmatch.SurfaceVisualModel,
 		DestinationID: string(secretmatch.DestinationModelProvider), DestinationLabel: "model provider",

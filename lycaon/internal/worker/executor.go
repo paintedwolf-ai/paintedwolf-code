@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/promptresult"
 	"strings"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
@@ -13,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
@@ -35,34 +35,49 @@ func (e *LocalWorkerExecutor) AbortWorkerRuntime(ctx context.Context, task api.W
 	if task.ChildSessionID == "" {
 		return nil
 	}
-	if e.Sessions == nil {
+	if e.WorkerCancellations == nil {
 		return fmt.Errorf("worker runtime stop is not configured")
 	}
-	return e.Sessions.StopWorkerRuntime(ctx, task.ChildSessionID)
+	return e.WorkerCancellations.StopRuntime(ctx, task.ChildSessionID)
 }
 
 type LocalWorkerExecutor struct {
-	Sessions      WorkerExecutionSessions
-	ChildSessions WorkerChildSessionBinder
-	Injects       *prompts.InjectRenderer
-	TouchPaths    session.WorkerPhaseTouchPathsSource
-	Reports       ChangeReportDeps
-	Waits         *awaitstore.Store
+	Sessions            WorkerExecutionSessions
+	Prompts             WorkerPromptExecution
+	Transcripts         workercloseout.WorkerSummaryResolver
+	Cancellations       WorkerPromptCancellation
+	Graceful            WorkerGracefulCloseout
+	WorkerCancellations WorkerCancellationRuntime
+	ChildSessions       WorkerChildSessionBinder
+	Workspace           WorkerProjectRoots
+	Injects             *prompts.InjectRenderer
+	TouchPaths          session.WorkerPhaseTouchPathsSource
+	Reports             ChangeReportDeps
+	Waits               *awaitstore.Store
 }
 
 type WorkerExecutionSessions interface {
-	GracefulCancelSession
-	StopWorkerRuntime(ctx context.Context, childSessionID string) error
-	session.PromptRunner
-	workercloseout.WorkerSummaryResolver
+	SpawnChild(context.Context, string, api.SpawnChildRequest) (*api.Session, error)
 	workercloseout.WorkerSummaryFinalizeBounds
 	SessionByID(ctx context.Context, id string) (*api.Session, error)
 	SetWorkerMaxToolLoops(ctx context.Context, childSessionID string, maxToolLoops int) error
-	ProjectRootRefs(ctx context.Context, projectID string) []projectroot.RootRef
-	TakeWorkerGracefulCancel(childSessionID string) (jobID, reason string, ok bool)
-	FinishWorkerGracefulCancel(childSessionID string)
-	CancelInFlightPrompt(sessionID string)
-	PromptWorkerResume(ctx context.Context, sessionID, jobID, leaseID string, condition awaitstore.Condition, onAdmitted func() error) (*promptresult.Result, error)
+}
+
+type WorkerGracefulCloseout interface {
+	Closeout(string) (string, string, bool)
+	Finish(string)
+}
+type WorkerPromptCancellation interface{ Cancel(string) }
+
+type WorkerPromptExecution interface {
+	Prompt(context.Context, string, string) (*promptresult.Result, error)
+	PromptWorker(context.Context, string, string, string) (*promptresult.Result, error)
+	workercloseout.HostTurnRunner
+	PromptWorkerResume(context.Context, string, string, string, awaitstore.Condition, func() error) (*promptresult.Result, error)
+}
+
+type WorkerProjectRoots interface {
+	ProjectRoots(context.Context, string) []projectroot.RootRef
 }
 
 // WorkerChildSessionBinder records the child session associated with a worker job.
@@ -72,8 +87,8 @@ type WorkerChildSessionBinder interface {
 
 var workerExecLog = observability.LazyComponent("worker_executor")
 
-func NewLocalWorkerExecutor(sessions WorkerExecutionSessions, childSessions WorkerChildSessionBinder) *LocalWorkerExecutor {
-	return &LocalWorkerExecutor{Sessions: sessions, ChildSessions: childSessions}
+func NewLocalWorkerExecutor(sessions WorkerExecutionSessions, childSessions WorkerChildSessionBinder, workspace WorkerProjectRoots, prompts WorkerPromptExecution, transcripts workercloseout.WorkerSummaryResolver, cancellation WorkerPromptCancellation, graceful WorkerGracefulCloseout, workerCancellations WorkerCancellationRuntime) *LocalWorkerExecutor {
+	return &LocalWorkerExecutor{Sessions: sessions, Prompts: prompts, Transcripts: transcripts, Cancellations: cancellation, Graceful: graceful, WorkerCancellations: workerCancellations, ChildSessions: childSessions, Workspace: workspace}
 }
 
 func (e *LocalWorkerExecutor) SetPromptInjects(renderer *prompts.InjectRenderer) {
@@ -128,7 +143,7 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 	if err := e.ChildSessions.SetChildSessionID(ctx, task.ID, child.ID); err != nil {
 		return api.WorkerResult{}, fmt.Errorf("persist worker child session: %w", err)
 	}
-	stopCancelWatch := watchWorkerPromptCancel(ctx, e.Sessions, child.ID)
+	stopCancelWatch := watchWorkerPromptCancel(ctx, e.Cancellations, child.ID)
 	defer stopCancelWatch()
 
 	var waitLeaseID string
@@ -141,7 +156,7 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 		return api.WorkerResult{}, err
 	}
 	if resumedWait {
-		_, err = e.Sessions.PromptWorkerResume(ctx, child.ID, task.ID, waitLeaseID, condition, func() error {
+		_, err = e.Prompts.PromptWorkerResume(ctx, child.ID, task.ID, waitLeaseID, condition, func() error {
 			return e.Waits.MarkResumeDelivered(ctx, waitLeaseID)
 		})
 	} else {
@@ -152,7 +167,7 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 				return api.WorkerResult{}, err
 			}
 		}
-		_, err = e.Sessions.PromptWorker(ctx, child.ID, task.ID, promptText)
+		_, err = e.Prompts.PromptWorker(ctx, child.ID, task.ID, promptText)
 	}
 	if err != nil {
 		return api.WorkerResult{}, err
@@ -166,16 +181,16 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 	}
 
 	finalizeOpts := e.workerFinalizeOpts(ctx, task, child, run.ProjectDir)
-	if _, reason, pending := e.Sessions.TakeWorkerGracefulCancel(child.ID); pending {
+	if _, reason, pending := e.Graceful.Closeout(child.ID); pending {
 		result, finishErr := e.completeGracefulStop(ctx, task, child, reason, finalizeOpts)
-		e.Sessions.FinishWorkerGracefulCancel(child.ID)
+		e.Graceful.Finish(child.ID)
 		if finishErr != nil {
 			return api.WorkerResult{}, finishErr
 		}
 		return result, nil
 	}
 
-	outcome, err := workercloseout.FinalizeWorkerSummaryForChild(ctx, e.Sessions, child.ID, agentType, finalizeOpts)
+	outcome, err := workercloseout.FinalizeWorkerSummaryForChild(ctx, e.Transcripts, e.Prompts, child.ID, agentType, finalizeOpts)
 	if err != nil {
 		return api.WorkerResult{}, err
 	}
@@ -201,7 +216,7 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 
 // Retries reuse the job's persisted assignment.
 func (e *LocalWorkerExecutor) assignmentForReusedChild(ctx context.Context, childID, jobID, prompt string) (string, error) {
-	messages, err := e.Sessions.GetWorkerJobMessages(ctx, childID, jobID)
+	messages, err := e.Transcripts.GetWorkerJobMessages(ctx, childID, jobID)
 	if err != nil {
 		return "", fmt.Errorf("read worker assignment history: %w", err)
 	}
@@ -224,16 +239,16 @@ func (e *LocalWorkerExecutor) workerFinalizeOpts(
 	opts.WorkerJobID = strings.TrimSpace(task.ID)
 	opts.ProjectDir = strings.TrimSpace(projectDir)
 	opts.ActiveRootID = strings.TrimSpace(child.WorkspaceRootID)
-	if strings.TrimSpace(task.ProjectID) != "" {
-		opts.ProjectRoots = e.Sessions.ProjectRootRefs(ctx, task.ProjectID)
+	if strings.TrimSpace(task.ProjectID) != "" && e.Workspace != nil {
+		opts.ProjectRoots = e.Workspace.ProjectRoots(ctx, task.ProjectID)
 	}
 	return opts
 }
 
-func watchWorkerPromptCancel(ctx context.Context, sessions WorkerExecutionSessions, sessionID string) func() {
+func watchWorkerPromptCancel(ctx context.Context, cancellation WorkerPromptCancellation, sessionID string) func() {
 	done := make(chan struct{})
 	stop := context.AfterFunc(ctx, func() {
-		sessions.CancelInFlightPrompt(sessionID)
+		cancellation.Cancel(sessionID)
 		close(done)
 	})
 	return func() {

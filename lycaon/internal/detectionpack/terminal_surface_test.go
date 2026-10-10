@@ -16,7 +16,12 @@ func bundledGateSource(t *testing.T) *GateSource {
 
 func matchTool(t *testing.T, source *GateSource, tool string, args map[string]any) (hitl.DetectionMatch, bool) {
 	t.Helper()
-	return source.MatchAction(hitl.ProposedAction{Tool: tool, Args: args}, "strict")
+	return source.MatchAction(hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: tool,
+Args: args,
+},
+}, "strict")
 }
 
 // The same command asks the same way whether it is run through the command tool

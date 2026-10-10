@@ -38,7 +38,7 @@ func assertSecretCatalogSharedWithScanner(t *testing.T, root string) {
 	if !strings.Contains(scanner, "secretmatch.Bundled()") {
 		t.Fatal("in-process Gitleaks scanner must compile the bundled secret-pattern layers")
 	}
-	screen := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/secret_screen.go")
+	screen := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/security/evidence.go")
 	if !strings.Contains(screen, "secretmatch.BuildMatcher(secretmatch.Bundled())") {
 		t.Fatal("outbound screen must compile the same bundled secret-pattern layers as the scanner")
 	}
@@ -108,20 +108,20 @@ func assertOutboundSecretDetectorRegistered(t *testing.T, root string) {
 // assertOutboundSecretBoundary checks screening and authority order.
 func assertOutboundSecretBoundary(t *testing.T, root string) {
 	t.Helper()
-	boundary := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/executor_impl.go")
+	boundary := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/executor_impl.go")
 	resolveAt := strings.Index(boundary, "e.applyPreInvokeBoundary(ctx, qualifiedName, profileID, args, tc)")
-	screenAt := strings.Index(boundary, "e.screenArgvSecrets(ctx, qualifiedName, executionArgs, tc)")
-	invokeAt := strings.Index(boundary, "e.registry.Run(ctx, qualifiedName, executionArgs, tc)")
+	screenAt := strings.Index(boundary, "e.Secrets.screenArgvSecrets(ctx, qualifiedName, executionArgs, tc)")
+	invokeAt := strings.Index(boundary, "e.Metadata.registry.Run(ctx, qualifiedName, executionArgs, tc)")
 	if resolveAt < 0 || screenAt < 0 || invokeAt < 0 || !(resolveAt < screenAt && screenAt < invokeAt) {
 		t.Fatal("managed references must resolve, then exact values must be screened, before tool invocation")
 	}
-	preflightSource := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/invocation_boundary.go")
-	preflight := sourceFuncChunk(t, preflightSource, "func (e *DefaultToolExecutor) applyPreInvokeBoundary")
-	if !strings.Contains(preflight, "e.resolveSecretReferences(ctx, tool, args, tc)") ||
-		!strings.Contains(preflight, "tc.Secrets = secrets") {
+	preflightSource := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/invocation_boundary.go")
+	preflight := sourceFuncChunk(t, preflightSource, "func (e *Executor) applyPreInvokeBoundary")
+	if !strings.Contains(preflight, "e.Secrets.resolveSecretReferences(ctx, tool, args, tc)") ||
+		!strings.Contains(preflight, "tc.Effects.Secrets = secrets") {
 		t.Fatal("pre-invoke boundary must bind resolved secrets to the invocation context")
 	}
-	screen := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/outbound_secret_screen.go")
+	screen := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/outbound_secret_screen.go")
 	if !strings.Contains(screen, "gate.Evaluate(facts") {
 		t.Fatal("the secret screen must decide through the single gate evaluation")
 	}
@@ -131,7 +131,7 @@ func assertOutboundSecretBoundary(t *testing.T, root string) {
 	if reuse := gate.ReuseFor(api.GateSecretOutbound); reuse.Scope != gate.ScopeProject {
 		t.Fatalf("GateSecretOutbound must cap reusable authority at project scope, got %q", reuse.Scope)
 	}
-	offer := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/secret_release_offer.go")
+	offer := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/secret_release_offer.go")
 	for _, want := range []string{
 		"secretmatch.FingerprintDigest", "ApprovalGrantScopeProject",
 	} {
@@ -149,9 +149,9 @@ func assertOutboundSecretBoundary(t *testing.T, root string) {
 	if !strings.Contains(lookup, "SecretFingerprintsCovered") {
 		t.Fatal("secret release must be re-evaluated through the approval SSOT")
 	}
-	coverage := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/secret_permission.go")
+	coverage := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/secret_permission.go")
 	if !strings.Contains(screen, "e.secretRecipientsCovered(finding, recipients, fingerprintValues)") ||
-		!strings.Contains(coverage, ".approvalGate.SecretFingerprintsCovered") {
+		!strings.Contains(coverage, ".Approvals.approvalGate.SecretFingerprintsCovered") {
 		t.Fatal("secret release coverage must use the approval gate")
 	}
 	approval := contractcheck.ReadRepoFile(t, root, "lycaon/internal/hitl/approval.go")
@@ -174,7 +174,7 @@ func assertOutboundSecretRejectAndNotice(t *testing.T, root string) {
 	if !strings.Contains(policy, "id: OUTBOUND_SECRET_DENIED") {
 		t.Fatal("OUTBOUND_SECRET_DENIED policy id mismatch")
 	}
-	obs := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/observation_facts.go")
+	obs := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolrejection/observation_facts.go")
 	if !strings.Contains(obs, `"OUTBOUND_SECRET_DENIED"`) {
 		t.Fatal("observation map must include OUTBOUND_SECRET_DENIED")
 	}
