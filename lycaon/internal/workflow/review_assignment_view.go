@@ -8,7 +8,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // ReviewAssignmentsView exposes bounded review context through the coordination board.
@@ -126,32 +125,15 @@ func ReviewAssignmentsView(ctx context.Context, m *RunManager, args map[string]a
 				return "", fmt.Errorf("invalid subject cursor")
 			}
 		}
-		facts := append(append([]reviewcoverage.Fact{}, binding.Subject.Facts.Obligations...), binding.Subject.Facts.Gaps...)
-		if offset > len(facts) {
-			return "", fmt.Errorf("subject cursor exceeds scope")
+		page, next, err := reviewcoverage.Page(binding.Subject, offset, reviewcoverage.SubjectPageSize)
+		if err != nil {
+			return "", err
 		}
-		end := min(offset+50, len(facts))
-		next := ""
-		if end < len(facts) {
-			next = strconv.Itoa(end)
-		}
-		out = map[string]any{"assignment_id": id, "purpose": binding.Purpose, "coverage_required": binding.CoverageRequired, "revision": binding.Subject.Facts.Revision, "facts": facts[offset:end], "candidate": reviewCandidatePage(binding.Subject.Candidate, facts[offset:end]), "next_cursor": next}
+		facts := append(page.Facts.Obligations, page.Facts.Gaps...)
+		out = map[string]any{"assignment_id": id, "purpose": binding.Purpose, "coverage_required": binding.CoverageRequired, "revision": binding.Subject.Facts.Revision, "facts": facts, "candidate": page.Candidate, "next_cursor": next}
 	default:
 		return "", fmt.Errorf("unknown review view")
 	}
 	raw, err := json.Marshal(out)
 	return string(raw), err
-}
-
-func reviewCandidatePage(candidate api.CoverageReview, facts []reviewcoverage.Fact) api.CoverageReview {
-	page := api.CoverageReview{Revision: candidate.Revision, Assessments: []api.CoverageAssessment{}}
-	for _, assessment := range candidate.Assessments {
-		for _, fact := range facts {
-			if assessment.ID == fact.ID {
-				page.Assessments = append(page.Assessments, assessment)
-				break
-			}
-		}
-	}
-	return page
 }

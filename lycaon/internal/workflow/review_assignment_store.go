@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -33,35 +34,32 @@ func (s *SQLStore) RecordReviewBinding(ctx context.Context, run *api.WorkflowRun
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	var revision int64
-	var phase, status string
-	if err := tx.QueryRowContext(ctx, `SELECT revision,current_phase,status FROM workflow_runs WHERE id=?`, run.ID).Scan(&revision, &phase, &status); err != nil {
+	queries := db.New(tx)
+	state, err := queries.GetReviewAssignmentRunState(ctx, run.ID)
+	if err != nil {
 		return err
 	}
-	if revision != run.Revision || phase != binding.Phase || status != "running" {
+	if state.Revision != run.Revision || state.CurrentPhase != binding.Phase || state.Status != "running" {
 		return fmt.Errorf("review assignment: workflow changed before dispatch")
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO workflow_review_subjects(id,run_id,phase,revision,subject_json) VALUES(?,?,?,?,?) ON CONFLICT(id) DO NOTHING`, subjectID, run.ID, binding.Phase, binding.Subject.Facts.Revision, string(subject))
+	if err := queries.InsertWorkflowReviewSubject(ctx, db.InsertWorkflowReviewSubjectParams{ID: subjectID, RunID: run.ID, Phase: binding.Phase, Revision: binding.Subject.Facts.Revision, SubjectJson: string(subject)}); err != nil {
+		return err
+	}
+	if err := queries.InsertWorkflowReviewAssignment(ctx, db.InsertWorkflowReviewAssignmentParams{ID: binding.ID, RunID: run.ID, SubjectID: subjectID, Phase: binding.Phase, WorkID: binding.WorkID, Agent: binding.Agent, BindingJson: string(body)}); err != nil {
+		return err
+	}
+	stored, err := queries.GetWorkflowReviewAssignmentIdentity(ctx, binding.ID)
 	if err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO workflow_review_assignments(id,run_id,subject_id,phase,work_id,agent,binding_json) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING`, binding.ID, run.ID, subjectID, binding.Phase, binding.WorkID, binding.Agent, string(body))
-	if err != nil {
-		return err
-	}
-	var stored, storedSubject string
-	if err := tx.QueryRowContext(ctx, `SELECT binding_json,subject_id FROM workflow_review_assignments WHERE id=?`, binding.ID).Scan(&stored, &storedSubject); err != nil {
-		return err
-	}
-	if stored != string(body) || storedSubject != subjectID {
+	if stored.BindingJson != string(body) || stored.SubjectID != subjectID {
 		return fmt.Errorf("review assignment identity reused with different inputs")
 	}
 	return tx.Commit()
 }
 
 func (s *SQLStore) ReviewBinding(ctx context.Context, id string) (*reviewcoverage.Binding, error) {
-	var raw, subject string
-	err := s.db.QueryRowContext(ctx, `SELECT a.binding_json,s.subject_json FROM workflow_review_assignments a JOIN workflow_review_subjects s ON s.id=a.subject_id WHERE a.id=?`, id).Scan(&raw, &subject)
+	row, err := s.queries.GetWorkflowReviewBinding(ctx, id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -69,43 +67,36 @@ func (s *SQLStore) ReviewBinding(ctx context.Context, id string) (*reviewcoverag
 		return nil, err
 	}
 	var binding reviewcoverage.Binding
-	if err := json.Unmarshal([]byte(raw), &binding); err != nil {
+	if err := json.Unmarshal([]byte(row.BindingJson), &binding); err != nil {
 		return nil, err
 	}
-	if err := json.Unmarshal([]byte(subject), &binding.Subject); err != nil {
+	if err := json.Unmarshal([]byte(row.SubjectJson), &binding.Subject); err != nil {
 		return nil, err
 	}
 	return &binding, nil
 }
 
 func (s *SQLStore) ReviewBindings(ctx context.Context, runID, phase, after string, limit int) ([]reviewcoverage.Binding, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT a.binding_json,s.subject_json FROM workflow_review_assignments a JOIN workflow_review_subjects s ON s.id=a.subject_id WHERE a.run_id=? AND a.phase=? AND a.id>? ORDER BY a.id LIMIT ?`, runID, phase, after, min(max(limit, 1), 100))
+	rows, err := s.queries.ListWorkflowReviewBindings(ctx, db.ListWorkflowReviewBindingsParams{RunID: runID, Phase: phase, ID: after, Limit: int64(min(max(limit, 1), 100))})
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	out := []reviewcoverage.Binding{}
-	for rows.Next() {
-		var raw, subject string
-		if err := rows.Scan(&raw, &subject); err != nil {
-			return nil, err
-		}
+	out := make([]reviewcoverage.Binding, 0, len(rows))
+	for _, row := range rows {
 		var binding reviewcoverage.Binding
-		if err := json.Unmarshal([]byte(raw), &binding); err != nil {
+		if err := json.Unmarshal([]byte(row.BindingJson), &binding); err != nil {
 			return nil, err
 		}
-		if err := json.Unmarshal([]byte(subject), &binding.Subject); err != nil {
+		if err := json.Unmarshal([]byte(row.SubjectJson), &binding.Subject); err != nil {
 			return nil, err
 		}
 		out = append(out, binding)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func (s *SQLStore) ReviewInputRevision(ctx context.Context, runID string) (int64, error) {
-	var revision int64
-	err := s.db.QueryRowContext(ctx, `SELECT review_revision FROM workflow_runs WHERE id=?`, runID).Scan(&revision)
-	return revision, err
+	return s.queries.GetWorkflowReviewInputRevision(ctx, runID)
 }
 
 func verifyReviewInputsTx(ctx context.Context, tx *sql.Tx, runID, phase string, vars map[string]any) error {
@@ -121,8 +112,8 @@ func verifyReviewInputsTx(ctx context.Context, tx *sql.Tx, runID, phase string, 
 	if err := json.Unmarshal([]byte(raw), &accepted); err != nil {
 		return err
 	}
-	var revision int64
-	if err := tx.QueryRowContext(ctx, `SELECT review_revision FROM workflow_runs WHERE id=?`, runID).Scan(&revision); err != nil {
+	revision, err := db.New(tx).GetWorkflowReviewInputRevision(ctx, runID)
+	if err != nil {
 		return err
 	}
 	if revision != accepted.Facts.InputRevision {

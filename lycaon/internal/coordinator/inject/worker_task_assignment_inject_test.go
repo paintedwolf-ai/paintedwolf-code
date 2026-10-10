@@ -3,6 +3,7 @@ package inject
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -110,7 +111,9 @@ func TestWorkerAssignmentCarriesCoverageIndependentlyOfClaims(t *testing.T) {
 	in := WorkerTaskAssignmentInput{SessionID: "parent", ProjectDir: t.TempDir(), AgentType: "reviewer", WorkerJobID: "job", Charter: testWorkerCharter("Challenge one claim"), CoverageAssignment: &reviewcoverage.Binding{Subject: assignment, CoverageRequired: true}}
 	out, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), in)
 	testutil.FailErr(t, "render coverage assignment", err)
-	raw, err := json.Marshal(assignment)
+	page, _, err := reviewcoverage.Page(assignment, 0, 50)
+	testutil.FailErr(t, "page coverage assignment", err)
+	raw, err := json.Marshal(page)
 	testutil.FailErr(t, "encode coverage assignment", err)
 	if !strings.Contains(out, string(raw)) {
 		t.Fatal("host scope lost from assignment")
@@ -120,5 +123,21 @@ func TestWorkerAssignmentCarriesCoverageIndependentlyOfClaims(t *testing.T) {
 	testutil.FailErr(t, "render ordinary assignment", err)
 	if strings.Contains(out, assignment.Facts.Revision) {
 		t.Fatal("ordinary worker inherited coverage contract")
+	}
+}
+
+func TestWorkerAssignmentPagesLargeSubjects(t *testing.T) {
+	binding := reviewcoverage.Binding{ID: "job", CoverageRequired: true, Subject: reviewcoverage.Assignment{Facts: reviewcoverage.Facts{Revision: "retained"}}}
+	for i := 0; i < 51; i++ {
+		binding.Subject.Facts.Obligations = append(binding.Subject.Facts.Obligations, reviewcoverage.Fact{ID: fmt.Sprintf("area/%d", i)})
+	}
+	data := BuildWorkerTaskAssignmentData(t.Context(), WorkerTaskAssignmentInput{CoverageAssignment: &binding})
+	var page reviewcoverage.BindingPage
+	testutil.FailErr(t, "decode paged prompt context", json.Unmarshal([]byte(data.CoverageAssignment), &page))
+	if page.ID != "job" || page.NextCursor != "50" || len(page.Subject.Facts.Obligations) != 50 || page.Subject.Facts.Revision != "retained" {
+		t.Fatalf("invalid paged context: %+v", page)
+	}
+	if len(binding.Subject.Facts.Obligations) != 51 {
+		t.Fatal("projection mutated stored subject")
 	}
 }

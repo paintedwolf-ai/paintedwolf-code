@@ -15,10 +15,10 @@ Use `scan_query` with these `scan_ids`, `kind: sca`, `view: groups` and `offset:
 
 {{ coverage_assignment }}
 
-{% if coverage_required %}Assess the assigned `subject.facts` and candidate judgments. Use `scan_query(view: coverage)` for bounded drilldown and inspect relevant source; samples do not establish full scope. Return `complete_leg.coverage_review` using `subject.facts.revision`, with a cited assessment for every assigned fact. Use satisfied for obligations, covered or immaterial for resolved gaps, and material_open or essential_open for unanswered work. Report additional discoveries separately; they do not expand this assignment.
+{% if coverage_required %}Assess the assigned `subject.facts` and candidate judgments. If `next_cursor` is present, retrieve the remaining pages with `pack_board(review_view: subject, assignment_id: id, cursor: next_cursor)`. Use `scan_query(view: coverage)` for bounded drilldown and inspect relevant source; samples do not establish full scope. Return `complete_leg.coverage_review` using `subject.facts.revision`, with a cited assessment for every assigned fact. Use satisfied for obligations, covered or immaterial for resolved gaps, and material_open or essential_open for unanswered work. Report additional discoveries separately; they do not expand this assignment.
 {% else %}Complete the assigned investigation or advisory review using its stated criteria. No whole-survey coverage assessment is required.
 {% endif %}
-{% endif %}Host scan execution, coverage, and result-availability fields describe the bound evidence. Coordinator commentary does not change those facts.
+{% endif %}Host scan fields describe the bound evidence.
 
 Leg assignment ({{ agent_type }}):
 {% if scope_mode %}Scope: {{ scope_mode }}{% if scope_mode == "write" %} (overlay){% endif %}.

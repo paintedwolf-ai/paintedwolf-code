@@ -3,6 +3,7 @@ package reviewcoverage
 import (
 	"fmt"
 	"slices"
+	"strconv"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -127,4 +128,46 @@ func Compose(base api.CoverageReview, update api.CoverageReview, scope Facts) (a
 		out.Assessments[i] = assessment
 	}
 	return out, nil
+}
+
+// Page projects bounded assessment inputs without changing the recorded revision.
+func Page(subject Assignment, offset, limit int) (Assignment, string, error) {
+	facts := append(append([]Fact{}, subject.Facts.Obligations...), subject.Facts.Gaps...)
+	if offset < 0 || offset > len(facts) || limit < 1 {
+		return Assignment{}, "", fmt.Errorf("invalid review subject page")
+	}
+	end := min(offset+limit, len(facts))
+	page := Assignment{Facts: Facts{Revision: subject.Facts.Revision}, Candidate: api.CoverageReview{Revision: subject.Candidate.Revision, Assessments: []api.CoverageAssessment{}}}
+	for i := offset; i < end; i++ {
+		if i < len(subject.Facts.Obligations) {
+			page.Facts.Obligations = append(page.Facts.Obligations, facts[i])
+		} else {
+			page.Facts.Gaps = append(page.Facts.Gaps, facts[i])
+		}
+		for _, a := range subject.Candidate.Assessments {
+			if a.ID == facts[i].ID {
+				page.Candidate.Assessments = append(page.Candidate.Assessments, a)
+				break
+			}
+		}
+	}
+	next := ""
+	if end < len(facts) {
+		next = strconv.Itoa(end)
+	}
+	return page, next, nil
+}
+
+const SubjectPageSize = 50
+
+type BindingPage struct {
+	Binding
+	NextCursor string `json:"next_cursor,omitempty"`
+}
+
+// FirstPage is the same bounded projection in initial context and repair feedback.
+func FirstPage(binding Binding) BindingPage {
+	page, next, _ := Page(binding.Subject, 0, SubjectPageSize)
+	binding.Subject = page
+	return BindingPage{Binding: binding, NextCursor: next}
 }

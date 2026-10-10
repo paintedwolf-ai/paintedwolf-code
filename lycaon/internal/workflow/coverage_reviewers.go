@@ -96,7 +96,7 @@ func (m *RunManager) ValidateCoverageCompletion(ctx context.Context, task *api.W
 		}
 		detail = err.Error()
 	}
-	raw, err := json.Marshal(binding)
+	raw, err := json.Marshal(reviewcoverage.FirstPage(*binding))
 	if err != nil {
 		return err
 	}

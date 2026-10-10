@@ -125,7 +125,7 @@ func BuildWorkerTaskAssignmentData(ctx context.Context, in WorkerTaskAssignmentI
 	}
 	if in.CoverageAssignment != nil {
 		data.CoverageRequired = in.CoverageAssignment.CoverageRequired
-		if raw, err := json.Marshal(in.CoverageAssignment); err == nil {
+		if raw, err := json.Marshal(reviewcoverage.FirstPage(*in.CoverageAssignment)); err == nil {
 			data.CoverageAssignment = string(raw)
 		}
 	}

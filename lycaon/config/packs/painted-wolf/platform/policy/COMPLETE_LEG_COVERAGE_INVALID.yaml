@@ -12,8 +12,9 @@ copy:
   why: The assigned coverage review needs an explicit assessment of every assigned scope fact.
   fix: >-
     Return coverage_review using this assignment's subject.facts.revision and one cited assessment
-    per fact. Assess candidate exclusions against the full scope and use native scan_query
-    with view coverage for bounded drilldown. Retain unfinished material or essential work.
+    per fact. If next_cursor is present, continue with pack_board review_view subject,
+    assignment_id id, and cursor next_cursor. Use scan_query view coverage for drilldown.
+    Retain unfinished material or essential work.
     Recorded assignment: {{ paintedwolf.assignment }}
   instead: Repair the coverage assessment and resubmit complete_leg within this leg.
   what: The coverage assessment is missing, incomplete, or stale.
@@ -24,7 +25,7 @@ x-paintedwolf-scenarios:
 - id: missing
   vars:
     detail: coverage assessment missing
-    assignment: '{"facts":{"revision":"current","obligations":[],"gaps":[]}}'
+    assignment: '{"id":"job","subject":{"facts":{"revision":"current","obligations":[],"gaps":[]}}}'
   expect_contains:
   - 'Code: COMPLETE_LEG_COVERAGE_INVALID'
   - current
