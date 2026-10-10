@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -110,6 +111,22 @@ func TestFeedbackToolReturnsRetainedInputWithoutIssuingAnotherQuestion(t *testin
 		}
 		if result.Pending != pending || (pending && result.PhaseID != "phase") {
 			t.Fatalf("feedback projection=%+v pending=%v", result, pending)
+		}
+	}
+}
+
+func TestProtectedInputWireMetadataRetainsBoundedLifetime(t *testing.T) {
+	for _, ttl := range []any{float64(60), int(60), int64(60)} {
+		req, err := parseAskUserArgs(map[string]any{"prompt": " Provide key ", "response_type": "secret", "secret": map[string]any{"name": " Deploy key ", "purpose": " release ", "scope": "project", "agent_use_ttl_seconds": ttl}})
+		if err != nil || req.Secret == nil || req.Secret.Name != "Deploy key" || req.Secret.Purpose != "release" || req.Secret.Scope != "project" || req.Secret.AgentUseTTLSeconds != 60 {
+			t.Fatalf("protected wire metadata=%+v err=%v", req.Secret, err)
+		}
+	}
+	for _, ttl := range []any{float64(1.5), float64(-1), float64(maxAskSecretAgentUseLifetimeSeconds + 1), "60"} {
+		_, err := parseAskUserArgs(map[string]any{"prompt": "Provide key", "secret": map[string]any{"name": "Key", "agent_use_ttl_seconds": ttl}})
+		var reject *toolrejection.ToolReject
+		if !errors.As(err, &reject) || reject.Code != "ASK_USER_SECRET_METADATA_INVALID" || reject.Data["field"] != "secret.agent_use_ttl_seconds" {
+			t.Fatalf("unusable lifetime %v refusal=%v", ttl, err)
 		}
 	}
 }
