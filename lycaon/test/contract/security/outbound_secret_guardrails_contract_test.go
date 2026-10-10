@@ -38,7 +38,7 @@ func assertSecretCatalogSharedWithScanner(t *testing.T, root string) {
 	if !strings.Contains(scanner, "secretmatch.Bundled()") {
 		t.Fatal("in-process Gitleaks scanner must compile the bundled secret-pattern layers")
 	}
-	screen := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/secret_screen.go")
+	screen := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/security/evidence.go")
 	if !strings.Contains(screen, "secretmatch.BuildMatcher(secretmatch.Bundled())") {
 		t.Fatal("outbound screen must compile the same bundled secret-pattern layers as the scanner")
 	}

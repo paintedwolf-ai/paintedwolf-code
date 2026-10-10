@@ -10,7 +10,7 @@ import (
 )
 
 // commitPathForbiddenTokens — summarize_pack trim and TrimSummarizeChunk must
-// not appear on the tool-wire commit path (prepareToolWireContent / CompactToolWireIfOversized).
+// not appear on the tool-wire commit path (history.Service.ToolWire / CompactToolWireIfOversized).
 // Assembly invokes TrimSummarizeChunk from the pipeline instead.
 var commitPathForbiddenTokens = []string{
 	"summarize_pack",
@@ -18,7 +18,7 @@ var commitPathForbiddenTokens = []string{
 }
 
 var commitPathScanFiles = []string{
-	"lycaon/internal/session/tool_wire.go",
+	"lycaon/internal/session/history/tool_wire.go",
 	"lycaon/internal/llm/compaction/tool_wire_compact.go",
 }
 
