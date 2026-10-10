@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	internalapi "github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -75,6 +77,8 @@ func (r *recordingRoundTripper) snapshot() []recordedHTTPRequest {
 
 func installRecordingProviderHTTP(t *testing.T) *recordingRoundTripper {
 	t.Helper()
+	// Endpoint validation still runs before the recording transport.
+	egress.TestingResolve(t, egress.StaticLookup(netip.MustParseAddr("1.1.1.1")))
 	rec := &recordingRoundTripper{}
 	webresearch.SetProviderHTTPClientForTest(&http.Client{Transport: rec})
 	t.Cleanup(func() { webresearch.SetProviderHTTPClientForTest(nil) })

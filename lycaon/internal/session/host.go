@@ -243,6 +243,7 @@ func (m *Host) BeginEngineShutdown() {
 		return
 	}
 	m.Runner.Settlement.BeginShutdown()
+	m.Coordinator.Runtime.StopSleepTimers()
 	m.Catalog.Stop()
 	if m.Runner.Curation != nil {
 		m.Runner.Curation.Stop()
@@ -258,6 +259,7 @@ func (m *Host) WaitForEngineShutdown(ctx context.Context) error {
 		return nil
 	}
 	var errs []error
+	errs = append(errs, m.Coordinator.Runtime.WaitSleepTimers(ctx))
 	if m.Runner.Curation != nil {
 		m.Runner.Curation.Wait(ctx)
 	}

@@ -27,7 +27,8 @@ type runtimeResources struct {
 
 func newRuntimeResources() *runtimeResources {
 	resources := &runtimeResources{lifecycle: resourcelifecycle.New()}
-	resources.Track("source-watchers", 85, func(context.Context) error { repochange.CloseWatchers(); return nil })
+	releaseWatchers := repochange.AcquireWatcherLifetime()
+	resources.Track("source-watchers", 85, func(context.Context) error { releaseWatchers(); return nil })
 	resources.Track("debug-captures", 150, func(context.Context) error { observability.CloseDebugCaptures(); return nil })
 	return resources
 }

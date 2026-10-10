@@ -13,7 +13,7 @@ func TestEnsureProjectWatchRefusesCanceledCaller(t *testing.T) {
 	const projectID = "project-canceled-bind"
 	t.Cleanup(func() { StopProjectWatch(context.Background(), projectID) })
 
-	bound := EnsureProjectWatch(ctx, projectID, "", []RootSpec{{ID: "r1", WorkspaceID: "ws", Path: t.TempDir()}}, nil)
+	bound := EnsureProjectWatch(ctx, nil, projectID, "", []RootSpec{{ID: "r1", WorkspaceID: "ws", Path: t.TempDir()}}, nil)
 
 	if bound {
 		t.Fatal("a canceled caller bound a project watch")
