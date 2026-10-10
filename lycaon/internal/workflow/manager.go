@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	workflowblueprints "github.com/lycaon/lycaon/internal/workflow/blueprints"
 	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
