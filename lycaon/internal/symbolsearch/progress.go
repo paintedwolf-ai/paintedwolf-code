@@ -135,7 +135,7 @@ func (r *symbolSearchRun) outlinePending(ctx context.Context, state *Progress) {
 		if ctx.Err() != nil {
 			break
 		}
-		consumed[projectsource.DeclarationFileKey{file.RootID, file.Path}] = true
+		consumed[projectsource.DeclarationFileKey{RootID: file.RootID, Path: file.Path}] = true
 		r.filesLeft--
 		if n := len(r.passes); n > 0 {
 			r.passes[n-1].Files++
@@ -156,7 +156,7 @@ func (r *symbolSearchRun) outlinePending(ctx context.Context, state *Progress) {
 	}
 	pending := state.pending[:0]
 	for _, hit := range state.pending {
-		if !consumed[projectsource.DeclarationFileKey{hit.RootID, strings.ReplaceAll(strings.TrimSpace(hit.Path), "\\", "/")}] {
+		if !consumed[projectsource.DeclarationFileKey{RootID: hit.RootID, Path: strings.ReplaceAll(strings.TrimSpace(hit.Path), "\\", "/")}] {
 			pending = append(pending, hit)
 		}
 	}

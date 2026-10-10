@@ -79,9 +79,9 @@ func TestSymbolSearchRanksTiersBeforeKindsAndPaths(t *testing.T) {
 		highlights[m.Name] = m.Highlights
 	}
 	for name, want := range map[string][]projectsource.SourceTextRange{
-		"LoadCfg":        {{4, 7}},
-		"CacheFileGroup": {{0, 1}, {5, 6}, {9, 10}},
-		"xcfgx":          {{1, 4}},
+		"LoadCfg":        {{Start: 4, End: 7}},
+		"CacheFileGroup": {{Start: 0, End: 1}, {Start: 5, End: 6}, {Start: 9, End: 10}},
+		"xcfgx":          {{Start: 1, End: 4}},
 	} {
 		if !reflect.DeepEqual(highlights[name], want) {
 			t.Errorf("%s highlights = %v, want %v", name, highlights[name], want)

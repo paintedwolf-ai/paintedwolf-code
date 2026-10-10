@@ -14,20 +14,20 @@ func TestSymbolNameMatcherTiers(t *testing.T) {
 		tier        symbolMatchTier
 		ranges      []projectsource.SourceTextRange
 	}{
-		{"ParseConfig", "ParseConfig", symbolTierExactCase, []projectsource.SourceTextRange{{0, 11}}},
-		{"parseconfig", "ParseConfig", symbolTierExact, []projectsource.SourceTextRange{{0, 11}}},
-		{"PARSECONFIG", "ParseConfig", symbolTierExact, []projectsource.SourceTextRange{{0, 11}}},
-		{"parse", "ParseConfig", symbolTierPrefix, []projectsource.SourceTextRange{{0, 5}}},
-		{"config", "ParseConfig", symbolTierWordStart, []projectsource.SourceTextRange{{5, 11}}},
-		{"config", "parse_config", symbolTierWordStart, []projectsource.SourceTextRange{{6, 12}}},
-		{"server", "HTTPServer", symbolTierWordStart, []projectsource.SourceTextRange{{4, 10}}},
-		{"encode", "Base64Encode", symbolTierWordStart, []projectsource.SourceTextRange{{6, 12}}},
-		{"pc", "ParseConfig", symbolTierHump, []projectsource.SourceTextRange{{0, 1}, {5, 6}}},
-		{"ParseCfg", "ParseConfig", symbolTierHump, []projectsource.SourceTextRange{{0, 6}, {8, 9}, {10, 11}}},
-		{"hs", "HTTPServer", symbolTierHump, []projectsource.SourceTextRange{{0, 1}, {4, 5}}},
-		{"b64e", "Base64Encode", symbolTierHump, []projectsource.SourceTextRange{{0, 1}, {4, 7}}},
-		{"gpc", "getParseConfig", symbolTierHump, []projectsource.SourceTextRange{{0, 1}, {3, 4}, {8, 9}}},
-		{"arse", "ParseConfig", symbolTierSubstring, []projectsource.SourceTextRange{{1, 5}}},
+		{"ParseConfig", "ParseConfig", symbolTierExactCase, []projectsource.SourceTextRange{{Start: 0, End: 11}}},
+		{"parseconfig", "ParseConfig", symbolTierExact, []projectsource.SourceTextRange{{Start: 0, End: 11}}},
+		{"PARSECONFIG", "ParseConfig", symbolTierExact, []projectsource.SourceTextRange{{Start: 0, End: 11}}},
+		{"parse", "ParseConfig", symbolTierPrefix, []projectsource.SourceTextRange{{Start: 0, End: 5}}},
+		{"config", "ParseConfig", symbolTierWordStart, []projectsource.SourceTextRange{{Start: 5, End: 11}}},
+		{"config", "parse_config", symbolTierWordStart, []projectsource.SourceTextRange{{Start: 6, End: 12}}},
+		{"server", "HTTPServer", symbolTierWordStart, []projectsource.SourceTextRange{{Start: 4, End: 10}}},
+		{"encode", "Base64Encode", symbolTierWordStart, []projectsource.SourceTextRange{{Start: 6, End: 12}}},
+		{"pc", "ParseConfig", symbolTierHump, []projectsource.SourceTextRange{{Start: 0, End: 1}, {Start: 5, End: 6}}},
+		{"ParseCfg", "ParseConfig", symbolTierHump, []projectsource.SourceTextRange{{Start: 0, End: 6}, {Start: 8, End: 9}, {Start: 10, End: 11}}},
+		{"hs", "HTTPServer", symbolTierHump, []projectsource.SourceTextRange{{Start: 0, End: 1}, {Start: 4, End: 5}}},
+		{"b64e", "Base64Encode", symbolTierHump, []projectsource.SourceTextRange{{Start: 0, End: 1}, {Start: 4, End: 7}}},
+		{"gpc", "getParseConfig", symbolTierHump, []projectsource.SourceTextRange{{Start: 0, End: 1}, {Start: 3, End: 4}, {Start: 8, End: 9}}},
+		{"arse", "ParseConfig", symbolTierSubstring, []projectsource.SourceTextRange{{Start: 1, End: 5}}},
 		{"pc", "package", symbolTierNone, nil},
 		{"cfg", "Config", symbolTierNone, nil},
 		{"pcx", "ParseConfig", symbolTierNone, nil},
@@ -45,7 +45,7 @@ func TestSymbolNameMatcherTiers(t *testing.T) {
 
 func TestSymbolNameMatcherHighlightsCountCodePoints(t *testing.T) {
 	tier, ranges := newSymbolNameMatcher("größe").match("MaxGröße")
-	if tier != symbolTierWordStart || !reflect.DeepEqual(ranges, []projectsource.SourceTextRange{{3, 8}}) {
+	if tier != symbolTierWordStart || !reflect.DeepEqual(ranges, []projectsource.SourceTextRange{{Start: 3, End: 8}}) {
 		t.Fatalf("match = %d %v, want word start at code points 3..8", tier, ranges)
 	}
 }
