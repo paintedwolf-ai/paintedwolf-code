@@ -1,4 +1,4 @@
-package workflow
+package review
 
 import (
 	"context"
@@ -6,84 +6,86 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type verdictOperationContextKey struct{}
 
-func withVerdictOperationID(ctx context.Context, id string) context.Context {
+func WithOperationID(ctx context.Context, id string) context.Context {
 	return context.WithValue(ctx, verdictOperationContextKey{}, strings.TrimSpace(id))
 }
 
 // RecordReviewLoopVerdict applies one structured review result.
-func (m *RunManager) RecordReviewLoopVerdict(
+func (m *Verdicts) RecordReviewLoopVerdict(
 	ctx context.Context,
 	sessionID string,
 	verdict map[string]string,
 	citedEvidence []api.CitationGroundingCitedEvidence,
 	citedURLs []string,
-) (ReviewLoopVerdictOutcome, error) {
+) (runstate.ReviewOutcome, error) {
 	if m == nil || strings.TrimSpace(sessionID) == "" {
-		return ReviewLoopVerdictOutcome{}, nil
+		return runstate.ReviewOutcome{}, nil
 	}
 	operationID, _ := ctx.Value(verdictOperationContextKey{}).(string)
 	if operationID == "" {
 		operationID = uuid.NewString()
 	}
-	inputRaw, err := json.Marshal(VerdictSubmission{SessionID: sessionID, Verdict: verdict, Cited: citedEvidence, CitedURLs: citedURLs})
+	inputRaw, err := json.Marshal(runstate.VerdictSubmission{SessionID: sessionID, Verdict: verdict, Cited: citedEvidence, CitedURLs: citedURLs})
 	if err != nil {
-		return ReviewLoopVerdictOutcome{}, err
+		return runstate.ReviewOutcome{}, err
 	}
 	digest := sha256.Sum256(inputRaw)
 	inputDigest := hex.EncodeToString(digest[:])
 	replay, err := m.resolveVerdictReplay(ctx, operationID, inputDigest)
 	if err != nil {
-		return ReviewLoopVerdictOutcome{}, err
+		return runstate.ReviewOutcome{}, err
 	}
 	if replay.Replayed {
 		return replay.Outcome, nil
 	}
 	target, err := m.resolveVerdictTarget(ctx, sessionID, operationID, replay.Pending)
 	if err != nil {
-		return ReviewLoopVerdictOutcome{}, err
+		return runstate.ReviewOutcome{}, err
 	}
 	if target.Converged {
-		return ReviewLoopVerdictOutcome{}, nil
+		return runstate.ReviewOutcome{}, nil
 	}
 	active, rl, key := target.Run, target.Loop, target.Key
-	unlockVars := m.lockRunVars(active.ID)
+	unlockVars := m.Vars.Lock(active.ID)
 	varsUnlocked := false
 	defer func() {
 		if !varsUnlocked {
 			unlockVars()
 		}
 	}()
-	vars, err := m.Store.GetScaffoldVars(ctx, active.ID)
+	vars, err := m.Runs.GetScaffoldVars(ctx, active.ID)
 	if err != nil {
-		return ReviewLoopVerdictOutcome{}, err
+		return runstate.ReviewOutcome{}, err
 	}
 
 	checked, err := m.validateReviewSubmission(ctx, active, rl, verdict, vars, citedEvidence, citedURLs)
 	if err != nil {
-		return ReviewLoopVerdictOutcome{}, err
+		return runstate.ReviewOutcome{}, err
 	}
 	out, questionVars := checked.Outcome, checked.Vars
 	var committedVars map[string]any
-	attemptSoFar := ReviewLoopAttempt(vars, active.CurrentPhase)
+	attemptSoFar := runstate.ReviewLoopAttempt(vars, active.CurrentPhase)
 	switch {
-	case out.Valid && ReviewLoopVerdictTerminal(rl, verdict):
+	case out.Valid && workflowvalidation.ReviewLoopVerdictTerminal(rl, verdict):
 		out.Terminal = true
 		out.Attempt = attemptSoFar
-		committedVars = StampReviewVerdict(questionVars, key, verdict)
-		committedVars = SatisfyGateInVars(committedVars, "evidence_passed:"+key)
+		committedVars = runstate.StampReviewVerdict(questionVars, key, verdict)
+		committedVars = runstate.SatisfyGateInVars(committedVars, "evidence_passed:"+key)
 	case out.Valid && rl.FollowupAttempts > 0:
 		committedVars = questionVars
 		out.Attempt = attemptSoFar
@@ -93,29 +95,29 @@ func (m *RunManager) RecordReviewLoopVerdict(
 		out.IterationCapExceeded = true
 		out.Attempt = attemptSoFar
 	case out.Valid:
-		committedVars = bumpReviewLoopAttempt(vars, active.CurrentPhase)
-		out.Attempt = ReviewLoopAttempt(committedVars, active.CurrentPhase)
+		committedVars = runstate.BumpReviewLoopAttempt(vars, active.CurrentPhase)
+		out.Attempt = runstate.ReviewLoopAttempt(committedVars, active.CurrentPhase)
 	}
 	if out.Valid && committedVars != nil {
-		committedVars, err = resolveReviewRepair(committedVars, active.CurrentPhase)
+		committedVars, err = runstate.ResolveReviewRepair(committedVars, active.CurrentPhase)
 		if err != nil {
 			return out, err
 		}
 	}
 	evidenceID := uuid.NewSHA1(uuid.NameSpaceOID, []byte("verdict-evidence:"+operationID)).String()
-	op := verdictOperation{
+	op := runstate.VerdictOperation{
 		ToolCallID: operationID, RunID: active.ID, SourceRevision: active.Revision,
 		Phase: active.CurrentPhase, InputDigest: inputDigest, EvidenceRecordID: evidenceID, EvidenceJSON: string(inputRaw),
 	}
-	stored, _, prepareErr := m.Store.prepareVerdictOperation(ctx, op)
+	stored, _, prepareErr := m.Records.PrepareVerdictOperation(ctx, op)
 	if prepareErr != nil {
 		return out, prepareErr
 	}
 	op = *stored
-	projectDir := m.projectDirForRun(ctx, active)
-	if err := m.Store.commitVerdictOperation(ctx, op, active, projectDir, committedVars, out); err != nil {
-		if rejection := tools.AsToolReject(err); rejection != nil && rejection.Code == ReviewContextChangedCode {
-			if resolveErr := m.Store.resolveVerdictOperationDiverged(ctx, operationID, rejection.Code); resolveErr != nil {
+	projectDir := m.Resolver.ProjectDirForRun(ctx, active)
+	if err := m.Records.CommitVerdictOperation(ctx, op, active, projectDir, committedVars, out); err != nil {
+		if rejection := toolrejection.AsToolReject(err); rejection != nil && rejection.Code == ReviewContextChangedCode {
+			if resolveErr := m.Records.ResolveVerdictOperationDiverged(ctx, operationID, rejection.Code); resolveErr != nil {
 				return out, resolveErr
 			}
 			out.Valid, out.Terminal, out.CoverageIssue = false, false, rejection
@@ -124,13 +126,13 @@ func (m *RunManager) RecordReviewLoopVerdict(
 		return out, err
 	}
 	op.Status = "committed"
-	if err := publishVerdictEvidence(ctx, m, op, out); err != nil {
+	if err := m.publishVerdictEvidence(ctx, op, out); err != nil {
 		return out, err
 	}
 	unlockVars()
 	varsUnlocked = true
 	if out.Terminal {
-		_, err = m.TryAutoAdvance(ctx, active.ID)
+		_, err = m.Phases.TryAutoAdvance(ctx, active.ID)
 		return out, err
 	}
 	if !out.Valid {
@@ -154,35 +156,35 @@ func (m *RunManager) RecordReviewLoopVerdict(
 
 // verdictReplay carries a committed result or resumable receipt.
 type verdictReplay struct {
-	Outcome  ReviewLoopVerdictOutcome
+	Outcome  runstate.ReviewOutcome
 	Replayed bool
-	Pending  *verdictOperation
+	Pending  *runstate.VerdictOperation
 }
 
-func (m *RunManager) resolveVerdictReplay(ctx context.Context, operationID, inputDigest string) (verdictReplay, error) {
-	existing, ok, err := m.Store.getVerdictOperation(ctx, operationID)
+func (m *Verdicts) resolveVerdictReplay(ctx context.Context, operationID, inputDigest string) (verdictReplay, error) {
+	existing, ok, err := m.Records.GetVerdictOperation(ctx, operationID)
 	if err != nil || !ok {
 		return verdictReplay{}, err
 	}
 	if existing.InputDigest != inputDigest {
-		return verdictReplay{}, fmt.Errorf("submit_verdict tool call %s: %w", operationID, ErrOperationConflict)
+		return verdictReplay{}, fmt.Errorf("submit_verdict tool call %s: %w", operationID, runstate.ErrOperationConflict)
 	}
 	switch {
 	case existing.Status == "committed":
-		var replayed ReviewLoopVerdictOutcome
+		var replayed runstate.ReviewOutcome
 		if err := json.Unmarshal([]byte(existing.ResponseJSON), &replayed); err != nil {
 			return verdictReplay{}, err
 		}
-		if err := publishVerdictEvidence(ctx, m, *existing, replayed); err != nil {
+		if err := m.publishVerdictEvidence(ctx, *existing, replayed); err != nil {
 			return verdictReplay{}, err
 		}
 		if replayed.Terminal {
-			_, _ = m.TryAutoAdvance(ctx, existing.RunID)
+			_, _ = m.Phases.TryAutoAdvance(ctx, existing.RunID)
 		}
 		return verdictReplay{Outcome: replayed, Replayed: true}, nil
 	case existing.Status == "diverged":
 		return verdictReplay{}, fmt.Errorf("submit_verdict tool call %s can no longer apply: %s", operationID, existing.Error)
-	case verdictOperationPending(existing.Status):
+	case runstate.VerdictOperationPending(existing.Status):
 		return verdictReplay{Pending: existing}, nil
 	}
 	return verdictReplay{}, nil
@@ -196,19 +198,19 @@ type verdictTarget struct {
 	Converged bool
 }
 
-func (m *RunManager) resolveVerdictTarget(
+func (m *Verdicts) resolveVerdictTarget(
 	ctx context.Context,
 	sessionID string,
 	operationID string,
-	pending *verdictOperation,
+	pending *runstate.VerdictOperation,
 ) (verdictTarget, error) {
 	converge := func(reason string) (verdictTarget, error) {
 		if pending == nil {
 			return verdictTarget{Converged: true}, nil
 		}
-		return verdictTarget{Converged: true}, m.Store.resolveVerdictOperationDiverged(ctx, operationID, reason)
+		return verdictTarget{Converged: true}, m.Records.ResolveVerdictOperationDiverged(ctx, operationID, reason)
 	}
-	active, err := m.Store.ActiveBySession(ctx, sessionID)
+	active, err := m.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil {
 		return verdictTarget{}, err
 	}
@@ -221,11 +223,11 @@ func (m *RunManager) resolveVerdictTarget(
 	}
 	if pending != nil && pending.SourceRevision != active.Revision {
 		// Rebase a prepared verdict after same-phase revision changes.
-		if err := m.Store.rebaseVerdictOperation(ctx, operationID, active.Revision); err != nil {
+		if err := m.Records.RebaseVerdictOperation(ctx, operationID, active.Revision); err != nil {
 			return verdictTarget{}, err
 		}
 	}
-	manifest, err := m.manifestForRun(ctx, active)
+	manifest, err := m.Resolver.ForRun(ctx, active)
 	if err != nil {
 		return verdictTarget{}, err
 	}
@@ -241,37 +243,6 @@ func (m *RunManager) resolveVerdictTarget(
 	return verdictTarget{Run: active, Loop: rl, Key: key}, nil
 }
 
-// ReviewLoopVerdictOutcome reports what RecordReviewLoopVerdict did, for tool results.
-type ReviewLoopVerdictOutcome struct {
-	// Applied reports whether the active phase accepts review verdicts.
-	Applied bool
-	// Valid reports schema validity against the phase verdict_schema.
-	Valid bool
-	// Terminal reports the gate was satisfied and the host is advancing.
-	Terminal bool
-	// Attempt is the review round counter after this submission.
-	Attempt     int
-	Phase       string
-	EvidenceKey string
-	// MissingAgents lists required reviewers without succeeded envelopes.
-	MissingAgents  []string
-	InventoryIssue *InventoryIssue
-	// CoverageIssue is the structured refusal of a coverage assessment.
-	CoverageIssue *tools.ToolReject
-	QuestionIssue *tools.ToolReject
-	// IterationCapExceeded reports a non-terminal verdict rejected because the
-	// phase already reached iteration_cap on a prior attempt.
-	IterationCapExceeded bool
-	// GroundingCode is the citation-audit reject on a terminal verdict.
-	GroundingCode    string
-	UngroundedCount  int
-	UngroundedSample []string
-	UncitedReviewers []string
-	ObservedHandles  []string
-	// Grounding is the validated citation provenance of an accepted terminal verdict.
-	Grounding *api.CitationGrounding
-}
-
 // allVerdictCitations flattens the top-level citation channel with every
 // claims-typed field's per-claim citations for one grounding audit.
 func allVerdictCitations(
@@ -280,7 +251,7 @@ func allVerdictCitations(
 	cited []api.CitationGroundingCitedEvidence,
 ) []api.CitationGroundingCitedEvidence {
 	out := append([]api.CitationGroundingCitedEvidence(nil), cited...)
-	claims, err := ParseVerdictClaims(rl, verdict)
+	claims, err := workflowvalidation.ParseVerdictClaims(rl, verdict)
 	if err != nil {
 		return out
 	}
@@ -289,7 +260,7 @@ func allVerdictCitations(
 			out = append(out, claim.CitedEvidence...)
 		}
 	}
-	if review, err := ParseVerdictCoverage(rl, verdict); err == nil && review != nil {
+	if review, err := workflowvalidation.ParseVerdictCoverage(rl, verdict); err == nil && review != nil {
 		for _, assessment := range review.Assessments {
 			out = append(out, assessment.CitedEvidence...)
 		}
@@ -297,7 +268,7 @@ func allVerdictCitations(
 	return out
 }
 
-func (m *RunManager) persistReviewLoopEvidence(
+func (m *Verdicts) persistReviewLoopEvidence(
 	ctx context.Context,
 	sessionID string,
 	active *api.WorkflowRun,
@@ -333,7 +304,7 @@ func (m *RunManager) persistReviewLoopEvidence(
 		evidence.GateType(strings.TrimSpace(rl.EvidenceKey)),
 		phaseID,
 		active.ID,
-		ReviewLoopVerdictEvidenceVerdict(rl, verdict),
+		workflowvalidation.ReviewLoopVerdictEvidenceVerdict(rl, verdict),
 		strings.TrimSpace(verdict["verdict"]),
 		artifacts,
 		"",
@@ -391,7 +362,7 @@ func reviewLoopIterationCap(rl workflowdef.ReviewLoopDef) int {
 }
 
 // Explicit runs own phase reviews; ambient runs use the current user intent.
-func (m *RunManager) missingReviewAgents(ctx context.Context, run *api.WorkflowRun, required []string) []string {
+func (m *Verdicts) missingReviewAgents(ctx context.Context, run *api.WorkflowRun, required []string) []string {
 	if len(required) == 0 {
 		return nil
 	}
@@ -403,7 +374,7 @@ func (m *RunManager) missingReviewAgents(ctx context.Context, run *api.WorkflowR
 		return append([]string(nil), required...)
 	}
 	var since time.Time
-	ambient := m.IsAmbientRun(run)
+	ambient := runstate.IsAmbientRun(run)
 	if ambient {
 		if m.Sessions == nil {
 			return append([]string(nil), required...)
@@ -435,26 +406,10 @@ func (m *RunManager) missingReviewAgents(ctx context.Context, run *api.WorkflowR
 	return missing
 }
 
-func (m *RunManager) notifyReviewLoopHeld(ctx context.Context, sessionID string, decisionRequired bool) {
+func (m *Verdicts) notifyReviewLoopHeld(ctx context.Context, sessionID string, decisionRequired bool) {
 	if m != nil && m.OnReviewLoopHeld != nil {
 		m.OnReviewLoopHeld(ctx, sessionID, decisionRequired)
 	}
 }
 
-// ReviewLoopAttempt returns the phase's recorded non-terminal attempt count, 0 when none.
-func ReviewLoopAttempt(vars map[string]any, phaseID string) int {
-	if s, ok := DotPathString(vars, reviewLoopAttemptPath(phaseID)); ok {
-		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil {
-			return n
-		}
-	}
-	return 0
-}
-
-func bumpReviewLoopAttempt(vars map[string]any, phaseID string) map[string]any {
-	return SetHostVar(vars, reviewLoopAttemptPath(phaseID), strconv.Itoa(ReviewLoopAttempt(vars, phaseID)+1))
-}
-
-func reviewLoopAttemptPath(phaseID string) string {
-	return "review_loop." + phaseID + ".attempt"
-}
+// runstate.ReviewLoopAttempt returns the phase's recorded non-terminal attempt count, 0 when none.

@@ -3,6 +3,7 @@ package runstate
 import (
 	"context"
 	"database/sql"
+	"github.com/lycaon/lycaon/internal/reviewcoverage"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
@@ -11,6 +12,7 @@ import (
 
 // Repository binds the actual persistence domains used by workflow services.
 type Repository struct {
+	Assignments  AssignmentsRepository
 	Runs         RunsRepository
 	State        StateRepository
 	Starts       StartsRepository
@@ -71,6 +73,7 @@ type VerdictsRepository interface {
 	GetVerdictOperation(ctx context.Context, toolCallID string) (*VerdictOperation, bool, error)
 	PrepareVerdictOperation(ctx context.Context, op VerdictOperation) (*VerdictOperation, bool, error)
 	MarkVerdictEvidenceApplied(ctx context.Context, toolCallID string) error
+	MarkVerdictEvidencePublished(ctx context.Context, toolCallID string) error
 	PendingVerdictOperations(ctx context.Context) ([]VerdictOperation, error)
 	CommitVerdictOperation(ctx context.Context, op VerdictOperation, run *api.WorkflowRun, projectDir string, vars map[string]any, outcome ReviewOutcome) error
 	ResolveVerdictOperationDiverged(ctx context.Context, toolCallID, reason string) error
@@ -91,3 +94,10 @@ type SessionMutations interface {
 }
 
 type RunnableNotifier interface{ NotifyRunnable() }
+
+type AssignmentsRepository interface {
+	RecordReviewBinding(context.Context, *api.WorkflowRun, reviewcoverage.Binding) error
+	ReviewBinding(context.Context, string) (*reviewcoverage.Binding, error)
+	ReviewBindings(context.Context, string, string, string, int) ([]reviewcoverage.Binding, error)
+	ReviewInputRevision(context.Context, string) (int64, error)
+}

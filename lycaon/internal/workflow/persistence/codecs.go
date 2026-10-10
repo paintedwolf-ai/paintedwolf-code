@@ -198,6 +198,6 @@ func verdictOperationFromRow(row db.WorkflowVerdictOperations) (runstate.Verdict
 		ToolCallID: row.ToolCallID, RunID: row.RunID, SourceRevision: row.SourceRevision,
 		Phase: row.Phase, InputDigest: row.InputDigest, EvidenceRecordID: row.EvidenceRecordID,
 		EvidenceJSON: row.EvidenceJson, Status: row.Status, ResponseJSON: row.ResponseJson.String,
-		Error: row.Error, CreatedAt: createdAt,
+		Error: row.Error, CreatedAt: createdAt, EvidencePublished: row.EvidencePublished != 0,
 	}, nil
 }

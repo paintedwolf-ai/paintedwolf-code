@@ -1,31 +1,32 @@
-package workflow
+package review
 
 import (
 	"context"
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const ReviewRequiredCode = "SUBMIT_VERDICT_REVIEW_REQUIRED"
-const ReviewContextChangedCode = "SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED"
+const ReviewContextChangedCode = runstate.ReviewContextChangedCode
 
 type assessedAssignment struct {
 	binding reviewcoverage.Binding
 	review  api.CoverageReview
 }
 
-func (r reviewAssignments) completed(ctx context.Context, runID, phase, agent string, tasks []api.WorkerTask) ([]assessedAssignment, []string, error) {
+func (r Assignments) completed(ctx context.Context, runID, phase, agent string, tasks []api.WorkerTask) ([]assessedAssignment, []string, error) {
 	var out []assessedAssignment
 	var active []string
 	for _, task := range tasks {
 		if task.WorkflowRunID != runID || task.WorkflowPhase != phase || task.AgentType != agent {
 			continue
 		}
-		binding, err := r.runs.Store.ReviewBinding(ctx, task.ID)
+		binding, err := r.Runs.ReviewBinding(ctx, task.ID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -102,14 +103,14 @@ func applicableReview(base assessedAssignment, updates []assessedAssignment, cur
 	return len(changed) == 0
 }
 
-func (r reviewAssignments) validate(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, current reviewcoverage.Assignment, tasks []api.WorkerTask) (*tools.ToolReject, error) {
+func (r Assignments) validate(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, current reviewcoverage.Assignment, tasks []api.WorkerTask) (*toolrejection.ToolReject, error) {
 	agents := def.CoverageReviewers
 	if def.AssignmentBinding == "explicit" {
-		vars, err := r.runs.Store.GetScaffoldVars(ctx, run.ID)
+		vars, err := r.Runs.GetScaffoldVars(ctx, run.ID)
 		if err != nil {
 			return nil, err
 		}
-		agents, _ = effectiveReviewAgents(run.CurrentPhase, def, vars)
+		agents, _ = runstate.EffectiveReviewAgents(run.CurrentPhase, def, vars)
 	}
 	assessed := map[string][]assessedAssignment{}
 	for _, agent := range agents {
@@ -126,10 +127,10 @@ func (r reviewAssignments) validate(ctx context.Context, run *api.WorkflowRun, d
 			if len(active) > 0 {
 				action = "wait_for_work"
 			}
-			return &tools.ToolReject{Code: ReviewRequiredCode, Data: map[string]any{"action": action, "work_ids": []string{reviewWorkID(agent)}, "agent": agent, "job_ids": active}}, nil
+			return &toolrejection.ToolReject{Code: ReviewRequiredCode, Data: map[string]any{"action": action, "work_ids": []string{reviewWorkID(agent)}, "agent": agent, "job_ids": active}}, nil
 		}
 	}
-	vars, err := r.runs.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := r.Runs.GetScaffoldVars(ctx, run.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +155,7 @@ func (r reviewAssignments) validate(ctx context.Context, run *api.WorkflowRun, d
 				if len(active) > 0 {
 					action = "wait_for_work"
 				}
-				return &tools.ToolReject{Code: ReviewRequiredCode, Data: map[string]any{"action": action, "work_ids": []string{questionReviewWorkID(q.ID)}, "agent": agent, "job_ids": active}}, nil
+				return &toolrejection.ToolReject{Code: ReviewRequiredCode, Data: map[string]any{"action": action, "work_ids": []string{questionReviewWorkID(q.ID)}, "agent": agent, "job_ids": active}}, nil
 			}
 		}
 	}
@@ -170,12 +171,12 @@ func reviewObligationIDs(facts reviewcoverage.Facts) []string {
 	return out
 }
 
-func (r reviewAssignments) questionCurrent(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, tasks []api.WorkerTask, question, agent string) (bool, error) {
+func (r Assignments) questionCurrent(ctx context.Context, run *api.WorkflowRun, def workflowdef.ReviewLoopDef, tasks []api.WorkerTask, question, agent string) (bool, error) {
 	completed, _, err := r.completed(ctx, run.ID, run.CurrentPhase, agent, tasks)
 	if err != nil {
 		return false, err
 	}
-	manifest, err := r.runs.manifestForRun(ctx, run)
+	manifest, err := r.Resolver.ForRun(ctx, run)
 	if err != nil {
 		return false, err
 	}

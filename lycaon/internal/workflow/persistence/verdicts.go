@@ -118,6 +118,9 @@ func (s *Verdicts) CommitVerdictOperation(ctx context.Context, op runstate.Verdi
 	}
 	defer func() { _ = tx.Rollback() }()
 	if vars != nil {
+		if err := verifyReviewInputsTx(ctx, tx, run.ID, op.Phase, vars); err != nil {
+			return err
+		}
 		now := time.Now().UTC()
 		raw, marshalErr := json.Marshal(vars)
 		if marshalErr != nil {
@@ -160,4 +163,9 @@ func (s *Verdicts) CommitVerdictOperation(ctx context.Context, op runstate.Verdi
 		s.transactions.outbox.Notify()
 	}
 	return nil
+}
+func (s *Verdicts) MarkVerdictEvidencePublished(ctx context.Context, toolCallID string) error {
+	return s.transactions.queries.MarkWorkflowVerdictEvidencePublished(ctx, db.MarkWorkflowVerdictEvidencePublishedParams{
+		UpdatedAt: db.FormatTime(time.Now().UTC()), ToolCallID: toolCallID,
+	})
 }

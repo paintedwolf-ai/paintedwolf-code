@@ -25,16 +25,17 @@ type VerdictRepair struct {
 }
 
 type VerdictOperation struct {
-	ToolCallID       string
-	RunID            string
-	SourceRevision   int64
-	Phase            string
-	InputDigest      string
-	EvidenceRecordID string
-	EvidenceJSON     string
-	Status           string
-	ResponseJSON     string
-	Error            string
+	EvidencePublished bool
+	ToolCallID        string
+	RunID             string
+	SourceRevision    int64
+	Phase             string
+	InputDigest       string
+	EvidenceRecordID  string
+	EvidenceJSON      string
+	Status            string
+	ResponseJSON      string
+	Error             string
 	// CreatedAt is when the verdict was submitted; recovery replays keep it.
 	CreatedAt time.Time
 }
