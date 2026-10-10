@@ -558,3 +558,32 @@ func TestHTTPRequestVerdictIsScopedToThePort(t *testing.T) {
 		t.Fatalf("asked ports = %v, want one ask per port and a cache hit on the repeat", asked)
 	}
 }
+
+func TestEgressPolicyReleasePreservesReplacementDeny(t *testing.T) {
+	SetEgressPosture(PostureAsk)
+	t.Cleanup(func() { SetEgressPosture(PostureObserve) })
+	oldRelease := SetEgressRuleEvaluator(func(context.Context, EgressCommand, string) EgressRuleResult {
+		return EgressRuleResult{Effect: EgressRuleAsk, Pattern: "old-policy"}
+	})
+	currentRelease := SetEgressRuleEvaluator(func(context.Context, EgressCommand, string) EgressRuleResult {
+		return EgressRuleResult{Effect: EgressRuleDeny, Pattern: "current-policy"}
+	})
+	defer oldRelease()
+	defer currentRelease()
+	oldRelease()
+	oldRelease()
+	broker := newTestBroker()
+	broker.tokens["owner-token"] = EgressCommand{SessionID: "owner-session"}
+	asked := false
+	broker.resolver = func(context.Context, EgressCommand, egressproxy.Endpoint, *EgressDetectionCitation) bool {
+		asked = true
+		return true
+	}
+	if decideHTTPConnect(broker, t.Context(), "owner-token", "blocked.test") || asked {
+		t.Fatal("releasing the old host bypassed the current authored deny")
+	}
+	currentRelease()
+	if !decideHTTPConnect(broker, t.Context(), "owner-token", "after-release.test") || !asked {
+		t.Fatal("released policy retained a stale authored deny")
+	}
+}

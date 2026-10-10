@@ -225,42 +225,6 @@ var egressBroker = &egressBrokerT{
 }
 
 var (
-	ruleEvalMu sync.RWMutex
-	ruleEval   func(ctx context.Context, cmd EgressCommand, host string) EgressRuleResult
-)
-
-// EgressRuleEffect is the authored policy result for one host. Reusable authority
-// is evaluated separately by the approval gate.
-type EgressRuleEffect string
-
-const (
-	EgressRuleDeny EgressRuleEffect = "deny"
-	EgressRuleAsk  EgressRuleEffect = "ask"
-)
-
-// EgressRuleResult retains the authored pattern for citations.
-type EgressRuleResult struct {
-	Effect  EgressRuleEffect
-	Pattern string
-	UnitID  string
-	PackID  string
-	Scope   string
-}
-
-// SetEgressRuleEvaluator installs the host deny/ask policy check the proxy consults.
-func SetEgressRuleEvaluator(fn func(ctx context.Context, cmd EgressCommand, host string) EgressRuleResult) {
-	ruleEvalMu.Lock()
-	ruleEval = fn
-	ruleEvalMu.Unlock()
-}
-
-func currentRuleEval() func(context.Context, EgressCommand, string) EgressRuleResult {
-	ruleEvalMu.RLock()
-	defer ruleEvalMu.RUnlock()
-	return ruleEval
-}
-
-var (
 	approvalsDisabledMu  sync.RWMutex
 	approvalsDisabledSrc func(EgressCommand) bool
 )
