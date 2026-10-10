@@ -49,8 +49,8 @@ func TestSymbolFederationDoesNotCycleBeyondRetainedProjectCapacity(t *testing.T)
 				}
 			}
 		}
-		if attempt == 1 && pending > 0 && terminal == 0 {
-			t.Fatalf("stable %d-project query restarted slices instead of advancing or reporting its retained-capacity bound: pending=%d", len(projects), pending)
+		if attempt == 1 && (pending != 0 || terminal != 1) {
+			t.Fatalf("stable %d-project query restarted slices instead of completing retained progress and reporting one capacity bound: pending=%d terminal=%d", len(projects), pending, terminal)
 		}
 	}
 }

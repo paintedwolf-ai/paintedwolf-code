@@ -49,6 +49,12 @@ type ResourceTracker interface {
 	Track(string, int, func(context.Context) error)
 }
 
+// ScannerFixtures supplies deterministic scanner inputs for integration fixtures.
+type ScannerFixtures struct {
+	Registry         scan.CodeScannerRegistry
+	AdvisoryDatabase string
+}
+
 // Dependencies specifies external inputs required to bootstrap scanning services.
 type Dependencies struct {
 	Resources             ResourceTracker
@@ -67,7 +73,7 @@ type Dependencies struct {
 	FingerprintScannerKey func() []byte
 	ScanIgnores           scan.SecretIgnoreSource
 	InjectRenderer        *prompts.InjectRenderer
-	TestRegistry          scan.CodeScannerRegistry
+	Fixtures              ScannerFixtures
 	DelegationBySession   func(string) (string, string, bool)
 	WorkflowRunsGet       func(context.Context, string) (*api.WorkflowRun, error)
 	WorkflowRunParams     func(context.Context, string, string, string) (map[string]any, error)
