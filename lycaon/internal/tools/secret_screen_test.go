@@ -66,7 +66,7 @@ func TestAskSecretScreenMapsThreeWayDecision(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-			exec.Approvals.SetCheckpointManager(tc.mgr, nil)
+			exec.Approvals.SetCheckpointManager(t.Context(), tc.mgr, nil)
 			got, askErr := exec.Secrets.AskSecretScreen(context.Background(), finding)
 			testutil.FailErr(t, "ask secret screen", askErr)
 			if got.Decision != tc.want {
@@ -100,7 +100,7 @@ func TestAskSecretScreenRedactDecisionOnUnrewritableSurfaceFaults(t *testing.T) 
 		result: &hitl.DecisionResult{Approved: true, RedactSecrets: true},
 	}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, nil)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 	got, askErr := exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
 		SessionID: "sess-1", ProjectID: "proj-1", Surface: secretmatch.SurfaceCommand, DestinationID: "process",
 		RuleID: "gitleaks:github-pat", RuleTitle: "GitHub Personal Access Token",
@@ -154,7 +154,7 @@ func TestAskSecretScreenPreCardExitsFaultRatherThanBlockSilently(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
 			if tc.mgr != nil {
-				exec.Approvals.SetCheckpointManager(tc.mgr, nil)
+				exec.Approvals.SetCheckpointManager(t.Context(), tc.mgr, nil)
 			}
 			got, askErr := exec.Secrets.AskSecretScreen(context.Background(), tc.alert)
 			fault, ok := secretmatch.Faulted(askErr)
@@ -226,7 +226,7 @@ func TestAskSecretScreenUsesAttributionAndNeverStoresValue(t *testing.T) {
 
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, nil)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 	decision, askErr := exec.Secrets.AskSecretScreen(ctx, secretmatch.Alert{
 		Surface:       secretmatch.SurfaceWebSearch,
 		DestinationID: "web_search", DestinationLabel: "web search providers",

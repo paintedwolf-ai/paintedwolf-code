@@ -142,7 +142,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		if deps.Settings.Service == nil {
 			return deps.Settings.SessionLimits.WorkerToolBudget()
 		}
-		if !deps.Settings.ProjectSurfaceGate(projectcontrib.SurfaceProjectSettings, deps.Storage.Projects).AppliesPath(context.Background(), projectDir) {
+		if !deps.Settings.ProjectSurfaceGate(projectcontrib.SurfaceProjectSettings, deps.Storage.Projects).AppliesPath(context.WithoutCancel(ctx), projectDir) {
 			projectDir = ""
 		}
 		return settings.ProjectLimitsAdapter{Store: deps.Settings.Service.Limits}.SessionLimits(projectDir).WorkerToolBudget()

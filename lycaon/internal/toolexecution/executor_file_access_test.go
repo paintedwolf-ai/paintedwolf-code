@@ -56,7 +56,7 @@ func TestAllowOnceWritesExternalFileWithoutReusableAccess(t *testing.T) {
 	}
 	for _, content := range []string{"first approved write", "second approved write"} {
 		mgr := &asyncHITL{requested: make(chan struct{}, 1)}
-		executor.Approvals.SetCheckpointManager(mgr, gate)
+		executor.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		done := make(chan error, 1)
 		go func() {
@@ -112,7 +112,7 @@ func TestWriteToSessionScratchPassesFileChangeReview(t *testing.T) {
 	testutil.FailErr(t, "register native writer", reg.Register("write", writer.Run))
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), reg, "implement")
 	mgr := &asyncHITL{requested: make(chan struct{}, 1)}
-	executor.Approvals.SetCheckpointManager(mgr, gate)
+	executor.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	tc := tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
 			ActiveRootID: "root"},
@@ -157,7 +157,7 @@ func TestControlPlanePathDeniedBeforeAnyCheckpoint(t *testing.T) {
 	}))
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), reg, "implement")
 	mgr := &asyncHITL{requested: make(chan struct{}, 1)}
-	executor.Approvals.SetCheckpointManager(mgr, gate)
+	executor.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	tc := tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
 			ActiveRootID: "root"},

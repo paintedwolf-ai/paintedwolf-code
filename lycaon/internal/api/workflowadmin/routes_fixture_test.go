@@ -58,7 +58,7 @@ func newRoutesFixture(t *testing.T, orchestrator orchestration.Orchestrator) *ro
 	deps.Workflow.Orchestrator = orchestrator
 	server := hostapi.NewServer(deps, slog.New(slog.DiscardHandler), hostapi.TestAPIToken)
 	t.Cleanup(func() {
-		server.StopBackground()
+		server.StopBackground(t.Context())
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
 		server.WaitForBackground(ctx)

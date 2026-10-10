@@ -3,12 +3,12 @@ package sourceapi
 import "context"
 
 // Stop releases project routing before its host stores are shut down.
-func (s *Watch) Stop() {
+func (s *Watch) Stop(ctx context.Context) {
 	if s == nil {
 		return
 	}
 	s.watchWork.Stop()
-	s.watches.Stop()
+	s.watches.Stop(ctx)
 }
 
 // Wait joins watch installation and copied observer delivery before store release.

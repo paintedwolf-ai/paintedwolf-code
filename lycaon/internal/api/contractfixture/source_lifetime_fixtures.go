@@ -57,7 +57,7 @@ var SourcesReleased sync.Map
 func StopBackgroundOnCleanup(t *testing.T, srv *hostapi.Server) {
 	t.Helper()
 	t.Cleanup(func() {
-		srv.StopBackground()
+		srv.StopBackground(t.Context())
 		DrainBackground(t, srv)
 		if _, released := SourcesReleased.LoadOrStore(srv, struct{}{}); !released {
 			ReleaseProjectSources(t, srv)

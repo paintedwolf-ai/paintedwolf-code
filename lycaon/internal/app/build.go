@@ -97,7 +97,7 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 			b.processes = processes.New(b.startup.logger, resources)
 			return b.processes.StartEgress(b.storage.Directory)
 		}},
-		{"refusal-watch", startupprotocol.PhaseConfiguration, func() error { return b.processes.StartRefusalWatch(b.storage.Directory) }},
+		{"refusal-watch", startupprotocol.PhaseConfiguration, func() error { return b.processes.StartRefusalWatch(ctx, b.storage.Directory) }},
 		{"user-path", startupprotocol.PhaseUserPath, func() error { return b.processes.ResolvePath(ctx) }},
 		{"credential-floors", startupprotocol.PhaseCredentials, func() error { return b.security.Detections.LoadFloors() }},
 		{"host_resources", startupprotocol.PhaseHostResources, func() error { return b.settings.BuildHostResources(b.storage.Directory) }},

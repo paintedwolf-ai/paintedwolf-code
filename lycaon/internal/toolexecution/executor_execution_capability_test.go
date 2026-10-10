@@ -56,7 +56,7 @@ func TestExecutionCapabilityAsksBeforeSpawnAndConsumesOnce(t *testing.T) {
 			}))
 			executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), registry, "implement")
 			manager := &asyncHITL{requested: make(chan struct{}, 4)}
-			executor.Approvals.SetCheckpointManager(manager, gate)
+			executor.Approvals.SetCheckpointManager(t.Context(), manager, gate)
 			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 			defer cancel()
 			done := make(chan error, 1)
@@ -152,7 +152,7 @@ func TestCapabilityCardAndExecutionShareTheBranchExpandedArgv(t *testing.T) {
 	}))
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), registry, "implement")
 	manager := &asyncHITL{requested: make(chan struct{}, 4)}
-	executor.Approvals.SetCheckpointManager(manager, gate)
+	executor.Approvals.SetCheckpointManager(t.Context(), manager, gate)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "worker", SessionID: "task", ToolCallID: "call", Agent: "implement"}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root", WorkerCoord: executionWorkerBranch{root: branch}}}

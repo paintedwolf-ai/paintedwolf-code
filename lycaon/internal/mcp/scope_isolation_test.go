@@ -58,7 +58,7 @@ func newScopedRegistry(t *testing.T, conn SessionConnector) *Runtime {
 	testutil.FailErr(t, "NewRuntime", err)
 	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())
 	reg.Connections.SetDeviceProbeRoots(func() []string { return []string{filepath.Join(dir, "probe")} })
-	t.Cleanup(func() { _ = reg.Close() })
+	t.Cleanup(func() { _ = reg.Close(t.Context()) })
 	testutil.FailErr(t, "load", reg.Catalog.Load(context.Background()))
 	return reg
 }

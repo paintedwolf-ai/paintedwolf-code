@@ -20,11 +20,11 @@ func (b *Runtime) StartEgress(dataDir string) error {
 	return nil
 }
 
-func (b *Runtime) StartRefusalWatch(dataDir string) error {
+func (b *Runtime) StartRefusalWatch(ctx context.Context, dataDir string) error {
 	if !confine.Available() {
 		return nil
 	}
-	confine.StartRefusalWatch(dataDir)
+	confine.StartRefusalWatch(ctx, dataDir)
 	b.resources.Track("refusal-watch", 55, func(context.Context) error { confine.StopRefusalWatch(); return nil })
 	return nil
 }

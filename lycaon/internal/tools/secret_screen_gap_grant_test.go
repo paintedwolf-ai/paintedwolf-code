@@ -37,7 +37,7 @@ func TestUnscreenedImageTaskReleaseCoversLaterImagesToTheSameDestination(t *test
 	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, gate)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	provider := string(secretmatch.DestinationModelProvider)
 	ctx := context.Background()
 
