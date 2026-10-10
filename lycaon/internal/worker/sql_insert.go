@@ -10,9 +10,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+type ReviewAssignmentActiveError struct{ JobID string }
+
+func (e *ReviewAssignmentActiveError) Error() string {
+	return "review assignment already has active job " + e.JobID
+}
 
 // InsertTask inserts a worker job row.
 func (s *SQLStore) InsertTask(ctx context.Context, task api.WorkerTask) error {
@@ -39,7 +44,7 @@ func insertTask(ctx context.Context, queries *db.Queries, task api.WorkerTask) e
 	if task.WorkflowRunID != "" {
 		active, err := queries.ActiveWorkflowReviewAssignmentJob(ctx, task.ID)
 		if err == nil {
-			return &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "task", "field": "workflow_work_id", "reason": "review_assignment_already_active", "action": "wait_for_work", "job_ids": []string{active}, "workflow_work_id": task.WorkflowWorkID}}
+			return &ReviewAssignmentActiveError{JobID: active}
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			return err

@@ -29,6 +29,8 @@ type reviewQuestionWork struct {
 	ReviewQuestion
 }
 
+func questionReviewWorkID(id string) string { return id + "/review" }
+
 func reviewQuestionPath(phase string) string { return "review_questions." + phase }
 
 func reviewQuestions(vars map[string]any, phase string) ([]reviewQuestionWork, error) {
@@ -105,11 +107,11 @@ func (m *RunManager) prepareReviewQuestions(ctx context.Context, run *api.Workfl
 		}
 	}
 	known, err = registerReviewQuestions(def, claims, known, facts, terminal)
-	for i := range known {
-		known[i].ReviewWorkID = known[i].ID + "/review"
-	}
 	if err != nil {
 		return vars, err
+	}
+	for i := range known {
+		known[i].ReviewWorkID = questionReviewWorkID(known[i].ID)
 	}
 	if terminal {
 		if m.WorkerTasks == nil {

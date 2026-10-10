@@ -73,7 +73,7 @@ func boundedVerdictDiagnostics(details map[string]any) map[string]any {
 	}
 	out := map[string]any{}
 	budget := 12 << 10
-	for _, key := range []string{"workflow_phase", "field", "field_path", "issues", "schema_issues", "repairs", "unknown_groups", "unaccounted_group_ids", "reason"} {
+	for _, key := range []string{"action", "work_id", "work_ids", "job_ids", "agent", "missing_claim_ids", "expected_claim_ids", "question_id", "revision", "workflow_phase", "field", "field_path", "issues", "schema_issues", "repairs", "unknown_groups", "unaccounted_group_ids", "reason"} {
 		value, ok := source[key]
 		if !ok {
 			continue

@@ -234,7 +234,7 @@ WHERE project_id = ? AND path = ? AND workflow_run_id = ? AND workflow_revision 
 
 -- name: GetWorkflowVerdictOperation :one
 SELECT tool_call_id, run_id, source_revision, phase, input_digest, evidence_record_id,
-       evidence_json, status, response_json, error, created_at, updated_at
+       evidence_json, status, response_json, error, created_at, updated_at, evidence_published
 FROM workflow_verdict_operations
 WHERE tool_call_id = ?;
 
@@ -252,16 +252,16 @@ INSERT INTO workflow_verdict_operations(
 ) VALUES (?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?)
 ON CONFLICT(tool_call_id) DO NOTHING;
 
--- name: MarkWorkflowVerdictEvidenceApplied :exec
+-- name: MarkWorkflowVerdictEvidencePublished :exec
 UPDATE workflow_verdict_operations
-SET status = 'evidence_applied', updated_at = ?
-WHERE tool_call_id = ? AND status = 'prepared';
+SET evidence_published = 1, updated_at = ?
+WHERE tool_call_id = ? AND status = 'committed';
 
 -- name: ListPendingWorkflowVerdictOperations :many
 SELECT tool_call_id, run_id, source_revision, phase, input_digest, evidence_record_id,
-       evidence_json, status, response_json, error, created_at, updated_at
+       evidence_json, status, response_json, error, created_at, updated_at, evidence_published
 FROM workflow_verdict_operations
-WHERE status IN ('prepared', 'evidence_applied')
+WHERE status IN ('prepared', 'evidence_applied') OR (status = 'committed' AND evidence_published = 0)
 ORDER BY created_at, tool_call_id;
 
 -- name: CommitWorkflowVerdictOperation :execrows

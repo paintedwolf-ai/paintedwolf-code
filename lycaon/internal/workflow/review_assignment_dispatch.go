@@ -38,7 +38,7 @@ func (r reviewAssignments) bind(ctx context.Context, run *api.WorkflowRun, task 
 	}
 	var scope []string
 	for _, q := range questions {
-		if task.WorkflowWorkID != q.ID && task.WorkflowWorkID != q.ID+"/review" {
+		if task.WorkflowWorkID != q.ID && task.WorkflowWorkID != questionReviewWorkID(q.ID) {
 			continue
 		}
 		binding.QuestionID, binding.ClaimIDs = q.ID, []string{q.ClaimID}
@@ -84,7 +84,9 @@ func (r reviewAssignments) bind(ctx context.Context, run *api.WorkflowRun, task 
 		slices.Sort(binding.PredecessorJobs)
 		slices.Sort(binding.InvestigationJobs)
 		if binding.Purpose == reviewcoverage.QuestionReview {
-			task.AfterWorkers = slices.Clone(binding.InvestigationJobs)
+			task.AfterWorkers = append(task.AfterWorkers, binding.InvestigationJobs...)
+			slices.Sort(task.AfterWorkers)
+			task.AfterWorkers = slices.Compact(task.AfterWorkers)
 		}
 	}
 	return m.Store.RecordReviewBinding(ctx, run, binding)

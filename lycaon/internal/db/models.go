@@ -2129,16 +2129,17 @@ type WorkflowTeardownOperations struct {
 }
 
 type WorkflowVerdictOperations struct {
-	ToolCallID       string         `json:"tool_call_id"`
-	RunID            string         `json:"run_id"`
-	SourceRevision   int64          `json:"source_revision"`
-	Phase            string         `json:"phase"`
-	InputDigest      string         `json:"input_digest"`
-	EvidenceRecordID string         `json:"evidence_record_id"`
-	EvidenceJson     string         `json:"evidence_json"`
-	Status           string         `json:"status"`
-	ResponseJson     sql.NullString `json:"response_json"`
-	Error            string         `json:"error"`
-	CreatedAt        string         `json:"created_at"`
-	UpdatedAt        string         `json:"updated_at"`
+	ToolCallID        string         `json:"tool_call_id"`
+	RunID             string         `json:"run_id"`
+	SourceRevision    int64          `json:"source_revision"`
+	Phase             string         `json:"phase"`
+	InputDigest       string         `json:"input_digest"`
+	EvidenceRecordID  string         `json:"evidence_record_id"`
+	EvidenceJson      string         `json:"evidence_json"`
+	Status            string         `json:"status"`
+	ResponseJson      sql.NullString `json:"response_json"`
+	Error             string         `json:"error"`
+	CreatedAt         string         `json:"created_at"`
+	UpdatedAt         string         `json:"updated_at"`
+	EvidencePublished int64          `json:"evidence_published"`
 }

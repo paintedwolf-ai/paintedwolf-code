@@ -112,23 +112,19 @@ func (m *RunManager) RecordReviewLoopVerdict(
 		return out, prepareErr
 	}
 	op = *stored
-	if op.Status == "prepared" && out.Valid {
-		// Validated provenance supersedes the raw citation args once the audit ran.
-		persistCited := allVerdictCitations(rl, verdict, citedEvidence)
-		if out.Grounding != nil && len(out.Grounding.CitedEvidence) > 0 {
-			persistCited = out.Grounding.CitedEvidence
-		}
-		if err := m.persistReviewLoopEvidence(ctx, sessionID, active, rl, target.PhaseID, verdict, persistCited, citedURLs, evidenceID, op.CreatedAt); err != nil {
-			return out, err
-		}
-	}
-	if op.Status == "prepared" {
-		if err := m.Store.markVerdictEvidenceApplied(ctx, operationID); err != nil {
-			return out, err
-		}
-	}
 	projectDir := m.projectDirForRun(ctx, active)
 	if err := m.Store.commitVerdictOperation(ctx, op, active, projectDir, committedVars, out); err != nil {
+		if rejection := tools.AsToolReject(err); rejection != nil && rejection.Code == ReviewContextChangedCode {
+			if resolveErr := m.Store.resolveVerdictOperationDiverged(ctx, operationID, rejection.Code); resolveErr != nil {
+				return out, resolveErr
+			}
+			out.Valid, out.Terminal, out.CoverageIssue = false, false, rejection
+			return out, nil
+		}
+		return out, err
+	}
+	op.Status = "committed"
+	if err := publishVerdictEvidence(ctx, m, op, out); err != nil {
 		return out, err
 	}
 	unlockVars()
@@ -177,6 +173,9 @@ func (m *RunManager) resolveVerdictReplay(ctx context.Context, operationID, inpu
 		if err := json.Unmarshal([]byte(existing.ResponseJSON), &replayed); err != nil {
 			return verdictReplay{}, err
 		}
+		if err := publishVerdictEvidence(ctx, m, *existing, replayed); err != nil {
+			return verdictReplay{}, err
+		}
 		if replayed.Terminal {
 			_, _ = m.TryAutoAdvance(ctx, existing.RunID)
 		}
@@ -193,7 +192,6 @@ func (m *RunManager) resolveVerdictReplay(ctx context.Context, operationID, inpu
 type verdictTarget struct {
 	Run       *api.WorkflowRun
 	Loop      workflowdef.ReviewLoopDef
-	PhaseID   string
 	Key       string
 	Converged bool
 }
@@ -240,7 +238,7 @@ func (m *RunManager) resolveVerdictTarget(
 	if key == "" {
 		return converge("phase " + active.CurrentPhase + " review loop has no evidence key")
 	}
-	return verdictTarget{Run: active, Loop: rl, PhaseID: def.ID, Key: key}, nil
+	return verdictTarget{Run: active, Loop: rl, Key: key}, nil
 }
 
 // ReviewLoopVerdictOutcome reports what RecordReviewLoopVerdict did, for tool results.
@@ -310,6 +308,7 @@ func (m *RunManager) persistReviewLoopEvidence(
 	citedURLs []string,
 	recordID string,
 	recordedAt time.Time,
+	attempt int,
 ) error {
 	if m == nil || m.EvidenceStore == nil {
 		return nil
@@ -330,10 +329,6 @@ func (m *RunManager) persistReviewLoopEvidence(
 		return nil
 	}
 	artifacts := verdictArtifacts(verdict, citedEvidence, citedURLs)
-	attempt := 0
-	if vars, err := m.Store.GetScaffoldVars(ctx, active.ID); err == nil {
-		attempt = ReviewLoopAttempt(vars, phaseID)
-	}
 	rec := evidence.GateRecord(
 		evidence.GateType(strings.TrimSpace(rl.EvidenceKey)),
 		phaseID,

@@ -61,7 +61,8 @@ func TestVerdictReceiptsPreserveIncompleteOperations(t *testing.T) {
 			testutil.FailErr(t, "prepare receipt", err)
 			switch status {
 			case "evidence_applied":
-				testutil.FailErr(t, "apply receipt evidence", store.markVerdictEvidenceApplied(t.Context(), "pending-call"))
+				_, err := store.db.ExecContext(t.Context(), "UPDATE workflow_verdict_operations SET status='evidence_applied' WHERE tool_call_id='pending-call'")
+				testutil.FailErr(t, "seed released pending receipt", err)
 			case "diverged":
 				testutil.FailErr(t, "resolve divergent receipt", store.resolveVerdictOperationDiverged(t.Context(), "pending-call", "phase changed"))
 			}

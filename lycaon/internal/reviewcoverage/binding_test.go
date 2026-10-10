@@ -1,8 +1,9 @@
 package reviewcoverage
 
 import (
-	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestReviewOutputDoesNotChangeAssignedInputs(t *testing.T) {

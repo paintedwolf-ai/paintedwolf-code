@@ -430,7 +430,7 @@ func (q *Queries) GetWorkflowStartOperation(ctx context.Context, id string) (Get
 
 const getWorkflowVerdictOperation = `-- name: GetWorkflowVerdictOperation :one
 SELECT tool_call_id, run_id, source_revision, phase, input_digest, evidence_record_id,
-       evidence_json, status, response_json, error, created_at, updated_at
+       evidence_json, status, response_json, error, created_at, updated_at, evidence_published
 FROM workflow_verdict_operations
 WHERE tool_call_id = ?
 `
@@ -451,6 +451,7 @@ func (q *Queries) GetWorkflowVerdictOperation(ctx context.Context, toolCallID st
 		&i.Error,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EvidencePublished,
 	)
 	return i, err
 }
@@ -769,9 +770,9 @@ func (q *Queries) ListPendingWorkflowTeardownOperations(ctx context.Context) ([]
 
 const listPendingWorkflowVerdictOperations = `-- name: ListPendingWorkflowVerdictOperations :many
 SELECT tool_call_id, run_id, source_revision, phase, input_digest, evidence_record_id,
-       evidence_json, status, response_json, error, created_at, updated_at
+       evidence_json, status, response_json, error, created_at, updated_at, evidence_published
 FROM workflow_verdict_operations
-WHERE status IN ('prepared', 'evidence_applied')
+WHERE status IN ('prepared', 'evidence_applied') OR (status = 'committed' AND evidence_published = 0)
 ORDER BY created_at, tool_call_id
 `
 
@@ -797,6 +798,7 @@ func (q *Queries) ListPendingWorkflowVerdictOperations(ctx context.Context) ([]W
 			&i.Error,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.EvidencePublished,
 		); err != nil {
 			return nil, err
 		}
@@ -1052,19 +1054,19 @@ func (q *Queries) ListWorkflowVerdictReceipts(ctx context.Context, runID string)
 	return items, nil
 }
 
-const markWorkflowVerdictEvidenceApplied = `-- name: MarkWorkflowVerdictEvidenceApplied :exec
+const markWorkflowVerdictEvidencePublished = `-- name: MarkWorkflowVerdictEvidencePublished :exec
 UPDATE workflow_verdict_operations
-SET status = 'evidence_applied', updated_at = ?
-WHERE tool_call_id = ? AND status = 'prepared'
+SET evidence_published = 1, updated_at = ?
+WHERE tool_call_id = ? AND status = 'committed'
 `
 
-type MarkWorkflowVerdictEvidenceAppliedParams struct {
+type MarkWorkflowVerdictEvidencePublishedParams struct {
 	UpdatedAt  string `json:"updated_at"`
 	ToolCallID string `json:"tool_call_id"`
 }
 
-func (q *Queries) MarkWorkflowVerdictEvidenceApplied(ctx context.Context, arg MarkWorkflowVerdictEvidenceAppliedParams) error {
-	_, err := q.db.ExecContext(ctx, markWorkflowVerdictEvidenceApplied, arg.UpdatedAt, arg.ToolCallID)
+func (q *Queries) MarkWorkflowVerdictEvidencePublished(ctx context.Context, arg MarkWorkflowVerdictEvidencePublishedParams) error {
+	_, err := q.db.ExecContext(ctx, markWorkflowVerdictEvidencePublished, arg.UpdatedAt, arg.ToolCallID)
 	return err
 }
 

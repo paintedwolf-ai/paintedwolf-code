@@ -61,21 +61,23 @@ func (q *Queries) GetWorkflowReviewAssignmentIdentity(ctx context.Context, id st
 }
 
 const getWorkflowReviewBinding = `-- name: GetWorkflowReviewBinding :one
-SELECT a.binding_json, s.subject_json
+SELECT a.binding_json, s.subject_json, CAST(COALESCE(j.status, 'reserved') AS TEXT) AS job_status
 FROM workflow_review_assignments a
 JOIN workflow_review_subjects s ON s.id = a.subject_id
+LEFT JOIN worker_jobs j ON j.id = a.id
 WHERE a.id = ?
 `
 
 type GetWorkflowReviewBindingRow struct {
 	BindingJson string `json:"binding_json"`
 	SubjectJson string `json:"subject_json"`
+	JobStatus   string `json:"job_status"`
 }
 
 func (q *Queries) GetWorkflowReviewBinding(ctx context.Context, id string) (GetWorkflowReviewBindingRow, error) {
 	row := q.db.QueryRowContext(ctx, getWorkflowReviewBinding, id)
 	var i GetWorkflowReviewBindingRow
-	err := row.Scan(&i.BindingJson, &i.SubjectJson)
+	err := row.Scan(&i.BindingJson, &i.SubjectJson, &i.JobStatus)
 	return i, err
 }
 
@@ -143,9 +145,10 @@ func (q *Queries) InsertWorkflowReviewSubject(ctx context.Context, arg InsertWor
 }
 
 const listWorkflowReviewBindings = `-- name: ListWorkflowReviewBindings :many
-SELECT a.binding_json, s.subject_json
+SELECT a.binding_json, s.subject_json, CAST(COALESCE(j.status, 'reserved') AS TEXT) AS job_status
 FROM workflow_review_assignments a
 JOIN workflow_review_subjects s ON s.id = a.subject_id
+LEFT JOIN worker_jobs j ON j.id = a.id
 WHERE a.run_id = ? AND a.phase = ? AND a.id > ?
 ORDER BY a.id LIMIT ?
 `
@@ -160,6 +163,7 @@ type ListWorkflowReviewBindingsParams struct {
 type ListWorkflowReviewBindingsRow struct {
 	BindingJson string `json:"binding_json"`
 	SubjectJson string `json:"subject_json"`
+	JobStatus   string `json:"job_status"`
 }
 
 func (q *Queries) ListWorkflowReviewBindings(ctx context.Context, arg ListWorkflowReviewBindingsParams) ([]ListWorkflowReviewBindingsRow, error) {
@@ -176,7 +180,7 @@ func (q *Queries) ListWorkflowReviewBindings(ctx context.Context, arg ListWorkfl
 	var items []ListWorkflowReviewBindingsRow
 	for rows.Next() {
 		var i ListWorkflowReviewBindingsRow
-		if err := rows.Scan(&i.BindingJson, &i.SubjectJson); err != nil {
+		if err := rows.Scan(&i.BindingJson, &i.SubjectJson, &i.JobStatus); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

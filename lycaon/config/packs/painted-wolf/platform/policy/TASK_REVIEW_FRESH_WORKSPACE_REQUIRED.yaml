@@ -1,0 +1,21 @@
+oar: '1.0'
+id: TASK_REVIEW_FRESH_WORKSPACE_REQUIRED
+kind: policy
+anchor: tool.rejected
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles: [tool]
+when: paintedwolf.rejection_code == "TASK_REVIEW_FRESH_WORKSPACE_REQUIRED"
+effect: block
+copy:
+  what: A question reassessment requires a fresh worker workspace.
+  cause: Investigation outputs must be propagated before the reviewer starts.
+  fix: Dispatch the same workflow_work_id without child_session_id or scope.base_overlay_id. Preserve any after_workers prerequisites.
+  instead: Start a new reviewer with the registered work ID; retain earlier reviews as evidence.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:workflow
+x-paintedwolf-message: A question reassessment requires a fresh worker workspace.
+x-paintedwolf-scenarios:
+- id: rejected
+  vars: {}
+  expect_contains: ['Code: TASK_REVIEW_FRESH_WORKSPACE_REQUIRED']

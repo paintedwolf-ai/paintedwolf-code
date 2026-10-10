@@ -166,6 +166,10 @@ results remain the authoritative assessments. The run's `review_revision` advanc
 transactionally with worker state and bound scan changes; review acceptance checks
 that revision in the verdict transaction. Accepted report snapshots are retained
 projections over those inputs, so later work cannot rewrite a completed review.
+Verdict acceptance commits before evidence publication. The receipt retains a
+publication acknowledgement; restart recovery publishes the committed receipt
+idempotently without revalidating later inputs. A rejected input revision resolves
+the prepared receipt without publishing evidence.
 
 This is a fact-plus-head design, not full event sourcing. Small mutable heads answer current-state questions without replay; immutable attempts, outputs, receipts, and results preserve the execution facts needed for audit and recovery. There is no generic event reducer, global sequence, or whole-history boot replay. Domain-specific projectors consume exact pending rows in bounded batches.
 

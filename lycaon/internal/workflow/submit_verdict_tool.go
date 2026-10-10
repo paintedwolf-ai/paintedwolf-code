@@ -100,6 +100,9 @@ func RegisterSubmitVerdictTool(reg *tools.DefaultRegistry, runs *RunManager) err
 		ctx = withVerdictOperationID(ctx, tctx.ToolCallID)
 		outcome, err := runs.RecordReviewLoopVerdict(ctx, tctx.SessionID, verdict, cited, citedURLs)
 		if err != nil {
+			if rejection := tools.AsToolReject(err); rejection != nil {
+				return rejectSubmitVerdict(tctx, rejection.Code, active.CurrentPhase, rejection.Data)
+			}
 			return "", err
 		}
 		if repairs := verdictRepairs(outline, outcome); len(repairs) > 0 {

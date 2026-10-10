@@ -2,11 +2,12 @@ package workflow
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 func TestQuestionTaskAdmissionUsesDurableAttempts(t *testing.T) {
@@ -48,5 +49,16 @@ func TestQuestionTaskAdmissionUsesDurableAttempts(t *testing.T) {
 				t.Fatalf("rejection = %v, want %s", err, tc.reason)
 			}
 		})
+	}
+}
+
+func TestQuestionReviewRejectsResumeBeforeAddingPrerequisites(t *testing.T) {
+	mgr := &RunManager{WorkerTasks: func(context.Context, string) ([]api.WorkerTask, error) { return nil, nil }}
+	vars := SetHostVar(nil, reviewQuestionPath("challenge"), `[{"id":"question/c6","claim_id":"c6","missing_fact":"Trace admission","obligations":[]}]`)
+	task := &api.WorkerTask{WorkflowWorkID: questionReviewWorkID("question/c6"), AgentType: "skeptic", ChildSessionID: "existing-child"}
+	err := mgr.assertQuestionTask(t.Context(), &api.WorkflowRun{ID: "run", CurrentPhase: "challenge"}, workflowdef.ReviewLoopDef{RequiredAgents: []string{"skeptic"}}, vars, task)
+	rejected := tools.AsToolReject(err)
+	if rejected == nil || rejected.Code != "TASK_REVIEW_FRESH_WORKSPACE_REQUIRED" || len(task.AfterWorkers) != 0 {
+		t.Fatalf("resume failed on an injected prerequisite: %v", err)
 	}
 }

@@ -1,0 +1,21 @@
+oar: '1.0'
+id: WORKFLOW_REVIEW_VIEW_INVALID
+kind: policy
+anchor: tool.rejected
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles: [tool]
+when: paintedwolf.rejection_code == "WORKFLOW_REVIEW_VIEW_INVALID"
+effect: block
+copy:
+  what: The requested review view is unavailable or invalid.
+  cause: The review view must match the active run, permitted assignment, and returned cursor.
+  fix: Use summary or assignments as coordinator; workers use subject with their exact assignment_id. Use only returned cursors and do not combine review and finding selectors.
+  instead: Correct the named selector; ask the coordinator if no assignment is available.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:workflow
+x-paintedwolf-message: The requested review view is unavailable or invalid.
+x-paintedwolf-scenarios:
+- id: rejected
+  vars: {}
+  expect_contains: ['Code: WORKFLOW_REVIEW_VIEW_INVALID']

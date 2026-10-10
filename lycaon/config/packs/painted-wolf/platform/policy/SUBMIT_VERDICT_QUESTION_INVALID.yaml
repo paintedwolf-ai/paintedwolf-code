@@ -21,7 +21,7 @@ x-paintedwolf-emit: guard:workflow
 x-paintedwolf-scenarios:
   - id: review_required
     vars:
-      rejection_reason: current_review_required
+      rejection_reason: claim_outcome_required
       offenders_sample: question/c1
     expect_contains: ['Code: SUBMIT_VERDICT_QUESTION_INVALID', workflow_work_id, review_work_id]
   - id: exhausted

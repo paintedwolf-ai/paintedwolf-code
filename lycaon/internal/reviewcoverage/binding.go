@@ -19,6 +19,7 @@ const (
 
 // Binding is immutable dispatch context. The job's terminal result is its assessment.
 type Binding struct {
+	JobStatus         string     `json:"-"`
 	ID                string     `json:"id"`
 	RunID             string     `json:"run_id"`
 	Phase             string     `json:"phase"`
@@ -30,7 +31,7 @@ type Binding struct {
 	QuestionID        string     `json:"question_id,omitempty"`
 	ClaimIDs          []string   `json:"claim_ids,omitempty"`
 	PredecessorJobs   []string   `json:"predecessor_job_ids,omitempty"`
-	InvestigationJobs []string   `json:"investigation_jobs,omitempty"`
+	InvestigationJobs []string   `json:"investigation_job_ids,omitempty"`
 }
 
 // Scoped retains precisely the registered obligations and gaps affecting them.

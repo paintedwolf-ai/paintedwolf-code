@@ -93,7 +93,7 @@ func (m *RunManager) WorkflowWork(ctx context.Context, sessionID, workID string)
 		if err != nil {
 			return spawn.WorkflowWork{}, false, err
 		}
-		if slices.ContainsFunc(questions, func(q reviewQuestionWork) bool { return q.ID == workID || q.ID+"/review" == workID }) {
+		if slices.ContainsFunc(questions, func(q reviewQuestionWork) bool { return q.ID == workID || questionReviewWorkID(q.ID) == workID }) {
 			return spawn.WorkflowWork{RunID: run.ID, Phase: run.CurrentPhase, Scope: &api.TaskScope{Mode: "read"}}, true, nil
 		}
 		return spawn.WorkflowWork{}, false, nil
@@ -159,7 +159,7 @@ func (m *RunManager) AssertWorkerTask(ctx context.Context, task *api.WorkerTask)
 			if task.WorkflowWorkID != "" && !slices.Contains(dedupeReviewAgents(def.ReviewLoop.RequiredAgents, def.ReviewLoop.IfSpawnable), task.AgentType) {
 				return rejectFanoutTask("undeclared_reviewer", task)
 			}
-			if def.ReviewLoop.AssignmentBinding == "explicit" || len(def.ReviewLoop.CoverageReviewers) > 0 || task.WorkflowWorkID != "" {
+			if slices.Contains(dedupeReviewAgents(def.ReviewLoop.RequiredAgents, def.ReviewLoop.IfSpawnable), task.AgentType) && (def.ReviewLoop.AssignmentBinding == "explicit" || len(def.ReviewLoop.CoverageReviewers) > 0 || task.WorkflowWorkID != "") {
 				return (reviewAssignments{m}).assertInitial(ctx, run, task)
 			}
 			return nil

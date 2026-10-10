@@ -12,11 +12,11 @@ copy:
   cause: The submitted revision does not identify the current reconciliation inputs.
   why: Existing accepted results remain recorded; their applicability is checked separately.
   fix: Read pack_board with review_view summary and reconcile the changed inputs before using its revision.
-  instead: Reconcile the resulting evidence before resubmitting the verdict.
+  instead: Refresh the context before dispatching any replacement review.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:workflow
-x-paintedwolf-message: Required review work is outstanding.
+x-paintedwolf-message: Refresh the changed review context.
 x-paintedwolf-scenarios:
-- id: required
+- id: refresh
   vars: {}
   expect_contains: ['Code: SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED', 'review_view']

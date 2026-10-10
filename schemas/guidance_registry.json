@@ -2690,7 +2690,7 @@
       "summary": "The verdict does not cite these required reviewer envelopes: {{ paintedwolf.review_uncited_reviewers }}."
     },
     "SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED": {
-      "branch_instruction": "Reconcile the resulting evidence before resubmitting the verdict.",
+      "branch_instruction": "Refresh the context before dispatching any replacement review.",
       "category": "recoverable",
       "emit": "guard:workflow",
       "summary": "The review context changed after this submission was prepared."
@@ -2874,6 +2874,12 @@
       "category": "recoverable",
       "emit": "guard:task",
       "summary": "Requested max_tool_loops {{ paintedwolf.max_tool_loops }} falls outside the current host range {{ paintedwolf.min_required }}–{{ paintedwolf.host_max }}."
+    },
+    "TASK_REVIEW_FRESH_WORKSPACE_REQUIRED": {
+      "branch_instruction": "Start a new reviewer with the registered work ID; retain earlier reviews as evidence.",
+      "category": "recoverable",
+      "emit": "guard:workflow",
+      "summary": "A question reassessment requires a fresh worker workspace."
     },
     "TASK_SCOPE_PROFILE_READ_ONLY": {
       "branch_instruction": "Branch on Code: pick a mutation-capable profile for write overlays; keep read-only profiles on read scope.",
@@ -3492,6 +3498,12 @@
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "Tried to deliver the workflow's completion report while the durable run is still in phase `{{ paintedwolf.phase }}`."
+    },
+    "WORKFLOW_REVIEW_VIEW_INVALID": {
+      "branch_instruction": "Correct the named selector; ask the coordinator if no assignment is available.",
+      "category": "recoverable",
+      "emit": "guard:workflow",
+      "summary": "The requested review view is unavailable or invalid."
     },
     "WORKFLOW_SESSION_COMPOSE_REQUIRED": {
       "branch_instruction": "Use the current workflow contract and explicit human start action; do not invent a start or composition API call.",

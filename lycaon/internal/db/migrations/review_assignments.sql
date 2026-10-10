@@ -35,3 +35,9 @@ BEGIN UPDATE workflow_runs SET review_revision=review_revision+1 WHERE id=OLD.wo
 CREATE TRIGGER workflow_review_scan_update AFTER UPDATE OF status,result_json,source_snapshot_id ON code_scans
 WHEN OLD.status IS NOT NEW.status OR OLD.result_json IS NOT NEW.result_json OR OLD.source_snapshot_id IS NOT NEW.source_snapshot_id
 BEGIN UPDATE workflow_runs SET review_revision=review_revision+1 WHERE id IN (SELECT workflow_run_id FROM workflow_scan_bindings WHERE scan_id=NEW.id); END;
+
+ALTER TABLE workflow_verdict_operations ADD COLUMN evidence_published INTEGER NOT NULL DEFAULT 0 CHECK (evidence_published IN (0, 1));
+DROP INDEX idx_workflow_verdict_operations_recovery;
+CREATE INDEX idx_workflow_verdict_operations_recovery
+    ON workflow_verdict_operations(status, created_at, tool_call_id)
+    WHERE status IN ('prepared', 'evidence_applied') OR (status = 'committed' AND evidence_published = 0);
