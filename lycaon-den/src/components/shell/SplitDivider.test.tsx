@@ -75,31 +75,42 @@ describe("SplitDivider", () => {
     expect(tx.preview.mock.lastCall?.[0]).toBe(usable - STAGE_COL_MIN);
   });
 
-  it("continues a drag across sidebar collapse without moving the chat edge", async () => {
+  it.each([true, false])("keeps the rounded drag edge stable across sidebar collapse (stage left: %s)", async (stageOnLeft) => {
     const [hostWidth, setHostWidth] = createSignal(1120);
     const [chatWidth, setChatWidth] = createSignal(440);
     const tx = sessionHarness(setChatWidth);
     render(() => (
       <div>
         <SplitDivider availableWidthPx={() => 1400}
-          chatWidthPx={chatWidth} stageOnLeft={() => true}
+          chatWidthPx={chatWidth} stageOnLeft={() => stageOnLeft}
           onBegin={tx.onBegin} onReset={vi.fn()} />
       </div>
     ));
     const separator = screen.getByTestId("split-divider") as HTMLElement;
     vi.spyOn(separator.parentElement!, "getBoundingClientRect").mockImplementation(() => ({
-      left: 1400 - hostWidth(), right: 1400, width: hostWidth(),
+      left: stageOnLeft ? 1400 - hostWidth() : 0,
+      right: stageOnLeft ? 1400 : hostWidth(), width: hostWidth(),
     }) as DOMRect);
     separator.setPointerCapture = vi.fn();
     separator.releasePointerCapture = vi.fn();
-    separator.dispatchEvent(pointerEvent("pointerdown", 960));
-    window.dispatchEvent(pointerEvent("pointermove", 600));
+    const pointerX = stageOnLeft ? 600 : 800;
+    separator.dispatchEvent(pointerEvent("pointerdown", stageOnLeft ? 960 : 440));
+    window.dispatchEvent(pointerEvent("pointermove", pointerX));
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-    expect(tx.preview.mock.lastCall?.[0]).toBe(799.5);
+    // Width preferences use whole pixels; the 1px divider straddles the pointer.
+    expect(tx.preview.mock.lastCall?.[0]).toBe(800);
 
     setHostWidth(1400);
-    window.dispatchEvent(pointerEvent("pointerup", 599));
-    expect(tx.preview.mock.lastCall?.[0]).toBe(800.5);
+    window.dispatchEvent(pointerEvent("pointermove", pointerX));
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    expect(tx.preview.mock.lastCall?.[0]).toBe(800);
+    const releaseX = pointerX + (stageOnLeft ? -1 : 1);
+    window.dispatchEvent(pointerEvent("pointerup", releaseX));
+    expect(tx.preview.mock.lastCall?.[0]).toBe(801);
+    const dividerCenter = stageOnLeft
+      ? 1400 - chatWidth() - DIVIDER_PX / 2
+      : chatWidth() + DIVIDER_PX / 2;
+    expect(Math.abs(dividerCenter - releaseX)).toBeLessThanOrEqual(DIVIDER_PX / 2);
     expect(tx.commit).toHaveBeenCalledOnce();
   });
 
