@@ -9,33 +9,33 @@ import (
 	"github.com/lycaon/lycaon/internal/workscope"
 )
 
-// ObserveRepochange owns repository notifications until the returned drain completes.
+// ObserveRepochange registers repository notifications until the returned drain completes.
 func (c *Service) ObserveRepochange() func(context.Context) error {
 	if c == nil {
 		return func(context.Context) error { return nil }
 	}
-	owner := &repochangeOwner{observe: c.onRepochange}
-	unregister := repochange.RegisterObserver(owner.deliver)
+	registration := &repochangeRegistration{observe: c.onRepochange}
+	unregister := repochange.RegisterObserver(registration.deliver)
 	return func(ctx context.Context) error {
-		owner.work.Stop()
+		registration.work.Stop()
 		unregister()
-		if err := owner.work.Wait(ctx); err != nil {
+		if err := registration.work.Wait(ctx); err != nil {
 			return err
 		}
-		owner.mu.Lock()
-		owner.observe = nil
-		owner.mu.Unlock()
+		registration.mu.Lock()
+		registration.observe = nil
+		registration.mu.Unlock()
 		return nil
 	}
 }
 
-type repochangeOwner struct {
+type repochangeRegistration struct {
 	work    workscope.Group
 	mu      sync.Mutex
 	observe repochange.Observer
 }
 
-func (o *repochangeOwner) deliver(ctx context.Context, event repochange.Event) {
+func (o *repochangeRegistration) deliver(ctx context.Context, event repochange.Event) {
 	ctx, finish, err := o.work.Begin(ctx)
 	if err != nil {
 		return

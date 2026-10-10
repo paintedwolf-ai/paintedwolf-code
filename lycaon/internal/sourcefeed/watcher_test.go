@@ -402,12 +402,12 @@ func TestWatchLifetimeIdleWaitKeepsLiveObserver(t *testing.T) {
 	testutil.FailErr(t, "release lifetime", lifetime.Wait(t.Context()))
 }
 
-type watchOwnerBlockingPublisher struct {
+type watchBlockingPublisher struct {
 	capturePub
 	entered, cancelled, release chan struct{}
 }
 
-func (p *watchOwnerBlockingPublisher) SourceChanged(ctx context.Context, _ api.SourceChangesEvent) error {
+func (p *watchBlockingPublisher) SourceChanged(ctx context.Context, _ api.SourceChangesEvent) error {
 	close(p.entered)
 	<-ctx.Done()
 	close(p.cancelled)
@@ -417,7 +417,7 @@ func (p *watchOwnerBlockingPublisher) SourceChanged(ctx context.Context, _ api.S
 
 func TestWatchLifetimeStopDrainsWholeFlushPublication(t *testing.T) {
 	lifetime := &WatchLifetime{}
-	pub := &watchOwnerBlockingPublisher{entered: make(chan struct{}), cancelled: make(chan struct{}), release: make(chan struct{})}
+	pub := &watchBlockingPublisher{entered: make(chan struct{}), cancelled: make(chan struct{}), release: make(chan struct{})}
 	t.Cleanup(Bind(pub))
 	roots := []RootSpec{{ID: "r1", WorkspaceID: "ws", Path: t.TempDir()}}
 	EnsureProjectWatch(t.Context(), lifetime, "lifetime-publish", "", roots, nil)
