@@ -64,3 +64,20 @@ it("advances pending symbol discovery and stops at terminal coverage gaps", () =
   refresh.schedule({ issues: [{ executor: "code", reason: "time_budget" }] }, rerun);
   expect(vi.getTimerCount()).toBe(0);
 });
+
+
+it("bounds pending symbol refreshes and permits a new explicit search", () => {
+  vi.useFakeTimers();
+  const refresh = createSearchRefresh();
+  const result = { issues: [{ reason: "symbol_pending" }] } as SearchResponse;
+  const rerun = vi.fn(() => refresh.schedule(result, rerun));
+  refresh.schedule(result, rerun);
+  vi.advanceTimersByTime(300_000);
+  expect(rerun).toHaveBeenCalledTimes(20);
+  expect(vi.getTimerCount()).toBe(0);
+  refresh.reset();
+  refresh.schedule(result, rerun);
+  vi.advanceTimersByTime(750);
+  expect(rerun).toHaveBeenCalledTimes(21);
+  refresh.clear();
+});
