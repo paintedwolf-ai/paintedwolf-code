@@ -242,7 +242,7 @@ Args: map[string]any{"command": "echo restart"},
 },
 	})
 	testutil.FailErr(t, "request pending approval", err)
-	original.StopExpiryTimers()
+	testutil.FailErr(t, "stop original checkpoint expiries", original.StopExpiryTimers(ctx))
 	pending, err := original.PollCheckpoint(ctx, response.CheckpointID)
 	testutil.FailErr(t, "read after shutdown", err)
 	if pending.Status != hitl.DecisionStatusPending {
@@ -251,7 +251,7 @@ Args: map[string]any{"command": "echo restart"},
 	_, err = database.ExecContext(ctx, "UPDATE checkpoints SET created_at = ? WHERE id = ?", db.FormatTime(time.Now().UTC().Add(-2*time.Hour)), response.CheckpointID)
 	testutil.FailErr(t, "age original deadline", err)
 	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
-	t.Cleanup(restarted.StopExpiryTimers)
+	t.Cleanup(func() { testutil.FailErr(t, "stop restored checkpoint expiries", restarted.StopExpiryTimers(context.WithoutCancel(ctx))) })
 	restarted.SetCheckpointExpiry(func() time.Duration { return time.Hour })
 	testutil.FailErr(t, "restore approval after shutdown", restarted.RestorePending(ctx))
 	settled, err := restarted.PollCheckpoint(ctx, response.CheckpointID)
