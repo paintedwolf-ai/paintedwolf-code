@@ -57,7 +57,7 @@ func reviewQuestions(vars map[string]any, phase string) ([]reviewQuestionWork, e
 }
 
 func questionClaims(def workflowdef.ReviewLoopDef, verdict map[string]string) ([]workflowvalidation.VerdictClaim, error) {
-	fields, err := workflowvalidation.Parseworkflowvalidation.VerdictClaims(def, verdict)
+	fields, err := workflowvalidation.ParseVerdictClaims(def, verdict)
 	if err != nil {
 		return nil, err
 	}

@@ -19,7 +19,7 @@ func TestMissingClaimOutcomeReturnsExactClaimIDsWithoutInventingWork(t *testing.
 	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"rltest@1.0.0": manifest})
 	dir := t.TempDir()
 	mgr.Verdicts.EvidenceStore = inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
-	mgr.Verdicts.ProjectDir = func(context.Context, string) (string, error) { return dir, nil }
+	mgr.Verdicts.EvidenceProjectDir = func(context.Context, string) (string, error) { return dir, nil }
 	record := evidence.GateRecord(evidence.GateTypeSurveyClaims, "candidate", run.ID, evidence.GateVerdictPassed, "SELECTED", map[string]any{"verdict": "SELECTED", "claims": `[{"id":"exact/claim-7","title":"Boundary","statement":"Investigate the boundary","status":"claimed"}]`}, "", "", "", 0, time.Now().UTC())
 	testutil.FailErr(t, "record candidate claim", mgr.Verdicts.EvidenceStore.Append(t.Context(), dir, record))
 	def := *manifest.PhaseDefs[1].ReviewLoop

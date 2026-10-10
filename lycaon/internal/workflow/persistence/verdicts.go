@@ -117,10 +117,12 @@ func (s *Verdicts) CommitVerdictOperation(ctx context.Context, op runstate.Verdi
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if vars != nil {
+	if outcome.Valid && outcome.Terminal {
 		if err := verifyReviewInputsTx(ctx, tx, run.ID, op.Phase, vars); err != nil {
 			return err
 		}
+	}
+	if vars != nil {
 		now := time.Now().UTC()
 		raw, marshalErr := json.Marshal(vars)
 		if marshalErr != nil {
