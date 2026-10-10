@@ -22,7 +22,7 @@ func TestInterruptedRunReconcileEmitsTerminalBoundary(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	sessStore := store.NewSQL(sqlDB)
 	wfStore := workflowpersistence.New(sqlDB)
-	runMgr := workflow.NewHost(wfStore, workflow.Models{Client: sessStore, Provider: nil, Limits: nil, Cost: nil}, nil)
+	runMgr := workflow.NewManager(wfStore, sessStore, nil, nil)
 	runMgr.Recovery.Busy = func(context.Context, string) bool { return false }
 
 	rapid.Check(t, func(rt *rapid.T) {
