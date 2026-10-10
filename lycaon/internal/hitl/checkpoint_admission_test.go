@@ -362,7 +362,7 @@ func newTestManager(t *testing.T) (db.ReadHandle, *hitl.Checkpoints, string) {
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
 	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
-	t.Cleanup(mgr.StopExpiryTimers)
+	t.Cleanup(func() { testutil.FailErr(t, "stop checkpoint expiries", mgr.StopExpiryTimers(context.Background())) })
 	return sqlDB, mgr, "sess-hitl-1"
 }
 

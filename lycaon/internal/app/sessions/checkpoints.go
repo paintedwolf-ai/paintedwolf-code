@@ -58,7 +58,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	checkpointStore := hitl.NewSQLStore(deps.Database)
 	checkpointStore.SetEventOutbox(deps.EventsOutbox)
 	checkpointMgr := hitl.NewCheckpoints(checkpointStore, deps.EventPublisher, deps.Security.Authority.Recorder)
-	deps.Resources.Track("checkpoint-expiries", 25, func(context.Context) error { checkpointMgr.StopExpiryTimers(); return nil })
+	deps.Resources.Track("checkpoint-expiries", 25, checkpointMgr.StopExpiryTimers)
 	checkpointMgr.Sessions.SetSessionAdmission(r.Manager.Chats.Gate.WithSessionTreeAdmission)
 	checkpointMgr.Presence.SetVaultUnlock(deps.Security.Presence, deps.Security.Unlocks, unlockRecorder{})
 	deps.Execution.Host.Executor.Secrets.SetPresenceAvailable(checkpointMgr.Presence.PresenceAvailable)
