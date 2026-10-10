@@ -175,6 +175,8 @@ func (b *serveBuilder) wireServer() error {
 		return err
 	}
 	b.server.Server = api.NewServer(deps, b.startup.logger, b.identity.Token)
+	watch := b.server.Server.Sources.Watch
+	b.startup.resources.Track("api-source-watches", 22, func(ctx context.Context) error { watch.Stop(); return watch.Wait(ctx) })
 	return registerServerHooks(b, extensionJournal)
 }
 
