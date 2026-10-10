@@ -30,16 +30,40 @@ func TestPromptLoopParitySpecPosture(t *testing.T) {
 
 func TestWorkerAndCoordinatorSharePromptLoop(t *testing.T) {
 	fix := setupContextualToolsFixture(t, api.SessionPostureBuild)
-	coordLoop := fix.Mgr.Runner.Coordinator.PromptLoop()
+	runtime := fix.Mgr.Coordinator.Runtime
+	if runtime == nil || fix.Mgr.Runner.Coordinator != runtime {
+		t.Fatal("coordinator and turn execution must share one prompt runtime")
+	}
+	wakeLoop := runtime.CoordinatorLoop()
+	coordinatorSnapshot := runtime.PromptLoop()
+	coordinatorSnapshot.Context.Deps.SetPromptTurnSurface(fix.Sess.ID, "parent-surface")
+	t.Cleanup(func() { runtime.EndPromptTurn(fix.Sess.ID) })
 	ctx := context.Background()
 	child, err := fix.Mgr.Workers.SpawnChild(ctx, fix.Sess.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer,
 		Prompt:    "implement",
 	})
 	testutil.FailErr(t, "fix.Mgr.SpawnChild failed", err)
-	_ = child
-	if fix.Mgr.Runner.Coordinator.PromptLoop() != coordLoop {
-		t.Fatal("coordinator and child must share the same PromptLoop instance")
+	if child.ParentSessionID != fix.Sess.ID {
+		t.Fatalf("child parent=%q, want %q", child.ParentSessionID, fix.Sess.ID)
+	}
+	t.Cleanup(func() { runtime.EndPromptTurn(child.ID) })
+	workerSnapshot := fix.Mgr.Runner.Coordinator.PromptLoop()
+	if fix.Mgr.Runner.Coordinator != runtime || fix.Mgr.Coordinator.Runtime != runtime || runtime.CoordinatorLoop() != wakeLoop {
+		t.Fatal("worker creation and dependency refresh must retain the shared runtime and wake owner")
+	}
+	if workerSnapshot == coordinatorSnapshot {
+		t.Fatal("prompt turns must receive fresh dependency snapshots")
+	}
+	if got := workerSnapshot.Context.Deps.PromptTurnSurface(fix.Sess.ID); got != "parent-surface" {
+		t.Fatalf("refreshed worker snapshot lost shared parent state: %q", got)
+	}
+	workerSnapshot.Context.Deps.SetPromptTurnSurface(child.ID, "child-surface")
+	if got := coordinatorSnapshot.Context.Deps.PromptTurnSurface(child.ID); got != "child-surface" {
+		t.Fatalf("coordinator snapshot cannot read shared child state: %q", got)
+	}
+	if got := coordinatorSnapshot.Context.Deps.PromptTurnSurface(fix.Sess.ID); got != "parent-surface" {
+		t.Fatalf("child state replaced the parent turn surface: %q", got)
 	}
 }
 
