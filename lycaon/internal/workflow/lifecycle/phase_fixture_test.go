@@ -76,27 +76,3 @@ func advancePlanThroughExpand(ctx context.Context, mgr *workflow.RunManager, run
 	}
 	return mgr.Phases.Advance(ctx, run.ID)
 }
-
-func advancePlanToApprovePhase(ctx context.Context, mgr *workflow.RunManager, run *api.WorkflowRun) (*api.WorkflowRun, error) {
-	var err error
-	run, err = completePlanIntake(ctx, mgr, run)
-	if err != nil {
-		return nil, err
-	}
-	run, err = completePlanResearchAtDepthNone(ctx, mgr, run)
-	if err != nil {
-		return nil, err
-	}
-	run, err = advancePlanThroughExpand(ctx, mgr, run)
-	if err != nil {
-		return nil, err
-	}
-	run, err = completePlanReviewAtDepthNone(ctx, mgr, run)
-	if err != nil {
-		return nil, err
-	}
-	if run, err = mgr.Store.Runs.Get(ctx, run.ID); err != nil {
-		return nil, err
-	}
-	return run, nil
-}
