@@ -13,6 +13,9 @@ import (
 // Release watcher suppression only when the failed effect left its input intact.
 // Partial or uninspectable publication retains its journal scope for recovery.
 func sourceFailureLeavesInput(plan *sourceMutationPlan) bool {
+	if !plan.Changed {
+		return true
+	}
 	if !plan.EffectStarted && plan.Kind != "write" && plan.Kind != "batch_write" {
 		return true
 	}
