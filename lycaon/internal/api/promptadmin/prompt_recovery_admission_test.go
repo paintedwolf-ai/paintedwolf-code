@@ -1,6 +1,8 @@
 package promptadmin
 
 import (
+	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -32,5 +34,18 @@ func TestRecoveryAdmissionDoesNotConvertButtonTextIntoNewContent(t *testing.T) {
 	testutil.FailErr(t, "admit button recovery", err)
 	if admitted == nil {
 		t.Fatal("recovery not persisted")
+	}
+}
+
+func TestRecoveryWithNewAttachmentsIsInvalidRequest(t *testing.T) {
+	handler, _, attachments, sess := newPromptAttachmentRecoveryFixture(t)
+	req := wire.PromptRequest{OperationID: uuid.NewString(), Recovery: &wire.PromptRecovery{Action: "continue"},
+		Attachments: []wire.PromptAttachmentPart{{}}}
+	response := httptest.NewRecorder()
+	_, ok := handler.Submission.preparePromptAdmission(response, httptest.NewRequest("POST", "/", nil), sess.ID, sess, req, attachments, "", "", false)
+	var body wire.ErrorResponse
+	testutil.FailErr(t, "decode refusal", json.Unmarshal(response.Body.Bytes(), &body))
+	if ok || response.Code != http.StatusBadRequest || body.Code != wire.ApiErrorCodeInvalidRequest {
+		t.Fatalf("malformed recovery = %d %+v (accepted=%v)", response.Code, body, ok)
 	}
 }

@@ -117,8 +117,14 @@ func (s *Submission) HandlePrompt(w http.ResponseWriter, r *http.Request) {
 			s.responses.FailDetails(w, wire.ApiErrorCodeSessionSpendCeilingReached, usernotice.SpendCeilingContext(err), "chat spend ceiling reached")
 			return
 		}
-		if errors.Is(err, recovery.ErrStale) {
-			s.responses.FailReason(w, wire.ApiErrorCodePromptRecoveryStale, err.Error())
+		if errors.Is(err, recovery.ErrInvalid) {
+			s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, err.Error())
+			return
+		}
+		var stale *recovery.StaleError
+		if errors.As(err, &stale) {
+			s.responses.FailDetails(w, wire.ApiErrorCodePromptRecoveryStale,
+				map[string]any{"reason": stale.Reason, "explanation": stale.Message}, stale.Message)
 			return
 		}
 		var conflict *store.PromptSubmissionConflictError
@@ -182,7 +188,7 @@ func (s *Submission) preparePromptAdmission(
 ) (promptAdmission, bool) {
 	if req.Recovery != nil {
 		if len(req.Attachments) != 0 || len(req.References) != 0 || len(req.Secrets) != 0 {
-			s.responses.FailReason(w, wire.ApiErrorCodePromptRecoveryStale, "Recovery cannot add attachments, references, or secrets; send them as a new message")
+			s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "Recovery cannot add attachments, references, or secrets; send them as a new message")
 			return promptAdmission{}, false
 		}
 		return promptAdmission{input: promptinput.Input{Text: text, Recovery: req.Recovery}}, true
