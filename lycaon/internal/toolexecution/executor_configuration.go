@@ -28,8 +28,6 @@ type SessionHostLedger interface {
 
 // SetMCPCatalog wires MCP structural observation for OAR.
 
-// SetCheckpointManager routes tool and egress approvals through the same checkpoint flow.
-
 // SetToolApprovalCoalesce wires mint/join spam guards for pending tool_approval asks.
 
 // SetGateRepeatLedger wires reason-keyed repeat counting for tool_approval mints.

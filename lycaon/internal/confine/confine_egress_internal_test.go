@@ -4,8 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/gate"
@@ -585,5 +587,77 @@ func TestEgressPolicyReleasePreservesReplacementDeny(t *testing.T) {
 	currentRelease()
 	if !decideHTTPConnect(broker, t.Context(), "owner-token", "after-release.test") || !asked {
 		t.Fatal("released policy retained a stale authored deny")
+	}
+}
+
+func TestEgressResolverReleasePreservesReplacementAndDrainsApproval(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	SetEgressPosture(PostureAsk)
+	t.Cleanup(func() { SetEgressPosture(PostureObserve) })
+	oldRelease := SetEgressResolver(func(context.Context, EgressCommand, egressproxy.Endpoint, *EgressDetectionCitation) bool {
+		t.Error("released resolver received a dial")
+		return false
+	})
+	entered, canceled, finish := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	allowFinish := sync.OnceFunc(func() { close(finish) })
+	defer allowFinish()
+	currentRelease := SetEgressResolver(func(ctx context.Context, _ EgressCommand, _ egressproxy.Endpoint, _ *EgressDetectionCitation) bool {
+		close(entered)
+		<-ctx.Done()
+		close(canceled)
+		<-finish
+		return true
+	})
+	t.Cleanup(func() {
+		if err := currentRelease(context.Background()); err != nil {
+			t.Errorf("cleanup approval resolver: %v", err)
+		}
+	})
+	if err := oldRelease(ctx); err != nil {
+		t.Fatalf("release old resolver: %v", err)
+	}
+	egressBroker.mu.Lock()
+	copied := egressBroker.resolver
+	egressBroker.mu.Unlock()
+	dial := make(chan bool, 1)
+	go func() {
+		dial <- DecideAttributedHost(ctx, EgressCommand{SessionID: "resolver-owner"}, "approval.test")
+	}()
+	select {
+	case <-entered:
+	case <-ctx.Done():
+		t.Fatal("approval did not enter current resolver")
+	}
+	drained := make(chan error, 1)
+	go func() { drained <- currentRelease(ctx) }()
+	select {
+	case <-canceled:
+	case <-ctx.Done():
+		t.Fatal("release did not cancel active approval")
+	}
+	select {
+	case err := <-drained:
+		t.Fatalf("release returned before active approval finished: %v", err)
+	default:
+	}
+	if copied(t.Context(), EgressCommand{}, egressproxy.Endpoint{}, nil) {
+		t.Fatal("copied callback admitted while owner was draining")
+	}
+	allowFinish()
+	if err := <-drained; err != nil {
+		t.Fatalf("drain current approval: %v", err)
+	}
+	if <-dial {
+		t.Fatal("canceled approval authorized its dial")
+	}
+	if copied(t.Context(), EgressCommand{}, egressproxy.Endpoint{}, nil) {
+		t.Fatal("copied callback authorized after owner close")
+	}
+	if DecideAttributedHost(t.Context(), EgressCommand{SessionID: "closed-resolver"}, "after-close.test") {
+		t.Fatal("closed resolver authorized a new dial")
+	}
+	if err := currentRelease(t.Context()); err != nil {
+		t.Fatalf("repeat resolver release: %v", err)
 	}
 }
