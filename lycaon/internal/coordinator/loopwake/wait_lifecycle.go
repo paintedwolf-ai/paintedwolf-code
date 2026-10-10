@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
+	"github.com/lycaon/lycaon/internal/workscope"
 )
 
 type WaitsDeps struct {
@@ -18,6 +18,7 @@ type Waits struct {
 	depsMu        sync.RWMutex
 	deps          WaitsDeps
 	sleep         sessionSleeps
+	timerWork     workscope.Group
 	Policy        *HostWakePolicy
 	Nudges        *Nudges
 	Facts         *SessionFacts
@@ -54,83 +55,6 @@ func (l *Waits) EnterSleep(
 ) {
 	l.enterSleep(ctx, sessionID, sleepArm{
 		until: until, reason: reason, triggers: triggers, processHandles: processHandles, mover: mover,
-	})
-}
-func (l *Waits) enterSleep(ctx context.Context, sessionID string, arm sleepArm) {
-	if l == nil || strings.TrimSpace(sessionID) == "" {
-		return
-	}
-	triggers := arm.triggers
-	if triggers == nil {
-		triggers = DefaultCoordinatorWaitTriggers(l.Subscriptions.overlayPromoteDue(ctx, sessionID, anchor.Envelope{}))
-	}
-	st := l.sleep.state(sessionID)
-	// Preserve context values for the later timer wake.
-	wakeCtx := context.WithoutCancel(ctx)
-
-	st.mu.Lock()
-	// A re-arm retires the previous lease before opening another.
-	closed, hadLease := closeWaitLeaseLocked(st, sessionID)
-	cancelSleepTimerLocked(st)
-	st.armed = true
-	st.untilComplete = arm.untilComplete
-	st.until = arm.until.UTC()
-	st.interruptedUntil = time.Time{}
-	st.reason = strings.TrimSpace(arm.reason)
-	st.waitTriggers = dedupeWaitTriggers(triggers)
-	st.processHandles = normalizeProcessHandles(arm.processHandles)
-	st.workerHandles = normalizeProcessHandles(arm.workerHandles)
-	st.mover = arm.mover
-	opened := openWaitLeaseLocked(st, sessionID, arm.mover)
-	loopLogSleep(sessionID, "arm", arm.reason, st.until)
-	l.armSleepTimerLocked(st, wakeCtx, sessionID, arm.reason)
-	st.mu.Unlock()
-
-	if hadLease {
-		l.publishWaitLease(ctx, closed)
-	}
-	if opened.ActivityID != "" {
-		l.publishWaitLease(ctx, opened)
-	}
-}
-func (l *Waits) armSleepTimerLocked(st *sessionSleep, wakeCtx context.Context, sessionID, reason string) {
-	if _, ok := waitTriggerSet(st.waitTriggers)[WaitTriggerTimer]; !ok {
-		st.timer = nil
-		return
-	}
-	remaining := time.Until(st.until)
-	if remaining <= 0 {
-		remaining = time.Millisecond
-	}
-	generation := st.timerGeneration
-	timerDone := make(chan struct{})
-	st.timerDone = timerDone
-	st.timer = time.AfterFunc(remaining, func() {
-		defer close(timerDone)
-		st.mu.Lock()
-		if st.timerGeneration != generation {
-			st.mu.Unlock()
-			return
-		}
-		until := st.until
-		st.timer = nil
-		st.timerGeneration++
-		// The deadline also retires the activity lease.
-		expired, hadLease := closeWaitLeaseLocked(st, sessionID)
-		st.mu.Unlock()
-		if store := l.Subscriptions.durableWaitStore(); store != nil {
-			winner := awaitstore.Condition{Kind: "timer", Outcome: "timed_out"}
-			if lease, active, _ := store.ForSession(wakeCtx, sessionID); active {
-				if won, _ := store.SettleLease(wakeCtx, lease.ID, "timed_out", winner); won {
-					l.Deliveries.rememberWaitWinner(sessionID, lease.ID, winner)
-				}
-			}
-		}
-		if hadLease {
-			l.publishWaitLease(wakeCtx, expired)
-		}
-		loopLogSleep(sessionID, "timer_fire", reason, until)
-		l.Nudges.Nudge(wakeCtx, sessionID, anchor.WaitTimerFired, anchor.WaitTimerFired, "", anchor.Envelope{})
 	})
 }
 func (l *Waits) MarkWaitCalled(sessionID string) {
@@ -439,7 +363,10 @@ func (l *Waits) StopSleepTimers() {
 	if l == nil {
 		return
 	}
+	l.timerWork.Stop()
+	l.sleep.mu.Lock()
 	l.sleep.stopTimers()
+	l.sleep.mu.Unlock()
 }
 func (l *Waits) rearmSleepAfterSkip(ctx context.Context, sessionID string) {
 	if l == nil {

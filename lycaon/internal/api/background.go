@@ -24,6 +24,7 @@ func (s *Server) StopBackground() {
 		s.fileBriefings.Stop()
 	}
 	s.background.Stop()
+	s.Sources.Watch.Stop()
 }
 
 // WaitForBackground drains host work together, then settles its attention updates.
@@ -32,6 +33,8 @@ func (s *Server) WaitForBackground(ctx context.Context) {
 		return
 	}
 	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { defer wg.Done(); _ = s.Sources.Watch.Wait(ctx) }()
 	if s.fileBriefings != nil {
 		wg.Add(1)
 		go func() { defer wg.Done(); s.fileBriefings.Wait(ctx) }()

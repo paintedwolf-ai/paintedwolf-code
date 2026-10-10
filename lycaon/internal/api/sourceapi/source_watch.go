@@ -67,11 +67,16 @@ func (s *Watch) EnsureSourceWatch(ctx context.Context, projectID string) (int, b
 }
 
 func (s *Watch) ensureWorkspaceWatch(ctx context.Context, p *project.Project) bool {
+	ctx, finish, err := s.watchWork.Begin(ctx)
+	if err != nil {
+		return false
+	}
+	defer finish()
 	roots := make([]sourcefeed.RootSpec, 0, len(p.Roots))
 	for _, r := range p.Roots {
 		roots = append(roots, sourcefeed.RootSpec{ID: r.ID, WorkspaceID: p.WorkspaceID(), Path: r.Path})
 	}
-	bound := sourcefeed.EnsureProjectWatch(ctx, p.ID, p.SourceBranch.String(), roots, func(ctx context.Context, _ string, batch sourcefeed.ExternalBatch) {
+	bound := sourcefeed.EnsureProjectWatch(ctx, &s.watches, p.ID, p.SourceBranch.String(), roots, func(ctx context.Context, _ string, batch sourcefeed.ExternalBatch) {
 		s.observeWorkspaceChanges(ctx, p, batch)
 	})
 	if bound {
