@@ -3,6 +3,7 @@ package workerworkspace
 import (
 	"context"
 	"errors"
+	"os"
 	"reflect"
 	"testing"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
 )
 
 type enrichmentJobs struct {
