@@ -35,6 +35,36 @@ class GoDigestTests(unittest.TestCase):
             self.assertIn("Go exited with status 137", result.stdout)
             self.assertNotIn("✓", result.stdout)
 
+    def test_report_distinguishes_executed_skipped_and_no_test_packages(self):
+        events = [
+            {"Package": "fixture/ran", "Test": "TestRan", "Action": "run"},
+            {"Package": "fixture/ran", "Test": "TestRan", "Action": "pass"},
+            {"Package": "fixture/ran", "Action": "pass"},
+            {"Package": "fixture/skipped", "Test": "TestResource", "Action": "run"},
+            {"Package": "fixture/skipped", "Test": "TestResource", "Action": "skip"},
+            {"Package": "fixture/skipped", "Action": "pass"},
+            {"Package": "fixture/no_tests", "Action": "skip"},
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            result = self.digest(events, directory)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("test results: 1 passed, 0 failed, 1 skipped", result.stdout)
+        self.assertIn("1 package without tests", result.stdout)
+
+    def test_all_skipped_and_no_test_reports_never_claim_executed_tests(self):
+        cases = [
+            ([{"Package": "fixture/no_tests", "Action": "skip"}], 0, 1),
+            ([{"Package": "fixture/skipped", "Test": "TestResource", "Action": "skip"},
+              {"Package": "fixture/skipped", "Action": "pass"}], 1, 0),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            for events, skipped, empty in cases:
+                with self.subTest(events=events):
+                    result = self.digest(events, directory)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertIn(f"test results: 0 passed, 0 failed, {skipped} skipped", result.stdout)
+                    self.assertIn(f"{empty} package", result.stdout)
+
     def test_skipped_package_establishes_completion(self):
         with tempfile.TemporaryDirectory() as directory:
             result = self.digest([{"Package": "example/test", "Action": "skip"}], directory)
