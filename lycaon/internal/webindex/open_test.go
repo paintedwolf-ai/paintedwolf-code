@@ -77,3 +77,33 @@ func TestOpenDoesNotReplaceBlockingParentFile(t *testing.T) {
 		t.Fatalf("failed startup changed parent: %q %v", raw, err)
 	}
 }
+
+func TestWriterFailureDoesNotDiscardRetainedPagesOrStopLaterWrites(t *testing.T) {
+	store, err := Open(t.Context(), filepath.Join(t.TempDir(), "web-index.db"))
+	testutil.FailErr(t, "open writer fixture", err)
+	t.Cleanup(func() { testutil.FailErr(t, "close writer fixture", store.Close()) })
+	store.QueuePage(t.Context(), Page{URL: "https://a.example/retained", Title: "retained evidence"})
+	store.Flush()
+	testutil.FailErr(t, "install write refusal", store.syncWrite(t.Context(), func(database *sql.DB) error {
+		_, err := database.ExecContext(t.Context(), `CREATE TRIGGER refuse_selected_page BEFORE INSERT ON docs
+   WHEN NEW.url = 'https://a.example/refused' BEGIN SELECT RAISE(ABORT, 'fixture write refusal'); END`)
+		return err
+	}))
+	store.QueuePage(t.Context(), Page{URL: "https://a.example/refused", Title: "refused evidence"})
+	store.QueuePage(t.Context(), Page{URL: "https://a.example/later", Title: "later evidence"})
+	store.Flush()
+	stats, err := store.Stats(t.Context())
+	testutil.FailErr(t, "inspect writer failure", err)
+	if stats.WritesFailed != 1 {
+		t.Fatalf("writer failures=%d, want exactly one failed page", stats.WritesFailed)
+	}
+	docs, err := store.Search(t.Context(), "evidence", 10)
+	testutil.FailErr(t, "query surviving pages", err)
+	retained := map[string]bool{}
+	for _, doc := range docs {
+		retained[doc.URL] = true
+	}
+	if len(retained) != 2 || !retained["https://a.example/retained"] || !retained["https://a.example/later"] || retained["https://a.example/refused"] {
+		t.Fatalf("write refusal discarded prior pages, leaked refused page, or stopped writer: %+v", docs)
+	}
+}
