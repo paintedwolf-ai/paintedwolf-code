@@ -1,0 +1,29 @@
+package scanning
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/scan"
+	scanregistry "github.com/lycaon/lycaon/internal/scan/registry"
+)
+
+// The host owns its default scanner generation; injected registries remain caller-owned.
+func loadScannerRegistry(deps Dependencies, priority exec.ProcessPriority, appliesPath func(context.Context, string) bool) (scan.CodeScannerRegistry, error) {
+	if deps.TestRegistry != nil {
+		return deps.TestRegistry, nil
+	}
+	var key []byte
+	if deps.FingerprintScannerKey != nil {
+		key = deps.FingerprintScannerKey()
+	}
+	reg, err := scanregistry.New(scanregistry.Options{ScannerFingerprintKey: key, ModuleRoot: deps.ModuleRoot, ProcessPriority: priority, ProjectTierApplies: appliesPath})
+	if err != nil {
+		return nil, fmt.Errorf("scan registry: %w", err)
+	}
+	if deps.Resources != nil {
+		deps.Resources.Track("scanner-registry", 89, func(context.Context) error { return reg.Close() })
+	}
+	return reg, nil
+}
