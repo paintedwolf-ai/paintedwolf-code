@@ -10,12 +10,14 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/internal/workscope"
 	"strings"
 )
 
 type RepositoryChanges interface{ Changed(context.Context, string) }
 
-func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progress.RunScopedStore, runs runstate.RunsRepository, settled func(context.Context, string), repository RepositoryChanges, invalidateAge func(string), service *llm.Service) func() {
+func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progress.RunScopedStore, runs runstate.RunsRepository, settled func(context.Context, string), repository RepositoryChanges, invalidateAge func(string), service *llm.Service) func(context.Context) error {
+	var work workscope.Group
 	if service != nil {
 		service.Lifecycle = utilityLanePublisher{pub: publisher}
 		if service.Utility != nil {
@@ -23,12 +25,22 @@ func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progre
 		}
 	}
 	releaseFindings := findings.RegisterAppendObserver(func(ctx context.Context, ev findings.AppendEvent) {
+		ctx, finish, err := work.Begin(ctx)
+		if err != nil {
+			return
+		}
+		defer finish()
 		if strings.TrimSpace(ev.SessionID) == "" {
 			return
 		}
 		publisher.PublishFindings(ctx, ev.SessionID, findings.BumpRevision(ev.SessionID))
 	})
 	releaseRepository := repochange.RegisterObserver(func(ctx context.Context, ev repochange.Event) {
+		ctx, finish, err := work.Begin(ctx)
+		if err != nil {
+			return
+		}
+		defer finish()
 		if repository != nil {
 			repository.Changed(ctx, ev.ProjectDir)
 		}
@@ -39,6 +51,11 @@ func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progre
 	activeRun := activeRunIDFromWorkflow(runs)
 	coalescer := progress.NewCoalescer(progress.DefaultCoalesceWindow, newProgressChangeEmitter(sessions, publisher, activeRun, progressStore))
 	releaseProgress := progress.RegisterWriteObserver(func(ctx context.Context, ev progress.WriteEvent) {
+		ctx, finish, err := work.Begin(ctx)
+		if err != nil {
+			return
+		}
+		defer finish()
 		if strings.TrimSpace(ev.SessionID) == "" {
 			return
 		}
@@ -47,10 +64,15 @@ func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progre
 		emitProgressCompletion(ctx, sessions, publisher, progressStore, activeRun, ev.SessionID)
 		settled(ctx, ev.SessionID)
 	})
-	return func() {
+	return func(ctx context.Context) error {
+		work.Stop()
 		releaseProgress()
 		releaseRepository()
 		releaseFindings()
+		if err := work.Wait(ctx); err != nil {
+			return err
+		}
 		coalescer.Close()
+		return nil
 	}
 }
