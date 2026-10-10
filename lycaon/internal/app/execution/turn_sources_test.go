@@ -2,6 +2,7 @@ package execution
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"
 	"time"
 
@@ -30,7 +31,7 @@ func TestTurnSourcesFailClosedUntilOneSessionOwnerIsBound(t *testing.T) {
 		t.Fatal("construction accepted absent execution sources")
 	}
 	if err := sources.Bind(owner); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "bind session loading", err)
 	}
 	replacement := &loadingOwnerFixture{}
 	if err := sources.Bind(replacement); err == nil {

@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 	"time"
@@ -25,7 +26,7 @@ func TestLoopEvaluateDeniesWhenDisabled(t *testing.T) {
 	})
 	allow, reason, err := engine.Admission.ShouldLoopWake(context.Background(), "s1", anchor.LegFinished)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "evaluate loop wake", err)
 	}
 	busy := reason == "session_busy"
 	if allow || busy {
