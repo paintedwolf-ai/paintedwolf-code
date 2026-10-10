@@ -151,3 +151,27 @@ func TestMarkingAProjectSecretRescreensExistingTaskHistory(t *testing.T) {
 		})
 	}
 }
+
+func TestRuntimeRedactorRebindingRetainsManagedScreening(t *testing.T) {
+	b, matcher, store, _ := managedScreeningFixture(t)
+	b.InstallEvidence(matcher, b.Fingerprinter)
+	b.BindTranscript(matcher, nil, nil)
+	raw := "orchard-rebound-secret-synthetic-only"
+	_, err := b.Capabilities.Put(t.Context(), secretcap.PutRequest{
+		ProjectID: testdbseed.DefaultProjectID, OperationID: "rebound-screen", Name: "Rebound token", Purpose: "owner replacement screening",
+		Scope: secretcap.ScopeProject, Origin: secretcap.OriginFileMarked, PersonID: testdbseed.OwnerID(t, store.DB()), Value: raw,
+	})
+	testutil.FailErr(t, "mark secret after redactor replacement", err)
+	testutil.FailErr(t, "persist through rebound screening", store.AppendMessages(t.Context(), "root-1", wire.Message{ID: "rebound-message", Role: wire.MessageRoleTool, Content: "observed " + raw}))
+	messages, err := store.GetMessages(t.Context(), "root-1")
+	testutil.FailErr(t, "read rebound screened bytes", err)
+	if len(messages) != 1 {
+		t.Fatalf("rebound messages = %d", len(messages))
+	}
+	assertManagedMessageScreened(t, messages[0], raw)
+	if got := observability.RedactCaptureText("observed " + raw); strings.Contains(got, raw) {
+		t.Fatal("replacing catalog redactor left managed capture plaintext")
+	}
+	b.ReleaseRedactors()
+	b.ReleaseRedactors()
+}
