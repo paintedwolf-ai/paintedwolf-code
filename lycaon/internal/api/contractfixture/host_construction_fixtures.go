@@ -30,7 +30,9 @@ import (
 
 func NewServerForTest(t *testing.T, deps hostapi.Dependencies, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
-	deps.Core.UserNotices = TestUserNotices(t)
+	if deps.Core.UserNotices == nil {
+		deps.Core.UserNotices = TestUserNotices(t)
+	}
 	for _, opt := range opts {
 		opt(&deps)
 	}
@@ -50,14 +52,30 @@ func NewTestServer(t *testing.T, opts ...TestDeps) *hostapi.Server {
 func NewTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
-	store := store.NewMemory()
-	mock := llm.NewMockProvider(TestMockConfig(t))
-	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
-	mgr.SetDataDir(t.TempDir())
-	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
-	// Stub bindings do not expose coordinator tools.
 	WireTestBindingRegistry(t)
-	return NewServerForTest(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}, opts...)
+	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store.NewMemory(), Projects: project.NewMemoryRegistry()}}
+	for _, opt := range opts {
+		opt(&deps)
+	}
+	if deps.Core.Sessions == nil {
+		deps.Core.Sessions = newFixtureHost(t, deps, reg)
+	}
+	return NewServerForTest(t, deps)
+}
+
+func newFixtureHost(t *testing.T, deps hostapi.Dependencies, reg tools.ToolRegistry) *session.Host {
+	t.Helper()
+	mgr := session.NewHost(deps.Core.Store, session.Models{Client: llm.NewMockProvider(TestMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
+	mgr.SetDataDir(t.TempDir())
+	mgr.SetProjectRegistry(deps.Core.Projects)
+	if deps.Core.Settings != nil && deps.Core.Settings.Limits != nil {
+		mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: deps.Core.Settings.Limits})
+	}
+	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
+	if deps.Core.MutationGate != nil {
+		mgr.Runner.Execution.SetMutationGate(deps.Core.MutationGate)
+	}
+	return mgr
 }
 
 // Ambient attach requires sessions and workflows in the same database.
@@ -65,23 +83,30 @@ func NewTestServerWithRegistry(t *testing.T, reg tools.ToolRegistry, opts ...Tes
 func NewTestServerWithWorkflowRegistry(t *testing.T, reg tools.ToolRegistry, opts ...TestDeps) *hostapi.Server {
 	t.Helper()
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
-	sqlDB := testdbfixture.Open(t, "store.db")
-
-	sessions := store.NewSQL(sqlDB)
-	mock := llm.NewMockProvider(TestMockConfig(t))
-	mgr := session.NewHost(sessions, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, reg)
-	mgr.SetDataDir(t.TempDir())
-	mgr.Coordinator.Guards.SetToolMetadata(testtool.RegistryInvoker{Registry: reg})
 	WireTestBindingRegistry(t)
-
-	registry, err := workflowdef.RegistryFromDirs("")
-	testutil.FailErr(t, "workflowdef.RegistryFromDirs", err)
-	runs := workflowpersistence.New(sqlDB)
-	workflows := workflow.NewManager(runs, sessions, registry, nil)
-	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: workflows.Store.Runs, Policy: workflows.Policy, Ambient: workflows.Ambient, Blueprints: workflows.Blueprints, Batch: workflows.Batch, Slash: workflows.Slash, Requests: workflows.Requests, Feedback: workflows.Feedback, Transcript: workflows.Transcript, Asks: workflows.Asks, Fanout: workflows.Fanout, Phases: workflows.Phases, Reports: workflows.Reports, Recovery: workflows.Recovery, Cleanup: workflows})
-	return NewServerForTest(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: sessions, PersonActions: personactions.New(sqlDB), Projects: project.NewSQLRegistry(sqlDB), Sessions: mgr}, Workflow: hostapi.WorkflowDependencies{
-		Workflows: workflows, WorkflowRuns: runs}}, opts...)
+	sqlDB := testdbfixture.Open(t, "store.db")
+	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Database: sqlDB, Store: store.NewSQL(sqlDB), Projects: project.NewSQLRegistry(sqlDB)}}
+	for _, opt := range opts {
+		opt(&deps)
+	}
+	if deps.Core.PersonActions == nil {
+		deps.Core.PersonActions = personactions.New(deps.Core.Database)
+	}
+	if deps.Workflow.WorkflowRuns == nil {
+		deps.Workflow.WorkflowRuns = workflowpersistence.New(deps.Core.Database)
+	}
+	if deps.Workflow.Workflows == nil {
+		registry, err := workflowdef.RegistryFromDirs("")
+		testutil.FailErr(t, "workflowdef.RegistryFromDirs", err)
+		deps.Workflow.Workflows = workflow.NewManager(deps.Workflow.WorkflowRuns, deps.Core.Store, registry, nil)
+	}
+	if deps.Core.Sessions == nil {
+		mgr := newFixtureHost(t, deps, reg)
+		workflows := deps.Workflow.Workflows
+		mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: workflows.Store.Runs, Policy: workflows.Policy, Ambient: workflows.Ambient, Blueprints: workflows.Blueprints, Batch: workflows.Batch, Slash: workflows.Slash, Requests: workflows.Requests, Feedback: workflows.Feedback, Transcript: workflows.Transcript, Asks: workflows.Asks, Fanout: workflows.Fanout, Phases: workflows.Phases, Reports: workflows.Reports, Recovery: workflows.Recovery, Cleanup: workflows})
+		deps.Core.Sessions = mgr
+	}
+	return NewServerForTest(t, deps)
 }
 
 // newServerForTest builds a server with the bundled user notices after opts

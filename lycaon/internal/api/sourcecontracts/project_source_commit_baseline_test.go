@@ -73,7 +73,7 @@ func TestCommitBaselineReadsTheNestedRootsOwnFile(t *testing.T) {
 
 func TestRestoreGitCausedVersionUsesGitObjectStore(t *testing.T) {
 	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
-	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger, contractfixture.WithoutSourceInventory, contractfixture.WithSessionStore(sessionstore.NewSQL(ledgerDB)))
+	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger, contractfixture.WithPassiveSourceInventory, contractfixture.WithSessionStore(sessionstore.NewSQL(ledgerDB)))
 	repo, nested := contractfixture.NestedRootRepo(t)
 
 	p := contractfixture.CreateProjectForTest(t, srv, nested)
@@ -166,7 +166,7 @@ func TestRestoreGitCausedVersionUsesGitObjectStore(t *testing.T) {
 
 func TestRestoreGitCausedVersionRefusesDriftedGitBytes(t *testing.T) {
 	ledger, ledgerDB, withLedger := contractfixture.TestSourceLedger(t)
-	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger, contractfixture.WithoutSourceInventory)
+	srv := contractfixture.NewTestServer(t, contractfixture.WithTestGitManager, withLedger, contractfixture.WithPassiveSourceInventory)
 	_, nested := contractfixture.NestedRootRepo(t)
 
 	p := contractfixture.CreateProjectForTest(t, srv, nested)

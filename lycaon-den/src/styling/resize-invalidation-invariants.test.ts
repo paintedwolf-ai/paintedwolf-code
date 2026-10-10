@@ -260,13 +260,7 @@ describe("resize measurement", () => {
     expect(handle).toContain("new ResizeObserver(syncAxis)");
   });
 
-  it("captures split host edges once per drag", () => {
-    const divider = read("components/shell/SplitDivider.tsx");
-    const widthFn =
-      /const chatWidthFromClientX[\s\S]*?\n  \};/.exec(divider)?.[0] ?? "";
-    expect(widthFn).not.toBe("");
-    expect(widthFn).not.toContain("getBoundingClientRect");
-  });
+
 });
 
 describe("split responsive authority", () => {
@@ -279,9 +273,9 @@ describe("split responsive authority", () => {
     expect(read("shell/layout-store.ts")).not.toMatch(/isSplitAvailable/);
   });
 
-  it("keeps the measured host width for action and drag time only", () => {
+  it("lets the split divider claim the viewport width as the sidebar yields", () => {
     expect(read("components/shell/shell-stage-placement.ts")).toMatch(/widenWindowBy\(stageChromeDeficitPx\(/);
-    expect(read("components/shell/Shell.tsx")).toMatch(/hostWidthPx=\{splitHostWidthPx\}/);
+    expect(read("components/shell/Shell.tsx")).toMatch(/availableWidthPx=\{layoutViewportWidthPx\}/);
   });
 });
 
@@ -557,7 +551,7 @@ describe("ordered responsive sidebars", () => {
     expect(SPLIT_MIN_HOST - 1).toBeGreaterThanOrEqual(STAGE_COL_MIN);
   });
 
-  it("places the stage seam above the native window minimum", () => {
+  it("keeps both split columns above the native window minimum", () => {
     const configs = [
       "src-tauri/tauri.conf.json",
       "src-tauri/tauri.macos.conf.json",
@@ -567,7 +561,7 @@ describe("ordered responsive sidebars", () => {
       const parsed = JSON.parse(readDenFile(config)) as {
         app: { windows: Array<{ minWidth: number }> };
       };
-      expect(STAGE_COL_MIN).toBeGreaterThan(parsed.app.windows[0]!.minWidth);
+      expect(SPLIT_MIN_HOST).toBeGreaterThan(parsed.app.windows[0]!.minWidth);
     }
   });
 

@@ -26,7 +26,6 @@ func TestProjectRemovalRetiresScansOnlyAfterLastAttachment(t *testing.T) {
 			store := scan.NewSQLStore(database)
 			srv := contractfixture.NewTestServer(t, withLedger, func(d *hostapi.Dependencies) {
 				d.Core.Projects = project.NewSQLRegistry(database)
-				d.Core.Sessions.SetProjectRegistry(d.Core.Projects)
 				d.Scans.ScanCadence = scancadence.New(store, nil, nil, nil, scancfg.DefaultGatesConfig(), nil)
 			})
 			root := t.TempDir()
