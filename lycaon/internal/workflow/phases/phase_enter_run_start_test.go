@@ -23,15 +23,16 @@ func TestPhaseEnterHookReportsRunStartWhileObligationHeld(t *testing.T) {
 
 	var phases []string
 	var runStarts []bool
+	var entered []workflowphases.RunContext
 	mgr.Phases.PhaseEnterHook = func(_ context.Context, rc *workflowphases.RunContext, _ workflowdef.PhaseDef) {
+		entered = append(entered, *rc)
 		phases = append(phases, rc.Phase)
 		runStarts = append(runStarts, rc.IsRunStart())
 	}
 
 	ctx := context.Background()
-	if _, err := startRun(ctx, mgr, "sess-1", "obligationtest", "1.0.0"); err != nil {
-		testutil.FailErr(t, "start run", err)
-	}
+	run, err := startRun(ctx, mgr, "sess-1", "obligationtest", "1.0.0")
+	testutil.FailErr(t, "start run", err)
 
 	held, err := mgr.Obligations.HostObligationHeld(ctx, "sess-1")
 	testutil.FailErr(t, "HostObligationHeld", err)
@@ -40,6 +41,9 @@ func TestPhaseEnterHookReportsRunStartWhileObligationHeld(t *testing.T) {
 	}
 	if len(phases) != 1 || phases[0] != "ingest" {
 		t.Fatalf("phase enter hooks = %#v want one for ingest", phases)
+	}
+	if entered[0].RunID != run.ID || entered[0].SessionID != run.SessionID || entered[0].WorkflowID != run.WorkflowID || entered[0].WorkflowVersion != "1.0.0" || entered[0].WorkflowVersion != run.WorkflowVersion {
+		t.Fatalf("initial phase lost persisted workflow identity: hook=%+v run=%+v", entered[0], run)
 	}
 	if !runStarts[0] {
 		t.Fatal("a run start must report IsRunStart so the starting turn survives the hook")
