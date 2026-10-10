@@ -40,7 +40,7 @@ func TestDefaultScannerRegistryRegistersImmediateOwnedCleanup(t *testing.T) {
 func TestInjectedScannerRegistryRemainsCallerOwned(t *testing.T) {
 	injected := &scan.MockRegistry{}
 	resources := &scannerResources{}
-	loaded, err := loadScannerRegistry(t.Context(), Dependencies{TestRegistry: injected, Resources: resources}, exec.ProcessPriorityBelowNormal, nil)
+	loaded, err := loadScannerRegistry(t.Context(), Dependencies{Fixtures: ScannerFixtures{Registry: injected}, Resources: resources}, exec.ProcessPriorityBelowNormal, nil)
 	testutil.FailErr(t, "bind injected registry", err)
 	if loaded != injected || resources.release != nil {
 		t.Fatal("host closed the caller-provided scanner fixture")
