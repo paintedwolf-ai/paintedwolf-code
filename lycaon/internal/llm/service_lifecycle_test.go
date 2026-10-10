@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -34,7 +36,7 @@ func TestServiceCloseWaitsForModelFeedRefresh(t *testing.T) {
 func TestCanceledServiceAllocationDoesNotCreateDeviceState(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("XDG_CONFIG_HOME", home)
+	t.Setenv(configdir.EnvConfigDir, filepath.Join(home, "device"))
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	service, err := NewService(ctx, nil)

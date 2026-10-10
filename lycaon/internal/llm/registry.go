@@ -4,21 +4,17 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/catalogruntime"
-	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/destconfig"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/llm/discovery"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/llm/providerhttp"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
@@ -51,59 +47,12 @@ const providerListCacheTTL = 30 * time.Second
 // Usage-probe budget during provider listing.
 const cloudflareUsageFetchTimeout = 2 * time.Second
 
-// NewRegistry builds providers from catalog and stored credentials.
-func NewRegistry(ctx context.Context, catalog *ProviderCatalog, credentials *providercredentials.Store) (*Registry, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	roleExclusions, err := LoadRoleExclusions()
-	if err != nil {
-		return nil, err
-	}
-	rateDirectory := os.Getenv("LYCAON_LLM_RATE_STATE_DIR")
-	if rateDirectory != "" && (!configdir.IsHarnessChannel() || !filepath.IsAbs(rateDirectory)) {
-		return nil, fmt.Errorf("shared provider rate state requires an absolute directory in the isolated harness")
-	}
-	r := &Registry{
-		rateGate:        providerretry.NewProviderRateGate(rateDirectory),
-		catalog:         catalog,
-		credentials:     credentials,
-		discovery:       discovery.NewCache(nil),
-		cloudflareUsage: openaicompat.NewCloudflareUsageCache(),
-		discoveryClient: providerhttp.DiscoveryClient(discoverModelsTimeout),
-		roleExclusions:  roleExclusions,
-		listCache:       catalogruntime.NewSnapshotCache(providerListCacheTTL, cloneProviderMetaList),
-	}
-	// Initial discovery belongs to the allocating startup.
-	if err := r.rebuild(ctx); err != nil {
-		return nil, err
-	}
-	return r, nil
-}
-
 // RoleExclusions returns the registry's model restrictions.
 func (r *Registry) RoleExclusions() RoleExclusions {
 	if r == nil {
 		return RoleExclusions{}
 	}
 	return cloneRoleExclusions(r.roleExclusions)
-}
-
-// SetModelFeed sets the shared model feed.
-func (r *Registry) SetModelFeed(ctx context.Context, feed *modelfeed.Feed) {
-	r.modelFeed.Store(feed)
-	r.InvalidateListCache()
-	if feed == nil {
-		return
-	}
-	feed.AddRefreshListener(func() {
-		if r.modelFeed.Load() != feed {
-			return
-		}
-		_ = r.rebuild(context.Background())
-	})
-	// Publish an existing disk snapshot immediately.
-	_ = r.rebuild(ctx)
 }
 
 // SetOutboundSecretScreen sets the final plaintext screen.
