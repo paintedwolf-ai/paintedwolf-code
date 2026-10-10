@@ -25,7 +25,9 @@ func TestExpiryTimersFireUntilStopped(t *testing.T) {
 	}
 
 	timers.schedule(t.Context(), "pending", time.Hour, expire)
-	timers.stop()
+	if err := timers.stop(t.Context()); err != nil {
+		t.Fatal(err)
+	}
 	timers.mu.Lock()
 	armed := len(timers.timers)
 	timers.mu.Unlock()
@@ -40,5 +42,37 @@ func TestExpiryTimersFireUntilStopped(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 	var manager *Checkpoints
-	manager.StopExpiryTimers()
+	if err := manager.StopExpiryTimers(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestExpiryStopDrainsRunningCallback(t *testing.T) {
+	var timers expiryTimers
+	started, release, finished := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	timers.schedule(t.Context(), "running", time.Millisecond, func(context.Context, string, string) error {
+		close(started)
+		<-release
+		return nil
+	})
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("callback did not start")
+	}
+	go func() { finished <- timers.stop(t.Context()) }()
+	select {
+	case err := <-finished:
+		t.Fatalf("stop returned before callback drain: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	select {
+	case err := <-finished:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("stop did not drain")
+	}
 }
