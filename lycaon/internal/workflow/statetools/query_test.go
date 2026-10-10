@@ -97,3 +97,15 @@ func TestStateQueryReadsActiveScaffoldAndRefusesMissingState(t *testing.T) {
 		}
 	}
 }
+
+func TestStateToolsRefuseUnboundInvocationBeforeReadingRun(t *testing.T) {
+	reg := tools.NewDefaultRegistry()
+	if err := RegisterStateTools(reg, StateToolDeps{Runs: queryRuns{}, Sessions: querySessions{t.TempDir()}}); err != nil {
+		t.Fatalf("register state tools: %v", err)
+	}
+	for _, name := range []string{"state_query", "state_start", "state_close", "state_update"} {
+		if out, err := reg.Run(t.Context(), name, nil, tools.ToolContext{}); err == nil || out != "" {
+			t.Fatalf("%s accepted unbound invocation output=%q err=%v", name, out, err)
+		}
+	}
+}
