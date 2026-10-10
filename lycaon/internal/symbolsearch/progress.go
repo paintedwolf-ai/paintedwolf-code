@@ -11,7 +11,7 @@ import (
 
 const retainedDeclarationBytes = 1 << 20
 
-// Progress is disposable, caller-serialized state. Its owner binds
+// Progress is disposable, caller-serialized state. Its caller binds
 // it to query, scope, catalog revisions, and content epochs before every use.
 // Only one candidate batch and the best bounded result set survive a request.
 type Progress struct {

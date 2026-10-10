@@ -138,6 +138,7 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 		CaseSensitive:    leg.Flags.CaseSensitive,
 		Exact:            leg.Flags.WholeWord,
 		ExcludeDirs:      leg.ExcludeDirs,
+		Admits:           filter.Admits,
 		Wall:             allocation.Discovery,
 		AbbreviationWall: allocation.Abbreviation,
 		OutlineWall:      allocation.Outline,
@@ -156,9 +157,6 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 		out.filesOutlined += pass.Files
 	}
 	for _, match := range result.Symbols {
-		if !filter.Admits(match.Path, match.Name) {
-			continue
-		}
 		highlights := make([]search.TextRange, 0, len(match.Highlights))
 		for _, span := range match.Highlights {
 			highlights = append(highlights, search.TextRange{Start: span.Start, End: span.End})

@@ -9,7 +9,7 @@ import (
 )
 
 // CodeProgress is a bounded frontier, not a retained reader or a query job.
-// Its owner binds it to the query and root set, and serializes access.
+// Its caller binds it to the query and root set, and serializes access.
 type CodeProgress struct {
 	Root     int
 	After    string
@@ -63,8 +63,8 @@ func (e *CodeExecutor) discoverCandidates(ctx context.Context, leg *CodePlanLeg,
 func (e *CodeExecutor) candidatePageScan(ctx context.Context, gen codeGeneration, paths pathGlobFilter, spec codeScanSpec, cap int, progress *CodeProgress, report *ExecutorReport) (bool, error) {
 	epoch := repochange.CurrentEpoch(gen.rootPath)
 	if progress.Revision != 0 && (progress.Instance != gen.reader.Status.Instance || progress.Revision != gen.reader.Status.Revision || progress.Epoch != epoch) {
-		// The owner invalidates confirmed declarations as well. Do not splice
-		// generations if publication raced the owner's initial snapshot.
+		// The caller invalidates confirmed declarations as well. Do not splice
+		// generations if publication raced the caller's initial snapshot.
 		report.Issues = append(report.Issues, Issue{Executor: ExecutorCode, Reason: IssueCatalogRefreshing})
 		return false, nil
 	}

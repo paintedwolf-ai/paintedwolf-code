@@ -40,6 +40,8 @@ type Request struct {
 	Exact bool
 	// ExcludeDirs carries catalog-provided dependency and build directories.
 	ExcludeDirs []string
+	// Admits applies the caller's query filters before retaining or capping results.
+	Admits func(path, name string) bool
 	// Wall bounds literal discovery; zero uses DiscoveryWall.
 	Wall time.Duration
 	// AbbreviationWall bounds the abbreviation pass; zero uses AbbreviationWall.
@@ -136,6 +138,7 @@ func Run(
 	run := &symbolSearchRun{
 		p: p, search: search, matcher: newSymbolNameMatcher(query),
 		caseSensitive: req.CaseSensitive, exact: req.Exact, roots: roots,
+		admits:   req.Admits,
 		excludes: req.ExcludeDirs, filesLeft: OutlineFileCap,
 		matches: append([]Match(nil), progress.matches...),
 	}
@@ -197,6 +200,7 @@ type symbolSearchRun struct {
 	exact         bool
 	roots         []symbolSearchRoot
 	excludes      []string
+	admits        func(path, name string) bool
 	filesLeft     int
 	matches       []Match
 	incomplete    bool
@@ -217,6 +221,9 @@ func (r *symbolSearchRun) pick(file project.DeclarationFile, symbols []project.S
 		seen[sym] = struct{}{}
 		tier, highlights := r.matcher.match(sym.Name)
 		if !r.keeps(sym.Name, tier, highlights) {
+			continue
+		}
+		if r.admits != nil && !r.admits(file.Path, sym.Name) {
 			continue
 		}
 		out = append(out, Match{

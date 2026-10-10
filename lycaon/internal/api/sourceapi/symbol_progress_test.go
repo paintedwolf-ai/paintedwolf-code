@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,6 +17,61 @@ import (
 	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
+
+func TestSymbolExecutorFiltersBeforeRetainingBoundedResults(t *testing.T) {
+	e, p, leg := symbolProgressFixture(t, 1)
+	var source strings.Builder
+	source.WriteString("package p\n")
+	for i := range 201 {
+		fmt.Fprintf(&source, "func TargetExcluded%03d() {}\n", i)
+	}
+	source.WriteString("func TargetWanted() {}\n")
+	root := p.Roots[0]
+	testutil.FailErr(t, "write filtered declarations", os.WriteFile(filepath.Join(root.Path, "f000.go"), []byte(source.String()), 0600))
+	repochange.Advance(root.Path)
+	sourcecatalog.Process().InvalidateRootChange(root.Path, []string{"f000.go"}, repochange.StructuralPathSet{})
+	leg.Flags.WholeWord = false
+	leg.Query = search.AndExpr{Exprs: []search.Node{
+		search.TextExpr{Text: "Target"},
+		search.NotExpr{Expr: search.TextExpr{Text: "Excluded"}},
+	}}
+	for attempt := range 2 {
+		result, err := e.Run(t.Context(), search.PlanLeg{Symbol: leg})
+		testutil.FailErr(t, "find admitted declaration", err)
+		if len(result.Hits) != 1 || result.Hits[0].Title != "TargetWanted" || len(result.Issues) != 0 {
+			t.Fatalf("attempt %d: filtered declarations consumed retained result capacity: %+v", attempt, result)
+		}
+	}
+}
+
+func TestSymbolExecutorExcludedExactNameDoesNotStopAbbreviations(t *testing.T) {
+	e, p, leg := symbolProgressFixture(t, 2)
+	root := p.Roots[0]
+	for name, content := range map[string]string{
+		"f000.go": "package p\nfunc PC() {}\n",
+		"f001.go": "package p\nfunc ParseConfig() {}\n",
+	} {
+		testutil.FailErr(t, "write abbreviation fixture", os.WriteFile(filepath.Join(root.Path, name), []byte(content), 0600))
+	}
+	repochange.Advance(root.Path)
+	sourcecatalog.Process().InvalidateRootChange(root.Path, []string{"f000.go", "f001.go"}, repochange.StructuralPathSet{})
+	leg.Name = "pc"
+	leg.Flags.WholeWord = false
+	leg.Query = search.AndExpr{Exprs: []search.Node{
+		search.TextExpr{Text: "pc"},
+		search.NotExpr{Expr: search.OrExpr{Exprs: []search.Node{
+			search.FilterExpr{Field: "path", Value: "f000.go"},
+			search.FilterExpr{Field: "path", Value: "other.go"},
+		}}},
+	}}
+	for attempt := range 2 {
+		result, err := e.Run(t.Context(), search.PlanLeg{Symbol: leg})
+		testutil.FailErr(t, "find admitted abbreviation", err)
+		if len(result.Hits) != 1 || result.Hits[0].Title != "ParseConfig" || len(result.Issues) != 0 {
+			t.Fatalf("attempt %d: excluded exact name stopped abbreviation discovery: %+v", attempt, result)
+		}
+	}
+}
 
 func symbolProgressFixture(t *testing.T, count int) (*SymbolExecutor, *project.Project, *search.SymbolPlanLeg) {
 	t.Helper()
@@ -114,7 +170,7 @@ func TestSymbolProgressCacheBindsQueryAndExpires(t *testing.T) {
 	}
 }
 
-func TestSymbolProgressWaitCancellationPreservesOwner(t *testing.T) {
+func TestSymbolProgressWaitCancellationPreservesEntry(t *testing.T) {
 	e, p, leg := symbolProgressFixture(t, 1)
 	first, release, err := e.progress.acquire(t.Context(), p, leg, nil)
 	testutil.FailErr(t, "hold progress", err)
