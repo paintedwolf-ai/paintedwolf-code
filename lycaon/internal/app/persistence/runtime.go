@@ -96,7 +96,8 @@ func (b *Runtime) Open(ctx context.Context, dbPath string, startup startupprotoc
 
 	b.Sessions = store.NewSQL(b.Database)
 	b.Projects = project.NewSQLRegistry(b.Database)
-	wireAgentPolicyRoots(b.ctx, b.Projects)
+	releasePolicyRoots := wireAgentPolicyRoots(b.ctx, b.Projects)
+	b.resources.Track("agent-policy-roots", 160, func(context.Context) error { releasePolicyRoots(); return nil })
 	b.SourceLedger = sourceledger.New(b.Database, filepath.Join(b.Directory, enginepaths.SourceContentDirName))
 	b.SourceLedger.Content.SetGuard(b.Claim)
 	b.SourceLedger.Git.SetGitReader(gitStateReader{mgr: git.NewManager()})
@@ -122,9 +123,9 @@ type ResourceLifetime interface {
 // wireAgentPolicyRoots protects the agent policy of every registered project,
 // which other sessions load while this invocation is rooted elsewhere. A
 // failed read keeps the last roots it saw.
-func wireAgentPolicyRoots(ctx context.Context, registry *project.SQLRegistry) {
+func wireAgentPolicyRoots(ctx context.Context, registry *project.SQLRegistry) func() {
 	var last atomic.Pointer[[]string]
-	confine.SetAgentPolicyRootsSource(func() []string {
+	return confine.SetAgentPolicyRootsSource(func() []string {
 		paths, err := registry.RootPaths(context.WithoutCancel(ctx))
 		if err != nil {
 			if kept := last.Load(); kept != nil {
