@@ -4,10 +4,16 @@ import (
 	"context"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/catalogruntime"
+	"github.com/lycaon/lycaon/internal/configdir"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
+	"github.com/lycaon/lycaon/internal/llm/discovery"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/providerhttp"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
+	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/modelfeed"
+	"os"
+	"path/filepath"
 )
 
 // NewService loads catalog, credentials, policy, registry, and router.
