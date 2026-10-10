@@ -205,11 +205,12 @@ type egressBrokerT struct {
 	loopback map[string]func(uint16) bool
 	// lineages retains an action's identity past its lease so a process it left
 	// running can still be placed against its project.
-	lineages     map[string]EgressCommand
-	lineageSeq   map[string]uint64
-	lineageAge   []string
-	lineageOrder uint64
-	resolver     EgressResolver
+	lineages      map[string]EgressCommand
+	lineageSeq    map[string]uint64
+	lineageAge    []string
+	lineageOrder  uint64
+	resolver      EgressResolver
+	resolverOwner *egressResolverRegistration
 }
 
 // retainedLineages bounds how many ended actions stay placeable.
@@ -264,13 +265,6 @@ func EffectivePosture(cmd EgressCommand) EgressPosture {
 		return fn(cmd)
 	}
 	return currentPosture()
-}
-
-// SetEgressResolver installs the approval hook for unmatched hosts.
-func SetEgressResolver(fn EgressResolver) {
-	egressBroker.mu.Lock()
-	egressBroker.resolver = fn
-	egressBroker.mu.Unlock()
 }
 
 var (

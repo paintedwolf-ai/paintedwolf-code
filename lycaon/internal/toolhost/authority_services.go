@@ -282,3 +282,11 @@ func (r *AuthorityServices) ReleaseEgressPolicy() {
 		r.releaseEgressPolicy = nil
 	}
 }
+
+// ReleaseEgressApprovals stops and drains this host's broker approval callbacks.
+func (r *AuthorityServices) ReleaseEgressApprovals(ctx context.Context) error {
+	if r == nil || r.reviews == nil {
+		return nil
+	}
+	return r.reviews.ReleaseEgressResolver(ctx)
+}

@@ -48,20 +48,21 @@ type Metadata struct {
 
 // Approvals owns approval coordination and checkpoint lifetime.
 type Approvals struct {
-	Metadata          *Metadata
-	Network           *Network
-	Rejections        *Rejections
-	Secrets           *Secrets
-	checkpointMgr     hitl.CheckpointManager
-	approvalGate      hitl.ApprovalGate
-	approvalExplainer ApprovalExplainer
-	approvalOutcome   ApprovalOutcomeRenderer
-	aiRationale       toolapproval.AIRationaleAttacher
-	authzRecorder     authzledger.Recorder
-	approvalCoalesce  toolapproval.ToolApprovalCoalesce
-	gateRepeat        toolapproval.GateRepeatLedger
-	consequence       toolapproval.ConsequenceDeriver
-	backgroundCommand BackgroundCommandResolver
+	Metadata              *Metadata
+	Network               *Network
+	Rejections            *Rejections
+	Secrets               *Secrets
+	releaseEgressResolver func(context.Context) error
+	checkpointMgr         hitl.CheckpointManager
+	approvalGate          hitl.ApprovalGate
+	approvalExplainer     ApprovalExplainer
+	approvalOutcome       ApprovalOutcomeRenderer
+	aiRationale           toolapproval.AIRationaleAttacher
+	authzRecorder         authzledger.Recorder
+	approvalCoalesce      toolapproval.ToolApprovalCoalesce
+	gateRepeat            toolapproval.GateRepeatLedger
+	consequence           toolapproval.ConsequenceDeriver
+	backgroundCommand     BackgroundCommandResolver
 }
 
 // Network owns endpoint discovery and egress fan-in.
