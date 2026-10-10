@@ -50,6 +50,13 @@ func TestExpiryTimersFireUntilStopped(t *testing.T) {
 func TestExpiryStopDrainsRunningCallback(t *testing.T) {
 	var timers expiryTimers
 	started, release, finished := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
 	timers.schedule(t.Context(), "running", time.Millisecond, func(context.Context, string, string) error {
 		close(started)
 		<-release
@@ -74,5 +81,36 @@ func TestExpiryStopDrainsRunningCallback(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("stop did not drain")
+	}
+}
+
+func TestExpiryDrainHonorsShutdownCancellation(t *testing.T) {
+	var timers expiryTimers
+	started, release := make(chan struct{}), make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	timers.schedule(t.Context(), "running", time.Millisecond, func(context.Context, string, string) error {
+		close(started)
+		<-release
+		return nil
+	})
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("callback did not start")
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := timers.stop(ctx); err != context.Canceled {
+		t.Fatalf("cancelled shutdown drain = %v", err)
+	}
+	close(release)
+	if err := timers.stop(t.Context()); err != nil {
+		t.Fatal(err)
 	}
 }
