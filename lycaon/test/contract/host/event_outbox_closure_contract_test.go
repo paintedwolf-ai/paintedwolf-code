@@ -77,7 +77,7 @@ var outboxSilentMutators = map[string]string{
 	"lycaon/internal/worker/sql_query.go:MarkOutcomeDelivered":                         "records that a worker outcome reached its parent; the parent's transcript append announces the delivery",
 	"lycaon/internal/worker/sql_queue_cancellation.go:RequestCancellation":             "fences a job's claims and outcomes before its runtime stops; the job announces when cancellation settles",
 	"lycaon/internal/workflow/persistence/verdicts.go:PrepareVerdictOperation":         "prepares an internal replay/recovery receipt; the workflow transition announces atomically when the verdict commits",
-	"lycaon/internal/workflow/persistence/verdicts.go:MarkVerdictEvidenceApplied":      "marks the internal recovery receipt's evidence phase; no run projection changes until the verdict commits",
+	"lycaon/internal/workflow/persistence/verdicts.go:MarkVerdictEvidencePublished":    "marks the internal accepted receipt's evidence delivery; the verdict commit already announced the run projection",
 	"lycaon/internal/workflow/persistence/verdicts.go:ResolveVerdictOperationDiverged": "terminally resolves an internal recovery receipt without changing the run; diagnostic recovery state is not a workflow wire transition",
 	"lycaon/internal/workflow/persistence/verdicts.go:RebaseVerdictOperation":          "moves a prepared verdict operation, an internal recovery receipt, onto a newer phase revision; the verdict announces when it commits",
 }

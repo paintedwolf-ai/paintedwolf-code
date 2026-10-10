@@ -14,7 +14,7 @@ import (
 func TestQuestionClosureRequiresInvestigationOrBoundedImmateriality(t *testing.T) {
 	def := workflowdef.ReviewLoopDef{FollowupAttempts: 2, ClaimStatuses: map[string]workflowdef.ClaimClass{"unresolved": workflowdef.ClaimOpen, "refuted": workflowdef.ClaimFailed}}
 	claims := []workflowvalidation.VerdictClaim{{ID: "c6", Status: "unresolved"}}
-	questions := []reviewQuestionWork{{ID: "question/c6", ClaimID: "c6", ReviewQuestion: ReviewQuestion{MissingFact: "First admission consent", Obligations: []string{"execute/leg-1"}}}}
+	questions := []reviewQuestionWork{{ID: "question/c6", ClaimID: "c6", ReviewQuestion: workflowvalidation.ReviewQuestion{MissingFact: "First admission consent", Obligations: []string{"execute/leg-1"}}}}
 	review := &api.CoverageReview{Assessments: []api.CoverageAssessment{{ID: "question/c6", Disposition: reviewcoverage.EssentialOpen}}}
 	if err := checkQuestionClosure(def, claims, questions, nil, "challenge", review); err == nil {
 		t.Fatal("uninvestigated question closed")

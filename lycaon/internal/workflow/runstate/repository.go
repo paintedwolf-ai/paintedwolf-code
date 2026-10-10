@@ -72,7 +72,6 @@ type VerdictsRepository interface {
 	ReadVerdictReceipts(context.Context, string) ([]VerdictReceipt, error)
 	GetVerdictOperation(ctx context.Context, toolCallID string) (*VerdictOperation, bool, error)
 	PrepareVerdictOperation(ctx context.Context, op VerdictOperation) (*VerdictOperation, bool, error)
-	MarkVerdictEvidenceApplied(ctx context.Context, toolCallID string) error
 	MarkVerdictEvidencePublished(ctx context.Context, toolCallID string) error
 	PendingVerdictOperations(ctx context.Context) ([]VerdictOperation, error)
 	CommitVerdictOperation(ctx context.Context, op VerdictOperation, run *api.WorkflowRun, projectDir string, vars map[string]any, outcome ReviewOutcome) error

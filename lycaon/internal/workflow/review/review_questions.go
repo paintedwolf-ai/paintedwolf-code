@@ -18,17 +18,11 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ReviewQuestion binds a missing fact to affected coverage obligations.
-type ReviewQuestion struct {
-	MissingFact string   `json:"missing_fact"`
-	Obligations []string `json:"obligations"`
-}
-
 type reviewQuestionWork struct {
 	ReviewWorkID string `json:"review_work_id,omitempty"`
 	ID           string `json:"id"`
 	ClaimID      string `json:"claim_id"`
-	ReviewQuestion
+	workflowvalidation.ReviewQuestion
 }
 
 func questionReviewWorkID(id string) string { return id + "/review" }
