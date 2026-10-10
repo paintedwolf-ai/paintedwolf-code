@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,6 +19,12 @@ func TestSourceNamespaceMigratesReleasedHistory(t *testing.T) {
 	testutil.FailErr(t, "read released store", err)
 	target := filepath.Join(t.TempDir(), "store.db")
 	testutil.FailErr(t, "copy released store", os.WriteFile(target, raw, 0600))
+	seedReleasedNamespace(t, target, []namespaceSeed{
+		{"tree", "", "directory"}, {"tree/nested", "", "directory"},
+		{"tree/nested/file", "", "content"}, {"tree/nested/deleted", "", "absent"},
+		{"tree/nested/unresolved", "", "unresolved"},
+		{"tree/nested/file", "worker", "content"}, {"other/file", "worker", "absent"},
+	})
 	before, err := openReader(t.Context(), target)
 	testutil.FailErr(t, "open released history", err)
 	tables := []string{"source_branch_heads", "source_files", "source_versions", "source_effects", "source_operations", "source_history_entries", "source_recovery_entries", "source_checkpoints", "source_checkpoint_git_states"}
@@ -92,5 +99,62 @@ func TestUnreleasedNamespaceShapeHasNoUpgradeRoute(t *testing.T) {
 	}
 	if _, err := PlanSchemaUpgrade(t.Context(), candidate); !errors.Is(err, migrations.ErrUnsupported) {
 		t.Fatalf("unreleased namespace candidate upgrade = %v, want unsupported shape", err)
+	}
+}
+
+type namespaceSeed struct{ path, branch, state string }
+
+func seedReleasedNamespace(t *testing.T, path string, seeds []namespaceSeed) {
+	t.Helper()
+	database, err := sql.Open("sqlite", path)
+	testutil.FailErr(t, "open released fixture for seeding", err)
+	defer func() { _ = database.Close() }()
+	testutil.FailErr(t, "enforce released fixture foreign keys", func() error { _, err := database.ExecContext(t.Context(), "PRAGMA foreign_keys=ON"); return err }())
+	for i, seed := range seeds {
+		id := fmt.Sprintf("namespace-%d", i)
+		kind := "file"
+		if seed.state == "directory" {
+			kind = "directory"
+		}
+		_, err := database.ExecContext(t.Context(), `INSERT INTO source_files(id,project_id,entry_kind,created_ts) SELECT ?,project_id,?,created_ts FROM source_files LIMIT 1`, id, kind)
+		testutil.FailErr(t, "seed logical file", err)
+		_, err = database.ExecContext(t.Context(), `INSERT INTO source_versions(id,file_id,project_id,branch_id,root_id,path,state,content_sha256,capture_state,capture_reason,capture_quality,created_ts,seq)
+            SELECT ?,?,project_id,?,root_id,?,?,CASE WHEN ?='content' THEN content_sha256 ELSE '' END,
+            CASE WHEN ? IN ('directory','absent') THEN 'not_applicable' ELSE 'metadata_only' END,
+            CASE WHEN ?='unresolved' THEN 'unavailable' ELSE '' END,'observed',created_ts,
+            (SELECT max(seq)+1 FROM source_versions) FROM source_versions WHERE state='content' LIMIT 1`,
+			id, id, seed.branch, seed.path, seed.state, seed.state, seed.state, seed.state)
+		testutil.FailErr(t, "seed source version", err)
+		_, err = database.ExecContext(t.Context(), `INSERT INTO source_branch_heads SELECT project_id,branch_id,file_id,id,root_id,path,state,content_sha256,seq,created_ts FROM source_versions WHERE id=?`, id)
+		testutil.FailErr(t, "seed released branch head", err)
+	}
+}
+
+func TestSourceNamespaceRefusesLossyReleasedPaths(t *testing.T) {
+	for _, seed := range []namespaceSeed{{"tree/./file", "", "content"}, {"tree//nested", "", "directory"}} {
+		t.Run(seed.path, func(t *testing.T) {
+			raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "upgrade-corpus", "1.0.1", "store.db"))
+			testutil.FailErr(t, "read released store", err)
+			path := filepath.Join(t.TempDir(), "store.db")
+			testutil.FailErr(t, "copy released store", os.WriteFile(path, raw, 0600))
+			seedReleasedNamespace(t, path, []namespaceSeed{seed})
+			before, err := openReader(t.Context(), path)
+			testutil.FailErr(t, "open seeded source", err)
+			retained := namespaceTableContents(t, before, "source_branch_heads")
+			baseline, err := inspectSchema(t.Context(), before)
+			testutil.FailErr(t, "inspect source baseline", err)
+			testutil.FailErr(t, "close source", before.Close())
+			if err := UpgradeStaged(t.Context(), path); err == nil {
+				t.Fatal("lossy path migration succeeded")
+			}
+			after, err := openReader(t.Context(), path)
+			testutil.FailErr(t, "open refused source", err)
+			defer func() { _ = after.Close() }()
+			got, err := inspectSchema(t.Context(), after)
+			testutil.FailErr(t, "inspect refused baseline", err)
+			if got != baseline || namespaceTableContents(t, after, "source_branch_heads") != retained {
+				t.Fatal("refused migration changed released history")
+			}
+		})
 	}
 }

@@ -33,6 +33,7 @@ func TestReviewAssignmentMigrationPreservesBaseline(t *testing.T) {
 	tx, err := source.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin migration", err)
 	testutil.FailErr(t, "apply migration", step.Apply(t.Context(), tx))
+	testutil.FailErr(t, "validate migration", step.Validate(t.Context(), tx))
 	shape, err := ShapeDigest(t.Context(), tx)
 	testutil.FailErr(t, "read migrated shape", err)
 	if shape != target.Shape {
