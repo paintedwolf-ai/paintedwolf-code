@@ -6,7 +6,6 @@ on:
 permissions:
   actions: write
   contents: write
-  issues: write
   pull-requests: write
 concurrency:
   group: verification-recovery-${{ github.event.workflow_run.id }}

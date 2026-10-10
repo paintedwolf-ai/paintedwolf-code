@@ -1,6 +1,7 @@
 """Change-scoped reports: the change base, budget findings, and changed-statement coverage."""
 
 import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -177,3 +178,24 @@ class ChangedCoverageTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BudgetPublicationTests(unittest.TestCase):
+    def test_main_publishes_source_bound_inventory_even_when_other_suite_fails(self):
+        from ci_policy.budget_snapshot import validate
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'budgets' / 'reports').mkdir(parents=True)
+            inventory = {'suite': 'maintainability', 'tracking': {'schema_version': 1, 'complete': True, 'artifacts': []},
+                         'findings': [], 'untouched': {}, 'warnings': [], 'notes': []}
+            scope = change_report.Scope('c' * 40, 'explicit', [])
+            outputs = [subprocess.CompletedProcess([], 0, 'a' * 40), subprocess.CompletedProcess([], 0, 'b' * 40)]
+            with patch.object(budgets.change_report, 'resolve', return_value=scope), \
+                    patch.object(budgets, 'change_set', return_value={'base': scope.base}), \
+                    patch.object(budgets, 'run_suites', return_value=(1, {'maintainability': inventory})), \
+                    patch.object(budgets, 'artifact_root', return_value=root), \
+                    patch.object(budgets.change_report, 'git', side_effect=outputs), \
+                    patch.dict(os.environ, {'GITHUB_SHA': ''}), redirect_stdout(io.StringIO()):
+                self.assertEqual(budgets.main(), 1)
+            value = json.loads((root / 'budgets' / 'reports' / 'maintainability.json').read_text())
+            self.assertEqual(validate(value, 'a' * 40, 'b' * 40)[1], {})
