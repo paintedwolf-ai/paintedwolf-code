@@ -134,7 +134,7 @@ if [[ "${HOST_KIND}" == "darwin" ]]; then
 fi
 
 BUNDLE_KIND="dmg"
-BUILD_CONFIG=()
+BUILD_CONFIG=(--config "$(python3 "${ROOT}/scripts/update_keys.py")")
 if [[ "${HOST_KIND}" == "linux" ]]; then
   BUNDLE_KIND="appimage"
 elif [[ "${HOST_KIND}" == "windows" ]]; then
