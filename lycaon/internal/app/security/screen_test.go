@@ -3,8 +3,9 @@ package security
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/secretmatch"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
 type screenAuthorityFixture struct {
