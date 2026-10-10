@@ -42,7 +42,7 @@ func TestAssemblyFiltersPromptHistory(t *testing.T) {
 	}{
 		{"internal/coordinator/assembly/engine.go", "api.FilterPromptHistory"},
 		{"internal/session/promptassembly/assembly.go", "api.FilterPromptHistory"},
-		{"internal/session/compaction.go", "api.FilterPromptHistory"},
+		{"internal/session/history/compaction.go", "api.FilterPromptHistory"},
 		{"internal/llm/compaction/context_message.go", "RehydrateTranscriptProjectionFields"},
 	}
 	for _, c := range checks {
