@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -86,7 +87,7 @@ func assertContributionRefusal(t *testing.T, rec *httptest.ResponseRecorder, wan
 	t.Helper()
 	var out wire.ErrorResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "decode contribution refusal", err)
 	}
 	if out.Code != want || rec.Code != want.HTTPStatus() {
 		t.Fatalf("status=%d code=%s want=%s", rec.Code, out.Code, want)

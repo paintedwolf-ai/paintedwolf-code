@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/browser/renderhandle"
 	"github.com/lycaon/lycaon/internal/browserengine"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
@@ -26,11 +27,11 @@ func TestVideoAdmissionDistinguishesMissingDirectoryEmptyOversizedAndUnsupported
 	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}}}
 	for path, content := range map[string]string{"empty.mp4": "", "large.mp4": "12345", "text.txt": "not video"} {
 		if err := os.WriteFile(filepath.Join(root, path), []byte(content), 0600); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "write video fixture", err)
 		}
 	}
 	if err := os.Mkdir(filepath.Join(root, "directory.mp4"), 0700); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create video directory fixture", err)
 	}
 	for _, item := range []struct {
 		path, code string
@@ -48,7 +49,7 @@ func TestImageHandleViewRetainsCommittedRasterRevision(t *testing.T) {
 	store := renderhandle.NewStore()
 	saved, err := store.Put("session", &renderhandle.RenderHandle{ID: "view", Bytes: []byte("projected raster"), Mime: "text/html", Caption: "caption", Canvas: browser.RenderCanvas{Width: 320, Height: 180}}, 0)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "save image render handle", err)
 	}
 	effect := &tools.ToolInvocationOut{}
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}, Effects: tools.InvocationEffects{Out: effect}}
@@ -61,7 +62,7 @@ func TestImageHandleViewRetainsCommittedRasterRevision(t *testing.T) {
 	}
 	var response viewImageResult
 	if err := json.Unmarshal([]byte(raw), &response); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "decode image handle result", err)
 	}
 	if response.Width != 320 || response.Height != 180 || response.Revision != saved.Revision {
 		t.Fatalf("lost image coordinates=%+v", response)
@@ -75,7 +76,7 @@ func TestImageHandleViewRetainsCommittedRasterRevision(t *testing.T) {
 func TestScreenedRasterNormalizationCannotPublishCorruptPixels(t *testing.T) {
 	var source bytes.Buffer
 	if err := png.Encode(&source, image.NewRGBA(image.Rect(0, 0, 2, 3))); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "encode raster fixture", err)
 	}
 	effect := &tools.ToolInvocationOut{}
 	tc := tools.ToolContext{Effects: tools.InvocationEffects{Out: effect}}
@@ -121,18 +122,18 @@ func TestRenderRefusesUnsupportedMarkupWithoutCommittingHandle(t *testing.T) {
 func TestVideoSheetProjectionKeepsFrameCoordinatesAndRefusesCorruptPixels(t *testing.T) {
 	var source bytes.Buffer
 	if err := png.Encode(&source, image.NewRGBA(image.Rect(0, 0, 2, 3))); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "encode video sheet fixture", err)
 	}
 	effect := &tools.ToolInvocationOut{}
 	tc := tools.ToolContext{Effects: tools.InvocationEffects{Out: effect}}
 	sheet := browser.VideoSheet{Info: browser.VideoInfo{Width: 320, Height: 180, DurationMS: 1000}, Frames: []float64{0, 1000}, Sheet: source.Bytes()}
 	raw, err := renderVideoView(t.Context(), ViewVideoDeps{}, tc, viewVideoArgs{Path: "clip.mp4"}, "clip.mp4", "video/mp4", sheet)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "project video sheet", err)
 	}
 	var result viewVideoResult
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "decode video sheet result", err)
 	}
 	if result.Width != 320 || result.Height != 180 || result.DurationMS != 1000 || len(result.Frames) != 2 || result.Frames[1].AtMS != 1000 || result.Frames[0].Label == result.Frames[1].Label || effect.Visual == nil || !effect.Visual.Perceive || !effect.Visual.Projected {
 		t.Fatalf("lost frame projection: result=%+v visual=%+v", result, effect.Visual)

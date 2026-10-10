@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/browser/renderhandle"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
@@ -12,11 +13,11 @@ func TestEffectiveRenderPatchPreservesCommittedRevisionAndPresentation(t *testin
 	store := renderhandle.NewStore()
 	saved, err := store.Put("session", &renderhandle.RenderHandle{ID: "view", Markup: "<p>old</p>", Mime: "text/html", Theme: "dark", Fonts: []string{"fixture"}, Caption: "caption", Viewport: renderhandle.ViewportConfig{Width: 320, Height: 180, Scale: 2, Fit: "content"}}, 0)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "save initial render revision", err)
 	}
 	eff, err := resolveEffectiveRender(renderViewArgs{Handle: "view", OldString: "old", NewString: "new"}, "session", store)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "prepare render patch", err)
 	}
 	if eff.markup != "<p>new</p>" || eff.base != saved.Revision || eff.mime != "text/html" || eff.theme != "dark" || eff.caption != "caption" || eff.width != 320 || eff.height != 180 || eff.scale != 2 || len(eff.fonts) != 1 {
 		t.Fatalf("patch lost presentation or revision: %+v", eff)
@@ -37,7 +38,7 @@ func TestEffectiveRenderPatchPreservesCommittedRevisionAndPresentation(t *testin
 		}
 	}
 	if _, err := store.Put("session", &renderhandle.RenderHandle{ID: "ambiguous", Markup: "old old", Mime: "text/html"}, 0); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "save ambiguous render fixture", err)
 	}
 	_, err = resolveEffectiveRender(renderViewArgs{Handle: "ambiguous", OldString: "old", NewString: "new"}, "session", store)
 	var reject *toolrejection.ToolReject
@@ -53,7 +54,7 @@ func TestEffectiveRenderPatchPreservesCommittedRevisionAndPresentation(t *testin
 func TestRenderAdmissionRejectsMissingSourceAndMIMEWithoutChangingSavedView(t *testing.T) {
 	store := renderhandle.NewStore()
 	if _, err := store.Put("session", &renderhandle.RenderHandle{ID: "view", Markup: "<p>saved</p>", Mime: "html"}, 0); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "save admission render fixture", err)
 	}
 	for _, item := range []struct {
 		in   renderViewArgs

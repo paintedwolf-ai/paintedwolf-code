@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/naming"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -95,7 +96,7 @@ func assertSessionRefusal(t *testing.T, rec *httptest.ResponseRecorder, want wir
 	t.Helper()
 	var response wire.ErrorResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "decode session refusal", err)
 	}
 	if response.Code != want || rec.Code != want.HTTPStatus() {
 		t.Fatalf("status=%d code=%s want=%s", rec.Code, response.Code, want)

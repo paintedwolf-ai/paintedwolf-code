@@ -6,6 +6,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visual"
@@ -16,7 +17,7 @@ func TestImageArtifactUsesResolvedRootAndKeepsStoredRasterReference(t *testing.T
 	store := visual.NewMemoryStore()
 	artifact, err := store.Put(t.Context(), "root", visual.Entry{Meta: wire.VisualArtifact{Mime: "image/png", Source: wire.VisualArtifactSourceCapture, Caption: "fixture", Perceive: true}, Bytes: visual.TestPNG1x1Bytes()})
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store image artifact", err)
 	}
 	effect := &tools.ToolInvocationOut{}
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "child"}, Effects: tools.InvocationEffects{Out: effect}}

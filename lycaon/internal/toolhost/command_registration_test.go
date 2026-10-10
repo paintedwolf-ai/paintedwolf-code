@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/hostprocess"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -20,7 +21,7 @@ func TestRegisteredProcessListReturnsStructuredInventory(t *testing.T) {
 	var output *command.CommandOutputTool
 	var stop *command.CommandStopTool
 	if err := registerCommandTools(reg, nil, nil, &cmd, &verify, &output, &stop); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "register process and command tools", err)
 	}
 	reviewed := false
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}, Execution: tools.InvocationExecution{ProcessReview: func(_ context.Context, operation string, targets []hostprocess.Process) error {
@@ -32,14 +33,14 @@ func TestRegisteredProcessListReturnsStructuredInventory(t *testing.T) {
 	}}}
 	raw, err := reg.Run(t.Context(), "process_list", map[string]any{"pid": os.Getpid()}, tc)
 	if err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "run process inventory", err)
 	}
 	if !json.Valid([]byte(raw)) {
 		t.Fatalf("process inventory not JSON: %q", raw)
 	}
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "decode process inventory", err)
 	}
 	if !reviewed {
 		t.Fatal("process list bypassed review")
@@ -59,7 +60,7 @@ func TestCommandRegistrationRefusesUndeclaredToolAtCatalogBoundary(t *testing.T)
 			}
 			reg, err := tools.NewCatalogRegistry(&toolschema.Config{Tools: entries})
 			if err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "build restricted metadata registry", err)
 			}
 			var cmd *command.CommandTool
 			var verify *native.VerifyTool

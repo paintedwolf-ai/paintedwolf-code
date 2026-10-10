@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -33,7 +34,7 @@ func TestProviderOperationsRefuseUnattachedProjectBeforeChangingDeviceState(t *t
 			tc.handle(rec, req)
 			var out wire.ErrorResponse
 			if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "decode unattached project refusal", err)
 			}
 			if rec.Code != http.StatusNotFound || out.Code != wire.ApiErrorCodeProjectNotFound {
 				t.Fatalf("status=%d code=%s", rec.Code, out.Code)
@@ -66,7 +67,7 @@ func TestDeviceProviderRequestsReachRegistryAndPreserveMissingProvider(t *testin
 		tc.handle(rec, req)
 		var response wire.ErrorResponse
 		if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "decode missing provider refusal", err)
 		}
 		if response.Code != "mcp_provider_not_found" {
 			t.Fatalf("missing provider status=%d response=%s", rec.Code, rec.Body.String())
