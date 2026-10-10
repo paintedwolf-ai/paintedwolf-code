@@ -23,15 +23,15 @@ export const LAYOUT_BAND_SCALES = {
   stageHost: {
     attribute: "data-host-band",
     stops: [
-      { token: "max-1076", edge: "max", px: SPLIT_MIN_HOST - 1 },
-      { token: "min-1077", edge: "min", px: SPLIT_MIN_HOST },
+      { token: "max-900", edge: "max", px: SPLIT_MIN_HOST - 1 },
+      { token: "min-901", edge: "min", px: SPLIT_MIN_HOST },
     ],
   },
   /** Width required for the file tree beside the editor. */
   stageColumn: {
     attribute: "data-stage-band",
     stops: [
-      { token: "max-735", edge: "max", px: STAGE_COL_MIN - 1 },
+      { token: "max-559", edge: "max", px: STAGE_COL_MIN - 1 },
     ],
   },
   /** Full conversation width, including unsplit layouts. */

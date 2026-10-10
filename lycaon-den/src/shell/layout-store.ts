@@ -316,12 +316,17 @@ export function preferredChatWidthPx(): number {
   return resolveChatWidthPx(currentPreferences());
 }
 
+/** Conversation width requested by a drag or the saved layout, before fitting. */
+export function requestedChatWidthPx(): number {
+  const preview = resizePreview("split");
+  return preview == null || preview === PANE_HIDDEN_PX
+    ? preferredChatWidthPx()
+    : preview;
+}
+
 /** Conversation width to render; the stage takes the rest of the host. */
 export function effectiveChatWidthPx(hostWidthPx: number): number {
-  const preview = resizePreview("split");
-  const px =
-    preview == null || preview === PANE_HIDDEN_PX ? preferredChatWidthPx() : preview;
-  return clampChatWidthPx(px, hostWidthPx);
+  return clampChatWidthPx(requestedChatWidthPx(), hostWidthPx);
 }
 
 /** A divider drag has passed the point where releasing hides the conversation. */
