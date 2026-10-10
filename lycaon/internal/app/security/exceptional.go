@@ -21,7 +21,7 @@ type DirectIPRecorder interface {
 	AppendDirectIPLifecycle(context.Context, authzledger.DirectIPLifecycleRecord)
 }
 
-func (b *Runtime) BuildExceptional(control *toolexecution.Capabilities, approvals *settings.ApprovalStore, disabled func(string) bool, lifetime SessionLifetime, recorder DirectIPRecorder, reconstruct func(protection.DirectIPReconstructHook)) error {
+func (b *Runtime) BuildExceptional(ctx context.Context, control *toolexecution.Capabilities, approvals *settings.ApprovalStore, disabled func(string) bool, lifetime SessionLifetime, recorder DirectIPRecorder, reconstruct func(protection.DirectIPReconstructHook)) error {
 	socketCapabilityRT := approvalstate.NewSocketCapabilityRuntime()
 	b.Sockets = socketCapabilityRT
 	control.SetSocketCapabilityRuntime(socketCapabilityRT)
@@ -60,7 +60,7 @@ func (b *Runtime) BuildExceptional(control *toolexecution.Capabilities, approval
 	if recorder != nil {
 		rec := recorder
 		control.SetDirectIPLifecycleHook(func(ev tools.DirectIPLifecycleEvent) {
-			rec.AppendDirectIPLifecycle(context.Background(), authzledger.DirectIPLifecycleRecord{
+			rec.AppendDirectIPLifecycle(context.WithoutCancel(ctx), authzledger.DirectIPLifecycleRecord{
 				SessionID:            ev.SessionID,
 				Phase:                string(ev.Phase),
 				Tool:                 "command",
@@ -70,7 +70,7 @@ func (b *Runtime) BuildExceptional(control *toolexecution.Capabilities, approval
 			})
 		})
 		reconstruct(func(sessionID, _, _ string) {
-			rec.AppendDirectIPLifecycle(context.Background(), authzledger.DirectIPLifecycleRecord{
+			rec.AppendDirectIPLifecycle(context.WithoutCancel(ctx), authzledger.DirectIPLifecycleRecord{
 				SessionID:  sessionID,
 				Phase:      string(tools.DirectIPLifecycleReconstructed),
 				Tool:       "command",

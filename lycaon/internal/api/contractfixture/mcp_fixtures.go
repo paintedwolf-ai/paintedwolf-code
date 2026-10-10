@@ -74,7 +74,7 @@ func NewMCPProviderWithDistro(t *testing.T, distroBody string, projectMCP bool, 
 	if err := reg.Catalog.Load(context.Background()); err != nil {
 		testutil.FailErr(t, "reg.Catalog.Load failed", err)
 	}
-	t.Cleanup(func() { _ = reg.Close() })
+	t.Cleanup(func() { _ = reg.Close(t.Context()) })
 	store := store.NewMemory()
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store, Projects: project.NewMemoryRegistry(),

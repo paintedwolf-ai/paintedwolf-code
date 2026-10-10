@@ -203,7 +203,7 @@ func TestExecutorAskRuleSuspendsNotHardError(t *testing.T) {
 	mgr := &asyncHITL{requested: make(chan struct{}, 1)}
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
-	exec.Approvals.SetCheckpointManager(mgr, gate)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -252,7 +252,7 @@ func TestExecutorCarriesSingleApprovalEvaluationToCheckpoint(t *testing.T) {
 	mgr := &asyncHITL{requested: make(chan struct{}, 1)}
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
-	exec.Approvals.SetCheckpointManager(mgr, gate)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 
 	done := make(chan error, 1)
 	go func() {
@@ -293,7 +293,7 @@ func TestExecutorCommandStopApprovalShowsRecordedCommand(t *testing.T) {
 		Allowed:          true,
 		RequiresApproval: true,
 	}}, reg, "implement")
-	executor.Approvals.SetCheckpointManager(mgr, nil)
+	executor.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 	executor.Approvals.SetBackgroundCommandResolver(func(sessionID, handle string) string {
 		if sessionID != "session-123" || handle != "process-123" {
 			t.Fatalf("resolver received session=%q handle=%q", sessionID, handle)
@@ -361,7 +361,7 @@ func TestExecutorRejectReturnsApprovalDenied(t *testing.T) {
 	outcomes := bundledOutcomes(t)
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
-	exec.Approvals.SetCheckpointManager(mgr, gate)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	exec.Approvals.SetApprovalOutcomeRenderer(outcomes)
 
 	_, err = exec.Invoke(context.Background(), "write", map[string]any{"path": "a.txt", "content": "x"}, tools.ToolContext{
@@ -417,7 +417,7 @@ func TestExecutorExpiryReturnsTimeoutNotDenial(t *testing.T) {
 	outcomes := bundledOutcomes(t)
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
-	exec.Approvals.SetCheckpointManager(mgr, gate)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	exec.Approvals.SetApprovalOutcomeRenderer(outcomes)
 
 	_, err = exec.Invoke(context.Background(), "write", map[string]any{"path": "a.txt", "content": "x"}, tools.ToolContext{

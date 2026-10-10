@@ -453,11 +453,11 @@ func (r *ProviderCatalog) projectOverlayApplies(ctx context.Context, projectDir 
 
 // Close shuts down all MCP sessions and the subprocesses behind them. It is terminal:
 // the lifetime context every future spawn would inherit is canceled.
-func (r *Runtime) Close() error {
+func (r *Runtime) Close(ctx context.Context) error {
 	if r == nil {
 		return nil
 	}
 	err := r.Connections.Close()
-	r.Credentials.oauth.Close()
+	r.Credentials.oauth.Close(ctx)
 	return err
 }

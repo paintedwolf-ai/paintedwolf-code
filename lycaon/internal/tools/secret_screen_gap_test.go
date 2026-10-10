@@ -18,7 +18,7 @@ import (
 func TestUnscreenedImageCardKeepsLadderAndDisablesRedaction(t *testing.T) {
 	mgr := &secretScreenHITL{status: hitl.DecisionStatusApproved}
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, nil)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 	gap := secretmatch.GapOCRUnavailable
 	_, err := exec.Secrets.AskSecretScreen(context.Background(), secretmatch.Alert{
 		SessionID: "worker", RootSessionID: "sess", ProjectID: "project-id", ProjectDir: "/project",

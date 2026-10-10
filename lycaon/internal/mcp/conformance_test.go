@@ -29,7 +29,7 @@ func TestConfinedMCPSeamConformance(t *testing.T) {
 		MCPProviderEntry: MCPProviderEntry{ID: "fixture", Command: bin, Args: legacyRootsFixtureArgs, Enabled: true},
 	}}
 	reg.Connections.SetDeviceProbeRoots(func() []string { return []string{root} })
-	t.Cleanup(func() { _ = reg.Close() })
+	t.Cleanup(func() { _ = reg.Close(t.Context()) })
 
 	out, err := reg.Calls.CallTool(context.Background(), CallScope{}, "fixture", "list_roots", nil)
 	testutil.FailErr(t, "list_roots", err)
@@ -165,7 +165,7 @@ func TestCloseTerminatesSpawnedServer(t *testing.T) {
 		t.Fatal("no spawned process to reap")
 	}
 
-	testutil.FailErr(t, "close", reg.Close())
+	testutil.FailErr(t, "close", reg.Close(t.Context()))
 	if reg.Connections.sessionCount() != 0 {
 		t.Fatal("Close left sessions cached")
 	}
@@ -182,7 +182,7 @@ func newFixtureRegistry(t *testing.T, bin string) *Runtime {
 		MCPProviderEntry: MCPProviderEntry{ID: "fixture", Command: bin, Enabled: true},
 	}}
 	reg.Connections.SetDeviceProbeRoots(func() []string { return []string{t.TempDir()} })
-	t.Cleanup(func() { _ = reg.Close() })
+	t.Cleanup(func() { _ = reg.Close(t.Context()) })
 	return reg
 }
 

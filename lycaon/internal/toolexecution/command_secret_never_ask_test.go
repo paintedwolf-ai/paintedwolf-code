@@ -27,7 +27,7 @@ func argvNeverAskExecutor(t *testing.T, standing bool) *Executor {
 	testutil.FailErr(t, "BuildMatcher", err)
 	e := NewExecutor(nil, nil, "")
 	e.Secrets.SetSecretMatcher(m)
-	e.Approvals.SetCheckpointManager(nil, argvStandingGate{standing: standing})
+	e.Approvals.SetCheckpointManager(t.Context(), nil, argvStandingGate{standing: standing})
 	e.Capabilities.SetApprovalsDisabled(func(string) bool { return true })
 	return e
 }

@@ -467,7 +467,7 @@ func (r *ProviderAdministration) DeleteOverlay(ctx context.Context, providerID, 
 	// Tokens are device-global, so only a device-scope delete revokes: a
 	// project-override delete leaves the device provider (and its token) live.
 	if r.Credentials.oauth != nil && strings.TrimSpace(scopeProjectDir) == "" {
-		if revokeErr := r.Credentials.oauth.Revoke(providerID); revokeErr != nil { //nolint:contextcheck // Revoke tears down process-local OAuth state.
+		if revokeErr := r.Credentials.oauth.Revoke(ctx, providerID); revokeErr != nil {
 			slog.WarnContext(ctx, "mcp oauth revoke on delete failed", "provider_id", providerID, "error", revokeErr)
 		}
 	}

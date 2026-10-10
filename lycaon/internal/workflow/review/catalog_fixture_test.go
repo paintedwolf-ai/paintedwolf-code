@@ -22,11 +22,3 @@ func catalogRegistry(t *testing.T) *tools.DefaultRegistry {
 	testutil.FailErr(t, "NewCatalogRegistry", err)
 	return reg
 }
-func catalogSubmitVerdictSchema(t *testing.T) map[string]any {
-	t.Helper()
-	meta, ok := shippedToolSchemas(t).ToolMeta("submit_verdict")
-	if !ok {
-		t.Fatal("submit_verdict schema missing")
-	}
-	return meta.ArgsSchema
-}

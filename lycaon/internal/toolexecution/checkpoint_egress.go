@@ -8,7 +8,7 @@ import (
 )
 
 // SetCheckpointManager routes tool and egress approvals through the same checkpoint flow.
-func (e *Approvals) SetCheckpointManager(mgr hitl.CheckpointManager, gate hitl.ApprovalGate) {
+func (e *Approvals) SetCheckpointManager(ctx context.Context, mgr hitl.CheckpointManager, gate hitl.ApprovalGate) {
 	if e == nil {
 		return
 	}
@@ -17,7 +17,7 @@ func (e *Approvals) SetCheckpointManager(mgr hitl.CheckpointManager, gate hitl.A
 	previous := e.releaseEgressResolver
 	e.releaseEgressResolver = confine.SetEgressResolver(e.Network.resolveEgress)
 	if previous != nil {
-		_ = previous(context.Background())
+		_ = previous(context.WithoutCancel(ctx))
 	}
 }
 

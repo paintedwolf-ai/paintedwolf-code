@@ -91,7 +91,7 @@ func TestWatchStopDrainsInstallingWatchAndSealsRebind(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("watch seeding did not enter")
 	}
-	server.Watch.Stop()
+	server.Watch.Stop(t.Context())
 	select {
 	case <-cancelled:
 	case <-time.After(5 * time.Second):

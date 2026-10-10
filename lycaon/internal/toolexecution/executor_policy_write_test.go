@@ -54,7 +54,7 @@ func TestInstructionWriteUsesOrdinaryApprovalWithExactDiff(t *testing.T) {
 	}
 	for _, after := range []string{"First approved instructions\n", "Second approved instructions\n"} {
 		manager := &asyncHITL{requested: make(chan struct{}, 1)}
-		executor.Approvals.SetCheckpointManager(manager, approvalGate)
+		executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		t.Cleanup(cancel)
 		done := make(chan error, 1)
@@ -135,7 +135,7 @@ func TestInstructionContentReviewAuthorizesOnlyComposedBytes(t *testing.T) {
 	testutil.FailErr(t, "register writer", registry.Register("write", writer.Run))
 	approvalGate := settings.NewBypassApprovalGate()
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvalGate), registry, "implement")
-	executor.Approvals.SetCheckpointManager(manager, approvalGate)
+	executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
 	_, err = executor.Invoke(t.Context(), "write", map[string]any{"path": "AGENTS.md", "content": "proposed change\n"}, tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "root"},
@@ -177,7 +177,7 @@ func TestFileChangeApprovalDeduplicatesPathsAndRetainsIndexPreviews(t *testing.T
 	}))
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvalGate), registry, "implement")
 	manager := &asyncHITL{requested: make(chan struct{}, 1)}
-	executor.Approvals.SetCheckpointManager(manager, approvalGate)
+	executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	done := make(chan error, 1)
@@ -224,7 +224,7 @@ func TestCommandInstructionGrantUsesOneOrdinaryApproval(t *testing.T) {
 	}))
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvalGate), reg, "implement")
 	manager := &asyncHITL{requested: make(chan struct{}, 2)}
-	executor.Approvals.SetCheckpointManager(manager, approvalGate)
+	executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	done := make(chan error, 1)
@@ -295,7 +295,7 @@ func TestCoordinatorInvestigateOverlayWriteReachesAgentPolicyApproval(t *testing
 	}
 
 	manager := &asyncHITL{requested: make(chan struct{}, 1)}
-	executor.Approvals.SetCheckpointManager(manager, approvalGate)
+	executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	t.Cleanup(cancel)
 	done := make(chan error, 1)

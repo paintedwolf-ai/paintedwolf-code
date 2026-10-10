@@ -18,7 +18,7 @@ import (
 
 func TestGetWebResearchProvidersStatus(t *testing.T) {
 	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t))
-	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(reg))
+	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
 	cfg := webresearch.NewConfigStoreAt(filepath.Join(t.TempDir(), "web-research-config.yaml"))
 	creds := webresearch.NewCredentialStoreAt(filepath.Join(t.TempDir(), "credential-vault.age"), reg.Catalog())
 	s := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{
@@ -93,7 +93,7 @@ func TestGetWebResearchProvidersStatus(t *testing.T) {
 
 func TestTestWebResearchProviderUnknown(t *testing.T) {
 	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t))
-	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(reg))
+	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
 	s := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: sessionstore.NewMemory()}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{Catalog: reg.Catalog(), Registry: reg}}}), nil, "test-token")
 
@@ -109,7 +109,7 @@ func TestTestWebResearchProviderUnknown(t *testing.T) {
 
 func TestTestWebResearchProviderNotConfigured(t *testing.T) {
 	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t))
-	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(reg))
+	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
 	s := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: sessionstore.NewMemory()}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{Catalog: reg.Catalog(), Registry: reg}}}), nil, "test-token")
 
@@ -133,7 +133,7 @@ func TestTestWebResearchProviderNotConfigured(t *testing.T) {
 
 func TestUpdateWebResearchProviderConfigRejectsMetadataEndpoint(t *testing.T) {
 	reg := webresearch.NewRegistry(contractfixture.MustCatalog(t))
-	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(reg))
+	testutil.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
 	cfg := webresearch.NewConfigStoreAt(filepath.Join(t.TempDir(), "web-research-config.yaml"))
 	creds := webresearch.NewCredentialStoreAt(filepath.Join(t.TempDir(), "credential-vault.age"), reg.Catalog())
 	s := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, External: hostapi.ExternalDependencies{WebResearch: webresearch.Runtime{

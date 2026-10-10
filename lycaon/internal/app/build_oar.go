@@ -38,7 +38,7 @@ func (b *serveBuilder) wireOARBlockPlane() error {
 	if err := oar.InstallCapabilityBundled(schemaDir); err != nil {
 		return fmt.Errorf("oar: %w", err)
 	}
-	matcher, err := b.security.LoadMatcher(b.startup.cfg.TestSecretMatcher)
+	matcher, err := b.security.LoadMatcher(b.startup.ctx, b.startup.cfg.TestSecretMatcher)
 	if err != nil {
 		return fmt.Errorf("oar secretmatch detector: %w", err)
 	}

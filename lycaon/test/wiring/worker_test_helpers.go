@@ -206,7 +206,10 @@ func executeWorkerWithinDrain(
 		return out.result, out.err
 	case <-ctx.Done():
 		// The harness deadline explicitly cancels checkpoint waits.
-		if current, ok := h.Delegations.Queue.Get(task.ID); ok && current != nil && current.ChildSessionID != "" {
+		lookupCtx, cancelLookup := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+		current, ok := h.Delegations.Queue.Lookup(lookupCtx, task.ID)
+		cancelLookup()
+		if ok && current != nil && current.ChildSessionID != "" {
 			h.Sessions.Manager.Runner.Execution.Cancel(current.ChildSessionID)
 		}
 		select {

@@ -44,7 +44,7 @@ func TestFireworksRegistryUnconfiguredWithoutKey(t *testing.T) {
 	t.Setenv("FIREWORKS_API_KEY", "fw-env-ignored")
 	catalog, err := llm.NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
 	contractcheck.FailErr(t, "llm.NewProviderCatalogAt failed", err)
-	registry, err := llm.NewRegistry(catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
 	contractcheck.FailErr(t, "llm.NewRegistry failed", err)
 	if registry.IsConfigured("fireworks") {
 		t.Fatal("expected fireworks unconfigured without stored credential (env ignored)")

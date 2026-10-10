@@ -39,7 +39,7 @@ func TestCommandRedirectTargetsAreReviewedLikeNativeWrites(t *testing.T) {
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), recorder), registry, "implement")
 	// Prepared changes reach the gate the executor was given; the recorder
 	// never asks, so no checkpoint manager is needed.
-	executor.Approvals.SetCheckpointManager(nil, recorder)
+	executor.Approvals.SetCheckpointManager(t.Context(), nil, recorder)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	contractcheck.FailErr(t, "approval store", err)
 	realGate := settings.NewRuleApprovalGate(store, settings.NoSources())

@@ -202,7 +202,7 @@ func TestExecutorCoalesceIdenticalPendingSharesCheckpoint(t *testing.T) {
 	rationale := &countingRationale{}
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
-	exec.Approvals.SetCheckpointManager(mgr, gate)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: rt})
 	exec.Approvals.SetAIRationaleAttacher(rationale)
 
@@ -280,7 +280,7 @@ func TestExecutorCoalesceDifferentArgsMintTwo(t *testing.T) {
 	rt := approvalstate.NewToolApprovalCoalesce()
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
-	exec.Approvals.SetCheckpointManager(mgr, gate)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: rt})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -345,7 +345,7 @@ func TestExecutorCoalesceAbortMintAllowsRetry(t *testing.T) {
 	rt := approvalstate.NewToolApprovalCoalesce()
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
-	exec.Approvals.SetCheckpointManager(mgr, gate)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: rt})
 
 	tc := tools.ToolContext{
@@ -386,7 +386,7 @@ func TestExecutorNetworkCoalesceCrossWorkerRootSession(t *testing.T) {
 	mgr := &coalesceHITL{req: make(chan struct{}, 2)}
 	rt := approvalstate.NewToolApprovalCoalesce()
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.Approvals.SetCheckpointManager(mgr, nil)
+	exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: rt})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -441,18 +441,18 @@ func TestExactLeaseSilencesDetection(t *testing.T) {
 		}
 	}})
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "aws s3 rm --recursive s3://x"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: tmp,
-SessionID: "chat",
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{tmp}},
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "aws s3 rm --recursive s3://x"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: tmp,
+			SessionID:  "chat",
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{tmp}},
+		},
+	}
 	offer := hitl.ExactActionSetOffer(action, []string{hitl.GrantKey(action)})
 	_, err = approvals.ApplyGrant(offer.Grant)
 	testutil.FailErr(t, "ApplyGrant", err)
