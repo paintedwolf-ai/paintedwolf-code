@@ -66,10 +66,6 @@ type Assembly struct {
 
 func (m *Assembly) Build() assembly.AssemblyDeps {
 	rt := m.Runtime
-	var workerCtx assembly.WorkerContextBuilder
-	if m != nil {
-		workerCtx = m.WorkerContext
-	}
 	return assembly.AssemblyDeps{
 		Prompts:               m.Prompts,
 		Injects:               prompts.NewInjectRenderer(m.Prompts),
@@ -77,7 +73,7 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		Agents:                m.Profiles.Agents,
 		Workflows:             m.Workflow.Manifests,
 		CoordinatorFrame:      m.Frame,
-		WorkerContext:         workerCtx,
+		WorkerContext:         m.WorkerContext,
 		SiblingNoteDelivery:   m.Notes,
 		PeerReservations:      m.Workspaces,
 		ImplementSessionState: m.State.ForSession,

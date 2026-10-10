@@ -48,7 +48,7 @@ type ExternalObserver func(ctx context.Context, projectID string, batch External
 type projectWatch struct {
 	projectID string
 	roots     []RootSpec
-	owner     *WatchOwner
+	lifetime  *WatchLifetime
 	external  ExternalObserver
 	changes   *changeConverger
 	unbind    func()
@@ -192,15 +192,15 @@ func (w *projectWatch) flushExternalChanges(ctx context.Context, pending pending
 		return
 	}
 	watchRegMu.Lock()
-	owner, external := w.owner, w.external
+	lifetime, external := w.lifetime, w.external
 	watchRegMu.Unlock()
-	if owner != nil {
-		ownedCtx, finish, err := owner.work.Begin(ctx)
+	if lifetime != nil {
+		activeCtx, finish, err := lifetime.work.Begin(ctx)
 		if err != nil {
 			return
 		}
 		defer finish()
-		ctx = ownedCtx
+		ctx = activeCtx
 	}
 	batch := ExternalBatch{Resync: pending.resync, HeadMoved: pending.headMoved}
 	// A window the watcher could not fully name publishes as one invalidation.

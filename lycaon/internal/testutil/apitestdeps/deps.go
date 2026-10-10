@@ -180,7 +180,7 @@ func fillWebResearch(t *testing.T, d *Deps) {
 	}
 	if d.WebResearch.Registry == nil {
 		registry := webresearch.NewRegistry(d.WebResearch.Catalog)
-		testutil.FailErr(t, "web research providers", webresearch.RegisterCatalogProviders(registry))
+		testutil.FailErr(t, "web research providers", webresearch.RegisterCatalogProviders(t.Context(), registry))
 		d.WebResearch.Registry = registry
 	}
 	if d.WebResearch.Config == nil {
@@ -206,7 +206,7 @@ func fillLLM(t *testing.T, d *Deps) {
 	credentials := providercredentials.NewAt(filepath.Join(dir, "credential-vault.age"))
 	policy, err := llm.NewPolicyStoreAt(filepath.Join(dir, "model-policy.yaml"))
 	testutil.FailErr(t, "model policy", err)
-	registry, err := llm.NewRegistry(catalog, credentials)
+	registry, err := llm.NewRegistry(t.Context(), catalog, credentials)
 	testutil.FailErr(t, "provider registry", err)
 	d.LLM = &llm.Service{
 		Catalog: catalog, Credentials: credentials, Registry: registry, Policy: policy,
@@ -499,7 +499,7 @@ func fillExtensions(t *testing.T, d *Deps) {
 			OAuthStore:         mcp.NewOAuthTokenStoreAt(filepath.Join(t.TempDir(), "mcp-oauth.vault")),
 		})
 		testutil.FailErr(t, "mcp registry", err)
-		t.Cleanup(func() { _ = registry.Close() })
+		t.Cleanup(func() { _ = registry.Close(t.Context()) })
 		d.MCP = registry
 	}
 	if d.ExtensionViews == nil {

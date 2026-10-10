@@ -39,7 +39,7 @@ type Projection struct {
 
 func (m *Projection) Build() promptloop.ProjectionDeps {
 	appendMsgs := m.Transcript.Append
-	if m != nil && m.Reviews != nil {
+	if m.Reviews != nil {
 		appendMsgs = func(ctx context.Context, sessionID string, msgs ...api.Message) error {
 			if err := m.Transcript.Append(ctx, sessionID, msgs...); err != nil {
 				return err

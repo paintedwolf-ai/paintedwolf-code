@@ -9,14 +9,14 @@ import (
 
 // EnsureProjectWatch preserves unchanged bindings and their pending changes.
 // A true result identifies a new binding that needs inventory catch-up.
-func EnsureProjectWatch(ctx context.Context, owner *WatchOwner, projectID, scopeID string, roots []RootSpec, external ExternalObserver) bool {
-	if owner != nil {
-		ownedCtx, finish, err := owner.work.Begin(ctx)
+func EnsureProjectWatch(ctx context.Context, lifetime *WatchLifetime, projectID, scopeID string, roots []RootSpec, external ExternalObserver) bool {
+	if lifetime != nil {
+		activeCtx, finish, err := lifetime.work.Begin(ctx)
 		if err != nil {
 			return false
 		}
 		defer finish()
-		ctx = ownedCtx
+		ctx = activeCtx
 	}
 	projectID = strings.TrimSpace(projectID)
 	cleaned := cleanWatchRoots(roots)
@@ -32,13 +32,13 @@ func EnsureProjectWatch(ctx context.Context, owner *WatchOwner, projectID, scope
 		return false
 	}
 	key := watchKey{projectID, scopeID}
-	if owner != nil {
-		external = owner.observer(key, external)
+	if lifetime != nil {
+		external = lifetime.observer(key, external)
 	}
 	previous := watchers[key]
 	if previous != nil && sameWatchRoots(previous.roots, cleaned) {
 		previous.external = external
-		previous.owner = owner
+		previous.lifetime = lifetime
 		for _, root := range cleaned {
 			repochange.EnsureRoot(ctx, root.Path)
 		}
@@ -48,7 +48,7 @@ func EnsureProjectWatch(ctx context.Context, owner *WatchOwner, projectID, scope
 	if previous != nil {
 		previous.unbind()
 	}
-	w := &projectWatch{projectID: projectID, roots: cleaned, external: external, owner: owner}
+	w := &projectWatch{projectID: projectID, roots: cleaned, external: external, lifetime: lifetime}
 	w.changes = newChangeConverger(externalChangeQuietWindow, externalChangeMaxDelay, w.flushExternalChanges)
 	w.changes.holdWhile(w.gitBusy, externalChangeHoldCeiling)
 	w.unbind = repochange.RegisterObserver(w.observe)

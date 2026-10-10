@@ -26,7 +26,7 @@ func newRoundTripRegistry(t *testing.T) (*mcp.Runtime, string) {
 	})
 	testutil.FailErr(t, "NewRuntime", err)
 	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())
-	t.Cleanup(func() { _ = reg.Close() })
+	t.Cleanup(func() { _ = reg.Close(t.Context()) })
 	testutil.FailErr(t, "load", reg.Catalog.Load(context.Background()))
 	return reg, globalPath
 }

@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/version"
 )
 
-func (b *Runtime) openUpgradeableStore(path string) (*db.Store, error) {
+func (b *Runtime) openUpgradeableStore(ctx context.Context, path string) (*db.Store, error) {
 	hooks := db.UpgradeHooks{
 		Before: func(ctx context.Context, source *sql.DB, plan migrations.Plan) error {
 			previous, _, err := db.ReadAppVersion(ctx, source)
@@ -26,7 +26,7 @@ func (b *Runtime) openUpgradeableStore(path string) (*db.Store, error) {
 				SQLDB: source, AppVersion: previous, SchemaUserVersion: plan.Source.Revision}, plan, version.Version)
 		},
 		Progress: func(phase migrations.Phase) {
-			b.logger.Info("store upgrade", "phase", phase)
+			b.logger.InfoContext(ctx, "store upgrade", "phase", phase)
 			if b.startup == nil {
 				return
 			}
@@ -45,18 +45,18 @@ func (b *Runtime) openUpgradeableStore(path string) (*db.Store, error) {
 		},
 	}
 	if _, err := os.Stat(path); err == nil {
-		if err := b.captureVersionRecovery(path, hooks); err != nil {
+		if err := b.captureVersionRecovery(ctx, path, hooks); err != nil {
 			return nil, err
 		}
 	} else if !os.IsNotExist(err) {
 		return nil, err
 	}
-	database, err := db.OpenWithOptions(b.ctx, path, hooks, db.StoreOptions{})
+	database, err := db.OpenWithOptions(ctx, path, hooks, db.StoreOptions{})
 	if err != nil {
 		return nil, err
 	}
-	if err := b.prepareUpgradeReadiness(database, filepath.Dir(path)); err != nil {
-		_ = database.Close()
+	if err := b.prepareUpgradeReadiness(ctx, database, filepath.Dir(path)); err != nil {
+		_ = database.Shutdown(ctx)
 		if errors.Is(err, db.ErrStoreIncompatible) {
 			return nil, err
 		}
@@ -66,11 +66,11 @@ func (b *Runtime) openUpgradeableStore(path string) (*db.Store, error) {
 	return database, nil
 }
 
-func (b *Runtime) prepareUpgradeReadiness(database *db.Store, dataDir string) error {
+func (b *Runtime) prepareUpgradeReadiness(ctx context.Context, database *db.Store, dataDir string) error {
 	recoveryDir := filepath.Join(dataDir, db.UpgradeRecoveryDirName)
 	pending := filepath.Join(recoveryDir, "pending.json")
 	if _, err := os.Stat(pending); err == nil {
-		if err := backup.ValidateLiveReferences(b.ctx, database, dataDir); err != nil {
+		if err := backup.ValidateLiveReferences(ctx, database, dataDir); err != nil {
 			return &db.StoreIncompatibleError{Reason: db.RecoveryReasonIntegrityFailed, StoreSchemaVersion: db.SchemaVersion,
 				Detail: fmt.Sprintf("upgraded history has unavailable retained files: %v", err)}
 		}
@@ -85,7 +85,7 @@ func (b *Runtime) prepareUpgradeReadiness(database *db.Store, dataDir string) er
 			err := backup.CompleteUpgradeRecovery(dataDir, version.Version)
 			var prune *backup.RecoveryPruneError
 			if errors.As(err, &prune) {
-				b.logger.Warn("could not remove older recovery snapshots; cleanup deferred", "error", err)
+				b.logger.WarnContext(ctx, "could not remove older recovery snapshots; cleanup deferred", "error", err)
 				return nil
 			}
 			return err
@@ -96,23 +96,23 @@ func (b *Runtime) prepareUpgradeReadiness(database *db.Store, dataDir string) er
 	return nil
 }
 
-func (b *Runtime) captureVersionRecovery(path string, hooks db.UpgradeHooks) error {
-	source, err := db.OpenReadOnly(b.ctx, path)
+func (b *Runtime) captureVersionRecovery(ctx context.Context, path string, hooks db.UpgradeHooks) error {
+	source, err := db.OpenReadOnly(ctx, path)
 	if err != nil {
 		// OpenWithOptions classifies corrupt and incompatible stores.
 		return nil
 	}
 	defer func() { _ = source.Close() }()
-	plan, err := db.PlanUpgrade(b.ctx, source)
+	plan, err := db.PlanUpgrade(ctx, source)
 	if err != nil || plan.Required() {
 		return nil
 	}
-	previous, found, err := db.ReadAppVersion(b.ctx, source)
+	previous, found, err := db.ReadAppVersion(ctx, source)
 	if err != nil || !found || previous == version.Version {
 		return err
 	}
 	hooks.Progress(migrations.Snapshotting)
-	if err := hooks.Before(b.ctx, source, plan); err != nil {
+	if err := hooks.Before(ctx, source, plan); err != nil {
 		return errors.Join(&db.StoreIncompatibleError{Reason: db.RecoveryReasonIntegrityFailed,
 			StoreSchemaVersion: plan.Source.Revision, Detail: "Could not preserve history before the application update."}, err)
 	}

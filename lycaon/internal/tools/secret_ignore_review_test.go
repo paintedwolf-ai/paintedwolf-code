@@ -59,7 +59,7 @@ func TestSecretIgnoreReviewNeverPersistsValueOrInstallsGrant(t *testing.T) {
 		}
 	}
 	executor := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	executor.Approvals.SetCheckpointManager(mgr, nil)
+	executor.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 	executor.Secrets.SetSecretMatcher(matcher)
 	executor.Secrets.SetSecretIgnores(service)
 	_, err = executor.Secrets.AskSecretScreen(t.Context(), secretmatch.Alert{SessionID: "session", ProjectID: "project", Surface: secretmatch.SurfaceCommand, DestinationID: "process", RuleID: "gitleaks:aws-access-token", RuleTitle: "AWS access key", Fingerprints: []secretmatch.SecretFingerprint{fp.Fingerprint(value)}, ReviewValue: value})

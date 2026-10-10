@@ -28,7 +28,7 @@ func TestProjectViewNeverObservesRollbackTransient(t *testing.T) {
 		Connector:          &MockConnector{},
 	})
 	testutil.FailErr(t, "NewRuntime", err)
-	t.Cleanup(func() { _ = r.Close() })
+	t.Cleanup(func() { _ = r.Close(t.Context()) })
 	r.Catalog.SetProjectOverlayGate(func(context.Context, string) bool { return true })
 	testutil.FailErr(t, "load", r.Catalog.Load(context.Background()))
 

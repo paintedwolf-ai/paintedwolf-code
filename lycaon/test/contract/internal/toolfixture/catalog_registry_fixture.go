@@ -111,7 +111,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	if err := worker.RegisterDeclineWorkerBudgetTool(reg, worker.DeclineBudgetToolDeps{Queue: budgetQueue, Ledger: budgetLedger}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterDeclineWorkerBudgetTool failed", err)
 	}
-	webRT, err := webresearch.WireRuntime()
+	webRT, err := webresearch.WireRuntime(t.Context())
 	contractcheck.FailErr(t, "webresearch.WireRuntime", err)
 	if err := webresearch.RegisterToolsWithFactory(reg, webresearch.ToolDeps{
 		Creds: webRT.Creds, Config: webRT.Config, Catalog: webRT.Catalog, Registry: webRT.Registry,

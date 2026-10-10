@@ -8,28 +8,28 @@ import (
 	"sync/atomic"
 )
 
-// WatchOwner releases only routing and observer callbacks it still owns.
-type WatchOwner struct {
+// WatchLifetime releases its current routing and drains admitted callbacks.
+type WatchLifetime struct {
 	stopped   atomic.Bool
 	work      workscope.Group
 	mu        sync.Mutex
-	callbacks map[watchKey]*ownedObserver
+	callbacks map[watchKey]*registeredObserver
 }
-type ownedObserver struct {
-	mu    sync.Mutex
-	fn    ExternalObserver
-	owner *WatchOwner
+type registeredObserver struct {
+	mu       sync.Mutex
+	fn       ExternalObserver
+	lifetime *WatchLifetime
 }
 
-func (o *WatchOwner) observer(key watchKey, fn ExternalObserver) ExternalObserver {
+func (o *WatchLifetime) observer(key watchKey, fn ExternalObserver) ExternalObserver {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.callbacks == nil {
-		o.callbacks = make(map[watchKey]*ownedObserver)
+		o.callbacks = make(map[watchKey]*registeredObserver)
 	}
 	callback := o.callbacks[key]
 	if callback == nil {
-		callback = &ownedObserver{owner: o}
+		callback = &registeredObserver{lifetime: o}
 		o.callbacks[key] = callback
 	}
 	callback.mu.Lock()
@@ -37,8 +37,8 @@ func (o *WatchOwner) observer(key watchKey, fn ExternalObserver) ExternalObserve
 	callback.mu.Unlock()
 	return callback.observe
 }
-func (c *ownedObserver) observe(parent context.Context, projectID string, batch ExternalBatch) {
-	ctx, finish, err := c.owner.work.Begin(parent)
+func (c *registeredObserver) observe(parent context.Context, projectID string, batch ExternalBatch) {
+	ctx, finish, err := c.lifetime.work.Begin(parent)
 	if err != nil {
 		return
 	}
@@ -51,14 +51,14 @@ func (c *ownedObserver) observe(parent context.Context, projectID string, batch 
 	}
 }
 
-// Stop seals copied callback admission and removes this owner's current routing.
-func (o *WatchOwner) Stop() {
+// Stop seals copied callback admission and removes this lifetime's current routing.
+func (o *WatchLifetime) Stop(ctx context.Context) {
 	o.stopped.Store(true)
 	o.work.Stop()
 	watchRegMu.Lock()
 	var removed []*projectWatch
 	for key, watch := range watchers {
-		if watch.owner == o {
+		if watch.lifetime == o {
 			delete(watchers, key)
 			removed = append(removed, watch)
 		}
@@ -73,12 +73,12 @@ func (o *WatchOwner) Stop() {
 	}
 	watchRegMu.Unlock()
 	for _, watch := range removed {
-		watch.changes.close(context.Background())
+		watch.changes.close(context.WithoutCancel(ctx))
 	}
 }
 
 // Wait drains admitted work before dropping every captured host callback.
-func (o *WatchOwner) Wait(ctx context.Context) error {
+func (o *WatchLifetime) Wait(ctx context.Context) error {
 	if err := o.work.Wait(ctx); err != nil {
 		return err
 	}

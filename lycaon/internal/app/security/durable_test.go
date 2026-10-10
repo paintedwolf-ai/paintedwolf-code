@@ -39,7 +39,7 @@ func managedScreeningFixture(t *testing.T) (*Runtime, *secretmatch.Matcher, *ses
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x5a}, 32))
 	testutil.FailErr(t, "build fingerprinter", err)
 	matcher.SetFingerprinter(fp)
-	b.InstallEvidence(matcher, fp)
+	b.InstallEvidence(t.Context(), matcher, fp)
 	b.Capabilities = secretcap.NewWithStore(database, values, func(root string, values []secretmatch.Remembered) { b.Harvest.Remember(root, values...) })
 	b.BindTranscript(matcher, nil, nil)
 	t.Cleanup(b.ReleaseRedactors)
@@ -154,7 +154,7 @@ func TestMarkingAProjectSecretRescreensExistingTaskHistory(t *testing.T) {
 
 func TestRuntimeRedactorRebindingRetainsManagedScreening(t *testing.T) {
 	b, matcher, store, _ := managedScreeningFixture(t)
-	b.InstallEvidence(matcher, b.Fingerprinter)
+	b.InstallEvidence(t.Context(), matcher, b.Fingerprinter)
 	b.BindTranscript(matcher, nil, nil)
 	raw := "orchard-rebound-secret-synthetic-only"
 	_, err := b.Capabilities.Put(t.Context(), secretcap.PutRequest{

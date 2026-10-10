@@ -25,7 +25,6 @@ type Transactions struct {
 	sessions runstate.SessionMutations
 	authz    authzledger.TransactionalRecorder
 	workers  runstate.RunnableNotifier
-	runs     *Runs
 }
 
 func (s *Transactions) SetEventOutbox(outbox *eventoutbox.Outbox) {

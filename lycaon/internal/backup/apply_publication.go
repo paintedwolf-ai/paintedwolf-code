@@ -66,13 +66,13 @@ func clearSQLiteSidecars(dest string, mainStore bool) error {
 }
 
 // installFileAtomic installs the entry and syncs directories through the restore root.
-func installFileAtomic(root, src, dest string, entry PendingFile) error {
+func installFileAtomic(ctx context.Context, root, src, dest string, entry PendingFile) error {
 	if entry.Kind == fileKindSymlink {
 		return installSymlinkAtomic(root, src, dest, entry.RelPath)
 	}
 	tmp := filepath.Join(filepath.Dir(dest), ".restore-file-"+uuid.NewString())
 	defer func() { _ = os.Remove(tmp) }()
-	if _, err := copySnapshotRegular(context.Background(), src, tmp, os.FileMode(entry.Mode)); err != nil {
+	if _, err := copySnapshotRegular(ctx, src, tmp, os.FileMode(entry.Mode)); err != nil {
 		return fmt.Errorf("copy staged file: %w", err)
 	}
 	tempRel, err := filepath.Rel(root, tmp)

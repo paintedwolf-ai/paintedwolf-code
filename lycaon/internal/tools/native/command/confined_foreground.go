@@ -72,10 +72,6 @@ func StampBoundaryRefusal(tctx tools.ToolContext, res *hostcmd.Result) {
 	})
 }
 
-func stampBoundaryRefusal(tctx tools.ToolContext, res *hostcmd.Result) {
-	StampBoundaryRefusal(tctx, res)
-}
-
 func (c ConfinedForeground) dispatch(
 	ctx context.Context,
 	args map[string]any,

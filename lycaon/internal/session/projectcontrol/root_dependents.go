@@ -151,10 +151,6 @@ func (d RootDependents) merge(other RootDependents) RootDependents {
 	return out
 }
 
-type projectWorkerLister interface {
-	List(ctx context.Context, projectID string, status ...api.WorkerStatus) ([]api.WorkerTask, error)
-}
-
 // RootDependents returns sandbox-bound work that would break if rootID were removed.
 func (m *Service) RootDependents(ctx context.Context, projectID, rootID string) (RootDependents, error) {
 	if m == nil {

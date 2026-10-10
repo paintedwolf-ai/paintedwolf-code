@@ -18,7 +18,7 @@ var startRefusalWatch sync.Once
 // An empty state root prevents reclamation of concurrent test streams.
 func requireRefusalWatch(t *testing.T) {
 	t.Helper()
-	startRefusalWatch.Do(func() { confine.StartRefusalWatch("") })
+	startRefusalWatch.Do(func() { confine.StartRefusalWatch(t.Context(), "") })
 	deadline := time.Now().Add(15 * time.Second)
 	for !confine.RefusalWatchLive() {
 		if time.Now().After(deadline) {

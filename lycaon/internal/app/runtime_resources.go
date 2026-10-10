@@ -44,7 +44,7 @@ func (r *runtimeResources) Track(name string, order int, cleanup func(context.Co
 
 func (r *runtimeResources) setMCP(registry *mcp.Runtime) {
 	r.mcpRegistry = registry
-	r.Track("mcp", 110, func(context.Context) error { return registry.Close() })
+	r.Track("mcp", 110, func(ctx context.Context) error { return registry.Close(ctx) })
 }
 
 func (r *runtimeResources) setCLISocket(server *clisocket.Server) {

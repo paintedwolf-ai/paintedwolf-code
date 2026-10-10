@@ -286,7 +286,7 @@ func intArg(args map[string]any, key string) int {
 }
 
 // WireRuntime loads the catalog before catalog-dependent stores.
-func WireRuntime() (Runtime, error) {
+func WireRuntime(ctx context.Context) (Runtime, error) {
 	cat, err := LoadCatalog()
 	if err != nil {
 		return Runtime{}, err
@@ -300,7 +300,7 @@ func WireRuntime() (Runtime, error) {
 		return Runtime{}, err
 	}
 	reg := NewRegistry(cat)
-	if err := RegisterCatalogProviders(reg); err != nil {
+	if err := RegisterCatalogProviders(ctx, reg); err != nil {
 		return Runtime{}, err
 	}
 	limits, err := LoadFetchURLLimits()

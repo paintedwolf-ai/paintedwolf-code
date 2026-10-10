@@ -55,6 +55,3 @@ func waitLeaseOpenForTest(l *Waits, sessionID string) bool {
 func evaluateForTest(l *Admission, ctx context.Context, sessionID string, wake anchor.ID) (allow bool, busy bool) {
 	return l.evaluate(ctx, sessionID, wake)
 }
-func tryConsumeBudgetForTest(l *Admission, ctx context.Context, sessionID, runID string) bool {
-	return l.ConsumeBudget(ctx, sessionID, runID, anchor.LegFinished)
-}

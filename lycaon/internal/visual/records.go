@@ -63,7 +63,7 @@ type Records struct {
 	outbox     *eventoutbox.Outbox
 	projection ArtifactProjection
 	// onHandleBound keeps the hot tier coherent after a binding commits.
-	onHandleBound func(artifactID, handle string)
+	onHandleBound func(context.Context, string, string)
 }
 
 // NewRecords binds the durable record store to the main database.
@@ -166,7 +166,7 @@ func (r *Records) BindEvidenceHandleTx(ctx context.Context, tx *sql.Tx, projectI
 
 // EvidenceHandleBound publishes a committed binding: event delivery wakes and
 // the hot tier takes the handle.
-func (r *Records) EvidenceHandleBound(artifactID, handle string) {
+func (r *Records) EvidenceHandleBound(ctx context.Context, artifactID, handle string) {
 	if r == nil {
 		return
 	}
@@ -174,7 +174,7 @@ func (r *Records) EvidenceHandleBound(artifactID, handle string) {
 		r.outbox.Notify()
 	}
 	if r.onHandleBound != nil {
-		r.onHandleBound(normalizeID(artifactID), strings.TrimSpace(handle))
+		r.onHandleBound(ctx, normalizeID(artifactID), strings.TrimSpace(handle))
 	}
 }
 

@@ -102,7 +102,7 @@ func TestCommandRedirectIntoCredentialFileAsksAsProtectedWrite(t *testing.T) {
 			testutil.FailErr(t, "register command", registry.Register("command", command.Run))
 			executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvalGate), registry, "implement")
 			manager := &protectedWriteHITL{}
-			executor.Approvals.SetCheckpointManager(manager, approvalGate)
+			executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
 
 			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 			defer cancel()

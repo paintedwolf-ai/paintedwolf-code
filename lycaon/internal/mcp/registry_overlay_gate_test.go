@@ -74,7 +74,7 @@ func newOverlayFixture(t *testing.T, distro, user, project string, providerTools
 	testutil.FailErr(t, "NewRuntime", err)
 	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())
 	reg.Catalog.SetProjectOverlayGate(func(context.Context, string) bool { return applies })
-	t.Cleanup(func() { _ = reg.Close() })
+	t.Cleanup(func() { _ = reg.Close(t.Context()) })
 	testutil.FailErr(t, "load", reg.Catalog.Load(context.Background()))
 	return &overlayFixture{reg: reg, projectDir: projectDir, calls: calls, applies: &applies, connector: connector}
 }
