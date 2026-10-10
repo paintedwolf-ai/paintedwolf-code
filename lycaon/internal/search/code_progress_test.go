@@ -51,19 +51,45 @@ func TestDeclarationCandidatesAdvanceBoundedFrontier(t *testing.T) {
 	}
 }
 
-func TestDeclarationCandidatesDetectContentEpochChange(t *testing.T) {
-	e, leg := candidateFixture(t, 3)
-	_, err := e.Run(t.Context(), PlanLeg{Code: leg})
-	testutil.FailErr(t, "initial candidates", err)
-	before := *leg.Progress
-	repochange.Advance(leg.PathRoots[0].Path)
-	report, err := e.Run(t.Context(), PlanLeg{Code: leg})
-	testutil.FailErr(t, "changed candidates", err)
-	if len(report.Hits) != 0 || len(report.Issues) != 1 || report.Issues[0].Reason != IssueCatalogRefreshing || *leg.Progress != before {
-		t.Fatalf("changed result=%+v frontier=%+v", report, leg.Progress)
+func TestDeclarationCandidatesAdvanceAcrossFreshDependencyReaders(t *testing.T) {
+	e, leg := candidateFixture(t, 5)
+	leg.IncludeDependencies = true
+	seen := map[string]bool{}
+	for attempt, want := range []int{2, 2, 1} {
+		report, err := e.Run(t.Context(), PlanLeg{Code: leg})
+		testutil.FailErr(t, "advance private dependency discovery", err)
+		if len(report.Hits) != want || report.Limited != (attempt < 2) || len(report.Issues) != 0 {
+			t.Fatalf("attempt %d: fresh private reader stalled source progress: %+v", attempt, report)
+		}
+		for _, hit := range report.Hits {
+			if seen[hit.Path] {
+				t.Fatalf("private reader revisited %s", hit.Path)
+			}
+			seen[hit.Path] = true
+		}
+	}
+	if leg.Progress.Root != 1 || len(seen) != 5 {
+		t.Fatalf("private discovery frontier=%+v seen=%v", leg.Progress, seen)
 	}
 }
 
+func TestDeclarationCandidatesDetectContentEpochChange(t *testing.T) {
+	for name, include := range map[string]bool{"shared index": false, "private dependency index": true} {
+		t.Run(name, func(t *testing.T) {
+			e, leg := candidateFixture(t, 3)
+			leg.IncludeDependencies = include
+			_, err := e.Run(t.Context(), PlanLeg{Code: leg})
+			testutil.FailErr(t, "initial candidates", err)
+			before := *leg.Progress
+			repochange.Advance(leg.PathRoots[0].Path)
+			report, err := e.Run(t.Context(), PlanLeg{Code: leg})
+			testutil.FailErr(t, "changed candidates", err)
+			if len(report.Hits) != 0 || len(report.Issues) != 1 || report.Issues[0].Reason != IssueCatalogRefreshing || *leg.Progress != before {
+				t.Fatalf("changed result=%+v frontier=%+v", report, leg.Progress)
+			}
+		})
+	}
+}
 func TestDeclarationForegroundCompletionDoesNotRequirePreparation(t *testing.T) {
 	e, leg := candidateFixture(t, 2)
 	leg.Cap = 10
@@ -96,7 +122,7 @@ func TestDeclarationCandidatesRejectRetiredIndexInstance(t *testing.T) {
 	_, err := e.Run(t.Context(), PlanLeg{Code: leg})
 	testutil.FailErr(t, "initial candidate slice", err)
 	before := *leg.Progress
-	testutil.FailErr(t, "retire catalog", e.catalog.ClearTreeStores(t.Context(), func() error { return nil }))
+	testutil.FailErr(t, "retire catalog", e.catalog.Trees.ClearTreeStores(t.Context(), func() error { return nil }))
 	root := leg.PathRoots[0]
 	testutil.FailErr(t, "reopen catalog", catalogtest.AwaitIndex(t.Context(), e.catalog, root.ProjectID, sourcecatalog.Root{ID: root.RootID, Path: root.Path}))
 	next, err := e.Run(t.Context(), PlanLeg{Code: leg})

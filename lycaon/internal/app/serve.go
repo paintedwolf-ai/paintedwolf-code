@@ -4,7 +4,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/app/boards"
+	"github.com/lycaon/lycaon/internal/app/delegations"
+	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workflows"
+	"github.com/lycaon/lycaon/internal/clisocket"
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/coordinator"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
+	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/hostlock"
+	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/projectliveness"
+	"github.com/lycaon/lycaon/internal/startupprotocol"
+	"github.com/lycaon/lycaon/internal/tools"
 	"io"
 	"log/slog"
 	"net"
@@ -15,46 +32,27 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/api"
-	"github.com/lycaon/lycaon/internal/blueprint"
-	"github.com/lycaon/lycaon/internal/clisocket"
-	"github.com/lycaon/lycaon/internal/configdir"
-	"github.com/lycaon/lycaon/internal/coordinator"
-	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/delegation"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/hostlock"
-	"github.com/lycaon/lycaon/internal/mcp"
-	"github.com/lycaon/lycaon/internal/observability"
-	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/projectliveness"
-	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/startupprotocol"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/visual"
-	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workflow"
 )
+
+type runnerState struct {
+	runners   []backgroundRunner
+	cancel    context.CancelFunc
+	runnersWG sync.WaitGroup
+	profileWG sync.WaitGroup
+	active    bool
+}
 
 // ServeApp holds wired serve subsystems after Build.
 type ServeApp struct {
 	Server               *api.Server
-	SessionMgr           *session.Manager
-	SessionStore         session.Store
+	Sessions             *sessions.Runtime
+	Workflows            *workflows.Runtime
+	Delegations          *delegations.Runtime
+	Boards               *boards.Runtime
 	ProjectLiveness      *projectliveness.Tracker
 	CoordinatorRuntime   *coordinator.Runtime
-	WorkflowMgr          *workflow.RunManager
-	BlueprintMgr         *blueprint.Manager
-	DelegationMgr        *delegation.Manager
-	DelegationStore      orchestration.PipelineDelegationStore
 	AgentRegistry        *orchestration.MemoryAgentRegistry
-	WorkerQueue          worker.WorkerQueue
 	ToolRegistry         *tools.DefaultRegistry
-	SessionWorkflowStore workflow.SessionWorkflowStore
-	CheckpointMgr        hitl.CheckpointManager
-	VisualStore          visual.Store
 	DB                   db.ReadHandle
 	Events               events.ReplayHub
 	ConfigRoot           string
@@ -70,11 +68,7 @@ type ServeApp struct {
 	// decider is the local decision engine, closed at shutdown when it owns a process.
 	decider decide.Decider
 
-	runners       []backgroundRunner
-	runnersCancel context.CancelFunc
-	runnersWG     sync.WaitGroup
-	profileWG     sync.WaitGroup
-	runnersActive bool
+	runners runnerState
 
 	projects clisocket.Projects
 	eventPub *events.Publisher
@@ -89,7 +83,7 @@ func (a *ServeApp) StartBackgroundWorkers(ctx context.Context) (context.CancelFu
 }
 
 // MCPRegistry returns the MCP registry when wired.
-func (a *ServeApp) MCPRegistry() *mcp.RegistryImpl {
+func (a *ServeApp) MCPRegistry() *mcp.Runtime {
 	if a == nil || a.resources == nil {
 		return nil
 	}
@@ -114,25 +108,20 @@ func (a *ServeApp) Close() error {
 	if a == nil {
 		return nil
 	}
-	if a.SessionMgr != nil {
-		a.SessionMgr.BeginEngineShutdown()
+	if a.Sessions != nil && a.Sessions.Manager != nil {
+		a.Sessions.Manager.BeginEngineShutdown()
 	}
+
 	a.stopRunners()
 	drainCtx, cancel := context.WithTimeout(context.Background(), resourceReleaseTimeout)
 	defer cancel()
 	if a.Server != nil {
-		a.Server.StopBackground()
-	}
-	var drainErr error
-	if a.SessionMgr != nil {
-		drainErr = a.SessionMgr.WaitForEngineShutdown(drainCtx)
-	}
-	if a.Server != nil {
+		a.Server.StopBackground(drainCtx)
 		a.Server.WaitForBackground(drainCtx)
 	}
 	// Store shutdown retains its reserved cleanup floor.
-	err := errors.Join(drainErr, a.resources.Close(drainCtx))
-	a.profileWG.Wait()
+	err := a.resources.Close(drainCtx)
+	a.runners.profileWG.Wait()
 	a.DB = nil
 	return err
 }
@@ -227,8 +216,8 @@ func (a *ServeApp) Run(ctx context.Context) error {
 		}
 	}
 	if a.resources != nil && a.resources.mcpRegistry != nil {
-		a.resources.mcpRegistry.SetAPIAccess(a.APIToken)
-		if err := a.resources.mcpRegistry.Resync(ctx); err != nil {
+		a.resources.mcpRegistry.Connections.SetAPIAccess(a.APIToken)
+		if err := a.resources.mcpRegistry.Tools.Resync(ctx); err != nil {
 			slog.WarnContext(ctx, "mcp resync after listen", "err", err)
 		}
 	}
@@ -283,18 +272,20 @@ func (a *ServeApp) Run(ctx context.Context) error {
 	}
 
 	// Settle active turns before background cancellation.
-	a.SessionMgr.BeginEngineShutdown()
+	if a.Sessions != nil && a.Sessions.Manager != nil {
+		a.Sessions.Manager.BeginEngineShutdown()
+	}
 	if closer, ok := a.decider.(io.Closer); ok {
 		_ = closer.Close()
 	}
 
-	a.Server.StopBackground()
+	a.Server.StopBackground(context.WithoutCancel(ctx))
 
 	// One deadline covers runner and HTTP draining.
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), serveDrainTimeout)
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), serveDrainTimeout)
 	defer cancel()
-	a.stopRunnersWithin(shutdownCtx)                                                      //nolint:contextcheck // shutdown outlives the canceled run ctx
-	if err := a.resources.httpServer.Shutdown(shutdownCtx); err != nil && runErr == nil { //nolint:contextcheck // shutdown outlives the canceled run ctx
+	a.stopRunnersWithin(shutdownCtx)
+	if err := a.resources.httpServer.Shutdown(shutdownCtx); err != nil && runErr == nil {
 		runErr = err
 	}
 	return runErr

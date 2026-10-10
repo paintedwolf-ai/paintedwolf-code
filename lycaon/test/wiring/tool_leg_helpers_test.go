@@ -7,7 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -16,7 +16,7 @@ func compositeWorkerWithPolicy(agents orchestration.AgentRegistry, policy interf
 	ListForPrompt(context.Context, *api.Session, string) []tools.ToolMeta
 }) *delegation.CompositeWorkerContext {
 	return &delegation.CompositeWorkerContext{
-		AgentsFor: func(*api.Session) session.AgentProfileResolver { return agents },
+		AgentsFor: func(*api.Session) profiles.AgentProfileResolver { return agents },
 		Tools: delegation.LegToolListerFunc(func(c context.Context, s *api.Session, profileID string) []string {
 			return sortedToolNamesFromMeta(policy.ListForPrompt(c, s, profileID))
 		}),

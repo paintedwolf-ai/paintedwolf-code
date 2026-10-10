@@ -59,8 +59,8 @@ func TestAgentWriteAndEditEmitSourceChanged(t *testing.T) {
 
 	dir := t.TempDir()
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID = "proj-agent"
-	tctx.UserTurn = 4
+	tctx.Identity.ProjectID = "proj-agent"
+	tctx.Identity.UserTurn = 4
 
 	wt := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := wt.Run(context.Background(), map[string]any{
@@ -89,9 +89,9 @@ func TestAgentWriteAndEditEmitSourceChanged(t *testing.T) {
 func TestAgentMutationUsesToolContextWorkspace(t *testing.T) {
 	root := t.TempDir()
 	tctx := nativefixture.Context(root)
-	tctx.ProjectID = "proj-worker"
-	tctx.WorkerJobID = "job-1"
-	tctx.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
+	tctx.Identity.ProjectID = "proj-worker"
+	tctx.Identity.WorkerJobID = "job-1"
+	tctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
 	_, change, ok := agentCommitInputs(tctx, agentMutation{
 		Op: api.SourceChangeOpCreate, AbsPath: filepath.Join(root, "worker.go"),
 	})
@@ -109,7 +109,7 @@ func TestAgentMkdirEmitsSourceChanged(t *testing.T) {
 
 	dir := t.TempDir()
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID = "proj-agent-mkdir"
+	tctx.Identity.ProjectID = "proj-agent-mkdir"
 	_, err := (&MkdirTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{
 		"paths": []any{"generated/nested"},
 	}, tctx)
@@ -132,7 +132,7 @@ func TestAgentUTF16EditEmitsRawEncodedSHA(t *testing.T) {
 	before := testutil.EncodeTextFixture(t, "before\n", textfile.UTF16BEBOM)
 	testutil.FailErr(t, "write fixture", os.WriteFile(path, before, 0o644))
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID = "proj-agent-utf16"
+	tctx.Identity.ProjectID = "proj-agent-utf16"
 
 	_, err := (&EditTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{
 		"path": "wide.txt", "old_string": "before", "new_string": "after",

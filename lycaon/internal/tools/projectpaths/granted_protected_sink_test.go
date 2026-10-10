@@ -3,10 +3,13 @@ package projectpaths_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"weak"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/isolation"
@@ -45,9 +48,9 @@ func TestGrantedAccessCannotReachProtectedSinks(t *testing.T) {
 	grantEverything(t, outside)
 
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
-		ActiveRootID: "p",
-		SessionID:    "chat-1",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
+			ActiveRootID: "p"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-1"},
 	}
 
 	for name, path := range map[string]string{
@@ -68,9 +71,9 @@ func TestGrantedAccessStillResolvesOrdinaryPaths(t *testing.T) {
 	grantEverything(t, outside)
 
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
-		ActiveRootID: "p",
-		SessionID:    "chat-1",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
+			ActiveRootID: "p"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-1"},
 	}
 	target := filepath.Join(outside, "notes", "todo.md")
 	want := filepath.Join(canon(t, outside), "notes", "todo.md")
@@ -107,9 +110,9 @@ func TestTreeGrantResolvesDescendantsAndExactDoesNot(t *testing.T) {
 	t.Cleanup(func() { projectpaths.SetGrantedAccessSource(nil) })
 
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
-		ActiveRootID: "p",
-		SessionID:    "chat-1",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
+			ActiveRootID: "p"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-1"},
 	}
 	for _, path := range []string{folder, child, nested} {
 		res, err := projectpaths.ResolveRead(context.Background(), nil, tctx, path)
@@ -144,9 +147,9 @@ func TestGrantedAccessKeepsGovernanceReadable(t *testing.T) {
 	proj := t.TempDir()
 	grantEverything(t, outside)
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
-		ActiveRootID: "p",
-		SessionID:    "chat-1",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
+			ActiveRootID: "p"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-1"},
 	}
 	// Policy files remain readable.
 	if _, err := projectpaths.ResolveRead(context.Background(), nil, tctx,
@@ -165,13 +168,13 @@ func TestControlPlanePathsRefuseGrantsWithTheGateCode(t *testing.T) {
 	grantEverything(t, cfg)
 
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
-		ActiveRootID: "p",
-		SessionID:    "chat-1",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Label: "proj", Path: proj, IsPrimary: true}},
+			ActiveRootID: "p"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-1"},
 	}
 	expectCode := func(t *testing.T, err error, code string) {
 		t.Helper()
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if err == nil || !errors.As(err, &reject) || reject.Code != code {
 			t.Fatalf("err = %v want %s", err, code)
 		}
@@ -201,5 +204,52 @@ func TestControlPlanePathsRefuseGrantsWithTheGateCode(t *testing.T) {
 	testutil.FailErr(t, "ResolveRead draft through grant", err)
 	if !res.External {
 		t.Fatal("an agent workspace under the state tree must resolve through its grant")
+	}
+}
+
+func ownedPathGrant(path string) (func(), weak.Pointer[projectpaths.Access]) {
+	owner := &projectpaths.Access{Path: path}
+	release := projectpaths.SetGrantedAccessSource(func(_, _, abs string, write bool) (projectpaths.Access, bool) {
+		if write || abs != owner.Path {
+			return projectpaths.Access{}, false
+		}
+		return *owner, true
+	})
+	return release, weak.Make(owner)
+}
+
+func TestReleasedGrantOwnerDoesNotReplaceCurrentPathAuthority(t *testing.T) {
+	project := t.TempDir()
+	outside := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	oldPath, currentPath := filepath.Join(outside, "old.txt"), filepath.Join(outside, "current.txt")
+	tctx := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Path: project, IsPrimary: true}}}, Identity: tools.InvocationIdentity{SessionID: "chat"}}
+	oldRelease, oldOwner := ownedPathGrant(oldPath)
+	t.Cleanup(oldRelease)
+	currentRelease, currentOwner := ownedPathGrant(currentPath)
+	t.Cleanup(currentRelease)
+	oldRelease()
+	oldRelease()
+	runtime.GC()
+	if oldOwner.Value() != nil {
+		t.Fatal("released registration handle retained its path authority owner")
+	}
+	if _, err := projectpaths.ResolveRead(t.Context(), nil, tctx, oldPath); err == nil {
+		t.Fatal("replacement retained the previous owner's grant")
+	}
+	resolved, err := projectpaths.ResolveRead(t.Context(), nil, tctx, currentPath)
+	testutil.FailErr(t, "resolve current owner's grant after old owner release", err)
+	if !resolved.External {
+		t.Fatal("current grant did not resolve as external authority")
+	}
+	if _, err := projectpaths.ResolveWrite(t.Context(), nil, tctx, currentPath); err == nil {
+		t.Fatal("read-only registration widened write authority")
+	}
+	currentRelease()
+	runtime.GC()
+	if currentOwner.Value() != nil {
+		t.Fatal("current release handle retained its owner")
+	}
+	if _, err := projectpaths.ResolveRead(t.Context(), nil, tctx, currentPath); err == nil {
+		t.Fatal("closed owner still supplied external path authority")
 	}
 }

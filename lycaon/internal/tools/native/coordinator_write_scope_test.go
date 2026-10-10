@@ -35,12 +35,12 @@ func TestWriteWorkerBranchOutsideProjectTree(t *testing.T) {
 
 	write := &native.WriteTool{Boundary: boundary}
 	tctx := tools.ToolContext{
-		Roots:            []projectroot.RootRef{{ID: "p", Path: primary, IsPrimary: true}},
-		ActiveRootID:     "p",
-		WorkerBranchRoot: branchRoot,
-		WorkerJobID:      "job-1",
-		BranchWorkspace:  testutil.CompleteBranchWorkspace{},
-		Agent:            "implementer",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Path: primary, IsPrimary: true}},
+			ActiveRootID:     "p",
+			WorkerBranchRoot: branchRoot,
+			BranchWorkspace:  testutil.CompleteBranchWorkspace{}},
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-1",
+			Agent: "implementer"},
 	}
 	out, err := write.Run(context.Background(), map[string]any{
 		"path":    "main.go",

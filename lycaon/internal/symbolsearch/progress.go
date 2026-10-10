@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 )
 
 const retainedDeclarationBytes = 1 << 20
@@ -16,20 +16,20 @@ const retainedDeclarationBytes = 1 << 20
 // Only one candidate batch and the best bounded result set survive a request.
 type Progress struct {
 	phase         int
-	pending       []project.DeclarationSearchHit
+	pending       []projectsource.DeclarationSearchHit
 	discoveryDone bool
 	matches       []Match
-	gaps          []project.DeclarationGap
-	discoveryGaps []project.DeclarationGap
+	gaps          []projectsource.DeclarationGap
+	discoveryGaps []projectsource.DeclarationGap
 }
 
 func (r *symbolSearchRun) advance(ctx context.Context, query string, limit int, wall, abbreviationWall, outlineWall time.Duration, state *Progress, resume bool) (bool, error) {
 	discoveryEnd := time.Now().Add(wall)
 	outlineLeft := outlineWall
 	for state.phase < 2 {
-		match, pattern := project.DeclarationMatchSubstring, query
+		match, pattern := projectsource.DeclarationMatchSubstring, query
 		if r.exact {
-			match = project.DeclarationMatchWholeWord
+			match = projectsource.DeclarationMatchWholeWord
 		}
 		if state.phase == 1 {
 			hump, ok := symbolHumpPattern(query)
@@ -46,7 +46,7 @@ func (r *symbolSearchRun) advance(ctx context.Context, query string, limit int, 
 				r.incomplete = r.coverage.Incomplete()
 				return true, nil
 			}
-			match, pattern = project.DeclarationMatchRegexp, hump
+			match, pattern = projectsource.DeclarationMatchRegexp, hump
 			discoveryEnd = time.Now().Add(abbreviationWall)
 		}
 		if len(state.pending) == 0 && !state.discoveryDone {
@@ -55,8 +55,8 @@ func (r *symbolSearchRun) advance(ctx context.Context, query string, limit int, 
 				break
 			}
 			started := time.Now()
-			hits, coverage, err := r.search(ctx, project.DeclarationSearchQuery{
-				ProjectID: r.p.ID, Roots: r.discoveryRoots(), Pattern: pattern, Match: match,
+			hits, coverage, err := r.search(ctx, projectsource.DeclarationSearchQuery{
+				ProjectID: r.p.SourceID(), Roots: r.discoveryRoots(), Pattern: pattern, Match: match,
 				ExcludeDirs: append([]string(nil), r.excludes...), HitCap: DiscoveryFileCap,
 				Wall: remaining, Continue: true,
 			})
@@ -79,7 +79,7 @@ func (r *symbolSearchRun) advance(ctx context.Context, query string, limit int, 
 				}
 			}
 			if coverage.Limited && !resume {
-				state.gaps = mergeDeclarationGap(state.gaps, project.DeclarationGap{Reason: "symbol_budget", Limit: DiscoveryFileCap})
+				state.gaps = mergeDeclarationGap(state.gaps, projectsource.DeclarationGap{Reason: "symbol_budget", Limit: DiscoveryFileCap})
 				state.discoveryDone = true
 			}
 		}
@@ -103,21 +103,21 @@ func (r *symbolSearchRun) advance(ctx context.Context, query string, limit int, 
 	}
 	r.coverage.Gaps = append(r.coverage.Gaps, state.discoveryGaps...)
 	if ctx.Err() != nil {
-		r.coverage.Gaps = mergeDeclarationGap(r.coverage.Gaps, project.DeclarationGap{Reason: project.DeclarationTimeBudget})
+		r.coverage.Gaps = mergeDeclarationGap(r.coverage.Gaps, projectsource.DeclarationGap{Reason: projectsource.DeclarationTimeBudget})
 	}
 	if state.phase < 2 {
-		reason := project.DeclarationPending
+		reason := projectsource.DeclarationPending
 		if !resume {
-			reason = project.DeclarationSymbolBudget
+			reason = projectsource.DeclarationSymbolBudget
 		}
-		r.coverage.Gaps = mergeDeclarationGap(r.coverage.Gaps, project.DeclarationGap{Reason: reason})
+		r.coverage.Gaps = mergeDeclarationGap(r.coverage.Gaps, projectsource.DeclarationGap{Reason: reason})
 	}
 	r.incomplete = r.coverage.Incomplete()
 	return false, nil
 }
 
-func (r *symbolSearchRun) discoveryRoots() []project.DeclarationSearchRoot {
-	roots := make([]project.DeclarationSearchRoot, 0, len(r.roots))
+func (r *symbolSearchRun) discoveryRoots() []projectsource.DeclarationSearchRoot {
+	roots := make([]projectsource.DeclarationSearchRoot, 0, len(r.roots))
 	for _, root := range r.roots {
 		roots = append(roots, root.DeclarationSearchRoot)
 	}
@@ -125,17 +125,17 @@ func (r *symbolSearchRun) discoveryRoots() []project.DeclarationSearchRoot {
 }
 
 func (r *symbolSearchRun) outlinePending(ctx context.Context, state *Progress) {
-	files := r.rankCandidates(project.DeclarationFilesFromHits(state.pending))
-	consumed := map[project.DeclarationFileKey]bool{}
+	files := r.rankCandidates(projectsource.DeclarationFilesFromHits(state.pending))
+	consumed := map[projectsource.DeclarationFileKey]bool{}
 	for _, file := range files {
 		if r.filesLeft <= 0 || ctx.Err() != nil {
 			break
 		}
-		symbols, content, ok := project.ReadSourceDeclarations(ctx, r.p, file.RootID, file.Path)
+		symbols, content, ok := projectsource.ReadSourceDeclarations(ctx, r.p, file.RootID, file.Path)
 		if ctx.Err() != nil {
 			break
 		}
-		consumed[project.DeclarationFileKey{file.RootID, file.Path}] = true
+		consumed[projectsource.DeclarationFileKey{file.RootID, file.Path}] = true
 		r.filesLeft--
 		if n := len(r.passes); n > 0 {
 			r.passes[n-1].Files++
@@ -143,11 +143,11 @@ func (r *symbolSearchRun) outlinePending(ctx context.Context, state *Progress) {
 		if !ok {
 			count := 1
 			for _, gap := range state.gaps {
-				if gap.Reason == project.DeclarationFilesSkipped {
+				if gap.Reason == projectsource.DeclarationFilesSkipped {
 					count += gap.Count
 				}
 			}
-			state.gaps = mergeDeclarationGap(state.gaps, project.DeclarationGap{Reason: project.DeclarationFilesSkipped, Count: count})
+			state.gaps = mergeDeclarationGap(state.gaps, projectsource.DeclarationGap{Reason: projectsource.DeclarationFilesSkipped, Count: count})
 			continue
 		}
 		r.matches = append(r.matches, r.pick(file, symbols, content)...)
@@ -156,7 +156,7 @@ func (r *symbolSearchRun) outlinePending(ctx context.Context, state *Progress) {
 	}
 	pending := state.pending[:0]
 	for _, hit := range state.pending {
-		if !consumed[project.DeclarationFileKey{hit.RootID, strings.ReplaceAll(strings.TrimSpace(hit.Path), "\\", "/")}] {
+		if !consumed[projectsource.DeclarationFileKey{hit.RootID, strings.ReplaceAll(strings.TrimSpace(hit.Path), "\\", "/")}] {
 			pending = append(pending, hit)
 		}
 	}
@@ -177,7 +177,7 @@ func (r *symbolSearchRun) trimMatches() {
 		}
 		size := len(match.Name) + len(match.Path) + len(match.Signature) + len(match.Highlights)*16 + 128
 		if size > bytesLeft {
-			r.coverage.Gaps = mergeDeclarationGap(r.coverage.Gaps, project.DeclarationGap{Reason: project.DeclarationSymbolBudget, Limit: retainedDeclarationBytes})
+			r.coverage.Gaps = mergeDeclarationGap(r.coverage.Gaps, projectsource.DeclarationGap{Reason: projectsource.DeclarationSymbolBudget, Limit: retainedDeclarationBytes})
 			continue
 		}
 		bytesLeft -= size
@@ -201,7 +201,7 @@ func (r *symbolSearchRun) saveProgress(state *Progress) {
 	}
 }
 
-func declarationRetryable(reason project.DeclarationGapReason) bool {
+func declarationRetryable(reason projectsource.DeclarationGapReason) bool {
 	switch reason {
 	case "time_budget", "catalog_warming", "catalog_incomplete", "catalog_refreshing", "index_warming":
 		return true
@@ -210,7 +210,7 @@ func declarationRetryable(reason project.DeclarationGapReason) bool {
 	}
 }
 
-func mergeDeclarationGap(gaps []project.DeclarationGap, gap project.DeclarationGap) []project.DeclarationGap {
+func mergeDeclarationGap(gaps []projectsource.DeclarationGap, gap projectsource.DeclarationGap) []projectsource.DeclarationGap {
 	for i := range gaps {
 		if gaps[i].Reason == gap.Reason {
 			gaps[i].Count = max(gaps[i].Count, gap.Count)
@@ -221,9 +221,9 @@ func mergeDeclarationGap(gaps []project.DeclarationGap, gap project.DeclarationG
 }
 
 // Rank within a bounded batch before spending the outline allocation.
-func (r *symbolSearchRun) rankCandidates(files []project.DeclarationFile) []project.DeclarationFile {
+func (r *symbolSearchRun) rankCandidates(files []projectsource.DeclarationFile) []projectsource.DeclarationFile {
 	type candidate struct {
-		file  project.DeclarationFile
+		file  projectsource.DeclarationFile
 		tier  symbolMatchTier
 		depth int
 	}

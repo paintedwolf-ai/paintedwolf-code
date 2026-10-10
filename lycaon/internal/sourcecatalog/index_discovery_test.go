@@ -19,10 +19,10 @@ import (
 func TestForegroundDirectoryCompletesWhileBulkDirectoryWorkerIsHeld(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "file.txt", "source")
-	catalog.broker = backgroundwork.New(map[backgroundwork.Resource]backgroundwork.Limits{
+	catalog.Trees.broker = backgroundwork.New(map[backgroundwork.Resource]backgroundwork.Limits{
 		backgroundwork.ResourceDirectory: {Total: 2, PerLane: 2},
 	})
-	hold, err := catalog.broker.Acquire(t.Context(), backgroundwork.Request{
+	hold, err := catalog.Trees.broker.Acquire(t.Context(), backgroundwork.Request{
 		Key: "bulk", Lane: root.Path, Priority: backgroundwork.PriorityProactive,
 		Resources: []backgroundwork.Resource{backgroundwork.ResourceDirectory},
 	})
@@ -32,7 +32,7 @@ func TestForegroundDirectoryCompletesWhileBulkDirectoryWorkerIsHeld(t *testing.T
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
-		_, observeErr := catalog.ObserveDirectory(ctx, "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+		_, observeErr := catalog.Directories.ObserveDirectory(ctx, "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 		done <- observeErr
 	}()
 	testutil.FailErr(t, "foreground discovery with bulk worker held", <-done)
@@ -43,7 +43,7 @@ func TestIndexContinuesPastAnEntireVanishedMetadataPage(t *testing.T) {
 	for i := range 300 {
 		writeIndexFile(t, root.Path, fmt.Sprintf("file-%04d.txt", i), "source")
 	}
-	observation, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
+	observation, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
 	testutil.FailErr(t, "observe files", err)
 	walk := discoveryWalk(t, catalog, root)
 	for i := range indexBatchSize {
@@ -81,12 +81,12 @@ func TestColdDiscoveryCompletesWideDirectoryWithoutRestart(t *testing.T) {
 	for index := range entries {
 		writeIndexFile(t, root.Path, fmt.Sprintf("file-%04d.txt", index), "source")
 	}
-	observation, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
+	observation, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
 	testutil.FailErr(t, "discover wide directory", err)
 	if !observation.Complete || observation.Entries != entries {
 		t.Fatalf("wide discovery: observation=%+v", observation)
 	}
-	nav, err := catalog.OpenNavigation(t.Context(), "p", root)
+	nav, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open completed wide directory", err)
 	defer func() { _ = nav.Close() }()
 	if extent := navigationExtent(t, nav); extent != entries {
@@ -100,7 +100,7 @@ func TestIndexAdmissionUsesIndependentStructuralStorage(t *testing.T) {
 		writeIndexFile(t, root.Path, dir+"/entry.txt", "source")
 	}
 	for _, dir := range []string{".", "a", "b"} {
-		_, err := catalog.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+		_, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 		testutil.FailErr(t, "prepare membership", err)
 	}
 	reader := waitIndex(t, catalog, root)
@@ -109,7 +109,7 @@ func TestIndexAdmissionUsesIndependentStructuralStorage(t *testing.T) {
 	if count != 2 {
 		t.Fatalf("files=%d", count)
 	}
-	nav, err := catalog.OpenNavigation(t.Context(), "p", root)
+	nav, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "read structural generation", err)
 	defer func() { _ = nav.Close() }()
 	if nav.pages == nil || nav.pages.directories.Len() != 3 {
@@ -122,7 +122,7 @@ func TestIndexAdmissionUsesIndependentStructuralStorage(t *testing.T) {
 
 func discoveryWalk(t *testing.T, catalog *Catalog, root Root) *indexWalk {
 	t.Helper()
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "open discovery store", err)
 	db, physical, release, err := store.acquireIndex(t.Context())
 	testutil.FailErr(t, "acquire discovery resources", err)
@@ -145,11 +145,11 @@ func navigationExtent(t *testing.T, navigation *Navigation) int64 {
 func TestDiscoveryRetainsPreviouslyObservedDescendants(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "dir/nested/file.txt", "source")
-	_, err := catalog.ObserveDirectory(t.Context(), "p", root, "dir/nested", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, "dir/nested", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe descendant first", err)
-	testutil.FailErr(t, "publish containing directories", catalog.ObserveDirectories(t.Context(), "p", root,
+	testutil.FailErr(t, "publish containing directories", catalog.Directories.ObserveDirectories(t.Context(), "p", root,
 		[]string{"dir", "."}, backgroundwork.PriorityProactive))
-	nav, err := catalog.OpenNavigation(t.Context(), "p", root)
+	nav, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open completed ranks", err)
 	defer func() { _ = nav.Close() }()
 	if extent := navigationExtent(t, nav); extent != 3 {
@@ -165,7 +165,7 @@ func TestDiscoveryRetainsPreviouslyObservedDescendants(t *testing.T) {
 func TestDiscoveryPublicationFailureLeavesNoPartialFacts(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "file.txt", "source")
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "open discovery store", err)
 	pin, err := store.retainGeneration(headGeneration, true)
 	testutil.FailErr(t, "pin empty generation", err)
@@ -185,8 +185,8 @@ func TestDiscoveryPublicationFailureLeavesNoPartialFacts(t *testing.T) {
 	if observation, err := store.readObservation(t.Context(), "."); !errors.Is(err, pagedview.ErrMissing) || observation.Path != "" {
 		t.Fatalf("failed publication retained observation=%+v error=%v", observation, err)
 	}
-	testutil.FailErr(t, "retry valid publication", catalog.ObserveDirectories(t.Context(), "p", root, []string{"."}, backgroundwork.PriorityProactive))
-	nav, err := catalog.OpenNavigation(t.Context(), "p", root)
+	testutil.FailErr(t, "retry valid publication", catalog.Directories.ObserveDirectories(t.Context(), "p", root, []string{"."}, backgroundwork.PriorityProactive))
+	nav, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open recovered inventory", err)
 	defer func() { _ = nav.Close() }()
 	if extent := navigationExtent(t, nav); extent != 1 {
@@ -200,13 +200,13 @@ func TestDiscoveryPublishesCountsAndRanksAcrossConcurrentAdditions(t *testing.T)
 	for index := range directories {
 		writeIndexFile(t, root.Path, fmt.Sprintf("dir-%02d/a.txt", index), "initial")
 	}
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "open structural store", err)
 	for _, dir := range []string{".", "dir-00", "dir-01", "dir-02", "dir-03"} {
-		_, err := catalog.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{})
+		_, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{})
 		testutil.FailErr(t, "discover initial structure", err)
 	}
-	previous, err := catalog.OpenNavigation(t.Context(), "p", root)
+	previous, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "pin original ranks", err)
 	defer func() { _ = previous.Close() }()
 	if extent := navigationExtent(t, previous); extent != directories*2 {
@@ -228,10 +228,10 @@ func TestDiscoveryPublishesCountsAndRanksAcrossConcurrentAdditions(t *testing.T)
 	store.mu.Lock()
 	store.invalidateObservationsLocked([]string{"dir-01/late.txt"})
 	store.mu.Unlock()
-	_, err = catalog.ObserveDirectory(t.Context(), "p", root, "dir-01", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, "dir-01", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "publish foreground addition", err)
 	testutil.FailErr(t, "rebase independent bulk publication", store.publishStructure(t.Context(), staleBuilder, stalePin.Generation))
-	current, err := catalog.OpenNavigation(t.Context(), "p", root)
+	current, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "pin updated ranks", err)
 	defer func() { _ = current.Close() }()
 	if old, updated := navigationExtent(t, previous), navigationExtent(t, current); old != 8 || updated != 9 {

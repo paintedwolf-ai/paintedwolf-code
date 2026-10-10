@@ -31,7 +31,7 @@ func TestExecuteRetainsChildSessionForDenTranscript(t *testing.T) {
 		},
 	}
 	binder := &fakeChildSessionBinder{}
-	exec := NewLocalWorkerExecutor(runner, binder)
+	exec := NewLocalWorkerExecutor(runner, binder, runner, runner, runner, runner, runner, runner)
 	exec.SetPromptInjects(promptstest.InjectRenderer(t))
 
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)

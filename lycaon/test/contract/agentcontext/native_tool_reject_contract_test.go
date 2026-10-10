@@ -3,6 +3,8 @@ package contract
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -23,7 +25,7 @@ import (
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
 
-func securityNativeExecutor(t *testing.T) *tools.DefaultToolExecutor {
+func securityNativeExecutor(t *testing.T) *toolexecution.Executor {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
@@ -36,11 +38,11 @@ func securityNativeExecutor(t *testing.T) *tools.DefaultToolExecutor {
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfig", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	rt.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
+	rt.Authority.ApplyGuidanceRejects(guidance.NewStaticRejectFormatter(hints))
 	toolfixture.WireContractBlockPlane(t, rt, guidance.NewStaticRejectFormatter(hints))
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(configRoot, "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "LoadSchemaDir", err)
-	rt.Executor.SetToolSchemas(schemas)
+	rt.Executor.Metadata.SetToolSchemas(schemas)
 	return rt.Executor
 }
 
@@ -60,11 +62,11 @@ func TestNativeFindPathEscapeE2E(t *testing.T) {
 	b := contractcheck.ProdToolBoundary(t)
 	find := &surveytools.FindTool{Boundary: b}
 	_, err := find.Run(context.Background(), map[string]any{"path": "../../etc/passwd"}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
 		t.Fatalf("err = %v want SURVEY_PATH_ESCAPE", err)
 	}
@@ -76,11 +78,11 @@ func TestNativeListDirControlPlaneE2E(t *testing.T) {
 	b := contractcheck.ProdToolBoundary(t)
 	listDir := &surveytools.ListDirTool{Boundary: b}
 	_, err := listDir.Run(context.Background(), map[string]any{"path": filepath.Join(cfg, "debug", "sessions")}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "SANDBOX_CONTROL_PLANE_DENIED" {
 		t.Fatalf("err = %v want SANDBOX_CONTROL_PLANE_DENIED", err)
 	}
@@ -101,8 +103,9 @@ func TestNativeListDirScopeFieldsRemainStructuredE2E(t *testing.T) {
 	out, err := listDir.Run(context.Background(), map[string]any{
 		"path": path, "max_depth": 1,
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1", Agent: "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	contractcheck.FailErr(t, "list literal scope-like path", err)
 	if !strings.Contains(out, "marker.txt") {
@@ -115,11 +118,11 @@ func TestNativeGrepInvalidRegexStructuredRejectE2E(t *testing.T) {
 	_, err := exec.Invoke(context.Background(), "grep", map[string]any{
 		"pattern": "[unclosed",
 	}, tools.ToolContext{
-		Roots:              []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID:       "r1",
-		Agent:              "implement",
-		RepoFileCount:      100,
-		RepoFileCountKnown: true,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID:       "r1",
+			RepoFileCount:      100,
+			RepoFileCountKnown: true},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	assertStructuredRejectCode(t, err, "GREP_REGEX_INVALID")
 }
@@ -130,7 +133,7 @@ func TestNativeSummarizeNoInputStructuredRejectE2E(t *testing.T) {
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	formatter := guidance.NewStaticRejectFormatter(hints)
 
-	formatted := tools.FormatDecisionReject("SUMMARIZE_NO_INPUT", map[string]any{"need_one_of": []string{"path", "paths", "pattern", "content"}}, formatter)
+	formatted := toolrejection.FormatDecisionReject("SUMMARIZE_NO_INPUT", map[string]any{"need_one_of": []string{"path", "paths", "pattern", "content"}}, formatter)
 	assertStructuredRejectCode(t, formatted, "SUMMARIZE_NO_INPUT")
 	if !strings.Contains(formatted.Error(), "sibling") && !strings.Contains(formatted.Error(), "path") {
 		t.Fatalf("expected path/sibling fix guidance, got %q", formatted.Error())
@@ -147,9 +150,9 @@ func TestNativeChmod777StructuredRejectE2E(t *testing.T) {
 		"paths": []any{"run.sh"},
 		"mode":  "777",
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	assertStructuredRejectCode(t, err, "CHMOD_MODE_DENIED")
 }
@@ -169,9 +172,9 @@ func TestNativeChmodPlusXOnScriptSuccessE2E(t *testing.T) {
 		"paths": []any{"scripts/foo.sh"},
 		"mode":  "+x",
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	testutil.FailErr(t, "chmod +x", err)
 	if !strings.Contains(out, "mode_after") {
@@ -197,9 +200,9 @@ func TestNativeDeleteNonEmptyDirStructuredRejectE2E(t *testing.T) {
 	_, err := exec.Invoke(context.Background(), "delete", map[string]any{
 		"paths": []any{"pkg"},
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	assertStructuredRejectCode(t, err, "DELETE_NOT_EMPTY")
 }
@@ -210,9 +213,9 @@ func TestNativeDeleteOutsideWriteScopeStructuredRejectE2E(t *testing.T) {
 	_, err := exec.Invoke(context.Background(), "delete", map[string]any{
 		"paths": []any{"../outside.txt"},
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	if err == nil {
 		t.Fatal("expected delete path denial")
@@ -235,9 +238,9 @@ func TestNativeDeleteGitPathStructuredRejectE2E(t *testing.T) {
 	_, err := exec.Invoke(context.Background(), "delete", map[string]any{
 		"paths": []any{".git/HEAD"},
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	assertStructuredRejectCode(t, err, "GIT_INTERNALS_WRITE_DENIED")
 }
@@ -254,9 +257,9 @@ func TestNativeCopySizeExceededStructuredRejectE2E(t *testing.T) {
 		},
 		"max_file_bytes": 100,
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	assertStructuredRejectCode(t, err, "COPY_SIZE_EXCEEDED")
 }
@@ -275,9 +278,9 @@ func TestNativeMoveOverwriteSuccessE2E(t *testing.T) {
 			map[string]any{"from": "src.txt", "to": "dst.txt"},
 		},
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	testutil.FailErr(t, "move overwrite", err)
 	data, err := os.ReadFile(filepath.Join(root, "dst.txt"))
@@ -296,9 +299,9 @@ func TestNativeMkdirFileExistsStructuredRejectE2E(t *testing.T) {
 	_, err := exec.Invoke(context.Background(), "mkdir", map[string]any{
 		"paths": []any{"file.txt"},
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	assertStructuredRejectCode(t, err, "MKDIR_FILE_EXISTS")
 }
@@ -308,7 +311,9 @@ func TestNativeCommandCpHabitRedirectMatcher(t *testing.T) {
 	exec := securityNativeExecutor(t)
 	root := t.TempDir()
 	_, err := exec.Invoke(context.Background(), "command", map[string]any{"command": "cp src.txt dst.txt"}, tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}}, ActiveRootID: "r1", Agent: "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	assertStructuredRejectCode(t, err, "USE_COPY_NATIVE")
 }
@@ -326,9 +331,9 @@ func TestNativeChownForeignUIDStructuredRejectE2E(t *testing.T) {
 		"paths": []any{"a.txt"},
 		"owner": "65534",
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	assertStructuredRejectCode(t, err, "CHOWN_TARGET_DENIED")
 }
@@ -346,9 +351,9 @@ func TestNativeChownGitPathStructuredRejectE2E(t *testing.T) {
 		"paths": []any{".git/HEAD"},
 		"owner": "current",
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	assertStructuredRejectCode(t, err, "GIT_INTERNALS_WRITE_DENIED")
 }
@@ -363,7 +368,9 @@ func TestNativeCommandChownExactRedirect(t *testing.T) {
 	exec := securityNativeExecutor(t)
 	root := t.TempDir()
 	_, err = exec.Invoke(context.Background(), "command", map[string]any{"command": "chown " + account.Uid + ":" + account.Gid + " scripts/run.sh"}, tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}}, ActiveRootID: "r1", Agent: "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	assertStructuredRejectCode(t, err, "USE_CHOWN_NATIVE")
 }
@@ -373,9 +380,9 @@ func TestNativeCommandFindHabitRedirectE2E(t *testing.T) {
 	_, err := exec.Invoke(context.Background(), "command", map[string]any{
 		"command": "find . -name '*.go'",
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "explore_readonly",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
 	})
 	if err == nil || !strings.Contains(err.Error(), "USE_FIND_NOT_COMMAND") {
 		t.Fatalf("err = %v want USE_FIND_NOT_COMMAND redirect", err)
@@ -391,11 +398,11 @@ func TestNativeReadRejectsDirectoryE2E(t *testing.T) {
 	b := contractcheck.ProdToolBoundary(t)
 	read := &surveytools.ReadTool{Boundary: b}
 	_, err := read.Run(context.Background(), map[string]any{"path": "src"}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "explore_readonly",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "READ_IS_DIRECTORY" {
 		t.Fatalf("read on directory err = %v want READ_IS_DIRECTORY", err)
 	}

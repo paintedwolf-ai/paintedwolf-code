@@ -16,8 +16,8 @@ import (
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/usernotice"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	openapi "github.com/lycaon/lycaon/test/openapi"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // widgetSpec is a small API the sweep's own tests drive: a paged collection,

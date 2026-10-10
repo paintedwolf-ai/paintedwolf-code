@@ -140,7 +140,7 @@ func TestSymbolProgressCacheBindsQueryAndExpires(t *testing.T) {
 	e, p, leg := symbolProgressFixture(t, 1)
 	acquire := func() *symbolProgressEntry {
 		t.Helper()
-		entry, release, err := e.progress.acquire(t.Context(), p, leg, nil)
+		entry, release, err := e.progress.acquire(t.Context(), p, leg, nil, true)
 		testutil.FailErr(t, "acquire progress", err)
 		release()
 		return entry
@@ -172,16 +172,16 @@ func TestSymbolProgressCacheBindsQueryAndExpires(t *testing.T) {
 
 func TestSymbolProgressWaitCancellationPreservesEntry(t *testing.T) {
 	e, p, leg := symbolProgressFixture(t, 1)
-	first, release, err := e.progress.acquire(t.Context(), p, leg, nil)
+	first, release, err := e.progress.acquire(t.Context(), p, leg, nil, true)
 	testutil.FailErr(t, "hold progress", err)
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, _, err = e.progress.acquire(ctx, p, leg, nil)
+	_, _, err = e.progress.acquire(ctx, p, leg, nil, true)
 	if err != context.Canceled {
 		t.Fatalf("waiting error=%v", err)
 	}
 	release()
-	next, done, err := e.progress.acquire(t.Context(), p, leg, nil)
+	next, done, err := e.progress.acquire(t.Context(), p, leg, nil, true)
 	testutil.FailErr(t, "resume progress", err)
 	defer done()
 	if first != next {

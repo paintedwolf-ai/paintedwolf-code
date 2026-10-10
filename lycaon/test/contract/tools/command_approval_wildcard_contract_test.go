@@ -51,11 +51,17 @@ func TestCommandApprovalWildcardContractFixtures(t *testing.T) {
 	}
 	for _, tc := range cases {
 		res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-			Tool:       "command",
-			Args:       map[string]any{"command": tc.command},
-			ProjectDir: project,
-			Contained:  contained,
-		})
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": tc.command},
+},
+Scope: hitl.ActionScope{
+ProjectDir: project,
+},
+Execution: hitl.ActionExecution{
+Contained: contained,
+},
+})
 		contractcheck.FailErr(t, "Evaluate "+tc.command, err)
 		if tc.deny && !res.Denied {
 			t.Fatalf("%q: want denied, got %+v", tc.command, res)

@@ -32,7 +32,7 @@ func environmentWriteRoots() []string {
 		if strings.TrimSpace(root) == "" {
 			continue
 		}
-		resolved := strings.TrimRight(fspath.CanonicalPath(root), "/")
+		resolved := fspath.CanonicalPath(root)
 		if resolved != "" && !seen[resolved] {
 			seen[resolved] = true
 			roots = append(roots, resolved)

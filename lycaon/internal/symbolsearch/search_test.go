@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -73,11 +74,11 @@ func TestSymbolSearchRanksTiersBeforeKindsAndPaths(t *testing.T) {
 	if got.Incomplete || got.Limited {
 		t.Fatalf("incomplete %v limited %v; want an exact-name search to be complete", got.Incomplete, got.Limited)
 	}
-	highlights := map[string][]project.SourceTextRange{}
+	highlights := map[string][]projectsource.SourceTextRange{}
 	for _, m := range got.Symbols {
 		highlights[m.Name] = m.Highlights
 	}
-	for name, want := range map[string][]project.SourceTextRange{
+	for name, want := range map[string][]projectsource.SourceTextRange{
 		"LoadCfg":        {{4, 7}},
 		"CacheFileGroup": {{0, 1}, {5, 6}, {9, 10}},
 		"xcfgx":          {{1, 4}},
@@ -162,8 +163,8 @@ func TestSymbolSearchSpansRootsAndHonorsRootID(t *testing.T) {
 	}
 
 	_, err = Run(context.Background(), p, Request{Query: "SharedName", RootIDs: []string{"missing"}, Wall: testSymbolWall}, testDeclarationSearch)
-	if !errors.Is(err, project.ErrSourceNoRoot) {
-		t.Fatalf("unknown root error = %v, want project.ErrSourceNoRoot", err)
+	if !errors.Is(err, projectsource.ErrSourceNoRoot) {
+		t.Fatalf("unknown root error = %v, want projectsource.ErrSourceNoRoot", err)
 	}
 }
 
@@ -203,9 +204,9 @@ func TestSymbolSearchFileBudgetAndLimitTruncate(t *testing.T) {
 func TestSymbolSearchShortQueryRunsNoSearch(t *testing.T) {
 	p := symbolSearchFixture(t, map[string]string{"a.go": "package a\n\nfunc A() {}\n"})
 	called := false
-	search := func(context.Context, project.DeclarationSearchQuery) ([]project.DeclarationSearchHit, project.DeclarationCoverage, error) {
+	search := func(context.Context, projectsource.DeclarationSearchQuery) ([]projectsource.DeclarationSearchHit, projectsource.DeclarationCoverage, error) {
 		called = true
-		return nil, project.DeclarationCoverage{}, nil
+		return nil, projectsource.DeclarationCoverage{}, nil
 	}
 	for _, query := range []string{"", " ", "A", " é "} {
 		got, err := Run(context.Background(), p, Request{Query: query}, search)
@@ -224,8 +225,8 @@ func TestSymbolSearchSkipsAbbreviationsBehindAFullPage(t *testing.T) {
 		"a.go":    "package p\n\nfunc CfgOne() {}\n\nfunc CfgTwo() {}\n",
 		"hump.go": "package p\n\nfunc CacheFileGroup() {}\n",
 	})
-	var patterns []project.DeclarationMatch
-	search := func(ctx context.Context, query project.DeclarationSearchQuery) ([]project.DeclarationSearchHit, project.DeclarationCoverage, error) {
+	var patterns []projectsource.DeclarationMatch
+	search := func(ctx context.Context, query projectsource.DeclarationSearchQuery) ([]projectsource.DeclarationSearchHit, projectsource.DeclarationCoverage, error) {
 		patterns = append(patterns, query.Match)
 		return testDeclarationSearch(ctx, query)
 	}
@@ -234,7 +235,7 @@ func TestSymbolSearchSkipsAbbreviationsBehindAFullPage(t *testing.T) {
 	if names := symbolNames(got.Symbols); len(names) != 2 || !got.Limited || got.Incomplete {
 		t.Fatalf("matches = %q limited %v incomplete %v, want the two prefix matches, limited", names, got.Limited, got.Incomplete)
 	}
-	if !reflect.DeepEqual(patterns, []project.DeclarationMatch{project.DeclarationMatchSubstring}) {
+	if !reflect.DeepEqual(patterns, []projectsource.DeclarationMatch{projectsource.DeclarationMatchSubstring}) {
 		t.Fatalf("passes = %v, want only the substring pass", patterns)
 	}
 }
@@ -242,8 +243,8 @@ func TestSymbolSearchSkipsAbbreviationsBehindAFullPage(t *testing.T) {
 func TestSymbolSearchReturnsDiscoveryError(t *testing.T) {
 	p := symbolSearchFixture(t, map[string]string{"a.go": "package a\n"})
 	want := errors.New("search failed")
-	search := func(context.Context, project.DeclarationSearchQuery) ([]project.DeclarationSearchHit, project.DeclarationCoverage, error) {
-		return nil, project.DeclarationCoverage{}, want
+	search := func(context.Context, projectsource.DeclarationSearchQuery) ([]projectsource.DeclarationSearchHit, projectsource.DeclarationCoverage, error) {
+		return nil, projectsource.DeclarationCoverage{}, want
 	}
 	if _, err := Run(context.Background(), p, Request{Query: "Name"}, search); !errors.Is(err, want) {
 		t.Fatalf("error = %v, want %v", err, want)
@@ -255,8 +256,8 @@ func TestSymbolSearchExactNameSkipsAbbreviations(t *testing.T) {
 		"a.go":    "package p\n\nfunc Cfg() {}\n",
 		"hump.go": "package p\n\nfunc CacheFileGroup() {}\n",
 	})
-	var passes []project.DeclarationMatch
-	search := func(ctx context.Context, query project.DeclarationSearchQuery) ([]project.DeclarationSearchHit, project.DeclarationCoverage, error) {
+	var passes []projectsource.DeclarationMatch
+	search := func(ctx context.Context, query projectsource.DeclarationSearchQuery) ([]projectsource.DeclarationSearchHit, projectsource.DeclarationCoverage, error) {
 		passes = append(passes, query.Match)
 		return testDeclarationSearch(ctx, query)
 	}
@@ -267,7 +268,7 @@ func TestSymbolSearchExactNameSkipsAbbreviations(t *testing.T) {
 	if names := symbolNames(got.Symbols); !reflect.DeepEqual(names, []string{"Cfg function a.go:3"}) || got.Incomplete || got.Limited {
 		t.Fatalf("matches = %q incomplete %v limited %v, want the exact name, complete", names, got.Incomplete, got.Limited)
 	}
-	if !reflect.DeepEqual(passes, []project.DeclarationMatch{project.DeclarationMatchSubstring}) {
+	if !reflect.DeepEqual(passes, []projectsource.DeclarationMatch{projectsource.DeclarationMatchSubstring}) {
 		t.Fatalf("passes = %v, want only the substring pass", passes)
 	}
 }
@@ -276,8 +277,8 @@ func TestSymbolSearchExactKeepsWholeNamesFromOneWholeWordPass(t *testing.T) {
 	p := symbolSearchFixture(t, map[string]string{
 		"a.go": "package p\n\nfunc Cfg() {}\n\nfunc cfg() {}\n\nfunc CfgLoader() {}\n\nfunc LoadCfg() {}\n",
 	})
-	var passes []project.DeclarationMatch
-	search := func(ctx context.Context, query project.DeclarationSearchQuery) ([]project.DeclarationSearchHit, project.DeclarationCoverage, error) {
+	var passes []projectsource.DeclarationMatch
+	search := func(ctx context.Context, query projectsource.DeclarationSearchQuery) ([]projectsource.DeclarationSearchHit, projectsource.DeclarationCoverage, error) {
 		passes = append(passes, query.Match)
 		return testDeclarationSearch(ctx, query)
 	}
@@ -288,7 +289,7 @@ func TestSymbolSearchExactKeepsWholeNamesFromOneWholeWordPass(t *testing.T) {
 	if names := symbolNames(got.Symbols); !reflect.DeepEqual(names, []string{"cfg function a.go:5", "Cfg function a.go:3"}) {
 		t.Fatalf("exact matches = %q, want both whole names, the query's spelling first", names)
 	}
-	if !reflect.DeepEqual(passes, []project.DeclarationMatch{project.DeclarationMatchWholeWord}) {
+	if !reflect.DeepEqual(passes, []projectsource.DeclarationMatch{projectsource.DeclarationMatchWholeWord}) {
 		t.Fatalf("passes = %v, want one whole-word pass", passes)
 	}
 	cased, err := Run(context.Background(), p, Request{

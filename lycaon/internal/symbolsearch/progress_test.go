@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -16,14 +16,14 @@ func TestSymbolProgressRetainsPendingOutlines(t *testing.T) {
 		files[fmt.Sprintf("f%03d.go", i)] = "package p\nfunc Target() {}\n"
 	}
 	p := symbolSearchFixture(t, files)
-	hits := make([]project.DeclarationSearchHit, 0, len(files))
+	hits := make([]projectsource.DeclarationSearchHit, 0, len(files))
 	for i := range len(files) {
-		hits = append(hits, project.DeclarationSearchHit{RootID: p.Roots[0].ID, Path: fmt.Sprintf("f%03d.go", i)})
+		hits = append(hits, projectsource.DeclarationSearchHit{RootID: p.Roots[0].ID, Path: fmt.Sprintf("f%03d.go", i)})
 	}
 	calls := 0
-	discover := func(context.Context, project.DeclarationSearchQuery) ([]project.DeclarationSearchHit, project.DeclarationCoverage, error) {
+	discover := func(context.Context, projectsource.DeclarationSearchQuery) ([]projectsource.DeclarationSearchHit, projectsource.DeclarationCoverage, error) {
 		calls++
-		return hits, project.DeclarationCoverage{}, nil
+		return hits, projectsource.DeclarationCoverage{}, nil
 	}
 	state := &Progress{}
 	req := Request{Query: "Target", Exact: true, Limit: 200, Progress: state, Wall: testSymbolWall, OutlineWall: testSymbolWall}
@@ -59,19 +59,19 @@ func TestSymbolProgressCompleteRefinementReopensAbbreviations(t *testing.T) {
 func TestSymbolProgressPreservesCoverageReasons(t *testing.T) {
 	p := symbolSearchFixture(t, map[string]string{"a.go": "package p\nfunc Target() {}\n"})
 	state := &Progress{}
-	discover := func(context.Context, project.DeclarationSearchQuery) ([]project.DeclarationSearchHit, project.DeclarationCoverage, error) {
-		return nil, project.DeclarationCoverage{Gaps: []project.DeclarationGap{{Reason: project.DeclarationCatalogWarming, Count: 2}, {Reason: "catalog_bounded", Count: 3}}}, nil
+	discover := func(context.Context, projectsource.DeclarationSearchQuery) ([]projectsource.DeclarationSearchHit, projectsource.DeclarationCoverage, error) {
+		return nil, projectsource.DeclarationCoverage{Gaps: []projectsource.DeclarationGap{{Reason: projectsource.DeclarationCatalogWarming, Count: 2}, {Reason: "catalog_bounded", Count: 3}}}, nil
 	}
 	result, err := Run(t.Context(), p, Request{Query: "Target", Progress: state}, discover)
 	testutil.FailErr(t, "coverage search", err)
 	if !result.Incomplete {
 		t.Fatal("coverage gap reported complete")
 	}
-	counts := map[project.DeclarationGapReason]int{}
+	counts := map[projectsource.DeclarationGapReason]int{}
 	for _, gap := range result.Coverage.Gaps {
 		counts[gap.Reason] = gap.Count
 	}
-	if counts[project.DeclarationCatalogWarming] != 2 || counts["catalog_bounded"] != 3 {
+	if counts[projectsource.DeclarationCatalogWarming] != 2 || counts["catalog_bounded"] != 3 {
 		t.Fatalf("coverage=%+v", result.Coverage)
 	}
 }
@@ -82,13 +82,13 @@ func TestSymbolProgressCancellationKeepsNominatedFiles(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	calls := 0
-	discover := func(context.Context, project.DeclarationSearchQuery) ([]project.DeclarationSearchHit, project.DeclarationCoverage, error) {
+	discover := func(context.Context, projectsource.DeclarationSearchQuery) ([]projectsource.DeclarationSearchHit, projectsource.DeclarationCoverage, error) {
 		calls++
 		if calls == 1 {
 			cancel()
-			return []project.DeclarationSearchHit{{RootID: p.Roots[0].ID, Path: "a.go"}}, project.DeclarationCoverage{Gaps: []project.DeclarationGap{{Reason: project.DeclarationTimeBudget}}}, nil
+			return []projectsource.DeclarationSearchHit{{RootID: p.Roots[0].ID, Path: "a.go"}}, projectsource.DeclarationCoverage{Gaps: []projectsource.DeclarationGap{{Reason: projectsource.DeclarationTimeBudget}}}, nil
 		}
-		return nil, project.DeclarationCoverage{}, nil
+		return nil, projectsource.DeclarationCoverage{}, nil
 	}
 	req := Request{Query: "Target", Exact: true, Progress: state, Wall: testSymbolWall, OutlineWall: testSymbolWall}
 	canceled, err := Run(ctx, p, req, discover)
@@ -112,7 +112,7 @@ func TestSymbolProgressBoundsRetainedDeclarationBytes(t *testing.T) {
 	run := &symbolSearchRun{matches: []Match{{Name: strings.Repeat("x", retainedDeclarationBytes+1), Path: "large.go"}}}
 	state := &Progress{}
 	run.saveProgress(state)
-	if len(state.matches) != 0 || len(state.gaps) != 1 || state.gaps[0].Reason != project.DeclarationSymbolBudget {
+	if len(state.matches) != 0 || len(state.gaps) != 1 || state.gaps[0].Reason != projectsource.DeclarationSymbolBudget {
 		t.Fatalf("retained %d matches; gaps=%+v", len(state.matches), state.gaps)
 	}
 }

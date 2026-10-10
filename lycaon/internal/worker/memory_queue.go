@@ -39,7 +39,7 @@ type InMemoryQueue struct {
 	defaultTarget    api.ExecutionTarget
 	onRunningCancel  func(ctx context.Context, jobID string) error
 	events           *events.Publisher
-	workflowRuns     WorkflowRunChecker
+	workflowRuns     *WorkflowDomains
 	sessionAdmission func(ctx context.Context, sessionID string, fn func() error) error
 	failureCatalog   ExecuteFailureRenderer
 	cancelReports    ChangeReportDeps
@@ -134,11 +134,11 @@ func (q *InMemoryQueue) SetEventPublisher(p *events.Publisher) {
 	q.events = p
 }
 
-// SetWorkflowRunChecker gates enqueue when a workflow run is paused or terminal.
-func (q *InMemoryQueue) SetWorkflowRunChecker(c WorkflowRunChecker) {
+// SetWorkflowDomains gates enqueue when a workflow run is paused or terminal.
+func (q *InMemoryQueue) SetWorkflowDomains(domains *WorkflowDomains) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	q.workflowRuns = c
+	q.workflowRuns = domains
 }
 
 // SetWorkerWorkspaceManager provisions private branches on ClaimWorkerBranch.

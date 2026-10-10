@@ -4,13 +4,14 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/report"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // reportClaims states each claim as the run's review phases left it.
-func reportClaims(claims []workflow.RunClaim) []report.ReportClaim {
+func reportClaims(claims []workflowpresentation.RunClaim) []report.ReportClaim {
 	out := make([]report.ReportClaim, 0, len(claims))
 	for _, c := range claims {
 		out = append(out, report.ReportClaim{
@@ -27,7 +28,7 @@ func reportClaims(claims []workflow.RunClaim) []report.ReportClaim {
 // review answered it or as unknown: an unstated conclusion is not a cleared
 // one. Without an accepted call the answers alone decide, as a range when an
 // unknown leaves one.
-func reportBrief(brief *workflowdef.Brief, findings []assembledFinding, claims, unreported []workflow.RunClaim, call *wire.CompletionReportRating) *report.ReportBrief {
+func reportBrief(brief *workflowdef.Brief, findings []assembledFinding, claims, unreported []workflowpresentation.RunClaim, call *wire.CompletionReportRating) *report.ReportBrief {
 	if brief == nil {
 		return nil
 	}
@@ -38,7 +39,7 @@ func reportBrief(brief *workflowdef.Brief, findings []assembledFinding, claims, 
 	for _, d := range brief.Dimensions {
 		out.Dimensions = append(out.Dimensions, d.Label)
 	}
-	reviewed := workflow.ClaimAnswers(claims)
+	reviewed := workflowreview.ClaimAnswers(claims)
 	var items []map[string]string
 	for i, f := range findings {
 		if !f.finding.NeedsAttention() {
@@ -79,12 +80,12 @@ func reportBrief(brief *workflowdef.Brief, findings []assembledFinding, claims, 
 }
 
 // reportUnreported lists the review claims no finding of the closeout carries.
-func reportUnreported(findings []assembledFinding, claims []workflow.RunClaim) []workflow.RunClaim {
+func reportUnreported(findings []assembledFinding, claims []workflowpresentation.RunClaim) []workflowpresentation.RunClaim {
 	ids := make([]string, 0, len(findings))
 	for _, f := range findings {
 		ids = append(ids, f.finding.ID)
 	}
-	return workflow.UnreportedClaims(ids, claims)
+	return workflowreview.UnreportedClaims(ids, claims)
 }
 
 func answerLabels(brief *workflowdef.Brief, answers map[string]string) []string {

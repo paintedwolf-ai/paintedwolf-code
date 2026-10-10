@@ -100,7 +100,7 @@ func (g *recordingGate) reviewed(tool string) (hitl.ProposedAction, bool) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	for i := len(g.actions) - 1; i >= 0; i-- {
-		if g.actions[i].Tool == tool {
+		if g.actions[i].Invocation.Tool == tool {
 			return g.actions[i], true
 		}
 	}

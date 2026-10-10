@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/promptresult"
 	"strings"
 	"sync"
 	"testing"
@@ -13,11 +12,12 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/stream"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -82,7 +82,7 @@ func (f *fakePromptRunner) PromptWorker(ctx context.Context, sessionID, jobID, t
 	return f.Prompt(ctx, sessionID, text)
 }
 
-func (f *fakePromptRunner) CancelInFlightPrompt(sessionID string) {
+func (f *fakePromptRunner) Cancel(sessionID string) {
 	f.mu.Lock()
 	f.cancelCalls = append(f.cancelCalls, sessionID)
 	cancel := f.cancelPrompt
@@ -118,19 +118,27 @@ func (f *fakePromptRunner) SetWorkerMaxToolLoops(context.Context, string, int) e
 	return nil
 }
 
-func (f *fakePromptRunner) ProjectRootRefs(context.Context, string) []projectroot.RootRef {
+func (f *fakePromptRunner) ProjectRoots(context.Context, string) []projectroot.RootRef {
 	return nil
 }
 
-func (f *fakePromptRunner) TakeWorkerGracefulCancel(string) (string, string, bool) {
+func (f *fakePromptRunner) Closeout(string) (string, string, bool) {
 	return "", "", false
 }
 
-func (f *fakePromptRunner) FinishWorkerGracefulCancel(string) {}
+func (f *fakePromptRunner) Finish(string) {}
 
-func newTestWorkerExecutor(t *testing.T, runner WorkerExecutionSessions) *LocalWorkerExecutor {
+func newTestWorkerExecutor(t *testing.T, runner interface {
+	WorkerExecutionSessions
+	WorkerProjectRoots
+	WorkerPromptExecution
+	workercloseout.WorkerSummaryResolver
+	WorkerPromptCancellation
+	WorkerGracefulCloseout
+	WorkerCancellationRuntime
+}) *LocalWorkerExecutor {
 	t.Helper()
-	exec := NewLocalWorkerExecutor(runner, &fakeChildSessionBinder{})
+	exec := NewLocalWorkerExecutor(runner, &fakeChildSessionBinder{}, runner, runner, runner, runner, runner, runner)
 	exec.SetPromptInjects(testInjectRenderer(t))
 	return exec
 }
@@ -168,7 +176,7 @@ func TestExecuteUsesPromptRunner(t *testing.T) {
 
 func TestExecuteStopsWhenChildBindingFails(t *testing.T) {
 	runner := &fakePromptRunner{}
-	exec := NewLocalWorkerExecutor(runner, &fakeChildSessionBinder{err: errors.New("write failed")})
+	exec := NewLocalWorkerExecutor(runner, &fakeChildSessionBinder{err: errors.New("write failed")}, runner, runner, runner, runner, runner, runner)
 	exec.SetPromptInjects(testInjectRenderer(t))
 
 	_, err := exec.Execute(t.Context(), api.WorkerTask{
@@ -194,7 +202,7 @@ func TestExecuteCancellationStopsChildPrompt(t *testing.T) {
 		},
 		cancelPrompt: func(string) { close(stopped) },
 	}
-	exec := NewLocalWorkerExecutor(runner, &fakeChildSessionBinder{})
+	exec := NewLocalWorkerExecutor(runner, &fakeChildSessionBinder{}, runner, runner, runner, runner, runner, runner)
 	exec.SetPromptInjects(new(prompts.InjectRenderer))
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -408,7 +416,7 @@ func (o *outcomeRunner) PromptHostTurn(ctx context.Context, sessionID string, _ 
 	return o.Prompt(ctx, sessionID, text)
 }
 
-func (f *fakePromptRunner) StopWorkerRuntime(ctx context.Context, childID string) error {
+func (f *fakePromptRunner) StopRuntime(ctx context.Context, childID string) error {
 	if f.stopRuntime != nil {
 		return f.stopRuntime(ctx, childID)
 	}
@@ -419,15 +427,15 @@ func (*fakePromptRunner) PromptWorkerResume(context.Context, string, string, str
 	return nil, errors.New("unexpected worker resume")
 }
 
-func (*fakePromptRunner) RegisterWorkerGracefulCancel(string, string, string) error {
+func (*fakePromptRunner) Register(string, string, string) error {
 	return errors.New("unexpected graceful cancellation")
 }
 
-func (*fakePromptRunner) AppendWorkerCancellation(context.Context, string, session.WorkerCancellationInput) error {
+func (*fakePromptRunner) Append(context.Context, string, workeroutcomes.CancellationInput) error {
 	return errors.New("unexpected cancellation publication")
 }
 
-func (*fakePromptRunner) NotifyWorkerCycleTerminal(context.Context, string, string) {}
+func (*fakePromptRunner) Terminal(context.Context, string, string) {}
 
 func TestLocalExecutorAbortUsesChildRuntime(t *testing.T) {
 	for _, stopErr := range []error{nil, errors.New("cleanup failed")} {
@@ -439,7 +447,7 @@ func TestLocalExecutorAbortUsesChildRuntime(t *testing.T) {
 			stopped = childID
 			return stopErr
 		}}
-		executor := NewLocalWorkerExecutor(runner, &fakeChildSessionBinder{})
+		executor := NewLocalWorkerExecutor(runner, &fakeChildSessionBinder{}, runner, runner, runner, runner, runner, runner)
 		err := executor.AbortWorkerRuntime(t.Context(), api.WorkerTask{ID: "job", ChildSessionID: "child"})
 		if !errors.Is(err, stopErr) || stopped != "child" {
 			t.Fatalf("cleanup = %q, %v; want child, %v", stopped, err, stopErr)

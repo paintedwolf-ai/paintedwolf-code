@@ -74,7 +74,7 @@ func (s *Handler) draftCommitMessage(ctx context.Context, dir, diff string) (str
 		summarizer = s.LLMService.BindSummarizer(&llm.RegistrySummarizer{
 			Scope:      llm.SettingsScopeGlobal,
 			ProjectDir: dir,
-			Cost:       s.Sessions.CostTracker(),
+			Cost:       s.Sessions.Coordinator.Model.Cost,
 			Fallback:   compaction.UnavailableSummarizer{},
 			Purpose:    "commit_draft",
 			Class:      llm.UtilityClassRequested,

@@ -2,8 +2,12 @@ package sourcecatalog
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"path"
+	"sync"
+	"sync/atomic"
+	"unsafe"
 
 	"github.com/lycaon/lycaon/internal/pagedview"
 )
@@ -26,8 +30,8 @@ type Navigation struct {
 }
 
 // OpenNavigation reads the head generation.
-func (c *Catalog) OpenNavigation(ctx context.Context, projectID string, root Root) (*Navigation, error) {
-	store, err := c.indexStore(ctx, projectID, root)
+func (c *Directories) OpenNavigation(ctx context.Context, projectID string, root Root) (*Navigation, error) {
+	store, err := c.trees.indexStore(ctx, projectID, root)
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +149,7 @@ func (n *Navigation) Entry(ctx context.Context, rel string) (Entry, error) {
 func (n *Navigation) entryOf(item pagedview.RangeItem[TreeItem]) Entry {
 	rel := item.Value.Path
 	return Entry{RootID: n.root.ID, Path: rel, Parent: normalizeDir(path.Dir(rel)), Name: path.Base(rel), Depth: pathDepth(rel),
-		IsDir: directoryOrderKind(item.Key), IsSymlink: item.Value.Symlink}
+		IsDir: directoryOrderKind(item.Key), IsSymlink: item.Value.Symlink, Boundary: n.pin.store.policy.boundaryDir(rel) != ""}
 }
 
 func (n *Navigation) Child(ctx context.Context, dir string, rank int64, recursive bool) (Entry, int64, error) {
@@ -186,7 +190,7 @@ func (n *Navigation) ChildRank(ctx context.Context, dir string, entry Entry, rec
 // Each frame bounds decoded pages while generations retain compact bytes.
 func (n *Navigation) pageReader() *structuralPageReader {
 	if n.reader == nil {
-		n.reader = &structuralPageReader{generation: n.pages, shared: &n.pin.store.catalog.structurePages, cacheID: n.pin.store.instance, cache: pagedview.NewCache[uint64, pagedview.RangePage[TreeItem]](128, 2<<20)}
+		n.reader = &structuralPageReader{generation: n.pages, shared: &n.pin.store.stores.Directories.structurePages, cacheID: n.pin.store.instance, cache: pagedview.NewCache[uint64, pagedview.RangePage[TreeItem]](128, 2<<20)}
 	}
 	return n.reader
 }
@@ -222,4 +226,137 @@ func (r *structuralPageReader) Write(ctx context.Context, id uint64, page pagedv
 }
 func (r *structuralPageReader) Delete(ctx context.Context, id uint64) error {
 	return r.generation.Delete(ctx, id)
+}
+
+// Directories owns live observations, navigation notifications, and presentation resources.
+type Directories struct {
+	trees               *TreeStores
+	structurePages      structurePageCache
+	presentations       presentationStore
+	navigationObservers navigationObservers
+}
+
+type navigationObservers struct {
+	mu        sync.Mutex
+	next      uint64
+	listeners map[uint64]navigationObserver
+}
+type navigationObserver struct {
+	root    string
+	changed func()
+}
+
+// SubscribeNavigation reports committed metadata changes, without copying paths
+// or holding the catalog lock while a subscriber receives the notification.
+func (c *Directories) SubscribeNavigation(root Root, changed func()) func() {
+	observers := &c.navigationObservers
+	observers.mu.Lock()
+	if observers.listeners == nil {
+		observers.listeners = make(map[uint64]navigationObserver)
+	}
+	observers.next++
+	id := observers.next
+	observers.listeners[id] = navigationObserver{root.Path, changed}
+	observers.mu.Unlock()
+	var once sync.Once
+	return func() {
+		once.Do(func() { observers.mu.Lock(); delete(observers.listeners, id); observers.mu.Unlock() })
+	}
+}
+func (c *Directories) navigationChanged(root Root) {
+	observers := &c.navigationObservers
+	observers.mu.Lock()
+	listeners := make([]func(), 0, len(observers.listeners))
+	for _, observer := range observers.listeners {
+		if observer.root == root.Path {
+			listeners = append(listeners, observer.changed)
+		}
+	}
+	observers.mu.Unlock()
+	for _, listener := range listeners {
+		listener()
+	}
+}
+
+// Roots and views share one temporary pager and its resident cache.
+type presentationStore struct {
+	mu    sync.Mutex
+	db    *sql.DB
+	users int
+}
+
+func (c *Directories) acquirePresentation(ctx context.Context) (*sql.DB, func(), error) {
+	store := &c.presentations
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if store.db == nil {
+		db, err := sql.Open("sqlite", "")
+		if err != nil {
+			return nil, nil, err
+		}
+		db.SetMaxOpenConns(1)
+		db.SetMaxIdleConns(1)
+		// The pager disappears on process exit; rollback still protects live transactions.
+		_, err = db.ExecContext(ctx, `PRAGMA page_size=4096; PRAGMA cache_size=-2048; PRAGMA synchronous=OFF;`+rangeSchema+projectionSchema+treeOverlaySchema)
+		if err != nil {
+			_ = db.Close()
+			return nil, nil, err
+		}
+		store.db = db
+	}
+	store.users++
+	var once sync.Once
+	return store.db, func() {
+		once.Do(func() {
+			store.mu.Lock()
+			defer store.mu.Unlock()
+			store.users--
+			if store.users == 0 {
+				_ = store.db.Close()
+				store.db = nil
+			}
+		})
+	}, nil
+}
+
+var pageCacheSerial atomic.Uint64
+
+// Compressed page bytes do not bound the decoded paths retained in memory.
+func rangePageBytes(page pagedview.RangePage[TreeItem]) int64 {
+	bytes := int64(unsafe.Sizeof(page)) + 128
+	bytes += int64(cap(page.Items)) * int64(unsafe.Sizeof(pagedview.RangeItem[TreeItem]{}))
+	bytes += int64(cap(page.Children)) * int64(unsafe.Sizeof(pagedview.Branch{}))
+	for _, item := range page.Items {
+		bytes += int64(len(item.Key) + len(item.Value.Path))
+	}
+	for _, child := range page.Children {
+		bytes += int64(len(child.Key))
+	}
+	return bytes
+}
+
+type structurePageKey struct{ store, id uint64 }
+
+// Only committed immutable pages enter the shared cache.
+type structurePageCache struct {
+	mu    sync.Mutex
+	pages *pagedview.Cache[structurePageKey, pagedview.RangePage[TreeItem]]
+}
+
+func (c *structurePageCache) get(key structurePageKey) (pagedview.RangePage[TreeItem], bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.pages == nil {
+		return pagedview.RangePage[TreeItem]{}, false
+	}
+	return c.pages.Get(key)
+}
+
+func (c *structurePageCache) put(key structurePageKey, page pagedview.RangePage[TreeItem]) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.pages == nil {
+		c.pages = pagedview.NewCache[structurePageKey, pagedview.RangePage[TreeItem]](2048, 16<<20)
+	}
+	c.pages.Put(key, page, rangePageBytes(page))
 }

@@ -31,7 +31,17 @@ func capabilityPathReviewWithRung(t *testing.T, read bool, rung ApprovalOptionRu
 	if read {
 		kind, target, subject, category = AuthorityReadPathChat, "read_path", ApprovalSubjectReadPathSet, ApprovalGrantCategoryReadPath
 	}
-	action := ProposedAction{Tool: target, Args: map[string]any{"path": path}, SessionID: "session", ActionID: "call", ProjectID: "project"}
+	action := ProposedAction{
+Invocation: ActionInvocation{
+Tool: target,
+Args: map[string]any{"path": path},
+ActionID: "call",
+},
+Scope: ActionScope{
+SessionID: "session",
+ProjectID: "project",
+},
+}
 	grant := ApprovalGrant{
 		ID: "grant_" + target, Scope: scope, ChatSessionID: "session", ProjectID: "project",
 		Predicate: ApprovalGrantPredicate{Category: category, Pattern: path},
@@ -59,7 +69,17 @@ func capabilityPathReviewWithRung(t *testing.T, read bool, rung ApprovalOptionRu
 
 func TestCapabilityCompositionPreservesIndependentPathAuthority(t *testing.T) {
 	write, read := capabilityPathReview(t, false), capabilityPathReview(t, true)
-	action := ProposedAction{Tool: "command", Args: map[string]any{"command": "true"}, SessionID: "session", ProjectID: "project", ActionID: "call"}
+	action := ProposedAction{
+Invocation: ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "true"},
+ActionID: "call",
+},
+Scope: ActionScope{
+SessionID: "session",
+ProjectID: "project",
+},
+}
 	plan, _, err := ComposeCapabilityApprovals(action, []*PreparedApproval{write, read})
 	testutil.FailErr(t, "compose path approvals", err)
 	option, ok := plan.Option(plan.RecommendedOptionID)
@@ -83,7 +103,7 @@ func TestCapabilityCompositionPreservesIndependentPathAuthority(t *testing.T) {
 func TestCapabilityCompositionRefusesForeignInvocation(t *testing.T) {
 	review := capabilityPathReview(t, true)
 	action := *review.Request.ProposedAction
-	action.ActionID = "another-call"
+	action.Invocation.ActionID = "another-call"
 	if _, _, err := ComposeCapabilityApprovals(action, []*PreparedApproval{review}); err == nil {
 		t.Fatal("composition accepted another invocation")
 	}

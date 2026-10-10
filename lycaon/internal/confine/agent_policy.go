@@ -3,30 +3,46 @@ package confine
 import (
 	"path/filepath"
 	"strings"
-	"sync/atomic"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/protectedpath"
 )
 
-// agentPolicyRootsSource supplies every registered project root, whose agent
-// policy other sessions load even when this invocation is rooted elsewhere.
-var agentPolicyRootsSource atomic.Pointer[func() []string]
+type agentPolicyRegistration struct{ roots func() []string }
 
-// SetAgentPolicyRootsSource installs the registered project roots.
-func SetAgentPolicyRootsSource(fn func() []string) {
-	if fn == nil {
-		agentPolicyRootsSource.Store(nil)
-		return
+var (
+	agentPolicyMu     sync.RWMutex
+	agentPolicySource *agentPolicyRegistration
+)
+
+// SetAgentPolicyRootsSource installs registered roots until its owner releases it.
+func SetAgentPolicyRootsSource(fn func() []string) func() {
+	registration := &agentPolicyRegistration{roots: fn}
+	agentPolicyMu.Lock()
+	agentPolicySource = registration
+	agentPolicyMu.Unlock()
+	return func() {
+		agentPolicyMu.Lock()
+		defer agentPolicyMu.Unlock()
+		if agentPolicySource == registration {
+			agentPolicySource = nil
+		}
+		registration.roots = nil
 	}
-	agentPolicyRootsSource.Store(&fn)
 }
 
 // agentPolicyRoots returns the registered roots plus extra, canonical and unique.
 func agentPolicyRoots(extra []string) []string {
 	roots := append([]string(nil), extra...)
-	if fn := agentPolicyRootsSource.Load(); fn != nil {
-		roots = append(roots, (*fn)()...)
+	agentPolicyMu.RLock()
+	var read func() []string
+	if agentPolicySource != nil {
+		read = agentPolicySource.roots
+	}
+	agentPolicyMu.RUnlock()
+	if read != nil {
+		roots = append(roots, read()...)
 	}
 	seen := map[string]bool{}
 	out := make([]string, 0, len(roots))

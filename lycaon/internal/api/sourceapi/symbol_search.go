@@ -9,7 +9,9 @@ import (
 
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/search"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/symbolsearch"
 )
 
@@ -33,15 +35,16 @@ func (e *SymbolExecutor) Source() string { return search.ExecutorSymbol }
 
 // symbolProject is one project's roots on the leg, in plan order.
 type symbolProject struct {
-	id      string
-	rootIDs []string
+	id             string
+	rootIDs        []string
+	retainProgress bool
 }
 
 // symbolProjectResult is one project's answer.
 type symbolProjectResult struct {
 	hits          []search.Hit
 	limited       bool
-	coverage      project.DeclarationCoverage
+	coverage      projectsource.DeclarationCoverage
 	filesOutlined int
 	err           error
 }
@@ -70,7 +73,7 @@ func (e *SymbolExecutor) Run(ctx context.Context, leg search.PlanLeg) (search.Ex
 		select {
 		case sem <- struct{}{}:
 		case <-legCtx.Done():
-			results[i].coverage.Gaps = []project.DeclarationGap{{Reason: project.DeclarationTimeBudget}, {Reason: project.DeclarationPending}}
+			results[i].coverage.Gaps = []projectsource.DeclarationGap{{Reason: projectsource.DeclarationTimeBudget}, symbolProgressGap(p.retainProgress)}
 			continue
 		}
 		wg.Add(1)
@@ -90,7 +93,10 @@ func (e *SymbolExecutor) Run(ctx context.Context, leg search.PlanLeg) (search.Ex
 	for i, result := range results {
 		if result.err != nil {
 			if legCtx.Err() != nil {
-				report.Issues = append(report.Issues, search.Issue{Executor: search.ExecutorSymbol, Reason: search.IssueTimeBudget}, search.Issue{Executor: search.ExecutorSymbol, Reason: search.IssueSymbolPending})
+				sliceGap := symbolProgressGap(projects[i].retainProgress)
+				report.Issues = append(report.Issues,
+					search.Issue{Executor: search.ExecutorSymbol, Reason: search.IssueTimeBudget},
+					search.Issue{Executor: search.ExecutorSymbol, Reason: search.IssueReason(sliceGap.Reason), Limit: sliceGap.Limit})
 				continue
 			}
 			report.Issues = append(report.Issues, search.Issue{
@@ -124,11 +130,19 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 	if err != nil {
 		return symbolProjectResult{err: err}
 	}
-	entry, release, err := e.progress.acquire(ctx, p, leg, target.rootIDs)
+	entry, release, err := e.progress.acquire(ctx, p, leg, target.rootIDs, target.retainProgress)
 	if err != nil {
 		return symbolProjectResult{err: err}
 	}
 	defer release()
+	rootFilters := make(map[string]search.SymbolFilter, len(p.Roots))
+	for _, root := range p.Roots {
+		rootFilters[root.ID] = filter.ForRoot(ctx, sourcecatalog.Process(), root.Path, leg.IncludeDependencies)
+	}
+	admits := func(rootID, path, name string) bool {
+		rootFilter, known := rootFilters[rootID]
+		return known && rootFilter.Admits(path, name)
+	}
 	allocation := leg.Budget.SymbolAllocation()
 	started := time.Now()
 	result, err := symbolsearch.Run(ctx, p, symbolsearch.Request{
@@ -138,7 +152,7 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 		CaseSensitive:    leg.Flags.CaseSensitive,
 		Exact:            leg.Flags.WholeWord,
 		ExcludeDirs:      leg.ExcludeDirs,
-		Admits:           filter.Admits,
+		Admits:           admits,
 		Wall:             allocation.Discovery,
 		AbbreviationWall: allocation.Abbreviation,
 		OutlineWall:      allocation.Outline,
@@ -149,7 +163,14 @@ func (e *SymbolExecutor) searchProject(ctx context.Context, leg *search.SymbolPl
 	}
 	if !symbolEpochsCurrent(entry.stamp) {
 		entry.discovery = nil
-		return symbolProjectResult{coverage: project.DeclarationCoverage{Gaps: []project.DeclarationGap{{Reason: project.DeclarationCatalogRefreshing}}}}
+		return symbolProjectResult{coverage: projectsource.DeclarationCoverage{Gaps: []projectsource.DeclarationGap{{Reason: projectsource.DeclarationCatalogRefreshing}}}}
+	}
+	if !entry.retained {
+		for i, gap := range result.Coverage.Gaps {
+			if gap.Reason == projectsource.DeclarationPending {
+				result.Coverage.Gaps[i] = symbolProgressGap(false)
+			}
+		}
 	}
 	logSymbolSearchDone(target.id, result, started)
 	out := symbolProjectResult{limited: result.Limited, coverage: result.Coverage}
@@ -190,7 +211,7 @@ func symbolProjects(roots []search.CodeRoot) []symbolProject {
 		if !seen {
 			at = len(out)
 			index[id] = at
-			out = append(out, symbolProject{id: id})
+			out = append(out, symbolProject{id: id, retainProgress: len(out) < symbolProgressLimit})
 		}
 		out[at].rootIDs = append(out[at].rootIDs, root.RootID)
 	}

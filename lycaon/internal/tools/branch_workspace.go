@@ -16,10 +16,10 @@ type BranchWorkspace interface {
 
 // RequireBranchWorkspace validates worker-branch context wiring.
 func RequireBranchWorkspace(tctx ToolContext) error {
-	if strings.TrimSpace(tctx.WorkerBranchRoot) == "" {
+	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" {
 		return nil
 	}
-	if tctx.BranchWorkspace == nil {
+	if tctx.Source.BranchWorkspace == nil {
 		return fmt.Errorf("worker branch workspace not configured: %w", fs.ErrInvalid)
 	}
 	return nil
@@ -30,10 +30,10 @@ func ValidateWorkerBranch(ctx context.Context, tctx ToolContext) error {
 	if err := RequireBranchWorkspace(tctx); err != nil {
 		return err
 	}
-	if strings.TrimSpace(tctx.WorkerBranchRoot) == "" {
+	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" {
 		return nil
 	}
-	return tctx.BranchWorkspace.ValidateMeta(ctx)
+	return tctx.Source.BranchWorkspace.ValidateMeta(ctx)
 }
 
 // RequiresWorkerBranch reports whether the named tool must claim a private

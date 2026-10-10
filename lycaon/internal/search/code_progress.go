@@ -11,11 +11,12 @@ import (
 // CodeProgress is a bounded frontier, not a retained reader or a query job.
 // Its caller binds it to the query and root set, and serializes access.
 type CodeProgress struct {
-	Root     int
-	After    string
-	Revision uint64
-	Instance uint64
-	Epoch    repochange.Epoch
+	Root      int
+	Selection int
+	After     string
+	Revision  uint64
+	Instance  uint64
+	Epoch     repochange.Epoch
 }
 
 func (e *CodeExecutor) discoverCandidates(ctx context.Context, leg *CodePlanLeg, paths pathGlobFilter, spec codeScanSpec) (ExecutorReport, error) {
@@ -31,7 +32,14 @@ func (e *CodeExecutor) discoverCandidates(ctx context.Context, leg *CodePlanLeg,
 	spec.lineCap = 1
 	for progress.Root < len(leg.PathRoots) {
 		root := leg.PathRoots[progress.Root]
-		gen, err := resolveCodeGeneration(scanCtx, e.catalog, root, e.generationWaitBudget())
+		selections := codeIndexSelections(scanCtx, e.catalog, root, leg.Query, leg.Flags, leg.IncludeDependencies)
+		if progress.Selection >= len(selections) {
+			progress.Root++
+			progress.Selection = 0
+			continue
+		}
+		selection := selections[progress.Selection]
+		gen, err := resolveRequestedCodeGeneration(scanCtx, e.catalog, root, e.generationWaitBudget(), selection.include, selection.paths...)
 		if errors.Is(err, errCodeCatalogWarming) {
 			report.Code.WarmingRoots++
 			break
@@ -39,7 +47,7 @@ func (e *CodeExecutor) discoverCandidates(ctx context.Context, leg *CodePlanLeg,
 		if err != nil {
 			return report, err
 		}
-		done, err := e.candidatePageScan(scanCtx, gen, paths, spec, leg.Cap, progress, &report)
+		done, err := e.candidatePageScan(scanCtx, gen, paths.withDependencies(scanCtx, e.catalog, root.Path, leg.IncludeDependencies), spec, leg.Cap, progress, &report)
 		_ = gen.reader.Close()
 		if scanCtx.Err() != nil {
 			report.TimedOut = true
@@ -51,8 +59,8 @@ func (e *CodeExecutor) discoverCandidates(ctx context.Context, leg *CodePlanLeg,
 		if !done {
 			break
 		}
-		progress.Root++
-		progress.After, progress.Revision = "", 0
+		progress.Selection++
+		progress.After, progress.Revision, progress.Instance, progress.Epoch = "", 0, 0, repochange.Epoch{}
 	}
 	if ctx.Err() != nil {
 		return report, ctx.Err()

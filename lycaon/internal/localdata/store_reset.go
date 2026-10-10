@@ -35,13 +35,13 @@ func StoreResetRecoveryRelDirs() []string {
 }
 
 // ResetStoreCoupled removes development state keyed by database identities.
-func ResetStoreCoupled(dbPath string) error {
+func ResetStoreCoupled(ctx context.Context, dbPath string) error {
 	dbPath = filepath.Clean(strings.TrimSpace(dbPath))
 	if dbPath == "" || dbPath == "." {
 		return nil
 	}
 	base := filepath.Dir(dbPath)
-	release, err := editoroutbox.Acquire(context.Background(), base)
+	release, err := editoroutbox.Acquire(ctx, base)
 	if err != nil {
 		return err
 	}

@@ -10,14 +10,14 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/pagecursor"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/scan/rules"
 	"github.com/lycaon/lycaon/internal/search"
 )
 
 // sourceSearchPages continues a source search after one index entry inside
 // the index generation that answered the first page.
-var sourceSearchPages = pagecursor.For[project.SourceIndexEntry]("source_search")
+var sourceSearchPages = pagecursor.For[projectsource.SourceIndexEntry]("source_search")
 
 var sourceSearchLimit = httpio.MustPageLimit(50, 1, 200)
 
@@ -25,13 +25,13 @@ func sourceSearchScope(projectID, rootID, query string) string {
 	return pagecursor.Scope(projectID, rootID, query)
 }
 
-func encodeSourceSearchCursor(scope string, generation uint64, after project.SourceIndexEntry) (string, error) {
+func encodeSourceSearchCursor(scope string, generation uint64, after projectsource.SourceIndexEntry) (string, error) {
 	return sourceSearchPages.EncodeAt(scope, generation, after)
 }
 
 // decodeSourceSearchCursor opens a continuation for the index generation the
 // request reads; a cursor from any other generation is pagecursor.ErrExpired.
-func decodeSourceSearchCursor(raw, scope string, generation uint64) (*project.SourceIndexEntry, error) {
+func decodeSourceSearchCursor(raw, scope string, generation uint64) (*projectsource.SourceIndexEntry, error) {
 	if raw == "" {
 		return nil, nil
 	}
@@ -55,28 +55,28 @@ var SearchDependencyPatterns = sync.OnceValue(func() []string {
 })
 
 // searchDeclarations runs declaration discovery over whole roots.
-var searchDeclarations = declarationSearchIn(nil, nil, nil)
+var searchDeclarations = declarationSearchIn(nil, nil, nil, false)
 
 // declarationSearchIn runs declaration-discovery passes on the live code
 // executor, each pattern ANDed with scope and bounded by the include and
 // exclude globs, so discovery sees the files the query's paths name.
-func declarationSearchIn(scope []search.Node, include, exclude []string) project.DeclarationSearch {
-	progress := map[project.DeclarationMatch]*search.CodeProgress{}
-	return func(ctx context.Context, query project.DeclarationSearchQuery) ([]project.DeclarationSearchHit, project.DeclarationCoverage, error) {
+func declarationSearchIn(scope []search.Node, include, exclude []string, includeDependencies bool) projectsource.DeclarationSearch {
+	progress := map[projectsource.DeclarationMatch]*search.CodeProgress{}
+	return func(ctx context.Context, query projectsource.DeclarationSearchQuery) ([]projectsource.DeclarationSearchHit, projectsource.DeclarationCoverage, error) {
 		hitCap := query.HitCap
 		if hitCap <= 0 {
-			hitCap = project.DefinitionSearchHitCap
+			hitCap = projectsource.DefinitionSearchHitCap
 		}
 		flags := search.MatchFlags{Include: include, Exclude: exclude}
 		switch query.Match {
-		case project.DeclarationMatchWholeWord:
+		case projectsource.DeclarationMatchWholeWord:
 			flags.WholeWord = true
-		case project.DeclarationMatchSubstring:
-		case project.DeclarationMatchRegexp:
+		case projectsource.DeclarationMatchSubstring:
+		case projectsource.DeclarationMatchRegexp:
 			flags.Regex = true
 			flags.CaseSensitive = true
 		default:
-			return nil, project.DeclarationCoverage{}, fmt.Errorf("unknown declaration match %d", query.Match)
+			return nil, projectsource.DeclarationCoverage{}, fmt.Errorf("unknown declaration match %d", query.Match)
 		}
 		roots := make([]search.CodeRoot, 0, len(query.Roots))
 		for _, root := range query.Roots {
@@ -105,15 +105,16 @@ func declarationSearchIn(scope []search.Node, include, exclude []string) project
 			Executor: search.ExecutorCode,
 			Cap:      probeCap,
 			Code: &search.CodePlanLeg{
-				Query:           pattern,
-				Candidates:      query.Continue,
-				Progress:        cursor,
-				PathRoots:       roots,
-				Cap:             probeCap,
-				Lines:           true,
-				LineExcludeDirs: query.ExcludeDirs,
-				Flags:           flags,
-				Wall:            query.Wall,
+				IncludeDependencies: includeDependencies,
+				Query:               pattern,
+				Candidates:          query.Continue,
+				Progress:            cursor,
+				PathRoots:           roots,
+				Cap:                 probeCap,
+				Lines:               true,
+				LineExcludeDirs:     query.ExcludeDirs,
+				Flags:               flags,
+				Wall:                query.Wall,
 			},
 		})
 		if err != nil {
@@ -121,20 +122,20 @@ func declarationSearchIn(scope []search.Node, include, exclude []string) project
 				if cursor != nil {
 					*cursor = checkpoint
 				}
-				return nil, project.DeclarationCoverage{}, err
+				return nil, projectsource.DeclarationCoverage{}, err
 			}
 			report.TimedOut = true
 		}
-		out := make([]project.DeclarationSearchHit, 0, len(report.Hits))
+		out := make([]projectsource.DeclarationSearchHit, 0, len(report.Hits))
 		for _, h := range report.Hits {
 			if h.HitKind != search.HitKindCode {
 				continue
 			}
-			out = append(out, project.DeclarationSearchHit{RootID: h.RootID, Path: h.Path, Snippet: strings.Clone(h.Snippet)})
+			out = append(out, projectsource.DeclarationSearchHit{RootID: h.RootID, Path: h.Path, Snippet: strings.Clone(h.Snippet)})
 		}
-		coverage := project.DeclarationCoverage{Limited: report.Limited || len(out) > hitCap}
+		coverage := projectsource.DeclarationCoverage{Limited: report.Limited || len(out) > hitCap}
 		for _, issue := range report.CoverageIssues(search.ExecutorCode) {
-			coverage.Gaps = append(coverage.Gaps, project.DeclarationGap{Reason: project.DeclarationGapReason(issue.Reason), Count: issue.Count, Limit: issue.Limit, Message: issue.Message})
+			coverage.Gaps = append(coverage.Gaps, projectsource.DeclarationGap{Reason: projectsource.DeclarationGapReason(issue.Reason), Count: issue.Count, Limit: issue.Limit, Message: issue.Message})
 		}
 		if len(out) > hitCap {
 			out = out[:hitCap]

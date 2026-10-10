@@ -9,7 +9,7 @@ import (
 )
 
 // Output admission happens after execution; refusing delivery does not undo it.
-func (l toolInvocations) refuseOutputDelivery(ctx context.Context, sess *api.Session, tc api.ToolCall, toolCtx tools.ToolContext, run toolInvocation, code string, data map[string]any) toolInvocation {
+func (l *toolInvocations) refuseOutputDelivery(ctx context.Context, sess *api.Session, tc api.ToolCall, toolCtx tools.ToolContext, run toolInvocation, code string, data map[string]any) toolInvocation {
 	data = maps.Clone(data)
 	if data == nil {
 		data = map[string]any{}

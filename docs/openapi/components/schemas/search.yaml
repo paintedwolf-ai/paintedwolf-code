@@ -34,6 +34,9 @@ components:
           maximum: 500
         budget:
           $ref: '#/components/schemas/SearchBudget'
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
         regex:
           type: boolean
           description: When true, treat the code pattern as a Go regexp
@@ -324,6 +327,9 @@ components:
           format: uuid
         format:
           $ref: search.yaml#/components/schemas/SearchExportFormat
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
         regex:
           type: boolean
         case_sensitive:
@@ -410,6 +416,9 @@ components:
         origin_project_id:
           type: string
           format: uuid
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this preview. Omitted means false.
         regex:
           type: boolean
         case_sensitive:

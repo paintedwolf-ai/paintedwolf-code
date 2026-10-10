@@ -1,6 +1,0 @@
-{
-  "category": "go_receiver_methods",
-  "artifact": "lycaon/internal/session/session.Manager",
-  "cap": 720,
-  "reason": "Predates the limits; fixes still land here while the package is decomposed (#271)."
-}

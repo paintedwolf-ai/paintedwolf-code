@@ -12,68 +12,77 @@ import (
 // readers pin it across catalog eviction and drain; structural readers pin their
 // immutable generation separately.
 type navigationResources struct {
+	mu      sync.Mutex
 	root    *os.Root
 	users   int
 	idle    chan struct{}
-	closing bool
 	retired bool
 }
 
-func (s *indexStore) acquireNavigation(ctx context.Context) (*os.Root, func(), error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (n *navigationResources) Acquire(ctx context.Context, path string) (*os.Root, func(), error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	if err := ctx.Err(); err != nil {
 		return nil, nil, err
 	}
-	resources := &s.navigation
-	if resources.closing || resources.retired {
+	if n.retired {
 		return nil, nil, errors.New("source navigation is draining")
 	}
-	if resources.root == nil {
-		root, err := os.OpenRoot(s.root.Path)
+	if n.root == nil {
+		root, err := os.OpenRoot(path)
 		if err != nil {
 			return nil, nil, err
 		}
-		resources.root = root
+		n.root = root
 	}
-	if resources.users == 0 {
-		resources.idle = make(chan struct{})
+	if n.users == 0 {
+		n.idle = make(chan struct{})
 	}
-	resources.users++
+	n.users++
 	var once sync.Once
-	return resources.root, func() { once.Do(s.releaseNavigation) }, nil
+	return n.root, func() { once.Do(n.release) }, nil
 }
 
-func (s *indexStore) releaseNavigation() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	resources := &s.navigation
-	resources.users--
-	if resources.users == 0 {
-		if resources.closing || resources.retired {
-			s.closeNavigationLocked()
+func (n *navigationResources) release() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.users--
+	if n.users == 0 {
+		if n.retired {
+			n.closeLocked()
 		}
-		close(resources.idle)
+		close(n.idle)
 	}
 }
 
-func (s *indexStore) closeNavigationLocked() {
-	resources := &s.navigation
-	if resources.root != nil {
-		_ = resources.root.Close()
+func (n *navigationResources) closeLocked() {
+	if n.root != nil {
+		_ = n.root.Close()
 	}
-	resources.root = nil
-	resources.closing = false
+	n.root = nil
 }
 
-func (s *indexStore) drainNavigationLocked() <-chan struct{} {
-	resources := &s.navigation
-	if resources.users == 0 {
-		s.closeNavigationLocked()
+func (n *navigationResources) Drain() <-chan struct{} {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.retired = true
+	if n.users == 0 {
+		n.closeLocked()
 		return nil
 	}
-	resources.closing = true
-	return resources.idle
+	return n.idle
+}
+
+func (n *navigationResources) Retired() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.retired
+}
+
+func (n *navigationResources) Active() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.users > 0
 }
 
 func (s *indexStore) acquireIndex(ctx context.Context) (*sql.DB, *os.Root, func(), error) {

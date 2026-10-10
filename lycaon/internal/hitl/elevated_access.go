@@ -12,16 +12,16 @@ import (
 // are reduced to digests. It describes authority, never whether it was used.
 func ElevatedEffectsForAction(action ProposedAction) []api.ElevatedAccessEffect {
 	var effects []api.ElevatedAccessEffect
-	if action.Contained.DirectIP || action.Contained.Egress == ContainedEgressDirectIP {
+	if action.Execution.Contained.DirectIP || action.Execution.Contained.Egress == ContainedEgressDirectIP {
 		effects = append(effects, api.ElevatedAccessEffectDirectNetwork)
 	}
-	if action.Contained.HostExecution {
+	if action.Execution.Contained.HostExecution {
 		effects = append(effects, api.ElevatedAccessEffectHostExecution)
 	}
-	if action.Contained.ProcessControl || action.ProcessAccess == "signal" {
+	if action.Execution.Contained.ProcessControl || action.Execution.ProcessAccess == "signal" {
 		effects = append(effects, api.ElevatedAccessEffectProcessControl)
 	}
-	if action.Contained.SocketCount > 0 || len(action.SocketGrants) > 0 {
+	if action.Execution.Contained.SocketCount > 0 || len(action.Sockets.SocketGrants) > 0 {
 		effects = append(effects, api.ElevatedAccessEffectLocalService)
 	}
 	return effects

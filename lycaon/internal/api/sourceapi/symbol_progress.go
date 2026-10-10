@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -24,12 +25,13 @@ type symbolProgressCache struct {
 }
 
 type symbolProgressEntry struct {
+	retained  bool
 	gate      chan struct{}
 	users     int
 	used      time.Time
 	stamp     string
 	state     symbolsearch.Progress
-	discovery project.DeclarationSearch
+	discovery projectsource.DeclarationSearch
 }
 
 type symbolSourceStamp struct {
@@ -49,7 +51,7 @@ func symbolStamp(ctx context.Context, p *project.Project, rootIDs []string) (str
 		if !selected {
 			continue
 		}
-		status, err := sourcecatalog.Process().IndexStatus(ctx, p.ID, sourcecatalog.Root{ID: root.ID, Path: root.Path})
+		status, err := sourcecatalog.Process().Trees.IndexStatus(ctx, p.ID, sourcecatalog.Root{ID: root.ID, Path: root.Path})
 		if err != nil {
 			return "", err
 		}
@@ -60,17 +62,21 @@ func symbolStamp(ctx context.Context, p *project.Project, rootIDs []string) (str
 }
 
 // acquire serializes one query without blocking unrelated queries. Entries hold
-// no readers, goroutines, or preparation ownership and expire on bounded LRU use.
-func (c *symbolProgressCache) acquire(ctx context.Context, p *project.Project, leg *search.SymbolPlanLeg, roots []string) (*symbolProgressEntry, func(), error) {
+// no readers, goroutines, or preparation jobs and expire on bounded LRU use.
+func (c *symbolProgressCache) acquire(ctx context.Context, p *project.Project, leg *search.SymbolPlanLeg, roots []string, retain bool) (*symbolProgressEntry, func(), error) {
+	if !retain {
+		return unretainedSymbolProgress(ctx, p, leg, roots)
+	}
 	body, err := json.Marshal(struct {
-		Project  string
-		Attached []project.Root
-		Name     string
-		Query    any
-		Roots    []string
-		Flags    search.MatchFlags
-		Excludes []string
-	}{p.ID, p.Roots, leg.Name, symbolQueryIdentity(leg.Query), roots, leg.Flags, leg.ExcludeDirs})
+		Project             string
+		Attached            []project.Root
+		Name                string
+		Query               any
+		Roots               []string
+		Flags               search.MatchFlags
+		Excludes            []string
+		IncludeDependencies bool
+	}{p.ID, p.Roots, leg.Name, symbolQueryIdentity(leg.Query), roots, leg.Flags, leg.ExcludeDirs, leg.IncludeDependencies})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -103,6 +109,7 @@ func (c *symbolProgressCache) acquire(ctx context.Context, p *project.Project, l
 		entry.gate <- struct{}{}
 		if len(c.entries) < symbolProgressLimit {
 			c.entries[key] = entry
+			entry.retained = true
 		}
 	}
 	entry.used = now
@@ -128,7 +135,7 @@ func (c *symbolProgressCache) acquire(ctx context.Context, p *project.Project, l
 	}
 	if entry.discovery == nil || entry.stamp != stamp {
 		entry.state = symbolsearch.Progress{}
-		entry.discovery = declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude)
+		entry.discovery = declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude, leg.IncludeDependencies)
 		entry.stamp = stamp
 	}
 	return entry, release, nil
@@ -175,4 +182,26 @@ func symbolQueryIdentity(node search.Node) any {
 	default:
 		return fmt.Sprintf("%#v", node)
 	}
+}
+
+// A stable federated leg reserves progress for its first bounded project set.
+// Overflow can still finish in the foreground; unfinished work is a terminal
+// retention bound because another request would restart the same slice.
+func symbolProgressGap(retained bool) projectsource.DeclarationGap {
+	if retained {
+		return projectsource.DeclarationGap{Reason: projectsource.DeclarationPending}
+	}
+	return projectsource.DeclarationGap{Reason: projectsource.DeclarationSymbolBudget, Limit: symbolProgressLimit}
+}
+
+func unretainedSymbolProgress(ctx context.Context, p *project.Project, leg *search.SymbolPlanLeg, roots []string) (*symbolProgressEntry, func(), error) {
+	stamp, err := symbolStamp(ctx, p, roots)
+	if err != nil {
+		return nil, nil, err
+	}
+	entry := &symbolProgressEntry{
+		stamp:     stamp,
+		discovery: declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude, leg.IncludeDependencies),
+	}
+	return entry, func() {}, nil
 }

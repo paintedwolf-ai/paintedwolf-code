@@ -10,11 +10,11 @@ import (
 
 // resolveContentApply validates a decision against the stored host plan,
 // composes final bytes, and commits them before the blocked writer is notified.
-func (m *Manager) resolveContentApply(ctx context.Context, sessionID, checkpointID string, requested *ContentApplyResolve) (*CheckpointResponse, error) {
+func (m *Checkpoints) resolveContentApply(ctx context.Context, sessionID, checkpointID string, requested *ContentApplyResolve) (*CheckpointResponse, error) {
 	unlock := m.resolutionLocks.Lock(checkpointID)
 	defer unlock()
 
-	row, err := m.store.Get(ctx, checkpointID)
+	row, err := m.Store.Get(ctx, checkpointID)
 	if err != nil {
 		return nil, err
 	}
@@ -64,8 +64,8 @@ func (m *Manager) resolveContentApply(ctx context.Context, sessionID, checkpoint
 		return nil, err
 	}
 	now := time.Now().UTC()
-	viaOutbox, err := m.store.resolveCheckpoint(ctx, *row, status, nil, resolved, now, resolution,
-		m.resolutionSeal(ctx, status))
+	viaOutbox, err := m.Store.resolveCheckpoint(ctx, *row, status, nil, resolved, now, resolution,
+		m.Authority.resolutionSeal(ctx, status))
 	if err != nil {
 		return nil, err
 	}

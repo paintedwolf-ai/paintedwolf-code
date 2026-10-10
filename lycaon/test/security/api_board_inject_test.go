@@ -15,7 +15,7 @@ import (
 func TestCoordinatorPromptInjectWithoutToolCall(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
 	rec := h.Recording
-	mgr := h.SessionMgr
+	mgr := h.Sessions.Manager
 	srv := h.Server
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -23,13 +23,13 @@ func TestCoordinatorPromptInjectWithoutToolCall(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 	sess := createSessionHTTP(t, srv, dir)
-	if _, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
+	if _, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan", WorkflowVersion: "1.0.0",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := mgr.Prompt(ctx, sess.ID, "coordinate"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "coordinate"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	// Workflow startup can consume the orientation fingerprint before the user prompt.
 	found := false
@@ -47,7 +47,7 @@ func TestCoordinatorPromptInjectWithoutToolCall(t *testing.T) {
 func TestCoordinatorPromptInjectDedup(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
 	rec := h.Recording
-	mgr := h.SessionMgr
+	mgr := h.Sessions.Manager
 	srv := h.Server
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -56,12 +56,12 @@ func TestCoordinatorPromptInjectDedup(t *testing.T) {
 	}
 	sess := createSessionHTTP(t, srv, dir)
 	exitAmbientRunHTTP(t, srv, sess.ID)
-	if _, err := mgr.Prompt(ctx, sess.ID, "one"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "one"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	for _, prompt := range []string{"two", "three", "four"} {
-		if _, err := mgr.Prompt(ctx, sess.ID, prompt); err != nil {
-			testutil.FailErr(t, "mgr.Prompt failed", err)
+		if _, err := mgr.Submissions.Prompt(ctx, sess.ID, prompt); err != nil {
+			testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 		}
 		if !boardInjectInMessages(rec.LastRequest().Messages) {
 			return

@@ -3,6 +3,7 @@ package workscope
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"
 	"time"
 )
@@ -43,5 +44,25 @@ func TestWaitTracksEachBusyInterval(t *testing.T) {
 		if err := group.Wait(t.Context()); err != nil {
 			t.Fatalf("wait interval: %v", err)
 		}
+	}
+}
+
+func TestSealPreservesWorkUntilShutdown(t *testing.T) {
+	var group Group
+	ctx, finish, err := group.Begin(t.Context())
+	if err != nil {
+		testutil.FailErr(t, "begin work", err)
+	}
+	defer finish()
+	group.Seal()
+	if ctx.Err() != nil {
+		t.Fatal("seal canceled admitted work")
+	}
+	if _, _, err := group.Begin(t.Context()); !errors.Is(err, context.Canceled) {
+		t.Fatalf("sealed admission: %v", err)
+	}
+	group.Stop()
+	if !errors.Is(ctx.Err(), context.Canceled) {
+		t.Fatal("shutdown did not cancel sealed work")
 	}
 }

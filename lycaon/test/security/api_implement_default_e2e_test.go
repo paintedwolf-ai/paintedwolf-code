@@ -71,8 +71,8 @@ func TestImplementDefaultParitySmoke(t *testing.T) {
 	wiring.AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
 	prompt := "Add a // TODO: review here comment at the top of main.go"
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, prompt); err != nil {
-		testutil.FailErr(t, "h.SessionMgr.Prompt failed", err)
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, prompt); err != nil {
+		testutil.FailErr(t, "h.Sessions.Manager.Submissions.Prompt failed", err)
 	}
 	if err := wiring.DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID); err != nil {
 		last := recording.LastRequest()
@@ -95,8 +95,8 @@ func TestImplementDefaultParitySmoke(t *testing.T) {
 		t.Fatalf("main.go = %q want TODO comment after worker", string(data))
 	}
 
-	run, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
-	testutil.FailErr(t, "h.WorkflowMgr.GetActive failed", err)
+	run, err := h.Workflows.Manager.Store.Runs.ActiveBySession(ctx, sess.ID)
+	testutil.FailErr(t, "h.Workflows.Manager.GetActive failed", err)
 	if run == nil || run.WorkflowID != "implement" {
 		t.Fatalf("expected ambient implement run, got %+v", run)
 	}
@@ -108,8 +108,8 @@ func TestImplementDefaultParitySmoke(t *testing.T) {
 		t.Fatalf("GET active workflow status = %d want 200 body=%s", w.Code, w.Body.String())
 	}
 
-	msgs, err := h.SessionMgr.GetMessages(ctx, sess.ID)
-	testutil.FailErr(t, "h.SessionMgr.GetMessages failed", err)
+	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
+	testutil.FailErr(t, "h.Sessions.Manager.GetMessages failed", err)
 	foundTask := false
 	for _, msg := range msgs {
 		if msg.WorkerSummary != nil && msg.WorkerSummary.WorkerID != "" {

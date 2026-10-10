@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,6 +12,12 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+type ReviewAssignmentActiveError struct{ JobID string }
+
+func (e *ReviewAssignmentActiveError) Error() string {
+	return "review assignment already has active job " + e.JobID
+}
 
 // InsertTask inserts a worker job row.
 func (s *SQLStore) InsertTask(ctx context.Context, task api.WorkerTask) error {
@@ -33,6 +40,15 @@ func InsertTaskTx(ctx context.Context, tx *sql.Tx, task api.WorkerTask) error {
 func insertTask(ctx context.Context, queries *db.Queries, task api.WorkerTask) error {
 	if task.ID == "" {
 		task.ID = uuid.NewString()
+	}
+	if task.WorkflowRunID != "" {
+		active, err := queries.ActiveWorkflowReviewAssignmentJob(ctx, task.ID)
+		if err == nil {
+			return &ReviewAssignmentActiveError{JobID: active}
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
 	}
 	if err := normalizeWorkerInstructions(&task); err != nil {
 		return err

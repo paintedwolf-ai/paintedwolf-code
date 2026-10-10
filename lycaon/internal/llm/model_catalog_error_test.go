@@ -26,7 +26,7 @@ func TestModelAssignmentDiscoveryFailure(t *testing.T) {
     api_key_env: ""
     models: []
 `+MinimalShipHTTPRetryYAML)
-	registry, err := NewRegistry(catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credentials.age")))
+	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credentials.age")))
 	testutil.FailErr(t, "create registry", err)
 	service := &Service{Catalog: catalog, Registry: registry}
 	ref := ModelRef{ProviderID: "cloud", Model: "candidate"}
@@ -48,7 +48,7 @@ func TestModelAssignmentDiscoveryFailure(t *testing.T) {
 	testutil.FailErr(t, "create fixture feed", err)
 	_, err = feed.Refresh(t.Context())
 	testutil.FailErr(t, "refresh fixture feed", err)
-	registry.SetModelFeed(feed)
+	registry.SetModelFeed(t.Context(), feed)
 	testutil.FailErr(t, "assign known model despite failed discovery", service.ValidateModelRef(t.Context(), ref, PolicySlotCoordinator))
 	ref.Model = "absent-from-feed"
 	if err = service.ValidateModelRef(t.Context(), ref, PolicySlotCoordinator); !errors.As(err, &unavailable) {

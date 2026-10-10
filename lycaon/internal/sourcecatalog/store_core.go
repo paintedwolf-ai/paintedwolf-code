@@ -199,7 +199,7 @@ func openTreeDB(ctx context.Context, file string) (*sql.DB, error) {
 // zero never waits.
 func openTreeDBWaiting(ctx context.Context, file string, busyMS int) (*sql.DB, error) {
 	u := url.URL{Scheme: "file", Path: file}
-	db, err := sql.Open("sqlite", u.String()+fmt.Sprintf("?_pragma=recursive_triggers(1)&_pragma=busy_timeout(%d)&_pragma=cache_size(-4096)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=journal_size_limit(%d)", busyMS, treeJournalSizeLimit))
+	db, err := sql.Open("sqlite", u.String()+fmt.Sprintf("?_pragma=auto_vacuum(INCREMENTAL)&_pragma=recursive_triggers(1)&_pragma=busy_timeout(%d)&_pragma=cache_size(-4096)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)&_pragma=journal_size_limit(%d)", busyMS, treeJournalSizeLimit))
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func openTreeDBWaiting(ctx context.Context, file string, busyMS int) (*sql.DB, e
 
 // treeDirPath resolves where generations live: the test override, else the
 // catalog cache under the engine config root.
-func (c *Catalog) treeDirPath() (string, error) {
+func (c *TreeStores) treeDirPath() (string, error) {
 	if c.treeDir != "" {
 		return c.treeDir, nil
 	}
@@ -412,7 +412,7 @@ func (s *storeCore) settleEpoch(epoch repochange.Epoch) {
 	s.full = true
 }
 
-func (c *Catalog) invalidateTrees(rootPath string, paths []string) {
+func (c *TreeStores) invalidateTrees(rootPath string, paths []string) {
 	if c == nil {
 		return
 	}
@@ -423,6 +423,18 @@ func (c *Catalog) invalidateTrees(rootPath string, paths []string) {
 		changed, relevant := treeChangesForRoot(rootPath, core.root.Path, paths)
 		if !relevant {
 			continue
+		}
+		if index, ok := s.(*indexStore); ok {
+			filtered := changed[:0]
+			for _, rel := range changed {
+				if index.policy.boundaryPath(rel, false) == "" {
+					filtered = append(filtered, rel)
+				}
+			}
+			if len(changed) > 0 && len(filtered) == 0 {
+				continue
+			}
+			changed = filtered
 		}
 		core.mu.Lock()
 		core.observed = repochange.CurrentEpoch(core.root.Path)
@@ -445,7 +457,7 @@ func (c *Catalog) invalidateTrees(rootPath string, paths []string) {
 	}
 }
 
-func (c *Catalog) observeTreeEpoch(rootPath string) {
+func (c *TreeStores) observeTreeEpoch(rootPath string) {
 	if c == nil {
 		return
 	}
@@ -468,60 +480,6 @@ func (c *Catalog) observeTreeEpoch(rootPath string) {
 
 // Drain cancels catalog discovery, checkpoints, and content indexing and joins
 // their workers. Existing generation pins remain readable until released.
-func (c *Catalog) Drain(ctx context.Context) error {
-	if c == nil {
-		return nil
-	}
-	c.mu.Lock()
-	var pending []<-chan struct{}
-	for _, rec := range c.records {
-		if rec.building {
-			rec.cancel()
-			pending = append(pending, rec.done)
-		}
-	}
-	for _, s := range c.trees {
-		core := s.core()
-		core.mu.Lock()
-		if index, ok := s.(*indexStore); ok {
-			if index.inventory.cancel != nil {
-				index.inventory.cancel()
-				pending = append(pending, index.inventory.done)
-			}
-			pending = append(pending, index.observations.CancelAll()...)
-			if done := index.drainStructuralCheckpointLocked(); done != nil {
-				pending = append(pending, done)
-			}
-			index.pins.drained = true
-			index.releaseCompletedStructureLocked()
-			if index.structure != nil && index.pins.held[index.structure.id] == nil {
-				index.structure.close()
-				index.structure = nil
-			}
-			if idle := index.drainNavigationLocked(); idle != nil {
-				pending = append(pending, idle)
-			}
-		}
-		if core.building {
-			core.cancel()
-			pending = append(pending, core.done)
-		}
-		for _, build := range s.contentBuilds() {
-			build.cancel()
-			pending = append(pending, build.done)
-		}
-		core.mu.Unlock()
-	}
-	c.mu.Unlock()
-	for _, done := range pending {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-done:
-		}
-	}
-	return nil
-}
 
 func treeChangesForRoot(eventRoot, indexRoot string, paths []string) ([]string, bool) {
 	eventRoot, indexRoot = cleanAbs(eventRoot), cleanAbs(indexRoot)
@@ -560,49 +518,4 @@ func treeChangesForRoot(eventRoot, indexRoot string, paths []string) ([]string, 
 // hasParentPrefix reports whether a relative path climbs out of its base.
 func hasParentPrefix(rel string) bool {
 	return strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
-func (c *Catalog) evictTreeStores(keep string) {
-	limit := max(1, c.rootLimit+c.scopedLimit)
-	for len(c.trees) > limit {
-		oldest := ""
-		for key, s := range c.trees {
-			core := s.core()
-			core.mu.Lock()
-			eligible := key != keep && treeStoreEvictableLocked(s)
-			core.mu.Unlock()
-			if eligible && (oldest == "" || core.lastUsed.Before(c.trees[oldest].core().lastUsed)) {
-				oldest = key
-			}
-		}
-		if oldest == "" {
-			return
-		}
-		if !retireTreeStore(c.trees[oldest]) {
-			continue
-		}
-		delete(c.trees, oldest)
-	}
-}
-
-// SuspendProjectStores retires in-memory projection stores for a parked project
-// while keeping the persisted SQLite generation files intact on disk.
-func (c *Catalog) SuspendProjectStores(projectID string) {
-	if c == nil {
-		return
-	}
-	projectID = strings.TrimSpace(projectID)
-	if projectID == "" {
-		return
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for key, s := range c.trees {
-		core := s.core()
-		if core.projectID == projectID {
-			if retireTreeStore(s) {
-				delete(c.trees, key)
-			}
-		}
-	}
 }

@@ -29,25 +29,28 @@ func TestCommandObservationDoesNotWaitIndefinitelyForOtherProjects(t *testing.T)
 			})
 			testutil.FailErr(t, "occupy snapshot I/O", err)
 			defer release()
-			testutil.FailErr(t, "close original snapshot store", ledger.store.snapshots.Close())
-			ledger.store.snapshots = sourcesnapshot.New(ledger.sqlDB, ledger.store.objects,
+			testutil.FailErr(t, "close original snapshot store", ledger.store.Snapshots.Close())
+			ledger.store.Snapshots = sourcesnapshot.New(ledger.sqlDB, ledger.store.Content,
 				filepath.Join(t.TempDir(), "observations.db"), broker)
+			ledger.store.Inventory.snapshots = ledger.store.Snapshots
+			ledger.store.Commands.snapshots = ledger.store.Snapshots
 			t.Cleanup(func() {
-				testutil.FailErr(t, "close snapshot store", ledger.store.snapshots.Close())
+				testutil.FailErr(t, "close snapshot store", ledger.store.Snapshots.Close())
 			})
 			// The proof is that the budget bounds the wait, whatever its length.
-			ledger.store.observationBudget = testutil.Timeout(500 * time.Millisecond)
-			budget := ledger.store.observationBudget
+			ledger.store.Inventory.observationBudget = testutil.Timeout(500 * time.Millisecond)
+			ledger.store.Commands.observationBudget = ledger.store.Inventory.observationBudget
+			budget := ledger.store.Inventory.observationBudget
 			ctx, cancel := context.WithTimeout(t.Context(), 3*budget)
 			defer cancel()
 			started := time.Now()
 			if operation == "verification" {
-				revision, root := VerificationState(ctx, ledger.store, ledger.root)
+				revision, root := VerificationState(ctx, ledger.store.Inventory, ledger.root)
 				if revision != "" || root != "" {
 					t.Fatal("unobserved source produced verification evidence")
 				}
 			} else {
-				window, err := ledger.store.OpenCommandWindow(ctx, CommandWindowInput{
+				window, err := ledger.store.Commands.OpenCommandWindow(ctx, CommandWindowInput{
 					ProjectID: "p1", Roots: onDiskRoots(ledger.root), ToolName: "command",
 				})
 				if window != nil || !errors.Is(err, context.DeadlineExceeded) {
@@ -61,8 +64,8 @@ func TestCommandObservationDoesNotWaitIndefinitelyForOtherProjects(t *testing.T)
 			// cold capture, so it runs under the production budget rather than the
 			// shortened one that only bounded the blocked wait.
 			release()
-			ledger.store.observationBudget = testutil.Timeout(commandObservationBudget)
-			revision, root := VerificationState(t.Context(), ledger.store, ledger.root)
+			ledger.store.Inventory.observationBudget = testutil.Timeout(commandObservationBudget)
+			revision, root := VerificationState(t.Context(), ledger.store.Inventory, ledger.root)
 			if revision == "" || root == "" {
 				t.Fatal("source observation did not recover after capacity became available")
 			}

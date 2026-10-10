@@ -3,6 +3,7 @@ package page
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"mime"
 	"os"
 	"path/filepath"
@@ -43,7 +44,7 @@ func resolveRouteBodies(ctx context.Context, tctx tools.ToolContext, routes []br
 			continue
 		}
 		invalid := func(reason string) error {
-			return &tools.ToolReject{Code: "CAPTURE_ROUTE_INVALID", Data: map[string]any{
+			return &toolrejection.ToolReject{Code: "CAPTURE_ROUTE_INVALID", Data: map[string]any{
 				"reason": reason, "route": i, "route_url": routes[i].URL, "body_path": modelPath,
 			}}
 		}

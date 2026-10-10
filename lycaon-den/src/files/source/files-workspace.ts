@@ -109,7 +109,7 @@ export function createFilesWorkspace(options: {
     if (!coverage) return null;
     switch (coverage.state) {
       case "live":
-        return null;
+        return coverage.policy_unwatched ? "Some folders are refreshed on demand" : null;
       case "partial":
         return "Outside changes in some folders are not watched";
       case "faulted":

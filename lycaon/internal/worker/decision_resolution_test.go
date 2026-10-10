@@ -7,7 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
-	"github.com/lycaon/lycaon/internal/session"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -25,7 +25,7 @@ func TestSQLDecisionResolverRollsBackEveryWrite(t *testing.T) {
 		VALUES (?, ?, ?, ?, 'implementer', 'held', 'fixture', 'fixture', ?)`,
 		"job-1", testdbseed.DefaultProjectID, "parent-1", "child-1", time.Now().UTC().Format(time.RFC3339Nano))
 	testutil.FailErr(t, "insert worker job", err)
-	decisions := session.NewSQLDecisionStore(database)
+	decisions := sessiondecisions.NewSQL(database)
 	testutil.FailErr(t, "put decision", decisions.Put(t.Context(), api.WorkerDecisionRequest{
 		ChildSessionID: "child-1", WorkerID: "job-1", Question: "Choose one", Options: []string{"A", "B"},
 	}))
@@ -88,7 +88,7 @@ func TestSQLDecisionResolverRequeuesSameWorkerWithBranchContinuity(t *testing.T)
 		time.Now().UTC().Format(time.RFC3339Nano))
 	testutil.FailErr(t, "seed durable worker progress", err)
 
-	decisions := session.NewSQLDecisionStore(database)
+	decisions := sessiondecisions.NewSQL(database)
 	decision := api.WorkerDecisionRequest{
 		ChildSessionID: "child-1", WorkerID: "job-1", Question: "Choose one", Options: []string{"A", "B"},
 	}

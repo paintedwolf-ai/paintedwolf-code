@@ -20,8 +20,8 @@ type emitSite struct {
 }
 
 var userMutationSites = []emitSite{
-	{relFile: "internal/project/source_mutation_commit.go", fn: "commitTx", call: "EmitBatchTx"},
-	{relFile: "internal/project/source_mutation_commit.go", fn: "commitWithoutStore", call: "EmitBatch"},
+	{relFile: "internal/projectsource/source_mutation_commit.go", fn: "commitTx", call: "EmitBatchTx"},
+	{relFile: "internal/projectsource/source_mutation_commit.go", fn: "commitWithoutStore", call: "EmitBatch"},
 }
 
 var expectedEmitSites = map[sourcefeed.EmitDoor][]emitSite{
@@ -29,7 +29,7 @@ var expectedEmitSites = map[sourcefeed.EmitDoor][]emitSite{
 		{relFile: "internal/tools/native/source_write.go", fn: "commitAgentMutationTx", call: "EmitTx"},
 		{relFile: "internal/tools/native/source_write.go", fn: "commitAgentMutationWithoutStore", call: "Emit"},
 	},
-	sourcefeed.DoorEditorSave: {{relFile: "internal/editordoc/service.go", fn: "commit", call: "EmitTx"}},
+	sourcefeed.DoorEditorSave: {{relFile: "internal/editordoc/save_publication.go", fn: "commit", call: "EmitTx"}},
 	sourcefeed.DoorWorkerPromotion: {
 		{relFile: "internal/worker/sql_promotion.go", fn: "CommitPromotion", call: "EmitBatchTx"},
 	},

@@ -8,7 +8,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 )
 
 // Project symbol search bounds. The limit sets Limited; the other bounds set
@@ -41,7 +41,7 @@ type Request struct {
 	// ExcludeDirs carries catalog-provided dependency and build directories.
 	ExcludeDirs []string
 	// Admits applies the caller's query filters before retaining or capping results.
-	Admits func(path, name string) bool
+	Admits func(rootID, path, name string) bool
 	// Wall bounds literal discovery; zero uses DiscoveryWall.
 	Wall time.Duration
 	// AbbreviationWall bounds the abbreviation pass; zero uses AbbreviationWall.
@@ -57,9 +57,9 @@ type Match struct {
 	Path   string
 	Line   int
 	Name   string
-	Kind   project.SourceSymbolKind
+	Kind   projectsource.SourceSymbolKind
 	// Highlights are code point ranges of Name the query matched.
-	Highlights []project.SourceTextRange
+	Highlights []projectsource.SourceTextRange
 	// Signature is the declaration's source line, trimmed.
 	Signature string
 	tier      symbolMatchTier
@@ -79,14 +79,14 @@ type Result struct {
 	// Incomplete means a line cap, clock, file budget, unreadable file, or
 	// catalog coverage gap stopped discovery, so more matches may exist.
 	Incomplete bool
-	Coverage   project.DeclarationCoverage
+	Coverage   projectsource.DeclarationCoverage
 	// Passes say where discovery and outlining spent the request's time.
 	Passes []Pass
 }
 
 // Pass reports one discovery pass and the outlining that followed it.
 type Pass struct {
-	Match     project.DeclarationMatch
+	Match     projectsource.DeclarationMatch
 	Hits      int
 	Files     int
 	Partial   bool
@@ -100,16 +100,16 @@ type Pass struct {
 // are prose, not declarations, and never match.
 func Run(
 	ctx context.Context,
-	p *project.Project,
+	p projectsource.ProjectSource,
 	req Request,
-	search project.DeclarationSearch,
+	search projectsource.DeclarationSearch,
 ) (Result, error) {
 	query := strings.TrimSpace(req.Query)
 	if utf8.RuneCountInString(query) < MinQueryRunes {
 		return Result{Symbols: []Match{}}, nil
 	}
-	if p == nil || len(p.Roots) == 0 {
-		return Result{}, project.ErrSourceNoRoot
+	if p == nil || len(p.SourceRoots()) == 0 {
+		return Result{}, projectsource.ErrSourceNoRoot
 	}
 	if search == nil {
 		return Result{}, errors.New("declaration search is required")
@@ -165,54 +165,54 @@ func Run(
 }
 
 type symbolSearchRoot struct {
-	project.DeclarationSearchRoot
+	projectsource.DeclarationSearchRoot
 	order int
 }
 
 // symbolSearchRoots selects every root, or the roots rootIDs names, in the
 // project's root order.
-func symbolSearchRoots(p *project.Project, rootIDs []string) ([]symbolSearchRoot, error) {
+func symbolSearchRoots(p projectsource.ProjectSource, rootIDs []string) ([]symbolSearchRoot, error) {
 	wanted := map[string]bool{}
 	for _, id := range rootIDs {
 		if id = strings.TrimSpace(id); id != "" {
 			wanted[id] = true
 		}
 	}
-	out := make([]symbolSearchRoot, 0, len(p.Roots))
-	for i, root := range p.Roots {
+	out := make([]symbolSearchRoot, 0, len(p.SourceRoots()))
+	for i, root := range p.SourceRoots() {
 		if len(wanted) > 0 && !wanted[root.ID] {
 			continue
 		}
-		out = append(out, symbolSearchRoot{DeclarationSearchRoot: project.DeclarationSearchRoot{ID: root.ID, Path: root.Path}, order: i})
+		out = append(out, symbolSearchRoot{DeclarationSearchRoot: projectsource.DeclarationSearchRoot{ID: root.ID, Path: root.Path}, order: i})
 	}
 	if len(out) == 0 {
-		return nil, project.ErrSourceNoRoot
+		return nil, projectsource.ErrSourceNoRoot
 	}
 	return out, nil
 }
 
 // symbolSearchRun shares the file budget across passes.
 type symbolSearchRun struct {
-	p             *project.Project
-	search        project.DeclarationSearch
+	p             projectsource.ProjectSource
+	search        projectsource.DeclarationSearch
 	matcher       symbolNameMatcher
 	caseSensitive bool
 	exact         bool
 	roots         []symbolSearchRoot
 	excludes      []string
-	admits        func(path, name string) bool
+	admits        func(rootID, path, name string) bool
 	filesLeft     int
 	matches       []Match
 	incomplete    bool
-	coverage      project.DeclarationCoverage
+	coverage      projectsource.DeclarationCoverage
 	passes        []Pass
 }
 
-func (r *symbolSearchRun) pick(file project.DeclarationFile, symbols []project.SourceSymbol, content string) []Match {
+func (r *symbolSearchRun) pick(file projectsource.DeclarationFile, symbols []projectsource.SourceSymbol, content string) []Match {
 	var out []Match
-	seen := map[project.SourceSymbol]struct{}{}
+	seen := map[projectsource.SourceSymbol]struct{}{}
 	for _, sym := range symbols {
-		if sym.Kind == project.SourceSymbolKindHeading {
+		if sym.Kind == projectsource.SourceSymbolKindHeading {
 			continue
 		}
 		if _, dup := seen[sym]; dup {
@@ -223,7 +223,7 @@ func (r *symbolSearchRun) pick(file project.DeclarationFile, symbols []project.S
 		if !r.keeps(sym.Name, tier, highlights) {
 			continue
 		}
-		if r.admits != nil && !r.admits(file.Path, sym.Name) {
+		if r.admits != nil && !r.admits(file.RootID, file.Path, sym.Name) {
 			continue
 		}
 		out = append(out, Match{
@@ -242,7 +242,7 @@ func (r *symbolSearchRun) pick(file project.DeclarationFile, symbols []project.S
 }
 
 // keeps applies the request's exactness and case to one match.
-func (r *symbolSearchRun) keeps(name string, tier symbolMatchTier, highlights []project.SourceTextRange) bool {
+func (r *symbolSearchRun) keeps(name string, tier symbolMatchTier, highlights []projectsource.SourceTextRange) bool {
 	switch {
 	case tier == symbolTierNone:
 		return false
@@ -263,7 +263,7 @@ func (r *symbolSearchRun) rootOrder(rootID string) int {
 			return root.order
 		}
 	}
-	return len(r.p.Roots)
+	return len(r.p.SourceRoots())
 }
 
 func (r *symbolSearchRun) countBetterThan(tier symbolMatchTier) int {
@@ -278,15 +278,15 @@ func (r *symbolSearchRun) countBetterThan(tier symbolMatchTier) int {
 
 // symbolKindRank orders declarations of one tier: types and classes, then
 // functions, methods, and constants.
-func symbolKindRank(kind project.SourceSymbolKind) int {
+func symbolKindRank(kind projectsource.SourceSymbolKind) int {
 	switch kind {
-	case project.SourceSymbolKindType, project.SourceSymbolKindClass:
+	case projectsource.SourceSymbolKindType, projectsource.SourceSymbolKindClass:
 		return 0
-	case project.SourceSymbolKindFunction:
+	case projectsource.SourceSymbolKindFunction:
 		return 1
-	case project.SourceSymbolKindMethod:
+	case projectsource.SourceSymbolKindMethod:
 		return 2
-	case project.SourceSymbolKindConstant:
+	case projectsource.SourceSymbolKindConstant:
 		return 3
 	default:
 		return 4
@@ -316,7 +316,7 @@ func symbolMatchLess(a, b Match) bool {
 }
 
 func symbolSignature(content string, line int) string {
-	snippet := project.DeclarationLine(content, line)
+	snippet := projectsource.DeclarationLine(content, line)
 	if len(snippet) <= 512 {
 		return snippet
 	}

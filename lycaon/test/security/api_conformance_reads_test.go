@@ -17,8 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/testutil"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // conformanceEffects observes host state changes around one read. The sweep

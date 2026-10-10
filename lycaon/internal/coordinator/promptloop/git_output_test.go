@@ -73,13 +73,20 @@ func TestGitDiffDoesNotDiscardWithoutRecovery(t *testing.T) {
 
 func TestGitDiffSpillsOnlyScreenedHunks(t *testing.T) {
 	dir := t.TempDir()
-	loop := &PromptLoop{Deps: PromptLoopDeps{DataDir: dir, RedactMessageForStorage: testStorageRedactor}}
+	loop := NewPromptLoop(PromptLoopDeps{
+		Tools: ToolsDeps{
+			DataDir: dir,
+		},
+		Projection: ProjectionDeps{
+			RedactMessageForStorage: testStorageRedactor,
+		},
+	})
 	diff := strings.Repeat("+unchanged\n", 100) + "+" + storageBoundarySecret + "\n"
 	raw, err := git.MarshalDiffToolResponse(git.DiffToolResponse{MaxBytes: 100, Files: []git.DiffToolEntry{{Path: "secret.env", Diff: diff}}, FilesTotal: 1}, nil)
 	testutil.FailErr(t, "marshal sensitive diff", err)
-	projection := toolInvocations{loop}.projectToolResultForStorage(t.Context(), raw, nil)
+	projection := loop.Projection.projectToolResultForStorage(t.Context(), raw, nil)
 	sess := &api.Session{ID: "screened-git", ProjectID: testdbseed.DefaultProjectID}
-	got := toolInvocations{loop}.truncateToolResultForSession(t.Context(), "git_diff", projection, raw, 64000, 0, sess)
+	got := loop.Tools.truncateToolResultForSession(t.Context(), "git_diff", projection, raw, 64000, 0, sess)
 	if got.reject != nil {
 		t.Fatalf("screened diff rejected: %+v", got.reject)
 	}

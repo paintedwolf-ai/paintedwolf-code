@@ -142,7 +142,12 @@ func scanFixtureDir(t *testing.T) string {
 
 func securityToolContext(sessionID, dir, agent string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	return tools.ToolContext{SessionID: sessionID, Roots: roots, ActiveRootID: "r1", Agent: agent}
+	return tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sessionID,
+			Agent: agent},
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: "r1"},
+	}
 }
 
 // projectScan is a scan together with the project that addresses it.

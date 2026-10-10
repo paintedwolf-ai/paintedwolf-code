@@ -71,14 +71,25 @@ func ActiveIsStale() bool {
 
 var (
 	refresherMu sync.Mutex
-	refresher   func(context.Context)
+	refresher   *activeRefresher
 )
 
-// SetActiveRefresher registers publication for external device-state changes.
-func SetActiveRefresher(fn func(context.Context)) {
+type activeRefresher struct{ run func(context.Context) }
+
+// SetActiveRefresher registers publication until its owner releases it.
+func SetActiveRefresher(fn func(context.Context)) func() {
+	registration := &activeRefresher{run: fn}
 	refresherMu.Lock()
-	defer refresherMu.Unlock()
-	refresher = fn
+	refresher = registration
+	refresherMu.Unlock()
+	return func() {
+		refresherMu.Lock()
+		defer refresherMu.Unlock()
+		if refresher == registration {
+			refresher = nil
+		}
+		registration.run = nil
+	}
 }
 
 // RefreshActiveIfStale republishes changed intent, retaining the catalog on failure.
@@ -87,7 +98,10 @@ func RefreshActiveIfStale(ctx context.Context) {
 		return
 	}
 	refresherMu.Lock()
-	fn := refresher
+	var fn func(context.Context)
+	if refresher != nil {
+		fn = refresher.run
+	}
 	refresherMu.Unlock()
 	if fn != nil {
 		fn(ctx)

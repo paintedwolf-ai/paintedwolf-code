@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // Synthetic access-token canary.
@@ -291,7 +291,7 @@ func TestScreenPayloadsNeverCarryValue(t *testing.T) {
 	_ = p.Search(ctx, googleCSETestSettings(), plantedAWS, 5)
 }
 
-func assertNoSecretValue(t *testing.T, value string, m secretmatch.Match, rej *tools.ToolReject) {
+func assertNoSecretValue(t *testing.T, value string, m secretmatch.Match, rej *toolrejection.ToolReject) {
 	t.Helper()
 	blob, err := json.Marshal(map[string]any{
 		"match": m,
@@ -331,7 +331,7 @@ func TestScreenOutboundBlocksEveryNonSendDecision(t *testing.T) {
 				t.Fatalf("blocked screen returned the value: %q", got)
 			}
 			reject := secretScreenRejectFromErr(denied)
-			if reject.Data[tools.UserGuidanceKey] != "use the public endpoint" {
+			if reject.Data[toolrejection.UserGuidanceKey] != "use the public endpoint" {
 				t.Fatalf("reject dropped the user's direction: %+v", reject.Data)
 			}
 			assertNoSecretValue(t, plantedAWS, denied.Match, reject)

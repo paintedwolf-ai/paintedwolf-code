@@ -31,7 +31,7 @@ type chatContentRead struct {
 // readChatContent loads the addressed content. The caller checks the
 // revision the client names with chatContentCurrent once its own query
 // inputs are valid.
-func (s *Handler) readChatContent(w http.ResponseWriter, r *http.Request) (chatContentRead, bool) {
+func (s *Content) readChatContent(w http.ResponseWriter, r *http.Request) (chatContentRead, bool) {
 	var out chatContentRead
 	query := r.URL.Query()
 	sessionID := chi.URLParam(r, "id")
@@ -68,7 +68,7 @@ func (s *Handler) readChatContent(w http.ResponseWriter, r *http.Request) (chatC
 
 // chatContentCurrent refuses a read of a revision other than the one the
 // client names in `sha256`.
-func (s *Handler) chatContentCurrent(w http.ResponseWriter, r *http.Request, read chatContentRead) bool {
+func (s *Content) chatContentCurrent(w http.ResponseWriter, r *http.Request, read chatContentRead) bool {
 	if r.URL.Query().Get("sha256") != read.reference.SHA256 {
 		s.responses.Fail(w, wire.ApiErrorCodeChatContentChanged, "This content changed. Reopen it to read the current version.")
 		return false
@@ -76,7 +76,7 @@ func (s *Handler) chatContentCurrent(w http.ResponseWriter, r *http.Request, rea
 	return true
 }
 
-func (s *Handler) HandleGetChatContent(w http.ResponseWriter, r *http.Request) {
+func (s *Content) HandleGetChatContent(w http.ResponseWriter, r *http.Request) {
 	read, ok := s.readChatContent(w, r)
 	if !ok || !s.chatContentCurrent(w, r, read) {
 		return
@@ -125,7 +125,7 @@ func (s *Handler) HandleGetChatContent(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, wire.ChatContentPage{Reference: read.reference, Text: string(read.text[offset:end]), Offset: offset, EndOffset: end, Complete: end == len(read.text), Spans: spans})
 }
 
-func (s *Handler) writeChatContentRows(w http.ResponseWriter, r *http.Request, read chatContentRead, row, locate int, locatePresent bool) {
+func (s *Content) writeChatContentRows(w http.ResponseWriter, r *http.Request, read chatContentRead, row, locate int, locatePresent bool) {
 	offsets := messageview.ContentRowOffsets(read.text)
 	read.reference.Rows = len(offsets) - 1
 	if locatePresent {
@@ -140,7 +140,7 @@ func (s *Handler) writeChatContentRows(w http.ResponseWriter, r *http.Request, r
 	httpio.WriteJSON(w, http.StatusOK, wire.ChatContentPage{Reference: read.reference, Offset: offsets[row], EndOffset: offsets[end], Complete: end == read.reference.Rows, Rows: rows, Spans: []wire.RedactedSpan{}})
 }
 
-func (s *Handler) HandleSearchChatContent(w http.ResponseWriter, r *http.Request) {
+func (s *Content) HandleSearchChatContent(w http.ResponseWriter, r *http.Request) {
 	read, ok := s.readChatContent(w, r)
 	if !ok {
 		return

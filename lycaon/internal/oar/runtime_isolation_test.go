@@ -3,10 +3,10 @@ package oar
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/oarcore"
 	"sync"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -38,11 +38,11 @@ func TestConcurrentEvaluationsKeepRulesSessionAndSnapshotTogether(t *testing.T) 
 	}
 	evaluate := func(sessionID string) evaluation {
 		gc := NewGuardContext()
-		gc.SessionID = sessionID
+		gc.Session.SessionID = sessionID
 		gc.RegisterProvider("paintedwolf.workers_idle", func(target *GuardContext) error {
 			ready.Done()
 			<-start
-			target.WorkersIdle = true
+			target.Workers.WorkersIdle = true
 			return nil
 		})
 		res, evalErr := pipeline.EvaluateBlock(t.Context(), AnchorToolPreInvoke, gc)

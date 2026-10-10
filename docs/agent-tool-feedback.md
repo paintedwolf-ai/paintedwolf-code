@@ -57,7 +57,7 @@ A block answers four questions without narrating implementation: which transitio
 ### Typed detail conventions
 
 - Browser action failures retain the original zero-based `index` and a bounded `completed_actions` prefix (index, type, locators per completed step). Those effects remain applied; the failing step may also have taken effect before settling failed. `interactive_controls` retains observed control names, text, and disabled state; `interactive_truncated` says the inventory is partial. An absent disabled value is unknown, not enabled. Successful idle waits return the settled control state.
-- Owner failures caused by a subprocess deadline carry `timeout` details: measured `elapsed_ms`, the effective `deadline`, and `source` (`command` or `caller`) ([`owner_failure.go`](../lycaon/internal/tools/owner_failure.go)). They describe the underlying execution, which can predate a tool that joined shared work, and never establish a root cause or permission to repeat effects.
+- Owner failures caused by a subprocess deadline carry `timeout` details: measured `elapsed_ms`, the effective `deadline`, and `source` (`command` or `caller`) ([`owner_failure.go`](../lycaon/internal/toolrejection/owner_failure.go)). They describe the underlying execution, which can predate a tool that joined shared work, and never establish a root cause or permission to repeat effects.
 
 - `TOOL_ARGS_INVALID` explains a schema failure in terms of what the caller wrote ([`tools/argdiag`](../lycaon/internal/tools/argdiag)). A member that a closed object does not declare, and that exactly one adjacent object (its parent or one child) declares and lacks, is reported as `misplaced_fields` with `found_under` and `belongs_under`, at any depth. A string in a declared object or array slot is JSON text: `json_encoded` when it parses, `json_malformed` when it does not. Malformed text names where reading stopped — `json_open_paths` for containers still open at the end, or the 1-based byte of an unexpected token, unterminated string, or trailing text — and the members its structure misplaces as written; `close_before` names where an object read too far should have closed. Members written after the value closed are `json_trailing_members`, placed under `json_trailing_belongs_under`: the slot when it declares them, or the object beside it when the text swallowed the call's other arguments. When every finding is repairable and the repaired call validates, `replacement_args_json` restates it, up to 3 KB; the host never applies a repair itself.
 
@@ -113,9 +113,9 @@ Some successful tool results include structured state updates such as queue posi
 
 ### Review verdict rejections
 
-`submit_verdict` rejects with a `SUBMIT_VERDICT_*` code and typed details. Its arguments have three top-level channels: `verdict`, `cited_evidence`, and `cited_urls` ([`submit_verdict_tool.go`](../lycaon/internal/workflow/submit_verdict_tool.go)). The active phase schema exclusively defines the keys inside `verdict`, so misplaced citation channels and stale phase fields reject instead of being silently ignored. The two citation channels anchor the evidence a verdict rests on and are never projected as members of it.
+`submit_verdict` rejects with a `SUBMIT_VERDICT_*` code and typed details. Its arguments have three top-level channels: `verdict`, `cited_evidence`, and `cited_urls` ([`submit_verdict_tool.go`](../lycaon/internal/workflow/review/submit_verdict_tool.go)). The active phase schema exclusively defines the keys inside `verdict`, so misplaced citation channels and stale phase fields reject instead of being silently ignored. The two citation channels anchor the evidence a verdict rests on and are never projected as members of it.
 
-A `claims`-typed member is a JSON array of `{id, title, statement, status, answers, cited_evidence}` ([`review_loop_verdict.go`](../lycaon/internal/workflow/review_loop_verdict.go)): `id` and `statement` are required; the phase that introduces a claim sets its one-line `title`; each `cited_evidence` entry names exactly one of `handle` or `path`. A later phase adjudicates an earlier claim by restating its id with the status word that phase's guidance teaches; the host stores the word and never interprets it.
+A `claims`-typed member is a JSON array of `{id, title, statement, status, answers, cited_evidence}` ([`review_loop_verdict.go`](../lycaon/internal/workflow/validation/review_loop_verdict.go)): `id` and `statement` are required; the phase that introduces a claim sets its one-line `title`; each `cited_evidence` entry names exactly one of `handle` or `path`. A later phase adjudicates an earlier claim by restating its id with the status word that phase's guidance teaches; the host stores the word and never interprets it.
 
 A review phase offers `submit_verdict` with that phase's call schema: `verdict` declares exactly the phase's members, their nesting, decision values, claim statuses, and rating answers, and admission validates against the schema the turn offered. The rejection details include the active phase, the expected call as an outline of that schema, and bounded offender or reviewer facts. Independent acceptance failures appear together as typed `repairs` entries, each retaining its code and details; the primary refusal keeps its specific code. Running scans use `SUBMIT_VERDICT_SCANS_PENDING`, distinct from unaccounted groups. Correct the named condition and resubmit. A verdict rejection is not a completed review round and does not authorize abandoning the phase exit.
 
@@ -178,7 +178,12 @@ replace a later candidate with an earlier result.
 
 Three consecutive equivalent structured defects, or eight rejected responses,
 pause the phase as `review_blocked`. Missing workers and unsettled scans retain
-their existing wait semantics. An impossible offered coverage-id contract blocks
+their existing wait semantics. `SUBMIT_VERDICT_REVIEW_REQUIRED` supplies a dispatch
+or wait action with exact work/job IDs. `SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED`
+requests refreshed review context. Neither spends the malformed-submission
+budget. Missing stamped outcomes name `missing_claim_ids` and
+`expected_claim_ids`; an unregistered claim never receives a fabricated question
+identity. An impossible offered coverage-id contract blocks
 before a model call. Pausing records the report snapshot and worker hold in the
 workflow command transaction; startup replays the transcript-to-accounting crash
 window. Neither pause nor snapshot delivery stamps an evidence verdict.
