@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/people"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -51,8 +52,11 @@ func TestCapturedPromotionAndBlueprintRemainInCheckpoint(t *testing.T) {
 	if manifest.BlueprintPath != "plans/original.md" || len(manifest.Paths) != 2 {
 		t.Fatalf("retained checkpoint=%+v", manifest)
 	}
-	_, err = checkpoints.Open(ctx, "deleted-session", "orphan")
+	orphan, err := repository.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create orphan session", err)
+	_, err = checkpoints.Open(ctx, orphan.ID, "orphan")
 	testutil.FailErr(t, "seed orphan", err)
+	testutil.FailErr(t, "delete orphan session", repository.Delete(ctx, orphan.ID))
 	if n := rewinds.captures.RemoveOrphanCheckpoints(ctx, dir); n != 1 {
 		t.Fatalf("removed %d orphan checkpoint trees", n)
 	}
