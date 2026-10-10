@@ -1,6 +1,0 @@
-{
-  "category": "test_directories",
-  "artifact": "lycaon/internal/worker",
-  "cap": 100,
-  "reason": "Worker execution, outcomes, and peer contract invariants decomposed from session (#271)."
-}
