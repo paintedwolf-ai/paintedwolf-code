@@ -9,8 +9,8 @@ import (
 	"github.com/lycaon/lycaon/internal/version"
 )
 
-func (s *Server) storeFailure() *db.StoreIncompatibleError {
-	health, ok := s.database.(interface{ Failure() error })
+func storeFailure(database db.Handle) *db.StoreIncompatibleError {
+	health, ok := database.(interface{ Failure() error })
 	if !ok {
 		return nil
 	}
@@ -47,9 +47,14 @@ func (s *Server) healthPayload() healthResponse {
 		PreviousAppVersion: s.previousAppVersion,
 	}
 	st := s.recovery
-	if failure := s.storeFailure(); failure != nil {
+	if failure := storeFailure(s.database); failure != nil {
 		st = &recoveryState{Reason: failure.Reason, Detail: failure.Detail, StoreSchemaVersion: failure.StoreSchemaVersion}
 	}
+	resp.setRecovery(st)
+	return resp
+}
+
+func (resp *healthResponse) setRecovery(st *recoveryState) {
 	if st != nil {
 		resp.Status = "recovery"
 		storeVer := st.StoreSchemaVersion
@@ -59,5 +64,4 @@ func (s *Server) healthPayload() healthResponse {
 		resp.RecoverySnapshotAvailable = st.SnapshotAvailable
 		resp.RecoverySnapshotAt = st.SnapshotAt
 	}
-	return resp
 }

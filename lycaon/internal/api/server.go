@@ -875,7 +875,7 @@ func (s *Server) registerHostResourceRoutes(r chi.Router) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/health" && s.storeFailure() != nil {
+	if r.URL.Path != "/health" && storeFailure(s.database) != nil {
 		s.responses.Fail(w, wire.ApiErrorCodeStoreIncompatible, "History storage failed its integrity check; the engine is stopping for recovery.")
 		return
 	}
