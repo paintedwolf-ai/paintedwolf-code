@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import feed_signing
 import feed_credentials_migrate as migration
-from verification_tests.test_feed_signing_execution import public_key, signature
+from verification_tests.distribution.test_feed_signing_execution import public_key, signature
 
 
 class FeedVerificationTests(unittest.TestCase):

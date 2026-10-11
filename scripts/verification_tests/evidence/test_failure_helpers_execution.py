@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "rewrite-fail-messages.py"
+SCRIPT = Path(__file__).resolve().parents[2] / "rewrite-fail-messages.py"
 SPEC = importlib.util.spec_from_file_location("rewrite_fail_messages", SCRIPT)
 rewrite = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(rewrite)

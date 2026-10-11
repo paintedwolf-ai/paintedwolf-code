@@ -10,7 +10,7 @@ import unittest
 class GoDigestTests(unittest.TestCase):
     def digest(self, events, directory, process_code=0):
         return subprocess.run(
-            [sys.executable, str(Path(__file__).resolve().parents[1].joinpath("test-digest.py")), "--process-rc", str(process_code)],
+            [sys.executable, str(Path(__file__).resolve().parents[2].joinpath("test-digest.py")), "--process-rc", str(process_code)],
             input="\n".join(json.dumps(event) for event in events),
             text=True, capture_output=True,
             env={**os.environ, "LAST_RUN_DIR": directory}, check=False,
@@ -165,7 +165,7 @@ class VitestDigestTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "report.json"
             path.write_text(json.dumps(report))
-            result = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1].joinpath("vitest-digest.py")),
+            result = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[2].joinpath("vitest-digest.py")),
                                      "--input", str(path)], capture_output=True, text=True, timeout=5)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("2.50s  src/clock.test.ts slow clock", result.stdout)
@@ -181,7 +181,7 @@ class VitestDigestTests(unittest.TestCase):
             for report in [*cases, passed]:
                 with self.subTest(report=report):
                     path.write_text(json.dumps(report))
-                    result = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1].joinpath("vitest-digest.py")),
+                    result = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[2].joinpath("vitest-digest.py")),
                                              "--input", str(path)], capture_output=True, text=True,
                                             env={**os.environ, "LAST_RUN_DIR": directory}, timeout=5)
                     self.assertEqual(result.returncode, 0 if report == passed else 1, result.stdout + result.stderr)
@@ -194,7 +194,7 @@ class WireGeneratorTests(unittest.TestCase):
             root = Path(directory)
             script = root / "scripts/codegen-den-types.sh"
             script.parent.mkdir()
-            script.write_bytes(Path(__file__).resolve().parents[1].joinpath("codegen-den-types.sh").read_bytes())
+            script.write_bytes(Path(__file__).resolve().parents[2].joinpath("codegen-den-types.sh").read_bytes())
             schema = root / "docs/openapi.yaml"
             schema.parent.mkdir()
             schema.write_text("openapi: 3.1.0\n")
@@ -218,7 +218,7 @@ class WireGeneratorTests(unittest.TestCase):
 
 class WatchdogValidationTests(unittest.TestCase):
     def test_invalid_timeout_is_rejected_before_starting_a_watchdog(self):
-        script = str(Path(__file__).resolve().parents[1].joinpath("process-group-watchdog.py"))
+        script = str(Path(__file__).resolve().parents[2].joinpath("process-group-watchdog.py"))
         for value in ("nan", "inf", "0", "-1", "invalid", ""):
             with self.subTest(value=value):
                 result = subprocess.run([sys.executable, script, "--validate", value],

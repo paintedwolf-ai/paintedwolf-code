@@ -185,7 +185,7 @@ class ReleaseControlTests(unittest.TestCase):
         import os
         import subprocess
         from pathlib import Path
-        root = Path(__file__).resolve().parents[2]
+        root = Path(__file__).resolve().parents[3]
         result = subprocess.run(["bash", str(root / "scripts/release-halt.sh"), "--bad", "0.2.0", "--channel", "stable", "--current-file", str(root / "lycaon/testdata/release-halt/current-bad.json"), "--dry-run"], env={**os.environ, "DOWNLOAD_BASE_URL": "https://downloads.paintedwolf.dev"}, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("withdrawn", result.stderr)
@@ -195,7 +195,7 @@ class HaltPlanTests(unittest.TestCase):
     def setUp(self):
         import importlib.util
         from pathlib import Path
-        spec = importlib.util.spec_from_file_location("halt_plan_tests", Path(__file__).resolve().parents[1].joinpath("release-halt-plan.py"))
+        spec = importlib.util.spec_from_file_location("halt_plan_tests", Path(__file__).resolve().parents[2].joinpath("release-halt-plan.py"))
         self.plan = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.plan)
 
@@ -241,7 +241,7 @@ class HaltPlanTests(unittest.TestCase):
         import hashlib
         from pathlib import Path
         from update_keys import load_registry, release_binding
-        fixture = json.loads(Path(__file__).resolve().parents[2].joinpath("lycaon-den/src-tauri/src/update_service/fixtures/signed-feed.json").read_text())
+        fixture = json.loads(Path(__file__).resolve().parents[3].joinpath("lycaon-den/src-tauri/src/update_service/fixtures/signed-feed.json").read_text())
         registry = load_registry()
         registry["generations"][0]["feed_public_key"] = fixture["feed_public_key"]
         rows = {(1, "stable"): {"generation": 1, "channel": "stable", "bad": "1.3.0", "last_good": "1.2.3"}}

@@ -14,8 +14,8 @@ class AppBuildExecutionTest(unittest.TestCase):
                 root = Path(temp)
                 scripts = root / "scripts"
                 scripts.mkdir()
-                shutil.copyfile(Path(__file__).resolve().parents[1].joinpath("den-build-app.sh"), scripts / "den-build-app.sh")
-                shutil.copytree(Path(__file__).resolve().parents[1].joinpath("macos-build-tools"), scripts / "macos-build-tools")
+                shutil.copyfile(Path(__file__).resolve().parents[2].joinpath("den-build-app.sh"), scripts / "den-build-app.sh")
+                shutil.copytree(Path(__file__).resolve().parents[2].joinpath("macos-build-tools"), scripts / "macos-build-tools")
                 for name in ("sync-den-versions.sh",):
                     (scripts / name).write_text("#!/bin/bash\nexit 0\n")
                 stage_log = root / "staged.txt"
@@ -73,7 +73,7 @@ profile = "debug" if "--debug" in sys.argv else "release"
 
     @unittest.skipUnless(os.name == "posix", "macOS tool requires POSIX descriptors")
     def test_asset_compiler_reopens_closed_stdin_and_preserves_result(self):
-        wrapper = Path(__file__).resolve().parents[1].joinpath("macos-build-tools") / "actool"
+        wrapper = Path(__file__).resolve().parents[2].joinpath("macos-build-tools") / "actool"
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             log = root / "arguments.json"

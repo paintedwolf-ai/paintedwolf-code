@@ -15,7 +15,7 @@ from update_keys import key_id, load_registry, release_binding
 
 class FeedPublicationTests(unittest.TestCase):
     def test_prepared_publication_is_exact_repeatable_and_refuses_a_bad_binding(self):
-        root = Path(__file__).resolve().parents[2]
+        root = Path(__file__).resolve().parents[3]
         with tempfile.TemporaryDirectory() as temporary:
             work = Path(temporary)
             scripts, packaging, commands, store = [work / name for name in ("scripts", "packaging", "commands", "store")]

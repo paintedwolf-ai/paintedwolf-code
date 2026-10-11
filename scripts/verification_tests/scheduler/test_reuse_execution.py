@@ -13,7 +13,7 @@ from unittest.mock import patch
 import verification_reuse as reuse
 from verification_execute import StageEvents
 
-WRAPPER = Path(__file__).resolve().parents[1] / "go-test-exec.py"
+WRAPPER = Path(__file__).resolve().parents[2] / "go-test-exec.py"
 
 
 class KeyTests(unittest.TestCase):

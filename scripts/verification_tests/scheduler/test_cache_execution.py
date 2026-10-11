@@ -12,7 +12,7 @@ from unittest.mock import patch
 import verification_cache as cache
 from verification_resources import Reservation
 
-spec = importlib.util.spec_from_file_location("cache_execution", Path(__file__).resolve().parents[1].joinpath("test-execution.py"))
+spec = importlib.util.spec_from_file_location("cache_execution", Path(__file__).resolve().parents[2].joinpath("test-execution.py"))
 execution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(execution)
 

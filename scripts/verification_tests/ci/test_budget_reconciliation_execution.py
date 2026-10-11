@@ -6,7 +6,7 @@ import zipfile
 from unittest.mock import patch
 
 from ci_policy import budget_evidence as evidence, maintainability_issues as tracker
-from verification_tests.test_budget_tracking_execution import report, row, issue
+from verification_tests.ci.test_budget_tracking_execution import report, row, issue
 from ci_policy.budget_snapshot import validate
 from ci_policy import budget_history as history
 

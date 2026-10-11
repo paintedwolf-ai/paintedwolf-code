@@ -72,7 +72,7 @@ class HarnessRuntimeTest(unittest.TestCase):
         self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         self.scripts = self.root / "scripts"
-        source = Path(__file__).resolve().parents[1]
+        source = Path(__file__).resolve().parents[2]
         for name in ("e2e-sidecar-bg.sh", "e2e-sidecar-serve.sh", "e2e-sidecar-stop.sh",
                      "e2e/sidecar-process.sh", "e2e/model-fixture.ts", "harness/crash-restart.sh"):
             target = self.scripts / name
