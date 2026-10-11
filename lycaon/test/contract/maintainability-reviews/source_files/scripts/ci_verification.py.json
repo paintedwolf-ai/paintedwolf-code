@@ -1,9 +1,0 @@
-{
-  "category": "source_files",
-  "artifact": "scripts/ci_verification.py",
-  "kind": "module",
-  "workstream": "verification-contracts",
-  "disposition": "refactor",
-  "reason": "Review the implementation seams and dependency contracts in this workstream; preserve behavior and operation settlement.",
-  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb"
-}
