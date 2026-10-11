@@ -19,6 +19,7 @@ type Props = Omit<ComponentProps<typeof FilesTreePane>, "tree" | "review"> &
     "filterOpen" | "onFilterClose" | "renaming" | "onCommitRename" |
     "onCancelRename" | "onMovePath" | "onReady" | "onRowMenu" |
     "onWorkspaceMismatch" | "onInitialLoadSettled"> & {
+      navigationRevision: number;
       publishedTreeFile: ActiveFile;
       displayedTreeFile: ActiveFile;
       explicitTreeReveal: ActiveFile;
@@ -31,7 +32,7 @@ export function FilesNavigationPane(props: Props) {
     const selected = props.selectedEntry;
     if (!editorRevealInTreePref() || selected?.kind !== "file") return selected;
     const explicit = props.explicitTreeReveal;
-    if (explicit?.revision === props.navigationRevision && explicit.rootId === selected.rootId &&
+    if (explicit && explicit.revision === props.navigationRevision && explicit.rootId === selected.rootId &&
       explicit.path === selected.path) return selected;
     const displayed = props.displayedTreeFile;
     return displayed ? { ...displayed, kind: "file" as const } : selected;
