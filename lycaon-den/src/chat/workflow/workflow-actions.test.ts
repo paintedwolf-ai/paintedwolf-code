@@ -1,10 +1,11 @@
+import { bindAppConnection } from "../../platform/connection/app-connection.ts";
+import { connectionServicesFixture } from "../../test/connection-services-fixture.ts";
 import { resetSessionSnapshotReads } from "../../api/session-snapshot-refresh.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import { wireProject } from "../../api/mocks/project-fixture.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { createProjectsStore } from "../../store/projects-store.ts";
-import { registerProjectsStore } from "../../platform/connection/app-connection.ts";
 import type { Message, WorkflowRun } from "../../api/types.ts";
 import { mergeWorkflowRunsFromMessages, refreshWorkflowState, startWorkflowForSession, exitActiveWorkflow } from "./workflow-actions.ts";
 import { emptyProjects } from "../../test/projects-fixture.ts";
@@ -143,7 +144,7 @@ describe("refreshWorkflowState", () => {
       onProjectEvent: () => () => {},
     });
     projects.load([wireProject("/tmp/p", "proj-1")]);
-    registerProjectsStore(projects);
+    bindAppConnection(connectionServicesFixture({ projects: projects }));
     const client = stubClient({
       getActiveWorkflowRun: vi.fn().mockResolvedValue({
         id: "run-1",

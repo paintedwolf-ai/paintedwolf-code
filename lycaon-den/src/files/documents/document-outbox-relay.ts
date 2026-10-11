@@ -35,6 +35,7 @@ export function wakeDocumentOutbox(documentId: string, revision: number, outbox 
 export async function relayDocumentOutbox(projectId: string | undefined, client: LycaonClient,
   resident: (id: string) => boolean, outbox: DocumentOutbox = documentOutbox(), stopped = () => false, synchronized?: (document: EditorDocument) => void): Promise<void> {
   await prepareClientIdentity();
+  if (stopped()) return;
   const state = deliveryAttempts(outbox);
   for (const item of await outbox.list(projectId)) {
     const projectId = item.projectId;
@@ -45,6 +46,7 @@ export async function relayDocumentOutbox(projectId: string | undefined, client:
     const isResident = resident(item.documentId);
     const reservation = await documentResidency.acquire(documentResourceKey(projectId, { documentId: item.documentId }), documentOpeningReservation(), "background", () => !stopped() && (isResident || !resident(item.documentId)));
     if (!reservation) continue;
+    if (stopped()) { reservation.release(); return; }
     let replica: DocumentReplica | undefined;
     let attempt = previous;
     if (!attempt || attempt.client !== client) {
@@ -53,7 +55,9 @@ export async function relayDocumentOutbox(projectId: string | undefined, client:
     }
     try {
       const records = await readReservedRecovery(outbox, item.documentId, reservation);
+      if (stopped()) return;
       await reservation.expand(1024 * 1024 + recoveryBytes(records) * 2);
+      if (stopped()) return;
       const pending = records.filter((record) => record.kind === "format" || (record.kind === "update" && !record.acknowledged) || (record.kind === "command" && !record.result));
       if (pending.length === 0) { state.delete(item.documentId); continue; }
       if (isResident && !pending.some(record => record.kind === "command" && !record.historyBase)) continue;
@@ -63,10 +67,13 @@ export async function relayDocumentOutbox(projectId: string | undefined, client:
       }
       if (attempt.retryAt > Date.now()) continue;
       let document = await client.createEditorDocumentSnapshot(projectId, item.documentId, { client_id: clientIdentity() });
+      if (stopped()) return;
       attempt.revision = Math.max(attempt.revision ?? 0, document.revision);
       document = (await resumeDocumentCommands(client, document, outbox, records, () => readReservedRecovery(outbox, item.documentId, reservation))).document;
+      if (stopped()) return;
       if (isResident) { state.delete(item.documentId); continue; }
       for (const command of pending) {
+        if (stopped()) return;
         if (command.kind !== "command" || !command.historyBase || command.clientId === clientIdentity()) continue;
         const accepted = await deliverDocumentCommand(client, command, outbox);
         if (accepted.revision >= document.revision) document = accepted;
@@ -75,11 +82,14 @@ export async function relayDocumentOutbox(projectId: string | undefined, client:
       replica = new DocumentReplica(document, () => client, () => undefined, outbox, undefined, attempt.incarnation, undefined, false);
       await replica.initialize(await readReservedRecovery(outbox, item.documentId, reservation));
       attempt.revision = Math.max(attempt.revision ?? 0, replica.accepted.revision);
+      if (stopped()) return;
       await replica.flush();
+      if (stopped()) return;
       if (!replica.pendingCount) synchronized?.(replica.accepted);
       attempt.failures = 0;
       attempt.retryAt = 0;
     } catch (error) {
+      if (stopped()) return;
       if (error instanceof LycaonApiError && error.code === "editor_document_not_found") {
         // The host has no such document; its records leave the outbox.
         await outbox.commit([], await readReservedRecovery(outbox, item.documentId, reservation)).catch(() => undefined);
@@ -101,7 +111,7 @@ export function startDocumentOutboxRelay(client: () => LycaonClient | null,
   const run = async () => {
     try {
       const connected = client();
-      if (connected) await relayDocumentOutbox(undefined, connected, resident, undefined, () => stopped, synchronized);
+      if (connected) await relayDocumentOutbox(undefined, connected, resident, undefined, () => stopped || client() !== connected, synchronized);
     } finally {
       if (!stopped) timer = setTimeout(() => { void run().catch(() => undefined); }, 5_000);
     }

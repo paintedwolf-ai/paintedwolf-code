@@ -1,10 +1,7 @@
+import type { ConnectionServices } from "./connection-services.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import { resetSessionEventRevisions } from "../../api/events.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
-import type { SettingsStore } from "../../store/settings-store.ts";
-import type { RecentsStore } from "../../store/recents-store.ts";
-import type { ShellStore } from "../../store/shell-store.ts";
-import type { ProjectsStore } from "../../store/projects-store.ts";
 import type { NoticeReporter, NoticeStore } from "../../notices/notice-store.ts";
 import { registerNoticePublisher } from "../../notices/notice-store.ts";
 import type { EntityRetire } from "../../lifecycle/entity-retire.ts";
@@ -18,9 +15,8 @@ import { cancelWorkerTranscriptCoalesce } from "../../chat/worker/worker-transcr
 import { clearChildMessageBuffer } from "../../chat/transcript/projection/worker-child-message-buffer.ts";
 import { reconcileActiveScope } from "../../chat/session/session-reconcile.ts";
 import type { BackendConnection } from "./backend.ts";
-import { clearBackendConnection, discoverBackend, fetchHealth, getBackendConnection, readSidecarInfo, restartBackend, setBackendConnection } from "./backend.ts";
-import { watchEngineState } from "./engine-supervision.ts";
-import { CLIENT_NOTICES } from "../../notices/client-notices.generated.ts";
+import { clearBackendConnection, discoverBackend, fetchHealth, getBackendConnection,  restartBackend, setBackendConnection } from "./backend.ts";
+import { createEngineFollower } from "./connection-engine-follower.ts";
 import { noteHealthResponse, noteStoreRevision, resetStoreRevisionTracking } from "./health.ts";
 import { incompatibleHost } from "./host-identity.ts";
 import { setBackendReachabilityObserver } from "./request-connectivity.ts";
@@ -29,17 +25,10 @@ import { createConnectionReconcile } from "./connection-reconcile.ts";
 import { ConnectionInvalidation } from "./connection-invalidation.ts";
 import { createConnectionEvents } from "./connection-events.ts";
 
-const ENGINE_RESTARTING_NOTICE = "engine_restarting";
-
 const host = new ConnectionHost();
-let settingsStoreRef: SettingsStore | null = null;
-let costStoreRef: CostStore | null = null;
-let recentsStoreRef: RecentsStore | null = null;
-let shellStoreRef: ShellStore | null = null;
-let projectsStoreRef: ProjectsStore | null = null;
-let appStoreRef: AppStore | null = null;
-let noticeStoreRef: NoticeStore | null = null;
-let entityRetireRef: EntityRetire | null = null;
+let services: ConnectionServices | null = null;
+let bindingLifetime: AbortController | undefined;
+let engineFollower: ReturnType<typeof createEngineFollower> | undefined;
 let connectInFlight: Promise<LycaonClient> | null = null;
 /** OR-merged across concurrent connect callers for this in-flight attempt. */
 let connectFailureNotices = false;
@@ -47,27 +36,31 @@ let connectFailureNotices = false;
 const invalidation = new ConnectionInvalidation({
   client: host.getClient,
   projects: () => projectsRegistry(),
-  settings: () => settingsStoreRef,
-  costs: () => costStoreRef,
+  settings: () => services?.settings ?? null,
+  costs: () => services?.costs ?? null,
 });
 const reconcile = createConnectionReconcile(host, {
-  shell: () => shellStoreRef,
-  projects: () => projectsStoreRef,
-  recents: () => recentsStoreRef,
-  retire: () => entityRetireRef,
+  shell: () => services?.shell ?? null,
+  projects: () => services?.projects ?? null,
+  recents: () => services?.recents ?? null,
+  retire: () => services?.retire ?? null,
   notices: appNoticeReporter,
   resetEvents: resetBackendEventStream,
   resubscribeForeground: resubscribeForegroundProjectEvents,
 });
 const events = createConnectionEvents({
   host, invalidation, reconcile,
-  projects: () => projectsStoreRef,
-  recents: () => recentsStoreRef,
-  retire: () => entityRetireRef,
+  projects: () => services?.projects ?? null,
+  recents: () => services?.recents ?? null,
+  retire: () => services?.retire ?? null,
 });
 export const projectsRegistry = reconcile.projectsRegistry;
 export const handleSessionGone = reconcile.handleSessionGone;
 export const getLycaonClient = host.getClient;
+export function captureConnectionGuard(client: LycaonClient): () => boolean {
+  const generation = host.generation;
+  return () => host.generation === generation && host.client === client;
+}
 export const setLycaonClientForTest = host.setClientForTest;
 export const resumeProjectEventsAfter = events.resumeProjectEventsAfter;
 export const onProjectEvent = events.onProjectEvent;
@@ -77,43 +70,45 @@ export const onAttentionResync = events.onAttentionResync;
 export const onSessionEvent = events.onSessionEvent;
 export const projectEventsAreSubscribed = events.projectEventsAreSubscribed;
 export const waitForProjectEvents = events.waitForProjectEvents;
-export const subscribeProjectEvents = events.subscribeProjectEvents;
-
-export function registerSettingsStore(store: SettingsStore): void {
-  settingsStoreRef = store;
-  invalidation.resetSettings();
+export function subscribeProjectEvents(app: AppStore, projectId: string): void {
+  assertBoundAppStore(app);
+  events.subscribeProjectEvents(app, projectId);
 }
 
-export function registerCostStore(store: CostStore): void {
-  costStoreRef = store;
+function assertBoundAppStore(app: AppStore): void {
+  if (services?.app !== app) throw new Error("The window connection binding is no longer active.");
+}
+
+/** Rebinding retires asynchronous work before exposing replacement services. */
+export function bindAppConnection(next: ConnectionServices): { signal: AbortSignal; dispose(): void } {
+  engineFollower?.dispose();
+  engineFollower = undefined;
+  disconnectAppBackend();
+  bindingLifetime?.abort();
+  const lifetime = bindingLifetime = new AbortController();
+  const binding = services = Object.freeze({ ...next });
+  invalidation.resetSettings();
+  registerNoticePublisher(binding.notices);
+  setBackendReachabilityObserver({
+    reachable: () => { if (services === binding) markSidecarConnected(binding.app); },
+    unreachable: () => { if (services === binding) binding.app.actions.setSidecarStatus("disconnected"); },
+  });
+  return { signal: lifetime.signal, dispose: () => {
+    if (services !== binding) return;
+    engineFollower?.dispose();
+    engineFollower = undefined;
+    disconnectAppBackend();
+    lifetime.abort();
+    bindingLifetime = undefined;
+    setBackendReachabilityObserver(null);
+    registerNoticePublisher(null);
+    services = null;
+  } };
 }
 
 /** Cost store for stage views mounted outside the store-prop tree. */
 export function getCostStore(): CostStore | null {
-  return costStoreRef;
-}
-
-export function registerRecentsStore(store: RecentsStore): void {
-  recentsStoreRef = store;
-}
-
-export function registerShellStore(store: ShellStore): void {
-  shellStoreRef = store;
-}
-
-export function registerProjectsStore(store: ProjectsStore): void {
-  projectsStoreRef = store;
-}
-
-export function registerAppStore(store: AppStore): void {
-  appStoreRef = store;
-  setBackendReachabilityObserver({
-    reachable: () => {
-      const current = appStoreRef;
-      if (current) markSidecarConnected(current);
-    },
-    unreachable: () => appStoreRef?.actions.setSidecarStatus("disconnected"),
-  });
+  return services?.costs ?? null;
 }
 
 /** Refresh readiness when the sidecar becomes reachable. */
@@ -127,23 +122,13 @@ function markSidecarConnected(appStore: AppStore): void {
   }
 }
 
-export function registerNoticeStore(store: NoticeStore): void {
-  noticeStoreRef = store;
-  // SSE dispatch uses a registration hook to avoid an import cycle.
-  registerNoticePublisher(store);
-}
-
-export function registerEntityRetire(retire: EntityRetire | null): void {
-  entityRetireRef = retire;
-}
-
 export function getEntityRetire(): EntityRetire | null {
-  return entityRetireRef;
+  return services?.retire ?? null;
 }
 
 /** Notice store for code outside a reactive context. */
 export function getRegisteredNoticeStore(): NoticeStore | null {
-  return noticeStoreRef;
+  return services?.notices ?? null;
 }
 
 /** Reports app-scoped connection and boot failures. */
@@ -153,21 +138,21 @@ export function appNoticeReporter(): NoticeReporter {
 
 /** Returns a reporter bound to one notice scope. */
 export function noticeReporterFor(scope: NoticeScope): NoticeReporter {
-  const store = noticeStoreRef;
+  const store = services?.notices ?? null;
   if (!store) return { reportError: () => {}, publish: () => {} };
   return store.reporterFor(scope);
 }
 
 /** Resubscribe the foreground project after reconnect. */
-function resubscribeForegroundProjectEvents(appStore = appStoreRef): void {
-  const projectId = shellStoreRef?.state.foreground?.projectId?.trim() ?? "";
+function resubscribeForegroundProjectEvents(appStore = services?.app ?? null): void {
+  const projectId = services?.shell.state.foreground?.projectId?.trim() ?? "";
   if (!appStore) return;
   subscribeProjectEvents(appStore, projectId);
 }
 
 function resetBackendEventStream(appStore: AppStore | null): void {
   events.reset();
-  costStoreRef?.actions.clear();
+  services?.costs.actions.clear();
   resetPreflightStore();
   resetFileSummariesSetting();
   if (appStore) {
@@ -181,6 +166,7 @@ export function attachKnownBackend(
   appStore: AppStore,
   connection: BackendConnection,
 ): LycaonClient {
+  assertBoundAppStore(appStore);
   host.advance();
   connectInFlight = null;
   connectFailureNotices = false;
@@ -223,51 +209,52 @@ export async function connectAppBackend(
   appStore: AppStore,
   opts?: ConnectAppBackendOpts,
 ): Promise<LycaonClient> {
+  assertBoundAppStore(appStore);
   if (connectInFlight) {
     if (opts?.reportFailure) connectFailureNotices = true;
     return connectInFlight;
   }
-  const known = opts?.connection;
-  if (known && host.client) {
-    // The shell replaced the engine this window was bound to.
-    disconnectAppBackend();
-  } else if (host.client) {
-    const client = host.client;
-    const generation = host.generation;
-    const valid = await verifyCachedBackend(appStore);
-    host.assertCurrent(generation, client);
-    if (valid) return client;
-    disconnectAppBackend();
-  }
   connectFailureNotices = opts?.reportFailure ?? false;
-  const generation = host.generation;
-  const discover = known
-    ? async () => {
-      setBackendConnection(known);
-      return known;
+  const startedGeneration = host.generation;
+  const flight = Promise.resolve().then(async () => {
+    host.assertCurrent(startedGeneration);
+    const known = opts?.connection;
+    if (known && host.client) {
+      retireBackendConnection();
+    } else if (host.client) {
+      const client = host.client;
+      const generation = host.generation;
+      const valid = await verifyCachedBackend(appStore);
+      host.assertCurrent(generation, client);
+      if (valid) return client;
+      retireBackendConnection();
     }
-    : discoverBackend;
-  const flight = connectAppBackendInner(appStore, generation, discover)
-    .catch((err) => {
-      if (generation === host.generation && connectFailureNotices) {
-        appNoticeReporter().reportError(
-          err instanceof Error ? err : new Error("Backend connection failed"),
-        );
+    const discover = known
+      ? async () => {
+        setBackendConnection(known);
+        return known;
       }
-      throw err;
-    })
-    .finally(() => {
-      if (connectInFlight !== flight) return;
-      connectInFlight = null;
-      connectFailureNotices = false;
-    });
+      : discoverBackend;
+    return connectAppBackendInner(appStore, host.generation, discover);
+  }).catch((err) => {
+    if (connectInFlight === flight && connectFailureNotices) {
+      appNoticeReporter().reportError(
+        err instanceof Error ? err : new Error("Backend connection failed"),
+      );
+    }
+    throw err;
+  }).finally(() => {
+    if (connectInFlight !== flight) return;
+    connectInFlight = null;
+    connectFailureNotices = false;
+  });
   connectInFlight = flight;
   return flight;
 }
 
 /** Restart the managed sidecar and fully reconnect this window to the new store. */
 export async function restartAppBackend(): Promise<LycaonClient> {
-  const appStore = appStoreRef;
+  const appStore = services?.app ?? null;
   if (!appStore) throw new Error("app connection is not initialized");
   disconnectAppBackend();
   const generation = host.generation;
@@ -343,58 +330,38 @@ export function boundEngineGeneration(): number | undefined {
   return (host.connection ?? getBackendConnection())?.engineGeneration;
 }
 
-/**
- * Follows the engine the shell supervises. A new generation is a replacement
- * process with its own port and token, so the window rebinds to it; while
- * the engine is down the window holds its place instead of reporting each
- * failed request.
- */
+/** Follows engine replacements for the active service binding. */
 export async function followEngineState(appStore: AppStore): Promise<() => void> {
-  let sawEngineDown = false;
-  return watchEngineState((engine) => {
-    const notices = appNoticeReporter();
-    if (engine.state === "restarting") {
-      sawEngineDown = true;
-      appStore.actions.setSidecarStatus("disconnected");
-      notices.publish({
-        code: ENGINE_RESTARTING_NOTICE,
-        severity: "warning",
-        title: CLIENT_NOTICES.engine_restarting.title,
-        message: CLIENT_NOTICES.engine_restarting.message,
-      });
-      return;
-    }
-    noticeStoreRef?.withdraw(ENGINE_RESTARTING_NOTICE, APP_SCOPE);
-    if (engine.state === "stopped") {
-      sawEngineDown = true;
-      appStore.actions.setSidecarStatus("disconnected");
-      return;
-    }
-    if (engine.state !== "running" || connectInFlight) return;
-    const bound = boundEngineGeneration();
-    // An unbound window that never lost an engine is still booting; its own connect binds it.
-    if (bound === engine.generation || (bound === undefined && !sawEngineDown)) return;
-    sawEngineDown = false;
-    void readSidecarInfo()
-      .then((connection) => {
-        if (!connection || connection.engineGeneration !== engine.generation) return;
-        if (boundEngineGeneration() === engine.generation) return;
-        return connectAppBackend(appStore, { connection });
-      })
-      .catch(() => undefined);
+  assertBoundAppStore(appStore);
+  engineFollower?.dispose();
+  const follower = engineFollower = createEngineFollower({
+    app: appStore,
+    notices: services?.notices ?? null,
+    connecting: () => connectInFlight,
+    boundGeneration: boundEngineGeneration,
+    connect: (connection) => connectAppBackend(appStore, { connection }),
   });
+  await follower.ready;
+  return () => {
+    follower.dispose();
+    if (engineFollower === follower) engineFollower = undefined;
+  };
 }
 
 export function disconnectAppBackend(): void {
+  connectInFlight = null;
+  connectFailureNotices = false;
+  retireBackendConnection();
+}
+
+function retireBackendConnection(): void {
   host.advance();
-  resetBackendEventStream(appStoreRef);
+  resetBackendEventStream(services?.app ?? null);
   events.dispose();
   cancelWorkerTranscriptCoalesce();
   clearChildMessageBuffer();
-  connectInFlight = null;
-  connectFailureNotices = false;
   host.clear();
   resetStoreRevisionTracking();
   clearBackendConnection();
-  appStoreRef?.actions.setSidecarStatus("disconnected");
+  services?.app.actions.setSidecarStatus("disconnected");
 }

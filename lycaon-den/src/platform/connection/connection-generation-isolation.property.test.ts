@@ -57,14 +57,10 @@ function setupStores(mod: AppConnectionModule): TestStores {
   const settingsStore = createSettingsStore();
   const costStore = createCostStore();
 
-  mod.registerAppStore(appStore);
-  mod.registerShellStore(shellStore);
-  mod.registerProjectsStore(projectsStore);
-  mod.registerSettingsStore(settingsStore);
-  mod.registerCostStore(costStore);
-  mod.registerRecentsStore(recentsStore);
-  mod.registerNoticeStore(noticeStore);
-  mod.registerEntityRetire(retire);
+  mod.bindAppConnection({
+    app: appStore, shell: shellStore, projects: projectsStore, settings: settingsStore,
+    costs: costStore, recents: recentsStore, notices: noticeStore, retire,
+  });
 
   return { appStore, shellStore, projectsStore, recentsStore, settingsStore, costStore, noticeStore };
 }

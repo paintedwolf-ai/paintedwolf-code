@@ -69,11 +69,16 @@ function mirror(
 
 export function startComposerDocumentMirror(): () => void {
   stopMirror?.();
-  stopMirror = subscribeSharedComposerDocuments(mirror);
-  return () => {
-    stopMirror?.();
-    stopMirror = undefined;
+  const unsubscribe = subscribeSharedComposerDocuments(mirror);
+  let stopped = false;
+  const stop = () => {
+    if (stopped) return;
+    stopped = true;
+    unsubscribe();
+    if (stopMirror === stop) stopMirror = undefined;
   };
+  stopMirror = stop;
+  return stop;
 }
 
 function seed(destination: ChatDestination) {

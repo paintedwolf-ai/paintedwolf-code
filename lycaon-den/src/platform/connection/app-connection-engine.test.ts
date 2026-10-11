@@ -1,7 +1,7 @@
 import { installConnectionFixtureCleanup, discoverBackend, createLycaonClient, readSidecarInfo, loadModule, loadModuleWithNotices, resetEngineStateHandler, emitEngineState } from "./app-connection-test-fixture.ts";
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createAppStore } from "../../store/app-state.ts";
+import { createFixtureApp } from "./app-connection-test-fixture.ts";
 
 installConnectionFixtureCleanup();
   describe("engine supervision", () => {
@@ -14,7 +14,7 @@ installConnectionFixtureCleanup();
 
     it("rebinds to the replacement engine and withdraws the restarting notice", async () => {
       const { mod, all } = await loadModuleWithNotices();
-      const appStore = createAppStore();
+      const appStore = createFixtureApp();
       discoverBackend.mockResolvedValue({ baseUrl: "http://127.0.0.1:8787", apiToken: "tok", engineGeneration: 1 });
       await mod.followEngineState(appStore);
       await mod.connectAppBackend(appStore);
@@ -38,7 +38,7 @@ installConnectionFixtureCleanup();
 
     it("leaves a booting window to its own connect", async () => {
       const mod = await loadModule();
-      await mod.followEngineState(createAppStore());
+      await mod.followEngineState(createFixtureApp());
       emitEngineState({ state: "running", generation: 1 });
       await Promise.resolve();
       expect(readSidecarInfo).not.toHaveBeenCalled();
@@ -46,7 +46,7 @@ installConnectionFixtureCleanup();
 
     it("keeps the engine it is already bound to", async () => {
       const mod = await loadModule();
-      const appStore = createAppStore();
+      const appStore = createFixtureApp();
       discoverBackend.mockResolvedValue({ baseUrl: "http://127.0.0.1:8787", apiToken: "tok", engineGeneration: 3 });
       await mod.followEngineState(appStore);
       await mod.connectAppBackend(appStore);
@@ -57,7 +57,7 @@ installConnectionFixtureCleanup();
 
     it("rebinds a window that learns of an intentional restart elsewhere", async () => {
       const mod = await loadModule();
-      const appStore = createAppStore();
+      const appStore = createFixtureApp();
       discoverBackend.mockResolvedValue({ baseUrl: "http://127.0.0.1:8787", apiToken: "tok", engineGeneration: 4 });
       await mod.followEngineState(appStore);
       await mod.connectAppBackend(appStore);
@@ -69,7 +69,7 @@ installConnectionFixtureCleanup();
 
     it("goes offline without a stop of its own when the shell gives up", async () => {
       const mod = await loadModule();
-      const appStore = createAppStore();
+      const appStore = createFixtureApp();
       await mod.followEngineState(appStore);
       await mod.connectAppBackend(appStore);
       emitEngineState({ state: "stopped", exit });

@@ -32,12 +32,12 @@ describe("session-prefetch", () => {
   it("retires a recent chat the host no longer has instead of warming it every boot", async () => {
     const onSessionGone = vi.fn();
     const gone = stubClient({ getSessionBootstrap: vi.fn(async () => { throw new LycaonApiError("missing", 404, "session_not_found"); }) });
-    await warmSessionChatCache(gone, { projectId: "p1", sessionId: "deleted" }, [], onSessionGone);
+    await warmSessionChatCache(gone, { projectId: "p1", sessionId: "deleted" }, onSessionGone, () => true);
     expect(onSessionGone).toHaveBeenCalledWith({ projectId: "p1", sessionId: "deleted" });
 
     onSessionGone.mockClear();
     const offline = stubClient({ getSessionBootstrap: vi.fn(async () => { throw new LycaonApiError("offline", 500, "internal_error"); }) });
-    await warmSessionChatCache(offline, { projectId: "p1", sessionId: "live" }, [], onSessionGone);
+    await warmSessionChatCache(offline, { projectId: "p1", sessionId: "live" }, onSessionGone, () => true);
     expect(onSessionGone).not.toHaveBeenCalled();
   });
 });

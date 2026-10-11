@@ -10,6 +10,7 @@ import { ConfirmDestructiveHost } from "./components/ConfirmDestructiveDialog.ts
 import { HostFolderDialog } from "./components/HostFolderDialog.tsx";
 import { TextEditContextMenuHost } from "./components/TextEditContextMenuHost.tsx";
 import {
+  bindAppConnection,
   connectAppBackend,
   disconnectAppBackend,
   getLycaonClient,
@@ -17,14 +18,6 @@ import {
   onAttentionResync,
   onProjectEvent,
   onSessionEvent,
-  registerAppStore,
-  registerCostStore,
-  registerProjectsStore,
-  registerRecentsStore,
-  registerSettingsStore,
-  registerNoticeStore,
-  registerEntityRetire,
-  registerShellStore,
 } from "./platform/connection/app-connection.ts";
 import { startAppBoot } from "./platform/connection/app-boot.ts";
 import { rememberSessionChatFromStore } from "./chat/session/session-chat-cache.ts";
@@ -65,30 +58,26 @@ onAttentionResync(() => void attentionStore.load());
 const projectSessionsStore = createProjectSessionsStore(() => getLycaonClient(), {
   onSessionEvent,
 });
-// The stream (re)opening is the moment a client exists and events may have
-// been missed — same resync rule the attention store follows.
+// A reopened stream refreshes events missed while disconnected.
 onAttentionResync(() => void projectSessionsStore.refresh());
 const shellStore = createShellStore("offline");
 const settingsStore = createSettingsStore();
 const costStore = createCostStore();
-registerSettingsStore(settingsStore);
-registerCostStore(costStore);
-registerAppStore(appStore);
-registerNoticeStore(noticeStore);
-registerEntityRetire(
-  createEntityRetire({
-    notices: noticeStore,
-    attention: attentionStore,
-    recents: recentsStore,
-  }),
-);
-registerRecentsStore(recentsStore);
-registerShellStore(shellStore);
-registerProjectsStore(projectsStore);
+const entityRetire = createEntityRetire({
+  notices: noticeStore,
+  attention: attentionStore,
+  recents: recentsStore,
+});
 
 function App() {
+  const connectionBinding = bindAppConnection({
+    app: appStore, settings: settingsStore, costs: costStore, notices: noticeStore,
+    retire: entityRetire, recents: recentsStore, shell: shellStore, projects: projectsStore,
+  });
+  onCleanup(connectionBinding.dispose);
   createEffect(() => documentResidency.setBudget(windowDocumentBudget(1 + itemWindowViews().length)));
   onMount(() => {
+    if (connectionBinding.signal.aborted) return;
     const stopDocumentDelivery = startDocumentOutboxRelay(getLycaonClient, id => !!editorReplica(id), document => applyFilesBufferDocumentStatus(document.project_id, document, true));
     const stopComposerDocumentMirror = startComposerDocumentMirror();
     const subject = windowSubject();
@@ -106,7 +95,7 @@ function App() {
           ? subject.projectId
           : null,
       attachOnly: subject != null,
-    });
+    }, connectionBinding.signal);
     // Only the main window delivers system notifications.
     const unmountNotifications = subject
       ? () => {}
@@ -120,25 +109,35 @@ function App() {
       : mountUpdateNotice({ notices: noticeStore });
     let stopped = false;
     let stopUpdateRecovery = () => {};
+    const releaseUpdateRecovery = () => {
+      stopUpdateRecovery();
+      stopUpdateRecovery = () => {};
+    };
     if (!subject && isTauriRuntime()) {
       void listenHostEvent("update-resume-engine", () => {
+        if (stopped || connectionBinding.signal.aborted) return;
         disconnectAppBackend();
         void connectAppBackend(appStore).catch(() => undefined);
       }).then((stop) => {
-        if (stopped) stop();
+        if (stopped || connectionBinding.signal.aborted) stop();
         else stopUpdateRecovery = stop;
       });
     }
-    onCleanup(() => {
+    const releaseBackground = () => {
+      if (stopped) return;
       stopped = true;
-      stopUpdateRecovery();
+      connectionBinding.signal.removeEventListener("abort", releaseBackground);
+      releaseUpdateRecovery();
       stopDocumentDelivery();
       stopComposerDocumentMirror();
       unmountNotifications();
       unmountUpdates();
+    };
+    connectionBinding.signal.addEventListener("abort", releaseBackground, { once: true });
+    onCleanup(() => {
+      releaseBackground();
       rememberSessionChatFromStore(appStore);
       void flushTranscriptRowHeightsToDisk().catch(() => undefined);
-      disconnectAppBackend();
     });
   });
 
