@@ -181,6 +181,11 @@ The archive always names its SQLite payload `store.db`. An internal restore mark
 
 A failed apply is not a dead end. The marker records the failure, so the boot enters recovery mode and an explicit restore, recovery snapshot, or start fresh replaces the stuck transaction instead of being refused as a pending restart. The pre-image that transaction displaced is kept.
 
+Pending rewind journals belong to the installation. Their durable references resolve
+inside the restored checkpoint tree, independent of the original configuration
+directory. Restore validates journal identity and required bytes before publication;
+external project roots keep their explicit project identity.
+
 Transcript export is a separate portable representation of one session and is not a backup of host state.
 
 ## Internal code
