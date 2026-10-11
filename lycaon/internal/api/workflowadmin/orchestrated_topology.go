@@ -12,7 +12,7 @@ import (
 )
 
 func (s *Topology) StartOrchestratedTopologyForRun(ctx context.Context, sessionID string, run *wire.WorkflowRun) {
-	if s == nil || s.Orchestrator == nil || run == nil {
+	if s == nil || s.Orchestrator == nil || s.Requests == nil || run == nil {
 		return
 	}
 	// Workflow bytes come from the resolved catalog.
@@ -28,6 +28,11 @@ func (s *Topology) StartOrchestratedTopologyForRun(ctx context.Context, sessionI
 	if !manifest.BoundPhases[strings.TrimSpace(run.CurrentPhase)] {
 		return
 	}
+	ready, err := s.Requests.TopologyRequestReady(ctx, run.ID)
+	if err != nil || !ready {
+		return
+	}
+
 	sess, err := s.Store.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return
