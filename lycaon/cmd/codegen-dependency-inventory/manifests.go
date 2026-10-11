@@ -16,9 +16,7 @@ import (
 type row struct {
 	key        string // annotation key within its section
 	name       string // markdown, with qualifiers
-	title      string // markdown, bare
 	dependency string // Dependabot dependency name; empty when Dependabot does not manage it
-	group      int
 	pins       []value
 	pinNote    string
 	upstream   []upstreamRef
@@ -70,7 +68,6 @@ func goModuleRows(p *pinReader, m *manifestConfig) ([]row, error) {
 		rw := row{
 			key:        r.Mod.Path,
 			name:       "`" + r.Mod.Path + "`",
-			title:      "`" + r.Mod.Path + "`",
 			dependency: r.Mod.Path,
 			pins:       []value{{text: r.Mod.Version}},
 			upstream:   packageUpstream(kindGoModule, r.Mod.Path),
@@ -122,7 +119,6 @@ func bunRows(p *pinReader, m *manifestConfig) ([]row, error) {
 			rw := row{
 				key:        name,
 				name:       qualified(name, table.qualifier),
-				title:      "`" + name + "`",
 				dependency: name,
 				pins:       []value{{text: installed}},
 				upstream:   packageUpstream(kindNPM, name),
@@ -137,7 +133,6 @@ func bunRows(p *pinReader, m *manifestConfig) ([]row, error) {
 		rows = append(rows, row{
 			key:      "override:" + name,
 			name:     qualified(name, "override"),
-			title:    "`" + name + "`",
 			pins:     []value{{text: floor}},
 			upstream: packageUpstream(kindNPM, name),
 		})
@@ -181,7 +176,6 @@ func cargoRows(p *pinReader, m *manifestConfig) ([]row, error) {
 		rw := row{
 			key:        dep.name,
 			name:       qualified(dep.name, dep.qualifier()),
-			title:      "`" + dep.name + "`",
 			dependency: dep.name,
 			upstream:   packageUpstream(kindCrate, dep.name),
 		}

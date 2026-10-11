@@ -28,6 +28,10 @@ func (s *Handler) StartOrchestratedTopologyForRun(ctx context.Context, sessionID
 	if !manifest.BoundPhases[strings.TrimSpace(run.CurrentPhase)] {
 		return
 	}
+	ready, err := s.Workflows.TopologyRequestReady(ctx, run.ID)
+	if err != nil || !ready {
+		return
+	}
 	sess, err := s.Store.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return

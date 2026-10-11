@@ -54,6 +54,12 @@ func TestOptionsWorkflowEndToEnd(t *testing.T) {
 
 	// Pending request input holds the initial topology phase.
 	h.Server.Workflow.StartOrchestratedTopologyForRun(ctx, sess.ID, run)
+	testutil.FailErr(t, "recover pending topology", h.Server.Workflow.RecoverOrchestratedTopologies(ctx))
+	pendingCtx := testutil.BoundedContext(t, topologyWaitBudget)
+	h.Server.WaitForBackground(pendingCtx)
+	if err := pendingCtx.Err(); err != nil {
+		t.Fatalf("pending topology background work did not settle: %v", err)
+	}
 	if _, ok := h.DelegationStore.DelegationBySessionID(sess.ID); ok {
 		t.Fatal("research fan-out started before the request was answered")
 	}

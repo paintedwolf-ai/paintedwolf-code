@@ -22,16 +22,14 @@ func renderInventory(p *policy, sections []section, snap snapshot) []byte {
 	fmt.Fprintf(&b, "Pinned values are read from the tree when this page is generated. "+
 		"Upstream values come from `dependencies/upstream.json`, last refreshed on **%s**. "+
 		"The dependency inventory workflow regenerates this page after dependency changes land on main "+
-		"and refreshes upstream weekly. A blank rating or note means the entry "+
-		"has no judgement in `dependencies/` yet. A blank Dependabot cell means default "+
-		"grouped updates.\n\n---\n\n", snap.Fetched)
+		"and refreshes upstream weekly. This page highlights priority updates and upgrade constraints; "+
+		"the complete policy and pin sources are linked below.\n\n---\n\n", snap.Fetched)
 	renderBehind(&b, sections, snap)
 	b.WriteString("## Rating vectors\n\n")
 	writeProse(&b, p.ratings)
 	renderQuadrants(&b, p.Quadrants, sections)
-	for _, s := range sections {
-		renderSection(&b, s, snap)
-	}
+	renderConstraints(&b, sections, snap)
+	renderInventorySources(&b, sections)
 	b.WriteString("## Operational runbooks\n\n")
 	writeProse(&b, p.runbooks)
 	return []byte(strings.TrimRight(b.String(), "\n") + "\n")
@@ -81,7 +79,7 @@ func renderQuadrants(b *strings.Builder, stances quadrantStances, sections []sec
 	quadrants := []struct {
 		title, stance     string
 		urgent, expensive bool
-		members           []string
+		members           int
 	}{
 		{title: "High urgency, high friction", stance: stances.HighUrgencyHighFriction, urgent: true, expensive: true},
 		{title: "High urgency, low or moderate friction", stance: stances.HighUrgencyLowFriction, urgent: true},
@@ -96,42 +94,17 @@ func renderQuadrants(b *strings.Builder, stances quadrantStances, sections []sec
 			urgent := r.Urgency == "critical" || r.Urgency == "high"
 			for i := range quadrants {
 				if quadrants[i].urgent == urgent && quadrants[i].expensive == (r.Friction == "high") {
-					quadrants[i].members = append(quadrants[i].members, r.title)
+					quadrants[i].members++
 				}
 			}
 		}
 	}
 	b.WriteString("## Quadrants\n\nAn entry counts as high urgency when rated Critical or High, and as high friction when rated High. " +
-		"Entries missing either rating are not placed.\n\n| Quadrant | Stance | Members |\n|---|---|---|\n")
+		"Entries missing either rating are not placed.\n\n| Quadrant | Stance | Entries |\n|---|---|---|\n")
 	for _, q := range quadrants {
-		fmt.Fprintf(b, "| **%s** | %s | %s |\n", q.title, cell(q.stance), strings.Join(q.members, ", "))
+		fmt.Fprintf(b, "| **%s** | %s | %d |\n", q.title, cell(q.stance), q.members)
 	}
 	b.WriteString("\n---\n\n")
-}
-
-func renderSection(b *strings.Builder, s section, snap snapshot) {
-	fmt.Fprintf(b, "## %s\n\n", s.cfg.Title)
-	writeProse(b, s.cfg.Intro)
-	dependabot := s.cfg.Manifest != nil && s.cfg.Manifest.DependabotGroup != ""
-	grouped := map[int][]row{}
-	for _, r := range s.rows {
-		grouped[r.group] = append(grouped[r.group], r)
-	}
-	for i, g := range s.cfg.Groups {
-		if len(grouped[i]) == 0 {
-			continue
-		}
-		fmt.Fprintf(b, "### %s\n\n", g.Title)
-		writeProse(b, g.Intro)
-		renderTable(b, grouped[i], snap, dependabot)
-	}
-	if rest := grouped[ungrouped]; len(rest) > 0 {
-		if len(s.cfg.Groups) > 0 {
-			b.WriteString("### Other entries\n\n")
-		}
-		renderTable(b, rest, snap, dependabot)
-	}
-	b.WriteString("---\n\n")
 }
 
 func renderTable(b *strings.Builder, rows []row, snap snapshot, dependabot bool) {

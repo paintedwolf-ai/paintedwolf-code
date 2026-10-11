@@ -14,7 +14,7 @@ Toolchain setup, local dev stacks, debug capture, and the `./task` targets with 
 - Node at `.node-version` for OpenAPI lint, bundle, and codegen
 - Rust with Cargo for the Tauri shell, installed through [rustup](https://rustup.rs) so `rust-toolchain.toml` selects the version
 
-`./task setup-dev` checks each of these. Current pins and upstream versions are listed in the [dependency inventory](operations/dependency-inventory.md).
+`./task setup-dev` checks each of these. Current pins and upstream versions are linked from the [dependency inventory](operations/dependency-inventory.md).
 
 ## First-time setup
 
