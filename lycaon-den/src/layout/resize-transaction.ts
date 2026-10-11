@@ -37,16 +37,19 @@ export function resizePreview(key: ResizeKey): number | null {
 function finishResize(id: number, outcome: "commit" | "cancel"): void {
   const current = resize();
   if (!current || current.id !== id) return;
-  batch(() => {
-    setResize(null);
-    if (
-      outcome === "commit" &&
-      Math.abs(current.previewValue - current.startValue) >= current.movementThreshold
-    ) {
-      current.commit(current.previewValue);
-    }
-  });
-  endShellLayoutBusy();
+  try {
+    batch(() => {
+      setResize(null);
+      if (
+        outcome === "commit" &&
+        Math.abs(current.previewValue - current.startValue) >= current.movementThreshold
+      ) {
+        current.commit(current.previewValue);
+      }
+    });
+  } finally {
+    endShellLayoutBusy();
+  }
 }
 
 export function cancelActiveResize(): void {

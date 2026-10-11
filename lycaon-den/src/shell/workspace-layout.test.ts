@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRoot, createComputed } from "solid-js";
+import { PANE_HIDDEN_PX } from "../layout/drag-to-hide.ts";
 import { EMPTY_APP_STATE_V1 } from "../../shared/app-state-types.ts";
 import { beginListColumnResize, beginListPaneResize, listPanePrefs } from "../list/list-layout.ts";
 import {
@@ -256,6 +257,15 @@ describe("layout contracts", () => {
     expect(getAppStateSnapshot().layout?.listPanes?.search?.columnWidths).toEqual({
       name: 160,
     });
+  });
+
+  it("settles layout even when a hide action fails", () => {
+    const drag = beginNavWidthResize(() => { throw new Error("hide failed"); });
+    drag.preview(PANE_HIDDEN_PX);
+    expect(() => drag.commit()).toThrow("hide failed");
+    expect(effectiveNavWidthPx()).toBe(preferredNavWidthPx());
+    flushShellLayoutSettleForTests();
+    expect(isShellLayoutUnstable()).toBe(false);
   });
 
   it("replaces workspace drags with list drags and ignores late callbacks", () => {
