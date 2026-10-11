@@ -69,7 +69,7 @@ func typeShape(tree *workingTree, inv *inventory, id string) (string, error) {
 		}
 	}
 	if len(declarations) == 0 {
-		return "", fmt.Errorf("Go artifact %s has no declarations", id)
+		return "", fmt.Errorf("artifact %s has no Go declarations", id)
 	}
 	slices.Sort(declarations)
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(slices.Compact(declarations), "\n")))), nil
