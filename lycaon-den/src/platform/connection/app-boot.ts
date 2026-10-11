@@ -407,7 +407,7 @@ async function bootstrapAppBackend(
 }
 
 /** Load persisted state, reveal the shell, then attach the backend in the background. */
-export async function startAppBoot(stores: AppBootStores, signal?: AbortSignal): Promise<void> {
+export async function startAppBoot(stores: AppBootStores, signal: AbortSignal): Promise<void> {
   if (signal?.aborted) return;
   signal?.addEventListener("abort", () => { shellSessionSwitchGeneration.next(); }, { once: true });
   const releasePreparation = appBootPreparation.register("backend", () => false);
