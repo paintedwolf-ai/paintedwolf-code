@@ -33,6 +33,7 @@ type ReadHandle interface {
 
 // Store manages a serialized writer and concurrent readers.
 type Store struct {
+	health  storeHealth
 	dataDir string
 	writer  *sql.DB
 	reader  *sql.DB
@@ -49,6 +50,7 @@ type Store struct {
 
 func newStore(writer, reader *sql.DB) *Store {
 	s := &Store{
+		health: storeHealth{failed: make(chan struct{})},
 		writer: writer, reader: reader,
 		maintenance: make(chan struct{}, 1), checkpoint: make(chan struct{}, 1),
 	}
@@ -59,6 +61,9 @@ func newStore(writer, reader *sql.DB) *Store {
 
 // ExecContext runs on the writer.
 func (s *Store) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
+	if err := s.Failure(); err != nil {
+		return nil, err
+	}
 	if s == nil || s.writer == nil {
 		return nil, errors.New("execute durable store: writer is closed")
 	}
@@ -71,6 +76,9 @@ func (s *Store) ExecContext(ctx context.Context, query string, args ...any) (sql
 
 // PrepareContext uses the writer because statement access mode is unknown.
 func (s *Store) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
+	if err := s.Failure(); err != nil {
+		return nil, err
+	}
 	if s == nil || s.writer == nil {
 		return nil, errors.New("prepare durable store: writer is closed")
 	}
@@ -95,11 +103,18 @@ func (s *Store) QueryRowContext(ctx context.Context, query string, args ...any) 
 
 // BeginTx starts an immediate writer transaction.
 func (s *Store) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {
+	if err := s.Failure(); err != nil {
+		return nil, err
+	}
 	if s == nil || s.writer == nil {
 		return nil, errors.New("begin durable transaction: writer is closed")
 	}
 	tx, err := s.writer.BeginTx(ctx, opts)
 	if err == nil {
+		if failure := s.Failure(); failure != nil {
+			_ = tx.Rollback()
+			return nil, failure
+		}
 		s.noteWrite()
 	}
 	return tx, err
@@ -172,7 +187,9 @@ func (s *Store) Shutdown(parent context.Context) error {
 				errs = append(errs, fmt.Errorf("close durable readers: %w", err))
 			}
 		}
-		if s.writer != nil {
+		if s.writer != nil && s.Failure() != nil {
+			errs = append(errs, s.writer.Close())
+		} else if s.writer != nil {
 			// Include the clean marker in the final checkpoint.
 			markErr := markShutdownState(ctx, s.writer, true)
 			if markErr != nil {
