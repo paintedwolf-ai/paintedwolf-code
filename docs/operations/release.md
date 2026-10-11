@@ -40,7 +40,8 @@ reading their values locally:
    ```
 2. After the maintenance workflow lands on `main`, dispatch
    `gh workflow run release-secrets-check.yml --ref main -f feed_credentials=migrate`.
-   This mode signs a disposable pointer against the registered public key and
+   This mode signs a disposable pointer, verifies its bytes and trusted comment
+   with minisign against the registered public key, and
    exports only a Libsodium sealed-box ciphertext. It refuses an existing map
    or a registry that has advanced beyond generation 1. It performs no storage,
    tap, website, or release publication probes.
@@ -55,7 +56,7 @@ reading their values locally:
    environment encryption key before installation, refresh the public variable
    and rerun migration. No private credential belongs in logs or artifacts.
 
-Retain every generation's feed credential while its feed may need a halt; add a separate entry before publishing a bridge. Each signing invocation receives only its selected credential. Build jobs never receive the map. The registered public key is checked even in rehearsals, which use an explicit fixture registry restricted to `release-system-tests/`.
+Retain every generation's feed credential while its feed may need a halt; add a separate entry before publishing a bridge. Each signing invocation receives only its selected credential. Build jobs never receive the map. The pointer bytes and trusted comment are cryptographically verified with minisign before publication and when validating prepared halts, including rehearsals, which use an explicit fixture registry restricted to `release-system-tests/`.
 
 The `release-rehearsal` environment serves the weekly [release system live
 test](../../.github/workflows/release-system-live-test.yml), which exercises

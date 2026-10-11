@@ -29,6 +29,11 @@ class FeedSigningTests(unittest.TestCase):
         used = []
         def run(command, **kwargs):
             env = kwargs["env"]
+            if command[0] == "minisign":
+                self.assertEqual(set(env), {"PATH"})
+                self.assertTrue(kwargs["capture_output"])
+                self.assertEqual(kwargs["timeout"], 30)
+                return subprocess.CompletedProcess(command, 0)
             self.assertNotIn("FEED_SIGNING_KEYS_JSON", env)
             number = int(env["TAURI_SIGNING_PRIVATE_KEY"].split("-")[1])
             self.assertEqual(env["TAURI_SIGNING_PRIVATE_KEY_PASSWORD"], f"password-{number}")
