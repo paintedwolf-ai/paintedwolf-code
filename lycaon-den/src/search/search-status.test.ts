@@ -68,3 +68,10 @@ it("explains a symbol search that stopped at its budget", () => {
   expect(searchCoverageNote({ exhaustive: false, issues })).toBe("Results may be incomplete. Narrow your search for more matches.");
   expect(searchIssueNotes(issues)).toContain("The symbol search stopped before checking every candidate.");
 });
+
+it("describes retained symbol progress separately from indexing and terminal limits", () => {
+  const issues = [{ executor: "symbol", reason: "symbol_pending" as const }];
+  expect(searchCoverageNote({ exhaustive: false, issues })).toBe("Results may be incomplete. Still searching symbols…");
+  expect(searchIssueNotes(issues)).toContain("Symbol search is continuing.");
+  expect(searchWarming({ issues })).toBe(false);
+});

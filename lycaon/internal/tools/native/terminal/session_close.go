@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -28,12 +29,12 @@ func CloseHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		if err != nil {
 			return "", err
 		}
-		if err := bg.LookupPTY(tctx.SessionID, in.ID); err != nil {
+		if err := bg.Terminal.LookupPTY(tctx.Identity.SessionID, in.ID); err != nil {
 			return "", mapTerminalLifecycleReject(err, in.ID)
 		}
-		subject, _ := bg.CommandLine(tctx.SessionID, in.ID)
+		subject, _ := bg.CommandLine(tctx.Identity.SessionID, in.ID)
 		tctx.SetDisplaySubject(subject)
-		res, err := bg.ClosePTY(tctx.SessionID, in.ID)
+		res, err := bg.Terminal.ClosePTY(tctx.Identity.SessionID, in.ID)
 		if err != nil {
 			return "", mapTerminalLifecycleReject(err, in.ID)
 		}
@@ -49,7 +50,7 @@ func parseTerminalCloseArgs(args map[string]any) (terminalCloseArgs, error) {
 	id, _ := args["id"].(string)
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return terminalCloseArgs{}, tools.RejectInvalidArguments("TERMINAL_ID_REQUIRED", map[string]any{"reason": "missing_id"})
+		return terminalCloseArgs{}, toolrejection.RejectInvalidArguments("TERMINAL_ID_REQUIRED", map[string]any{"reason": "missing_id"})
 	}
 	return terminalCloseArgs{ID: id}, nil
 }

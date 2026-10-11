@@ -13,8 +13,8 @@ import (
 
 var workerListLimit = httpio.MustPageLimit(100, 1, worker.MaxSessionPageSize)
 
-func (s *Server) handleListWorkers(w http.ResponseWriter, r *http.Request) {
-	projectID, _, ok := requestscope.ProjectIDQuery(s.projectRegistry, &s.responses, w, r)
+func (s *Workers) handleListWorkers(w http.ResponseWriter, r *http.Request) {
+	projectID, _, ok := requestscope.ProjectIDQuery(s.projectRegistry, s.responses, w, r)
 	if !ok {
 		return
 	}

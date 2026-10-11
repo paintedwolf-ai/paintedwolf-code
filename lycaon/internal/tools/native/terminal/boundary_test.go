@@ -24,7 +24,10 @@ func TestTerminalObservationsCarryBrokerDenials(t *testing.T) {
 	for tool, obs := range surfaces {
 		t.Run(tool, func(t *testing.T) {
 			out := &tools.ToolInvocationOut{}
-			report := stampBoundary(tools.ToolContext{SessionID: "sess", Out: out}, tool, obs)
+			report := stampBoundary(tools.ToolContext{
+				Identity: tools.InvocationIdentity{SessionID: "sess"},
+				Effects:  tools.InvocationEffects{Out: out},
+			}, tool, obs)
 			if report.BoundaryRefusal != string(confine.AttributionSubject) {
 				t.Fatalf("boundary refusal = %q", report.BoundaryRefusal)
 			}
@@ -44,7 +47,10 @@ func TestReportStatesTheBoxOnACleanObservation(t *testing.T) {
 		ListenPorts: []uint16{8765},
 	})
 	out := &tools.ToolInvocationOut{}
-	report := stampBoundary(tools.ToolContext{SessionID: "sess", Out: out}, SnapshotToolName,
+	report := stampBoundary(tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess"},
+		Effects:  tools.InvocationEffects{Out: out},
+	}, SnapshotToolName,
 		snapshotObservation(bgprocess.PTYSnapshotResult{
 			Boundary: appliedBoundary(),
 			Report:   spawn,
@@ -70,7 +76,10 @@ func TestReportStatesTheBoxOnACleanObservation(t *testing.T) {
 // An unconfined terminal has no boundary to attribute anything to.
 func TestUnconfinedTerminalAttributesNothing(t *testing.T) {
 	out := &tools.ToolInvocationOut{}
-	report := stampBoundary(tools.ToolContext{SessionID: "sess", Out: out}, SnapshotToolName,
+	report := stampBoundary(tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess"},
+		Effects:  tools.InvocationEffects{Out: out},
+	}, SnapshotToolName,
 		snapshotObservation(bgprocess.PTYSnapshotResult{
 			Network: []confine.EgressHost{{Host: "blocked.test", Allowed: false}},
 		}))
@@ -86,7 +95,10 @@ func TestUnconfinedTerminalAttributesNothing(t *testing.T) {
 func TestTerminalObservationStatesRemotePackageDestinationRecovery(t *testing.T) {
 	report := confine.ReportOf(appliedBoundary()).WithRemotePackageExecution([]string{"proxy.golang.org"}, nil)
 	out := &tools.ToolInvocationOut{}
-	got := stampBoundary(tools.ToolContext{SessionID: "sess", Out: out}, ReadToolName, observation{
+	got := stampBoundary(tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess"},
+		Effects:  tools.InvocationEffects{Out: out},
+	}, ReadToolName, observation{
 		Boundary: appliedBoundary(), Report: report,
 		Network: []confine.EgressHost{{Host: "gitea.example.com", Port: 443, Allowed: false}},
 	})

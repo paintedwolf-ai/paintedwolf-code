@@ -3,15 +3,26 @@ package workflow
 import (
 	"context"
 	"fmt"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-const obligationsVarKey = "obligations"
+type Obligations struct {
+	Gates    workflowgates.GateEvaluator
+	Runs     runstate.RunsRepository
+	Vars     *runstate.Variables
+	Resolver *catalog.Resolver
+	Phases   *workflowphases.Service
+	Kinds    map[string]ObligationKind
+}
 
 // ObligationKind identifies one host-observed phase wait.
 type ObligationKind interface {
@@ -24,44 +35,26 @@ type ObligationKind interface {
 	Status(ctx context.Context, workflowRunID, phase string) (api.WorkflowRunObligation, error)
 }
 
-// EvidenceDigestSource contributes one block to the review-loop evidence digest.
-type EvidenceDigestSource func(ctx context.Context, workflowRunID string) string
-
-// RegisterObligationKind adds a kind to the manager's registry.
-func (m *RunManager) RegisterObligationKind(kind ObligationKind) {
+// Register adds a kind to the obligation registry.
+func (m *Obligations) Register(kind ObligationKind) {
 	if m == nil || kind == nil || strings.TrimSpace(kind.Kind()) == "" {
 		return
 	}
-	if m.Obligations == nil {
-		m.Obligations = map[string]ObligationKind{}
+	if m.Kinds == nil {
+		m.Kinds = map[string]ObligationKind{}
 	}
-	m.Obligations[kind.Kind()] = kind
-}
-
-// ObligationGateLeaf returns the settled gate leaf id for a kind.
-func ObligationGateLeaf(kind string) string {
-	return conditions.ObligationGatePrefix + strings.TrimSpace(kind)
-}
-
-// ObligationKindFromGateLeaf extracts the kind from obligation_settled:<kind>.
-func ObligationKindFromGateLeaf(leaf string) (string, bool) {
-	leaf = strings.TrimSpace(leaf)
-	if !strings.HasPrefix(leaf, conditions.ObligationGatePrefix) {
-		return "", false
-	}
-	kind := strings.TrimSpace(strings.TrimPrefix(leaf, conditions.ObligationGatePrefix))
-	return kind, kind != ""
+	m.Kinds[kind.Kind()] = kind
 }
 
 // ObligationParams returns the parameters a run's phase declares for an
 // obligation kind. The phase is named, not read from the run, so a status read
 // racing a phase advance still resolves the phase it was asked about.
-func (m *RunManager) ObligationParams(ctx context.Context, workflowRunID, phaseID, kind string) (map[string]any, error) {
-	run, err := m.Get(ctx, workflowRunID)
+func (m *Obligations) ObligationParams(ctx context.Context, workflowRunID, phaseID, kind string) (map[string]any, error) {
+	run, err := m.Runs.Get(ctx, workflowRunID)
 	if err != nil {
 		return nil, err
 	}
-	manifest, err := m.manifestForRun(ctx, run)
+	manifest, err := m.Resolver.ForRun(ctx, run)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +71,7 @@ func (m *RunManager) ObligationParams(ctx context.Context, workflowRunID, phaseI
 }
 
 // RecordObligationTerminal refreshes a gate after ledger work settles.
-func (m *RunManager) RecordObligationTerminal(ctx context.Context, workflowRunID, kind string) error {
+func (m *Obligations) RecordObligationTerminal(ctx context.Context, workflowRunID, kind string) error {
 	if m == nil {
 		return nil
 	}
@@ -87,27 +80,27 @@ func (m *RunManager) RecordObligationTerminal(ctx context.Context, workflowRunID
 	if runID == "" || kind == "" {
 		return nil
 	}
-	run, err := m.Get(ctx, runID)
+	run, err := m.Runs.Get(ctx, runID)
 	if err != nil || run == nil {
 		return err
 	}
-	manifest, err := m.manifestForRun(ctx, run)
+	manifest, err := m.Resolver.ForRun(ctx, run)
 	if err != nil {
 		return err
 	}
 	def, ok := manifest.PhaseByID(run.CurrentPhase)
-	if !ok || !workflowdef.PhaseHasGate(def, ObligationGateLeaf(kind)) {
+	if !ok || !workflowdef.PhaseHasGate(def, workflowdef.ObligationGateLeaf(kind)) {
 		return nil
 	}
 	if err := m.stampObligationVars(ctx, run, def); err != nil {
 		return err
 	}
-	_, err = m.TryAutoAdvance(ctx, run.ID)
+	_, err = m.Phases.TryAutoAdvance(ctx, run.ID)
 	return err
 }
 
 // stampObligationFailed settles work that failed before enqueue.
-func (m *RunManager) stampObligationFailed(ctx context.Context, run *api.WorkflowRun, kind string, cause error) error {
+func (m *Obligations) stampObligationFailed(ctx context.Context, run *api.WorkflowRun, kind string, cause error) error {
 	if m == nil || run == nil || cause == nil {
 		return nil
 	}
@@ -115,21 +108,21 @@ func (m *RunManager) stampObligationFailed(ctx context.Context, run *api.Workflo
 		"status": api.ObligationStatusFailed,
 		"error":  strings.TrimSpace(cause.Error()),
 	}
-	_, err := m.StampRunVars(ctx, run.ID, func(_ context.Context, _ *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
-		return SetHostVar(vars, obligationsVarKey+"."+kind, summary), true, nil
+	_, err := m.Vars.Stamp(ctx, run.ID, func(_ context.Context, _ *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+		return runstate.SetHostVar(vars, runstate.ObligationsVarKey+"."+kind, summary), true, nil
 	})
 	return err
 }
 
 // stampObligationVars refreshes phase obligation summaries.
-func (m *RunManager) stampObligationVars(ctx context.Context, run *api.WorkflowRun, def workflowdef.PhaseDef) error {
+func (m *Obligations) stampObligationVars(ctx context.Context, run *api.WorkflowRun, def workflowdef.PhaseDef) error {
 	if m == nil || run == nil || !def.HasOnEnterObligations() {
 		return nil
 	}
-	_, err := m.StampRunVars(ctx, run.ID, func(ctx context.Context, run *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+	_, err := m.Vars.Stamp(ctx, run.ID, func(ctx context.Context, run *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
 		changed := false
 		for _, ob := range def.OnEnter.Obligations {
-			kind := m.Obligations[ob.Kind]
+			kind := m.Kinds[ob.Kind]
 			if kind == nil {
 				continue
 			}
@@ -142,7 +135,7 @@ func (m *RunManager) stampObligationVars(ctx context.Context, run *api.WorkflowR
 				// Keep failures that have no ledger row.
 				continue
 			}
-			vars = SetHostVar(vars, obligationsVarKey+"."+ob.Kind, summary)
+			vars = runstate.SetHostVar(vars, runstate.ObligationsVarKey+"."+ob.Kind, summary)
 			changed = true
 		}
 		return vars, changed, nil
@@ -168,20 +161,20 @@ func obligationSummaryVar(status api.WorkflowRunObligation) map[string]any {
 
 // ObligationsFromVars returns the host-stamped obligation summaries for injects.
 func ObligationsFromVars(vars map[string]any) map[string]any {
-	raw, ok := vars[obligationsVarKey].(map[string]any)
+	raw, ok := vars[runstate.ObligationsVarKey].(map[string]any)
 	if !ok || len(raw) == 0 {
 		return nil
 	}
 	return raw
 }
 
-// triggerObligationsOnEnter starts phase work and records status.
-func (m *RunManager) triggerObligationsOnEnter(ctx context.Context, run *api.WorkflowRun, projectDir string, def workflowdef.PhaseDef) {
+// TriggerOnEnter starts phase work and records status.
+func (m *Obligations) TriggerOnEnter(ctx context.Context, run *api.WorkflowRun, projectDir string, def workflowdef.PhaseDef) {
 	if m == nil || run == nil || !def.HasOnEnterObligations() {
 		return
 	}
 	for _, ob := range def.OnEnter.Obligations {
-		kind := m.Obligations[ob.Kind]
+		kind := m.Kinds[ob.Kind]
 		if kind == nil {
 			slog.WarnContext(ctx, "workflow phase declares unregistered obligation kind; gate will hold",
 				"run_id", run.ID, "phase", def.ID, "kind", ob.Kind)
@@ -194,14 +187,14 @@ func (m *RunManager) triggerObligationsOnEnter(ctx context.Context, run *api.Wor
 	_ = m.stampObligationVars(ctx, run, def)
 }
 
-// PhaseObligationsUI returns current host waits.
-func (m *RunManager) PhaseObligationsUI(ctx context.Context, run *api.WorkflowRun, def workflowdef.PhaseDef) []api.WorkflowRunObligation {
+// Status returns current host waits.
+func (m *Obligations) Status(ctx context.Context, run *api.WorkflowRun, def workflowdef.PhaseDef) []api.WorkflowRunObligation {
 	if m == nil || run == nil || !def.HasOnEnterObligations() {
 		return nil
 	}
 	out := make([]api.WorkflowRunObligation, 0, len(def.OnEnter.Obligations))
 	for _, ob := range def.OnEnter.Obligations {
-		kind := m.Obligations[ob.Kind]
+		kind := m.Kinds[ob.Kind]
 		if kind == nil {
 			out = append(out, api.WorkflowRunObligation{
 				Kind: ob.Kind, Status: api.ObligationStatusPending, Error: "obligation kind not registered",

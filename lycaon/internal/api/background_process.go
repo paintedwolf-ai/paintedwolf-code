@@ -10,21 +10,21 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) requireBackgroundProcessSession(w http.ResponseWriter, r *http.Request) (string, bool) {
+func (s *Conversation) requireBackgroundProcessSession(w http.ResponseWriter, r *http.Request) (string, bool) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
-	if !requestscope.SessionExists(s.sessionStore, &s.responses, w, r, id) {
+	if !requestscope.SessionExists(s.sessionStore, s.responses, w, r, id) {
 		return "", false
 	}
 	return id, true
 }
 
 // handleListBackgroundProcesses provides process state for client rehydration.
-func (s *Server) handleListBackgroundProcesses(w http.ResponseWriter, r *http.Request) {
+func (s *Conversation) handleListBackgroundProcesses(w http.ResponseWriter, r *http.Request) {
 	id, ok := s.requireBackgroundProcessSession(w, r)
 	if !ok {
 		return
 	}
-	processes := s.sessions.ListBackgroundProcesses(r.Context(), id)
+	processes := s.sessions.Processes.ListBackgroundProcesses(r.Context(), id)
 	if processes == nil {
 		processes = []wire.BackgroundProcess{}
 	}
@@ -32,7 +32,7 @@ func (s *Server) handleListBackgroundProcesses(w http.ResponseWriter, r *http.Re
 }
 
 // handleGetBackgroundProcessOutput reads retained output without changing the process.
-func (s *Server) handleGetBackgroundProcessOutput(w http.ResponseWriter, r *http.Request) {
+func (s *Conversation) handleGetBackgroundProcessOutput(w http.ResponseWriter, r *http.Request) {
 	id, ok := s.requireBackgroundProcessSession(w, r)
 	if !ok {
 		return
@@ -42,7 +42,7 @@ func (s *Server) handleGetBackgroundProcessOutput(w http.ResponseWriter, r *http
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "process_id required")
 		return
 	}
-	output, err := s.sessions.GetBackgroundProcessOutput(r.Context(), id, processID)
+	output, err := s.sessions.Processes.GetBackgroundProcessOutput(r.Context(), id, processID)
 	if err != nil {
 		s.responses.Fail(w, wire.ApiErrorCodeBackgroundProcessNotFound, "background process not found")
 		return
@@ -51,7 +51,7 @@ func (s *Server) handleGetBackgroundProcessOutput(w http.ResponseWriter, r *http
 }
 
 // handleStopBackgroundProcess uses the same process registry as the command_stop tool.
-func (s *Server) handleStopBackgroundProcess(w http.ResponseWriter, r *http.Request) {
+func (s *Conversation) handleStopBackgroundProcess(w http.ResponseWriter, r *http.Request) {
 	id, ok := s.requireBackgroundProcessSession(w, r)
 	if !ok {
 		return
@@ -61,7 +61,7 @@ func (s *Server) handleStopBackgroundProcess(w http.ResponseWriter, r *http.Requ
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "process_id required")
 		return
 	}
-	result, err := s.sessions.StopBackgroundProcess(id, processID)
+	result, err := s.sessions.Processes.StopBackgroundProcess(id, processID)
 	if err != nil {
 		s.responses.Fail(w, wire.ApiErrorCodeBackgroundProcessNotFound, "background process not found")
 		return

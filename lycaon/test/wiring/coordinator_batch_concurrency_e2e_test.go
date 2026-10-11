@@ -3,14 +3,14 @@ package wiring
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -100,11 +100,11 @@ func TestCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, batchConcurrencyUserPrompt); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, batchConcurrencyUserPrompt); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	msgs, err := h.SessionMgr.GetMessages(ctx, sess.ID)
+	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if got := countTaskEnqueuedToolMessages(msgs); got != 3 {
 		t.Fatalf("enqueued task tool messages = %d want 3", got)
@@ -116,7 +116,7 @@ func TestCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
 		t.Fatalf("coordinator LLM requests = %d want 2 (batch and follow-up)", len(rec.AllRequests()))
 	}
 
-	inFlight, err := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending, api.WorkerStatusRunning)
+	inFlight, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending, api.WorkerStatusRunning)
 	testutil.FailErr(t, "ListBySession", err)
 	if len(inFlight) != 3 {
 		t.Fatalf("in-flight worker jobs = %d want 3", len(inFlight))
@@ -145,11 +145,11 @@ func TestCoordinatorBatchTaskAndReadFollowUpE2E(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "BATCH_TASK_AND_READ"); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "BATCH_TASK_AND_READ"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	msgs, err := h.SessionMgr.GetMessages(ctx, sess.ID)
+	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if countTaskEnqueuedToolMessages(msgs) != 1 {
 		t.Fatalf("expected one enqueued task(), got %d enqueued messages", countTaskEnqueuedToolMessages(msgs))
@@ -172,20 +172,20 @@ func TestCoordinatorBatchOverCapRejectedInSameTurnE2E(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "BATCH_OVER_CAP"); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "BATCH_OVER_CAP"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	msgs, err := h.SessionMgr.GetMessages(ctx, sess.ID)
+	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if got := countTaskEnqueuedToolMessages(msgs); got != spawn.MaxInFlightTaskWorkers {
 		t.Fatalf("enqueued = %d want %d before cap reject", got, spawn.MaxInFlightTaskWorkers)
 	}
-	if !messageContains(msgs, session.CoordinatorWorkerInFlightCode) {
-		t.Fatalf("expected %s on over-cap task() in batch, msgs=%+v", session.CoordinatorWorkerInFlightCode, msgs)
+	if !messageContains(msgs, workeradmission.CoordinatorWorkerInFlightCode) {
+		t.Fatalf("expected %s on over-cap task() in batch, msgs=%+v", workeradmission.CoordinatorWorkerInFlightCode, msgs)
 	}
 
-	inFlight, err := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending, api.WorkerStatusRunning)
+	inFlight, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending, api.WorkerStatusRunning)
 	testutil.FailErr(t, "ListBySession", err)
 	if len(inFlight) != spawn.MaxInFlightTaskWorkers {
 		t.Fatalf("queue in-flight = %d want cap %d", len(inFlight), spawn.MaxInFlightTaskWorkers)
@@ -202,11 +202,11 @@ func TestCoordinatorBatchRosterNoteOnMultiTaskE2E(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, batchConcurrencyUserPrompt); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, batchConcurrencyUserPrompt); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	msgs, err := h.SessionMgr.GetMessages(ctx, sess.ID)
+	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if !messageContains(msgs, "batch dispatch") {
 		t.Fatal("expected batch roster note when ≥2 task() enqueue in one turn")
@@ -231,11 +231,11 @@ func TestCoordinatorBatchRosterNoteAbsentOnSingleTaskE2E(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "SINGLE_TASK_ONLY"); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "SINGLE_TASK_ONLY"); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	msgs, err := h.SessionMgr.GetMessages(ctx, sess.ID)
+	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if messageContains(msgs, "batch dispatch") {
 		t.Fatal("batch roster note must not appear for single task() enqueue")
@@ -255,15 +255,15 @@ func TestCoordinatorPackBoardShowsInFlightRosterE2E(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, batchConcurrencyUserPrompt); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, batchConcurrencyUserPrompt); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
 	raw, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"detail_level": "compact"}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    sess.ID,
-		Agent:        "coordinator",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: sess.ID,
+			Agent: "coordinator"},
 	})
 	testutil.FailErr(t, "pack_board", err)
 	for _, want := range []string{"in flight", "repo-researcher", "path-explorer", "implementer"} {
@@ -285,11 +285,11 @@ func TestCoordinatorBatchEnqueuesBeforeTurnEndsNotSerialFirstOnlyE2E(t *testing.
 	testutil.FailErr(t, "create session", err)
 	h.SeedProgress(t, ctx, sess.ID)
 
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, batchConcurrencyUserPrompt); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, batchConcurrencyUserPrompt); err != nil {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	inFlight, err := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending)
+	inFlight, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending)
 	testutil.FailErr(t, "ListBySession", err)
 	if len(inFlight) != 3 {
 		t.Fatalf("pending jobs = %d want 3 (serial-first bug would leave 1)", len(inFlight))

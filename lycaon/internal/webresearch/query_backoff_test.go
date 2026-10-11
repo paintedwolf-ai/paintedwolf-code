@@ -156,7 +156,7 @@ providers:
 	quota := &memQuotaStore{}
 	reg := NewRegistry(cat)
 	reg.AttachQuotaStore(quota)
-	testutil.FailErr(t, "RegisterCatalogProviders", RegisterCatalogProviders(reg))
+	testutil.FailErr(t, "RegisterCatalogProviders", RegisterCatalogProviders(t.Context(), reg))
 	calls := 0
 	endpoint := backoffServer(t, "never matches", &calls)
 

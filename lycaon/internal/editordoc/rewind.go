@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
@@ -52,9 +52,7 @@ func (s *Service) sourceRewindDocuments(ctx context.Context, p *project.Project,
 			destination = f.Expected.Path
 		}
 		if applyErr != nil {
-			if ledger, ok := s.ledger.(interface {
-				ResolveHeadByFile(context.Context, string, sourcebranch.ID, string) (sourceledger.BranchHead, error)
-			}); ok {
+			if ledger := s.history; ledger != nil {
 				head, err := ledger.ResolveHeadByFile(ctx, p.ID, f.BranchID, f.FileID)
 				if err != nil {
 					reconcileErr = errors.Join(reconcileErr, err)
@@ -130,7 +128,7 @@ func (s *Service) reconcileRewoundDocument(ctx context.Context, p *project.Proje
 	}
 	read, err := readDocumentSource(p, d)
 	if err != nil {
-		if errors.Is(err, project.ErrSourceNotFound) || errors.Is(err, os.ErrNotExist) {
+		if errors.Is(err, projectsource.ErrSourceNotFound) || errors.Is(err, os.ErrNotExist) {
 			return s.markAbsent(ctx, d)
 		}
 		return err

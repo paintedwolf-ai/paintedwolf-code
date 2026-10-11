@@ -29,6 +29,7 @@ var (
 )
 
 type structuralScanOptions struct {
+	explicitRoot   string
 	store          *indexStore
 	broker         *backgroundwork.Broker
 	spoolDir       string
@@ -302,7 +303,7 @@ func validateStructuralScanDirectory(root *os.Root, dir string) error {
 func acquireStructuralScanDirectory(ctx context.Context, dir string, options structuralScanOptions) (func(), error) {
 	broker := options.broker
 	if broker == nil && options.store != nil {
-		broker = options.store.catalog.broker
+		broker = options.store.stores.broker
 	}
 	if broker == nil {
 		broker = backgroundwork.Process()
@@ -338,6 +339,9 @@ func structuralScanObservation(dir string, options structuralScanOptions) Direct
 }
 
 func structuralScanDescend(options structuralScanOptions, dir string) (bool, error) {
+	if options.store != nil && (!options.store.policy.selects(dir, true) || dir != options.explicitRoot && options.store.policy.boundaryDir(dir) != "") {
+		return false, nil
+	}
 	if options.descend == nil {
 		return true, nil
 	}
@@ -369,7 +373,7 @@ func structuralScanSpoolDir(options structuralScanOptions) string {
 		return options.spoolDir
 	}
 	if options.store != nil {
-		if dir, err := options.store.catalog.treeDirPath(); err == nil {
+		if dir, err := options.store.stores.treeDirPath(); err == nil {
 			return dir
 		}
 	}

@@ -24,7 +24,7 @@ type detectionPacksCtl struct {
 	configDir string
 	publish   func(*detectionpack.Matcher)
 	// sessions supplies extension-contributed packs, read per operation.
-	sessions *session.Manager
+	sessions *session.Host
 }
 
 // ReloadDetectionPacks rebuilds the process matcher from the current catalog.
@@ -219,7 +219,7 @@ func (s *Handler) HandleDeleteDetectionPack(w http.ResponseWriter, r *http.Reque
 }
 
 func (c *detectionPacksCtl) contributedLocked(ctx context.Context) []detectionpack.Pack {
-	view := c.sessions.Catalog().DeviceView(ctx)
+	view := c.sessions.Catalog.DeviceView(ctx)
 	if view == nil {
 		return nil
 	}

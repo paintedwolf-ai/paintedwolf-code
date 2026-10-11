@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -24,7 +25,7 @@ const (
 // ErrPinNotFound reports a missing named boundary.
 var ErrPinNotFound = errors.New("pin not found")
 
-// Checkpoint is an immutable manifest boundary.
+// Checkpoint is an immutable source-history boundary.
 type Checkpoint struct {
 	ID             string
 	ProjectID      string
@@ -79,16 +80,16 @@ type StructuralCheckpointInput struct {
 	Turn      int
 }
 
-// CreateStructuralCheckpoint stores a structural manifest delta.
-func (s *Store) CreateStructuralCheckpoint(ctx context.Context, in StructuralCheckpointInput) (Checkpoint, error) {
+// CreateStructuralCheckpoint stores a structural history boundary.
+func (s *Checkpoints) CreateStructuralCheckpoint(ctx context.Context, in StructuralCheckpointInput) (Checkpoint, error) {
 	if in.Kind == CheckpointNamed {
 		return Checkpoint{}, fmt.Errorf("named boundaries are pins")
 	}
 	return s.createCheckpoint(ctx, in)
 }
 
-// CreatePin stores a named manifest delta.
-func (s *Store) CreatePin(ctx context.Context, projectID, label string) (Pin, error) {
+// CreatePin stores a named history boundary.
+func (s *Checkpoints) CreatePin(ctx context.Context, projectID, label string) (Pin, error) {
 	checkpoint, err := s.createCheckpoint(ctx, StructuralCheckpointInput{
 		ProjectID: projectID, Kind: CheckpointNamed, Label: label,
 	})
@@ -105,7 +106,7 @@ func (s *Store) CreatePin(ctx context.Context, projectID, label string) (Pin, er
 }
 
 // checkpointGitHeads batch-loads the recorded git positions behind boundaries.
-func (s *Store) checkpointGitHeads(ctx context.Context, ids []string) (map[string][]PinGitHead, error) {
+func (s *Checkpoints) checkpointGitHeads(ctx context.Context, ids []string) (map[string][]PinGitHead, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -127,7 +128,7 @@ func (s *Store) checkpointGitHeads(ctx context.Context, ids []string) (map[strin
 	return out, nil
 }
 
-func (s *Store) createCheckpoint(ctx context.Context, in StructuralCheckpointInput) (Checkpoint, error) {
+func (s *Checkpoints) createCheckpoint(ctx context.Context, in StructuralCheckpointInput) (Checkpoint, error) {
 	if s == nil {
 		return Checkpoint{}, fmt.Errorf("ledger not configured")
 	}
@@ -161,11 +162,9 @@ func (s *Store) createCheckpoint(ctx context.Context, in StructuralCheckpointInp
 	}
 	now := time.Now().UTC()
 	parentID := ""
-	parentOrdinal := int64(-1)
 	parent, parentErr := q.LatestStructuralSourceCheckpoint(ctx, in.ProjectID)
 	if parentErr == nil {
 		parentID = parent.ID
-		parentOrdinal = parent.CreatedOrdinal
 	} else if !errors.Is(parentErr, sql.ErrNoRows) {
 		return Checkpoint{}, parentErr
 	}
@@ -180,20 +179,6 @@ func (s *Store) createCheckpoint(ctx context.Context, in StructuralCheckpointInp
 		CreatedOrdinal: out.CreatedOrdinal, CreatedTs: now.Format(checkpointTimeLayout),
 	}); err != nil {
 		return Checkpoint{}, err
-	}
-	heads, err := q.ListTrunkSourceHeadsAfterOrdinal(ctx, db.ListTrunkSourceHeadsAfterOrdinalParams{
-		ProjectID: in.ProjectID, Ordinal: parentOrdinal,
-	})
-	if err != nil {
-		return Checkpoint{}, err
-	}
-	for _, head := range heads {
-		if err := q.InsertSourceCheckpointEntry(ctx, db.InsertSourceCheckpointEntryParams{
-			CheckpointID: out.ID, FileID: head.FileID,
-			VersionID: head.VersionID, Ordinal: head.Ordinal,
-		}); err != nil {
-			return Checkpoint{}, err
-		}
 	}
 	// The boundary carries the git position as last observed; no repository
 	// read runs inside the transaction.
@@ -216,7 +201,7 @@ func (s *Store) createCheckpoint(ctx context.Context, in StructuralCheckpointInp
 }
 
 // ListPinsPage returns one page of named project boundaries.
-func (s *Store) ListPinsPage(ctx context.Context, projectID string, query PinPageQuery) (PinPage, error) {
+func (s *Checkpoints) ListPinsPage(ctx context.Context, projectID string, query PinPageQuery) (PinPage, error) {
 	limit := query.Limit
 	if limit <= 0 {
 		limit = DefaultPinPageLimit
@@ -264,7 +249,7 @@ func pinFromCheckpoint(checkpoint Checkpoint) Pin {
 }
 
 // UpdatePinLabel changes a named boundary's label.
-func (s *Store) UpdatePinLabel(ctx context.Context, projectID, id, label string) error {
+func (s *Checkpoints) UpdatePinLabel(ctx context.Context, projectID, id, label string) error {
 	updated, err := s.queries.UpdateNamedSourceCheckpointLabel(ctx, db.UpdateNamedSourceCheckpointLabelParams{
 		Label: label, ID: id, ProjectID: projectID,
 	})
@@ -278,7 +263,7 @@ func (s *Store) UpdatePinLabel(ctx context.Context, projectID, id, label string)
 }
 
 // GetPin returns one named project boundary.
-func (s *Store) GetPin(ctx context.Context, projectID, id string) (Pin, error) {
+func (s *Checkpoints) GetPin(ctx context.Context, projectID, id string) (Pin, error) {
 	row, err := s.queries.GetSourceCheckpoint(ctx, id)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -299,7 +284,7 @@ func (s *Store) GetPin(ctx context.Context, projectID, id string) (Pin, error) {
 }
 
 // DeletePin removes a named boundary.
-func (s *Store) DeletePin(ctx context.Context, projectID, id string) error {
+func (s *Checkpoints) DeletePin(ctx context.Context, projectID, id string) error {
 	deleted, err := s.queries.DeleteNamedSourceCheckpoint(ctx, db.DeleteNamedSourceCheckpointParams{ID: id, ProjectID: projectID})
 	if err != nil {
 		return err
@@ -343,3 +328,31 @@ func validateCheckpointInput(in StructuralCheckpointInput) error {
 	}
 	return fmt.Errorf("invalid %q checkpoint boundary", in.Kind)
 }
+
+// Checkpoints owns durable history boundaries and review presentation.
+type Checkpoints struct {
+	queries  *db.Queries
+	recordMu *sync.Mutex
+	sqlDB    db.Handle
+}
+
+// TurnCheckpoint resolves a user turn's boundary; found=false means the baseline is unknown.
+func (s *Checkpoints) TurnCheckpoint(ctx context.Context, projectID, sessionID string, turn int) (Checkpoint, bool, error) {
+	if s == nil {
+		return Checkpoint{}, false, fmt.Errorf("ledger not configured")
+	}
+	row, err := s.queries.GetTurnCheckpointForSession(ctx, db.GetTurnCheckpointForSessionParams{
+		ProjectID: projectID, SessionID: sessionID, Turn: int64(turn),
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return Checkpoint{}, false, nil
+	}
+	if err != nil {
+		return Checkpoint{}, false, err
+	}
+	return checkpointFromColumns(row.ID, row.ProjectID, row.Kind, row.Label, row.ParentID,
+		row.SessionID, row.Turn, row.CreatedOrdinal, row.CreatedTs), true, nil
+}
+
+// Effects at or below the first-turn ordinal predate the session.
+// found=false means the session has no recorded turn boundary.

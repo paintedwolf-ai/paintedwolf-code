@@ -40,10 +40,10 @@ type callbackResult struct {
 // handle runs on the listener's goroutine with the parsed result; whatever it returns
 // decides what the browser is shown. The listener stops after the first redirect it can
 // parse, or when timeout elapses, whichever comes first.
-func startCallbackListener(handle func(callbackResult) error) (*callbackListener, error) {
+func startCallbackListener(ctx context.Context, handle func(callbackResult) error) (*callbackListener, error) {
 	// Explicitly IPv4 loopback: some authorization servers reject "localhost" and
 	// registering both families would advertise a redirect we might not answer on.
-	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
 	if err != nil {
 		return nil, fmt.Errorf("oauth callback listener: %w", err)
 	}
@@ -64,7 +64,7 @@ func startCallbackListener(handle func(callbackResult) error) (*callbackListener
 			err = handle(res)
 		}
 		writeCallbackPage(w, err)
-		l.finish() //nolint:contextcheck // process-local listener teardown after one-shot redirect
+		l.finish(req.Context())
 	})
 	l.srv = &http.Server{
 		Handler:           mux,
@@ -75,7 +75,7 @@ func startCallbackListener(handle func(callbackResult) error) (*callbackListener
 		select {
 		case <-l.done:
 		case <-time.After(oauthCallbackTimeout):
-			l.finish()
+			l.finish(ctx)
 		}
 	}()
 	return l, nil
@@ -90,7 +90,7 @@ func (l *callbackListener) RedirectURI() string {
 }
 
 // finish shuts the listener down. Safe to call repeatedly and from either goroutine.
-func (l *callbackListener) finish() {
+func (l *callbackListener) finish(parent context.Context) {
 	if l == nil {
 		return
 	}
@@ -100,7 +100,7 @@ func (l *callbackListener) finish() {
 		// the handler that called this, and Close would cut it off mid-flight.
 		go func() {
 			// Process-local teardown — not tied to any request ctx that may already be done.
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 5*time.Second)
 			defer cancel()
 			_ = l.srv.Shutdown(ctx)
 		}()

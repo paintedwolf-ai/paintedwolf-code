@@ -23,7 +23,7 @@ func testCatalog(t *testing.T) *Catalog {
 func testRegistry(t *testing.T) *Registry {
 	t.Helper()
 	reg := NewRegistry(testCatalog(t))
-	testutil.FailErr(t, "RegisterCatalogProviders", RegisterCatalogProviders(reg))
+	testutil.FailErr(t, "RegisterCatalogProviders", RegisterCatalogProviders(t.Context(), reg))
 	return reg
 }
 

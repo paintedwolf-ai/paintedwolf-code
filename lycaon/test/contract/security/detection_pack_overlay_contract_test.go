@@ -59,11 +59,17 @@ func gateWithDetection(
 
 func containedCommand(cmd string) hitl.ProposedAction {
 	return hitl.ProposedAction{
-		Tool:       "command",
-		Args:       map[string]any{"command": cmd},
-		Contained:  hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy},
-		ProjectDir: "/tmp/proj",
-		SessionID:  "s1",
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": cmd},
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: "/tmp/proj",
+			SessionID:  "s1",
+		},
 	}
 }
 
@@ -130,14 +136,14 @@ func TestDetectionOverlayNeverAllowsDenyOrSuppress(t *testing.T) {
 		t.Fatalf("session-granted action must not deny, got %+v", res)
 	}
 	hostAction := action
-	hostAction.Args = map[string]any{"command": "echo hi", "host": "api.example.com"}
+	hostAction.Invocation.Args = map[string]any{"command": "echo hi", "host": "api.example.com"}
 	hostGrant := hitl.ApprovalGrant{
-		Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: hostAction.ChatSession(),
-		ProjectDir: hostAction.ProjectDir, Title: hitl.TitleAllowForThisChat,
+		Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: hostAction.Scope.ChatSession(),
+		ProjectDir: hostAction.Scope.ProjectDir, Title: hitl.TitleAllowForThisChat,
 		Coverage: "connections to `api.example.com`", ExpiresWhen: hitl.ExpiresWhenChatDeleted,
 		Predicate: hitl.ApprovalGrantPredicate{Category: string(settings.ApprovalCategoryHost), Pattern: "api.example.com"},
 		Witness: hitl.ApprovalGrantWitness{
-			FSJailed: hostAction.Contained.FSJailed, Egress: hostAction.Contained.Egress,
+			FSJailed: hostAction.Execution.Contained.FSJailed, Egress: hostAction.Execution.Contained.Egress,
 		},
 	}
 	hostGrant.ID = "grant_host_family_fixture"
@@ -175,7 +181,14 @@ func TestDetectionOverlayNeverSuppressesRequired(t *testing.T) {
 	// Detection matches preserve the existing tool-definition approval.
 	approvalGate := gateWithDetection(t, gate.PostureStrict, src)
 	res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
-		Tool: "mcp__demo__tool", Args: map[string]any{}, ProjectDir: t.TempDir(), SessionID: "s1",
+		Invocation: hitl.ActionInvocation{
+			Tool: "mcp__demo__tool",
+			Args: map[string]any{},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: t.TempDir(),
+			SessionID:  "s1",
+		},
 	})
 	testutil.FailErr(t, "Evaluate", err)
 	if !res.Required() {
@@ -202,7 +215,7 @@ func TestDetectionOverlayZeroPackParity(t *testing.T) {
 		containedCommand("echo hi"),
 		containedCommand("aws s3 ls"),
 		containedCommand("terraform plan"),
-		{Tool: "read", Files: []string{"a.go"}, ProjectDir: t.TempDir(), SessionID: "s1"},
+		{Invocation: hitl.ActionInvocation{Tool: "read", Files: []string{"a.go"}}, Scope: hitl.ActionScope{ProjectDir: t.TempDir(), SessionID: "s1"}},
 	}
 
 	for _, posture := range []gate.Posture{
@@ -217,7 +230,7 @@ func TestDetectionOverlayZeroPackParity(t *testing.T) {
 			testutil.FailErr(t, "empty Evaluate", err)
 			if !approvalResultsEqual(a, b) {
 				t.Fatalf("zero-pack parity failed posture=%s action=%+v\nno-pack=%+v\nempty=%+v",
-					posture, action.Tool, a, b)
+					posture, action.Invocation.Tool, a, b)
 			}
 		}
 	}

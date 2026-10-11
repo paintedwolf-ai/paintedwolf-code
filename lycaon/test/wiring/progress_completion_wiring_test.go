@@ -22,7 +22,9 @@ func TestProgressCompletionAppendsTranscriptMessage(t *testing.T) {
 	runUpdate := func(content string) {
 		if _, err := h.ToolRegistry.Run(ctx, "update_progress", map[string]any{
 			"content": content,
-		}, tools.ToolContext{SessionID: sess.ID}); err != nil {
+		}, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		}); err != nil {
 			testutil.FailErr(t, "update_progress", err)
 		}
 	}

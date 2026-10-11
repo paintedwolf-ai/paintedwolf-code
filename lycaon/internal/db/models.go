@@ -1429,13 +1429,6 @@ type SourceBranchHeads struct {
 	ObservedTs    string `json:"observed_ts"`
 }
 
-type SourceCheckpointEntries struct {
-	CheckpointID string `json:"checkpoint_id"`
-	FileID       string `json:"file_id"`
-	VersionID    string `json:"version_id"`
-	Ordinal      int64  `json:"ordinal"`
-}
-
 type SourceCheckpointGitStates struct {
 	CheckpointID string `json:"checkpoint_id"`
 	RootID       string `json:"root_id"`
@@ -1474,6 +1467,19 @@ type SourceCommandWindows struct {
 	Ordinal       int64  `json:"ordinal"`
 	StartedTs     string `json:"started_ts"`
 	EndedTs       string `json:"ended_ts"`
+}
+
+type SourceDirectories struct {
+	ID          string         `json:"id"`
+	ProjectID   string         `json:"project_id"`
+	BranchID    string         `json:"branch_id"`
+	RootID      string         `json:"root_id"`
+	ParentID    sql.NullString `json:"parent_id"`
+	Name        string         `json:"name"`
+	Present     int64          `json:"present"`
+	Ordinal     int64          `json:"ordinal"`
+	ObservedTs  string         `json:"observed_ts"`
+	RecoveryKey string         `json:"recovery_key"`
 }
 
 type SourceEffectAuthors struct {
@@ -1575,6 +1581,20 @@ type SourceGitTransitions struct {
 	ObservedTs      string         `json:"observed_ts"`
 }
 
+type SourceHeadEntries struct {
+	ProjectID     string `json:"project_id"`
+	BranchID      string `json:"branch_id"`
+	FileID        string `json:"file_id"`
+	VersionID     string `json:"version_id"`
+	RootID        string `json:"root_id"`
+	DirectoryID   string `json:"directory_id"`
+	Name          string `json:"name"`
+	State         string `json:"state"`
+	ContentSha256 string `json:"content_sha256"`
+	Ordinal       int64  `json:"ordinal"`
+	ObservedTs    string `json:"observed_ts"`
+}
+
 type SourceHistoryEntries struct {
 	Seq          int64  `json:"seq"`
 	ID           string `json:"id"`
@@ -1587,6 +1607,7 @@ type SourceHistoryEntries struct {
 	RedoPlanJson string `json:"redo_plan_json"`
 	CreatedAt    string `json:"created_at"`
 	UpdatedAt    string `json:"updated_at"`
+	Availability string `json:"availability"`
 }
 
 type SourceInventoryState struct {
@@ -2050,6 +2071,24 @@ type WorkflowCommands struct {
 	CommittedAt    string `json:"committed_at"`
 }
 
+type WorkflowReviewAssignments struct {
+	ID          string `json:"id"`
+	RunID       string `json:"run_id"`
+	SubjectID   string `json:"subject_id"`
+	Phase       string `json:"phase"`
+	WorkID      string `json:"work_id"`
+	Agent       string `json:"agent"`
+	BindingJson string `json:"binding_json"`
+}
+
+type WorkflowReviewSubjects struct {
+	ID          string `json:"id"`
+	RunID       string `json:"run_id"`
+	Phase       string `json:"phase"`
+	Revision    string `json:"revision"`
+	SubjectJson string `json:"subject_json"`
+}
+
 type WorkflowRunPageOrdinals struct {
 	Ordinal int64  `json:"ordinal"`
 	RunID   string `json:"run_id"`
@@ -2077,6 +2116,7 @@ type WorkflowRuns struct {
 	UpdatedAt       string         `json:"updated_at"`
 	PausedAt        sql.NullString `json:"paused_at"`
 	CompletedAt     sql.NullString `json:"completed_at"`
+	ReviewRevision  int64          `json:"review_revision"`
 }
 
 type WorkflowScanBindings struct {
@@ -2110,16 +2150,17 @@ type WorkflowTeardownOperations struct {
 }
 
 type WorkflowVerdictOperations struct {
-	ToolCallID       string         `json:"tool_call_id"`
-	RunID            string         `json:"run_id"`
-	SourceRevision   int64          `json:"source_revision"`
-	Phase            string         `json:"phase"`
-	InputDigest      string         `json:"input_digest"`
-	EvidenceRecordID string         `json:"evidence_record_id"`
-	EvidenceJson     string         `json:"evidence_json"`
-	Status           string         `json:"status"`
-	ResponseJson     sql.NullString `json:"response_json"`
-	Error            string         `json:"error"`
-	CreatedAt        string         `json:"created_at"`
-	UpdatedAt        string         `json:"updated_at"`
+	ToolCallID        string         `json:"tool_call_id"`
+	RunID             string         `json:"run_id"`
+	SourceRevision    int64          `json:"source_revision"`
+	Phase             string         `json:"phase"`
+	InputDigest       string         `json:"input_digest"`
+	EvidenceRecordID  string         `json:"evidence_record_id"`
+	EvidenceJson      string         `json:"evidence_json"`
+	Status            string         `json:"status"`
+	ResponseJson      sql.NullString `json:"response_json"`
+	Error             string         `json:"error"`
+	CreatedAt         string         `json:"created_at"`
+	UpdatedAt         string         `json:"updated_at"`
+	EvidencePublished int64          `json:"evidence_published"`
 }

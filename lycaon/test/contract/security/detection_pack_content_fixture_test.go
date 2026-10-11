@@ -85,20 +85,28 @@ func contractFixtureMatchesRule(
 		ID: pack.ID, Enabled: true, Rules: []detectionpack.Rule{rule},
 	}}}), semantics)
 	action := hitl.ProposedAction{
-		Tool:             tool,
-		Args:             args,
-		Files:            fixture.TargetFiles,
-		ApprovalCategory: fixture.ApprovalCategory,
-		ApprovalSubject:  fixture.ApprovalSubject,
-		ProjectDir:       "/tmp/proj",
-		SessionID:        "s",
-		ActionID:         "contract-fixture",
-		Contained: hitl.Contained{
+Invocation: hitl.ActionInvocation{
+Tool: tool,
+Args: args,
+Files: fixture.TargetFiles,
+ActionID: "contract-fixture",
+},
+Resources: hitl.ActionResources{
+ApprovalCategory: fixture.ApprovalCategory,
+ApprovalSubject: fixture.ApprovalSubject,
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/tmp/proj",
+SessionID: "s",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{
 			FSJailed: true,
 			Egress:   "proxy",
 			Roots:    []string{"/tmp/proj"},
 		},
-	}
+},
+}
 	if detectionpack.EffectFromTags(rule.Tags).MintsCredential {
 		hit, ok := source.MintedCredentialRule(action)
 		return ok && hit.RuleID == rule.ID

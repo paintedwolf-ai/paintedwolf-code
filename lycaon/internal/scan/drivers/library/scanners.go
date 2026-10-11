@@ -17,7 +17,6 @@ import (
 	"github.com/google/osv-scalibr/plugin"
 	pluginconfig "github.com/google/osv-scalibr/plugin/config"
 	"github.com/google/osv-scalibr/plugin/list"
-	scalibrresult "github.com/google/osv-scalibr/result"
 	"github.com/lycaon/lycaon/internal/advisory"
 	"github.com/lycaon/lycaon/internal/advisory/severity"
 	"github.com/lycaon/lycaon/internal/egressclass"
@@ -151,33 +150,6 @@ func (s *ScalibrScanner) Run(ctx context.Context, req scan.ScanRequest) (*scanou
 		Categories:    s.Categories(),
 		Findings:      findings,
 	}, nil
-}
-
-func validateScalibrResult(result *scalibrresult.ScanResult) error {
-	if result == nil || result.Status == nil {
-		return fmt.Errorf("scalibr scan returned no status")
-	}
-	if result.Status.Status != plugin.ScanStatusSucceeded {
-		return fmt.Errorf("scalibr scan did not complete: status=%d reason=%s",
-			result.Status.Status, strings.TrimSpace(result.Status.FailureReason))
-	}
-	for _, state := range result.PluginStatus {
-		if state == nil || state.Status == nil || state.Status.Status != plugin.ScanStatusSucceeded {
-			name := "unknown"
-			status := plugin.ScanStatusUnspecified
-			reason := ""
-			if state != nil {
-				name = state.Name
-				if state.Status != nil {
-					status = state.Status.Status
-					reason = state.Status.FailureReason
-				}
-			}
-			return fmt.Errorf("scalibr plugin %q did not complete: status=%d reason=%s",
-				name, status, strings.TrimSpace(reason))
-		}
-	}
-	return nil
 }
 
 // mapPackageVulns turns matched records into findings, then folds the records

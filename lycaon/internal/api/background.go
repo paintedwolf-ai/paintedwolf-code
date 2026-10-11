@@ -16,14 +16,15 @@ func (s *Server) ShuttingDown() <-chan struct{} {
 }
 
 // StopBackground cancels detached work before shutdown drains it.
-func (s *Server) StopBackground() {
+func (s *Server) StopBackground(ctx context.Context) {
 	if s == nil {
 		return
 	}
-	if s.Sources.FileBriefings != nil {
-		s.Sources.FileBriefings.Stop()
+	if s.fileBriefings != nil {
+		s.fileBriefings.Stop()
 	}
 	s.background.Stop()
+	s.Sources.Watch.Stop(ctx)
 }
 
 // WaitForBackground drains host work together, then settles its attention updates.
@@ -32,9 +33,11 @@ func (s *Server) WaitForBackground(ctx context.Context) {
 		return
 	}
 	var wg sync.WaitGroup
-	if s.Sources.FileBriefings != nil {
+	wg.Add(1)
+	go func() { defer wg.Done(); _ = s.Sources.Watch.Wait(ctx) }()
+	if s.fileBriefings != nil {
 		wg.Add(1)
-		go func() { defer wg.Done(); s.Sources.FileBriefings.Wait(ctx) }()
+		go func() { defer wg.Done(); s.fileBriefings.Wait(ctx) }()
 	}
 	wg.Add(1)
 	go func() {
@@ -45,11 +48,11 @@ func (s *Server) WaitForBackground(ctx context.Context) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			s.sessions.WaitForCoordinatorAsyncTurns(ctx)
+			s.sessions.Coordinator.WaitForTurns(ctx)
 		}()
 		go func() {
 			defer wg.Done()
-			s.sessions.WaitForPromptCuration(ctx)
+			s.sessions.Runner.Curation.Wait(ctx)
 		}()
 	}
 	wg.Wait()

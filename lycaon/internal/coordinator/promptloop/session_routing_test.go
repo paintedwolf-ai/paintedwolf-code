@@ -18,9 +18,13 @@ func TestSessionRoutingClientHonorsWorkerPool(t *testing.T) {
 		AgentPool: llm.AgentPool{Selection: llm.PoolSelectionFirst,
 			Models: []llm.ModelRef{{ProviderID: "worker-provider", Model: "worker-model"}}},
 	})
-	loop := &PromptLoop{Deps: PromptLoopDeps{LLMService: &llm.Service{
-		Registry: &llm.Registry{}, Router: llm.NewStaticModelRouter(policy),
-	}}}
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			LLMService: &llm.Service{
+				Registry: &llm.Registry{}, Router: llm.NewStaticModelRouter(policy),
+			},
+		},
+	})
 	for _, tc := range []struct {
 		name     string
 		session  api.Session
@@ -31,7 +35,7 @@ func TestSessionRoutingClientHonorsWorkerPool(t *testing.T) {
 		{"override", api.Session{ParentSessionID: "parent", ProviderID: "override-provider", Model: "override-model"}, "override-provider"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := modelTurn{loop}.sessionRoutingClient(&tc.session).Stream(t.Context(), modelcall.CompletionRequest{})
+			_, err := loop.Model.sessionRoutingClient(&tc.session).Stream(t.Context(), modelcall.CompletionRequest{})
 			var missing *failure.ProviderNotConfiguredError
 			if !errors.As(err, &missing) || missing.ProviderID != tc.provider {
 				t.Fatalf("selected provider error = %v, want %s", err, tc.provider)

@@ -5,51 +5,53 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/coordinator/guard"
-	"github.com/lycaon/lycaon/internal/governance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/progress"
-	queuestore "github.com/lycaon/lycaon/internal/queue"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // Bounded stores are zero-value usable.
-func newForgetTestManager() *Manager {
-	return &Manager{}
+func newForgetTestManager(t *testing.T) *Host {
+	m, _ := newTestManager(t)
+	return m
 }
 
 func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
-	m := newForgetTestManager()
+	m := newForgetTestManager(t)
 	var forgot []string
-	testutil.FailErr(t, "register approval cleanup", m.RegisterSessionCleanup("approvals", 50, func(_ context.Context, id string) error {
+	testutil.FailErr(t, "register approval cleanup", m.Resources.RegisterCleanup("approvals", 50, func(_ context.Context, id string) error {
 		forgot = append(forgot, id)
 		return nil
 	}))
 
 	const sid = "sess-1"
-	m.progressClosureExpect.Store(sid, guard.ProgressClosureBaseline{Closed: 1})
-	seedCloseoutState(&m.closeout, sid, sid)
-	m.coordinatorBatchTurn.Store(sid, true)
+	progressStore := progress.NewMemoryStore()
+	progressStore.Set(sid, "- [ ] task")
+	m.SetProgressStore(progressStore)
+	m.Coordinator.ProgressClosure.Arm(t.Context(), sid, "job-closure")
+	m.Runner.Closeouts.RecordGroundingFriction(t.Context(), sid)
+	m.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sid, "citation", "offender", "draft", nil)
+	m.Coordinator.Batch.AcceptSynthesis(t.Context(), sid)
 	checkpoints := sessioncheckpoint.New(t.TempDir(), t.TempDir(), sessionstore.NewMemory())
-	testutil.FailErr(t, "open checkpoint capture", m.checkpointCapture.Open(t.Context(), checkpoints, sid, "anchor"))
-	m.mergeReconcile.Store(sid, map[string]struct{}{"a.go": {}})
-	m.compactionTokenCalibration.Store(sid, compaction.PromptTokenCalibration{
-		ReportedPromptTokens: 150, TranscriptEstimate: 100,
-	})
-	m.promotePathStatus.Store(sid, &promotePathSessionStore{})
-	m.agentsMDCache.Store(sid, &governance.AgentsMDSessionState{})
-	m.writeRootRuntime = approvalstate.NewSandboxPathGrantRuntime()
-	m.writeRootRuntime.GrantChat(sid, "/opt/cache", "grant-1", "cp-1", nil)
-	m.queue = queuestore.New()
-	m.queue.AppendOrdered(sid, "", testutil.HostOwner().ID, "queued follow-up", 0, time.Time{})
+	testutil.FailErr(t, "open checkpoint capture", m.Chats.Captures.Capture.Open(t.Context(), checkpoints, sid, "anchor"))
+	m.Promotion.SetMergeReconcilePaths(sid, []string{"a.go"})
+	m.Runner.History.ObserveTokens(sid, 150, 100)
+	m.Promotion.RecordPromotePathStatus(sid, "job", []api.WorkerPromotePathStatus{{Path: "a.go"}})
+	writeRootRuntime := approvalstate.NewSandboxPathGrantRuntime()
+	m.Resources.Authority.Writes = writeRootRuntime
+
+	writeRootRuntime.GrantChat(sid, "/opt/cache", "grant-1", "cp-1", nil)
+
+	m.Resources.Queue.AppendOrdered(sid, "", testutil.HostOwner().ID, "queued follow-up", 0, time.Time{})
 	progress.TurnStarted(sid)
 
-	m.DisposeSessionResources(t.Context(), sid)
+	m.Resources.Dispose(t.Context(), sid)
 
-	m.checkpointCapture.RecordPath(t.Context(), checkpoints, sid, "after.go")
+	m.Chats.Captures.Capture.RecordPath(t.Context(), checkpoints, sid, "after.go")
 	manifest, err := checkpoints.Load(t.Context(), sid, "anchor")
 	testutil.FailErr(t, "load released checkpoint", err)
 	if len(manifest.Paths) != 0 {
@@ -57,31 +59,30 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	}
 
 	held := map[string]func() bool{
-		"progressClosureExpect": func() bool { _, ok := m.progressClosureExpect.Load(sid); return ok },
-		"closeout prompt":       func() bool { _, ok := m.closeout.prompts.Load(sid); return ok },
-		"closeout cycle":        func() bool { _, ok := m.closeout.cycles.Load(sid); return ok },
-		"coordinatorBatchTurn":  func() bool { _, ok := m.coordinatorBatchTurn.Load(sid); return ok },
-		"mergeReconcile":        func() bool { _, ok := m.mergeReconcile.Load(sid); return ok },
+		"progressClosureExpect": func() bool { _, ok := m.Coordinator.ProgressClosure.Baseline(sid); return ok },
+		"coordinatorBatchTurn":  func() bool { return m.Coordinator.Batch.TurnGuard(sid).SynthesisAcceptedThisTurn },
+		"mergeReconcile":        func() bool { return m.Promotion.Allowed(sid, "a.go") },
 		"compactionTokenCalibration": func() bool {
-			_, ok := m.compactionTokenCalibration.Load(sid)
-			return ok
+			return m.Runner.History.Calibration(sid) != (compaction.PromptTokenCalibration{})
 		},
-		"promotePathStatus": func() bool { _, ok := m.promotePathStatus.Load(sid); return ok },
-		"agentsMDCache":     func() bool { _, ok := m.agentsMDCache.Load(sid); return ok },
+		"promotePathStatus": func() bool { return len(m.Promotion.PromotePathBoardLines(sid)) > 0 },
 	}
 	for name, stillThere := range held {
 		if stillThere() {
 			t.Errorf("%s survived ForgetSession", name)
 		}
 	}
+	if m.Runner.Closeouts.CloseoutStallState(t.Context(), sid).Active {
+		t.Fatal("closeout cycle survived disposal")
+	}
 	if len(forgot) != 1 || forgot[0] != sid {
 		t.Fatalf("approval gate release = %v, want [%s]", forgot, sid)
 	}
-	if len(m.writeRootRuntime.ListChatGrants(sid)) != 0 {
+	if len(writeRootRuntime.ListChatGrants(sid)) != 0 {
 		t.Fatal("write-root runtime survived ForgetSession")
 	}
 
-	if got := m.QueueSnapshot(sid); len(got.QueueItems) != 0 || got.Revision != 0 {
+	if got := m.Chats.Drafts.Snapshot(sid); len(got.QueueItems) != 0 || got.Revision != 0 {
 		t.Fatalf("queue survived ForgetSession: %+v", got)
 	}
 	if clock := progress.Clock(sid); clock.Running() {
@@ -91,31 +92,33 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 
 // Stop releases one run; the chat's approvals last until the chat is disposed.
 func TestStopKeepsTheChatsApprovedSandboxGrants(t *testing.T) {
-	m := newForgetTestManager()
+	m := newForgetTestManager(t)
 	var released, disposed []string
-	testutil.FailErr(t, "register run cleanup", m.RegisterSessionCleanup("approval-run", 50, func(_ context.Context, id string) error {
+	testutil.FailErr(t, "register run cleanup", m.Resources.RegisterCleanup("approval-run", 50, func(_ context.Context, id string) error {
 		released = append(released, id)
 		return nil
 	}))
-	testutil.FailErr(t, "register disposal", m.RegisterSessionDisposal("approvals", 50, func(_ context.Context, id string) error {
+	testutil.FailErr(t, "register disposal", m.Resources.RegisterDisposal("approvals", 50, func(_ context.Context, id string) error {
 		disposed = append(disposed, id)
 		return nil
 	}))
 	const sid = "sess-stop"
-	m.writeRootRuntime = approvalstate.NewSandboxPathGrantRuntime()
-	m.writeRootRuntime.GrantChat(sid, "/opt/cache", "grant-1", "cp-1", nil)
-	m.writeRootRuntime.GrantSessionWriteRoot(sid, "/opt/derived")
+	writeRootRuntime := approvalstate.NewSandboxPathGrantRuntime()
+	m.Resources.Authority.Writes = writeRootRuntime
 
-	testutil.FailErr(t, "stop", m.releaseSessionRuntime(t.Context(), sid))
-	if roots := m.writeRootRuntime.SessionWriteRoots(sid); len(roots) != 1 || roots[0] != "/opt/cache" {
+	writeRootRuntime.GrantChat(sid, "/opt/cache", "grant-1", "cp-1", nil)
+	writeRootRuntime.GrantSessionWriteRoot(sid, "/opt/derived")
+
+	testutil.FailErr(t, "stop", m.Chats.ReleaseRuntime(t.Context(), sid))
+	if roots := writeRootRuntime.SessionWriteRoots(sid); len(roots) != 1 || roots[0] != "/opt/cache" {
 		t.Fatalf("roots after Stop = %v, want only the approved grant", roots)
 	}
 	if len(released) != 1 || len(disposed) != 0 {
 		t.Fatalf("Stop ran release %v and disposal %v, want release only", released, disposed)
 	}
 
-	m.DisposeSessionResources(t.Context(), sid)
-	if roots := m.writeRootRuntime.SessionWriteRoots(sid); len(roots) != 0 {
+	m.Resources.Dispose(t.Context(), sid)
+	if roots := writeRootRuntime.SessionWriteRoots(sid); len(roots) != 0 {
 		t.Fatalf("roots after delete = %v", roots)
 	}
 	if len(disposed) != 1 || disposed[0] != sid {
@@ -124,13 +127,13 @@ func TestStopKeepsTheChatsApprovedSandboxGrants(t *testing.T) {
 }
 
 func TestForgetJobClearsUnclaimedWakePayloads(t *testing.T) {
-	m := newForgetTestManager()
+	m := newForgetTestManager(t)
 	const job = "job-1"
-	m.workerDigests.Store(job, "digest")
+	m.Workers.Digests.Put(job, "digest")
 
-	m.ForgetJob(job)
+	m.Workers.Digests.Forget(job)
 
-	if _, ok := m.workerDigests.Load(job); ok {
+	if digest := m.Workers.Digests.Take(job); digest != "" {
 		t.Error("workerDigests survived ForgetJob")
 	}
 }

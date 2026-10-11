@@ -14,15 +14,15 @@ func ObserveCoordinatorSynthesisWrapupTool(surfaceID, toolName string, toolOffer
 	if gc == nil {
 		return
 	}
-	gc.Surface = strings.TrimSpace(surfaceID)
+	gc.Session.Surface = strings.TrimSpace(surfaceID)
 	toolName = strings.TrimSpace(strings.ToLower(toolName))
-	gc.Tool = toolName
+	gc.Invocation.Tool = toolName
 	gc.DeriveToolClassFacts()
-	if gc.Surface != spawn.SurfaceImplementSynthesis || toolName == "" {
+	if gc.Session.Surface != spawn.SurfaceImplementSynthesis || toolName == "" {
 		return
 	}
 	forbidden := !toolOffered
-	gc.SynthesisWrapupToolForbidden = forbidden
+	gc.Workflow.SynthesisWrapupToolForbidden = forbidden
 	if forbidden {
 		gc.PutRejectData(CoordinatorSynthesisWrapupOnlyCode, map[string]any{"tool": toolName})
 	}

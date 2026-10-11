@@ -5,15 +5,17 @@ import (
 
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/workflow"
 )
 
 // ServeWiring is the production Prompt/gate configuration validated at serve start.
 type ServeWiring struct {
-	PostureRegistry *session.PostureRegistry
+	PostureRegistry *profiles.PostureRegistry
 	BundledRules    map[string]*rules.RulesConfig
 	RuleEngine      *rules.PostureRuleEngine
-	SessionManager  *session.Manager
+	SessionManager  *session.Host
 	WorkflowManager *workflow.RunManager
 }
 
@@ -25,7 +27,7 @@ func ValidateServeWiring(w ServeWiring) error {
 	if len(w.BundledRules) == 0 {
 		return fmt.Errorf("bundled rules required")
 	}
-	if err := rules.ValidatePostureRules(w.PostureRegistry, session.AllSessionPostures(), w.BundledRules); err != nil {
+	if err := rules.ValidatePostureRules(w.PostureRegistry, sessionposture.AllSessionPostures(), w.BundledRules); err != nil {
 		return fmt.Errorf("posture rules: %w", err)
 	}
 	if w.RuleEngine == nil {
@@ -40,8 +42,10 @@ func ValidateServeWiring(w ServeWiring) error {
 	if w.WorkflowManager == nil {
 		return fmt.Errorf("workflow manager required")
 	}
-	var _ session.WorkflowSessionView = w.WorkflowManager
-	for _, posture := range session.AllSessionPostures() {
+	if w.WorkflowManager.Policy == nil || w.WorkflowManager.Requests == nil || w.WorkflowManager.Phases == nil || w.WorkflowManager.Store == nil {
+		return fmt.Errorf("workflow runtime domains required")
+	}
+	for _, posture := range sessionposture.AllSessionPostures() {
 		paths, err := w.PostureRegistry.RulesPaths(posture)
 		if err != nil {
 			return fmt.Errorf("posture %q rules: %w", posture, err)

@@ -4,11 +4,6 @@ package orchestration_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -18,6 +13,11 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspace"
@@ -50,7 +50,7 @@ func TestPackIsolatedLegsNoCrossWrite(t *testing.T) {
 	binder := &dirWorkspaceBinder{}
 	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewManager(sessStore, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	queue := worker.NewInMemoryQueue(10)
 	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 	rec := &recordingDelegation{inner: delMgr, store: delStore, order: make([]string, 0, 4)}
@@ -62,7 +62,7 @@ func TestPackIsolatedLegsNoCrossWrite(t *testing.T) {
 		Workspaces: binder,
 	})
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 

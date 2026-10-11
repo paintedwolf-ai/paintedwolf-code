@@ -8,8 +8,8 @@ import (
 
 // CoordinatorBoardSessionID resolves the coordinator session key for board slices.
 func CoordinatorBoardSessionID(tctx tools.ToolContext) string {
-	if sid := strings.TrimSpace(tctx.HandoffSessionID); sid != "" {
+	if sid := strings.TrimSpace(tctx.Identity.HandoffSessionID); sid != "" {
 		return sid
 	}
-	return strings.TrimSpace(tctx.SessionID)
+	return strings.TrimSpace(tctx.Identity.SessionID)
 }

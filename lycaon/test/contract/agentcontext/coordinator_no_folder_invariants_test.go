@@ -57,6 +57,13 @@ func TestNoFolderCoordinatorToolsSubsetOfAllowlist(t *testing.T) {
 }
 
 // Visibility and denial share the no-folder catalog.
+func noFolderToolArgs(tool string) map[string]any {
+	if tool == "summarize" {
+		return map[string]any{"content": "already observed text"}
+	}
+	return nil
+}
+
 func TestNoFolderDenyGateAndSurfaceAgree(t *testing.T) {
 	t.Parallel()
 	allow, err := toolscope.NoFolderAllowlist()
@@ -66,7 +73,7 @@ func TestNoFolderDenyGateAndSurfaceAgree(t *testing.T) {
 	contractcheck.FailErr(t, "RegisterProjectToolConditions", conditions.RegisterProjectToolConditions(reg))
 	requiresRoots := func(tool string) bool {
 		got, evalErr := reg.Evaluate("tool_requires_project_roots",
-			conditions.EvalContext{ToolName: tool, ProjectRootCount: 0})
+			conditions.EvalContext{ToolName: tool, ToolArgs: noFolderToolArgs(tool), ProjectRootCount: 0})
 		contractcheck.FailErr(t, "evaluate tool_requires_project_roots", evalErr)
 		return got
 	}

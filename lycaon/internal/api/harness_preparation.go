@@ -15,7 +15,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) registerHarnessPreparation(r chi.Router) {
+func (s *HarnessPreparation) registerHarnessPreparation(r chi.Router) {
 	r.Get("/contract", s.handleHarnessContract)
 	r.Get("/execution/{sessionID}/{submissionID}", s.handleHarnessExecution)
 	r.Get("/workflow-execution/{sessionID}/{runID}", s.handleHarnessWorkflowExecution)
@@ -37,7 +37,7 @@ type untrustedContentSeeder interface {
 	SeedUntrustedContent(context.Context, string) error
 }
 
-func (s *Server) requireHarnessServices() harnessServices {
+func (s *HarnessPreparation) requireHarnessServices() *harnessServices {
 	seeder, _ := s.sessionStore.(untrustedContentSeeder)
 	preparation, _ := s.llmSvc.Preparation.(*harnessfixture.PreludeController)
 	httpio.RequireDependencies("harness",
@@ -45,10 +45,11 @@ func (s *Server) requireHarnessServices() harnessServices {
 		httpio.Required{Name: "LLM.Preparation", Present: preparation != nil},
 		httpio.Required{Name: "Store.SeedUntrustedContent", Present: seeder != nil},
 	)
-	return harnessServices{seeder: seeder, database: s.database, preparation: preparation}
+	*s.harness = harnessServices{seeder: seeder, database: s.database, preparation: preparation}
+	return s.harness
 }
 
-func (s *Server) handleHarnessPreparation(w http.ResponseWriter, r *http.Request) {
+func (s *HarnessPreparation) handleHarnessPreparation(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		SessionID string                 `json:"session_id"`
 		Prelude   harnessfixture.Prelude `json:"prelude"`
@@ -57,7 +58,7 @@ func (s *Server) handleHarnessPreparation(w http.ResponseWriter, r *http.Request
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	if !requestscope.SessionExists(s.sessionStore, &s.responses, w, r, request.SessionID) {
+	if !requestscope.SessionExists(s.sessionStore, s.responses, w, r, request.SessionID) {
 		return
 	}
 	if err := s.harness.preparation.Install(r.Context(), request.SessionID, request.Prelude); err != nil {
@@ -67,7 +68,7 @@ func (s *Server) handleHarnessPreparation(w http.ResponseWriter, r *http.Request
 	httpio.WriteJSON(w, http.StatusOK, map[string]any{"operation_id": request.Prelude.OperationID})
 }
 
-func (s *Server) handleHarnessPreparationReceipt(w http.ResponseWriter, r *http.Request) {
+func (s *HarnessPreparation) handleHarnessPreparationReceipt(w http.ResponseWriter, r *http.Request) {
 	receipt, err := s.harness.preparation.Receipt(chi.URLParam(r, "sessionID"))
 	if os.IsNotExist(err) {
 		s.responses.Fail(w, wire.ApiErrorCodePreparationReceiptNotFound, "Preparation has not reached candidate entry")
@@ -80,7 +81,7 @@ func (s *Server) handleHarnessPreparationReceipt(w http.ResponseWriter, r *http.
 	httpio.WriteJSON(w, http.StatusOK, receipt)
 }
 
-func (s *Server) handleHarnessWriteResource(w http.ResponseWriter, r *http.Request) {
+func (s *HarnessPreparation) handleHarnessWriteResource(w http.ResponseWriter, r *http.Request) {
 	var request harnessfixture.WriteResourceRequest
 	if err := httpio.DecodeJSON(w, r, &request); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -94,7 +95,7 @@ func (s *Server) handleHarnessWriteResource(w http.ResponseWriter, r *http.Reque
 	httpio.WriteJSON(w, http.StatusOK, resource)
 }
 
-func (s *Server) handleHarnessContract(w http.ResponseWriter, _ *http.Request) {
+func (s *HarnessPreparation) handleHarnessContract(w http.ResponseWriter, _ *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, map[string]any{
 		"application_version": version.Version,
 		"profile":             "development-harness",
@@ -102,7 +103,7 @@ func (s *Server) handleHarnessContract(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-func (s *Server) handleHarnessUpgradeHistory(w http.ResponseWriter, r *http.Request) {
+func (s *HarnessPreparation) handleHarnessUpgradeHistory(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		SessionID string `json:"session_id"`
 	}
@@ -110,7 +111,7 @@ func (s *Server) handleHarnessUpgradeHistory(w http.ResponseWriter, r *http.Requ
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	parent, ok := requestscope.Session(s.sessionStore, &s.responses, w, r, request.SessionID)
+	parent, ok := requestscope.Session(s.sessionStore, s.responses, w, r, request.SessionID)
 	if !ok {
 		return
 	}

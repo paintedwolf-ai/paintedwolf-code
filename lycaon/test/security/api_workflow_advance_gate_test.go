@@ -71,7 +71,7 @@ func TestAdvancePlanStubGateAllowsAfterFixture(t *testing.T) {
 	projectDir := t.TempDir()
 	h := wiring.BuildForTest(t)
 	srv := h.Server
-	blueprintMgr := h.BlueprintMgr
+	blueprintMgr := h.Workflows.Blueprints
 	sess := createSessionHTTP(t, srv, projectDir)
 	startBody := planStartBody
 	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))

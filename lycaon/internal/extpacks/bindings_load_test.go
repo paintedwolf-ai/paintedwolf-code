@@ -195,9 +195,9 @@ func TestGoldenConditionFromEffectiveBindings(t *testing.T) {
 		t.Fatal("expected match")
 	}
 	gc := oar.NewGuardContext()
-	gc.MCPSchemaMatched = matched
-	gc.MCPFields = fields
-	if !gc.MCPSchemaMatched || !oar.EvalMCPFieldBool(gc, "is_ready") {
+	gc.MCP.MCPSchemaMatched = matched
+	gc.MCP.MCPFields = fields
+	if !gc.MCP.MCPSchemaMatched || !oar.EvalMCPFieldBool(gc, "is_ready") {
 		t.Fatal("expected mcp_schema_matched && is_ready")
 	}
 	if oar.EvalMCPFieldString(gc, "widget_status") != "ready" {

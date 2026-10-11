@@ -3,13 +3,13 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -44,7 +44,7 @@ func TestCodeRewriteRequiresRewrite(t *testing.T) {
 		"path":    "main.go",
 		"pattern": `fmt.Println($A)`,
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "STRUCTURAL_PATTERN_INVALID" {
 		t.Fatalf("want STRUCTURAL_PATTERN_INVALID when rewrite omitted, got %v", err)
 	}
@@ -88,7 +88,7 @@ func TestCodeRewriteInvalidPattern(t *testing.T) {
 		"pattern": "func (",
 		"rewrite": "func ()",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "STRUCTURAL_PATTERN_INVALID" {
 		t.Fatalf("want STRUCTURAL_PATTERN_INVALID reject, got %v", err)
 	}
@@ -160,7 +160,7 @@ func TestCodeRewriteBareBinaryPatternRejected(t *testing.T) {
 		"pattern": "$T | $B",
 		"rewrite": "Union[$T, $B]",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "CODE_REWRITE_PATTERN_TOO_BROAD" {
 		t.Fatalf("want CODE_REWRITE_PATTERN_TOO_BROAD, got %v", err)
 	}
@@ -206,7 +206,7 @@ func TestCodeRewriteExplicitBadLangRejects(t *testing.T) {
 		"rewrite": "$A",
 		"lang":    "not-a-language",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "STRUCTURAL_LANG_UNKNOWN" {
 		t.Fatalf("want STRUCTURAL_LANG_UNKNOWN reject, got %v", err)
 	}

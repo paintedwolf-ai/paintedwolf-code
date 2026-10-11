@@ -65,7 +65,7 @@ var hostVarProducers = []struct {
 	},
 	{
 		key:       "pre_workflow_posture",
-		readerRE:  `vars\[hostVarBaselinePosture\]`,
+		readerRE:  `vars\[(?:runstate\.)?BaselinePostureKey\]`,
 		rationale: "boundary code restores posture on workflow end",
 	},
 	{
@@ -124,6 +124,11 @@ var hostVarProducers = []struct {
 		rationale: "phase-enter snapshot of if_spawnable reviewers that the turn roster can spawn",
 	},
 	{
+		key:       "accepted_review_subjects.",
+		readerRE:  `conditions\.DotPathGet\(vars, "accepted_review_subjects\."\+(?:phase|last)\)`,
+		rationale: "retained report inputs and transactional review acceptance fence",
+	},
+	{
 		key:       "review_verdict.",
 		readerRE:  `"review_verdict"`,
 		rationale: "terminal review_loop verdict stamped for later kicks",
@@ -157,7 +162,7 @@ func TestHostVarProducerConsumerClosure(t *testing.T) {
 
 	// Keys produced through a named const rather than a SetHostVar literal.
 	constProduced := map[string]bool{
-		"host_auto_advanced_from":       true, // HostAutoAdvancedFromKey
+		"host_auto_advanced_from":       true, // workflowphases.HostAutoAdvancedFromKey
 		"pre_workflow_posture":          true, // hostVarBaselinePosture
 		"human_approval.awaiting_since": true, // scaffoldvars.HumanApprovalAwaitingSincePath
 	}

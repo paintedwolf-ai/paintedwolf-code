@@ -3,6 +3,8 @@ package httpaction
 import (
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -20,7 +22,7 @@ import (
 
 func testBoundary() *sandbox.Boundary {
 	return sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
-		ID: tools.DefaultToolProfileID, Tools: map[string]bool{"http_request": true},
+		ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"http_request": true},
 	}})
 }
 
@@ -61,7 +63,10 @@ func TestHTTPRequestSendsJSONAndReturnsStructuredResponse(t *testing.T) {
 		"url": server.URL + "/v1/jobs", "method": "POST", "body_json": map[string]any{"ok": true},
 		"headers":            []any{map[string]any{"name": "X-Test", "value": "yes"}},
 		"capability_request": loopbackCapability(t, server.URL),
-	}, tools.ToolContext{Agent: tools.DefaultToolProfileID, Out: outcome})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+		Effects:  tools.InvocationEffects{Out: outcome},
+	})
 	if err != nil {
 		t.Fatalf("run http_request: %v", err)
 	}
@@ -80,8 +85,9 @@ func TestRequestBodyReadsProjectFile(t *testing.T) {
 		t.Fatalf("write payload: %v", err)
 	}
 	body, err := assembleBody(t.Context(), testBoundary(), tools.ToolContext{
-		Agent: tools.DefaultToolProfileID,
-		Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root",
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "root"},
 	}, map[string]any{"body_path": "payload.bin"})
 	if err != nil {
 		t.Fatalf("assembleBody: %v", err)
@@ -128,8 +134,10 @@ func TestHTTPRequestRejectsImplicitGETBodyAsInvalidArguments(t *testing.T) {
 	}
 	_, err := registry.Run(t.Context(), "http_request", map[string]any{
 		"url": "https://example.test", "body_text": "payload",
-	}, tools.ToolContext{Agent: tools.DefaultToolProfileID})
-	var reject *tools.ToolReject
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+	})
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("error = %v, want TOOL_ARGS_INVALID", err)
 	}
@@ -142,8 +150,10 @@ func TestHTTPRequestRejectsInvalidHeaderAsInvalidArguments(t *testing.T) {
 	}
 	_, err := registry.Run(t.Context(), "http_request", map[string]any{
 		"url": "https://example.test", "headers": []any{map[string]any{"name": "Bad Header", "value": "value"}},
-	}, tools.ToolContext{Agent: tools.DefaultToolProfileID})
-	var reject *tools.ToolReject
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+	})
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("error = %v, want TOOL_ARGS_INVALID", err)
 	}
@@ -159,8 +169,10 @@ func TestHTTPRequestRequiresExactLoopbackPorts(t *testing.T) {
 		"capability_request": map[string]any{
 			"loopback_connect": map[string]any{},
 		},
-	}, tools.ToolContext{Agent: tools.DefaultToolProfileID})
-	var reject *tools.ToolReject
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+	})
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("error = %v, want TOOL_ARGS_INVALID", err)
 	}
@@ -192,7 +204,9 @@ func TestHTTPRequestDiscardDoesNotBufferResponseBody(t *testing.T) {
 	out, err := registry.Run(t.Context(), "http_request", map[string]any{
 		"url": server.URL, "response_body": "discard",
 		"capability_request": loopbackCapability(t, server.URL),
-	}, tools.ToolContext{Agent: tools.DefaultToolProfileID})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+	})
 	if err != nil {
 		t.Fatalf("discard http_request: %v", err)
 	}

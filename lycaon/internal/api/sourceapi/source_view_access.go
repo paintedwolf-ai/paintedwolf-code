@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcetree"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -38,7 +38,7 @@ func sourceHandleParam(r *http.Request, name string) (string, error) {
 	return id, nil
 }
 
-func (s *Handler) requestedSourceView(w http.ResponseWriter, r *http.Request) (*sourceView, *http.Request, func(), bool) {
+func (s *Views) requestedSourceView(w http.ResponseWriter, r *http.Request) (*sourceView, *http.Request, func(), bool) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return nil, r, nil, false
@@ -61,7 +61,7 @@ func (s *Handler) requestedSourceView(w http.ResponseWriter, r *http.Request) (*
 		return nil, r, nil, false
 	}
 	view.mu.Lock()
-	current := view.current
+	current := view.comparisonData.current
 	view.mu.Unlock()
 	if current != nil {
 		scopeErr := validateSourceTreeAddress(scoped, wire.SourceTreeAddress{RootID: current.stream.RootID, Path: current.stream.Path})
@@ -71,7 +71,7 @@ func (s *Handler) requestedSourceView(w http.ResponseWriter, r *http.Request) (*
 			return nil, r, nil, false
 		}
 	}
-	s.refreshComparisonScreen(view)
+	s.ComparisonViews.refreshComparisonScreen(view)
 	view.touch()
 	s.sourceViewRegistry().presentations.Renew(func(p *sourcePresentation) bool { return p.read.id == view.id })
 	ctx, cancel := context.WithCancelCause(r.Context())
@@ -80,7 +80,7 @@ func (s *Handler) requestedSourceView(w http.ResponseWriter, r *http.Request) (*
 }
 
 // Every retained read rechecks the current project and session relationship.
-func (s *Handler) sourceViewProject(ctx context.Context, p *project.Project, view *sourceView) (*project.Project, error) {
+func (s *Views) sourceViewProject(ctx context.Context, p *project.Project, view *sourceView) (*project.Project, error) {
 	scope, err := requestscope.ResolveSessionProject(s.SessionStore, ctx, p, view.sessionID)
 	if err != nil {
 		return nil, err
@@ -92,23 +92,23 @@ func (s *Handler) sourceViewProject(ctx context.Context, p *project.Project, vie
 		return nil, pagedview.ErrExpired
 	}
 	view.mu.Lock()
-	source := view.chatSource
-	if view.comparisonSource.Chat != nil {
-		source = view.comparisonSource.Chat
+	source := view.comparisonData.chatSource
+	if view.comparisonData.comparisonSource.Chat != nil {
+		source = view.comparisonData.comparisonSource.Chat
 	}
 	view.mu.Unlock()
 	if source != nil {
-		if _, err := s.readChatFileEdit(ctx, view.sessionID, source.First); err != nil {
+		if _, err := s.Comparisons.readChatFileEdit(ctx, view.sessionID, source.First); err != nil {
 			return nil, errSourceViewEditGone
 		}
-		if _, err := s.readChatFileEdit(ctx, view.sessionID, source.Last); err != nil {
+		if _, err := s.Comparisons.readChatFileEdit(ctx, view.sessionID, source.Last); err != nil {
 			return nil, errSourceViewEditGone
 		}
 	}
 	return scope.Project, nil
 }
 
-func (s *Handler) HandleGetSourceView(w http.ResponseWriter, r *http.Request) {
+func (s *Views) HandleGetSourceView(w http.ResponseWriter, r *http.Request) {
 	view, r, release, ok := s.requestedSourceView(w, r)
 	if !ok {
 		return
@@ -125,7 +125,7 @@ func (s *Handler) HandleGetSourceView(w http.ResponseWriter, r *http.Request) {
 // HandleReleaseSourceView: the caller's person and project scope authorizes
 // release, so a view whose chat was deleted can still be released. A view the
 // host does not retain answers source_view_not_found.
-func (s *Handler) HandleReleaseSourceView(w http.ResponseWriter, r *http.Request) {
+func (s *Views) HandleReleaseSourceView(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -151,13 +151,13 @@ func (s *Handler) HandleReleaseSourceView(w http.ResponseWriter, r *http.Request
 
 // writeSourceViewAccessError answers the errors of addressing a retained view
 // and rechecking the chat and folders it reads.
-func (s *Handler) writeSourceViewAccessError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Views) writeSourceViewAccessError(w http.ResponseWriter, r *http.Request, err error) {
 	if !s.writeSourceViewAddressError(w, r, err) {
 		s.responses.InternalError(w, r, err)
 	}
 }
 
-func (s *Handler) writeSourceViewAddressError(w http.ResponseWriter, r *http.Request, err error) bool {
+func (s *Views) writeSourceViewAddressError(w http.ResponseWriter, r *http.Request, err error) bool {
 	if errors.Is(err, context.Canceled) && errors.Is(context.Cause(r.Context()), pagedview.ErrExpired) {
 		err = pagedview.ErrExpired
 	}
@@ -165,7 +165,7 @@ func (s *Handler) writeSourceViewAddressError(w http.ResponseWriter, r *http.Req
 	switch {
 	case errors.As(err, &handle):
 		s.responses.FailReason(w, wire.ApiErrorCodeInvalidRequest, handle.Error())
-	case errors.Is(err, session.ErrSessionWorktreeStale):
+	case errors.Is(err, sessionscope.ErrWorktreeStale):
 		s.responses.Fail(w, wire.ApiErrorCodeWorktreeStale, "This chat's worktree is missing or invalid. Unbind it in the Git tab to continue.")
 	case errors.Is(err, store.ErrSessionNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "This chat no longer exists.")
@@ -182,7 +182,7 @@ func (s *Handler) writeSourceViewAddressError(w http.ResponseWriter, r *http.Req
 	return true
 }
 
-func (s *Handler) writeSourceViewError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Views) writeSourceViewError(w http.ResponseWriter, r *http.Request, err error) {
 	if s.writeSourceViewAddressError(w, r, err) {
 		return
 	}
@@ -204,6 +204,6 @@ func (s *Handler) writeSourceViewError(w http.ResponseWriter, r *http.Request, e
 	case errors.Is(err, pagedview.ErrFrameSize):
 		s.responses.Fail(w, wire.ApiErrorCodeSourceViewFrameTooLarge, "The requested source row exceeds the presentation limit.")
 	default:
-		s.writeComparisonError(w, r, err)
+		s.Comparisons.writeComparisonError(w, r, err)
 	}
 }

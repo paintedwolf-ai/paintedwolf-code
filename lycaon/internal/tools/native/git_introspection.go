@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
@@ -121,7 +122,7 @@ func (t *GitRestoreTool) Run(ctx context.Context, args map[string]any, tctx tool
 		}
 		gitPath, err := filepath.Rel(gitRoot, resolved.Abs)
 		if err != nil || sandbox.HasParentTraversal(gitPath) {
-			return "", &tools.ToolReject{Code: "GIT_RESTORE_PATH_DENIED", Data: map[string]any{"path": relPath}}
+			return "", &toolrejection.ToolReject{Code: "GIT_RESTORE_PATH_DENIED", Data: map[string]any{"path": relPath}}
 		}
 		gitPaths = append(gitPaths, filepath.ToSlash(gitPath))
 		restored = append(restored, filepath.ToSlash(relPath))
@@ -129,8 +130,8 @@ func (t *GitRestoreTool) Run(ctx context.Context, args map[string]any, tctx tool
 	opts.Paths = gitPaths
 	opts.Review = func(ctx context.Context, files []git.RestoreFile) error { return t.reviewRestore(ctx, tctx, files) }
 	if err := t.Git.Restore(ctx, gitRoot, opts); err != nil {
-		var reject *tools.ToolReject
-		if errors.As(err, &reject) || tools.HostRefusal(err) != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		var reject *toolrejection.ToolReject
+		if errors.As(err, &reject) || toolrejection.HostRefusal(err) != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 			return "", err
 		}
 		return git.MarshalRestoreToolResponse(nil, err)
@@ -143,7 +144,7 @@ func (t *GitRestoreTool) Run(ctx context.Context, args map[string]any, tctx tool
 
 func parseGitRestoreOpts(args map[string]any) (git.GitRestoreOpts, error) {
 	paths, err := parseBoundedPaths(args, git.DefaultGitRestoreMaxPaths, func(max, got int) error {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "GIT_RESTORE_BULK_DENIED",
 			Data: map[string]any{"max_paths": max, "requested": got},
 		}
@@ -168,18 +169,18 @@ func assertGitReadPath(
 	}
 	relSlash := filepath.ToSlash(relPath)
 	if tools.IsSensitivePath(relSlash) {
-		return &tools.ToolReject{Code: "GIT_PATH_DENIED", Data: map[string]any{"path": relSlash, "tool": tool}}
+		return &toolrejection.ToolReject{Code: "GIT_PATH_DENIED", Data: map[string]any{"path": relSlash, "tool": tool}}
 	}
 	if boundary == nil {
 		return nil
 	}
 	if _, err := projectpaths.ResolveRead(ctx, boundary, tctx, relPath); err != nil {
 		// Preserve the resolver's structured rejection.
-		var structured *tools.ToolReject
-		if errors.As(err, &structured) || tools.HostRefusal(err) != nil {
+		var structured *toolrejection.ToolReject
+		if errors.As(err, &structured) || toolrejection.HostRefusal(err) != nil {
 			return err
 		}
-		return &tools.ToolReject{Code: "GIT_PATH_DENIED", Data: map[string]any{"path": relSlash, "tool": tool}}
+		return &toolrejection.ToolReject{Code: "GIT_PATH_DENIED", Data: map[string]any{"path": relSlash, "tool": tool}}
 	}
 	return nil
 }
@@ -191,7 +192,7 @@ func assertGitRestorePath(
 	relPath, profileID string,
 ) error {
 	_, err := assertWritePath(ctx, boundary, tctx, relPath, profileID, "git_restore", func(path string) error {
-		return &tools.ToolReject{Code: "GIT_RESTORE_PATH_DENIED", Data: map[string]any{"path": path}}
+		return &toolrejection.ToolReject{Code: "GIT_RESTORE_PATH_DENIED", Data: map[string]any{"path": path}}
 	})
 	return err
 }
@@ -241,7 +242,7 @@ func assertGitCommitPath(
 	relPath, profileID string,
 ) error {
 	deny := func(path string) error {
-		return &tools.ToolReject{Code: "GIT_COMMIT_PATH_DENIED", Data: map[string]any{"path": path}}
+		return &toolrejection.ToolReject{Code: "GIT_COMMIT_PATH_DENIED", Data: map[string]any{"path": path}}
 	}
 	if sandbox.HasParentTraversal(relPath) {
 		return deny(filepath.ToSlash(relPath))

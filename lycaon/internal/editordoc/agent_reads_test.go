@@ -54,7 +54,7 @@ func TestAgentReadBasisRequiresRereadAfterPinExpiryOrRestart(t *testing.T) {
 	if _, err := f.service.AgentReadBase(t.Context(), f.project.ID, "chat-a", read.ID, nil); !errors.Is(err, ErrAgentReadRequired) {
 		t.Fatalf("expired pin adopted current: %v", err)
 	}
-	restarted := New(f.store, f.recorder, fixedRoots{p: f.project})
+	restarted := New(f.store, f.recorder, f.recorder.History, fixedRoots{p: f.project})
 	closeServiceAtCleanup(t, restarted)
 	if _, err := restarted.AgentReadBase(t.Context(), f.project.ID, "chat-a", read.ID, nil); !errors.Is(err, ErrAgentReadRequired) {
 		t.Fatalf("restart adopted current: %v", err)

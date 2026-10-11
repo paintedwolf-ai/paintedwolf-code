@@ -24,15 +24,16 @@ func TestCoordinatorToolReturnsManifestPrompt(t *testing.T) {
 	})
 	h, sess := buildWorkflowHarnessWithManifest(t, manifest)
 	toolReg := h.ToolRegistry
-	workflowMgr := h.WorkflowMgr
+	workflowMgr := h.Workflows.Manager
 	ctx := context.Background()
-	if _, err := workflowMgr.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
+	if _, err := workflowMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "feedback-tool-e2e", WorkflowVersion: "1.0.0",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	out, err := toolReg.Run(ctx, "workflow_user_feedback", map[string]any{}, tools.ToolContext{
-		Agent: "coordinator", SessionID: sess.ID,
+		Identity: tools.InvocationIdentity{Agent: "coordinator",
+			SessionID: sess.ID},
 	})
 	testutil.FailErr(t, "toolReg.Run failed", err)
 	if !strings.Contains(out, "Which database engine?") || !strings.Contains(out, `"phase_id":"clarify"`) {

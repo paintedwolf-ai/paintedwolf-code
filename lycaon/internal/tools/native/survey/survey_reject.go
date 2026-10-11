@@ -2,13 +2,12 @@ package survey
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
-
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func grepPathNotFound(path string) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "GREP_PATH_NOT_FOUND",
 		Data: map[string]any{"path": path},
 	}

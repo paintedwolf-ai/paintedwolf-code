@@ -19,7 +19,7 @@ type AttributedText struct {
 
 type ComparisonAttribution struct{ Before, After []AttributedText }
 
-func (s *Store) versionTextState(ctx context.Context, versionID string) (*TextState, error) {
+func (s *Comparisons) versionTextState(ctx context.Context, versionID string) (*TextState, error) {
 	row, err := s.queries.GetSourceVersionTextState(ctx, versionID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -34,7 +34,7 @@ func (s *Store) versionTextState(ctx context.Context, versionID string) (*TextSt
 	return state, nil
 }
 
-func (s *Store) attachComparisonAttribution(ctx context.Context, baseline Baseline, opts ScopeComparisonOptions, out *Comparison) error {
+func (s *Comparisons) attachComparisonAttribution(ctx context.Context, baseline Baseline, opts ScopeComparisonOptions, out *Comparison) error {
 	before, err := s.versionTextState(ctx, out.Before.VersionID)
 	if err != nil {
 		return err
@@ -72,7 +72,7 @@ func (s *Store) attachComparisonAttribution(ctx context.Context, baseline Baseli
 	return nil
 }
 
-func (s *Store) contributionLabels(ctx context.Context, contributions []TextContribution) (map[string]string, error) {
+func (s *Comparisons) contributionLabels(ctx context.Context, contributions []TextContribution) (map[string]string, error) {
 	ids := make(map[string]bool)
 	for _, c := range contributions {
 		if c.SessionID != "" {

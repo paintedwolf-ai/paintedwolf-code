@@ -53,9 +53,9 @@ func NewDurableStore(cfg DurableConfig) *DurableStore {
 		hot = NewMemoryStore()
 	}
 	if cfg.Records != nil {
-		cfg.Records.onHandleBound = func(artifactID, handle string) {
+		cfg.Records.onHandleBound = func(ctx context.Context, artifactID, handle string) {
 			// An artifact the hot tier does not hold has nothing to refresh.
-			_ = hot.BindEvidenceHandle(context.Background(), artifactID, handle)
+			_ = hot.BindEvidenceHandle(ctx, artifactID, handle)
 		}
 	}
 	return &DurableStore{

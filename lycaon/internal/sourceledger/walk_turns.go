@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Store) walkTurns(ctx context.Context, projectID string, effects []Effect, movements []GitTransition) ([]api.SourceWalkTurn, error) {
+func (s *Walk) walkTurns(ctx context.Context, projectID string, effects []Effect, movements []GitTransition) ([]api.SourceWalkTurn, error) {
 	type turnKey struct {
 		session string
 		turn    int

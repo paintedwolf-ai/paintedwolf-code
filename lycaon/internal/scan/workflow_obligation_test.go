@@ -275,3 +275,28 @@ func TestWorkflowWorkerDigestSeparatesExecutionFromCoverage(t *testing.T) {
 		}
 	}
 }
+
+func TestResultsAvailableAcceptsNormalPartialCoverage(t *testing.T) {
+	for _, tc := range []struct {
+		gate   string
+		status api.CodeScanStatus
+		want   string
+	}{
+		{"results_available", api.CodeScanStatusComplete, api.ObligationStatusComplete},
+		{"complete", api.CodeScanStatusComplete, api.ObligationStatusFailed},
+		{"results_available", api.CodeScanStatusFailed, api.ObligationStatusFailed},
+		{"results_available", api.CodeScanStatusRunning, api.ObligationStatusPending},
+	} {
+		t.Run(tc.gate+string(tc.status), func(t *testing.T) {
+			scan := api.CodeScan{ID: "scan", ScannerID: "sast", Status: tc.status, CoverageStatus: api.ScanCoveragePartial}
+			obligation := &WorkflowObligation{Ledger: stubWorkflowScanLedger{scans: []api.CodeScan{scan}}, Params: func(context.Context, string, string, string) (map[string]any, error) {
+				return map[string]any{"categories": []any{"security"}, "full": true, "gate": tc.gate}, nil
+			}}
+			got, err := obligation.Status(t.Context(), "run", "ingest")
+			testutil.FailErr(t, "read scanner obligation", err)
+			if got.Status != tc.want {
+				t.Fatalf("got %s, want %s", got.Status, tc.want)
+			}
+		})
+	}
+}

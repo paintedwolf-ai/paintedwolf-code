@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/hostmarker"
@@ -21,16 +22,6 @@ import (
 // SourceHistoryTool reads recorded file changes and line authorship.
 type SourceHistoryTool struct {
 	Boundary *sandbox.Boundary
-}
-
-type sourceHistoryLedger interface {
-	sourceview.Provenance
-	QueryAttribution(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string) (sourceledger.AttributionResult, error)
-	SessionAuthoredPaths(ctx context.Context, projectID, sessionID, rootID string) ([]string, error)
-	GitTransitionsByIDs(ctx context.Context, ids []string) (map[string]sourceledger.GitTransition, error)
-	ReadRestorableVersion(ctx context.Context, projectID, versionID string) (sourceledger.RestorableVersion, error)
-	CompareVersions(ctx context.Context, projectID, versionID string) (sourceledger.Comparison, error)
-	CompareVersionPair(ctx context.Context, projectID, beforeID, afterID string) (sourceledger.Comparison, error)
 }
 
 const (
@@ -125,19 +116,18 @@ func (t *SourceHistoryTool) Run(ctx context.Context, args map[string]any, tctx t
 	case "diff":
 		return t.runDiff(ctx, args, tctx)
 	default:
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_HISTORY_MODE_INVALID",
 			Data: map[string]any{"mode": mode, "detail": "mode must be effects, lines, mine, version, or diff"},
 		}
 	}
 }
 
-// historyLedger asserts the ledger read surface. It runs after path
-// resolution, so scope and root rejects keep their own codes.
-func historyLedger(tctx tools.ToolContext) (sourceHistoryLedger, error) {
-	ledger, ok := tctx.SourceLedger.(sourceHistoryLedger)
-	if !ok {
-		return nil, &tools.ToolReject{
+// History availability is checked after path admission.
+func historyLedger(tctx tools.ToolContext) (tools.SourceHistory, error) {
+	ledger := tctx.Source.History
+	if ledger.Files == nil || ledger.Comparison == nil || ledger.Git == nil || ledger.Authorship == nil {
+		return tools.SourceHistory{}, &toolrejection.ToolReject{
 			Code: "SOURCE_HISTORY_UNAVAILABLE",
 			Data: map[string]any{"detail": "the source ledger is not configured for this session"},
 		}
@@ -181,7 +171,7 @@ func (t *SourceHistoryTool) runEffects(
 		return "", err
 	}
 	resp := sourceHistoryResponse{Mode: "effects", Path: display}
-	head, err := ledger.ResolveHead(ctx, tctx.ProjectID, branch, rootID, rel)
+	head, err := ledger.Files.ResolveHead(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		resp.Note = sourceHistoryNoRecordNote
 		return marshalSourceHistory(display, resp)
@@ -193,7 +183,7 @@ func (t *SourceHistoryTool) runEffects(
 	resp.Tip = &sourceHistoryTip{State: head.State, SHA256Short: sourceview.ShortSHA(head.SHA256), VersionID: head.VersionID}
 	limit := toolkit.BoundedIntArg(args, "limit", sourceHistoryDefaultLimit, 1, sourceHistoryMaxLimit).Effective
 	beforeOrdinal := int64(toolkit.BoundedIntArg(args, "before_ordinal", 0, 0, 1<<62).Effective)
-	page, err := ledger.QueryFileEffects(ctx, tctx.ProjectID, head.FileID, 0, beforeOrdinal, limit)
+	page, err := ledger.Files.QueryFileEffects(ctx, tctx.Identity.ProjectID, head.FileID, 0, beforeOrdinal, limit)
 	if err != nil {
 		return "", fmt.Errorf("source history effects: %w", err)
 	}
@@ -202,8 +192,8 @@ func (t *SourceHistoryTool) runEffects(
 			continue
 		}
 		row := sourceHistoryEffect{
-			Actor:     string(effect.ActorClassFor(tctx.SessionID)),
-			Detail:    effect.ActorDisplay(tctx.SessionID),
+			Actor:     string(effect.ActorClassFor(tctx.Identity.SessionID)),
+			Detail:    effect.ActorDisplay(tctx.Identity.SessionID),
 			Op:        string(effect.Op),
 			At:        effect.TS.UTC().Format(sourceview.StampTimeLayout),
 			Tool:      effect.ToolName,
@@ -238,7 +228,7 @@ func (t *SourceHistoryTool) runLines(
 	if err != nil {
 		return "", err
 	}
-	res, err := ledger.QueryAttribution(ctx, tctx.ProjectID, branch, rootID, rel)
+	res, err := ledger.Files.QueryAttribution(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
 	if err != nil {
 		return "", fmt.Errorf("source history lines: %w", err)
 	}
@@ -260,7 +250,7 @@ func (t *SourceHistoryTool) runLines(
 		}
 		row := sourceHistoryInterval{
 			StartLine: iv.StartLine, EndLine: iv.EndLine,
-			Actor: string(sourceledger.ClassifyActor(iv.Origin, iv.SessionID, tctx.SessionID)),
+			Actor: string(sourceledger.ClassifyActor(iv.Origin, iv.SessionID, tctx.Identity.SessionID)),
 			At:    iv.TS.UTC().Format(sourceview.StampTimeLayout),
 		}
 		if iv.Origin == api.SourceChangeOriginAgent {
@@ -285,8 +275,8 @@ func (t *SourceHistoryTool) runMine(
 	}
 	resp := sourceHistoryResponse{Mode: "mine", Recorded: true}
 	seen := make(map[string]struct{})
-	for _, root := range tctx.Roots {
-		authored, err := ledger.SessionAuthoredPaths(ctx, tctx.ProjectID, tctx.SessionID, root.ID)
+	for _, root := range tctx.Source.Roots {
+		authored, err := ledger.Authorship.SessionAuthoredPaths(ctx, tctx.Identity.ProjectID, tctx.Identity.SessionID, root.ID)
 		if err != nil {
 			return "", fmt.Errorf("source history mine: %w", err)
 		}
@@ -310,7 +300,7 @@ func (t *SourceHistoryTool) runMine(
 // attachSourceHistoryGit resolves the recorded ref movements behind the page's
 // effects. A failed lookup leaves rows without git facts rather than blocking
 // the history answer.
-func attachSourceHistoryGit(ctx context.Context, ledger sourceHistoryLedger, effects []sourceHistoryEffect) {
+func attachSourceHistoryGit(ctx context.Context, ledger tools.SourceHistory, effects []sourceHistoryEffect) {
 	ids := make([]string, 0, 2)
 	seen := make(map[string]struct{}, 2)
 	for _, row := range effects {
@@ -326,7 +316,7 @@ func attachSourceHistoryGit(ctx context.Context, ledger sourceHistoryLedger, eff
 	if len(ids) == 0 {
 		return
 	}
-	transitions, err := ledger.GitTransitionsByIDs(ctx, ids)
+	transitions, err := ledger.Git.GitTransitionsByIDs(ctx, ids)
 	if err != nil {
 		return
 	}
@@ -355,7 +345,7 @@ func (t *SourceHistoryTool) runVersion(
 	versionID, _ := args["version_id"].(string)
 	versionID = strings.TrimSpace(versionID)
 	if versionID == "" {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_REQUIRED",
 			Data: map[string]any{
 				"mode":   "version",
@@ -367,9 +357,9 @@ func (t *SourceHistoryTool) runVersion(
 	if err != nil {
 		return "", err
 	}
-	ver, err := ledger.ReadRestorableVersion(ctx, tctx.ProjectID, versionID)
+	ver, err := ledger.Files.ReadRestorableVersion(ctx, tctx.Identity.ProjectID, versionID)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_NOT_FOUND",
 			Data: map[string]any{
 				"version_id": versionID,
@@ -378,7 +368,7 @@ func (t *SourceHistoryTool) runVersion(
 		}
 	}
 	if errors.Is(err, sourceledger.ErrVersionUnavailable) {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_UNAVAILABLE",
 			Data: map[string]any{
 				"version_id": versionID,
@@ -391,7 +381,7 @@ func (t *SourceHistoryTool) runVersion(
 	}
 
 	if ver.Path != rel || (ver.RootID != "" && rootID != "" && ver.RootID != rootID) {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_PATH_MISMATCH",
 			Data: map[string]any{
 				"version_id":    versionID,
@@ -424,7 +414,7 @@ func (t *SourceHistoryTool) runVersion(
 
 	text, ok := ver.Text()
 	if !ok {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_UNAVAILABLE",
 			Data: map[string]any{
 				"version_id": versionID,
@@ -462,7 +452,7 @@ func (t *SourceHistoryTool) runDiff(
 	versionID, _ := args["version_id"].(string)
 	versionID = strings.TrimSpace(versionID)
 	if versionID == "" {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_REQUIRED",
 			Data: map[string]any{
 				"mode":   "diff",
@@ -480,9 +470,9 @@ func (t *SourceHistoryTool) runDiff(
 
 	var comp sourceledger.Comparison
 	if baseVersionID == "current" || baseVersionID == "head" {
-		head, err := ledger.ResolveHead(ctx, tctx.ProjectID, branch, rootID, rel)
+		head, err := ledger.Files.ResolveHead(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
 		if err != nil {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "SOURCE_VERSION_NOT_FOUND",
 				Data: map[string]any{
 					"version_id": baseVersionID,
@@ -494,13 +484,13 @@ func (t *SourceHistoryTool) runDiff(
 	}
 
 	if baseVersionID != "" {
-		comp, err = ledger.CompareVersionPair(ctx, tctx.ProjectID, baseVersionID, versionID)
+		comp, err = ledger.Comparison.CompareVersionPair(ctx, tctx.Identity.ProjectID, baseVersionID, versionID)
 	} else {
-		comp, err = ledger.CompareVersions(ctx, tctx.ProjectID, versionID)
+		comp, err = ledger.Comparison.CompareVersions(ctx, tctx.Identity.ProjectID, versionID)
 	}
 
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_NOT_FOUND",
 			Data: map[string]any{
 				"version_id": versionID,
@@ -517,7 +507,7 @@ func (t *SourceHistoryTool) runDiff(
 		if expectedPath == "" {
 			expectedPath = comp.Before.Path
 		}
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_PATH_MISMATCH",
 			Data: map[string]any{
 				"version_id":    versionID,
@@ -529,7 +519,7 @@ func (t *SourceHistoryTool) runDiff(
 	}
 
 	if comp.After.Availability == sourceledger.ContentUnavailable {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_UNAVAILABLE",
 			Data: map[string]any{
 				"version_id": versionID,
@@ -538,7 +528,7 @@ func (t *SourceHistoryTool) runDiff(
 		}
 	}
 	if comp.Before.Availability == sourceledger.ContentUnavailable {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SOURCE_VERSION_UNAVAILABLE",
 			Data: map[string]any{
 				"version_id": comp.Before.VersionID,

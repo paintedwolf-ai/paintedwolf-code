@@ -19,8 +19,8 @@ func (validatingBranchWorkspace) EnsureParents(context.Context, string) error { 
 func TestValidateWorkerBranchChecksMetadata(t *testing.T) {
 	want := errors.New("invalid branch metadata")
 	err := tools.ValidateWorkerBranch(context.Background(), tools.ToolContext{
-		WorkerBranchRoot: t.TempDir(),
-		BranchWorkspace:  validatingBranchWorkspace{err: want},
+		Source: tools.InvocationSource{WorkerBranchRoot: t.TempDir(),
+			BranchWorkspace: validatingBranchWorkspace{err: want}},
 	})
 	if !errors.Is(err, want) {
 		t.Fatalf("ValidateWorkerBranch error = %v, want %v", err, want)

@@ -21,9 +21,9 @@ func evidenceScreenRedactor(_ context.Context, msg api.Message) (api.Message, bo
 }
 
 // evidenceFileBytes reads every verify evidence row this project wrote.
-func evidenceFileBytes(t *testing.T, m *Manager, sess *api.Session) []byte {
+func evidenceFileBytes(t *testing.T, m *Host, sess *api.Session) []byte {
 	t.Helper()
-	root := m.evidenceRootFor(sess)
+	root := m.Verification.EvidenceRootFor(sess)
 	if strings.TrimSpace(root) == "" {
 		t.Fatal("evidence root is unset")
 	}
@@ -48,7 +48,7 @@ func evidenceFileBytes(t *testing.T, m *Manager, sess *api.Session) []byte {
 
 func TestSourceRunEvidenceIsScreenedBeforeItIsPersisted(t *testing.T) {
 	mgr, sess, _ := verifyGateHarness(t, "")
-	mgr.SetMessageStorageRedactor(evidenceScreenRedactor)
+	mgr.Runner.Transcript.SetRedactor(evidenceScreenRedactor)
 	recordVerify(t, mgr, sess, "deploy --token "+evidenceBoundarySecret, 0)
 
 	rows := evidenceFileBytes(t, mgr, sess)
@@ -62,10 +62,10 @@ func TestSourceRunEvidenceIsScreenedBeforeItIsPersisted(t *testing.T) {
 
 func TestScreenedEvidenceStillMatchesTheDeclaredCommand(t *testing.T) {
 	mgr, sess, history := verifyGateHarness(t, "make test")
-	mgr.SetMessageStorageRedactor(evidenceScreenRedactor)
+	mgr.Runner.Transcript.SetRedactor(evidenceScreenRedactor)
 	recordVerify(t, mgr, sess, "make test", 0)
 
-	passed, _, _ := mgr.verifyGateState(context.Background(), sess, workSince(history))
+	passed, _, _ := mgr.Verification.GateState(context.Background(), sess, workSince(history))
 	if !passed {
 		t.Fatal("declared verify command no longer satisfies the gate after screening")
 	}

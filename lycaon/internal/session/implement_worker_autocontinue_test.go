@@ -3,11 +3,16 @@ package session_test
 import (
 	"context"
 	"fmt"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -15,10 +20,8 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
@@ -26,14 +29,14 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "traced"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, store, nil, nil)
-	mgr.SetWorkflowSessionView(wfMgr)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -67,7 +70,7 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 			testutil.FailErr(t, "store.AppendMessages failed", err)
 		}
 	}
-	status, err := mgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	status, err := mgr.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		Summary:        "Created game.py",
 		Report:         workercompletion.WorkerCompletionReport{Brief: "Created game.py", LegStatus: "complete", FilesModified: []string{"game.py"}},
 		JobID:          jobID,
@@ -105,7 +108,7 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 
 func TestAppendWorkerSummaryFinalizesEnqueuedTaskTool(t *testing.T) {
 	store := store.NewMemory()
-	mgr := session.NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	ctx := context.Background()
 
 	parent, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -125,7 +128,7 @@ func TestAppendWorkerSummaryFinalizesEnqueuedTaskTool(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	_, err = mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	_, err = mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		Summary:        "done",
 		Report:         workercompletion.WorkerCompletionReport{Brief: "done", LegStatus: "complete"},
 		JobID:          "job-9",

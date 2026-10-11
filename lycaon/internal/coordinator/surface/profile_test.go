@@ -1,25 +1,26 @@
 package surface
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestResolveTurnProfileImplementInvestigateFirstUser(t *testing.T) {
 	p := ResolveTurnProfile(api.CoordinatorRunContext{}, &api.Session{Posture: api.SessionPostureBuild}, []api.Message{visibleTurnMessage("Hello")})
-	if p.SurfaceID != tools.SurfaceImplementInvestigate {
+	if p.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("surface = %q want investigate default", p.SurfaceID)
 	}
 }
 
 func TestSelectSurfaceInvestigateDefersOperationalTools(t *testing.T) {
-	plan, err := CompileToolPlan(TurnProfile{SurfaceID: tools.SurfaceImplementInvestigate}, 1)
+	plan, err := CompileToolPlan(TurnProfile{SurfaceID: toolcontract.SurfaceImplementInvestigate}, 1)
 	testutil.FailErr(t, "CompileToolPlan", err)
 	got := plan.DeferredNames()
 	found := map[string]bool{}
@@ -55,7 +56,7 @@ func TestCompileToolPlansFromYAML(t *testing.T) {
 	if len(plans) == 0 {
 		t.Fatal("expected non-empty coordinator surfaces from YAML")
 	}
-	for _, id := range []string{"await_user", "plan_research", tools.SurfaceImplementInvestigate} {
+	for _, id := range []string{"await_user", "plan_research", toolcontract.SurfaceImplementInvestigate} {
 		if _, ok := plans[id]; !ok {
 			t.Fatalf("missing surface %q", id)
 		}

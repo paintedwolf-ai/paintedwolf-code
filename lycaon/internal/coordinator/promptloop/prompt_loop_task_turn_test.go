@@ -20,7 +20,7 @@ func TestTaskSpawnCommitted(t *testing.T) {
 }
 
 func TestToolRejectMessageDoesNotInferEnqueuedJobID(t *testing.T) {
-	loop := &PromptLoop{}
+	loop := NewPromptLoop(PromptLoopDeps{})
 	body := `{"agent_type":"skeptic","job_id":"job-sk","status":"enqueued"}
 >>> Worker queued
 Code: BANNER_TASK_QUEUED
@@ -28,7 +28,7 @@ Code: BANNER_TASK_QUEUED
 >>> Tool feedback
 Workflow gate blocked at phase adjudicate
 Code: WORKFLOW_GATE_BLOCKED`
-	msg := toolInvocations{loop}.toolRejectMessage("task", "call-1", "asst-1", map[string]any{"agent_type": "skeptic"},
+	msg := loop.Tools.toolRejectMessage("task", "call-1", "asst-1", map[string]any{"agent_type": "skeptic"},
 		guidance.NewRefusal("WORKFLOW_GATE_BLOCKED", body))
 	if msg.ToolResult == nil {
 		t.Fatal("missing tool_result")

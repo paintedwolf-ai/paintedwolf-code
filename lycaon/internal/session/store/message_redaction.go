@@ -2,7 +2,7 @@ package store
 
 import (
 	"context"
-	"sync/atomic"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -11,33 +11,44 @@ import (
 // MessageRedactor screens one transcript row for storage.
 type MessageRedactor func(ctx context.Context, msg api.Message) (api.Message, bool)
 
-// messageRedactor applies one runtime policy across store handles.
-var messageRedactor atomic.Pointer[MessageRedactor]
+type messageRedactorRegistration struct{ fn MessageRedactor }
 
-// SetMessageRedactor installs transcript screening at the store boundary.
-func SetMessageRedactor(fn MessageRedactor) {
-	if fn == nil {
-		messageRedactor.Store(nil)
-		return
+var messageRedactorMu sync.Mutex
+var activeMessageRedactor *messageRedactorRegistration
+
+// SetMessageRedactor installs transcript screening until its owner releases it.
+func SetMessageRedactor(fn MessageRedactor) func() {
+	registration := &messageRedactorRegistration{fn: fn}
+	messageRedactorMu.Lock()
+	activeMessageRedactor = registration
+	messageRedactorMu.Unlock()
+	return func() {
+		messageRedactorMu.Lock()
+		defer messageRedactorMu.Unlock()
+		if activeMessageRedactor == registration {
+			activeMessageRedactor = nil
+		}
+		registration.fn = nil
 	}
-	messageRedactor.Store(&fn)
 }
 
 // screenMessageForStore applies the configured policy to one row.
 func screenMessageForStore(ctx context.Context, msg api.Message) api.Message {
-	loaded := messageRedactor.Load()
-	if loaded == nil {
+	messageRedactorMu.Lock()
+	var fn MessageRedactor
+	if activeMessageRedactor != nil {
+		fn = activeMessageRedactor.fn
+	}
+	messageRedactorMu.Unlock()
+	if fn == nil {
 		return msg
 	}
-	screened, _ := (*loaded)(ctx, msg)
+	screened, _ := fn(ctx, msg)
 	return screened
 }
 
 // screenMessagesForStore screens a batch in place for later publication.
 func screenMessagesForStore(ctx context.Context, msgs []api.Message) {
-	if messageRedactor.Load() == nil {
-		return
-	}
 	for i := range msgs {
 		msgs[i] = screenMessageForStore(ctx, msgs[i])
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"math"
 	"os"
 	"path/filepath"
@@ -43,7 +44,7 @@ func guardMutationContent(tool, path, content string) error {
 	if errors.Is(err, textfile.ErrRawTooLarge) || errors.Is(err, textfile.ErrTextTooLarge) {
 		return sourceview.MutationSizeReject(tool, path, int64(len(content)))
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "WRITE_BINARY_DENIED",
 		Data: map[string]any{
 			"path":           path,
@@ -57,7 +58,7 @@ func guardMutationContent(tool, path, content string) error {
 
 func parseChmodPaths(args map[string]any) ([]string, error) {
 	return parseBoundedPaths(args, hostChmodMaxPaths, func(max, got int) error {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "CHMOD_BULK_DENIED",
 			Data: map[string]any{"max_paths": max, "requested": got},
 		}
@@ -66,7 +67,7 @@ func parseChmodPaths(args map[string]any) ([]string, error) {
 
 func parseChownPaths(args map[string]any) ([]string, error) {
 	return parseBoundedPaths(args, hostChownMaxPaths, func(max, got int) error {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "CHOWN_BULK_DENIED",
 			Data: map[string]any{"max_paths": max, "requested": got},
 		}
@@ -75,7 +76,7 @@ func parseChownPaths(args map[string]any) ([]string, error) {
 
 func parseDeletePaths(args map[string]any) ([]string, error) {
 	return parseBoundedPaths(args, hostDeleteMaxPaths, func(max, got int) error {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "DELETE_BULK_DENIED",
 			Data: map[string]any{"max_paths": max, "requested": got},
 		}
@@ -97,7 +98,7 @@ func parseCopyPairs(args map[string]any) ([]filePair, int64, error) {
 			maxBytes = value
 		}
 		if maxBytes <= 0 {
-			return nil, 0, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "max_file_bytes must be a positive signed 64-bit integer"})
+			return nil, 0, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "max_file_bytes must be a positive signed 64-bit integer"})
 		}
 	}
 
@@ -111,7 +112,7 @@ func parseMovePairs(args map[string]any) ([]filePair, error) {
 
 func parseMkdirPaths(args map[string]any) ([]string, error) {
 	return parseBoundedPaths(args, hostMkdirMaxPaths, func(max, got int) error {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "MKDIR_BULK_DENIED",
 			Data: map[string]any{"max_paths": max, "requested": got},
 		}
@@ -124,7 +125,7 @@ func parseFilePairs(args map[string]any, key string, maxItems int, bulkCode stri
 		return nil, toolkit.MissingArg(key)
 	}
 	if len(raw) > maxItems {
-		return nil, &tools.ToolReject{
+		return nil, &toolrejection.ToolReject{
 			Code: bulkCode,
 			Data: map[string]any{"max_pairs": maxItems, "requested": len(raw)},
 		}
@@ -180,7 +181,7 @@ func assertChmodTarget(
 	info, err := os.Lstat(resolved.Abs)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return mutationTarget{}, 0, &tools.ToolReject{
+			return mutationTarget{}, 0, &toolrejection.ToolReject{
 				Code: "CHMOD_NOT_FOUND",
 				Data: map[string]any{"path": filepath.ToSlash(relPath)},
 			}
@@ -194,7 +195,7 @@ func assertChmodTarget(
 		}
 		resolvedRel := sourceview.SymlinkTarget(resolved.Root.Path, resolved.ScopeRel, target)
 		if resolvedRel == "" {
-			return mutationTarget{}, 0, &tools.ToolReject{
+			return mutationTarget{}, 0, &toolrejection.ToolReject{
 				Code: "CHMOD_SYMLINK_ESCAPE",
 				Data: map[string]any{"path": filepath.ToSlash(relPath)},
 			}
@@ -203,7 +204,7 @@ func assertChmodTarget(
 			if reject := writeScopeReject(ctx, boundary, resolvedRel, profileID, "chmod", err); !errors.Is(reject, err) {
 				return mutationTarget{}, 0, reject
 			}
-			return mutationTarget{}, 0, &tools.ToolReject{
+			return mutationTarget{}, 0, &toolrejection.ToolReject{
 				Code: "CHMOD_SYMLINK_ESCAPE",
 				Data: map[string]any{"path": filepath.ToSlash(relPath), "symlink_target": resolvedRel},
 			}
@@ -217,7 +218,7 @@ func assertChmodTarget(
 		info, err = os.Lstat(fullPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return mutationTarget{}, 0, &tools.ToolReject{
+				return mutationTarget{}, 0, &toolrejection.ToolReject{
 					Code: "CHMOD_NOT_FOUND",
 					Data: map[string]any{"path": filepath.ToSlash(relPath)},
 				}
@@ -242,7 +243,7 @@ func assertChownTarget(
 	info, err := os.Lstat(resolved.Abs)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return mutationTarget{}, 0, 0, &tools.ToolReject{
+			return mutationTarget{}, 0, 0, &toolrejection.ToolReject{
 				Code: "CHOWN_NOT_FOUND",
 				Data: map[string]any{"path": filepath.ToSlash(relPath)},
 			}
@@ -256,7 +257,7 @@ func assertChownTarget(
 		}
 		resolvedRel := sourceview.SymlinkTarget(resolved.Root.Path, resolved.ScopeRel, target)
 		if resolvedRel == "" {
-			return mutationTarget{}, 0, 0, &tools.ToolReject{
+			return mutationTarget{}, 0, 0, &toolrejection.ToolReject{
 				Code: "CHOWN_SYMLINK_ESCAPE",
 				Data: map[string]any{"path": filepath.ToSlash(relPath)},
 			}
@@ -265,7 +266,7 @@ func assertChownTarget(
 			if reject := writeScopeReject(ctx, boundary, resolvedRel, profileID, "chown", err); !errors.Is(reject, err) {
 				return mutationTarget{}, 0, 0, reject
 			}
-			return mutationTarget{}, 0, 0, &tools.ToolReject{
+			return mutationTarget{}, 0, 0, &toolrejection.ToolReject{
 				Code: "CHOWN_SYMLINK_ESCAPE",
 				Data: map[string]any{"path": filepath.ToSlash(relPath), "symlink_target": resolvedRel},
 			}
@@ -290,7 +291,7 @@ func assertChownWritePath(
 	relPath, profileID string,
 ) (projectpaths.Resolved, error) {
 	return assertWritePath(ctx, boundary, tctx, relPath, profileID, "chown", func(path string) error {
-		return &tools.ToolReject{Code: "CHOWN_PATH_DENIED", Data: map[string]any{"path": path}}
+		return &toolrejection.ToolReject{Code: "CHOWN_PATH_DENIED", Data: map[string]any{"path": path}}
 	})
 }
 
@@ -301,7 +302,7 @@ func assertChmodWritePath(
 	relPath, profileID string,
 ) (projectpaths.Resolved, error) {
 	return assertWritePath(ctx, boundary, tctx, relPath, profileID, "chmod", func(path string) error {
-		return &tools.ToolReject{Code: "CHMOD_PATH_DENIED", Data: map[string]any{"path": path}}
+		return &toolrejection.ToolReject{Code: "CHMOD_PATH_DENIED", Data: map[string]any{"path": path}}
 	})
 }
 
@@ -312,7 +313,7 @@ func assertDeleteWritePath(
 	relPath, profileID string,
 ) (projectpaths.Resolved, error) {
 	return assertWritePath(ctx, boundary, tctx, relPath, profileID, "delete", func(path string) error {
-		return &tools.ToolReject{Code: "DELETE_PATH_DENIED", Data: map[string]any{"path": path}}
+		return &toolrejection.ToolReject{Code: "DELETE_PATH_DENIED", Data: map[string]any{"path": path}}
 	})
 }
 
@@ -323,7 +324,7 @@ func assertCopyWritePath(
 	relPath, profileID string,
 ) (projectpaths.Resolved, error) {
 	return assertWritePath(ctx, boundary, tctx, relPath, profileID, "copy", func(path string) error {
-		return &tools.ToolReject{Code: "COPY_PATH_DENIED", Data: map[string]any{"path": path}}
+		return &toolrejection.ToolReject{Code: "COPY_PATH_DENIED", Data: map[string]any{"path": path}}
 	})
 }
 
@@ -334,7 +335,7 @@ func assertMoveWritePath(
 	relPath, profileID string,
 ) (projectpaths.Resolved, error) {
 	return assertWritePath(ctx, boundary, tctx, relPath, profileID, "move", func(path string) error {
-		return &tools.ToolReject{Code: "MOVE_PATH_DENIED", Data: map[string]any{"path": path}}
+		return &toolrejection.ToolReject{Code: "MOVE_PATH_DENIED", Data: map[string]any{"path": path}}
 	})
 }
 
@@ -345,7 +346,7 @@ func assertMkdirWritePath(
 	relPath, profileID string,
 ) (projectpaths.Resolved, error) {
 	return assertWritePath(ctx, boundary, tctx, relPath, profileID, "mkdir", func(path string) error {
-		return &tools.ToolReject{Code: "MKDIR_PATH_DENIED", Data: map[string]any{"path": path}}
+		return &toolrejection.ToolReject{Code: "MKDIR_PATH_DENIED", Data: map[string]any{"path": path}}
 	})
 }
 
@@ -364,7 +365,7 @@ func assertMutationFileSource(
 	info, err := os.Lstat(resolved.Abs)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return projectpaths.Resolved{}, &tools.ToolReject{
+			return projectpaths.Resolved{}, &toolrejection.ToolReject{
 				Code: notFoundCode,
 				Data: map[string]any{"path": filepath.ToSlash(relPath)},
 			}
@@ -372,7 +373,7 @@ func assertMutationFileSource(
 		return projectpaths.Resolved{}, fmt.Errorf("%s %s: %w", tool, relPath, err)
 	}
 	if info.IsDir() {
-		return projectpaths.Resolved{}, &tools.ToolReject{
+		return projectpaths.Resolved{}, &toolrejection.ToolReject{
 			Code: isDirCode,
 			Data: map[string]any{"path": filepath.ToSlash(relPath)},
 		}
@@ -384,7 +385,7 @@ func assertMutationFileSource(
 		}
 		resolvedRel := sourceview.SymlinkTarget(resolved.Root.Path, resolved.ScopeRel, target)
 		if resolvedRel == "" {
-			return projectpaths.Resolved{}, &tools.ToolReject{
+			return projectpaths.Resolved{}, &toolrejection.ToolReject{
 				Code: symlinkEscapeCode,
 				Data: map[string]any{"path": filepath.ToSlash(relPath)},
 			}
@@ -393,7 +394,7 @@ func assertMutationFileSource(
 			if reject := writeScopeReject(ctx, boundary, resolvedRel, profileID, tool, err); !errors.Is(reject, err) {
 				return projectpaths.Resolved{}, reject
 			}
-			return projectpaths.Resolved{}, &tools.ToolReject{
+			return projectpaths.Resolved{}, &toolrejection.ToolReject{
 				Code: symlinkEscapeCode,
 				Data: map[string]any{"path": filepath.ToSlash(relPath), "symlink_target": resolvedRel},
 			}
@@ -443,8 +444,8 @@ func writePathReject(
 	if reject := writeScopeReject(ctx, boundary, relSlash, profileID, tool, err); !errors.Is(reject, err) {
 		return reject
 	}
-	var structured *tools.ToolReject
-	if errors.As(err, &structured) || tools.HostRefusal(err) != nil {
+	var structured *toolrejection.ToolReject
+	if errors.As(err, &structured) || toolrejection.HostRefusal(err) != nil {
 		return err
 	}
 	return deny(relSlash)

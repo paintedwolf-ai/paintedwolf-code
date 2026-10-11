@@ -23,7 +23,7 @@ func TestWorkflowDeliveryRequiresAcceptedCurrentPhaseCloseout(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mgr, sess, _ := verifyGateHarness(t, "")
-			ready, err := mgr.WorkflowDeliveryReported(t.Context(), sess.ID, "run", "work")
+			ready, err := mgr.Runner.Transcript.DeliveredWorkflowPhase(t.Context(), sess.ID, "run", "work")
 			testutil.FailErr(t, "read initial delivery state", err)
 			if ready {
 				t.Fatal("empty work phase completed before doing work")
@@ -48,8 +48,8 @@ func TestWorkflowDeliveryRequiresAcceptedCurrentPhaseCloseout(t *testing.T) {
 			if tc.toolCall {
 				msg.ToolCalls = []api.ToolCall{{ID: "call", Name: "read"}}
 			}
-			testutil.FailErr(t, "append closeout", mgr.store.AppendMessages(t.Context(), sess.ID, msg))
-			ready, err = mgr.WorkflowDeliveryReported(t.Context(), sess.ID, "run", "work")
+			testutil.FailErr(t, "append closeout", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(t.Context(), sess.ID, msg))
+			ready, err = mgr.Runner.Transcript.DeliveredWorkflowPhase(t.Context(), sess.ID, "run", "work")
 			testutil.FailErr(t, "read reported delivery state", err)
 			if ready != tc.want {
 				t.Fatalf("ready=%v want %v", ready, tc.want)

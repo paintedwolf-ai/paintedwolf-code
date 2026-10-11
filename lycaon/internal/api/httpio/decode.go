@@ -8,7 +8,7 @@ import (
 	"mime"
 	"net/http"
 
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
 
@@ -143,6 +143,6 @@ func IsBodyTooLarge(err error) bool {
 // Source text can expand during UTF-16 decoding and JSON escaping. The
 // source service separately enforces decoded and encoded content limits.
 func DecodeSourceJSON(w http.ResponseWriter, r *http.Request, dst any) error {
-	limit := 6*textfile.LimitsForRaw(project.SourceWriteMaxBytes).MaxTextBytes + MaxJSONBody
+	limit := 6*textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes).MaxTextBytes + MaxJSONBody
 	return DecodeJSONLimit(w, r, dst, limit)
 }

@@ -2,11 +2,10 @@ package loopwake
 
 import (
 	"context"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
+	"time"
 )
 
 // A worker's budget request needs its coordinator the way a decision does, so
@@ -52,16 +51,16 @@ func TestNudgeWorkerBudgetRequestedBreaksWorkerSleepOnly(t *testing.T) {
 	}
 	loop.SetDeps(deps)
 	deadline := time.Now().UTC().Add(10 * time.Minute)
-	loop.EnterSleep(context.Background(), "worker-waiter", deadline, "waiting for workers", []WaitTrigger{WaitTriggerTimer, WaitTriggerAllWorkersIdle}, nil, SleepMoverHost)
-	loop.EnterSleep(context.Background(), "process-waiter", deadline, "waiting for a command", []WaitTrigger{WaitTriggerTimer, WaitTriggerProcessDone}, nil, SleepMoverHost)
+	loop.Waits.EnterSleep(context.Background(), "worker-waiter", deadline, "waiting for workers", []WaitTrigger{WaitTriggerTimer, WaitTriggerAllWorkersIdle}, nil, SleepMoverHost)
+	loop.Waits.EnterSleep(context.Background(), "process-waiter", deadline, "waiting for a command", []WaitTrigger{WaitTriggerTimer, WaitTriggerProcessDone}, nil, SleepMoverHost)
 
-	loop.NudgeWorkerBudgetRequested(context.Background(), "worker-waiter", "job-1", budgetRequestEnvelope("job-1"))
-	loop.NudgeWorkerBudgetRequested(context.Background(), "process-waiter", "job-1", budgetRequestEnvelope("job-1"))
+	loop.Nudges.NudgeWorkerBudgetRequested(context.Background(), "worker-waiter", "job-1", budgetRequestEnvelope("job-1"))
+	loop.Nudges.NudgeWorkerBudgetRequested(context.Background(), "process-waiter", "job-1", budgetRequestEnvelope("job-1"))
 
-	if loop.IsSleeping("worker-waiter") {
+	if loop.Waits.IsSleeping("worker-waiter") {
 		t.Fatal("budget request must break a sleep on workers")
 	}
-	if !loop.IsSleeping("process-waiter") {
+	if !loop.Waits.IsSleeping("process-waiter") {
 		t.Fatal("budget request must not break a sleep that awaits no worker")
 	}
 }

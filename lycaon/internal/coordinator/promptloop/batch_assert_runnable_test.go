@@ -19,26 +19,30 @@ func TestExecuteToolCallsInTurnRunsFullSerialTaskBatch(t *testing.T) {
 	_ = reg.Register("task", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 		atomic.AddInt32(&taskCalls, 1)
 		n := atomic.LoadInt32(&taskCalls)
-		if tctx.Out != nil {
-			tctx.Out.Dispatch = &api.WorkerDispatch{WorkerID: fmt.Sprintf("job-%d", n)}
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: fmt.Sprintf("job-%d", n)}
 		}
 		return fmt.Sprintf(`{"job_id":"job-%d","status":"enqueued"}`, n), nil
 	})
 	_ = reg.Register("wait", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
-		if tctx.Out != nil {
-			tctx.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked"}
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.Completion = &api.ToolCompletion{Operation: "wait", State: "parked"}
 		}
 		return `{"status":"sleeping","wake_at":"2099-01-01T00:00:00Z"}`, nil
 	})
 
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Tools: reg,
-		AssertRunnable: func(_ context.Context, _ string) error {
-			n := atomic.AddInt32(&assertCalls, 1)
-			if n > 1 {
-				return fmt.Errorf("not runnable after first task enqueue")
-			}
-			return nil
+		Context: ContextDeps{
+			Tools: reg,
+		},
+		Control: ControlDeps{
+			AssertRunnable: func(_ context.Context, _ string) error {
+				n := atomic.AddInt32(&assertCalls, 1)
+				if n > 1 {
+					return fmt.Errorf("not runnable after first task enqueue")
+				}
+				return nil
+			},
 		},
 	})
 	sess := &api.Session{ID: "sess-1", Posture: api.SessionPostureBuild}
@@ -54,17 +58,19 @@ func TestExecuteToolCallsInTurnRunsFullSerialTaskBatch(t *testing.T) {
 		},
 	}}
 	var appended []api.Message
-	loop.Deps.AppendMessages = func(_ context.Context, _ string, msgs ...api.Message) error {
+	loop.Projection.Deps.AppendMessages = func(_ context.Context, _ string, msgs ...api.Message) error {
 		appended = append(appended, msgs...)
 		return nil
 	}
 
-	history, turnTools, anyTask, taskCount, _, breakLoop, err := toolBatch{loop}.executeToolCallsInTurn(
+	history, turnTools, anyTask, taskCount, _, breakLoop, err := loop.Batch.executeToolCallsInTurn(
 		context.Background(),
 		sess,
 		sess.ID,
 		history[0].ToolCalls,
-		tools.ToolContext{SessionID: sess.ID},
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 		history,
 		"dispatch",
 		assistantID,

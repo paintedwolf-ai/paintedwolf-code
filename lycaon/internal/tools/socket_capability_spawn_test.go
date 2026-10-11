@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"github.com/lycaon/lycaon/internal/capabilitygrants"
+
 	"net"
 	"os"
 	"path/filepath"
@@ -14,9 +16,16 @@ import (
 )
 
 func TestSocketDayGrantOfferIdentity(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", SessionID: "sess-sock"}
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID: "sess-sock",
+		},
+	}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
-	offers := SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
+	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	day, task := offers[0], offers[1]
 	if day.ID == task.ID {
 		t.Fatal("day and task socket offers must never share an id")
@@ -50,9 +59,18 @@ func TestSocketDayGrantOfferIdentity(t *testing.T) {
 }
 
 func TestSocketDayRungRidesProjectWhileDurableRungStaysTask(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", SessionID: "sess-sock", ProjectID: "proj-sock", ProjectDir: "/tmp/proj"}
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:  "sess-sock",
+			ProjectID:  "proj-sock",
+			ProjectDir: "/tmp/proj",
+		},
+	}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
-	offers := SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
+	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	if len(offers) != 3 {
 		t.Fatalf("socket offers = %d, want day, task, and project: %+v", len(offers), offers)
 	}
@@ -88,7 +106,7 @@ func TestSocketDayRungRidesProjectWhileDurableRungStaysTask(t *testing.T) {
 		durable.ApprovedPath != grant.ApprovedPath || durable.ResolvedPath != grant.ResolvedPath {
 		t.Fatalf("project day durable grant = %+v", durable)
 	}
-	if durable.ProjectID != action.ProjectID || durable.ProjectDir != action.ProjectDir ||
+	if durable.ProjectID != action.Scope.ProjectID || durable.ProjectDir != action.Scope.ProjectDir ||
 		day.Authority[0].TTLSeconds != hitl.DayRungTTLSeconds {
 		t.Fatalf("project day durable scope = %+v", day.Authority[0])
 	}
@@ -98,18 +116,34 @@ func TestSocketDayRungRidesProjectWhileDurableRungStaysTask(t *testing.T) {
 }
 
 func TestSocketDayRungRidesIdentityWithoutFolder(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", SessionID: "sess-sock", ProjectID: "proj-sock"}
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID: "sess-sock",
+			ProjectID: "proj-sock",
+		},
+	}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
-	offers := SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
+	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	if offers[0].Scope != hitl.ApprovalGrantScopeProject || offers[0].Grant.ProjectID != "proj-sock" {
 		t.Fatalf("no-folder socket day = %+v, want project identity", offers[0])
 	}
 }
 
 func TestSocketDayRungStaysTaskWithoutProjectIdentity(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", SessionID: "sess-sock", ProjectDir: "/tmp/proj"}
+	action := hitl.ProposedAction{
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+		},
+		Scope: hitl.ActionScope{
+			SessionID:  "sess-sock",
+			ProjectDir: "/tmp/proj",
+		},
+	}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
-	offers := SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
+	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	if offers[0].Scope != hitl.ApprovalGrantScopeChat {
 		t.Fatalf("folder-only socket day = %+v, want task", offers[0])
 	}
@@ -144,8 +178,9 @@ func (r *memorySocketRuntime) AuthorizedGrants(_, sessionID, toolCallID, actionD
 	return out
 }
 
-func (r *memorySocketRuntime) GrantChat(_ string, g confine.SocketGrant, _, _, _ string, _ *time.Time) {
+func (r *memorySocketRuntime) GrantChat(_ string, g confine.SocketGrant, _, _, _ string, _ *time.Time) bool {
 	r.task = append(r.task, g)
+	return true
 }
 
 func (r *memorySocketRuntime) IssuePermit(sessionID, toolCallID, actionDigest string, g confine.SocketGrant) {
@@ -177,8 +212,8 @@ func TestConfineRequestForSpawnIgnoresForgedRawRequest(t *testing.T) {
 	_ = listenUnixSocket(t, filepath.Join(dir, "s.sock"))
 
 	tctx := ToolContext{
-		SessionID:  "sess",
-		ToolCallID: "call-1",
+		Identity: InvocationIdentity{SessionID: "sess",
+			ToolCallID: "call-1"},
 	}
 	req, reject := ConfineRequestForSpawn(t.Context(), tctx, []string{dir})
 	if reject != nil {
@@ -206,11 +241,11 @@ func TestConfineRequestForSpawnConsumesPermit(t *testing.T) {
 	rt.IssuePermit("sess", "call-1", digest, g)
 
 	tctx := ToolContext{
-		SessionID:               "sess",
-		ToolCallID:              "call-1",
-		SocketGrants:            []confine.SocketGrant{g},
-		SocketActionDigest:      digest,
-		SocketCapabilityRuntime: rt,
+		Identity: InvocationIdentity{SessionID: "sess",
+			ToolCallID: "call-1"},
+		Socket: InvocationSocket{SocketGrants: []confine.SocketGrant{g},
+			SocketActionDigest:      digest,
+			SocketCapabilityRuntime: rt},
 	}
 	req, reject := ConfineRequestForSpawn(t.Context(), tctx, []string{dir})
 	if reject != nil {

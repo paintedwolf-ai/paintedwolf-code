@@ -21,7 +21,7 @@ import (
 	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -179,7 +179,7 @@ func largestCatalogPhaseInject(t *testing.T, renderer *prompts.InjectRenderer, h
 			rows = append(rows, inject.WorkflowPhaseRow{ID: phase.ID, CompleteWhen: phase.CompleteWhen, Next: phase.Next, Terminal: phase.Terminal})
 		}
 		for _, phase := range manifest.PhaseDefs {
-			exit := workflow.ProjectPhaseExit(manifest, phase, nil, nil).InjectView()
+			exit := workflowpresentation.ProjectPhaseExit(manifest, phase, nil, nil).InjectView()
 			if phase.ReviewLoop != nil {
 				contractcheck.FailErr(t, "attach verdict call", verdictcall.Attach(exit, catalog, *phase.ReviewLoop, manifest.ReportBrief()))
 			}
@@ -197,7 +197,7 @@ func largestCatalogPhaseInject(t *testing.T, renderer *prompts.InjectRenderer, h
 	return largest
 }
 
-func promptBudgetCoverageAssignment() *reviewcoverage.Assignment {
+func promptBudgetCoverageAssignment() *reviewcoverage.Binding {
 	var warnings []api.ScanWarning
 	for i := range 36 {
 		warnings = append(warnings, api.ScanWarning{File: fmt.Sprintf("component-%02d/src/entry.go", i), Construct: "indirect_call"})
@@ -206,5 +206,5 @@ func promptBudgetCoverageAssignment() *reviewcoverage.Assignment {
 	facts := reviewcoverage.Facts{Obligations: []reviewcoverage.Fact{{ID: "survey/entry", Kind: "planned_area", Subject: "External entry points"}}, Gaps: []reviewcoverage.Fact{{ID: "gap/partial", Kind: "file_partial_semantics", FileCount: scope.Files, Count: scope.Warnings, Paths: scope.PathsSample, Distribution: &scope.Profile, Scans: []string{"scan-fixture"}}}}
 	candidate := api.CoverageReview{Revision: "candidate", Assessments: []api.CoverageAssessment{{ID: "gap/partial", Disposition: "immaterial", Reason: "Candidate excludes the affected scope", Obligations: []string{"survey/entry"}, CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "scan#1"}}}}}
 	assignment := reviewcoverage.Assign(facts, candidate, "challenge")
-	return &assignment
+	return &reviewcoverage.Binding{ID: "job-budget-fixture", RunID: "run-budget-fixture", Phase: "challenge", WorkID: "review/skeptic", Agent: "skeptic", Purpose: reviewcoverage.IndependentReview, CoverageRequired: true, Subject: assignment}
 }

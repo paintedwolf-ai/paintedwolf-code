@@ -24,11 +24,11 @@ func TestResolveCaptureProjectDirUsesWorkerWorkspaceView(t *testing.T) {
 	testutil.FailErr(t, "write worker fixture", os.WriteFile(filepath.Join(branch, "index.html"), []byte("worker"), 0o600))
 
 	tctx := tools.ToolContext{
-		Roots:            []projectroot.RootRef{{ID: "project", Path: primary, IsPrimary: true}},
-		ActiveRootID:     "project",
-		WorkerJobID:      "job-1",
-		WorkerBranchRoot: branch,
-		BranchWorkspace:  testutil.CompleteBranchWorkspace{},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "project", Path: primary, IsPrimary: true}},
+			ActiveRootID:     "project",
+			WorkerBranchRoot: branch,
+			BranchWorkspace:  testutil.CompleteBranchWorkspace{}},
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-1"},
 	}
 	resolved, err := resolveCaptureProjectDir(t.Context(), tctx, ".")
 	testutil.FailErr(t, "resolve worker capture root", err)
@@ -46,11 +46,11 @@ func TestResolveCaptureProjectDirUsesActiveAttachedRoot(t *testing.T) {
 	primary := t.TempDir()
 	secondary := t.TempDir()
 	tctx := tools.ToolContext{
-		Roots: []projectroot.RootRef{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{
 			{ID: "project", Label: "app", Path: primary, IsPrimary: true},
 			{ID: "docs", Label: "docs", Path: secondary},
 		},
-		ActiveRootID: "project",
+			ActiveRootID: "project"},
 	}
 	resolved, err := resolveCaptureProjectDir(t.Context(), tctx, "@docs")
 	testutil.FailErr(t, "resolve attached capture root", err)
@@ -79,15 +79,15 @@ func TestCaptureHandlerReadsAndReturnsTheUnsavedWorkerSurface(t *testing.T) {
 		"project_dir": ".",
 		"viewport":    map[string]any{"width": 320, "height": 180},
 	}, tools.ToolContext{
-		ProjectID:        "project",
-		SessionID:        "worker",
-		ParentSessionID:  "root",
-		Roots:            []projectroot.RootRef{{ID: "project", Path: primary, IsPrimary: true}},
-		ActiveRootID:     "project",
-		WorkerJobID:      "job-1",
-		WorkerBranchRoot: branch,
-		BranchWorkspace:  testutil.CompleteBranchWorkspace{},
-		Out:              out,
+		Identity: tools.InvocationIdentity{ProjectID: "project",
+			SessionID:       "worker",
+			ParentSessionID: "root",
+			WorkerJobID:     "job-1"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "project", Path: primary, IsPrimary: true}},
+			ActiveRootID:     "project",
+			WorkerBranchRoot: branch,
+			BranchWorkspace:  testutil.CompleteBranchWorkspace{}},
+		Effects: tools.InvocationEffects{Out: out},
 	})
 	testutil.FailErr(t, "capture worker draft surface", err)
 	if !strings.Contains(result, "WORKER DRAFT SURFACE") || strings.Contains(result, "PRIMARY SURFACE") {

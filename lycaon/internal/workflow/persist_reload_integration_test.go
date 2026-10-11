@@ -9,7 +9,10 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -37,10 +40,10 @@ phases:
       - delegation_closeout_complete
       - evidence_passed:verify
 `
-	if err := store.Upsert(context.Background(), sessionID, []byte(manifest), ComposeActorCoordinator, nil); err != nil {
+	if err := store.Upsert(context.Background(), sessionID, []byte(manifest), workflowdrafts.Coordinator, nil); err != nil {
 		testutil.FailErr(t, "store.Upsert failed", err)
 	}
-	if _, err := p.Persist(context.Background(), PersistRequest{
+	if _, err := p.Persist(context.Background(), workflowcomposition.PersistRequest{
 		SessionID:  sessionID,
 		ProjectDir: projectDir,
 		WorkflowID: "hotfix",
@@ -50,7 +53,7 @@ phases:
 	}); err != nil {
 		t.Fatal(err)
 	}
-	resolver := ManifestResolver{SessionStore: store, ProjectTierApplies: func(context.Context, string) bool { return true }}
+	resolver := workflowcatalog.Resolver{SessionStore: store, ProjectTierApplies: func(context.Context, string) bool { return true }}
 	summaries, err := resolver.ListResolved(context.Background(), projectDir, sessionID)
 	testutil.FailErr(t, "resolver.ListResolved failed", err)
 	found := false
@@ -75,16 +78,16 @@ phases:
 	}
 }
 
-func testPersisterForIntegration(t *testing.T) (*Persister, *MemorySessionWorkflowStore) {
+func testPersisterForIntegration(t *testing.T) (*workflowcomposition.Persister, *workflowdrafts.Memory) {
 	t.Helper()
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	store := NewMemorySessionWorkflowStore()
-	policy, err := LoadComposePolicy()
-	testutil.FailErr(t, "LoadComposePolicy failed", err)
-	return &Persister{
+	store := workflowdrafts.NewMemory()
+	policy, err := workflowcomposition.LoadComposePolicy()
+	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
+	return &workflowcomposition.Persister{
 		SessionStore: store,
 		Registry:     reg,
 		Agents:       agents,
@@ -116,10 +119,10 @@ phases:
       - delegation_closeout_complete
       - evidence_passed:verify
 `
-	if err := store.Upsert(context.Background(), sessionID, []byte(manifest), ComposeActorCoordinator, nil); err != nil {
+	if err := store.Upsert(context.Background(), sessionID, []byte(manifest), workflowdrafts.Coordinator, nil); err != nil {
 		testutil.FailErr(t, "store.Upsert failed", err)
 	}
-	if _, err := p.Persist(context.Background(), PersistRequest{
+	if _, err := p.Persist(context.Background(), workflowcomposition.PersistRequest{
 		SessionID:  sessionID,
 		ProjectDir: projectDir,
 		WorkflowID: "hotfix",
@@ -131,7 +134,7 @@ phases:
 	}); err != nil {
 		t.Fatal(err)
 	}
-	before, err := ManifestResolver{SessionStore: store, ProjectTierApplies: func(context.Context, string) bool { return true }}.ListResolved(context.Background(), projectDir, "")
+	before, err := workflowcatalog.Resolver{SessionStore: store, ProjectTierApplies: func(context.Context, string) bool { return true }}.ListResolved(context.Background(), projectDir, "")
 	testutil.FailErr(t, "operation failed", err)
 	foundBefore := false
 	for _, s := range before {

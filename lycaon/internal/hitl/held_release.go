@@ -146,7 +146,7 @@ func NewUnlockPlan(action ProposedAction, held HeldRelease, screen *SecretScreen
 		}},
 	}
 	presentation := ApprovalPresentation{
-		Action: TitleUnlockForThisChat, Tool: action.Tool, Impact: unlockImpact,
+		Action: TitleUnlockForThisChat, Tool: action.Invocation.Tool, Impact: unlockImpact,
 		Gate: api.GateSecretOutbound, ConsequenceBand: string(api.ConsequenceBandHighRisk),
 		ConsequenceCode: string(api.ConsequenceCodeSecret),
 		Cited: []PresentedFact{{Gate: api.GateSecretOutbound, Key: "secret.custody", Value: "a value you stored", Source: "managed_secret"}},

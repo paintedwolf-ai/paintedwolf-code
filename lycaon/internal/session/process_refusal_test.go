@@ -2,21 +2,21 @@ package session
 
 import (
 	"context"
-	"strings"
-	"testing"
-	"time"
-
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/submissions"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"strings"
+	"testing"
+	"time"
 )
 
 func refusalObservation() confine.Observation {
@@ -43,13 +43,12 @@ func assertRefusalDigest(t *testing.T, digest string) {
 
 func TestHandleCommandRefusalWakesWithDigest(t *testing.T) {
 	memory := store.NewMemory()
-	mgr := NewManager(memory, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(memory, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "")
 	testutil.FailErr(t, "create waiting session", err)
-	mgr.SetCoordinatorRuntime(coordinator.NewRuntime(coordinator.RuntimeDeps{}))
-	loop := mgr.ensureCoordinatorRuntime().CoordinatorLoop()
+	loop := mgr.Coordinator.Runtime.CoordinatorLoop()
 	reports := make(chan anchor.Envelope, 1)
-	deps := mgr.buildLoopWakeDeps()
+	deps := mgr.Coordinator.Loop.Build()
 	deps.HostWakeActionable = func(context.Context, loopwake.HostWakeActionableInput) bool { return true }
 	deps.QueueInform = func(_ context.Context, _ string, inform anchor.ID, env anchor.Envelope) {
 		if inform == anchor.ProcessRefused {
@@ -57,13 +56,13 @@ func TestHandleCommandRefusalWakesWithDigest(t *testing.T) {
 		}
 	}
 	loop.SetDeps(deps)
-	loop.EnterSleep(t.Context(), sess.ID, time.Time{}, "waiting for command",
+	loop.Waits.EnterSleep(t.Context(), sess.ID, time.Time{}, "waiting for command",
 		[]loopwake.WaitTrigger{loopwake.WaitTriggerProcessDone}, []string{"command-1"}, loopwake.SleepMoverHost)
-	mgr.HandleCommandRefusal(t.Context(), bgprocess.RefusalNotice{
+	mgr.Processes.HandleCommandRefusal(t.Context(), bgprocess.RefusalNotice{
 		SessionID: sess.ID, Handle: "command-1", OriginTool: "command", Mode: bgprocess.JobModeBackground,
 		StartedAt: time.Now(), Unshown: 2, Stages: []hostcmd.StageResult{{Command: "vm start"}}, Observation: refusalObservation(),
 	})
-	if loop.IsSleeping(sess.ID) {
+	if loop.Waits.IsSleeping(sess.ID) {
 		t.Fatal("refusal left the matching process wait asleep")
 	}
 	select {
@@ -75,14 +74,14 @@ func TestHandleCommandRefusalWakesWithDigest(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("refusal wake omitted the report")
 	}
-	loop.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
 }
 
 func TestCommandCompletionDigestIncludesRefusalsAndTimeout(t *testing.T) {
 	completion := bgprocess.Completion{Handle: "command-1", OriginTool: "command", Mode: bgprocess.JobModeBackground,
 		TerminationReason: bgprocess.TerminationTimedOut, ExitCode: -1,
 		Stages: []hostcmd.StageResult{{Command: "vm start"}}, Observation: refusalObservation(), Tail: "still waiting"}
-	digest := commandCompletionDigest(completion)
+	digest := processcontrol.CommandCompletionDigest(completion)
 	assertRefusalDigest(t, digest)
 	for _, want := range []string{"termination=timed_out", "exit_code=-1", "tail:\nstill waiting"} {
 		if !strings.Contains(digest, want) {
@@ -97,7 +96,7 @@ func TestWaitWinnerTextRetainsTheProcessReport(t *testing.T) {
 		{"refused", "handle=command-1 state=running\nsandbox_refusals:\n- network-bind /tmp/user.sock"},
 	} {
 		t.Run(tc.outcome, func(t *testing.T) {
-			text := waitWinnerText(awaitstore.Condition{Kind: "process_done", Outcome: tc.outcome, Report: tc.report})
+			text := submissions.WaitWinnerText(awaitstore.Condition{Kind: "process_done", Outcome: tc.outcome, Report: tc.report})
 			if !strings.Contains(text, tc.report) {
 				t.Fatalf("resumed prompt lost the process report: %s", text)
 			}

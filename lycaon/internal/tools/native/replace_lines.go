@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"math"
 	"os"
 	"sort"
@@ -271,7 +272,7 @@ func shiftIndent(path string, lines []string, operation lineOperation) ([]string
 			continue
 		}
 		if !strings.HasPrefix(line, operation.Prefix) {
-			return nil, &tools.ToolReject{Code: "REPLACE_LINES_INDENT_MISMATCH", Data: map[string]any{
+			return nil, &toolrejection.ToolReject{Code: "REPLACE_LINES_INDENT_MISMATCH", Data: map[string]any{
 				"path": path, "line": operation.StartLine + i, "prefix": operation.Prefix,
 			}}
 		}
@@ -361,7 +362,7 @@ func dominantTerminator(content string) string {
 }
 
 func replaceLinesInvalidRange(path string, startLine, endLine int, reason string) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "REPLACE_LINES_INVALID_RANGE",
 		Data: map[string]any{
 			"path":       path,
@@ -373,7 +374,7 @@ func replaceLinesInvalidRange(path string, startLine, endLine int, reason string
 }
 
 func replaceLinesBeyondEOF(path string, startLine, endLine, totalLines int) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "REPLACE_LINES_BEYOND_EOF",
 		Data: map[string]any{
 			"path":        path,

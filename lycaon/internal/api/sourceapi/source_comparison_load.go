@@ -22,7 +22,7 @@ type comparisonFailure struct {
 
 func (e *comparisonFailure) Error() string { return e.message }
 
-func (s *Handler) writeComparisonError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Comparisons) writeComparisonError(w http.ResponseWriter, r *http.Request, err error) {
 	var failure *comparisonFailure
 	if errors.As(err, &failure) {
 		s.responses.Fail(w, failure.code, failure.message)
@@ -38,7 +38,7 @@ func (s *Handler) writeComparisonError(w http.ResponseWriter, r *http.Request, e
 	}
 }
 
-func (s *Handler) loadScopeComparison(ctx context.Context, p *project.Project, source wire.ScopeComparisonSource) (sourceledger.Comparison, error) {
+func (s *Comparisons) loadScopeComparison(ctx context.Context, p *project.Project, source wire.ScopeComparisonSource) (sourceledger.Comparison, error) {
 	baseline, err := sourceledger.ParseBaseline(source.Baseline)
 	if err != nil {
 		return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "The baseline is not a source baseline."}
@@ -49,42 +49,42 @@ func (s *Handler) loadScopeComparison(ctx context.Context, p *project.Project, s
 	if start := source.PresentationAfterOrdinal; start != nil && (*start < 0 || baseline.Kind != sourceledger.BaselinePresentation) {
 		return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "A presentation start requires a nonnegative ordinal and the presentation baseline."}
 	}
-	_, branch, err := s.workspaceSourceHead(ctx, p, source.FileID)
+	_, branch, err := s.Workspace.workspaceSourceHead(ctx, p, source.FileID)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		return sourceledger.Comparison{}, nil
 	}
 	if err != nil {
 		return sourceledger.Comparison{}, err
 	}
-	return s.SourceLedger.CompareScope(ctx, p.ID, branch, baseline, source.FileID, sourceledger.ScopeComparisonOptions{
+	return s.SourceLedger.Comparisons.CompareScope(ctx, p.ID, branch, baseline, source.FileID, sourceledger.ScopeComparisonOptions{
 		UnmarkUserEdits:          source.MarkUserEdits != nil && !*source.MarkUserEdits,
 		PresentationAfterOrdinal: source.PresentationAfterOrdinal,
 	})
 }
 
-func (s *Handler) loadTurnComparison(ctx context.Context, p *project.Project, source wire.TurnComparisonSource) (sourceledger.Comparison, error) {
+func (s *Comparisons) loadTurnComparison(ctx context.Context, p *project.Project, source wire.TurnComparisonSource) (sourceledger.Comparison, error) {
 	if source.FileID == "" || source.SessionID == "" || source.Turn < 1 {
 		return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "A turn comparison requires a file, a chat, and a positive turn."}
 	}
-	if _, _, err := s.workspaceSourceHead(ctx, p, source.FileID); err != nil {
+	if _, _, err := s.Workspace.workspaceSourceHead(ctx, p, source.FileID); err != nil {
 		if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 			return sourceledger.Comparison{}, nil
 		}
 		return sourceledger.Comparison{}, err
 	}
-	return s.SourceLedger.CompareTurn(ctx, p.ID, source.SessionID, source.Turn, source.FileID, sourceledger.ScopeComparisonOptions{
+	return s.SourceLedger.Comparisons.CompareTurn(ctx, p.ID, source.SessionID, source.Turn, source.FileID, sourceledger.ScopeComparisonOptions{
 		UnmarkUserEdits: source.MarkUserEdits != nil && !*source.MarkUserEdits,
 	})
 }
 
-func (s *Handler) loadReviewedComparison(ctx context.Context, p *project.Project, source wire.ReviewedComparisonSource) (sourceledger.Comparison, error) {
+func (s *Comparisons) loadReviewedComparison(ctx context.Context, p *project.Project, source wire.ReviewedComparisonSource) (sourceledger.Comparison, error) {
 	if source.FileID == "" || source.ReviewedThroughOrdinal <= 0 {
 		return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "A reviewed comparison requires a file and a positive reviewed ordinal."}
 	}
-	if _, _, err := s.workspaceSourceHead(ctx, p, source.FileID); err != nil {
+	if _, _, err := s.Workspace.workspaceSourceHead(ctx, p, source.FileID); err != nil {
 		return sourceledger.Comparison{}, err
 	}
-	return s.SourceLedger.CompareReviewed(ctx, p.ID, source.FileID, source.ReviewedThroughOrdinal)
+	return s.SourceLedger.Comparisons.CompareReviewed(ctx, p.ID, source.FileID, source.ReviewedThroughOrdinal)
 }
 
 // commitComparisonHead returns an empty head for a repository without commits.
@@ -101,7 +101,7 @@ func commitComparisonHead(ctx context.Context, mgr git.GitManager, rootAbs strin
 	return status.Head, nil
 }
 
-func (s *Handler) loadCommitComparison(ctx context.Context, p *project.Project, source wire.CommitComparisonSource, trees *commitTrees) (sourceledger.Comparison, error) {
+func (s *Comparisons) loadCommitComparison(ctx context.Context, p *project.Project, source wire.CommitComparisonSource, trees *commitTrees) (sourceledger.Comparison, error) {
 	if source.RootID == "" || !filepath.IsLocal(source.Path) || source.Path == "." {
 		return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "A commit comparison requires a folder and a relative file path."}
 	}
@@ -137,7 +137,7 @@ func (s *Handler) loadCommitComparison(ctx context.Context, p *project.Project, 
 	return sourceledger.Comparison{InRange: true, Op: op, Before: before, After: after}, nil
 }
 
-func (s *Handler) loadBlobComparison(ctx context.Context, p *project.Project, source wire.BlobComparisonSource) (sourceledger.Comparison, error) {
+func (s *Comparisons) loadBlobComparison(ctx context.Context, p *project.Project, source wire.BlobComparisonSource) (sourceledger.Comparison, error) {
 	if source.RootID == "" {
 		return sourceledger.Comparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "A repository object comparison requires a folder."}
 	}
@@ -158,7 +158,7 @@ func (s *Handler) loadBlobComparison(ctx context.Context, p *project.Project, so
 	return diff, nil
 }
 
-func (s *Handler) writeSourceReviewedComparison(w http.ResponseWriter, r *http.Request, p *project.Project, fileID string) {
+func (s *Comparisons) writeSourceReviewedComparison(w http.ResponseWriter, r *http.Request, p *project.Project, fileID string) {
 	q := r.URL.Query()
 	through, err := strconv.ParseInt(q.Get("reviewed_through_ordinal"), 10, 64)
 	if err != nil || through <= 0 || fileID == "" || q.Has("baseline") || q.Has("mark_user_edits") || q.Has("presentation_after_ordinal") {

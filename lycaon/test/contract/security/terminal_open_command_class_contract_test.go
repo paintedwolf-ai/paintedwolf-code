@@ -3,6 +3,8 @@ package contract
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,11 +38,23 @@ func TestTerminalOpenClassifyTierParityWithCommand(t *testing.T) {
 	}
 	for _, tc := range cases {
 		commandTier := settings.ClassifyTier(hitl.ProposedAction{
-			Tool: "command", ProjectDir: proj, Args: map[string]any{"command": tc.cmd},
-		})
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": tc.cmd},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+})
 		openTier := settings.ClassifyTier(hitl.ProposedAction{
-			Tool: "terminal_open", ProjectDir: proj, Args: map[string]any{"command": tc.cmd},
-		})
+Invocation: hitl.ActionInvocation{
+Tool: "terminal_open",
+Args: map[string]any{"command": tc.cmd},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+})
 		if commandTier != openTier {
 			t.Fatalf("command %q: command=%v terminal_open=%v", tc.cmd, commandTier, openTier)
 		}
@@ -53,15 +67,29 @@ func TestBundledTerminalOpenBranchesOnContainmentNotCommandText(t *testing.T) {
 	contained := hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{dir}}
 	for _, command := range []string{"go test ./...", "cat /etc/hosts", "git push origin main"} {
 		approved := evalBundled(t, hitl.ProposedAction{
-			Tool: "terminal_open", Args: map[string]any{"command": command}, ProjectDir: dir,
-			Contained: contained,
-		})
+Invocation: hitl.ActionInvocation{
+Tool: "terminal_open",
+Args: map[string]any{"command": command},
+},
+Scope: hitl.ActionScope{
+ProjectDir: dir,
+},
+Execution: hitl.ActionExecution{
+Contained: contained,
+},
+})
 		if !approved.AutoApproved() || approved.Required() || approved.Denied {
 			t.Errorf("contained terminal_open %q must run: %+v", command, approved)
 		}
 		asked := evalBundled(t, hitl.ProposedAction{
-			Tool: "terminal_open", Args: map[string]any{"command": command}, ProjectDir: dir,
-		})
+Invocation: hitl.ActionInvocation{
+Tool: "terminal_open",
+Args: map[string]any{"command": command},
+},
+Scope: hitl.ActionScope{
+ProjectDir: dir,
+},
+})
 		if !asked.Required() || asked.Denied {
 			t.Errorf("uncontained terminal_open %q must ask: %+v", command, asked)
 		}
@@ -74,8 +102,9 @@ func TestTerminalOpenRejectsShellStringAndPipeline(t *testing.T) {
 	contractcheck.FailErr(t, "register", native.RegisterTerminalSessionTools(reg, bg))
 	dir := t.TempDir()
 	tctx := tools.ToolContext{
-		SessionID: "s", ProjectID: "p",
-		Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}},
+		Identity: tools.InvocationIdentity{SessionID: "s",
+			ProjectID: "p"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}},
 	}
 	// Substitution never expands, so it stays a metacharacter rejection.
 	_, err := reg.Run(context.Background(), "terminal_open", map[string]any{
@@ -102,7 +131,7 @@ func TestTerminalOpenRejectsShellStringAndPipeline(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected pipeline reject")
 	}
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("err = %v, want TOOL_ARGS_INVALID for pipeline", err)
 	}
@@ -113,19 +142,19 @@ func TestTerminalOpenNotArgvRejectObservation(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	contractcheck.FailErr(t, "register", native.RegisterTerminalSessionTools(reg, bg))
 
-	exec := tools.NewDefaultToolExecutor(nil, reg, "implement")
+	exec := toolexecution.NewExecutor(nil, reg, "implement")
 
 	_, err := exec.Invoke(context.Background(), "terminal_open", map[string]any{"command": "go test; rm -rf /"}, tools.ToolContext{
-		SessionID:    "sess",
-		ProjectID:    "proj",
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "implement",
+		Identity: tools.InvocationIdentity{SessionID: "sess",
+			ProjectID: "proj",
+			Agent:     "implement"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+			ActiveRootID: "r1"},
 	})
 	if err == nil {
 		t.Fatal("expected argv deny")
 	}
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_NOT_ARGV" {
 		t.Fatalf("want COMMAND_NOT_ARGV ToolReject, got %v", err)
 	}

@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/sourceblob"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -52,7 +54,7 @@ type CommandWindowOpener interface {
 type OpenCommandWindow struct {
 	ID string
 
-	store  *Store
+	store  *Commands
 	window *openCommandWindow
 	closed sync.Once
 }
@@ -103,7 +105,7 @@ func (w *openCommandWindow) startSnapshot(ctx context.Context, snapshots *source
 
 // OpenCommandWindow reconciles the tree, remembers that inventory as the
 // window's start, and records the window on the project's source clock.
-func (s *Store) OpenCommandWindow(ctx context.Context, in CommandWindowInput) (*OpenCommandWindow, error) {
+func (s *Commands) OpenCommandWindow(ctx context.Context, in CommandWindowInput) (*OpenCommandWindow, error) {
 	if s == nil || s.sqlDB == nil {
 		return nil, fmt.Errorf("ledger not configured")
 	}
@@ -123,10 +125,10 @@ func (s *Store) OpenCommandWindow(ctx context.Context, in CommandWindowInput) (*
 	// it; incomplete coverage cannot prove the tree unchanged, so it pays a pass.
 	req.Force = !sourcesnapshot.ChangeTokenTrusted(snapshotRoots(in.Roots))
 	req.Wait = true
-	if err := s.EnsureInventory(ctx, req); err != nil {
+	if err := s.inventory.EnsureInventory(ctx, req); err != nil {
 		return nil, err
 	}
-	state, err := s.InventoryState(ctx, in.ProjectID, inventoryBranch(req.Roots), req.RootsGeneration)
+	state, err := s.inventory.InventoryState(ctx, in.ProjectID, inventoryBranch(req.Roots), req.RootsGeneration)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +152,7 @@ func (s *Store) OpenCommandWindow(ctx context.Context, in CommandWindowInput) (*
 	return &OpenCommandWindow{ID: window.id, store: s, window: window}, nil
 }
 
-func (s *Store) insertWindow(ctx context.Context, w *openCommandWindow, commandLine string) error {
+func (s *Commands) insertWindow(ctx context.Context, w *openCommandWindow, commandLine string) error {
 	s.recordMu.Lock()
 	defer s.recordMu.Unlock()
 	tx, err := s.sqlDB.BeginTx(ctx, nil)
@@ -182,7 +184,7 @@ const (
 
 // retainWindowStart keeps the before-images the window's admissions may
 // need, bounded by windowRetainFiles and windowRetainBytes.
-func (s *Store) retainWindowStart(ctx context.Context, w *openCommandWindow) error {
+func (s *Commands) retainWindowStart(ctx context.Context, w *openCommandWindow) error {
 	if w.startSnapshotID == "" || s.snapshots == nil {
 		return nil
 	}
@@ -253,7 +255,7 @@ func (s *Store) retainWindowStart(ctx context.Context, w *openCommandWindow) err
 
 // windowInventoryRequest reads the project's current root generation so the
 // window's passes join the same inventory lineage as the watcher's.
-func (s *Store) windowInventoryRequest(ctx context.Context, projectID string, roots []RootSpec) (InventoryRequest, error) {
+func (s *Commands) windowInventoryRequest(ctx context.Context, projectID string, roots []RootSpec) (InventoryRequest, error) {
 	project, err := s.queries.GetProjectByID(ctx, projectID)
 	if err != nil {
 		return InventoryRequest{}, err
@@ -285,7 +287,7 @@ func (o *OpenCommandWindow) Settled() <-chan struct{} {
 	return o.window.settled
 }
 
-func (s *Store) closeCommandWindow(ctx context.Context, w *openCommandWindow) error {
+func (s *Commands) closeCommandWindow(ctx context.Context, w *openCommandWindow) error {
 	ended := time.Now().UTC()
 	s.windowsMu.Lock()
 	w.closing = true
@@ -306,7 +308,7 @@ func (s *Store) closeCommandWindow(ctx context.Context, w *openCommandWindow) er
 
 // awaitWindowPass returns once an inventory pass has completed since the
 // window closed, or the settle period elapsed.
-func (s *Store) awaitWindowPass(ctx context.Context, w *openCommandWindow) {
+func (s *Commands) awaitWindowPass(ctx context.Context, w *openCommandWindow) {
 	deadline := time.NewTimer(s.windowSettle)
 	defer deadline.Stop()
 	for {
@@ -329,7 +331,7 @@ func (s *Store) awaitWindowPass(ctx context.Context, w *openCommandWindow) {
 
 // settleCommandWindow runs the last pass when one is still owed, stops
 // attributing, and makes the row final.
-func (s *Store) settleCommandWindow(ctx context.Context, w *openCommandWindow, ended time.Time, force bool) error {
+func (s *Commands) settleCommandWindow(ctx context.Context, w *openCommandWindow, ended time.Time, force bool) error {
 	defer close(w.settled)
 	roots := snapshotRoots(w.roots)
 	s.windowsMu.Lock()
@@ -342,15 +344,15 @@ func (s *Store) settleCommandWindow(ctx context.Context, w *openCommandWindow, e
 			passErr = err
 		} else {
 			req.Force, req.Wait = true, true
-			passErr = s.EnsureInventory(ctx, req)
+			passErr = s.inventory.EnsureInventory(ctx, req)
 		}
 	}
 	// Pending observers commit their references before window collection.
-	release, err := s.lockObservations(ctx, w.projectID, w.roots)
+	release, err := s.git.lockObservations(ctx, w.projectID, w.roots)
 	if release != nil {
 		defer release()
 		// HEAD may move without invalidating any working-file snapshots.
-		_, gitErr := s.observeGitState(ctx, w.projectID, w.roots)
+		_, gitErr := s.git.observeGitState(ctx, w.projectID, w.roots)
 		passErr = errors.Join(passErr, gitErr)
 	}
 	s.windowsMu.Lock()
@@ -380,7 +382,7 @@ func (s *Store) settleCommandWindow(ctx context.Context, w *openCommandWindow, e
 }
 
 // notePassCompleted counts the pass and wakes windows waiting on one.
-func (s *Store) notePassCompleted(projectID string) {
+func (s *Commands) notePassCompleted(projectID string) {
 	s.windowsMu.Lock()
 	s.inventoryPasses[projectID]++
 	close(s.passWake)
@@ -389,7 +391,7 @@ func (s *Store) notePassCompleted(projectID string) {
 }
 
 // finishWindow ends the row and keeps it while file or Git history names it.
-func (s *Store) finishWindow(ctx context.Context, id, admissionMode string, ended time.Time) error {
+func (s *Commands) finishWindow(ctx context.Context, id, admissionMode string, ended time.Time) error {
 	s.recordMu.Lock()
 	defer s.recordMu.Unlock()
 	tx, err := s.sqlDB.BeginTx(ctx, nil)
@@ -414,7 +416,7 @@ func (s *Store) finishWindow(ctx context.Context, id, admissionMode string, ende
 
 // recoverInterruptedWindows settles rows an earlier process left running:
 // memory is the only record of an open window, so all of them are interrupted.
-func (s *Store) recoverInterruptedWindows(ctx context.Context) {
+func (s *Commands) recoverInterruptedWindows(ctx context.Context) {
 	s.windowRecovery.Do(func() {
 		s.recordMu.Lock()
 		defer s.recordMu.Unlock()
@@ -434,7 +436,7 @@ func (s *Store) recoverInterruptedWindows(ctx context.Context) {
 
 // Prefer the newest running window, then the newest settling window,
 // to minimize attribution of preceding changes.
-func (s *Store) attributionWindow(projectID string, roots []RootSpec) *openCommandWindow {
+func (s *Commands) attributionWindow(projectID string, roots []RootSpec) *openCommandWindow {
 	s.windowsMu.Lock()
 	defer s.windowsMu.Unlock()
 	held := make([]*openCommandWindow, 0)
@@ -467,7 +469,7 @@ func commandWindowFromRow(row db.SourceCommandWindows) CommandWindow {
 }
 
 // commandWindowsFor resolves the windows a page of effects or versions names.
-func (s *Store) commandWindowsFor(ctx context.Context, ids []string) (map[string]CommandWindow, error) {
+func (s *Commands) commandWindowsFor(ctx context.Context, ids []string) (map[string]CommandWindow, error) {
 	unique := make([]string, 0, len(ids))
 	seen := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
@@ -496,4 +498,32 @@ func (s *Store) commandWindowsFor(ctx context.Context, ids []string) (map[string
 		out[row.ID] = commandWindowFromRow(row)
 	}
 	return out, nil
+}
+
+// Commands attributes source observations to host command windows.
+type Commands struct {
+	inventoryPasses   map[string]uint64
+	objects           *sourceblob.Store
+	observationBudget time.Duration
+	openWindows       map[string][]*openCommandWindow
+	passWake          chan struct{}
+	queries           *db.Queries
+	recordMu          *sync.Mutex
+	snapshots         *sourcesnapshot.Store
+	sqlDB             db.Handle
+	windowRecovery    sync.Once
+	windowSettle      time.Duration
+	windowsMu         sync.Mutex
+	git               commandsGitPort
+	inventory         commandsInventoryPort
+}
+
+type commandsInventoryPort interface {
+	EnsureInventory(ctx context.Context, req InventoryRequest) error
+	InventoryState(ctx context.Context, projectID string, branch sourcebranch.ID, rootsGeneration int) (InventoryState, error)
+}
+
+type commandsGitPort interface {
+	lockObservations(ctx context.Context, projectID string, roots []RootSpec) (func(), error)
+	observeGitState(ctx context.Context, projectID string, roots []RootSpec) (map[string]string, error)
 }

@@ -11,7 +11,7 @@ import (
 )
 
 // FileTrackedSince reports the first retained state time.
-func (s *Store) FileTrackedSince(
+func (s *History) FileTrackedSince(
 	ctx context.Context,
 	projectID, fileID string,
 ) (time.Time, bool, error) {
@@ -35,7 +35,7 @@ func (s *Store) FileTrackedSince(
 }
 
 // FileVersionGitOIDs maps content addresses to their newest version.
-func (s *Store) FileVersionGitOIDs(
+func (s *History) FileVersionGitOIDs(
 	ctx context.Context,
 	projectID, fileID string,
 ) (map[string]string, error) {
@@ -66,7 +66,7 @@ func (s *Store) FileVersionGitOIDs(
 }
 
 // GitTransitionChain returns observed head movements oldest first.
-func (s *Store) GitTransitionChain(
+func (s *History) GitTransitionChain(
 	ctx context.Context,
 	projectID, rootID string,
 	limit int,

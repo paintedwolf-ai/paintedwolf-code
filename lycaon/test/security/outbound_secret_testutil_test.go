@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	internalapi "github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -75,6 +77,8 @@ func (r *recordingRoundTripper) snapshot() []recordedHTTPRequest {
 
 func installRecordingProviderHTTP(t *testing.T) *recordingRoundTripper {
 	t.Helper()
+	// Endpoint validation still runs before the recording transport.
+	egress.TestingResolve(t, egress.StaticLookup(netip.MustParseAddr("1.1.1.1")))
 	rec := &recordingRoundTripper{}
 	webresearch.SetProviderHTTPClientForTest(&http.Client{Transport: rec})
 	t.Cleanup(func() { webresearch.SetProviderHTTPClientForTest(nil) })
@@ -138,7 +142,7 @@ func startPromptAsync(t *testing.T, h *wiring.Harness, sessionID, text string) <
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	t.Cleanup(func() {
-		h.SessionMgr.CancelInFlightPrompt(sessionID)
+		h.Sessions.Manager.Runner.Execution.Cancel(sessionID)
 		cancel()
 		select {
 		case <-done:
@@ -148,7 +152,7 @@ func startPromptAsync(t *testing.T, h *wiring.Harness, sessionID, text string) <
 	})
 	go func() {
 		defer close(done)
-		_, err := h.SessionMgr.Prompt(ctx, sessionID, text)
+		_, err := h.Sessions.Manager.Submissions.Prompt(ctx, sessionID, text)
 		done <- err
 	}()
 	return done
@@ -162,7 +166,7 @@ func awaitOutboundPrompt(t *testing.T, h *wiring.Harness, sessionID string, done
 	case <-time.After(testutil.Timeout(30 * time.Second)):
 		err := fmt.Errorf("outbound prompt did not finish after its approval was resolved")
 		dumpSessionFloorDebug(t, h, sessionID, err)
-		h.SessionMgr.CancelInFlightPrompt(sessionID)
+		h.Sessions.Manager.Runner.Execution.Cancel(sessionID)
 		return err
 	}
 }
@@ -180,7 +184,7 @@ func tryWaitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string
 	t.Helper()
 	var ev wire.CheckpointEvent
 	ok := testutil.WaitForNoFatal(d, func() bool {
-		pending, err := h.CheckpointMgr.ListPending(context.Background(), sessionID, nil)
+		pending, err := h.Sessions.Checkpoints.ListPending(context.Background(), sessionID, nil)
 		if err == nil && len(pending) == 1 && pending[0].Kind == wire.CheckpointKindToolApproval {
 			ev = pending[0]
 			return true
@@ -192,7 +196,7 @@ func tryWaitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string
 
 func dumpSessionFloorDebug(t *testing.T, h *wiring.Harness, sessionID string, promptErr error) {
 	t.Helper()
-	pending, _ := h.CheckpointMgr.ListPending(context.Background(), sessionID, nil)
+	pending, _ := h.Sessions.Checkpoints.ListPending(context.Background(), sessionID, nil)
 	msgs, _ := h.Store.GetMessages(context.Background(), sessionID)
 	t.Logf("promptErr=%v pending=%d", promptErr, len(pending))
 	for _, p := range pending {

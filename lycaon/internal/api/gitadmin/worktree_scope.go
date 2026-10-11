@@ -52,7 +52,7 @@ func (s *Handler) resolveWorktreeScope(w http.ResponseWriter, r *http.Request, s
 }
 
 func (s *Handler) acquireIdleMutation(w http.ResponseWriter, sessionID string) (func(), bool) {
-	unlock, ok := s.Sessions.TryIdleMutation(sessionID)
+	unlock, ok := s.Sessions.Runner.Execution.TryIdleMutation(sessionID)
 	if !ok {
 		s.responses.Fail(w, wire.ApiErrorCodeSessionNotIdle, "session has a turn in flight — stop it first")
 		return nil, false

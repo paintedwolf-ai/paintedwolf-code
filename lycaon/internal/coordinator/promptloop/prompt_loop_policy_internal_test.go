@@ -19,9 +19,9 @@ func TestRunLoadsOneCoordinatorFramePerModelTurn(t *testing.T) {
 	source := &countingCoordinatorFrameSource{}
 	buildCalls := 0
 	deps := StoreDeps(memory)
-	deps.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "done"}}})
-	deps.CoordinatorFrame = source
-	deps.BuildMessages = func(_ context.Context, _ *api.Session, history []api.Message, frame *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "done"}}})
+	deps.Context.CoordinatorFrame = source
+	deps.Context.BuildMessages = func(_ context.Context, _ *api.Session, history []api.Message, frame *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 		buildCalls++
 		if frame == nil || frame.WorkflowRevision != int64(buildCalls) {
 			t.Fatalf("frame = %+v at model turn %d", frame, buildCalls)
@@ -46,16 +46,16 @@ func TestRunBindsCoordinatorPolicySnapshotToPromptToolSchema(t *testing.T) {
 	memory := store.NewMemory()
 	policy := &frameCheckingToolPolicy{}
 	deps := StoreDeps(memory)
-	deps.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "done"}}})
-	deps.CoordinatorFrame = staticCoordinatorFrameSource{frame: inject.CoordinatorTurnFrame{
+	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "done"}}})
+	deps.Context.CoordinatorFrame = staticCoordinatorFrameSource{frame: inject.CoordinatorTurnFrame{
 		RunContext:    api.CoordinatorRunContext{WorkflowID: "implement", RunID: "run-1", CurrentPhase: "verify"},
 		ManifestRules: []string{"workflow-rules.yaml"},
 		ScaffoldVars:  map[string]any{"dispatch": "sealed"},
 	}}
-	deps.CoordinatorPostureRules = func(context.Context, *api.Session) ([]string, error) {
+	deps.Context.CoordinatorPostureRules = func(context.Context, *api.Session) ([]string, error) {
 		return []string{"postures/build.yaml"}, nil
 	}
-	deps.Policy = policy
+	deps.Context.Policy = policy
 	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, "project")
 	testutil.FailErr(t, "create session", err)
 	_, err = NewPromptLoopForTest(deps).Run(t.Context(), PromptRunInput{
@@ -82,15 +82,19 @@ func TestRunBindsCoordinatorPolicySnapshotToPromptToolSchema(t *testing.T) {
 func TestCompleteStreamUsesPolicyList(t *testing.T) {
 	policy := &recordingToolPolicy{}
 	client := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		LLM:    client,
-		Policy: policy,
-		BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-			return history, nil
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			LLM: client,
 		},
-	}}
+		Context: ContextDeps{
+			Policy: policy,
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
+		},
+	})
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
-	if _, _, err := (modelTurn{loop}).completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil); err != nil {
+	if _, _, err := loop.Model.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil); err != nil {
 		testutil.FailErr(t, "modelTurn{loop}.completeStream failed", err)
 	}
 	if len(policy.listCalls) != 1 || policy.listCalls[0] != "coordinator" {
@@ -137,12 +141,14 @@ func TestCoordinatorToolsForTurnTrimsEveryDiscoveredProfile(t *testing.T) {
 		},
 	}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Policy: registryTestPolicy{metas: []tools.ToolMeta{dirty}},
+		Context: ContextDeps{
+			Policy: registryTestPolicy{metas: []tools.ToolMeta{dirty}},
+		},
 	})
 	ids := discoveredPromptProfileIDs(t)
 	offered := 0
 	for _, id := range ids {
-		got, _, _, err := modelTurn{loop}.coordinatorToolsForTurn(
+		got, _, _, err := loop.Context.coordinatorToolsForTurn(
 			context.Background(),
 			&api.Session{ID: "child-1", ParentSessionID: "parent-1", AgentType: id},
 			id,

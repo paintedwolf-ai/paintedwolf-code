@@ -30,7 +30,7 @@ type RefusalNotice struct {
 // RefusalPublisher receives refusal notices for visible running jobs.
 type RefusalPublisher func(ctx context.Context, notice RefusalNotice)
 
-func (r *Registry) watchRefusals(ctx context.Context, proc *Process) {
+func (r *Output) watchRefusals(ctx context.Context, proc *Process) {
 	proc.facts.Action.OnRefusal(func() { r.refusalObserved(ctx, proc) })
 	// Refusals can arrive before listener registration.
 	if len(proc.facts.Refusals().Refusals) > 0 {
@@ -38,27 +38,27 @@ func (r *Registry) watchRefusals(ctx context.Context, proc *Process) {
 	}
 }
 
-func (r *Registry) refusalObserved(ctx context.Context, proc *Process) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (r *Output) refusalObserved(ctx context.Context, proc *Process) {
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
 	if r.refused == nil || proc.refusalNotice != nil || !proc.running {
 		return
 	}
 	proc.refusalNotice = time.AfterFunc(refusalNoticeSettle, func() { r.publishRefusals(ctx, proc) })
 }
 
-func (r *Registry) publishRefusals(ctx context.Context, proc *Process) {
-	r.mu.Lock()
+func (r *Output) publishRefusals(ctx context.Context, proc *Process) {
+	r.jobs.mu.Lock()
 	proc.refusalNotice = nil
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	r.publishRefusalSnapshot(ctx, proc, proc.facts.Refusals())
 }
 
-func (r *Registry) publishRefusalSnapshot(ctx context.Context, proc *Process, refusals confine.SandboxRefusals) {
-	r.mu.Lock()
+func (r *Output) publishRefusalSnapshot(ctx context.Context, proc *Process, refusals confine.SandboxRefusals) {
+	r.jobs.mu.Lock()
 	// Silent foreground jobs report refusals in their tool result.
 	if r.refused == nil || proc.silent || proc.discarded || !proc.running || len(refusals.Refusals) <= proc.refusalsShown {
-		r.mu.Unlock()
+		r.jobs.mu.Unlock()
 		return
 	}
 	notice := RefusalNotice{
@@ -69,7 +69,7 @@ func (r *Registry) publishRefusalSnapshot(ctx context.Context, proc *Process, re
 	}
 	proc.refusalsShown = len(refusals.Refusals)
 	boundary, facts, publish := proc.boundary, proc.facts, r.refused
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	notice.Observation = confine.StampRefusal(notice.OriginTool, notice.SessionID, boundary, confine.RefusalContext{
 		MediatedNetwork:        facts.MediatedNetwork(),
 		RemotePackageExecution: facts.Report.RemotePackageExecution,
@@ -80,12 +80,12 @@ func (r *Registry) publishRefusalSnapshot(ctx context.Context, proc *Process, re
 }
 
 // NoteRefusalsShown advances the notice watermark after a tool result.
-func (r *Registry) NoteRefusalsShown(sessionID, handle string, shown int) {
-	proc, err := r.lookup(sessionID, handle)
+func (r *Output) NoteRefusalsShown(sessionID, handle string, shown int) {
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil || proc == nil {
 		return
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	proc.refusalsShown = max(proc.refusalsShown, shown)
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 }

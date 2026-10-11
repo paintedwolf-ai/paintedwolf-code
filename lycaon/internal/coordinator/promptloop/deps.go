@@ -25,11 +25,11 @@ func rootModelRequestSessionID(sess *api.Session, sessionID string) string {
 	return strings.TrimSpace(sessionID)
 }
 
-func (l modelTurn) sessionRoutingClient(sess *api.Session) modelcall.LLMClient {
+func (l *modelTurn) sessionRoutingClient(sess *api.Session) modelcall.LLMClient {
 	client := llm.WithClientDispatch(l.Deps.LLM)
 	if l.Deps.LLMService != nil && l.Deps.LLMService.Registry != nil && l.Deps.LLMService.Router != nil {
 		client = llm.NewRoutingClient(l.Deps.LLMService.Registry, l.Deps.LLMService.Router, l.Deps.LLM, l.Deps.LLMService.Utility, l.Deps.LLMService.Capacity, l.Deps.LLMService.Refusals, func(ctx context.Context) (*llm.ModelSelection, error) {
-			router := l.Deps.LLMService.Router.WithOverlayRoots(l.overlayRootPaths(ctx, sess))
+			router := l.Deps.LLMService.Router.WithOverlayRoots(l.Context.overlayRootPaths(ctx, sess))
 			return router.ResolveSession(ctx, sess)
 		})
 	}
@@ -40,7 +40,7 @@ func (l modelTurn) sessionRoutingClient(sess *api.Session) modelcall.LLMClient {
 }
 
 // providerProfile uses the default driver profile for unknown provider IDs.
-func (l modelTurn) providerProfile(providerID string) providerprofile.Profile {
+func (l *modelTurn) providerProfile(providerID string) providerprofile.Profile {
 	if l.Deps.LLMService != nil && l.Deps.LLMService.Registry != nil && strings.TrimSpace(providerID) != "" {
 		if p, err := l.Deps.LLMService.Registry.Get(providerID); err == nil && p != nil {
 			return p.Profile()

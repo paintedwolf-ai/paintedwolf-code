@@ -2,7 +2,8 @@ package editordoc
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/project"
+
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
 
@@ -34,7 +35,7 @@ func (s *Service) PreviewAgentEdits(ctx context.Context, inputs []AgentEdit) ([]
 		if err != nil {
 			return nil, err
 		}
-		limits := textfile.LimitsForRaw(project.SourceWriteMaxBytes)
+		limits := textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes)
 		before, err := textfile.EncodeBounded(serializeEOL(d.Draft, d.EOL), d.Encoding, limits)
 		if err != nil {
 			return nil, err

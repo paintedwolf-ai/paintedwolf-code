@@ -28,7 +28,7 @@ func landRewritePlans(ctx context.Context, tctx tools.ToolContext, plans []rewri
 		}
 		edits = append(edits, tools.EditorDocumentEdit{DocumentID: plan.source.Editor.ID,
 			ExpectedRevision: plan.source.Editor.Revision, Content: plan.content, OperationID: uuid.NewString(),
-			SessionID: tctx.SessionID, Turn: tctx.UserTurn, ToolCallID: tctx.ToolCallID, ToolName: "code_rewrite"})
+			SessionID: tctx.Identity.SessionID, Turn: tctx.Identity.UserTurn, ToolCallID: tctx.Identity.ToolCallID, ToolName: "code_rewrite"})
 		indices = append(indices, i)
 	}
 	if len(edits) > 0 {
@@ -36,7 +36,7 @@ func landRewritePlans(ctx context.Context, tctx tools.ToolContext, plans []rewri
 		if !ok {
 			return fmt.Errorf("collaborative documents unavailable for rewrite transaction")
 		}
-		previews, err := documents.PreviewAgentEdits(ctx, tctx.ProjectID, edits)
+		previews, err := documents.PreviewAgentEdits(ctx, tctx.Identity.ProjectID, edits)
 		if err != nil {
 			return err
 		}
@@ -47,12 +47,12 @@ func landRewritePlans(ctx context.Context, tctx tools.ToolContext, plans []rewri
 		if err := tctx.ReviewFileChanges(ctx, reviews...); err != nil {
 			return err
 		}
-		results, err := documents.ApplyAgentEdits(ctx, tctx.ProjectID, edits)
+		results, err := documents.ApplyAgentEdits(ctx, tctx.Identity.ProjectID, edits)
 		if err != nil {
 			return err
 		}
 		for i, result := range results {
-			documents.AdvanceAgentRead(tctx.ProjectID, tctx.SessionID, tctx.EditorReadBases, edits[i], result.Document)
+			documents.AdvanceAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Source.EditorReadBases, edits[i], result.Document)
 			reportLanded(tctx, result.Document)
 			plan := plans[indices[i]]
 			tctx.RecordModelAuthoredCredentials(ctx, plan.resolved.Abs, []byte(plan.content))

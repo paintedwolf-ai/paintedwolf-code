@@ -12,7 +12,7 @@ import (
 
 // A directory may already be gone when its event arrives. Select descendants
 // from recorded paths rather than relying on the directory's current type.
-func (s *Store) observedPathHeads(ctx context.Context, projectID string, roots []RootSpec, refs []PathRef) ([]db.SourceBranchHeads, error) {
+func (s *Inventory) observedPathHeads(ctx context.Context, projectID string, roots []RootSpec, refs []PathRef) ([]db.SourceBranchHeads, error) {
 	var heads []db.SourceBranchHeads
 	var failures []error
 	seen := make(map[string]struct{})
@@ -44,7 +44,7 @@ func (s *Store) observedPathHeads(ctx context.Context, projectID string, roots [
 	return heads, errors.Join(failures...)
 }
 
-func (s *Store) headsAtObservedPath(ctx context.Context, projectID string, branch sourcebranch.ID, ref PathRef) ([]db.SourceBranchHeads, error) {
+func (s *Inventory) headsAtObservedPath(ctx context.Context, projectID string, branch sourcebranch.ID, ref PathRef) ([]db.SourceBranchHeads, error) {
 	head, err := s.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{
 		ProjectID: projectID, BranchID: branch.String(), RootID: ref.RootID, Path: ref.Path,
 	})
@@ -81,7 +81,7 @@ func branchForObservedRoot(roots []RootSpec, id string) sourcebranch.ID {
 	}
 	return sourcebranch.Trunk
 }
-func (s *Store) observedRootHeads(ctx context.Context, projectID string, roots []RootSpec) ([]db.SourceBranchHeads, error) {
+func (s *Inventory) observedRootHeads(ctx context.Context, projectID string, roots []RootSpec) ([]db.SourceBranchHeads, error) {
 	var result []db.SourceBranchHeads
 	for _, root := range roots {
 		heads, err := s.queries.ListSourceRootHeads(ctx, db.ListSourceRootHeadsParams{ProjectID: projectID, BranchID: root.BranchID.String(), RootID: root.ID})

@@ -15,14 +15,27 @@ type UntrustedIngestionSource interface {
 
 var (
 	untrustedIngestionMu  sync.RWMutex
-	untrustedIngestionSrc UntrustedIngestionSource
+	untrustedIngestionSrc *ingestionRegistration
 )
 
-// SetUntrustedIngestionSource installs the pre-dial ingestion reader.
-func SetUntrustedIngestionSource(src UntrustedIngestionSource) {
+type ingestionRegistration struct {
+	source UntrustedIngestionSource
+}
+
+// SetUntrustedIngestionSource installs the pre-dial reader and returns its release.
+func SetUntrustedIngestionSource(src UntrustedIngestionSource) func() {
+	registration := &ingestionRegistration{source: src}
 	untrustedIngestionMu.Lock()
-	untrustedIngestionSrc = src
+	untrustedIngestionSrc = registration
 	untrustedIngestionMu.Unlock()
+	return func() {
+		untrustedIngestionMu.Lock()
+		defer untrustedIngestionMu.Unlock()
+		if untrustedIngestionSrc == registration {
+			untrustedIngestionSrc = nil
+		}
+		registration.source = nil
+	}
 }
 
 // retrievalDial identifies dials that produce ingestion evidence.
@@ -34,7 +47,10 @@ func retrievalDial(cmd EgressCommand) bool {
 // sessionIngestedUntrusted reads ingestion state from the root chat.
 func sessionIngestedUntrusted(ctx context.Context, cmd EgressCommand) bool {
 	untrustedIngestionMu.RLock()
-	src := untrustedIngestionSrc
+	var src UntrustedIngestionSource
+	if untrustedIngestionSrc != nil {
+		src = untrustedIngestionSrc.source
+	}
 	untrustedIngestionMu.RUnlock()
 	if src == nil {
 		return false

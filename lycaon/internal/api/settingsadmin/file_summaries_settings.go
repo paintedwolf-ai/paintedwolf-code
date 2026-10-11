@@ -28,7 +28,7 @@ func (s *Handler) HandleUpdateFileSummariesSettings(w http.ResponseWriter, r *ht
 		} else {
 			enabled = req.Enabled
 		}
-		if err := s.Sources.FileBriefings.SetEnabled(r.Context(), enabled); err != nil {
+		if err := s.Sources.Briefings.FileBriefings.SetEnabled(r.Context(), enabled); err != nil {
 			s.responses.InternalError(w, r, err)
 			return
 		}

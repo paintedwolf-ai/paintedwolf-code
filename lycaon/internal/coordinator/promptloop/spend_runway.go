@@ -2,14 +2,14 @@ package promptloop
 
 import (
 	"context"
-	"strings"
 	"log/slog"
+	"strings"
 
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // SpendRunway reports proximity to the session spend ceiling.
@@ -38,7 +38,7 @@ type spendCeilingDecision struct {
 }
 
 // A spent session may receive one final tool round before closeout.
-func (l turnNudges) applySpendCeiling(
+func (l *turnNudges) applySpendCeiling(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, profileID, userPrompt string,
@@ -47,7 +47,7 @@ func (l turnNudges) applySpendCeiling(
 	st *promptLoopTurnState,
 ) (spendCeilingDecision, error) {
 	var out spendCeilingDecision
-	if l.PromptLoop == nil || l.Deps.CheckSpendCeiling == nil {
+	if l == nil || l.Deps.CheckSpendCeiling == nil {
 		return out, nil
 	}
 	check, err := l.Deps.CheckSpendCeiling(ctx, sessionID, sess)
@@ -63,7 +63,7 @@ func (l turnNudges) applySpendCeiling(
 		out.WindDown = true
 		return out, nil
 	}
-	closedHistory, aid, content, cerr := turnCloseout(l).runEarlyTurnCloseout(
+	closedHistory, aid, content, cerr := l.Closeout.runEarlyTurnCloseout(
 		ctx, sess, sessionID, profileID, userPrompt, st.history, maxIter,
 		TurnCloseoutSpendCeiling, "", false, in, st,
 	)
@@ -84,7 +84,7 @@ func (l turnNudges) applySpendCeiling(
 	return out, nil
 }
 
-func (l turnNudges) maybeSpendSoftStopNudge(
+func (l *turnNudges) maybeSpendSoftStopNudge(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -92,7 +92,7 @@ func (l turnNudges) maybeSpendSoftStopNudge(
 	windDown bool,
 	st *promptLoopTurnState,
 ) ([]api.Message, error) {
-	if l.PromptLoop == nil || l.Deps.SpendSoftStopNudge == nil || sess == nil || !windDown {
+	if l == nil || l.Deps.SpendSoftStopNudge == nil || sess == nil || !windDown {
 		return history, nil
 	}
 	nudge := l.Deps.SpendSoftStopNudge(ctx, sess)
@@ -130,7 +130,7 @@ func filterSpendSoftStopToolMetas(metas []tools.ToolMeta) []tools.ToolMeta {
 	return out
 }
 
-func (l turnNudges) maybeSpendRunwayNudge(
+func (l *turnNudges) maybeSpendRunwayNudge(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -138,7 +138,7 @@ func (l turnNudges) maybeSpendRunwayNudge(
 	runway SpendRunway,
 	st *promptLoopTurnState,
 ) ([]api.Message, error) {
-	if l.PromptLoop == nil || l.Deps.SpendRunwayNudge == nil || sess == nil {
+	if l == nil || l.Deps.SpendRunwayNudge == nil || sess == nil {
 		return history, nil
 	}
 	if !runway.Low {
@@ -151,17 +151,17 @@ func (l turnNudges) maybeSpendRunwayNudge(
 	return l.appendHostNudge(ctx, sessionID, history, nudge, "", st)
 }
 
-func (l turnNudges) spendCeilingReached(err error) bool {
+func (l *turnNudges) spendCeilingReached(err error) bool {
 	if err == nil {
 		return false
 	}
-	if l.PromptLoop != nil && l.Deps.IsSpendCeiling != nil {
+	if l != nil && l.Deps.IsSpendCeiling != nil {
 		return l.Deps.IsSpendCeiling(err)
 	}
 	return false
 }
 
-func (l modelTurn) voidCostReceipt(ctx context.Context, callID string) {
+func (l *modelTurn) voidCostReceipt(ctx context.Context, callID string) {
 	ledger, ok := l.Deps.Cost.(cost.CallLedger)
 	if !ok || strings.TrimSpace(callID) == "" {
 		return
@@ -172,14 +172,14 @@ func (l modelTurn) voidCostReceipt(ctx context.Context, callID string) {
 }
 
 // publishLLMCallOK reports a completed coordinator call.
-func (l modelTurn) publishLLMCallOK(
+func (l *modelTurn) publishLLMCallOK(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, callID, providerID, model string,
 	usage modelcall.TokenUsage,
 	loop *api.CoordinatorLoopProgress,
 ) {
-	if l.Deps.Events == nil {
+	if l.Projection.Deps.Events == nil {
 		return
 	}
 	var contextWindow, compactionThreshold int
@@ -188,7 +188,7 @@ func (l modelTurn) publishLLMCallOK(
 		contextWindow = cc.ModelContextWindow
 		compactionThreshold = cc.CompactionTriggerTokens()
 	}
-	l.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
+	l.Projection.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
 		CallID:   callID,
 		Provider: providerID,
 		Model:    model,
@@ -204,13 +204,13 @@ func (l modelTurn) publishLLMCallOK(
 	})
 }
 
-func (l modelTurn) resolveUsageMeta(sess *api.Session, completion *modelcall.Completion) (providerID, model string) {
+func (l *modelTurn) resolveUsageMeta(sess *api.Session, completion *modelcall.Completion) (providerID, model string) {
 	if completion != nil && completion.ProviderID != "" {
 		return completion.ProviderID, completion.Model
 	}
 	if l.Deps.LLMService != nil && l.Deps.LLMService.Registry != nil && l.Deps.LLMService.Router != nil {
 		ctx := context.Background()
-		router := l.Deps.LLMService.Router.WithOverlayRoots(l.overlayRootPaths(ctx, sess))
+		router := l.Deps.LLMService.Router.WithOverlayRoots(l.Context.overlayRootPaths(ctx, sess))
 		sel, err := router.ResolveSession(ctx, sess)
 		if err == nil && sel != nil {
 			return sel.ProviderID, sel.Model
@@ -220,7 +220,7 @@ func (l modelTurn) resolveUsageMeta(sess *api.Session, completion *modelcall.Com
 }
 
 // recordUsage records reported or host-measured usage.
-func (l modelTurn) recordUsage(
+func (l *modelTurn) recordUsage(
 	ctx context.Context, sess *api.Session, callID, providerID, model string,
 	req modelcall.CompletionRequest, completion *modelcall.Completion,
 ) error {
@@ -283,23 +283,23 @@ func (l modelTurn) recordUsage(
 	}); err != nil {
 		return err
 	}
-	if l.Deps.Events != nil {
+	if l.Projection.Deps.Events != nil {
 		// Worker usage updates the root session rollup.
 		scopeID := l.costRollupScopeID(ctx, sess)
 		if summary, err := l.Deps.Cost.Summary(ctx, api.CostScopeSession, scopeID, ""); err == nil {
-			l.Deps.Events.PublishCost(ctx, sessionProjectKey(sess), scopeID, cost.CostEventFromSummary(summary))
+			l.Projection.Deps.Events.PublishCost(ctx, sessionProjectKey(sess), scopeID, cost.CostEventFromSummary(summary))
 		}
 	}
 	return nil
 }
 
 // costRollupScopeID returns the top-level session.
-func (l modelTurn) costRollupScopeID(ctx context.Context, sess *api.Session) string {
+func (l *modelTurn) costRollupScopeID(ctx context.Context, sess *api.Session) string {
 	if strings.TrimSpace(sess.ParentSessionID) == "" {
 		return sess.ID
 	}
-	if l.Deps.RootSessionID != nil {
-		if root := strings.TrimSpace(l.Deps.RootSessionID(ctx, sess.ID)); root != "" {
+	if l.Context.Deps.RootSessionID != nil {
+		if root := strings.TrimSpace(l.Context.Deps.RootSessionID(ctx, sess.ID)); root != "" {
 			return root
 		}
 	}
@@ -307,7 +307,7 @@ func (l modelTurn) costRollupScopeID(ctx context.Context, sess *api.Session) str
 }
 
 // recordAbandonedTurnUsage preserves observable usage after failure.
-func (l modelTurn) recordAbandonedTurnUsage(
+func (l *modelTurn) recordAbandonedTurnUsage(
 	ctx context.Context, sess *api.Session, callID, providerID, model string,
 	req modelcall.CompletionRequest, completion *modelcall.Completion,
 ) {

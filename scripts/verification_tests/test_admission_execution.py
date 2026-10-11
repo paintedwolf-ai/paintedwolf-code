@@ -31,6 +31,36 @@ class AdmissionTests(unittest.TestCase):
         graph = {'a': [], 'b': ['a', 'c'], 'c': ['b'], 'test': ['c'], 'unrelated': []}
         self.assertEqual(impact.reverse_closure(graph, {'a'}), {'a', 'b', 'c', 'test'})
 
+    def test_owner_change_selects_production_and_relocated_test_callers(self):
+        module = 'github.com/lycaon/lycaon/'
+        owner = 'internal/tools/toolcontext'
+        records = [
+            ('internal/api/contractfixture', {'Imports': ['internal/api/sessionfixture']}),
+            ('internal/api/sessionfixture', {'XTestImports': ['internal/app/sessionfixture']}),
+            ('internal/app/sessionfixture', {'TestImports': ['internal/app/sessions']}),
+            ('internal/app/sessions', {'Imports': [owner]}),
+            (owner, {}),
+            ('internal/unrelated', {}),
+            ('test/contract/authority', {}),
+            ('test/smoke', {}),
+        ]
+        output = '\n'.join(json.dumps({
+            'ImportPath': module + directory,
+            'Dir': str(impact.ROOT / 'lycaon' / directory),
+            **{kind: [module + dependency for dependency in dependencies]
+               for kind, dependencies in edges.items()},
+        }) for directory, edges in records)
+        result = impact.subprocess.CompletedProcess([], 0, stdout=output, stderr='')
+        with patch.object(impact.subprocess, 'run', return_value=result):
+            packages = impact.go_scope({
+                'full': False, 'paths': [f'lycaon/{owner}/context.go'],
+            })
+        self.assertEqual(packages, sorted([
+            './internal/api/contractfixture', './internal/api/sessionfixture',
+            './internal/app/sessionfixture', './internal/app/sessions',
+            './' + owner, './test/contract/authority', './test/smoke',
+        ]))
+
     def test_no_graph_evidence_runs_full_recipe(self):
         with patch.object(impact.subprocess, 'run') as run:
             run.return_value.returncode = 1

@@ -32,9 +32,9 @@ func CompileCheckpointApprovalPlan(req CheckpointRequest) (*ApprovalPlan, error)
 	subject := genericApprovalSubject(displayAction, title)
 	primaryGate, cited, reasons := PresentDecision(req.Decision)
 	presentation := ApprovalPresentation{
-		FileChanges: redactedFileChanges(action.FileChanges),
-		Action:      actionLabel(displayAction), Tool: firstNonEmpty(displayAction.PresentationTool, displayAction.Tool), Command: displayAction.Command,
-		Impact: firstNonEmpty(observability.RedactCaptureText(action.EstimatedImpact), "Allow the agent to perform this exact action."),
+		FileChanges: redactedFileChanges(action.Mutations.FileChanges),
+		Action:      actionLabel(displayAction), Tool: firstNonEmpty(displayAction.Presentation.PresentationTool, displayAction.Invocation.Tool), Command: displayAction.Presentation.Command,
+		Impact: firstNonEmpty(observability.RedactCaptureText(action.Presentation.EstimatedImpact), "Allow the agent to perform this exact action."),
 		Lead:   leadFact(primaryGate, cited),
 		Gate:   primaryGate, Cited: cited, GrantDelta: req.GrantDelta,
 		ConsequenceBand: string(req.ConsequenceBand), ConsequenceCode: string(req.ConsequenceCode),
@@ -50,7 +50,7 @@ func CompileCheckpointApprovalPlan(req CheckpointRequest) (*ApprovalPlan, error)
 
 	options := approvalOptionsFromOffers(req.GrantOffers, true)
 	switch {
-	case action.PackageExecution != nil:
+	case action.Execution.PackageExecution != nil:
 		subject = packageExecutionSubject(displayAction, title)
 	case req.SocketCapability != nil:
 		subject = socketApprovalSubject(title, req.SocketCapability.Targets)
@@ -93,20 +93,20 @@ func CompileCheckpointApprovalPlan(req CheckpointRequest) (*ApprovalPlan, error)
 			presentation.Command = cmd
 		}
 		presentation.Location = compileSecretLocation(req.SecretScreen)
-	case action.Contained.HostExecution:
+	case action.Execution.Contained.HostExecution:
 		subject = ApprovalSubject{
 			Kind:    ApprovalSubjectHostExecution,
 			Title:   firstNonEmpty(title, HostExecutionTitle),
-			Targets: []ApprovalTarget{{Kind: string(ApprovalSubjectHostExecution), Label: action.Command}},
+			Targets: []ApprovalTarget{{Kind: string(ApprovalSubjectHostExecution), Label: action.Presentation.Command}},
 		}
 		presentation.Impact = HostExecutionWhat
 		presentation.IfWrong = HostExecutionIfWrong
 		presentation.AllowLine = ExecutionAllowLine
-	case action.Contained.ProcessControl:
+	case action.Execution.Contained.ProcessControl:
 		subject = ApprovalSubject{
 			Kind:    ApprovalSubjectProcessControl,
 			Title:   firstNonEmpty(title, ProcessControlTitle),
-			Targets: []ApprovalTarget{{Kind: string(ApprovalSubjectProcessControl), Label: action.Command}},
+			Targets: []ApprovalTarget{{Kind: string(ApprovalSubjectProcessControl), Label: action.Presentation.Command}},
 		}
 		presentation.Impact = ProcessControlWhat
 		presentation.IfWrong = ProcessControlIfWrong
@@ -171,21 +171,21 @@ func sentenceCase(s string) string {
 }
 
 func redactedApprovalAction(action ProposedAction) ProposedAction {
-	action.Tool = observability.RedactCaptureText(action.Tool)
-	action.PresentationTool = observability.RedactCaptureText(action.PresentationTool)
-	action.Command = observability.RedactCaptureText(action.Command)
-	action.EstimatedImpact = observability.RedactCaptureText(action.EstimatedImpact)
-	action.ProjectDir = observability.RedactCaptureText(action.ProjectDir)
-	action.Files = append([]string(nil), action.Files...)
-	for i := range action.Files {
-		action.Files[i] = observability.RedactCaptureText(action.Files[i])
+	action.Invocation.Tool = observability.RedactCaptureText(action.Invocation.Tool)
+	action.Presentation.PresentationTool = observability.RedactCaptureText(action.Presentation.PresentationTool)
+	action.Presentation.Command = observability.RedactCaptureText(action.Presentation.Command)
+	action.Presentation.EstimatedImpact = observability.RedactCaptureText(action.Presentation.EstimatedImpact)
+	action.Scope.ProjectDir = observability.RedactCaptureText(action.Scope.ProjectDir)
+	action.Invocation.Files = append([]string(nil), action.Invocation.Files...)
+	for i := range action.Invocation.Files {
+		action.Invocation.Files[i] = observability.RedactCaptureText(action.Invocation.Files[i])
 	}
-	action.DeclaredDestinations = append([]string(nil), action.DeclaredDestinations...)
-	for i := range action.DeclaredDestinations {
-		action.DeclaredDestinations[i] = observability.RedactCaptureText(action.DeclaredDestinations[i])
+	action.Egress.DeclaredDestinations = append([]string(nil), action.Egress.DeclaredDestinations...)
+	for i := range action.Egress.DeclaredDestinations {
+		action.Egress.DeclaredDestinations[i] = observability.RedactCaptureText(action.Egress.DeclaredDestinations[i])
 	}
-	if scrubbed, ok := observability.RedactCaptureValue(action.Args).(map[string]any); ok {
-		action.Args = scrubbed
+	if scrubbed, ok := observability.RedactCaptureValue(action.Invocation.Args).(map[string]any); ok {
+		action.Invocation.Args = scrubbed
 	}
 	return action
 }
@@ -208,7 +208,7 @@ func redactedFileChanges(changes []api.ApprovalFileChange) []api.ApprovalFileCha
 }
 
 func packageExecutionSubject(action ProposedAction, title string) ApprovalSubject {
-	execution := action.PackageExecution
+	execution := action.Execution.PackageExecution
 	if execution == nil {
 		return genericApprovalSubject(action, title)
 	}
@@ -365,20 +365,20 @@ func secretApprovalOptions(secret *SecretScreen, offers []ApprovalGrantOffer) []
 }
 
 func genericApprovalSubject(action ProposedAction, title string) ApprovalSubject {
-	label := strings.TrimSpace(action.Command)
+	label := strings.TrimSpace(action.Presentation.Command)
 	if label == "" {
-		if len(action.Files) > 0 {
-			label = strings.Join(action.Files, "\n")
-		} else if encoded, err := json.Marshal(action.Args); err == nil && string(encoded) != "{}" {
+		if len(action.Invocation.Files) > 0 {
+			label = strings.Join(action.Invocation.Files, "\n")
+		} else if encoded, err := json.Marshal(action.Invocation.Args); err == nil && string(encoded) != "{}" {
 			label = string(encoded)
 		}
 	}
 	if label == "" {
-		label = action.Tool
+		label = action.Invocation.Tool
 	}
 	return ApprovalSubject{
-		Kind: ApprovalSubjectAction, Title: firstNonEmpty(title, "Approve "+action.Tool),
-		Targets: []ApprovalTarget{{Kind: "action", Label: label, Details: map[string]any{"tool": action.Tool, "args": action.Args}}},
+		Kind: ApprovalSubjectAction, Title: firstNonEmpty(title, "Approve "+action.Invocation.Tool),
+		Targets: []ApprovalTarget{{Kind: "action", Label: label, Details: map[string]any{"tool": action.Invocation.Tool, "args": action.Invocation.Args}}},
 	}
 }
 
@@ -446,13 +446,13 @@ func secretEvidenceLabel(secret *SecretScreen) string {
 }
 
 func actionLabel(action ProposedAction) string {
-	if strings.TrimSpace(action.Command) != "" {
+	if strings.TrimSpace(action.Presentation.Command) != "" {
 		return "Run command"
 	}
-	if action.Tool == "" {
+	if action.Invocation.Tool == "" {
 		return "Run action"
 	}
-	return "Use " + action.Tool
+	return "Use " + action.Invocation.Tool
 }
 
 func firstNonEmpty(values ...string) string {

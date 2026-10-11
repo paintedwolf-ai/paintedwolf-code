@@ -45,7 +45,7 @@ func TestRecoveryDirectorySurvivesLiveBodyMutationAndDeletion(t *testing.T) {
 	_, err = StageLatestUpgradeRecovery(t.Context(), StageOpts{ConfigDir: root, DBPath: path, SQLDB: database, SchemaVersion: db.SchemaVersion})
 	testutil.FailErr(t, "stage direct snapshot", err)
 	testutil.FailErr(t, "close live database", database.Close())
-	testutil.FailErr(t, "apply direct snapshot", ApplyPending(root))
+	testutil.FailErr(t, "apply direct snapshot", ApplyPending(t.Context(), root))
 	restored, err := os.ReadFile(bodyPath)
 	testutil.FailErr(t, "read restored body", err)
 	if string(restored) != "before" {

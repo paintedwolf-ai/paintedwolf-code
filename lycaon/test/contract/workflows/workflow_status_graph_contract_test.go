@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -34,7 +34,7 @@ var allWorkflowRunStatuses = []struct {
 
 // TestWorkflowRunStatusGraphReachability scans production code for the status
 // state machine: each status has a write and a read, and terminal statuses match
-// workflow.IsTerminal.
+// runstate.IsTerminal.
 func TestWorkflowRunStatusGraphReachability(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
@@ -145,7 +145,7 @@ func TestWorkflowRunStatusGraphReachability(t *testing.T) {
 
 	// 4. The mirror's terminal facet matches the production classifier.
 	for _, e := range allWorkflowRunStatuses {
-		got := workflow.IsTerminal(e.status)
+		got := runstate.IsTerminal(e.status)
 		if got != e.terminal {
 			t.Errorf("status %q terminal mismatch: got %v want %v", e.status, got, e.terminal)
 		}

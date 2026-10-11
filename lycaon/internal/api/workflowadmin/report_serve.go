@@ -11,7 +11,7 @@ import (
 )
 
 // serveReportPDF renders one assembled report and writes it as an attachment.
-func (s *Handler) serveReportPDF(w http.ResponseWriter, r *http.Request, input report.ReportInput) {
+func (s *Reports) serveReportPDF(w http.ResponseWriter, r *http.Request, input report.ReportInput) {
 	pdf, err := report.Render(input)
 	if err != nil {
 		s.responses.InternalError(w, r, err)

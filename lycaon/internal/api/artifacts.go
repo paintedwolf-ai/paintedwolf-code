@@ -15,13 +15,13 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/pagecursor"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/visual"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) handleListSessionArtifacts(w http.ResponseWriter, r *http.Request) {
+func (s *Artifacts) HandleListSessionArtifacts(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	if _, err := s.sessionStore.Get(r.Context(), sessionID); err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
@@ -36,7 +36,7 @@ func (s *Server) handleListSessionArtifacts(w http.ResponseWriter, r *http.Reque
 		s.responses.InvalidQuery(w, err)
 		return
 	}
-	root := session.RootSessionID(r.Context(), s.sessionStore, sessionID)
+	root := sessiontree.RootID(r.Context(), s.sessionStore, sessionID)
 	scope := pagecursor.Scope(root)
 	var after *sessionArtifactCursor
 	if pq.Cursor != "" {
@@ -107,7 +107,7 @@ func sessionArtifactPage(items []wire.ArtifactListItem, after *sessionArtifactCu
 	return page, &sessionArtifactCursor{CreatedAt: last.CreatedAt, ID: last.ID}
 }
 
-func (s *Server) handleCreateSessionArtifact(w http.ResponseWriter, r *http.Request) {
+func (s *Artifacts) HandleCreateSessionArtifact(w http.ResponseWriter, r *http.Request) {
 	pageID := strings.TrimSpace(r.URL.Query().Get("page_id"))
 	if pageID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "live tool recording page_id required")
@@ -175,7 +175,7 @@ func (s *Server) handleCreateSessionArtifact(w http.ResponseWriter, r *http.Requ
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "live tool recording transcript origin not found")
 		return
 	}
-	root := session.RootSessionID(r.Context(), s.sessionStore, sess.ID)
+	root := sessiontree.RootID(r.Context(), s.sessionStore, sess.ID)
 	holder := strings.TrimSpace(sess.ID)
 	artifact, err := s.visualStore.Put(r.Context(), root, visual.Entry{
 		Meta: visual.LiveToolRecordingMeta(recordingMediaType, pageID, originMessageID, toolCallID, recordedAt, durationMS),
@@ -236,8 +236,8 @@ func parseRecordingStart(raw string) (time.Time, bool) {
 	return recordedAt.UTC(), err == nil
 }
 
-func (s *Server) handleListProjectArtifacts(w http.ResponseWriter, r *http.Request) {
-	p, ok := requestscope.ProjectByURLID(s.projectRegistry, &s.responses, w, r)
+func (s *Artifacts) HandleListProjectArtifacts(w http.ResponseWriter, r *http.Request) {
+	p, ok := requestscope.ProjectByURLID(s.projectRegistry, s.responses, w, r)
 	if !ok {
 		return
 	}
@@ -303,13 +303,13 @@ func encodeArtifactCursor(projectID, createdAt, id string) (string, error) {
 }
 
 // Deletion preserves durable references after removing artifact bytes.
-func (s *Server) handleDeleteProjectArtifact(w http.ResponseWriter, r *http.Request) {
+func (s *Artifacts) HandleDeleteProjectArtifact(w http.ResponseWriter, r *http.Request) {
 	artifactID := strings.TrimSpace(chi.URLParam(r, "artifact_id"))
 	if artifactID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "artifact id required")
 		return
 	}
-	p, ok := requestscope.ProjectByURLID(s.projectRegistry, &s.responses, w, r)
+	p, ok := requestscope.ProjectByURLID(s.projectRegistry, s.responses, w, r)
 	if !ok {
 		return
 	}
@@ -325,7 +325,7 @@ func (s *Server) handleDeleteProjectArtifact(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleSessionArtifact(w http.ResponseWriter, r *http.Request) {
+func (s *Artifacts) HandleSessionArtifact(w http.ResponseWriter, r *http.Request) {
 	// Artifact identities survive deletion; bytes must be resolved on each fetch.
 	w.Header().Set("Cache-Control", "private, no-store")
 	sessionID := chi.URLParam(r, "id")
@@ -342,7 +342,7 @@ func (s *Server) handleSessionArtifact(w http.ResponseWriter, r *http.Request) {
 		s.responses.InternalError(w, r, err)
 		return
 	}
-	root := session.RootSessionID(r.Context(), s.sessionStore, sessionID)
+	root := sessiontree.RootID(r.Context(), s.sessionStore, sessionID)
 	res := s.visualStore.Resolve(r.Context(), root, artifactID)
 	if !res.IsPresent() {
 		switch res.Reason() {

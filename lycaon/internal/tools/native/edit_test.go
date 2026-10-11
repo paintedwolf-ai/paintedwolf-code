@@ -3,13 +3,13 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -51,7 +51,7 @@ func TestEditToolRejectsIdenticalStrings(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "f.txt", "old_string": "same", "new_string": "same",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "EDIT_ARGS_CONFLICT" {
 		t.Fatalf("err = %v want EDIT_ARGS_CONFLICT", err)
 	}
@@ -64,7 +64,7 @@ func TestEditToolMissingNewStringIsArgsInvalid(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "f.txt", "old_string": "same",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("err = %v want TOOL_ARGS_INVALID", err)
 	}

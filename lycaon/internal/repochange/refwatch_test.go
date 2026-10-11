@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -37,7 +38,9 @@ func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 	seedBareGitLayout(t, rootDir)
 
 	root := canonicalTestDir(t, rootDir)
-	var headMoved, worktree atomic.Int32
+	var headMoved atomic.Int32
+	var mu sync.Mutex
+	var worktree [][]string
 	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
 		if ev.ProjectDir != root {
 			return
@@ -46,12 +49,20 @@ func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 			headMoved.Add(1)
 		}
 		if ev.Kind == repochange.WorktreeChanged {
-			worktree.Add(1)
+			mu.Lock()
+			worktree = append(worktree, ev.Paths)
+			mu.Unlock()
 		}
 	})
 
 	repochange.EnsureRoot(t.Context(), root)
 	time.Sleep(50 * time.Millisecond)
+	// The seeded layout predates the stream; a platform stream may still
+	// deliver its creation late, so only changes after this point count.
+	repochange.ResetDebouncerForTest(t.Context())
+	mu.Lock()
+	worktree = nil
+	mu.Unlock()
 
 	// A commit made in an outside terminal appends the HEAD reflog and moves
 	// the loose branch ref. Both also belong to the root metadata namespace.
@@ -69,8 +80,10 @@ func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 		t.Fatal("expected HeadMoved for a ref-surface write")
 	}
 	repochange.ResetDebouncerForTest(t.Context())
-	if worktree.Load() == 0 {
-		t.Fatal("ref metadata did not notify filesystem consumers")
+	mu.Lock()
+	defer mu.Unlock()
+	if len(worktree) != 0 {
+		t.Fatalf("lazy Git metadata triggered source filesystem reconciliation: %v", worktree)
 	}
 }
 

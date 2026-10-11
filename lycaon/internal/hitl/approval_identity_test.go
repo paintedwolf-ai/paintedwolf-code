@@ -22,8 +22,13 @@ type identityAuthzRecorder struct {
 }
 
 func TestCheckpointRefusesMatchingEmptyActionDigests(t *testing.T) {
-	manager := hitl.NewManager(identityStore{}, nil, identityAuthzRecorder{})
-	action := hitl.ProposedAction{Tool: "command", Args: map[string]any{"invalid": make(chan int)}}
+	manager := hitl.NewCheckpoints(identityStore{}, nil, identityAuthzRecorder{})
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"invalid": make(chan int)},
+},
+}
 	response, err := manager.RequestCheckpoint(t.Context(), hitl.CheckpointRequest{
 		SessionID: "session", Kind: api.CheckpointKindToolApproval,
 		ProposedAction: &action, ApprovalPlan: &hitl.ApprovalPlan{ActionDigest: hitl.GrantKey(action)},

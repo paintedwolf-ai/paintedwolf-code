@@ -26,7 +26,7 @@ func PathWithinWriteRoots(path string, writeRoots []string) bool {
 		if r == "" {
 			continue
 		}
-		if p == r || strings.HasPrefix(p, r+"/") {
+		if PathAtOrUnder(p, r) {
 			return true
 		}
 	}
@@ -112,7 +112,7 @@ func WriteRootsForBoundary(projectID string, projectRoots, granted []string, ses
 	seen := map[string]bool{}
 	out := []string{}
 	for _, r := range roots {
-		r = strings.TrimRight(r, "/")
+		r = filepath.Clean(r)
 		if r == "" || seen[r] {
 			continue
 		}
@@ -125,14 +125,7 @@ func WriteRootsForBoundary(projectID string, projectRoots, granted []string, ses
 
 func validatedWriteRoots(projectID string, projectRoots, granted []string, sessionScratchRoot string) ([]string, error) {
 	roots := WriteRootsForBoundary(projectID, projectRoots, granted, sessionScratchRoot)
-	grantedSet := map[string]bool{}
-	for _, g := range append(append([]string(nil), granted...), grantedWriteRoots(projectID)...) {
-		if g = strings.TrimSpace(g); g == "" {
-			continue
-		}
-		grantedSet[strings.TrimRight(fspath.CanonicalPath(g), "/")] = true
-	}
-	if err := validateEffectiveWriteRoots(roots, grantedSet); err != nil {
+	if err := validateEffectiveWriteRoots(roots); err != nil {
 		return nil, err
 	}
 	return roots, nil

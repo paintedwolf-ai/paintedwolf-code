@@ -32,11 +32,11 @@ func TestProseCompletionRequiresUsablePayload(t *testing.T) {
 					ToolCalls: []api.ToolCall{{ID: "read-1", Name: "read", Args: map[string]any{"path": "a.txt"}}},
 				}}}
 				deps := promptloop.StoreDeps(messages)
-				deps.LLM = client
-				deps.Tools = registry
-				deps.Policy = &recordingToolPolicy{}
-				deps.Limits = loopTestLimits(1)
-				deps.CoordinatorFrame = investigateCoordinatorContext()
+				deps.Model.LLM = client
+				deps.Context.Tools = registry
+				deps.Context.Policy = &recordingToolPolicy{}
+				deps.Context.Limits = loopTestLimits(1)
+				deps.Context.CoordinatorFrame = investigateCoordinatorContext()
 				result, err := promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{
 					SessionID: sess.ID, Session: sess, History: userHistory("Read a.txt"),
 					UserPrompt: "Read a.txt", ProfileID: "coordinator", ProseFinish: forced,

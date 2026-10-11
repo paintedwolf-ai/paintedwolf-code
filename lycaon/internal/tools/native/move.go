@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -60,7 +61,7 @@ func (t *MoveTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		if srcResolved.External != dstResolved.External ||
 			srcResolved.Root.ID != dstResolved.Root.ID ||
 			filepath.Clean(srcResolved.Root.Path) != filepath.Clean(dstResolved.Root.Path) {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "MOVE_CROSS_ROOT",
 				Data: map[string]any{"from": fromSlash, "to": toSlash},
 			}

@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session"
+	sessionobservation "github.com/lycaon/lycaon/internal/session/observation"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,9 +28,9 @@ func TestWorkflowScenarioUsesExplicitStartAndTreeSettlement(t *testing.T) {
 					started = true
 					_ = json.NewEncoder(w).Encode(api.WorkflowRun{ID: "flow", SessionID: "root", WorkflowID: "release", WorkflowVersion: "1.0.0"})
 				case "/harness/workflow-execution/root/flow":
-					_ = json.NewEncoder(w).Encode(session.WorkflowExecutionObservation{
+					_ = json.NewEncoder(w).Encode(sessionobservation.WorkflowExecutionObservation{
 						Run:       api.WorkflowRun{ID: "flow", SessionID: "root", WorkflowID: "release", WorkflowVersion: "1.0.0", Status: status},
-						Execution: session.ExecutionObservation{SessionID: "root", Settled: true},
+						Execution: sessionobservation.ExecutionObservation{SessionID: "root", Settled: true},
 					})
 				default:
 					t.Errorf("unexpected workflow request: %s", r.URL.Path)
@@ -56,16 +56,16 @@ func TestWorkflowScenarioUsesExplicitStartAndTreeSettlement(t *testing.T) {
 
 func TestWorkflowObservationRejectsForeignRunAndContradictorySettlement(t *testing.T) {
 	result := CaseReport{SessionID: "root", WorkflowID: "release", WorkflowRunID: "flow"}
-	observation := session.WorkflowExecutionObservation{
+	observation := sessionobservation.WorkflowExecutionObservation{
 		Run:       api.WorkflowRun{ID: "flow", WorkflowID: "release", SessionID: "root"},
-		Execution: session.ExecutionObservation{SessionID: "root", Settled: true},
+		Execution: sessionobservation.ExecutionObservation{SessionID: "root", Settled: true},
 	}
 	testutil.FailErr(t, "validate workflow observation", validateWorkflowObservation(observation, result))
-	for _, mutate := range []func(*session.WorkflowExecutionObservation){
-		func(o *session.WorkflowExecutionObservation) { o.Run.ID = "foreign" },
-		func(o *session.WorkflowExecutionObservation) { o.Run.SessionID = "foreign" },
-		func(o *session.WorkflowExecutionObservation) {
-			o.Execution.Blockers = []session.ExecutionBlocker{{Kind: "continuation"}}
+	for _, mutate := range []func(*sessionobservation.WorkflowExecutionObservation){
+		func(o *sessionobservation.WorkflowExecutionObservation) { o.Run.ID = "foreign" },
+		func(o *sessionobservation.WorkflowExecutionObservation) { o.Run.SessionID = "foreign" },
+		func(o *sessionobservation.WorkflowExecutionObservation) {
+			o.Execution.Blockers = []sessionobservation.ExecutionBlocker{{Kind: "continuation"}}
 		},
 	} {
 		changed := observation

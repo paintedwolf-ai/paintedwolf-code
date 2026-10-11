@@ -3,9 +3,13 @@ package app
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
+	"weak"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
@@ -13,7 +17,10 @@ import (
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -22,13 +29,13 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-func testBuildConfig(t *testing.T, configRoot string) Config {
+func testBuildConfig(t *testing.T, configRoot string) configuration.Config {
 	t.Helper()
 	t.Setenv(configdir.EnvConfigDir, t.TempDir())
 	configtest.Overlay(t, map[config.Rel]string{
 		config.DistroMCP: "providers:\n  - id: svca\n    command: \"true\"\n    args: []\n    enabled: false\n",
 	})
-	return Config{
+	return configuration.Config{
 		DBPath:                    filepath.Join(t.TempDir(), "app-test.db"),
 		ListenAddr:                "127.0.0.1:0",
 		ConfigRoot:                configRoot,
@@ -121,21 +128,21 @@ func TestBuildWithSeparateStoreDirectorySupportsWorkers(t *testing.T) {
 	testutil.FailErr(t, "Build failed", err)
 	t.Cleanup(func() { _ = app.Close() })
 
-	if app.Server == nil || app.DB == nil || app.SessionMgr == nil || app.WorkflowMgr == nil {
+	if app.Server == nil || app.DB == nil || app.Sessions == nil || app.Workflows == nil {
 		t.Fatalf("ServeApp = %+v", app)
 	}
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, projectDir)
-	jobID, err := app.WorkerQueue.Enqueue(t.Context(), wire.WorkerTask{
+	jobID, err := app.Delegations.Queue.Enqueue(t.Context(), wire.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: projectDir, Scope: &wire.TaskScope{Mode: wire.TaskScopeModeWrite, Paths: []string{"."}},
 	})
 	testutil.FailErr(t, "enqueue worker", err)
-	_, err = app.WorkerQueue.ClaimNext(t.Context(), worker.ClaimRequest{
+	_, err = app.Delegations.Queue.ClaimNext(t.Context(), worker.ClaimRequest{
 		ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "store-root-test", ExecutionTarget: wire.ExecutionTargetLocal,
 	})
 	testutil.FailErr(t, "claim worker", err)
-	job, err := app.WorkerQueue.ClaimWorkerBranch(t.Context(), jobID)
+	job, err := app.Delegations.Queue.ClaimWorkerBranch(t.Context(), jobID)
 	testutil.FailErr(t, "claim worker branch under active store", err)
 	rel, err := filepath.Rel(filepath.Dir(cfg.DBPath), job.WorkspaceRoot)
 	testutil.FailErr(t, "resolve branch against active store", err)
@@ -157,9 +164,9 @@ func TestBuildPreservesExplicitSessionLimits(t *testing.T) {
 	testutil.FailErr(t, "build with explicit session limits", err)
 	t.Cleanup(func() { _ = app.Close() })
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, t.TempDir())
-	sess, err := app.SessionMgr.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
+	sess, err := app.Sessions.Manager.Chats.CreateForProject(t.Context(), testdbseed.DefaultProjectID, wire.SessionPostureBuild)
 	testutil.FailErr(t, "create session with explicit limits", err)
-	allowed, reason, err := app.CoordinatorRuntime.CoordinatorLoop().ShouldLoopWake(t.Context(), sess.ID, anchor.PhaseAdvanced)
+	allowed, reason, err := app.CoordinatorRuntime.CoordinatorLoop().Admission.ShouldLoopWake(t.Context(), sess.ID, anchor.PhaseAdvanced)
 	testutil.FailErr(t, "evaluate workflow phase wake", err)
 	if allowed || reason != "feature_disabled" {
 		t.Fatalf("workflow wake allowed=%v reason=%q; explicit disabled loop was replaced by live settings", allowed, reason)
@@ -175,5 +182,115 @@ func TestBuildStopsWhenShutdownArrivesDuringStartup(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "startup interrupted before observability") {
 		t.Fatalf("error = %v, want the step it stopped before", err)
+	}
+}
+
+func closeBuiltHostWithoutServing(t *testing.T) weak.Pointer[session.Host] {
+	t.Helper()
+	app, err := Build(t.Context(), testBuildConfig(t, configlayout.FindModuleRoot()))
+	testutil.FailErr(t, "build without serving", err)
+	host := app.Sessions.Manager
+	testutil.FailErr(t, "close without serving", app.Close())
+	if host.Runner.Settlement.Disposition(true) != wire.SessionIdleDispositionInterrupted {
+		t.Fatal("Close did not mark the host as shutting down")
+	}
+	return weak.Make(host)
+}
+
+func TestBuildCloseWithoutServeReleasesSessionHost(t *testing.T) {
+	testutil.SkipIfShort(t, "assembles the full app graph")
+	t.Setenv("LYCAON_LLM_MOCK", "1")
+	t.Setenv("LYCAON_API_TOKEN", "test-token")
+	host := closeBuiltHostWithoutServing(t)
+	runtime.GC()
+	if host.Value() != nil {
+		t.Fatal("Close without Serve retained the session host")
+	}
+}
+
+func closeBuiltHostWithArmedWait(t *testing.T) weak.Pointer[session.Host] {
+	t.Helper()
+	app, err := Build(t.Context(), testBuildConfig(t, configlayout.FindModuleRoot()))
+	testutil.FailErr(t, "build with armed wait", err)
+	projectDir := t.TempDir()
+	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, projectDir)
+	sess, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create waiting session", err)
+	host := app.Sessions.Manager
+	waits := host.Coordinator.Runtime.CoordinatorLoop().Waits
+	waits.EnterSleep(t.Context(), sess.ID, time.Now().Add(time.Hour), "fixture", []loopwake.WaitTrigger{loopwake.WaitTriggerTimer}, nil, loopwake.SleepMoverHost)
+	if !waits.IsSleeping(sess.ID) {
+		t.Fatal("coordinator wait was not armed before Close")
+	}
+	triggers := waits.Triggers(sess.ID)
+	if len(triggers) != 1 || triggers[0] != loopwake.WaitTriggerTimer {
+		t.Fatalf("armed wait triggers = %v, want timer", triggers)
+	}
+	testutil.FailErr(t, "close with armed wait", app.Close())
+	return weak.Make(host)
+}
+
+func TestBuildCloseReleasesHostWithArmedCoordinatorWait(t *testing.T) {
+	testutil.SkipIfShort(t, "assembles the full app graph")
+	t.Setenv("LYCAON_LLM_MOCK", "1")
+	t.Setenv("LYCAON_API_TOKEN", "test-token")
+	host := closeBuiltHostWithArmedWait(t)
+	runtime.GC()
+	if host.Value() != nil {
+		t.Fatal("Close retained the host through its armed coordinator timer")
+	}
+}
+
+func closeBuiltHostWithSourceWatch(t *testing.T) weak.Pointer[session.Host] {
+	t.Helper()
+	app, err := Build(t.Context(), testBuildConfig(t, configlayout.FindModuleRoot()))
+	testutil.FailErr(t, "build with source watch", err)
+	root := t.TempDir()
+	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, root)
+	_, exists := app.Server.Sources.Watch.EnsureSourceWatch(t.Context(), testdbseed.DefaultProjectID)
+	if !exists || !repochange.Coverage(root).Watching {
+		t.Fatal("fixture did not bind a live project watch before Close")
+	}
+	host := app.Sessions.Manager
+	testutil.FailErr(t, "close with source watch", app.Close())
+	return weak.Make(host)
+}
+
+func TestBuildCloseReleasesHostWithProjectSourceWatch(t *testing.T) {
+	testutil.SkipIfShort(t, "assembles the full app graph")
+	t.Setenv("LYCAON_LLM_MOCK", "1")
+	t.Setenv("LYCAON_API_TOKEN", "test-token")
+	host := closeBuiltHostWithSourceWatch(t)
+	runtime.GC()
+	if host.Value() != nil {
+		t.Fatal("Close retained the host through its project source watch")
+	}
+}
+
+func TestBuildClosePreservesNewerProjectSourceWatch(t *testing.T) {
+	testutil.SkipIfShort(t, "assembles two app graphs")
+	t.Setenv("LYCAON_LLM_MOCK", "1")
+	t.Setenv("LYCAON_API_TOKEN", "test-token")
+	root := t.TempDir()
+	old, err := Build(t.Context(), testBuildConfig(t, configlayout.FindModuleRoot()))
+	testutil.FailErr(t, "build old watch owner", err)
+	t.Cleanup(func() { _ = old.Close() })
+	testdbseed.InsertProjectRoot(t, old.DB, testdbseed.DefaultProjectID, root)
+	old.Server.Sources.Watch.EnsureSourceWatch(t.Context(), testdbseed.DefaultProjectID)
+	current, err := Build(t.Context(), testBuildConfig(t, configlayout.FindModuleRoot()))
+	testutil.FailErr(t, "build current watch owner", err)
+	t.Cleanup(func() { _ = current.Close() })
+	testdbseed.InsertProjectRoot(t, current.DB, testdbseed.DefaultProjectID, root)
+	current.Server.Sources.Watch.EnsureSourceWatch(t.Context(), testdbseed.DefaultProjectID)
+	if !repochange.Coverage(root).Watching {
+		t.Fatal("fixture did not start shared physical stream")
+	}
+	testutil.FailErr(t, "close replaced app", old.Close())
+	if !repochange.Coverage(root).Watching {
+		t.Fatal("old app closed current app's physical stream")
+	}
+	testutil.FailErr(t, "close final app", current.Close())
+	if repochange.Coverage(root).Watching {
+		t.Fatal("final app left its physical stream alive")
 	}
 }

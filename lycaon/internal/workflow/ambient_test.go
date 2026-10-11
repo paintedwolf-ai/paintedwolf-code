@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -26,19 +27,19 @@ func TestIsSessionAmbientRootMachineState(t *testing.T) {
 	bundledDir := filepath.Join(filepath.Dir(file), "..", "..", "config", "packs", "painted-wolf", "platform", "workflows")
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
-	ambient, err := mgr.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
+	ambient, err := mgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 
 	// Persisted attachment policy identifies ambient runs after reload.
-	if !mgr.IsAmbientRun(ambient) {
+	if !runstate.IsAmbientRun(ambient) {
 		t.Fatal("fresh ambient start must be session ambient root")
 	}
-	loaded, err := mgr.Store.Get(ctx, ambient.ID)
+	loaded, err := mgr.Store.Runs.Get(ctx, ambient.ID)
 	testutil.FailErr(t, "Get ambient", err)
 	if loaded.AttachPolicy != string(workflowdef.AttachPolicySessionCreate) {
 		t.Fatalf("store-hydrated AttachPolicy = %q want %q", loaded.AttachPolicy, workflowdef.AttachPolicySessionCreate)
 	}
-	if !mgr.IsAmbientRun(loaded) {
+	if !runstate.IsAmbientRun(loaded) {
 		t.Fatal("store-hydrated ambient root must use persisted attach.policy + no parent")
 	}
 
@@ -53,7 +54,7 @@ func TestIsSessionAmbientRootMachineState(t *testing.T) {
 		Status:          api.WorkflowRunStatusRunning,
 		CurrentPhase:    "boot",
 	}
-	if mgr.IsAmbientRun(child) {
+	if runstate.IsAmbientRun(child) {
 		t.Fatal("child implement@ must not be session ambient root")
 	}
 
@@ -62,7 +63,7 @@ func TestIsSessionAmbientRootMachineState(t *testing.T) {
 		WorkflowVersion: "1.0.0", AttachPolicy: "",
 		Status: api.WorkflowRunStatusRunning, CurrentPhase: "boot",
 	}
-	if mgr.IsAmbientRun(catalog) {
+	if runstate.IsAmbientRun(catalog) {
 		t.Fatal("catalog root must not be session ambient root")
 	}
 }
@@ -79,31 +80,31 @@ func TestExitUsesPersistedAttachmentAfterCatalogChanges(t *testing.T) {
 			var run *api.WorkflowRun
 			var err error
 			if ambient {
-				run, err = mgr.StartAmbient(ctx, "sess-1", "implement", "1.0.0")
+				run, err = mgr.Ambient.StartAmbient(ctx, "sess-1", "implement", "1.0.0")
 			} else {
 				run, err = startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
 			}
 			testutil.FailErr(t, "start workflow", err)
-			manifest, err := mgr.manifestForRun(ctx, run)
+			manifest, err := mgr.Resolver.ForRun(ctx, run)
 			testutil.FailErr(t, "read original manifest", err)
 			manifest.Attach.Policy = workflowdef.AttachPolicySessionCreate
 			if ambient {
 				manifest.Attach.Policy = ""
 			}
-			mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{workflowdef.ManifestKey(manifest.ID, manifest.Version): manifest})
-			_, err = mgr.Exit(ctx, run.SessionID, run.ID, run.Revision, "exit reviewed run")
+			mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{workflowdef.ManifestKey(manifest.ID, manifest.Version): manifest})
+			_, err = mgr.Controls.Exit(ctx, run.SessionID, run.ID, run.Revision, "exit reviewed run")
 			testutil.FailErr(t, "exit after catalog change", err)
-			settled, err := mgr.Get(ctx, run.ID)
+			settled, err := mgr.Store.Runs.Get(ctx, run.ID)
 			testutil.FailErr(t, "read exited run", err)
 			if settled.Status != api.WorkflowRunStatusCanceled {
 				t.Fatalf("exited run status = %s", settled.Status)
 			}
-			active, err := mgr.GetActive(ctx, run.SessionID)
+			active, err := mgr.Store.Runs.ActiveBySession(ctx, run.SessionID)
 			testutil.FailErr(t, "read active workflow", err)
 			if ambient && active != nil {
 				t.Fatalf("ambient exit respawned workflow: %+v", active)
 			}
-			if !ambient && (active == nil || !mgr.IsAmbientRun(active)) {
+			if !ambient && (active == nil || !runstate.IsAmbientRun(active)) {
 				t.Fatalf("catalog exit must attach a fresh ambient workflow: %+v", active)
 			}
 		})

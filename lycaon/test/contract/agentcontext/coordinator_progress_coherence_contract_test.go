@@ -1,12 +1,13 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	coordinatorcoordinationplane "github.com/lycaon/lycaon/test/wiring/fixtures/coordinator_coordination_plane"
@@ -19,7 +20,7 @@ func TestCoordinatorProgressOneBoardAuthoringTool(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	investigate := renderCoordinatorTripartiteForRunContext(
 		t, root, apiCoordinatorRunRunning(), nil, "Survey this repo", nil,
-		tools.SurfaceImplementInvestigate,
+		toolcontract.SurfaceImplementInvestigate,
 	)
 	if !strings.Contains(investigate, progress.AuthoringToolID) {
 		t.Fatalf("investigate prompt must name %q for plan authoring", progress.AuthoringToolID)

@@ -66,9 +66,11 @@ func TestHarnessToolsUsesRealCallsWithoutChangingEligibility(t *testing.T) {
 	defer upstream.Close()
 	catalog := strings.Replace(fakeProvidersYAML(upstream.URL), "tools: {state: supported}", "tools: {state: unknown}", 1)
 	server, base := newProviderTestServerWithCatalogs(t, catalog, catalog)
-	refresh = func() error { return server.llmSvc.Registry.RefreshModels(t.Context(), testProviderID) }
+	refresh = func() error {
+		return server.Admin.Project.Verification.LLMService.Registry.RefreshModels(t.Context(), testProviderID)
+	}
 	ref := llm.ModelRef{ProviderID: testProviderID, Model: "model-x"}
-	testutil.FailErr(t, "assign chat model with unlisted tools without paid calls", server.llmSvc.ValidateModelRef(t.Context(), ref, llm.PolicySlotCoordinator))
+	testutil.FailErr(t, "assign chat model with unlisted tools without paid calls", server.Admin.Project.Verification.LLMService.ValidateModelRef(t.Context(), ref, llm.PolicySlotCoordinator))
 	if calls.Load() != 0 {
 		t.Fatal("assignment made paid calls")
 	}
@@ -85,12 +87,12 @@ func TestHarnessToolsUsesRealCallsWithoutChangingEligibility(t *testing.T) {
 	if !result.OK || calls.Load() != 2 {
 		t.Fatalf("diagnostic=%+v, calls=%d", result, calls.Load())
 	}
-	testutil.FailErr(t, "assign verified model", server.llmSvc.ValidateModelRef(t.Context(), ref, llm.PolicySlotCoordinator))
+	testutil.FailErr(t, "assign verified model", server.Admin.Project.Verification.LLMService.ValidateModelRef(t.Context(), ref, llm.PolicySlotCoordinator))
 	if result.ReasoningPolicy == nil || result.DriverSHA256 == "" || result.RequestPolicySHA256 == "" {
 		t.Fatal("diagnostic lost request provenance")
 	}
 	var meta wire.ProviderMeta
-	for _, candidate := range server.llmSvc.Registry.List(t.Context()) {
+	for _, candidate := range server.Admin.Project.Verification.LLMService.Registry.List(t.Context()) {
 		if candidate.ID == testProviderID {
 			meta = candidate
 			break

@@ -20,16 +20,16 @@ func TestResumeParentAfterChildExitEmitsResumedBoundary(t *testing.T) {
 		ID: "run-parent", SessionID: sess.ID, WorkflowID: "plan",
 		WorkflowVersion: "1.0.0", Status: api.WorkflowRunStatusPausedOnChild, CurrentPhase: "boot",
 	}
-	testutil.FailErr(t, "create parent", mgr.Store.CreateState(ctx, parent, "", nil))
+	testutil.FailErr(t, "create parent", mgr.Store.State.CreateState(ctx, parent, "", nil))
 	parentID := parent.ID
 	child := &api.WorkflowRun{
 		ID: "run-child", SessionID: sess.ID, WorkflowID: "plan",
 		WorkflowVersion: "1.0.0", ParentRunID: &parentID,
 		Status: api.WorkflowRunStatusCanceled, CurrentPhase: "boot", CompletedAt: new(time.Now().UTC()),
 	}
-	testutil.FailErr(t, "create child", mgr.Store.CreateState(ctx, child, "", nil))
+	testutil.FailErr(t, "create child", mgr.Store.State.CreateState(ctx, child, "", nil))
 
-	gotParent, err := mgr.resumeParentAfterChildExit(ctx, child, string(child.Status))
+	gotParent, err := mgr.Children.ResumeParentAfterChildExit(ctx, child, string(child.Status))
 	testutil.FailErr(t, "resumeParentAfterChildExit", err)
 	if gotParent == nil || gotParent.Status != api.WorkflowRunStatusRunning {
 		t.Fatalf("parent status = %v want running", gotParent)

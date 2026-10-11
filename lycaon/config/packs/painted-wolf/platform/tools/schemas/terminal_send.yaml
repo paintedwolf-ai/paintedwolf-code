@@ -12,7 +12,7 @@ schema:
       additionalProperties: false
       required: [services]
       description: >-
-        Request one reusable permission for the managed secrets used by this
+        Use only when this invocation passes a managed secret reference (`{{paintedwolf-secret:…}}`) from secret input or the vault; programs using their own stored login need no `secret_use`. Request one reusable permission for the managed secrets used by this
         process and their later use with the named HTTP services. The person
         reviews both process access and these declared service addresses.
         This does not claim the process or a daemon sends only to those services.

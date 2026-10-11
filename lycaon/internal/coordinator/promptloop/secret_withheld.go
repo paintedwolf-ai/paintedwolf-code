@@ -14,7 +14,7 @@ type SecretWithheldNudge func(ctx context.Context, sess *api.Session, guidance s
 const maxSecretWithheldRetries = 1
 
 // handleSecretWithheldTurn records the refusal and decides whether to retry.
-func (l turnNudges) handleSecretWithheldTurn(
+func (l *turnNudges) handleSecretWithheldTurn(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,

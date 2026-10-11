@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"sync"
 	"testing"
 
@@ -31,27 +32,27 @@ func TestBatchRejectionsEscalateOnlyAcrossResponses(t *testing.T) {
 			testutil.FailErr(t, "create session", err)
 			client := &varyingArgsToolClient{batchSize: 5, stopAfter: 3}
 			deps := promptloop.StoreDeps(messages)
-			deps.LLM, deps.Tools, deps.Policy, deps.DoomLoop = client, tools.NewStubRegistry(), &recordingToolPolicy{}, guard
+			deps.Model.LLM, deps.Context.Tools, deps.Context.Policy, deps.Nudges.DoomLoop = client, tools.NewStubRegistry(), &recordingToolPolicy{}, guard
 			refusal := func() error {
-				return guidance.NewRefusal("TOOL_NOT_OFFERED", "schema not loaded").WithCause(&tools.ToolReject{Code: "TOOL_NOT_OFFERED", FailureClass: api.FailureClassPolicyRejection})
+				return guidance.NewRefusal("TOOL_NOT_OFFERED", "schema not loaded").WithCause(&toolrejection.ToolReject{Code: "TOOL_NOT_OFFERED", FailureClass: api.FailureClassPolicyRejection})
 			}
 			if beforeInvoke {
-				deps.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
+				deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
 					return "", false, refusal()
 				}
 			} else {
-				testutil.FailErr(t, "register rejecting tool", deps.Tools.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", refusal() }))
+				testutil.FailErr(t, "register rejecting tool", deps.Context.Tools.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", refusal() }))
 			}
 			var mu sync.Mutex
 			var counts []int
-			deps.EscalateRepeatedCode = func(_ context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal {
+			deps.Nudges.EscalateRepeatedCode = func(_ context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal {
 				count := guard.CodeRejectResponses(sessionID, tool, original.Code())
 				mu.Lock()
 				counts = append(counts, count)
 				mu.Unlock()
 				return nil
 			}
-			_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("inspect portraits"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{SessionID: sess.ID}})
+			_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("inspect portraits"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}})
 			testutil.FailErr(t, "run batched rejections", err)
 			if len(counts) != 15 {
 				t.Fatalf("recorded counts = %v, want 15 rejected calls", counts)
@@ -76,14 +77,14 @@ func TestOfferedSchemaResolvesEarlierLoadingRejections(t *testing.T) {
 		testutil.FailErr(t, "seed missing schema", guard.RecordAttempt(ctx, sess.ID, fmt.Sprint(response), "read", args, "TOOL_NOT_OFFERED", false))
 	}
 	deps := promptloop.StoreDeps(messages)
-	deps.Tools, deps.Policy, deps.DoomLoop = tools.NewStubRegistry(), &recordingToolPolicy{}, guard
+	deps.Context.Tools, deps.Context.Policy, deps.Nudges.DoomLoop = tools.NewStubRegistry(), &recordingToolPolicy{}, guard
 	invoked := 0
-	testutil.FailErr(t, "register loaded tool", deps.Tools.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+	testutil.FailErr(t, "register loaded tool", deps.Context.Tools.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		invoked++
 		return "SVG source", nil
 	}))
-	deps.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".*", FollowUpText: "Inspected.", ToolCalls: []llm.MockToolCall{{ID: "read-svg", Name: "read", Args: args}}}}})
-	_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("inspect"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{SessionID: sess.ID}})
+	deps.Model.LLM = llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".*", FollowUpText: "Inspected.", ToolCalls: []llm.MockToolCall{{ID: "read-svg", Name: "read", Args: args}}}}})
+	_, err = promptloop.NewPromptLoopForTest(deps).Run(ctx, promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("inspect"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}})
 	testutil.FailErr(t, "run after loading", err)
 	if invoked != 1 {
 		t.Fatalf("loaded tool invoked %d times, want once", invoked)

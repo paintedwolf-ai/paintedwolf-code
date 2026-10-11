@@ -2,16 +2,15 @@ package tools
 
 import (
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 	"sync"
 
-	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
 )
 
@@ -25,129 +24,24 @@ type executionPermit struct {
 	consumed                      bool
 }
 
-func (e *DefaultToolExecutor) preflightExecutionCapability(ctx context.Context, tool string, args map[string]any, tc *ToolContext) error {
-	request, reject := ParseCapabilityRequest(args)
-	if reject != nil {
-		return reject
-	}
-	if request == nil || (!request.ProcessControl && !request.HostExecution) {
-		return nil
-	}
-	tc.ProcessControl, tc.HostExecution = request.ProcessControl, request.HostExecution
-	action := e.executionCapabilityAction(ctx, tool, args, *tc)
-	if request.ProcessControl && !action.Contained.FSJailed {
-		return &ToolReject{Code: isolation.CodeExecutionBoundaryUnavailable}
-	}
-	result, err := e.evaluatePreSpawn(ctx, action)
-	if err != nil {
-		return err
-	}
-	if result == nil {
-		return &ToolReject{Code: isolation.CodeApprovalUnavailable}
-	}
-	if result.Denied {
-		return e.rejectBoundaryPolicyDeny(ctx, tool, args, *tc, result)
-	}
-	if result.Required() {
-		if err := e.awaitExecutionCapability(ctx, action, *tc, result); err != nil {
-			return err
-		}
-	}
-	tc.executionPermit = &executionPermit{session: tc.SessionID, call: tc.ToolCallID, processControl: tc.ProcessControl, hostExecution: tc.HostExecution, boundary: action.ExecutionBoundaryDigest, arguments: executionArgumentsDigest(args)}
-	return nil
-}
-
-func (e *DefaultToolExecutor) executionCapabilityAction(ctx context.Context, tool string, args map[string]any, tc ToolContext) hitl.ProposedAction {
-	request := e.actionConfineRequest(ctx, tc)
-	action := proposedActionFromPolicy(e.preInvokePolicyContext(tool, tc.ProfileID(), args, tc, request))
-	action.ExecutionBoundaryDigest = executionBoundaryDigest(request)
-	action.Command = commandsurface.PrimaryCommandLine(args, nil)
-	return action
-}
-
-func (e *DefaultToolExecutor) awaitExecutionCapability(ctx context.Context, action hitl.ProposedAction, tc ToolContext, result *hitl.ApprovalResult) error {
-	subject, title, impact, consequence := executionCapabilityCopy(tc.HostExecution)
-	targets := []hitl.ApprovalTarget{{Kind: string(subject), Label: action.Command}}
-	who := hitl.WhoAgentCommand
-	if action.ProcessAccess != "" {
-		subject = hitl.ApprovalSubjectAction
-		who = hitl.WhoAgentAction
-		title, impact, consequence = hitl.ProcessSignalTitle, hitl.ProcessSignalWhat, hitl.ProcessSignalIfWrong
-		targets = action.ProcessTargets
-		if action.ProcessAccess == "list" {
-			title, impact, consequence = hitl.ProcessListTitle, hitl.ProcessListWhat, hitl.ProcessListIfWrong
-		} else {
-			subject = hitl.ApprovalSubjectActionSet
-		}
-	}
-	options := []hitl.ApprovalOption{hitl.CurrentActionOption()}
-	offers := e.grantOffers(action, result)
-	for _, offer := range offers {
-		options = append(options, hitl.GrantOption(offer))
-	}
-	options = append(options, e.quietOptionsFor(action, result.Decision)...)
-	primary, cited, reasons := hitl.PresentDecision(result.Decision)
-	plan, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
-		Kind: subject, Title: title, Targets: targets,
-	}, hitl.ApprovalPresentation{
-		Action: title, Tool: action.Tool, Command: action.Command,
-		Impact: impact, Who: who, IfWrong: consequence,
-		AllowLine: hitl.ExecutionAllowLine,
-		Gate:      primary, Cited: cited, Detection: detectionOf(result), GrantDelta: result.GrantDelta,
-	}, reasons, options, hitl.FaceContext{})
-	if err != nil {
-		return ApprovalPlanInvalid()
-	}
-	permission, err := e.prepareSecretPermission(ctx, action.Tool, action.Args, tc)
-	if err != nil {
-		return err
-	}
-	plan, err = hitl.ComposeSecretPermission(plan, action, permission, hitl.FaceContext{})
-	if err != nil {
-		return ApprovalPlanInvalid()
-	}
-	final, err := e.raiseAndWaitToolApproval(ctx, toolApprovalRaise{
-		Action: action, Plan: plan, Title: title, ToolCallID: tc.ToolCallID, ProjectID: tc.ProjectID,
-		Decision: result.Decision, Detection: detectionOf(result), ApprovalMatches: approvalRuleMatches(result),
-		SkipGrantOfferAutofill: true, SecretScreenHit: permission != nil,
-		CoalesceKey: permission.Key(hitl.GrantKey(action)),
-		GrantOffers: offers,
-	})
-	if err != nil {
-		return err
-	}
-	if !hitl.CheckpointAuthorizes(final) {
-		return isolationCheckpointReject(isolation.CodeExecutionCapabilityDenied, final)
-	}
-	approveCapabilitySecretPermission(ctx, tc, permission)
-	return nil
-}
-
-func executionCapabilityCopy(host bool) (hitl.ApprovalSubjectKind, string, string, string) {
-	if host {
-		return hitl.ApprovalSubjectHostExecution, hitl.HostExecutionTitle, hitl.HostExecutionWhat, hitl.HostExecutionIfWrong
-	}
-	return hitl.ApprovalSubjectProcessControl, hitl.ProcessControlTitle, hitl.ProcessControlWhat, hitl.ProcessControlIfWrong
-}
-
-func finalizeExecutionCapability(tc ToolContext, req confine.Request) *ToolReject {
+func finalizeExecutionCapability(tc ToolContext, req confine.Request) *toolrejection.ToolReject {
 	if !req.HostExecution && !req.ProcessControl {
 		return nil
 	}
-	permit := tc.executionPermit
+	permit := tc.Execution.executionPermit
 	if permit == nil {
-		return &ToolReject{Code: isolation.CodeExecutionAuthorizationChanged}
+		return &toolrejection.ToolReject{Code: isolation.CodeExecutionAuthorizationChanged}
 	}
 	permit.mu.Lock()
 	defer permit.mu.Unlock()
-	if permit.arguments != executionArgumentsDigest(tc.CanonicalArgs) || permit.boundary != executionBoundaryDigest(req) || permit.consumed || permit.session != tc.SessionID || permit.call != tc.ToolCallID || permit.hostExecution != req.HostExecution || permit.processControl != req.ProcessControl {
-		return &ToolReject{Code: isolation.CodeExecutionAuthorizationChanged}
+	if permit.arguments != executionArgumentsDigest(tc.Effects.CanonicalArgs) || permit.boundary != ExecutionBoundaryDigest(req) || permit.consumed || permit.session != tc.Identity.SessionID || permit.call != tc.Identity.ToolCallID || permit.hostExecution != req.HostExecution || permit.processControl != req.ProcessControl {
+		return &toolrejection.ToolReject{Code: isolation.CodeExecutionAuthorizationChanged}
 	}
 	permit.consumed = true
 	return nil
 }
 
-func executionBoundaryDigest(req confine.Request) string {
+func ExecutionBoundaryDigest(req confine.Request) string {
 	// Set order and duplicates do not change the reviewed boundary.
 	req.Roots = executionBoundarySet(req.Roots)
 	req.GrantedWriteRoots = executionBoundarySet(req.GrantedWriteRoots)
@@ -190,3 +84,11 @@ func executionBoundarySet[T comparable](values []T) []T {
 	})
 	return slices.Compact(out)
 }
+
+// StampExecutionApproval binds reviewed authority to this call and launch boundary.
+func (tc *ToolContext) StampExecutionApproval(args map[string]any, reviewed hitl.ProposedAction) {
+	tc.Execution.executionPermit = &executionPermit{session: tc.Identity.SessionID, call: tc.Identity.ToolCallID, processControl: tc.Execution.ProcessControl, hostExecution: tc.Execution.HostExecution, boundary: reviewed.Execution.ExecutionBoundaryDigest, arguments: executionArgumentsDigest(args)}
+}
+
+// HasExecutionApproval reports whether this invocation reached capability review.
+func (tc ToolContext) HasExecutionApproval() bool { return tc.Execution.executionPermit != nil }

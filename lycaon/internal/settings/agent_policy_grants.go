@@ -39,10 +39,10 @@ var agentPolicySurfaceCopy = map[string]string{
 func agentPolicyPredicate(action hitl.ProposedAction, posture gate.Posture) ApprovalRule {
 	var subjects []string
 	prefix := agentPolicySurfacesPrefix
-	for _, target := range action.AgentPolicy {
+	for _, target := range action.Mutations.AgentPolicy {
 		if posture.LeasesAgentPolicyFiles() {
 			prefix = agentPolicyFilesPrefix
-			subjects = append(subjects, agentPolicyFile(target, action.ProjectDir))
+			subjects = append(subjects, agentPolicyFile(target, action.Scope.ProjectDir))
 			continue
 		}
 		subjects = append(subjects, target.Surface)
@@ -82,12 +82,12 @@ func agentPolicyCoverage(pattern string) string {
 // agent-policy file. At Strict only exact-file leases count, so a lease
 // granted before a posture change cannot cover more than Strict would.
 func agentPolicyGrantCovers(g *RuleApprovalGate, action hitl.ProposedAction, posture gate.Posture) bool {
-	if g == nil || g.grants == nil || len(action.AgentPolicy) == 0 {
+	if g == nil || g.grants == nil || len(action.Mutations.AgentPolicy) == 0 {
 		return false
 	}
-	grants := g.grants.live(action.ChatSession())
-	for _, target := range action.AgentPolicy {
-		file := agentPolicyFile(target, action.ProjectDir)
+	grants := g.grants.live(action.Scope.ChatSession())
+	for _, target := range action.Mutations.AgentPolicy {
+		file := agentPolicyFile(target, action.Scope.ProjectDir)
 		covered := false
 		for _, grant := range grants {
 			if agentPolicyGrantApplies(grant, action, posture, target.Surface, file) {

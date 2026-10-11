@@ -1,13 +1,14 @@
 package guard_test
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -40,7 +41,7 @@ func TestObserveCloseoutEnvelope(t *testing.T) {
 			sess, hostLoopHistory(
 				nil),
 			content, nil,
-			tools.SurfaceImplementInvestigate, true, surface.ImplementSessionState{}, rejectFmt, guard.BatchTurnGuard{})
+			toolcontract.SurfaceImplementInvestigate, true, surface.ImplementSessionState{}, rejectFmt, guard.BatchTurnGuard{})
 
 		if blocked {
 			t.Fatalf("expected envelope json to pass guard, reject=%q", reject)
@@ -54,7 +55,7 @@ func TestObserveCloseoutEnvelope(t *testing.T) {
 			sess, hostLoopHistory(
 				nil),
 			content, nil,
-			tools.SurfaceImplementInvestigate, true, surface.ImplementSessionState{}, rejectFmt, guard.BatchTurnGuard{})
+			toolcontract.SurfaceImplementInvestigate, true, surface.ImplementSessionState{}, rejectFmt, guard.BatchTurnGuard{})
 
 		if !blocked {
 			t.Fatal("expected hybrid prose reject")

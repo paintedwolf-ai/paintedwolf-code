@@ -1,12 +1,13 @@
 package guard
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestObserveProgressReconcileOnSynthesis_allowsClose(t *testing.T) {
@@ -50,7 +51,7 @@ func TestObserveProgressReconcileOnSynthesis_skipsInvestigate(t *testing.T) {
 	_, block := formatObservationReject(t, fmt, func(gc *oar.GuardContext) {
 		gc.ObserveToolCall("update_progress", nil)
 		ObserveProgressReconcileOnSynthesis(
-			tools.SurfaceImplementInvestigate,
+			toolcontract.SurfaceImplementInvestigate,
 			"",
 			map[string]any{"content": "## Progress\n- [ ] new"},
 			gc,
@@ -65,7 +66,7 @@ func TestObserveProgressReconcileIgnoresOtherContentTools(t *testing.T) {
 	gc := oar.NewGuardContext()
 	gc.ObserveToolCall("write", nil)
 	ObserveProgressReconcileOnSynthesis(spawn.SurfaceImplementSynthesis, "- [x] done", map[string]any{"content": "- [ ] unrelated"}, gc)
-	if gc.ProgressReconcileNeeded {
+	if gc.Progress.ProgressReconcileNeeded {
 		t.Fatal("unrelated tool became a checklist update")
 	}
 }

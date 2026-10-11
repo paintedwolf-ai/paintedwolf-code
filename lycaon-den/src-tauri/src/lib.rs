@@ -10,6 +10,7 @@ mod config_dir;
 mod detect_editors;
 mod document_outbox;
 mod external_attachment_import;
+mod http_transport;
 mod item_windows;
 #[cfg(target_os = "macos")]
 mod native_notifications;

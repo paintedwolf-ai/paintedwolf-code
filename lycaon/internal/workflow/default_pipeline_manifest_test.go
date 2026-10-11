@@ -15,7 +15,7 @@ func TestBugbashManifestBindsAndAdvances(t *testing.T) {
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs failed", err)
-	manifest, err := manifests.Get("bugbash", "1.0.0")
+	manifest, err := manifests.Get("bugbash", "1.1.0")
 	testutil.FailErr(t, "manifests.Get failed", err)
 
 	wantBinds := map[string]string{
@@ -50,40 +50,40 @@ func TestBugbashManifestBindsAndAdvances(t *testing.T) {
 
 	mgr, _, _, _ := testManager(t)
 	mgr.SetConditionRegistry(reg)
-	mgr.Manifests = manifests
+	mgr.Resolver.Overlay = manifests
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.1.0")
 	testutil.FailErr(t, "startRun failed", err)
 	if run.CurrentPhase != "hunt" {
 		t.Fatalf("phase = %q want hunt", run.CurrentPhase)
 	}
 
-	if _, err := mgr.Advance(ctx, run.ID); err == nil {
+	if _, err := mgr.Phases.Advance(ctx, run.ID); err == nil {
 		t.Fatal("expected advance blocked before hunt parallel stages complete")
 	}
 	for _, stage := range []string{"hunt_correctness", "hunt_edges", "hunt_races"} {
-		if err := mgr.MarkTopologyStageComplete(ctx, run.ID, stage, "", ""); err != nil {
+		if err := mgr.Phases.MarkTopologyStageComplete(ctx, run.ID, stage, "", ""); err != nil {
 			testutil.FailErr(t, "MarkTopologyStageComplete "+stage, err)
 		}
 	}
-	run, err = mgr.Get(ctx, run.ID)
-	testutil.FailErr(t, "mgr.Get after hunt stages", err)
+	run, err = mgr.Store.Runs.Get(ctx, run.ID)
+	testutil.FailErr(t, "mgr.Store.Runs.Get after hunt stages", err)
 	if run.CurrentPhase != "triage" {
 		t.Fatalf("phase = %q want triage after hunt topology marks", run.CurrentPhase)
 	}
 
-	eval := RegistryGateEvaluator{Registry: reg, Sessions: mgr.Sessions}
-	vars, err := mgr.Store.GetScaffoldVars(ctx, run.ID)
-	testutil.FailErr(t, "mgr.Store.GetScaffoldVars failed", err)
+	eval := RegistryGateEvaluator{Registry: reg, Sessions: mgr.Policy.Sessions}
+	vars, err := mgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
+	testutil.FailErr(t, "mgr.Store.Runs.GetScaffoldVars failed", err)
 	okGate, _, err := eval.PhaseGateMet(ctx, manifest, run, vars)
 	if err != nil || okGate {
 		t.Fatalf("triage gate before stage complete = %v err=%v", okGate, err)
 	}
-	if err := mgr.MarkTopologyStageComplete(ctx, run.ID, "triage", "", ""); err != nil {
-		testutil.FailErr(t, "mgr.MarkTopologyStageComplete failed", err)
+	if err := mgr.Phases.MarkTopologyStageComplete(ctx, run.ID, "triage", "", ""); err != nil {
+		testutil.FailErr(t, "mgr.Phases.MarkTopologyStageComplete failed", err)
 	}
-	run, err = mgr.Get(ctx, run.ID)
-	testutil.FailErr(t, "mgr.Get after triage stage", err)
+	run, err = mgr.Store.Runs.Get(ctx, run.ID)
+	testutil.FailErr(t, "mgr.Store.Runs.Get after triage stage", err)
 	if run.CurrentPhase != "expand" {
 		t.Fatalf("phase = %q want expand after triage topology mark", run.CurrentPhase)
 	}
@@ -128,64 +128,74 @@ func TestBugbashApprovedBlueprintRunsImplementChildAndCompletes(t *testing.T) {
 	setTestRegistry(t, mgr, blueprintMgr, deps)
 	ctx := workflowCaller(t, mgr)
 
-	parent, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.0.0")
+	parent, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.1.0")
 	testutil.FailErr(t, "start bugbash", err)
 	for _, stage := range []string{"hunt_correctness", "hunt_edges", "hunt_races", "triage"} {
-		testutil.FailErr(t, "complete topology stage "+stage, mgr.MarkTopologyStageComplete(ctx, parent.ID, stage, stage+" complete", ""))
+		testutil.FailErr(t, "complete topology stage "+stage, mgr.Phases.MarkTopologyStageComplete(ctx, parent.ID, stage, stage+" complete", ""))
 	}
-	parent, err = mgr.Get(ctx, parent.ID)
+	parent, err = mgr.Store.Runs.Get(ctx, parent.ID)
 	testutil.FailErr(t, "get expand phase", err)
 	if parent.CurrentPhase != "expand" {
 		t.Fatalf("phase = %q want expand", parent.CurrentPhase)
 	}
 	seedValidPlanContent(t, blueprintMgr, parent.BlueprintPath)
-	parent, err = mgr.TryAutoAdvance(ctx, parent.ID)
+	parent, err = mgr.Phases.TryAutoAdvance(ctx, parent.ID)
 	testutil.FailErr(t, "advance to approval", err)
 	if parent.CurrentPhase != "approve" {
 		t.Fatalf("phase = %q want approve", parent.CurrentPhase)
 	}
-	parent, err = mgr.SyncHumanApproval(ctx, parent.ID, projectDir)
+	parent, err = mgr.Approvals.SyncHumanApproval(ctx, parent.ID, projectDir)
 	testutil.FailErr(t, "approve bugbash Blueprint", err)
 	if parent.Status != api.WorkflowRunStatusPausedOnChild || parent.CurrentPhase != "fix" {
 		t.Fatalf("parent = status %q phase %q want paused_on_child/fix", parent.Status, parent.CurrentPhase)
 	}
-	child, err := mgr.GetActive(ctx, parent.SessionID)
+	child, err := mgr.Store.Runs.ActiveBySession(ctx, parent.SessionID)
 	testutil.FailErr(t, "get implement child", err)
 	if child.WorkflowID != "implement" || child.BlueprintPath != parent.BlueprintPath {
 		t.Fatalf("child = workflow %q Blueprint %q want implement/%q", child.WorkflowID, child.BlueprintPath, parent.BlueprintPath)
 	}
-	msgs, err := mgr.Sessions.GetMessages(ctx, parent.SessionID)
+	msgs, err := mgr.Verdicts.Sessions.GetMessages(ctx, parent.SessionID)
 	testutil.FailErr(t, "get Blueprint transcript while child runs", err)
 	blueprintRow, ok := findBlueprintTranscriptMessage(msgs, parent.BlueprintPath)
 	if !ok || blueprintRow.Blueprint == nil {
 		t.Fatal("expected Blueprint transcript while child runs")
 	}
-	if blueprintRow.Blueprint.PhaseLabel != blueprintPhaseLabel(parent.CurrentPhase) {
+	if blueprintRow.Blueprint.PhaseLabel != "fix" {
 		t.Fatalf("Blueprint phase label = %q want parent phase %q", blueprintRow.Blueprint.PhaseLabel, parent.CurrentPhase)
 	}
-	testutil.FailErr(t, "orient implement child", mgr.RecordBoardOrientReady(ctx, child.SessionID, "test-orient"))
-	child, err = mgr.Get(ctx, child.ID)
+	testutil.FailErr(t, "orient implement child", mgr.Fanout.RecordBoardOrientReady(ctx, child.SessionID, "test-orient"))
+	child, err = mgr.Store.Runs.Get(ctx, child.ID)
 	testutil.FailErr(t, "get child before delivery", err)
 	if child.Status != api.WorkflowRunStatusRunning || child.CurrentPhase != "work" {
 		t.Fatalf("child before delivery = %q/%q, want running/work", child.Status, child.CurrentPhase)
 	}
 	delivered = true
-	testutil.FailErr(t, "complete implement child work", mgr.RecordWorkerTerminalProof(ctx, child.SessionID, "test-work", "complete"))
+	testutil.FailErr(t, "complete implement child work", mgr.Fanout.RecordWorkerTerminalProof(ctx, child.SessionID, "test-work", "complete"))
 
-	child, err = mgr.Get(ctx, child.ID)
+	child, err = mgr.Store.Runs.Get(ctx, child.ID)
 	testutil.FailErr(t, "get completed child", err)
 	if child.Status != api.WorkflowRunStatusComplete {
 		t.Fatalf("child status = %q phase=%q want complete", child.Status, child.CurrentPhase)
 	}
-	parent, err = mgr.Get(ctx, parent.ID)
+	parent, err = mgr.Store.Runs.Get(ctx, parent.ID)
 	testutil.FailErr(t, "get completed bugbash", err)
 	if parent.Status != api.WorkflowRunStatusComplete || parent.CurrentPhase != "done" {
 		t.Fatalf("parent = status %q phase %q want complete/done", parent.Status, parent.CurrentPhase)
 	}
-	msgs, err = mgr.Sessions.GetMessages(ctx, parent.SessionID)
+	msgs, err = mgr.Verdicts.Sessions.GetMessages(ctx, parent.SessionID)
 	testutil.FailErr(t, "get completed Blueprint transcript", err)
 	blueprintRow, ok = findBlueprintTranscriptMessage(msgs, parent.BlueprintPath)
 	if !ok || blueprintRow.Blueprint == nil || blueprintRow.Blueprint.PhaseLabel != "Done" {
 		t.Fatalf("completed Blueprint transcript = %+v want Done", blueprintRow.Blueprint)
 	}
+}
+
+func findBlueprintTranscriptMessage(messages []api.Message, path string) (api.Message, bool) {
+	for i := len(messages) - 1; i >= 0; i-- {
+		message := messages[i]
+		if api.IsBlueprintMessage(message) && message.Blueprint != nil && message.Blueprint.BlueprintPath == path {
+			return message, true
+		}
+	}
+	return api.Message{}, false
 }

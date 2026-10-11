@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -44,7 +45,7 @@ func resolveTaskIdentity(ctx context.Context, deps TaskToolDeps, tctx tools.Tool
 	if childSessionID = strings.TrimSpace(childSessionID); childSessionID != "" {
 		prior, ok := deps.Queue.GetLatestByChildSessionID(ctx, childSessionID)
 		if !ok || prior == nil {
-			return id, &tools.ToolReject{Code: workerResumeChildUnknownCode, Data: map[string]any{"child_session_id": childSessionID}}
+			return id, &toolrejection.ToolReject{Code: workerResumeChildUnknownCode, Data: map[string]any{"child_session_id": childSessionID}}
 		}
 		id.Prior = prior
 		if err := id.inheritFrom(prior, scopeGiven, childSessionID, budget); err != nil {
@@ -71,7 +72,7 @@ func resolveTaskIdentity(ctx context.Context, deps TaskToolDeps, tctx tools.Tool
 		}
 	}
 	if id.AgentType == "" {
-		return id, &tools.ToolReject{
+		return id, &toolrejection.ToolReject{
 			Code: "TOOL_ARGS_INVALID",
 			Data: map[string]any{"reason": "missing_agent_type", "field": "agent_type", "tool": "task"},
 		}
@@ -109,7 +110,7 @@ func (id *taskIdentity) workflowWork(ctx context.Context, deps TaskToolDeps, tct
 	if id.WorkflowWorkID == "" || deps.WorkflowWork == nil {
 		return spawn.WorkflowWork{}, false, nil
 	}
-	leg, ok, err := deps.WorkflowWork(ctx, tctx.SessionID, id.WorkflowWorkID)
+	leg, ok, err := deps.WorkflowWork(ctx, tctx.Identity.SessionID, id.WorkflowWorkID)
 	if err != nil {
 		return spawn.WorkflowWork{}, false, err
 	}
@@ -121,7 +122,7 @@ func (id *taskIdentity) workflowWork(ctx context.Context, deps TaskToolDeps, tct
 }
 
 func resumeMismatch(childSessionID, field, recorded, requested string) error {
-	return &tools.ToolReject{Code: workerResumeMismatchCode, Data: map[string]any{
+	return &toolrejection.ToolReject{Code: workerResumeMismatchCode, Data: map[string]any{
 		"child_session_id": childSessionID,
 		"resume_field":     field,
 		"resume_recorded":  recorded,

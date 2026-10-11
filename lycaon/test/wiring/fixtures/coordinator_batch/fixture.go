@@ -9,7 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -67,8 +67,8 @@ func (f IncidentReplayFixture) ImplementSessionState() surface.ImplementSessionS
 		PendingOverlayIDs: append([]string(nil), f.LoopWakeState.PendingOverlayIDs...),
 	}
 	state.WrapupGatesLoaded = true
-	state.BatchReadyForSynthesis = session.BatchReadyForSynthesis(state, f.History, f.ProgressContent, true, true)
-	state.OpenRepairSinceUserIntent = session.OpenRepairSinceUserIntent(f.History, false)
+	state.BatchReadyForSynthesis = workeroutcomes.BatchReadyForSynthesis(state, f.History, f.ProgressContent, true, true)
+	state.OpenRepairSinceUserIntent = workeroutcomes.OpenRepairSinceUserIntent(f.History, false)
 	state.ProgressMissing = progress.ProgressMissing(f.ProgressContent)
 	return state
 }

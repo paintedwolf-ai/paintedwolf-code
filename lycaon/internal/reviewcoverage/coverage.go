@@ -15,6 +15,7 @@ import (
 
 // Fact is a host observation bound to the review revision.
 type Fact struct {
+	EvidenceRevision      string                `json:"evidence_revision,omitempty"`
 	Phase                 string                `json:"phase,omitempty"`
 	Distribution          *scancoverage.Profile `json:"distribution,omitempty"`
 	InvestigationAttempts int                   `json:"investigation_attempts,omitempty"`
@@ -39,9 +40,10 @@ type Fact struct {
 
 // Facts identifies the complete input to a coverage review.
 type Facts struct {
-	Revision    string `json:"revision"`
-	Obligations []Fact `json:"obligations"`
-	Gaps        []Fact `json:"gaps"`
+	InputRevision int64  `json:"input_revision,omitempty"`
+	Revision      string `json:"revision"`
+	Obligations   []Fact `json:"obligations"`
+	Gaps          []Fact `json:"gaps"`
 }
 
 const (

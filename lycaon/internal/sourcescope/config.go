@@ -17,6 +17,9 @@ type Plane struct {
 	Budgets sandbox.SurveyBudgets
 	// DeferredDirectories are traversed after ordinary directories.
 	DeferredDirectories []string
+	// BoundaryDirectories remain readable but are discovered only on demand.
+	BoundaryDirectories []string
+	NestedCheckouts     bool
 	// CollapsedDirectories are left closed by a recursive expansion. Neither
 	// set affects admission.
 	CollapsedDirectories []string
@@ -96,6 +99,7 @@ func DefaultConfig() (Config, error) {
 		return Config{}, err
 	}
 	cfg.Catalog.DeferredDirectories, cfg.Catalog.CollapsedDirectories = priority.Deferred, priority.Collapsed
+	cfg.Catalog.BoundaryDirectories, cfg.Catalog.NestedCheckouts = priority.Boundaries, true
 	if err := cfg.validate(); err != nil {
 		return Config{}, fmt.Errorf("%s: %w", config.SourceScope, err)
 	}

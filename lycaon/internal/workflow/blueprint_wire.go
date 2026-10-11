@@ -11,8 +11,10 @@ func WireBlueprintDepsForTest(mgr *RunManager, projectDir string) *blueprint.Man
 	}
 	blueprintStore := blueprint.NewFileStoreForTest(projectDir)
 	blueprintMgr := blueprint.NewManager(blueprintStore)
-	blueprintMgr.AfterRetarget = mgr.RebindBlueprintPath
-	mgr.BlueprintCreate = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
-	mgr.BlueprintGet = blueprintMgr
+	blueprintMgr.AfterRetarget = mgr.Blueprints.RebindBlueprintPath
+	mgr.Blueprints.Creator = blueprint.WorkflowBlueprintCreator{Manager: blueprintMgr}
+	mgr.Blueprints.Getter = blueprintMgr
+	mgr.Presentation.BlueprintGetter = blueprintMgr
+	mgr.Approvals.Getter = blueprintMgr
 	return blueprintMgr
 }

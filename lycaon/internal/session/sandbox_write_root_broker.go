@@ -1,9 +1,13 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolapproval"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
+
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -14,8 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
+
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -27,7 +30,7 @@ type WriteRootCheckpointBroker struct {
 	// ReadRuntime holds chat read-path leases, a separate namespace from
 	// write roots: a grant in one never covers the other.
 	ReadRuntime *approvalstate.SandboxPathGrantRuntime
-	Consequence tools.ConsequenceDeriver
+	Consequence toolapproval.ConsequenceDeriver
 	Authority   hitl.ApprovalGate
 	// ApprovalsDisabled authorizes the request without a prompt.
 	ApprovalsDisabled func(projectDir string) bool
@@ -48,9 +51,9 @@ func (b *WriteRootCheckpointBroker) posture(projectDir string) gate.Posture {
 	return b.Posture(projectDir)
 }
 
-// Authorize implements native.SandboxWriteRootGate.
-func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in native.SandboxWriteRootAsk) (native.SandboxWriteRootResult, error) {
-	var out native.SandboxWriteRootResult
+// Authorize implements command.SandboxWriteRootGate.
+func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in command.SandboxWriteRootAsk) (command.SandboxWriteRootResult, error) {
+	var out command.SandboxWriteRootResult
 	if b == nil || b.Checkpoints == nil || b.Runtime == nil {
 		return out, nil
 	}
@@ -60,7 +63,7 @@ func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in native.San
 	}
 	// The invocation's own scratch is already inside its boundary.
 	if confine.WithinSessionScratch(proposed, in.SessionScratchRoot) {
-		return native.SandboxWriteRootResult{Authorized: true, ProposedWriteRoot: proposed}, nil
+		return command.SandboxWriteRootResult{Authorized: true, ProposedWriteRoot: proposed}, nil
 	}
 	// Control-plane writes are denied without prompting.
 	if confine.ControlPlanePathDenied(proposed, true, in.SessionScratchRoot) {
@@ -90,16 +93,16 @@ func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in native.San
 	if subject.Kind == confine.WriteSubjectOrdinary {
 		// Ordinary paths can use a covering chat grant.
 		if covering := sessionOverlayCovering(b.Runtime, rootSessionID, proposed); covering != "" {
-			return native.SandboxWriteRootResult{
+			return command.SandboxWriteRootResult{
 				Authorized:        true,
 				ProposedWriteRoot: covering,
 			}, nil
 		}
 		if inRoots {
-			return native.SandboxWriteRootResult{Authorized: true, ProposedWriteRoot: proposed}, nil
+			return command.SandboxWriteRootResult{Authorized: true, ProposedWriteRoot: proposed}, nil
 		}
 	} else if sessionOverlayHasExact(b.Runtime, rootSessionID, proposed) {
-		return native.SandboxWriteRootResult{Authorized: true, ProposedWriteRoot: proposed}, nil
+		return command.SandboxWriteRootResult{Authorized: true, ProposedWriteRoot: proposed}, nil
 	}
 	var userRule *gate.UserRule
 	var approvalMatches []hitl.ApprovalRuleMatch
@@ -107,7 +110,7 @@ func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in native.San
 		rule, matched := b.Rule(ctx, in.ProjectID, projectDir, proposed)
 		if matched && rule.Effect == settings.ApprovalEffectDeny {
 			b.recordRuleDeny(ctx, invokingSessionID, in, proposed, rule)
-			return native.SandboxWriteRootResult{Denied: true, ProposedWriteRoot: proposed}, nil
+			return command.SandboxWriteRootResult{Denied: true, ProposedWriteRoot: proposed}, nil
 		}
 		if matched && rule.Effect == settings.ApprovalEffectAsk {
 			approvalMatches = []hitl.ApprovalRuleMatch{approvalRuleMatch(rule)}
@@ -151,7 +154,7 @@ func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in native.San
 	if autoGrant {
 		b.Runtime.ClearDenied(invokingSessionID, proposed)
 		b.Runtime.GrantSessionWriteRoot(rootSessionID, proposed)
-		return native.SandboxWriteRootResult{
+		return command.SandboxWriteRootResult{
 			Authorized:        true,
 			ProposedWriteRoot: proposed,
 		}, nil
@@ -163,12 +166,12 @@ func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in native.San
 // raiseWriteRootCard builds and awaits a write-root checkpoint.
 func (b *WriteRootCheckpointBroker) raiseWriteRootCard(
 	ctx context.Context,
-	in native.SandboxWriteRootAsk,
+	in command.SandboxWriteRootAsk,
 	invokingSessionID, rootSessionID, projectDir, proposed string,
 	subject confine.WriteSubject,
 	decision *gate.Decision,
 	approvalMatches []hitl.ApprovalRuleMatch,
-) (native.SandboxWriteRootResult, error) {
+) (command.SandboxWriteRootResult, error) {
 	resolved, err := awaitSandboxAsk(ctx, sandboxAskRequest{
 		Gate: b.Runtime, Checkpoints: b.Checkpoints, Authz: b.Authz,
 		InvokingSessionID: invokingSessionID, Key: proposed, ToolCallID: in.ToolCallID,
@@ -179,9 +182,9 @@ func (b *WriteRootCheckpointBroker) raiseWriteRootCard(
 		},
 	})
 	if err != nil || !resolved.Answered {
-		return native.SandboxWriteRootResult{}, err
+		return command.SandboxWriteRootResult{}, err
 	}
-	return native.SandboxWriteRootResult{
+	return command.SandboxWriteRootResult{
 		Raised:            resolved.Raised,
 		Authorized:        resolved.Authorized,
 		Denied:            resolved.Denied,
@@ -227,7 +230,7 @@ func writeRootCardCopyFor(subject confine.WriteSubject, proposed string, protect
 }
 
 func (b *WriteRootCheckpointBroker) buildWriteRootCard(
-	in native.SandboxWriteRootAsk,
+	in command.SandboxWriteRootAsk,
 	invokingSessionID, rootSessionID, projectDir, proposed string,
 	subject confine.WriteSubject,
 	decision *gate.Decision,
@@ -241,13 +244,23 @@ func (b *WriteRootCheckpointBroker) buildWriteRootCard(
 		band, code = b.Consequence.WriteRoot(proposed)
 	}
 	grantAction := hitl.ProposedAction{
-		Tool: "write_root", Args: map[string]any{"proposed_write_root": proposed},
-		ProjectID: in.ProjectID, ProjectDir: projectDir, SessionID: invokingSessionID, RootSessionID: rootSessionID,
-		Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
-			ProjectID:         in.ProjectID,
-			Roots:             projectRoots(projectDir),
-			OverlayWriteRoots: b.Runtime.SessionWriteRoots(rootSessionID),
-		}),
+		Invocation: hitl.ActionInvocation{
+			Tool: "write_root",
+			Args: map[string]any{"proposed_write_root": proposed},
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:     in.ProjectID,
+			ProjectDir:    projectDir,
+			SessionID:     invokingSessionID,
+			RootSessionID: rootSessionID,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
+				ProjectID:         in.ProjectID,
+				Roots:             projectRoots(projectDir),
+				OverlayWriteRoots: b.Runtime.SessionWriteRoots(rootSessionID),
+			}),
+		},
 	}
 	var grantOffers []hitl.ApprovalGrantOffer
 	if b.Authority != nil && subject.Kind == confine.WriteSubjectOrdinary {
@@ -291,7 +304,7 @@ func (b *WriteRootCheckpointBroker) buildWriteRootCard(
 		if b.Authority == nil {
 			return false
 		}
-		_, live := b.Authority.AskQuietLive(grantAction.ChatSession(), key)
+		_, live := b.Authority.AskQuietLive(grantAction.Scope.ChatSession(), key)
 		return live
 	})...)
 	primaryGate, cited, reasons := hitl.PresentDecision(decision)
@@ -309,7 +322,7 @@ func (b *WriteRootCheckpointBroker) buildWriteRootCard(
 		ConsequenceBand: string(band), ConsequenceCode: string(code),
 	}, reasons, options, hitl.FaceContext{})
 	if err != nil {
-		return sandboxAskCard{}, tools.ApprovalPlanInvalid()
+		return sandboxAskCard{}, toolrejection.ApprovalPlanInvalid()
 	}
 	return sandboxAskCard{
 		Action: grantAction, Title: card.subjectTitle, Plan: plan,
@@ -327,7 +340,7 @@ func approvalRuleMatch(rule settings.ApprovalRule) hitl.ApprovalRuleMatch {
 func (b *WriteRootCheckpointBroker) recordRuleDeny(
 	ctx context.Context,
 	sessionID string,
-	in native.SandboxWriteRootAsk,
+	in command.SandboxWriteRootAsk,
 	proposed string,
 	rule settings.ApprovalRule,
 ) {
@@ -350,13 +363,13 @@ func writeRootChatGrant(action hitl.ProposedAction, root string) hitl.ApprovalGr
 	root = confine.NormalizeWriteRootKey(root)
 	raw := strings.Join([]string{
 		string(hitl.ApprovalGrantScopeChat), hitl.ApprovalGrantCategoryWriteRoot,
-		root, action.ChatSession(),
+		root, action.Scope.ChatSession(),
 	}, "\x00")
 	sum := sha256.Sum256([]byte(raw))
 	return hitl.ApprovalGrant{
 		ID: "grant_" + hex.EncodeToString(sum[:8]), Scope: hitl.ApprovalGrantScopeChat,
 		Predicate:     hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategoryWriteRoot, Pattern: root},
-		ChatSessionID: action.ChatSession(), ProjectID: action.ProjectID, ProjectDir: action.ProjectDir,
+		ChatSessionID: action.Scope.ChatSession(), ProjectID: action.Scope.ProjectID, ProjectDir: action.Scope.ProjectDir,
 		Title: hitl.TitleAllowForThisChat, Coverage: "writes within `" + root + "`",
 		GrantedAt: time.Now().UTC(), ExpiresWhen: hitl.ExpiresWhenChatDeleted,
 		ReaskWhen: "a different write root is needed", Source: "checkpoint",

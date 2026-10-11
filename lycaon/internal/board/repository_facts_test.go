@@ -24,7 +24,7 @@ type advancingWorkflow struct {
 	calls int
 }
 
-func (w *advancingWorkflow) GetActive(context.Context, string) (*api.WorkflowRun, error) {
+func (w *advancingWorkflow) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
 	w.calls++
 	return &api.WorkflowRun{ID: "run", CurrentPhase: w.phase}, nil
 }
@@ -34,7 +34,7 @@ func TestPromptRepositoryFactsKeepWorkflowAndReservationsLive(t *testing.T) {
 	repo := &countedRepository{progressiveRepoProvider: progressiveRepoProvider{brief: &repoinfo.Brief{Materialized: true, FileCount: 1}}}
 	workflow := &advancingWorkflow{phase: "orient"}
 	reservations := 0
-	b := &SnapshotBuilder{Repo: repo, Workflow: workflow, ActiveReservations: func(string) []api.BoardReservationEntry {
+	b := &SnapshotBuilder{Repo: repo, Workflow: &WorkflowRunSource{Runs: workflow, Presentation: workflow}, ActiveReservations: func(string) []api.BoardReservationEntry {
 		reservations++
 		return nil
 	}}

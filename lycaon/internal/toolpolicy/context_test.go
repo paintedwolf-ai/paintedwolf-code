@@ -13,50 +13,24 @@ type recordingWorkflowView struct {
 	activeRun *api.WorkflowRun
 }
 
-func (r *recordingWorkflowView) record(name string) {
-	r.calls = append(r.calls, name)
-}
-
-func (r *recordingWorkflowView) CurrentPhase(ctx context.Context, sessionID string) string {
-	r.record("CurrentPhase")
-	return "phase-a"
-}
-
-func (r *recordingWorkflowView) ActivePhaseHasReviewLoop(ctx context.Context, sessionID string) bool {
-	r.record("ActivePhaseHasReviewLoop")
-	return false
-}
-
-func (r *recordingWorkflowView) AllowedAgents(ctx context.Context, sessionID string) []string {
-	r.record("AllowedAgents")
-	return []string{"coordinator"}
-}
-
-func (r *recordingWorkflowView) ActiveManifest(ctx context.Context, sessionID string) (ActiveWorkflowManifest, bool) {
-	r.record("ActiveManifest")
-	return ActiveWorkflowManifest{Rules: []string{"manifest-rules.yaml"}}, true
-}
-
-func (r *recordingWorkflowView) ScaffoldVarsForSession(ctx context.Context, sessionID string) (map[string]any, error) {
-	r.record("ScaffoldVarsForSession")
-	return map[string]any{"k": "v"}, nil
-}
-
-func (r *recordingWorkflowView) ActivePlan(ctx context.Context, sessionID string) (string, string, bool) {
-	r.record("ActivePlan")
-	return "plan-1", "plan body", true
-}
-
-func (r *recordingWorkflowView) GetActive(ctx context.Context, sessionID string) (*api.WorkflowRun, error) {
-	r.record("GetActive")
-	return r.activeRun, nil
+func (r *recordingWorkflowView) snapshot(context.Context, string) (WorkflowSnapshot, error) {
+	r.calls = append(r.calls, "snapshot")
+	state := WorkflowSnapshot{Phase: "phase-a", AllowedAgents: []string{"coordinator"},
+		ManifestRules: []string{"manifest-rules.yaml"}, BlueprintPath: "plan-1", PlanContent: "plan body", Vars: map[string]any{"k": "v"}}
+	if r.activeRun != nil {
+		state.RunID, state.WorkflowID, state.RunStatus = r.activeRun.ID, r.activeRun.WorkflowID, r.activeRun.Status
+	}
+	return state, nil
 }
 
 func TestBuildEvalContextUsesWorkflowView(t *testing.T) {
 	view := &recordingWorkflowView{}
-	deps := EngineDeps{Workflows: view}
+	deps := EngineDeps{Workflows: view.snapshot}
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
-	eval := BuildEvalContext(context.Background(), deps, sess, "read_file", map[string]any{"path": "x"})
+	eval, err := BuildEvalContext(context.Background(), deps, sess, "read_file", map[string]any{"path": "x"})
+	if err != nil {
+		t.Fatalf("build evaluation context: %v", err)
+	}
 	if eval.Phase != "phase-a" {
 		t.Fatalf("phase = %q want phase-a", eval.Phase)
 	}
@@ -72,19 +46,10 @@ func TestBuildEvalContextUsesWorkflowView(t *testing.T) {
 	if eval.Vars["k"] != "v" {
 		t.Fatalf("vars = %v", eval.Vars)
 	}
-	if len(view.calls) != 7 {
+	if len(view.calls) != 1 {
 		t.Fatalf("workflow view calls = %v", view.calls)
 	}
-	foundReviewLoop := false
-	for _, c := range view.calls {
-		if c == "ActivePhaseHasReviewLoop" {
-			foundReviewLoop = true
-			break
-		}
-	}
-	if !foundReviewLoop {
-		t.Fatalf("expected ActivePhaseHasReviewLoop in %v", view.calls)
-	}
+
 }
 
 func TestBuildEvalContextWiresActiveRunStatus(t *testing.T) {
@@ -92,9 +57,12 @@ func TestBuildEvalContextWiresActiveRunStatus(t *testing.T) {
 		ID: "run-1", WorkflowID: "plan", Status: api.WorkflowRunStatusRunning, CurrentPhase: "stub",
 	}
 	view := &recordingWorkflowView{activeRun: run}
-	deps := EngineDeps{Workflows: view}
+	deps := EngineDeps{Workflows: view.snapshot}
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec}
-	eval := BuildEvalContext(context.Background(), deps, sess, "workflow_advance", nil)
+	eval, err := BuildEvalContext(context.Background(), deps, sess, "workflow_advance", nil)
+	if err != nil {
+		t.Fatalf("build evaluation context: %v", err)
+	}
 	if eval.WorkflowID != "plan" || eval.RunStatus != api.WorkflowRunStatusRunning {
 		t.Fatalf("workflow = %q status = %q", eval.WorkflowID, eval.RunStatus)
 	}
@@ -102,7 +70,7 @@ func TestBuildEvalContextWiresActiveRunStatus(t *testing.T) {
 
 func TestBuildEvalContextUsesBoundCoordinatorTurnFrame(t *testing.T) {
 	view := &recordingWorkflowView{}
-	deps := EngineDeps{Workflows: view}
+	deps := EngineDeps{Workflows: view.snapshot}
 	sess := &api.Session{ID: "s1", WorkspacePath: "/project", Posture: api.SessionPostureSpec}
 	frame := &inject.CoordinatorTurnFrame{
 		WorkflowRevision: 41,
@@ -122,7 +90,10 @@ func TestBuildEvalContextUsesBoundCoordinatorTurnFrame(t *testing.T) {
 		},
 	}
 
-	eval := BuildEvalContext(WithCoordinatorTurnFrame(context.Background(), frame), deps, sess, "task", nil)
+	eval, err := BuildEvalContext(WithCoordinatorTurnFrame(context.Background(), frame), deps, sess, "task", nil)
+	if err != nil {
+		t.Fatalf("build evaluation context: %v", err)
+	}
 	if len(view.calls) != 0 {
 		t.Fatalf("frame-backed evaluation reloaded workflow state: %v", view.calls)
 	}
@@ -154,11 +125,14 @@ func TestBuildEvalContextUsesBoundCoordinatorTurnFrame(t *testing.T) {
 // declared workflow allowlist (the repoKnownEmpty fail-open).
 func TestBuildEvalContextEmptyAttachedRosterIsNotDeclaredFallback(t *testing.T) {
 	view := &recordingWorkflowView{}
-	deps := EngineDeps{Workflows: view}
+	deps := EngineDeps{Workflows: view.snapshot}
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureBuild}
 
 	ctx := WithTaskSpawnAllowlist(context.Background(), []string{})
-	eval := BuildEvalContext(ctx, deps, sess, "task", map[string]any{"agent_type": "implementer"})
+	eval, err := BuildEvalContext(ctx, deps, sess, "task", map[string]any{"agent_type": "implementer"})
+	if err != nil {
+		t.Fatalf("build evaluation context: %v", err)
+	}
 	if eval.AllowedAgents == nil {
 		t.Fatal("attached empty roster must stay non-nil (no agents dispatchable)")
 	}

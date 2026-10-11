@@ -36,11 +36,11 @@ func TestRecordFindingPublishesFindingsSSE(t *testing.T) {
 		"summary": "peer-visible finding",
 		"ref":     "pkg/foo.go",
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    sess1.ID,
-		Agent:        "implementer",
-		WorkerJobID:  "job-a",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: sess1.ID,
+			Agent:       "implementer",
+			WorkerJobID: "job-a"},
 	})
 	testutil.FailErr(t, "record_finding", err)
 

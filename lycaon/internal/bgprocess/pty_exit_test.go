@@ -21,7 +21,7 @@ func TestPTYCompletionWaitsForTerminalOutput(t *testing.T) {
 			done: make(chan struct{}), running: true, silent: true,
 			screen: newPTYScreen(80, 24),
 		}
-		go reg.waitPTY(t.Context(), proc)
+		go reg.Terminal.waitPTY(t.Context(), proc)
 		synctest.Wait()
 		select {
 		case <-proc.done:

@@ -37,7 +37,7 @@ func TestDisposeSessionEndsJobsOutsideTheLeadersGroup(t *testing.T) {
 	job := waitForJobPID(t, pidFile)
 
 	started := time.Now()
-	testutil.FailErr(t, "dispose session processes", reg.DisposeSession(context.Background(), "sess-1"))
+	testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(context.Background(), "sess-1"))
 	if elapsed := time.Since(started); elapsed > exec.TerminateGrace+5*time.Second {
 		t.Fatalf("dispose took %v", elapsed)
 	}
@@ -90,5 +90,5 @@ func TestDisposeSessionWaitsForBoundedDetachedOutputDrain(t *testing.T) {
 	_ = waitForJobPID(t, pidFile)
 	ctx, cancel := context.WithTimeout(context.Background(), exec.TerminateGrace+exec.PipelineWaitDelay+5*time.Second)
 	defer cancel()
-	testutil.FailErr(t, "dispose detached output drain", reg.DisposeSession(ctx, "sess-1"))
+	testutil.FailErr(t, "dispose detached output drain", reg.Lifecycle.DisposeSession(ctx, "sess-1"))
 }

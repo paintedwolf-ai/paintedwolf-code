@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 )
 
 type SourceSnapshotMode uint8
@@ -20,12 +21,12 @@ const (
 // Document carries its pinned revision; Source carries the observed disk identity.
 type SourceSnapshot struct {
 	Document *Document
-	Source   *project.SourceReadResult
+	Source   *projectsource.SourceReadResult
 }
 
 // ResolveSourceSnapshot serves the pinned document when it holds unsaved edits or
 // the mode admits it for editing, and the disk observation otherwise.
-func (s *Service) ResolveSourceSnapshot(ctx context.Context, p *project.Project, req project.SourceReadRequest, mode SourceSnapshotMode) (*SourceSnapshot, error) {
+func (s *Service) ResolveSourceSnapshot(ctx context.Context, p *project.Project, req projectsource.SourceReadRequest, mode SourceSnapshotMode) (*SourceSnapshot, error) {
 	if mode == AdmitEditable {
 		d, err := s.Open(ctx, p, req.Path, req.RootID, req.DecodeAs, "", nil)
 		if err != nil {
@@ -53,7 +54,7 @@ func (s *Service) ResolveSourceSnapshot(ctx context.Context, p *project.Project,
 			}
 		}
 	}
-	observation, err := project.ObserveProjectSource(p, req)
+	observation, err := projectsource.ObserveProjectSource(p, req)
 	if err != nil {
 		return nil, err
 	}

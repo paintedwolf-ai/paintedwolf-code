@@ -16,7 +16,7 @@ import (
 
 func TestRunBestSelectsScalibrForSCA(t *testing.T) {
 	root := configlayout.FindModuleRoot()
-	reg, err := registry.New(registry.Options{ModuleRoot: root})
+	reg, err := registry.New(t.Context(), registry.Options{ModuleRoot: root})
 	testutil.FailErr(t, "registry.New failed", err)
 	candidates := reg.List(api.ScanCategorySCA)
 	if len(candidates) == 0 {
@@ -28,7 +28,7 @@ func TestRunBestSelectsScalibrForSCA(t *testing.T) {
 }
 
 func TestLibraryScannerUsesManagedWorker(t *testing.T) {
-	reg, err := registry.New(registry.Options{ModuleRoot: configlayout.FindModuleRoot()})
+	reg, err := registry.New(t.Context(), registry.Options{ModuleRoot: configlayout.FindModuleRoot()})
 	testutil.FailErr(t, "registry.New", err)
 	scanner, err := reg.Get("lycaon-sca")
 	testutil.FailErr(t, "get SCA scanner", err)
@@ -39,7 +39,7 @@ func TestLibraryScannerUsesManagedWorker(t *testing.T) {
 
 func TestRunBestSelectsOpenGrepForSAST(t *testing.T) {
 	root := configlayout.FindModuleRoot()
-	reg, err := registry.New(registry.Options{ModuleRoot: root})
+	reg, err := registry.New(t.Context(), registry.Options{ModuleRoot: root})
 	testutil.FailErr(t, "registry.New failed", err)
 	candidates := reg.List(api.ScanCategorySAST)
 	found := false
@@ -55,7 +55,7 @@ func TestRunBestSelectsOpenGrepForSAST(t *testing.T) {
 
 func TestRunBestRequiresProjectDir(t *testing.T) {
 	root := configlayout.FindModuleRoot()
-	reg, err := registry.New(registry.Options{ModuleRoot: root})
+	reg, err := registry.New(t.Context(), registry.Options{ModuleRoot: root})
 	testutil.FailErr(t, "registry.New failed", err)
 	_, err = reg.RunBest(context.Background(), []api.ScanCategory{api.ScanCategorySecret}, scan.ScanRequest{})
 	if err == nil {
@@ -66,7 +66,7 @@ func TestRunBestRequiresProjectDir(t *testing.T) {
 func TestReloadMakesDeviceSlotReplacementImmediatelyRunnable(t *testing.T) {
 	root := configlayout.FindModuleRoot()
 	home := t.TempDir()
-	reg, err := registry.New(registry.Options{ModuleRoot: root, HomeDir: home})
+	reg, err := registry.New(t.Context(), registry.Options{ModuleRoot: root, HomeDir: home})
 	testutil.FailErr(t, "registry.New", err)
 	store := scancatalog.NewCatalogStore(root, home, nil)
 
@@ -101,7 +101,7 @@ func TestListForProjectAppliesSlotOverrideWithoutChangingDeviceSelection(t *test
 	err = store.SetProjectScannerEnabled(t.Context(), projectDir, "custom-sca", true)
 	testutil.FailErr(t, "SetProjectScannerEnabled", err)
 
-	reg, err := registry.New(registry.Options{
+	reg, err := registry.New(t.Context(), registry.Options{
 		ModuleRoot: root,
 		HomeDir:    home,
 		ProjectTierApplies: func(context.Context, string) bool {

@@ -8,11 +8,11 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/editorconfig"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleGetProjectSourceEditorConfig(w http.ResponseWriter, r *http.Request) {
+func (s *Workspace) HandleGetProjectSourceEditorConfig(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -27,7 +27,7 @@ func (s *Handler) HandleGetProjectSourceEditorConfig(w http.ResponseWriter, r *h
 		s.responses.InvalidQuery(w, errors.New("root_id is required"))
 		return
 	}
-	path, props, err := project.ResolveSourceEditorConfig(p, query.Get("path"), rootID)
+	path, props, err := projectsource.ResolveSourceEditorConfig(p, query.Get("path"), rootID)
 	if err != nil {
 		s.writeSourceReadError(w, r, err)
 		return

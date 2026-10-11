@@ -2,6 +2,7 @@ package httpaction
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -74,11 +75,14 @@ func TestHeldValueLeavesOnlyWhileItsChatIsUnlocked(t *testing.T) {
 			testutil.FailErr(t, "resolve request", err)
 			resolved.InChatForTest("chat-1", unlocks)
 			ctx := secretcap.WithResolution(t.Context(), resolved)
-			_, runErr := registry.Run(ctx, "http_request", resolved.Arguments, tools.ToolContext{CanonicalArgs: args, Secrets: resolved})
+			_, runErr := registry.Run(ctx, "http_request", resolved.Arguments, tools.ToolContext{
+				Effects: tools.InvocationEffects{CanonicalArgs: args,
+					Secrets: resolved},
+			})
 			resolved.Finish(t.Context())
 			if !unlocked {
-				reject := tools.AsToolReject(runErr)
-				if reject == nil || reject.Code != tools.OutboundSecretScreenFailedCode || reject.Data["fault_stage"] != secretmatch.FaultStageVaultLocked {
+				reject := toolrejection.AsToolReject(runErr)
+				if reject == nil || reject.Code != toolrejection.OutboundSecretScreenFailedCode || reject.Data["fault_stage"] != secretmatch.FaultStageVaultLocked {
 					t.Fatalf("locked release result = %v", runErr)
 				}
 				if received.Load() != 0 {

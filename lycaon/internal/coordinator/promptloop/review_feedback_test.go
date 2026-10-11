@@ -22,9 +22,15 @@ func TestReviewFeedbackCanReadReviseAndVerifyBeforeParking(t *testing.T) {
 		}))
 	}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Tools:                 reg,
-		AppendMessages:        func(context.Context, string, ...api.Message) error { return nil },
-		HumanApprovalAwaiting: func(context.Context, string) bool { return true },
+		Context: ContextDeps{
+			Tools: reg,
+		},
+		Projection: ProjectionDeps{
+			AppendMessages: func(context.Context, string, ...api.Message) error { return nil },
+		},
+		Control: ControlDeps{
+			HumanApprovalAwaiting: func(context.Context, string) bool { return true },
+		},
 	})
 	sess := &api.Session{ID: "review-feedback", Posture: api.SessionPostureSpec}
 	var history []api.Message
@@ -32,7 +38,7 @@ func TestReviewFeedbackCanReadReviseAndVerifyBeforeParking(t *testing.T) {
 		id := fmt.Sprintf("review-%d", i)
 		calls := []api.ToolCall{{ID: id + "-call", Name: tool, Args: map[string]any{"path": "blueprint.md", "step": id}}}
 		history = append(history, api.Message{ID: id, Role: api.MessageRoleAssistant, ToolCalls: calls})
-		next, _, _, _, _, parked, err := toolBatch{loop}.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "Revise the blueprint", id, "", nil)
+		next, _, _, _, _, parked, err := loop.Batch.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "Revise the blueprint", id, "", nil)
 		testutil.FailErr(t, "execute review feedback", err)
 		if parked {
 			t.Fatalf("existing approval stopped feedback after %s", tool)
@@ -67,10 +73,16 @@ func TestApprovalBoundaryAcrossSerialAndParallelBatches(t *testing.T) {
 						},
 					}))
 					loop := NewPromptLoopForTest(PromptLoopDeps{
-						Tools:                 reg,
-						AppendMessages:        func(context.Context, string, ...api.Message) error { return nil },
-						HumanApprovalAwaiting: func(context.Context, string) bool { return awaiting.Load() },
-						HostObligationHeld:    func(context.Context, string) bool { return hostHeld },
+						Context: ContextDeps{
+							Tools: reg,
+						},
+						Projection: ProjectionDeps{
+							AppendMessages: func(context.Context, string, ...api.Message) error { return nil },
+						},
+						Control: ControlDeps{
+							HumanApprovalAwaiting: func(context.Context, string) bool { return awaiting.Load() },
+							HostObligationHeld:    func(context.Context, string) bool { return hostHeld },
+						},
 					})
 					calls := []api.ToolCall{
 						{ID: "one", Name: "observe", Args: map[string]any{"path": "first.md"}},
@@ -78,7 +90,7 @@ func TestApprovalBoundaryAcrossSerialAndParallelBatches(t *testing.T) {
 					}
 					sess := &api.Session{ID: "boundary"}
 					history := []api.Message{{ID: "assistant", Role: api.MessageRoleAssistant, ToolCalls: calls}}
-					_, _, _, _, _, parked, err := toolBatch{loop}.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "feedback", "assistant", "", nil)
+					_, _, _, _, _, parked, err := loop.Batch.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "feedback", "assistant", "", nil)
 					testutil.FailErr(t, "execute approval boundary", err)
 					wantPark := !initiallyAwaiting || hostHeld
 					wantCalls := int32(2)

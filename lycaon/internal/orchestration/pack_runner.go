@@ -268,7 +268,7 @@ func (o *OrchestratorImpl) dispatchPackLeg(
 		return err
 	}
 	if o.workflows != nil && strings.TrimSpace(workflowRunID) != "" {
-		if err := o.workflows.AssertRunnable(ctx, workflowRunID); err != nil {
+		if err := o.workflows.Policy.AssertRunnable(ctx, workflowRunID); err != nil {
 			return err
 		}
 	}

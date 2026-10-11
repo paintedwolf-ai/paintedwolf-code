@@ -71,12 +71,12 @@ func TestUserDecisionRejectPausesRun(t *testing.T) {
 			},
 		}},
 	})
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"decision-flow@1.0.0": manifest})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"decision-flow@1.0.0": manifest})
 	ctx := workflowCaller(t, mgr)
 	run, err := startRun(ctx, mgr, "sess-1", "decision-flow", "1.0.0")
 	testutil.FailErr(t, "startRun failed", err)
-	run, err = mgr.ResolveUserDecision(ctx, "sess-1", run.ID, "confirm", []string{"no"}, "")
-	testutil.FailErr(t, "mgr.ResolveUserDecision failed", err)
+	run, err = mgr.Feedback.ResolveUserDecision(ctx, "sess-1", run.ID, "confirm", []string{"no"}, "")
+	testutil.FailErr(t, "mgr.Feedback.ResolveUserDecision failed", err)
 	if run.Status != api.WorkflowRunStatusPaused {
 		t.Fatalf("status = %q want paused", run.Status)
 	}
@@ -99,16 +99,16 @@ func TestUserFeedbackFromChat(t *testing.T) {
 			},
 		}},
 	})
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"feedback-flow@1.0.0": manifest})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"feedback-flow@1.0.0": manifest})
 	ctx := context.Background()
 	run, err := startRun(ctx, mgr, "sess-1", "feedback-flow", "1.0.0")
 	testutil.FailErr(t, "startRun failed", err)
-	if err := mgr.TryResolveUserFeedback(ctx, "sess-1", "", testutil.HostOwner().ID, "GraphQL"); err != nil {
-		testutil.FailErr(t, "mgr.TryResolveUserFeedback failed", err)
+	if err := mgr.Feedback.TryResolveUserFeedback(ctx, "sess-1", "", testutil.HostOwner().ID, "GraphQL"); err != nil {
+		testutil.FailErr(t, "mgr.Feedback.TryResolveUserFeedback failed", err)
 	}
-	vars, err := mgr.Store.GetScaffoldVars(ctx, run.ID)
-	testutil.FailErr(t, "mgr.Store.GetScaffoldVars failed", err)
-	eval := RegistryGateEvaluator{Registry: reg, Sessions: mgr.Sessions}
+	vars, err := mgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
+	testutil.FailErr(t, "mgr.Store.Runs.GetScaffoldVars failed", err)
+	eval := RegistryGateEvaluator{Registry: reg, Sessions: mgr.Policy.Sessions}
 	ok, _, err := eval.PhaseGateMet(ctx, manifest, run, vars)
 	if err != nil || !ok {
 		t.Fatalf("feedback gate = %v err=%v", ok, err)
@@ -132,17 +132,17 @@ func TestAdvanceBlockedUntilTopologyStageComplete(t *testing.T) {
 			ID: "closeout",
 		}},
 	})
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"pipeline-gate@1.0.0": manifest})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"pipeline-gate@1.0.0": manifest})
 	ctx := context.Background()
 	run, err := startRun(ctx, mgr, "sess-1", "pipeline-gate", "1.0.0")
 	testutil.FailErr(t, "startRun failed", err)
-	if _, err := mgr.Advance(ctx, run.ID); err == nil {
+	if _, err := mgr.Phases.Advance(ctx, run.ID); err == nil {
 		t.Fatal("expected gate block before topology stage complete")
 	}
-	if err := mgr.MarkTopologyStageComplete(ctx, run.ID, "implement", "", ""); err != nil {
-		testutil.FailErr(t, "mgr.MarkTopologyStageComplete failed", err)
+	if err := mgr.Phases.MarkTopologyStageComplete(ctx, run.ID, "implement", "", ""); err != nil {
+		testutil.FailErr(t, "mgr.Phases.MarkTopologyStageComplete failed", err)
 	}
-	run, err = mgr.Advance(ctx, run.ID)
+	run, err = mgr.Phases.Advance(ctx, run.ID)
 	if err != nil {
 		t.Fatalf("advance after stage complete: %v", err)
 	}

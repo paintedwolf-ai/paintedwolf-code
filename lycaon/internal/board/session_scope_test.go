@@ -7,12 +7,14 @@ import (
 )
 
 func TestCoordinatorBoardSessionID(t *testing.T) {
-	if got := CoordinatorBoardSessionID(tools.ToolContext{SessionID: "coord"}); got != "coord" {
+	if got := CoordinatorBoardSessionID(tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "coord"},
+	}); got != "coord" {
 		t.Fatalf("coordinator = %q", got)
 	}
 	if got := CoordinatorBoardSessionID(tools.ToolContext{
-		SessionID:        "child",
-		HandoffSessionID: "coord",
+		Identity: tools.InvocationIdentity{SessionID: "child",
+			HandoffSessionID: "coord"},
 	}); got != "coord" {
 		t.Fatalf("worker child = %q, want coord", got)
 	}

@@ -39,10 +39,15 @@ func assertCheckpointLifecycleRouting(t *testing.T, transport string, status api
 		t.Cleanup(func() { testutil.FailErr(t, "close outbox", outbox.Close()) })
 	}
 	publisher := &events.Publisher{Hub: hub}
-	manager := hitl.NewManager(store, publisher, authzcontext.SQLRecorder(database))
+	manager := hitl.NewCheckpoints(store, publisher, authzcontext.SQLRecorder(database))
 	response, err := requestExplicitApprovalCheckpoint(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, hitl.CheckpointRequest{
 		SessionID: sid, Kind: api.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "printf fixture"}},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "printf fixture"},
+},
+},
 	})
 	testutil.FailErr(t, "request checkpoint", err)
 	stored, err := store.Get(testdbseed.OwnerCaller(t, t.Context(), database), response.CheckpointID)
@@ -54,7 +59,7 @@ func assertCheckpointLifecycleRouting(t *testing.T, transport string, status api
 		t.Fatal("checkpoint payload duplicates project ownership")
 	}
 	assertCheckpointEvent(t, stream, response.CheckpointID, api.CheckpointStatusPending)
-	manager = hitl.NewManager(store, publisher, authzcontext.SQLRecorder(database))
+	manager = hitl.NewCheckpoints(store, publisher, authzcontext.SQLRecorder(database))
 	testutil.FailErr(t, "restore pending checkpoint", manager.RestorePending(testdbseed.OwnerCaller(t, t.Context(), database)))
 	if status == api.CheckpointStatusApproved {
 		approveCurrentOption(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, sid, response.CheckpointID)
@@ -73,22 +78,26 @@ func TestCheckpointRejectsContradictoryOwnership(t *testing.T) {
 			insertSession(t, database, sid)
 			req := hitl.CheckpointRequest{
 				SessionID: sid, Kind: api.CheckpointKindToolApproval,
-				ProposedAction: &hitl.ProposedAction{Tool: "command"},
+				ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+},
 			}
 			switch conflict {
 			case "request project":
 				req.ProjectID = "another-project"
 			case "action project":
-				req.ProposedAction.ProjectID = "another-project"
+				req.ProposedAction.Scope.ProjectID = "another-project"
 			case "action session":
-				req.ProposedAction.SessionID = "another-session"
+				req.ProposedAction.Scope.SessionID = "another-session"
 			case "missing session":
 				req.SessionID = "missing-session"
 			}
 			if _, err := requestExplicitApprovalCheckpoint(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, req); err == nil {
 				t.Fatal("checkpoint accepted contradictory ownership")
 			}
-			pending, err := manager.Store().ListPending(testdbseed.OwnerCaller(t, t.Context(), database))
+			pending, err := manager.Store.ListPending(testdbseed.OwnerCaller(t, t.Context(), database))
 			testutil.FailErr(t, "read pending", err)
 			if len(pending) != 0 {
 				t.Fatalf("rejected request persisted checkpoints: %+v", pending)
@@ -103,7 +112,7 @@ func TestCheckpointDatabaseEnforcesSessionProject(t *testing.T) {
 	testdbseed.InsertSession(t, database, "other-session", "other-project")
 	for _, projectID := range []string{"", "other-project", "missing-project"} {
 		t.Run("insert-"+projectID, func(t *testing.T) {
-			err := manager.Store().Insert(testdbseed.OwnerCaller(t, t.Context(), database), hitl.StoredCheckpoint{
+			err := manager.Store.Insert(testdbseed.OwnerCaller(t, t.Context(), database), hitl.StoredCheckpoint{
 				ID: "invalid-" + projectID, SessionID: sid, ProjectID: projectID,
 				Kind: api.CheckpointKindToolApproval, Status: hitl.DecisionStatusPending, CreatedAt: time.Now().UTC(),
 			})
@@ -113,7 +122,11 @@ func TestCheckpointDatabaseEnforcesSessionProject(t *testing.T) {
 		})
 	}
 	response, err := requestExplicitApprovalCheckpoint(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, hitl.CheckpointRequest{
-		SessionID: sid, Kind: api.CheckpointKindToolApproval, ProposedAction: &hitl.ProposedAction{Tool: "command"},
+		SessionID: sid, Kind: api.CheckpointKindToolApproval, ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+},
 	})
 	testutil.FailErr(t, "create owned checkpoint", err)
 	for _, query := range []string{

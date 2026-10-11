@@ -27,8 +27,8 @@ var purityClaims = []purityClaim{
 	{"(*DefaultService).Validate", "internal/parse", "DefaultService", "Validate"},
 	{"(*Runner).ValidateStages", "internal/hostcmd", "Runner", "ValidateStages"},
 	{"ParseOutput", "internal/scan", "", "ParseOutput"},
-	{"(*Manager).Emit", "internal/session", "Manager", "Emit"},
-	{"(*Manager).EmitEager", "internal/session", "Manager", "EmitEager"},
+	{"(*guidancedelivery.Service).Emit", "internal/session/guidancedelivery", "Service", "Emit"},
+	{"(*guidancedelivery.Service).EmitEager", "internal/session/guidancedelivery", "Service", "EmitEager"},
 }
 
 // purityForbiddenImports contains unambiguous I/O boundaries.

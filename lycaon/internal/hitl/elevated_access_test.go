@@ -48,14 +48,31 @@ func TestElevatedQuietClassification(t *testing.T) {
 }
 
 func TestExactActionRetainsEveryElevatedBoundary(t *testing.T) {
-	action := ProposedAction{Tool: "command", SessionID: "chat", Args: map[string]any{"command": "run"},
-		Contained: Contained{DirectIP: true, HostExecution: true, ProcessControl: true, SocketCount: 1}}
+	action := ProposedAction{
+Invocation: ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "run"},
+},
+Scope: ActionScope{
+SessionID: "chat",
+},
+Execution: ActionExecution{
+Contained: Contained{DirectIP: true, HostExecution: true, ProcessControl: true, SocketCount: 1},
+},
+}
 	grant := ExactActionOfferAtScope(action, ApprovalGrantScopeChat).Grant
 	want := []api.ElevatedAccessEffect{api.ElevatedAccessEffectDirectNetwork, api.ElevatedAccessEffectHostExecution, api.ElevatedAccessEffectLocalService, api.ElevatedAccessEffectProcessControl}
 	if got := ElevatedGrantEffects(grant); !slices.Equal(got, want) {
 		t.Fatalf("exact action lost authority: %v", got)
 	}
-	ordinary := ExactActionOfferAtScope(ProposedAction{Tool: "read", SessionID: "chat"}, ApprovalGrantScopeChat).Grant
+	ordinary := ExactActionOfferAtScope(ProposedAction{
+Invocation: ActionInvocation{
+Tool: "read",
+},
+Scope: ActionScope{
+SessionID: "chat",
+},
+}, ApprovalGrantScopeChat).Grant
 	if len(ordinary.ElevatedEffects) != 0 {
 		t.Fatal("ordinary exact action classified as elevated")
 	}

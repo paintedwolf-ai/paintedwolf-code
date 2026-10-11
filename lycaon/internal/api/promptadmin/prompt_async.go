@@ -3,12 +3,15 @@ package promptadmin
 import (
 	"context"
 	"errors"
+
 	"github.com/lycaon/lycaon/internal/httpclient"
 	"github.com/lycaon/lycaon/internal/noticeerr"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionexecution "github.com/lycaon/lycaon/internal/session/execution"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/submissions"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -64,14 +67,14 @@ func shouldPublishPromptHostError(err error) bool {
 	}
 	// Stopped and active submissions are not host errors.
 	return !errors.Is(err, lifecycle.ErrStopping) &&
-		!errors.Is(err, session.ErrPromptSubmissionInFlight)
+		!errors.Is(err, submissions.ErrInFlight)
 }
 
 // Compile-time check for the host-turn failure callback.
-var _ session.TurnFailureSink = (*Handler)(nil).PublishTurnFailure
+var _ sessionexecution.TurnFailureSink = (*Execution)(nil).PublishTurnFailure
 
-func (s *Handler) PublishTurnFailure(ctx context.Context, sessionID string, err error) {
-	err = session.UnreportedTurnFailure(err)
+func (s *Execution) PublishTurnFailure(ctx context.Context, sessionID string, err error) {
+	err = sessionexecution.UnreportedTurnFailure(err)
 	if !shouldPublishPromptHostError(err) {
 		return
 	}
@@ -109,25 +112,25 @@ func sessionMessagesHaveTurnProgress(msgs []wire.Message) bool {
 	return false
 }
 
-func (s *Handler) ResumePromptSubmission(parent context.Context, sessionID string, row *store.PromptSubmission) {
+func (s *Execution) ResumePromptSubmission(parent context.Context, sessionID string, row *store.PromptSubmission) {
 	if row == nil || row.Status != store.PromptSubmissionQueued {
 		return
 	}
 	s.runPromptAsync(parent, sessionID, row.ID)
 }
 
-func (s *Handler) runPromptAsync(parent context.Context, sessionID, submissionID string) {
+func (s *Execution) runPromptAsync(parent context.Context, sessionID, submissionID string) {
 	s.background.Go(parent, func(ctx context.Context) {
 		perf := observability.StartPerformanceOperation("prompt.run", map[string]string{
 			"session_id": sessionID, "operation_id": submissionID,
 		})
 		outcome := "error"
 		defer func() { perf.End(outcome) }()
-		retentions, retentionErr := s.capturePromptAttachmentRetentions(ctx, submissionID)
+		retentions, retentionErr := s.Attachments.capturePromptAttachmentRetentions(ctx, submissionID)
 		perf.Mark("retain_attachments")
 		var err error
 		if retentionErr == nil {
-			_, err = s.Sessions.RunPromptSubmission(ctx, submissionID)
+			_, err = s.Sessions.Submissions.RunPromptSubmission(ctx, submissionID)
 		} else {
 			err = retentionErr
 		}
@@ -138,10 +141,10 @@ func (s *Handler) runPromptAsync(parent context.Context, sessionID, submissionID
 				s.responses.Logger.WarnContext(cleanupCtx, "capture prompt attachment retentions", "operation_id", submissionID, "error", retentionErr)
 			}
 			// A receipt left queued would pend forever.
-			if abandonErr := s.Sessions.AbandonPromptSubmission(cleanupCtx, submissionID, retentionErr); abandonErr != nil && s.responses.Logger != nil {
+			if abandonErr := s.Sessions.Submissions.AbandonPromptSubmission(cleanupCtx, submissionID, retentionErr); abandonErr != nil && s.responses.Logger != nil {
 				s.responses.Logger.WarnContext(cleanupCtx, "abandon unrunnable prompt submission", "operation_id", submissionID, "error", abandonErr)
 			}
-		} else if cleanupErr := s.reconcilePromptAttachmentRetentions(cleanupCtx, retentions); cleanupErr != nil && s.responses.Logger != nil {
+		} else if cleanupErr := s.Attachments.reconcilePromptAttachmentRetentions(cleanupCtx, retentions); cleanupErr != nil && s.responses.Logger != nil {
 			s.responses.Logger.WarnContext(cleanupCtx, "reconcile prompt attachment retentions", "operation_id", submissionID, "error", cleanupErr)
 		}
 		if err != nil {
@@ -156,8 +159,8 @@ func (s *Handler) runPromptAsync(parent context.Context, sessionID, submissionID
 }
 
 // RecoverPromptSubmissions requeues pending receipts in submission order.
-func (s *Handler) RecoverPromptSubmissions(ctx context.Context) error {
-	ids, err := s.Sessions.RecoverPromptSubmissions(ctx)
+func (s *Execution) RecoverPromptSubmissions(ctx context.Context) error {
+	ids, err := s.Sessions.Submissions.RecoverPromptSubmissions(ctx)
 	if err != nil {
 		return err
 	}
@@ -165,11 +168,11 @@ func (s *Handler) RecoverPromptSubmissions(ctx context.Context) error {
 	seen := make(map[string]struct{}, len(ids))
 	retentionsBySession := make(map[string][]promptAttachmentRetentionSet)
 	for _, id := range ids {
-		row, getErr := s.Sessions.GetPromptSubmission(ctx, id)
+		row, getErr := s.Sessions.Submissions.GetPromptSubmission(ctx, id)
 		if getErr != nil {
 			return getErr
 		}
-		retentions, retentionErr := s.capturePromptAttachmentRetentions(ctx, id)
+		retentions, retentionErr := s.Attachments.capturePromptAttachmentRetentions(ctx, id)
 		if retentionErr != nil {
 			return retentionErr
 		}
@@ -182,12 +185,12 @@ func (s *Handler) RecoverPromptSubmissions(ctx context.Context) error {
 	for _, sessionID := range drainSessions {
 		retentionSets := retentionsBySession[sessionID]
 		s.background.Go(ctx, func(drainCtx context.Context) {
-			if err := s.Sessions.DrainPromptSubmissions(drainCtx, sessionID); err != nil {
+			if err := s.Sessions.Submissions.DrainPromptSubmissions(drainCtx, sessionID); err != nil {
 				s.PublishTurnFailure(drainCtx, sessionID, err)
 			}
 			cleanupCtx := context.WithoutCancel(drainCtx)
 			for _, retentions := range retentionSets {
-				if err := s.reconcilePromptAttachmentRetentions(cleanupCtx, retentions); err != nil && s.responses.Logger != nil {
+				if err := s.Attachments.reconcilePromptAttachmentRetentions(cleanupCtx, retentions); err != nil && s.responses.Logger != nil {
 					s.responses.Logger.WarnContext(cleanupCtx, "reconcile recovered prompt attachments", "operation_id", retentions.operationID, "error", err)
 				}
 			}

@@ -32,7 +32,10 @@ func TestSkillDiscoveryOutageToExactRead(t *testing.T) {
 				},
 			}
 			out := &tools.ToolInvocationOut{}
-			tctx := tools.ToolContext{SessionID: "s", Out: out}
+			tctx := tools.ToolContext{
+				Identity: tools.InvocationIdentity{SessionID: "s"},
+				Effects:  tools.InvocationEffects{Out: out},
+			}
 			args := map[string]any{"need": "perform the procedure"}
 			count := 0
 			for {
@@ -98,7 +101,9 @@ func TestSkillHealthyRankingHasNoDiscovery(t *testing.T) {
 				},
 			}
 			out := &tools.ToolInvocationOut{}
-			raw, err := tool.Run(t.Context(), map[string]any{"need": "do the work"}, tools.ToolContext{Out: out})
+			raw, err := tool.Run(t.Context(), map[string]any{"need": "do the work"}, tools.ToolContext{
+				Effects: tools.InvocationEffects{Out: out},
+			})
 			if score == 0 {
 				if err == nil || raw != "" || out.Skill != nil {
 					t.Fatalf("no match output=%q error=%v", raw, err)

@@ -13,7 +13,7 @@ import (
 
 // Seed shared text identities with the ledger's recorded authorship.
 func (s *Service) initialAuthorship(ctx context.Context, d *Document, client uint32) ([]sourceledger.TextContribution, error) {
-	prior, err := s.ledger.QueryAttribution(ctx, d.ProjectID, d.BranchID, d.RootID, d.Path)
+	prior, err := s.history.QueryAttribution(ctx, d.ProjectID, d.BranchID, d.RootID, d.Path)
 	if err != nil || prior.HeadSHA256 != d.BaseSHA256 || d.Draft != d.BaseContent {
 		return nil, err
 	}

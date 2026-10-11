@@ -3,6 +3,7 @@ package reporting
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"unicode/utf8"
 
@@ -27,7 +28,7 @@ type FindingsScopeKey func(ctx context.Context, sessionID string) string
 
 func FindingsHandler(gates RecordFindingGates, store findings.Store, scopeKey FindingsScopeKey) tools.ToolHandler {
 	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		rootSession := strings.TrimSpace(scopeKey(ctx, tctx.SessionID))
+		rootSession := strings.TrimSpace(scopeKey(ctx, tctx.Identity.SessionID))
 		if rootSession == "" {
 			return "", fmt.Errorf("session required")
 		}
@@ -38,23 +39,23 @@ func FindingsHandler(gates RecordFindingGates, store findings.Store, scopeKey Fi
 		}
 		body, _ := args["body"].(string)
 		if utf8.RuneCountInString(summary) > findings.SummaryMaxChars {
-			return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "summary", "reason": "summary_exceeds_320_characters", "maximum": findings.SummaryMaxChars, "actual": utf8.RuneCountInString(summary), "unit": "characters"}}
+			return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "summary", "reason": "summary_exceeds_320_characters", "maximum": findings.SummaryMaxChars, "actual": utf8.RuneCountInString(summary), "unit": "characters"}}
 		}
 		if len(body) > findings.BodyMaxBytes {
-			return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "body", "reason": "body_exceeds_8192_bytes", "maximum": findings.BodyMaxBytes, "actual": len(body), "unit": "bytes"}}
+			return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "body", "reason": "body_exceeds_8192_bytes", "maximum": findings.BodyMaxBytes, "actual": len(body), "unit": "bytes"}}
 		}
 		ref, _ := args["ref"].(string)
 		ref = strings.TrimSpace(ref)
 		if len(ref) > 512 {
-			return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "ref", "reason": "ref_exceeds_512_bytes", "maximum": 512, "unit": "bytes"}}
+			return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "ref", "reason": "ref_exceeds_512_bytes", "maximum": 512, "unit": "bytes"}}
 		}
 		if ref == "" {
-			return "", &tools.ToolReject{Code: "FINDING_UNGROUNDED", Data: map[string]any{"reason": "reference_required"}}
+			return "", &toolrejection.ToolReject{Code: "FINDING_UNGROUNDED", Data: map[string]any{"reason": "reference_required"}}
 		}
 
-		agent := strings.TrimSpace(tctx.WorkerJobID)
+		agent := strings.TrimSpace(tctx.Identity.WorkerJobID)
 		if agent == "" {
-			agent = strings.TrimSpace(tctx.Agent)
+			agent = strings.TrimSpace(tctx.Identity.Agent)
 		}
 		if agent == "" {
 			agent = findingAgentCoordinator

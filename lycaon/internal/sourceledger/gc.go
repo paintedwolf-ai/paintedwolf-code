@@ -28,7 +28,7 @@ const (
 // reference checks against ledger writes without acquiring recordMu.
 
 // StorageUsage reports revision-content retention.
-func (s *Store) StorageUsage(ctx context.Context) (storageusage.Usage, error) {
+func (s *Retention) StorageUsage(ctx context.Context) (storageusage.Usage, error) {
 	used, err := s.queries.SumSourceBlobObjectBytes(ctx)
 	if err != nil {
 		return storageusage.Usage{}, err
@@ -42,7 +42,7 @@ func (s *Store) StorageUsage(ctx context.Context) (storageusage.Usage, error) {
 
 // MaintainBlobs runs one bounded pass: one orphan batch and one reclaim batch.
 // Inventory completion runs it so interactive work repairs a little each time.
-func (s *Store) MaintainBlobs(ctx context.Context) error {
+func (s *Retention) MaintainBlobs(ctx context.Context) error {
 	if s == nil || s.sqlDB == nil {
 		return nil
 	}
@@ -55,7 +55,7 @@ func (s *Store) MaintainBlobs(ctx context.Context) error {
 
 // SweepBlobs scans shards and drains reclamation in batches. Releasing the
 // lease between batches lets captures proceed; the cursor preserves progress.
-func (s *Store) SweepBlobs(ctx context.Context) error {
+func (s *Retention) SweepBlobs(ctx context.Context) error {
 	if s == nil || s.sqlDB == nil {
 		return nil
 	}
@@ -90,7 +90,7 @@ func (s *Store) SweepBlobs(ctx context.Context) error {
 
 // RunBlobGC sweeps on interval until ctx ends, trying again after retry when
 // a sweep was deferred behind a capture.
-func (s *Store) RunBlobGC(ctx context.Context, interval, retry time.Duration) error {
+func (s *Retention) RunBlobGC(ctx context.Context, interval, retry time.Duration) error {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 	for {
@@ -130,7 +130,7 @@ func (s *Store) RunBlobGC(ctx context.Context, interval, retry time.Duration) er
 }
 
 // pruneOrphanBatch removes one batch of objects no row names.
-func (s *Store) pruneOrphanBatch(ctx context.Context) (sourceblob.OrphanPass, error) {
+func (s *Retention) pruneOrphanBatch(ctx context.Context) (sourceblob.OrphanPass, error) {
 	release, ok, err := s.objects.TryAcquireMaintenanceLease()
 	if err != nil {
 		return sourceblob.OrphanPass{}, err
@@ -157,7 +157,7 @@ func (s *Store) pruneOrphanBatch(ctx context.Context) (sourceblob.OrphanPass, er
 
 // reclaimBlobBatch dequeues referenced candidates and deletes unreferenced ones.
 // It returns the number settled.
-func (s *Store) reclaimBlobBatch(ctx context.Context) (int, error) {
+func (s *Retention) reclaimBlobBatch(ctx context.Context) (int, error) {
 	release, ok, err := s.objects.TryAcquireMaintenanceLease()
 	if err != nil {
 		return 0, err
@@ -195,7 +195,7 @@ func (s *Store) reclaimBlobBatch(ctx context.Context) (int, error) {
 
 // Remove bytes before committing the row deletion. A failed commit leaves
 // the candidate queued for another batch.
-func (s *Store) deleteUnreferencedBlob(ctx context.Context, q *db.Queries, object db.SourceBlobObjects) error {
+func (s *Retention) deleteUnreferencedBlob(ctx context.Context, q *db.Queries, object db.SourceBlobObjects) error {
 	if err := q.DeleteSourceBlobObject(ctx, object.Sha256); err != nil {
 		return err
 	}

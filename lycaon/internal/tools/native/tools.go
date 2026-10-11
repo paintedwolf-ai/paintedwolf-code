@@ -3,28 +3,19 @@ package native
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"os"
 	"strings"
-	"time"
 
-	"github.com/lycaon/lycaon/internal/bgprocess"
-	"github.com/lycaon/lycaon/internal/commandsurface"
-	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/hostcmd"
-	"github.com/lycaon/lycaon/internal/packageexec"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
-	terminaltool "github.com/lycaon/lycaon/internal/tools/native/terminal"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
-	"github.com/lycaon/lycaon/internal/tools/surveyjson"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const coordinatorProfileID = "coordinator"
@@ -197,18 +188,18 @@ func (t *EditTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 }
 
 func captureFileEdit(tctx tools.ToolContext, path, after string, before *string) {
-	if tctx.Out == nil || strings.TrimSpace(path) == "" {
+	if tctx.Effects.Out == nil || strings.TrimSpace(path) == "" {
 		return
 	}
 	// The recorded edit names each value this call resolved by its reference.
 	if before != nil {
-		referenced := tctx.Secrets.ReferenceEchoes(*before)
+		referenced := tctx.Effects.Secrets.ReferenceEchoes(*before)
 		before = &referenced
 	}
-	tctx.Out.FileEdit = &tools.FileEditCapture{
+	tctx.Effects.Out.FileEdit = &tools.FileEditCapture{
 		Path:   path,
 		Before: before,
-		After:  tctx.Secrets.ReferenceEchoes(after),
+		After:  tctx.Effects.Secrets.ReferenceEchoes(after),
 	}
 }
 
@@ -223,193 +214,23 @@ func verifyTextWriteBase(target fseffect.Target, fullPath, baseSHA256 string) er
 		} else if err != nil {
 			return fmt.Errorf("stat write base: %w", err)
 		}
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath, "text_base_changed": true}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath, "text_base_changed": true}}
 	}
 	currentFile, err := target.Open()
 	if err != nil {
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
 	}
 	defer func() { _ = currentFile.Close() }()
 	info, err := currentFile.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() > readcaps.MaxMutationBytes {
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
 	}
 	current, err := io.ReadAll(io.LimitReader(currentFile, readcaps.MaxMutationBytes+1))
 	if err != nil {
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath}}
 	}
 	if textfile.SHA256(current) != baseSHA256 {
-		return &tools.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath, "text_base_changed": true}}
+		return &toolrejection.ToolReject{Code: "TEXT_WRITE_CONFLICT", Data: map[string]any{"path": fullPath, "text_base_changed": true}}
 	}
 	return nil
-}
-
-// CommandTool executes commands within the invocation's confinement boundary.
-type CommandTool struct {
-	DeclaredCommand DeclaredVerifyCommand
-	Runner          *hostcmd.Runner
-	Boundary        *sandbox.Boundary
-	Background      *bgprocess.Registry
-	FailureTracker  *CommandFailureTracker
-	WriteRootGate   SandboxWriteRootGate
-}
-
-func (t *CommandTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-	tctx.VerificationCheck = verificationRequested(args)
-	if t.DeclaredCommand != nil {
-		declared := t.DeclaredCommand(tctx.ActiveRootPath())
-		tctx.VerificationCheck = tctx.VerificationCheck || (strings.TrimSpace(declared) != "" && commandsurface.SameCommandLine(canonicalCommandKey(tctx, args), declared))
-	}
-	if t.Runner == nil {
-		return "", fmt.Errorf("command runner not configured")
-	}
-	if t.FailureTracker == nil {
-		t.FailureTracker = NewCommandFailureTracker()
-	}
-	if toolkit.BoolArg(args, "background", false) {
-		return runCommandBackground(ctx, t.Background, t.Runner, t.Boundary, args, tctx, t.confined().sessionWriteRoots(ctx, tctx), "command")
-	}
-	res, outcome, err := t.confined().run(ctx, args, tctx)
-	if err != nil {
-		return "", err
-	}
-	if !outcome.Finished {
-		return encodeCommandRunning(tctx, outcome, commandWaitBudget(args))
-	}
-	stampBoundaryRefusal(tctx, res)
-	stampIndexWatch(tctx, outcome.IndexWatch)
-	commandVerdict, _ := verdictFor(res)
-	stampSourceRun(tctx, res, commandVerdict, outcome)
-	var payload any = res
-	if outcome.Terminal != nil {
-		caption := terminalCaptureCaption(args)
-		capture := terminaltool.CaptureFromScreen(ctx, t.Background, tctx, outcome.Terminal.Screen, caption)
-		payload = struct {
-			*hostcmd.Result
-			TerminalCapture terminaltool.SnapshotResult `json:"terminal_capture"`
-		}{Result: res, TerminalCapture: capture}
-	} else if outcome.SnapshotCapture != nil {
-		payload = struct {
-			*hostcmd.Result
-			SnapshotCapture *SnapshotCaptureResult `json:"snapshot_capture"`
-		}{Result: res, SnapshotCapture: outcome.SnapshotCapture}
-	}
-	out, err := surveyjson.Marshal(payload)
-	if err != nil {
-		return "", fmt.Errorf("command encode: %w", err)
-	}
-	return string(out), nil
-}
-
-// confined binds this tool's wiring to the shared confined-foreground path.
-func (t *CommandTool) confined() confinedForeground {
-	return confinedForeground{
-		Background:     t.Background,
-		FailureTracker: t.FailureTracker,
-		Runner:         t.Runner,
-		Boundary:       t.Boundary,
-		WriteRootGate:  t.WriteRootGate,
-		ToolName:       "command",
-	}
-}
-
-// boundaryNetworkMode returns the applied egress label.
-func boundaryNetworkMode(b confine.Boundary) string {
-	if !b.Applied {
-		return ""
-	}
-	return confine.NetworkLabel(b.Network)
-}
-
-// commandConfinementReport builds the process boundary report.
-func commandConfinementReport(
-	boundary confine.Boundary, posture string, local confine.LocalNetworkGrant,
-	packageExecution *packageexec.Execution,
-) confine.Report {
-	report := confine.ReportOf(boundary)
-	report.NetworkPosture = posture
-	report = report.WithLocalNetwork(local)
-	if packageExecution != nil {
-		report = report.WithRemotePackageExecution(packageExecution.AllowedHosts, packageExecution.ApprovedReadPaths)
-	}
-	return report
-}
-
-// commandResultFromOutcome builds a finished foreground result.
-func commandResultFromOutcome(
-	outcome commandRunOutcome,
-	local confine.LocalNetworkGrant,
-	packageExecution *packageexec.Execution,
-) *hostcmd.Result {
-	res := &hostcmd.Result{
-		Stages:            outcome.Snapshot.Stages,
-		ExitCode:          outcome.Snapshot.ExitCode,
-		Tail:              outcome.Snapshot.Tail,
-		OK:                outcome.Snapshot.ExitCode == 0 && outcome.Snapshot.Failure == nil && outcome.Snapshot.TerminationReason != bgprocess.TerminationStopped && outcome.Snapshot.TerminationReason != bgprocess.TerminationTimedOut,
-		ExecFailure:       outcome.Snapshot.Failure,
-		TerminationReason: string(outcome.Snapshot.TerminationReason),
-		Network:           outcome.Network,
-		Report:            commandConfinementReport(outcome.Boundary, outcome.NetworkPosture, local, packageExecution).WithSandboxRefusals(outcome.Refusals),
-		StdinProvided:     outcome.IO.StdinProvided,
-		StdinFrom:         outcome.IO.StdinFrom,
-		StdoutTo:          outcome.IO.StdoutTo,
-		StderrTo:          outcome.IO.StderrTo,
-		EnvKeys:           outcome.IO.EnvKeys,
-		Cwd:               outcome.Cwd,
-		LeftRunning:       outcome.LeftRunning,
-	}
-	res.Tail = enginepaths.RewriteWorkerBranchPaths(res.Tail) // compilers print the absolute cwd
-	if snap := outcome.Snapshot; len(snap.Output) > len(snap.Tail) || snap.OutputEvicted {
-		res.Truncated = true
-		res.OriginalTailBytes = len(snap.Output)
-		res.WireSpillPath = outcome.SpillPath
-	}
-	if tail, truncated, orig := CapOpaqueTail(res.Tail, 0); truncated {
-		res.Tail = tail
-		res.Truncated = true
-		res.OriginalTailBytes = max(res.OriginalTailBytes, orig)
-	}
-	return res
-}
-
-// captureProcessHandle records a live process on the invocation.
-func captureProcessHandle(tctx tools.ToolContext, handle string, running bool) {
-	if tctx.Out == nil || strings.TrimSpace(handle) == "" {
-		return
-	}
-	tctx.Out.Process = &api.ToolProcessHandle{Handle: handle, Running: running}
-}
-
-// encodeCommandRunning renders a foreground command promoted to a live handle,
-// with what the kernel has refused it so far.
-func encodeCommandRunning(tctx tools.ToolContext, outcome commandRunOutcome, budget time.Duration) (string, error) {
-	captureProcessHandle(tctx, outcome.Handle, true)
-	report := commandConfinementReport(
-		outcome.Boundary, outcome.NetworkPosture, tools.LocalNetworkGrantOf(tctx), tctx.PackageExecution,
-	)
-	if outcome.Boundary.Applied {
-		stamped := confine.StampRefusal("command", tctx.SessionID, outcome.Boundary, confine.RefusalContext{
-			MediatedNetwork:        outcome.Network,
-			RemotePackageExecution: report.RemotePackageExecution,
-			Running:                true,
-			Refusals:               outcome.Refusals,
-		})
-		report.BoundaryRefusal = string(stamped.Attribution)
-		if tctx.Out != nil {
-			tctx.Out.Facts = tools.ApplyRefusalFacts(tctx.Out.Facts, stamped)
-		}
-	}
-	out, err := surveyjson.Marshal(hostcmd.CommandRunningResult{
-		Running:  true,
-		Handle:   outcome.Handle,
-		Stages:   outcome.Snapshot.Stages,
-		Tail:     outcome.Snapshot.Tail,
-		WaitedMs: int(budget.Milliseconds()),
-		Network:  outcome.Network,
-		Report:   report.WithSandboxRefusals(outcome.Refusals),
-	})
-	if err != nil {
-		return "", fmt.Errorf("command running encode: %w", err)
-	}
-	return string(out), nil
 }

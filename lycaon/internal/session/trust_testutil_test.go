@@ -11,7 +11,7 @@ import (
 )
 
 // RegisterProjectContextForTest wires a project and its trust store.
-func RegisterProjectContextForTest(t *testing.T, m *Manager, projectDir string) string {
+func RegisterProjectContextForTest(t *testing.T, m *Host, projectDir string) string {
 	t.Helper()
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	surfaces, err := settings.NewTrustSurfacesStoreAt(

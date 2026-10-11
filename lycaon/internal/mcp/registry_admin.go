@@ -12,11 +12,11 @@ import (
 )
 
 // overlayPathFor returns the file a mutation at this scope writes to.
-func (r *RegistryImpl) overlayPathFor(scopeProjectDir string) string {
+func (r *ProviderAdministration) overlayPathFor(scopeProjectDir string) string {
 	if dir := strings.TrimSpace(scopeProjectDir); dir != "" {
 		return projectMCPPath(dir)
 	}
-	return r.globalPath
+	return r.Catalog.globalPath
 }
 
 // overlayLockHeldKey marks a context as already holding the catalog
@@ -35,7 +35,7 @@ func overlayLockAlreadyHeld(ctx context.Context, target string) bool {
 	return held != "" && held == filepath.Clean(target)
 }
 
-func (r *RegistryImpl) updateOverlay(
+func (r *ProviderAdministration) updateOverlay(
 	ctx context.Context,
 	scopeProjectDir string,
 	apply func(ctx context.Context, path string) error,
@@ -45,7 +45,7 @@ func (r *RegistryImpl) updateOverlay(
 	// Callbacks share the transaction lock for this overlay.
 	lockedCtx := withOverlayLockHeld(ctx, path)
 	if err := catalogruntime.UpdateFile(ctx, catalogruntime.FileUpdate{
-		LockRoot: r.statePath,
+		LockRoot: r.Catalog.statePath,
 		Target:   path,
 		Mode:     mcpFileMode,
 		DirMode:  0o700,
@@ -54,7 +54,7 @@ func (r *RegistryImpl) updateOverlay(
 		},
 		Publish: func() error {
 			if strings.TrimSpace(scopeProjectDir) == "" {
-				return r.Load(lockedCtx)
+				return r.Catalog.Load(lockedCtx)
 			}
 			return nil
 		},
@@ -74,7 +74,7 @@ func (r *RegistryImpl) updateOverlay(
 }
 
 // ListProviders returns the merged MCP catalog for a scope plus rejected trust rows.
-func (r *RegistryImpl) ListProviders(ctx context.Context, scope CallScope) []api.McpProvider {
+func (r *ProviderCatalog) ListProviders(ctx context.Context, scope CallScope) []api.McpProvider {
 	view := r.projectView(ctx, scope.ProjectDir)
 	out := make([]api.McpProvider, 0, len(view.catalog)+len(view.rejected))
 	for _, s := range view.catalog {
@@ -100,7 +100,7 @@ func (r *RegistryImpl) ListProviders(ctx context.Context, scope CallScope) []api
 
 // ConfiguredHosts returns the hostnames of every enabled HTTP MCP provider this
 // project can reach. Hosts only — the URL carries a path and sometimes a token.
-func (r *RegistryImpl) ConfiguredHosts(ctx context.Context, projectDir string) []string {
+func (r *ProviderCatalog) ConfiguredHosts(ctx context.Context, projectDir string) []string {
 	if r == nil {
 		return nil
 	}
@@ -118,7 +118,7 @@ func (r *RegistryImpl) ConfiguredHosts(ctx context.Context, projectDir string) [
 }
 
 // GetProvider returns one wired provider row, or false if missing.
-func (r *RegistryImpl) GetProvider(ctx context.Context, scope CallScope, id string) (api.McpProvider, bool) {
+func (r *ProviderCatalog) GetProvider(ctx context.Context, scope CallScope, id string) (api.McpProvider, bool) {
 	for _, row := range r.ListProviders(ctx, scope) {
 		if row.ID == id {
 			return row, true
@@ -128,9 +128,9 @@ func (r *RegistryImpl) GetProvider(ctx context.Context, scope CallScope, id stri
 }
 
 // SetProviderEnabled persists overlay enabled and republishes.
-func (r *RegistryImpl) SetProviderEnabled(ctx context.Context, scope CallScope, providerID string, enabled bool, scopeProjectDir string) error {
+func (r *ProviderAdministration) SetProviderEnabled(ctx context.Context, scope CallScope, providerID string, enabled bool, scopeProjectDir string) error {
 	err := r.updateOverlay(ctx, scopeProjectDir, func(txCtx context.Context, path string) error {
-		if !r.projectView(txCtx, scope.ProjectDir).known(providerID) {
+		if !r.Catalog.projectView(txCtx, scope.ProjectDir).known(providerID) {
 			return ErrUnknownMCPProvider(providerID)
 		}
 		return setProviderEnabled(path, providerID, enabled)
@@ -139,7 +139,7 @@ func (r *RegistryImpl) SetProviderEnabled(ctx context.Context, scope CallScope, 
 }
 
 // CreateProvider writes a new overlay row (user or project) and republishes.
-func (r *RegistryImpl) CreateProvider(ctx context.Context, scope CallScope, req api.CreateMcpProviderRequest, scopeProjectDir string) (api.McpProvider, error) {
+func (r *ProviderAdministration) CreateProvider(ctx context.Context, scope CallScope, req api.CreateMcpProviderRequest, scopeProjectDir string) (api.McpProvider, error) {
 	switch req.Source {
 	case "recipe":
 		recipeID := strings.TrimSpace(req.RecipeID)
@@ -155,7 +155,7 @@ func (r *RegistryImpl) CreateProvider(ctx context.Context, scope CallScope, req 
 	if id == "" {
 		return api.McpProvider{}, AdminErr(CodeIDRequired)
 	}
-	if r.projectView(ctx, scope.ProjectDir).known(id) {
+	if r.Catalog.projectView(ctx, scope.ProjectDir).known(id) {
 		return api.McpProvider{}, AdminErrID(RejectDuplicateID, id)
 	}
 
@@ -167,15 +167,15 @@ func (r *RegistryImpl) CreateProvider(ctx context.Context, scope CallScope, req 
 }
 
 // AddRecipe copies a bundled recipe into the overlay catalog, disabled.
-func (r *RegistryImpl) AddRecipe(ctx context.Context, scope CallScope, recipeID, scopeProjectDir string) (api.McpProvider, error) {
-	rec, ok := r.recipes.Entry(recipeID)
+func (r *ProviderAdministration) AddRecipe(ctx context.Context, scope CallScope, recipeID, scopeProjectDir string) (api.McpProvider, error) {
+	rec, ok := r.Credentials.recipes.Entry(recipeID)
 	if !ok {
 		return api.McpProvider{}, AdminErr(CodeRecipeNotFound)
 	}
 	if strings.TrimSpace(scopeProjectDir) != "" && !rec.ProjectOK() {
 		return api.McpProvider{}, AdminErr(RejectProjectRemoteForbidden)
 	}
-	ov, ok := r.recipes.OverlayFor(recipeID)
+	ov, ok := r.Credentials.recipes.OverlayFor(recipeID)
 	if !ok {
 		return api.McpProvider{}, AdminErr(CodeRecipeNotFound)
 	}
@@ -183,8 +183,8 @@ func (r *RegistryImpl) AddRecipe(ctx context.Context, scope CallScope, recipeID,
 }
 
 // ListRecipes returns bundled recipes with added/project_ok flags for this scope.
-func (r *RegistryImpl) ListRecipes(ctx context.Context, scope CallScope) []api.McpRecipe {
-	view := r.projectView(ctx, scope.ProjectDir)
+func (r *ProviderAdministration) ListRecipes(ctx context.Context, scope CallScope) []api.McpRecipe {
+	view := r.Catalog.projectView(ctx, scope.ProjectDir)
 	known := map[string]struct{}{}
 	for _, s := range view.catalog {
 		known[s.ID] = struct{}{}
@@ -194,7 +194,7 @@ func (r *RegistryImpl) ListRecipes(ctx context.Context, scope CallScope) []api.M
 			known[rej.ID] = struct{}{}
 		}
 	}
-	entries := r.recipes.Entries()
+	entries := r.Credentials.recipes.Entries()
 	out := make([]api.McpRecipe, 0, len(entries))
 	for _, rec := range entries {
 		_, added := known[rec.ID]
@@ -224,15 +224,15 @@ func (r *RegistryImpl) ListRecipes(ctx context.Context, scope CallScope) []api.M
 	return out
 }
 
-func (r *RegistryImpl) persistNewOverlay(ctx context.Context, scope CallScope, id string, ov MCPProviderOverlay, scopeProjectDir string) (api.McpProvider, error) {
+func (r *ProviderAdministration) persistNewOverlay(ctx context.Context, scope CallScope, id string, ov MCPProviderOverlay, scopeProjectDir string) (api.McpProvider, error) {
 	var created api.McpProvider
 	err := r.updateOverlay(ctx, scopeProjectDir, func(txCtx context.Context, path string) error {
-		if r.projectView(txCtx, scope.ProjectDir).known(id) {
+		if r.Catalog.projectView(txCtx, scope.ProjectDir).known(id) {
 			return AdminErrID(RejectDuplicateID, id)
 		}
 		return upsertProviderOverlay(path, ov)
 	}, func(txCtx context.Context) error {
-		row, ok := r.GetProvider(txCtx, scope, id)
+		row, ok := r.Catalog.GetProvider(txCtx, scope, id)
 		if ok && row.Status != api.McpStatusRejected {
 			created = row
 			return nil
@@ -303,7 +303,7 @@ func overlayFromCreate(id string, req api.CreateMcpProviderRequest) (MCPProvider
 
 // UpdateProvider patches overlay fields and republishes.
 // Rejected ids are valid targets: the overlay row is still on disk.
-func (r *RegistryImpl) UpdateProvider(ctx context.Context, scope CallScope, providerID string, req api.UpdateMcpProviderRequest, scopeProjectDir string) (api.McpProvider, error) {
+func (r *ProviderAdministration) UpdateProvider(ctx context.Context, scope CallScope, providerID string, req api.UpdateMcpProviderRequest, scopeProjectDir string) (api.McpProvider, error) {
 	if !updateNamesAField(req) {
 		return api.McpProvider{}, AdminErr(CodeUpdateEmpty)
 	}
@@ -325,14 +325,14 @@ func (r *RegistryImpl) UpdateProvider(ctx context.Context, scope CallScope, prov
 
 	var updated api.McpProvider
 	err := r.updateOverlay(ctx, scopeProjectDir, func(txCtx context.Context, path string) error {
-		if !r.projectView(txCtx, scope.ProjectDir).known(providerID) {
+		if !r.Catalog.projectView(txCtx, scope.ProjectDir).known(providerID) {
 			return ErrUnknownMCPProvider(providerID)
 		}
 		return patchProviderOverlay(path, providerID, func(ov *MCPProviderOverlay) {
 			applyUpdateToOverlay(ov, req)
 		})
 	}, func(txCtx context.Context) error {
-		row, ok := r.GetProvider(txCtx, scope, providerID)
+		row, ok := r.Catalog.GetProvider(txCtx, scope, providerID)
 		if !ok {
 			return ErrUnknownMCPProvider(providerID)
 		}
@@ -453,9 +453,9 @@ func recipeCredentialWire(rec Recipe) api.McpCredentialWire {
 }
 
 // DeleteOverlay removes a user or project overlay row for providerID.
-func (r *RegistryImpl) DeleteOverlay(ctx context.Context, providerID, scopeProjectDir string) error {
+func (r *ProviderAdministration) DeleteOverlay(ctx context.Context, providerID, scopeProjectDir string) error {
 	err := r.updateOverlay(ctx, scopeProjectDir, func(txCtx context.Context, path string) error {
-		if !r.projectView(txCtx, scopeProjectDir).known(providerID) {
+		if !r.Catalog.projectView(txCtx, scopeProjectDir).known(providerID) {
 			return ErrUnknownMCPProvider(providerID)
 		}
 		return clearProviderOverride(path, providerID)
@@ -463,11 +463,11 @@ func (r *RegistryImpl) DeleteOverlay(ctx context.Context, providerID, scopeProje
 	if err != nil {
 		return persistErr(err)
 	}
-	r.closeProviderSessions(providerID)
+	r.Connections.closeProviderSessions(providerID)
 	// Tokens are device-global, so only a device-scope delete revokes: a
 	// project-override delete leaves the device provider (and its token) live.
-	if r.oauth != nil && strings.TrimSpace(scopeProjectDir) == "" {
-		if revokeErr := r.oauth.Revoke(providerID); revokeErr != nil { //nolint:contextcheck // Revoke tears down process-local OAuth state.
+	if r.Credentials.oauth != nil && strings.TrimSpace(scopeProjectDir) == "" {
+		if revokeErr := r.Credentials.oauth.Revoke(ctx, providerID); revokeErr != nil {
 			slog.WarnContext(ctx, "mcp oauth revoke on delete failed", "provider_id", providerID, "error", revokeErr)
 		}
 	}
@@ -483,26 +483,26 @@ func overlayHTTPURL(raw string) (string, error) {
 }
 
 // ResyncProvider drops one provider's sessions and re-runs the sync.
-func (r *RegistryImpl) ResyncProvider(ctx context.Context, scope CallScope, providerID string) (api.McpProvider, error) {
-	if !r.projectView(ctx, scope.ProjectDir).known(providerID) {
+func (r *ProviderAdministration) ResyncProvider(ctx context.Context, scope CallScope, providerID string) (api.McpProvider, error) {
+	if !r.Catalog.projectView(ctx, scope.ProjectDir).known(providerID) {
 		return api.McpProvider{}, ErrUnknownMCPProvider(providerID)
 	}
-	r.closeProviderSessions(providerID)
-	if err := r.SyncTools(ctx); err != nil {
+	r.Connections.closeProviderSessions(providerID)
+	if err := r.Tools.SyncTools(ctx); err != nil {
 		return api.McpProvider{}, syncErr(err)
 	}
-	if row, ok := r.GetProvider(ctx, scope, providerID); ok {
+	if row, ok := r.Catalog.GetProvider(ctx, scope, providerID); ok {
 		return row, nil
 	}
 	return api.McpProvider{}, ErrUnknownMCPProvider(providerID)
 }
 
 // ListDiscoveredTools returns qualified tool infos for an enabled provider.
-func (r *RegistryImpl) ListDiscoveredTools(ctx context.Context, scope CallScope, providerID string) ([]api.McpToolInfo, error) {
-	if !r.projectView(ctx, scope.ProjectDir).known(providerID) {
+func (r *ProviderAdministration) ListDiscoveredTools(ctx context.Context, scope CallScope, providerID string) ([]api.McpToolInfo, error) {
+	if !r.Catalog.projectView(ctx, scope.ProjectDir).known(providerID) {
 		return nil, ErrUnknownMCPProvider(providerID)
 	}
-	metas, err := r.ListTools(ctx, scope, providerID)
+	metas, err := r.Calls.ListTools(ctx, scope, providerID)
 	if err != nil {
 		return nil, syncErr(err)
 	}
@@ -514,8 +514,8 @@ func (r *RegistryImpl) ListDiscoveredTools(ctx context.Context, scope CallScope,
 }
 
 // Check verifies each catalog provider for a scope and surfaces rejected trust rows.
-func (r *RegistryImpl) Check(ctx context.Context, scope CallScope) []api.McpCheckRow {
-	view := r.projectView(ctx, scope.ProjectDir)
+func (r *ProviderAdministration) Check(ctx context.Context, scope CallScope) []api.McpCheckRow {
+	view := r.Catalog.projectView(ctx, scope.ProjectDir)
 	out := make([]api.McpCheckRow, 0, len(view.catalog)+len(view.rejected))
 	for _, rej := range view.rejected {
 		out = append(out, api.McpCheckRow{
@@ -531,7 +531,7 @@ func (r *RegistryImpl) Check(ctx context.Context, scope CallScope) []api.McpChec
 			out = append(out, row)
 			continue
 		}
-		sess, err := r.ensureSession(ctx, scope, s.MCPProviderEntry)
+		sess, err := r.Connections.ensureSession(ctx, scope, s.MCPProviderEntry)
 		if err != nil {
 			row.Status = api.McpCheckRowStatusError
 			row.Code = string(SyncFailureCode(err))
@@ -539,7 +539,7 @@ func (r *RegistryImpl) Check(ctx context.Context, scope CallScope) []api.McpChec
 			continue
 		}
 		if _, err := sess.ListTools(ctx); err != nil {
-			r.evictDeadSession(scope, s.ID, err)
+			r.Connections.evictDeadSession(scope, s.ID, err)
 			row.Status = api.McpCheckRowStatusError
 			row.Code = string(SyncFailureCode(err))
 			out = append(out, row)
@@ -549,126 +549,4 @@ func (r *RegistryImpl) Check(ctx context.Context, scope CallScope) []api.McpChec
 		out = append(out, row)
 	}
 	return out
-}
-
-// StartOAuth begins MCP Authorization for an HTTP provider.
-func (r *RegistryImpl) StartOAuth(ctx context.Context, scope CallScope, providerID string) (api.McpOAuthStartResponse, error) {
-	entry, ok := r.deviceEntry(providerID)
-	if !ok {
-		return api.McpOAuthStartResponse{}, ErrUnknownMCPProvider(providerID)
-	}
-	if r.oauth == nil {
-		return api.McpOAuthStartResponse{}, AdminErr(CodeOAuthUnavailable)
-	}
-	if r.recipeForbidsOAuth(entry) {
-		return api.McpOAuthStartResponse{}, AdminErr(CodeOAuthNotSupported)
-	}
-	res, err := r.oauth.Start(ctx, entry, scope.ProjectID, func(completeErr error) {
-		r.onOAuthCallbackComplete(providerID, completeErr)
-	})
-	if err != nil {
-		return api.McpOAuthStartResponse{}, oauthErr(err)
-	}
-	return api.McpOAuthStartResponse{
-		AuthorizeURL: res.AuthorizeURL,
-		State:        res.State,
-		RedirectURI:  res.RedirectURI,
-	}, nil
-}
-
-func (r *RegistryImpl) stampRecipeCredential(entry MCPProviderEntry) MCPProviderEntry {
-	if r == nil {
-		return entry
-	}
-	rec, ok := r.recipes.Entry(entry.Recipe)
-	if !ok {
-		return entry
-	}
-	kind, _ := NormalizeCredentialWire(string(rec.CredentialWire))
-	entry.CredentialWire = string(kind)
-	entry.CredentialHeader = rec.CredentialHeader
-	return entry
-}
-
-func (r *RegistryImpl) recipeForbidsOAuth(entry MCPProviderEntry) bool {
-	if strings.TrimSpace(entry.Recipe) == "" {
-		return false
-	}
-	rec, ok := r.recipes.Entry(entry.Recipe)
-	if !ok {
-		return false
-	}
-	return rec.Auth != RecipeAuthOAuth
-}
-
-// onOAuthCallbackComplete applies the same post-exchange updates as CompleteOAuth.
-func (r *RegistryImpl) onOAuthCallbackComplete(providerID string, err error) {
-	if err != nil {
-		slog.Warn("mcp oauth callback failed", "provider_id", providerID, "error", err)
-		return
-	}
-	r.mu.Lock()
-	delete(r.authRequired, providerID)
-	r.mu.Unlock()
-	r.closeProviderSessions(providerID)
-	if syncErr := r.SyncTools(r.lifeCtx); syncErr != nil {
-		slog.Warn("mcp sync after oauth callback failed", "provider_id", providerID, "error", syncErr)
-	}
-	if r.onSettings != nil {
-		r.onSettings()
-	}
-}
-
-// CompleteOAuth finishes the authorization-code exchange and stores tokens.
-func (r *RegistryImpl) CompleteOAuth(ctx context.Context, scope CallScope, providerID string, req api.McpOAuthCompleteRequest) (api.McpProvider, error) {
-	if _, ok := r.deviceEntry(providerID); !ok {
-		return api.McpProvider{}, ErrUnknownMCPProvider(providerID)
-	}
-	if r.oauth == nil {
-		return api.McpProvider{}, AdminErr(CodeOAuthUnavailable)
-	}
-	if err := r.oauth.Complete(ctx, providerID, scope.ProjectID, OAuthCompleteRequest{Code: req.Code, State: req.State}); err != nil {
-		return api.McpProvider{}, oauthErr(err)
-	}
-	r.mu.Lock()
-	delete(r.authRequired, providerID)
-	r.mu.Unlock()
-	r.closeProviderSessions(providerID)
-	// Sync faults land on the row as last_error, not this return.
-	_ = r.SyncTools(ctx)
-	if row, ok := r.GetProvider(ctx, scope, providerID); ok {
-		return row, nil
-	}
-	return api.McpProvider{}, ErrUnknownMCPProvider(providerID)
-}
-
-// CancelOAuth retires one pending sign-in without changing saved credentials.
-func (r *RegistryImpl) CancelOAuth(scope CallScope, providerID, state string) error {
-	if _, ok := r.deviceEntry(providerID); !ok {
-		return ErrUnknownMCPProvider(providerID)
-	}
-	if r.oauth == nil {
-		return AdminErr(CodeOAuthUnavailable)
-	}
-	r.oauth.Cancel(providerID, scope.ProjectID, state)
-	return nil
-}
-
-// RevokeOAuth clears stored OAuth tokens (Sign out).
-func (r *RegistryImpl) RevokeOAuth(ctx context.Context, scope CallScope, providerID string) (api.McpProvider, error) {
-	if _, ok := r.deviceEntry(providerID); !ok {
-		return api.McpProvider{}, ErrUnknownMCPProvider(providerID)
-	}
-	if r.oauth == nil {
-		return api.McpProvider{}, AdminErr(CodeOAuthUnavailable)
-	}
-	if err := r.oauth.Revoke(providerID); err != nil { //nolint:contextcheck // Revoke tears down a process-local loopback listener
-		return api.McpProvider{}, oauthErr(err)
-	}
-	r.markAuthRequired(providerID)
-	r.closeProviderSessions(providerID)
-	if row, ok := r.GetProvider(ctx, scope, providerID); ok {
-		return row, nil
-	}
-	return api.McpProvider{}, ErrUnknownMCPProvider(providerID)
 }

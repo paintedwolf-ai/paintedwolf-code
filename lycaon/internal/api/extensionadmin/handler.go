@@ -23,11 +23,11 @@ type Deps struct {
 	Owner       *extensionstate.Owner
 	Runtime     ContributionRuntime
 	Events      events.ReplayHub
-	MCPRegistry *mcp.RegistryImpl
+	MCPRegistry *mcp.Runtime
 	ModuleRoot  string
 	Projects    project.Registry
 	Store       session.Store
-	Sessions    *session.Manager
+	Sessions    *session.Host
 	Settings    *settings.Service
 	Workflow    *workflowadmin.Handler
 	Prompt      *promptadmin.Handler
@@ -35,14 +35,67 @@ type Deps struct {
 }
 
 type Handler struct {
-	Deps
+	Catalog       *Catalog
+	Contributions *Contributions
+	Execution     *Execution
+	Mutations     *Mutations
+	Suggestions   *Suggestions
+}
+
+type Catalog struct {
+	Mutations          *Mutations
+	Projects           project.Registry
 	extensionsOverview extensionsOverviewCache
+	responses          *httpio.Responder
+}
+
+type Contributions struct {
+	MCP                *mcp.ProviderCatalog
+	MCPCalls           *mcp.ToolCalls
+	Projects           project.Registry
+	Sessions           *session.Host
 	contribDeviceFrame *contribframe.Frame
 	contribFrameOrder  []string
 	contribFrames      map[string]*contribframe.Frame
 	contribFramesMu    sync.Mutex
-	background         *taskgroup.Group
 	responses          *httpio.Responder
+}
+
+type Execution struct {
+	Contributions    *Contributions
+	MCP              *mcp.ToolCalls
+	Projects         project.Registry
+	PromptSubmission *promptadmin.Submission
+	PromptReferences *promptadmin.References
+	PromptExecution  *promptadmin.Execution
+	Runtime          ContributionRuntime
+	Sessions         *session.Host
+	Store            session.Store
+	Workflow         *workflowadmin.RunControl
+	responses        *httpio.Responder
+}
+
+type Mutations struct {
+	Catalog       *Catalog
+	Contributions *Contributions
+	Events        events.ReplayHub
+	MCP           *mcp.ConnectionPool
+	ModuleRoot    string
+	Owner         *extensionstate.Owner
+	Projects      project.Registry
+	Scan          *scanadmin.Handler
+	Sessions      *session.Host
+	Settings      *settings.Service
+	background    *taskgroup.Group
+	responses     *httpio.Responder
+}
+
+type Suggestions struct {
+	Catalog   *Catalog
+	Mutations *Mutations
+	Projects  project.Registry
+	Settings  *settings.Service
+	responses *httpio.Responder
 }
 
 func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Handler {
@@ -56,5 +109,19 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 		httpio.Required{Name: "Settings.TrustSurfaces", Present: deps.Settings != nil && deps.Settings.TrustSurfaces != nil},
 		httpio.Required{Name: "Store", Present: deps.Store != nil},
 	)
-	return Handler{Deps: deps, responses: responses, background: background}
+	h := Handler{}
+	h.Catalog = &Catalog{Projects: deps.Projects, responses: responses}
+	h.Contributions = &Contributions{MCP: deps.MCPRegistry.Catalog, MCPCalls: deps.MCPRegistry.Calls, Projects: deps.Projects, Sessions: deps.Sessions, responses: responses}
+	h.Execution = &Execution{MCP: deps.MCPRegistry.Calls, Projects: deps.Projects, PromptSubmission: deps.Prompt.Submission, PromptReferences: deps.Prompt.References, PromptExecution: deps.Prompt.Execution, Runtime: deps.Runtime, Sessions: deps.Sessions, Store: deps.Store, Workflow: deps.Workflow.RunControl, responses: responses}
+	h.Mutations = &Mutations{Events: deps.Events, MCP: deps.MCPRegistry.Connections, ModuleRoot: deps.ModuleRoot, Owner: deps.Owner, Projects: deps.Projects, Scan: deps.Scan, Sessions: deps.Sessions, Settings: deps.Settings, background: background, responses: responses}
+	h.Suggestions = &Suggestions{Projects: deps.Projects, Settings: deps.Settings, responses: responses}
+	h.Catalog.Mutations = h.Mutations
+	h.Execution.Contributions = h.Contributions
+	h.Mutations.Catalog = h.Catalog
+	h.Mutations.Contributions = h.Contributions
+	h.Suggestions.Catalog = h.Catalog
+	h.Suggestions.Mutations = h.Mutations
+	deps.Owner.Publisher = extensionPublisher{h.Mutations}
+	deps.Owner.Events = extensionEmitter{h.Mutations}
+	return h
 }

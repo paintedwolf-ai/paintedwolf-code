@@ -13,39 +13,39 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) newTreeView(scope pagedview.Scope, p *project.Project, request wire.SourceTreeViewCreate) *sourceView {
+func (s *Trees) newTreeView(scope pagedview.Scope, p *project.Project, request wire.SourceTreeViewCreate) *sourceView {
 	ctx, cancel := context.WithCancel(s.background.Context())
 	view := &sourceView{scope: scope, clientID: request.ClientID, sessionID: request.SessionID, workspaceID: p.WorkspaceID(),
-		ctx: ctx, cancel: cancel, state: "preparing", commands: pagedview.NewCommands[string](&s.sourceViews.receipts),
-		treeIntent: request.Intent, roots: project.ToAPI(p).Roots, expires: time.Now().Add(sourceViewLifetime),
-		filterGeneration: uuid.NewString(), projectionRevision: uuid.NewString(), reviewGeneration: uuid.NewString(), reviewPreparing: true, reviewDirty: true}
+		ctx: ctx, cancel: cancel, state: "preparing", commands: pagedview.NewCommands[string](&s.sourceViews.receipts), expires: time.Now().Add(sourceViewLifetime), projectionRevision: uuid.NewString(), navigation: sourceViewNavigation{
+			treeIntent: request.Intent, roots: project.ToAPI(p).Roots}, filtering: sourceViewFiltering{
+			filterGeneration: uuid.NewString()}, reviewing: sourceViewReviewing{reviewGeneration: uuid.NewString(), reviewPreparing: true, reviewDirty: true}}
 	roots := make([]sourcetree.Root, 0, len(p.Roots))
 	for _, root := range p.Roots {
 		roots = append(roots, sourcetree.Root{Root: sourcecatalog.Root{ID: root.ID, Path: root.Path}, Label: root.Label})
 	}
-	view.notifier = pagedview.NewNotifier(250*time.Millisecond, func() { s.publishSourceView(view) })
+	view.notifier = pagedview.NewNotifier(250*time.Millisecond, func() { s.Views.publishSourceView(view) })
 	for _, root := range roots {
-		if err := sourcecatalog.Process().WarmNavigation(ctx, scope.Project, root.Root); err != nil {
+		if err := sourcecatalog.Process().Directories.WarmNavigation(ctx, scope.Project, root.Root); err != nil {
 			slog.Warn("Source inventory could not start", "root", root.ID, "error", err)
 		}
 	}
-	view.tree = sourcetree.New(ctx, scope, roots, sourcecatalog.Process(), func() { s.treeViewChanged(view) })
+	view.navigation.tree = sourcetree.New(ctx, scope, roots, sourcecatalog.Process(), func() { s.treeViewChanged(view) })
 	s.watchTreeView(view, p)
 	return view
 }
 
-func (s *Handler) prepareTreeView(view *sourceView, release func()) {
+func (s *Trees) prepareTreeView(view *sourceView, release func()) {
 	s.background.Go(view.ctx, func(ctx context.Context) {
 		defer release()
 		view.intentMu.Lock()
-		if err := view.tree.Disclose(ctx, nil, treeDisclosures(view.treeIntent.Disclosures)...); err != nil {
+		if err := view.navigation.tree.Disclose(ctx, nil, treeDisclosures(view.navigation.treeIntent.Disclosures)...); err != nil {
 			view.intentMu.Unlock()
 			view.fail(err)
 			view.notifier.Notify(true)
 			return
 		}
-		view.treeInitialized = true
-		done := view.tree.Prepare()
+		view.navigation.treeInitialized = true
+		done := view.navigation.tree.Prepare()
 		view.intentMu.Unlock()
 		select {
 		case <-done:
@@ -53,15 +53,15 @@ func (s *Handler) prepareTreeView(view *sourceView, release func()) {
 			return
 		}
 		view.mu.Lock()
-		view.treePrepared = true
+		view.navigation.treePrepared = true
 		view.mu.Unlock()
 		s.refreshTreeReview(view)
 		view.notifier.Notify(true)
 	})
 }
 
-func (s *Handler) retainSourceWork(view *sourceView, done <-chan struct{}) {
-	_, release, err := s.sourceViewRegistry().registry.Acquire(view.scope, view.id)
+func (s *Trees) retainSourceWork(view *sourceView, done <-chan struct{}) {
+	_, release, err := s.Views.sourceViewRegistry().registry.Acquire(view.scope, view.id)
 	if err != nil {
 		return
 	}

@@ -68,7 +68,7 @@ func (t *GrepTool) grepWalkTree(ctx context.Context, tctx tools.ToolContext, tar
 }
 
 func (t *GrepTool) grepWalkTreeSequential(ctx context.Context, tctx tools.ToolContext, target grepTarget, includeHidden bool, search *grepSearch, walkExtra sandbox.SurveyOptions) error {
-	if strings.TrimSpace(tctx.WorkerBranchRoot) != "" {
+	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
 		return t.grepWalkTreeSequentialSurvey(ctx, tctx, target, includeHidden, search, walkExtra)
 	}
 	var scanErr error
@@ -196,7 +196,7 @@ func (t *GrepTool) grepWalkTreeParallel(ctx context.Context, tctx tools.ToolCont
 	search.ctx, search.boundary, search.tctx = ctx, t.Boundary, tctx
 	stream := search.startStream(grepWorkerCount())
 	var walkErr error
-	if strings.TrimSpace(tctx.WorkerBranchRoot) == "" {
+	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" {
 		walkErr = t.forEachGrepCatalogJob(ctx, tctx, target, includeHidden, walkExtra, search, stream.submit)
 	} else {
 		walkErr = t.forEachGrepBranchJob(ctx, tctx, target, includeHidden, walkExtra, stream.submit)
@@ -338,7 +338,7 @@ func (t *GrepTool) forEachGrepCatalogJob(
 	search *grepSearch,
 	yield func(grepFileJob) bool,
 ) error {
-	inventory, err := sourceInventoryForScope(ctx, t.Catalog, tctx.ProjectID, target.root, target.fullRoot)
+	inventory, err := sourceInventoryForScope(ctx, catalogOrProcess(t.Catalog), tctx.Identity.ProjectID, target.root, target.fullRoot)
 	if err != nil {
 		return err
 	}
@@ -375,7 +375,7 @@ func (t *GrepTool) forEachGrepCatalogJob(
 			return sourcecatalog.WalkContinue
 		}
 		if canPrune {
-			if _, hasDraft := search.drafts.Lookup(abs); !hasDraft && t.Catalog.CanPrune(target.root.Path, search.require, entry) {
+			if _, hasDraft := search.drafts.Lookup(abs); !hasDraft && t.Catalog.Literals.CanPrune(target.root.Path, search.require, entry) {
 				if search.stats != nil {
 					search.stats.IndexBloomPruned.Add(1)
 				}

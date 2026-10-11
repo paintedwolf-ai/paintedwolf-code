@@ -2,27 +2,29 @@ package session_test
 
 import (
 	"encoding/json"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"testing"
 )
 
 func TestWorkerParentDeliveryPreservesFrozenDecision(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	database := testdbfixture.Open(t, "worker-feedback.db")
 	mem := store.NewSQL(database)
-	mgr := session.NewManager(mem, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	parent, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
@@ -37,7 +39,7 @@ func TestWorkerParentDeliveryPreservesFrozenDecision(t *testing.T) {
 	testutil.FailErr(t, "persist result", err)
 	var result api.WorkerResult
 	testutil.FailErr(t, "reload result", json.Unmarshal(data, &result))
-	status, err := mgr.ProjectWorkerResult(t.Context(), session.WorkerSummaryInput{JobID: "job-feedback", ChildSessionID: child.ID, ParentSessionID: parent.ID, AgentType: "implementer"}, result)
+	status, err := mgr.Workers.Results.ProjectResult(t.Context(), workeroutcomes.SummaryInput{JobID: "job-feedback", ChildSessionID: child.ID, ParentSessionID: parent.ID, AgentType: "implementer"}, result)
 	testutil.FailErr(t, "project frozen result", err)
 	if status != "partial" {
 		t.Fatalf("partial result promoted to %s", status)

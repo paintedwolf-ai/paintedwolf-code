@@ -23,7 +23,7 @@ func TestInterruptedToolProjectionRetainsIdentityAcrossRecoveryPaths(t *testing.
 			database := testdbfixture.Open(t, "interrupted-identity.db")
 			testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 			st := store.NewSQL(database)
-			manager := NewManager(st, nil, nil, settings.DefaultSessionLimits())
+			manager := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 			recorder := invocation.NewSQLRecorder(database)
 			manager.SetInvocationRecorder(recorder)
 			sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -35,9 +35,9 @@ func TestInterruptedToolProjectionRetainsIdentityAcrossRecoveryPaths(t *testing.
 			testutil.FailErr(t, "interrupt tool owners", err)
 			for range 2 {
 				if scoped {
-					err = manager.recoverInterruptedToolResultPagesForSession(t.Context(), recorder, sess.ID)
+					err = manager.Stops.Recovery.RecoverInterruptedToolResultPagesForSession(t.Context(), recorder, sess.ID)
 				} else {
-					err = manager.RecoverInterruptedToolResults(t.Context())
+					err = manager.Stops.Recovery.RecoverInterruptedToolResults(t.Context())
 				}
 				testutil.FailErr(t, "recover tool projections", err)
 			}

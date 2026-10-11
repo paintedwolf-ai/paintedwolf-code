@@ -71,7 +71,7 @@ func advancePlanWorkflow(t *testing.T, h *wiring.Harness, base string, run *wire
 	}
 	assertPhaseGateError(t, body, "expand", "plan_stub_valid")
 
-	seedPlanStub(t, h.BlueprintMgr, run.ProjectID, run.BlueprintPath)
+	seedPlanStub(t, h.Workflows.Blueprints, run.ProjectID, run.BlueprintPath)
 	advanced := journeyPostJSON[wire.WorkflowRun](t, base,
 		"/v1/workflow-runs/"+run.ID+"/advance", workflowCommandJSON(t, base, run.ID, nil), http.StatusOK)
 	if advanced.CurrentPhase != "approve" {
@@ -110,7 +110,7 @@ func assertPlanWriteAllowed(t *testing.T, h *wiring.Harness, sessionID string) {
 	loaded, err := h.Store.Get(ctx, sessionID)
 	testutil.FailErr(t, "h.Store.Get failed", err)
 	planPath := settingsoverlay.Rel("blueprints/plan.md")
-	err = h.SessionMgr.PromptToolPolicy().EvaluateInvoke(ctx, loaded, "write", map[string]any{
+	err = h.Sessions.Manager.Coordinator.Guards.Policy().EvaluateInvoke(ctx, loaded, "write", map[string]any{
 		"path": planPath, "content": conditions.TestPlanContentWithTasks,
 	})
 	testutil.FailErr(t, "write invoke policy", err)
@@ -153,7 +153,7 @@ func finishPlanWorkflow(
 	if superseded.ID == run.ID {
 		t.Fatal("expected a new run id after human supersede")
 	}
-	prior, err := h.WorkflowMgr.Get(ctx, run.ID)
+	prior, err := h.Workflows.Manager.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get prior run after supersede", err)
 	if prior.Status != wire.WorkflowRunStatusCanceled {
 		t.Fatalf("prior status = %q want canceled after supersede", prior.Status)

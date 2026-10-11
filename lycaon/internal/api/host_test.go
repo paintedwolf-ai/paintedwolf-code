@@ -23,8 +23,8 @@ func hostRequest(remoteAddr string) *http.Request {
 func TestHostIdentifiesHostContractAndCaller(t *testing.T) {
 	identity, err := hostidentity.LoadOrCreate(t.TempDir())
 	testutil.FailErr(t, "create host identity", err)
-	srv := newTestServer(t, func(d *Dependencies) { d.HostIdentity = identity })
-	owner, err := srv.sessionStore.HostOwner(t.Context())
+	srv := newTestServer(t, func(d *Dependencies) { d.Host.HostIdentity = identity })
+	owner, err := srv.Sources.Workspace.SessionStore.HostOwner(t.Context())
 	testutil.FailErr(t, "read host owner", err)
 
 	res := httptest.NewRecorder()
@@ -51,7 +51,7 @@ func TestHostIdentifiesHostContractAndCaller(t *testing.T) {
 func TestHostOffersSharedDeviceOnlyToLoopbackPeers(t *testing.T) {
 	identity, err := hostidentity.LoadOrCreate(t.TempDir())
 	testutil.FailErr(t, "create host identity", err)
-	srv := newTestServer(t, func(d *Dependencies) { d.HostIdentity = identity })
+	srv := newTestServer(t, func(d *Dependencies) { d.Host.HostIdentity = identity })
 	for remote, shared := range map[string]bool{
 		"127.0.0.1:1":       true,
 		"[::1]:1":           true,
@@ -99,7 +99,7 @@ func TestOperationAuthorizationRequiresACallerWithAuthority(t *testing.T) {
 
 func TestAuthenticatedRequestsActForTheHostOwner(t *testing.T) {
 	srv := newTestServer(t)
-	owner, err := srv.sessionStore.HostOwner(t.Context())
+	owner, err := srv.Sources.Workspace.SessionStore.HostOwner(t.Context())
 	testutil.FailErr(t, "read host owner", err)
 	var bound people.Person
 	handler := srv.bindCaller(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {

@@ -19,7 +19,7 @@ var classificationAuthorities = []string{
 
 // pathIdentityExemptions allow uses that reject symlink components.
 var pathIdentityExemptions = map[string]string{
-	"internal/project/source_lifecycle_path.go": "lifecycle writes reject dangling parent links and retain the selected directory entry",
+	"internal/projectsource/source_lifecycle.go": "lifecycle writes reject dangling parent links and retain the selected directory entry",
 	"internal/fseffect/transaction_unix.go":     "atomic replace refuses symlink components rather than following them",
 	"internal/fseffect/transaction_windows.go":  "atomic replace refuses symlink components rather than following them",
 }

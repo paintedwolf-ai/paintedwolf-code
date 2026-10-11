@@ -115,7 +115,7 @@ func scanSurveyProbeTarget(
 	if !info.IsDir() {
 		return scanSurveyProbeFile(ctx, reads, target.fullRoot, target.displayRoot, info, searches, stats)
 	}
-	if tctx.WorkerBranchRoot != "" {
+	if tctx.Source.WorkerBranchRoot != "" {
 		return scanSurveyProbeTree(ctx, tool, reads, tctx, target, searches, stats)
 	}
 	var scanErr error

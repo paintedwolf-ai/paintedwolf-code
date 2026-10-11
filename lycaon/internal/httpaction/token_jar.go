@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/url"
 	"regexp"
 	"sort"
@@ -129,17 +130,17 @@ func openTokenJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args m
 		return nil, secretcap.TokenJarRequest{}, invalid(fmt.Errorf("token_jar must be a name"))
 	}
 	if deps.Secrets == nil {
-		return nil, secretcap.TokenJarRequest{}, &tools.ToolReject{
+		return nil, secretcap.TokenJarRequest{}, &toolrejection.ToolReject{
 			Code: TokenJarFailedCode, Data: map[string]any{"jar": name, "token_jar_name": name, "reason": "managed secrets are unavailable"},
 		}
 	}
 	req := secretcap.TokenJarRequest{
-		ProjectID: strings.TrimSpace(tctx.ProjectID), ChatSessionID: tctx.ChatSessionID(),
-		SessionID: strings.TrimSpace(tctx.SessionID), OperationID: strings.TrimSpace(tctx.ToolCallID), Name: name,
+		ProjectID: strings.TrimSpace(tctx.Identity.ProjectID), ChatSessionID: tctx.ChatSessionID(),
+		SessionID: strings.TrimSpace(tctx.Identity.SessionID), OperationID: strings.TrimSpace(tctx.Identity.ToolCallID), Name: name,
 	}
 	jar, err := deps.Secrets.OpenTokenJar(ctx, req)
 	if err != nil {
-		return nil, req, &tools.ToolReject{
+		return nil, req, &toolrejection.ToolReject{
 			Code: TokenJarFailedCode, Data: map[string]any{"jar": name, "token_jar_name": name, "reason": err.Error()},
 		}
 	}
@@ -174,7 +175,7 @@ func referencedTokenNames(req outboundRequest) []string {
 // placedTokens resolves every reference against the jar and marks the ones
 // whose issuer is not this request's destination. An unheld name is refused
 // rather than sent literally.
-func placedTokens(req outboundRequest, jar *secretcap.TokenJar, destinationID string) ([]tokenPlacement, *tools.ToolReject) {
+func placedTokens(req outboundRequest, jar *secretcap.TokenJar, destinationID string) ([]tokenPlacement, *toolrejection.ToolReject) {
 	names := referencedTokenNames(req)
 	if len(names) == 0 {
 		return nil, nil
@@ -193,7 +194,7 @@ func placedTokens(req outboundRequest, jar *secretcap.TokenJar, destinationID st
 		placements = append(placements, tokenPlacement{name: name, token: token, foreign: token.Origin != destinationID})
 	}
 	if len(missing) > 0 {
-		return nil, &tools.ToolReject{
+		return nil, &toolrejection.ToolReject{
 			Code: TokenNotHeldCode,
 			Data: map[string]any{"jar": jar.Name, "missing": missing, "held": jar.Names()},
 		}
@@ -204,7 +205,7 @@ func placedTokens(req outboundRequest, jar *secretcap.TokenJar, destinationID st
 // substituteTokens writes each placed token onto the wire. A foreign token
 // the screen released redacted is written as the marker instead, and the
 // request then carries the redaction receipt.
-func substituteTokens(req outboundRequest, placements []tokenPlacement, release secretmatch.Resolution) (outboundRequest, *tools.ToolReject) {
+func substituteTokens(req outboundRequest, placements []tokenPlacement, release secretmatch.Resolution) (outboundRequest, *toolrejection.ToolReject) {
 	if len(placements) == 0 {
 		return req, nil
 	}
@@ -362,7 +363,7 @@ func captureResponseTokens(
 	rules []captureTokenRule,
 	resp outboundhttp.Response,
 	issuerID, issuerLabel string,
-) (*tokenReceipt, *tools.ToolReject) {
+) (*tokenReceipt, *toolrejection.ToolReject) {
 	if jar == nil && len(rules) == 0 {
 		return nil, nil
 	}
@@ -375,7 +376,7 @@ func captureResponseTokens(
 	}
 	captured, missing := extractTokens(resp, rules)
 	if len(missing) > 0 {
-		return nil, &tools.ToolReject{
+		return nil, &toolrejection.ToolReject{
 			Code: TokenCaptureFailedCode,
 			Data: map[string]any{"jar": jar.Name, "missing": missing},
 		}
