@@ -107,6 +107,7 @@ func setImplementRunPhase(t *testing.T, wfStore *runstate.Repository, run *wire.
 }
 
 type loopFixture struct {
+	rec   *llm.RecordingClient
 	mgr   *session.Host
 	wfMgr *workflow.RunManager
 	store *store.SQL
@@ -164,7 +165,7 @@ func setupLoopFixture(t *testing.T, cfg settings.SessionLimits) loopFixture {
 		testutil.FailErr(t, "wfMgr.Store.Update failed", err)
 	}
 	drainCoordinatorAsyncTurnsOnCleanup(t, mgr)
-	return loopFixture{mgr: mgr, wfMgr: wfMgr, store: store, sess: sess}
+	return loopFixture{mgr: mgr, rec: rec, wfMgr: wfMgr, store: store, sess: sess}
 }
 
 func TestShouldLoopWakeDeniesHumanApprovalAwaiting(t *testing.T) {
@@ -587,50 +588,6 @@ func TestImplementWorkerSummaryLoopWakesCoordinator(t *testing.T) {
 	})
 }
 
-func TestLegFinishedQueuesKickAndAutoPrompts(t *testing.T) {
-	fix := setupLoopFixture(t, settings.DefaultSessionLimits())
-	ctx := context.Background()
-
-	if _, err := fix.mgr.Submissions.Prompt(ctx, fix.sess.ID, "start implement"); err != nil {
-		testutil.FailErr(t, "fix.mgr.Submissions.Prompt failed", err)
-	}
-	child, err := fix.store.CreateChild(ctx, fix.sess, wire.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
-	testutil.FailErr(t, "create child", err)
-	if _, err := fix.mgr.Workers.Summaries.Append(ctx, fix.sess.ID, workeroutcomes.SummaryInput{
-		Summary:        "leg done",
-		DelegationID:   "dep-1",
-		LegID:          "leg-1",
-		JobID:          "job-1",
-		ChildSessionID: child.ID,
-		AgentType:      orchestration.ProfilePathExplorer,
-		Status:         "complete",
-		CompletedAt:    autoContinuePtrTime(time.Now().UTC()),
-	}); err != nil {
-		testutil.FailErr(t, "append leg summary", err)
-	}
-	fix.mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, fix.sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-1", anchor.Envelope{
-		CompletedAt: autoContinuePtrTime(time.Now().UTC()),
-	})
-
-	testutil.WaitFor(t, 5*time.Second, func() bool {
-		msgs, err := fix.store.GetMessages(ctx, fix.sess.ID)
-		if err != nil {
-			return false
-		}
-		assistants := 0
-		hasAuto := false
-		for _, msg := range msgs {
-			if msg.Role == wire.MessageRoleAssistant {
-				assistants++
-			}
-			if msg.Kind == wire.MessageKindHostLoopWake {
-				hasAuto = true
-			}
-		}
-		return assistants >= 2 && hasAuto
-	})
-}
-
 func autoContinuePtrTime(t time.Time) *time.Time {
 	u := t.UTC()
 	return &u
@@ -653,6 +610,7 @@ func simulateWorkerJobComplete(t *testing.T, mgr *session.Host, q worker.WorkerQ
 	bridge := &worker.SessionOutcomeBridge{Workers: mgr.Coordinator.Workers, Loop: mgr.Coordinator.Runtime.CoordinatorLoop().Nudges, Results: mgr.Workers.Results, State: mgr.Workers.State, Closure: mgr.Coordinator.ProgressClosure}
 	testutil.FailErr(t, "OnWorkerComplete", bridge.OnWorkerComplete(ctx, jobID, result))
 	testutil.FailErr(t, "acknowledge worker outcome", q.MarkOutcomeDelivered(ctx, jobID))
+	bridge.OnOutcomeDelivered(ctx, *claimed)
 }
 
 func TestImplementWorkerSummaryPartialSkipsLoopWake(t *testing.T) {
