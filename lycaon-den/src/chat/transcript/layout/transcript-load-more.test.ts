@@ -317,8 +317,8 @@ describe("createTranscriptPaging", () => {
   it("rejects a page after the session view generation changes", async () => {
     const appStore = createAppStore();
     appStore.actions.installTranscriptBaseline("s-generation", [older(50)], 51, { hasMoreBefore: true });
-    let resolve!: (value: { messages: Message[]; turn_clocks: {}; turn_loads: {} }) => void;
-    const response = new Promise<{ messages: Message[]; turn_clocks: {}; turn_loads: {} }>(done => { resolve = done; });
+    let resolve!: (value: { messages: Message[]; turn_clocks: Record<string, never>; turn_loads: Record<string, never> }) => void;
+    const response = new Promise<{ messages: Message[]; turn_clocks: Record<string, never>; turn_loads: Record<string, never> }>(done => { resolve = done; });
     const pending = loadTranscriptPage(stubClient({ listSessionMessages: () => response }), appStore, "s-generation", "older");
     appStore.actions.invalidateSessionViewRequests();
     resolve({ messages: [older(40)], turn_clocks: {}, turn_loads: {} });
