@@ -23,7 +23,7 @@ func TestReleasedRecoveryManifestsEnterBoundedReclamation(t *testing.T) {
 				testutil.FailErr(t, "seed released recovery", err)
 			}
 			_, err = source.Exec(`INSERT INTO source_history_entries(id,project_id,kind,state,undo_label,redo_label,undo_plan_json,redo_plan_json,created_at,updated_at) SELECT 'recovery-history',id,'trash','undone','','','{}','{"recovery_id":"retained"}','','' FROM projects LIMIT 1`)
-			testutil.FailErr(t, "seed redo ownership", err)
+			testutil.FailErr(t, "seed redo references", err)
 			before := namespaceTableContents(t, source, "source_recovery_entries")
 			testutil.FailErr(t, "close released store", source.Close())
 			for boot := 0; boot < 2; boot++ {

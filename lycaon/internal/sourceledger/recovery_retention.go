@@ -6,14 +6,14 @@ import (
 	"errors"
 )
 
-// Active operations own captures named by their receipt ID before plan publication.
+// Active receipts retain captures named by their ID before plan publication.
 const recoveryClaimQuery = `SELECT
  EXISTS(SELECT 1 FROM source_history_entries WHERE project_id=?1 AND json_extract(undo_plan_json,'$.recovery_id')=?2)
  OR EXISTS(SELECT 1 FROM source_history_entries WHERE project_id=?1 AND json_extract(redo_plan_json,'$.recovery_id')=?2)
  OR EXISTS(SELECT 1 FROM source_mutations WHERE project_id=?1 AND status IN ('prepared','file_applied','failed','diverged') AND json_extract(NULLIF(plan_json,''),'$.recovery_id')=?2)
  OR EXISTS(SELECT 1 FROM source_mutations WHERE project_id=?1 AND id=?2 AND status IN ('prepared','file_applied'))`
 
-// HoldRecoveryReferences protects preparation through its durable ownership commit.
+// HoldRecoveryReferences protects preparation until its references commit.
 func (s *Retention) HoldRecoveryReferences() func() {
 	return s.objects.AcquireReferenceLease()
 }

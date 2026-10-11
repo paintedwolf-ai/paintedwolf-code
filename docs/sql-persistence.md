@@ -197,9 +197,9 @@ Deletion follows declared lifetime relationships, not a hand-maintained list in 
 
 Project deletion first resolves open sessions, worker branches, and filesystem state through their subsystem owners. SQL deletion cannot pretend those external resources disappeared. Project removal receipts in `project_removals` have no project foreign key: they describe an operation whose subject may already be deleted, and the request, reviewed evidence, checkpointed outcome, and operation identity survive it. Settled receipts expire with operation journals; unsettled receipts remain to report interrupted execution without replaying it.
 
-Recovery retention uses indexed ownership by project and recovery identity. Releasing
+Recovery retention uses indexed references by project and recovery identity. Releasing
 a history entry or mutation claim queues its recovery identity. The existing source
-collector checks indexed undo, redo, and pending-operation ownership, then removes
+collector checks indexed undo, redo, and pending-operation references, then removes
 at most one page per manifest table and transaction. Capture leases cover preparation
 through receipt publication. Unrelated retained receipts do not multiply cleanup work.
 
