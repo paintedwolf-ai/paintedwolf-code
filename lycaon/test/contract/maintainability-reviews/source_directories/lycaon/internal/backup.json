@@ -11,5 +11,6 @@
     "lycaon/internal/backup/restore_transaction_test.go": "186747724478720db309f06469fddcfb1f52292ff82f5e7200edc6276e78d445",
     "lycaon/internal/backup/recovery_publication_test.go": "6604aa8cd3aa9ea776cbb7020eb77ec4c12b0895015da8c100c8e8b9dec8b7cb",
     "lycaon/internal/backup/upgrade_recovery_test.go": "c9a2ec60b31d7e989002dab7833470881f83d6bcbe11a9ee8f55c7bf028af80f"
-  }
+  },
+  "reviewed_shape": "a85f2f0cfdab8b7b9bc6bb2ae03dc03597dbf1862020982e1d00fd4b620ae4e7"
 }

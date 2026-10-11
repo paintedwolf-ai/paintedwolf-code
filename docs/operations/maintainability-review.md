@@ -69,7 +69,8 @@ The revised loop separates measurement, admission, design and verification:
    shape and selected behavioral contracts. Construction records and data
    projections receive their own classifications.
 4. Reopen review when growth exceeds the ceiling, a selected contract changes,
-   a Go declaration/signature/dependency changes, or the decision is removed.
+   a Go declaration/signature, TypeScript dependency set or directory membership
+   changes, or the decision is removed.
    Renaming an artifact does not inherit acceptance. Invalidated decisions create
    an issue even when no issue existed during the retained state.
 5. Reconcile from verified main evidence. Preserve human issue text, stable issue
@@ -91,7 +92,7 @@ review when import structure changes.
 Regression coverage includes retained-to-invalidated transitions, no-issue
 retention followed by boundary-only changes, repeated reconciliation, changed
 measurements, manual dismissal, renamed/deleted artifacts, hostile issue prose,
-and type/dependency changes that do not increase field or method counts.
+and type/dependency changes that do not increase field, method or import counts.
 
 ## Delivery and verification
 

@@ -112,18 +112,27 @@ class ArchitecturalReviewTests(unittest.TestCase):
         self.assertFalse(issues.tracked(resolved)['active'])
         self.assertEqual(issues.plan([resolved], {}, observation('1' * 40)), ([], 0))
 
-    def test_same_size_type_change_renews_review(self):
-        entry = reviewed('shape_changed')
-        entry.update(category='go_struct_fields', id='pkg/p.Service', shape='1' * 64,
-                     spans=[{'file': 'pkg/server.go', 'first': 1, 'last': 20}])
-        entry['review']['reviewed_shape'] = '2' * 64
-        snapshot.validate(report([entry]), 'a' * 40, 'b' * 40)
-        closed = issue(state='closed', state_reason='completed', body=issues.block(entry, observation(), True))
-        operations, _ = issues.plan([closed], artifacts(entry), observation('f' * 40))
-        self.assertEqual(operations[0]['action'], 'reopen')
-        entry['review']['state'] = 'retained'
-        with self.assertRaises(ValueError):
-            snapshot.validate(report([entry]), 'a' * 40, 'b' * 40)
+    def test_same_size_structural_change_renews_review(self):
+        for category, artifact in [('go_struct_fields', 'pkg/p.Service'),
+                                   ('ts_local_dependencies', 'pkg/service.ts'),
+                                   ('source_directories', 'pkg'), ('test_directories', 'pkg')]:
+            with self.subTest(category=category):
+                entry = reviewed('shape_changed')
+                entry.update(category=category, id=artifact, shape='1' * 64,
+                             spans=[{'file': 'pkg/server.go', 'first': 1, 'last': 20}])
+                entry['review']['reviewed_shape'] = '2' * 64
+                snapshot.validate(report([entry]), 'a' * 40, 'b' * 40)
+                closed = issue(state='closed', state_reason='completed', body=issues.block(entry, observation(), True))
+                operations, _ = issues.plan([closed], artifacts(entry), observation('f' * 40))
+                self.assertEqual(operations[0]['action'], 'reopen')
+                entry['review']['state'] = 'retained'
+                with self.assertRaises(ValueError):
+                    snapshot.validate(report([entry]), 'a' * 40, 'b' * 40)
+                entry['shape'] = entry['review']['reviewed_shape']
+                snapshot.validate(report([entry]), 'a' * 40, 'b' * 40)
+                entry['review']['reviewed_shape'] = ''
+                with self.assertRaises(ValueError):
+                    snapshot.validate(report([entry]), 'a' * 40, 'b' * 40)
 
 
 class AgentFeedbackTests(unittest.TestCase):

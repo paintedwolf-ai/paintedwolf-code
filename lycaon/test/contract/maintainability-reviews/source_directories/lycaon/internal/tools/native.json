@@ -10,5 +10,6 @@
   "boundaries": {
     "lycaon/internal/tools/native/source_write_contract_test.go": "9787a70ac8836316cc9692eace9f647a1c78ba3d2eaf09c31175fe2a0c87a2a6",
     "lycaon/internal/tools/native/read_blobstore_compressed_test.go": "25d3a535342e58cdcd8ee3cff809fa2bcc990059869378b9948131a656dbfe80"
-  }
+  },
+  "reviewed_shape": "c72506b10cdf213702dd00cfaed3f4ef56e3d7810f41d660374a5dd714e4942f"
 }

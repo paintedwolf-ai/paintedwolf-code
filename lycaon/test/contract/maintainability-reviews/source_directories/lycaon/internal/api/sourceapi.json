@@ -13,5 +13,6 @@
     "lycaon/internal/api/sourceapi/source_view_receipts_test.go": "6cd5876b5652fb2408c3ecb22f028e55657722f9355a57b116ebc1c3f1d0421e",
     "lycaon/internal/api/sourceapi/watch_coverage_policy_test.go": "1f9a7d26e43541b8edf02fddd37d8aafe85ceeedddc04c5ddc59d7f5b3fb9919",
     "lycaon/internal/api/searchcontracts/search_dependencies_test.go": "66fc176faf903446181e052dd3f4a7fd621fd8b6611be83f53f41d8b783b325e"
-  }
+  },
+  "reviewed_shape": "af7f8c7712a92799b7aab4c11c7e35e44ee4256cd38bc92f18d0d97ffaed4431"
 }

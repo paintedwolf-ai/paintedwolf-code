@@ -253,18 +253,24 @@ change the artifact identity or create new runtime authority boundaries.
 
 A `refactor` decision classifies work without prescribing extraction: simplifying,
 consolidating fragments, and moving a genuine boundary are all valid outcomes.
-It does not suppress the warning. A
-`retain` decision requires a numeric `ceiling` above the warning threshold and
-at or below the hard limit, plus `boundaries`: a map of repository-relative
-files to their SHA-256 digests. Select the contract tests and declarations that support the rationale. Pin only
-boundaries whose changes invalidate the decision; avoid whole implementation
-files when the type shape and focused contracts express that boundary. Retained Go artifacts also record `reviewed_shape`, the signature printed in
-the tracking report. The checker derives that signature from the type declaration
-and method signatures, including receiver kinds, type parameters, and dependency
-identity. Bodies, comments, and declaration order are excluded. Unaliased and dot imports
-are conservatively included because import paths need not match package names. A
-changed signature renews review even when the size stays constant. Review state
-is measured, never authored.
+It does not suppress the warning. A `retain` decision requires a numeric `ceiling`
+above the warning threshold and at or below the hard limit, plus `boundaries`: a
+map of repository-relative files to their SHA-256 digests. Select the contract
+tests and declarations that support the rationale. Pin only boundaries whose
+changes invalidate the decision; avoid whole implementation files when structural
+shape and focused contracts express that boundary.
+
+Retained Go artifacts record `reviewed_shape`, the signature printed in the
+tracking report. The checker derives it from the type declaration and method
+signatures, including receiver kinds, type parameters, and dependency identity.
+Bodies, comments, and declaration order are excluded. Unaliased and dot imports
+are conservatively included because import paths need not match package names.
+TypeScript dependency reviews record the sorted resolved local module identities
+in the same field. Reordering or equivalent import spelling does not renew a
+decision; replacing a dependency does. Directory reviews record the sorted
+immediate measured source or test members, so same-count membership changes also
+renew review while body-only edits do not. A changed structural signature renews
+review even when the size stays constant. Review state is measured, never authored.
 
 The checker carries this decision in the source-bound report. Growth beyond the
 ceiling or a changed, removed, or nonregular boundary file renews review. Unknown

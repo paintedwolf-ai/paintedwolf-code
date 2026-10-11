@@ -12,5 +12,6 @@
     "lycaon/internal/tools/confine_request_parity_test.go": "c571018230a22c0985b430376cc7216a66c98065a6aa39a92a3ffe9f2a819415",
     "lycaon/internal/tools/source_context_test.go": "bd7d89bb3ad46c1dc63f198f906e0a35b9f4f1dabae33b0a1c743cfc2281bef6",
     "lycaon/internal/tools/file_change_review_test.go": "5909d66ac6b182e59a85077f11e04c8543923791444085f791f58554f945796b"
-  }
+  },
+  "reviewed_shape": "2da8f7ff8f331e0cbe06ffe228bf59917e80cdcf11233bcd92fb097f68882cc0"
 }

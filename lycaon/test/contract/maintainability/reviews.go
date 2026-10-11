@@ -26,8 +26,14 @@ func attachReviews(tree *workingTree, policy sizebudget.Policy, inv *inventory, 
 	for i := range report.Artifacts {
 		row := &report.Artifacts[i]
 		rows[row.Category+":"+row.ID] = row
-		if strings.HasPrefix(row.Category, "go_") {
-			shape, err := typeShape(tree, inv, row.ID)
+		if hasReviewShape(row.Category) {
+			var shape string
+			var err error
+			if strings.HasPrefix(row.Category, "go_") {
+				shape, err = typeShape(tree, inv, row.ID)
+			} else {
+				shape, err = inventoryShape(inv, row.Category, row.ID)
+			}
 			if err != nil {
 				return err
 			}
@@ -129,12 +135,12 @@ func validateReview(review artifactReview, policy sizebudget.Policy, inv *invent
 	if review.Ceiling <= limit.Warn || review.Ceiling > limit.Limit || len(review.Boundaries) == 0 || len(review.Boundaries) > 32 {
 		return fmt.Errorf("retained warning requires a ceiling within the hard limit and 1-32 boundaries")
 	}
-	if strings.HasPrefix(review.Category, "go_") {
+	if hasReviewShape(review.Category) {
 		if !hexLength(review.ReviewedShape, 64) {
-			return fmt.Errorf("retained Go artifact requires its reviewed shape")
+			return fmt.Errorf("retained structural artifact requires its reviewed shape")
 		}
 	} else if review.ReviewedShape != "" {
-		return fmt.Errorf("only Go artifacts carry a type shape")
+		return fmt.Errorf("category does not carry a structural shape")
 	}
 	for file, digest := range review.Boundaries {
 		if !reviewPath(file) || !hexLength(digest, 64) {
@@ -181,4 +187,9 @@ func reviewSlug(value string) bool {
 func hexLength(value string, length int) bool {
 	_, err := hex.DecodeString(value)
 	return len(value) == length && err == nil && value == strings.ToLower(value)
+}
+
+func hasReviewShape(category string) bool {
+	return strings.HasPrefix(category, "go_") || category == "ts_local_dependencies" ||
+		category == "source_directories" || category == "test_directories"
 }

@@ -11,5 +11,6 @@
     "lycaon/internal/workflow/lifecycle/human_start_supersede_test.go": "8109ec71ad566ef8d313df1c66b6b6cfc6d63bc858186a7eb6b930cfc60186bf",
     "lycaon/internal/workflow/lifecycle/teardown_test.go": "39bb7d9c21003f14389a12dff5dc1d22ed4cfa40deed594bbea6facb488f3db0",
     "lycaon/internal/workflow/lifecycle/failure_test.go": "b26f458bfa44ca0552cc17e32f31624e3831a26c10e256841f7b80e4e7435a62"
-  }
+  },
+  "reviewed_shape": "0edea348bfa1bdc7aa705e3951902a90440a5c19226004e02998a6b8b86dfc59"
 }

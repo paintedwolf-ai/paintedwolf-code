@@ -8,6 +8,10 @@ FIELDS = frozenset({'kind', 'workstream', 'disposition', 'reason', 'reviewed_com
                     'ceiling', 'boundaries', 'state', 'reviewed_shape'})
 
 
+def has_review_shape(category):
+    return category.startswith('go_') or category in {'ts_local_dependencies', 'source_directories', 'test_directories'}
+
+
 def validate_review(review, row, relative):
     if not isinstance(review, dict) or set(review) != FIELDS:
         raise ValueError('invalid architectural review shape')
@@ -21,7 +25,7 @@ def validate_review(review, row, relative):
             or not re.fullmatch('[0-9a-f]{40}', review['reviewed_commit'])):
         raise ValueError('missing architectural review provenance')
     if not isinstance(review['reviewed_shape'], str):
-        raise ValueError('invalid reviewed type shape')
+        raise ValueError('invalid reviewed structural shape')
     if type(review['ceiling']) is not int or not isinstance(review['boundaries'], dict):
         raise ValueError('invalid architectural review bounds')
     if not isinstance(review['state'], str) or review['state'] not in STATES:
@@ -36,15 +40,15 @@ def validate_review(review, row, relative):
         if not relative(path) or not isinstance(digest, str) or not re.fullmatch('[0-9a-f]{64}', digest):
             raise ValueError('invalid architectural review boundary')
     shape = review['reviewed_shape']
-    if row['category'].startswith('go_'):
+    if has_review_shape(row['category']):
         if not isinstance(shape, str) or not re.fullmatch('[0-9a-f]{64}', shape):
-            raise ValueError('retained Go artifact requires its reviewed shape')
+            raise ValueError('retained structural artifact requires its reviewed shape')
     elif shape:
-        raise ValueError('unexpected reviewed type shape')
+        raise ValueError('unexpected reviewed structural shape')
     if review['state'] == 'retained' and shape != row.get('shape', ''):
-        raise ValueError('retained review has a changed type shape')
+        raise ValueError('retained review has a changed structural shape')
     if review['state'] == 'shape_changed' and (not shape or shape == row.get('shape', '')):
-        raise ValueError('shape change lacks different type evidence')
+        raise ValueError('shape change lacks different structural evidence')
     exceeded = row['measured'] > review['ceiling']
     if (review['state'] == 'refactor' or exceeded != (review['state'] == 'ceiling_exceeded')):
         raise ValueError('architectural review contradicts its measurement')

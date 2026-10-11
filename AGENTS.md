@@ -118,7 +118,7 @@ report before acting on a historical issue. For each affected concern:
   interactions. A smaller helper is not a new subsystem owner.
 - Change callers and tests with a real boundary; do not hide dependencies in
   context bags, forwarders, or re-export barrels to lower a metric.
-- Record a retained warning's rationale, measured ceiling, type shape where
+- Record a retained warning's rationale, measured ceiling, structural shape where
   applicable, and the focused contracts that support it. Do not automatically
   increase a ceiling or refresh fingerprints after they change; reconsider the
   decision and verify those contracts first.
