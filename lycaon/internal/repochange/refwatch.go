@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -21,9 +22,18 @@ type refFileState struct {
 	exists bool
 }
 
+// refObserver tracks repository metadata independently of watch coverage.
+type refObserver struct {
+	mu     sync.Mutex
+	dirs   map[string]struct{}
+	states map[string]refFileState
+	timer  *time.Timer
+	closed bool
+}
+
 // Roots without a repository re-arm when a .git entry appears.
-func (w *worktreeWatcher) armRefWatch() {
-	repo, ok := gitrepo.Discover(w.root)
+func (w *refObserver) arm(root string, register func(string) addOutcome) {
+	repo, ok := gitrepo.Discover(root)
 	if !ok || repo.GitDir == "" || repo.CommonDir == "" {
 		return
 	}
@@ -38,39 +48,38 @@ func (w *worktreeWatcher) armRefWatch() {
 		filepath.Join(repo.CommonDir, "refs", "heads"),
 	)
 	w.mu.Lock()
-	if w.refDirs == nil {
-		w.refDirs = map[string]struct{}{}
+	if w.dirs == nil {
+		w.dirs = map[string]struct{}{}
 	}
-	if w.refState == nil {
-		w.refState = map[string]refFileState{}
+	if w.states == nil {
+		w.states = map[string]refFileState{}
 	}
 	w.mu.Unlock()
 	for _, dir := range dirs {
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 			continue
 		}
-		if w.addMeasuredDir(dir) == addRegistered {
+		if register(dir) == addRegistered {
 			w.mu.Lock()
-			w.refDirs[dir] = struct{}{}
+			w.dirs[dir] = struct{}{}
 			w.mu.Unlock()
 		}
 	}
 	w.seedRefState(repo)
 }
 
-// isRefEvent reports whether an event path lives on a watched ref surface.
-func (w *worktreeWatcher) isRefEvent(name string) bool {
+func (w *refObserver) contains(name string) bool {
 	dir := filepath.Dir(name)
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if _, ok := w.refDirs[name]; ok {
+	if _, ok := w.dirs[name]; ok {
 		return true
 	}
-	if _, ok := w.refDirs[dir]; ok {
+	if _, ok := w.dirs[dir]; ok {
 		return true
 	}
 	// Parent coverage includes branch directories awaiting registration.
-	for watched := range w.refDirs {
+	for watched := range w.dirs {
 		if strings.HasSuffix(watched, string(os.PathSeparator)+filepath.Join("refs", "heads")) &&
 			strings.HasPrefix(dir, watched+string(os.PathSeparator)) {
 			return true
@@ -79,12 +88,12 @@ func (w *worktreeWatcher) isRefEvent(name string) bool {
 	return false
 }
 
-// handleRefEvent distinguishes index changes from committed-history movement.
-func (w *worktreeWatcher) handleRefEvent(ctx context.Context, ev fsnotify.Event) {
+// Index changes and committed-history movement emit distinct events.
+func (w *refObserver) observe(ctx context.Context, root string, ev fsnotify.Event, register func(string) addOutcome) {
 	if filepath.Base(ev.Name) == "index" {
-		if repo, ok := gitrepo.Discover(w.root); ok && ev.Name == filepath.Join(repo.GitDir, "index") {
+		if repo, ok := gitrepo.Discover(root); ok && ev.Name == filepath.Join(repo.GitDir, "index") {
 			if w.refChanged(ev.Name) {
-				Notify(ctx, Event{ProjectDir: w.root, Kind: IndexChanged, Source: SourceWatcher})
+				Notify(ctx, Event{ProjectDir: root, Kind: IndexChanged, Source: SourceWatcher})
 			}
 			return
 		}
@@ -100,9 +109,9 @@ func (w *worktreeWatcher) handleRefEvent(ctx context.Context, ev fsnotify.Event)
 	if ev.Op&fsnotify.Create != 0 {
 		if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
 			// A new refs/heads subdirectory (slashed branch name).
-			if w.addMeasuredDir(ev.Name) == addRegistered {
+			if register(ev.Name) == addRegistered {
 				w.mu.Lock()
-				w.refDirs[ev.Name] = struct{}{}
+				w.dirs[ev.Name] = struct{}{}
 				w.mu.Unlock()
 			}
 			return
@@ -111,10 +120,10 @@ func (w *worktreeWatcher) handleRefEvent(ctx context.Context, ev fsnotify.Event)
 	if !w.refChanged(ev.Name) {
 		return
 	}
-	w.scheduleHeadNotify(ctx)
+	w.schedule(ctx, root)
 }
 
-func (w *worktreeWatcher) seedRefState(repo gitrepo.Repo) {
+func (w *refObserver) seedRefState(repo gitrepo.Repo) {
 	for _, file := range []string{
 		filepath.Join(repo.GitDir, "index"),
 		filepath.Join(repo.GitDir, "HEAD"),
@@ -135,18 +144,18 @@ func (w *worktreeWatcher) seedRefState(repo gitrepo.Repo) {
 	}
 }
 
-func (w *worktreeWatcher) rememberRefState(path string) {
+func (w *refObserver) rememberRefState(path string) {
 	state := readRefFileState(path)
 	w.mu.Lock()
-	w.refState[path] = state
+	w.states[path] = state
 	w.mu.Unlock()
 }
 
-func (w *worktreeWatcher) refChanged(path string) bool {
+func (w *refObserver) refChanged(path string) bool {
 	current := readRefFileState(path)
 	w.mu.Lock()
-	previous, known := w.refState[path]
-	w.refState[path] = current
+	previous, known := w.states[path]
+	w.states[path] = current
 	w.mu.Unlock()
 	if !known {
 		return current.exists
@@ -162,21 +171,19 @@ func readRefFileState(path string) refFileState {
 	return refFileState{digest: sha256.Sum256(raw), exists: true}
 }
 
-// scheduleHeadNotify emits one debounced HeadMoved unless closed.
-func (w *worktreeWatcher) scheduleHeadNotify(ctx context.Context) {
+func (w *refObserver) schedule(ctx context.Context, root string) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.closed {
 		return
 	}
-	if w.refNotifyTimer != nil {
-		w.refNotifyTimer.Reset(refNotifyDebounce)
+	if w.timer != nil {
+		w.timer.Reset(refNotifyDebounce)
 		return
 	}
-	root := w.root
-	w.refNotifyTimer = time.AfterFunc(refNotifyDebounce, func() {
+	w.timer = time.AfterFunc(refNotifyDebounce, func() {
 		w.mu.Lock()
-		w.refNotifyTimer = nil
+		w.timer = nil
 		closed := w.closed
 		w.mu.Unlock()
 		if closed {
@@ -186,13 +193,19 @@ func (w *worktreeWatcher) scheduleHeadNotify(ctx context.Context) {
 	})
 }
 
-// stopRefNotify cancels a pending debounced notification at close.
-func (w *worktreeWatcher) stopRefNotify() {
+func (w *refObserver) close() {
 	w.mu.Lock()
-	timer := w.refNotifyTimer
-	w.refNotifyTimer = nil
+	timer := w.timer
+	w.timer = nil
+	w.closed = true
 	w.mu.Unlock()
 	if timer != nil {
 		timer.Stop()
 	}
+}
+
+func (w *refObserver) forget(path string) {
+	w.mu.Lock()
+	delete(w.dirs, path)
+	w.mu.Unlock()
 }
