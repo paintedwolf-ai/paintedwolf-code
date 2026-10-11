@@ -1,6 +1,13 @@
 import { createEffect, type Accessor } from "solid-js";
 import { observeElementExtent } from "../../layout/element-extent.ts";
-import { FILES_TREE_SURFACE, clampListPaneSizePx, listPaneSizeMinPx, maxListPaneSizePx, resolveListPaneSizePx, type ListPaneAxis } from "../../list/list-pane-model.ts";
+import {
+  FILES_TREE_SURFACE,
+  clampListPaneSizePx,
+  listPaneSizeMinPx,
+  maxListPaneSizePx,
+  resolveListPaneSizePx,
+  type ListPaneAxis,
+} from "../../list/list-pane-model.ts";
 import { widenWindowBy } from "../../platform/windows/window-chrome.ts";
 import { dragRequestsHide, PANE_HIDDEN_PX } from "../../layout/drag-to-hide.ts";
 import {
@@ -18,7 +25,11 @@ import {
   workspaceOrientationPref,
 } from "../../shell/workspace-layout.ts";
 import { filesShowWindowDeficitPx } from "../../shell/responsive-collapse.ts";
-import { filesTreeCollapsed, setFilesTreeClaimed, setFilesTreeCollapsed } from "./files-tree-window-state.ts";
+import {
+  filesTreeCollapsed,
+  setFilesTreeClaimed,
+  setFilesTreeCollapsed,
+} from "./files-tree-window-state.ts";
 
 export function createFilesTreeLayout(stageEl: Accessor<HTMLElement | undefined>) {
   // Observed extent avoids layout reads during dragging.
@@ -73,7 +84,10 @@ export function createFilesTreeLayout(stageEl: Accessor<HTMLElement | undefined>
   };
 
   return {
-    treeStyle, showFilesTree, toggleFilesTree, stripSide,
+    treeStyle,
+    showFilesTree,
+    toggleFilesTree,
+    stripSide,
     resizeDirection: () => workspaceOrientationPref() === "mirrored" ? -1 as const : 1 as const,
     size: (axis: ListPaneAxis) => resolveListPaneSizePx(
       FILES_TREE_SURFACE, listPanePrefs(FILES_TREE_SURFACE), axis, bodySize(axis),

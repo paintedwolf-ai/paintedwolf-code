@@ -39,8 +39,6 @@ describe("resize measurement", () => {
     expect(handle).not.toMatch(/addEventListener\("resize"/);
     expect(handle).toContain("new ResizeObserver(syncAxis)");
   });
-
-
 });
 
 describe("layout epoch", () => {
