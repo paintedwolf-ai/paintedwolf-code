@@ -5,12 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/people"
-	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -49,23 +47,6 @@ func (s *Store) RecordBatch(ctx context.Context, inputs []RecordInput) error {
 	bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 	_, _ = s.Retention.reclaimBlobBatch(bg)
 	cancel()
-	return nil
-}
-
-func validateBatch(inputs []RecordInput) error {
-	first := inputs[0]
-	if strings.TrimSpace(first.ProjectID) == "" || strings.TrimSpace(first.RootID) == "" ||
-		strings.TrimSpace(first.Path) == "" || first.Op == "" || first.Origin == "" {
-		return fmt.Errorf("source history requires project, root, path, operation, and origin")
-	}
-	for _, in := range inputs[1:] {
-		if in.ProjectID != first.ProjectID || in.BranchID != first.BranchID ||
-			in.Origin != first.Origin ||
-			in.OperationID != first.OperationID || in.GitTransitionID != first.GitTransitionID ||
-			in.CommandWindowID != first.CommandWindowID {
-			return fmt.Errorf("source operation effects disagree on operation metadata")
-		}
-	}
 	return nil
 }
 
@@ -130,44 +111,6 @@ func (s *Store) operationPerson(ctx context.Context, in RecordInput) (string, er
 		return "", fmt.Errorf("source operation person: %w", err)
 	}
 	return person.ID, nil
-}
-
-func normalizedInput(in RecordInput) RecordInput {
-	if in.TS.IsZero() {
-		in.TS = time.Now().UTC()
-	}
-	if in.Cause == "" {
-		switch in.Origin {
-		case api.SourceChangeOriginAgent:
-			in.Cause = "agent_tool"
-		case api.SourceChangeOriginUser:
-			in.Cause = "human_edit"
-		default:
-			in.Cause = "external_observation"
-		}
-	}
-	if in.CaptureQuality == "" {
-		in.CaptureQuality = "exact"
-		if in.Origin == api.SourceChangeOriginExternal {
-			in.CaptureQuality = "observed"
-		}
-	}
-	if in.EntryKind == "" {
-		in.EntryKind = EntryKindFile
-	}
-	if in.BeforeSHA256 == "" && in.Before != nil {
-		in.BeforeSHA256 = sourceblob.ContentSHA(in.Before)
-	}
-	if in.AfterSHA256 == "" && in.After != nil {
-		in.AfterSHA256 = sourceblob.ContentSHA(in.After)
-	}
-	if in.BeforeSize == 0 && in.Before != nil {
-		in.BeforeSize = int64(len(in.Before))
-	}
-	if in.AfterSize == 0 && in.After != nil {
-		in.AfterSize = int64(len(in.After))
-	}
-	return in
 }
 
 // recordEffect lands one effect and reports the file and version it produced.
