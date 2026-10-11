@@ -107,10 +107,9 @@ func OpenWithOptions(ctx context.Context, dbPath string, hooks UpgradeHooks, opt
 			return nil, fmt.Errorf("read shutdown state: %w", err)
 		}
 		auditDue = !clean
-		// A successful integrity check clears the audit failure marker.
-		if err := clearIntegrityAuditFailed(ctx, writer); err != nil {
+		if err := prepareAuditState(ctx, writer, auditDue); err != nil {
 			_ = writer.Close()
-			return nil, fmt.Errorf("clear integrity audit state: %w", err)
+			return nil, storeIncompatible(RecoveryReasonIntegrityFailed, SchemaVersion, err.Error())
 		}
 	}
 	if err := markShutdownState(ctx, writer, false); err != nil {

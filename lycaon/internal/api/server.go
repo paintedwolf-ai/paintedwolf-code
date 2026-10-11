@@ -79,7 +79,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/usernotice"
-	"github.com/lycaon/lycaon/internal/version"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/webindex"
 	"github.com/lycaon/lycaon/internal/webresearch"
@@ -702,7 +701,7 @@ func (s *Server) registerProjectRoutes(r chi.Router) {
 	s.registerV1Operation(r, operationUpdateProjectManagedSecret, s.Project.HandleUpdateProjectManagedSecret)
 	s.registerV1Operation(r, operationReplaceProjectManagedSecretValue, s.Project.HandleReplaceProjectManagedSecretValue)
 	s.registerV1Operation(r, operationHoldProjectManagedSecret, s.Project.HandleHoldProjectManagedSecret)
-	s.registerV1Operation(r, operationListProjectManagedSecretUses,s.Project.HandleListProjectManagedSecretUses)
+	s.registerV1Operation(r, operationListProjectManagedSecretUses, s.Project.HandleListProjectManagedSecretUses)
 	s.registerV1Operation(r, operationBeginProjectManagedSecretReveal, s.Project.HandleBeginProjectManagedSecretReveal)
 	s.registerV1Operation(r, operationCompleteProjectManagedSecretReveal, s.Project.HandleCompleteProjectManagedSecretReveal)
 	s.registerV1Operation(r, operationRevokeProjectManagedSecret, s.Project.HandleRevokeProjectManagedSecret)
@@ -876,6 +875,10 @@ func (s *Server) registerHostResourceRoutes(r chi.Router) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/health" && s.storeFailure() != nil {
+		s.responses.Fail(w, wire.ApiErrorCodeStoreIncompatible, "History storage failed its integrity check; the engine is stopping for recovery.")
+		return
+	}
 	s.router.ServeHTTP(w, r)
 }
 
@@ -892,45 +895,6 @@ func (s *Server) rejectRestorePending(next http.Handler) http.Handler {
 
 func (s *Server) markRestorePending() {
 	s.restorePending.Store(true)
-}
-
-type healthResponse struct {
-	Status                    string `json:"status"`
-	Version                   string `json:"version"`
-	StoreRevision             uint64 `json:"store_revision"`
-	SchemaVersion             int    `json:"schema_version"`
-	MinDenVersion             string `json:"min_den_version,omitempty"`
-	PreviousAppVersion        string `json:"previous_app_version,omitempty"`
-	StoreSchemaVersion        *int   `json:"store_schema_version,omitempty"`
-	RecoveryReason            string `json:"recovery_reason,omitempty"`
-	RecoveryDetail            string `json:"recovery_detail,omitempty"`
-	RecoverySnapshotAvailable bool   `json:"recovery_snapshot_available"`
-	RecoverySnapshotAt        string `json:"recovery_snapshot_at,omitempty"`
-}
-
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	httpio.WriteJSON(w, http.StatusOK, s.healthPayload())
-}
-
-func (s *Server) healthPayload() healthResponse {
-	resp := healthResponse{
-		Status:             "ok",
-		Version:            version.Version,
-		StoreRevision:      s.storeRevision,
-		SchemaVersion:      db.SchemaVersion,
-		MinDenVersion:      s.minDenVersion,
-		PreviousAppVersion: s.previousAppVersion,
-	}
-	if st := s.recovery; st != nil {
-		resp.Status = "recovery"
-		storeVer := st.StoreSchemaVersion
-		resp.StoreSchemaVersion = &storeVer
-		resp.RecoveryReason = string(st.Reason)
-		resp.RecoveryDetail = st.Detail
-		resp.RecoverySnapshotAvailable = st.SnapshotAvailable
-		resp.RecoverySnapshotAt = st.SnapshotAt
-	}
-	return resp
 }
 
 func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {

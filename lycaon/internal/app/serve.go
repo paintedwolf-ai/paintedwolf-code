@@ -153,7 +153,7 @@ func (a *ServeApp) watchStoreClaim(ctx context.Context) <-chan error {
 	return lost
 }
 
-// Run starts HTTP and background runners until SIGINT/SIGTERM, ctx cancellation, or loss of the store claim.
+// Run serves until shutdown or loss of safe store access.
 func (a *ServeApp) Run(ctx context.Context) error {
 	startupReady := false
 	defer func() {
@@ -266,6 +266,9 @@ func (a *ServeApp) Run(ctx context.Context) error {
 	select {
 	case err := <-errChan:
 		runErr = fmt.Errorf("server error: %w", err)
+	case <-a.storeFailed():
+		runErr = a.resources.db.Failure()
+		slog.ErrorContext(ctx, "store integrity failed; stopping the engine", "error", runErr)
 	case err := <-claimLost:
 		slog.ErrorContext(ctx, "store claim lost; stopping the engine", "error", err)
 		runErr = err
