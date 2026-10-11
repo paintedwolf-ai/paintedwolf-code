@@ -13,6 +13,9 @@ pub(super) fn retry_delay(failures: u32) -> u64 {
 pub fn start_update_scheduler(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let service = app.state::<UpdateService>();
+        if service.inner.lock().await.state.development {
+            return;
+        }
         let mut wake = service.wake.subscribe();
         let mut delay = FIRST_CHECK_SECS;
         let mut failures = 0;

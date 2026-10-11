@@ -12,14 +12,14 @@ use std::{
 fn engine_stderr_rotates_without_a_process_restart() {
     let directory = crate::test_support::TempDir::new("continuous-engine-log");
     let path = directory.join("engine.log");
-    let input = vec![b'x'; ENGINE_LOG_MAX_BYTES as usize * 3 + 17];
+    let input = vec![b'x'; crate::diagnostic_log::LOG_MAX_BYTES as usize * 3 + 17];
     drain_engine_stderr(std::io::Cursor::new(input), Some(path.clone()));
-    assert!(fs::metadata(&path).expect("current log").len() <= ENGINE_LOG_MAX_BYTES);
+    assert!(fs::metadata(&path).expect("current log").len() <= crate::diagnostic_log::LOG_MAX_BYTES);
     assert!(
         fs::metadata(path.with_extension("log.1"))
             .expect("previous log")
             .len()
-            <= ENGINE_LOG_MAX_BYTES
+            <= crate::diagnostic_log::LOG_MAX_BYTES
     );
     assert_eq!(fs::read(path).expect("latest output"), vec![b'x'; 17]);
 }

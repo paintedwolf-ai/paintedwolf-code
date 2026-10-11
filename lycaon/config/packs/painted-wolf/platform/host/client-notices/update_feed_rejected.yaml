@@ -1,0 +1,11 @@
+scope: app
+title: Update feed could not be verified
+message: >-
+  Painted Wolf Code could not verify the published update information. No update was installed.
+suggested_action: >-
+  Open Settings → General → Updates for details and check again later.
+scenarios:
+  - id: default
+    expect_contains:
+      - Painted Wolf Code
+      - No update was installed

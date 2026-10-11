@@ -5,12 +5,12 @@ import { CLIENT_NOTICES } from "../../notices/client-notices.generated.ts";
 import { nativeUpdateState, type createUpdateState } from "./update-state.ts";
 import type { NativeUpdateState } from "./update-service.ts";
 
-const codes = ["update_available", "update_ready", "update_failed"] as const;
+const codes = ["update_available", "update_ready", "update_failed", "update_feed_rejected"] as const;
 type UpdateNotice = (typeof codes)[number];
 
 function noticeFor(state: NativeUpdateState | null): UpdateNotice | undefined {
-  if (!state) return undefined;
-  if (state.last_error?.code === "feed_rejected") return "update_failed";
+  if (!state || state.capabilities.blocked_reason === "development_build") return undefined;
+  if (state.last_error?.code === "feed_rejected") return "update_feed_rejected";
   if (state.capabilities.can_restart_to_update && state.offer_confirmed_at !== null) return "update_ready";
   if (state.installation === "failed" && state.last_error && state.last_error.code !== "check_failed" && state.last_error.code !== "cancelled") return "update_failed";
   if (!state.automatic_updates_enabled && state.capabilities.can_download && state.candidate?.rollout_eligibility === "eligible") return "update_available";
@@ -39,7 +39,7 @@ export function mountUpdateNotice(options: {
       if (!code) return;
       const copy = CLIENT_NOTICES[code];
       options.notices.publish({
-        code, severity: code === "update_failed" ? "warning" : "info",
+        code, severity: code === "update_failed" || code === "update_feed_rejected" ? "warning" : "info",
         title: copy.title, message: copy.message, suggestedAction: copy.suggestedAction,
       }, APP_SCOPE);
     }));

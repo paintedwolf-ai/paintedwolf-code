@@ -110,6 +110,9 @@ pub(super) async fn run_check(app: &AppHandle, automatic: bool) -> Result<Check,
     let mut wake = service.wake.subscribe();
     let (generation, version, channel) = {
         let mut inner = service.inner.lock().await;
+        if inner.state.development {
+            return Err(super::Failure::DevelopmentBuild.into());
+        }
         if (automatic && !inner.state.automatic_updates_enabled)
             || inner.state.installation.busy()
             || inner.state.discovery == Discovery::Checking

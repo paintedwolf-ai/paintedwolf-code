@@ -31,7 +31,7 @@ export function UpdatePanel(props: UpdatePanelProps) {
   const state = updates.state;
   usePresentationParticipant("update-state", () => state() !== null || updates.error() !== null);
   const candidate = () => state()?.candidate;
-  const locked = () => updates.busy() || !state() || state()?.installation === "recovery_required";
+  const locked = () => state()?.capabilities.blocked_reason === "development_build" || updates.busy() || !state() || state()?.installation === "recovery_required";
   const progress = () => {
     const current = state();
     const total = current?.total_bytes;
@@ -63,6 +63,7 @@ export function UpdatePanel(props: UpdatePanelProps) {
     <DenButton variant="secondary" {...(props.preferences ? settingAnchor("check-for-updates") : {})} data-testid="updates-check-now" disabled={updates.busy() || !state()?.capabilities.can_check} onClick={() => void updates.run(updates.service.check)}>{state()?.discovery === "checking" ? "Checking…" : "Check now"}</DenButton>
     <Show when={state()}>{(current) => <div class="den-settings-hint" data-testid="updates-status">
       <p data-testid="updates-current-version">Version {current().running_version}</p>
+      <Show when={current().capabilities.blocked_reason === "development_build"}><p data-testid="updates-development-build">Updates are unavailable in development builds. Install a packaged release to use automatic updates.</p></Show>
       <Show when={current().discovery === "up_to_date"}><p>You’re using the latest version.</p></Show>
       <Show when={current().discovery === "held_back"}><p data-testid="updates-rollout-eligibility">A newer release is rolling out gradually. Check now to get it sooner.</p></Show>
       <Show when={candidate()}>{(release) => <p>Version {release().version} is available.</p>}</Show>

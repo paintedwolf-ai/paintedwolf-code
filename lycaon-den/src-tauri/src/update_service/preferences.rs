@@ -20,6 +20,9 @@ async fn set(
 ) -> Result<NativeUpdateState, UpdateError> {
     let service = app.state::<UpdateService>();
     let mut inner = service.inner.lock().await;
+    if inner.state.development {
+        return Err(Failure::DevelopmentBuild.into());
+    }
     if inner.state.installation == Installation::RecoveryRequired {
         return Err(Failure::RecoveryRequired.into());
     }

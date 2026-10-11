@@ -1,5 +1,6 @@
 /** Recovery guidance keyed by native failure codes. */
 export const UPDATE_ERROR_MESSAGES = {
+  development_build: "Updates are unavailable in development builds. Install a packaged release to use automatic updates.",
   state_unavailable: "Update settings could not be opened. Restart the app and try again.",
   invalid_version: "This app has invalid version information. Download a fresh copy to update.",
   invalid_transition: "Another update action is in progress. Wait for it to finish and try again.",

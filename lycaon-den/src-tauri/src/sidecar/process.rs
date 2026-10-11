@@ -1,6 +1,6 @@
 use super::layout::{bundled_engine_layout, resolve_lycaon_binary};
 use super::logging::{
-    append_engine_log, drain_engine_stderr, engine_log_path, write_engine_log_header,
+    drain_engine_stderr, engine_log_path, write_engine_log_header,
 };
 use super::startup::STARTUP_PROTOCOL_VERSION;
 use super::ChildState;
@@ -65,7 +65,7 @@ fn note_slow_graceful_stop(waited: Duration, killed: bool) {
         } else {
             "exited on its own"
         };
-        let _ = append_engine_log(
+        let _ = crate::diagnostic_log::append(
             &path,
             format!(
                 "--- engine shutdown took {}ms; {outcome} ---\n",
