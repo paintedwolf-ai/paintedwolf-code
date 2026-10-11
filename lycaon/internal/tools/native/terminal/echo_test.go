@@ -31,7 +31,7 @@ func TestSendResultReportsNoPayloadLength(t *testing.T) {
 func TestOpenEchoesTheCanonicalCommand(t *testing.T) {
 	canonical := "curl -H Authorization:{{paintedwolf-secret:0f7a2f1c-1a11-4a1a-9a1a-2b3c4d5e6f70}} https://example.test"
 	echo := canonicalCommandEcho(tools.ToolContext{
-		CanonicalArgs: map[string]any{"command": "  " + canonical + "  "},
+		Effects: tools.InvocationEffects{CanonicalArgs: map[string]any{"command": "  " + canonical + "  "}},
 	})
 	if echo != canonical {
 		t.Fatalf("echo = %q, want the canonical command line", echo)

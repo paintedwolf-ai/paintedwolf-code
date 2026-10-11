@@ -78,7 +78,7 @@ func (q *InMemoryQueue) FinishCanceled(ctx context.Context, jobID string, result
 		q.mu.Unlock()
 		result = cancellationResultForJob(ctx, q, jobID, deps)
 	}
-	return q.finalizeCanceled(ctx, jobID, result)
+	return finalizeCanceled(ctx, q, jobID, result)
 }
 
 // Hold moves a pending job to held without terminating it.
@@ -104,7 +104,7 @@ func (q *InMemoryQueue) Hold(ctx context.Context, jobID string) error {
 	return nil
 }
 
-func (q *InMemoryQueue) finalizeCanceled(ctx context.Context, jobID string, result *api.WorkerResult) error {
+func finalizeCanceled(ctx context.Context, q *InMemoryQueue, jobID string, result *api.WorkerResult) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func (q *InMemoryQueue) finalizeCanceled(ctx context.Context, jobID string, resu
 	snapshot := job.task
 	projectID := job.projectID
 	q.mu.Unlock()
-	q.destroyWorkspaceRoot(jobID, workspaceRoot)
+	destroyWorkspaceRoot(q, jobID, workspaceRoot)
 	q.refreshBoard(ctx, snapshot, projectID)
 	return nil
 }

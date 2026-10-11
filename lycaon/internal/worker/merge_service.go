@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"log/slog"
 	"os"
 	"strings"
@@ -20,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -83,7 +83,7 @@ type MergeSessionLister interface {
 
 // WorkerCoordinationCleanup releases landed worker coordination state.
 type WorkerCoordinationCleanup interface {
-	ReleaseWorkerReservations(ctx context.Context, parentSessionID, jobID string) error
+	ReleaseReservations(ctx context.Context, parentSessionID, jobID string) error
 }
 
 // DelegationCloseoutRetry re-evaluates closeout after promotion.
@@ -105,21 +105,23 @@ type OverlayDocumentSynchronizer interface {
 
 // MergeService applies coordinator merge tools to worker branches.
 type MergeService struct {
-	Queue        MergeQueue
-	Store        MergeStore
-	Reports      ChangeReportDeps
-	Evidence     SourceEvidenceContext
-	Workspace    WorkerWorkspaceManager
-	Reject       *guidance.StaticRejectFormatter
-	Sessions     MergeSessionLister
-	Reconcile    session.MergeReconcileRegistrar
-	Coord        WorkerCoordinationCleanup
-	Closeout     DelegationCloseoutRetry
-	Projects     ProjectStore
-	Scans        OverlayScanHook
-	SourceLedger sourceledger.PromoteRecorder
-	Documents    OverlayDocumentSynchronizer
-	DataDir      string
+	Queue         MergeQueue
+	Store         MergeStore
+	Reports       ChangeReportDeps
+	Evidence      SourceEvidenceContext
+	Workspace     WorkerWorkspaceManager
+	Reject        *guidance.StaticRejectFormatter
+	Sessions      MergeSessionLister
+	Reconcile     MergeReconcileRegistrar
+	Captures      PromoteCapture
+	Coord         WorkerCoordinationCleanup
+	Closeout      DelegationCloseoutRetry
+	Projects      ProjectStore
+	Scans         OverlayScanHook
+	SourceLedger  sourceledger.PromoteRecorder
+	SourceHistory sourceledger.JobHistory
+	Documents     OverlayDocumentSynchronizer
+	DataDir       string
 }
 
 // PreviewForSession assesses one overlay without changing state.
@@ -461,7 +463,7 @@ func (s *MergeService) finishPromoteState(
 			}
 		}
 		if s.Coord != nil && task != nil {
-			_ = s.Coord.ReleaseWorkerReservations(ctx, task.ParentSessionID, jobID)
+			_ = s.Coord.ReleaseReservations(ctx, task.ParentSessionID, jobID)
 		}
 		if s.Closeout != nil && task != nil && task.DelegationID != "" {
 			_ = s.Closeout.RetryCloseout(ctx, task.DelegationID)
@@ -551,7 +553,7 @@ func (s *MergeService) reject(code string, data map[string]any) error {
 	if s != nil {
 		formatter = s.Reject
 	}
-	return tools.FormatDecisionReject(code, data, formatter)
+	return toolrejection.FormatDecisionReject(code, data, formatter)
 }
 
 func normalizeMergePaths(ctx context.Context, paths []string, task api.WorkerTask, roots []projectroot.RootRef) []string {
@@ -601,4 +603,15 @@ func (s *MergeService) taskRootRefs(ctx context.Context, task *api.WorkerTask) [
 		projects = s.Projects
 	}
 	return TaskRootRefs(ctx, task, projects)
+}
+
+type MergeReconcileRegistrar interface {
+	SetMergeReconcilePaths(sessionID string, paths []string)
+	ClearMergeReconcilePaths(sessionID string)
+	RecordPromotePathStatus(sessionID, jobID string, statuses []api.WorkerPromotePathStatus)
+	RecordOverlayPreviewSummary(sessionID, jobID string, out *api.WorkerMergeResult)
+	ClearPromotePathStatus(sessionID, jobID string)
+}
+type PromoteCapture interface {
+	RecordPromotedPrimaryPaths(context.Context, string, []string)
 }

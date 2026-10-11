@@ -51,10 +51,17 @@ func TestCompilePackagePlanShowsResolvedIdentityAndRemotePackageBoundary(t *test
 		t.Fatalf("balanced posture must ask GateRemotePackageExecutionKnown: %v, %+v", verdict, decision)
 	}
 	action := hitl.ProposedAction{
-		Tool: "command", Command: "npx create-vite@latest demo",
-		Args:             map[string]any{"command": "npx create-vite@latest demo"},
-		PackageExecution: execution,
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "npx create-vite@latest demo"},
+},
+Presentation: hitl.ActionPresentation{
+Command: "npx create-vite@latest demo",
+},
+Execution: hitl.ActionExecution{
+PackageExecution: execution,
+},
+}
 	plan, err := hitl.CompileCheckpointApprovalPlan(hitl.CheckpointRequest{
 		ProposedAction: &action, Decision: decision, Title: "Run downloaded package code",
 	})
@@ -93,9 +100,14 @@ func TestCompileApprovalPlanRedactsCredentialArguments(t *testing.T) {
 		ApprovalRequest: &gate.ApprovalRequest{Count: 1},
 	}, gate.DefaultPosture)
 	action := hitl.ProposedAction{
-		Tool: "command", Command: command,
-		Args: map[string]any{"command": command, "token": secret},
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": command, "token": secret},
+},
+Presentation: hitl.ActionPresentation{
+Command: command,
+},
+}
 	plan, err := hitl.CompileCheckpointApprovalPlan(hitl.CheckpointRequest{
 		ProposedAction: &action, Decision: decision,
 	})
@@ -123,7 +135,12 @@ func approvalPlanPresentation() (hitl.ApprovalPresentation, []api.ApprovalGate) 
 }
 
 func TestApprovalPlanRejectsSubjectAtWrongStage(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "pwd"}}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "pwd"},
+},
+}
 	presentation, reasons := approvalPlanPresentation()
 	_, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSend, hitl.ApprovalSubject{
 		Kind: hitl.ApprovalSubjectAction, Title: "Run command",
@@ -137,7 +154,12 @@ func TestApprovalPlanRejectsSubjectAtWrongStage(t *testing.T) {
 }
 
 func TestApprovalPlanRejectsProjectGrantWithoutProjectID(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "pwd"}}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "pwd"},
+},
+}
 	presentation, reasons := approvalPlanPresentation()
 	grant := hitl.ApprovalGrant{
 		ID: "grant_no_project", Scope: hitl.ApprovalGrantScopeProject,
@@ -162,7 +184,12 @@ func TestApprovalPlanRejectsProjectGrantWithoutProjectID(t *testing.T) {
 }
 
 func TestApprovalPlanRejectsLeaseWithoutReusableAuthority(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "pwd"}}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "pwd"},
+},
+}
 	presentation, reasons := approvalPlanPresentation()
 	_, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
 		Kind: hitl.ApprovalSubjectAction, Title: "Run command",
@@ -179,7 +206,12 @@ func TestApprovalPlanRejectsLeaseWithoutReusableAuthority(t *testing.T) {
 }
 
 func TestApprovalPlanIdentityCoversEveryField(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "pwd"}}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "pwd"},
+},
+}
 	presentation, reasons := approvalPlanPresentation()
 	plan, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
 		Kind: hitl.ApprovalSubjectAction, Title: "Run command",
@@ -195,7 +227,12 @@ func TestApprovalPlanIdentityCoversEveryField(t *testing.T) {
 }
 
 func TestApprovalPlanRejectsMissingGateProvenance(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "pwd"}}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "pwd"},
+},
+}
 	_, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
 		Kind: hitl.ApprovalSubjectAction, Title: "Run command",
 		Targets: []hitl.ApprovalTarget{{Kind: "action", Label: "pwd"}},
@@ -208,7 +245,15 @@ func TestApprovalPlanRejectsMissingGateProvenance(t *testing.T) {
 }
 
 func TestCompileCheckpointApprovalPlanCarriesApprovalRuleProvenance(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", Command: "git push origin main", Args: map[string]any{"command": "git push origin main"}}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "git push origin main"},
+},
+Presentation: hitl.ActionPresentation{
+Command: "git push origin main",
+},
+}
 	_, decision := gate.Evaluate(gate.Facts{
 		Stage: gate.StagePreSpawn, Ran: gate.ProducerApprovalRequest,
 		ApprovalRequest: &gate.ApprovalRequest{Count: 1},
@@ -227,7 +272,11 @@ func TestCompileCheckpointApprovalPlanCarriesApprovalRuleProvenance(t *testing.T
 }
 
 func TestCompileSecretPlanAuthorsFileLocation(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "model_request"}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "model_request",
+},
+}
 	_, decision := gate.Evaluate(gate.Facts{
 		Stage: gate.StagePreSend, Ran: gate.ProducerPayload,
 		Payload: &gate.SecretHit{
@@ -261,7 +310,14 @@ func TestCompileSecretPlanAuthorsFileLocation(t *testing.T) {
 }
 
 func TestCompileSecretPlanNamesTheReceiverForACommand(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", Command: "curl https://api.github.com/user"}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Presentation: hitl.ActionPresentation{
+Command: "curl https://api.github.com/user",
+},
+}
 	_, decision := gate.Evaluate(gate.Facts{
 		Stage: gate.StagePreSend, Ran: gate.ProducerPayload,
 		Payload: &gate.SecretHit{

@@ -156,7 +156,10 @@ func (t *ListDirTool) listRootCatalog(
 	maxDepth int,
 	includeHidden bool,
 ) ([]listDirEntry, bool) {
-	current := catalogOrProcess(t.Catalog).Current(ctx, tctx.ProjectID, []sourcecatalog.Root{{ID: root.ID, Path: root.Path}})
+	if catalogOrProcess(t.Catalog).BoundaryPath(ctx, root.Path, projectroot.ScopeRel(root, fullPath), true) != "" {
+		return nil, false
+	}
+	current := catalogOrProcess(t.Catalog).Current(ctx, tctx.Identity.ProjectID, []sourcecatalog.Root{{ID: root.ID, Path: root.Path}})
 	if current.State != sourcecatalog.StateReady {
 		return nil, false
 	}

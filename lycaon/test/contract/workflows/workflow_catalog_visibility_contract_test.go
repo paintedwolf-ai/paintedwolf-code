@@ -6,7 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -16,7 +16,7 @@ import (
 
 func TestWorkflowCatalogOmitsSystemTier(t *testing.T) {
 	t.Parallel()
-	resolver := workflow.ManifestResolver{}
+	resolver := workflowcatalog.Resolver{}
 	summaries, err := resolver.ListResolved(context.Background(), "", "")
 	contractcheck.FailErr(t, "ListResolved", err)
 	for _, row := range summaries {
@@ -86,7 +86,7 @@ func TestWorkflowAmbientAttachBijection(t *testing.T) {
 		t.Fatalf("session_create count = %d want 1", sessionCreate)
 	}
 
-	resolver := workflow.ManifestResolver{}
+	resolver := workflowcatalog.Resolver{}
 	summaries, err := resolver.ListResolved(context.Background(), "", "")
 	contractcheck.FailErr(t, "ListResolved", err)
 	for _, row := range summaries {

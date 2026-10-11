@@ -18,7 +18,7 @@ import (
 )
 
 // handlePreflight runs and renders every probe.
-func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
+func (s *Activity) handlePreflight(w http.ResponseWriter, r *http.Request) {
 	results, overall := preflight.Default().Run(r.Context(), s.preflightEnv)
 	if s.responses.Logger != nil {
 		codes := make([]string, 0, len(results))
@@ -37,7 +37,7 @@ func (s *Server) handlePreflight(w http.ResponseWriter, r *http.Request) {
 	report := wire.PreflightReport{
 		Overall:                string(overall),
 		Probes:                 make([]wire.PreflightProbe, 0, len(results)),
-		AttachmentCapabilities: attachmentCapabilitiesWire(s.Prompt.Caps),
+		AttachmentCapabilities: attachmentCapabilitiesWire(s.attachmentCaps),
 	}
 	facts := preflightHostFacts(s.preflightEnv)
 	now := time.Now()
@@ -105,7 +105,7 @@ func buildRevision() string {
 }
 
 // preflightProbeWire renders one probe result.
-func (s *Server) preflightProbeWire(res preflight.Result, facts preflight.HostFacts, now time.Time) wire.PreflightProbe {
+func (s *Activity) preflightProbeWire(res preflight.Result, facts preflight.HostFacts, now time.Time) wire.PreflightProbe {
 	probe := wire.PreflightProbe{
 		ID:     res.ID,
 		Status: string(res.Status),

@@ -1,9 +1,15 @@
 package loopwake
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 // sessionSleeps maps a session ID to its *sessionSleep.
-type sessionSleeps struct{ sync.Map }
+type sessionSleeps struct {
+	sync.Map
+	mu sync.Mutex
+}
 
 // state returns the session's sleep state, creating it on first use.
 func (s *sessionSleeps) state(sessionID string) *sessionSleep {
@@ -32,12 +38,10 @@ func (s *sessionSleeps) stopTimers() {
 	})
 }
 
-// StopSleepTimers disarms every armed wait timer at host shutdown. An armed
-// timer keeps the engine and its dependencies reachable until it fires. Wait
-// leases stay open in the durable store for the next host to settle.
-func (l *LoopEngine) StopSleepTimers() {
+// WaitSleepTimers joins admitted wait publication and timer delivery.
+func (l *Waits) WaitSleepTimers(ctx context.Context) error {
 	if l == nil {
-		return
+		return nil
 	}
-	l.sleep.stopTimers()
+	return l.timerWork.Wait(ctx)
 }

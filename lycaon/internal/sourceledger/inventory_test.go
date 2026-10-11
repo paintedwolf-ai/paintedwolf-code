@@ -19,7 +19,7 @@ func TestSuspendInventoryCancelsAllBranchesAndBlocksAdmission(t *testing.T) {
 	defer cancel()
 	testdbseed.InsertProject(t, st.sqlDB, "p2")
 	started := make(chan string, 3)
-	st.inventoryReconcile = func(ctx context.Context, projectID string, _ []RootSpec) (int, error) {
+	st.Inventory.inventoryReconcile = func(ctx context.Context, projectID string, _ []RootSpec) (int, error) {
 		started <- projectID
 		<-ctx.Done()
 		return 0, ctx.Err()
@@ -29,13 +29,13 @@ func TestSuspendInventoryCancelsAllBranchesAndBlocksAdmission(t *testing.T) {
 	done := make(chan error, 2)
 	for _, branch := range []string{"", "worker"} {
 		go func() {
-			done <- st.EnsureInventory(ctx, InventoryRequest{ProjectID: "p1", RootsGeneration: 1,
+			done <- st.Inventory.EnsureInventory(ctx, InventoryRequest{ProjectID: "p1", RootsGeneration: 1,
 				Roots: []RootSpec{{ID: "r1", BranchID: sourcebranch.ID(branch), Path: "/first"}}})
 		}()
 	}
 	otherDone := make(chan error, 1)
 	go func() {
-		otherDone <- st.EnsureInventory(otherCtx, InventoryRequest{ProjectID: "p2", RootsGeneration: 1,
+		otherDone <- st.Inventory.EnsureInventory(otherCtx, InventoryRequest{ProjectID: "p2", RootsGeneration: 1,
 			Roots: []RootSpec{{ID: "r2", Path: "/second"}}})
 	}()
 	for range 3 {
@@ -47,7 +47,7 @@ func TestSuspendInventoryCancelsAllBranchesAndBlocksAdmission(t *testing.T) {
 	}
 	drainCtx, cancelDrain := context.WithTimeout(ctx, 5*time.Second)
 	defer cancelDrain()
-	resume, err := st.SuspendInventory(drainCtx, "p1")
+	resume, err := st.Inventory.SuspendInventory(drainCtx, "p1")
 	defer resume()
 	testutil.FailErr(t, "suspend inventory", err)
 	for range 2 {
@@ -60,15 +60,15 @@ func TestSuspendInventoryCancelsAllBranchesAndBlocksAdmission(t *testing.T) {
 		t.Fatalf("unrelated inventory stopped: %v", err)
 	default:
 	}
-	if err := st.EnsureInventory(ctx, InventoryRequest{ProjectID: "p1", RootsGeneration: 2}); !errors.Is(err, context.Canceled) {
+	if err := st.Inventory.EnsureInventory(ctx, InventoryRequest{ProjectID: "p1", RootsGeneration: 2}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("suspended admission = %v, want cancellation", err)
 	}
 	cancelOther()
 	<-otherDone
 	resume()
 	resume()
-	st.inventoryReconcile = func(context.Context, string, []RootSpec) (int, error) { return 0, nil }
-	testutil.FailErr(t, "resume new generation", st.EnsureInventory(ctx, InventoryRequest{ProjectID: "p1", RootsGeneration: 2}))
+	st.Inventory.inventoryReconcile = func(context.Context, string, []RootSpec) (int, error) { return 0, nil }
+	testutil.FailErr(t, "resume new generation", st.Inventory.EnsureInventory(ctx, InventoryRequest{ProjectID: "p1", RootsGeneration: 2}))
 }
 
 func TestEnsureInventoryCoalescesAndRunsNewestRootsGeneration(t *testing.T) {
@@ -76,7 +76,7 @@ func TestEnsureInventoryCoalescesAndRunsNewestRootsGeneration(t *testing.T) {
 	started := make(chan struct{})
 	release := make(chan struct{})
 	var calls atomic.Int32
-	st.inventoryReconcile = func(_ context.Context, _ string, roots []RootSpec) (int, error) {
+	st.Inventory.inventoryReconcile = func(_ context.Context, _ string, roots []RootSpec) (int, error) {
 		call := calls.Add(1)
 		if call == 1 {
 			close(started)
@@ -87,7 +87,7 @@ func TestEnsureInventoryCoalescesAndRunsNewestRootsGeneration(t *testing.T) {
 
 	firstDone := make(chan error, 1)
 	go func() {
-		firstDone <- st.EnsureInventory(ctx, InventoryRequest{
+		firstDone <- st.Inventory.EnsureInventory(ctx, InventoryRequest{
 			ProjectID: "p1", RootsGeneration: 1,
 			Roots: []RootSpec{{ID: "r1", Path: "/first"}},
 		})
@@ -98,11 +98,11 @@ func TestEnsureInventoryCoalescesAndRunsNewestRootsGeneration(t *testing.T) {
 		t.Fatal("first inventory generation did not start")
 	}
 
-	testutil.FailErr(t, "join same generation", st.EnsureInventory(ctx, InventoryRequest{
+	testutil.FailErr(t, "join same generation", st.Inventory.EnsureInventory(ctx, InventoryRequest{
 		ProjectID: "p1", RootsGeneration: 1,
 		Roots: []RootSpec{{ID: "r1", Path: "/duplicate"}},
 	}))
-	testutil.FailErr(t, "queue next generation", st.EnsureInventory(ctx, InventoryRequest{
+	testutil.FailErr(t, "queue next generation", st.Inventory.EnsureInventory(ctx, InventoryRequest{
 		ProjectID: "p1", RootsGeneration: 2,
 		Roots: []RootSpec{{ID: "r1", Path: "/next"}, {ID: "r2", Path: "/added"}},
 	}))
@@ -116,7 +116,7 @@ func TestEnsureInventoryCoalescesAndRunsNewestRootsGeneration(t *testing.T) {
 	if got := calls.Load(); got != 2 {
 		t.Fatalf("inventory calls = %d, want one active plus one newer generation", got)
 	}
-	state, err := st.InventoryState(ctx, "p1", "", 2)
+	state, err := st.Inventory.InventoryState(ctx, "p1", "", 2)
 	testutil.FailErr(t, "inventory state", err)
 	if !state.Complete || state.Phase != InventoryReady || state.CompletedGeneration != 2 || state.FileCount != 2 {
 		t.Fatalf("inventory state = %+v", state)
@@ -125,7 +125,7 @@ func TestEnsureInventoryCoalescesAndRunsNewestRootsGeneration(t *testing.T) {
 
 func TestInventoryStateIsUninitializedWithoutDurableRow(t *testing.T) {
 	st, ctx := openLedger(t)
-	state, err := st.InventoryState(ctx, "p1", "", 3)
+	state, err := st.Inventory.InventoryState(ctx, "p1", "", 3)
 	testutil.FailErr(t, "inventory state", err)
 	if state.Complete || state.Phase != InventoryUninitialized || state.CompletedGeneration != -1 {
 		t.Fatalf("inventory state = %+v", state)
@@ -136,9 +136,9 @@ func TestInventoryJobRetirementCannotDeleteNewerJob(t *testing.T) {
 	st, _ := openLedger(t)
 	completed := InventoryRequest{ProjectID: "p1", RootsGeneration: 1, requestedEpoch: "epoch-1", serial: 1}
 	retiring := &inventoryJob{request: completed, done: make(chan struct{})}
-	st.inventoryJobs["p1"] = retiring
+	st.Inventory.inventoryJobs["p1"] = retiring
 
-	if !st.settleInventoryJob("p1", retiring, completed, nil) {
+	if !st.Inventory.settleInventoryJob("p1", retiring, completed, nil) {
 		t.Fatal("completed inventory job did not settle")
 	}
 	select {
@@ -149,9 +149,9 @@ func TestInventoryJobRetirementCannotDeleteNewerJob(t *testing.T) {
 	newer := &inventoryJob{request: InventoryRequest{
 		ProjectID: "p1", RootsGeneration: 2, requestedEpoch: "epoch-2", serial: 2,
 	}, done: make(chan struct{})}
-	st.inventoryJobs["p1"] = newer
-	st.releaseInventoryJob("p1", retiring)
-	if st.inventoryJobs["p1"] != newer {
+	st.Inventory.inventoryJobs["p1"] = newer
+	st.Inventory.releaseInventoryJob("p1", retiring)
+	if st.Inventory.inventoryJobs["p1"] != newer {
 		t.Fatal("retiring job deleted the newer inventory record")
 	}
 }
@@ -164,14 +164,14 @@ func TestEnsureInventoryCompletesForEmptyFolder(t *testing.T) {
 		Roots: []RootSpec{{ID: "r1", Path: empty}},
 	}
 	done := make(chan error, 1)
-	go func() { done <- st.EnsureInventory(ctx, req) }()
+	go func() { done <- st.Inventory.EnsureInventory(ctx, req) }()
 	select {
 	case err := <-done:
 		testutil.FailErr(t, "ensure inventory", err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("empty-folder inventory did not finish within 5s")
 	}
-	state, err := st.InventoryState(ctx, "p1", "", 1)
+	state, err := st.Inventory.InventoryState(ctx, "p1", "", 1)
 	testutil.FailErr(t, "inventory state", err)
 	if !state.Complete || state.Phase != InventoryReady {
 		t.Fatalf("inventory state = %+v", state)
@@ -184,7 +184,7 @@ func TestEnsureInventoryCompletesForEmptyFolder(t *testing.T) {
 func TestEnsureInventoryStaysCompleteWhenRescheduledForEmptyFolder(t *testing.T) {
 	st, ctx := openLedger(t)
 	var calls atomic.Int32
-	st.inventoryReconcile = func(context.Context, string, []RootSpec) (int, error) {
+	st.Inventory.inventoryReconcile = func(context.Context, string, []RootSpec) (int, error) {
 		calls.Add(1)
 		return 0, nil
 	}
@@ -193,15 +193,15 @@ func TestEnsureInventoryStaysCompleteWhenRescheduledForEmptyFolder(t *testing.T)
 		ProjectID: "p1", RootsGeneration: 1,
 		Roots: []RootSpec{{ID: "r1", Path: empty}},
 	}
-	testutil.FailErr(t, "first ensure", st.EnsureInventory(ctx, req))
-	state, err := st.InventoryState(ctx, "p1", "", 1)
+	testutil.FailErr(t, "first ensure", st.Inventory.EnsureInventory(ctx, req))
+	state, err := st.Inventory.InventoryState(ctx, "p1", "", 1)
 	testutil.FailErr(t, "state after first", err)
 	if !state.Complete {
 		t.Fatalf("first inventory incomplete: %+v", state)
 	}
 	for i := 0; i < 5; i++ {
-		testutil.FailErr(t, "reschedule", st.EnsureInventory(ctx, req))
-		state, err = st.InventoryState(ctx, "p1", "", 1)
+		testutil.FailErr(t, "reschedule", st.Inventory.EnsureInventory(ctx, req))
+		state, err = st.Inventory.InventoryState(ctx, "p1", "", 1)
 		testutil.FailErr(t, "state", err)
 		if !state.Complete || state.Phase != InventoryReady {
 			t.Fatalf("reschedule %d left inventory incomplete: %+v", i, state)
@@ -216,8 +216,8 @@ func TestEnsureInventoryRevalidatesIncompleteWatcherCoverageAfterBound(t *testin
 	st, ctx := openLedger(t)
 	var calls atomic.Int32
 	now := time.Now().UTC()
-	st.inventoryNow = func() time.Time { return now }
-	st.inventoryReconcile = func(context.Context, string, []RootSpec) (int, error) {
+	st.Inventory.inventoryNow = func() time.Time { return now }
+	st.Inventory.inventoryReconcile = func(context.Context, string, []RootSpec) (int, error) {
 		calls.Add(1)
 		return 0, nil
 	}
@@ -226,17 +226,17 @@ func TestEnsureInventoryRevalidatesIncompleteWatcherCoverageAfterBound(t *testin
 		ProjectID: "p1", RootsGeneration: 1,
 		Roots: []RootSpec{{ID: "r1", Path: empty}},
 	}
-	testutil.FailErr(t, "first ensure", st.EnsureInventory(ctx, req))
-	state, err := st.InventoryState(ctx, "p1", "", 1)
+	testutil.FailErr(t, "first ensure", st.Inventory.EnsureInventory(ctx, req))
+	state, err := st.Inventory.InventoryState(ctx, "p1", "", 1)
 	testutil.FailErr(t, "state after first ensure", err)
 	now = state.CompletedAt
 	now = now.Add(repochange.CoverageRevalidationInterval - time.Second)
-	testutil.FailErr(t, "fresh ensure", st.EnsureInventory(ctx, req))
+	testutil.FailErr(t, "fresh ensure", st.Inventory.EnsureInventory(ctx, req))
 	if got := calls.Load(); got != 1 {
 		t.Fatalf("fresh inventory reconciliations = %d, want 1", got)
 	}
 	now = now.Add(2 * time.Second)
-	testutil.FailErr(t, "stale ensure", st.EnsureInventory(ctx, req))
+	testutil.FailErr(t, "stale ensure", st.Inventory.EnsureInventory(ctx, req))
 	if got := calls.Load(); got != 2 {
 		t.Fatalf("stale inventory reconciliations = %d, want 2", got)
 	}
@@ -249,15 +249,15 @@ func TestEnsureInventoryReopensAfterEpochAdvance(t *testing.T) {
 		ProjectID: "p1", RootsGeneration: 1,
 		Roots: []RootSpec{{ID: "r1", Path: empty}},
 	}
-	testutil.FailErr(t, "first ensure", st.EnsureInventory(ctx, req))
-	state, err := st.InventoryState(ctx, "p1", "", 1)
+	testutil.FailErr(t, "first ensure", st.Inventory.EnsureInventory(ctx, req))
+	state, err := st.Inventory.InventoryState(ctx, "p1", "", 1)
 	testutil.FailErr(t, "state after first", err)
 	if !state.Complete {
 		t.Fatalf("first inventory incomplete: %+v", state)
 	}
 	repochange.Advance(empty)
-	testutil.FailErr(t, "re-ensure", st.EnsureInventory(ctx, req))
-	state, err = st.InventoryState(ctx, "p1", "", 1)
+	testutil.FailErr(t, "re-ensure", st.Inventory.EnsureInventory(ctx, req))
+	state, err = st.Inventory.InventoryState(ctx, "p1", "", 1)
 	testutil.FailErr(t, "state after re-ensure", err)
 	if !state.Complete || state.Phase != InventoryReady {
 		t.Fatalf("want complete after re-ensure, got %+v", state)

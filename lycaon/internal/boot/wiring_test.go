@@ -7,17 +7,19 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 )
 
 func TestValidateServeWiringAcceptsProductionShape(t *testing.T) {
-	postures, err := session.LoadPostureRegistry()
-	testutil.FailErr(t, "session.LoadPostureRegistry failed", err)
+	postures, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	packs, err := rules.LoadBundledRules()
 	testutil.FailErr(t, "rules.LoadBundledRules failed", err)
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
@@ -27,13 +29,13 @@ func TestValidateServeWiringAcceptsProductionShape(t *testing.T) {
 	}
 	engine, err := rules.NewPostureRuleEngine(postures, packs, reg)
 	testutil.FailErr(t, "rules.NewPostureRuleEngine failed", err)
-	mgr := session.NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
-	mgr.SetPostureRegistry(postures)
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr.Profiles.SetPostureRegistry(postures)
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
 	sqlDB := testdbfixture.Open(t, "wiring.db")
 	sessStore := store.NewSQL(sqlDB)
-	workflowMgr := workflow.NewManager(workflow.NewSQLStore(sqlDB), sessStore, manifests, nil)
+	workflowMgr := workflow.NewManager(workflowpersistence.New(sqlDB), sessStore, manifests, nil)
 	workflowMgr.SetConditionRegistry(reg)
 	if err := boot.ValidateServeWiring(boot.ServeWiring{
 		PostureRegistry: postures,

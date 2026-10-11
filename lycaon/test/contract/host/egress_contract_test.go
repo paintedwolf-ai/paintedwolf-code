@@ -255,15 +255,21 @@ func TestNonHTTPOutboundAdaptersBindInventoryClasses(t *testing.T) {
 		!strings.Contains(service, "embedded_key().0") {
 		t.Fatalf("update service does not bind inventory template %q", update.EndpointTemplate)
 	}
+	transport := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon-den/src-tauri/src/http_transport.rs")
+	if !strings.Contains(transport, "reqwest::Client::builder()") ||
+		!strings.Contains(transport, "rustls::crypto::ring::default_provider().install_default()") {
+		t.Fatal("shared native HTTP transport must initialize TLS before constructing its client")
+	}
+	feed := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon-den/src-tauri/src/update_service/feed.rs")
 	// The feed is read directly, without proxies or redirects, and verified before any field is used.
 	for _, needle := range []string{
-		"reqwest::Client::builder()",
+		"crate::http_transport::client_builder()",
 		".no_proxy()",
 		".redirect(reqwest::redirect::Policy::none())",
 		"verification::verify_feed(",
 		"feed_state::accept(",
 	} {
-		if !strings.Contains(service, needle) {
+		if !strings.Contains(feed, needle) {
 			t.Fatalf("update manifest class is missing %q", needle)
 		}
 	}

@@ -51,7 +51,7 @@ func TestMCPDisabledToolsUnavailable(t *testing.T) {
 	if reg == nil {
 		t.Fatal("MCP registry required")
 	}
-	names := reg.RegisteredMCPTools()
+	names := reg.Catalog.RegisteredMCPTools()
 	for _, name := range names {
 		t.Fatalf("unexpected registered mcp tool %q while disabled", name)
 	}

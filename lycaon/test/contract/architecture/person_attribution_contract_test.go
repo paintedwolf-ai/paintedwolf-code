@@ -14,18 +14,15 @@ import (
 
 const peoplePkg = "github.com/lycaon/lycaon/internal/people"
 
-// actingFallbacks are the only callers allowed to credit the host owner when a
-// context carries no authenticated caller. Each authors a record the host
-// admits on a person's behalf; none settles a decision. A decision names its
-// person through people.Deciding and refuses without one.
+// Only admitted authorship may fall back to the host owner.
 var actingFallbacks = map[string]string{
 	"internal/session/store/sql_sessions.go:CreateWithStatus": "a root chat the host opens belongs to the host owner",
 	"internal/session/store/memory.go:CreateWithStatus":       "memory twin of the SQL session store",
-	"internal/session/kick_nudge.go:promptAuthor":             "a prompt without an admission receipt is authored by its request's caller",
-	"internal/session/prompt_submission.go:admitPrompt":       "a user prompt admission names its request's caller",
+	"internal/session/transcript/user_input.go:PromptAuthor":  "a prompt without an admission receipt is authored by its request's caller",
+	"internal/session/submissions/admission.go:admitPrompt":   "a user prompt admission names its request's caller",
 	"internal/editordoc/authorship.go:personActor":            "editor transitions are authored by their client's person",
-	"internal/sourceledger/store.go:operationPerson":          "user-origin source operations without an explicit person",
-	"internal/project/source_mutation_store.go:insert":        "user file mutations journal their person",
+	"internal/sourceledger/recording.go:operationPerson":      "user-origin source operations without an explicit person",
+	"internal/projectsource/source_mutation_store.go:insert":  "user file mutations journal their person",
 }
 
 func TestOwnerFallbackIsLimitedToAdmittedAuthorship(t *testing.T) {
@@ -69,7 +66,7 @@ func TestOwnerFallbackIsLimitedToAdmittedAuthorship(t *testing.T) {
 func TestAgentToolCallsCarryNoRequestCaller(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	corp, err := contractcheck.LoadGoASTCorpus(filepath.Join(root, "lycaon", "internal", "tools"))
+	corp, err := contractcheck.LoadGoASTCorpus(filepath.Join(root, "lycaon", "internal", "toolexecution"))
 	contractcheck.FailErr(t, "load AST corpus", err)
 	found := false
 	for _, gf := range corp.Files() {
@@ -78,18 +75,18 @@ func TestAgentToolCallsCarryNoRequestCaller(t *testing.T) {
 		}
 		alias := contractcheck.ImportAliasFor(gf.AST, peoplePkg)
 		for _, fn := range funcDecls(gf.AST) {
-			if fn.Name.Name != "Invoke" || receiverName(fn) != "DefaultToolExecutor" {
+			if fn.Name.Name != "Invoke" || receiverName(fn) != "Executor" {
 				continue
 			}
 			found = true
 			if alias == "" || !callsSelector(fn.Body, alias, "WithoutCaller") {
-				t.Errorf("DefaultToolExecutor.Invoke must strip the request caller with people.WithoutCaller " +
+				t.Errorf("Executor.Invoke must strip the request caller with people.WithoutCaller " +
 					"so agent effects are never recorded as a person's")
 			}
 		}
 	}
 	if !found {
-		t.Fatal("DefaultToolExecutor.Invoke not found")
+		t.Fatal("Executor.Invoke not found")
 	}
 }
 

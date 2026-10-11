@@ -322,7 +322,7 @@ func TestStageAndApplyRoundTrip(t *testing.T) {
 		t.Fatalf("stage must not overwrite live yet: %s", live)
 	}
 
-	testutil.FailErr(t, "apply", backup.ApplyPending(configDir))
+	testutil.FailErr(t, "apply", backup.ApplyPending(t.Context(), configDir))
 	if _, err := os.Stat(backup.PendingMarkerPath(configDir)); !os.IsNotExist(err) {
 		t.Fatal("marker must be cleared after apply")
 	}
@@ -398,7 +398,7 @@ func TestRoundTripPreservesNestedHistoryDraftModesAndSymlinks(t *testing.T) {
 	})
 	testutil.FailErr(t, "stage", err)
 	testutil.FailErr(t, "close store", sqlDB.Close())
-	testutil.FailErr(t, "apply", backup.ApplyPending(configDir))
+	testutil.FailErr(t, "apply", backup.ApplyPending(t.Context(), configDir))
 
 	for rel, fixture := range files {
 		path := filepath.Join(configDir, filepath.FromSlash(rel))
@@ -454,7 +454,7 @@ func TestHistoryOnlyRestoreKeepsLocalCredentials(t *testing.T) {
 	})
 	testutil.FailErr(t, "stage", err)
 	_ = sqlDB.Close()
-	testutil.FailErr(t, "apply", backup.ApplyPending(configDir))
+	testutil.FailErr(t, "apply", backup.ApplyPending(t.Context(), configDir))
 
 	credentials, err := os.ReadFile(vaultPath)
 	testutil.FailErr(t, "read credential vault", err)
@@ -498,7 +498,7 @@ func TestFullRestoreDeletesAbsentManagedFiles(t *testing.T) {
 	if !bytes.Equal(recovered, liveLimits) {
 		t.Fatalf("recovery limits = %q want %q", recovered, liveLimits)
 	}
-	testutil.FailErr(t, "apply", backup.ApplyPending(configDir))
+	testutil.FailErr(t, "apply", backup.ApplyPending(t.Context(), configDir))
 	if _, err := os.Stat(filepath.Join(configDir, "limits.yaml")); !os.IsNotExist(err) {
 		t.Fatalf("full restore retained limits absent from archive: %v", err)
 	}
@@ -542,7 +542,7 @@ func TestApplyClearsSidecarsLeftByTheOutgoingStore(t *testing.T) {
 	// Simulate an uncheckpointed journal at startup.
 	testutil.FailErr(t, "leave stale wal", os.WriteFile(dbPath+"-wal", staleWAL, 0o600))
 
-	testutil.FailErr(t, "apply", backup.ApplyPending(configDir))
+	testutil.FailErr(t, "apply", backup.ApplyPending(t.Context(), configDir))
 
 	for _, suffix := range db.StoreSidecarSuffixes() {
 		if _, err := os.Stat(dbPath + suffix); !os.IsNotExist(err) {
@@ -617,7 +617,7 @@ func TestStageSnapshotsEveryFileTheRestoreReplaces(t *testing.T) {
 	}
 
 	// Apply preserves the recovery copy.
-	testutil.FailErr(t, "apply", backup.ApplyPending(configDir))
+	testutil.FailErr(t, "apply", backup.ApplyPending(t.Context(), configDir))
 	for rel, want := range live {
 		got, err := os.ReadFile(filepath.Join(result.RecoveryCopyPath, rel))
 		testutil.FailErr(t, "read recovery after apply "+rel, err)
@@ -651,7 +651,7 @@ func projectIDs(t *testing.T, ctx context.Context, sqlDB db.Handle) []string {
 
 func TestApplyPendingNoopWithoutMarker(t *testing.T) {
 	t.Parallel()
-	testutil.FailErr(t, "noop", backup.ApplyPending(t.TempDir()))
+	testutil.FailErr(t, "noop", backup.ApplyPending(t.Context(), t.TempDir()))
 }
 
 func TestPackageDoesNotImportRedactor(t *testing.T) {

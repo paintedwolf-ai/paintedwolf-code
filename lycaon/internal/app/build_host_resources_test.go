@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/app/configuration"
 	"path/filepath"
 	"testing"
 
@@ -33,7 +34,7 @@ func TestHostResourcePolicyIncludesExtensionRules(t *testing.T) {
 			Effect:   settings.ApprovalEffectDeny,
 		}},
 	}}
-	policy := newHostResourcePolicyBinder(store, source)
+	policy := configuration.HostResourcePolicyBinder(store, source)
 	decide := policy(context.Background(), hostresources.ProjectContext{ID: "project-1", Dir: t.TempDir()})
 	decision := decide("local-db", "data")
 

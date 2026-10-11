@@ -25,7 +25,11 @@ func TestUnknownActionsUseCatalogCopy(t *testing.T) {
 	cfg.Explanations[FallbackExplanationKey] = entry
 	registry, err := newRegistry(cfg)
 	testutil.FailErr(t, "construct explanation registry", err)
-	action := hitl.ProposedAction{Tool: "unknown_fixture_action"}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "unknown_fixture_action",
+},
+}
 	got := registry.ExplainAction(action, settings.TierIrreversible)
 	want := RenderEntry(entry, ActionTemplateVars(action))
 	if !got.UsedFallback || got.Copy != want {

@@ -14,6 +14,7 @@ export function searchCoverageNote(
   if (reasons.has("catalog_warming") || reasons.has("catalog_incomplete") || reasons.has("index_warming")) {
     return "Results may be incomplete. Still indexing…";
   }
+  if (reasons.has("symbol_pending")) return "Results may be incomplete. Still searching symbols…";
   if (reasons.has("time_budget") || reasons.has("symbol_budget") || reasons.has("result_limit")) {
     return "Results may be incomplete. Narrow your search for more matches.";
   }
@@ -44,6 +45,7 @@ export function searchIssueNotes(issues: readonly SearchIssue[] = []): string {
     notes.push("Files are being updated. Results refresh automatically while this view is open.");
   }
   if (has("time_budget")) notes.push("The search reached its time limit. Narrow the query to cover more files.");
+  if (has("symbol_pending")) notes.push("Symbol search is continuing. More declarations may appear.");
   if (has("symbol_budget")) notes.push("The symbol search stopped before checking every candidate. Type more of the name to find more declarations.");
   if (has("result_limit")) notes.push("The result limit was reached. Narrow the query to see additional matches.");
   return notes.join(" ");

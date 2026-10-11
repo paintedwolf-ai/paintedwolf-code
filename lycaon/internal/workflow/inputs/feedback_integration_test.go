@@ -1,0 +1,176 @@
+//go:build integration
+
+package inputs_test
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	wire "github.com/lycaon/lycaon/pkg/api"
+)
+
+func feedbackFlowManifest() workflowdef.Manifest {
+	return workflowdef.FinalizeManifest(workflowdef.Manifest{
+		ID:      "feedback-flow",
+		Version: "1.0.0",
+		Controls: workflowdef.ManifestControls{
+			PhaseAdvance: workflowdef.PhaseAdvanceHost,
+		},
+		PhaseDefs: []workflowdef.PhaseDef{{
+			ID:           "clarify",
+			CompleteWhen: "user_feedback_received:clarify",
+			Next:         "done",
+			OnEnter: workflowdef.PhaseOnEnter{
+				RequestUserFeedback: &workflowdef.UserFeedbackPrompt{Prompt: "REST or GraphQL?"},
+			},
+		}, {ID: "done"}},
+	})
+}
+
+func setupFeedbackIntegration(t *testing.T) (*workflow.RunManager, *session.Host, *wire.Session, context.Context) {
+	t.Helper()
+	sqlDB := testdbfixture.Open(t, "feedback-int.db")
+
+	store := store.NewSQL(sqlDB)
+	sessMgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	testutil.FailErr(t, "install anchor registry", sessMgr.Coordinator.Guidance.InstallAnchorRegistry())
+
+	manifest := feedbackFlowManifest()
+	manifestReg := workflowdef.NewRegistry(map[string]workflowdef.Manifest{
+		manifest.ID + "@" + manifest.Version: manifest,
+	})
+	wfMgr := workflow.NewManager(workflowpersistence.New(sqlDB), store, manifestReg, nil)
+	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
+	testutil.FailErr(t, "build conditions registry", err)
+	wfMgr.SetConditionRegistry(reg)
+	wfMgr.Feedback.OnFeedbackPending = func(_ context.Context, sessionID, _ string) {
+		sessMgr.Coordinator.Guidance.Emit(context.Background(), sessionID, anchor.FeedbackPending, anchor.Envelope{})
+	}
+
+	dir := t.TempDir()
+
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
+
+	sess, err := store.Create(context.Background(), wire.CreateSessionRequest{
+		Posture: wire.SessionPostureSpec,
+	}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session in store", err)
+	sessMgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
+	return wfMgr, sessMgr, sess, testdbseed.OwnerCaller(t, context.Background(), sqlDB)
+}
+
+func TestClarifyTemplateChatSatisfies(t *testing.T) {
+	wfMgr, _, sess, _ := setupFeedbackIntegration(t)
+	ctx := context.Background()
+	run, err := wfMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
+		WorkflowID: "feedback-flow", WorkflowVersion: "1.0.0",
+	})
+	testutil.FailErr(t, "wfMgr.Starts.StartHuman failed", err)
+	if run.CurrentPhase != "clarify" {
+		t.Fatalf("phase = %q", run.CurrentPhase)
+	}
+	if err := wfMgr.Feedback.TryResolveUserFeedback(ctx, sess.ID, "", testutil.HostOwner().ID, "Use GraphQL"); err != nil {
+		testutil.FailErr(t, "wfMgr.Feedback.TryResolveUserFeedback failed", err)
+	}
+	run, err = wfMgr.Store.Runs.Get(ctx, run.ID)
+	testutil.FailErr(t, "wfMgr.Presentation.Get failed", err)
+	if run.CurrentPhase != "done" {
+		t.Fatalf("phase = %q want done after chat feedback", run.CurrentPhase)
+	}
+}
+
+func TestClarifyTemplateHTTPSatisfies(t *testing.T) {
+	wfMgr, _, sess, ctx := setupFeedbackIntegration(t)
+	run, err := wfMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
+		WorkflowID: "feedback-flow", WorkflowVersion: "1.0.0",
+	})
+	testutil.FailErr(t, "wfMgr.Starts.StartHuman failed", err)
+	run, err = wfMgr.Feedback.ResolveUserFeedback(ctx, sess.ID, run.ID, "clarify", "REST please")
+	testutil.FailErr(t, "wfMgr.Feedback.ResolveUserFeedback failed", err)
+	if run.CurrentPhase != "done" {
+		t.Fatalf("phase = %q want done after HTTP feedback", run.CurrentPhase)
+	}
+}
+
+func TestFeedbackKickQueuedOnPhaseEntry(t *testing.T) {
+	root := configlayout.FindModuleRoot()
+	sqlDB := testdbfixture.Open(t, "feedback-kick.db")
+
+	store := store.NewSQL(sqlDB)
+	sessMgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(nil), Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	testutil.FailErr(t, "install anchor registry", sessMgr.Coordinator.Guidance.InstallAnchorRegistry())
+
+	manifest := feedbackFlowManifest()
+	wfMgr := workflow.NewManager(workflowpersistence.New(sqlDB), store, workflowdef.NewRegistry(map[string]workflowdef.Manifest{
+		manifest.ID + "@" + manifest.Version: manifest,
+	}), nil)
+	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
+	testutil.FailErr(t, "build conditions registry", err)
+	wfMgr.SetConditionRegistry(reg)
+	kicked := false
+	wfMgr.Feedback.OnFeedbackPending = func(_ context.Context, sessionID, phaseID string) {
+		kicked = true
+		if phaseID != "clarify" {
+			t.Fatalf("phase = %q want clarify", phaseID)
+		}
+		sessMgr.Coordinator.Guidance.Emit(context.Background(), sessionID, anchor.FeedbackPending, anchor.Envelope{})
+	}
+
+	dir := t.TempDir()
+
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
+
+	sess, err := store.Create(context.Background(), wire.CreateSessionRequest{
+		Posture: wire.SessionPostureSpec,
+	}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session in store", err)
+	if _, err := wfMgr.Starts.StartHuman(context.Background(), sess.ID, wire.StartWorkflowRunRequest{
+		WorkflowID: "feedback-flow", WorkflowVersion: "1.0.0",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !kicked {
+		t.Fatal("OnFeedbackPending hook not invoked")
+	}
+	kickPath := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "guidance", "coordinator-feedback-pending.md")
+	data, err := os.ReadFile(kickPath)
+	testutil.FailErr(t, "read file", err)
+	if !strings.Contains(string(data), "pending_feedback") {
+		t.Fatalf("kick template = %q", data)
+	}
+}
+
+func TestClarifyThenImplementTemplateOverridesPlanStub(t *testing.T) {
+	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
+	testutil.FailErr(t, "load workflow templates", err)
+	tpl, ok := templates["clarify-then-implement-template"]
+	if !ok {
+		t.Fatal("missing clarify-then-implement-template")
+	}
+	if !strings.Contains(tpl.ManifestRaw, "id: research") {
+		t.Fatalf("template manifest = %s", tpl.ManifestRaw)
+	}
+	if !strings.Contains(tpl.ManifestRaw, "user_feedback_received:clarify") {
+		t.Fatal("template gate must reference clarify phase id")
+	}
+}

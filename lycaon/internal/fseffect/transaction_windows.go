@@ -500,13 +500,25 @@ func RenameGuarded(root, fromRel, toRel, expected string) error {
 	return renameEntry(root, fromRel, toRel, false, expected)
 }
 
+// RelocateGuarded moves an identified entry between held roots without replacing a destination.
+func RelocateGuarded(from, to Location, expected string) error {
+	if expected == "" {
+		return ErrPostcondition
+	}
+	return relocateEntry(from, to, false, expected)
+}
+
 func renameEntry(root, fromRel, toRel string, replace bool, expected string) error {
-	from, err := openWindowsParent(Location{Root: root, Rel: fromRel}, false, true)
+	return relocateEntry(Location{Root: root, Rel: fromRel}, Location{Root: root, Rel: toRel}, replace, expected)
+}
+
+func relocateEntry(source, destination Location, replace bool, expected string) error {
+	from, err := openWindowsParent(source, false, true)
 	if err != nil {
 		return err
 	}
 	defer from.close()
-	to, err := openWindowsParent(Location{Root: root, Rel: toRel}, true, true)
+	to, err := openWindowsParent(destination, true, true)
 	if err != nil {
 		return err
 	}

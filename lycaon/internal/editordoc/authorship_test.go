@@ -26,7 +26,7 @@ func TestHumanPublicationKeepsContributionsFromMultipleChats(t *testing.T) {
 	}
 	var sharedEffect string
 	for _, sessionID := range []string{"chat-1", "chat-2"} {
-		walk, err := ledger.QueryWalk(t.Context(), f.project.ID, sourceledger.Baseline{Kind: sourceledger.BaselineSession,
+		walk, err := ledger.Walk.QueryWalk(t.Context(), f.project.ID, sourceledger.Baseline{Kind: sourceledger.BaselineSession,
 			SessionID: sessionID, WithoutUserEdits: true}, 100, 0, sourceledger.CommitLens{})
 		testutil.FailErr(t, "review contributing chat", err)
 		if len(walk.Files) != 1 || len(walk.Files[0].Effects) != 1 || walk.Files[0].UnpresentedAgentEffects != 1 {

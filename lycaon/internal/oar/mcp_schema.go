@@ -42,19 +42,19 @@ func (p *GuardPipeline) maybeApplyMCPSchema(
 	if anchor != AnchorToolPost {
 		return nil
 	}
-	if gc.MCPProviderID == "" {
+	if gc.MCP.MCPProviderID == "" {
 		return nil
 	}
 	if !rulesNeedMCPSchema(rules) {
 		return nil
 	}
-	if gc.mcpSchemaComputed {
-		return gc.mcpSchemaError
+	if gc.lazy.mcpSchemaComputed {
+		return gc.lazy.mcpSchemaError
 	}
-	defer func() { gc.mcpSchemaComputed = true; gc.mcpSchemaError = err }()
+	defer func() { gc.lazy.mcpSchemaComputed = true; gc.lazy.mcpSchemaError = err }()
 	apply := p.mcpSchemaApply
 	if apply == nil {
-		list := p.mcpBindingsForSession(ctx, gc.SessionID)
+		list := p.mcpBindingsForSession(ctx, gc.Session.SessionID)
 		if len(list) == 0 {
 			return nil
 		}
@@ -70,12 +70,12 @@ func (p *GuardPipeline) maybeApplyMCPSchema(
 			return matched, out, err
 		}
 	}
-	matched, fields, err := apply(gc.MCPProviderID, gc.MCPToolName, gc.MCPResultText)
+	matched, fields, err := apply(gc.MCP.MCPProviderID, gc.MCP.MCPToolName, gc.MCP.MCPResultText)
 	if err != nil {
 		return err
 	}
-	gc.MCPSchemaMatched = matched
-	gc.MCPFields = fields
+	gc.MCP.MCPSchemaMatched = matched
+	gc.MCP.MCPFields = fields
 	return nil
 }
 
@@ -111,19 +111,19 @@ func NeedsMCPSchemaFacts(when string, flow []string) bool {
 
 // EvalMCPHasField is mcp_has_field(key).
 func EvalMCPHasField(gc *GuardContext, key string) bool {
-	if gc == nil || key == "" || gc.MCPFields == nil {
+	if gc == nil || key == "" || gc.MCP.MCPFields == nil {
 		return false
 	}
-	_, ok := gc.MCPFields[key]
+	_, ok := gc.MCP.MCPFields[key]
 	return ok
 }
 
 // EvalMCPFieldBool is mcp_field_bool(key); missing/wrong type → false.
 func EvalMCPFieldBool(gc *GuardContext, key string) bool {
-	if gc == nil || gc.MCPFields == nil {
+	if gc == nil || gc.MCP.MCPFields == nil {
 		return false
 	}
-	v, ok := gc.MCPFields[key]
+	v, ok := gc.MCP.MCPFields[key]
 	if !ok {
 		return false
 	}
@@ -136,10 +136,10 @@ func EvalMCPFieldBool(gc *GuardContext, key string) bool {
 
 // EvalMCPFieldString is mcp_field_string(key); missing/wrong type → "".
 func EvalMCPFieldString(gc *GuardContext, key string) string {
-	if gc == nil || gc.MCPFields == nil {
+	if gc == nil || gc.MCP.MCPFields == nil {
 		return ""
 	}
-	v, ok := gc.MCPFields[key]
+	v, ok := gc.MCP.MCPFields[key]
 	if !ok {
 		return ""
 	}
@@ -152,10 +152,10 @@ func EvalMCPFieldString(gc *GuardContext, key string) string {
 
 // EvalMCPFieldInt is mcp_field_int(key); missing/wrong type → 0.
 func EvalMCPFieldInt(gc *GuardContext, key string) int64 {
-	if gc == nil || gc.MCPFields == nil {
+	if gc == nil || gc.MCP.MCPFields == nil {
 		return 0
 	}
-	v, ok := gc.MCPFields[key]
+	v, ok := gc.MCP.MCPFields[key]
 	if !ok {
 		return 0
 	}

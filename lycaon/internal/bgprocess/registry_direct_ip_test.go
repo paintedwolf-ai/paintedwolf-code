@@ -40,7 +40,7 @@ func TestActiveDirectIPJobsActiveUnknownAndCompleted(t *testing.T) {
 		t.Fatalf("unknown jobs = %+v", jobs)
 	}
 
-	_, err = reg.Stop("sess-1", handle)
+	_, err = reg.Lifecycle.Stop("sess-1", handle)
 	testutil.FailErr(t, "stop", err)
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {

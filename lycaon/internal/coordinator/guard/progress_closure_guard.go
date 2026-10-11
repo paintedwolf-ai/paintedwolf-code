@@ -30,19 +30,19 @@ func ObserveProgressItemNotClosedBeforeDispatch(
 	if gc == nil || sess == nil || sess.IsWorkerChild() {
 		return
 	}
-	gc.ProgressClosureArmed = armed
-	gc.Tool = strings.TrimSpace(tool)
+	gc.Progress.ProgressClosureArmed = armed
+	gc.Invocation.Tool = strings.TrimSpace(tool)
 	gc.DeriveToolClassFacts()
-	gc.ProgressGatedTool = progress.IsProgressGatedTool(tool)
-	if !armed || !gc.ProgressGatedTool {
+	gc.Progress.ProgressGatedTool = progress.IsProgressGatedTool(tool)
+	if !armed || !gc.Progress.ProgressGatedTool {
 		return
 	}
 	done, pending, na := progress.CloseCounts(progressContent)
-	gc.ProgressOpenItems = int64(pending)
+	gc.Progress.ProgressOpenItems = int64(pending)
 	closed := done + na
-	gc.ProgressClosedBeyondBaseline = closed > baseline.Closed
-	gc.ProgressReconciledSinceArm = progressContent != baseline.Content
-	if pending > 0 && !gc.ProgressClosedBeyondBaseline && !gc.ProgressReconciledSinceArm {
+	gc.Progress.ProgressClosedBeyondBaseline = closed > baseline.Closed
+	gc.Progress.ProgressReconciledSinceArm = progressContent != baseline.Content
+	if pending > 0 && !gc.Progress.ProgressClosedBeyondBaseline && !gc.Progress.ProgressReconciledSinceArm {
 		gc.PutRejectData(ProgressItemNotClosedCode, map[string]any{
 			"tool":         strings.TrimSpace(tool),
 			"pending":      pending,

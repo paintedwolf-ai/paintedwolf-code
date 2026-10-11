@@ -21,7 +21,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleResolveSocketGrant(w http.ResponseWriter, r *http.Request) {
+func (s *Grants) HandleResolveSocketGrant(w http.ResponseWriter, r *http.Request) {
 	var req wire.ResolveSocketGrantRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -45,7 +45,7 @@ func (s *Handler) HandleResolveSocketGrant(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-func (s *Handler) HandleCreateApprovalGrant(w http.ResponseWriter, r *http.Request) {
+func (s *Grants) HandleCreateApprovalGrant(w http.ResponseWriter, r *http.Request) {
 	s.authorityMu.Lock()
 	defer s.authorityMu.Unlock()
 	var req wire.CreateApprovalGrantRequest
@@ -153,7 +153,7 @@ func (s *Handler) HandleCreateApprovalGrant(w http.ResponseWriter, r *http.Reque
 }
 
 // createHostGrant uses the same host-pattern derivation as approval cards.
-func (s *Handler) createHostGrant(w http.ResponseWriter, r *http.Request, req wire.CreateApprovalGrantRequest) {
+func (s *Grants) createHostGrant(w http.ResponseWriter, r *http.Request, req wire.CreateApprovalGrantRequest) {
 	site, port := hostscope.SplitTunnelPattern(req.HostPattern)
 	site = strings.ToLower(strings.TrimSpace(strings.TrimPrefix(site, "*.")))
 	if site == "" {
@@ -221,7 +221,7 @@ func (s *Handler) createHostGrant(w http.ResponseWriter, r *http.Request, req wi
 	httpio.WriteJSON(w, http.StatusCreated, mapped[0])
 }
 
-func (s *Handler) writeSocketResolveError(w http.ResponseWriter, err error) {
+func (s *Grants) writeSocketResolveError(w http.ResponseWriter, err error) {
 	var se *confine.SocketResolveError
 	if errors.As(err, &se) && se != nil {
 		s.responses.FailDetails(w, se.Code, map[string]any{"field": "socket_path"}, "the socket path cannot be granted")

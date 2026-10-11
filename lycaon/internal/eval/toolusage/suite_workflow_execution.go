@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionobservation "github.com/lycaon/lycaon/internal/session/observation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -48,7 +48,7 @@ func (c *liveClient) observeWorkflow(ctx context.Context, result CaseReport) (bo
 	if err != nil {
 		return false, err
 	}
-	observation, err := decodeJSON[session.WorkflowExecutionObservation](c.do(request)) //nolint:bodyclose // decodeJSON closes the body.
+	observation, err := decodeJSON[sessionobservation.WorkflowExecutionObservation](c.do(request)) //nolint:bodyclose // decodeJSON closes the body.
 	if err != nil {
 		return false, err
 	}
@@ -72,7 +72,7 @@ func (c *liveClient) observeWorkflow(ctx context.Context, result CaseReport) (bo
 	return observation.Execution.Settled, nil
 }
 
-func validateWorkflowObservation(observation session.WorkflowExecutionObservation, result CaseReport) error {
+func validateWorkflowObservation(observation sessionobservation.WorkflowExecutionObservation, result CaseReport) error {
 	if observation.Run.ID != result.WorkflowRunID || observation.Run.WorkflowID != result.WorkflowID || observation.Run.SessionID != result.SessionID || observation.Execution.SessionID != result.SessionID {
 		return &ExecutionFailure{Kind: "harness", Code: "workflow_binding"}
 	}
@@ -90,7 +90,7 @@ func settleCapturedWorkflow(capture string, result *CaseReport) error {
 	if err != nil {
 		return err
 	}
-	var observation session.WorkflowExecutionObservation
+	var observation sessionobservation.WorkflowExecutionObservation
 	if err := json.Unmarshal(body, &observation); err != nil {
 		return err
 	}

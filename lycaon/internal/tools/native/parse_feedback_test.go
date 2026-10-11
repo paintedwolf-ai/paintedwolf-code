@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -29,7 +30,7 @@ func TestMutationTimeoutPreservesFileAndReportsHostCause(t *testing.T) {
 	proposed := "  log) printf '%s' x ;;\n" + strings.Repeat("  local va=\"${arr[@]:-}\"\n  if [[ -n \"${v}\" ]]; then printf '%s' \"${v}\"; fi\n", 160)
 	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{"path": "script.sh", "content": proposed}, nativefixture.Context(dir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "MUTATION_PARSE_INCOMPLETE" {
 		t.Fatalf("write result = %v", err)
 	}
@@ -81,7 +82,7 @@ func TestWriteSyntaxOverrideStillChecksContentAndRecordsReason(t *testing.T) {
 	dir := t.TempDir()
 	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	tc := nativefixture.Context(dir)
-	tc.Out = &tools.ToolInvocationOut{}
+	tc.Effects.Out = &tools.ToolInvocationOut{}
 	content := "package broken\nfunc ("
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "a.go", "content": content, "syntax_override_reason": "intentional incomplete edit",
@@ -89,8 +90,8 @@ func TestWriteSyntaxOverrideStillChecksContentAndRecordsReason(t *testing.T) {
 	testutil.FailErr(t, "write with explicit override", err)
 	got, err := os.ReadFile(filepath.Join(dir, "a.go"))
 	testutil.FailErr(t, "read overridden mutation", err)
-	if string(got) != content || !tc.Out.Facts.HasCode(tools.SyntaxCheckOverriddenCode) {
-		t.Fatalf("mutation or override record missing: %q %+v", got, tc.Out.Facts)
+	if string(got) != content || !tc.Effects.Out.Facts.HasCode(tools.SyntaxCheckOverriddenCode) {
+		t.Fatalf("mutation or override record missing: %q %+v", got, tc.Effects.Out.Facts)
 	}
 	_, err = tool.Run(context.Background(), map[string]any{
 		"path": "binary.go", "content": "package broken\x00", "syntax_override_reason": "intentional incomplete edit",
@@ -146,7 +147,7 @@ func TestMultiRewriteParseFailurePreservesPlannedFiles(t *testing.T) {
 	}
 	tool := &CodeRewriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{"paths": []string{"a.go", "b.go"}, "pattern": "f($A)", "rewrite": "g($A)"}, nativefixture.Context(dir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SOURCE_PARSE_INCOMPLETE" {
 		t.Fatalf("unavailable rewrite source did not reject planning: %v", err)
 	}

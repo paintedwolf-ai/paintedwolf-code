@@ -1,4 +1,4 @@
-description: "Locate repository areas with {\"path\":\".\"}. A named directory or explicit listing controls return entries instead. Use summarize to explain the area. Replaces command: ls -la."
+description: "Paths accept @scratch/<path> for this chat or worker’s private working files. Locate repository areas with {\"path\":\".\"}. A named directory or explicit listing controls return entries instead. Use summarize to explain the area. Replaces command: ls -la."
 schema:
   type: object
   properties:

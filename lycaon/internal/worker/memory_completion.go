@@ -132,7 +132,7 @@ func (q *InMemoryQueue) completeAdmitted(ctx context.Context, claimed *api.Worke
 	projects := q.projects
 	q.mu.Unlock()
 	if snapshot.MergeStatus == api.WorkerMergeStatusPending && strings.TrimSpace(snapshot.WorkspaceOverlayPath) == "" && strings.TrimSpace(snapshot.WorkspaceBaselinePath) != "" {
-		overlayPath, err := q.captureOverlay(ctx, &snapshot, projects)
+		overlayPath, err := captureOverlay(ctx, &snapshot, projects)
 		if err != nil {
 			if errors.Is(err, workspacebaseline.ErrOverlayBudgetExceeded) {
 				workerWorkspaceLog.Warn("write overlay exceeds budget; leaving unsealed for review",
@@ -195,7 +195,7 @@ func (q *InMemoryQueue) failAdmitted(ctx context.Context, claimed *api.WorkerTas
 	snapshot := job.task
 	projectID := job.projectID
 	q.mu.Unlock()
-	q.destroyWorkspaceRoot(jobID, workspaceRoot)
+	destroyWorkspaceRoot(q, jobID, workspaceRoot)
 	q.refreshBoard(ctx, snapshot, projectID)
 	return true, nil
 }

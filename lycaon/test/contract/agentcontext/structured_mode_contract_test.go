@@ -1,12 +1,13 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -26,7 +27,7 @@ func TestTurnProfileActiveVsInactivePlan(t *testing.T) {
 	if active.SurfaceID != "plan_stub" {
 		t.Fatalf("active surface = %q want plan_stub", active.SurfaceID)
 	}
-	if inactive.SurfaceID != tools.SurfaceImplementInvestigate {
+	if inactive.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("inactive surface = %q want implement_investigate", inactive.SurfaceID)
 	}
 }

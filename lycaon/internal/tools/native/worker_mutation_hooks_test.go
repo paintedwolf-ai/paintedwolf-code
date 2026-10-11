@@ -1,6 +1,8 @@
 package native
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"testing"
 
@@ -21,20 +23,20 @@ func (s *workerCoordSpy) AfterWorkerWrite(context.Context, tools.ToolContext, st
 	s.after++
 }
 
-func (s *workerCoordSpy) ReleaseWorkerReservations(context.Context, string, string) error {
+func (s *workerCoordSpy) ReleaseReservations(context.Context, string, string) error {
 	return nil
 }
 
-func (s *workerCoordSpy) EnsureWorkerBranch(_ context.Context, tctx tools.ToolContext) (tools.ToolContext, error) {
+func (s *workerCoordSpy) EnsureBranch(_ context.Context, tctx tools.ToolContext) (tools.ToolContext, error) {
 	return tctx, nil
 }
 
 func TestWorkerMutationHooksRunOnInvestigateSurface(t *testing.T) {
 	spy := &workerCoordSpy{}
 	tctx := tools.ToolContext{
-		WorkerJobID:   "job-1",
-		TurnSurfaceID: tools.SurfaceImplementInvestigate,
-		WorkerCoord:   spy,
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-1"},
+		Turn:     tools.InvocationTurn{TurnSurfaceID: toolcontract.SurfaceImplementInvestigate},
+		Source:   tools.InvocationSource{WorkerCoord: spy},
 	}
 	if err := beforeWorkerMutation(context.Background(), tctx, "src/foo.go"); err != nil {
 		t.Fatalf("beforeWorkerMutation: %v", err)
@@ -48,8 +50,8 @@ func TestWorkerMutationHooksRunOnInvestigateSurface(t *testing.T) {
 func TestSkipWorkerMutationHooksWithoutWorkerJobID(t *testing.T) {
 	spy := &workerCoordSpy{}
 	tctx := tools.ToolContext{
-		TurnSurfaceID: "implement_dispatch",
-		WorkerCoord:   spy,
+		Turn:   tools.InvocationTurn{TurnSurfaceID: "implement_dispatch"},
+		Source: tools.InvocationSource{WorkerCoord: spy},
 	}
 	if err := beforeWorkerMutation(context.Background(), tctx, "src/foo.go"); err != nil {
 		t.Fatalf("beforeWorkerMutation: %v", err)
@@ -63,9 +65,9 @@ func TestSkipWorkerMutationHooksWithoutWorkerJobID(t *testing.T) {
 func TestWorkerMutationHooksRunForWorkerJob(t *testing.T) {
 	spy := &workerCoordSpy{}
 	tctx := tools.ToolContext{
-		WorkerJobID:   "job-1",
-		TurnSurfaceID: "implement_dispatch",
-		WorkerCoord:   spy,
+		Identity: tools.InvocationIdentity{WorkerJobID: "job-1"},
+		Turn:     tools.InvocationTurn{TurnSurfaceID: "implement_dispatch"},
+		Source:   tools.InvocationSource{WorkerCoord: spy},
 	}
 	if err := beforeWorkerMutation(context.Background(), tctx, "src/foo.go"); err != nil {
 		t.Fatalf("beforeWorkerMutation: %v", err)

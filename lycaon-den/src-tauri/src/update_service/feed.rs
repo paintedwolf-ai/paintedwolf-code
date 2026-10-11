@@ -129,7 +129,7 @@ pub async fn fetch_with_deadline(
     let deadline = tokio::time::Instant::now() + deadline;
     let running = semver::Version::parse(running_version)
         .map_err(|e| UpdateError::new(Failure::InvalidVersion, e))?;
-    let client = reqwest::Client::builder()
+    let client = crate::http_transport::client_builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(CHECK_REQUEST_TIMEOUT)

@@ -72,7 +72,7 @@ func (s *indexStore) compactCheckpointPin(ctx context.Context, pin *GenerationPi
 // the caller already holds, so the head it was caught up to is still head.
 func (s *indexStore) installCompaction(ctx context.Context, expected, compacted *structuralGeneration) (*GenerationPin, error) {
 	s.mu.Lock()
-	if s.structure != expected || s.checkpoint.drained || s.pins.drained || ctx.Err() != nil {
+	if s.structure != expected || s.checkpoint.Drained() || s.pins.drained || ctx.Err() != nil {
 		s.mu.Unlock()
 		compacted.close()
 		return nil, ctx.Err()
@@ -81,7 +81,7 @@ func (s *indexStore) installCompaction(ctx context.Context, expected, compacted 
 	s.pins.held[compacted.id] = &generationPin{count: 1, value: compacted}
 	replacement := &GenerationPin{store: s, Generation: compacted.id, value: compacted}
 	s.mu.Unlock()
-	s.catalog.navigationChanged(s.root)
+	s.stores.Directories.navigationChanged(s.root)
 	return replacement, nil
 }
 

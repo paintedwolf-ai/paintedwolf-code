@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/logview"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionobservation "github.com/lycaon/lycaon/internal/session/observation"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -144,7 +144,7 @@ func TestSuiteRetainsResultsAndStopsOnModelMismatch(t *testing.T) {
 				defer serverMu.Unlock()
 				switch {
 				case r.URL.Path == "/harness/execution/s/submission":
-					_ = json.NewEncoder(w).Encode(session.ExecutionObservation{SessionID: "s", SubmissionID: "submission", SubmissionStatus: store.PromptSubmissionComplete, Settled: true})
+					_ = json.NewEncoder(w).Encode(sessionobservation.ExecutionObservation{SessionID: "s", SubmissionID: "submission", SubmissionStatus: store.PromptSubmissionComplete, Settled: true})
 				case r.URL.Path == "/v1/projects":
 					_ = json.NewEncoder(w).Encode(wire.Project{ID: "p"})
 				case r.URL.Path == "/v1/sessions":

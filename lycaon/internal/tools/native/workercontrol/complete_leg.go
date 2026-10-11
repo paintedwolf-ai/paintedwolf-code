@@ -3,6 +3,7 @@ package workercontrol
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
@@ -23,7 +24,7 @@ type CompleteLegDecoder func(context.Context, map[string]any, tools.ToolContext)
 func CompleteLegHandler(decode CompleteLegDecoder) tools.ToolHandler {
 	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		if tools.OutOfSessionScope(CompleteLegTool, tctx) {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "COMPLETE_LEG_ADDRESSED_SESSION",
 				Data: map[string]any{"tool": CompleteLegTool},
 			}

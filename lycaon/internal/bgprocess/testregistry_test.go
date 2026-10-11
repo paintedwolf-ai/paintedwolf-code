@@ -19,7 +19,7 @@ func newTestRegistry(t *testing.T, cfg bgprocess.Config, hooks bgprocess.Hooks) 
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), registryCloseBudget)
 		defer cancel()
-		if err := reg.Close(ctx); err != nil {
+		if err := reg.Lifecycle.Close(ctx); err != nil {
 			t.Errorf("registry close: %v", err)
 		}
 	})

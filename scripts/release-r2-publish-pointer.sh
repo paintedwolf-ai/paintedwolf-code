@@ -134,7 +134,7 @@ else
   python3 "$(dirname "$0")/feed_signing.py" --file "${SIGNED_COPY}" \
     --generation "${GENERATION}" --storage-prefix "${STORAGE_PREFIX}" ${registry_args[@]+"${registry_args[@]}"}
 fi
-python3 "$(dirname "$0")/feed_signature.py" --signature "${SIGNATURE}" --file "${FEED_NAME}" \
+python3 "$(dirname "$0")/feed_signature.py" --signature "${SIGNATURE}" --pointer "${SIGNED_COPY}" --file "${FEED_NAME}" \
   --version "${EXPECTED_VERSION}" --generation "${GENERATION}" \
   --storage-prefix "${STORAGE_PREFIX}" ${registry_args[@]+"${registry_args[@]}"} >/dev/null
 if [[ -n "${PREPARE_OUTPUT}" ]]; then

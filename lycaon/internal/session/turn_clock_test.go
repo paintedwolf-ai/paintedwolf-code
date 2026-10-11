@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -33,7 +32,7 @@ func TestPromptStartsWithFreshTurnClock(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 		progress.TurnFinished(root.ID)
 		observer.events = nil
-		_, err = mgr.Prompt(t.Context(), root.ID, "hello")
+		_, err = mgr.Submissions.Prompt(t.Context(), root.ID, "hello")
 		testutil.FailErr(t, "run user prompt", err)
 		if len(observer.events) != 3 {
 			t.Fatalf("clock edges = %+v, want start, anchor, and finish", observer.events)
@@ -72,12 +71,12 @@ func TestTurnClockRestoresFromTheStoreAfterRestart(t *testing.T) {
 	root, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create root", err)
 	t.Cleanup(func() { progress.ForgetClock(root.ID) })
-	_, err = mgr.Prompt(ctx, root.ID, "hello")
+	_, err = mgr.Submissions.Prompt(ctx, root.ID, "hello")
 	testutil.FailErr(t, "run user prompt", err)
-	before := mgr.TurnClock(ctx, root.ID)
+	before := mgr.Runner.Clocks.Read(ctx, root.ID)
 
 	progress.ForgetClock(root.ID)
-	after := mgr.TurnClock(ctx, root.ID)
+	after := mgr.Runner.Clocks.Read(ctx, root.ID)
 	if after.OpeningMessageID == "" || after.OpeningMessageID != before.OpeningMessageID {
 		t.Fatalf("restored clock = %+v, want turn %q", after, before.OpeningMessageID)
 	}
@@ -90,62 +89,5 @@ func TestTurnClockRestoresFromTheStoreAfterRestart(t *testing.T) {
 	testutil.FailErr(t, "parse settled_at after restart", err)
 	if !afterSettled.Equal(beforeSettled) {
 		t.Fatalf("restored settled_at = %s, want %s", afterSettled, beforeSettled)
-	}
-}
-
-func TestCheckpointWaitIsActiveButNotWorkTime(t *testing.T) {
-	mgr, sessions := newTestManager(t)
-	ctx := t.Context()
-	root, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create root", err)
-	child, err := sessions.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
-	testutil.FailErr(t, "create child", err)
-	t.Cleanup(func() { progress.ForgetClock(root.ID) })
-
-	finish := mgr.beginTurnClock(ctx, child.ID, false)
-	resume := mgr.BeginCheckpointWait(ctx, child.ID)
-	time.Sleep(40 * time.Millisecond)
-	resume()
-	finish()
-	clock := progress.Clock(root.ID)
-	if clock.ActiveMs < 40 || clock.ActiveMs-clock.WorkMs < 30 {
-		t.Fatalf("clock = %+v, want the child's approval wait counted as active but not work", clock)
-	}
-}
-
-func TestTurnClockOpensOnlyForNewRootUserTurn(t *testing.T) {
-	mgr, sessions := newTestManager(t)
-	ctx := t.Context()
-	root, err := sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create root", err)
-	child, err := sessions.CreateChild(ctx, root, api.SpawnChildRequest{AgentType: orchestration.ProfilePathExplorer})
-	testutil.FailErr(t, "create child", err)
-	t.Cleanup(func() { progress.ForgetClock(root.ID) })
-
-	finish := mgr.beginTurnClock(ctx, root.ID, true)
-	time.Sleep(20 * time.Millisecond)
-	finish()
-	banked := progress.Clock(root.ID).ActiveMs
-	if banked <= 0 {
-		t.Fatal("first user turn should bank elapsed time")
-	}
-	for _, continuation := range []struct {
-		id          string
-		newUserTurn bool
-	}{
-		{root.ID, false},
-		{child.ID, true},
-	} {
-		finish = mgr.beginTurnClock(ctx, continuation.id, continuation.newUserTurn)
-		if got := progress.Clock(root.ID); got.ActiveMs < banked || !got.Running() {
-			t.Fatalf("continuation clock = %+v, want at least %d and running", got, banked)
-		}
-		finish()
-	}
-
-	finish = mgr.beginTurnClock(ctx, root.ID, true)
-	defer finish()
-	if got := progress.Clock(root.ID); got.ActiveMs != 0 || !got.Running() {
-		t.Fatalf("next user turn clock = %+v, want running from zero", got)
 	}
 }

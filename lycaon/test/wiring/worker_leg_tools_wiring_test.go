@@ -2,13 +2,13 @@ package wiring
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/decide"
 	"reflect"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -28,12 +28,12 @@ func TestWorkerLegToolsMatchListForPrompt(t *testing.T) {
 	dir := t.TempDir()
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	policy := h.SessionMgr.PromptToolPolicy()
+	policy := h.Sessions.Manager.Coordinator.Guards.Policy()
 	builder := compositeWorkerWithPolicy(h.AgentRegistry, policy)
 
 	for _, agentType := range implementDefaultAgents {
 		t.Run(agentType, func(t *testing.T) {
-			child, err := h.SessionMgr.SpawnChild(ctx, sess.ID, api.SpawnChildRequest{
+			child, err := h.Sessions.Manager.Workers.SpawnChild(ctx, sess.ID, api.SpawnChildRequest{
 				AgentType: agentType,
 				Prompt:    "survey",
 			})
@@ -81,12 +81,12 @@ func TestImplementerLegToolsMatchImplementProfile(t *testing.T) {
 	dir := t.TempDir()
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create parent", err)
-	child, err := h.SessionMgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := h.Sessions.Manager.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: fixture.AgentType,
 		Prompt:    "implement scaffold",
 	})
 	testutil.FailErr(t, "SpawnChild", err)
-	policy := h.SessionMgr.PromptToolPolicy()
+	policy := h.Sessions.Manager.Coordinator.Guards.Policy()
 	schema := sortedToolNamesFromMeta(policy.ListForPrompt(ctx, child, fixture.ProfileID))
 	want := append([]string(nil), fixture.WantLegTools...)
 	sort.Strings(want)

@@ -22,7 +22,7 @@ const recoveryPageSize = 256
 
 // RecoveryWriter bounds memory and keeps compression outside database transactions.
 type RecoveryWriter struct {
-	store                 *Store
+	store                 *Retention
 	projectID, recoveryID string
 	entries               []RecoveryEntry
 	objects               []sourceblob.Capture
@@ -30,7 +30,7 @@ type RecoveryWriter struct {
 	release               func()
 }
 
-func (s *Store) BeginRecovery(ctx context.Context, projectID, recoveryID string) (*RecoveryWriter, error) {
+func (s *Retention) BeginRecovery(ctx context.Context, projectID, recoveryID string) (*RecoveryWriter, error) {
 	if _, err := s.sqlDB.ExecContext(ctx, `DELETE FROM source_recovery_entries WHERE project_id=? AND recovery_id=?`, projectID, recoveryID); err != nil {
 		return nil, err
 	}
@@ -97,7 +97,7 @@ func (w *RecoveryWriter) Flush(ctx context.Context) error {
 }
 
 // WalkRecovery releases each read cursor before invoking callbacks that may write.
-func (s *Store) WalkRecovery(ctx context.Context, projectID, recoveryID string, count int64, reverse bool, visit func(RecoveryEntry) error) error {
+func (s *Retention) WalkRecovery(ctx context.Context, projectID, recoveryID string, count int64, reverse bool, visit func(RecoveryEntry) error) error {
 	for offset := int64(0); offset < count; offset += recoveryPageSize {
 		start, end := offset, min(offset+recoveryPageSize, count)
 		order := "ASC"
@@ -121,7 +121,7 @@ func (s *Store) WalkRecovery(ctx context.Context, projectID, recoveryID string, 
 	return nil
 }
 
-func (s *Store) readRecoveryPage(ctx context.Context, projectID, recoveryID string, start, end int64, order string) ([]RecoveryEntry, error) {
+func (s *Retention) readRecoveryPage(ctx context.Context, projectID, recoveryID string, start, end int64, order string) ([]RecoveryEntry, error) {
 	rows, err := s.sqlDB.QueryContext(ctx, `SELECT path,mode,sha256,link FROM source_recovery_entries WHERE project_id=? AND recovery_id=? AND ordinal>=? AND ordinal<? ORDER BY ordinal `+order, projectID, recoveryID, start, end)
 	if err != nil {
 		return nil, err

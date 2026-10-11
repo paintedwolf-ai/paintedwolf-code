@@ -123,6 +123,7 @@ type BlueprintDef struct {
 
 // ReviewLoopDef defines a bounded parallel review cycle.
 type ReviewLoopDef struct {
+	AssignmentBinding         string
 	CoverageReviewers         []string
 	FollowupAttempts          int
 	ReconcilesPhase           string
@@ -663,4 +664,14 @@ func prunePhaseDefsToKeepSet(defs []PhaseDef, keep map[string]struct{}) []PhaseD
 		}
 	}
 	return out
+}
+
+func StartPosture(manifest Manifest, phaseID string) api.SessionPosture {
+	posture := strings.TrimSpace(manifest.InitialPosture)
+	if phase, ok := manifest.PhaseByID(phaseID); ok {
+		if phasePosture := strings.TrimSpace(phase.OnEnter.SetPosture); phasePosture != "" {
+			posture = phasePosture
+		}
+	}
+	return api.SessionPosture(posture)
 }

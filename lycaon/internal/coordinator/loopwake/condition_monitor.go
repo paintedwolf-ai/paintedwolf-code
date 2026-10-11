@@ -22,7 +22,7 @@ const (
 	conditionProbeMax   = 2 * time.Second
 )
 
-func startConditionMonitor(ctx context.Context, loop *LoopEngine, store *awaitstore.Store, lease awaitstore.Lease) {
+func startConditionMonitor(ctx context.Context, loop *WaitSubscriptions, store *awaitstore.Store, lease awaitstore.Lease) {
 	if loop == nil || store == nil || !hasActiveCondition(lease.Conditions) && !lease.Deadline.IsZero() {
 		return
 	}
@@ -38,7 +38,7 @@ func hasActiveCondition(conditions []awaitstore.Condition) bool {
 	return false
 }
 
-func monitorConditions(ctx context.Context, loop *LoopEngine, store *awaitstore.Store, lease awaitstore.Lease) {
+func monitorConditions(ctx context.Context, loop *WaitSubscriptions, store *awaitstore.Store, lease awaitstore.Lease) {
 	defer confine.ForgetEgressAction(lease.SessionID, lease.ToolCallID)
 	delay := conditionProbeStart
 	for {
@@ -66,7 +66,7 @@ func monitorConditions(ctx context.Context, loop *LoopEngine, store *awaitstore.
 
 // Reconciliation stops only for a terminal lease or a completed settlement.
 // Store failures leave the host monitor alive for a later retry.
-func reconcileWaitConditions(ctx context.Context, loop *LoopEngine, store *awaitstore.Store, lease awaitstore.Lease) bool {
+func reconcileWaitConditions(ctx context.Context, loop *WaitSubscriptions, store *awaitstore.Store, lease awaitstore.Lease) bool {
 	if ctx.Err() != nil {
 		return true
 	}
@@ -96,11 +96,11 @@ func reconcileWaitConditions(ctx context.Context, loop *LoopEngine, store *await
 			return true
 		}
 		if strings.TrimSpace(lease.WorkerJobID) == "" {
-			loop.rememberWaitWinner(lease.SessionID, lease.ID, winner)
+			loop.Deliveries.rememberWaitWinner(lease.SessionID, lease.ID, winner)
 		}
-		loop.breakSleep(ctx, lease.SessionID, winner.Kind, false)
+		loop.Waits.breakSleep(ctx, lease.SessionID, winner.Kind, false)
 		if strings.TrimSpace(lease.WorkerJobID) == "" {
-			loop.Nudge(ctx, lease.SessionID, anchor.LoopWake, anchor.LoopWake, lease.ID, anchor.Envelope{})
+			loop.Nudges.Nudge(ctx, lease.SessionID, anchor.LoopWake, anchor.LoopWake, lease.ID, anchor.Envelope{})
 		}
 		return true
 	}

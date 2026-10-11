@@ -161,9 +161,9 @@ func TestGitStatusToolIncludesRecentCommits(t *testing.T) {
 	gittest.InitCommit(t, tmpDir, "Initial commit")
 	execTool := toolfixture.ContractToolExecutor(t)
 	out, err := execTool.Invoke(context.Background(), "git_status", map[string]any{}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "explore_readonly",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
 	})
 	contractcheck.FailErr(t, "git_status invoke", err)
 	var obj map[string]any
@@ -195,9 +195,9 @@ func TestFindToolWireDepthSemantics(t *testing.T) {
 		"name_glob": "**/*.go",
 		"max_depth": float64(3),
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "explore_readonly",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
 	})
 	contractcheck.FailErr(t, "find invoke", err)
 	if strings.Contains(out, "depth_clipped") {
@@ -224,9 +224,9 @@ func TestReadToolWireIncludesLineTotal(t *testing.T) {
 	out, err := execTool.Invoke(context.Background(), "read", map[string]any{
 		"path": "sample.txt",
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "explore_readonly",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
 	})
 	contractcheck.FailErr(t, "read invoke", err)
 	var obj map[string]any

@@ -68,7 +68,7 @@ func TestLiveWatcherInvalidatesModelLiteralCandidatesWithUnchangedMetadata(t *te
 	query := LiteralQuery{RootID: "root", Base: ".", Require: litprefilter.AnyOf("OmegaNeedle"), Open: literalTestOpener(root)}
 	snapshot, err := catalog.Snapshot(t.Context(), "project", []Root{{ID: "root", Path: root}})
 	testutil.FailErr(t, "initial catalog", err)
-	candidates, err := catalog.LiteralCandidates(t.Context(), snapshot, query)
+	candidates, err := catalog.Literals.LiteralCandidates(t.Context(), snapshot, query)
 	testutil.FailErr(t, "warm literal cache", err)
 	if len(candidates) != 0 {
 		t.Fatal("unwritten literal matched the initial file")
@@ -78,7 +78,7 @@ func TestLiveWatcherInvalidatesModelLiteralCandidatesWithUnchangedMetadata(t *te
 	testutil.WaitFor(t, 5*time.Second, func() bool {
 		current, err := catalog.Snapshot(t.Context(), "project", []Root{{ID: "root", Path: root}})
 		testutil.FailErr(t, "refresh catalog", err)
-		candidates, err := catalog.LiteralCandidates(t.Context(), current, query)
+		candidates, err := catalog.Literals.LiteralCandidates(t.Context(), current, query)
 		testutil.FailErr(t, "query changed literal", err)
 		return slices.Equal(literalCandidatePaths(candidates), []string{"source.txt"})
 	})

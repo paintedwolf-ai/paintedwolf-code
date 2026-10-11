@@ -36,10 +36,10 @@ func writeMarker(t *testing.T, dir, value string) {
 
 func terminalCwdToolContext(roots []projectroot.RootRef, sessionID, workerJobID string) tools.ToolContext {
 	return tools.ToolContext{
-		SessionID:   sessionID,
-		WorkerJobID: workerJobID,
-		Agent:       "implement",
-		Roots:       roots,
+		Identity: tools.InvocationIdentity{SessionID: sessionID,
+			WorkerJobID: workerJobID,
+			Agent:       "implement"},
+		Source: tools.InvocationSource{Roots: roots},
 	}
 }
 
@@ -135,8 +135,8 @@ func TestTerminalOpenCwdWorkerBranchResolvesArgUnderBranch(t *testing.T) {
 	script := makeTerminalCwdScript(t, root)
 
 	tctx := terminalCwdToolContext([]projectroot.RootRef{{ID: "main", Path: root, IsPrimary: true}}, "sess", "job")
-	tctx.WorkerBranchRoot = branch
-	tctx.BranchWorkspace = testutil.CompleteBranchWorkspace{}
+	tctx.Source.WorkerBranchRoot = branch
+	tctx.Source.BranchWorkspace = testutil.CompleteBranchWorkspace{}
 	testutil.FailErr(t, "WriteJobMeta", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{
 		Roots: []workspace.JobMetaRoot{{ID: "root", Path: root, IsPrimary: true}},
 	}))

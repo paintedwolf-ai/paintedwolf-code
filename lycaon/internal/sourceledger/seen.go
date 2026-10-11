@@ -3,11 +3,11 @@ package sourceledger
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"slices"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -54,7 +54,7 @@ type seenRow struct {
 // QuerySeen lists the files the reader has looked at, newest look first.
 // Without user edits, the person's own writes neither make a file new again
 // nor count among the effects a look covered.
-func (s *Store) QuerySeen(
+func (s *History) QuerySeen(
 	ctx context.Context,
 	projectID string,
 	rootBranches map[string]sourcebranch.ID,
@@ -91,7 +91,7 @@ func (s *Store) QuerySeen(
 	return out, nil
 }
 
-func (s *Store) seenRows(ctx context.Context, projectID string, roots map[string]sourcebranch.ID, page SeenPageQuery, limit int64, withoutUserEdits bool) ([]seenRow, error) {
+func (s *History) seenRows(ctx context.Context, projectID string, roots map[string]sourcebranch.ID, page SeenPageQuery, limit int64, withoutUserEdits bool) ([]seenRow, error) {
 	rootBranches, err := encodeRootBranches(roots)
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func (s *Store) seenRows(ctx context.Context, projectID string, roots map[string
 
 // seenFile reports false for a head that is neither content nor a deletion,
 // which no editor presents.
-func (s *Store) seenFile(ctx context.Context, projectID string, row seenRow, withoutUserEdits bool) (SeenFile, bool, error) {
+func (s *History) seenFile(ctx context.Context, projectID string, row seenRow, withoutUserEdits bool) (SeenFile, bool, error) {
 	file := SeenFile{FileID: row.fileID, RootID: row.rootID, Path: row.path, ThroughOrdinal: row.through}
 	switch row.state {
 	case "content":
@@ -149,7 +149,7 @@ func (s *Store) seenFile(ctx context.Context, projectID string, row seenRow, wit
 			r.Origin, r.Cause, r.ActorLabel, r.SessionID, r.JobID, r.Turn,
 			r.ToolCallID, r.ToolName, r.BatchID, r.CaptureQuality, r.GitTransitionID, r.CommandWindowID)))
 	}
-	if err := s.hydrateEffectAuthors(ctx, projectID, file.Effects); err != nil {
+	if err := s.walk.hydrateEffectAuthors(ctx, projectID, file.Effects); err != nil {
 		return SeenFile{}, false, err
 	}
 	if withoutUserEdits {

@@ -29,7 +29,7 @@ func TestDirectIndexMemoryAnswersWhenProviderMissesHost(t *testing.T) {
 	}))
 	t.Cleanup(target.Close)
 
-	store, err := webindex.Open(filepath.Join(t.TempDir(), "web-index.db"))
+	store, err := webindex.Open(t.Context(), filepath.Join(t.TempDir(), "web-index.db"))
 	testutil.FailErr(t, "open index", err)
 	t.Cleanup(func() { _ = store.Close() })
 	store.QueuePage(t.Context(), webindex.Page{
@@ -72,7 +72,7 @@ func TestDirectMemoryAnswersWithoutModel(t *testing.T) {
 	}))
 	t.Cleanup(target.Close)
 
-	store, err := webindex.Open(filepath.Join(t.TempDir(), "web-index.db"))
+	store, err := webindex.Open(t.Context(), filepath.Join(t.TempDir(), "web-index.db"))
 	testutil.FailErr(t, "open index", err)
 	t.Cleanup(func() { _ = store.Close() })
 	store.QueuePage(t.Context(), webindex.Page{
@@ -110,7 +110,7 @@ func TestDirectSearchIngestsIntoIndex(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	store, err := webindex.Open(filepath.Join(t.TempDir(), "web-index.db"))
+	store, err := webindex.Open(t.Context(), filepath.Join(t.TempDir(), "web-index.db"))
 	testutil.FailErr(t, "open index", err)
 	t.Cleanup(func() { _ = store.Close() })
 
@@ -147,7 +147,7 @@ func TestDirectDeadIndexMemoryURLEvicted(t *testing.T) {
 	}))
 	t.Cleanup(dead.Close)
 
-	store, err := webindex.Open(filepath.Join(t.TempDir(), "web-index.db"))
+	store, err := webindex.Open(t.Context(), filepath.Join(t.TempDir(), "web-index.db"))
 	testutil.FailErr(t, "open index", err)
 	t.Cleanup(func() { _ = store.Close() })
 	deadURL := dead.URL + "/gone/widget-frobnicator-review"
@@ -182,7 +182,7 @@ func TestDirectMemoryAnswersFromWarmIndex(t *testing.T) {
 	}))
 	t.Cleanup(page.Close)
 
-	store, err := webindex.Open(filepath.Join(t.TempDir(), "web-index.db"))
+	store, err := webindex.Open(t.Context(), filepath.Join(t.TempDir(), "web-index.db"))
 	testutil.FailErr(t, "open index", err)
 	t.Cleanup(func() { _ = store.Close() })
 	store.QueuePage(t.Context(), webindex.Page{URL: page.URL + "/", Title: "Widget frobnicator review", Verified: true})

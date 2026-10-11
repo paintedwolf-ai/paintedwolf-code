@@ -109,3 +109,16 @@ func orderCodeRoots(roots []CodeRoot, originProjectID string) []CodeRoot {
 	}
 	return append(first, rest...)
 }
+
+// SymbolAllocation reserves time for confirmation instead of allowing discovery
+// to consume the entire leg. Complete mode scales every phase proportionally.
+type SymbolAllocation struct {
+	Discovery    time.Duration
+	Abbreviation time.Duration
+	Outline      time.Duration
+}
+
+func (b SearchBudget) SymbolAllocation() SymbolAllocation {
+	wall := b.Wall()
+	return SymbolAllocation{Discovery: wall * 3 / 8, Abbreviation: wall / 8, Outline: wall / 2}
+}

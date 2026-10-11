@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -69,7 +70,7 @@ func (s *SQLStore) CancelJob(ctx context.Context, id string, result *api.WorkerR
 	}); err != nil {
 		return false, err
 	}
-	if err := EnqueueJobEventTx(ctx, tx, s.outbox, id); err != nil {
+	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, id); err != nil {
 		return false, err
 	}
 	if err := tx.Commit(); err != nil {

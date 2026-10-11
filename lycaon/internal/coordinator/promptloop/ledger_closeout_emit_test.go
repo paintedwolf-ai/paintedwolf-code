@@ -15,17 +15,21 @@ import (
 func TestEmitAssembledCloseoutPreservesHostAssembled(t *testing.T) {
 	var committed api.Message
 	deps := PromptLoopDeps{
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			committed = msg
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				committed = msg
+				return nil
+			},
+			// Simulate a recompute that would set traced=true.,
 		},
-		// Simulate a recompute that would set traced=true.
-		ProseCitationGrounding: func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string) *api.CitationGrounding {
-			return &api.CitationGrounding{Traced: true}
-		},
-		AssembleLedgerCloseout: func(_ context.Context, _, _ string, forcedBy []string, drafted string, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-			return guidance.CoordinatorCompletionReport{Synthesis: drafted},
-				&api.CitationGrounding{HostAssembled: true, Traced: false, CitedURLs: []string{"https://status.example.com/42"}, RetryCount: retryCount}
+		Closeout: CloseoutDeps{
+			ProseCitationGrounding: func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string) *api.CitationGrounding {
+				return &api.CitationGrounding{Traced: true}
+			},
+			AssembleLedgerCloseout: func(_ context.Context, _, _ string, forcedBy []string, drafted string, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+				return guidance.CoordinatorCompletionReport{Synthesis: drafted},
+					&api.CitationGrounding{HostAssembled: true, Traced: false, CitedURLs: []string{"https://status.example.com/42"}, RetryCount: retryCount}
+			},
 		},
 	}
 	l := NewPromptLoopForTest(deps)
@@ -37,7 +41,7 @@ func TestEmitAssembledCloseoutPreservesHostAssembled(t *testing.T) {
 	history := []api.Message{{ID: "slot-1", Role: api.MessageRoleAssistant}}
 	prose := "The outage began when the cache warmer looped; root cause is a missing backoff."
 
-	out, err := turnCloseout{l}.emitAssembledCloseout(
+	out, err := l.Closeout.emitAssembledCloseout(
 		context.Background(), sess, "s1", "", "implement_investigate", prose,
 		[]string{"INVEST_CITATIONS_REQUIRED"}, st, history,
 	)
@@ -84,27 +88,31 @@ func TestEmitAssembledRunReportRecordsItsDefects(t *testing.T) {
 		{Code: guidance.ReportClaimUnreportedCode, Reason: "claims need a finding", Offenders: []string{"c1 (failed)"}, Count: 2},
 	}
 	l := NewPromptLoopForTest(PromptLoopDeps{
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			committed = msg
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				committed = msg
+				return nil
+			},
 		},
-		AssembleLedgerCloseout: func(context.Context, string, string, []string, string, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-			return guidance.CoordinatorCompletionReport{
-				Synthesis: "Survey done.",
-				Findings:  []guidance.CoordinatorFinding{{ID: "f1", Title: "Weak pin", Disposition: "ok"}},
-				Ask:       &guidance.CoordinatorAsk{Do: "Bump the pin.", Effort: "tiny"},
-			}, &api.CitationGrounding{HostAssembled: true}
-		},
-		CheckRunReportDocument: func(_ context.Context, _ string, report guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
-			checked = report
-			return issues, nil
+		Closeout: CloseoutDeps{
+			AssembleLedgerCloseout: func(context.Context, string, string, []string, string, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+				return guidance.CoordinatorCompletionReport{
+					Synthesis: "Survey done.",
+					Findings:  []guidance.CoordinatorFinding{{ID: "f1", Title: "Weak pin", Disposition: "ok"}},
+					Ask:       &guidance.CoordinatorAsk{Do: "Bump the pin.", Effort: "tiny"},
+				}, &api.CitationGrounding{HostAssembled: true}
+			},
+			CheckRunReportDocument: func(_ context.Context, _ string, report guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
+				checked = report
+				return issues, nil
+			},
 		},
 	})
 	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true, coordinatorFrame: testReportFrame()}
 	st.coordinatorFrame.RunContext.RunID = "run-1"
 	st.coordinatorFrame.RunContext.CurrentPhase = "synthesis"
 	st.coordinatorFrame.Runtime.ReportDocumentEnabled = true
-	out, err := turnCloseout{l}.emitAssembledCloseout(
+	out, err := l.Closeout.emitAssembledCloseout(
 		t.Context(), &api.Session{ID: "s1"}, "s1", "", "coordinator_security_synthesis", "draft",
 		[]string{guidance.ReportClaimUnreportedCode}, st, []api.Message{{ID: "slot-1", Role: api.MessageRoleAssistant}},
 	)
@@ -145,26 +153,30 @@ func TestEmitAssembledRunReportRecordsItsUnreadFence(t *testing.T) {
 	})
 	testutil.FailErr(t, "marshal retained draft", err)
 	l := NewPromptLoopForTest(PromptLoopDeps{
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			committed = msg
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				committed = msg
+				return nil
+			},
 		},
-		CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
-			return guidance.RetainedCloseout{Active: true, DocumentAttempt: 3, Drafted: drafted, ForcedBy: []string{guidance.ReportFenceUnreadableCode}, Unread: unread}
-		},
-		AssembleLedgerCloseout: func(_ context.Context, _, _ string, _ []string, raw string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-			report, ok := guidance.ParseCoordinatorCompletionReport(raw)
-			if !ok {
-				t.Fatalf("retained draft is not an envelope: %q", raw)
-			}
-			return report, &api.CitationGrounding{HostAssembled: true}
-		},
-		CheckRunReportDocument: func(context.Context, string, guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
-			return []guidance.ReportDocumentIssue{{Code: guidance.ReportDocumentInvalidCode, Reason: "1 finding(s) need action, so the report needs an ask"}}, nil
+		Closeout: CloseoutDeps{
+			CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
+				return guidance.RetainedCloseout{Active: true, DocumentAttempt: 3, Drafted: drafted, ForcedBy: []string{guidance.ReportFenceUnreadableCode}, Unread: unread}
+			},
+			AssembleLedgerCloseout: func(_ context.Context, _, _ string, _ []string, raw string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+				report, ok := guidance.ParseCoordinatorCompletionReport(raw)
+				if !ok {
+					t.Fatalf("retained draft is not an envelope: %q", raw)
+				}
+				return report, &api.CitationGrounding{HostAssembled: true}
+			},
+			CheckRunReportDocument: func(context.Context, string, guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
+				return []guidance.ReportDocumentIssue{{Code: guidance.ReportDocumentInvalidCode, Reason: "1 finding(s) need action, so the report needs an ask"}}, nil
+			},
 		},
 	})
 	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true, coordinatorFrame: testReportFrame()}
-	out, err := turnCloseout{l}.emitStalledCloseout(t.Context(), &api.Session{ID: "s1"}, "s1", "", "coordinator_security_synthesis", st,
+	out, err := l.Closeout.emitStalledCloseout(t.Context(), &api.Session{ID: "s1"}, "s1", "", "coordinator_security_synthesis", st,
 		[]api.Message{{ID: "slot-1", Role: api.MessageRoleAssistant}})
 	testutil.FailErr(t, "emitStalledCloseout", err)
 	meta := committed.CompletionReport
@@ -181,7 +193,7 @@ func TestEmitAssembledRunReportRecordsItsUnreadFence(t *testing.T) {
 func TestEmitAssembledCloseoutRequiresAssembler(t *testing.T) {
 	l := NewPromptLoopForTest(PromptLoopDeps{})
 	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true}
-	_, err := turnCloseout{l}.emitAssembledCloseout(
+	_, err := l.Closeout.emitAssembledCloseout(
 		context.Background(), &api.Session{ID: "s1"}, "s1", "", "implement_investigate", "prose",
 		nil, st, nil,
 	)
@@ -194,17 +206,21 @@ func TestEmitAssembledCloseoutWithoutGroundingStaysDraft(t *testing.T) {
 	var committed api.Message
 	var updates []api.Message
 	l := NewPromptLoopForTest(PromptLoopDeps{
-		AssembleLedgerCloseout: func(context.Context, string, string, []string, string, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-			return guidance.CoordinatorCompletionReport{Synthesis: "No observed evidence."}, nil
+		Closeout: CloseoutDeps{
+			AssembleLedgerCloseout: func(context.Context, string, string, []string, string, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+				return guidance.CoordinatorCompletionReport{Synthesis: "No observed evidence."}, nil
+			},
 		},
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			updates = append(updates, msg)
-			committed = msg
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				updates = append(updates, msg)
+				committed = msg
+				return nil
+			},
 		},
 	})
 	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true}
-	out, err := turnCloseout{l}.emitAssembledCloseout(
+	out, err := l.Closeout.emitAssembledCloseout(
 		context.Background(), &api.Session{ID: "s1"}, "s1", "", "implement_synthesis", "", nil,
 		st, []api.Message{{ID: "slot-1", Role: api.MessageRoleAssistant}},
 	)
@@ -226,17 +242,21 @@ func TestEarlyCloseoutFinishBlockAssembles(t *testing.T) {
 	var committed api.Message
 	var forcedCodes []string
 	deps := PromptLoopDeps{
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			committed = msg
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				committed = msg
+				return nil
+			},
 		},
-		AssembleLedgerCloseout: func(_ context.Context, _, _ string, forcedBy []string, drafted string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-			forcedCodes = append([]string(nil), forcedBy...)
-			report, ok := guidance.ParseCoordinatorCompletionReport(drafted)
-			if !ok || report.Headline != "Partial audit" || len(report.CitedEvidence) != 1 {
-				t.Fatalf("forced finish lost the report envelope: %q", drafted)
-			}
-			return report, &api.CitationGrounding{HostAssembled: true, Traced: false}
+		Closeout: CloseoutDeps{
+			AssembleLedgerCloseout: func(_ context.Context, _, _ string, forcedBy []string, drafted string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+				forcedCodes = append([]string(nil), forcedBy...)
+				report, ok := guidance.ParseCoordinatorCompletionReport(drafted)
+				if !ok || report.Headline != "Partial audit" || len(report.CitedEvidence) != 1 {
+					t.Fatalf("forced finish lost the report envelope: %q", drafted)
+				}
+				return report, &api.CitationGrounding{HostAssembled: true, Traced: false}
+			},
 		},
 	}
 	l := NewPromptLoopForTest(deps)
@@ -246,7 +266,7 @@ func TestEarlyCloseoutFinishBlockAssembles(t *testing.T) {
 	envelope := "```json\n{\"synthesis\":\"## Audit status\\nPartial findings after sandbox blocks.\",\"headline\":\"Partial audit\",\"cited_evidence\":[{\"evidence\":\"read#1\"}]}\n```"
 	reject := "Rejected: open progress\n\nCode: PROGRESS_OPEN_BEFORE_CLOSEOUT\n"
 
-	hist, aid, content, err := turnCloseout{l}.emitEarlyCloseoutAfterFinishBlock(
+	hist, aid, content, err := l.Closeout.emitEarlyCloseoutAfterFinishBlock(
 		context.Background(), sess, "s1", "", "implement_investigate", envelope, refusalForTest(reject), st, history,
 	)
 	testutil.FailErr(t, "emitEarlyCloseoutAfterFinishBlock", err)

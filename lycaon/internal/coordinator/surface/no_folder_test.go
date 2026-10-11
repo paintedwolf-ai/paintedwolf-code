@@ -9,10 +9,10 @@ import (
 )
 
 func TestFilterSurfaceToolsForRootCountZeroRoots(t *testing.T) {
-	tools := []string{"task", "read", "grep", "pack_board", "web_search", "fetch_url", "wait", "promote_overlay"}
+	tools := []string{"task", "read", "summarize", "grep", "pack_board", "web_search", "fetch_url", "wait", "promote_overlay"}
 	got, err := FilterSurfaceToolsForRootCount(tools, 0)
 	testutil.FailErr(t, "FilterSurfaceToolsForRootCount", err)
-	want := map[string]bool{"task": true, "web_search": true, "fetch_url": true, "wait": true}
+	want := map[string]bool{"task": true, "summarize": true, "web_search": true, "fetch_url": true, "wait": true}
 	if len(got) != len(want) {
 		t.Fatalf("filtered tools = %v want keys %v", got, want)
 	}

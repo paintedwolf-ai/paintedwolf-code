@@ -16,10 +16,17 @@ import (
 
 func TestBoardInjectServeWiring(t *testing.T) {
 	t.Parallel()
-	text := contractcheck.ServeWireSource(t)
-	for _, needle := range []string{"SetBoardInject", "RegisterBoardTools", "InjectBuilder"} {
+	root := contractcheck.RepoRoot(t)
+	text := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/boards/build.go")
+	for _, needle := range []string{"Coordinator.ConfigureBoard(&board.InjectBuilder{", "SnapshotBuilder: r.Snapshot", "RegisterBoardTools", "board.DefaultInjectFormatter()", "Manager.Promotion"} {
 		if !strings.Contains(text, needle) {
 			t.Fatalf("serve wire missing %q board inject wiring", needle)
+		}
+	}
+	peer := contractcheck.ReadRepoFile(t, root, "lycaon/internal/session/coordinatorcontrol/board.go")
+	for _, needle := range []string{"func (m *Service) ConfigureBoard(", "rt.SetBoardInject(builder, formatter", "SetWorkerRoots(workspaces.BoardRoots)", "SetActiveReservations(workspaces.ReservationEntries)", "SetPromotePathOverlay(promotion.PromotePathBoardLines)", "SetOverlayMergePlan(promotion.MergePlan())"} {
+		if !strings.Contains(peer, needle) {
+			t.Fatalf("typed board peer missing %q", needle)
 		}
 	}
 }

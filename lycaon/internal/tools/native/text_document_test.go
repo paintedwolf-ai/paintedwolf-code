@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -187,7 +188,7 @@ func TestWriteRefusesUnsupportedExistingTextWithoutChangingIt(t *testing.T) {
 	_, err := (&WriteTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{
 		"path": "unsupported.txt", "content": "replacement\n",
 	}, nativefixture.Context(dir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "READ_BINARY_DENIED" {
 		t.Fatalf("err = %v, want READ_BINARY_DENIED", err)
 	}
@@ -273,7 +274,7 @@ func TestNativeMutationRejectsChangeAfterOpenAndBeforeCommit(t *testing.T) {
 			}).Run(context.Background(), map[string]any{
 				"path": "notes.txt", "content": "agent replacement\n",
 			}, nativefixture.Context(dir))
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != "TEXT_WRITE_CONFLICT" {
 				t.Fatalf("error = %v, want TEXT_WRITE_CONFLICT", err)
 			}
