@@ -18,7 +18,7 @@ import {
 } from "../../blueprint/blueprint-workspace-modal.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { isBlueprintWorkflowRun } from "../../workflow/workflows-drawer-model.ts";
-import type { ProjectFileDocumentSession } from "../../files/components/ProjectFilesView.tsx";
+import type { ProjectFileDocumentSession } from "../../files/components/project-files-view-props.ts";
 import { saveProjectFileDocument } from "../../files/documents/project-file-document-save.ts";
 import { projectFilesState } from "../../files/documents/files-buffer-state.ts";
 import { fileBufferKey } from "../../files/components/project-files-model.ts";

@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-const filesView = readFileSync(
-  join(import.meta.dirname, "../components/ProjectFilesView.tsx"),
+const commandBindings = readFileSync(
+  join(import.meta.dirname, "../commands/files-command-bindings.ts"),
   "utf8",
 );
 const definitionNavigation = readFileSync(
@@ -31,8 +31,8 @@ describe("definition jump history push-before-jump", () => {
 
   it("keeps jump-back on the shared stack used by Ctrl+-", () => {
     expect(jumpBridge).toContain("export function pushProjectJump");
-    expect(filesView).toContain('"files.jumpBack"');
-    expect(filesView).toContain('"files.goToDefinition"');
+    expect(commandBindings).toContain('"files.jumpBack"');
+    expect(commandBindings).toContain('"files.goToDefinition"');
   });
 
   it("keeps misses and lookup errors in the editor", () => {
