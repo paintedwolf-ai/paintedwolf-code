@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/sourcecatalog/sourcecatalog.TreeStores",
+  "kind": "runtime_service",
+  "workstream": "source-observations",
+  "disposition": "retain",
+  "reason": "The store registry coordinates acquisition, drain, projection-writer exclusion, pin retention and file reclamation through the same lifecycle lock. Extracting a reclamation service would duplicate this coordination protocol rather than narrow it.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 635,
+  "boundaries": {
+    "lycaon/internal/sourcecatalog/summary_reconcile_test.go": "46c0856cdf3003241e807c7f76833f8701e6ee66a5c6b2fb09261b4f3c863af8",
+    "lycaon/internal/sourcecatalog/generation_pins_test.go": "8a4ff6551773defa8c27ce3e7cb36cad15346c0e9fbd67ea1bcddae91128a4f8",
+    "lycaon/internal/sourcecatalog/structural_lifecycle_test.go": "86d1e3fa4425f0d557bbbf07ec9d6582af6250162d9440b86e1faf2915687f04"
+  },
+  "reviewed_shape": "e15c3326c88cde7800977f686b48e95f50c2c2085691a2abfd7d4f6ca0d1f8ed"
+}
