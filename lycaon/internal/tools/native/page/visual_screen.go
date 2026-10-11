@@ -3,6 +3,7 @@ package page
 import (
 	"context"
 	"errors"
+
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/visualscreen"

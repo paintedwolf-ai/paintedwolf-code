@@ -3,6 +3,7 @@ package page
 import (
 	"context"
 	"errors"
+
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/browserengine"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
