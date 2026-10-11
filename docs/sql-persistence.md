@@ -73,9 +73,9 @@ Unknown shapes, including earlier development shapes with revision 1, remain unt
 
 ### Locks
 
-**Two locks travel with the baseline, and both are committed.** [`lycaon/internal/db/schema.sql.lock.json`](../lycaon/internal/db/schema.sql.lock.json) hashes `schema.sql` statement by statement in order, so an edit that reorders or silently rewrites an existing statement fails instead of landing as an appended change. [`lycaon/internal/db/schema_version_lock.json`](../lycaon/internal/db/schema_version_lock.json) carries the declared `schema_version` that the bundle smoke test, the upgrade corpus boot, and the upgrade rehearsal read back from a real store, which lets those checks assert a version rather than trust one.
+**Two locks travel with the baseline, and both are committed.** [`lycaon/internal/db/schema.sql.lock.json`](../lycaon/internal/db/schema.sql.lock.json) hashes `schema.sql` statement by statement in order, verified during release qualification (`PW_RELEASE_QUALIFICATION=1` or release-tagged builds) so an edit that reorders or silently rewrites an existing statement fails instead of landing as an appended change. [`lycaon/internal/db/schema_version_lock.json`](../lycaon/internal/db/schema_version_lock.json) carries the declared `schema_version` that the bundle smoke test, the upgrade corpus boot, and the upgrade rehearsal read back from a real store, which lets those checks assert a version rather than trust one.
 
-An intentional `schema.sql` edit therefore turns `TestSchemaSQLLock` red until you record the new statement hashes:
+During release qualification, an intentional `schema.sql` edit turns `TestSchemaSQLLock` red until you record the new statement hashes:
 
 ```bash
 UPDATE_SCHEMA_LOCK=1 ./task test:digest -- ./test/contract/persistence -run TestSchemaSQLLock

@@ -1,6 +1,7 @@
 package sourceledger
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
@@ -81,7 +82,7 @@ func TestDirectoryRecreationDoesNotResurrectOldChildren(t *testing.T) {
 	if head.State != "absent" {
 		t.Fatalf("recreated directory resurrected %+v", head)
 	}
-	if _, err := store.History.ResolveHead(ctx, "p1", sourcebranch.Trunk, "r1", "tree/old"); err != ErrHistoryNotFound {
+	if _, err := store.History.ResolveHead(ctx, "p1", sourcebranch.Trunk, "r1", "tree/old"); !errors.Is(err, ErrHistoryNotFound) {
 		t.Fatalf("old child remains visible: %v", err)
 	}
 }

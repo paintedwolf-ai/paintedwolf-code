@@ -5,6 +5,7 @@ package desktoptrash
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -104,6 +105,10 @@ func linuxTrashFor(path string) (string, string, error) {
 }
 
 func privateTrashDirectory(path string) error {
+	uid := int64(os.Getuid())
+	if uid < 0 || uid > math.MaxUint32 {
+		return fmt.Errorf("unsafe trash directory: %s", path)
+	}
 	mkdirErr := os.Mkdir(path, 0700)
 	if mkdirErr != nil && !os.IsExist(mkdirErr) {
 		return mkdirErr
@@ -113,7 +118,7 @@ func privateTrashDirectory(path string) error {
 		return err
 	}
 	stat, ok := info.Sys().(*syscall.Stat_t)
-	if !info.IsDir() || !ok || stat.Uid != uint32(os.Getuid()) || info.Mode().Perm() != 0700 {
+	if !info.IsDir() || !ok || stat.Uid != uint32(uid) || info.Mode().Perm() != 0700 {
 		return fmt.Errorf("unsafe trash directory: %s", path)
 	}
 	if mkdirErr == nil {
