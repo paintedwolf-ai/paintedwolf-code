@@ -2992,6 +2992,12 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '413':
           $ref: '#/components/responses/ContentTooLarge'
         '415':
@@ -3215,6 +3221,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '413':
           $ref: '#/components/responses/ContentTooLarge'
         '415':
@@ -3280,6 +3292,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: File changed on disk since it was loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:
@@ -3379,6 +3397,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: Directory is not empty and recursive was not set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:
@@ -4822,6 +4846,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '413':
           $ref: '#/components/responses/ContentTooLarge'
         '415':
@@ -4974,6 +5004,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '413':
           $ref: '#/components/responses/ContentTooLarge'
         '415':
@@ -5024,6 +5060,12 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: History moved or the filesystem no longer matches the recorded operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:
@@ -5099,6 +5141,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '413':
           $ref: '#/components/responses/ContentTooLarge'
         '415':
@@ -5166,6 +5214,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: Destination path already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:
@@ -5902,6 +5956,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '413':
           $ref: '#/components/responses/ContentTooLarge'
         '415':
@@ -5971,6 +6031,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: The working file changed since it was loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:

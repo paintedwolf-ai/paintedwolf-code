@@ -118,6 +118,12 @@ paths:
           $ref: ../../components/responses.yaml#/components/responses/Forbidden
         '404':
           $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '409':
           $ref: ../../components/responses.yaml#/components/responses/Conflict
         '413':
