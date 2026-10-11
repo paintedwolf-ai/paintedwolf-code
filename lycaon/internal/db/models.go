@@ -1726,6 +1726,11 @@ type SourceRecoveryObjects struct {
 	Sha256     string `json:"sha256"`
 }
 
+type SourceRecoveryReclaimQueue struct {
+	ProjectID  string `json:"project_id"`
+	RecoveryID string `json:"recovery_id"`
+}
+
 type SourceSnapshotBoundaries struct {
 	SnapshotID string `json:"snapshot_id"`
 	RootPath   string `json:"root_path"`

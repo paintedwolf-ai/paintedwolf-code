@@ -24,6 +24,9 @@ var namespaceImplementation []byte
 //go:embed review_assignments.sql
 var reviewAssignmentsMigration []byte
 
+//go:embed recovery_retention.sql
+var recoveryRetentionMigration []byte
+
 func migrateSourceNamespace(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, string(namespaceSchema)); err != nil {
 		return err
@@ -61,7 +64,10 @@ func migrateSourceNamespace(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, string(namespaceProjection)); err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, string(reviewAssignmentsMigration))
+	if _, err = tx.ExecContext(ctx, string(reviewAssignmentsMigration)); err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, string(recoveryRetentionMigration))
 	return err
 }
 

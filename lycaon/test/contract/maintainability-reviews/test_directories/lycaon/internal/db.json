@@ -1,0 +1,15 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/db",
+  "kind": "test_suite",
+  "workstream": "database-integrity",
+  "disposition": "retain",
+  "reason": "Database tests exercise private fresh-schema, migration, transaction, and recovery seams through actual stores. The expression-index audit belongs with those contracts; moving it to an external package would obscure the schema fixture or broaden production visibility. Retain the current test membership and require renewed review for any membership growth or replacement.",
+  "reviewed_commit": "be8c82f32a7764e8b58a56a72420046e184b4510",
+  "ceiling": 40,
+  "boundaries": {
+    "lycaon/internal/db/schema_integrity_test.go": "40c3f6ae2cd2be3bd8b16dd852636611406d18ed9f737912351307f0b6169dbe",
+    "lycaon/internal/db/schema_index_integrity_test.go": "fa12ca9706074beda8b7bbd08726d68b2b9eb65bd03525fe58e9b4d52f742281"
+  },
+  "reviewed_shape": "301d2e62e2c1f64581faab0fb2a8a5508dd7120fb93e59f1608f9769613389a3"
+}
