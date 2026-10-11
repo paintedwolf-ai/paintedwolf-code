@@ -47,6 +47,7 @@ func TestMaintainabilityWithinBudget(t *testing.T) {
 	report.Tracking = trackingReport(policy, inv, isTouched)
 	testutil.FailErr(t, "attach maintainability reviews", attachReviews(tree, policy, inv, report.Tracking))
 	report.Notes = append(report.Notes, notes...)
+	report.Notes = append(report.Notes, reviewChanges(baseTree, tree)...)
 	testutil.FailErr(t, "write maintainability report", sizebudget.WriteReport(report))
 	if failures := sizebudget.Failures(findings); len(failures) > 0 {
 		t.Fatal(sizebudget.FailureReport(suite, failures, detail(inv)))

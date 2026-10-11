@@ -1,0 +1,14 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/oar/oar.GroundingFacts",
+  "kind": "projection",
+  "workstream": "tool-domains",
+  "disposition": "retain",
+  "reason": "These fields project structured grounding evidence into the declared policy vocabulary. Keep the fact projection explicit; it does not settle invoked operations.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 21,
+  "boundaries": {
+    "lycaon/internal/oar/context_facts.go": "11c9a1d129d5f37e53643262b30a502bab7e53791b2352d73cbb6920dba7983e"
+  },
+  "reviewed_shape": "332c4c9bd2356082f4c19cbfbf10d9a8a0ea36817f2745cbe7f30e1633f26bb7"
+}

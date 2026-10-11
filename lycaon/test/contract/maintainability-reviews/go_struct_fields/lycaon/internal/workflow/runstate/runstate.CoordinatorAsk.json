@@ -1,0 +1,14 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/workflow/runstate/runstate.CoordinatorAsk",
+  "kind": "data_record",
+  "workstream": "worker-workflow-lifecycle",
+  "disposition": "retain",
+  "reason": "The ask binds one request, revision, response, and terminal state. Keep its flat persisted representation and validate transitions at the workflow boundary.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 21,
+  "boundaries": {
+    "lycaon/internal/workflow/runstate/coordinator_ask.go": "346e18116961a84a92c1c2ee525ef3c8b17a5b58448d68d629d0ce4e704fa291"
+  },
+  "reviewed_shape": "1c88219c8ffcb1f7ce39902fb854c139549ec7eee9da96f346746ce01af9c519"
+}

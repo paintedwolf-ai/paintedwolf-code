@@ -1,0 +1,9 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/toolexecution/executor_tool_approval.go",
+  "kind": "module",
+  "workstream": "tool-domains",
+  "disposition": "refactor",
+  "reason": "Review the implementation seams and dependency contracts in this workstream; preserve behavior and operation settlement.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb"
+}

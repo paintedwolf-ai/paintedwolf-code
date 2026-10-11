@@ -1,0 +1,14 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/sourcecatalog/sourcecatalog.TreeOverlay",
+  "kind": "algorithm",
+  "workstream": "source-observations",
+  "disposition": "retain",
+  "reason": "The overlay API coordinates one temporary tree projection, its reads, copying, and release. Preserve the cohesive resource lifetime instead of splitting sixteen methods among forwarding types.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 16,
+  "boundaries": {
+    "lycaon/internal/sourcecatalog/tree_overlay.go": "12b76b93e4b39e31209100ee37a25a14cf0823e502c13b2546171436739ead18"
+  },
+  "reviewed_shape": "9d2f02feab478a566b3a1615b1d2f17617283039e57bd7cdd20047055deaa25e"
+}

@@ -1,0 +1,86 @@
+package maintainability
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/printer"
+	"go/scanner"
+	"go/token"
+	"slices"
+	"strings"
+)
+
+// typeShape fingerprints declarations and method signatures, excluding bodies and comments.
+func typeShape(tree *workingTree, inv *inventory, id string) (string, error) {
+	_, name, ok := strings.Cut(id[strings.LastIndex(id, "/")+1:], ".")
+	if !ok {
+		return "", fmt.Errorf("invalid Go artifact %s", id)
+	}
+	var declarations []string
+	for _, file := range inv.sources[id] {
+		raw, err := tree.read(file)
+		if err != nil {
+			return "", fmt.Errorf("read shape source: %w", err)
+		}
+		fset := token.NewFileSet()
+		parsed, err := parser.ParseFile(fset, file, raw, parser.SkipObjectResolution)
+		if err != nil {
+			return "", fmt.Errorf("parse shape source: %w", err)
+		}
+		for _, declaration := range parsed.Decls {
+			switch decl := declaration.(type) {
+			case *ast.GenDecl:
+				for _, spec := range decl.Specs {
+					named, ok := spec.(*ast.TypeSpec)
+					if ok && named.Name.Name == name {
+						value, err := shapeText(fset, named.Type)
+						if err != nil {
+							return "", err
+						}
+						declarations = append(declarations, "type:"+value)
+					}
+				}
+			case *ast.FuncDecl:
+				if decl.Recv != nil && receiverName(decl.Recv.List[0].Type) == name {
+					value, err := shapeText(fset, decl.Type)
+					if err != nil {
+						return "", err
+					}
+					declarations = append(declarations, decl.Name.Name+":"+value)
+				}
+			}
+		}
+	}
+	if len(declarations) == 0 {
+		return "", fmt.Errorf("Go artifact %s has no declarations", id)
+	}
+	slices.Sort(declarations)
+	return fmt.Sprintf("%x", sha256.Sum256([]byte(strings.Join(slices.Compact(declarations), "\n")))), nil
+}
+
+func shapeText(fset *token.FileSet, node ast.Node) (string, error) {
+	var out bytes.Buffer
+	if err := printer.Fprint(&out, fset, node); err != nil {
+		return "", fmt.Errorf("format Go shape: %w", err)
+	}
+	var scan scanner.Scanner
+	positions := token.NewFileSet()
+	scan.Init(positions.AddFile("", -1, out.Len()), out.Bytes(), nil, 0)
+	var tokens []string
+	for {
+		_, kind, literal := scan.Scan()
+		if kind == token.EOF {
+			break
+		}
+		if kind == token.SEMICOLON {
+			continue
+		}
+		tokens = append(tokens, kind.String(), literal)
+	}
+	raw, err := json.Marshal(tokens)
+	return string(raw), err
+}

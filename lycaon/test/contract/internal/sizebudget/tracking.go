@@ -10,6 +10,7 @@ type TrackingReport struct {
 
 // TrackingArtifact carries the measurements needed to maintain one cleanup issue.
 type TrackingArtifact struct {
+	Shape           string          `json:"shape,omitempty"`
 	Review          *ArtifactReview `json:"review,omitempty"`
 	Category        string          `json:"category"`
 	ID              string          `json:"id"`

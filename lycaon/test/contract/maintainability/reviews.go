@@ -26,6 +26,13 @@ func attachReviews(tree *workingTree, policy sizebudget.Policy, inv *inventory, 
 	for i := range report.Artifacts {
 		row := &report.Artifacts[i]
 		rows[row.Category+":"+row.ID] = row
+		if strings.HasPrefix(row.Category, "go_") {
+			shape, err := typeShape(tree, inv, row.ID)
+			if err != nil {
+				return err
+			}
+			row.Shape = shape
+		}
 	}
 	seen := map[string]bool{}
 	for _, file := range tree.files() {
@@ -46,6 +53,9 @@ func attachReviews(tree *workingTree, policy sizebudget.Policy, inv *inventory, 
 		}
 		review.State = reviewState(tree, review, inv.measured[review.Category][review.Artifact])
 		if row := rows[key]; row != nil {
+			if review.State == "retained" && review.ReviewedShape != row.Shape {
+				review.State = "shape_changed"
+			}
 			row.Review = &review.ArtifactReview
 		}
 	}
@@ -61,6 +71,16 @@ func readReview(tree *workingTree, file string) (artifactReview, error) {
 	if err != nil {
 		return review, fmt.Errorf("read review %s: %w", file, err)
 	}
+	if err := uniqueReviewKeys(raw); err != nil {
+		return review, fmt.Errorf("decode review %s: %w", file, err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return review, err
+	}
+	if _, ok := fields["state"]; ok {
+		return review, fmt.Errorf("review %s authors measured state", file)
+	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&review); err != nil {
@@ -68,6 +88,9 @@ func readReview(tree *workingTree, file string) (artifactReview, error) {
 	}
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return review, fmt.Errorf("review %s has trailing content", file)
+	}
+	if review.Boundaries == nil {
+		review.Boundaries = map[string]string{}
 	}
 	return review, nil
 }
@@ -98,13 +121,20 @@ func validateReview(review artifactReview, policy sizebudget.Policy, inv *invent
 		return fmt.Errorf("review state is measured, not authored")
 	}
 	if review.Disposition == "refactor" {
-		if review.Ceiling != 0 || len(review.Boundaries) != 0 {
+		if review.Ceiling != 0 || len(review.Boundaries) != 0 || review.ReviewedShape != "" {
 			return fmt.Errorf("refactor reviews cannot accept a ceiling or boundaries")
 		}
 		return nil
 	}
 	if review.Ceiling <= limit.Warn || review.Ceiling > limit.Limit || len(review.Boundaries) == 0 || len(review.Boundaries) > 32 {
 		return fmt.Errorf("retained warning requires a ceiling within the hard limit and 1-32 boundaries")
+	}
+	if strings.HasPrefix(review.Category, "go_") {
+		if !hexLength(review.ReviewedShape, 64) {
+			return fmt.Errorf("retained Go artifact requires its reviewed shape")
+		}
+	} else if review.ReviewedShape != "" {
+		return fmt.Errorf("only Go artifacts carry a type shape")
 	}
 	for file, digest := range review.Boundaries {
 		if !reviewPath(file) || !hexLength(digest, 64) {

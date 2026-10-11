@@ -5,6 +5,7 @@ import re
 from urllib.parse import quote
 
 from .budget_snapshot import CATEGORIES, key, relative
+from .budget_review import dismissed, retained, unchanged
 
 START = '<!-- paintedwolf-maintainability:v1 -->'
 END = '<!-- /paintedwolf-maintainability -->'
@@ -42,15 +43,32 @@ def legacy(issue, artifacts):
     return None
 
 
-def block(row, observation, active):
+def block(row, observation, active, previous=None):
     state = {**{k: v for k, v in row.items() if k != 'spans'}, 'sources': row['sources'][:20], **observation, 'key': key(row['category'], row['id']), 'active': active}
+    state['measurement_source'] = observation['source_sha'] if active else (previous or {}).get('measurement_source', (previous or {}).get('source_sha', observation['source_sha']))
+    if previous is not None and active:
+        prior = previous.get('prior_observation') if previous.get('source_sha') == observation['source_sha'] else {
+            'measured': previous['measured'], 'source_sha': previous.get('measurement_source', previous['source_sha'])}
+        if prior:
+            state['prior_observation'] = prior
     encoded = json.dumps(state, sort_keys=True, separators=(',', ':')).replace('<', '\\u003c').replace('>', '\\u003e')
-    status = 'Above the cleanup threshold' if active else 'Within the cleanup threshold or removed'
+    status = ('Retained by bounded architectural review' if retained(row) else 'Review required') if active else 'Within the cleanup threshold or removed'
+    measurement_label = 'Latest measurement' if active else 'Last above-threshold measurement'
     lines = [START, '<!-- state:' + encoded + ' -->',
              f"**{status}**: `{html.escape(row['category'])}` / `{html.escape(row['id'])}`.", '',
-             f"Latest above-threshold measurement: **{row['measured']}**. Cleanup threshold: **{row['warn']}**. "
+             f"{measurement_label}: **{row['measured']}**. Warning threshold: **{row['warn']}**. "
              f"Hard limit: **{row['limit']}**. Effective cap: **{row['effective_cap']}**.", '',
              f"[Main observation]({observation['run_url']}) at `{observation['source_sha']}`."]
+    prior = state.get('prior_observation')
+    if prior:
+        lines += ['', f"Previous observation: **{prior['measured']}** at `{prior['source_sha']}`; delta **{row['measured'] - prior['measured']:+d}**."]
+    review = row.get('review')
+    if review:
+        lines += ['', f"Workstream: `{review['workstream']}`. Classification: `{review['kind']}`.",
+                  f"Design decision: **{review['disposition']}**; review state: **{review['state']}**.",
+                  html.escape(review['reason']), f"Reviewed source: `{review['reviewed_commit']}`."]
+        if review['disposition'] == 'retain':
+            lines += [f"Review ceiling: **{review['ceiling']}**. Boundary changes or growth renew review; hard limits remain unchanged."]
     if row['exception_reason']:
         lines += ['', 'Exception: ' + html.escape(row['exception_reason'])]
     links = [f"[{html.escape(path)}](https://github.com/{observation['repository']}/blob/"
@@ -58,13 +76,13 @@ def block(row, observation, active):
     lines += ['', 'Sources: ' + ', '.join(links)]
     if len(row['sources']) > 20:
         lines += [f"The report lists {len(row['sources'])} source paths."]
-    lines += ['', 'Reduce the artifact along cohesive domain boundaries to the cleanup threshold or below. '
-              'Preserve behavior and verify through the repository task runner.', END]
+    lines += ['', 'Review cohesion, dependencies, and lifecycle before choosing a refactor or a bounded design decision. '
+              'Preserve operation contracts and verify through the repository task runner.', END]
     return '\n'.join(lines)
 
 
 def body_for(issue, row, observation, active):
-    managed = block(row, observation, active)
+    managed = block(row, observation, active, tracked(issue))
     body = issue.get('body') or ''
     if START in body:
         start, end = body.index(START), body.index(END) + len(END)
@@ -95,6 +113,9 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
         matches = sorted(indexed.get(identity, []), key=lambda pair: pair[0]['number'])
         row = artifacts.get(identity)
         if not matches:
+            if retained(row):
+                suppressed += 1
+                continue
             if not backfill and identity not in intake_keys:
                 continue
             operations.append({'action': 'create', 'key': identity, 'body': {
@@ -107,30 +128,28 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
                 operations.append({'action': 'deduplicate', 'number': duplicate['number'], 'expected': expected(duplicate), 'body': {
                     'state': 'closed', 'state_reason': 'not_planned',
                     'body': (duplicate.get('body') or '') + f"\n\nTracked by #{issue['number']}."}})
-        if issue['state'] == 'closed' and issue.get('state_reason') == 'not_planned':
-            suppressed += int(row is not None)
+        if dismissed(issue, row, previous, intake_keys, identity):
+            suppressed += 1
             continue
         active = row is not None
-        measured_fields = ['category', 'id', 'measured', 'warn', 'limit', 'effective_cap', 'exception_reason']
-        if (active and issue['state'] == 'open' and START in (issue.get('body') or '')
-                and identity not in intake_keys and all(row.get(k) == previous.get(k) for k in measured_fields)
-                and row['sources'][:20] == previous.get('sources')):
+        desired_state = 'closed' if not active or retained(row) else 'open'
+        if (active and issue['state'] == desired_state and START in (issue.get('body') or '')
+                and identity not in intake_keys and unchanged(row, previous)):
             continue
         if not active:
             # Already resolved issues retain the observation that resolved them.
-            if issue['state'] == 'closed':
+            if issue['state'] == 'closed' and not previous.get('active', True):
                 continue
             row = {k: previous[k] for k in ['category', 'id', 'measured', 'warn', 'limit',
                                            'effective_cap', 'exception_reason', 'sources']}
         body = body_for(issue, row, observation, active)
-        desired_state = 'open' if active else 'closed'
         if body == issue.get('body') and desired_state == issue['state']:
             continue
         change = {'body': body}
         action = 'update'
         if desired_state != issue['state']:
-            action = 'reopen' if active else 'resolve'
-            change.update(state=desired_state, state_reason='reopened' if active else 'completed')
+            action = 'reopen' if desired_state == 'open' else ('retain' if active else 'resolve')
+            change.update(state=desired_state, state_reason='reopened' if desired_state == 'open' else 'completed')
         operations.append({'action': action, 'number': issue['number'], 'expected': expected(issue), 'key': identity, 'body': change})
     if any(len(op['body']['body'].encode()) > 60000 for op in operations):
         raise ValueError('planned issue body exceeds the size bound')
