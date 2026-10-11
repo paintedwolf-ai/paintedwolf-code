@@ -104,8 +104,9 @@ describe("resize invalidation", () => {
   it("declares tree geometry on the pane that reads it", () => {
     expect(registered).toContain("--den-files-tree-w");
     expect(read("files/components/ProjectFilesView.tsx")).toMatch(
-      /<FilesTreePane[\s\S]*?style=\{treeStyle\(\)\}/,
+      /<FilesNavigationPane[\s\S]*?style=\{treeStyle\(\)\}/,
     );
+    expect(read("files/components/FilesNavigationPane.tsx")).toMatch(/<FilesTreePane[\s\S]*?style=\{props\.style\}/);
     expect(read("files/components/FilesTreePane.tsx")).toMatch(/class="den-files-tree-pane"[\s\S]*?style=\{props\.style\}/);
   });
 

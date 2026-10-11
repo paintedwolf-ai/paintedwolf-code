@@ -1,3 +1,4 @@
+import type { ProjectFileDocumentSession } from "../../files/components/project-files-view-props.ts";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import type { ProjectRoot } from "../../api/types.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
@@ -11,10 +12,7 @@ import {
 } from "../../blueprint/blueprint-inline-card-model.ts";
 import { createModalFocusTrap } from "../../platform/interaction/modal-focus-trap.ts";
 import { Scrollport } from "../primitives/Scrollport.tsx";
-import {
-  ProjectFilesView,
-  type ProjectFileDocumentSession,
-} from "../../files/components/ProjectFilesView.tsx";
+import { ProjectFilesView } from "../../files/components/ProjectFilesView.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
 import { chromeProps, proseProps } from "../../styling/ui-chrome.ts";
 import { focusWithoutScroll } from "../../platform/interaction/focus.ts";
