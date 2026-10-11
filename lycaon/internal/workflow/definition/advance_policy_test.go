@@ -71,6 +71,7 @@ func TestEffectiveAdvancePolicyShippedManifestParity(t *testing.T) {
 		"security-survey@2.0.0": {},
 		"security-survey@1.0.0": {},
 		"options@1.0.0":         {},
+		"bugbash@1.1.0":         {},
 		"bugbash@1.0.0":         {},
 	}
 

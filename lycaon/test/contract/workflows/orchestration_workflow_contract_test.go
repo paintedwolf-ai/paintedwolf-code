@@ -21,9 +21,9 @@ func TestBugbashInWorkflowCatalog(t *testing.T) {
 	t.Parallel()
 	catalog, err := workflowfixture.LoadMergedWorkflowCatalog(t)
 	contractcheck.FailErr(t, "loadMergedWorkflowCatalog failed", err)
-	m, ok := catalog["bugbash@1.0.0"]
+	m, ok := catalog["bugbash@1.1.0"]
 	if !ok {
-		t.Fatal("bugbash@1.0.0 missing from bundled catalog")
+		t.Fatal("bugbash@1.1.0 missing from bundled catalog")
 	}
 	if m.Topology != "bugbash" {
 		t.Fatalf("topology = %q want bugbash", m.Topology)

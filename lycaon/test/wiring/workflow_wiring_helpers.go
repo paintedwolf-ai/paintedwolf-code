@@ -54,8 +54,12 @@ func waitWorkflowPhase(t *testing.T, ctx context.Context, mgr *workflow.RunManag
 
 func startTopologyWorkflowRun(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, workflowID string) *api.WorkflowRun {
 	t.Helper()
+	version := "1.0.0"
+	if workflowID == "bugbash" {
+		version = "1.1.0"
+	}
 	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
-		WorkflowID: workflowID, WorkflowVersion: "1.0.0",
+		WorkflowID: workflowID, WorkflowVersion: version,
 	})
 	testutil.FailErr(t, "StartHuman "+workflowID, err)
 	return run

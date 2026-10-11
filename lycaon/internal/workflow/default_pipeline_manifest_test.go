@@ -15,7 +15,7 @@ func TestBugbashManifestBindsAndAdvances(t *testing.T) {
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs failed", err)
-	manifest, err := manifests.Get("bugbash", "1.0.0")
+	manifest, err := manifests.Get("bugbash", "1.1.0")
 	testutil.FailErr(t, "manifests.Get failed", err)
 
 	wantBinds := map[string]string{
@@ -52,7 +52,7 @@ func TestBugbashManifestBindsAndAdvances(t *testing.T) {
 	mgr.SetConditionRegistry(reg)
 	mgr.Resolver.Overlay = manifests
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.1.0")
 	testutil.FailErr(t, "startRun failed", err)
 	if run.CurrentPhase != "hunt" {
 		t.Fatalf("phase = %q want hunt", run.CurrentPhase)
@@ -128,7 +128,7 @@ func TestBugbashApprovedBlueprintRunsImplementChildAndCompletes(t *testing.T) {
 	setTestRegistry(t, mgr, blueprintMgr, deps)
 	ctx := workflowCaller(t, mgr)
 
-	parent, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.0.0")
+	parent, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.1.0")
 	testutil.FailErr(t, "start bugbash", err)
 	for _, stage := range []string{"hunt_correctness", "hunt_edges", "hunt_races", "triage"} {
 		testutil.FailErr(t, "complete topology stage "+stage, mgr.Phases.MarkTopologyStageComplete(ctx, parent.ID, stage, stage+" complete", ""))

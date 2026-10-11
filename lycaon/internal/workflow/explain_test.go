@@ -126,7 +126,7 @@ func TestTopologyPhaseExplainNamesItsStagesAndRunProjectsLegs(t *testing.T) {
 	legs := &stubTopologyLegs{}
 	mgr.Presentation.TopologyLegs = legs
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.1.0")
 	testutil.FailErr(t, "start bugbash run", err)
 
 	note := onlyExplainNote(t, sessStore)
