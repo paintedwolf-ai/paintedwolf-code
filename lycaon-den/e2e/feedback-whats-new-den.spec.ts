@@ -147,6 +147,10 @@ webE2e.describe("feedback + what's new den", () => {
       await page.getByRole("button", { name: "Got it", exact: true }).click();
       await expect(page.locator('[data-notice-code="whats_new"]')).toHaveCount(0);
 
+      await expect.poll(() => whatsNewLatch(page)).toBe(RELEASED_VERSION);
+      await page.reload();
+      await expect(page.getByTestId("home-view")).toBeVisible({ timeout: 30_000 });
+      await expect(announcement).toHaveCount(0);
       expect(await whatsNewLatch(page)).toBe(RELEASED_VERSION);
     },
   );
