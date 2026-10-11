@@ -1,3 +1,4 @@
+import { bindFixtureServices } from "./app-connection-test-fixture.ts";
 import { installConnectionFixtureCleanup, reconcileActiveScope, reconcileRecentsWithStores, fetchHealth, noteStoreRevision, discoverBackend, createLycaonClient, subscribeEvents, resetSessionEventRevisions, refreshPreflight, getHost, lastSubscribeOptions, closeMock, registeredShell, loadModule } from "./app-connection-test-fixture.ts";
 
 import { stubClient } from "../../test/client-fixture.ts";
@@ -82,7 +83,7 @@ describe("app connection cache", () => {
 
     const mod = await loadModule();
     const recents = createRecentsStore();
-    mod.registerRecentsStore(recents);
+    bindFixtureServices(mod, { recents: recents });
     await mod.connectAppBackend(appStore);
 
     expect(reconcileRecentsWithStores).toHaveBeenCalledWith(
@@ -106,7 +107,7 @@ describe("app connection cache", () => {
 
     const mod = await loadModule();
     const recents = createRecentsStore();
-    mod.registerRecentsStore(recents);
+    bindFixtureServices(mod, { recents: recents });
     await mod.connectAppBackend(appStore);
 
     expect(reconcileRecentsWithStores).toHaveBeenCalledWith(
@@ -127,7 +128,7 @@ describe("app connection cache", () => {
 
     const mod = await loadModule();
     const recents = createRecentsStore();
-    mod.registerRecentsStore(recents);
+    bindFixtureServices(mod, { recents: recents });
     await mod.connectAppBackend(appStore);
 
     expect(reconcileRecentsWithStores).toHaveBeenCalledWith(
@@ -162,7 +163,7 @@ describe("app connection cache", () => {
 
     const mod = await loadModule();
     const recents = createRecentsStore();
-    mod.registerRecentsStore(recents);
+    bindFixtureServices(mod, { recents: recents });
     await mod.connectAppBackend(appStore);
     mod.subscribeProjectEvents(appStore, "proj-1");
 
@@ -186,7 +187,7 @@ describe("app connection cache", () => {
 
     const mod = await loadModule();
     const recents = createRecentsStore();
-    mod.registerRecentsStore(recents);
+    bindFixtureServices(mod, { recents: recents });
     await mod.connectAppBackend(appStore);
     mod.subscribeProjectEvents(appStore, "proj-1");
     expect(reconcileRecentsWithStores).not.toHaveBeenCalled();
@@ -252,10 +253,10 @@ describe("app connection cache", () => {
     });
 
     const mod = await loadModule();
-    mod.registerShellStore(shell);
-    mod.registerProjectsStore(
+    bindFixtureServices(mod, { shell: shell });
+    bindFixtureServices(mod, { projects: 
       createProjectsStore(() => null, { onProjectEvent: () => () => {} }),
-    );
+     });
     await mod.connectAppBackend(appStore);
 
     expect(shell.state.activeProjectId).toBeNull();
@@ -275,11 +276,11 @@ describe("app connection cache", () => {
     createLycaonClient.mockReturnValue(client);
 
     const mod = await loadModule();
-    mod.registerShellStore(shell);
+    bindFixtureServices(mod, { shell: shell });
     const projects = createProjectsStore(() => client as never, {
       onProjectEvent: () => () => {},
     });
-    mod.registerProjectsStore(projects);
+    bindFixtureServices(mod, { projects: projects });
     await mod.connectAppBackend(appStore);
 
     expect(client.getProject).toHaveBeenCalledWith("draft-1");

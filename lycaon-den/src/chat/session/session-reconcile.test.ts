@@ -1,9 +1,10 @@
+import { bindAppConnection } from "../../platform/connection/app-connection.ts";
+import { connectionServicesFixture } from "../../test/connection-services-fixture.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import { wireProject } from "../../api/mocks/project-fixture.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { createProjectsStore } from "../../store/projects-store.ts";
-import { registerProjectsStore } from "../../platform/connection/app-connection.ts";
 import { createRecentsStore } from "../../store/recents-store.ts";
 import { createShellStore } from "../../store/shell-store.ts";
 import {
@@ -190,7 +191,7 @@ describe("reconcileActiveScope", () => {
       onProjectEvent: () => () => {},
     });
     projects.load([wireProject("/tmp/p")]);
-    registerProjectsStore(projects);
+    bindAppConnection(connectionServicesFixture({ projects: projects }));
     store.actions.setCurrentSession({
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",

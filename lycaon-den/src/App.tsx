@@ -10,6 +10,7 @@ import { ConfirmDestructiveHost } from "./components/ConfirmDestructiveDialog.ts
 import { HostFolderDialog } from "./components/HostFolderDialog.tsx";
 import { TextEditContextMenuHost } from "./components/TextEditContextMenuHost.tsx";
 import {
+  bindAppConnection,
   connectAppBackend,
   disconnectAppBackend,
   getLycaonClient,
@@ -17,14 +18,6 @@ import {
   onAttentionResync,
   onProjectEvent,
   onSessionEvent,
-  registerAppStore,
-  registerCostStore,
-  registerProjectsStore,
-  registerRecentsStore,
-  registerSettingsStore,
-  registerNoticeStore,
-  registerEntityRetire,
-  registerShellStore,
 } from "./platform/connection/app-connection.ts";
 import { startAppBoot } from "./platform/connection/app-boot.ts";
 import { rememberSessionChatFromStore } from "./chat/session/session-chat-cache.ts";
@@ -51,8 +44,7 @@ import { EngineStartupStage } from "./components/EngineStartupStage.tsx";
 import { engineStartupState } from "./platform/connection/engine-startup.ts";
 
 const appStore = createAppStore();
-// Its own store, not a slice of appStore: notices are not
-// foreground state. See notices/notice-store.ts.
+// Notices persist independently of foreground session changes.
 const noticeStore = createNoticeStore();
 const recentsStore = createRecentsStore();
 const projectsStore = createProjectsStore(() => getLycaonClient(), {
@@ -65,28 +57,23 @@ onAttentionResync(() => void attentionStore.load());
 const projectSessionsStore = createProjectSessionsStore(() => getLycaonClient(), {
   onSessionEvent,
 });
-// The stream (re)opening is the moment a client exists and events may have
-// been missed — same resync rule the attention store follows.
+// A reopened stream refreshes events missed while disconnected.
 onAttentionResync(() => void projectSessionsStore.refresh());
 const shellStore = createShellStore("offline");
 const settingsStore = createSettingsStore();
 const costStore = createCostStore();
-registerSettingsStore(settingsStore);
-registerCostStore(costStore);
-registerAppStore(appStore);
-registerNoticeStore(noticeStore);
-registerEntityRetire(
-  createEntityRetire({
-    notices: noticeStore,
-    attention: attentionStore,
-    recents: recentsStore,
-  }),
-);
-registerRecentsStore(recentsStore);
-registerShellStore(shellStore);
-registerProjectsStore(projectsStore);
+const entityRetire = createEntityRetire({
+  notices: noticeStore,
+  attention: attentionStore,
+  recents: recentsStore,
+});
 
 function App() {
+  const releaseConnection = bindAppConnection({
+    app: appStore, settings: settingsStore, costs: costStore, notices: noticeStore,
+    retire: entityRetire, recents: recentsStore, shell: shellStore, projects: projectsStore,
+  });
+  onCleanup(releaseConnection);
   createEffect(() => documentResidency.setBudget(windowDocumentBudget(1 + itemWindowViews().length)));
   onMount(() => {
     const stopDocumentDelivery = startDocumentOutboxRelay(getLycaonClient, id => !!editorReplica(id), document => applyFilesBufferDocumentStatus(document.project_id, document, true));

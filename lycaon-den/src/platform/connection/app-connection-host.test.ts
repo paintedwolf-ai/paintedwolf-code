@@ -1,3 +1,4 @@
+import { bindFixtureServices } from "./app-connection-test-fixture.ts";
 import { installConnectionFixtureCleanup, discoverBackend, createLycaonClient, subscribeEvents, refreshPreflight, getHost, lastSubscribeOptions, loadModule, loadModuleWithNotices } from "./app-connection-test-fixture.ts";
 import { createSettingsStore } from "../../store/settings-store.ts";
 import { createCostStore } from "../../store/cost-store.ts";
@@ -22,7 +23,7 @@ describe("app connection host", () => {
     const mod = await loadModule();
     const store = createAppStore();
     const costs = createCostStore();
-    mod.registerCostStore(costs);
+    bindFixtureServices(mod, { costs: costs });
     let answer!: (value: CostSummary) => void;
     const read = costs.refreshSession(stubClient({ getCostSummary: () => new Promise<CostSummary>((resolve) => { answer = resolve; }) }), "session");
     mod.attachKnownBackend(store, { baseUrl: "http://127.0.0.1:8788", apiToken: "replacement" });
@@ -70,9 +71,9 @@ describe("app connection host", () => {
     const store = createAppStore();
     const shell = createShellStore("connected");
     shell.commitStageScope({ projectId: "old", sessionId: "old-session" });
-    mod.registerShellStore(shell);
+    bindFixtureServices(mod, { shell: shell });
     const projects = createProjectsStore(mod.getLycaonClient, { onProjectEvent: () => () => {} });
-    mod.registerProjectsStore(projects);
+    bindFixtureServices(mod, { projects: projects });
     let answer!: (project: ReturnType<typeof wireProject>) => void;
     let reject!: (error: Error) => void;
     const getProject = vi.fn(() => new Promise<ReturnType<typeof wireProject>>((resolve, fail) => { answer = resolve; reject = fail; }));
@@ -94,10 +95,10 @@ describe("app connection host", () => {
   it("does not install old connection settings after backend replacement", async () => {
     const mod = await loadModule();
     const appStore = createAppStore();
-    mod.registerShellStore(createShellStore("connected"));
-    mod.registerProjectsStore(createProjectsStore(mod.getLycaonClient, { onProjectEvent: () => () => {} }));
+    bindFixtureServices(mod, { shell: createShellStore("connected") });
+    bindFixtureServices(mod, { projects: createProjectsStore(mod.getLycaonClient, { onProjectEvent: () => () => {} }) });
     const settings = createSettingsStore();
-    mod.registerSettingsStore(settings);
+    bindFixtureServices(mod, { settings: settings });
     let answer!: (providers: never[]) => void;
     const listProviders = vi.fn(() => new Promise<never[]>((resolve) => { answer = resolve; }));
     createLycaonClient.mockReturnValueOnce(stubClient({
@@ -128,7 +129,7 @@ describe("app connection host", () => {
   it("uses shared HTTP transport observations for window reachability", async () => {
     const appStore = createAppStore();
     const mod = await loadModule();
-    mod.registerAppStore(appStore);
+    bindFixtureServices(mod, { app: appStore });
     appStore.actions.setSidecarStatus("connected");
 
     noteBackendUnreachable();
@@ -142,7 +143,7 @@ describe("app connection host", () => {
   it("does not turn failed readiness reads into a reachable-request feedback loop", async () => {
     const appStore = createAppStore();
     const mod = await loadModule();
-    mod.registerAppStore(appStore);
+    bindFixtureServices(mod, { app: appStore });
     let reads = 0;
     const getFileSummariesSettings = vi.fn(async () => {
       reads++;
@@ -266,7 +267,7 @@ describe("app connection host", () => {
   it("disconnectAppBackend marks the app offline", async () => {
     const appStore = createAppStore();
     const mod = await loadModule();
-    mod.registerAppStore(appStore);
+    bindFixtureServices(mod, { app: appStore });
     await mod.connectAppBackend(appStore);
     expect(appStore.state.sidecarStatus).toBe("connected");
     mod.disconnectAppBackend();

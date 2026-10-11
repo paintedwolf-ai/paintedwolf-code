@@ -1,3 +1,4 @@
+import { bindFixtureServices } from "./app-connection-test-fixture.ts";
 import { installConnectionFixtureCleanup, fetchHealth, noteHealthResponse, watchWindowExit, reconcileActiveScope, refreshCodeScanCache, noteStoreRevision, createLycaonClient, subscribeEvents, resetSessionEventRevisions, refreshPreflight, lastSubscribeOptions, lastSubscribeHandlers, subscribedProjectIds, closeMock, loadModule, testEntityRetire } from "./app-connection-test-fixture.ts";
 
 import { describe, expect, it, vi } from "vitest";
@@ -295,12 +296,12 @@ describe("app connection events", () => {
     createLycaonClient.mockReturnValue(client);
 
     const mod = await loadModule();
-    mod.registerRecentsStore(recents);
-    mod.registerShellStore(shell);
-    mod.registerEntityRetire(testEntityRetire(recents));
-    mod.registerProjectsStore(
+    bindFixtureServices(mod, { recents: recents });
+    bindFixtureServices(mod, { shell: shell });
+    bindFixtureServices(mod, { retire: testEntityRetire(recents) });
+    bindFixtureServices(mod, { projects: 
       createProjectsStore(() => null, { onProjectEvent: () => () => {} }),
-    );
+     });
     await mod.connectAppBackend(appStore);
 
     expect(capturedOnSessionGone).toBeDefined();
@@ -320,9 +321,9 @@ describe("app connection events", () => {
     const recents = createRecentsStore();
     const shell = createShellStore("connected");
     const mod = await loadModule();
-    mod.registerRecentsStore(recents);
-    mod.registerShellStore(shell);
-    mod.registerEntityRetire(testEntityRetire(recents));
+    bindFixtureServices(mod, { recents: recents });
+    bindFixtureServices(mod, { shell: shell });
+    bindFixtureServices(mod, { retire: testEntityRetire(recents) });
     await mod.connectAppBackend(appStore);
     await recents.registerSession({
       projectId: "proj-remote",
@@ -362,7 +363,7 @@ describe("app connection events", () => {
     shell.commitStageScope({ projectId: "proj-old", sessionId: "sess-old" });
 
     const mod = await loadModule();
-    mod.registerShellStore(shell);
+    bindFixtureServices(mod, { shell: shell });
     await mod.connectAppBackend(appStore);
 
     mod.subscribeProjectEvents(appStore, "proj-old");
@@ -381,7 +382,7 @@ describe("app connection events", () => {
     createLycaonClient.mockReturnValue(client);
 
     const mod = await loadModule();
-    mod.registerShellStore(createShellStore("connected"));
+    bindFixtureServices(mod, { shell: createShellStore("connected") });
     await mod.connectAppBackend(appStore);
 
     mod.subscribeProjectEvents(appStore, "proj-1");

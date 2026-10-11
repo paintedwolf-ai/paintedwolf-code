@@ -1,3 +1,5 @@
+import { bindAppConnection } from "../../platform/connection/app-connection.ts";
+import { connectionServicesFixture } from "../../test/connection-services-fixture.ts";
 import { resetSessionSnapshotReads } from "../../api/session-snapshot-refresh.ts";
 import { stubClient, type ClientStubs } from "../../test/client-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
@@ -5,8 +7,6 @@ import { wireProject } from "../../api/mocks/project-fixture.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { createProjectsStore } from "../../store/projects-store.ts";
 import {
-  registerNoticeStore,
-  registerProjectsStore,
 } from "../../platform/connection/app-connection.ts";
 import { createNoticeStore } from "../../notices/notice-store.ts";
 import { selectSessionNotices } from "../../notices/notice-select.ts";
@@ -521,7 +521,7 @@ describe("sendChatPrompt", () => {
 
   it("retracts the seat and reports when pre-send work fails", async () => {
     const notices = createNoticeStore();
-    registerNoticeStore(notices);
+    bindAppConnection(connectionServicesFixture({ notices: notices }));
     const appStore = createAppStore();
     appStore.actions.setCurrentSession(idle);
 
@@ -726,7 +726,7 @@ describe("stopChatActivity", () => {
   it("surfaces abort errors and restores the live stop state", async () => {
     const appStore = createAppStore();
     const notices = createNoticeStore();
-    registerNoticeStore(notices);
+    bindAppConnection(connectionServicesFixture({ notices: notices }));
     appStore.actions.holdPromptSubmission("s1", "submission-1");
 
     const abort = vi.fn().mockRejectedValue(new Error("network down"));
@@ -748,7 +748,7 @@ describe("stopChatActivity", () => {
     const appStore = createAppStore();
     appStore.actions.setCurrentSession(busySession("s1", "/tmp/p"));
     const projectRows = [wireProject("/tmp/p", "proj-1")];
-    registerProjectsStore(testProjectsStore(projectRows));
+    bindAppConnection(connectionServicesFixture({ projects: testProjectsStore(projectRows) }));
 
     const listWorkers = vi.fn().mockResolvedValue([]);
     const client = stubClient({
@@ -779,7 +779,7 @@ describe("stopChatActivity", () => {
 
   it("uses the single host abort operation for active catalog workflows", async () => {
     const appStore = createAppStore();
-    registerProjectsStore(testProjectsStore([wireProject("/tmp/p", "proj-1")]));
+    bindAppConnection(connectionServicesFixture({ projects: testProjectsStore([wireProject("/tmp/p", "proj-1")]) }));
     appStore.actions.setCurrentSession(idleSession("s1", "/tmp/p"));
     appStore.actions.setWorkflowState("s1", appStore.state.sessionViewEpoch, {
       activeWorkflowRun: {
