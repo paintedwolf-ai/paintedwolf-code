@@ -281,7 +281,7 @@ describe("createTranscriptPaging", () => {
   it("does not alternate page edges when compact history has both edges in reach", async () => {
     const rows = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => older(from + i - 1));
     const page = (from: number, to: number) => ({
-      messages: rows(from, to), before_cursor: from > 1 ? "older" : undefined,
+      messages: rows(from, to), watermark: 1_000, before_cursor: from > 1 ? "older" : undefined,
       after_cursor: to < 1_000 ? "newer" : undefined, turn_clocks: {}, turn_loads: {},
     });
     const appStore = createAppStore();
