@@ -63,6 +63,7 @@ impl UpdateService {
         let channel = receipt_channel
             .unwrap_or_else(|| default_channel(&version).expect("compiled product version"));
         let mut state = NativeUpdateState::new(version, channel, source);
+        state.development = cfg!(debug_assertions) && installer::bundle().is_err();
         state.last_error = error;
         // A process outside an installed bundle has nothing to coordinate.
         state.coordinated = launch.lease.is_some() || installer::bundle().is_err();

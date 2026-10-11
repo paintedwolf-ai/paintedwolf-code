@@ -135,6 +135,8 @@ pub struct NativeUpdateState {
     /// This process holds the installation lease that excludes activation beneath it.
     #[serde(skip)]
     pub coordinated: bool,
+    #[serde(skip)]
+    pub development: bool,
     pub install_source: InstallSource,
     pub capabilities: Capabilities,
     pub discovery: Discovery,
@@ -163,6 +165,7 @@ impl NativeUpdateState {
             automatic_updates_enabled: true,
             startup_pending: true,
             coordinated: true,
+            development: false,
             install_source,
             capabilities: Capabilities::default(),
             discovery: Discovery::Idle,
@@ -179,6 +182,13 @@ impl NativeUpdateState {
     }
     /// `supported` says whether the installation is a writable bundle on a supported platform.
     pub fn refresh_capabilities(&mut self, supported: bool) {
+        if self.development {
+            self.capabilities = Capabilities {
+                blocked_reason: Some("development_build".into()),
+                ..Capabilities::default()
+            };
+            return;
+        }
         if self.installation == Installation::RecoveryRequired {
             self.capabilities = Capabilities {
                 blocked_reason: Some("recovery_required".into()),
