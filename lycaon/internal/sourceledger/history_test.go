@@ -477,7 +477,7 @@ func TestMaintenanceReclaimsContentAfterProjectDeletion(t *testing.T) {
 	}
 }
 
-func TestRecordTxRollsBackHistoryWithCaller(t *testing.T) {
+func TestPreparedHistoryRollsBackWithCaller(t *testing.T) {
 	store, ctx := openLedger(t)
 	prepared, err := store.Prepare(ctx, []RecordInput{{
 		ProjectID: "p1", RootID: "r1", Path: "a.txt", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, After: []byte("a"),

@@ -5,13 +5,19 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/sourceblob"
-	"github.com/lycaon/lycaon/pkg/api"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/sourceblob"
+	"github.com/lycaon/lycaon/pkg/api"
 )
+
+type preparedTrack struct {
+	TrackInput
+	object *db.UpsertSourceBlobObjectParams
+}
 
 // TrackFile establishes or refreshes a file's tracked baseline.
 func (s *Store) TrackFile(ctx context.Context, raw TrackInput) (TrackedFile, error) {
@@ -24,8 +30,7 @@ func (s *Store) TrackFile(ctx context.Context, raw TrackInput) (TrackedFile, err
 	}
 	release := s.objects.AcquireReferenceLease()
 	defer release()
-	var err error
-	in.object, err = prepareContent(ctx, s.objects, in.SHA256, in.Content, in.EntryKind)
+	object, err := prepareContent(ctx, s.objects, in.SHA256, in.Content, in.EntryKind)
 	if err != nil {
 		return TrackedFile{}, err
 	}
@@ -37,7 +42,7 @@ func (s *Store) TrackFile(ctx context.Context, raw TrackInput) (TrackedFile, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := s.queries.WithTx(tx)
-	tracked, err := s.trackFileTx(ctx, q, in)
+	tracked, err := s.trackFileTx(ctx, q, preparedTrack{TrackInput: in, object: object})
 	if err != nil {
 		return TrackedFile{}, err
 	}
@@ -105,20 +110,19 @@ func normalizeTrackInput(in TrackInput) TrackInput {
 	return in
 }
 
-func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in TrackInput) (TrackedFile, error) {
+func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in preparedTrack) (TrackedFile, error) {
 	head, err := q.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{
 		ProjectID: in.ProjectID, BranchID: in.BranchID.String(), RootID: in.RootID, Path: in.Path,
 	})
 	if err == nil {
 		if in.SHA256 != "" && head.ContentSha256 != "" && head.ContentSha256 != in.SHA256 {
-			if err := s.recordBatchTx(ctx, q, []RecordInput{{
+			if err := s.recordBatchTx(ctx, q, []preparedRecord{{RecordInput: normalizedInput(RecordInput{
 				ProjectID: in.ProjectID, BranchID: in.BranchID,
 				RootID: in.RootID, Path: in.Path, FileID: head.FileID, EntryKind: in.EntryKind,
 				Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
 				AfterSHA256: in.SHA256, After: in.Content, AfterSize: in.Size,
-				objects: map[string]*db.UpsertSourceBlobObjectParams{in.SHA256: in.object},
-				Cause:   "open_observation", CaptureQuality: "observed", TS: in.TS,
-			}}); err != nil {
+				Cause: "open_observation", CaptureQuality: "observed", TS: in.TS,
+			}), objects: map[string]*db.UpsertSourceBlobObjectParams{in.SHA256: in.object}}}); err != nil {
 				return TrackedFile{}, err
 			}
 			updated, err := q.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{

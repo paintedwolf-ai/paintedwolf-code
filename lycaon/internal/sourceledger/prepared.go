@@ -18,10 +18,15 @@ type PreparedRecording interface {
 	Close()
 }
 
+type preparedRecord struct {
+	RecordInput
+	objects map[string]*db.UpsertSourceBlobObjectParams
+}
+
 type preparedRecording struct {
 	mu      sync.Mutex
 	store   *Store
-	inputs  []RecordInput
+	inputs  []preparedRecord
 	release func()
 }
 
@@ -37,7 +42,7 @@ func (s *Store) Prepare(ctx context.Context, inputs []RecordInput) (PreparedReco
 	}
 	p := &preparedRecording{store: s, release: s.objects.AcquireReferenceLease()}
 	for _, raw := range inputs {
-		in := normalizedInput(raw)
+		in := preparedRecord{RecordInput: normalizedInput(raw)}
 		in.Before, in.After = bytes.Clone(in.Before), bytes.Clone(in.After)
 		in.TextBefore, in.TextAfter = cloneTextState(in.TextBefore), cloneTextState(in.TextAfter)
 		in.objects = make(map[string]*db.UpsertSourceBlobObjectParams, 2)

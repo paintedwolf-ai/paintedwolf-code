@@ -4,9 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
-	"time"
 )
 
 type versionSpec struct {

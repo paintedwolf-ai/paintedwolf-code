@@ -134,7 +134,6 @@ func (s *Store) ClearObservationCache(ctx context.Context) error {
 
 // RecordInput is one exact consequence within a causal operation.
 type RecordInput struct {
-	objects               map[string]*db.UpsertSourceBlobObjectParams
 	TextBefore, TextAfter *TextState
 	ProjectID             string
 	// BranchID is the line of history this lands on; the zero value is the trunk.
@@ -180,7 +179,6 @@ type Recorder interface {
 
 // TrackInput identifies a file entering sparse history.
 type TrackInput struct {
-	object                  *db.UpsertSourceBlobObjectParams
 	ProjectID, RootID, Path string
 	BranchID                sourcebranch.ID
 	EntryKind               string
@@ -280,16 +278,16 @@ func validateBatch(inputs []RecordInput) error {
 	return nil
 }
 
-func (s *Store) recordBatchTx(ctx context.Context, q *db.Queries, inputs []RecordInput) error {
+func (s *Store) recordBatchTx(ctx context.Context, q *db.Queries, inputs []preparedRecord) error {
 	_, err := s.recordBatchIdentityTx(ctx, q, inputs)
 	return err
 }
 
 // recordBatchIdentityTx records the batch and answers the last effect's file
 // identity. A replayed operation key answers an empty identity.
-func (s *Store) recordBatchIdentityTx(ctx context.Context, q *db.Queries, inputs []RecordInput) (TrackedFile, error) {
+func (s *Store) recordBatchIdentityTx(ctx context.Context, q *db.Queries, inputs []preparedRecord) (TrackedFile, error) {
 	var recorded TrackedFile
-	first := normalizedInput(inputs[0])
+	first := inputs[0].RecordInput
 	if first.OperationID != "" {
 		_, err := q.GetSourceOperationByKey(ctx, db.GetSourceOperationByKeyParams{
 			ProjectID: first.ProjectID, OperationKey: first.OperationID,
@@ -320,8 +318,7 @@ func (s *Store) recordBatchIdentityTx(ctx context.Context, q *db.Queries, inputs
 	}); err != nil {
 		return recorded, err
 	}
-	for _, raw := range inputs {
-		in := normalizedInput(raw)
+	for _, in := range inputs {
 		if err := s.recordEffect(ctx, q, operationID, in, &recorded); err != nil {
 			return recorded, err
 		}
@@ -383,7 +380,7 @@ func normalizedInput(in RecordInput) RecordInput {
 }
 
 // recordEffect lands one effect and reports the file and version it produced.
-func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID string, in RecordInput, recorded *TrackedFile) error {
+func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID string, in preparedRecord, recorded *TrackedFile) error {
 	lookupPath := in.Path
 	if in.Op == api.SourceChangeOpRename && in.FromPath != "" {
 		lookupPath = in.FromPath
@@ -522,7 +519,7 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 	}); err != nil {
 		return err
 	}
-	hasAgent, err := recordPublicationAuthorship(ctx, q, beforeVersionID, afterVersionID, effectID, in)
+	hasAgent, err := recordPublicationAuthorship(ctx, q, beforeVersionID, afterVersionID, effectID, in.RecordInput)
 	if err != nil {
 		return err
 	}
@@ -533,12 +530,12 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 			return err
 		}
 	}
-	if err := updateLineAttribution(ctx, q, in, fileID, effectID); err != nil {
+	if err := updateLineAttribution(ctx, q, in.RecordInput, fileID, effectID); err != nil {
 		return err
 	}
 	if in.EntryKind == EntryKindDirectory &&
 		(in.Op == api.SourceChangeOpRename || in.Op == api.SourceChangeOpDelete) {
-		return s.followDirectoryTransition(ctx, q, operationID, in)
+		return s.followDirectoryTransition(ctx, q, operationID, in.RecordInput)
 	}
 	return nil
 }

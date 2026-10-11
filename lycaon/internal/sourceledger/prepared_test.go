@@ -5,6 +5,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -94,6 +96,12 @@ func TestPreparedContentDoesNotNeedTheDatabaseWriter(t *testing.T) {
 				}
 				t.Fatal("content preparation waited for the database writer")
 			}
+			// Transaction application must not return to the object publisher.
+			objects := store.objects
+			blocked := filepath.Join(t.TempDir(), "not-a-directory")
+			testutil.FailErr(t, "block publication", os.WriteFile(blocked, []byte("blocked"), 0600))
+			store.objects = sourceblob.New(blocked)
+			defer func() { store.objects = objects }()
 			if held {
 				defer edit.Close()
 				_, err = edit.CommitTx(ctx, tx)
