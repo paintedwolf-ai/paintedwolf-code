@@ -32,8 +32,15 @@ func (c *workerBranchLedgerCapture) Record(_ context.Context, in sourceledger.Re
 	return nil
 }
 
-func (c *workerBranchLedgerCapture) RecordTx(ctx context.Context, _ *sql.Tx, in sourceledger.RecordInput) error {
-	return c.Record(ctx, in)
+func (c *workerBranchLedgerCapture) Prepare(_ context.Context, inputs []sourceledger.RecordInput) (sourceledger.PreparedRecording, error) {
+	return preparedCapture(func(ctx context.Context, _ *sql.Tx) (sourceledger.TrackedFile, error) {
+		for _, in := range inputs {
+			if err := c.Record(ctx, in); err != nil {
+				return sourceledger.TrackedFile{}, err
+			}
+		}
+		return sourceledger.TrackedFile{}, nil
+	}), nil
 }
 
 type workerBranchFeedCapture struct {
@@ -151,3 +158,10 @@ func TestWorkerBranchEditRecordsAgainstWorkerBranch(t *testing.T) {
 		})
 	}
 }
+
+type preparedCapture func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error)
+
+func (p preparedCapture) CommitTx(ctx context.Context, tx *sql.Tx) (sourceledger.TrackedFile, error) {
+	return p(ctx, tx)
+}
+func (p preparedCapture) Close() {}

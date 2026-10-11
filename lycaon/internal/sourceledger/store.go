@@ -134,6 +134,7 @@ func (s *Store) ClearObservationCache(ctx context.Context) error {
 
 // RecordInput is one exact consequence within a causal operation.
 type RecordInput struct {
+	objects               map[string]*db.UpsertSourceBlobObjectParams
 	TextBefore, TextAfter *TextState
 	ProjectID             string
 	// BranchID is the line of history this lands on; the zero value is the trunk.
@@ -174,11 +175,12 @@ type RecordInput struct {
 
 type Recorder interface {
 	Record(context.Context, RecordInput) error
-	RecordTx(context.Context, *sql.Tx, RecordInput) error
+	Prepare(context.Context, []RecordInput) (PreparedRecording, error)
 }
 
 // TrackInput identifies a file entering sparse history.
 type TrackInput struct {
+	object                  *db.UpsertSourceBlobObjectParams
 	ProjectID, RootID, Path string
 	BranchID                sourcebranch.ID
 	EntryKind               string
@@ -199,7 +201,6 @@ type FileTracker interface {
 type BatchRecorder interface {
 	Recorder
 	RecordBatch(context.Context, []RecordInput) error
-	RecordBatchTx(context.Context, *sql.Tx, []RecordInput) error
 }
 
 type PromoteRecorder interface {
@@ -214,193 +215,6 @@ type JobVersionResolver interface {
 type AuthorshipReader interface {
 	Recorder
 	SessionAuthoredPaths(context.Context, string, string, string) ([]string, error)
-}
-
-// TrackFile establishes or refreshes a file's tracked baseline.
-func (s *Store) TrackFile(ctx context.Context, raw TrackInput) (TrackedFile, error) {
-	if s == nil || s.sqlDB == nil {
-		return TrackedFile{}, fmt.Errorf("ledger not configured")
-	}
-	in := normalizeTrackInput(raw)
-	if in.ProjectID == "" || in.RootID == "" || in.Path == "" {
-		return TrackedFile{}, fmt.Errorf("source tracking requires project, root, and path")
-	}
-	s.recordMu.Lock()
-	defer s.recordMu.Unlock()
-	tx, err := s.sqlDB.BeginTx(ctx, nil)
-	if err != nil {
-		return TrackedFile{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	q := s.queries.WithTx(tx)
-	tracked, err := s.trackFileTx(ctx, q, in)
-	if err != nil {
-		return TrackedFile{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return TrackedFile{}, err
-	}
-	return tracked, nil
-}
-
-// LookupFile answers a file's recorded identity and, when the recorded head
-// holds exactly this content, its version. It records nothing: a path the
-// ledger has not recorded answers an empty identity. An untouched worker path
-// carries its trunk identity.
-func (s *Store) LookupFile(ctx context.Context, raw TrackInput) (TrackedFile, error) {
-	in := normalizeTrackInput(raw)
-	head, err := s.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{
-		ProjectID: in.ProjectID, BranchID: in.BranchID.String(), RootID: in.RootID, Path: in.Path,
-	})
-	if err == nil {
-		return recordedVersion(head.FileID, head.VersionID, head.ContentSha256, in.SHA256), nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) || !in.BranchID.IsWorker() {
-		return TrackedFile{}, ignoreNoRows(err)
-	}
-	trunk, err := s.queries.GetTrunkSourceHeadByPath(ctx, db.GetTrunkSourceHeadByPathParams{
-		ProjectID: in.ProjectID, RootID: in.RootID, Path: in.Path,
-	})
-	if err != nil {
-		return TrackedFile{}, ignoreNoRows(err)
-	}
-	return recordedVersion(trunk.FileID, trunk.VersionID, trunk.ContentSha256, in.SHA256), nil
-}
-
-func recordedVersion(fileID, versionID, recordedSHA, readSHA string) TrackedFile {
-	out := TrackedFile{FileID: fileID}
-	if readSHA != "" && recordedSHA == readSHA {
-		out.VersionID = versionID
-	}
-	return out
-}
-
-func ignoreNoRows(err error) error {
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
-	return err
-}
-
-func normalizeTrackInput(in TrackInput) TrackInput {
-	in.ProjectID = strings.TrimSpace(in.ProjectID)
-	in.RootID = strings.TrimSpace(in.RootID)
-	in.Path = filepath.ToSlash(strings.TrimSpace(in.Path))
-	if in.EntryKind == "" {
-		in.EntryKind = EntryKindFile
-	}
-	if in.TS.IsZero() {
-		in.TS = time.Now().UTC()
-	}
-	if in.SHA256 == "" && in.Content != nil {
-		in.SHA256 = sourceblob.ContentSHA(in.Content)
-	}
-	if in.Size == 0 && in.Content != nil {
-		in.Size = int64(len(in.Content))
-	}
-	return in
-}
-
-func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in TrackInput) (TrackedFile, error) {
-	head, err := q.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{
-		ProjectID: in.ProjectID, BranchID: in.BranchID.String(), RootID: in.RootID, Path: in.Path,
-	})
-	if err == nil {
-		if in.SHA256 != "" && head.ContentSha256 != "" && head.ContentSha256 != in.SHA256 {
-			if err := s.recordBatchTx(ctx, q, []RecordInput{{
-				ProjectID: in.ProjectID, BranchID: in.BranchID,
-				RootID: in.RootID, Path: in.Path, FileID: head.FileID, EntryKind: in.EntryKind,
-				Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
-				AfterSHA256: in.SHA256, After: in.Content, AfterSize: in.Size,
-				Cause: "open_observation", CaptureQuality: "observed", TS: in.TS,
-			}}); err != nil {
-				return TrackedFile{}, err
-			}
-			updated, err := q.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{
-				ProjectID: in.ProjectID, BranchID: in.BranchID.String(), FileID: head.FileID,
-			})
-			if err != nil {
-				return TrackedFile{}, err
-			}
-			return TrackedFile{FileID: updated.FileID, VersionID: updated.VersionID}, nil
-		}
-		if in.SHA256 == "" || head.ContentSha256 == in.SHA256 {
-			return TrackedFile{FileID: head.FileID, VersionID: head.VersionID}, nil
-		}
-		// Enrich a metadata-only head without recording an effect.
-		versionID, err := s.insertVersion(ctx, q, versionSpec{
-			FileID: head.FileID, ProjectID: in.ProjectID, BranchID: in.BranchID,
-			ParentVersionID: head.VersionID,
-			RootID:          in.RootID, Path: in.Path, EntryKind: in.EntryKind,
-			SHA256: in.SHA256, Content: in.Content, Size: in.Size,
-			CaptureQuality: "exact", TS: in.TS,
-		})
-		if err != nil {
-			return TrackedFile{}, err
-		}
-		if err := q.UpsertSourceBranchHead(ctx, db.UpsertSourceBranchHeadParams{
-			ProjectID: in.ProjectID, BranchID: in.BranchID.String(),
-			FileID: head.FileID, VersionID: versionID, RootID: in.RootID, Path: in.Path,
-			State: "content", ContentSha256: in.SHA256, Ordinal: head.Ordinal,
-			ObservedTs: in.TS.Format(time.RFC3339Nano),
-		}); err != nil {
-			return TrackedFile{}, err
-		}
-		return TrackedFile{FileID: head.FileID, VersionID: versionID}, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return TrackedFile{}, err
-	}
-	// Untouched worker paths inherit trunk file identity.
-	fileID, derivedFromVersionID := "", ""
-	if in.BranchID.IsWorker() {
-		trunk, trunkErr := q.GetTrunkSourceHeadByPath(ctx, db.GetTrunkSourceHeadByPathParams{
-			ProjectID: in.ProjectID, RootID: in.RootID, Path: in.Path,
-		})
-		if trunkErr == nil {
-			fileID, derivedFromVersionID = trunk.FileID, trunk.VersionID
-		} else if !errors.Is(trunkErr, sql.ErrNoRows) {
-			return TrackedFile{}, trunkErr
-		}
-	}
-	if fileID == "" {
-		fileID = newID()
-		if err := q.InsertSourceFile(ctx, db.InsertSourceFileParams{
-			ID: fileID, ProjectID: in.ProjectID, EntryKind: in.EntryKind,
-			CreatedTs: in.TS.Format(time.RFC3339Nano),
-		}); err != nil {
-			return TrackedFile{}, err
-		}
-	}
-	state := "unresolved"
-	if in.EntryKind == EntryKindDirectory {
-		state = "directory"
-	} else if in.SHA256 != "" {
-		state = "content"
-	}
-	versionID, err := s.insertVersion(ctx, q, versionSpec{
-		FileID: fileID, ProjectID: in.ProjectID, BranchID: in.BranchID,
-		DerivedFromVersionID: derivedFromVersionID,
-		RootID:               in.RootID, Path: in.Path,
-		EntryKind: in.EntryKind, State: state, SHA256: in.SHA256, Content: in.Content,
-		Size: in.Size, CaptureQuality: "exact", TS: in.TS,
-	})
-	if err != nil {
-		return TrackedFile{}, err
-	}
-	ordinal, err := q.LatestSourceOrdinal(ctx, in.ProjectID)
-	if err != nil {
-		return TrackedFile{}, err
-	}
-	if err := q.UpsertSourceBranchHead(ctx, db.UpsertSourceBranchHeadParams{
-		ProjectID: in.ProjectID, BranchID: in.BranchID.String(),
-		FileID: fileID, VersionID: versionID, RootID: in.RootID, Path: in.Path,
-		State: state, ContentSha256: in.SHA256, Ordinal: ordinal,
-		ObservedTs: in.TS.Format(time.RFC3339Nano),
-	}); err != nil {
-		return TrackedFile{}, err
-	}
-	return TrackedFile{FileID: fileID, VersionID: versionID}, nil
 }
 
 func (s *Store) LedgerDB() db.Handle {
@@ -420,9 +234,11 @@ func (s *Store) RecordBatch(ctx context.Context, inputs []RecordInput) error {
 	if s == nil || s.sqlDB == nil || len(inputs) == 0 {
 		return nil
 	}
-	if err := validateBatch(inputs); err != nil {
+	prepared, err := s.Prepare(ctx, inputs)
+	if err != nil {
 		return err
 	}
+	defer prepared.Close()
 	s.recordMu.Lock()
 	tx, err := s.sqlDB.BeginTx(ctx, nil)
 	if err != nil {
@@ -430,7 +246,7 @@ func (s *Store) RecordBatch(ctx context.Context, inputs []RecordInput) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := s.recordBatchTx(ctx, s.queries.WithTx(tx), inputs); err != nil {
+	if _, err := prepared.CommitTx(ctx, tx); err != nil {
 		s.recordMu.Unlock()
 		return err
 	}
@@ -439,40 +255,12 @@ func (s *Store) RecordBatch(ctx context.Context, inputs []RecordInput) error {
 		return err
 	}
 	s.recordMu.Unlock()
+	prepared.Close()
 	// Leased or slow-to-reclaim blobs remain queued for a later pass.
 	bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 	_, _ = s.reclaimBlobBatch(bg)
 	cancel()
 	return nil
-}
-
-// RecordTx joins a caller transaction for a single-effect operation.
-func (s *Store) RecordTx(ctx context.Context, tx *sql.Tx, in RecordInput) error {
-	return s.RecordBatchTx(ctx, tx, []RecordInput{in})
-}
-
-// RecordFileTx records one effect and answers the file identity it landed on,
-// which is new when the effect creates a path the ledger holds no file for.
-func (s *Store) RecordFileTx(ctx context.Context, tx *sql.Tx, in RecordInput) (TrackedFile, error) {
-	if s == nil || s.sqlDB == nil || tx == nil {
-		return TrackedFile{}, fmt.Errorf("ledger not configured")
-	}
-	inputs := []RecordInput{in}
-	if err := validateBatch(inputs); err != nil {
-		return TrackedFile{}, err
-	}
-	return s.recordBatchIdentityTx(ctx, s.queries.WithTx(tx), inputs)
-}
-
-// RecordBatchTx joins a caller transaction for a multi-effect operation.
-func (s *Store) RecordBatchTx(ctx context.Context, tx *sql.Tx, inputs []RecordInput) error {
-	if s == nil || s.sqlDB == nil || tx == nil || len(inputs) == 0 {
-		return nil
-	}
-	if err := validateBatch(inputs); err != nil {
-		return err
-	}
-	return s.recordBatchTx(ctx, s.queries.WithTx(tx), inputs)
 }
 
 func validateBatch(inputs []RecordInput) error {
@@ -653,11 +441,11 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 	}
 
 	// Preserve the observed pre-image when it differs from the tracked head.
-	preSHA, preBytes, preSize, preRoot, prePath := in.BeforeSHA256, in.Before, in.BeforeSize, in.RootID, in.Path
+	preSHA, preSize, preRoot, prePath := in.BeforeSHA256, in.BeforeSize, in.RootID, in.Path
 	if in.Op == api.SourceChangeOpRename {
 		preRoot, prePath = in.RootID, in.FromPath
 		if preSHA == "" {
-			preSHA, preBytes, preSize = in.AfterSHA256, in.After, in.AfterSize
+			preSHA, preSize = in.AfterSHA256, in.AfterSize
 		}
 	}
 	needsPreimage := in.Op != api.SourceChangeOpCreate && beforeVersionID == ""
@@ -670,7 +458,7 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 			ParentVersionID:      beforeVersionID,
 			DerivedFromVersionID: in.DerivedFromVersionID,
 			RootID:               preRoot, Path: prePath, EntryKind: in.EntryKind,
-			SHA256: preSHA, Content: preBytes, Size: preSize,
+			SHA256: preSHA, Object: in.objects[preSHA], Size: preSize,
 			CaptureQuality: in.CaptureQuality, TS: in.TS,
 		})
 		if err != nil {
@@ -680,12 +468,12 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 	}
 
 	parentVersionID := beforeVersionID
-	state, afterSHA, afterBytes, afterSize := "content", in.AfterSHA256, in.After, in.AfterSize
+	state, afterSHA, afterSize := "content", in.AfterSHA256, in.AfterSize
 	switch {
 	case in.Op == api.SourceChangeOpDelete:
-		state, afterSHA, afterBytes, afterSize = "absent", "", nil, 0
+		state, afterSHA, afterSize = "absent", "", 0
 	case in.EntryKind == EntryKindDirectory:
-		state, afterSHA, afterBytes, afterSize = "directory", "", nil, 0
+		state, afterSHA, afterSize = "directory", "", 0
 	case in.Op == api.SourceChangeOpRename && afterSHA == "" && headErr == nil:
 		afterSHA = head.ContentSha256
 		parent, err := q.GetSourceVersion(ctx, head.VersionID)
@@ -699,7 +487,7 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 		ParentVersionID:      parentVersionID,
 		DerivedFromVersionID: in.DerivedFromVersionID, OperationID: operationID,
 		RootID: in.RootID, Path: in.Path, EntryKind: in.EntryKind, State: state,
-		SHA256: afterSHA, Content: afterBytes, Size: afterSize,
+		SHA256: afterSHA, Object: in.objects[afterSHA], Size: afterSize,
 		CaptureQuality: in.CaptureQuality, TS: in.TS,
 	})
 	if err != nil {
@@ -827,89 +615,6 @@ func (s *Store) followDirectoryTransition(
 		}
 	}
 	return nil
-}
-
-type versionSpec struct {
-	FileID, ProjectID, ParentVersionID, DerivedFromVersionID string
-	OperationID, RootID, Path, EntryKind, State, SHA256      string
-	BranchID                                                 sourcebranch.ID
-	Content                                                  []byte
-	Size                                                     int64
-	CaptureQuality                                           string
-	// Landing defaults to the working file.
-	Landing string
-	TS      time.Time
-}
-
-func (s *Store) insertVersion(ctx context.Context, q *db.Queries, spec versionSpec) (string, error) {
-	state := spec.State
-	if state == "" {
-		if spec.EntryKind == EntryKindDirectory {
-			state = "directory"
-		} else if spec.SHA256 == "" {
-			state = "unresolved"
-		} else {
-			state = "content"
-		}
-	}
-	// Content state requires a content identity.
-	if state == "content" && spec.SHA256 == "" {
-		state = "unresolved"
-	}
-	captureState, captureReason := "not_applicable", ""
-	switch state {
-	case "content":
-		captureState = "metadata_only"
-		captureReason = "content_not_captured"
-		if spec.Size > MaxRevisionContentBytes {
-			captureReason = "content_too_large"
-		}
-		if spec.Content != nil && len(spec.Content) <= MaxRevisionContentBytes {
-			rel, stored, oids, err := s.objects.Put(spec.SHA256, spec.Content)
-			if err != nil {
-				return "", err
-			}
-			if err := q.UpsertSourceBlobObject(ctx, db.UpsertSourceBlobObjectParams{
-				Sha256: spec.SHA256, Size: int64(len(spec.Content)), StoredSize: stored,
-				StorageRelpath: rel,
-				GitOidSha1:     oids.SHA1, GitOidSha256: oids.SHA256,
-			}); err != nil {
-				return "", err
-			}
-			captureState, captureReason, spec.Size = "stored", "", int64(len(spec.Content))
-		} else if object, err := q.GetSourceBlobObject(ctx, spec.SHA256); err == nil {
-			captureState, captureReason, spec.Size = "stored", "", object.Size
-		} else if !errors.Is(err, sql.ErrNoRows) {
-			return "", err
-		}
-	case "unresolved":
-		captureState, captureReason = "metadata_only", "state_unresolved"
-	}
-	// Every retained state advances the source-history clock.
-	seq, err := q.AdvanceSourceOrdinal(ctx, spec.ProjectID)
-	if err != nil {
-		return "", err
-	}
-	landing := spec.Landing
-	if landing == "" {
-		landing = LandingWorkingFile
-	}
-	id := newID()
-	if err := q.InsertSourceVersion(ctx, db.InsertSourceVersionParams{
-		Seq: seq,
-		ID:  id, FileID: spec.FileID, ProjectID: spec.ProjectID,
-		BranchID:             spec.BranchID.String(),
-		ParentVersionID:      nullableString(spec.ParentVersionID),
-		DerivedFromVersionID: nullableString(spec.DerivedFromVersionID),
-		OperationID:          nullableString(spec.OperationID), RootID: spec.RootID, Path: spec.Path,
-		State: state, ContentSha256: spec.SHA256, ByteSize: spec.Size,
-		CaptureState: captureState, CaptureReason: captureReason,
-		CaptureQuality: spec.CaptureQuality, CreatedTs: spec.TS.Format(time.RFC3339Nano),
-		Landing: landing,
-	}); err != nil {
-		return "", err
-	}
-	return id, nil
 }
 
 func updateLineAttribution(

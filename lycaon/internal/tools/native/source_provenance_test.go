@@ -24,21 +24,23 @@ import (
 // fakeSourceLedger satisfies sourceledger.Recorder plus the provenance read
 // surface, so tests exercise the tool plumbing without a database.
 type fakeSourceLedger struct {
-	heads       map[string]sourceledger.BranchHead
-	headErr     error
-	effects     map[string][]sourceledger.Effect
-	attribution map[string]sourceledger.AttributionResult
-	authored    map[string][]string
-	floor       int64
-	floorFound  bool
+	heads        map[string]sourceledger.BranchHead
+	headErr      error
+	effects      map[string][]sourceledger.Effect
+	attribution  map[string]sourceledger.AttributionResult
+	authored     map[string][]string
+	floor        int64
+	floorFound   bool
 	versions     map[string]sourceledger.RestorableVersion
 	fileVersions map[string][]sourceledger.Version
 	comparisons  map[string]sourceledger.Comparison
 }
 
 func (f *fakeSourceLedger) Record(context.Context, sourceledger.RecordInput) error { return nil }
-func (f *fakeSourceLedger) RecordTx(context.Context, *sql.Tx, sourceledger.RecordInput) error {
-	return nil
+func (f *fakeSourceLedger) Prepare(context.Context, []sourceledger.RecordInput) (sourceledger.PreparedRecording, error) {
+	return preparedCapture(func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error) {
+		return sourceledger.TrackedFile{}, nil
+	}), nil
 }
 
 func (f *fakeSourceLedger) ReadRestorableVersion(_ context.Context, projectID, versionID string) (sourceledger.RestorableVersion, error) {
@@ -347,3 +349,10 @@ func TestReadSourceStampPreservesWorkerDestination(t *testing.T) {
 		t.Fatalf("worker source stamp=%+v", stamp)
 	}
 }
+
+type preparedCapture func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error)
+
+func (p preparedCapture) CommitTx(ctx context.Context, tx *sql.Tx) (sourceledger.TrackedFile, error) {
+	return p(ctx, tx)
+}
+func (p preparedCapture) Close() {}

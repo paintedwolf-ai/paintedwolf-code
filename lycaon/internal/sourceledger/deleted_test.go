@@ -120,12 +120,15 @@ func TestDeletedPathIgnoresUnsavedDocumentVersions(t *testing.T) {
 	})
 	deleted, err := store.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go")
 	testutil.FailErr(t, "resolve deletion", err)
-	tx, err := store.sqlDB.BeginTx(ctx, nil)
-	testutil.FailErr(t, "begin draft", err)
-	defer func() { _ = tx.Rollback() }()
-	_, err = store.RecordHeldEditTx(ctx, tx, HeldEdit{
+	prepared, err := store.PrepareHeldEdit(ctx, HeldEdit{
 		ProjectID: "p1", FileID: deleted.FileID, RootID: "r1", Path: "same.go", Content: []byte("unsaved draft\n"),
 	})
+	testutil.FailErr(t, "prepare draft", err)
+	defer prepared.Close()
+	tx, err := store.sqlDB.BeginTx(ctx, nil)
+	testutil.FailErr(t, "begin draft", err)
+	defer tx.Rollback()
+	_, err = prepared.CommitTx(ctx, tx)
 	testutil.FailErr(t, "retain draft", err)
 	testutil.FailErr(t, "commit draft", tx.Commit())
 	resolved, err := store.ResolveDeletedPath(ctx, "p1", sourcebranch.Trunk, "r1", "same.go")

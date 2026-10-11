@@ -60,8 +60,10 @@ func (s *txProbeSink) counts() (events, delivered int) {
 // failingRecordTx preserves the database and rejects capture.
 type failingRecordTx struct{ *sourceledger.Store }
 
-func (failingRecordTx) RecordTx(context.Context, *sql.Tx, sourceledger.RecordInput) error {
-	return errSourceLedgerFixture
+func (failingRecordTx) Prepare(context.Context, []sourceledger.RecordInput) (sourceledger.PreparedRecording, error) {
+	return preparedCapture(func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error) {
+		return sourceledger.TrackedFile{}, errSourceLedgerFixture
+	}), nil
 }
 
 func bindProbeSink(t *testing.T, st *sourceledger.Store, sink *txProbeSink) {
