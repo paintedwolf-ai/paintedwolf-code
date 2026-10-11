@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,14 +28,14 @@ func TestContentApplyDefaultOffParity(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectDir)
 	testutil.FailErr(t, "create test session", err)
 	gate := &toolhost.ContentApplyService{
-		Mgr:    h.CheckpointMgr,
+		Mgr:    h.Sessions.Checkpoints,
 		Review: review,
 	}
 	after, err := gate.GateApply(ctx, "write", "a.txt", nil, "hello", tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    sess.ID,
-		ProjectID:    testdbseed.DefaultProjectID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: sess.ID,
+			ProjectID: testdbseed.DefaultProjectID},
 	})
 	if err != nil {
 		testutil.FailErr(t, "content_apply gate should passthrough when review policy off", err)
@@ -58,29 +59,29 @@ func TestContentApplyEmittedWhenPolicyOn(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectDir)
 	testutil.FailErr(t, "create test session", err)
 	gate := &toolhost.ContentApplyService{
-		Mgr:    h.CheckpointMgr,
+		Mgr:    h.Sessions.Checkpoints,
 		Review: mustReviewStore(t, h.ConfigRoot),
 	}
 	done := make(chan error, 1)
 	go func() {
 		_, err := gate.GateApply(ctx, "write", "review.txt", nil, "pending bytes", tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-			ActiveRootID: "r1",
-			SessionID:    sess.ID,
-			ProjectID:    testdbseed.DefaultProjectID,
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+				ActiveRootID: "r1"},
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				ProjectID: testdbseed.DefaultProjectID},
 		})
 		done <- err
 	}()
 	var checkpointID string
 	testutil.WaitFor(t, 3*time.Second, func() bool {
-		pending, err := h.CheckpointMgr.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
+		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
 		if err == nil && len(pending) == 1 {
 			checkpointID = pending[0].ID
 			return true
 		}
 		return false
 	})
-	if _, err := h.CheckpointMgr.ResolveCheckpoint(ctx, sess.ID, checkpointID, wire.CheckpointKindContentApply, nil, &hitl.ContentApplyResolve{
+	if _, err := h.Sessions.Checkpoints.ResolveCheckpoint(ctx, sess.ID, checkpointID, wire.CheckpointKindContentApply, nil, &hitl.ContentApplyResolve{
 		Decision: wire.ContentApplyApprove,
 	}); err != nil {
 		testutil.FailErr(t, "approve content_apply checkpoint", err)
@@ -105,14 +106,14 @@ func TestContentApplyAppliesWhenPathNotReviewed(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectDir)
 	testutil.FailErr(t, "create test session", err)
 	gate := &toolhost.ContentApplyService{
-		Mgr:    h.CheckpointMgr,
+		Mgr:    h.Sessions.Checkpoints,
 		Review: mustReviewStore(t, h.ConfigRoot),
 	}
 	after, err := gate.GateApply(ctx, "write", "docs/readme.md", nil, "instant", tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    sess.ID,
-		ProjectID:    testdbseed.DefaultProjectID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: sess.ID,
+			ProjectID: testdbseed.DefaultProjectID},
 	})
 	if err != nil {
 		testutil.FailErr(t, "content_apply gate should pass through a path outside review_paths", err)
@@ -120,7 +121,7 @@ func TestContentApplyAppliesWhenPathNotReviewed(t *testing.T) {
 	if after != "instant" {
 		t.Fatalf("after = %q want instant passthrough", after)
 	}
-	pending, err := h.CheckpointMgr.ListPending(ctx, sess.ID, nil)
+	pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, nil)
 	testutil.FailErr(t, "list pending checkpoints", err)
 	if len(pending) != 0 {
 		t.Fatalf("expected no checkpoint for an unreviewed path, got %d pending: %+v", len(pending), pending)
@@ -137,34 +138,34 @@ func TestContentApplyRejectStructuredError(t *testing.T) {
 	}
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectDir)
 	testutil.FailErr(t, "create test session", err)
-	gate := &toolhost.ContentApplyService{Mgr: h.CheckpointMgr, Review: review}
+	gate := &toolhost.ContentApplyService{Mgr: h.Sessions.Checkpoints, Review: review}
 	done := make(chan error, 1)
 	go func() {
 		_, err := gate.GateApply(ctx, "write", "x.txt", nil, "nope", tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-			ActiveRootID: "r1",
-			SessionID:    sess.ID,
-			ProjectID:    testdbseed.DefaultProjectID,
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+				ActiveRootID: "r1"},
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				ProjectID: testdbseed.DefaultProjectID},
 		})
 		done <- err
 	}()
 	var checkpointID string
 	testutil.WaitFor(t, 3*time.Second, func() bool {
-		pending, err := h.CheckpointMgr.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
+		pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
 		if err == nil && len(pending) == 1 {
 			checkpointID = pending[0].ID
 			return true
 		}
 		return false
 	})
-	if _, err := h.CheckpointMgr.ResolveCheckpoint(ctx, sess.ID, checkpointID, wire.CheckpointKindContentApply, nil, &hitl.ContentApplyResolve{
+	if _, err := h.Sessions.Checkpoints.ResolveCheckpoint(ctx, sess.ID, checkpointID, wire.CheckpointKindContentApply, nil, &hitl.ContentApplyResolve{
 		Decision: wire.ContentApplyReject,
 		Guidance: "shorten the timeout instead",
 	}); err != nil {
 		testutil.FailErr(t, "reject content_apply checkpoint", err)
 	}
 	gateErr := <-done
-	reject := tools.AsToolReject(gateErr)
+	reject := toolrejection.AsToolReject(gateErr)
 	if reject == nil {
 		t.Fatalf("err = %v want structured ToolReject", gateErr)
 	}
@@ -204,24 +205,24 @@ func TestContentApplyHoldsEveryContentMutatingTool(t *testing.T) {
 				wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectDir)
 			testutil.FailErr(t, "create test session", err)
 			gate := &toolhost.ContentApplyService{
-				Mgr:    h.CheckpointMgr,
+				Mgr:    h.Sessions.Checkpoints,
 				Review: mustReviewStore(t, h.ConfigRoot),
 			}
 
 			done := make(chan error, 1)
 			go func() {
 				_, err := gate.GateApply(ctx, tool, "reviewed.txt", nil, "authored bytes", tools.ToolContext{
-					Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-					ActiveRootID: "r1",
-					SessionID:    sess.ID,
-					ProjectID:    testdbseed.DefaultProjectID,
+					Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+						ActiveRootID: "r1"},
+					Identity: tools.InvocationIdentity{SessionID: sess.ID,
+						ProjectID: testdbseed.DefaultProjectID},
 				})
 				done <- err
 			}()
 
 			var checkpointID string
 			testutil.WaitFor(t, 3*time.Second, func() bool {
-				pending, err := h.CheckpointMgr.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
+				pending, err := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
 				if err == nil && len(pending) == 1 {
 					checkpointID = pending[0].ID
 					return true
@@ -231,7 +232,7 @@ func TestContentApplyHoldsEveryContentMutatingTool(t *testing.T) {
 			if checkpointID == "" {
 				t.Fatalf("%s wrote past content review — no checkpoint was raised", tool)
 			}
-			if _, err := h.CheckpointMgr.ResolveCheckpoint(ctx, sess.ID, checkpointID,
+			if _, err := h.Sessions.Checkpoints.ResolveCheckpoint(ctx, sess.ID, checkpointID,
 				wire.CheckpointKindContentApply, nil, &hitl.ContentApplyResolve{
 					Decision: wire.ContentApplyApprove,
 				}); err != nil {
@@ -260,14 +261,14 @@ func TestContentApplyPassesThroughNonAuthoringTools(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t,
 		wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectDir)
 	testutil.FailErr(t, "create test session", err)
-	gate := &toolhost.ContentApplyService{Mgr: h.CheckpointMgr, Review: mustReviewStore(t, h.ConfigRoot)}
+	gate := &toolhost.ContentApplyService{Mgr: h.Sessions.Checkpoints, Review: mustReviewStore(t, h.ConfigRoot)}
 
 	for _, tool := range []string{"copy", "move", "extract_archive", "mkdir", "chmod"} {
 		after, err := gate.GateApply(ctx, tool, "reviewed.txt", nil, "bytes", tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-			ActiveRootID: "r1",
-			SessionID:    sess.ID,
-			ProjectID:    testdbseed.DefaultProjectID,
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+				ActiveRootID: "r1"},
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				ProjectID: testdbseed.DefaultProjectID},
 		})
 		testutil.FailErr(t, "gate "+tool, err)
 		if after != "bytes" {

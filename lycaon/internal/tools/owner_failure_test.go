@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 	"time"
 
@@ -17,8 +18,8 @@ func TestOwnerFailurePreservesTimeoutFacts(t *testing.T) {
 		err := fmt.Errorf("git status: %w", &exec.TimeoutError{
 			Elapsed: 9 * time.Second, Deadline: deadline, Cause: context.DeadlineExceeded, CommandDeadline: command,
 		})
-		reject := ownerFailure("git_status", "git", err)
-		if reject.Code != ToolOwnerFailedCode || reject.FailureClass != api.FailureClassOwnerError || reject.OwnerRef != "git" {
+		reject := toolrejection.OwnerFailure("git_status", "git", err)
+		if reject.Code != toolrejection.ToolOwnerFailedCode || reject.FailureClass != api.FailureClassOwnerError || reject.OwnerRef != "git" {
 			t.Fatalf("failure identity = %+v", reject)
 		}
 		facts := reject.Data["timeout"].(map[string]any)
@@ -26,7 +27,7 @@ func TestOwnerFailurePreservesTimeoutFacts(t *testing.T) {
 			t.Fatalf("timeout facts = %+v", facts)
 		}
 	}
-	if reject := ownerFailure("git_status", "git", errors.New("other failure")); reject.Data["timeout"] != nil {
+	if reject := toolrejection.OwnerFailure("git_status", "git", errors.New("other failure")); reject.Data["timeout"] != nil {
 		t.Fatalf("invented timeout facts: %+v", reject)
 	}
 }

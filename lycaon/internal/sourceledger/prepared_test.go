@@ -28,7 +28,7 @@ func (d observedWriter) BeginTx(ctx context.Context, options *sql.TxOptions) (*s
 }
 
 func TestHistoryPublishesObjectsBeforeAcquiringWriter(t *testing.T) {
-	for _, kind := range []string{"record", "batch", "track", "refresh", "observation", "path_drift"} {
+	for _, kind := range []string{"record", "batch", "track", "refresh", "observation", "path_drift", "observed_batch"} {
 		t.Run(kind, func(t *testing.T) {
 			store, ctx := openLedger(t)
 			if kind == "refresh" || kind == "observation" || kind == "path_drift" {
@@ -39,27 +39,30 @@ func TestHistoryPublishesObjectsBeforeAcquiringWriter(t *testing.T) {
 			begun := 0
 			store.sqlDB = observedWriter{Handle: store.sqlDB, beforeBegin: func() {
 				begun++
-				got, err := store.objects.GetSHA(sourceblob.ContentSHA(content))
+				got, err := store.Content.GetSHA(sourceblob.ContentSHA(content))
 				testutil.FailErr(t, "object must exist before writer admission", err)
 				if !bytes.Equal(got, content) {
 					t.Fatal("published content mismatch")
 				}
 			}}
-			input := RecordInput{ProjectID: "p1", RootID: "r1", Path: "a", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginExternal, After: content}
+			store.Inventory.sqlDB = store.sqlDB
+			input := RecordInput{RecordLocation: RecordLocation{RootID: "r1", Path: "a"}, ProjectID: "p1", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginExternal, After: content}
 			var err error
 			switch kind {
 			case "record":
 				err = store.Record(ctx, input)
 			case "batch":
 				err = store.RecordBatch(ctx, []RecordInput{input})
+			case "observed_batch":
+				_, err = store.Inventory.recordObservedBatch(ctx, []RecordInput{input})
 			case "observation", "path_drift":
 				head, readErr := store.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{ProjectID: "p1", BranchID: sourcebranch.Trunk.String(), RootID: "r1", Path: "a"})
 				testutil.FailErr(t, "read observed head", readErr)
 				after := &observedFile{rootID: "r1", path: "a", sha: sourceblob.ContentSHA(content), bytes: content, size: int64(len(content))}
 				if kind == "observation" {
-					_, err = store.recordObservation(ctx, "p1", head, after, newID(), observationCause{})
+					_, err = store.Inventory.recordObservation(ctx, "p1", head, after, newID(), observationCause{})
 				} else {
-					_, err = store.recordPathDrift(ctx, "p1", nil, []pathDrift{{head: head, observed: after, rootID: "r1"}}, nil, nil)
+					_, err = store.Inventory.recordPathDrift(ctx, "p1", nil, []pathDrift{{head: head, observed: after, rootID: "r1"}}, nil, nil)
 				}
 
 			default:
@@ -89,7 +92,7 @@ func TestPreparedContentDoesNotNeedTheDatabaseWriter(t *testing.T) {
 				if held {
 					edit, err = store.PrepareHeldEdit(ctx, HeldEdit{ProjectID: "p1", RootID: "r1", Path: "a", FileID: tracked.FileID, Content: []byte("held")})
 				} else {
-					recording, err = store.Prepare(ctx, []RecordInput{{ProjectID: "p1", RootID: "r1", Path: "a", Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal, After: []byte("saved")}})
+					recording, err = store.Prepare(ctx, []RecordInput{{RecordLocation: RecordLocation{RootID: "r1", Path: "a"}, ProjectID: "p1", Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal, After: []byte("saved")}})
 				}
 				done <- err
 			}()
@@ -108,11 +111,11 @@ func TestPreparedContentDoesNotNeedTheDatabaseWriter(t *testing.T) {
 				t.Fatal("content preparation waited for the database writer")
 			}
 			// Transaction application must not return to the object publisher.
-			objects := store.objects
+			objects := store.Content
 			blocked := filepath.Join(t.TempDir(), "not-a-directory")
 			testutil.FailErr(t, "block publication", os.WriteFile(blocked, []byte("blocked"), 0600))
-			store.objects = sourceblob.New(blocked)
-			defer func() { store.objects = objects }()
+			store.Content = sourceblob.New(blocked)
+			defer func() { store.Content = objects }()
 			if held {
 				defer edit.Close()
 				_, err = edit.CommitTx(ctx, tx)
@@ -130,7 +133,7 @@ func TestPreparationFreezesInputsAndReleasesRetention(t *testing.T) {
 	store, ctx := openLedger(t)
 	original := []byte("original")
 	state := &TextState{DocumentID: "doc", Epoch: 1, Spans: []TextSpan{{Length: 8, Client: 1}}}
-	inputs := []RecordInput{{ProjectID: "p1", RootID: "r1", Path: "a", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginExternal, After: original, TextAfter: state}}
+	inputs := []RecordInput{{RecordLocation: RecordLocation{RootID: "r1", Path: "a"}, ProjectID: "p1", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginExternal, After: original, TextAfter: state}}
 	recording, err := store.Prepare(ctx, inputs)
 	testutil.FailErr(t, "prepare", err)
 	defer recording.Close()
@@ -141,7 +144,7 @@ func TestPreparationFreezesInputsAndReleasesRetention(t *testing.T) {
 	if string(frozen.After) != "original" || frozen.Path != "a" || frozen.TextAfter.Spans[0].Client != 1 {
 		t.Fatal("preparation retained caller-owned inputs")
 	}
-	if release, ok, err := store.objects.TryAcquireMaintenanceLease(); err != nil || ok {
+	if release, ok, err := store.Content.TryAcquireMaintenanceLease(); err != nil || ok {
 		if ok {
 			release()
 		}
@@ -152,7 +155,7 @@ func TestPreparationFreezesInputsAndReleasesRetention(t *testing.T) {
 	if _, err := recording.CommitTx(ctx, nil); err == nil {
 		t.Fatal("closed recording was accepted")
 	}
-	release, ok, err := store.objects.TryAcquireMaintenanceLease()
+	release, ok, err := store.Content.TryAcquireMaintenanceLease()
 	testutil.FailErr(t, "maintenance lease", err)
 	if !ok {
 		t.Fatal("close leaked retention lease")
@@ -167,16 +170,52 @@ func TestPreparationFailureDoesNotLeakRetention(t *testing.T) {
 		if cancelled {
 			cancel()
 		}
-		_, err := store.Prepare(request, []RecordInput{{ProjectID: "p1", RootID: "r1", Path: "a", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginExternal, After: []byte("content"), AfterSHA256: sourceblob.ContentSHA([]byte("different"))}})
+		_, err := store.Prepare(request, []RecordInput{{RecordLocation: RecordLocation{RootID: "r1", Path: "a"}, ProjectID: "p1", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginExternal, After: []byte("content"), AfterSHA256: sourceblob.ContentSHA([]byte("different"))}})
 		cancel()
 		if err == nil || (cancelled && !errors.Is(err, context.Canceled)) {
 			t.Fatalf("preparation error: %v", err)
 		}
-		release, ok, err := store.objects.TryAcquireMaintenanceLease()
+		release, ok, err := store.Content.TryAcquireMaintenanceLease()
 		testutil.FailErr(t, "maintenance lease", err)
 		if !ok {
 			t.Fatal("failed preparation leaked retention lease")
 		}
 		release()
+	}
+}
+
+type pendingObservationPath string
+
+func (p pendingObservationPath) ObservationScope(_ context.Context, tx *sql.Tx, _ string) (MutationObservationScope, error) {
+	if tx == nil {
+		return nil, errors.New("mutation admission requires a transaction")
+	}
+	return p, nil
+}
+func (p pendingObservationPath) Pending(_ sourcebranch.ID, _, path string) bool {
+	return path == string(p)
+}
+
+func TestPreparedObservationBatchKeepsMutationAdmissionAndCausality(t *testing.T) {
+	store, ctx := openLedger(t)
+	store.SetMutationScopeProvider(pendingObservationPath("pending"))
+	inputs := make([]RecordInput, 0, 3)
+	for _, path := range []string{"pending", "first", "second"} {
+		inputs = append(inputs, RecordInput{RecordLocation: RecordLocation{RootID: "r1", Path: path}, ProjectID: "p1", OperationID: "observed-batch", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginExternal, After: []byte(path)})
+	}
+	recorded, err := store.Inventory.recordObservedBatch(ctx, inputs)
+	testutil.FailErr(t, "record admitted observation batch", err)
+	if recorded != 2 {
+		t.Fatalf("recorded %d paths; expected the two admitted paths", recorded)
+	}
+	var effects, operations int
+	err = store.sqlDB.QueryRowContext(ctx, `SELECT COUNT(*), COUNT(DISTINCT operation_id) FROM source_effects WHERE project_id='p1'`).Scan(&effects, &operations)
+	testutil.FailErr(t, "read observed batch effects", err)
+	if effects != 2 || operations != 1 {
+		t.Fatalf("batch has %d effects in %d operations", effects, operations)
+	}
+	_, err = store.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{ProjectID: "p1", BranchID: sourcebranch.Trunk.String(), RootID: "r1", Path: "pending"})
+	if !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("pending mutation acquired an observed head: %v", err)
 	}
 }

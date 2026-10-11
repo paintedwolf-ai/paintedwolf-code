@@ -8,7 +8,7 @@ import (
 
 // Compensation retains the selective target across replaced CRDT identities.
 // Reuse requires matching boundary and head operations.
-func (s *Store) rewindCompensationTarget(ctx context.Context, projectID, headID, targetID string) (*RestorableVersion, error) {
+func (s *Comparisons) rewindCompensationTarget(ctx context.Context, projectID, headID, targetID string) (*RestorableVersion, error) {
 	var versionID string
 	err := s.sqlDB.QueryRowContext(ctx, `SELECT original.id
  FROM source_versions current
@@ -26,7 +26,7 @@ func (s *Store) rewindCompensationTarget(ctx context.Context, projectID, headID,
 	if err != nil {
 		return nil, err
 	}
-	version, err := s.ReadRestorableVersion(ctx, projectID, versionID)
+	version, err := s.history.ReadRestorableVersion(ctx, projectID, versionID)
 	if errors.Is(err, ErrVersionUnavailable) {
 		return nil, nil
 	}

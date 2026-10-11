@@ -16,7 +16,7 @@ func TestWorkflowPausedOnChildRejectsAdvance(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
 	store := h.Store
-	blueprintMgr := h.BlueprintMgr
+	blueprintMgr := h.Workflows.Blueprints
 	sess := createSessionHTTP(t, srv, t.TempDir())
 	ctx := t.Context()
 	if _, err := store.Get(ctx, sess.ID); err != nil {

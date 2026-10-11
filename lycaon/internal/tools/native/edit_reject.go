@@ -1,18 +1,18 @@
 package native
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/runeclamp"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
 )
 
 func editOldStringNotFound(path, fileContent, oldString string) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "EDIT_OLD_STRING_NOT_FOUND",
 		Data: editMissData(path, fileContent, oldString),
 	}
@@ -37,7 +37,7 @@ func editTargetChangedByOthers(
 	}
 	data["changed_by"] = rows
 	data["change_count"] = totalChanges
-	return &tools.ToolReject{Code: "EDIT_TARGET_CHANGED_BY_OTHERS", Data: data}
+	return &toolrejection.ToolReject{Code: "EDIT_TARGET_CHANGED_BY_OTHERS", Data: data}
 }
 
 func editMissData(path, fileContent, oldString string) map[string]any {
@@ -108,7 +108,7 @@ func fmtReadHint(path string, nearLine int) string {
 }
 
 func editOldStringAmbiguous(path string, occurrences int) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "EDIT_OLD_STRING_AMBIGUOUS",
 		Data: map[string]any{
 			"path":        path,
@@ -118,7 +118,7 @@ func editOldStringAmbiguous(path string, occurrences int) error {
 }
 
 func editArgsConflict(detail string) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "EDIT_ARGS_CONFLICT",
 		Data: map[string]any{"detail": detail, "conflict": true},
 	}

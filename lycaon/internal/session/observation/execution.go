@@ -1,0 +1,125 @@
+package observation
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
+	"github.com/lycaon/lycaon/pkg/api"
+)
+
+type ExecutionCheckpointSource interface {
+	ListPending(context.Context, string, *api.CheckpointKind) ([]api.CheckpointEvent, error)
+}
+
+type ExecutionBlocker struct {
+	SessionID string `json:"session_id"`
+	Kind      string `json:"kind"`
+	ID        string `json:"id,omitempty"`
+}
+
+type ExecutionObservation struct {
+	SessionID        string                       `json:"session_id"`
+	SubmissionID     string                       `json:"submission_id"`
+	SubmissionStatus store.PromptSubmissionStatus `json:"submission_status"`
+	Settled          bool                         `json:"settled"`
+	Sessions         []store.ExecutionSession     `json:"sessions"`
+	Blockers         []ExecutionBlocker           `json:"blockers"`
+	Failures         []store.ExecutionSubmission  `json:"failures"`
+}
+
+type WorkflowExecutionObservation struct {
+	Run       api.WorkflowRun      `json:"run"`
+	Execution ExecutionObservation `json:"execution"`
+}
+
+func (m *Service) SetExecutionCheckpoints(source ExecutionCheckpointSource) {
+	m.checkpoints = source
+}
+
+// Observe separates runtime occupancy from unfinished task obligations.
+func (m *Service) Observe(ctx context.Context, sessionID, submissionID string) (ExecutionObservation, error) {
+	result := ExecutionObservation{SessionID: sessionID, SubmissionID: submissionID, Blockers: []ExecutionBlocker{}, Failures: []store.ExecutionSubmission{}}
+	if m == nil || m.store == nil {
+		return result, fmt.Errorf("session observation unavailable")
+	}
+	admission, err := m.store.GetPromptSubmission(ctx, submissionID)
+	if err != nil {
+		return result, err
+	}
+	if admission == nil {
+		return result, store.ErrPromptSubmissionNotFound
+	}
+	if admission.SessionID != sessionID {
+		return result, fmt.Errorf("submission does not belong to session")
+	}
+	result, err = m.Tree(ctx, sessionID)
+	result.SubmissionID = submissionID
+	result.SubmissionStatus = admission.Status
+	result.Settled = result.Settled && admission.Status.Terminal()
+	return result, err
+}
+
+// Tree reads occupancy without requiring a prompt admission.
+func (m *Service) Tree(ctx context.Context, sessionID string) (ExecutionObservation, error) {
+	result := ExecutionObservation{SessionID: sessionID, Blockers: []ExecutionBlocker{}, Failures: []store.ExecutionSubmission{}}
+	if m == nil || m.store == nil {
+		return result, fmt.Errorf("session observation unavailable")
+	}
+	state, err := m.store.ReadExecutionState(ctx, sessionID)
+	if err != nil {
+		return result, err
+	}
+	if len(state.Sessions) == 0 {
+		return result, fmt.Errorf("execution session no longer exists")
+	}
+	result.Sessions = state.Sessions
+	for _, p := range state.Submissions {
+		if !p.Status.Terminal() {
+			result.Blockers = append(result.Blockers, ExecutionBlocker{SessionID: p.SessionID, Kind: "submission", ID: p.ID})
+		} else {
+			result.Failures = append(result.Failures, p)
+		}
+	}
+	for _, s := range state.Sessions {
+		blockers, err := m.executionBlockers(ctx, s)
+		if err != nil {
+			return result, err
+		}
+		result.Blockers = append(result.Blockers, blockers...)
+	}
+	result.Settled = len(result.Blockers) == 0
+	return result, nil
+}
+
+func (m *Service) executionBlockers(ctx context.Context, s store.ExecutionSession) ([]ExecutionBlocker, error) {
+	var blockers []ExecutionBlocker
+	add := func(kind, id string) {
+		blockers = append(blockers, ExecutionBlocker{SessionID: s.ID, Kind: kind, ID: id})
+	}
+	if s.Status == api.SessionStatusBusy || s.Status == api.SessionStatusPreparing {
+		add("session", s.ID)
+	}
+	admission, nudges := m.admission, m.nudges
+	if admission.PromptExecutionActive(s.ID) || (nudges.HasPendingLoopWakes(s.ID) && !m.turns.HostTurnBlocked(ctx, s.ID)) {
+		add("continuation", s.ID)
+	}
+	idle, err := workeroutcomes.ParentSessionWorkerCycleIdle(ctx, m.workers, s.ProjectID, s.ID, "")
+	if err != nil {
+		return nil, err
+	}
+	if !idle {
+		add("worker_cycle", s.ID)
+	}
+	if m.checkpoints != nil {
+		pending, err := m.checkpoints.ListPending(ctx, s.ID, nil)
+		if err != nil {
+			return nil, err
+		}
+		for _, checkpoint := range pending {
+			add("checkpoint", checkpoint.ID)
+		}
+	}
+	return blockers, nil
+}

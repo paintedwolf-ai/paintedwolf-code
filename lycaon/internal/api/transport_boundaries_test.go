@@ -28,8 +28,8 @@ func TestVersionedRoutesPreserveTransportBoundaries(t *testing.T) {
 	recovery.responses.Notices = testUserNotices(t)
 	normalRoot := t.TempDir()
 	normal := newTestServer(t, func(d *Dependencies) {
-		d.DataDir = normalRoot
-		d.StorePath = filepath.Join(normalRoot, "store.db")
+		d.Storage.DataDir = normalRoot
+		d.Storage.StorePath = filepath.Join(normalRoot, "store.db")
 	})
 	for name, server := range map[string]*Server{"normal": normal, "recovery": recovery} {
 		t.Run(name, func(t *testing.T) {

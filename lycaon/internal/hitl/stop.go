@@ -12,7 +12,7 @@ import (
 )
 
 // CancelPendingForSession cancels pending checkpoints for one session.
-func (m *Manager) CancelPendingForSession(ctx context.Context, sessionID, reason string) error {
+func (m *Checkpoints) CancelPendingForSession(ctx context.Context, sessionID, reason string) error {
 	if m == nil {
 		return nil
 	}
@@ -20,7 +20,7 @@ func (m *Manager) CancelPendingForSession(ctx context.Context, sessionID, reason
 	if sessionID == "" {
 		return fmt.Errorf("session_id required")
 	}
-	rows, err := m.store.ListBySession(ctx, sessionID, DecisionStatusPending, nil)
+	rows, err := m.Store.ListBySession(ctx, sessionID, DecisionStatusPending, nil)
 	if err != nil {
 		return err
 	}
@@ -31,7 +31,7 @@ func (m *Manager) CancelPendingForSession(ctx context.Context, sessionID, reason
 	return cancelErr
 }
 
-func (m *Manager) cancelPending(ctx context.Context, checkpointID, reason string) error {
+func (m *Checkpoints) cancelPending(ctx context.Context, checkpointID, reason string) error {
 	resolution := stopResolution(ctx)
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
@@ -44,10 +44,10 @@ func (m *Manager) cancelPending(ctx context.Context, checkpointID, reason string
 }
 
 // settlePending settles a still-pending checkpoint the host answers itself.
-func (m *Manager) settlePending(ctx context.Context, checkpointID string, status DecisionStatus, result DecisionResult, resolution Resolution) error {
+func (m *Checkpoints) settlePending(ctx context.Context, checkpointID string, status DecisionStatus, result DecisionResult, resolution Resolution) error {
 	unlock := m.resolutionLocks.Lock(checkpointID)
 	defer unlock()
-	row, err := m.store.Get(ctx, checkpointID)
+	row, err := m.Store.Get(ctx, checkpointID)
 	if err != nil {
 		return err
 	}
@@ -55,7 +55,7 @@ func (m *Manager) settlePending(ctx context.Context, checkpointID string, status
 		return nil
 	}
 	now := time.Now().UTC()
-	viaOutbox, err := m.store.resolveCheckpoint(
+	viaOutbox, err := m.Store.resolveCheckpoint(
 		ctx,
 		*row,
 		status,
@@ -63,7 +63,7 @@ func (m *Manager) settlePending(ctx context.Context, checkpointID string, status
 		nil,
 		now,
 		resolution,
-		m.resolutionSeal(ctx, status),
+		m.Authority.resolutionSeal(ctx, status),
 	)
 	if err != nil {
 		return err
@@ -74,7 +74,7 @@ func (m *Manager) settlePending(ctx context.Context, checkpointID string, status
 	row.Resolution = &resolution
 	m.announceResolved(ctx, *row, viaOutbox)
 	if row.Kind == api.CheckpointKindToolApproval {
-		m.notifyToolApprovalTerminal(*row, status)
+		m.Authority.notifyToolApprovalTerminal(*row, status)
 	}
 	return nil
 }

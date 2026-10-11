@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/session/projectcontrol"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -33,7 +34,7 @@ func (s *stubOverlayPromoter) RebaseChildren(_ context.Context, _, _ string) ([]
 	return nil, nil
 }
 
-func setupHostEventManager(t *testing.T, promoter OverlayPromoter) (*Manager, string) {
+func setupHostEventManager(t *testing.T, promoter OverlayPromoter) (*Host, string) {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	store := store.NewMemory()
@@ -41,14 +42,14 @@ func setupHostEventManager(t *testing.T, promoter OverlayPromoter) (*Manager, st
 	if err != nil {
 		t.Fatalf("create session: %v", err)
 	}
-	mgr := NewManager(store, nil, nil, settings.SessionLimits{})
-	mgr.SetOverlayPromoter(promoter)
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
+	mgr.ProjectControl.SetOverlayPromoter(promoter)
 	return mgr, sess.ID
 }
 
-func transcriptContent(t *testing.T, mgr *Manager, sessionID string) []string {
+func transcriptContent(t *testing.T, mgr *Host, sessionID string) []string {
 	t.Helper()
-	msgs, err := mgr.store.GetMessages(context.Background(), sessionID)
+	msgs, err := mgr.Coordinator.Context.Sessions.(Store).GetMessages(context.Background(), sessionID)
 	if err != nil {
 		t.Fatalf("get messages: %v", err)
 	}
@@ -70,14 +71,14 @@ func TestManagerPromoteOverlayAppendsHostEvent(t *testing.T) {
 	}
 	mgr, sessionID := setupHostEventManager(t, stub)
 
-	out, err := mgr.PromoteOverlay(context.Background(), sessionID, "ov-grep", api.PromoteOverlayInput{Detail: "hunks"})
+	out, err := mgr.ProjectControl.PromoteOverlay(context.Background(), sessionID, "ov-grep", api.PromoteOverlayInput{Detail: "hunks"})
 	if err != nil {
 		t.Fatalf("PromoteOverlay: %v", err)
 	}
 	if out.Status != api.WorkerMergeStatusMerged {
 		t.Fatalf("status=%q want merged", out.Status)
 	}
-	messages, err := mgr.store.GetMessages(context.Background(), sessionID)
+	messages, err := mgr.Coordinator.Context.Sessions.(Store).GetMessages(context.Background(), sessionID)
 	testutil.FailErr(t, "get promotion messages", err)
 	if len(messages) != 1 || messages[0].ToolResult.OverlayPromotion == nil || messages[0].ToolResult.OverlayPromotion.Files[0].After != "merged" {
 		t.Fatalf("promotion metadata missing from durable message: %#v", messages)
@@ -110,7 +111,7 @@ func TestManagerPromoteOverlayAppendsRebaseConflictBanner(t *testing.T) {
 	}
 	mgr, sessionID := setupHostEventManager(t, stub)
 
-	_, err := mgr.PromoteOverlay(context.Background(), sessionID, "ov-grep", api.PromoteOverlayInput{Detail: "hunks"})
+	_, err := mgr.ProjectControl.PromoteOverlay(context.Background(), sessionID, "ov-grep", api.PromoteOverlayInput{Detail: "hunks"})
 	if err != nil {
 		t.Fatalf("PromoteOverlay: %v", err)
 	}
@@ -139,7 +140,7 @@ func TestManagerRejectOverlayAppendsHostEventAndParentRejectedBanner(t *testing.
 	}
 	mgr, sessionID := setupHostEventManager(t, stub)
 
-	out, err := mgr.RejectOverlay(context.Background(), sessionID, "ov-grep", "superseded")
+	out, err := mgr.ProjectControl.RejectOverlay(context.Background(), sessionID, "ov-grep", "superseded")
 	if err != nil {
 		t.Fatalf("RejectOverlay: %v", err)
 	}
@@ -169,19 +170,19 @@ func TestManagerRejectOverlayAppendsHostEventAndParentRejectedBanner(t *testing.
 func TestManagerOverlayResolutionRetriesProjectPromotion(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
-		resolve func(*Manager, string) error
+		resolve func(*Host, string) error
 	}{
 		{
 			name: "promote",
-			resolve: func(mgr *Manager, sessionID string) error {
-				_, err := mgr.PromoteOverlay(context.Background(), sessionID, "overlay-1", api.PromoteOverlayInput{})
+			resolve: func(mgr *Host, sessionID string) error {
+				_, err := mgr.ProjectControl.PromoteOverlay(context.Background(), sessionID, "overlay-1", api.PromoteOverlayInput{})
 				return err
 			},
 		},
 		{
 			name: "reject",
-			resolve: func(mgr *Manager, sessionID string) error {
-				_, err := mgr.RejectOverlay(context.Background(), sessionID, "overlay-1", "not needed")
+			resolve: func(mgr *Host, sessionID string) error {
+				_, err := mgr.ProjectControl.RejectOverlay(context.Background(), sessionID, "overlay-1", "not needed")
 				return err
 			},
 		},
@@ -191,13 +192,13 @@ func TestManagerOverlayResolutionRetriesProjectPromotion(t *testing.T) {
 			st := store.NewMemory()
 			sess, err := st.Create(context.Background(), api.CreateSessionRequest{}, "project-1")
 			testutil.FailErr(t, "create session", err)
-			mgr := NewManager(st, nil, nil, settings.SessionLimits{})
-			mgr.SetOverlayPromoter(&stubOverlayPromoter{
+			mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
+			mgr.ProjectControl.SetOverlayPromoter(&stubOverlayPromoter{
 				promoteOut: api.WorkerMergeResult{JobID: "overlay-1", Status: api.WorkerMergeStatusMerged},
 				rejectOut:  api.OverlayRejectOutcome{OverlayID: "overlay-1"},
 			})
 			var retriedProjectID string
-			mgr.SetPromotionHook(func(_ context.Context, projectID string) {
+			mgr.Admission.SetPromotion(func(_ context.Context, projectID string) {
 				retriedProjectID = projectID
 			})
 
@@ -224,7 +225,7 @@ func TestManagerPromoteOverlayNoBannerWhenNoRebaseConflicts(t *testing.T) {
 	}
 	mgr, sessionID := setupHostEventManager(t, stub)
 
-	_, err := mgr.PromoteOverlay(context.Background(), sessionID, "ov-grep", api.PromoteOverlayInput{Detail: "hunks"})
+	_, err := mgr.ProjectControl.PromoteOverlay(context.Background(), sessionID, "ov-grep", api.PromoteOverlayInput{Detail: "hunks"})
 	if err != nil {
 		t.Fatalf("PromoteOverlay: %v", err)
 	}
@@ -238,9 +239,9 @@ func TestManagerPromoteOverlayNoBannerWhenNoRebaseConflicts(t *testing.T) {
 }
 
 func TestFormatOverlayHostToolContent(t *testing.T) {
-	content, err := FormatOverlayHostToolContent(hostmarker.OverlayPromoteEventPrefix, map[string]any{"job_id": "job-a"}, "")
+	content, err := projectcontrol.FormatOverlayHostToolContent(hostmarker.OverlayPromoteEventPrefix, map[string]any{"job_id": "job-a"}, "")
 	if err != nil {
-		t.Fatalf("FormatOverlayHostToolContent: %v", err)
+		t.Fatalf("projectcontrol.FormatOverlayHostToolContent: %v", err)
 	}
 	if !strings.HasPrefix(content, hostmarker.OverlayPromoteEventPrefix) {
 		t.Fatalf("content = %q want promote prefix", content)
@@ -255,7 +256,7 @@ func TestAppendHostEventPublishesOrd(t *testing.T) {
 	store := store.NewMemory()
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetEventPublisher(pub)
 	projectID := attachTestProject(t, mgr)
 
@@ -267,7 +268,7 @@ func TestAppendHostEventPublishesOrd(t *testing.T) {
 	testutil.FailErr(t, "subscribe", err)
 	t.Cleanup(unsub)
 
-	testutil.FailErr(t, "appendHostEvent", mgr.appendHostEvent(ctx, sess.ID, hostmarker.OverlayPromoteEventPrefix, map[string]any{"job_id": "j1"}, ""))
+	testutil.FailErr(t, "appendHostEvent", mgr.ProjectControl.AppendHostEvent(ctx, sess.ID, hostmarker.OverlayPromoteEventPrefix, map[string]any{"job_id": "j1"}, ""))
 
 	msgs, err := store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)

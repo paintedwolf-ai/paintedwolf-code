@@ -24,8 +24,8 @@ type CallScope struct {
 
 // ScopeFromToolContext builds the scope for the invoking tool session.
 func ScopeFromToolContext(tctx tools.ToolContext) CallScope {
-	scope := CallScope{ProjectID: strings.TrimSpace(tctx.ProjectID)}
-	for _, root := range tctx.Roots {
+	scope := CallScope{ProjectID: strings.TrimSpace(tctx.Identity.ProjectID)}
+	for _, root := range tctx.Source.Roots {
 		p := strings.TrimSpace(root.Path)
 		if p == "" {
 			continue

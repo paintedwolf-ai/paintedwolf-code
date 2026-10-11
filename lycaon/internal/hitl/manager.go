@@ -32,74 +32,104 @@ const (
 	DecisionStatusCanceled DecisionStatus = "canceled"
 )
 
-// ProposedAction describes what the agent wants to do.
+// ProposedAction describes what the agent wants to do, structured into cohesive host fact domains.
 type ProposedAction struct {
-	ProcessAccess           string
-	ProcessTargets          []ApprovalTarget
-	ExecutionBoundaryDigest string
-	FileChanges             []api.ApprovalFileChange
-	// AgentPolicy is each changed file a project trust surface loads.
-	AgentPolicy []AgentPolicyTarget
-	Tool        string
-	Args        map[string]any
-	Files       []string
-	// ResolvedFiles binds declared paths to their physical invocation targets.
+	Invocation   ActionInvocation
+	Scope        ActionScope
+	Execution    ActionExecution
+	Resources    ActionResources
+	Mutations    ActionMutations
+	Presentation ActionPresentation
+	Sockets      ActionSockets
+	Egress       ActionEgress
+}
+
+// ActionInvocation captures tool invocation facts.
+type ActionInvocation struct {
+	Tool          string
+	Args          map[string]any
+	Files         []string
 	ResolvedFiles []string
-	// ApprovalCategory and ApprovalSubject carry host-resolved policy identity.
-	ApprovalCategory string
-	ApprovalSubject  string
-	// HostResources identifies policy subjects without granting access.
-	HostResources []string
-	// HostResourceFamilies groups policy subjects; grants bind concrete IDs.
-	HostResourceFamilies []string
-	// Command is display text; Args retains the exact invocation.
-	Command string
-	// PresentationTool overrides the card label without changing tool identity.
-	PresentationTool string
-	EstimatedImpact  string
-	// ProjectID is the identity a durable lease binds to.
-	ProjectID string
-	// ProjectDir is the active folder for path matching and coverage copy.
-	ProjectDir string
-	SessionID  string
-	// RootSessionID identifies the top-level chat.
-	RootSessionID string
-	// SessionScratchRoot is the invoking session's own scratch workspace. It
-	// holds whether or not an OS boundary applies, so it is not read from Contained.
+	ActionID      string
+}
+
+// ActionScope binds an action to its project and session context.
+type ActionScope struct {
+	ProjectID          string
+	ProjectDir         string
+	SessionID          string
+	RootSessionID      string
 	SessionScratchRoot string
-	// Contained is the executor's confinement result.
-	Contained Contained
-	// SocketGrants are host-resolved AF_UNIX grants for this invocation (not raw model paths).
-	SocketGrants      []confine.SocketGrant
-	SocketScopes      []string
-	SocketGrantStates []string
-	// AuthorizedSocketDigests lists per-grant digests already covered by chat scope or
-	// a current-call permit for this invocation.
-	AuthorizedSocketDigests []string
-	// AuthorizedDirectIP is true when a current-call direct-IP permit covers this invocation.
-	AuthorizedDirectIP bool
-	// ActionID is the host-issued tool-call/action identity used for event attribution.
-	ActionID string
-	// DirectIPRequested and its presentation context are host-derived capability facts.
-	DirectIPRequested    bool
-	Visibility           string
-	DeclaredDestinations []string
-	// PackageExecution binds approval to the resolved package action.
-	PackageExecution *packageexec.Execution
 }
 
 // ChatSession returns the chat that chat-scoped authority belongs to:
 // RootSessionID when set, else the action's own SessionID.
-func (a ProposedAction) ChatSession() string {
-	if a.RootSessionID != "" {
-		return a.RootSessionID
+func (s ActionScope) ChatSession() string {
+	if s.RootSessionID != "" {
+		return s.RootSessionID
 	}
-	return a.SessionID
+	return s.SessionID
+}
+
+// HasProjectIdentity reports whether the scope carries a project id.
+func (s ActionScope) HasProjectIdentity() bool {
+	return strings.TrimSpace(s.ProjectID) != ""
+}
+
+// ActionExecution captures execution boundaries, process targets, and packages.
+type ActionExecution struct {
+	Contained               Contained
+	ProcessAccess           string
+	ProcessTargets          []ApprovalTarget
+	ExecutionBoundaryDigest string
+	PackageExecution        *packageexec.Execution
+}
+
+// ActionResources carries host-resolved policy identity and resource targets.
+type ActionResources struct {
+	ApprovalCategory     string
+	ApprovalSubject      string
+	HostResources        []string
+	HostResourceFamilies []string
+}
+
+// ActionMutations carries pending file and policy mutations.
+type ActionMutations struct {
+	FileChanges []api.ApprovalFileChange
+	AgentPolicy []AgentPolicyTarget
+}
+
+// ActionPresentation captures card presentation facts.
+type ActionPresentation struct {
+	Command          string
+	PresentationTool string
+	EstimatedImpact  string
+}
+
+// ActionSockets captures UNIX domain socket grants and authorization facts.
+type ActionSockets struct {
+	SocketGrants            []confine.SocketGrant
+	SocketScopes            []string
+	SocketGrantStates       []string
+	AuthorizedSocketDigests []string
+}
+
+// ActionEgress captures network egress facts.
+type ActionEgress struct {
+	AuthorizedDirectIP   bool
+	DirectIPRequested    bool
+	Visibility           string
+	DeclaredDestinations []string
+}
+
+// ChatSession returns the chat that chat-scoped authority belongs to.
+func (a ProposedAction) ChatSession() string {
+	return a.Scope.ChatSession()
 }
 
 // HasProjectIdentity reports whether the action carries a project id.
 func (a ProposedAction) HasProjectIdentity() bool {
-	return strings.TrimSpace(a.ProjectID) != ""
+	return a.Scope.HasProjectIdentity()
 }
 
 // DecisionResult is the human resolution payload.

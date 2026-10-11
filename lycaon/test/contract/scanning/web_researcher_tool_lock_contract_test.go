@@ -68,7 +68,7 @@ func TestWebResearcherToolLockContract(t *testing.T) {
 
 	// The resolved surface can narrow the grant, never widen it.
 	exec := toolfixture.ContractToolExecutor(t)
-	for _, name := range toolfixture.SortedToolNames(context.Background(), exec, p.ToolProfile) {
+	for _, name := range toolfixture.SortedToolNames(context.Background(), exec.Metadata, p.ToolProfile) {
 		lower := strings.ToLower(strings.TrimSpace(name))
 		switch {
 		case lower == "write", lower == "edit", lower == "command",

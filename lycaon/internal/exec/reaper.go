@@ -15,9 +15,10 @@ const ReaperCommand = "internal-process-reaper"
 // forgets; kind 'g' names a process group and 'p' a single process by pid, and
 // 'd' a directory by absolute path.
 const (
-	reaperGroup   byte = 'g'
-	reaperProcess byte = 'p'
-	reaperDir     byte = 'd'
+	reaperGroup      byte = 'g'
+	reaperSupervisor byte = 's'
+	reaperProcess    byte = 'p'
+	reaperDir        byte = 'd'
 )
 
 // TrackProcessGroup records a started process group the engine owns, by its

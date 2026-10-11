@@ -15,18 +15,21 @@ import (
 
 // Handler serves MCP provider settings over the device registry.
 type Handler struct {
-	registry  *mcp.RegistryImpl
-	projects  project.Registry
-	responses *httpio.Responder
+	catalog        *mcp.ProviderCatalog
+	administration *mcp.ProviderAdministration
+	credentials    *mcp.ProviderCredentials
+	discovery      *mcp.ToolDiscovery
+	projects       project.Registry
+	responses      *httpio.Responder
 }
 
-func New(registry *mcp.RegistryImpl, projects project.Registry, responses *httpio.Responder) *Handler {
+func New(registry *mcp.Runtime, projects project.Registry, responses *httpio.Responder) *Handler {
 	httpio.RequireDependencies("mcpadmin",
 		httpio.Required{Name: "responses", Present: responses != nil},
 		httpio.Required{Name: "registry", Present: registry != nil},
 		httpio.Required{Name: "projects", Present: projects != nil},
 	)
-	return &Handler{registry: registry, projects: projects, responses: responses}
+	return &Handler{catalog: registry.Catalog, administration: registry.Administration, credentials: registry.Credentials, discovery: registry.Tools, projects: projects, responses: responses}
 }
 
 // mcpScope reads project_id from the request. Scope is per-call, not registry state.
@@ -47,7 +50,7 @@ func (s *Handler) ListProviders(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	providers := s.decorateMCPProviders(s.registry.ListProviders(r.Context(), scope))
+	providers := s.decorateMCPProviders(s.catalog.ListProviders(r.Context(), scope))
 	if providers == nil {
 		providers = []wire.McpProvider{}
 	}
@@ -64,7 +67,7 @@ func (s *Handler) CreateProvider(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	row, err := s.registry.CreateProvider(r.Context(), scope, req, scope.ProjectDir)
+	row, err := s.administration.CreateProvider(r.Context(), scope, req, scope.ProjectDir)
 	if err != nil {
 		s.writeMCPAdminError(w, err)
 		return
@@ -78,7 +81,7 @@ func (s *Handler) ListRecipes(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpio.WriteJSON(w, http.StatusOK, wire.McpRecipeCatalogResponse{
-		Recipes: s.registry.ListRecipes(r.Context(), scope),
+		Recipes: s.administration.ListRecipes(r.Context(), scope),
 	})
 }
 
@@ -93,7 +96,7 @@ func (s *Handler) UpdateProvider(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	row, err := s.registry.UpdateProvider(r.Context(), scope, id, req, scope.ProjectDir)
+	row, err := s.administration.UpdateProvider(r.Context(), scope, id, req, scope.ProjectDir)
 	if err != nil {
 		s.writeMCPAdminError(w, err)
 		return
@@ -107,7 +110,7 @@ func (s *Handler) DeleteProvider(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.registry.DeleteOverlay(r.Context(), id, scope.ProjectDir); err != nil {
+	if err := s.administration.DeleteOverlay(r.Context(), id, scope.ProjectDir); err != nil {
 		s.writeMCPAdminError(w, err)
 		return
 	}
@@ -120,7 +123,7 @@ func (s *Handler) ListProviderTools(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	tools, err := s.registry.ListDiscoveredTools(r.Context(), scope, id)
+	tools, err := s.administration.ListDiscoveredTools(r.Context(), scope, id)
 	if err != nil {
 		s.writeMCPAdminError(w, err)
 		return
@@ -137,7 +140,7 @@ func (s *Handler) RefreshProvider(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	row, err := s.registry.ResyncProvider(r.Context(), scope, id)
+	row, err := s.administration.ResyncProvider(r.Context(), scope, id)
 	if err != nil {
 		s.writeMCPAdminError(w, err)
 		return
@@ -150,7 +153,7 @@ func (s *Handler) CheckProviders(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rows := s.decorateMCPCheckRows(s.registry.Check(r.Context(), scope))
+	rows := s.decorateMCPCheckRows(s.administration.Check(r.Context(), scope))
 	if rows == nil {
 		rows = []wire.McpCheckRow{}
 	}
@@ -163,7 +166,7 @@ func (s *Handler) StartOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := chi.URLParam(r, "provider_id")
-	row, err := s.registry.StartOAuth(r.Context(), scope, id)
+	row, err := s.credentials.StartOAuth(r.Context(), scope, id)
 	if err != nil {
 		s.writeMCPAdminError(w, err)
 		return
@@ -186,7 +189,7 @@ func (s *Handler) CompleteOAuth(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	row, err := s.registry.CompleteOAuth(r.Context(), scope, id, req)
+	row, err := s.credentials.CompleteOAuth(r.Context(), scope, id, req)
 	if err != nil {
 		s.writeMCPAdminError(w, err)
 		return
@@ -209,7 +212,7 @@ func (s *Handler) CancelOAuth(w http.ResponseWriter, r *http.Request) {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "state is required")
 		return
 	}
-	if err := s.registry.CancelOAuth(scope, id, req.State); err != nil {
+	if err := s.credentials.CancelOAuth(r.Context(), scope, id, req.State); err != nil {
 		s.writeMCPAdminError(w, err)
 		return
 	}
@@ -222,7 +225,7 @@ func (s *Handler) RevokeOAuth(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if _, err := s.registry.RevokeOAuth(r.Context(), scope, id); err != nil {
+	if _, err := s.credentials.RevokeOAuth(r.Context(), scope, id); err != nil {
 		s.writeMCPAdminError(w, err)
 		return
 	}

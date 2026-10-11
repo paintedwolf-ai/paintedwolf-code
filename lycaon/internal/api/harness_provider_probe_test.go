@@ -21,7 +21,7 @@ func TestHarnessProviderProbeRequiresHarnessAuthenticationAndLiveOptIn(t *testin
 				} else {
 					t.Setenv(configdir.EnvHarness, "")
 				}
-				server := NewServer(requiredTestDeps(t, Dependencies{Store: sessionstore.NewMemory()}), nil, TestAPIToken)
+				server := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: sessionstore.NewMemory()}}), nil, TestAPIToken)
 				for _, test := range []struct {
 					auth, body string
 					want       int
@@ -53,13 +53,13 @@ func TestHarnessProviderProbeDoesNotBypassUnsupportedRole(t *testing.T) {
 	discovery := newProvADiscoveryServer(t)
 	catalog := strings.ReplaceAll(fakeProvidersYAML(discovery.URL), "tools: {state: supported}", "tools: {state: unsupported}")
 	server, _ := newProviderTestServerWithCatalogs(t, catalog, catalog)
-	result := server.probeProviderConversation(t.Context(), harnessProviderProbeRequest{
+	result := server.Routes.HarnessProviders.probeProviderConversation(t.Context(), harnessProviderProbeRequest{
 		Provider: testProviderID, Model: "model-x", Role: llm.PolicySlotCoordinator,
 	})
 	if result["accepted"] != false || result["code"] != "model_assignment_rejected" || result["failure_kind"] != "application" || result["retryable"] != false {
 		t.Fatalf("unverified role reached provider execution: %+v", result)
 	}
-	verification, err := server.llmSvc.Registry.CheckToolCompatibility(t.Context(), testProviderID, "model-x")
+	verification, err := server.Admin.Project.Verification.LLMService.Registry.CheckToolCompatibility(t.Context(), testProviderID, "model-x")
 	if err == nil || len(verification.Stages) != 0 {
 		t.Fatal("reference check bypassed role assignment")
 	}

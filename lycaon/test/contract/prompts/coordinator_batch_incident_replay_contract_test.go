@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"strings"
 	"testing"
@@ -10,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	coordinatorbatch "github.com/lycaon/lycaon/test/wiring/fixtures/coordinator_batch"
@@ -30,7 +31,7 @@ func TestSynthesisSurfaceAfterVerifierTerminal(t *testing.T) {
 		fix.History,
 		state,
 	)
-	if profile.SurfaceID == tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 		t.Fatal("post-verifier loop wake must not select implement_investigate")
 	}
 	if profile.SurfaceID != "implement_synthesis" {

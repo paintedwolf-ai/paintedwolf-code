@@ -25,7 +25,8 @@ func (r *mediatedRecorder) AppendMediatedEndpoint(_ context.Context, rec authzle
 func TestRecordMediatedEgressKeepsOriginatingTool(t *testing.T) {
 	recorder := &mediatedRecorder{}
 	RecordMediatedEgress(context.Background(), ToolContext{
-		SessionID: "session", AuthzRecorder: recorder,
+		Identity: InvocationIdentity{SessionID: "session"},
+		Local:    InvocationLocal{AuthzRecorder: recorder},
 	}, "verify", []confine.EgressHost{{Host: "example.test", Port: 443, Transport: "tcp", Allowed: true, Attempts: 2}})
 	if len(recorder.records) != 1 {
 		t.Fatalf("records = %d, want one", len(recorder.records))

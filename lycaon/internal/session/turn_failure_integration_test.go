@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -25,6 +26,8 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -45,30 +48,29 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "host-turn-failure.db")
 
 	st := store.NewSQL(sqlDB)
-	mgr := session.NewManager(st, silentProviderClient{}, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(st, session.Models{Client: silentProviderClient{}, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 
 	var mu sync.Mutex
 	var reported []error
-	mgr.SetTurnFailureSink(func(_ context.Context, _ string, err error) {
+	mgr.Runner.Turns.SetFailureSink(func(_ context.Context, _ string, err error) {
 		mu.Lock()
 		reported = append(reported, err)
 		mu.Unlock()
 	})
 
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	bundledDir := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "workflows")
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
 	wfMgr := workflow.NewManager(wfStore, st, manifestRegistry, nil)
-	wfMgr.Resolver = workflow.ManifestResolver{}
-	mgr.SetWorkflowSessionView(wfMgr)
-	mgr.SetLoopWorkflowSource(wfMgr)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
+	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -78,18 +80,18 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
-	_, err = wfMgr.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
+	_, err = wfMgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient", err)
 	testutil.FailErr(t, "set session busy", st.SetSessionStatus(ctx, sess.ID, wire.SessionStatusBusy))
 
-	finishExecution := mgr.BeginPromptExecutionForTest(t.Context(), sess.ID)
-	mgr.NudgeCoordinatorLoop(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished,
-		workflow.ImplementWorkLegKey(sess.ID), anchor.Envelope{})
-	if _, ok := mgr.PendingLoopNudgeForTest(sess.ID); !ok {
+	finishExecution := mgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
+	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished,
+		runstate.ImplementWorkLegKey(sess.ID), anchor.Envelope{})
+	if _, ok := mgr.Runner.Coordinator.CoordinatorLoop().Nudges.Pending(sess.ID); !ok {
 		t.Fatal("expected a deferred loop wake while prompt execution is active")
 	}
 	finishExecution()
-	mgr.DrainLoopPendingForTest(ctx, sess.ID)
+	mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
 
 	testutil.WaitFor(t, 10*time.Second, func() bool {
 		mu.Lock()

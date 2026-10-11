@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"strings"
 	"testing"
@@ -9,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -23,7 +24,7 @@ var implementInvestigateSurfaceTools = []string{
 func TestCoordinatorToolSurfaceSecretsRemainRequestableWithOutboundExecution(t *testing.T) {
 	t.Parallel()
 	surfaces := loadImplementSurfaces(t)
-	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: tools.SurfaceImplementInvestigate}, 1)
+	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: toolcontract.SurfaceImplementInvestigate}, 1)
 	contractcheck.FailErr(t, "CompileToolPlan", err)
 	deferred := plan.DeferredNames()
 	for _, name := range []string{"http_request", "process_list", "process_signal", "secret_generate", "secret_list", "secret_revoke"} {
@@ -72,7 +73,7 @@ var implementInvestigateDeferredTools = []string{
 func TestCoordinatorToolSurface_implementInvestigateMatchesSSOT(t *testing.T) {
 	t.Parallel()
 	surfaces := loadImplementSurfaces(t)
-	got := append([]string(nil), surfaces[tools.SurfaceImplementInvestigate]...)
+	got := append([]string(nil), surfaces[toolcontract.SurfaceImplementInvestigate]...)
 	sortStrings(got)
 	want := append([]string(nil), implementInvestigateSurfaceTools...)
 	sortStrings(want)
@@ -83,7 +84,7 @@ func TestCoordinatorToolSurface_implementInvestigateMatchesSSOT(t *testing.T) {
 
 func TestCoordinatorToolSurface_implementInvestigateDeferred(t *testing.T) {
 	t.Parallel()
-	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: tools.SurfaceImplementInvestigate}, 1)
+	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: toolcontract.SurfaceImplementInvestigate}, 1)
 	contractcheck.FailErr(t, "CompileToolPlan", err)
 	got := plan.DeferredNames()
 	sortStrings(got)
@@ -97,7 +98,7 @@ func TestCoordinatorToolSurface_implementInvestigateDeferred(t *testing.T) {
 func TestCoordinatorToolSurface_investigateSurfaceRegistered(t *testing.T) {
 	t.Parallel()
 	surfaces := loadImplementSurfaces(t)
-	if _, ok := surfaces[tools.SurfaceImplementInvestigate]; !ok {
+	if _, ok := surfaces[toolcontract.SurfaceImplementInvestigate]; !ok {
 		t.Fatal("missing implement_investigate surface registration")
 	}
 }
@@ -106,7 +107,7 @@ func TestCoordinatorToolSurface_investigateProductWriteScopeLoaded(t *testing.T)
 	t.Parallel()
 	reg, err := sandbox.LoadPathScopes()
 	contractcheck.FailErr(t, "LoadPathScopes", err)
-	scope, ok := reg[tools.CoordinatorProductWriteScope]
+	scope, ok := reg[toolcontract.CoordinatorProductWriteScope]
 	if !ok {
 		t.Fatal("missing coordinator_product_write scope")
 	}
@@ -116,24 +117,24 @@ func TestCoordinatorToolSurface_investigateProductWriteScopeLoaded(t *testing.T)
 	if len(scope.Deny) != 0 {
 		t.Fatalf("coordinator_product_write must have no heuristic deny list: deny=%v", scope.Deny)
 	}
-	if err := sandbox.CheckWriteInScope(scope, tools.CoordinatorProductWriteScope, "src/foo.go"); err != nil {
+	if err := sandbox.CheckWriteInScope(scope, toolcontract.CoordinatorProductWriteScope, "src/foo.go"); err != nil {
 		t.Fatalf("product path: %v", err)
 	}
-	if err := sandbox.CheckWriteInScope(scope, tools.CoordinatorProductWriteScope, settingsoverlay.DirName()+"/blueprints/x.md"); err != nil {
+	if err := sandbox.CheckWriteInScope(scope, toolcontract.CoordinatorProductWriteScope, settingsoverlay.DirName()+"/blueprints/x.md"); err != nil {
 		t.Fatalf("plan path: %v", err)
 	}
 	// Overlay trust surfaces and dependency trees are not denied by write scope;
 	// overlay writes reach the agent-policy gate for approval.
-	if err := sandbox.CheckWriteInScope(scope, tools.CoordinatorProductWriteScope, settingsoverlay.DirName()+"/rules/x.yaml"); err != nil {
+	if err := sandbox.CheckWriteInScope(scope, toolcontract.CoordinatorProductWriteScope, settingsoverlay.DirName()+"/rules/x.yaml"); err != nil {
 		t.Fatalf("overlay rules must reach approval: %v", err)
 	}
-	if err := sandbox.CheckWriteInScope(scope, tools.CoordinatorProductWriteScope, settingsoverlay.DirName()+"/ignores.yaml"); err != nil {
+	if err := sandbox.CheckWriteInScope(scope, toolcontract.CoordinatorProductWriteScope, settingsoverlay.DirName()+"/ignores.yaml"); err != nil {
 		t.Fatalf("overlay ignores must reach approval: %v", err)
 	}
-	if err := sandbox.CheckWriteInScope(scope, tools.CoordinatorProductWriteScope, "node_modules/pkg/index.js"); err != nil {
+	if err := sandbox.CheckWriteInScope(scope, toolcontract.CoordinatorProductWriteScope, "node_modules/pkg/index.js"); err != nil {
 		t.Fatalf("node_modules write must not be denied by scope: %v", err)
 	}
-	if err := sandbox.CheckWriteInScope(scope, tools.CoordinatorProductWriteScope, "vendor/pkg/foo.go"); err != nil {
+	if err := sandbox.CheckWriteInScope(scope, toolcontract.CoordinatorProductWriteScope, "vendor/pkg/foo.go"); err != nil {
 		t.Fatalf("vendor write must not be denied by scope: %v", err)
 	}
 }
@@ -143,12 +144,12 @@ func TestCoordinatorToolSurface_investigateSurveyRouteRendered(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	vars := map[string]any{"execution_mode": "investigate"}
-	if err := prompts.MergeCoordinatorSurfacePathVars(tools.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
+	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
 	rendered := renderCoordinatorTripartiteForRunContext(
 		t, root, api.CoordinatorRunContext{}, nil, "Research this repo", nil,
-		tools.SurfaceImplementInvestigate,
+		toolcontract.SurfaceImplementInvestigate,
 	)
 	for _, want := range []string{
 		"`summarize`",

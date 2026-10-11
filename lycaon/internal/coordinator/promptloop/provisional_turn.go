@@ -18,7 +18,7 @@ func newProvisionalAssistantMessage(msg api.Message) api.Message {
 	return msg
 }
 
-func (l *PromptLoop) attachProseCitationGrounding(
+func (l *turnCloseout) attachProseCitationGrounding(
 	ctx context.Context,
 	sess *api.Session,
 	history []api.Message,
@@ -38,7 +38,7 @@ func (l *PromptLoop) attachProseCitationGrounding(
 }
 
 // promptTurnSurface returns the pinned surface, or empty when unresolved.
-func (l *PromptLoop) promptTurnSurface(sessionID string) string {
+func (l *promptContext) promptTurnSurface(sessionID string) string {
 	if l == nil || l.Deps.PromptTurnSurface == nil {
 		return ""
 	}
@@ -65,7 +65,7 @@ func wireCopy(msg api.Message, project func(string) string) api.Message {
 }
 
 // keepCloseoutEnvelopeInternal also projects the body because grounded rows can render internally.
-func (l *PromptLoop) keepCloseoutEnvelopeInternal(ctx context.Context, sessionID, surfaceID string, msg api.Message) (api.Message, error) {
+func (l *turnProjection) keepCloseoutEnvelopeInternal(ctx context.Context, sessionID, surfaceID string, msg api.Message) (api.Message, error) {
 	msg.Visibility = api.MessageVisibilityInternal
 	if l.Deps.UpdateMessage != nil {
 		if err := l.Deps.UpdateMessage(ctx, sessionID, msg.ID, wireCopy(msg, closeoutWireContent(surfaceID))); err != nil {
@@ -76,7 +76,7 @@ func (l *PromptLoop) keepCloseoutEnvelopeInternal(ctx context.Context, sessionID
 }
 
 // commitProvisionalAssistantTurn promotes a guarded assistant row to the user transcript.
-func (l *PromptLoop) commitProvisionalAssistantTurn(ctx context.Context, sessionID string, msg api.Message) (api.Message, error) {
+func (l *turnProjection) commitProvisionalAssistantTurn(ctx context.Context, sessionID string, msg api.Message) (api.Message, error) {
 	if l == nil || l.Deps.UpdateMessage == nil {
 		return api.Message{}, fmt.Errorf("update message not configured")
 	}
@@ -89,7 +89,7 @@ func (l *PromptLoop) commitProvisionalAssistantTurn(ctx context.Context, session
 }
 
 // commitGuardedAssistantTurn grounds the raw envelope before publishing its narrative.
-func (l *PromptLoop) commitGuardedAssistantTurn(
+func (l *turnProjection) commitGuardedAssistantTurn(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -101,7 +101,7 @@ func (l *PromptLoop) commitGuardedAssistantTurn(
 	// Only prose responses become user drafts; tool-step text stays in model history.
 	if len(msg.ToolCalls) == 0 {
 		if surface.SurfaceDeliversReport(surfaceID) {
-			l.attachProseCitationGrounding(ctx, sess, history, userPrompt, surfaceID, &msg)
+			l.Closeout.attachProseCitationGrounding(ctx, sess, history, userPrompt, surfaceID, &msg)
 			if prose, ok := guard.ProjectCoordinatorCloseoutProse(surfaceID, msg.Content); ok {
 				msg.Content = prose
 			} else if guidance.CloseoutBodyIsEnvelopeShaped(msg.Content) {
@@ -122,7 +122,7 @@ func (l *PromptLoop) commitGuardedAssistantTurn(
 	midRunStep := msg.DraftStatus == api.DraftStatusLive && len(msg.ToolCalls) > 0
 	if msg.Kind == api.MessageKindDraft || proseCommit || midRunStep {
 		msg.DraftStatus = api.DraftStatusCommitted
-		if err := (turnNudges{l}).stampDraftVersionCount(ctx, sessionID, &msg); err != nil {
+		if err := l.Nudges.stampDraftVersionCount(ctx, sessionID, &msg); err != nil {
 			return api.Message{}, err
 		}
 		// Retried tool-only steps retain the draft card's version history.
@@ -134,7 +134,7 @@ func (l *PromptLoop) commitGuardedAssistantTurn(
 }
 
 // commitProvisionalAssistantInHistory promotes the assistant row in loop history once guards pass.
-func (l *PromptLoop) commitProvisionalAssistantInHistory(
+func (l *turnProjection) commitProvisionalAssistantInHistory(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,

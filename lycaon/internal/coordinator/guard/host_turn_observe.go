@@ -25,21 +25,21 @@ func ObserveCoordinatorHostNoToolTurn(
 		return
 	}
 	lastAssistant = strings.TrimSpace(lastAssistant)
-	gc.WorkersIdle = workersIdle
-	gc.IsHostCycleTurn = surface.HostCycleTurn(history)
-	gc.LastAssistant = lastAssistant
-	gc.TurnTools = append([]string(nil), turnTools...)
-	gc.Surface = strings.TrimSpace(surfaceID)
-	gc.BatchPhase = implState.BatchPhase
-	gc.BatchClosed = batchAlreadyClosed(batchTurn, implState.BatchPhase)
-	gc.ProgressHasOpenSteps = implState.ProgressOpenCount > 0
+	gc.Workers.WorkersIdle = workersIdle
+	gc.Session.IsHostCycleTurn = surface.HostCycleTurn(history)
+	gc.Session.LastAssistant = lastAssistant
+	gc.Session.TurnTools = append([]string(nil), turnTools...)
+	gc.Session.Surface = strings.TrimSpace(surfaceID)
+	gc.Workflow.BatchPhase = implState.BatchPhase
+	gc.Workflow.BatchClosed = batchAlreadyClosed(batchTurn, implState.BatchPhase)
+	gc.Progress.ProgressHasOpenSteps = implState.ProgressOpenCount > 0
 	pendingOverlay := len(implState.PendingOverlayIDs) > 0
-	gc.PendingOverlayPromote = pendingOverlay
-	gc.SurfaceMayFinish = SurfaceFinishesWithUserProse(surfaceID)
-	gc.CloseoutSurface = surface.SurfaceDeliversReport(surfaceID)
+	gc.Workers.PendingOverlayPromote = pendingOverlay
+	gc.Session.SurfaceMayFinish = SurfaceFinishesWithUserProse(surfaceID)
+	gc.Session.CloseoutSurface = surface.SurfaceDeliversReport(surfaceID)
 	if lastAssistant != "" {
 		_, ok := guidance.ParseCoordinatorCompletionReport(lastAssistant)
-		gc.HasCompletionReport = ok
-		gc.TaskEnvelopeEcho = assistantEchoesTaskEnvelope(lastAssistant)
+		gc.Progress.HasCompletionReport = ok
+		gc.Progress.TaskEnvelopeEcho = assistantEchoesTaskEnvelope(lastAssistant)
 	}
 }

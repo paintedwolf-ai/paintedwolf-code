@@ -164,8 +164,12 @@ func TestWatcherObservesHiddenAndMetadataChildren(t *testing.T) {
 	for time.Now().Before(until) {
 		repochange.ResetDebouncerForTest(t.Context())
 		mu.Lock()
-		complete := seen[".hidden/new.txt"] && seen[".paintedwolf/new.txt"] && seen[".git/objects/new.txt"] && seen[".git/config"]
+		complete := seen[".hidden/new.txt"] && seen[".paintedwolf/new.txt"]
+		lazyMetadata := seen[".git/objects/new.txt"] || seen[".git/config"]
 		mu.Unlock()
+		if lazyMetadata {
+			t.Fatal("lazy Git metadata triggered source reconciliation")
+		}
 		if complete {
 			return
 		}

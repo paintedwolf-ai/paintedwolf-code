@@ -10,27 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 )
 
-// TurnCheckpoint resolves a user turn's boundary; found=false means the baseline is unknown.
-func (s *Store) TurnCheckpoint(ctx context.Context, projectID, sessionID string, turn int) (Checkpoint, bool, error) {
-	if s == nil {
-		return Checkpoint{}, false, fmt.Errorf("ledger not configured")
-	}
-	row, err := s.queries.GetTurnCheckpointForSession(ctx, db.GetTurnCheckpointForSessionParams{
-		ProjectID: projectID, SessionID: sessionID, Turn: int64(turn),
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return Checkpoint{}, false, nil
-	}
-	if err != nil {
-		return Checkpoint{}, false, err
-	}
-	return checkpointFromColumns(row.ID, row.ProjectID, row.Kind, row.Label, row.ParentID,
-		row.SessionID, row.Turn, row.CreatedOrdinal, row.CreatedTs), true, nil
-}
-
-// Effects at or below the first-turn ordinal predate the session.
-// found=false means the session has no recorded turn boundary.
-func (s *Store) SessionActivityFloor(ctx context.Context, projectID, sessionID string) (int64, bool, error) {
+func (s *History) SessionActivityFloor(ctx context.Context, projectID, sessionID string) (int64, bool, error) {
 	if s == nil {
 		return 0, false, fmt.Errorf("ledger not configured")
 	}
@@ -47,7 +27,7 @@ func (s *Store) SessionActivityFloor(ctx context.Context, projectID, sessionID s
 }
 
 // Page newest effects in (afterOrdinal, throughOrdinal]; a zero upper bound is open.
-func (s *Store) EffectsBetween(
+func (s *History) EffectsBetween(
 	ctx context.Context,
 	projectID string,
 	afterOrdinal, throughOrdinal int64,
@@ -78,7 +58,7 @@ type FileEffectsResult struct {
 
 // afterOrdinal is exclusive; zero removes the lower bound.
 // beforeOrdinal resumes an older page; zero starts at the newest effects.
-func (s *Store) QueryFileEffects(
+func (s *History) QueryFileEffects(
 	ctx context.Context,
 	projectID, fileID string,
 	afterOrdinal, beforeOrdinal int64,
@@ -110,14 +90,14 @@ func (s *Store) QueryFileEffects(
 		out.Effects = out.Effects[:limit]
 		out.NextBeforeOrdinal = out.Effects[len(out.Effects)-1].Ordinal
 	}
-	if err := s.hydrateEffectAuthors(ctx, projectID, out.Effects); err != nil {
+	if err := s.walk.hydrateEffectAuthors(ctx, projectID, out.Effects); err != nil {
 		return FileEffectsResult{}, err
 	}
 	return out, nil
 }
 
 // LatestFileEffect returns the newest effect; found=false means provenance is unknown.
-func (s *Store) LatestFileEffect(ctx context.Context, projectID, fileID string) (Effect, bool, error) {
+func (s *History) LatestFileEffect(ctx context.Context, projectID, fileID string) (Effect, bool, error) {
 	res, err := s.QueryFileEffects(ctx, projectID, fileID, 0, 0, 1)
 	if err != nil || len(res.Effects) == 0 {
 		return Effect{}, false, err

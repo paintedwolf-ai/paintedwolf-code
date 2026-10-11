@@ -41,7 +41,7 @@ func TestCommandHistorySeparatesPeerContextAndSurvivesReceiptReplay(t *testing.T
 	_, err = f.service.SubmitReplica(t.Context(), f.project.ID, d.ID, later)
 	testutil.FailErr(t, "accept later edit", err)
 	testutil.FailErr(t, "stop service", f.service.Close(t.Context()))
-	f.service = New(f.store, f.recorder, fixedRoots{p: f.project})
+	f.service = New(f.store, f.recorder, f.recorder.History, fixedRoots{p: f.project})
 	closeServiceAtCleanup(t, f.service)
 	replay, err := f.service.Revert(t.Context(), f.project.ID, d.ID, command)
 	testutil.FailErr(t, "replay accepted action", err)

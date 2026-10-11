@@ -1,0 +1,11 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: session }
+title: "Item no longer in Trash"
+retryable: false
+message: "The item is no longer available in Trash, so this file operation cannot be undone."
+suggested_action: "Check Trash or restore the item from a backup."
+scenarios:
+  - id: default
+    vars: {}
+    expect_contains:
+      - "The item is no longer available in Trash"

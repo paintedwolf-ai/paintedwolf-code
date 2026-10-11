@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -33,12 +34,12 @@ func TestRenderViewToolRejectsMissingMarkup(t *testing.T) {
 		testutil.FailErr(t, "RegisterRenderViewTool failed", err)
 	}
 	_, err := reg.Run(context.Background(), page.RenderViewToolName, map[string]any{"mime": "svg"}, tools.ToolContext{
-		Out: &tools.ToolInvocationOut{},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
 	})
 	if err == nil {
 		t.Fatal("expected reject")
 	}
-	rej := &tools.ToolReject{}
+	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)
 	if !ok || rej.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("got %#v want TOOL_ARGS_INVALID", err)
@@ -56,12 +57,12 @@ func TestRenderViewToolRejectsNonPngDest(t *testing.T) {
 		"markup": "<svg></svg>",
 		"dest":   "assets/logo.jpg",
 	}, tools.ToolContext{
-		Out: &tools.ToolInvocationOut{},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
 	})
 	if err == nil {
 		t.Fatal("expected reject")
 	}
-	rej := &tools.ToolReject{}
+	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)
 	if !ok || rej.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("got %#v want TOOL_ARGS_INVALID", err)
@@ -84,12 +85,12 @@ func TestRenderViewToolRejectsInvalidScale(t *testing.T) {
 			"scale": 10.0,
 		},
 	}, tools.ToolContext{
-		Out: &tools.ToolInvocationOut{},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
 	})
 	if err == nil {
 		t.Fatal("expected reject")
 	}
-	rej := &tools.ToolReject{}
+	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)
 	if !ok || rej.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("got %#v want TOOL_ARGS_INVALID", err)
@@ -108,8 +109,8 @@ func TestRenderViewToolHandleLifecycle(t *testing.T) {
 	}
 
 	tctx := tools.ToolContext{
-		SessionID: "sess-render",
-		Out:       &tools.ToolInvocationOut{},
+		Identity: tools.InvocationIdentity{SessionID: "sess-render"},
+		Effects:  tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
 	}
 
 	t.Run("initial creation with handle", func(t *testing.T) {
@@ -124,13 +125,13 @@ func TestRenderViewToolHandleLifecycle(t *testing.T) {
 		if !strings.Contains(res, `"handle":"login-card"`) || !strings.Contains(res, `"revision":1`) {
 			t.Fatalf("expected handle login-card and revision 1, got %s", res)
 		}
-		if tctx.Out.Visual == nil || !tctx.Out.Visual.Perceive {
-			t.Fatalf("expected perceived visual, got %+v", tctx.Out.Visual)
+		if tctx.Effects.Out.Visual == nil || !tctx.Effects.Out.Visual.Perceive {
+			t.Fatalf("expected perceived visual, got %+v", tctx.Effects.Out.Visual)
 		}
 	})
 
 	t.Run("surgical patch updates markup and increments revision", func(t *testing.T) {
-		tctx.Out = &tools.ToolInvocationOut{}
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 		res2, err := reg.Run(context.Background(), page.RenderViewToolName, map[string]any{
 			"handle":     "login-card",
 			"old_string": `fill="#3b82f6"`,
@@ -142,14 +143,14 @@ func TestRenderViewToolHandleLifecycle(t *testing.T) {
 			t.Fatalf("expected revision 2 after patch, got %s", res2)
 		}
 
-		h, ok := store.Get(tctx.SessionID, "login-card")
+		h, ok := store.Get(tctx.Identity.SessionID, "login-card")
 		if !ok || h.Revision != 2 || !strings.Contains(h.Markup, `fill="#ef4444"`) {
 			t.Fatalf("expected handle stored with red fill, got %+v", h)
 		}
 	})
 
 	t.Run("patch target not found rejects RENDER_PATCH_NOT_FOUND", func(t *testing.T) {
-		tctx.Out = &tools.ToolInvocationOut{}
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 		_, err := reg.Run(context.Background(), page.RenderViewToolName, map[string]any{
 			"handle":     "login-card",
 			"old_string": `nonexistent_string`,
@@ -158,14 +159,14 @@ func TestRenderViewToolHandleLifecycle(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error on nonexistent patch string")
 		}
-		var rej *tools.ToolReject
+		var rej *toolrejection.ToolReject
 		if !errors.As(err, &rej) || rej.Code != "RENDER_PATCH_NOT_FOUND" {
 			t.Fatalf("expected RENDER_PATCH_NOT_FOUND, got %#v", err)
 		}
 	})
 
 	t.Run("nonexistent handle rejects RENDER_HANDLE_NOT_FOUND", func(t *testing.T) {
-		tctx.Out = &tools.ToolInvocationOut{}
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 		_, err := reg.Run(context.Background(), page.RenderViewToolName, map[string]any{
 			"handle":     "ghost-card",
 			"old_string": `foo`,
@@ -174,14 +175,14 @@ func TestRenderViewToolHandleLifecycle(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected error on nonexistent handle")
 		}
-		var rej *tools.ToolReject
+		var rej *toolrejection.ToolReject
 		if !errors.As(err, &rej) || rej.Code != "RENDER_HANDLE_NOT_FOUND" {
 			t.Fatalf("expected RENDER_HANDLE_NOT_FOUND, got %#v", err)
 		}
 	})
 
 	t.Run("re-render existing handle with theme without markup", func(t *testing.T) {
-		tctx.Out = &tools.ToolInvocationOut{}
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 		res3, err := reg.Run(context.Background(), page.RenderViewToolName, map[string]any{
 			"handle": "login-card",
 			"theme":  "dark",
@@ -207,8 +208,11 @@ func TestRenderViewToolFailedPatchKeepsRevision(t *testing.T) {
 		"handle":     "card",
 		"old_string": `<rect fill="#3b82f6"/>`,
 		"new_string": `<script>alert(1)</script>`,
-	}, tools.ToolContext{SessionID: sessionID, Out: &tools.ToolInvocationOut{}})
-	var rej *tools.ToolReject
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sessionID},
+		Effects:  tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+	})
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "RENDER_MARKUP_FORBIDDEN" {
 		t.Fatalf("err = %#v, want RENDER_MARKUP_FORBIDDEN", err)
 	}

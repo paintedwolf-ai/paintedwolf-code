@@ -87,8 +87,8 @@ func TestRunPipelineReturnsWhenDescendantEscapesProcessGroup(t *testing.T) {
 	testutil.FailErr(t, "locate test binary", err)
 	// The detached helper inherits the pipeline's stdout, which is what holds
 	// Wait open once the leader is gone.
-	script := fmt.Sprintf("%s -test.run=TestExecDetachHelperProcess -test.v=false & exit 0",
-		strconv.Quote(self))
+	script := fmt.Sprintf("%s -test.run=TestExecDetachHelperProcess -test.v=false & while [ ! -s %s ]; do sleep 0.01; done; exit 0",
+		strconv.Quote(self), strconv.Quote(pidFile))
 
 	started := time.Now()
 	const waitDelay = 50 * time.Millisecond

@@ -15,7 +15,7 @@ import (
 
 // HandleMarkSessionSeen stamps host time so clients cannot mark future turns read.
 // It also updates the project's recents order.
-func (s *Handler) HandleMarkSessionSeen(w http.ResponseWriter, r *http.Request) {
+func (s *Transcript) HandleMarkSessionSeen(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	seenAt := time.Now().UTC()
 	err := s.Store.UpdateSession(r.Context(), id, func(sess *wire.Session) {

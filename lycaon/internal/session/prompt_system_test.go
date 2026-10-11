@@ -35,14 +35,14 @@ func loadTestAgentRegistry(t *testing.T) *orchestration.MemoryAgentRegistry {
 	return reg
 }
 
-func newPromptTestManager(t *testing.T, llmClient modelcall.LLMClient) (*session.Manager, *store.Memory) {
+func newPromptTestManager(t *testing.T, llmClient modelcall.LLMClient) (*session.Host, *store.Memory) {
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	store := store.NewMemory()
 	toolReg := tools.NewExecutorRegistry(nil, tools.NewDefaultRegistry())
-	mgr := session.NewManager(store, llmClient, toolReg, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llmClient, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolReg)
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.SetAgentRegistry(loadTestAgentRegistry(t))
+	mgr.Profiles.SetAgentRegistry(loadTestAgentRegistry(t))
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	return mgr, store
@@ -68,8 +68,8 @@ func TestCompleteStreamInjectsAgentSystemPrompt(t *testing.T) {
 
 	coord, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	if _, err := mgr.Prompt(ctx, coord.ID, "hello coordinator"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, coord.ID, "hello coordinator"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	coordReq := rec.LastRequest()
 	coordSys, ok := firstSystemMessage(coordReq.Messages)
@@ -80,13 +80,13 @@ func TestCompleteStreamInjectsAgentSystemPrompt(t *testing.T) {
 		t.Fatalf("coordinator system = %q want investigate default", coordSys.Content)
 	}
 
-	child, err := mgr.SpawnChild(ctx, coord.ID, api.SpawnChildRequest{
+	child, err := mgr.Workers.SpawnChild(ctx, coord.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer,
 		Prompt:    "implement feature",
 	})
-	testutil.FailErr(t, "mgr.SpawnChild failed", err)
-	if _, err := mgr.Prompt(ctx, child.ID, "implement feature"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	testutil.FailErr(t, "mgr.Workers.SpawnChild failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, child.ID, "implement feature"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	implReq := rec.LastRequest()
 	implSys, ok := firstSystemMessage(implReq.Messages)
@@ -110,13 +110,14 @@ func TestCoordinatorPromptIncludesPackBoardInject(t *testing.T) {
 	}
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	store := store.NewMemory()
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	mgr.SetBoardInject(
+	mgr.Coordinator.ConfigureBoard(
 		&board.InjectBuilder{SnapshotBuilder: &board.SnapshotBuilder{Repo: repotest.NewProvider(t)}},
 		board.DefaultInjectFormatter(),
+		mgr.Promotion,
 	)
 	mgr.SetCoordinatorTurnFrameSource(planBoardContextStub{
 		ctx: api.CoordinatorRunContext{WorkflowID: "plan", CurrentPhase: "stub"},
@@ -125,8 +126,8 @@ func TestCoordinatorPromptIncludesPackBoardInject(t *testing.T) {
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
-	if _, err := mgr.Prompt(ctx, sess.ID, "plan"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "plan"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	found := false
 	for _, msg := range rec.LastRequest().Messages {
@@ -149,8 +150,8 @@ func TestCompleteStreamCoordinatorDefault(t *testing.T) {
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	if _, err := mgr.Prompt(ctx, sess.ID, "plan something"); err != nil {
-		testutil.FailErr(t, "mgr.Prompt failed", err)
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "plan something"); err != nil {
+		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	sys, ok := firstSystemMessage(rec.LastRequest().Messages)
 	if !ok {
@@ -166,15 +167,15 @@ func TestCompleteStreamMissingTemplateFails(t *testing.T) {
 	mgr, store := newPromptTestManager(t, llm.NewMockProvider(nil))
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	mgr.SetPromptEngine(engine)
-	mgr.SetAgentRegistry(&stubAgentResolver{profile: agentdef.Profile{
+	mgr.Profiles.SetAgentRegistry(&stubAgentResolver{profile: agentdef.Profile{
 		ID:                   "broken",
 		SystemPromptTemplate: "agents/missing.md",
 	}})
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	_ = mgr.SetAgentType(ctx, sess.ID, "broken")
-	if _, err := mgr.Prompt(ctx, sess.ID, "hi"); err == nil {
+	_ = mgr.Chats.SetAgentType(ctx, sess.ID, "broken")
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "hi"); err == nil {
 		t.Fatal("expected prompt error for missing template")
 	} else if !strings.Contains(err.Error(), "system prompt") {
 		t.Fatalf("error = %v", err)

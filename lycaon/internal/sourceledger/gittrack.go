@@ -5,10 +5,12 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/gitstate"
+	"github.com/lycaon/lycaon/internal/keylock"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 )
 
@@ -20,7 +22,7 @@ type GitStateReader interface {
 }
 
 // A nil reader disables ref observations without disabling file history.
-func (s *Store) SetGitReader(reader GitStateReader) {
+func (s *Git) SetGitReader(reader GitStateReader) {
 	if s == nil {
 		return
 	}
@@ -29,7 +31,7 @@ func (s *Store) SetGitReader(reader GitStateReader) {
 
 // ObserveGitState returns the terminal transition id per changed root.
 // First observations seed a baseline without creating a transition.
-func (s *Store) ObserveGitState(ctx context.Context, projectID string, roots []RootSpec) (map[string]string, error) {
+func (s *Git) ObserveGitState(ctx context.Context, projectID string, roots []RootSpec) (map[string]string, error) {
 	if s == nil || s.sqlDB == nil || s.gitReader == nil {
 		return nil, nil
 	}
@@ -42,7 +44,7 @@ func (s *Store) ObserveGitState(ctx context.Context, projectID string, roots []R
 }
 
 // The caller holds the roots' observation locks through file reconciliation.
-func (s *Store) observeGitState(ctx context.Context, projectID string, roots []RootSpec) (map[string]string, error) {
+func (s *Git) observeGitState(ctx context.Context, projectID string, roots []RootSpec) (map[string]string, error) {
 	if s.gitReader == nil {
 		return nil, nil
 	}
@@ -50,7 +52,7 @@ func (s *Store) observeGitState(ctx context.Context, projectID string, roots []R
 	var failures []error
 	for _, root := range roots {
 		attribution := gitAttribution{}
-		if window := s.attributionWindow(projectID, []RootSpec{root}); window != nil {
+		if window := s.commands.attributionWindow(projectID, []RootSpec{root}); window != nil {
 			attribution = gitAttribution{actor: Contributor{SessionID: window.sessionID, Turn: window.turn,
 				ToolCallID: window.toolCallID, ToolName: window.toolName}, commandWindowID: window.id}
 		}
@@ -70,7 +72,7 @@ func (s *Store) observeGitState(ctx context.Context, projectID string, roots []R
 	return terminal, errors.Join(failures...)
 }
 
-func (s *Store) observeRootGitState(ctx context.Context, projectID string, root RootSpec, attribution gitAttribution) (string, error) {
+func (s *Git) observeRootGitState(ctx context.Context, projectID string, root RootSpec, attribution gitAttribution) (string, error) {
 	next := s.gitReader.HeadState(ctx, root.Path)
 	prevRow, err := s.queries.GetSourceGitHead(ctx, db.GetSourceGitHeadParams{
 		ProjectID: projectID, BranchID: root.BranchID.String(), RootID: root.ID,
@@ -103,7 +105,7 @@ func (s *Store) observeRootGitState(ctx context.Context, projectID string, root 
 }
 
 // A concurrent head update makes this pass a no-op.
-func (s *Store) commitGitTransitions(
+func (s *Git) commitGitTransitions(
 	ctx context.Context,
 	projectID, rootID string,
 	prevRow db.GetSourceGitHeadRow,
@@ -163,7 +165,7 @@ func (s *Store) commitGitTransitions(
 	return terminalID, nil
 }
 
-func (s *Store) storeGitHead(ctx context.Context, projectID string, root RootSpec, state gitstate.State, now time.Time) error {
+func (s *Git) storeGitHead(ctx context.Context, projectID string, root RootSpec, state gitstate.State, now time.Time) error {
 	return s.queries.UpsertSourceGitHead(ctx, db.UpsertSourceGitHeadParams{
 		ProjectID: projectID, BranchID: root.BranchID.String(), RootID: root.ID, RepoState: string(state.Repo),
 		HeadCommit: state.HeadCommit, HeadRef: state.HeadRef,
@@ -194,7 +196,7 @@ type GitTransition struct {
 
 // GitTransitionsBetween pages transitions in (afterOrdinal, throughOrdinal],
 // newest first; throughOrdinal zero leaves the window open at the top.
-func (s *Store) GitTransitionsBetween(
+func (s *Git) GitTransitionsBetween(
 	ctx context.Context,
 	projectID string,
 	afterOrdinal, throughOrdinal int64,
@@ -221,7 +223,7 @@ func (s *Store) GitTransitionsBetween(
 }
 
 // GitTransitionsByIDs resolves recorded transitions for effect surfaces.
-func (s *Store) GitTransitionsByIDs(ctx context.Context, ids []string) (map[string]GitTransition, error) {
+func (s *Git) GitTransitionsByIDs(ctx context.Context, ids []string) (map[string]GitTransition, error) {
 	if s == nil || len(ids) == 0 {
 		return nil, nil
 	}
@@ -249,4 +251,23 @@ func gitTransitionFromRow(row db.SourceGitTransitions) GitTransition {
 		SessionID: row.SessionID, Turn: int(row.Turn), ToolCallID: row.ToolCallID,
 		ToolName: row.ToolName, CommandWindowID: row.CommandWindowID.String,
 	}
+}
+
+// Git serializes observed ref transitions and managed Git effects.
+type Git struct {
+	gitObservations keylock.Group
+	gitReader       GitStateReader
+	queries         *db.Queries
+	recordMu        *sync.Mutex
+	sqlDB           db.Handle
+	commands        gitCommandsPort
+	inventory       gitInventoryPort
+}
+
+type gitCommandsPort interface {
+	attributionWindow(projectID string, roots []RootSpec) *openCommandWindow
+}
+
+type gitInventoryPort interface {
+	observePaths(ctx context.Context, projectID string, roots []RootSpec, refs []PathRef, transitionByRoot map[string]string, actor *Contributor) (int, error)
 }

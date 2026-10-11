@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 )
 
-func (s *Handler) installChatApprovalDelta(checkpointID string, delta hitl.ApprovalAuthorityDelta) (func(), error) {
+func (s *Installation) installChatApprovalDelta(checkpointID string, delta hitl.ApprovalAuthorityDelta) (func(), error) {
 	chatSessionID := delta.ChatSession()
 	switch delta.Kind {
 	case hitl.AuthoritySocketChat:

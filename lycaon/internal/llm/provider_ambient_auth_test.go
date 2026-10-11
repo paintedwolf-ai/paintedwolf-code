@@ -163,7 +163,7 @@ func TestRegistryConfiguredFollowsCredentialMode(t *testing.T) {
     models: []
 `)
 	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
-	registry, err := NewRegistry(catalog, creds)
+	registry, err := NewRegistry(t.Context(), catalog, creds)
 	testutil.FailErr(t, "NewRegistry", err)
 
 	if registry.IsConfigured("keyed") {

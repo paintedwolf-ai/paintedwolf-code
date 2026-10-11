@@ -23,7 +23,7 @@ type Deps struct {
 	Projects          project.Registry
 	Cadence           *scancadence.Service
 	Coordinator       scan.ScanCoordinator
-	Sessions          *session.Manager
+	Sessions          *session.Host
 	Settings          *settings.Service
 }
 

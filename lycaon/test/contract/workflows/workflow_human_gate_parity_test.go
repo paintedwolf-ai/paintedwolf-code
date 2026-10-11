@@ -48,7 +48,8 @@ func TestHumanGateSatisfyPathParity(t *testing.T) {
 	stubBody, err := os.ReadFile(filepath.Join(root, "lycaon", "test", "contract", "wire", "stub_routes_workflows.go"))
 	contractcheck.FailErr(t, "read file", err)
 	stubText := string(stubBody)
-	wireText := contractcheck.ServeWireSource(t)
+	feedbackBinding := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/delegations/context.go")
+	feedbackHooks := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/delegations/hooks.go")
 	profileData, err := os.ReadFile(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "profiles", "coordinator.yaml"))
 	contractcheck.FailErr(t, "read file", err)
 	profileText := string(profileData)
@@ -71,8 +72,13 @@ func TestHumanGateSatisfyPathParity(t *testing.T) {
 			if !strings.Contains(stubText, spec.stubPath) {
 				t.Fatalf("workflow fixture missing %q", spec.stubPath)
 			}
-			if spec.kickConstant != "" && !strings.Contains(wireText, spec.kickConstant) {
-				t.Fatalf("serve wire missing %q wiring", spec.kickConstant)
+			if spec.kickConstant != "" {
+				if !strings.Contains(feedbackBinding, "deps.Workflows.Manager.Feedback.OnFeedbackPending = r.OnWorkflowFeedbackPending") {
+					t.Fatal("workflow feedback must bind its pending callback to the delegation runtime")
+				}
+				if !strings.Contains(feedbackHooks, "Coordinator.Guidance.Emit(ctx, sessionID, anchor."+spec.kickConstant+", anchor.Envelope{})") {
+					t.Fatalf("delegation runtime missing %q guidance emission", spec.kickConstant)
+				}
 			}
 			if spec.coordinatorTool != "" && !strings.Contains(profileText, spec.coordinatorTool+": sticky") {
 				t.Fatalf("coordinator profile missing sticky %q", spec.coordinatorTool)

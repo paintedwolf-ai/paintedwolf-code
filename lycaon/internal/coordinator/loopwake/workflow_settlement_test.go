@@ -3,27 +3,26 @@ package loopwake
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
-
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
+	"time"
 )
 
 func TestCompletedWorkflowClosesItsActivityLease(t *testing.T) {
 	loop := NewLoopEngine()
 	rec := newLeaseRecorder()
 	loop.SetDeps(leaseTestDeps(rec))
-	loop.EnterSleep(t.Context(), "sess", time.Now().Add(time.Hour), "phase held", HostObligationWaitTriggers(false), nil, SleepMoverHost)
-	ready, err := loop.CloseCompletedWorkflowWait(t.Context(), "sess")
+	loop.Waits.EnterSleep(t.Context(), "sess", time.Now().Add(time.Hour), "phase held", HostObligationWaitTriggers(false), nil, SleepMoverHost)
+	ready, err := loop.Subscriptions.CloseCompletedWorkflowWait(t.Context(), "sess")
 	testutil.FailErr(t, "close workflow wait", err)
-	if !ready || loop.IsSleeping("sess") || rec.openCount() != 0 || rec.edgeCount() != 2 {
-		t.Fatalf("ready=%v sleeping=%v edges=%d open=%d", ready, loop.IsSleeping("sess"), rec.edgeCount(), rec.openCount())
+	if !ready || loop.Waits.IsSleeping("sess") || rec.openCount() != 0 || rec.edgeCount() != 2 {
+		t.Fatalf("ready=%v sleeping=%v edges=%d open=%d", ready, loop.Waits.IsSleeping("sess"), rec.edgeCount(), rec.openCount())
 	}
-	ready, err = loop.CloseCompletedWorkflowWait(t.Context(), "sess")
+	ready, err = loop.Subscriptions.CloseCompletedWorkflowWait(t.Context(), "sess")
 	testutil.FailErr(t, "repeat workflow completion", err)
 	if !ready || rec.edgeCount() != 2 {
 		t.Fatal("repeated completion duplicated activity closure")
@@ -39,11 +38,11 @@ func TestCompletedWorkflowPreservesArmedToolWait(t *testing.T) {
 	loop := NewLoopEngine()
 	rec := newLeaseRecorder()
 	loop.SetDeps(leaseTestDeps(rec))
-	loop.SetWaitStore(waits)
-	loop.EnterSleep(t.Context(), "sess", time.Now().Add(time.Hour), "tool wait", []WaitTrigger{WaitTriggerPortReady}, nil, SleepMoverHost)
-	ready, err := loop.CloseCompletedWorkflowWait(t.Context(), "sess")
+	loop.Subscriptions.SetWaitStore(waits)
+	loop.Waits.EnterSleep(t.Context(), "sess", time.Now().Add(time.Hour), "tool wait", []WaitTrigger{WaitTriggerPortReady}, nil, SleepMoverHost)
+	ready, err := loop.Subscriptions.CloseCompletedWorkflowWait(t.Context(), "sess")
 	testutil.FailErr(t, "consider workflow completion", err)
-	if ready || !loop.IsSleeping("sess") || rec.openCount() != 1 {
+	if ready || !loop.Waits.IsSleeping("sess") || rec.openCount() != 1 {
 		t.Fatal("workflow completion closed an independent tool wait")
 	}
 	current, armed, err := waits.ForSession(t.Context(), "sess")
@@ -53,7 +52,7 @@ func TestCompletedWorkflowPreservesArmedToolWait(t *testing.T) {
 	}
 	_, err = waits.SettleLease(t.Context(), lease.ID, "resolved", awaitstore.Condition{Kind: "port_ready"})
 	testutil.FailErr(t, "resolve tool wait", err)
-	ready, err = loop.CloseCompletedWorkflowWait(t.Context(), "sess")
+	ready, err = loop.Subscriptions.CloseCompletedWorkflowWait(t.Context(), "sess")
 	testutil.FailErr(t, "settle after tool wait", err)
 	if !ready || rec.openCount() != 0 {
 		t.Fatal("resolved tool wait prevented workflow settlement")
@@ -67,13 +66,13 @@ func TestCompletedWorkflowPreservesStateOnWorkerLookupFailure(t *testing.T) {
 	want := errors.New("worker ledger unavailable")
 	deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) { return false, want }
 	loop.SetDeps(deps)
-	loop.EnterSleep(t.Context(), "sess", time.Now().Add(time.Hour), "phase held", HostObligationWaitTriggers(false), nil, SleepMoverHost)
-	ready, err := loop.CloseCompletedWorkflowWait(t.Context(), "sess")
+	loop.Waits.EnterSleep(t.Context(), "sess", time.Now().Add(time.Hour), "phase held", HostObligationWaitTriggers(false), nil, SleepMoverHost)
+	ready, err := loop.Subscriptions.CloseCompletedWorkflowWait(t.Context(), "sess")
 	if ready || !errors.Is(err, want) || rec.openCount() != 1 {
 		t.Fatalf("ready=%v err=%v open=%d", ready, err, rec.openCount())
 	}
 	loop.SetDeps(leaseTestDeps(rec))
-	ready, err = loop.CloseCompletedWorkflowWait(t.Context(), "sess")
+	ready, err = loop.Subscriptions.CloseCompletedWorkflowWait(t.Context(), "sess")
 	testutil.FailErr(t, "retry workflow completion", err)
 	if !ready || rec.openCount() != 0 {
 		t.Fatal("recovered worker lookup did not release the phase park")

@@ -17,7 +17,7 @@ func TestRecoveryReferenceProtectsCompleteObjectUntilRetired(t *testing.T) {
 	scope, err := os.OpenRoot(filepath.Dir(source))
 	testutil.FailErr(t, "open source root", err)
 	defer func() { _ = scope.Close() }()
-	writer, err := store.BeginRecovery(ctx, "p1", "recovery")
+	writer, err := store.Retention.BeginRecovery(ctx, "p1", "recovery")
 	testutil.FailErr(t, "begin recovery", err)
 	defer writer.Close()
 	saved, err := writer.Append(ctx, RecoveryEntry{Path: ".", Mode: 0o600}, scope, filepath.Base(source), nil)
@@ -25,16 +25,16 @@ func TestRecoveryReferenceProtectsCompleteObjectUntilRetired(t *testing.T) {
 	testutil.FailErr(t, "flush recovery", writer.Flush(ctx))
 	writer.Close()
 	testutil.FailErr(t, "remove original", os.Remove(source))
-	testutil.FailErr(t, "sweep", store.SweepBlobs(ctx))
+	testutil.FailErr(t, "sweep", store.Retention.SweepBlobs(ctx))
 	var restored bytes.Buffer
-	testutil.FailErr(t, "read recovery", store.CopyRecoveryFile(ctx, saved.SHA, &restored))
+	testutil.FailErr(t, "read recovery", store.Retention.CopyRecoveryFile(ctx, saved.SHA, &restored))
 	if !bytes.Equal(restored.Bytes(), body) {
 		t.Fatal("recovery content truncated or changed")
 	}
 	_, err = store.sqlDB.ExecContext(ctx, `DELETE FROM source_recovery_objects WHERE project_id='p1' AND recovery_id='recovery'`)
 	testutil.FailErr(t, "retire recovery", err)
-	testutil.FailErr(t, "reclaim", store.SweepBlobs(ctx))
-	if err := store.CopyRecoveryFile(ctx, saved.SHA, &bytes.Buffer{}); err == nil {
+	testutil.FailErr(t, "reclaim", store.Retention.SweepBlobs(ctx))
+	if err := store.Retention.CopyRecoveryFile(ctx, saved.SHA, &bytes.Buffer{}); err == nil {
 		t.Fatal("retired bytes remain")
 	}
 }

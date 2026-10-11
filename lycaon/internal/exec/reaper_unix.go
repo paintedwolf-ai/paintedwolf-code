@@ -120,6 +120,12 @@ func reap(in io.Reader) {
 		if start, alive := osprocess.StartTime(entry.id); !alive || start != entry.start {
 			continue
 		}
+		if entry.kind == reaperSupervisor {
+			if signalSupervisor(entry.id, entry.start, true) {
+				killed = append(killed, entry.id)
+			}
+			continue
+		}
 		target := entry.id
 		if entry.kind == reaperGroup {
 			target = -entry.id
@@ -180,7 +186,7 @@ func parseReaperEntry(kind byte, payload string) *reaperEntry {
 			return nil
 		}
 		return &reaperEntry{kind: kind, path: payload}
-	case reaperGroup, reaperProcess:
+	case reaperGroup, reaperProcess, reaperSupervisor:
 		id, err := strconv.Atoi(payload)
 		if err != nil || id <= 0 {
 			return nil

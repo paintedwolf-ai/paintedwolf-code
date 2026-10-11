@@ -59,6 +59,7 @@ export const APPROVALS_COPY = {
      * when the verb is the meaning. */
     allow: "Allow",
     otherOptions: "Other choices",
+    directoryScope: "Directory scope",
     apply: "Apply",
     /** Decline uses the full danger-button style. */
     no: "No",

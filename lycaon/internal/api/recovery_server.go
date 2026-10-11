@@ -52,6 +52,7 @@ func NewRecoveryServer(ctx context.Context, opts RecoveryServerOpts) *Server {
 		s.markRestorePending()
 	}
 
+	s.Routes.Storage = &Storage{dataDir: s.dataDir, storePath: s.storePath, responses: &s.responses, recovery: s.recovery, markRestorePending: s.markRestorePending}
 	s.router = chi.NewRouter()
 	s.router.Use(middleware.RequestID)
 	if os.Getenv("LYCAON_TEST") != "1" {
@@ -67,10 +68,10 @@ func NewRecoveryServer(ctx context.Context, opts RecoveryServerOpts) *Server {
 		r.Use(s.bindRecoveryCaller)
 		r.Use(s.rejectRestorePending)
 		r.Use(s.rejectEmptyPathSegments)
-		s.registerV1Operation(r, operationGetBackupCapabilities, s.handleBackupCapabilities)
-		s.registerV1Operation(r, operationRestoreBackup, s.handleRestoreBackup)
-		s.registerV1Operation(r, operationRestoreRecoverySnapshot, s.handleRestoreRecoverySnapshot)
-		s.registerV1Operation(r, operationResetStore, s.handleResetStore)
+		s.registerV1Operation(r, operationGetBackupCapabilities, s.Routes.Storage.handleBackupCapabilities)
+		s.registerV1Operation(r, operationRestoreBackup, s.Routes.Storage.handleRestoreBackup)
+		s.registerV1Operation(r, operationRestoreRecoverySnapshot, s.Routes.Storage.handleRestoreRecoverySnapshot)
+		s.registerV1Operation(r, operationResetStore, s.Routes.Storage.handleResetStore)
 	})
 	s.router.NotFound(s.handleStoreIncompatible)
 	s.router.MethodNotAllowed(s.handleStoreIncompatible)

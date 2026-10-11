@@ -57,7 +57,7 @@ func TestRestoreRejectsMalformedRetentionPolicyWithoutChangingLiveStore(t *testi
 			} else {
 				database := testdbfixture.OpenPath(t, path)
 				srv = newTestServer(t, withSessionStore(store.NewSQL(database)), func(d *Dependencies) {
-					d.DataDir, d.StorePath = root, path
+					d.Storage.DataDir, d.Storage.StorePath = root, path
 				})
 			}
 			testutil.FailErr(t, "seed live retention policy", os.WriteFile(filepath.Join(root, historyretention.PolicyFilename), valid, 0o600))

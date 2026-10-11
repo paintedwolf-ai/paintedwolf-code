@@ -20,16 +20,16 @@ type PTYSnapshotResult struct {
 }
 
 // SnapshotPTY returns the settled screen without consuming output.
-func (r *Registry) SnapshotPTY(ctx context.Context, sessionID, handle string, opts PTYReadOpts) (PTYSnapshotResult, error) {
-	proc, err := r.lookup(sessionID, handle)
+func (r *Terminal) SnapshotPTY(ctx context.Context, sessionID, handle string, opts PTYReadOpts) (PTYSnapshotResult, error) {
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return PTYSnapshotResult{}, err
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	kind := proc.kind
 	screen := proc.screen
 	finalScreen := proc.finalScreen
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	if kind != processKindPTY {
 		return PTYSnapshotResult{}, fmt.Errorf("%w: handle %s", ErrNotPTY, handle)
 	}
@@ -56,7 +56,7 @@ func (r *Registry) SnapshotPTY(ctx context.Context, sessionID, handle string, op
 	} else {
 		snap = screen.snapshot()
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	out := PTYSnapshotResult{
 		Screen:   snap,
 		Running:  proc.running,
@@ -69,8 +69,8 @@ func (r *Registry) SnapshotPTY(ctx context.Context, sessionID, handle string, op
 		code := proc.exitCode
 		out.ExitCode = &code
 	}
-	r.mu.Unlock()
-	projected, projectErr := r.ProjectScreen(ctx, processCaptureScope(proc), snap)
+	r.jobs.mu.Unlock()
+	projected, projectErr := r.Output.ProjectScreen(ctx, processCaptureScope(proc), snap)
 	if projectErr != nil {
 		return PTYSnapshotResult{}, fmt.Errorf("project terminal capture: %w", projectErr)
 	}
@@ -80,7 +80,7 @@ func (r *Registry) SnapshotPTY(ctx context.Context, sessionID, handle string, op
 
 // waitPTYQuiescence watches the main ring-buffer cursor; it does not drain
 // or advance terminal_read's high-water mark.
-func (r *Registry) waitPTYQuiescence(proc *Process, idle, timeout time.Duration) {
+func (r *Terminal) waitPTYQuiescence(proc *Process, idle, timeout time.Duration) {
 	if proc == nil || proc.buffer == nil {
 		return
 	}
@@ -95,9 +95,9 @@ func (r *Registry) waitPTYQuiescence(proc *Process, idle, timeout time.Duration)
 			last = cur
 			lastGrowth = time.Now()
 		}
-		r.mu.Lock()
+		r.jobs.mu.Lock()
 		exited := proc.hasExit
-		r.mu.Unlock()
+		r.jobs.mu.Unlock()
 		if exited || time.Since(lastGrowth) >= idle || time.Now().After(deadline) {
 			return
 		}
@@ -114,7 +114,7 @@ func (r *Registry) waitPTYQuiescence(proc *Process, idle, timeout time.Duration)
 
 // waitPTYOutput blocks until the main buffer grows, the process exits, or
 // timeout — used for first-frame snapshots right after terminal_open.
-func (r *Registry) waitPTYOutput(proc *Process, timeout time.Duration) {
+func (r *Terminal) waitPTYOutput(proc *Process, timeout time.Duration) {
 	if proc == nil || proc.buffer == nil {
 		return
 	}
@@ -126,9 +126,9 @@ func (r *Registry) waitPTYOutput(proc *Process, timeout time.Duration) {
 	ticker := time.NewTicker(ptyReadPoll)
 	defer ticker.Stop()
 	for {
-		r.mu.Lock()
+		r.jobs.mu.Lock()
 		exited := proc.hasExit
-		r.mu.Unlock()
+		r.jobs.mu.Unlock()
 		if exited || proc.buffer.NextCursor() > start || time.Now().After(deadline) {
 			return
 		}

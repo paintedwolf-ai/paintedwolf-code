@@ -2,8 +2,6 @@ package promptloop_test
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -14,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func TestPartialDispatchRepairsFailedPeerWhileAcceptedWorkerRuns(t *testing.T) {
@@ -25,13 +24,13 @@ func TestPartialDispatchRepairsFailedPeerWhileAcceptedWorkerRuns(t *testing.T) {
 	testutil.FailErr(t, "register task", reg.Register("task", func(_ context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		goal := args["goal"].(string)
 		accepted[goal]++
-		tctx.Out.Dispatch = &api.WorkerDispatch{WorkerID: goal}
+		tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: goal}
 		return "queued " + goal, nil
 	}))
 	wakes := loopwake.NewLoopEngine()
 	wakes.SetDeps(loopwake.LoopDeps{GetSession: storage.Get, WorkerCycleIdle: func(context.Context, *api.Session, string) (bool, error) { return false, nil }})
 	t.Cleanup(func() { wakes.ForgetSession(context.Background(), sess.ID) })
-	testutil.FailErr(t, "register wait", loopwake.RegisterWaitTool(reg, wakes, loopwake.WaitToolDeps{}))
+	testutil.FailErr(t, "register wait", loopwake.RegisterWaitTool(reg, wakes.Subscriptions, loopwake.WaitToolDeps{}))
 	backend, ui, repaired := taskCallArgs("implementer", "backend"), taskCallArgs("implementer", "ui"), taskCallArgs("implementer", "ui")
 	backend["goal"], ui["goal"], repaired["goal"] = "backend", "ui", "ui"
 	ui["invalid"] = true
@@ -41,18 +40,20 @@ func TestPartialDispatchRepairsFailedPeerWhileAcceptedWorkerRuns(t *testing.T) {
 		{ToolCalls: []api.ToolCall{{ID: "wait", Name: "wait", Args: map[string]any{"conditions": []any{map[string]any{"kind": "next_worker_done"}}}}}},
 	}}
 	deps := promptloop.StoreDeps(storage)
-	deps.LoadedTools = workersLoaded
-	deps.Tools, deps.LLM = reg, client
-	deps.ImplementSessionState = func(context.Context, *api.Session) surface.ImplementSessionState {
+	deps.Context.LoadedTools = workersLoaded
+	deps.Context.Tools, deps.Model.LLM = reg, client
+	deps.Context.ImplementSessionState = func(context.Context, *api.Session) surface.ImplementSessionState {
 		return surface.ImplementSessionState{WorkersInFlight: len(accepted)}
 	}
-	deps.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, args map[string]any) (string, bool, error) {
+	deps.Tools.BeforeToolRun = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, args map[string]any) (string, bool, error) {
 		if args["invalid"] == true {
 			return "", false, guidance.NewRefusal("TOOL_ARGS_INVALID", "brief.constraints must be an array")
 		}
 		return "", false, nil
 	}
-	result, err := promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("build both deliverables"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{SessionID: sess.ID}})
+	result, err := promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{SessionID: sess.ID, Session: sess, History: userHistory("build both deliverables"), ProfileID: "coordinator", ToolCtx: tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sess.ID},
+	}})
 	testutil.FailErr(t, "run coordinator", err)
 	if result.TasksDispatchedCount != 2 {
 		t.Fatalf("dispatch count = %d, want both accepted workers", result.TasksDispatchedCount)

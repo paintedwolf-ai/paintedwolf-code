@@ -3,10 +3,10 @@ package sourceview
 import (
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 	"github.com/lycaon/lycaon/internal/zstdcodec"
 )
@@ -41,7 +41,7 @@ func (a Access) SizeReject(tool, path string, size, maxBytes int64) error {
 	if size > 0 {
 		data["size"] = size
 	}
-	return &tools.ToolReject{Code: code, Data: data}
+	return &toolrejection.ToolReject{Code: code, Data: data}
 }
 
 // MutationSizeReject reports mutation content above readcaps.MaxMutationBytes.
@@ -64,7 +64,7 @@ func ReadContentCapped(tool string, access Access, loc fseffect.Location, displa
 		return nil, err
 	}
 	if info.IsDir() {
-		return nil, &tools.ToolReject{
+		return nil, &toolrejection.ToolReject{
 			Code: "READ_IS_DIRECTORY",
 			Data: map[string]any{"path": displayPath},
 		}

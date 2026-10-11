@@ -37,7 +37,7 @@ copy:
     {% if paintedwolf.process_running %}If the job cannot finish without the
     read, stop it with `command_stop`, then reissue{% else %}Reissue{% endif %}
     the same command with `capability_request.read_path` set to the matching
-    entry of {{ paintedwolf.refused_read_grants }}; approval follows the
+    entry of {{ paintedwolf.refused_read_grants }} as one string, never an array. If several paths are needed, grant one path per invocation and keep declaring that single path on retries; approval follows the
     project posture before it runs. If a later result says the read cannot
     proceed, continue without the content and report what is missing.
   instead: Reissue with capability_request.read_path naming the refused path —

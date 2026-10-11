@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -22,17 +23,17 @@ func TestAmbientRunStampsRowsAtCreation(t *testing.T) {
 	bundledDir := filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "workflows")
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	mgr := NewManager(NewSQLStore(sqlDB), store, reg, nil)
+	mgr := NewManager(workflowpersistence.New(sqlDB), store, reg, nil)
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "store.Create failed", err)
 	ref, err := workflowdef.LoadRegistryConfig(extpacks.OnDisk(bundledDir))
 	testutil.FailErr(t, "LoadRegistryConfig", err)
-	ambient, err := mgr.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
+	ambient, err := mgr.Ambient.StartAmbient(ctx, sess.ID, ref.ID, ref.Version)
 	testutil.FailErr(t, "StartAmbient failed", err)
 
-	if err := mgr.StampAndAppendMessages(ctx, sess.ID, api.Message{
+	if err := mgr.Transcript.StampAndAppendMessages(ctx, sess.ID, api.Message{
 		Role:    api.MessageRoleAssistant,
 		Content: "ambient turn",
 	}); err != nil {

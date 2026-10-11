@@ -202,7 +202,7 @@ func (s *fakeRefusalSource) endStream() {
 func newTestWatch(t *testing.T, source *fakeRefusalSource) *refusalWatchT {
 	t.Helper()
 	w := &refusalWatchT{feeds: map[string]*refusalFeed{}, probes: map[string]*refusalProbe{}}
-	w.start(source)
+	w.start(t.Context(), source)
 	t.Cleanup(w.stop)
 	return w
 }

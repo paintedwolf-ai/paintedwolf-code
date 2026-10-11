@@ -9,7 +9,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleLocateSourceView(w http.ResponseWriter, r *http.Request) {
+func (s *Presentation) HandleLocateSourceView(w http.ResponseWriter, r *http.Request) {
 	view, r, release, ok := s.requestedSourcePresentation(w, r)
 	if !ok {
 		return
@@ -43,7 +43,7 @@ func (s *Handler) HandleLocateSourceView(w http.ResponseWriter, r *http.Request)
 	}
 	read := view
 	var result wire.SourceViewLocation
-	if view.tree != nil {
+	if view.navigation.tree != nil {
 		if hasLine {
 			err = pagedview.ErrRange
 		} else {
@@ -54,14 +54,14 @@ func (s *Handler) HandleLocateSourceView(w http.ResponseWriter, r *http.Request)
 	}
 
 	if err != nil {
-		s.writeSourceViewError(w, r, err)
+		s.Views.writeSourceViewError(w, r, err)
 		return
 	}
 	httpio.WriteJSON(w, http.StatusOK, result)
 }
 
 func (view *sourceViewRead) locateTree(r *http.Request, encoded string) (*wire.SourceTreeLocation, error) {
-	if view.reviewPreparing {
+	if view.reviewing.reviewPreparing {
 		return nil, treeReviewPreparing()
 	}
 	anchor, err := decodeSourceAnchor[wire.SourceTreeAddress](encoded, "root_id", "path")
@@ -73,12 +73,12 @@ func (view *sourceViewRead) locateTree(r *http.Request, encoded string) (*wire.S
 	}
 	var location sourcetree.Location
 	var revision pagedview.Revision
-	if view.treeIntent.Filter != "" {
-		if view.filtered == nil {
+	if view.navigation.treeIntent.Filter != "" {
+		if view.filtering.filtered == nil {
 			return nil, &comparisonFailure{wire.ApiErrorCodeSourceViewPreparing, "The source filter is being prepared."}
 		}
-		location, err = view.filtered.Locate(r.Context(), treeAddress(*anchor))
-		revision, _ = view.filtered.Revision()
+		location, err = view.filtering.filtered.Locate(r.Context(), treeAddress(*anchor))
+		revision, _ = view.filtering.filtered.Revision()
 	} else {
 		location, revision, err = view.presentation.Locate(r.Context(), treeAddress(*anchor))
 	}
@@ -93,7 +93,7 @@ func (view *sourceViewRead) locateComparison(r *http.Request, encoded string, li
 	if view.state != "ready" {
 		return nil, &comparisonFailure{wire.ApiErrorCodeSourceViewPreparing, "The source comparison is not ready."}
 	}
-	if view.comparison == nil && view.current == nil || view.projection == nil {
+	if view.comparisonData.comparison == nil && view.comparisonData.current == nil || view.comparisonData.projection == nil {
 		return nil, pagedview.ErrRange
 	}
 	anchor, err := decodeSourceAnchor[wire.SourceComparisonAnchor](encoded, "row")
@@ -103,15 +103,15 @@ func (view *sourceViewRead) locateComparison(r *http.Request, encoded string, li
 	var sourceRow int
 	if anchor != nil {
 		sourceRow = anchor.Row
-	} else if view.current != nil {
-		sourceRow, err = view.current.document.RowAtLine(r.Context(), line)
+	} else if view.comparisonData.current != nil {
+		sourceRow, err = view.comparisonData.current.document.RowAtLine(r.Context(), line)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		sourceRow = view.comparison.RowAtLine(line, side)
+		sourceRow = view.comparisonData.comparison.RowAtLine(line, side)
 	}
-	rank, resolved, err := view.projection.Locate(r.Context(), sourceRow)
+	rank, resolved, err := view.comparisonData.projection.Locate(r.Context(), sourceRow)
 	if err != nil {
 		return nil, err
 	}

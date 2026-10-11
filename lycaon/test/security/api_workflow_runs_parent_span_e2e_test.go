@@ -15,7 +15,7 @@ import (
 func TestSessionWorkflowRunsListSurfacesParentRunIDOnChildInvoke(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
-	blueprintMgr := h.BlueprintMgr
+	blueprintMgr := h.Workflows.Blueprints
 	sess := createSessionHTTP(t, srv, t.TempDir())
 
 	startBody := planStartBody

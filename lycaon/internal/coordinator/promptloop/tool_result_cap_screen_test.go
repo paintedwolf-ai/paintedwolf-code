@@ -3,17 +3,18 @@ package promptloop
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
 	storepkg "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/zstdcodec"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
 )
 
 // shortestRecognizableFragment is this test's leak-detection floor.
@@ -49,19 +50,25 @@ func TestCappedToolResultLeavesNoSecretFragmentAnywhere(t *testing.T) {
 	sess.WorkspacePath = dir
 
 	var appended []api.Message
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		DataDir:                 dir,
-		HintConfig:              loadCoordinatorTestHintConfig(t),
-		RedactMessageForStorage: testStorageRedactor,
-		AppendMessages: func(ctx context.Context, sessionID string, msgs ...api.Message) error {
-			appended = append(appended, msgs...)
-			return sqlStore.AppendMessages(ctx, sessionID, msgs...)
+	loop := NewPromptLoop(PromptLoopDeps{
+		Tools: ToolsDeps{
+			DataDir: dir,
 		},
-		UpdateMessage: func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
-			_, updateErr := sqlStore.UpdateMessage(ctx, sessionID, messageID, msg)
-			return updateErr
+		Closeout: CloseoutDeps{
+			HintConfig: loadCoordinatorTestHintConfig(t),
 		},
-	}}
+		Projection: ProjectionDeps{
+			RedactMessageForStorage: testStorageRedactor,
+			AppendMessages: func(ctx context.Context, sessionID string, msgs ...api.Message) error {
+				appended = append(appended, msgs...)
+				return sqlStore.AppendMessages(ctx, sessionID, msgs...)
+			},
+			UpdateMessage: func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
+				_, updateErr := sqlStore.UpdateMessage(ctx, sessionID, messageID, msg)
+				return updateErr
+			},
+		},
+	})
 
 	rawContent := cappedToolResultWithSecretAtTheCut(maxBytes)
 	// Verify the fixture crosses the cap.
@@ -69,8 +76,8 @@ func TestCappedToolResultLeavesNoSecretFragmentAnywhere(t *testing.T) {
 		t.Fatal("fixture no longer cuts through the credential")
 	}
 	rawArgs := map[string]any{"path": ".env"}
-	projection := toolInvocations{loop}.projectToolResultForStorage(context.Background(), rawContent, rawArgs)
-	projected := toolInvocations{loop}.truncateToolResultForSession(
+	projection := loop.Projection.projectToolResultForStorage(context.Background(), rawContent, rawArgs)
+	projected := loop.Tools.truncateToolResultForSession(
 		context.Background(), "read", projection, rawContent, maxBytes, 0, sess,
 	)
 	if !strings.Contains(projected.content, "Code: TOOL_OUTPUT_TRUNCATED") {
@@ -90,7 +97,7 @@ func TestCappedToolResultLeavesNoSecretFragmentAnywhere(t *testing.T) {
 		},
 	}
 	last := time.Time{}
-	_, err = toolBatch{loop}.persistClassifiedToolOutcome(
+	_, err = loop.Batch.persistClassifiedToolOutcome(
 		context.Background(), sess.ID, sess, nil, toolCallOutcome{
 			toolName: "read", toolArgs: rawArgs, toolMsg: toolMsg,
 		}, &last, &promptLoopTurnState{},

@@ -13,7 +13,7 @@ type recordingNudger struct {
 	legFinished int
 }
 
-func (r *recordingNudger) NudgeCoordinatorLoop(_ context.Context, _ string, wake, _ anchor.ID, _ string, _ anchor.Envelope) {
+func (r *recordingNudger) Nudge(_ context.Context, _ string, wake, _ anchor.ID, _ string, _ anchor.Envelope) {
 	if wake == anchor.LegFinished {
 		r.legFinished++
 	}

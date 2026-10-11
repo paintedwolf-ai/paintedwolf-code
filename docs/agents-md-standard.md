@@ -54,7 +54,7 @@ Both may apply in one session; they are complementary, not duplicates. Humans ed
 
 ## Runtime inject
 
-Session AGENTS.md index/chain inject runs only when the `agents_md` trust surface applies to the project (device enable and project enable, `surfaceApplies` in [`trust_gate.go`](../lycaon/internal/session/trust_gate.go)). When either switch is off, the host skips inject.
+Session AGENTS.md index/chain inject runs only when the `agents_md` trust surface applies to the project (device enable and project enable, `scope.Service.Applies` in [`scope/service.go`](../lycaon/internal/session/scope/service.go)). When either switch is off, the host skips inject.
 
 Human AGENTS.md edits are not gated by the surface enable: the Files editor treats the file as ordinary source (`PUT /v1/projects/{id}/source`), so operators can edit repo policy files while session inject is off.
 

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -79,7 +81,11 @@ func TestRedactionReusesReviewedUploadBytes(t *testing.T) {
 		"headers":            []any{map[string]any{"name": "X-Subscription-Token", "value": plantedBraveKey}},
 		"form":               []any{map[string]any{"name": "upload", "path": "upload.txt"}},
 		"capability_request": loopbackCapability(t, server.URL),
-	}, tools.ToolContext{Agent: tools.DefaultToolProfileID, Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "root"},
+	})
 	testutil.FailErr(t, "send reviewed upload", err)
 	if received != "reviewed bytes" {
 		t.Fatal("redaction reread an upload after review")
@@ -118,7 +124,9 @@ func TestManagedWireProvenancePreservesUnrelatedSecretDetection(t *testing.T) {
 	if len(secretmatch.Fingerprints(evidence)) != 2 {
 		t.Fatal("managed provenance hid another credential in the same field")
 	}
-	redacted := redactRequestArguments(t.Context(), matcher, resolved.Arguments, tools.ToolContext{Secrets: resolved})
+	redacted := redactRequestArguments(t.Context(), matcher, resolved.Arguments, tools.ToolContext{
+		Effects: tools.InvocationEffects{Secrets: resolved},
+	})
 	body := redacted["body_text"].(string)
 	if strings.Contains(body, plantedBraveKey) || strings.Contains(body, "managed-opaque-value") {
 		t.Fatal("mixed field was not fully redacted")
@@ -179,10 +187,13 @@ func TestManagedSecretPolicySurvivesHTTPEncoding(t *testing.T) {
 			for range 2 {
 				resolved, resolveErr := service.Resolve(t.Context(), args, secretcap.ResolveContext{ProjectID: testdbseed.DefaultProjectID, ToolName: "http_request", ToolCallID: "request"})
 				testutil.FailErr(t, "resolve request", resolveErr)
-				_, runErr := registry.Run(t.Context(), "http_request", resolved.Arguments, tools.ToolContext{CanonicalArgs: args, Secrets: resolved})
+				_, runErr := registry.Run(t.Context(), "http_request", resolved.Arguments, tools.ToolContext{
+					Effects: tools.InvocationEffects{CanonicalArgs: args,
+						Secrets: resolved},
+				})
 				resolved.Finish(t.Context())
 				if decision == secretmatch.Withhold {
-					if reject := tools.AsToolReject(runErr); reject == nil || reject.Code != tools.OutboundSecretDeniedCode {
+					if reject := toolrejection.AsToolReject(runErr); reject == nil || reject.Code != toolrejection.OutboundSecretDeniedCode {
 						t.Fatalf("unexpected withhold result: %v", runErr)
 					}
 				} else {

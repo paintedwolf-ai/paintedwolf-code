@@ -62,7 +62,7 @@ func TestReviewPreparationDoesNotBlockConcurrentReads(t *testing.T) {
 	review, err := builder.Finish()
 	testutil.FailErr(t, "publish review facts", err)
 	t.Cleanup(review.Close)
-	navigation, err := view.catalog.OpenNavigation(t.Context(), view.scope.Project, root)
+	navigation, err := view.catalog.Directories.OpenNavigation(t.Context(), view.scope.Project, root)
 	testutil.FailErr(t, "read review basis", err)
 	base := Projection{Root: root.ID, Rules: &Rules{}, Navigation: navigation}
 	revision, err := base.revision(t.Context())
@@ -77,7 +77,7 @@ func TestReviewPreparationDoesNotBlockConcurrentReads(t *testing.T) {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		}
-		return view.catalog.OpenNavigation(ctx, view.scope.Project, root)
+		return view.catalog.Directories.OpenNavigation(ctx, view.scope.Project, root)
 	}}
 	_, _, err = review.projection(view.ctx, source, "intent", nil)
 	if !errors.Is(err, pagedview.ErrPreparing) {
@@ -150,7 +150,7 @@ func TestReviewProjectionSurvivesUnrelatedDiscovery(t *testing.T) {
 	review.mu.Lock()
 	previous := review.current[root.ID]
 	review.mu.Unlock()
-	_, err = view.catalog.ObserveDirectory(t.Context(), view.scope.Project, root, "closed", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityProactive})
+	_, err = view.catalog.Directories.ObserveDirectory(t.Context(), view.scope.Project, root, "closed", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityProactive})
 	testutil.FailErr(t, "discover unrelated children", err)
 	after, err := frameForTest(t, view, t.Context(), FrameRequest{Limit: 10})
 	testutil.FailErr(t, "reuse prepared review frame", err)

@@ -100,7 +100,7 @@ func NewDirectDiscovererFactory(
 		}
 		return &directDiscoverer{
 			index:       index,
-			memoryScope: tctx.SessionID,
+			memoryScope: tctx.Identity.SessionID,
 			taskHint:    curationctx.TaskHint(ctx),
 			registry:    wrRegistry,
 			settings:    DefaultSettings(creds, cfg, catalog),

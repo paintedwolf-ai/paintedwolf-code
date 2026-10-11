@@ -29,8 +29,9 @@ func TestEveryTerminalResultStatesTheBox(t *testing.T) {
 
 	dir := t.TempDir()
 	tctx := tools.ToolContext{
-		SessionID: "sess", ProjectID: "proj",
-		Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}},
+		Identity: tools.InvocationIdentity{SessionID: "sess",
+			ProjectID: "proj"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}},
 	}
 	for _, observe := range []string{"ack", "delta", "screen"} {
 		t.Run(observe, func(t *testing.T) {

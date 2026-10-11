@@ -152,3 +152,26 @@ func TestImageTokenEstimateScalesWithArea(t *testing.T) {
 		t.Fatalf("unsized estimate = %d", got)
 	}
 }
+
+func TestVisualResolverReleasePreservesReplacement(t *testing.T) {
+	oldCalls, currentCalls := 0, 0
+	releaseOld := SetVisualBytesResolver(func(string, string) ([]byte, string, bool) { oldCalls++; return nil, "", false })
+	png := perceptionPNG(t)
+	releaseCurrent := SetVisualBytesResolver(func(string, string) ([]byte, string, bool) { currentCalls++; return png, "image/png", true })
+	t.Cleanup(releaseCurrent)
+	releaseOld()
+	releaseOld()
+	if _, _, ok := UserArtifactWireImage("session", "artifact"); !ok {
+		t.Fatal("old owner removed current visual resolver")
+	}
+	if oldCalls != 0 || currentCalls != 1 {
+		t.Fatalf("resolver calls old=%d current=%d", oldCalls, currentCalls)
+	}
+	releaseCurrent()
+	if HasVisualResolver() {
+		t.Fatal("released visual resolver remains installed")
+	}
+	if _, _, ok := UserArtifactWireImage("session", "artifact"); ok {
+		t.Fatal("released visual resolver still serves images")
+	}
+}

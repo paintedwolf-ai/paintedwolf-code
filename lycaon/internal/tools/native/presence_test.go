@@ -46,8 +46,8 @@ func presenceCtx(t *testing.T, files map[string]string) (tools.ToolContext, *pre
 	}
 	tctx := nativefixture.Context(dir)
 	recorder := &presenceRecorder{}
-	tctx.Presence = recorder
-	tctx.Out = &tools.ToolInvocationOut{}
+	tctx.Effects.Presence = recorder
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
 	return tctx, recorder
 }
 
@@ -78,7 +78,7 @@ func TestReadCapturesTheLinesItReturned(t *testing.T) {
 			if len(recorder.targets) != 1 || recorder.targets[0] != (agentpresence.Target{RootID: "r1", Path: "a.go"}) || recorder.kinds[0] != api.AgentActivityKindReading {
 				t.Fatalf("targets = %+v kinds = %v", recorder.targets, recorder.kinds)
 			}
-			reads := tctx.Out.SourceReads
+			reads := tctx.Effects.Out.SourceReads
 			if len(reads) != 1 || reads[0].Extent != tc.extent || len(reads[0].Spans) != len(tc.spans) {
 				t.Fatalf("reads = %+v", reads)
 			}
@@ -95,8 +95,8 @@ func TestOutlineReadReturnsNoText(t *testing.T) {
 	tctx, _ := presenceCtx(t, map[string]string{"a.go": "package a\n\nfunc One() {}\n"})
 	_, err := (&surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{"path": "a.go", "mode": "outline"}, tctx)
 	testutil.FailErr(t, "outline read", err)
-	if len(tctx.Out.SourceReads) != 0 {
-		t.Fatalf("outline captured %+v", tctx.Out.SourceReads)
+	if len(tctx.Effects.Out.SourceReads) != 0 {
+		t.Fatalf("outline captured %+v", tctx.Effects.Out.SourceReads)
 	}
 }
 
@@ -107,7 +107,7 @@ func TestGrepCapturesEveryOccurrenceInCharacters(t *testing.T) {
 	if len(recorder.targets) != 1 || recorder.targets[0].Path != "pkg" {
 		t.Fatalf("scope target = %+v", recorder.targets)
 	}
-	reads := tctx.Out.SourceReads
+	reads := tctx.Effects.Out.SourceReads
 	if len(reads) != 2 {
 		t.Fatalf("reads = %+v", reads)
 	}
@@ -136,8 +136,8 @@ func TestTextIntentsNameTheLinesAWriteReplaces(t *testing.T) {
 
 func TestWorkerBranchWritesReportNoIntent(t *testing.T) {
 	tctx, recorder := presenceCtx(t, map[string]string{"a.go": "one\n"})
-	resolved := projectpaths.Resolved{Root: tctx.Roots[0], ScopeRel: "a.go", DisplayPath: "a.go"}
-	tctx.WorkerBranchRoot = t.TempDir()
+	resolved := projectpaths.Resolved{Root: tctx.Source.Roots[0], ScopeRel: "a.go", DisplayPath: "a.go"}
+	tctx.Source.WorkerBranchRoot = t.TempDir()
 	reportTextIntent(tctx, resolved, sourceview.Text{Content: "one\n"}, true, "two\n")
 	if len(recorder.intents) != 0 {
 		t.Fatalf("worker write reported %+v", recorder.intents)

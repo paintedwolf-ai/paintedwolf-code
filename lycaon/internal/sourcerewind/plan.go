@@ -23,8 +23,12 @@ type Documents interface {
 	WithSourceRewind(context.Context, *project.Project, []sourceledger.RewindFile, func() error) error
 }
 
+type Planner interface {
+	PlanRewind(context.Context, string, string, []string) (sourceledger.RewindPlan, error)
+}
+
 type Service struct {
-	Ledger    *sourceledger.Store
+	Planner   Planner
 	Mutations sourceeffect.Journal
 	Documents Documents
 }
@@ -49,10 +53,10 @@ type File struct {
 }
 
 func (s *Service) Prepare(ctx context.Context, p *project.Project, sessionID string, anchors []string) (*Operation, error) {
-	if s == nil || s.Ledger == nil || s.Mutations == nil {
+	if s == nil || s.Planner == nil || s.Mutations == nil {
 		return nil, fmt.Errorf("source rewind service unavailable")
 	}
-	plan, err := s.Ledger.PlanRewind(ctx, p.ID, sessionID, anchors)
+	plan, err := s.Planner.PlanRewind(ctx, p.ID, sessionID, anchors)
 	if err != nil {
 		return nil, err
 	}

@@ -2,16 +2,15 @@ package loopwake
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"sync/atomic"
-	"testing"
-	"time"
-
 	awaitstore "github.com/lycaon/lycaon/internal/await"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sync/atomic"
+	"testing"
+	"time"
 )
 
 func TestTerminalAcknowledgementSettlesOnlySubscribedCoordinatorWaits(t *testing.T) {
@@ -34,7 +33,7 @@ func TestTerminalAcknowledgementSettlesOnlySubscribedCoordinatorWaits(t *testing
 			testdbseed.InsertSession(t, database, id, testdbseed.DefaultProjectID)
 			store := &awaitstore.Store{DB: database}
 			loop := NewLoopEngine()
-			loop.SetWaitStore(store)
+			loop.Subscriptions.SetWaitStore(store)
 			t.Cleanup(func() { loop.ForgetSession(context.Background(), id) })
 			var deliveries atomic.Int32
 			deps := loopDepsForTest()
@@ -70,14 +69,14 @@ func TestTerminalAcknowledgementSettlesOnlySubscribedCoordinatorWaits(t *testing
 				})
 				testutil.FailErr(t, "arm subscribed wait", err)
 				triggers, handles := triggersFromConditions(conditions)
-				loop.EnterSleep(t.Context(), id, deadline, "fixture", triggers, handles, SleepMoverHost)
+				loop.Waits.EnterSleep(t.Context(), id, deadline, "fixture", triggers, handles, SleepMoverHost)
 			}
-			loop.OnWorkerCycleTerminal(t.Context(), id, "canceled-job")
-			loop.OnWorkerCycleTerminal(t.Context(), id, "canceled-job")
+			loop.Cycles.OnWorkerCycleTerminal(t.Context(), id, "canceled-job")
+			loop.Cycles.OnWorkerCycleTerminal(t.Context(), id, "canceled-job")
 			if tt.expected {
 				testutil.WaitFor(t, time.Second, func() bool { return deliveries.Load() == 1 })
 			}
-			loop.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+			loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
 			if got := deliveries.Load(); (got == 1) != tt.expected || got > 1 {
 				t.Fatalf("deliveries=%d expected=%v", got, tt.expected)
 			}

@@ -79,10 +79,14 @@ func LoadWorkflowManifest(catalog *extpacks.EffectiveCatalog, id, version string
 
 // workflowManifestUnitIDs returns the loaded workflow manifest unit ids.
 // `_templates` / `_topologies` ids nest under the same prefix and are not
-// manifests.
+// manifests. Sealed workflow units remain resolvable for pinned runs.
 func workflowManifestUnitIDs(catalog *extpacks.EffectiveCatalog) []string {
 	var out []string
 	for _, unitID := range catalog.LoadedUnitIDs() {
+		if _, rest, archived := extpacks.SplitArchiveUnitID(unitID); archived && rest == "workflow" {
+			out = append(out, unitID)
+			continue
+		}
 		stem, ok := strings.CutPrefix(unitID, extpacks.WorkflowUnitIDPrefix)
 		if !ok || stem == "" || strings.HasPrefix(stem, "_") || strings.Contains(stem, "/") {
 			continue

@@ -85,8 +85,8 @@ var refusalWatch = &refusalWatchT{
 // StartRefusalWatch begins reading the kernel's sandbox reports. Actions bound
 // before the stream is live report an incomplete witness; a host that cannot
 // read the reports gives every action an unavailable one.
-func StartRefusalWatch(stateRoot string) {
-	refusalWatch.start(newRefusalSource(stateRoot))
+func StartRefusalWatch(ctx context.Context, stateRoot string) {
+	refusalWatch.start(ctx, newRefusalSource(stateRoot))
 }
 
 // StopRefusalWatch preserves collected reports and degrades active witnesses.
@@ -94,7 +94,7 @@ func StopRefusalWatch() {
 	refusalWatch.stop()
 }
 
-func (w *refusalWatchT) start(source refusalSource) {
+func (w *refusalWatchT) start(parent context.Context, source refusalSource) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.state == watchStarting || w.state == watchLive {
@@ -104,7 +104,7 @@ func (w *refusalWatchT) start(source refusalSource) {
 		w.state, w.reason = watchUnavailable, "this platform reports no sandbox refusals"
 		return
 	}
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.WithoutCancel(parent))
 	w.source, w.state, w.reason = source, watchStarting, ""
 	w.cancel, w.done = cancel, make(chan struct{})
 	go w.run(ctx, source, w.done)

@@ -4,10 +4,10 @@
 package report
 
 import (
-	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // BlockedReviewSnapshot marks a report retained from a review paused before

@@ -97,20 +97,20 @@ func TestDisposableDatabaseSetupUsesFixture(t *testing.T) {
 	corpus, err := contractcheck.LoadGoASTCorpus(filepath.Join(contractcheck.RepoRoot(t), "lycaon"))
 	contractcheck.FailErr(t, "load Go test corpus", err)
 	directOpenScenarios := map[string]bool{
-		"internal/api/recovery_snapshot_baseline_test.go": true,
-		"internal/app/recovery_boot_test.go":              true,
-		"internal/app/recovery_failed_restore_test.go":    true,
-		"internal/app/recovery_startup_protocol_test.go":  true,
-		"internal/app/upgrade_recovery_snapshot_test.go":  true,
-		"internal/backup/backup_test.go":                  true,
-		"internal/backup/baseline_shape_test.go":          true,
-		"internal/backup/fresh_start_test.go":             true,
-		"internal/backup/restorable_test.go":              true,
-		"internal/backup/restore_transaction_test.go":     true,
-		"internal/db/search_global_scope_test.go":         true,
-		"internal/db/search_projection_test.go":           true,
-		"internal/db/search_sync_probe_test.go":           true,
-		"internal/project/promotion_engine_test.go":       true,
+		"internal/api/recovery_snapshot_baseline_test.go":   true,
+		"internal/app/recovery_boot_test.go":                true,
+		"internal/app/recovery_failed_restore_test.go":      true,
+		"internal/app/recovery_startup_protocol_test.go":    true,
+		"internal/app/persistence/upgrade_recovery_test.go": true,
+		"internal/backup/backup_test.go":                    true,
+		"internal/backup/baseline_shape_test.go":            true,
+		"internal/backup/fresh_start_test.go":               true,
+		"internal/backup/restorable_test.go":                true,
+		"internal/backup/restore_transaction_test.go":       true,
+		"internal/db/search_global_scope_test.go":           true,
+		"internal/db/search_projection_test.go":             true,
+		"internal/db/search_sync_probe_test.go":             true,
+		"internal/project/promotion_engine_test.go":         true,
 	}
 	var findings []string
 	for _, source := range corpus.Files() {

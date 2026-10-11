@@ -3,9 +3,9 @@ package native
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/syntaxhealth"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 type mutationSeam struct {
@@ -29,13 +29,13 @@ func rejectIfSyntaxUnhealthy(ctx context.Context, tool, path string, before *str
 	data := syntaxRejectData(tool, path, change, []byte(after), seam)
 	switch change.Transition {
 	case syntaxhealth.TransitionNewFileBroken, syntaxhealth.TransitionBrokeClean:
-		return &tools.ToolReject{Code: "MUTATION_BROKE_PARSE", Data: data}
+		return &toolrejection.ToolReject{Code: "MUTATION_BROKE_PARSE", Data: data}
 	case syntaxhealth.TransitionRepairRegressed:
-		return &tools.ToolReject{Code: "MUTATION_REPAIR_NOT_IMPROVED", Data: data}
+		return &toolrejection.ToolReject{Code: "MUTATION_REPAIR_NOT_IMPROVED", Data: data}
 	case syntaxhealth.TransitionParseIncomplete:
-		return &tools.ToolReject{Code: "MUTATION_PARSE_INCOMPLETE", Data: data}
+		return &toolrejection.ToolReject{Code: "MUTATION_PARSE_INCOMPLETE", Data: data}
 	default:
-		return &tools.ToolReject{Code: "MUTATION_PARSE_FAILED", Data: data}
+		return &toolrejection.ToolReject{Code: "MUTATION_PARSE_FAILED", Data: data}
 	}
 }
 

@@ -20,11 +20,17 @@ func detectionGate(t *testing.T, sources settings.Sources) hitl.ApprovalGate {
 
 func containedAction(sessionID string) hitl.ProposedAction {
 	return hitl.ProposedAction{
-		Tool:      "command",
-		Args:      map[string]any{"command": "echo hi"},
-		Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy},
-		SessionID: sessionID,
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo hi"},
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy},
+},
+Scope: hitl.ActionScope{
+SessionID: sessionID,
+},
+}
 }
 
 // Missing detection sources produce incomplete facts.

@@ -14,7 +14,7 @@ import (
 
 func TestAddRecipeCopiesDisabledUserOverlay(t *testing.T) {
 	reg := newTestRegistry(t, nil, "svca")
-	row, err := reg.AddRecipe(context.Background(), mcp.CallScope{}, "github", "")
+	row, err := reg.Administration.AddRecipe(context.Background(), mcp.CallScope{}, "github", "")
 	testutil.FailErr(t, "AddRecipe", err)
 	if row.ID != "github" || row.Enabled || row.Recipe != "github" || row.Auth != "static_token" {
 		t.Fatalf("row = %+v", row)
@@ -26,12 +26,12 @@ func TestAddRecipeCopiesDisabledUserOverlay(t *testing.T) {
 		t.Fatalf("url = %q", row.URL)
 	}
 
-	_, err = reg.AddRecipe(context.Background(), mcp.CallScope{}, "github", "")
+	_, err = reg.Administration.AddRecipe(context.Background(), mcp.CallScope{}, "github", "")
 	if !mcp.IsAdminCode(err, mcp.RejectDuplicateID) {
 		t.Fatalf("duplicate = %v", err)
 	}
 
-	_, err = reg.AddRecipe(context.Background(), mcp.CallScope{}, "not-a-recipe", "")
+	_, err = reg.Administration.AddRecipe(context.Background(), mcp.CallScope{}, "not-a-recipe", "")
 	if !mcp.IsAdminCode(err, mcp.CodeRecipeNotFound) {
 		t.Fatalf("unknown = %v", err)
 	}
@@ -39,7 +39,7 @@ func TestAddRecipeCopiesDisabledUserOverlay(t *testing.T) {
 
 func TestAddRecipeRefusesProjectRemote(t *testing.T) {
 	reg := newTestRegistry(t, nil, "svca")
-	_, err := reg.AddRecipe(context.Background(), mcp.CallScope{}, "github", t.TempDir())
+	_, err := reg.Administration.AddRecipe(context.Background(), mcp.CallScope{}, "github", t.TempDir())
 	if !mcp.IsAdminCode(err, mcp.RejectProjectRemoteForbidden) {
 		t.Fatalf("err = %v", err)
 	}
@@ -47,9 +47,9 @@ func TestAddRecipeRefusesProjectRemote(t *testing.T) {
 
 func TestStartOAuthRefusesStaticTokenRecipe(t *testing.T) {
 	reg := newTestRegistry(t, nil, "svca")
-	_, err := reg.AddRecipe(context.Background(), mcp.CallScope{}, "huggingface", "")
+	_, err := reg.Administration.AddRecipe(context.Background(), mcp.CallScope{}, "huggingface", "")
 	testutil.FailErr(t, "AddRecipe", err)
-	_, err = reg.StartOAuth(context.Background(), mcp.CallScope{}, "huggingface")
+	_, err = reg.Credentials.StartOAuth(context.Background(), mcp.CallScope{}, "huggingface")
 	if !mcp.IsAdminCode(err, mcp.CodeOAuthNotSupported) {
 		t.Fatalf("err = %v", err)
 	}
@@ -57,7 +57,7 @@ func TestStartOAuthRefusesStaticTokenRecipe(t *testing.T) {
 
 func TestAddRecipePagerDutyDeclaresTokenToken(t *testing.T) {
 	reg := newTestRegistry(t, nil, "svca")
-	row, err := reg.AddRecipe(context.Background(), mcp.CallScope{}, "pagerduty", "")
+	row, err := reg.Administration.AddRecipe(context.Background(), mcp.CallScope{}, "pagerduty", "")
 	testutil.FailErr(t, "AddRecipe", err)
 	if row.CredentialWire != "token_token" {
 		t.Fatalf("credential_wire = %q", row.CredentialWire)
@@ -72,16 +72,16 @@ func TestConnectStampsRecipeTokenToken(t *testing.T) {
 		"pagerduty": {{Name: "list", Description: "list"}},
 	}}}
 	reg := newTestRegistry(t, cap, "svca")
-	_, err := reg.AddRecipe(context.Background(), mcp.CallScope{}, "pagerduty", "")
+	_, err := reg.Administration.AddRecipe(context.Background(), mcp.CallScope{}, "pagerduty", "")
 	testutil.FailErr(t, "AddRecipe", err)
 	secret := "u+secret"
 	yes := true
-	_, err = reg.UpdateProvider(context.Background(), mcp.CallScope{}, "pagerduty", api.UpdateMcpProviderRequest{
+	_, err = reg.Administration.UpdateProvider(context.Background(), mcp.CallScope{}, "pagerduty", api.UpdateMcpProviderRequest{
 		Enabled: &yes,
 		Token:   &secret,
 	}, "")
 	testutil.FailErr(t, "enable pagerduty", err)
-	_ = reg.Check(context.Background(), mcp.CallScope{})
+	_ = reg.Administration.Check(context.Background(), mcp.CallScope{})
 	got := cap.entry("pagerduty")
 	if got.ID == "" {
 		t.Fatal("connect did not see pagerduty")
@@ -115,7 +115,7 @@ func (c *entryCaptureConnector) entry(id string) mcp.MCPProviderEntry {
 
 func TestListRecipesMarksAdded(t *testing.T) {
 	reg := newTestRegistry(t, nil, "svca")
-	before := reg.ListRecipes(context.Background(), mcp.CallScope{})
+	before := reg.Administration.ListRecipes(context.Background(), mcp.CallScope{})
 	var found bool
 	for _, rec := range before {
 		if rec.ID == "github" {
@@ -128,9 +128,9 @@ func TestListRecipesMarksAdded(t *testing.T) {
 	if !found {
 		t.Fatal("github recipe missing")
 	}
-	_, err := reg.AddRecipe(context.Background(), mcp.CallScope{}, "github", "")
+	_, err := reg.Administration.AddRecipe(context.Background(), mcp.CallScope{}, "github", "")
 	testutil.FailErr(t, "AddRecipe", err)
-	after := reg.ListRecipes(context.Background(), mcp.CallScope{})
+	after := reg.Administration.ListRecipes(context.Background(), mcp.CallScope{})
 	for _, rec := range after {
 		if rec.ID == "github" && !rec.Added {
 			t.Fatal("github should be marked added")

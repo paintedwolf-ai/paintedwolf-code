@@ -10,7 +10,7 @@ this page surfaces the entries that need attention. The policy also generates
 **Update urgency** reflects threat model and protocol decay. **Update friction** reflects
 engineering cost and verification surface. Review both before choosing an update.
 
-**See also:** [Dependencies policy](../dependencies.md) · [Release operations](release.md) ·
+**See also:** [Dependencies policy](../dependencies.md) ·
 [Licensing](../licensing.md) · [Compatibility](../compatibility.md) · [Dev tasks](../dev-tasks.md)
 
 Pinned values are read from the tree when this page is generated. Upstream values come from `dependencies/upstream.json`, last refreshed on **2026-10-07**. The dependency inventory workflow regenerates this page after dependency changes land on main and refreshes upstream weekly. This page highlights priority updates and upgrade constraints; the complete policy and pin sources are linked below.

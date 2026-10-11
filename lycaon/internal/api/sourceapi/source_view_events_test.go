@@ -23,21 +23,21 @@ func TestSourceViewNotificationsAnnounceOnlyObservableChanges(t *testing.T) {
 	root := t.TempDir()
 	testutil.FailErr(t, "create directory", os.Mkdir(filepath.Join(root, "src"), 0o700))
 	testutil.FailErr(t, "create file", os.WriteFile(filepath.Join(root, "src", "main.go"), []byte("package main\n"), 0o600))
-	project, err := project.CreateWithRoot(t.Context(), server.ProjectRegistry, root)
+	project, err := project.CreateWithRoot(t.Context(), server.Workspace.ProjectRegistry, root)
 	testutil.FailErr(t, "create project", err)
-	physical, err := server.ProjectRegistry.Get(t.Context(), project.ID)
+	physical, err := server.Workspace.ProjectRegistry.Get(t.Context(), project.ID)
 	testutil.FailErr(t, "resolve workspace", err)
 	stream, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: project.ID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe to project events", err)
 	defer unsubscribe()
 
 	request := wire.SourceTreeViewCreate{Kind: "tree", ClientID: "window:main", OperationID: uuid.NewString(), WorkspaceID: physical.WorkspaceID()}
-	created := readSourceViewResponse(t, callSourceViewHandler(t, server.HandleCreateSourceView, project.ID, "", request), http.StatusCreated).Tree
+	created := readSourceViewResponse(t, callSourceViewHandler(t, server.Views.HandleCreateSourceView, project.ID, "", request), http.StatusCreated).Tree
 	ready := func() *wire.SourceTreeView {
 		t.Helper()
 		var state *wire.SourceTreeView
 		testutil.WaitFor(t, 10*time.Second, func() bool {
-			state = readSourceViewResponse(t, callSourceViewHandler(t, server.HandleGetSourceView, project.ID, created.ID, nil), http.StatusOK).Tree
+			state = readSourceViewResponse(t, callSourceViewHandler(t, server.Views.HandleGetSourceView, project.ID, created.ID, nil), http.StatusOK).Tree
 			return state.State == "ready"
 		})
 		return state
@@ -69,7 +69,7 @@ func TestSourceViewNotificationsAnnounceOnlyObservableChanges(t *testing.T) {
 		}
 	}
 
-	view, release, err := server.sourceViewRegistry().registry.Acquire(pagedview.Scope{Person: testutil.HostOwner().ID, Project: project.ID}, created.ID)
+	view, release, err := server.Views.sourceViewRegistry().registry.Acquire(pagedview.Scope{Person: testutil.HostOwner().ID, Project: project.ID}, created.ID)
 	testutil.FailErr(t, "pin tree view", err)
 	defer release()
 	for range 5 {
@@ -82,7 +82,7 @@ func TestSourceViewNotificationsAnnounceOnlyObservableChanges(t *testing.T) {
 
 	update := wire.SourceTreeViewUpdate{Kind: "tree", OperationID: uuid.NewString(), ExpectedIntentRevision: settled.IntentRevision,
 		Command: wire.SourceTreeCommand{Disclose: &wire.SourceTreeDisclose{Kind: "disclose", Disclosures: []wire.SourceTreeDisclosure{{Address: wire.SourceTreeAddress{RootID: project.Roots[0].ID, Path: "src"}, Open: true}}}}}
-	readSourceViewResponse(t, callSourceViewHandler(t, server.HandleApplySourceViewIntent, project.ID, created.ID, update), http.StatusOK)
+	readSourceViewResponse(t, callSourceViewHandler(t, server.Trees.HandleApplySourceViewIntent, project.ID, created.ID, update), http.StatusOK)
 	event, announced := next(10 * time.Second)
 	if !announced || event.IntentRevision == settled.IntentRevision {
 		t.Fatalf("intent change announced=%v event=%+v", announced, event)

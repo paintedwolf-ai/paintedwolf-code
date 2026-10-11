@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -52,12 +53,12 @@ func TestRegistryGateEvaluatorGatesList(t *testing.T) {
 	regPass, err := conditions.NewDefaultRegistry(deps)
 	testutil.FailErr(t, "conditions.NewDefaultRegistry failed", err)
 	evalPass := RegistryGateEvaluator{Registry: regPass}
-	vars := SetHumanApprovalIssued(nil, true)
-	vars = SetHumanApprovalReady(vars, true)
-	vars = SetHostVar(vars, "human_approval.blueprint_path", blueprintPath)
-	vars = SetHumanApprovalHash(vars, workflowdef.HashBlueprintContent(planBody))
-	vars = SetGateSatisfied(vars, "delegation_closeout_complete", true)
-	vars = SetGateSatisfied(vars, "evidence_passed:verify", true)
+	vars := runstate.SetHumanApprovalIssued(nil, true)
+	vars = runstate.SetHumanApprovalReady(vars, true)
+	vars = runstate.SetHostVar(vars, "human_approval.blueprint_path", blueprintPath)
+	vars = runstate.SetHumanApprovalHash(vars, workflowdef.HashBlueprintContent(planBody))
+	vars = runstate.SetGateSatisfied(vars, "delegation_closeout_complete", true)
+	vars = runstate.SetGateSatisfied(vars, "evidence_passed:verify", true)
 	ok, result, err = evalPass.PhaseGateMet(context.Background(), manifest, run, vars)
 	if err != nil || !ok {
 		t.Fatalf("all gates should pass: ok=%v result=%+v err=%v", ok, result, err)
@@ -91,5 +92,25 @@ func TestCollectFailedLeavesUnknownIgnored(t *testing.T) {
 	testutil.FailErr(t, "collectFailedLeaves failed", err)
 	if len(failed) != 1 || failed[0] != "missing_leaf" {
 		t.Fatalf("failed = %v", failed)
+	}
+}
+
+func TestReviewGateRequiresCommittedWorkflowAcceptance(t *testing.T) {
+	reg, err := conditions.NewDefaultRegistry(conditions.TestRegistryDepsWithEvidence())
+	testutil.FailErr(t, "create successful evidence registry", err)
+	run := &api.WorkflowRun{SessionID: "session", CurrentPhase: "review"}
+	manifest := workflowdef.Manifest{PhaseDefs: []workflowdef.PhaseDef{{ID: "review", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"evidence_passed:rl_key"}, ReviewLoop: &workflowdef.ReviewLoopDef{EvidenceKey: "rl_key"}}}}
+	evaluator := RegistryGateEvaluator{Registry: reg}
+	var vars map[string]any
+	passed, _, err := evaluator.PhaseGateMet(t.Context(), manifest, run, vars)
+	testutil.FailErr(t, "check prepared evidence", err)
+	if passed {
+		t.Fatal("external evidence bypassed verdict commit")
+	}
+	vars = runstate.SetGateSatisfied(vars, "evidence_passed:rl_key", true)
+	passed, _, err = evaluator.PhaseGateMet(t.Context(), manifest, run, vars)
+	testutil.FailErr(t, "check committed acceptance", err)
+	if !passed {
+		t.Fatal("committed review gate did not pass")
 	}
 }

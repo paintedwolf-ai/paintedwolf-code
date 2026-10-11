@@ -73,7 +73,7 @@ func (s *indexStore) restoreStructure(ctx context.Context) (bool, []string) {
 	}
 	slog.DebugContext(ctx, "Structural checkpoint restored", "root", s.root.ID, "directories", generation.directories.Len(),
 		"stale", len(stale), "load_ms", loaded.Sub(started).Milliseconds(), "verify_ms", time.Since(loaded).Milliseconds())
-	s.catalog.navigationChanged(s.root)
+	s.stores.Directories.navigationChanged(s.root)
 	return true, stale
 }
 
@@ -81,7 +81,7 @@ func (s *indexStore) restoreStructure(ctx context.Context) (bool, []string) {
 // whose stamp moved, whose path is gone, or which never completed. A created or
 // deleted directory surfaces through its parent, whose stamp moved with it.
 func (s *indexStore) verifyStructuralStamps(ctx context.Context, generation *structuralGeneration) ([]string, error) {
-	root, release, err := s.acquireNavigation(ctx)
+	root, release, err := s.navigation.Acquire(ctx, s.root.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +118,7 @@ func (s *indexStore) verifyStructuralStamps(ctx context.Context, generation *str
 					if admitted != nil {
 						admitted()
 					}
-					release, err := s.catalog.broker.Acquire(ctx, backgroundwork.Request{Key: s.workKey() + ":restore", Lane: s.root.Path,
+					release, err := s.stores.broker.Acquire(ctx, backgroundwork.Request{Key: s.workKey() + ":restore", Lane: s.root.Path,
 						Priority: backgroundwork.PriorityProactive, Resources: []backgroundwork.Resource{backgroundwork.ResourceDirectory}})
 					if err != nil {
 						admitted = nil

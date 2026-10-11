@@ -48,7 +48,7 @@ agent_pool:
 	testutil.FailErr(t, "open catalog", err)
 	_, err = NewPolicyStore()
 	testutil.FailErr(t, "open policy", err)
-	_, err = NewRegistry(catalog, providercredentials.NewAt(filepath.Join(configDir, "credential-vault.age")))
+	_, err = NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(configDir, "credential-vault.age")))
 	testutil.FailErr(t, "open registry", err)
 
 	afterLocal, err := os.ReadFile(localPath)

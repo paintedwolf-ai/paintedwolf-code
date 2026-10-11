@@ -47,7 +47,7 @@ const (
 	SearchIssueReasonResultLimit   SearchIssueReason = "result_limit"
 	SearchIssueReasonExecutorError SearchIssueReason = "executor_error"
 	SearchIssueReasonFilesSkipped  SearchIssueReason = "files_skipped"
-	// SearchIssueReasonTimeBudget: the code leg's wall-clock budget ended with
+	// SearchIssueReasonTimeBudget: a source leg's wall-clock budget ended with
 	// files unscanned.
 	SearchIssueReasonTimeBudget SearchIssueReason = "time_budget"
 	// SearchIssueReasonCatalogWarming: Count roots had no source generation in
@@ -64,8 +64,9 @@ const (
 	SearchIssueReasonCatalogFailed        SearchIssueReason = "catalog_failed"
 	SearchIssueReasonCatalogRefreshFailed SearchIssueReason = "catalog_refresh_failed"
 	SearchIssueReasonCatalogRefreshing    SearchIssueReason = "catalog_refreshing"
-	// SearchIssueReasonSymbolBudget: declaration discovery in Count projects
-	// stopped at its line cap, clock, or file budget.
+	// SearchIssueReasonSymbolPending: retrying advances retained declaration work.
+	SearchIssueReasonSymbolPending SearchIssueReason = "symbol_pending"
+	// SearchIssueReasonSymbolBudget: a terminal declaration resource bound.
 	SearchIssueReasonSymbolBudget SearchIssueReason = "symbol_budget"
 )
 

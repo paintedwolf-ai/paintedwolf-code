@@ -3,6 +3,7 @@ package heldtools
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 	"time"
 
@@ -30,7 +31,10 @@ func run(t *testing.T, tool interface {
 	Run(context.Context, map[string]any, tools.ToolContext) (string, error)
 }, args map[string]any) (map[string]any, error) {
 	t.Helper()
-	out, err := tool.Run(t.Context(), args, tools.ToolContext{SessionID: "s1", Out: &tools.ToolInvocationOut{}})
+	out, err := tool.Run(t.Context(), args, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1"},
+		Effects:  tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +105,7 @@ func TestUnknownHandleRejectsWithAStructuredCode(t *testing.T) {
 		Run(context.Context, map[string]any, tools.ToolContext) (string, error)
 	}{"held_result": &ResultTool{Registry: registry}, "held_stop": &StopTool{Registry: registry}} {
 		_, err := run(t, tool, map[string]any{"handle": "held-9"})
-		reject := tools.AsToolReject(err)
+		reject := toolrejection.AsToolReject(err)
 		if reject == nil || reject.Code != "HELD_CALL_NOT_FOUND" || reject.Data["handle"] != "held-9" {
 			t.Fatalf("%s error = %v", name, err)
 		}

@@ -19,8 +19,8 @@ func TestSynthesisArcBNoSummarizeCompact(t *testing.T) {
 		"lycaon/internal/survey/synthesis_snapshot.go",
 		"lycaon/internal/survey/synthesis_curate.go",
 		"lycaon/internal/survey/synthesis_evidence.go",
-		"lycaon/internal/workflow/fanout_evidence.go",
-		"lycaon/internal/session/synthesis_evidence.go",
+		"lycaon/internal/workflow/review/fanout_evidence.go",
+		"lycaon/internal/session/closeoutassembly/synthesis_evidence.go",
 	} {
 		path := filepath.Join(root, rel)
 		body, err := os.ReadFile(path)

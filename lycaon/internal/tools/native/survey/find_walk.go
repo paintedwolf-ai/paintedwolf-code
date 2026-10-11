@@ -36,10 +36,10 @@ type findWalkParams struct {
 }
 
 func (t *FindTool) walkFindTree(p findWalkParams) error {
-	if strings.TrimSpace(p.tctx.WorkerBranchRoot) != "" {
+	if strings.TrimSpace(p.tctx.Source.WorkerBranchRoot) != "" {
 		return t.walkFindTreeSurvey(p)
 	}
-	inventory, err := sourceInventoryForScope(p.ctx, p.catalog, p.tctx.ProjectID, p.root, p.fullRoot)
+	inventory, err := sourceInventoryForScope(p.ctx, catalogOrProcess(p.catalog), p.tctx.Identity.ProjectID, p.root, p.fullRoot)
 	if err != nil {
 		return err
 	}

@@ -1,4 +1,4 @@
-description: "Bounded recursive directory walk — canonical for ** name_glob. Default type=any returns files and directories together. Wide unscoped walk at path=\".\" (2000+ paths) returns view digest (selected=0) with distribution + FIND_OVERFLOW_NARROW — pass name_glob when you can name a filename pattern. A concrete path (not \".\") or name_glob returns literal results[] (same as list_dir targeted). Explicit max_results or offset also forces a literal page. Replaces command: find(1) recursive walk, tree(1)."
+description: "Paths accept @scratch/<path> for this chat or worker’s private working files. Bounded recursive directory walk — canonical for ** name_glob. Default type=any returns files and directories together. Wide unscoped walk at path=\".\" (2000+ paths) returns view digest (selected=0) with distribution + FIND_OVERFLOW_NARROW — pass name_glob when you can name a filename pattern. A concrete path (not \".\") or name_glob returns literal results[] (same as list_dir targeted). Explicit max_results or offset also forces a literal page. Replaces command: find(1) recursive walk, tree(1)."
 schema:
   type: object
   properties:

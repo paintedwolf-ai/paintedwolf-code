@@ -68,7 +68,7 @@ func buildListDirZoomedMapResponse(ctx context.Context, t *ListDirTool, tctx too
 	if err != nil {
 		return listDirResponse{}, err
 	}
-	reader, status, err := catalogOrProcess(t.Catalog).OpenSummary(ctx, tctx.ProjectID,
+	reader, status, err := catalogOrProcess(t.Catalog).Trees.OpenSummary(ctx, tctx.Identity.ProjectID,
 		sourcecatalog.Root{ID: resolved.Root.ID, Path: resolved.Root.Path},
 		sourcecatalog.TreeScope{Key: scope.Key, Filter: scope.Filter, PruneNestedVCS: true}, 100*time.Millisecond)
 	if err != nil {

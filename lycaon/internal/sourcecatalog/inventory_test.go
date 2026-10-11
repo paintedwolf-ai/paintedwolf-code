@@ -14,13 +14,13 @@ import (
 
 func TestInventoryInvalidationsKeepHumanScope(t *testing.T) {
 	catalog, root := indexFixture(t)
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get catalog", err)
 	store.inventory.wake = make(chan struct{}, 1)
 	initialMark := store.invalidation.next
 	writeIndexFile(t, root.Path, "staging/data", "in flight")
 	t.Cleanup(repochange.HoldPrivateTree(filepath.Join(root.Path, "staging")))
-	catalog.invalidateTrees(root.Path, []string{"staging/data"})
+	catalog.Trees.invalidateTrees(root.Path, []string{"staging/data"})
 	if len(store.inventory.dirty) != 0 || store.invalidation.next != initialMark || len(store.inventory.wake) != 0 {
 		t.Fatal("private staging scheduled structural work")
 	}
@@ -28,17 +28,22 @@ func TestInventoryInvalidationsKeepHumanScope(t *testing.T) {
 	for _, rel := range paths {
 		writeIndexFile(t, root.Path, rel, "source")
 	}
-	catalog.invalidateTrees(root.Path, paths)
-	if len(store.inventory.dirty) != len(paths) {
+	catalog.Trees.invalidateTrees(root.Path, paths)
+	if len(store.inventory.dirty) != 3 {
 		t.Fatalf("pending human-visible directories: %v", store.inventory.dirty)
 	}
 	store.inventory.invalidate(nil)
 	testutil.FailErr(t, "publish mixed invalidations", store.inventoryPass(t.Context()))
-	waitInventoryExtent(t, catalog, root, 12)
+	waitInventoryExtent(t, catalog, root, 8)
 	writeIndexFile(t, root.Path, ".git/objects/later", "updated")
-	catalog.invalidateTrees(root.Path, []string{".git/objects/later"})
+	catalog.Trees.invalidateTrees(root.Path, []string{".git/objects/later"})
 	testutil.FailErr(t, "refresh Git metadata", store.inventoryPass(t.Context()))
-	waitInventoryExtent(t, catalog, root, 13)
+	waitInventoryExtent(t, catalog, root, 8)
+	observed, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".git/objects", DirectoryRead{})
+	testutil.FailErr(t, "read Git metadata on demand", err)
+	if !observed.Complete || observed.Entries != 2 {
+		t.Fatalf("on-demand Git listing: %+v", observed)
+	}
 	reader := waitIndex(t, catalog, root)
 	indexed, err := reader.FilePathsPage(t.Context(), FileScope{Audience: HumanAudience, IncludeHidden: true}, "", TreeFilePageLimit)
 	testutil.FailErr(t, "read search projection", err)
@@ -72,7 +77,7 @@ func TestIndexPublishesBeforeYieldingToInitialInventory(t *testing.T) {
 	}
 	writerContext, stopWriter := context.WithTimeout(ctx, time.Second)
 	defer stopWriter()
-	unwrite, err := store.write(writerContext)
+	unwrite, err := store.writer.Write(writerContext, store.writable)
 	testutil.FailErr(t, "acquire writer during inventory wait", err)
 	unwrite()
 	var revision int64
@@ -89,22 +94,22 @@ func TestInventoryCompletesWhileSearchWriterIsOccupied(t *testing.T) {
 	for i := range 400 {
 		writeIndexFile(t, root.Path, fmt.Sprintf("dir-%03d/file.txt", i), "source")
 	}
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get shared catalog", err)
-	unwrite, err := store.write(t.Context())
+	unwrite, err := store.writer.Write(t.Context(), store.writable)
 	testutil.FailErr(t, "occupy search writer", err)
 	defer unwrite()
-	testutil.FailErr(t, "start inventory", catalog.WarmNavigation(t.Context(), "p", root))
-	testutil.FailErr(t, "await initial structure", catalog.AwaitNavigation(t.Context(), "p", root))
+	testutil.FailErr(t, "start inventory", catalog.Directories.WarmNavigation(t.Context(), "p", root))
+	testutil.FailErr(t, "await initial structure", catalog.Directories.AwaitNavigation(t.Context(), "p", root))
 	waitInventoryExtent(t, catalog, root, 800)
 	if _, err := os.Stat(store.file); !os.IsNotExist(err) {
 		t.Fatalf("inventory created search storage: %v", err)
 	}
-	before, err := catalog.OpenNavigation(t.Context(), "p", root)
+	before, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "retain original structure", err)
 	defer func() { _ = before.Close() }()
 	writeIndexFile(t, root.Path, "new/nested/file.txt", "new")
-	catalog.invalidateTrees(root.Path, []string{"new"})
+	catalog.Trees.invalidateTrees(root.Path, []string{"new"})
 	waitInventoryExtent(t, catalog, root, 803)
 	if total := navigationExtent(t, before); total != 800 {
 		t.Fatalf("retained extent moved to %d", total)
@@ -114,7 +119,7 @@ func TestInventoryCompletesWhileSearchWriterIsOccupied(t *testing.T) {
 func waitInventoryExtent(t *testing.T, catalog *Catalog, root Root, want int64) {
 	t.Helper()
 	testutil.WaitFor(t, 15*time.Second, func() bool {
-		nav, err := catalog.OpenNavigation(t.Context(), "p", root)
+		nav, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 		if err != nil {
 			return false
 		}
@@ -135,7 +140,7 @@ func waitInventoryExtent(t *testing.T, catalog *Catalog, root Root, want int64) 
 func TestInventoryRetriesFailedFrontierPublication(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "nested/file.txt", "source")
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get catalog", err)
 	moved := root.Path + "-unavailable"
 	testutil.FailErr(t, "make root unavailable", os.Rename(root.Path, moved))
@@ -159,7 +164,7 @@ func TestInventoryRetriesFailedFrontierPublication(t *testing.T) {
 func TestInitialInventoryFailureSettlesWaitersAndRecovers(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "nested/file.txt", "source")
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get catalog", err)
 	moved := root.Path + "-unavailable"
 	testutil.FailErr(t, "make root unavailable", os.Rename(root.Path, moved))

@@ -3,16 +3,15 @@ package delegation
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/anchorcatalog"
-	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/prompts/promptstest"
-	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/grounding"
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -112,7 +111,7 @@ func TestGroundingLifecycleRetainsCloseoutRefusalAndOnePostTurnNotice(t *testing
 	state.Escalated = true
 	coord.State.Set(sessionID, state)
 	err = coord.AfterPrompt(t.Context(), sessionID, nil)
-	if !errors.Is(err, session.ErrGroundingEscalated) || len(notices) != 1 || notices[0].Code != "COORDINATOR_GROUNDING_ESCALATED" || notices[0].Copy == nil {
+	if !errors.Is(err, guidance.ErrGroundingEscalated) || len(notices) != 1 || notices[0].Code != "COORDINATOR_GROUNDING_ESCALATED" || notices[0].Copy == nil {
 		t.Fatalf("escalation delivery: error=%v notices=%+v", err, notices)
 	}
 	coord.Reset(sessionID)

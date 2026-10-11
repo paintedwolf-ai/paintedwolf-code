@@ -25,7 +25,9 @@ func TestFindingPagesAndDetailsAreRootScoped(t *testing.T) {
 	after := int64(0)
 	total := 0
 	for {
-		raw, err := readFindings(t.Context(), map[string]any{"findings_after": after}, tools.ToolContext{SessionID: "child"}, deps)
+		raw, err := readFindings(t.Context(), map[string]any{"findings_after": after}, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "child"},
+		}, deps)
 		testutil.FailErr(t, "page findings", err)
 		if strings.Contains(raw, "large private detail") || strings.Contains(raw, "unrelated") {
 			t.Fatal("page exposed body or another root")
@@ -48,12 +50,16 @@ func TestFindingPagesAndDetailsAreRootScoped(t *testing.T) {
 	if total != 19 {
 		t.Fatalf("paged %d findings, want 19", total)
 	}
-	raw, err := readFindings(t.Context(), map[string]any{"finding_id": int64(1)}, tools.ToolContext{SessionID: "child"}, deps)
+	raw, err := readFindings(t.Context(), map[string]any{"finding_id": int64(1)}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "child"},
+	}, deps)
 	testutil.FailErr(t, "read finding body", err)
 	if !strings.Contains(raw, "large private detail") {
 		t.Fatal("detail missing")
 	}
-	if _, err := readFindings(t.Context(), map[string]any{"finding_id": int64(20)}, tools.ToolContext{SessionID: "child"}, deps); err == nil {
+	if _, err := readFindings(t.Context(), map[string]any{"finding_id": int64(20)}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "child"},
+	}, deps); err == nil {
 		t.Fatal("read another root's finding")
 	}
 }

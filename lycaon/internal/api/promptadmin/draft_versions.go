@@ -12,7 +12,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleListDraftVersions(w http.ResponseWriter, r *http.Request) {
+func (s *Content) HandleListDraftVersions(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
 		return

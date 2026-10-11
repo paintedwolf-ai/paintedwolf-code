@@ -32,6 +32,10 @@ type preparedRecording struct {
 
 // Prepare publishes content before the caller acquires a database writer.
 func (s *Store) Prepare(ctx context.Context, inputs []RecordInput) (PreparedRecording, error) {
+	return s.prepare(ctx, inputs)
+}
+
+func (s *Store) prepare(ctx context.Context, inputs []RecordInput) (*preparedRecording, error) {
 	if s == nil || s.sqlDB == nil {
 		return nil, errors.New("ledger not configured")
 	}
@@ -40,7 +44,7 @@ func (s *Store) Prepare(ctx context.Context, inputs []RecordInput) (PreparedReco
 			return nil, err
 		}
 	}
-	p := &preparedRecording{store: s, release: s.objects.AcquireReferenceLease()}
+	p := &preparedRecording{store: s, release: s.Content.AcquireReferenceLease()}
 	for _, raw := range inputs {
 		in := preparedRecord{RecordInput: normalizedInput(raw)}
 		in.Before, in.After = bytes.Clone(in.Before), bytes.Clone(in.After)
@@ -50,7 +54,7 @@ func (s *Store) Prepare(ctx context.Context, inputs []RecordInput) (PreparedReco
 			sha   string
 			bytes []byte
 		}{{in.BeforeSHA256, in.Before}, {in.AfterSHA256, in.After}} {
-			object, err := prepareContent(ctx, s.objects, content.sha, content.bytes, in.EntryKind)
+			object, err := prepareContent(ctx, s.Content, content.sha, content.bytes, in.EntryKind)
 			if err != nil {
 				p.Close()
 				return nil, err
@@ -110,4 +114,29 @@ func (p *preparedRecording) Close() {
 		p.release = nil
 		p.inputs = nil
 	}
+}
+
+type preparedTrack struct {
+	TrackInput
+	object *db.UpsertSourceBlobObjectParams
+}
+
+// commitObserved filters pending mutations against the transaction's admission scope.
+func (p *preparedRecording) commitObserved(ctx context.Context, tx *sql.Tx, scope MutationObservationScope) (int, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.release == nil || tx == nil {
+		return 0, errors.New("prepared history is closed or transaction is missing")
+	}
+	admitted := make([]preparedRecord, 0, len(p.inputs))
+	for _, in := range p.inputs {
+		if scope == nil || !scope.Pending(in.BranchID, in.RootID, in.Path) {
+			admitted = append(admitted, in)
+		}
+	}
+	if len(admitted) == 0 {
+		return 0, nil
+	}
+	_, err := p.store.recordBatchIdentityTx(ctx, p.store.queries.WithTx(tx), admitted)
+	return len(admitted), err
 }

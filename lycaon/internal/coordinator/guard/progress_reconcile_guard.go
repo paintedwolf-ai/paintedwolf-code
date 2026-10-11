@@ -17,11 +17,11 @@ func ObserveProgressReconcileOnSynthesis(
 	args map[string]any,
 	gc *oar.GuardContext,
 ) {
-	if gc == nil || gc.Tool != "update_progress" {
+	if gc == nil || gc.Invocation.Tool != "update_progress" {
 		return
 	}
-	gc.Surface = strings.TrimSpace(surfaceID)
-	if gc.Surface != spawn.SurfaceImplementSynthesis {
+	gc.Session.Surface = strings.TrimSpace(surfaceID)
+	if gc.Session.Surface != spawn.SurfaceImplementSynthesis {
 		return
 	}
 	proposed, _ := args["content"].(string)
@@ -29,5 +29,5 @@ func ObserveProgressReconcileOnSynthesis(
 	if proposed == "" {
 		return
 	}
-	gc.ProgressReconcileNeeded = !progress.SynthesisReconcileOnly(currentProgress, proposed)
+	gc.Progress.ProgressReconcileNeeded = !progress.SynthesisReconcileOnly(currentProgress, proposed)
 }

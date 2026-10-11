@@ -40,13 +40,13 @@ func (s Text) SHA256() string {
 // ProjectDocuments returns the shared-document view when this invocation
 // reads the project tree itself; a worker on a private branch reads a copy.
 func ProjectDocuments(tctx tools.ToolContext) (tools.EditorDocuments, bool) {
-	if tctx.EditorDocuments == nil || strings.TrimSpace(tctx.ProjectID) == "" {
+	if tctx.Source.EditorDocuments == nil || strings.TrimSpace(tctx.Identity.ProjectID) == "" {
 		return nil, false
 	}
-	if tctx.SourceWorkspaceKind != api.SourceWorkspaceKindProject || strings.TrimSpace(tctx.WorkerBranchRoot) != "" {
+	if tctx.Source.SourceWorkspaceKind != api.SourceWorkspaceKindProject || strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
 		return nil, false
 	}
-	return tctx.EditorDocuments, true
+	return tctx.Source.EditorDocuments, true
 }
 
 // DocumentsFor narrows ProjectDocuments to one resolved path:
@@ -67,7 +67,7 @@ func LoadText(ctx context.Context, tool string, access Access, tctx tools.ToolCo
 		if err != nil {
 			return Text{}, err
 		}
-		doc, open, err := documents.OpenDocument(ctx, tctx.ProjectID, branch, resolved.Root.ID, resolved.ScopeRel)
+		doc, open, err := documents.OpenDocument(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, resolved.ScopeRel)
 		if err != nil {
 			return Text{}, fmt.Errorf("read collaborative document: %w", err)
 		}
@@ -78,7 +78,7 @@ func LoadText(ctx context.Context, tool string, access Access, tctx tools.ToolCo
 			return Text{Content: doc.Text, Editor: &doc}, nil
 		}
 	}
-	disk, err := ReadTextDocument(tool, access, resolved, tctx.MaxToolSpillBytes)
+	disk, err := ReadTextDocument(tool, access, resolved, tctx.Host.MaxToolSpillBytes)
 	if err != nil {
 		return Text{}, err
 	}
@@ -120,7 +120,7 @@ func DraftsFor(ctx context.Context, tctx tools.ToolContext) DraftOverlay {
 	if !ok {
 		return nil
 	}
-	dirty, err := documents.DirtyDocuments(ctx, tctx.ProjectID, tctx.ProjectSourceBranch)
+	dirty, err := documents.DirtyDocuments(ctx, tctx.Identity.ProjectID, tctx.Source.ProjectSourceBranch)
 	if err != nil {
 		slog.WarnContext(ctx, "editor documents unavailable for search; searching files", "err", err)
 		return nil
@@ -130,7 +130,7 @@ func DraftsFor(ctx context.Context, tctx tools.ToolContext) DraftOverlay {
 	}
 	overlay := make(DraftOverlay, len(dirty))
 	for _, d := range dirty {
-		abs, root, err := projectroot.ResolveAbs(tctx.Roots, d.RootID, d.Path)
+		abs, root, err := projectroot.ResolveAbs(tctx.Source.Roots, d.RootID, d.Path)
 		if err != nil || root.ID != d.RootID {
 			continue
 		}

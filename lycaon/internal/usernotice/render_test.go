@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -117,7 +117,7 @@ func TestSpendCeilingNoticeCoverage(t *testing.T) {
 			if tc.unpriced > 0 || tc.unknown > 0 {
 				coverage = wire.CostEstimateLowerBound
 			}
-			ctx := ContextFromPromptError(&session.SessionSpendCeilingReached{CeilingUSD: 5, SpentUSD: 5.12, Coverage: coverage, UnpricedTokens: tc.unpriced, UnknownChargedCalls: tc.unknown})
+			ctx := ContextFromPromptError(&spendguard.CeilingReached{CeilingUSD: 5, SpentUSD: 5.12, Coverage: coverage, UnpricedTokens: tc.unpriced, UnknownChargedCalls: tc.unknown})
 			copy, ok := catalog.Render("session_spend_ceiling_reached", ctx)
 			if !ok {
 				t.Fatal("spend notice did not render")

@@ -1,20 +1,21 @@
 package toolhost
 
 import (
+	"github.com/lycaon/lycaon/internal/toolapproval"
+
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 type gateRepeatLedgerAdapter struct {
 	rt *approvalstate.GateRepeatLedger
 }
 
-func (a gateRepeatLedgerAdapter) NoteAsk(chatSessionID, reasonKey, subject string) tools.GateRepeatSnapshot {
+func (a gateRepeatLedgerAdapter) NoteAsk(chatSessionID, reasonKey, subject string) toolapproval.GateRepeatSnapshot {
 	if a.rt == nil {
-		return tools.GateRepeatSnapshot{ReasonKey: reasonKey}
+		return toolapproval.GateRepeatSnapshot{ReasonKey: reasonKey}
 	}
 	snap := a.rt.NoteAsk(chatSessionID, reasonKey, subject)
-	return tools.GateRepeatSnapshot{
+	return toolapproval.GateRepeatSnapshot{
 		ReasonKey:         snap.ReasonKey,
 		Count:             snap.Count,
 		Subjects:          append([]string(nil), snap.Subjects...),

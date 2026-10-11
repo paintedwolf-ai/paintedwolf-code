@@ -3,11 +3,11 @@ package native
 import (
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestWritePathRejectRequiresTypedRefusal(t *testing.T) {
@@ -22,7 +22,7 @@ func TestWritePathRejectRequiresTypedRefusal(t *testing.T) {
 		},
 		{
 			name:     "typed observation",
-			err:      &tools.ToolReject{Code: "UNKNOWN_ROOT_LABEL"},
+			err:      &toolrejection.ToolReject{Code: "UNKNOWN_ROOT_LABEL"},
 			preserve: true,
 		},
 		{

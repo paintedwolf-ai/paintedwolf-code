@@ -21,10 +21,10 @@ func ObserveTaskWhilePendingUserInput(
 	if gc == nil || sess == nil {
 		return
 	}
-	gc.Tool = strings.TrimSpace(strings.ToLower(toolName))
+	gc.Invocation.Tool = strings.TrimSpace(strings.ToLower(toolName))
 	gc.DeriveToolClassFacts()
-	if gc.Tool != "task" || strings.TrimSpace(sess.ParentSessionID) != "" {
+	if gc.Invocation.Tool != "task" || strings.TrimSpace(sess.ParentSessionID) != "" {
 		return
 	}
-	gc.PendingUserInput = implState.PendingUserInput
+	gc.Session.PendingUserInput = implState.PendingUserInput
 }

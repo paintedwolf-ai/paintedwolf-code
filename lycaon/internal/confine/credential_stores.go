@@ -102,28 +102,3 @@ func expandHomePaths(paths []string) []string {
 	}
 	return out
 }
-
-// intersectsKeyMaterial reports whether path is at, inside, or above the floor.
-func intersectsKeyMaterial(path string) bool {
-	return intersectsAny(path, KeyMaterialWritePaths())
-}
-
-// intersectsCredentialStore reports whether path is at, inside, or above a catalogued
-// store.
-func intersectsCredentialStore(path string) bool {
-	return intersectsAny(path, CredentialStorePaths())
-}
-
-// intersectsAny matches both descendants and capability-bearing ancestors.
-// Comparison folds case where the filesystem does — see path_case.go.
-func intersectsAny(path string, roots []string) bool {
-	for _, root := range roots {
-		if strings.TrimSpace(root) == "" || filepath.Clean(root) == "." {
-			continue
-		}
-		if PathAtOrUnder(path, root) || PathAtOrUnder(root, path) {
-			return true
-		}
-	}
-	return false
-}

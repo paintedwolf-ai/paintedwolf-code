@@ -3,9 +3,7 @@ package confine
 import (
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 )
@@ -54,20 +52,12 @@ func validateWriteRootList(roots []string, refusal func(string) (bool, string)) 
 	return nil
 }
 
-// validateEffectiveWriteRoots rejects ambient home and filesystem roots.
-func validateEffectiveWriteRoots(roots []string, granted map[string]bool) *WriteRootRefusalError {
-	home, _ := os.UserHomeDir()
-	homeKey := strings.TrimRight(fspath.CanonicalPath(home), "/")
+// validateEffectiveWriteRoots validates resolved roots; floors apply inside broad roots.
+func validateEffectiveWriteRoots(roots []string) *WriteRootRefusalError {
 	for _, root := range normalizePathList(roots) {
 		resolved := fspath.CanonicalPath(root)
 		if resolved == "" || !filepath.IsAbs(resolved) {
 			return &WriteRootRefusalError{Path: root, Code: WriteRootCodeNotAbsolute}
-		}
-		if resolved == string(filepath.Separator) {
-			return &WriteRootRefusalError{Path: root, Code: WriteRootCodeFilesystemRoot}
-		}
-		if homeKey != "" && strings.TrimRight(resolved, "/") == homeKey && !granted[strings.TrimRight(resolved, "/")] {
-			return &WriteRootRefusalError{Path: root, Code: WriteRootCodeHome}
 		}
 	}
 	return nil

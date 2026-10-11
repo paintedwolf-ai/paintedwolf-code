@@ -33,7 +33,7 @@ func commitReviewDefault(kind string) bool {
 	}
 }
 
-func (s *Handler) sourceGitReviewRequest(w http.ResponseWriter, r *http.Request) (sourceGitReviewRequest, bool) {
+func (s *Review) sourceGitReviewRequest(w http.ResponseWriter, r *http.Request) (sourceGitReviewRequest, bool) {
 	var empty sourceGitReviewRequest
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
@@ -57,15 +57,15 @@ func (s *Handler) sourceGitReviewRequest(w http.ResponseWriter, r *http.Request)
 	} else if present {
 		parent = &value
 	}
-	req, err := s.loadSourceGitReview(r.Context(), p, chi.URLParam(r, "git_change_id"), movement, parent)
+	req, err := s.Comparisons.loadSourceGitReview(r.Context(), p, chi.URLParam(r, "git_change_id"), movement, parent)
 	if err != nil {
-		s.writeComparisonError(w, r, err)
+		s.Comparisons.writeComparisonError(w, r, err)
 		return empty, false
 	}
 	return req, true
 }
 
-func (s *Handler) HandleGetProjectSourceGitReview(w http.ResponseWriter, r *http.Request) {
+func (s *Review) HandleGetProjectSourceGitReview(w http.ResponseWriter, r *http.Request) {
 	req, ok := s.sourceGitReviewRequest(w, r)
 	if !ok {
 		return
@@ -108,7 +108,7 @@ type reviewPageInput struct {
 // readReviewPageInput validates `cursor` and `limit` before the commit pair is
 // resolved. Cursors bind to the pair and root, which fully determine the
 // listed files.
-func (s *Handler) readReviewPageInput(
+func (s *Review) readReviewPageInput(
 	w http.ResponseWriter,
 	r *http.Request,
 	pages pagecursor.Codec[reviewPosition],
@@ -135,7 +135,7 @@ func (s *Handler) readReviewPageInput(
 }
 
 // readReviewPage reads one page of the commit pair req names.
-func (s *Handler) readReviewPage(
+func (s *Review) readReviewPage(
 	w http.ResponseWriter,
 	r *http.Request,
 	pages pagecursor.Codec[reviewPosition],

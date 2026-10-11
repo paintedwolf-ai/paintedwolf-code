@@ -3,6 +3,7 @@ package safecmd
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -105,7 +106,7 @@ func Reject(code string, data map[string]any) error {
 	if data == nil {
 		data = map[string]any{}
 	}
-	return &tools.ToolReject{Code: code, Data: data}
+	return &toolrejection.ToolReject{Code: code, Data: data}
 }
 
 // EnforceInputBytes returns a structured reject when size exceeds Caps.InputBytes.

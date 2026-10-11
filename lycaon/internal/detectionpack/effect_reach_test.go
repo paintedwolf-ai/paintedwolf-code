@@ -117,19 +117,27 @@ func TestPerProcessReachSilencesOnlyContainedCleanupStage(t *testing.T) {
 	source := NewGateSource(NewMatcher(cat))
 	project := resolvedTempDir(t)
 	action := hitl.ProposedAction{
-		Tool: "command", ProjectDir: project, SessionID: "chat",
-		Args: map[string]any{"command": "rm -rf target Cargo.lock && cargo build"},
-		Contained: hitl.Contained{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "rm -rf target Cargo.lock && cargo build"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: project,
+SessionID: "chat",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{
 			FSJailed: true, Egress: hitl.ContainedEgressProxy,
 			Roots: []string{project}, WriteRoots: []string{project},
 		},
-	}
+},
+}
 	if match, ok := source.MatchAction(action, "balanced"); ok {
 		t.Fatalf("contained cleanup stage raised %s/%s", match.PackID, match.RuleID)
 	}
 
 	outside := resolvedTempDir(t)
-	action.Args = map[string]any{"command": "rm -rf " + outside + " && cargo build"}
+	action.Invocation.Args = map[string]any{"command": "rm -rf " + outside + " && cargo build"}
 	if match, ok := source.MatchAction(action, "balanced"); !ok || match.PackID != "command-destructive" {
 		t.Fatalf("outside cleanup match = %+v ok=%v", match, ok)
 	}

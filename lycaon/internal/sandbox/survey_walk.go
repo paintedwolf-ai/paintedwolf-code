@@ -76,6 +76,11 @@ type SurveyDeferrer interface {
 	DeferDir(rel, abs string) bool
 }
 
+// SurveyLazyTier records readable directory stubs without eager descent.
+type SurveyLazyTier interface {
+	LazyDir(rel, abs string) (detail string, lazy bool)
+}
+
 // Human listings include hidden entries, project overlays, and VCS metadata.
 func HumanFilesSurveyOptions() SurveyOptions {
 	return SurveyOptions{IncludeHidden: true, IncludeEngineOverlay: true, IncludeVCSMetadata: true}
@@ -229,6 +234,12 @@ func (w *surveyWalker) visitEntries(rel, abs string, depth, dirDepth int, entrie
 		}
 		if !isDir {
 			continue
+		}
+		if lazyScope, ok := w.opts.Scope.(SurveyLazyTier); ok {
+			if detail, lazy := lazyScope.LazyDir(childRel, childAbs); lazy {
+				w.boundary(childRel, BoundaryLazy, detail, 0)
+				continue
+			}
 		}
 		if w.opts.MaxDepth > 0 && childDepth >= w.opts.MaxDepth {
 			continue

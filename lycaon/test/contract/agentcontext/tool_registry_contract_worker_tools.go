@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -25,7 +25,7 @@ func registerContractWorkerSurfaceTools(t *testing.T, reg *tools.DefaultRegistry
 	if err := worker.RegisterAnswerDecisionTool(reg, worker.AnswerDecisionToolDeps{
 		Answer: &worker.AnswerDecisionService{
 			Queue:     worker.NewInMemoryQueue(1),
-			Decisions: session.NewMemoryDecisionStore(),
+			Decisions: sessiondecisions.NewMemory(),
 		},
 	}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterAnswerDecisionTool", err)

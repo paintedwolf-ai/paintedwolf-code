@@ -279,3 +279,22 @@ func TestCaptureRedactionBoundaryIsNameAnchored(t *testing.T) {
 		t.Fatalf("bearer token was not redacted: %q", got)
 	}
 }
+
+func TestCaptureRedactorReleasePreservesReplacementAndFieldFloor(t *testing.T) {
+	releaseOld := SetCaptureRedactor(func(value string) string { return strings.ReplaceAll(value, "old-marker", "old-screened") })
+	releaseCurrent := SetCaptureRedactor(func(value string) string { return strings.ReplaceAll(value, "current-marker", "current-screened") })
+	defer releaseOld()
+	defer releaseCurrent()
+	releaseOld()
+	releaseOld()
+	if got := RedactCaptureText("current-marker"); got != "current-screened" {
+		t.Fatalf("old owner removed current redaction: %q", got)
+	}
+	releaseCurrent()
+	if got := RedactCaptureText("current-marker"); got != "current-marker" {
+		t.Fatalf("released owner remains installed: %q", got)
+	}
+	if got := RedactCaptureText(`{"api_key":"credential-plain"}`); strings.Contains(got, "credential-plain") {
+		t.Fatal("released catalog disabled the capture field floor")
+	}
+}

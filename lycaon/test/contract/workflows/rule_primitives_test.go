@@ -8,7 +8,8 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -48,7 +49,7 @@ func TestRuleYAMLWhenKeysAreImplemented(t *testing.T) {
 				}
 				if key == "posture_is" {
 					val, _ := raw.(string)
-					if !session.ValidSessionPosture(val) {
+					if !sessionposture.ValidSessionPosture(val) {
 						t.Errorf("%s rule %q: invalid posture_is %q", e.Name(), rule.ID, val)
 					}
 				}
@@ -59,8 +60,8 @@ func TestRuleYAMLWhenKeysAreImplemented(t *testing.T) {
 
 func TestRuleEnginePostureBehaviorContract(t *testing.T) {
 	t.Parallel()
-	postures, err := session.LoadPostureRegistry()
-	contractcheck.FailErr(t, "session.LoadPostureRegistry failed", err)
+	postures, err := profiles.LoadPostureRegistry()
+	contractcheck.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	packs, err := rules.LoadBundledRules()
 	contractcheck.FailErr(t, "rules.LoadBundledRules failed", err)
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})

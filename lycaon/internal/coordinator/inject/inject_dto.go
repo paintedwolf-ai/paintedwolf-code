@@ -16,6 +16,7 @@ const maxPhaseIDPreview = 4
 
 // PhaseExitView is the current phase's leave recipe.
 type PhaseExitView struct {
+	ReviewWorkIDs       map[string]string
 	Kind                string
 	DepthParam          string
 	CoordinatorAdvances bool
@@ -423,6 +424,7 @@ func ActiveWorkflowInjectToMap(data ActiveWorkflowInjectData, hints *guidance.Hi
 			"review_loop_key":      data.PhaseExit.ReviewLoopKey,
 			"review_loop_cap":      data.PhaseExit.ReviewLoopCap,
 			"followup_attempts":    data.PhaseExit.FollowupAttempts,
+			"review_work_ids":      data.PhaseExit.ReviewWorkIDs,
 			"review_agents":        append([]string(nil), data.PhaseExit.ReviewAgents...),
 			"human_approval":       data.PhaseExit.HumanApproval,
 			"invoke_workflow_id":   data.PhaseExit.InvokeWorkflowID,

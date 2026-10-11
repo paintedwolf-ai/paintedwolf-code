@@ -194,8 +194,8 @@ func TestExplicitPathReadmitsTargetedExclude(t *testing.T) {
 	if len(plan.Code.LineExcludeDirs) != 1 || plan.Code.LineExcludeDirs[0] != "dist" {
 		t.Fatalf("line excludes = %v", plan.Code.LineExcludeDirs)
 	}
-	// File-name hits keep the full exclusion floor.
-	if len(plan.Code.FileExcludeDirs) != 2 {
+	// Explicit tree selection applies to both content and file-name hits.
+	if len(plan.Code.FileExcludeDirs) != 1 || plan.Code.FileExcludeDirs[0] != "dist" {
 		t.Fatalf("file excludes = %v", plan.Code.FileExcludeDirs)
 	}
 }

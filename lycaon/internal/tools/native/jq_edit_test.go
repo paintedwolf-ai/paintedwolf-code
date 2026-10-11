@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,7 +36,7 @@ func TestJqEditWritesThroughFileChangeReview(t *testing.T) {
 	tc := nativefixture.Context(dir)
 	declined := errors.New("declined")
 	var previews []tools.FileChange
-	tc.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+	tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		previews = append(previews, changes...)
 		if len(previews) == 1 {
 			return declined
@@ -74,7 +75,7 @@ func TestJqEditDestReadsSourceAndReviewsDestination(t *testing.T) {
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(dir, "base.yaml"), []byte(src), 0o644))
 	tc := nativefixture.Context(dir)
 	var reviewed []string
-	tc.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+	tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		for _, c := range changes {
 			reviewed = append(reviewed, c.Path)
 		}
@@ -106,13 +107,13 @@ func TestJqEditRefusalLeavesFileUntouched(t *testing.T) {
 	path := filepath.Join(dir, "Cargo.toml")
 	testutil.FailErr(t, "seed", os.WriteFile(path, []byte(src), 0o644))
 	tc := nativefixture.Context(dir)
-	tc.FileChangeReview = func(context.Context, []tools.FileChange) error {
+	tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error {
 		t.Fatal("a refused rewrite reached review")
 		return nil
 	}
 	tool := &JqEditTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{"path": "Cargo.toml", "query": `.package.version = "0.2.0"`}, tc)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "JQ_EDIT_LOSSY" {
 		t.Fatalf("err = %v want JQ_EDIT_LOSSY", err)
 	}

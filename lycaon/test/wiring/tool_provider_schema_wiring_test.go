@@ -24,7 +24,7 @@ func TestToolProfilesListForPromptHaveProviderArgsSchema(t *testing.T) {
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
 
-	policy := h.SessionMgr.PromptToolPolicy()
+	policy := h.Sessions.Manager.Coordinator.Guards.Policy()
 	for _, prof := range profiles {
 		t.Run(prof.ID, func(t *testing.T) {
 			metas := policy.ListForPrompt(ctx, sess, prof.ID)
@@ -63,12 +63,12 @@ func TestBundledAgentProfilesHaveProviderArgsSchema(t *testing.T) {
 		seen[profileID] = true
 
 		t.Run(profileID, func(t *testing.T) {
-			child, err := h.SessionMgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+			child, err := h.Sessions.Manager.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 				AgentType: agentType,
 				Prompt:    "schema contract probe",
 			})
 			testutil.FailErr(t, "SpawnChild", err)
-			metas := h.SessionMgr.PromptToolPolicy().ListForPrompt(ctx, child, profileID)
+			metas := h.Sessions.Manager.Coordinator.Guards.Policy().ListForPrompt(ctx, child, profileID)
 			if len(metas) == 0 {
 				t.Fatalf("agent %q profile %q listed no tools", agentType, profileID)
 			}

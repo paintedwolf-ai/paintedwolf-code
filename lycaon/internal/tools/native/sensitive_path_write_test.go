@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -113,7 +114,7 @@ func decliningReview(t *testing.T, dir, rel string) tools.ToolContext {
 	tctx := nativefixture.Context(dir)
 	want := fspath.CanonicalPath(filepath.Join(dir, filepath.FromSlash(rel)))
 	reviewed := false
-	tctx.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+	tctx.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		for _, change := range changes {
 			if fspath.CanonicalPath(change.Path) == want {
 				reviewed = true
@@ -133,7 +134,7 @@ func decliningReview(t *testing.T, dir, rel string) tools.ToolContext {
 func assertReviewDeclined(t *testing.T, err error, rel string) {
 	t.Helper()
 	if !errors.Is(err, errReviewDeclined) {
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if errors.As(err, &reject) {
 			t.Fatalf("mutating %s was refused with %s; credential writes must reach review", rel, reject.Code)
 		}

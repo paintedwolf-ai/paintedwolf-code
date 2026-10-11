@@ -18,7 +18,7 @@ func TestWorkflowCancellationPreservesClaimsUntilRuntimeSettlement(t *testing.T)
 			database := testdbfixture.Open(t, "store.db")
 			testdbseed.InsertWorkflowRun(t, database, "run", "parent", testdbseed.DefaultProjectID)
 			q := NewSQLQueue(database, 4)
-			q.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+			q.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 			ids := make([]string, 4)
 			for i := range ids {
 				id, err := q.Enqueue(t.Context(), api.WorkerTask{

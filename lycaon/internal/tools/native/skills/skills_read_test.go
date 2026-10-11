@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"reflect"
 	"strings"
@@ -104,7 +105,9 @@ func TestSkillsReadResourceTemplateBoundary(t *testing.T) {
 				},
 			}
 			out := &tools.ToolInvocationOut{}
-			got, err := tool.Run(t.Context(), map[string]any{"need": "example", "resource": resource}, tools.ToolContext{Out: out})
+			got, err := tool.Run(t.Context(), map[string]any{"need": "example", "resource": resource}, tools.ToolContext{
+				Effects: tools.InvocationEffects{Out: out},
+			})
 			testutil.FailErr(t, "read reference", err)
 			if got != "Skill resource: example/"+resource+"\n\n"+tc.want+"\n" || out.Skill == nil || out.Skill.Instructions != tc.want {
 				t.Fatalf("resource output = %q; projection = %#v", got, out.Skill)
@@ -132,7 +135,7 @@ func TestSkillsReadReturnsListedResource(t *testing.T) {
 	_, err = tool.Run(context.Background(), map[string]any{
 		"need": "example", "resource": "../outside.md",
 	}, tools.ToolContext{})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SKILL_RESOURCE_UNKNOWN" {
 		t.Fatalf("invalid resource err = %v", err)
 	}
@@ -162,7 +165,9 @@ func TestSkillsReadStampsSkillProjection(t *testing.T) {
 	_, err := tool.Run(
 		context.Background(),
 		map[string]any{"need": "verify-a-change"},
-		tools.ToolContext{Out: out},
+		tools.ToolContext{
+			Effects: tools.InvocationEffects{Out: out},
+		},
 	)
 	testutil.FailErr(t, "tool.Run failed", err)
 	got := out.Skill
@@ -202,7 +207,9 @@ func TestSkillsReadProjectionCopiesResources(t *testing.T) {
 		},
 	}
 	out := &tools.ToolInvocationOut{}
-	_, err := tool.Run(context.Background(), map[string]any{"need": "s"}, tools.ToolContext{Out: out})
+	_, err := tool.Run(context.Background(), map[string]any{"need": "s"}, tools.ToolContext{
+		Effects: tools.InvocationEffects{Out: out},
+	})
 	testutil.FailErr(t, "tool.Run failed", err)
 	resources[0] = "mutated.md"
 	if out.Skill.Resources[0] != "references/FORMAT.md" {
@@ -217,7 +224,9 @@ func TestSkillsReadUnknownLeavesProjectionUnstamped(t *testing.T) {
 		},
 	}
 	out := &tools.ToolInvocationOut{}
-	_, err := tool.Run(context.Background(), map[string]any{"need": "missing"}, tools.ToolContext{Out: out})
+	_, err := tool.Run(context.Background(), map[string]any{"need": "missing"}, tools.ToolContext{
+		Effects: tools.InvocationEffects{Out: out},
+	})
 	testutil.FailErr(t, "discover missing skill", err)
 	if out.Skill != nil {
 		t.Fatalf("rejected activation must resolve no skill: %#v", out.Skill)
@@ -314,7 +323,9 @@ func TestSkillsReadRendersPackBody(t *testing.T) {
 	got, err := tool.Run(
 		context.Background(),
 		map[string]any{"need": "orchestrate-a-large-task"},
-		tools.ToolContext{Out: out},
+		tools.ToolContext{
+			Effects: tools.InvocationEffects{Out: out},
+		},
 	)
 	testutil.FailErr(t, "tool.Run failed", err)
 	wantBody := fmt.Sprintf(
@@ -346,7 +357,9 @@ func TestSkillsReadProjectBodyStaysVerbatim(t *testing.T) {
 	got, err := tool.Run(
 		context.Background(),
 		map[string]any{"need": "project-skill"},
-		tools.ToolContext{Out: out},
+		tools.ToolContext{
+			Effects: tools.InvocationEffects{Out: out},
+		},
 	)
 	testutil.FailErr(t, "tool.Run failed", err)
 	if !strings.Contains(got, body) {
@@ -368,7 +381,7 @@ func TestSkillsReadTemplateInvalid(t *testing.T) {
 		},
 	}
 	_, err := tool.Run(context.Background(), map[string]any{"need": "broken"}, tools.ToolContext{})
-	var tr *tools.ToolReject
+	var tr *toolrejection.ToolReject
 	if !errors.As(err, &tr) || tr.Code != "SKILL_TEMPLATE_INVALID" {
 		t.Fatalf("err=%v want SKILL_TEMPLATE_INVALID", err)
 	}

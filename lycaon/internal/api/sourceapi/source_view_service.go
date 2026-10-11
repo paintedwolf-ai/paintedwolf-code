@@ -54,57 +54,81 @@ func (service *sourceViewService) projectGeneration(project string) uint64 {
 }
 
 type sourceView struct {
-	secretScreenMu                   sync.Mutex
-	secretScreenKey                  *comparisonScreenKey
-	interests                        pagedview.ViewportInterests
-	presentationMu                   sync.Mutex
-	intentMu                         sync.RWMutex
-	mu                               sync.Mutex
-	id                               string
-	scope                            pagedview.Scope
-	clientID, sessionID, workspaceID string
-	ctx                              context.Context
-	cancel                           context.CancelFunc
-	state                            string
-	failure                          *wire.SourceViewFailure
-	commands                         *pagedview.Commands[string]
-	notifier                         *pagedview.Notifier
+	interests      pagedview.ViewportInterests
+	presentationMu sync.Mutex
+	intentMu       sync.RWMutex
+	mu             sync.Mutex
+	id             string
+	scope          pagedview.Scope
+	clientID       string
+	sessionID      string
+	workspaceID    string
+	ctx            context.Context
+	cancel         context.CancelFunc
+	state          string
+	failure        *wire.SourceViewFailure
+	commands       *pagedview.Commands[string]
+	notifier       *pagedview.Notifier
 	// published is the last announced snapshot; only notifier delivery writes it.
-	published                         [sha256.Size]byte
-	tree                              *sourcetree.View
-	treeInitialized                   bool
-	treePrepared                      bool
-	reviewPreparing                   bool
-	reviewRunning                     bool
-	reviewDirty                       bool
-	reviewGeneration                  string
-	reviewCancel                      context.CancelFunc
-	filtered                          *sourcetree.Filtered
-	filterCancel                      context.CancelFunc
-	filterGeneration                  string
-	filterRunning, filterDirty        bool
-	treeIntent                        wire.SourceTreeIntent
-	treeNavigationBasis               string
-	roots                             []wire.ProjectRoot
-	comparisonIntent                  wire.SourceComparisonIntent
-	comparisonSource                  wire.SourceComparisonSelector
-	chatSource                        *wire.ChatComparisonSource
-	comparison                        *sourcecomparison.Document
-	current                           *currentSourceSnapshot
-	comparisonRelease                 func()
-	comparisonBefore, comparisonAfter wire.SourceComparisonSide
-	projection                        *sourceViewProjection
-	comparisonBudget                  *pagedview.Budget
-	descriptorBytes                   int64
-	trimDescriptor                    func(int64) error
-	projectionRevision                string
-	details                           *wire.SourceComparisonDetails
-	expires                           time.Time
+	published          [sha256.Size]byte
+	projectionRevision string
+	descriptorBytes    int64
+	trimDescriptor     func(int64) error
+	expires            time.Time
+	screening          sourceViewScreening
+	navigation         sourceViewNavigation
+	reviewing          sourceViewReviewing
+	filtering          sourceViewFiltering
+	comparisonData     sourceViewComparisonData
+}
+
+type sourceViewScreening struct {
+	secretScreenMu  sync.Mutex
+	secretScreenKey *comparisonScreenKey
+}
+
+type sourceViewNavigation struct {
+	tree                *sourcetree.View
+	treeInitialized     bool
+	treePrepared        bool
+	treeIntent          wire.SourceTreeIntent
+	treeNavigationBasis string
+	roots               []wire.ProjectRoot
+}
+
+type sourceViewReviewing struct {
+	reviewPreparing  bool
+	reviewRunning    bool
+	reviewDirty      bool
+	reviewGeneration string
+	reviewCancel     context.CancelFunc
+}
+
+type sourceViewFiltering struct {
+	filtered         *sourcetree.Filtered
+	filterCancel     context.CancelFunc
+	filterGeneration string
+	filterRunning    bool
+	filterDirty      bool
+}
+
+type sourceViewComparisonData struct {
+	comparisonIntent  wire.SourceComparisonIntent
+	comparisonSource  wire.SourceComparisonSelector
+	chatSource        *wire.ChatComparisonSource
+	comparison        *sourcecomparison.Document
+	current           *currentSourceSnapshot
+	comparisonRelease func()
+	comparisonBefore  wire.SourceComparisonSide
+	comparisonAfter   wire.SourceComparisonSide
+	projection        *sourceViewProjection
+	comparisonBudget  *pagedview.Budget
+	details           *wire.SourceComparisonDetails
 }
 
 //nolint:contextcheck,nolintlint // The registry and its sweeper follow the server lifetime.
-func (s *Handler) sourceViewRegistry() *sourceViewService {
-	service := &s.sourceViews
+func (s *Views) sourceViewRegistry() *sourceViewService {
+	service := s.sourceViews
 	service.once.Do(func() {
 		service.mu.Lock()
 		service.snapshotDisk = pagedview.NewBudget(2 << 30)
@@ -173,7 +197,7 @@ func (service *sourceViewService) create(ctx context.Context, key sourceViewCrea
 	}
 	view := build()
 	view.descriptorBytes = sourceViewDescriptorBytes + 2*int64(len(canonical))
-	if view.tree != nil {
+	if view.navigation.tree != nil {
 		view.descriptorBytes += sourceTreeDescriptorBytes
 	}
 	id, release, err := service.registry.PutPinned(key.scope, view, view.descriptorBytes, func(view *sourceView) {
@@ -222,7 +246,7 @@ func (service *sourceViewService) close() {
 }
 
 // InvalidateProjectSourceViews ends every view of a project whose folders changed.
-func (s *Handler) InvalidateProjectSourceViews(projectID string) {
+func (s *Views) InvalidateProjectSourceViews(projectID string) {
 	service := s.sourceViewRegistry()
 	service.mu.Lock()
 	if service.generations == nil {
@@ -234,7 +258,7 @@ func (s *Handler) InvalidateProjectSourceViews(projectID string) {
 }
 
 // ReleaseChatSourceViews ends every view addressed by a deleted chat.
-func (s *Handler) ReleaseChatSourceViews(sessionID string) {
+func (s *Views) ReleaseChatSourceViews(sessionID string) {
 	if sessionID == "" {
 		return
 	}
@@ -243,8 +267,8 @@ func (s *Handler) ReleaseChatSourceViews(sessionID string) {
 
 // invalidateSourceViews releases matching views and their presentations. Later
 // requests for those handles answer expired.
-func (s *Handler) invalidateSourceViews(matches func(*sourceView) bool) {
-	service := &s.sourceViews
+func (s *Views) invalidateSourceViews(matches func(*sourceView) bool) {
+	service := s.sourceViews
 	service.mu.Lock()
 	registry, presentations := service.registry, service.presentations
 	service.mu.Unlock()
@@ -266,18 +290,18 @@ func (view *sourceView) close() {
 	view.cancel()
 	view.interests.Close()
 	view.commands.Close()
-	if view.tree != nil {
-		view.tree.Close()
+	if view.navigation.tree != nil {
+		view.navigation.tree.Close()
 	}
-	if view.filtered != nil {
-		view.filtered.Close()
+	if view.filtering.filtered != nil {
+		view.filtering.filtered.Close()
 	}
 	if view.notifier != nil {
 		view.notifier.Close()
 	}
-	view.projection.release()
-	if view.comparisonRelease != nil {
-		view.comparisonRelease()
+	view.comparisonData.projection.release()
+	if view.comparisonData.comparisonRelease != nil {
+		view.comparisonData.comparisonRelease()
 	}
 }
 

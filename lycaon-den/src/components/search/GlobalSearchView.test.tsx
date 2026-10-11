@@ -432,4 +432,31 @@ describe("search request lifecycle", () => {
       expect(screen.queryByTestId("search-failed")).toBeNull();
     });
   });
+
+  it("renews automatic refinement when an exhausted same-query search is explicitly retried", async () => {
+    vi.useFakeTimers();
+    const pending = {
+      hits: [], status: "partial", exhaustive: false, total_hits: 0,
+      count_relation: "lower_bound", facets_exhaustive: false, facets: [],
+      interpreted: { scope: "current", filters: [] },
+      issues: [{ executor: "symbol", reason: "symbol_pending" }],
+    };
+    searchMock.mockImplementation(async () => {
+      if (searchMock.mock.calls.length === 22) throw new Error("final automatic request failed");
+      return pending;
+    });
+    render(() => <GlobalSearchView projects={[]} originProjectId="proj-a" originName="Alpha"
+      seed="needle project:current" appStore={createAppStore()} onNavigate={vi.fn()} />);
+    await vi.advanceTimersByTimeAsync(300_000);
+    expect(searchMock).toHaveBeenCalledTimes(22);
+    expect(screen.getByTestId("search-failed-retry")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("search-failed-retry"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(searchMock).toHaveBeenCalledTimes(24);
+    await vi.advanceTimersByTimeAsync(750);
+    expect(searchMock).toHaveBeenCalledTimes(25);
+    expect(screen.queryByTestId("search-failed-retry")).toBeNull();
+    expect(searchMock.mock.calls.every(([query]) => query === "needle project:current")).toBe(true);
+  });
+
 });

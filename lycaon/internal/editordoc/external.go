@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 )
 
 // PathRef addresses a document or subtree by root and root-relative path.
@@ -79,7 +80,7 @@ func (s *Service) observeExternalDocument(ctx context.Context, p *project.Projec
 // and its bytes reconcile into the shared text. The caller holds the lock.
 func (s *Service) reconcileDocumentDisk(ctx context.Context, p *project.Project, d *Document, observerClientID string) error {
 	release, err := s.reserveDocumentSource(ctx, p, d)
-	if errors.Is(err, project.ErrSourceBusy) {
+	if errors.Is(err, projectsource.ErrSourceBusy) {
 		return nil
 	}
 	if err != nil {
@@ -87,10 +88,10 @@ func (s *Service) reconcileDocumentDisk(ctx context.Context, p *project.Project,
 	}
 	defer release()
 	observation, read, err := observeDocumentSource(p, d)
-	if errors.Is(err, project.ErrSourceNotFound) || errors.Is(err, os.ErrNotExist) {
+	if errors.Is(err, projectsource.ErrSourceNotFound) || errors.Is(err, os.ErrNotExist) {
 		return s.markAbsent(ctx, d)
 	}
-	var unsupported *project.SourceUnsupportedEncodingError
+	var unsupported *projectsource.SourceUnsupportedEncodingError
 	if err != nil && !errors.As(err, &unsupported) {
 		return err
 	}
@@ -123,7 +124,7 @@ func (s *Service) markAbsent(ctx context.Context, d *Document) error {
 
 // reconcileObservedDocument folds one observed file into the document. A
 // recreated path rebinds the document to fileID and imports its bytes.
-func (s *Service) reconcileObservedDocument(ctx context.Context, d *Document, read *project.SourceReadResult, unsupported bool, observerClientID, fileID string) error {
+func (s *Service) reconcileObservedDocument(ctx context.Context, d *Document, read *projectsource.SourceReadResult, unsupported bool, observerClientID, fileID string) error {
 	previous := d.Revision
 	reappeared := d.Absent
 	rebound := fileID != "" && fileID != d.FileID

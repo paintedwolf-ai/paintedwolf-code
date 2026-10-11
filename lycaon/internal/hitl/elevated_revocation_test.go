@@ -30,7 +30,15 @@ func TestRevocationWaitsForInstallAndSeal(t *testing.T) {
 	defer cancel()
 	ctx := testdbseed.OwnerCaller(t, timed, database)
 	insertSession(t, database, sessionID)
-	action := hitl.ProposedAction{Tool: "command", SessionID: sessionID, Args: map[string]any{"command": "make"}}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "make"},
+},
+Scope: hitl.ActionScope{
+SessionID: sessionID,
+},
+}
 	grant := hitl.ApprovalGrant{ID: "grant_elevated", Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: sessionID, Title: hitl.TitleAllowForThisChat,
 		ElevatedEffects: []api.ElevatedAccessEffect{api.ElevatedAccessEffectHostExecution}}
 	presentation, reasons := approvalPlanPresentation()
@@ -45,10 +53,10 @@ func TestRevocationWaitsForInstallAndSeal(t *testing.T) {
 	checkpoint, err := manager.RequestCheckpoint(ctx, hitl.CheckpointRequest{SessionID: sessionID, Kind: api.CheckpointKindToolApproval, ProposedAction: &action, ApprovalPlan: plan})
 	testutil.FailErr(t, "create checkpoint", err)
 	held := heldElevatedInstaller{entered: make(chan struct{}), release: make(chan struct{})}
-	manager.SetApprovalAuthorityInstaller(held)
+	manager.Authority.SetApprovalAuthorityInstaller(held)
 	resolved := make(chan error, 1)
 	go func() {
-		_, err := manager.ResolveApprovalOption(ctx, sessionID, checkpoint.CheckpointID, "chat")
+		_, err := manager.Authority.ResolveApprovalOption(ctx, sessionID, checkpoint.CheckpointID, "chat")
 		resolved <- err
 	}()
 	select {
@@ -58,9 +66,9 @@ func TestRevocationWaitsForInstallAndSeal(t *testing.T) {
 	}
 	revoked := make(chan error, 1)
 	go func() {
-		release := manager.LockApprovalAuthority()
+		release := manager.Authority.LockApprovalAuthority()
 		defer release()
-		found, err := manager.ForgetChatGrant(ctx, grant.ID)
+		found, err := manager.Authority.ForgetChatGrant(ctx, grant.ID)
 		if err == nil && !found {
 			err = fmt.Errorf("revocation missed the installed grant's durable record")
 		}
@@ -75,8 +83,8 @@ func TestRevocationWaitsForInstallAndSeal(t *testing.T) {
 	testutil.FailErr(t, "resolve approval", <-resolved)
 	testutil.FailErr(t, "revoke committed authority", <-revoked)
 	restarted := &recordingInstaller{}
-	manager.SetApprovalAuthorityInstaller(restarted)
-	testutil.FailErr(t, "restore after revoke", manager.RestoreChatGrants(ctx))
+	manager.Authority.SetApprovalAuthorityInstaller(restarted)
+	testutil.FailErr(t, "restore after revoke", manager.Authority.RestoreChatGrants(ctx))
 	if len(restarted.grantIDs()) != 0 {
 		t.Fatal("revoked authority returned after restart")
 	}

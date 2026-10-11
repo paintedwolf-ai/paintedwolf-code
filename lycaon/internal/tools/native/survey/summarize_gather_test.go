@@ -4,15 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/summarize"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/summarize"
-	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
-	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
 func TestSummarizeGatherInlineChunking(t *testing.T) {
@@ -135,7 +134,7 @@ func TestSummarizeGatherPatternNoMatchSamples(t *testing.T) {
 	_, err := g.Gather(context.Background(), summarize.Request{
 		Path: "pkg/server.go", Pattern: `func handle[A-Z]`,
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SUMMARIZE_NO_MATERIAL" {
 		t.Fatalf("err = %v, want SUMMARIZE_NO_MATERIAL", err)
 	}
@@ -222,7 +221,7 @@ func TestSummarizeGatherBoundaryReject(t *testing.T) {
 	dir := t.TempDir()
 	g := testSummarizeGatherer(t, dir, summarize.DefaultCaps())
 	_, err := g.Gather(context.Background(), summarize.Request{Path: "../outside"})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
 		t.Fatalf("err = %v, want SURVEY_PATH_ESCAPE", err)
 	}
@@ -341,7 +340,7 @@ func TestSummarizeGatherPathsRejectsPartialMissing(t *testing.T) {
 	_, err := g.Gather(context.Background(), summarize.Request{
 		Paths: []string{"README.md", "go.mod", "pkg/a.go"},
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SUMMARIZE_PATHS_MISSING" {
 		t.Fatalf("err = %v, want SUMMARIZE_PATHS_MISSING", err)
 	}
@@ -355,7 +354,7 @@ func TestSummarizeGatherPathsAllMissing(t *testing.T) {
 	_, err := g.Gather(context.Background(), summarize.Request{
 		Paths: []string{"go.mod", "package.json"},
 	})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SUMMARIZE_PATHS_MISSING" {
 		t.Fatalf("err = %v, want SUMMARIZE_PATHS_MISSING", err)
 	}
@@ -367,7 +366,7 @@ func TestSummarizeGatherSinglePathMissing(t *testing.T) {
 	g := testSummarizeGatherer(t, dir, summarize.DefaultCaps())
 
 	_, err := g.Gather(context.Background(), summarize.Request{Path: "ghost/missing.go"})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SUMMARIZE_PATHS_MISSING" {
 		t.Fatalf("err = %v, want SUMMARIZE_PATHS_MISSING", err)
 	}
@@ -503,7 +502,7 @@ func TestSummarizeStreamsFileStructureInBoundedChunks(t *testing.T) {
 	caps := summarize.DefaultCaps()
 	caps.Gather.FileChunkBytes = 1024
 	g := testSummarizeGatherer(t, dir, caps)
-	sc, _, ok := g.structureFromAbs(context.Background(), largePath, "large.go")
+	sc, _, ok := g.sources.structureFromAbs(context.Background(), largePath, "large.go")
 	if !ok {
 		t.Fatal("streamed structure was unavailable")
 	}
@@ -580,7 +579,7 @@ func TestSummarizePatternStopsAtSourceBudgetOnWideLine(t *testing.T) {
 	g := testSummarizeGatherer(t, dir, summarize.DefaultCaps())
 	result, err := g.Gather(t.Context(), summarize.Request{Path: "large.txt", Pattern: "Needle"})
 	testutil.FailErr(t, "bounded wide pattern source", err)
-	if result.MatchCount != 0 || !g.sourceLimited || g.sourceReadBytes > int64(g.caps.Gather.FileReadBytes) {
-		t.Fatalf("pattern read=%d matches=%d limited=%v", g.sourceReadBytes, result.MatchCount, g.sourceLimited)
+	if result.MatchCount != 0 || !g.sources.sourceLimited || g.sources.sourceReadBytes > int64(g.caps.Gather.FileReadBytes) {
+		t.Fatalf("pattern read=%d matches=%d limited=%v", g.sources.sourceReadBytes, result.MatchCount, g.sources.sourceLimited)
 	}
 }

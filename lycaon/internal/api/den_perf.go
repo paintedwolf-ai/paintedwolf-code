@@ -15,7 +15,7 @@ const maxDenPerfEvents = 32
 // den-perf.jsonl debug capture when LYCAON_DEN_PERF_DEBUG or LYCAON_DEBUG_ALL is
 // on. When capture is off the handler still returns 204 so Den can fire-and-
 // forget without treating disabled capture as an error.
-func (s *Server) handleDenPerfEvents(w http.ResponseWriter, r *http.Request) {
+func (s *Activity) handleDenPerfEvents(w http.ResponseWriter, r *http.Request) {
 	var req wire.DenPerfEventsRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)

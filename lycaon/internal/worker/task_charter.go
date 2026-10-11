@@ -1,11 +1,11 @@
 package worker
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -39,7 +39,7 @@ func parseTaskCharter(args map[string]any) (api.WorkerTaskCharter, error) {
 		DoneWhen: doneWhen, ContextRefs: contextRefs,
 	}
 	if spawn.TaskCharterRunes(charter) > spawn.MaxTaskCharterRunes {
-		return api.WorkerTaskCharter{}, &tools.ToolReject{
+		return api.WorkerTaskCharter{}, &toolrejection.ToolReject{
 			Code: "TOOL_ARGS_INVALID",
 			Data: map[string]any{
 				"field": "brief", "tool": "task", "reason": "brief_too_long",
@@ -137,7 +137,7 @@ func formatTaskCharter(charter api.WorkerTaskCharter) string {
 }
 
 func invalidTaskCharter(field, reason string) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "TOOL_ARGS_INVALID",
 		Data: map[string]any{"field": field, "tool": "task", "reason": reason},
 	}

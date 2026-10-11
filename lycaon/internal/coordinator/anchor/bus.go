@@ -83,10 +83,10 @@ func (b *Bus) EmitMatch(ctx context.Context, sessionID string, id ID, partial En
 		return
 	}
 	gc := oar.NewGuardContext()
-	gc.Phase = match.Phase
-	gc.Surface = match.Surface
-	gc.Profile = match.Profile
-	gc.SessionPosture = match.SessionPosture
+	gc.Session.Phase = match.Phase
+	gc.Session.Surface = match.Surface
+	gc.Session.Profile = match.Profile
+	gc.Session.SessionPosture = match.SessionPosture
 	if !reg.WhenMatches(binding, gc) {
 		return
 	}

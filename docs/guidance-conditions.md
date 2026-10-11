@@ -37,7 +37,7 @@ when: paintedwolf.habit_redirect_match == "USE_GREP_REGEX"
 
 The prefix keeps a portable rule from binding this engine's host vocabulary.
 
-Prefer composing observation facts over echoing a validation code. `when: '"<token>" in arg_validation_errors'` is valid for a **schema** rule that attaches copy to one argument rejection; policy and invariant rules compose the underlying observations. The list carries the observation token a reject publishes, not its `Code:`. The `rejectCodeObservation` map in [`tools/observation_facts.go`](../lycaon/internal/tools/observation_facts.go) resolves a code to its token, and a rule that spells the token itself gates on a fact nothing sets.
+Prefer composing observation facts over echoing a validation code. `when: '"<token>" in arg_validation_errors'` is valid for a **schema** rule that attaches copy to one argument rejection; policy and invariant rules compose the underlying observations. The list carries the observation token a reject publishes, not its `Code:`. The `rejectCodeObservation` map in [`toolrejection/observation_facts.go`](../lycaon/internal/toolrejection/observation_facts.go) resolves a code to its token, and a rule that spells the token itself gates on a fact nothing sets.
 
 | Construct | Notes |
 |-----------|--------|

@@ -107,7 +107,7 @@ func TestProviderFailureMidRunIsRecoverable(t *testing.T) {
 			dir := h.ProjectDir(t, "fault-"+tc.name)
 			sess := createSessionHTTP(t, h.Server, dir)
 
-			_, err := h.SessionMgr.Prompt(ctx, sess.ID,
+			_, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID,
 				"[[scn:"+tc.marker+"]] do some work then hit the fault")
 			if err == nil {
 				t.Fatal("prompt succeeded despite an injected provider failure")
@@ -120,7 +120,7 @@ func TestProviderFailureMidRunIsRecoverable(t *testing.T) {
 
 			waitSessionIdle(t, h, sess.ID, 10*time.Second)
 
-			if _, err := h.SessionMgr.Prompt(ctx, sess.ID,
+			if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID,
 				"[[scn:"+tc.marker+"_after]] try again"); err != nil {
 				t.Fatalf("session unusable after a recoverable provider failure: %v", err)
 			}

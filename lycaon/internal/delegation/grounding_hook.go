@@ -19,7 +19,7 @@ type GroundingCoordinator struct {
 	Gate              DelegationGroundingGate
 	Config            GroundingConfig
 	State             *grounding.StateStore
-	Sessions          *session.Manager
+	Sessions          *session.Host
 	InspectorCloseout *InspectorCloseoutGate
 	Events            *events.Publisher
 	// Pipeline evaluates closeout refusals and post-turn advisories.
@@ -30,7 +30,7 @@ type workerQueueSnapshot interface {
 	List(ctx context.Context, projectDir string, statuses ...api.WorkerStatus) ([]api.WorkerTask, error)
 }
 
-func NewGroundingCoordinator(store Store, queue workerQueueSnapshot, gate DelegationGroundingGate, cfg GroundingConfig, state *grounding.StateStore, sessions *session.Manager) *GroundingCoordinator {
+func NewGroundingCoordinator(store Store, queue workerQueueSnapshot, gate DelegationGroundingGate, cfg GroundingConfig, state *grounding.StateStore, sessions *session.Host) *GroundingCoordinator {
 	if gate == nil {
 		gate = NewSimpleDelegationGroundingGate(cfg)
 	}
@@ -94,21 +94,21 @@ func (g *GroundingCoordinator) AfterPrompt(ctx context.Context, sessionID string
 	}
 	// Aggregate friction includes rejects from different grounding rules.
 	if g.Sessions != nil {
-		g.Sessions.RecordGroundingFriction(ctx, sessionID)
+		g.Sessions.Runner.Closeouts.RecordGroundingFriction(ctx, sessionID)
 	}
 	if g.Pipeline == nil || !g.Pipeline.AnchorEnforced(oar.AnchorCoordinatorPostTurn) {
 		return nil
 	}
 	gc := oar.NewGuardContext()
-	gc.SessionID = sessionID
-	gc.Profile = "coordinator"
+	gc.Session.SessionID = sessionID
+	gc.Session.Profile = "coordinator"
 	ObserveDelegationGroundingVerdict(gc, verdict)
 	if _, err := g.Pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorPostTurn, gc); err != nil {
 		return err
 	}
 	g.publishGroundingVerdict(ctx, sessionID, delegationID, verdict)
 	if g.IsEscalated(sessionID) {
-		return session.ErrGroundingEscalated
+		return guidance.ErrGroundingEscalated
 	}
 	return nil
 }
@@ -118,8 +118,8 @@ func (g *GroundingCoordinator) rejectCloseoutGrounding(ctx context.Context, sess
 		return ErrGroundingPending
 	}
 	gc := oar.NewGuardContext()
-	gc.SessionID = sessionID
-	gc.Profile = "coordinator"
+	gc.Session.SessionID = sessionID
+	gc.Session.Profile = "coordinator"
 	ObserveDelegationGroundingVerdict(gc, verdict)
 	res, err := g.Pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorCloseoutCheck, gc)
 	if err != nil {
@@ -224,7 +224,7 @@ func (g *GroundingCoordinator) summaryTags(ctx context.Context, sessionID string
 	if g.Sessions == nil {
 		return nil
 	}
-	msgs, err := g.Sessions.GetMessages(ctx, sessionID)
+	msgs, err := g.Sessions.Runner.Transcript.GetMessages(ctx, sessionID)
 	if err != nil {
 		return nil
 	}

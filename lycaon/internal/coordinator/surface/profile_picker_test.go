@@ -1,10 +1,11 @@
 package surface
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -45,8 +46,8 @@ func TestSelectSurfaceInvestigateDefaultAmbient(t *testing.T) {
 		nil,
 		"fix the auth bug in src/auth.go",
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
-		t.Fatalf("surface = %q want %q", profile.SurfaceID, tools.SurfaceImplementInvestigate)
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
+		t.Fatalf("surface = %q want %q", profile.SurfaceID, toolcontract.SurfaceImplementInvestigate)
 	}
 	if profile.ModeRefs[0] != "implement-investigate" {
 		t.Fatalf("modeRefs = %v", profile.ModeRefs)
@@ -60,7 +61,7 @@ func TestSelectSurfaceInvestigateLanguageAgnostic(t *testing.T) {
 		nil,
 		"corrige le bug d'authentification dans src/auth.go",
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("surface = %q want investigate for non-English user prompt", profile.SurfaceID)
 	}
 }
@@ -73,7 +74,7 @@ func TestSelectSurfaceInvestigateHardBlockWorkersInFlight(t *testing.T) {
 		"fix auth",
 		ImplementSessionState{WorkersInFlight: 1},
 	)
-	if profile.SurfaceID == tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 		t.Fatal("workers in flight must not select investigate")
 	}
 	if profile.SurfaceID != SurfaceImplementPark {
@@ -88,7 +89,7 @@ func TestSelectSurfaceInvestigateHardBlockPlanCatalog(t *testing.T) {
 		nil,
 		"research the repo",
 	)
-	if profile.SurfaceID == tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 		t.Fatal("plan catalog must not select investigate")
 	}
 	if profile.SurfaceID != "plan_research" {
@@ -103,7 +104,7 @@ func TestSelectSurfaceInvestigateHardBlockComposeDraft(t *testing.T) {
 		nil,
 		"compose workflow",
 	)
-	if profile.SurfaceID == tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 		t.Fatal("compose draft must not select investigate")
 	}
 }
@@ -116,7 +117,7 @@ func TestSelectSurfaceInvestigateHardBlockLoopWakeAfterWorkerCompletion(t *testi
 		history,
 		HostLoopWakeSentinel,
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("surface = %q want investigate on loop wake without batch readiness", profile.SurfaceID)
 	}
 }
@@ -154,7 +155,7 @@ func TestSelectSurfaceHostCycleOpenPlanAfterReadScoutUsesInvestigate(t *testing.
 		"Worker task finished — synthesize",
 		ImplementSessionState{ProgressOpenCount: 1},
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("read scout with open plan surface = %q want investigate", profile.SurfaceID)
 	}
 }
@@ -170,7 +171,7 @@ func TestSelectSurfaceIdleLoopWakeContinuesInvestigateAfterVisibleUser(t *testin
 		history,
 		HostLoopWakeSentinel,
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("idle loop wake after visible user surface = %q want investigate", profile.SurfaceID)
 	}
 }
@@ -188,7 +189,7 @@ func TestSelectSurfaceIdleLoopWakeStaysOrchestrateAfterWorkerSinceVisibleUser(t 
 		history,
 		HostLoopWakeSentinel,
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("surface = %q want investigate without batch readiness", profile.SurfaceID)
 	}
 }
@@ -201,7 +202,7 @@ func TestSelectSurfaceInvestigateHardBlockPendingOverlay(t *testing.T) {
 		"fix auth",
 		ImplementSessionState{PendingOverlayIDs: []string{"j1"}},
 	)
-	if profile.SurfaceID == tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 		t.Fatal("pending overlay promote must not select investigate")
 	}
 }
@@ -216,7 +217,7 @@ func TestSelectSurfaceInvestigateHardBlockChildSubroutine(t *testing.T) {
 		nil,
 		"fix auth",
 	)
-	if profile.SurfaceID == tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 		t.Fatal("child subroutine must not select investigate")
 	}
 	if profile.SurfaceID != SurfaceImplementDispatch {
@@ -235,7 +236,7 @@ func TestSelectSurfaceInvestigateYieldsToWorkersInFlight(t *testing.T) {
 		HostLoopWakeSentinel,
 		ImplementSessionState{WorkersInFlight: 2},
 	)
-	if profile.SurfaceID == tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 		t.Fatal("investigate default yields to workers-in-flight hard block")
 	}
 	if profile.SurfaceID != SurfaceImplementPark {
@@ -281,7 +282,7 @@ func TestSelectSurfaceTransitionBackToInvestigateAfterWorkersIdle(t *testing.T) 
 		completeImplementerHistoryForPicker(),
 		"summarize what changed",
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("idle visible user turn surface = %q want investigate", profile.SurfaceID)
 	}
 }
@@ -296,7 +297,7 @@ func TestSelectSurfaceWorkflowDefaultOrchestrateSuppressesInvestigate(t *testing
 		nil,
 		"fix auth",
 	)
-	if profile.SurfaceID == tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("Tier 1 orchestrate default must not select investigate, got %q", profile.SurfaceID)
 	}
 	if profile.SurfaceID != SurfaceImplementDispatch {
@@ -315,7 +316,7 @@ func TestSelectSurfacePhaseStampOrchestrateBeatsWorkflowInvestigateDefault(t *te
 		nil,
 		"dispatch fixes",
 	)
-	if profile.SurfaceID == tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 		t.Fatal("Tier 2 orchestrate stamp must beat Tier 1 investigate default")
 	}
 	if profile.SurfaceID != SurfaceImplementDispatch {
@@ -334,7 +335,7 @@ func TestSelectSurfaceWorkflowInvestigateDefaultWithWorkersInFlight(t *testing.T
 		HostLoopWakeSentinel,
 		ImplementSessionState{WorkersInFlight: 1},
 	)
-	if profile.SurfaceID == tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID == toolcontract.SurfaceImplementInvestigate {
 		t.Fatal("P1 workers in flight must block investigate even with Tier 1 investigate default")
 	}
 }

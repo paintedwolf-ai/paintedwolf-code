@@ -61,15 +61,15 @@ func TestBuildPostureDisallowedAgentAfterImplementPhase(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock), wiring.WithoutCoordinatorLoop())
 	srv := h.Server
 	store := h.Store
-	blueprintMgr := h.BlueprintMgr
+	blueprintMgr := h.Workflows.Blueprints
 	sess := createSessionHTTP(t, srv, t.TempDir())
 	ctx := t.Context()
 	advancePlanRunToImplement(t, h, srv, store, blueprintMgr, sess)
 
 	// Settle workflow setup before exercising its posture rules.
-	h.SessionMgr.CancelInFlightPrompt(sess.ID)
-	h.SessionMgr.WaitForCoordinatorAsyncTurns(ctx)
-	h.SessionMgr.ClearPendingKickForTest(sess.ID)
+	h.Sessions.Manager.Runner.Execution.Cancel(sess.ID)
+	h.Sessions.Manager.Coordinator.WaitForTurns(ctx)
+	h.Sessions.Manager.Runner.Coordinator.Kicks().ClearPending(sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
 	accepted := acceptPromptHTTP(t, srv, sess.ID, "spawn task")
 
@@ -120,19 +120,19 @@ func TestBuildPostureAllowsDelegationWithPlanManifestRules(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock), wiring.WithoutCoordinatorLoop())
 	srv := h.Server
 	store := h.Store
-	blueprintMgr := h.BlueprintMgr
+	blueprintMgr := h.Workflows.Blueprints
 	sess := createSessionHTTP(t, srv, t.TempDir())
 	ctx := t.Context()
 	advancePlanRunToImplement(t, h, srv, store, blueprintMgr, sess)
-	h.SessionMgr.CancelInFlightPrompt(sess.ID)
-	h.SessionMgr.WaitForCoordinatorAsyncTurns(ctx)
-	h.SessionMgr.ClearPendingKickForTest(sess.ID)
+	h.Sessions.Manager.Runner.Execution.Cancel(sess.ID)
+	h.Sessions.Manager.Coordinator.WaitForTurns(ctx)
+	h.Sessions.Manager.Runner.Coordinator.Kicks().ClearPending(sess.ID)
 
 	// Pending workers keep the workflow active until a poller claims them.
 	h.SeedProgress(t, ctx, sess.ID)
 	acceptPromptHTTP(t, srv, sess.ID, "spawn delegate")
 	if !testutil.WaitForNoFatal(promptIdleBudget, func() bool {
-		tasks, err := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
+		tasks, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(tasks) == 1
 	}) {
 		messages, err := store.GetMessages(ctx, sess.ID)

@@ -72,7 +72,7 @@ func TestBackgroundStartReturnsHandle(t *testing.T) {
 	if known, _ := reg.State("sess-1", "missing"); known {
 		t.Fatal("unknown process reported as owned")
 	}
-	out, err := reg.ReadOutput(context.Background(), "sess-1", handle)
+	out, err := reg.Output.ReadOutput(context.Background(), "sess-1", handle)
 	testutil.FailErr(t, "output after start", err)
 	if !out.Running {
 		t.Fatal("expected process running immediately after start")
@@ -95,7 +95,7 @@ func TestBackgroundCommandLineUsesRecordedStages(t *testing.T) {
 	if command != "printf hello | cat" {
 		t.Fatalf("command = %q want %q", command, "printf hello | cat")
 	}
-	stopped, err := reg.Stop("sess-1", handle)
+	stopped, err := reg.Lifecycle.Stop("sess-1", handle)
 	testutil.FailErr(t, "stop background", err)
 	if !stopped.StopRequested || (stopped.Running && stopped.ExitCode != nil) {
 		t.Fatalf("stop request misstates terminal state: %+v", stopped)
@@ -118,7 +118,7 @@ func TestBackgroundOutputStreamsIncrementally(t *testing.T) {
 	var first bgprocess.OutputSnapshot
 	var firstFound, secondFound bool
 	for time.Now().Before(deadline) {
-		snapshot, err := reg.ReadRawOutput("sess-1", handle, 0)
+		snapshot, err := reg.Output.ReadRawOutput("sess-1", handle, 0)
 		testutil.FailErr(t, "command_output cursor 0", err)
 		if len(snapshot.Output.Chunks) > 0 {
 			first = snapshot
@@ -132,7 +132,7 @@ func TestBackgroundOutputStreamsIncrementally(t *testing.T) {
 	}
 	cursor := first.Output.Next
 	for time.Now().Before(deadline) {
-		snapshot, err := reg.ReadRawOutput("sess-1", handle, cursor)
+		snapshot, err := reg.Output.ReadRawOutput("sess-1", handle, cursor)
 		testutil.FailErr(t, "command_output follow-up", err)
 		if len(snapshot.Output.Chunks) > 0 {
 			secondFound = true
@@ -155,7 +155,7 @@ func TestBackgroundLiveAndReloadProjectionCatchSecretsSplitAcrossWrites(t *testi
 			events <- event
 		},
 	})
-	reg.SetCaptureProjector(backgroundProjector())
+	reg.Output.SetCaptureProjector(backgroundProjector())
 	handle, err := startBackground(t.Context(), reg, "sess-1", "proj-1", hostcmd.Request{
 		ProjectDir: t.TempDir(),
 		Stages: []exec.Stage{{
@@ -164,7 +164,7 @@ func TestBackgroundLiveAndReloadProjectionCatchSecretsSplitAcrossWrites(t *testi
 		}},
 	}, hostcmd.NewRunner())
 	testutil.FailErr(t, "start background", err)
-	finished, err := reg.Await(t.Context(), "sess-1", handle, 5*time.Second)
+	finished, err := reg.Lifecycle.Await(t.Context(), "sess-1", handle, 5*time.Second)
 	testutil.FailErr(t, "await background", err)
 	if !finished {
 		t.Fatal("background process did not finish")
@@ -193,7 +193,7 @@ func TestBackgroundLiveAndReloadProjectionCatchSecretsSplitAcrossWrites(t *testi
 	}
 
 	// Rebuild from the full window to catch split values.
-	reloaded, err := reg.ReadOutput(context.Background(), "sess-1", handle)
+	reloaded, err := reg.Output.ReadOutput(context.Background(), "sess-1", handle)
 	testutil.FailErr(t, "read projected output", err)
 	var text strings.Builder
 	for _, chunk := range reloaded.Chunks {
@@ -206,15 +206,15 @@ func TestBackgroundLiveAndReloadProjectionCatchSecretsSplitAcrossWrites(t *testi
 
 func TestBackgroundListProjectsSecretBearingCommandLine(t *testing.T) {
 	reg := newTestRegistry(t, bgprocess.DefaultConfig(), bgprocess.Hooks{})
-	reg.SetCaptureProjector(backgroundProjector())
+	reg.Output.SetCaptureProjector(backgroundProjector())
 	handle, err := startBackground(t.Context(), reg, "sess-1", "proj-1", hostcmd.Request{
 		ProjectDir: t.TempDir(),
 		Stages:     []exec.Stage{{Name: "printf", Args: []string{backgroundCaptureSecret}}},
 	}, hostcmd.NewRunner())
 	testutil.FailErr(t, "start background", err)
-	_, err = reg.Await(t.Context(), "sess-1", handle, 5*time.Second)
+	_, err = reg.Lifecycle.Await(t.Context(), "sess-1", handle, 5*time.Second)
 	testutil.FailErr(t, "await background", err)
-	listed := reg.List(context.Background(), "sess-1")
+	listed := reg.Output.List(context.Background(), "sess-1")
 	if len(listed) != 1 || len(listed[0].Stages) != 1 {
 		t.Fatalf("listed processes = %+v", listed)
 	}
@@ -234,11 +234,11 @@ func TestBackgroundStopKillsProcess(t *testing.T) {
 		Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
 	}, runner)
 	testutil.FailErr(t, "start background", err)
-	_, err = reg.Stop("sess-1", handle)
+	_, err = reg.Lifecycle.Stop("sess-1", handle)
 	testutil.FailErr(t, "stop background", err)
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		out, err := reg.ReadOutput(context.Background(), "sess-1", handle)
+		out, err := reg.Output.ReadOutput(context.Background(), "sess-1", handle)
 		testutil.FailErr(t, "output after stop", err)
 		if !out.Running {
 			return
@@ -259,8 +259,8 @@ func TestBackgroundSessionEndKillsAll(t *testing.T) {
 		Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
 	}, runner)
 	testutil.FailErr(t, "start background", err)
-	testutil.FailErr(t, "dispose session processes", reg.DisposeSession(context.Background(), "sess-1"))
-	list := reg.List(context.Background(), "sess-1")
+	testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(context.Background(), "sess-1"))
+	list := reg.Output.List(context.Background(), "sess-1")
 	if len(list) != 0 {
 		t.Fatal("expected session end to remove background processes")
 	}
@@ -281,8 +281,8 @@ func TestRegistryCloseStopsAllSessionsAndRejectsNewStarts(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
-	testutil.FailErr(t, "close registry", reg.Close(ctx))
-	if got := len(reg.List(context.Background(), "sess-1")) + len(reg.List(context.Background(), "sess-2")); got != 0 {
+	testutil.FailErr(t, "close registry", reg.Lifecycle.Close(ctx))
+	if got := len(reg.Output.List(context.Background(), "sess-1")) + len(reg.Output.List(context.Background(), "sess-2")); got != 0 {
 		t.Fatalf("processes retained after close = %d", got)
 	}
 	_, err := startBackground(t.Context(), reg, "sess-3", "proj-1", hostcmd.Request{Launch: exec.HostLaunch("bgprocess test"),
@@ -332,7 +332,7 @@ func TestCompletedHandleDoesNotOccupyRunningCap(t *testing.T) {
 		Stages:     []exec.Stage{{Name: "true"}},
 	}, runner)
 	testutil.FailErr(t, "start quick background command", err)
-	finished, err := reg.Await(context.Background(), "sess-1", handle, 5*time.Second)
+	finished, err := reg.Lifecycle.Await(context.Background(), "sess-1", handle, 5*time.Second)
 	testutil.FailErr(t, "await quick background command", err)
 	if !finished {
 		t.Fatal("quick background command did not finish")
@@ -366,13 +366,13 @@ func TestCompletedHandleRetentionIsBounded(t *testing.T) {
 			Stages: []exec.Stage{{Name: "true"}},
 		}, runner)
 		testutil.FailErr(t, "start retained command", err)
-		finished, err := reg.Await(context.Background(), "sess-1", handle, 5*time.Second)
+		finished, err := reg.Lifecycle.Await(context.Background(), "sess-1", handle, 5*time.Second)
 		testutil.FailErr(t, "await retained command", err)
 		if !finished {
 			t.Fatal("retained command did not finish")
 		}
 	}
-	if got := len(reg.List(context.Background(), "sess-1")); got != 2 {
+	if got := len(reg.Output.List(context.Background(), "sess-1")); got != 2 {
 		t.Fatalf("retained completed handles = %d want 2", got)
 	}
 }
@@ -395,7 +395,7 @@ func TestCommandAdmissionRejectsLiveDuplicateBeforeConcurrency(t *testing.T) {
 	}
 	reg := newTestRegistry(t, bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	t.Cleanup(func() {
-		testutil.FailErr(t, "dispose session processes", reg.DisposeSession(context.Background(), "sess-1"))
+		testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(context.Background(), "sess-1"))
 	})
 	runner := hostcmd.NewRunner()
 	req := hostcmd.Request{Launch: exec.HostLaunch("bgprocess test"),
@@ -421,7 +421,7 @@ func TestCommandAdmissionRequiresExplicitAwaitedConcurrency(t *testing.T) {
 	}
 	reg := newTestRegistry(t, bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	t.Cleanup(func() {
-		testutil.FailErr(t, "dispose session processes", reg.DisposeSession(context.Background(), "sess-1"))
+		testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(context.Background(), "sess-1"))
 	})
 	runner := hostcmd.NewRunner()
 	start := func(seconds string, allow bool) (string, error) {
@@ -450,7 +450,7 @@ func TestAwaitedConcurrencyHasIndependentHardCap(t *testing.T) {
 	}
 	reg := newTestRegistry(t, bgprocess.Config{MaxAwaited: 2}, bgprocess.Hooks{})
 	t.Cleanup(func() {
-		testutil.FailErr(t, "dispose session processes", reg.DisposeSession(context.Background(), "sess-1"))
+		testutil.FailErr(t, "dispose session processes", reg.Lifecycle.DisposeSession(context.Background(), "sess-1"))
 	})
 	runner := hostcmd.NewRunner()
 	projectDir := t.TempDir()
@@ -490,7 +490,7 @@ func TestExecutionDeadlinePublishesOneTerminalCompletion(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "start deadline command", err)
-	finished, err := reg.Await(context.Background(), "sess-1", handle, 5*time.Second)
+	finished, err := reg.Lifecycle.Await(context.Background(), "sess-1", handle, 5*time.Second)
 	testutil.FailErr(t, "await deadline command", err)
 	if !finished {
 		t.Fatal("deadline command did not finish")
@@ -527,7 +527,7 @@ func TestPromotePublishesTerminalCompletionAfterExit(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "start quick awaited command", err)
-	finished, err := reg.Await(context.Background(), "sess-1", handle, 5*time.Second)
+	finished, err := reg.Lifecycle.Await(context.Background(), "sess-1", handle, 5*time.Second)
 	testutil.FailErr(t, "await quick command", err)
 	if !finished {
 		t.Fatal("quick command did not finish")
@@ -537,7 +537,7 @@ func TestPromotePublishesTerminalCompletionAfterExit(t *testing.T) {
 		t.Fatal("unpromoted awaited command must stay invisible")
 	default:
 	}
-	testutil.FailErr(t, "promote completed command", reg.Promote(context.Background(), "sess-1", handle))
+	testutil.FailErr(t, "promote completed command", reg.Output.Promote(context.Background(), "sess-1", handle))
 	select {
 	case <-completed:
 	case <-time.After(2 * time.Second):
@@ -596,7 +596,7 @@ func TestBackgroundLaunchFailureIsOnTheJobResult(t *testing.T) {
 		ProjectDir: t.TempDir(), Stages: stages,
 	}, hostcmd.NewRunner())
 	testutil.FailErr(t, "start command", err)
-	finished, err := reg.Await(context.Background(), "sess-1", handle, 5*time.Second)
+	finished, err := reg.Lifecycle.Await(context.Background(), "sess-1", handle, 5*time.Second)
 	testutil.FailErr(t, "await command", err)
 	if !finished {
 		t.Fatal("command did not finish")
@@ -608,7 +608,7 @@ func TestBackgroundLaunchFailureIsOnTheJobResult(t *testing.T) {
 		!strings.Contains(snap.Failure.Detail, "no-such-binary-for-launch") {
 		t.Fatalf("snapshot failure = %+v, want the stage launch error", snap.Failure)
 	}
-	raw, err := reg.ReadRawOutput("sess-1", handle, 0)
+	raw, err := reg.Output.ReadRawOutput("sess-1", handle, 0)
 	testutil.FailErr(t, "read raw output", err)
 	if raw.Failure == nil || raw.Failure.Kind != hostcmd.ExecFailureStageLaunch {
 		t.Fatalf("output failure = %+v, want the stage launch error", raw.Failure)

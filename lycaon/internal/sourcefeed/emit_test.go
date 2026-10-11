@@ -303,7 +303,7 @@ func TestWatcherExternalDebounce(t *testing.T) {
 	dir := t.TempDir()
 	projectID := "proj-watch"
 	var ledgerCalls atomic.Int32
-	EnsureProjectWatch(t.Context(), projectID, "", []RootSpec{{ID: "r1", WorkspaceID: "ws-watch", Path: dir}}, func(
+	EnsureProjectWatch(t.Context(), nil, projectID, "", []RootSpec{{ID: "r1", WorkspaceID: "ws-watch", Path: dir}}, func(
 		context.Context,
 		string,
 		ExternalBatch,
@@ -343,7 +343,7 @@ func TestWatcherSkipsGit(t *testing.T) {
 	gitDir := filepath.Join(dir, ".git")
 	testutil.FailErr(t, "mkdir .git", os.MkdirAll(gitDir, 0o755))
 	projectID := "proj-git"
-	EnsureProjectWatch(t.Context(), projectID, "", []RootSpec{{ID: "r1", WorkspaceID: "ws-git", Path: dir}}, nil)
+	EnsureProjectWatch(t.Context(), nil, projectID, "", []RootSpec{{ID: "r1", WorkspaceID: "ws-git", Path: dir}}, nil)
 	t.Cleanup(func() { StopProjectWatch(t.Context(), projectID) })
 
 	testutil.FailErr(t, "write .git", os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref"), 0o644))
@@ -362,7 +362,7 @@ func TestSelfWriteDrop(t *testing.T) {
 
 	dir := t.TempDir()
 	projectID := "proj-self"
-	EnsureProjectWatch(t.Context(), projectID, "", []RootSpec{{ID: "r1", WorkspaceID: "ws-self", Path: dir}}, nil)
+	EnsureProjectWatch(t.Context(), nil, projectID, "", []RootSpec{{ID: "r1", WorkspaceID: "ws-self", Path: dir}}, nil)
 	t.Cleanup(func() { StopProjectWatch(t.Context(), projectID) })
 
 	target := filepath.Join(dir, "host.txt")
@@ -420,7 +420,7 @@ func TestHostEmitContinuesWhileWatcherIsActive(t *testing.T) {
 
 	projectID := "proj-deg"
 	dir := t.TempDir()
-	EnsureProjectWatch(t.Context(), projectID, "", []RootSpec{{ID: "r1", WorkspaceID: "ws-deg", Path: dir}}, nil)
+	EnsureProjectWatch(t.Context(), nil, projectID, "", []RootSpec{{ID: "r1", WorkspaceID: "ws-deg", Path: dir}}, nil)
 	t.Cleanup(func() { StopProjectWatch(t.Context(), projectID) })
 	Emit(context.Background(), Change{
 		ProjectID:     projectID,

@@ -145,22 +145,22 @@ func factsToContext(facts map[string]any) *GuardContext {
 	}
 	facts = fixtureFactBindings(facts)
 	if v, ok := facts["tool"].(string); ok {
-		gc.Tool = v
+		gc.Invocation.Tool = v
 	}
 	if v, ok := facts["session_posture"].(string); ok {
-		gc.SessionPosture = v
+		gc.Session.SessionPosture = v
 	}
 	if v, ok := facts["profile"].(string); ok {
-		gc.Profile = v
+		gc.Session.Profile = v
 	}
 	if v, ok := facts["surface"].(string); ok {
-		gc.Surface = v
+		gc.Session.Surface = v
 	}
 	if v, ok := facts["phase"].(string); ok {
-		gc.Phase = v
+		gc.Session.Phase = v
 	}
 	if v, ok := facts["session_id"].(string); ok {
-		gc.SessionID = v
+		gc.Session.SessionID = v
 	}
 	setStringList := func(key string, dst *[]string) {
 		list, ok := facts[key].([]any)
@@ -174,83 +174,82 @@ func factsToContext(facts map[string]any) *GuardContext {
 			}
 		}
 	}
-	setStringList("content_roles", &gc.ContentRoles)
-	setStringList("content_origins", &gc.ContentOrigins)
-	setStringList("content_authorities", &gc.ContentAuthorities)
-	setStringList("content_trust_tiers", &gc.ContentTrustTiers)
-	setStringList("content_sources", &gc.ContentSources)
+	setStringList("content_roles", &gc.Content.ContentRoles)
+	setStringList("content_origins", &gc.Content.ContentOrigins)
+	setStringList("content_authorities", &gc.Content.ContentAuthorities)
+	setStringList("content_trust_tiers", &gc.Content.ContentTrustTiers)
+	setStringList("content_sources", &gc.Content.ContentSources)
 	if v, ok := facts["content_segment_count"].(float64); ok {
-		gc.ContentSegmentCount = int64(v)
+		gc.Content.ContentSegmentCount = int64(v)
 	}
 	setBool := func(key string, dst *bool) {
 		if v, ok := facts[key].(bool); ok {
 			*dst = v
 		}
 	}
-	setBool("workers_idle", &gc.WorkersIdle)
-	setBool("claims_completion", &gc.ClaimsCompletion)
-	setBool("has_matching_ledger_job", &gc.HasMatchingLedgerJob)
-	setBool("stub_valid", &gc.StubValid)
-	setBool("tool_is_state", &gc.ToolIsState)
-	setBool("tool_is_task", &gc.ToolIsTask)
-	setBool("tool_payload_chunkable", &gc.ToolPayloadChunkable)
-	setBool("tool_is_delegation", &gc.ToolIsDelegation)
-	setBool("tool_is_handoff", &gc.ToolIsHandoff)
-	setBool("pack_runner_task", &gc.PackRunnerTask)
-	setBool("posture_unresolved", &gc.PostureUnresolved)
-	setBool("high_risk_tool", &gc.HighRiskTool)
-	setBool("agent_is_plan_writer", &gc.AgentIsPlanWriter)
-	setBool("disallowed_agent", &gc.DisallowedAgent)
-	setBool("plan_awaiting_approval", &gc.PlanAwaitingApproval)
-	setBool("path_outside_scope", &gc.PathOutsideScope)
+	setBool("workers_idle", &gc.Workers.WorkersIdle)
+	setBool("claims_completion", &gc.Grounding.ClaimsCompletion)
+	setBool("has_matching_ledger_job", &gc.Grounding.HasMatchingLedgerJob)
+	setBool("stub_valid", &gc.Session.StubValid)
+	setBool("tool_is_state", &gc.Invocation.ToolIsState)
+	setBool("tool_is_task", &gc.Invocation.ToolIsTask)
+	setBool("tool_payload_chunkable", &gc.Invocation.ToolPayloadChunkable)
+	setBool("tool_is_delegation", &gc.Invocation.ToolIsDelegation)
+	setBool("tool_is_handoff", &gc.Invocation.ToolIsHandoff)
+	setBool("pack_runner_task", &gc.Invocation.PackRunnerTask)
+	setBool("posture_unresolved", &gc.Session.PostureUnresolved)
+	setBool("agent_is_plan_writer", &gc.Workers.AgentIsPlanWriter)
+	setBool("disallowed_agent", &gc.Workers.DisallowedAgent)
+	setBool("plan_awaiting_approval", &gc.Workflow.PlanAwaitingApproval)
+	setBool("path_outside_scope", &gc.Access.PathOutsideScope)
 	// Core observations a published fixture may set directly.
-	setBool("path_denied", &gc.PathDenied)
-	setBool("not_found", &gc.NotFound)
-	setBool("is_directory", &gc.IsDirectory)
-	setBool("policy_denied", &gc.PolicyDenied)
-	setBool("content_contains_untrusted", &gc.ContentContainsUntrusted)
+	setBool("path_denied", &gc.Rejection.PathDenied)
+	setBool("not_found", &gc.Rejection.NotFound)
+	setBool("is_directory", &gc.Rejection.IsDirectory)
+	setBool("policy_denied", &gc.Rejection.PolicyDenied)
+	setBool("content_contains_untrusted", &gc.Content.ContentContainsUntrusted)
 	if v, ok := facts["tool_args_fingerprint"].(string); ok {
-		gc.ToolArgsFingerprint = v
+		gc.Invocation.ToolArgsFingerprint = v
 	}
 	if m, ok := facts["tool_args"].(map[string]any); ok {
-		gc.ToolArgs = m
+		gc.Invocation.ToolArgs = m
 	}
 	if list, ok := facts["arg_validation_errors"].([]any); ok {
-		gc.ArgValidationErrors = nil
+		gc.Invocation.ArgValidationErrors = nil
 		for _, v := range list {
 			if s, ok := v.(string); ok {
-				gc.ArgValidationErrors = append(gc.ArgValidationErrors, s)
+				gc.Invocation.ArgValidationErrors = append(gc.Invocation.ArgValidationErrors, s)
 			}
 		}
 	}
 	if v, ok := facts["same_code_reject_run"].(float64); ok {
-		gc.SameCodeRejectRun = int64(v)
+		gc.Counters.SameCodeRejectRun = int64(v)
 	}
 	if v, ok := facts["prompt_injection_score"].(float64); ok {
-		gc.PromptInjectionScore = v
+		gc.Content.PromptInjectionScore = v
 	}
 	if v, ok := facts["jailbreak_score"].(float64); ok {
-		gc.JailbreakScore = v
+		gc.Content.JailbreakScore = v
 	}
 	if v, ok := facts["breaker_count"].(float64); ok {
-		gc.BreakerCount = int64(v)
+		gc.Counters.BreakerCount = int64(v)
 	}
 	if v, ok := facts["repeat_count"].(float64); ok {
-		gc.RepeatCount = int64(v)
+		gc.Counters.RepeatCount = int64(v)
 	}
 	if v, ok := facts["deferred_unactivated"].(float64); ok {
-		gc.DeferredUnactivated = int64(v)
+		gc.Counters.DeferredUnactivated = int64(v)
 	}
 	if m, ok := facts["path_outside_scope_by_tool"].(map[string]any); ok {
-		gc.PathOutsideScopeByTool = map[string]bool{}
+		gc.Access.PathOutsideScopeByTool = map[string]bool{}
 		for k, v := range m {
 			if b, ok := v.(bool); ok {
-				gc.PathOutsideScopeByTool[k] = b
+				gc.Access.PathOutsideScopeByTool[k] = b
 			}
 		}
 	}
 	if v, ok := facts["permission_profile"].(string); ok {
-		gc.PermissionProfile = v
+		gc.Session.PermissionProfile = v
 	}
 	if v, ok := facts["anchor"].(string); ok {
 		gc.Anchor = v

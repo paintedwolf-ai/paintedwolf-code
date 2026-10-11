@@ -16,11 +16,11 @@ func TestMCPSpawnAndListTools(t *testing.T) {
 		"svca": {{Name: "do", Description: "do"}},
 	}}
 	reg := newTestRegistry(t, conn, "svca")
-	if err := reg.SetProviderEnabled(context.Background(), mcp.CallScope{}, "svca", true, ""); err != nil {
-		testutil.FailErr(t, "reg.SetProviderEnabled failed", err)
+	if err := reg.Administration.SetProviderEnabled(context.Background(), mcp.CallScope{}, "svca", true, ""); err != nil {
+		testutil.FailErr(t, "reg.Administration.SetProviderEnabled failed", err)
 	}
-	tools, err := reg.ListTools(context.Background(), mcp.CallScope{}, "svca")
-	testutil.FailErr(t, "reg.ListTools failed", err)
+	tools, err := reg.Calls.ListTools(context.Background(), mcp.CallScope{}, "svca")
+	testutil.FailErr(t, "reg.Calls.ListTools failed", err)
 	if len(tools) == 0 {
 		t.Fatal("expected tools")
 	}

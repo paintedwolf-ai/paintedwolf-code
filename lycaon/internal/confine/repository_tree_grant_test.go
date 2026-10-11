@@ -61,9 +61,8 @@ func TestOutsideWriteRefusalNamesTheEnclosingWorkTree(t *testing.T) {
 	}
 }
 
-// The home directory and top-level directories are never proposed, even when
-// they hold a .git marker.
-func TestOutsideWriteGrantNeverWidensToHome(t *testing.T) {
+// A home repository offers its canonical repository root.
+func TestOutsideWriteGrantOffersHomeRepository(t *testing.T) {
 	home := fspath.CanonicalPath(t.TempDir())
 	t.Setenv("HOME", home)
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
@@ -71,8 +70,8 @@ func TestOutsideWriteGrantNeverWidensToHome(t *testing.T) {
 	dir := filepath.Join(home, "scratch")
 	mkdirFixture(t, dir)
 
-	if got := outsideWriteGrant(filepath.Join(dir, "a.txt")); got != dir {
-		t.Fatalf("grant = %s, want %s", got, dir)
+	if got := outsideWriteGrant(filepath.Join(dir, "a.txt")); got != home {
+		t.Fatalf("grant = %s, want %s", got, home)
 	}
 }
 

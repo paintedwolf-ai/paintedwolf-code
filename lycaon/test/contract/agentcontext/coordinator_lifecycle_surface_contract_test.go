@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"os"
 	"path/filepath"
 	"sort"
@@ -10,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -187,7 +188,7 @@ func TestCoordinatorCloseoutSurfacesTrackYAMLSSOT(t *testing.T) {
 	t.Parallel()
 	surfaces := loadImplementSurfaces(t)
 
-	closeoutIDs := []string{tools.SurfaceImplementInvestigate, spawn.SurfaceImplementSynthesis}
+	closeoutIDs := []string{toolcontract.SurfaceImplementInvestigate, spawn.SurfaceImplementSynthesis}
 	for _, id := range closeoutIDs {
 		if !surface.SurfaceDeliversReport(id) {
 			t.Fatalf("expected %q to be a coordinator closeout surface", id)

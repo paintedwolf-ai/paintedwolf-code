@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 )
 
@@ -19,7 +20,7 @@ type retargetRecord struct {
 	BranchID                                                   sourcebranch.ID
 }
 
-func (s *Service) PrepareRetarget(ctx context.Context, p *project.Project, plan project.SourceRenamePlan) (string, error) {
+func (s *Service) PrepareRetarget(ctx context.Context, p *project.Project, plan projectsource.SourceRenamePlan) (string, error) {
 	s.ops.Lock()
 	defer s.ops.Unlock()
 	if plan.OperationID == "" {

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
@@ -16,6 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
@@ -26,7 +29,7 @@ func TestHumanInputPhasesLatchPendingOnEnter(t *testing.T) {
 	ctx := context.Background()
 	for key, m := range workflowfixture.ContractAllResolvedManifests(t) {
 		for _, phase := range workflowfixture.HumanInputPhases(m) {
-			vars, err := workflow.ApplyPhaseOnEnter(ctx, workflow.PhaseEnterRequest{Manifest: m, PhaseID: phase.ID})
+			vars, err := workflowphases.ApplyPhaseOnEnter(ctx, workflowphases.PhaseEnterRequest{Manifest: m, PhaseID: phase.ID})
 			if err != nil {
 				t.Fatalf("manifest %q phase %q on_enter: %v", key, phase.ID, err)
 			}
@@ -44,17 +47,17 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 
 	store := store.NewSQL(sqlDB)
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ack"}}}))
-	mgr := session.NewManager(store, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	agents := orchestration.NewMemoryAgentRegistry()
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(ctx, agents))
-	mgr.SetAgentRegistry(agents)
+	mgr.Profiles.SetAgentRegistry(agents)
 
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	contractcheck.FailErr(t, "workflow.RegistryFromDirs failed", err)
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	wfMgr := workflow.NewManager(wfStore, store, manifestRegistry, nil)
-	mgr.SetWorkflowSessionView(wfMgr)
-	mgr.SetLoopWorkflowSource(wfMgr)
+	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
+	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 
 	for key, m := range workflowfixture.ContractAllResolvedManifests(t) {
 		phases := workflowfixture.HumanInputPhases(m)
@@ -67,7 +70,7 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 				testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 				sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 				contractcheck.FailErr(t, "create session in store", err)
-				run, err := wfMgr.Start(ctx, sess.ID, wire.StartWorkflowRunRequest{
+				run, err := wfMgr.Starts.Start(ctx, sess.ID, wire.StartWorkflowRunRequest{
 					WorkflowID:      m.ID,
 					WorkflowVersion: m.Version,
 				})
@@ -76,17 +79,17 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 				}
 				run.CurrentPhase = phase.ID
 				run.Status = wire.WorkflowRunStatusRunning
-				vars, err := workflow.ApplyPhaseOnEnter(ctx, workflow.PhaseEnterRequest{
+				vars, err := workflowphases.ApplyPhaseOnEnter(ctx, workflowphases.PhaseEnterRequest{
 					Sessions: store, SessionID: sess.ID, Manifest: m, PhaseID: phase.ID,
 				})
-				contractcheck.FailErr(t, "workflow.ApplyPhaseOnEnter failed", err)
-				if err := wfMgr.Store.CommitState(ctx, run, dir, vars); err != nil {
+				contractcheck.FailErr(t, "workflowphases.ApplyPhaseOnEnter failed", err)
+				if err := wfMgr.Store.State.CommitState(ctx, run, dir, vars); err != nil {
 					contractcheck.FailErr(t, "wfMgr.Store.CommitState failed", err)
 				}
 				if !scaffoldvars.HasPendingUserInput(vars) {
 					t.Fatal("expected pending user input scaffold")
 				}
-				allow, reason, err := mgr.ShouldLoopWake(ctx, sess.ID, anchor.LegFinished)
+				allow, reason, err := mgr.Coordinator.Runtime.CoordinatorLoop().Admission.ShouldLoopWake(ctx, sess.ID, anchor.LegFinished)
 				contractcheck.FailErr(t, "mgr.ShouldLoopWake failed", err)
 				if allow {
 					t.Fatalf("loop wake allowed during human input phase %q", phase.ID)

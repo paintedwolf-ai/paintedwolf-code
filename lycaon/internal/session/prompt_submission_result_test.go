@@ -7,13 +7,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/submissions"
 )
 
 // An interrupted receipt records a stopped turn, not a broken one. The async
 // runner reads this error to decide whether to publish a host error, so a park
 // that loses the sentinel reaches the user as a prompt failure.
 func TestPromptSubmissionResultInterruptedCarriesStopSentinel(t *testing.T) {
-	_, err := promptSubmissionResult(&store.PromptSubmission{
+	_, err := submissions.Result(&store.PromptSubmission{
 		ID:     "sub-1",
 		Status: store.PromptSubmissionInterrupted,
 		Error:  "session is stopping",
@@ -31,7 +32,7 @@ func TestPromptSubmissionResultInterruptedCarriesStopSentinel(t *testing.T) {
 
 // A failed receipt is a real failure and stays reportable.
 func TestPromptSubmissionResultFailedIsNotAStop(t *testing.T) {
-	_, err := promptSubmissionResult(&store.PromptSubmission{
+	_, err := submissions.Result(&store.PromptSubmission{
 		ID:     "sub-2",
 		Status: store.PromptSubmissionFailed,
 		Error:  "dial tcp 127.0.0.1:11434: connection refused",

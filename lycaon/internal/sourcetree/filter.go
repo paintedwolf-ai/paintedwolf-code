@@ -57,7 +57,7 @@ func (v *View) Filter(ctx context.Context, query string) (*Filtered, error) {
 	root := presentation.roots[0].root.Root
 	basis, extent := presentation.Revision()
 	complete := extent.Complete
-	store, err := v.catalog.NewProjectionRows(ctx, v.scope.Project, root)
+	store, err := v.catalog.Directories.NewProjectionRows(ctx, v.scope.Project, root)
 	if err != nil {
 		return nil, err
 	}
@@ -246,6 +246,7 @@ func (filter *Filtered) Retain() func() {
 func (filter *Filtered) Revision() (pagedview.Revision, pagedview.Extent) {
 	return filter.revision, filter.extent
 }
+
 // Locate resolves the nearest selected ancestor. An address outside the
 // selection is not visible; it is not an error.
 func (filter *Filtered) Locate(ctx context.Context, address Address) (Location, error) {

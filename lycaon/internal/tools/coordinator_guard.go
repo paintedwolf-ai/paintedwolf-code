@@ -10,14 +10,13 @@ type ToolProfileLister interface {
 	List(ctx context.Context, filter platform.ToolFilter) ([]ToolMeta, error)
 }
 
-func ListToolsForProfile(ctx context.Context, invoker ToolInvoker, filter platform.ToolFilter) []ToolMeta {
-	lister, ok := invoker.(ToolProfileLister)
-	if !ok {
+func ListToolsForProfile(ctx context.Context, lister ToolProfileLister, filter platform.ToolFilter) []ToolMeta {
+	if lister == nil {
 		return nil
 	}
-	tools, err := lister.List(ctx, filter)
+	metas, err := lister.List(ctx, filter)
 	if err != nil {
 		return nil
 	}
-	return tools
+	return metas
 }

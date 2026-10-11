@@ -44,7 +44,7 @@ func statedHeaders(tctx tools.ToolContext, args map[string]any, screened outboun
 	if screened.redacted {
 		return screened.headers
 	}
-	canonical := tctx.CanonicalArgs
+	canonical := tctx.Effects.CanonicalArgs
 	if canonical == nil {
 		canonical = args
 	}

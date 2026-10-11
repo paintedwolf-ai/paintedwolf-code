@@ -16,29 +16,29 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) handleGetHostResources(w http.ResponseWriter, r *http.Request) {
+func (s *Activity) handleGetHostResources(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.hostResourceSnapshot(r, false)
 	if err != nil {
-		requestscope.ScopeError(&s.responses, w, r, err)
+		requestscope.ScopeError(s.responses, w, r, err)
 		return
 	}
 	httpio.WriteJSON(w, http.StatusOK, hostResourcesWire(snap))
 }
 
-func (s *Server) handleRefreshHostResources(w http.ResponseWriter, r *http.Request) {
+func (s *Activity) handleRefreshHostResources(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.hostResourceSnapshot(r, true)
 	if err != nil {
-		requestscope.ScopeError(&s.responses, w, r, err)
+		requestscope.ScopeError(s.responses, w, r, err)
 		return
 	}
 	httpio.WriteJSON(w, http.StatusOK, hostResourcesWire(snap))
 }
 
-func (s *Server) handleUpdateHostResource(w http.ResponseWriter, r *http.Request) {
+func (s *Activity) handleUpdateHostResource(w http.ResponseWriter, r *http.Request) {
 	scope, ref, err := requestscope.Settings(r, s.projectRegistry)
 	projectDir := ref.Dir
 	if err != nil {
-		requestscope.ScopeError(&s.responses, w, r, err)
+		requestscope.ScopeError(s.responses, w, r, err)
 		return
 	}
 	id := strings.TrimSpace(chi.URLParam(r, "resource_id"))
@@ -70,7 +70,7 @@ func (s *Server) handleUpdateHostResource(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := s.settingsSvc.Approvals.SetHostResourceRule(scope, projectDir, id, effect); err != nil {
-		if !settingsadmin.ProjectApprovalsWriteError(&s.responses, w, err) {
+		if !settingsadmin.ProjectApprovalsWriteError(s.responses, w, err) {
 			s.responses.InternalError(w, r, err)
 		}
 		return
@@ -80,7 +80,7 @@ func (s *Server) handleUpdateHostResource(w http.ResponseWriter, r *http.Request
 	httpio.WriteJSON(w, http.StatusOK, hostResourcesWire(s.hostResources.SnapshotFor(r.Context(), false, project, nil)))
 }
 
-func (s *Server) hostResourceSnapshot(r *http.Request, refresh bool) (hostresources.Snapshot, error) {
+func (s *Activity) hostResourceSnapshot(r *http.Request, refresh bool) (hostresources.Snapshot, error) {
 	projectID := strings.TrimSpace(r.URL.Query().Get("project_id"))
 	if projectID != "" {
 		p, err := s.projectRegistry.Get(r.Context(), projectID)
