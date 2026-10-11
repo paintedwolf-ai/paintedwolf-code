@@ -86,6 +86,50 @@ describe("connection service lifetime", () => {
     expect(discoverBackend).not.toHaveBeenCalled();
   });
 
+  it.each(["stopped", "running"] as const)("ignores an older sidecar read after a newer %s event", async (state) => {
+    const mod = await loadModule();
+    const services = connectionServicesFixture();
+    const binding = mod.bindAppConnection(services);
+    await mod.followEngineState(services.app);
+    emitEngineState({ state: "stopped", exit: { signal: 9, description: "stopped" } });
+    let resolve!: (connection: { baseUrl: string; apiToken: string; engineGeneration: number }) => void;
+    readSidecarInfo.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    emitEngineState({ state: "running", generation: 2 });
+    readSidecarInfo.mockResolvedValueOnce(null);
+    emitEngineState(state === "running"
+      ? { state: "running", generation: 3 }
+      : { state: "stopped", exit: { signal: 9, description: "stopped" } });
+    resolve({ baseUrl: "http://obsolete", apiToken: "obsolete", engineGeneration: 2 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mod.getLycaonClient()).toBeNull();
+    expect(createLycaonClient).not.toHaveBeenCalled();
+    expect(readSidecarInfo).toHaveBeenCalledTimes(state === "running" ? 2 : 1);
+    binding.dispose();
+  });
+
+  it("reconciles the newest running engine after an older connection finishes", async () => {
+    const mod = await loadModule();
+    const services = connectionServicesFixture();
+    const binding = mod.bindAppConnection(services);
+    await mod.followEngineState(services.app);
+    let resolve!: (projects: never[]) => void;
+    const listProjects = vi.fn().mockReturnValueOnce(new Promise(done => { resolve = done; })).mockResolvedValue([]);
+    createLycaonClient.mockReturnValue({ listProjects });
+    const old = mod.connectAppBackend(services.app, {
+      connection: { baseUrl: "http://second", apiToken: "second", engineGeneration: 2 },
+    });
+    await vi.waitFor(() => expect(listProjects).toHaveBeenCalledOnce());
+    readSidecarInfo.mockResolvedValue({ baseUrl: "http://third", apiToken: "third", engineGeneration: 3 });
+    emitEngineState({ state: "running", generation: 3 });
+    expect(readSidecarInfo).not.toHaveBeenCalled();
+    resolve([]);
+    await old;
+    await vi.waitFor(() => expect(mod.boundEngineGeneration()).toBe(3));
+    expect(readSidecarInfo).toHaveBeenCalledOnce();
+    binding.dispose();
+  });
+
   it("refuses old stores before joining a replacement flight or replacing its follower", async () => {
     const mod = await loadModule();
     const first = connectionServicesFixture();

@@ -172,6 +172,7 @@ export function installConnectionFixtureCleanup() {
     subscribeEvents.mockReset();
     resetSessionEventRevisions.mockReset();
     refreshPreflight.mockClear();
+    readSidecarInfo.mockReset();
     getHost.mockReset();
     getHost.mockResolvedValue(TEST_HOST_INFO);
     lastSubscribeOptions = undefined;

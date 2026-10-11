@@ -179,7 +179,7 @@ async function reconcileBootScope(stores: AppBootStores, signal?: AbortSignal): 
       stores.appStore,
       client,
       stores.projects.state.projects,
-      { resumeVisible: true },
+      { resumeVisible: true, shouldApply: () => !signal?.aborted },
     );
   } catch {
     await abandonPersistedBootScope(stores, signal);

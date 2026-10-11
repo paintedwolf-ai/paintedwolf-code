@@ -10,7 +10,7 @@ const RESTARTING_NOTICE = "engine_restarting";
 type EngineFollowerPorts = {
   app: AppStore;
   notices: NoticeStore | null;
-  connecting(): boolean;
+  connecting(): Promise<unknown> | null;
   boundGeneration(): number | undefined;
   connect(connection: BackendConnection): Promise<unknown>;
 };
@@ -20,8 +20,10 @@ export function createEngineFollower(ports: EngineFollowerPorts) {
   let stopped = false;
   let stopSubscription: (() => void) | undefined;
   let sawEngineDown = false;
+  let eventRevision = 0;
   const ready = watchEngineState((engine) => {
     if (stopped) return;
+    const revision = ++eventRevision;
     if (engine.state === "restarting") {
       sawEngineDown = true;
       ports.app.actions.setSidecarStatus("disconnected");
@@ -39,16 +41,20 @@ export function createEngineFollower(ports: EngineFollowerPorts) {
       ports.app.actions.setSidecarStatus("disconnected");
       return;
     }
-    if (engine.state !== "running" || ports.connecting()) return;
-    const bound = ports.boundGeneration();
-    // Initial boot establishes its own connection.
-    if (bound === engine.generation || (bound === undefined && !sawEngineDown)) return;
-    sawEngineDown = false;
-    void readSidecarInfo().then((connection) => {
-      if (stopped || !connection || connection.engineGeneration !== engine.generation) return;
+    if (engine.state !== "running") return;
+    void (async () => {
+      const pending = ports.connecting();
+      if (pending) await pending.catch(() => undefined);
+      if (stopped || revision !== eventRevision) return;
+      const bound = ports.boundGeneration();
+      // Initial boot establishes its own connection.
+      if (bound === engine.generation || (bound === undefined && !sawEngineDown)) return;
+      const connection = await readSidecarInfo();
+      if (stopped || revision !== eventRevision || !connection || connection.engineGeneration !== engine.generation) return;
       if (ports.boundGeneration() === engine.generation) return;
+      sawEngineDown = false;
       return ports.connect(connection);
-    }).catch(() => undefined);
+    })().catch(() => undefined);
   }).then((stop) => {
     if (stopped) stop();
     else stopSubscription = stop;

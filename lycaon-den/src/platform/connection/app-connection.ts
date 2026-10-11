@@ -333,7 +333,7 @@ export async function followEngineState(appStore: AppStore): Promise<() => void>
   const follower = engineFollower = createEngineFollower({
     app: appStore,
     notices: services?.notices ?? null,
-    connecting: () => connectInFlight !== null,
+    connecting: () => connectInFlight,
     boundGeneration: boundEngineGeneration,
     connect: (connection) => connectAppBackend(appStore, { connection }),
   });
