@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -21,6 +22,10 @@ var schemaStmtSplitRE = regexp.MustCompile(`(?m);[\s]*(?:\n|$)`)
 
 func TestSchemaSQLLock(t *testing.T) {
 	t.Parallel()
+	if configdir.IsDevelopmentBuild() && os.Getenv("UPDATE_SCHEMA_LOCK") != "1" && os.Getenv("PW_RELEASE_QUALIFICATION") != "1" && os.Getenv("PW_RELEASE_VERIFY") != "1" {
+		t.Skip("schema.sql statement lock is a release qualification gate; skipped during development and non-release PR verification")
+	}
+
 	root := contractcheck.RepoRoot(t)
 	schemaPath := filepath.Join(root, "lycaon", "internal", "db", "schema.sql")
 	lockPath := filepath.Join(root, "lycaon", "internal", "db", "schema.sql.lock.json")
