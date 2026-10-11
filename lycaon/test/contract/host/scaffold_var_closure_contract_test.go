@@ -124,6 +124,11 @@ var hostVarProducers = []struct {
 		rationale: "phase-enter snapshot of if_spawnable reviewers that the turn roster can spawn",
 	},
 	{
+		key:       "accepted_review_subjects.",
+		readerRE:  `conditions\.DotPathGet\(vars, "accepted_review_subjects\."\+(?:phase|last)\)`,
+		rationale: "retained report inputs and transactional review acceptance fence",
+	},
+	{
 		key:       "review_verdict.",
 		readerRE:  `"review_verdict"`,
 		rationale: "terminal review_loop verdict stamped for later kicks",
