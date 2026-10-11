@@ -1,0 +1,18 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/api/api.Server",
+  "kind": "runtime_service",
+  "workstream": "http-composition",
+  "disposition": "retain",
+  "reason": "Server composes domain route families and applies one ordered HTTP boundary for caller identity, authorization, rate limits, person-action recording, restore fencing and lifecycle. A new middleware service would add coordination without reducing domain coupling. Domain behavior remains in route-family handlers.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 37,
+  "boundaries": {
+    "lycaon/internal/api/auth_test.go": "859503f743f556d1914fb8c635c5ac12efce13f34370fb17d752ccb626931f4d",
+    "lycaon/internal/api/host_test.go": "8f850fa4b484e81f8c36332b9b428a4d384e89045bc313c32f0f10f23a322449",
+    "lycaon/internal/api/operations_contract_test.go": "b12b3bbbfa9eceaee01e4c1d500f92c85076d87f55a07956bc24c83462d620ca",
+    "lycaon/internal/api/person_actions_test.go": "b41da5c4058be247f99758d1a8c286e95c11ab6d4d1c260db95925b3423c1536",
+    "lycaon/internal/api/backup_restore_pending_test.go": "4410f77466d3bd738ba7122f73fd85f89ae6336fcd64d875f132801e5c8d6aca"
+  },
+  "reviewed_shape": "a77772916f36e9cf05f366cd67f892b5052c67e5ce836ea7af47f0d35a8412e5"
+}
