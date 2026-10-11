@@ -124,7 +124,7 @@ func (a *ServeApp) superviseRunner(ctx context.Context, runner *backgroundRunner
 	for {
 		started := time.Now()
 		err := runBackgroundRunnerAttempt(ctx, runner)
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || a.storeFailure() != nil {
 			return
 		}
 		if time.Since(started) >= backgroundRunnerStableRun {

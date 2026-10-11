@@ -28,13 +28,11 @@ import (
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"
 	"github.com/lycaon/lycaon/internal/api/workflowadmin"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/people/personactions"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/version"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -147,6 +145,10 @@ func (s *Server) markUserPresence(next http.Handler) http.Handler {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/health" && s.Routes.Storage.failure() != nil {
+		s.responses.Fail(w, wire.ApiErrorCodeStoreIncompatible, "History storage failed its integrity check; the engine is stopping for recovery.")
+		return
+	}
 	s.router.ServeHTTP(w, r)
 }
 
@@ -163,45 +165,6 @@ func (s *Server) rejectRestorePending(next http.Handler) http.Handler {
 
 func (s *Server) markRestorePending() {
 	s.restorePending.Store(true)
-}
-
-type healthResponse struct {
-	Status                    string `json:"status"`
-	Version                   string `json:"version"`
-	StoreRevision             uint64 `json:"store_revision"`
-	SchemaVersion             int    `json:"schema_version"`
-	MinDenVersion             string `json:"min_den_version,omitempty"`
-	PreviousAppVersion        string `json:"previous_app_version,omitempty"`
-	StoreSchemaVersion        *int   `json:"store_schema_version,omitempty"`
-	RecoveryReason            string `json:"recovery_reason,omitempty"`
-	RecoveryDetail            string `json:"recovery_detail,omitempty"`
-	RecoverySnapshotAvailable bool   `json:"recovery_snapshot_available"`
-	RecoverySnapshotAt        string `json:"recovery_snapshot_at,omitempty"`
-}
-
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	httpio.WriteJSON(w, http.StatusOK, s.healthPayload())
-}
-
-func (s *Server) healthPayload() healthResponse {
-	resp := healthResponse{
-		Status:             "ok",
-		Version:            version.Version,
-		StoreRevision:      s.storeRevision,
-		SchemaVersion:      db.SchemaVersion,
-		MinDenVersion:      s.minDenVersion,
-		PreviousAppVersion: s.previousAppVersion,
-	}
-	if st := s.recovery; st != nil {
-		resp.Status = "recovery"
-		storeVer := st.StoreSchemaVersion
-		resp.StoreSchemaVersion = &storeVer
-		resp.RecoveryReason = string(st.Reason)
-		resp.RecoveryDetail = st.Detail
-		resp.RecoverySnapshotAvailable = st.SnapshotAvailable
-		resp.RecoverySnapshotAt = st.SnapshotAt
-	}
-	return resp
 }
 
 func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {

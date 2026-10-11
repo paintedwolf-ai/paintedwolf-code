@@ -10,15 +10,12 @@ import (
 	"time"
 )
 
-// integrityAuditFailedMetaKey records that a background audit found damage.
-// The next boot then runs the whole-store check before serving, which is the
-// path that reaches the recovery surface.
+// A nonempty audit marker requires full verification before the next open.
 const integrityAuditFailedMetaKey = "integrity_audit_failed"
 
 // prepareIntegrity is the boot gate for an existing store: nothing after a
 // clean shutdown, quick_check after an unclean one with the whole-store audit
-// deferred until serving starts, and the whole check when a failed audit left
-// its stamp.
+// deferred until serving starts, and the whole check for an unfinished audit.
 func prepareIntegrity(ctx context.Context, sqlDB *sql.DB) error {
 	stamped, err := integrityAuditFailed(ctx, sqlDB)
 	if err != nil {
@@ -46,17 +43,14 @@ func (s *Store) IntegrityAuditDue() bool {
 // RunIntegrityAudit audits the store once after boot, then parks until ctx
 // ends so the runner supervisor does not restart it.
 func RunIntegrityAudit(ctx context.Context, store *Store) error {
-	if err := AuditIntegrity(ctx, store); err != nil && ctx.Err() != nil {
-		return ctx.Err()
+	if err := AuditIntegrity(ctx, store); err != nil {
+		return err
 	}
 	<-ctx.Done()
 	return ctx.Err()
 }
 
-// AuditIntegrity runs integrity_check and foreign_key_check on the reader
-// pool and returns the result. Damage is logged and stamped so the next boot
-// refuses the store on the path that reaches recovery; a clean audit clears
-// the stamp.
+// AuditIntegrity quarantines confirmed damage and clears completed audit state.
 func AuditIntegrity(ctx context.Context, store *Store) error {
 	if store == nil || store.reader == nil {
 		return errors.New("audit integrity: nil database")
@@ -67,11 +61,13 @@ func AuditIntegrity(ctx context.Context, store *Store) error {
 		return ctx.Err()
 	}
 	if auditErr != nil {
-		slog.ErrorContext(ctx, "store integrity audit found damage; the next start runs recovery",
-			"component", "db", "error", auditErr, "elapsed", time.Since(started))
-		if err := stampIntegrityAuditFailed(ctx, store.writer, auditErr); err != nil {
-			slog.ErrorContext(ctx, "store integrity audit could not record its result", "component", "db", "error", err)
+		var damaged *StoreIncompatibleError
+		if !errors.As(auditErr, &damaged) {
+			return auditErr
 		}
+		store.quarantine(damaged)
+		slog.ErrorContext(ctx, "store integrity failed; writes stopped",
+			"component", "db", "error", auditErr, "elapsed", time.Since(started))
 		return auditErr
 	}
 	slog.InfoContext(ctx, "store integrity audit passed", "component", "db", "elapsed", time.Since(started))
@@ -121,8 +117,7 @@ func validateStoreIntegrity(ctx context.Context, sqlDB *sql.DB) error {
 func scanCheck(ctx context.Context, sqlDB *sql.DB, pragma string) error {
 	rows, err := sqlDB.QueryContext(ctx, "PRAGMA "+pragma) // #nosec G202 -- pragma is one of two package constants
 	if err != nil {
-		ver, _ := ReadUserVersion(ctx, sqlDB)
-		return storeIncompatible(RecoveryReasonIntegrityFailed, ver, fmt.Sprintf("%s: %v", pragma, err))
+		return integrityCheckError(err, pragma)
 	}
 	defer func() { _ = rows.Close() }()
 	var problems []string
@@ -130,8 +125,7 @@ func scanCheck(ctx context.Context, sqlDB *sql.DB, pragma string) error {
 	for rows.Next() {
 		var result string
 		if err := rows.Scan(&result); err != nil {
-			ver, _ := ReadUserVersion(ctx, sqlDB)
-			return storeIncompatible(RecoveryReasonIntegrityFailed, ver, fmt.Sprintf("read %s: %v", pragma, err))
+			return integrityCheckError(err, "read "+pragma)
 		}
 		if result != "ok" {
 			problemCount++
@@ -141,8 +135,7 @@ func scanCheck(ctx context.Context, sqlDB *sql.DB, pragma string) error {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		ver, _ := ReadUserVersion(ctx, sqlDB)
-		return storeIncompatible(RecoveryReasonIntegrityFailed, ver, fmt.Sprintf("scan %s: %v", pragma, err))
+		return integrityCheckError(err, "scan "+pragma)
 	}
 	if problemCount > 0 {
 		ver, _ := ReadUserVersion(ctx, sqlDB)
@@ -155,8 +148,7 @@ func scanCheck(ctx context.Context, sqlDB *sql.DB, pragma string) error {
 func foreignKeyCheck(ctx context.Context, sqlDB *sql.DB) error {
 	rows, err := sqlDB.QueryContext(ctx, `PRAGMA foreign_key_check`)
 	if err != nil {
-		ver, _ := ReadUserVersion(ctx, sqlDB)
-		return storeIncompatible(RecoveryReasonIntegrityFailed, ver, fmt.Sprintf("foreign_key_check: %v", err))
+		return integrityCheckError(err, "foreign_key_check")
 	}
 	defer func() { _ = rows.Close() }()
 	var problems []string
@@ -166,8 +158,7 @@ func foreignKeyCheck(ctx context.Context, sqlDB *sql.DB) error {
 		var rowID sql.NullInt64
 		var foreignKeyID int
 		if err := rows.Scan(&table, &rowID, &parent, &foreignKeyID); err != nil {
-			ver, _ := ReadUserVersion(ctx, sqlDB)
-			return storeIncompatible(RecoveryReasonIntegrityFailed, ver, fmt.Sprintf("read foreign_key_check: %v", err))
+			return integrityCheckError(err, "read foreign_key_check")
 		}
 		problemCount++
 		if len(problems) < 3 {
@@ -175,8 +166,7 @@ func foreignKeyCheck(ctx context.Context, sqlDB *sql.DB) error {
 		}
 	}
 	if err := rows.Err(); err != nil {
-		ver, _ := ReadUserVersion(ctx, sqlDB)
-		return storeIncompatible(RecoveryReasonIntegrityFailed, ver, fmt.Sprintf("scan foreign_key_check: %v", err))
+		return integrityCheckError(err, "scan foreign_key_check")
 	}
 	if problemCount == 0 {
 		return nil
