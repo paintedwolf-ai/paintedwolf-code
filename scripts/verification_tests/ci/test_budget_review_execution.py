@@ -3,8 +3,8 @@ import unittest
 
 from ci_policy import budget_issues as issues, budget_snapshot as snapshot
 import budgets
-from verification_tests.test_change_report_execution import report as display_report, finding
-from verification_tests.test_budget_tracking_execution import row, report, issue, observation
+from verification_tests.ci.test_change_report_execution import report as display_report, finding
+from verification_tests.ci.test_budget_tracking_execution import row, report, issue, observation
 
 
 def reviewed(state='retained', measured=350):
