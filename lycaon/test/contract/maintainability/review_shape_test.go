@@ -1,6 +1,7 @@
 package maintainability
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -8,11 +9,20 @@ import (
 
 func measuredShape(t *testing.T, body string) string {
 	t.Helper()
-	src := source{Path: "pkg/service.go", Language: "go", Body: []byte(body)}
+	return measuredFileShapes(t, map[string]string{"pkg/service.go": body})
+}
+
+func measuredFileShapes(t *testing.T, bodies map[string]string) string {
+	t.Helper()
 	inv := &inventory{measured: newMeasurements(), sources: map[string][]string{}, declarations: map[string][]span{}, methodSpans: map[string][]span{}, methods: map[string]map[string]bool{}}
-	_, err := inv.measureGo(src)
-	testutil.FailErr(t, "measure shape fixture", err)
-	shape, err := typeShape(&workingTree{bodies: map[string][]byte{src.Path: src.Body}}, inv, "pkg/p.Service")
+	tree := &workingTree{bodies: map[string][]byte{}}
+	for path, body := range bodies {
+		src := source{Path: path, Language: "go", Body: []byte(body)}
+		_, err := inv.measureGo(src)
+		testutil.FailErr(t, "measure shape fixture", err)
+		tree.bodies[path] = src.Body
+	}
+	shape, err := typeShape(tree, inv, "pkg/p.Service")
 	testutil.FailErr(t, "fingerprint shape", err)
 	return shape
 }
@@ -79,5 +89,38 @@ func TestTypeShapeTracksDotImportIdentity(t *testing.T) {
 	base := measuredShape(t, `package p; import . "example/first"; type Service struct { Value Record }`)
 	if got := measuredShape(t, `package p; import . "example/second"; type Service struct { Value Record }`); got == base {
 		t.Fatal("dot import identity disappeared from shape")
+	}
+}
+
+func TestTypeShapeBindsImportContextToEachDeclaration(t *testing.T) {
+	for _, tc := range []struct {
+		name, imports, value string
+	}{
+		{"dot", `. "example/%s"`, "Record"},
+		{"unaliased", `"example/%s/v2"`, "custom.Record"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			declaration := func(dependency string) string {
+				return fmt.Sprintf("package p; import "+tc.imports+"; type Service struct { Value "+tc.value+" }", dependency)
+			}
+			method := func(dependency string) string {
+				return fmt.Sprintf("package p; import "+tc.imports+"; func (*Service) Accept("+tc.value+") {}", dependency)
+			}
+			base := measuredFileShapes(t, map[string]string{
+				"pkg/service.go": declaration("first"), "pkg/method.go": method("second"),
+			})
+			swapped := measuredFileShapes(t, map[string]string{
+				"pkg/service.go": declaration("second"), "pkg/method.go": method("first"),
+			})
+			if swapped == base {
+				t.Fatal("swapped field and parameter dependencies retained the shape")
+			}
+			moved := measuredFileShapes(t, map[string]string{
+				"pkg/method.go": declaration("first"), "pkg/service.go": method("second"),
+			})
+			if moved != base {
+				t.Fatal("moving unchanged declarations renewed shape review")
+			}
+		})
 	}
 }

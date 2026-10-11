@@ -11,5 +11,5 @@
     "lycaon/internal/workflow/inputs/ask_receipt_projection_test.go": "a42f9295fe87cd7fe3d78768fb57c0011a2ef6d9701963f1659c91fe36a49ee6",
     "lycaon/internal/workflow/inputs/protected_resolution_test.go": "bb045be06830b3a555aaceb2187d5ee04dbde13cf2c9cb0bb4d005ce47da72ad"
   },
-  "reviewed_shape": "070323637e794ea341a2406dcfbd0ce31fcd9bc3f5c95fbcca1caf44589618fb"
+  "reviewed_shape": "b0cbaa553eca3b064b378dc6cda29f6aebab8e84e49ba564ac6d4aa419efbd22"
 }

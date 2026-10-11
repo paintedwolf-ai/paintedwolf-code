@@ -32,10 +32,10 @@ record, or extracted algorithm does not become a new subsystem owner.
 | Concern and original issues | Recommended organization | Why |
 | --- | --- | --- |
 | Workspace composition: #463, #468 | Shell composes mounted chat, stage, sidebar, overlays and project dialogs; feature modules provide their narrow integration surfaces. | Rendering lifetimes and feature dependencies become visible without a broad controller or import barrel. |
-| Layout and resize: #466, #467 | Keep persisted layout decisions distinct from mounted element measurement; retain a cohesive layout contract when its breadth is justified. | A split host measures its own element and cleans up observation with that element. |
+| Layout and resize: #466, #467 | Separate workspace layout, list layout and preferences persistence; coordinate resize claims across drag kinds and mounted lifetimes. | A split host measures its own element and cleans up observation with that element. |
 | Connection: #390 | One immutable binding per window, explicit teardown, and singleflight discovery/verification. | Eight independently mutable registrations allow partial rebinding and late work against stale stores. |
 | Transcript motion: #389 | Retain the shared motion coordinator; separate paging intent from resident geometry, fence responses by view generation, and bound retry and cache retention. | Page eviction must not reverse reader intent or cause repeated older/newer requests; transient failure must not permanently disable an edge. |
-| Native shell directory: #528 | Review by actual native subsystem cohesion, retaining platform composition where appropriate. | Directory size alone does not justify another runtime boundary. |
+| Native shell directory: #528 | Group app state, file grants/import, window identity/presentation and notifications by operation; keep transfer recovery beside the transfer journal. | Directory size alone does not justify another runtime boundary. |
 | HTTP composition: #407, #408, #507, #512 | Retain route-family handlers, the ordered Server transport boundary, and explicit construction records. | Authentication, rate limits, person actions, restore fencing and lifecycle have one ordered HTTP path. Nested dependency bags would conceal the graph. |
 | Worker and workflow: #514, #522, #526, #527, #510, #501, #394, #505, #515 | Retain fenced SQL transitions and their outbox in one adapter, ordered rewind dependencies, lifecycle admission, explicit persisted ask records and their integration tests. | Consumer interfaces already narrow access. Independent repositories or callback lists would spread transaction and teardown invariants. |
 | Source lifecycle: #525, #517, #511, #509 | Retain the coordinated tree-store lifecycle, mutable directory overlay, repository analysis lifetime and immutable review projection. | Drain, writer exclusion, pins and reclamation share one locking protocol. Spill and revision-cached freeze represent one collection. |
@@ -104,6 +104,8 @@ and type/dependency changes that do not increase field or method counts.
 | [#535](https://github.com/paintedwolf-ai/paintedwolf-code/pull/535) | Tool-result preparation and feedback. |
 | [#536](https://github.com/paintedwolf-ai/paintedwolf-code/pull/536) | Connection binding and lifecycle. |
 | [#537](https://github.com/paintedwolf-ai/paintedwolf-code/pull/537) | Hosted verification responsibilities and test organization. |
+| [#538](https://github.com/paintedwolf-ai/paintedwolf-code/pull/538) | Native app state, files, windows and notification facilities. |
+| [#539](https://github.com/paintedwolf-ai/paintedwolf-code/pull/539) | Workspace/list layout, preferences and resize coordination. |
 
 Each implementation is delivered independently through the merge queue. Scoped
 local checks qualify only their captured source and requested contracts. Ready

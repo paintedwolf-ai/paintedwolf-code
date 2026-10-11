@@ -62,8 +62,10 @@ func typeShape(tree *workingTree, inv *inventory, id string) (string, error) {
 				}
 			}
 		}
-		if len(declarations) > before && imports != "" {
-			declarations = append(declarations, "imports:"+imports)
+		if imports != "" {
+			for i := before; i < len(declarations); i++ {
+				declarations[i] += "\nimports:" + imports
+			}
 		}
 	}
 	if len(declarations) == 0 {
