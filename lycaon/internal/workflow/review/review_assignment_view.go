@@ -15,7 +15,7 @@ func rejectReviewView(reason, field string) error {
 	return &toolrejection.ToolReject{Code: "WORKFLOW_REVIEW_VIEW_INVALID", Data: map[string]any{"reason": reason, "field": field}}
 }
 
-// ReviewAssignmentsView exposes bounded review context through the coordination board.
+// View exposes bounded review context through the coordination board.
 func (m *Assignments) View(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 	if m == nil || m.Runs == nil || m.WorkerTasks == nil {
 		return "", rejectReviewView("review_unavailable", "review_view")
