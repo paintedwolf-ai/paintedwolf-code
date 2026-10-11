@@ -262,11 +262,11 @@ Worker baselines and overlays persist UUID identities. SQL resolves their filena
 
 ### Object maintenance
 
-Source-object publication verifies an existing encoded body before reusing its content identity. Both memory and file captures replace damaged bodies from their verified input; successful publication reports the size of the validated or replaced object.
-
 Source-object maintenance never makes the ledger wait. A capture holds the object store's shared reference lease from its first object write until its manifest is published; maintenance tries for the exclusive lease one bounded batch at a time and defers when a capture holds it, so no pending sweep queues new captures behind it and the ledger's record mutex is never taken by maintenance. A ledger record needs no lease: it writes its object inside the transaction that references it, and each maintenance batch runs its reference checks and file removals inside one immediate write transaction, so the single application writer keeps a record's object write and reference commit on one side of a batch or the other. A deferred sweep retries on a short cadence; a deferred repair at inventory completion is not that inventory's failure.
 
 Source writes check exact queued candidates without scanning the filesystem. Inventory completion also repairs bounded staging and content-addressed batches, and reference deletion enqueues exact object candidates for bounded checks. Attachment metadata supplies project usage without a filesystem walk; exact unclaimed candidates and bounded directory cursors repair interrupted writes, and filesystem guards exist only while admission commits. Transcript spill references are updated with transcript mutations. Project session activity advances bounded pages of settled spill files and checks each candidate through the reference index; recent writes remain candidates so a new publication cannot race old-reference cleanup.
+
+Source-object publication verifies an existing encoded body before reusing its content identity. Both memory and file captures replace damaged bodies from their verified input; successful publication reports the size of the validated or replaced object.
 
 ## sqlc and generated access
 
