@@ -2,6 +2,7 @@ package search
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -140,7 +141,7 @@ func TestDeclarationCandidatesCanceledRetryKeepsFrontier(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	_, err = e.Run(ctx, PlanLeg{Code: leg})
-	if err != context.Canceled || *leg.Progress != before {
+	if !errors.Is(err, context.Canceled) || *leg.Progress != before {
 		t.Fatalf("canceled scan error=%v frontier=%+v", err, leg.Progress)
 	}
 	next, err := e.Run(t.Context(), PlanLeg{Code: leg})
