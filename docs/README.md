@@ -69,7 +69,7 @@ The pages below are a map, not a linear book. Read the path that matches the cha
 3. [Coordinator benchmark](coordinator-benchmark.md) — the graded operation bank, runbook, and calibration.
 4. [Compatibility](compatibility.md) — durable-surface classes and the v1 evolution contract.
 5. [Dependencies](dependencies.md) — dependency and bundled-toolchain policy.
-6. [Dependency inventory](operations/dependency-inventory.md) — operational inventory, update difficulty, and importance across runtimes and packages.
+6. [Dependency inventory](operations/dependency-inventory.md) — update priorities, upgrade constraints, and links to complete inventory sources.
 7. [Release operations](operations/release.md) — candidate, publication, update proof, rollout, and recovery.
 
 ---

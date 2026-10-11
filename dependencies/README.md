@@ -27,7 +27,7 @@ pin changes refresh the page without waiting for the weekly registry query.
 
 | File | Holds |
 |---|---|
-| `policy.yaml` | Page title, quadrant stances, Dependabot schedule, and the section render order |
+| `policy.yaml` | Page title, quadrant stances, Dependabot schedule, and inventory source order |
 | `intro.md`, `ratings.md`, `runbooks.md` | Page prose. Links resolve from `docs/operations/`, where the page is written |
 | `sections/*.yaml` | One inventory section each: its manifest, groups, and entries |
 | `upstream.json` | Generated snapshot of upstream versions; never edit by hand |
@@ -40,7 +40,7 @@ lists **rows** declared by hand, or both.
 ```yaml
 title: Frontend packages (`lycaon-den`)
 intro: |
-  Optional Markdown shown under the heading.
+  Context retained in this policy file.
 manifest:
   kind: bun                    # gomod | bun | cargo
   path: lycaon-den/package.json
@@ -49,7 +49,7 @@ manifest:
 groups:
   - title: Locally patched packages
     intro: |
-      Optional Markdown shown under the group heading.
+      Context retained with this group in the policy file.
     packages:
       '@codemirror/view':
         urgency: low
@@ -60,9 +60,11 @@ packages: {}                   # judgement for entries outside any group
 rows: []                       # declared rows outside any group
 ```
 
-A discovered dependency without an entry still appears, with blank judgement, under
-**Other entries**. An entry for a package the manifest no longer lists is an error, so remove
-judgement when you remove the dependency. Quote package names that start with `@`.
+Every direct dependency is discovered even without a judgement entry. The page shows
+critical/high-urgency entries behind upstream and entries with high friction or an update
+restriction, then links to every section and manifest instead of repeating the full inventory.
+Quadrants summarize rated entries by count. An entry for a package the manifest no longer
+lists is an error, so remove judgement when you remove the dependency. Quote package names that start with `@`.
 
 ## Judgement fields
 
