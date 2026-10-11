@@ -137,4 +137,11 @@ func TestLinuxTrashPreservesMaximumLengthName(t *testing.T) {
 	if string(body) != "kept" {
 		t.Fatal("recovery lost contents")
 	}
+	t.Setenv("HOME", "")
+	if _, err := Move(t.Context(), path); err == nil {
+		t.Fatal("Trash accepted relative XDG data home without a home directory")
+	}
+	if body, err := os.ReadFile(path); err != nil || string(body) != "kept" {
+		t.Fatalf("unavailable Trash changed source: %q, %v", body, err)
+	}
 }
