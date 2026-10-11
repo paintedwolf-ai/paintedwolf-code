@@ -106,7 +106,7 @@ class BudgetReportTests(unittest.TestCase):
         lines, failed = budgets.suite_findings("maintainability", report(findings, untouched={"files": 3}))
         self.assertFalse(failed)
         self.assertEqual([f.level for f in lines], ["warning", "notice", "info"])
-        self.assertIn("past the warning line of 10", lines[0].text)
+        self.assertIn("warning 10, limit 20", lines[0].text)
         self.assertIn("admitted up to 50 because: composition root", lines[1].text)
         self.assertIn("3 artifact(s) past their limit were not touched", lines[2].text)
 

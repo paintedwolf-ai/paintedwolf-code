@@ -21,9 +21,9 @@ var suite = sizebudget.Suite{
 		"test_files":            {Unit: "lines", Measures: "Code-bearing physical lines of tests and test support", Remedy: "Group scenarios by the behavior they prove and keep reusable fixtures explicit."},
 		"source_directories":    {Unit: "files", Measures: "Immediate handwritten production source files", Remedy: "Group cohesive features with clear dependencies; moving files alone does not reduce receiver coupling."},
 		"test_directories":      {Unit: "files", Measures: "Immediate handwritten test and test-support source files", Remedy: "Group tests by their contracts while preserving discovery and tier membership."},
-		"go_struct_fields":      {Unit: "fields", Measures: "Named production struct fields; each name and embedded field counts", Remedy: "Separate cohesive services with explicit dependencies; do not hide dependencies inside an unrestricted context."},
-		"go_receiver_methods":   {Unit: "methods", Measures: "Distinct production receiver methods across package files", Remedy: "Extract a cohesive responsibility with narrow dependencies; splitting files keeps this total unchanged."},
-		"go_receiver_lines":     {Unit: "lines", Measures: "Code-bearing physical lines of production receiver methods across package files and build variants", Remedy: "Reduce concentrated behavior by extracting a coherent service, preserving lifecycle and synchronization."},
+		"go_struct_fields":      {Unit: "fields", Measures: "Named production struct fields; each name and embedded field counts", Remedy: "Distinguish runtime dependencies, construction bundles, and data records; choose a cohesive design and preserve explicit dependencies."},
+		"go_receiver_methods":   {Unit: "methods", Measures: "Distinct production receiver methods across package files", Remedy: "Review API cohesion and consumer needs; a focused adapter may retain several methods, while unrelated behavior should have a clear boundary."},
+		"go_receiver_lines":     {Unit: "lines", Measures: "Code-bearing physical lines of production receiver methods across package files and build variants", Remedy: "Review behavior and lifecycle together; simplify, consolidate, or separate real responsibilities while preserving synchronization."},
 		"ts_local_dependencies": {Unit: "modules", Measures: "Distinct resolved local imports and re-exports, including type-only and literal dynamic imports", Remedy: "Clarify feature boundaries and dependencies; avoid a barrel that conceals the same coupling."},
 	},
 }

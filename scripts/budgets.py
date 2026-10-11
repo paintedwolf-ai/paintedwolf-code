@@ -57,6 +57,7 @@ def suite_findings(name, report):
     def size(f):
         return f'{f["measured"]:,} {report["categories"][f["category"]]["unit"]}'
 
+    tracked = {(r["category"], r["id"]): r for r in report.get("tracking", {}).get("artifacts", [])}
     for f in report["findings"]:
         kind, label = f["kind"], f'{f["category"]} {f["id"]}'
         limit = report["categories"][f["category"]]["limit"]
@@ -73,8 +74,13 @@ def suite_findings(name, report):
             out.append(Finding("error", name, f'{label}: {size(f)}, past its exception cap of {f["bound"]:,}. Make it '
                                f'smaller, or revisit the reason: {f["reason"]}', source))
         elif kind == "over_warn":
-            out.append(Finding("warning", name, f"{label}: {size(f)}, past the warning line of {f['bound']:,} on the way "
-                               f"to its limit of {limit:,}; prefer a cohesive new file or package; merged changes create a cleanup issue", source))
+            entry = tracked.get((f["category"], f["id"]), {})
+            review = entry.get('review')
+            disposition = (f"design decision {review['disposition']} ({review['state']}); workstream {review['workstream']}; "
+                           f"{review['reason']}" if review else
+                           "review cohesion, dependencies, and lifecycle; choose refactoring, consolidation, or bounded retention")
+            severity = "notice" if review and review['state'] == 'retained' else "warning"
+            out.append(Finding(severity, name, f"{label}: {size(f)}, warning {f['bound']:,}, limit {limit:,}; {disposition}", source))
         elif kind == "excepted":
             out.append(Finding("notice", name, f'{label}: {size(f)}, admitted up to {f["bound"]:,} because: '
                                f'{f["reason"]}', source))

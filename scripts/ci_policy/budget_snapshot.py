@@ -3,6 +3,8 @@ import hashlib
 import json
 import re
 
+from .budget_review import has_review_shape, validate_review
+
 CATEGORIES = frozenset({'source_files', 'test_files', 'source_directories', 'test_directories',
                         'go_struct_fields', 'go_receiver_methods', 'go_receiver_lines', 'ts_local_dependencies'})
 SHA = re.compile(r'[0-9a-f]{40}')
@@ -70,6 +72,11 @@ def validate(report, sha, tree):
                     or type(span.get('first')) is not int or type(span.get('last')) is not int
                     or not 0 < span['first'] <= span['last']):
                 raise ValueError('invalid source span')
+        if 'shape' in row and (not has_review_shape(row['category']) or not isinstance(row['shape'], str)
+                               or not re.fullmatch('[0-9a-f]{64}', row['shape'])):
+            raise ValueError('invalid artifact structural shape')
+        if 'review' in row:
+            validate_review(row['review'], row, relative)
         identity = key(row['category'], row['id'])
         if identity in out:
             raise ValueError('duplicate tracking artifact')

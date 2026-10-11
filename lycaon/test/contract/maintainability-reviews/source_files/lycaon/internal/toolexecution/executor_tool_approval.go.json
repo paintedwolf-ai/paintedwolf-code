@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/toolexecution/executor_tool_approval.go",
+  "kind": "module",
+  "workstream": "tool-domains",
+  "disposition": "retain",
+  "reason": "Approval checkpoint coalescing, waiting, dismissal and denial recording form one ordered protocol. Keep the complete path visible rather than introducing a helper with broad access to approval state.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 335,
+  "boundaries": {
+    "lycaon/internal/toolexecution/executor_approval_test.go": "1239875b7c9f21715108debd5af6d37cd667472d296ab6a50a5236f72c5634d7",
+    "lycaon/internal/toolexecution/approval_identity_test.go": "4a3cd3279686d4df1b75cbd80306fcf7a22ac0b1c1dfcf4d4dcd5486c70b1b65"
+  }
+}

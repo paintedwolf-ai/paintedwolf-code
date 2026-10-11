@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/session/rewindruntime/rewindruntime.Service",
+  "kind": "runtime_service",
+  "workstream": "worker-workflow-lifecycle",
+  "disposition": "retain",
+  "reason": "The rewind adapter declares the volatile ledgers reset after durable rewind. Named dependencies and ordered calls make cancellation and reconciliation visible; replacing them with a generic callback list would erase this contract.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 13,
+  "boundaries": {
+    "lycaon/internal/session/rewind_state_test.go": "6f2180f2e10e2b943068c2482e26a2a6aae52c2885afaba2437d7004f1231edd",
+    "lycaon/internal/session/checkpointcontrol/checkpoint_refusal_test.go": "d0eb15ccaaaad97a4b89ddb943c53b6f6fae42a9f8be5e677488fa924527f35e"
+  },
+  "reviewed_shape": "015c20140415216b195fc301f5b76b26591529b7c5c3c013e4f4c3bf439fe10f"
+}

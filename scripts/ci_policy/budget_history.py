@@ -6,7 +6,7 @@ import subprocess
 import zipfile
 
 from .budget_evidence import MAX_ARCHIVE_BYTES
-from .budget_snapshot import SHA
+from .budget_snapshot import SHA, key
 from .github import pages, repository
 import change_report
 
@@ -64,6 +64,7 @@ def intake(run, rows, prior):
     if change_report.git(root, 'rev-parse', 'HEAD').stdout.strip() != run['head_sha']:
         raise ValueError('the reconciliation checkout is not the measured main commit')
     paths = change_report.changed_paths(root, base)
+    identities.update(changed_reviews(root, base, run['head_sha'], paths, rows))
     lines = change_report.changed_lines(root, base, paths)
     added, removed = change_report.added_and_removed(root, base)
     directories = {str(Path(path).parent) for path in added + removed}
@@ -87,3 +88,20 @@ def initial_base(root):
     if not commits or not SHA.fullmatch(commits[-1]):
         raise ValueError('cannot establish the maintainability tracking baseline')
     return change_report.git(root, 'rev-parse', commits[-1] + '^').stdout.strip()
+
+
+def changed_reviews(root, base, head, paths, rows):
+    identities = set()
+    prefix = 'lycaon/test/contract/maintainability-reviews/'
+    for path in paths:
+        if not path.startswith(prefix) or not path.endswith('.json'):
+            continue
+        for revision in (base, head):
+            entry = change_report.git(root, 'ls-tree', revision, '--', path)
+            if not entry.stdout.strip():
+                continue
+            review = json.loads(change_report.git(root, 'show', f'{revision}:{path}').stdout)
+            identity = key(review['category'], review['artifact'])
+            if identity in rows:
+                identities.add(identity)
+    return identities

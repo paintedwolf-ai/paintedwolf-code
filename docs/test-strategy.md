@@ -148,8 +148,8 @@ the same rules and the same words, so CI says nothing `check-fast` did not.
 | Maintainability (`test/contract/maintainability`) | Code-bearing lines per production and test file; handwritten files per production and test directory; Go struct fields; Go receiver methods and receiver lines summed across files and platform variants, so splitting a file cannot hide concentration; distinct local TypeScript imports per module. Generated and vendored files are classified from generator inventories. | [`maintainability-budgets.yaml`](../lycaon/test/contract/maintainability-budgets.yaml) |
 | Prompts (`test/contract/agentcontext`) | UTF-8 bytes of every rendered worker persona, coordinator tripartite fixture, inject, agent template, kick, and instruction unit; the tools each coordinator surface and worker profile sends upfront, limited as two classes; and each turn kind's widest static prompt against the model window | `sizes` and `absolute_maximums` in [`prompt-budgets.yaml`](../lycaon/config/packs/painted-wolf/platform/host/prompt-budgets.yaml) |
 
-Each maintainability category has a cleanup threshold (`warn`) and a hard limit
-(`limit`). Warnings permit admission and become cleanup issues after merge; hard
+Each maintainability category has a review threshold (`warn`) and a hard limit
+(`limit`). Warnings permit admission and request architectural review after merge; hard
 limits reject new or growing excess. Maintainability measures both the change
 base and current source using the same rules. An artifact that must stay
 larger can have an explicit cap and reason in its own file under
@@ -205,8 +205,9 @@ stores that identity and the latest observation. The reconciler enumerates open
 and closed issues without GitHub search, preserves titles and human prose outside
 the block, and updates evidence without adding a comment on every run. Untouched issues
 whose measurements and thresholds are unchanged retain their previous evidence. Completed
-issues reopen when the same debt returns. Closing an issue as **not planned**
-suppresses future reopening for that identity. Renames create new identities.
+issues reopen when actionable debt returns. A **not planned** dismissal lasts only
+while its measurement, thresholds, and source membership remain unchanged and no
+merged change touches the artifact again. Renames create new identities.
 Bot-authored issues carrying the tracking marker are exempt from ordinary issue
 intake, stale closure, and locking; their lifecycle follows the measured debt.
 Only automation-authored issues can be adopted or mutated; exact older automatic
@@ -228,6 +229,63 @@ retained `maintainability-issues.json` plan and category counts before applying 
 backfill. Each apply creates at most 25 new issues, spaces mutations one second
 apart, and records applied/deferred counts. Deferred intake does not advance the
 checkpoint; later runs or another explicit backfill dispatch continue it. The workflow never runs downloaded code or changes admission limits.
+
+#### Architectural review decisions
+
+Review records describe a design decision. The commit field records its stated
+provenance; fingerprints detect changes to selected source contracts. They do not
+prove tests passed. Verification receipts and CI retain that separate role.
+
+A warning measures concentration; it does not prescribe a package boundary.
+Review cohesive behavior, runtime dependencies, operation contracts, and state
+lifetimes before choosing a refactor. Construction bundles, domain records,
+projections, and runtime services have different reasons to grow.
+
+Each JSON record under `lycaon/test/contract/maintainability-reviews/` names one
+`category` and `artifact`, a `kind`, a `workstream`, a `disposition`, a `reason`,
+and the `reviewed_commit`. Kinds are `runtime_service`, `construction`,
+`data_record`, `projection`, `algorithm`, `test_suite`, and `module`. Workstreams
+are explicit lowercase identifiers for related implementation work; they do not
+change the artifact identity or create new runtime authority boundaries.
+
+A `refactor` decision classifies work without prescribing extraction: simplifying,
+consolidating fragments, and moving a genuine boundary are all valid outcomes.
+It does not suppress the warning. A `retain` decision requires a numeric `ceiling`
+above the warning threshold and at or below the hard limit, plus `boundaries`: a
+map of repository-relative files to their SHA-256 digests. Select the contract
+tests and declarations that support the rationale. Pin only boundaries whose
+changes invalidate the decision; avoid whole implementation files when structural
+shape and focused contracts express that boundary.
+
+Retained Go artifacts record `reviewed_shape`, the signature printed in the
+tracking report. The checker derives it from the type declaration and method
+signatures, including receiver kinds, type parameters, and dependency identity.
+Bodies, comments, and declaration order are excluded. Unaliased and dot imports
+are conservatively included because import paths need not match package names.
+TypeScript dependency reviews record the sorted resolved local module identities
+in the same field. Reordering or equivalent import spelling does not renew a
+decision; replacing a dependency does. Directory reviews record the sorted
+immediate measured source or test members, so same-count membership changes also
+renew review while body-only edits do not. A changed structural signature renews
+review even when the size stays constant. Review state is measured, never authored.
+
+The checker carries this decision in the source-bound report. Growth beyond the
+ceiling or a changed, removed, or nonregular boundary file renews review. Unknown
+fields, malformed records, duplicate identities, and records for removed
+artifacts fail validation. A rename requires an explicit decision for its new
+identity. Decisions never raise hard limits or replace exception caps. Added, revised,
+and removed decisions are reported beside code findings so repeated agents can
+see policy changes rather than silently ratcheting ceilings. Agents may revise a
+decision when new evidence warrants it; record the reason and verify the affected
+contracts in the same change.
+
+A retained warning remains in the measured inventory. Its issue closes with an
+explicit retained-design status rather than claiming the artifact became small;
+renewed review reopens that issue. New retained baseline warnings do not create
+issues. The reconciliation report groups reviewed artifacts by workstream and
+issue bodies show classification, rationale, reviewed source, current observation,
+and the previous observation and delta when evidence advances. Human prose
+outside the managed block remains unchanged.
 
 #### Prompt budgets
 
