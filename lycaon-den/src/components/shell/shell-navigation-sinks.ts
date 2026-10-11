@@ -1,5 +1,13 @@
-import { onCleanup } from "solid-js";
-import type { ContextNavItemId } from "../../../shared/app-state-types.ts";
+import { type ShellScope } from "./shell-scope.ts";
+import { onCleanup, onMount } from "solid-js";
+import { type ContextNavItemId } from "../../../shared/app-state-types.ts";
+import { registerComposerAttachmentSink } from "../../chat/composer/add-to-chat.ts";
+import { composerComposeBlockReason } from "../../chat/composer/composer-rules.ts";
+import { setStatusChipNavigationSink } from "../../chat/status/status-navigation-sink.ts";
+import { setShellNoticeActionSinks } from "../../notices/notice-actions.ts";
+import { closeDiffViewer } from "../../platform/navigation/in-app-diff.ts";
+import { type ProjectContextSection } from "../../settings/settings-nav-model.ts";
+import { catalogWorkflowRun } from "../../workflow/workflow-run-stack.ts";
 import { startWindowIdentityPaint } from "../../platform/windows/window-identity-paint.ts";
 import { installWindowResizeEpoch } from "../../shell/window-resize.ts";
 import { installWalkTranscriptMark } from "../../chat/transcript/presentation/walk-transcript-mark.ts";
@@ -19,23 +27,83 @@ import { revealHighlightActive, clearRevealHighlight } from "../../chat/transcri
 import { registerApprovalRevealSink } from "../../chat/checkpoint/approval-reveal.ts";
 import { sessionWorkers } from "../../chat/actions/chat-actions.ts";
 import { revealChicklet } from "../../chat/transcript/presentation/transcript-reveal.ts";
-import type { SessionNavigation } from "./session-navigation.ts";
-import type { ShellPaneVisibility } from "./shell-pane-visibility.ts";
-import type { ShellScope } from "./shell-scope.ts";
-import type { ShellSearchState } from "./shell-search-state.ts";
+import { type SessionNavigation } from "./session-navigation.ts";
+import { type ShellPaneVisibility } from "./shell-pane-visibility.ts";
+import { type ShellSearchState } from "./shell-search-state.ts";
+import { type ShellNavigation } from "./shell-navigation-state.ts";
 
-type NavigationSinkDependencies = Pick<ShellScope, "shell" | "projects" | "appStore" | "activeChat">
-  & Pick<ShellSearchState, "openSearch"> & Pick<ShellPaneVisibility, "revealConversation">
+type NavigationSinkDependencies = Pick<ShellScope, "shell" | "projects" | "appStore" | "activeChat" | "setNav">
+  & Pick<ShellSearchState, "openSearch" | "closeSearch" | "closeCrossbar"> & Pick<ShellPaneVisibility, "revealConversation">
   & Pick<SessionNavigation, "resumeSession"> & {
   openStageWithPlacement: (stage: ContextNavItemId, arrival: "routed", open?: () => void) => void;
   openNotificationSession: (sessionId: string) => void;
   openWorkers: (workerId?: string) => void;
+  openSettings: ShellNavigation["openSettings"];
+  selectContextSection: (section: ProjectContextSection) => void;
+  showNoProviderBanner: () => boolean;
 };
 
 /** Register before the shell becomes visible; cleanup shares the shell lifetime. */
 export function installShellNavigationSinks({ shell, projects, appStore, openStageWithPlacement,
   openSearch, openNotificationSession, revealConversation,
-  resumeSession, activeChat, openWorkers }: NavigationSinkDependencies) {
+  resumeSession, activeChat, openWorkers, closeSearch, closeCrossbar, setNav, openSettings,
+  selectContextSection, showNoProviderBanner }: NavigationSinkDependencies) {
+  // Provider nudges share shell-level navigation.
+  const openProvidersSettings = () => openSettings("providers");
+  setShellNoticeActionSinks({ openAIProviders: openProvidersSettings });
+  onCleanup(() => setShellNoticeActionSinks(null));
+
+  // Status chips route through the current shell.
+  setStatusChipNavigationSink((target) => {
+    if (target.kind === "project-context") {
+      openStageWithPlacement(target.stage, "routed");
+      return;
+    }
+    if (target.kind === "project-configuration") {
+      selectContextSection(target.section);
+      return;
+    }
+    openSettings(target.section);
+  });
+  onCleanup(() => setStatusChipNavigationSink(null));
+
+  // The visible chat is the local add-to-chat target.
+  onMount(() => {
+    const detach = registerComposerAttachmentSink({
+      sessionId: () => activeChat()?.sessionId ?? "",
+      blockReason: () =>
+        composerComposeBlockReason(
+          appStore.state.sidecarStatus,
+          activeChat()?.sessionId ?? null,
+          catalogWorkflowRun(
+            appStore.state.activeWorkflowRun,
+            appStore.state.workflowRuns,
+          ),
+          appStore.state.chatHydrationLock,
+          showNoProviderBanner(),
+          appStore.state.currentSession?.status,
+        ),
+      projectId: () =>
+        activeChat()?.projectId ??
+        shell.state.activeProjectId ??
+        "",
+      projectRoots: () => {
+        const id =
+          activeChat()?.projectId ?? shell.state.activeProjectId ?? "";
+        if (!id) return [];
+        return projects.byId(id)?.roots ?? [];
+      },
+      reveal: () => {
+        closeCrossbar();
+        closeSearch();
+        closeDiffViewer();
+        setNav("projects");
+        void revealConversation();
+      },
+    });
+    onCleanup(detach);
+  });
+
   const stopWindowResize = installWindowResizeEpoch();
   // Chat marking follows the Walk playhead.
   const stopWalkMark = installWalkTranscriptMark();
