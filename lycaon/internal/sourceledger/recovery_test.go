@@ -25,13 +25,15 @@ func TestRecoveryReferenceProtectsCompleteObjectUntilRetired(t *testing.T) {
 	testutil.FailErr(t, "flush recovery", writer.Flush(ctx))
 	writer.Close()
 	testutil.FailErr(t, "remove original", os.Remove(source))
+	_, err = store.sqlDB.ExecContext(ctx, `INSERT INTO source_mutations(id,project_id,kind,input_digest,plan_json,status,error,created_at,updated_at) VALUES('recovery','p1','delete','digest','{"recovery_id":"recovery"}','failed','','2026-01-01','2026-01-01')`)
+	testutil.FailErr(t, "retain interrupted operation", err)
 	testutil.FailErr(t, "sweep", store.Retention.SweepBlobs(ctx))
 	var restored bytes.Buffer
 	testutil.FailErr(t, "read recovery", store.Retention.CopyRecoveryFile(ctx, saved.SHA, &restored))
 	if !bytes.Equal(restored.Bytes(), body) {
 		t.Fatal("recovery content truncated or changed")
 	}
-	_, err = store.sqlDB.ExecContext(ctx, `DELETE FROM source_recovery_objects WHERE project_id='p1' AND recovery_id='recovery'`)
+	_, err = store.sqlDB.ExecContext(ctx, `DELETE FROM source_mutations WHERE id='recovery'`)
 	testutil.FailErr(t, "retire recovery", err)
 	testutil.FailErr(t, "reclaim", store.Retention.SweepBlobs(ctx))
 	if err := store.Retention.CopyRecoveryFile(ctx, saved.SHA, &bytes.Buffer{}); err == nil {

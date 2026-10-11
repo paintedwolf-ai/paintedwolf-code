@@ -14,9 +14,6 @@ func (s *SourceMutationService) Recover(ctx context.Context) error {
 	if s == nil {
 		return nil
 	}
-	if err := s.recovery.pruneSourceRecovery(ctx, ""); err != nil {
-		return err
-	}
 	rows, err := s.Journal.pending(ctx)
 	if err != nil {
 		return err

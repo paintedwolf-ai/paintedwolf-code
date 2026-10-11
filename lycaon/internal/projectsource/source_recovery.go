@@ -2,7 +2,6 @@ package projectsource
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -245,29 +244,6 @@ func (s *sourceRecovery) restoreRecoveryFile(ctx context.Context, scope *os.Root
 		copyErr = fssync.File(f)
 	}
 	return errors.Join(copyErr, f.Close())
-}
-
-// Pending mutation plans protect partial manifests while preparation runs.
-func (s *sourceRecovery) pruneSourceRecovery(ctx context.Context, projectID string) error {
-	if s.db == nil {
-		return nil
-	}
-	return pruneSourceRecoveryRows(ctx, s.db, projectID)
-}
-
-func pruneSourceRecoveryRows(ctx context.Context, exec interface {
-	ExecContext(context.Context, string, ...any) (sql.Result, error)
-}, projectID string) error {
-	for _, table := range []string{"source_recovery_objects", "source_recovery_entries"} {
-		_, err := exec.ExecContext(ctx, `DELETE FROM `+table+`
- WHERE (?='' OR project_id=?)
- AND NOT EXISTS (SELECT 1 FROM source_history_entries h WHERE h.project_id=`+table+`.project_id AND json_extract(h.undo_plan_json,'$.recovery_id')=`+table+`.recovery_id)
- AND NOT EXISTS (SELECT 1 FROM source_mutations m WHERE m.project_id=`+table+`.project_id AND m.status IN ('prepared','file_applied','failed','diverged') AND json_extract(m.plan_json,'$.recovery_id')=`+table+`.recovery_id)`, projectID, projectID)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // Traversal holds the selected directory and preserves symbolic links.

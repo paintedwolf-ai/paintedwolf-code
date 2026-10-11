@@ -31,10 +31,12 @@ type RecoveryWriter struct {
 }
 
 func (s *Retention) BeginRecovery(ctx context.Context, projectID, recoveryID string) (*RecoveryWriter, error) {
+	release := s.objects.AcquireReferenceLease()
 	if _, err := s.sqlDB.ExecContext(ctx, `DELETE FROM source_recovery_entries WHERE project_id=? AND recovery_id=?`, projectID, recoveryID); err != nil {
+		release()
 		return nil, err
 	}
-	return &RecoveryWriter{store: s, projectID: projectID, recoveryID: recoveryID, release: s.objects.AcquireReferenceLease()}, nil
+	return &RecoveryWriter{store: s, projectID: projectID, recoveryID: recoveryID, release: release}, nil
 }
 
 func (w *RecoveryWriter) Close() {

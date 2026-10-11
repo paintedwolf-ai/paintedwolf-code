@@ -46,6 +46,9 @@ func (s *Retention) MaintainBlobs(ctx context.Context) error {
 	if s == nil || s.sqlDB == nil {
 		return nil
 	}
+	if _, err := s.reclaimRecoveryBatch(ctx); err != nil {
+		return err
+	}
 	if _, err := s.pruneOrphanBatch(ctx); err != nil {
 		return err
 	}
@@ -58,6 +61,15 @@ func (s *Retention) MaintainBlobs(ctx context.Context) error {
 func (s *Retention) SweepBlobs(ctx context.Context) error {
 	if s == nil || s.sqlDB == nil {
 		return nil
+	}
+	for {
+		n, err := s.reclaimRecoveryBatch(ctx)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			break
+		}
 	}
 	if err := s.baselines.Prune(ctx); err != nil {
 		return err
