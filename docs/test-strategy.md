@@ -18,7 +18,7 @@ How Painted Wolf Code proves v1 behavior.
 | Browser and desktop | `lycaon-den/e2e/` | Complete user journeys through the web harness and Tauri shell |
 | Performance | `cmd/lycaon-perf`, Go benchmarks | Release-channel boot and mixed workloads, latency distributions, resource stability, restart/replay recovery, and focused hot paths |
 | Release | release workflow targets | Full Go behavior, race detection, scanner corpora, and Go and Den coverage floors |
-| Verification runner | `scripts/verification_tests/` | The `./task` queue: planning, batching, admission, cancellation, caching, reuse, health, and worker limits, through bounded subprocess fixtures |
+| Verification runner | `scripts/verification_tests/` (`scheduler`, `ci`, `distribution`, `evidence`) | The `./task` queue: planning, batching, admission, cancellation, caching, reuse, health, and worker limits, through bounded subprocess fixtures |
 | Coordinator benchmark | `scripts/coordinator-benchmark/` | Opt-in paid runs of candidate models through the real application, graded on environment outcomes — [Coordinator benchmark](coordinator-benchmark.md) |
 
 The bundled OpenAPI document is generated from `docs/openapi/**`. Contract tests prove its layout and its agreement with generated Go and TypeScript surfaces, in both directions and at both ends of the pipeline:
@@ -405,7 +405,7 @@ control sockets, and credentials never reach tests or separate otherwise
 identical requests. Every declared value must be a function of the checkout
 rather than of the call that submitted it: a per-invocation value gives each
 request its own digest, which ends batch sharing and result reuse with no
-visible failure; `scripts/verification_tests/test_environment_identity_execution.py`
+visible failure; `scripts/verification_tests/scheduler/test_environment_identity_execution.py`
 asserts that rule against the catalog. Verification is offline: no network route
 is declared or passed through, so a stage that dials is denied by the boundary.
 Only the environment digest is stored in queue metadata.

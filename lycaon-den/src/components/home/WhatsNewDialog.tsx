@@ -24,7 +24,7 @@ export type WhatsNewDialogProps = {
   onGotIt: () => void;
 };
 
-/** Full release notes, opened from Home's compact update notice. */
+/** Full release notes retain acknowledgement until the person confirms it. */
 export function WhatsNewDialog(props: WhatsNewDialogProps): JSX.Element {
   const [dialogEl, setDialogEl] = createSignal<HTMLDivElement | undefined>();
   const [copied, setCopied] = createSignal(false);
