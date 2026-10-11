@@ -32,10 +32,11 @@ func TestBlueprintRelocationAnnouncesEveryCommittedRevision(t *testing.T) {
 			completed := time.Now().UTC()
 			run.CompletedAt = &completed
 		}
-		run.ReviewRevision = 7
 		run.ProjectID = testdbseed.DefaultProjectID
 		run.WorkflowID, run.WorkflowVersion, run.CurrentPhase = "plan", "1.0.0", "research"
 		testutil.FailErr(t, "create run", store.State.CreateState(ctx, run, "", nil))
+		_, err := db.ExecContext(ctx, "UPDATE workflow_runs SET review_revision = 7 WHERE id = ?", run.ID)
+		testutil.FailErr(t, "seed review acceptance epoch", err)
 	}
 	store.Transactions.SetEventOutbox(eventoutbox.New(db, nil))
 	sessions, err := store.Blueprints.RelocateBlueprintPath(ctx, testdbseed.DefaultProjectID, "blueprints/old.md", "blueprints/new.md")
@@ -54,7 +55,7 @@ func TestBlueprintRelocationAnnouncesEveryCommittedRevision(t *testing.T) {
 		testutil.FailErr(t, "read event", rows.Scan(&id, &revision, &raw))
 		var event api.WorkflowEvent
 		testutil.FailErr(t, "decode event", json.Unmarshal([]byte(raw), &event))
-		if seen[id] || event.Event != api.WorkflowEventKindRunUpdated || event.WorkflowRunID != id || event.Run == nil || event.Run.Revision != revision || event.Run.BlueprintPath != "blueprints/new.md" || event.Run.ReviewRevision != 7 {
+		if seen[id] || event.Event != api.WorkflowEventKindRunUpdated || event.WorkflowRunID != id || event.Run == nil || event.Run.Revision != revision || event.Run.BlueprintPath != "blueprints/new.md" {
 			t.Fatalf("incorrect relocation event: facet=%s revision=%d event=%+v", id, revision, event)
 		}
 		seen[id] = true
@@ -66,6 +67,11 @@ func TestBlueprintRelocationAnnouncesEveryCommittedRevision(t *testing.T) {
 	for i, prior := range runs {
 		current, err := store.Runs.Get(ctx, prior.ID)
 		testutil.FailErr(t, "read committed run", err)
+		var reviewRevision int64
+		testutil.FailErr(t, "read retained review acceptance epoch", db.QueryRowContext(ctx, "SELECT review_revision FROM workflow_runs WHERE id = ?", prior.ID).Scan(&reviewRevision))
+		if reviewRevision != 7 {
+			t.Fatalf("blueprint relocation changed review acceptance epoch: run=%s got=%d want=7", prior.ID, reviewRevision)
+		}
 		if i < 3 {
 			if !seen[prior.ID] || current.Revision != prior.Revision+1 || current.BlueprintPath != "blueprints/new.md" {
 				t.Fatalf("changed run not represented exactly: before=%+v after=%+v", prior, current)
