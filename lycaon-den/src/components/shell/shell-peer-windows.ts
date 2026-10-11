@@ -3,7 +3,7 @@ import { createEffect, createMemo } from "solid-js";
 import { type ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { type WindowSubject } from "../../platform/windows/window-subject.ts";
 import { isContextNavItemId } from "../../settings/editor/context-nav-prefs.ts";
-import { currentSplitFocusRegion } from "../../shell/layout-store.ts";
+import { currentSplitFocusRegion } from "../../shell/workspace-layout.ts";
 import { resolvePeerOpenSubject, type PeerOpenSubject, peerWindowsForSubject } from "../../shortcuts/peer-view-subject.ts";
 import { projectFilesState } from "../../files/documents/files-buffer-state.ts";
 import { stageLabelFor } from "../stage/stage-registry.tsx";

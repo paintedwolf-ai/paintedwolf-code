@@ -5,7 +5,7 @@ import type {
 } from "../../../shared/app-state-types.ts";
 import { ariaKeyShortcutsForHandler, bindingForHandler } from "../../shortcuts/display-binding-for.ts";
 import { isTauriRuntime } from "../../platform/runtime.ts";
-import { workspaceOrientationPref } from "../../shell/layout-store.ts";
+import { workspaceOrientationPref } from "../../shell/workspace-layout.ts";
 import { stageLabelFor } from "../stage/stage-registry.tsx";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 import { ThemeIcon } from "../primitives/ThemeIcon.tsx";

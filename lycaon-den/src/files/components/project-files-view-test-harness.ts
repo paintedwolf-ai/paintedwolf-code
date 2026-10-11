@@ -18,7 +18,7 @@ import { sharedBufferLoadRequests } from "../documents/files-buffer-request-trac
 import { resetFilesEditorHostForTests } from "../editor/files-editor-host.ts";
 import { canEditLoadedSource } from "../../components/source/editor/source-editor-model.ts";
 import { resetAppStateSnapshotForTests } from "../../store/app-state-snapshot.ts";
-import { resetLayoutStoreForTests } from "../../shell/layout-store.ts";
+import { resetLayoutForTests } from "../../layout/layout-test-support.ts";
 import { resetShellLayoutBusyForTests } from "../../shell/shell-layout-busy.ts";
 import { resetFilesTreeWindowStateForTests } from "../tree/files-tree-window-state.ts";
 import { resetFilesTreeViewStateForTests } from "../tree/files-tree-view-state.ts";
@@ -302,7 +302,7 @@ export function resetProjectFilesViewTest() {
   resetEditorPrefsForTests();
   resetShellLayoutBusyForTests();
   resetScrollMeasureQuietForTests();
-  resetLayoutStoreForTests();
+  resetLayoutForTests();
   resetFilesTreeWindowStateForTests();
   resetFilesTreeViewStateForTests();
   resetSourceTreeStoreForTests();

@@ -9,7 +9,7 @@ import { LayoutDockButton, LayoutDockTray } from "./LayoutDock.tsx";
 
 const denSrc = join(import.meta.dirname, "../..");
 
-vi.mock("../../shell/layout-store.ts", () => ({
+vi.mock("../../shell/workspace-layout.ts", () => ({
   workspaceOrientationPref: () => "standard",
 }));
 

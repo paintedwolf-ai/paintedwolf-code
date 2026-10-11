@@ -50,7 +50,7 @@ import {
 } from "../../lib/scan-findings-table.ts";
 import { LEDGER_LIST_SURFACE, SECURITY_LIST_SURFACE } from "../../lib/scan-columns.ts";
 import type { SortDirection, SortState } from "../../list/list-sort.ts";
-import { commitListSort, listPanePrefs } from "../../shell/layout-store.ts";
+import { commitListSort, listPanePrefs } from "../../list/list-layout.ts";
 import { resolveListPaneSort } from "../../list/list-pane-model.ts";
 import {
   kpiEntries,

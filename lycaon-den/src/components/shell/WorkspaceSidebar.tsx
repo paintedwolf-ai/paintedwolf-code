@@ -19,7 +19,7 @@ import {
   toggleWorkspaceOrientation,
   swapSplitColumns,
   workspaceOrientationPref,
-} from "../../shell/layout-store.ts";
+} from "../../shell/workspace-layout.ts";
 import { workspacePreparation } from "../../shell/workspace-preparation.ts";
 import {
   isRegionEntry,

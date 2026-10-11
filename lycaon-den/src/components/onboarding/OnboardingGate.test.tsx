@@ -15,12 +15,12 @@ import { OnboardingGate } from "./OnboardingGate.tsx";
 import { onboardingSetupBlocker } from "./onboarding-gate-model.ts";
 import { tryDismissOnboardingWelcome } from "./onboarding-welcome-dismiss.ts";
 import { MODELS_SETTINGS_COPY } from "../../settings/providers/models-settings-copy.ts";
+import { resetLayoutForTests } from "../../layout/layout-test-support.ts";
 import {
-  resetLayoutStoreForTests,
   saveStartupCompanion,
   saveWorkspaceOrientation,
   startupCompanionPref,
-} from "../../shell/layout-store.ts";
+} from "../../shell/workspace-layout.ts";
 import { providerModel } from "../../test/provider-fixtures.ts";
 import { stageLabelFor } from "../stage/stage-registry.tsx";
 import { ONBOARDING_LAYOUT_COPY } from "./onboarding-layout-copy.ts";
@@ -133,7 +133,7 @@ afterEach(() => {
   completeFirstRunSetup.mockClear();
   resetDispatcherForTests();
   setDispatcherPlatformForTests(null);
-  resetLayoutStoreForTests();
+  resetLayoutForTests();
 });
 
 describe("onboarding-gate-model continue helpers", () => {

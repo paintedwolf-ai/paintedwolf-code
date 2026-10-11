@@ -49,7 +49,7 @@ import {
   splitHostWidthPx,
   stagePlacementMode,
   workspaceOrientationPref,
-} from "../../shell/layout-store.ts";
+} from "../../shell/workspace-layout.ts";
 import {
   resolveSplitCompanion,
   resolveStageColumn,

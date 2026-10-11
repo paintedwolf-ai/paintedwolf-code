@@ -116,7 +116,7 @@ describe("workspace placement contract", () => {
 
   it("keeps the Files return chip out of Files layout flow", () => {
     expect(STAGE_REGISTRY.files.backPlacement).toBe("titlebar");
-    const files = read("src/files/components/ProjectFilesView.tsx");
+    const files = read("src/files/components/ProjectFilesView.tsx") + read("src/files/tree/files-tree-layout.ts");
     expect(files).not.toContain("den-files-stage-gutter");
     expect(files).not.toContain("StageBackChip");
 
@@ -174,7 +174,7 @@ describe("workspace placement contract", () => {
   it("stores one conversation width for the workspace", () => {
     const types = read("shared/app-state-types.ts");
     expect(types).toMatch(/chatWidthPx\?: number/);
-    const store = read("src/shell/layout-store.ts");
+    const store = read("src/shell/workspace-layout.ts");
     expect(store).toContain("export function preferredChatWidthPx()");
     expect(store).toContain("export function beginChatWidthResize");
     const collapse = read("src/shell/responsive-collapse.ts");

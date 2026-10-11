@@ -3,7 +3,7 @@ import { type ShellScope } from "./shell-scope.ts";
 import { createEffect, createSignal, onCleanup } from "solid-js";
 import { type ContextNavItemId, CONTEXT_NAV_CATALOG } from "../../../shared/app-state-types.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
-import { hiddenSplitPanePref, resetChatWidthPx, setSplitFocusRegion, stagePlacementMode, toggleWorkspaceOrientation, swapSplitColumns } from "../../shell/layout-store.ts";
+import { hiddenSplitPanePref, resetChatWidthPx, setSplitFocusRegion, stagePlacementMode, toggleWorkspaceOrientation, swapSplitColumns } from "../../shell/workspace-layout.ts";
 import { focusRegion, focusRegionsVersion, isFocusRegionMounted, type FocusRegionId, cycleFocusRegion } from "../../shortcuts/focus-region.ts";
 import { sidebarNavigationOrder, adjacentSession, sidebarChatSections } from "../../store/projects-sidebar-model.ts";
 import { isChatActivityLive } from "../../chat/session/session-activity.ts";

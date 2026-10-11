@@ -9,7 +9,7 @@ import type {
 } from "../../api/types.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import { createAppStore } from "../../store/app-state.ts";
-import { resetLayoutStoreForTests } from "../../shell/layout-store.ts";
+import { resetLayoutForTests } from "../../layout/layout-test-support.ts";
 import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
 import { SecurityFindingsPane } from "./SecurityFindingsPane.tsx";
 
@@ -219,7 +219,7 @@ describe("Security ledger", () => {
   beforeEach(() => {
     client = mockClient();
     addFindingsToChat.mockReset().mockResolvedValue({ ok: true });
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
   });
 
   it("refreshes when finding history arrives after an identical completed scan event", async () => {

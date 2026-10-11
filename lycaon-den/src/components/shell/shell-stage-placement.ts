@@ -2,7 +2,7 @@ import { type ShellScope } from "./shell-scope.ts";
 import { createEffect, createSignal } from "solid-js";
 import { type ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
-import { companionPref, layoutViewportWidthPx, stagePlacementMode, preferredChatWidthPx, preferredNavWidthPx, saveStagePlacementMode, startupCompanionPref } from "../../shell/layout-store.ts";
+import { companionPref, layoutViewportWidthPx, stagePlacementMode, preferredChatWidthPx, preferredNavWidthPx, saveStagePlacementMode, startupCompanionPref } from "../../shell/workspace-layout.ts";
 import { resolveSplitCompanion, startupPlacementDecision } from "../../shell/stage-placement.ts";
 import { workspacePreparation } from "../../shell/workspace-preparation.ts";
 import { sidebarNavigationOrder, type SidebarChatRow } from "../../store/projects-sidebar-model.ts";

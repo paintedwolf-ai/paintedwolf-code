@@ -26,7 +26,7 @@ import { syncNotificationPrefsFromSnapshot } from "../../settings/chat/notificat
 import { syncOnboardingPrefsFromSnapshot } from "../../settings/system/onboarding-prefs.ts";
 import { syncShortcutPrefsFromSnapshot } from "../../settings/system/shortcut-prefs.ts";
 import { syncWhatsNewFromSnapshot } from "../../settings/system/whats-new-prefs.ts";
-import { syncLayoutFromSnapshot } from "../../shell/layout-store.ts";
+import { syncLayoutFromSnapshot } from "../../layout/layout-preferences.ts";
 import { parseAppState } from "./app-state-parse.ts";
 import { isTauriRuntime } from "../runtime.ts";
 import {
