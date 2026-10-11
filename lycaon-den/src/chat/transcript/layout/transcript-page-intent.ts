@@ -6,6 +6,7 @@ type Failure = { key: string; attempts: number; input: number; retryAt: number }
 export class TranscriptPageIntent {
   private direction: HistoryDirection | undefined;
   private input = 0;
+  private attemptedInput = 0;
   private failure: Failure | undefined;
 
   noteInput(direction: HistoryDirection): void {
@@ -27,9 +28,13 @@ export class TranscriptPageIntent {
     return Math.max(0, failure.retryAt - now);
   }
 
+  started(): void {
+    this.attemptedInput = this.input;
+  }
+
   failed(key: string, now: number): void {
     const attempts = this.failure?.key === key ? this.failure.attempts + 1 : 1;
-    this.failure = { key, attempts, input: this.input, retryAt: now + Math.min(8_000, 250 * 2 ** Math.min(attempts - 1, 5)) };
+    this.failure = { key, attempts, input: this.attemptedInput, retryAt: now + Math.min(8_000, 250 * 2 ** Math.min(attempts - 1, 5)) };
   }
 
   advanced(): void {

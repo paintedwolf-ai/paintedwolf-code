@@ -22,6 +22,19 @@ describe("transcript page intent", () => {
     }
   });
 
+  it("retains input received while the request was in flight", () => {
+    const intent = new TranscriptPageIntent();
+    intent.noteInput("older");
+    intent.started();
+    intent.noteInput("older");
+    intent.failed("older:a", 100);
+    expect(intent.retryDelay("older:a", 100)).toBe(250);
+    expect(intent.retryDelay("older:a", 350)).toBe(0);
+    intent.started();
+    intent.failed("older:a", 400);
+    expect(intent.retryDelay("older:a", 10_000)).toBeUndefined();
+  });
+
   it("bounds repeated failures and retries only after renewed reader input", () => {
     const intent = new TranscriptPageIntent();
     expect(intent.retryDelay("older:a", 0)).toBe(0);
@@ -31,6 +44,7 @@ describe("transcript page intent", () => {
     expect(intent.retryDelay("older:a", 100)).toBe(150);
     expect(intent.retryDelay("older:a", 250)).toBe(0);
     for (let attempt = 0; attempt < 100; attempt++) {
+      intent.started();
       intent.failed("older:a", 10_000);
       intent.noteInput("older");
       expect(intent.retryDelay("older:a", 10_000)).toBeLessThanOrEqual(8_000);

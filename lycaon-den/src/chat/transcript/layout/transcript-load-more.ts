@@ -139,12 +139,15 @@ export function createTranscriptPaging(
       return;
     }
     inFlight = true;
+    intent.started();
+    let advanced = false;
     void loadTranscriptPage(client, opts.appStore, sessionId, edge)
       .then((added) => {
         if (!added) {
           intent.failed(key, performance.now());
           return;
         }
+        advanced = true;
         intent.advanced();
         if (stopped) return;
         // Continue after the reading anchor settles.
@@ -153,12 +156,14 @@ export function createTranscriptPaging(
       .catch(() => intent.failed(key, performance.now()))
       .finally(() => {
         inFlight = false;
+        if (!advanced) maybeLoad();
       });
   };
 
   const stopCommits = motion?.subscribeCommits((source, position) => {
     if ((source === "thumb_drag" || source === "track_click") && position.top !== previousOffset) {
       intent.noteInput(position.top < previousOffset ? "older" : "newer");
+      maybeLoad();
     }
     previousOffset = position.top;
   });

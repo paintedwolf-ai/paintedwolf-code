@@ -344,6 +344,25 @@ describe("createTranscriptPaging", () => {
     } finally { stop.dispose(); el.remove(); }
   });
 
+  it("retries after input received before an in-flight request fails", async () => {
+    const appStore = createAppStore();
+    appStore.actions.installTranscriptBaseline("s-flight", [older(50)], 51, { hasMoreBefore: true });
+    const { el } = mockStreamHost({ scrollTop: 0, scrollHeight: () => 10_000, clientHeight: 500 });
+    let reject!: (reason: Error) => void;
+    const first = new Promise<never>((_resolve, fail) => { reject = fail; });
+    const listSessionMessages = vi.fn().mockReturnValueOnce(first).mockResolvedValue({
+      messages: [older(40)], turn_clocks: {}, turn_loads: {},
+    });
+    const paging = createTranscriptPaging(el, { client: () => stubClient({ listSessionMessages }), appStore, sessionId: () => "s-flight" });
+    try {
+      await vi.waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(1));
+      paging.readerInput("up");
+      reject(new Error("offline"));
+      await vi.waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(2));
+      expect(appStore.state.messages.map(row => row.id)).toEqual(["old-40", "old-50"]);
+    } finally { paging.dispose(); el.remove(); }
+  });
+
   it("walks through deep history until the anchor is resident", async () => {
     const appStore = createAppStore();
     appStore.actions.installTranscriptBaseline("s-deep", [older(100)], 101, {
