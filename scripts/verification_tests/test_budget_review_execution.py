@@ -30,7 +30,7 @@ class ArchitecturalReviewTests(unittest.TestCase):
                    {'reason': ''}, {'reviewed_commit': 'main'}, {'ceiling': 1000},
                    {'ceiling': True}, {'ceiling': 300}, {'boundaries': {}},
                    {'boundaries': {'../escape': 'f' * 64}}, {'state': 'unknown'},
-                   {'state': 'ceiling_exceeded'}, {'extra': True}]
+                   {'state': 'ceiling_exceeded'}, {'reviewed_shape': False}, {'reviewed_shape': []}, {'extra': True}]
         for change in changes:
             entry = reviewed()
             entry['review'].update(change)

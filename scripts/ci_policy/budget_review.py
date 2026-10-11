@@ -20,6 +20,8 @@ def validate_review(review, row, relative):
             or len(review['reason']) > 4096 or not isinstance(review['reviewed_commit'], str)
             or not re.fullmatch('[0-9a-f]{40}', review['reviewed_commit'])):
         raise ValueError('missing architectural review provenance')
+    if not isinstance(review['reviewed_shape'], str):
+        raise ValueError('invalid reviewed type shape')
     if type(review['ceiling']) is not int or not isinstance(review['boundaries'], dict):
         raise ValueError('invalid architectural review bounds')
     if not isinstance(review['state'], str) or review['state'] not in STATES:
