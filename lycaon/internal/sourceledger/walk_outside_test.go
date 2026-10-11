@@ -13,7 +13,7 @@ import (
 
 func sessionWalkPaths(t *testing.T, store *Store, sessionID string, outside bool) map[string]Effect {
 	t.Helper()
-	walk, err := store.QueryWalk(t.Context(), "p1", Baseline{
+	walk, err := store.Walk.QueryWalk(t.Context(), "p1", Baseline{
 		Kind: BaselineSession, SessionID: sessionID, WithOutsideChanges: outside,
 	}, 50, 0, CommitLens{})
 	testutil.FailErr(t, "query session walk", err)
@@ -24,13 +24,17 @@ func TestSessionWalkWithOutsideChangesAdmitsUnownedDrift(t *testing.T) {
 	store, ctx := openLedger(t)
 	testdbseed.InsertSession(t, store.sqlDB, "s1", "p1")
 	testdbseed.InsertSession(t, store.sqlDB, "s2", "p1")
-	mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", Path: "own.txt", SessionID: "s1", Turn: 1,
+	mustRecord(t, store, ctx, RecordInput{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "own.txt"}, ProjectID: "p1", SessionID: "s1", Turn: 1,
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, After: []byte("a")})
-	mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", Path: "outside.txt",
+	mustRecord(t, store, ctx, RecordInput{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "outside.txt"}, ProjectID: "p1",
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal, After: []byte("b")})
-	mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", Path: "other-chat.txt", SessionID: "s2", Turn: 1,
+	mustRecord(t, store, ctx, RecordInput{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "other-chat.txt"}, ProjectID: "p1", SessionID: "s2", Turn: 1,
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, After: []byte("c")})
-	mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", Path: "worker.txt", BranchID: sourcebranch.ID("job-1"),
+	mustRecord(t, store, ctx, RecordInput{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "worker.txt"}, ProjectID: "p1", BranchID: sourcebranch.ID("job-1"),
 		JobID: "job-1", Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal, After: []byte("d")})
 
 	own := sessionWalkPaths(t, store, "s1", false)
@@ -47,12 +51,14 @@ func TestSessionWalkWithOutsideChangesAdmitsUnownedDrift(t *testing.T) {
 func TestSessionWalkWithOutsideChangesEndsAtArchive(t *testing.T) {
 	store, ctx := openLedger(t)
 	testdbseed.InsertSession(t, store.sqlDB, "s1", "p1")
-	mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", Path: "during.txt",
+	mustRecord(t, store, ctx, RecordInput{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "during.txt"}, ProjectID: "p1",
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal, After: []byte("a")})
 	_, err := store.sqlDB.ExecContext(ctx, `UPDATE sessions SET archived_at = ? WHERE id = 's1'`,
 		db.FormatTime(time.Now().UTC()))
 	testutil.FailErr(t, "archive session", err)
-	mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", Path: "after.txt",
+	mustRecord(t, store, ctx, RecordInput{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "after.txt"}, ProjectID: "p1",
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
 		After: []byte("b"), TS: time.Now().UTC().Add(time.Minute)})
 
@@ -65,11 +71,13 @@ func TestSessionWalkWithOutsideChangesEndsAtArchive(t *testing.T) {
 // Drift from before the chat existed is not its story either.
 func TestSessionWalkWithOutsideChangesStartsAtCreation(t *testing.T) {
 	store, ctx := openLedger(t)
-	mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", Path: "earlier.txt",
+	mustRecord(t, store, ctx, RecordInput{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "earlier.txt"}, ProjectID: "p1",
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
 		After: []byte("a"), TS: time.Now().UTC().Add(-time.Hour)})
 	testdbseed.InsertSession(t, store.sqlDB, "s1", "p1")
-	mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", Path: "later.txt",
+	mustRecord(t, store, ctx, RecordInput{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "later.txt"}, ProjectID: "p1",
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
 		After: []byte("b"), TS: time.Now().UTC().Add(time.Minute)})
 

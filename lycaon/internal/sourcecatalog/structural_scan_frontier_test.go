@@ -53,7 +53,7 @@ func TestStructuralScanDefersDeclaredOutputAndVCSUntilSourceCompletes(t *testing
 func TestStructuralScanPriorityRefreshesIgnoreRules(t *testing.T) {
 	c, root := indexFixture(t)
 	writeIndexFile(t, root.Path, ".ignore", "first/\n")
-	store, err := c.indexStore(t.Context(), "p", root)
+	store, err := c.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "create index store", err)
 	options := structuralScanOptions{store: store}
 	for _, ignored := range []string{"first", "second"} {
@@ -78,7 +78,7 @@ func TestStructuralScanPriorityHonorsDeviceSetting(t *testing.T) {
 	cfg.Catalog.DeferIgnored = false
 	c.SetScopes(testScopes{plane: cfg.Catalog})
 	writeIndexFile(t, root.Path, ".ignore", "output/\n")
-	store, err := c.indexStore(t.Context(), "p", root)
+	store, err := c.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "create index store", err)
 	frontier := newStructuralScanFrontier(t.Context(), root.Path, structuralScanOptions{store: store})
 	defer frontier.close()
@@ -95,7 +95,7 @@ func TestStructuralScanFrontierOrdersExpandableVendoringBeforeCollapsedTrees(t *
 	cfg, err := sourcescope.DefaultConfig()
 	testutil.FailErr(t, "load catalog policy", err)
 	c.SetScopes(testScopes{plane: cfg.Catalog})
-	store, err := c.indexStore(t.Context(), "p", root)
+	store, err := c.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "create index store", err)
 	frontier := newStructuralScanFrontier(t.Context(), root.Path, structuralScanOptions{store: store})
 	defer frontier.close()

@@ -70,7 +70,6 @@ The pages below are a map, not a linear book. Read the path that matches the cha
 4. [Compatibility](compatibility.md) — durable-surface classes and the v1 evolution contract.
 5. [Dependencies](dependencies.md) — dependency and bundled-toolchain policy.
 6. [Dependency inventory](operations/dependency-inventory.md) — update priorities, upgrade constraints, and links to complete inventory sources.
-7. [Release operations](operations/release.md) — candidate, publication, update proof, rollout, and recovery.
 
 ---
 
@@ -87,7 +86,7 @@ The pages below are a map, not a linear book. Read the path that matches the cha
 | Models and external tools | [Providers](providers.md) · [MCP](mcp.md) · [HTTP actions](tools.md#http-actions) · [Web research](tools.md#web-research-sources) · [Cost](cost.md) |
 | Visual output | [Visual surface](visual-surface.md) · [Theme tokens](theme-tokens.md) |
 | Extensions | [Extend](extend.md) · [Adding a tool](adding-tools.md) · [Licensing](licensing.md) · [Trademarks](trademarks.md) |
-| Operations | [Dev tasks](dev-tasks.md) · [Test strategy](test-strategy.md) · [Coordinator benchmark](coordinator-benchmark.md) · [SQL persistence](sql-persistence.md) · [Package layering](package-layering.md) · [Dependencies](dependencies.md) · [Dependency inventory](operations/dependency-inventory.md) · [Release operations](operations/release.md) |
+| Operations | [Dev tasks](dev-tasks.md) · [Test strategy](test-strategy.md) · [Coordinator benchmark](coordinator-benchmark.md) · [SQL persistence](sql-persistence.md) · [Package layering](package-layering.md) · [Dependencies](dependencies.md) · [Dependency inventory](operations/dependency-inventory.md) |
 
 ## Machine contracts
 

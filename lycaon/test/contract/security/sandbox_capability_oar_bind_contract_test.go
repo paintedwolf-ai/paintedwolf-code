@@ -49,8 +49,8 @@ func assertIntrinsicRejection(t *testing.T, pipeline *oar.GuardPipeline, tool, c
 	t.Helper()
 	for _, observed := range []string{code, "UNRELATED_REFUSAL"} {
 		gc := oar.NewGuardContext()
-		gc.SessionID = t.Name() + tool + observed
-		gc.Tool = tool
+		gc.Session.SessionID = t.Name() + tool + observed
+		gc.Invocation.Tool = tool
 		gc.ObservedRejectCode = observed
 		result, err := pipeline.EvaluateBlock(t.Context(), oar.AnchorToolRejected, gc)
 		contractcheck.FailErr(t, "evaluate intrinsic refusal", err)

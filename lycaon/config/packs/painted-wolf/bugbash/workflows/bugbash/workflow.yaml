@@ -1,5 +1,5 @@
 id: bugbash
-version: 1.0.0
+version: 1.1.0
 name: Bugbash
 description: Hunt bugs in parallel, choose what to fix, then verify
 surface_profile: plan

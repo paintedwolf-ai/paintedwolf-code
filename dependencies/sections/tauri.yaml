@@ -28,7 +28,7 @@ packages:
       Verifies release artifacts and signed channel pointers in the native updater, and backs
       `scripts/verify-updater-signature.sh` through the `verify_updater_signature` example. Prove
       the chain with `scripts/release-validate-updater-manifest.sh` and `scripts/feed_signature.py`
-      against the keys in `packaging/update-keys.json`; see [Release operations](release.md).
+      against the keys in `packaging/update-keys.json`.
   flate2:
     urgency: high
     friction: low

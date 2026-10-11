@@ -33,7 +33,7 @@ func TestSQLStoreDelegationPersistenceAcrossReopen(t *testing.T) {
 	sqlDB2 := testdbfixture.OpenPath(t, dbPath)
 	store2 := NewSQLStore(sqlDB2)
 	got, err := store2.Get(context.Background(), created.ID)
-	testutil.FailErr(t, "store2.Get failed", err)
+	testutil.FailErr(t, "store2.Runs.Get failed", err)
 	if got.Task != "hunt" || len(got.Legs) != 1 {
 		t.Fatalf("delegation = %#v", got)
 	}

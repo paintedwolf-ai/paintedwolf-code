@@ -47,7 +47,7 @@ func TestCloudflarePlaceholderWithSavedKeyIsNotAssignable(t *testing.T) {
 `+MinimalShipHTTPRetryYAML)
 	creds := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
 	testutil.FailErr(t, "save credential", creds.Set("cloudflare-workers-ai-1", "test-token"))
-	registry, err := NewRegistry(catalog, creds)
+	registry, err := NewRegistry(t.Context(), catalog, creds)
 	testutil.FailErr(t, "create registry", err)
 	providers := registry.List(t.Context())
 	if len(providers) != 1 {

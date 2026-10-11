@@ -1,6 +1,7 @@
 package httpaction
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"mime"
 	"net/url"
 	"strconv"
@@ -30,17 +31,17 @@ func webPage(spec requestSpec, resp outboundhttp.Response, placement bodyPlaceme
 
 // reportWebPage states a delivered web page when fetch_url could read it this turn.
 func reportWebPage(tctx tools.ToolContext, spec requestSpec, resp outboundhttp.Response, placement bodyPlacement, finalURL string) {
-	if tctx.Out == nil || !tctx.TurnToolPlan.Addressable(fetchURLTool) || !webPage(spec, resp, placement) {
+	if tctx.Effects.Out == nil || !tctx.Turn.TurnToolPlan.Addressable(fetchURLTool) || !webPage(spec, resp, placement) {
 		return
 	}
 	host := spec.target.Hostname()
 	if final, err := url.Parse(finalURL); err == nil && final.Hostname() != "" {
 		host = final.Hostname()
 	}
-	tctx.Out.Facts = tctx.Out.Facts.WithFeedback(tools.HTTPRequestWebPageCode, map[string]any{
+	tctx.Effects.Out.Facts = tctx.Effects.Out.Facts.WithFeedback(toolrejection.HTTPRequestWebPageCode, map[string]any{
 		"host":               host,
 		"bytes":              strconv.FormatInt(resp.Bytes, 10),
 		"content_type":       resp.ContentType,
-		"fetch_url_deferred": tctx.TurnToolPlan.Deferred(fetchURLTool),
+		"fetch_url_deferred": tctx.Turn.TurnToolPlan.Deferred(fetchURLTool),
 	}, &api.FeedbackSubject{Kind: "host", ID: host})
 }

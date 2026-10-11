@@ -15,7 +15,7 @@ import (
 func TestCapabilityPreflightNeverBypassesAuthorizationByToolName(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	dir := filepath.Join(root, "lycaon", "internal", "tools")
+	dir := filepath.Join(root, "lycaon", "internal")
 	fset, files := contractcheck.ParseNonTestGoTree(t, dir)
 
 	var findings []string

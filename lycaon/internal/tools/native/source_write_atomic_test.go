@@ -9,10 +9,11 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -95,9 +96,13 @@ func TestAgentMutationCommitsAttributionAndEventTogether(t *testing.T) {
 	sink := &txProbeSink{}
 	bindProbeSink(t, st, sink)
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID, tctx.SessionID, tctx.UserTurn = "p1", "s1", 1
-	tctx.SourceLedger = st
-	tctx.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+	tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Identity.UserTurn = "p1", "s1", 1
+	tctx.Source.SourceLedger = st
+	tctx.Source.History = tools.SourceHistory{Files: st.History, Comparison: st.Comparisons, Git: st.Git, Authorship: st.Walk}
+	tctx.Source.Commands = st.Commands
+	tctx.Source.Observations = st.Inventory
+	tctx.Source.GitMutations = st.Git
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
 
 	path := filepath.Join(dir, "one.txt")
 	testutil.FailErr(t, "write", applyAgentFile(t.Context(), tctx, testMutationTarget(path), []byte("after\n"), nil, ""))
@@ -121,9 +126,13 @@ func TestAgentMutationEventFailureRollsBackTheLedgerRow(t *testing.T) {
 	sink := &txProbeSink{failEmit: errors.New("outbox unavailable")}
 	bindProbeSink(t, st, sink)
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID, tctx.SessionID, tctx.UserTurn = "p1", "s1", 1
-	tctx.SourceLedger = st
-	tctx.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+	tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Identity.UserTurn = "p1", "s1", 1
+	tctx.Source.SourceLedger = st
+	tctx.Source.History = tools.SourceHistory{Files: st.History, Comparison: st.Comparisons, Git: st.Git, Authorship: st.Walk}
+	tctx.Source.Commands = st.Commands
+	tctx.Source.Observations = st.Inventory
+	tctx.Source.GitMutations = st.Git
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
 
 	path := filepath.Join(dir, "torn.txt")
 	err := applyAgentFile(t.Context(), tctx, testMutationTarget(path), []byte("after\n"), nil, "")
@@ -151,8 +160,8 @@ func TestAgentMutationLedgerFailureAnnouncesNothing(t *testing.T) {
 	sink := &txProbeSink{}
 	bindProbeSink(t, st, sink)
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID, tctx.SessionID, tctx.UserTurn = "p1", "s1", 1
-	tctx.SourceLedger = failingRecordTx{Store: st}
+	tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Identity.UserTurn = "p1", "s1", 1
+	tctx.Source.SourceLedger = failingRecordTx{Store: st}
 
 	path := filepath.Join(dir, "unrecorded.txt")
 	err := applyAgentFile(t.Context(), tctx, testMutationTarget(path), []byte("after\n"), nil, "")
@@ -175,9 +184,14 @@ func TestAgentMutationPreparationFailureLeavesFileUntouched(t *testing.T) {
 	dir := t.TempDir()
 	st := bindLedgerForWrites(t, dir)
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID, tctx.SessionID = "p1", "s1"
-	tctx.SourceLedger = st
-	tctx.SourceMutations = project.NewSourceMutationService(st.LedgerDB(), st)
+	tctx.Identity.ProjectID, tctx.Identity.SessionID = "p1", "s1"
+	tctx.Source.SourceLedger = st
+	tctx.Source.History = tools.SourceHistory{Files: st.History, Comparison: st.Comparisons, Git: st.Git, Authorship: st.Walk}
+	tctx.Source.Commands = st.Commands
+	tctx.Source.Observations = st.Inventory
+	tctx.Source.GitMutations = st.Git
+	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(st.LedgerDB(), st)
+
 	_, err := st.LedgerDB().ExecContext(t.Context(), `CREATE TRIGGER reject_effect_preparation BEFORE INSERT ON source_mutations BEGIN SELECT RAISE(ABORT,'journal unavailable'); END`)
 	testutil.FailErr(t, "inject journal failure", err)
 	path := filepath.Join(dir, "not-created.txt")

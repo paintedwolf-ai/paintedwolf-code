@@ -19,7 +19,7 @@ const sourceDigestWorkers = 4
 
 // HandleDigestSourceComparisons measures comparisons without opening views.
 // Nothing is decorated or retained.
-func (s *Handler) HandleDigestSourceComparisons(w http.ResponseWriter, r *http.Request) {
+func (s *Comparisons) HandleDigestSourceComparisons(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -30,12 +30,12 @@ func (s *Handler) HandleDigestSourceComparisons(w http.ResponseWriter, r *http.R
 		return
 	}
 	if err := validateSourceComparisonDigestRequest(request); err != nil {
-		s.writeSourceViewError(w, r, err)
+		s.Views.writeSourceViewError(w, r, err)
 		return
 	}
 	scoped, err := requestscope.ResolveSessionProject(s.SessionStore, r.Context(), p, request.SessionID)
 	if err != nil {
-		s.writeSourceViewError(w, r, err)
+		s.Views.writeSourceViewError(w, r, err)
 		return
 	}
 	// Measurements are shared within the caller's project, like the documents
@@ -85,7 +85,7 @@ func validateSourceComparisonDigestRequest(request wire.SourceComparisonDigestRe
 	return nil
 }
 
-func (s *Handler) digestSourceComparison(ctx context.Context, scope pagedview.Scope, p *project.Project, sessionID string, source wire.SourceComparisonSelector, trees *commitTrees) wire.SourceComparisonDigest {
+func (s *Comparisons) digestSourceComparison(ctx context.Context, scope pagedview.Scope, p *project.Project, sessionID string, source wire.SourceComparisonSelector, trees *commitTrees) wire.SourceComparisonDigest {
 	failed := func(err error) wire.SourceComparisonDigest {
 		return wire.SourceComparisonDigest{Failure: sourcePreparationFailure(err, "The comparison could not be measured.")}
 	}

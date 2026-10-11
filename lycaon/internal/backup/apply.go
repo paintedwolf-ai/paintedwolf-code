@@ -23,7 +23,7 @@ type pendingRestore struct {
 
 // ApplyPending resumes a staged restore before the store opens.
 // Failures retain recovery state and enter recovery mode.
-func ApplyPending(configDir string) error {
+func ApplyPending(ctx context.Context, configDir string) error {
 	restore, err := loadPendingRestore(configDir)
 	if err != nil {
 		return unapplicableRestore(err)
@@ -31,12 +31,12 @@ func ApplyPending(configDir string) error {
 	if restore == nil {
 		return nil
 	}
-	release, err := editoroutbox.Acquire(context.Background(), configDir)
+	release, err := editoroutbox.Acquire(ctx, configDir)
 	if err != nil {
 		return unapplicableRestore(err)
 	}
 	defer release()
-	if err := restore.apply(configDir); err != nil {
+	if err := restore.apply(ctx, configDir); err != nil {
 		restore.recordFailure(err)
 		return unapplicableRestore(err)
 	}
@@ -51,11 +51,11 @@ func unapplicableRestore(err error) error {
 	}
 }
 
-func (r *pendingRestore) apply(configDir string) error {
+func (r *pendingRestore) apply(ctx context.Context, configDir string) error {
 	if err := r.prepareFileDestinations(configDir); err != nil {
 		return err
 	}
-	if err := r.installFiles(configDir); err != nil {
+	if err := r.installFiles(ctx, configDir); err != nil {
 		return err
 	}
 	if err := r.deleteFiles(configDir); err != nil {
@@ -105,14 +105,14 @@ func (r *pendingRestore) prepareFileDestinations(configDir string) error {
 	return nil
 }
 
-func (r *pendingRestore) installFiles(configDir string) error {
+func (r *pendingRestore) installFiles(ctx context.Context, configDir string) error {
 	for _, fe := range r.marker.Files {
 		if _, done := r.appliedSet[fe.RelPath]; done {
 			continue
 		}
 		src := r.stagedFiles[fe.RelPath]
 		dest := filepath.Join(configDir, filepath.FromSlash(r.marker.liveRelPath(fe.RelPath)))
-		if err := installFileAtomic(configDir, src, dest, fe); err != nil {
+		if err := installFileAtomic(ctx, configDir, src, dest, fe); err != nil {
 			return fmt.Errorf("install %s: %w", fe.RelPath, err)
 		}
 		// Remove database journals before recording progress.

@@ -9,7 +9,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 )
@@ -52,9 +53,9 @@ func TestPostureRegistryRulesPathsExist(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	cfgRoot := filepath.Join(root, "lycaon", "config")
-	reg, err := session.LoadPostureRegistry()
-	contractcheck.FailErr(t, "session.LoadPostureRegistry failed", err)
-	for _, posture := range session.AllSessionPostures() {
+	reg, err := profiles.LoadPostureRegistry()
+	contractcheck.FailErr(t, "profiles.LoadPostureRegistry failed", err)
+	for _, posture := range sessionposture.AllSessionPostures() {
 		spec, err := reg.Get(posture)
 		contractcheck.FailErr(t, "reg.Get failed", err)
 		for _, rulePath := range spec.Rules {

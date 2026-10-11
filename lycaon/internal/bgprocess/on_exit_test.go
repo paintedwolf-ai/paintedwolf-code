@@ -29,7 +29,7 @@ func TestOnExitFiresAfterProcessExits(t *testing.T) {
 	}
 
 	released := make(chan struct{})
-	reg.OnExit("sess-1", handle, func() { close(released) })
+	reg.Lifecycle.OnExit("sess-1", handle, func() { close(released) })
 
 	select {
 	case <-released:
@@ -47,7 +47,7 @@ func TestOnExitFiresAfterProcessExits(t *testing.T) {
 func TestOnExitFiresImmediatelyForUnknownHandle(t *testing.T) {
 	reg := newTestRegistry(t, bgprocess.Config{MaxBackground: 4}, bgprocess.Hooks{})
 	released := make(chan struct{})
-	reg.OnExit("sess-1", "no-such-handle", func() { close(released) })
+	reg.Lifecycle.OnExit("sess-1", "no-such-handle", func() { close(released) })
 	select {
 	case <-released:
 	case <-time.After(2 * time.Second):

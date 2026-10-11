@@ -125,6 +125,7 @@ func wireApprovalPlan(plan *ApprovalPlan) api.ApprovalPlan {
 		},
 		Reasons:             append([]api.ApprovalGate(nil), plan.Reasons...),
 		RecommendedOptionID: plan.RecommendedOptionID,
+		DirectoryScopes:     append([]string(nil), plan.DirectoryScopes...),
 	}
 	out.ElevatedEffects = savedOptionElevatedEffects(plan.Options)
 	out.HeldRelease = wireHeldRelease(plan.Held)
@@ -152,7 +153,7 @@ func wireApprovalPlan(plan *ApprovalPlan) api.ApprovalPlan {
 	for _, option := range plan.Options {
 		out.Options = append(out.Options, api.ApprovalOption{
 			ID: option.ID, Kind: api.ApprovalOptionKind(option.Kind), Rung: api.ApprovalOptionRung(option.Rung),
-			Scope: api.ApprovalGrantScope(option.Scope), Group: option.Group,
+			Scope: api.ApprovalGrantScope(option.Scope), Group: option.Group, DirectoryScope: option.DirectoryScope,
 			Title: option.Title, Coverage: option.Coverage, ExpiresWhen: option.ExpiresWhen,
 			ReaskWhen: option.ReaskWhen, DecisionAction: api.ApprovalOptionDecision(option.DecisionAction),
 			Disabled: option.Disabled, Note: option.Note,
@@ -300,9 +301,9 @@ func StoredCheckpointToEvent(row StoredCheckpoint) api.CheckpointEvent {
 	ev := api.CheckpointEvent{
 		ID:        row.ID,
 		SessionID: row.SessionID,
-		Kind:         row.Kind,
-		Status:       api.CheckpointStatus(row.Status),
-		IssuedAt:     row.CreatedAt,
+		Kind:      row.Kind,
+		Status:    api.CheckpointStatus(row.Status),
+		IssuedAt:  row.CreatedAt,
 	}
 	switch row.Kind {
 	case api.CheckpointKindToolApproval:

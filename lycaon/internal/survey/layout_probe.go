@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"os"
 	"path"
 	"path/filepath"
@@ -15,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -62,9 +62,9 @@ func runLayoutProbe(
 	root := resolved.Root
 	readFilter := scope.ReadFilter
 	if readFilter == nil && scope.Boundary != nil {
-		profileID := strings.TrimSpace(scope.ToolCtx.Agent)
+		profileID := strings.TrimSpace(scope.ToolCtx.Identity.Agent)
 		if profileID == "" {
-			profileID = tools.DefaultToolProfileID
+			profileID = toolprofiles.DefaultToolProfileID
 		}
 		readFilter, err = scope.Boundary.CompileReadFilter(ctx, root.Path, profileID)
 		if err != nil {
@@ -89,7 +89,7 @@ func runLayoutProbe(
 	}
 	roots := []sourcecatalog.Root{{ID: root.ID, Path: root.Path}}
 	joinCtx, cancel := context.WithTimeout(ctx, layoutCatalogJoinBudget)
-	snapshot, joinErr := catalog.Observe(joinCtx, scope.ToolCtx.ProjectID, roots)
+	snapshot, joinErr := catalog.Observe(joinCtx, scope.ToolCtx.Identity.ProjectID, roots)
 	cancel()
 	if joinErr != nil && ctx.Err() != nil {
 		return nil, 0, ProbeCoverage{}, ctx.Err()

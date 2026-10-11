@@ -3,22 +3,14 @@ package project
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
-
-	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 var (
@@ -638,155 +630,6 @@ func CreateWithRoot(ctx context.Context, reg Registry, path string) (*Project, e
 	return reg.Create(ctx, CreateParams{
 		Roots: []AttachRootParams{{Path: path}},
 	})
-}
-
-func ToAPI(p *Project) api.Project {
-	if p == nil {
-		return api.Project{}
-	}
-	out := api.Project{
-		ID:              p.ID,
-		Roots:           make([]api.ProjectRoot, 0, len(p.Roots)),
-		RootsGeneration: p.RootsGeneration,
-		SessionCount:    p.SessionCount,
-		Starred:         p.Starred,
-		IsDraft:         p.IsDraft,
-		LastOpenedAt:    p.LastOpenedAt,
-		CreatedAt:       p.CreatedAt,
-	}
-	if p.Promotion != nil {
-		out.Promotion = &api.ProjectPromotion{
-			DestinationPath: p.Promotion.DestinationPath,
-			InitGit:         p.Promotion.InitGit,
-			Phase:           string(p.Promotion.Phase),
-			LastError:       p.Promotion.LastError,
-			UpdatedAt:       p.Promotion.UpdatedAt,
-		}
-	}
-	if name := strings.TrimSpace(p.Name); name != "" {
-		out.Name = &name
-	}
-	if p.LastActivityAt != nil {
-		t := *p.LastActivityAt
-		out.LastActivityAt = &t
-	}
-	if id := strings.TrimSpace(p.CoverArtifactID); id != "" {
-		out.CoverArtifactID = &id
-		if root := strings.TrimSpace(p.CoverRootSessionID); root != "" {
-			out.CoverRootSessionID = &root
-		}
-		if src := strings.TrimSpace(p.CoverSource); src != "" {
-			out.CoverSource = &src
-		}
-		if p.CoverUpdatedAt != nil {
-			t := *p.CoverUpdatedAt
-			out.CoverUpdatedAt = &t
-		}
-	}
-	for _, r := range p.Roots {
-		wr := api.ProjectRoot{
-			ID:        r.ID,
-			Path:      r.Path,
-			Label:     r.Label,
-			IsPrimary: r.IsPrimary,
-			AddedAt:   r.AddedAt,
-			Kind:      string(r.Kind),
-		}
-		if hash := strings.TrimSpace(r.GitRemoteHash); hash != "" {
-			wr.GitRemoteHash = &hash
-		}
-		out.Roots = append(out.Roots, wr)
-	}
-	return out
-}
-
-// ResolveExistingDir returns the absolute path when path exists and is a directory.
-func ResolveExistingDir(path string) (string, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return "", ErrInvalidPath
-	}
-
-	abs, err := filepath.Abs(path)
-	if err != nil {
-		return "", fmt.Errorf("%w: %w", ErrInvalidPath, err)
-	}
-	abs = filepath.Clean(abs)
-
-	resolved, err := filepath.EvalSymlinks(abs)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", fmt.Errorf("%w: %s", ErrPathNotFound, abs)
-		}
-		return "", err
-	}
-
-	info, err := os.Stat(resolved)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", fmt.Errorf("%w: %s", ErrPathNotFound, resolved)
-		}
-		return "", err
-	}
-	if !info.IsDir() {
-		return "", fmt.Errorf("%w: %s", ErrNotDirectory, resolved)
-	}
-	if refused, code := confine.AttachedWriteRootRefused(resolved); refused {
-		return "", &RootRefusedError{Code: code, Path: resolved}
-	}
-	return resolved, nil
-}
-
-// RootRefusedError reports a refused attached root.
-type RootRefusedError struct {
-	Code string
-	Path string
-}
-
-func (e *RootRefusedError) Error() string {
-	if e == nil {
-		return ErrRootRefused.Error()
-	}
-	if e.Code == "" {
-		return fmt.Sprintf("%s: %s", ErrRootRefused.Error(), e.Path)
-	}
-	return fmt.Sprintf("%s: %s", ErrRootRefused.Error(), e.Code)
-}
-
-func (e *RootRefusedError) Unwrap() error { return ErrRootRefused }
-
-// RootRefusedCode extracts the machine code from an ErrRootRefused chain.
-func RootRefusedCode(err error) (string, bool) {
-	var refused *RootRefusedError
-	if errors.As(err, &refused) && refused.Code != "" {
-		return refused.Code, true
-	}
-	return "", false
-}
-
-const gitRemoteHashTimeout = 3 * time.Second
-
-// gitRemoteHash identifies origin's repository under a bounded timeout, so ssh and https
-// spellings of one repository hash alike.
-func gitRemoteHash(ctx context.Context, dir string) string {
-	ctx, cancel := context.WithTimeout(ctx, gitRemoteHashTimeout)
-	defer cancel()
-	out, code, err := gitexec.Run(ctx, dir, []string{"remote", "get-url", "origin"}, gitexec.Opts{
-		Profile: gitexec.ProfileHermetic,
-		Timeout: gitRemoteHashTimeout,
-	})
-	if err != nil || code != 0 {
-		return ""
-	}
-	url := strings.TrimSpace(string(out))
-	if repo := SourceRemoteRepo(url); repo != "" {
-		url = repo
-	}
-	if url == "" {
-		return ""
-	}
-	sum := sha256.Sum256([]byte(url))
-	return hex.EncodeToString(sum[:])
 }
 
 func (r *MemoryRegistry) ReadTrustBaseline(ctx context.Context, id string) (map[string]SeenRecord, error) {

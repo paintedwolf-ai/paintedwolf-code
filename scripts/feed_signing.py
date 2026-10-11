@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 from feed_signature import check
-from update_keys import load_registry
+from update_keys import decode_public_key, load_registry
 
 
 def credentials(document: str) -> dict:
@@ -39,6 +41,27 @@ def signing_registry(path: Path | None, prefix: str) -> dict:
     return load_registry(path) if path else load_registry()
 
 
+def verify(pointer: Path, signature: str, public_key: str) -> None:
+    """Verify the exact pointer and trusted comment with maintained minisign."""
+    decode_public_key(public_key)
+    with tempfile.TemporaryDirectory(prefix="feed-verification-") as directory:
+        signature_path = Path(directory) / "pointer.minisig"
+        public_path = Path(directory) / "feed.pub"
+        signature_path.write_bytes(base64.b64decode(signature.strip(), validate=True))
+        public_path.write_bytes(base64.b64decode(public_key, validate=True))
+        # Verification needs only public data; neither credentials nor tool diagnostics escape.
+        try:
+            result = subprocess.run(
+                ["minisign", "-V", "-q", "-m", str(pointer.resolve()),
+                 "-x", str(signature_path), "-p", str(public_path)],
+                env={"PATH": os.environ.get("PATH", os.defpath)},
+                capture_output=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            raise ValueError("feed signature verification could not complete") from None
+        if result.returncode:
+            raise ValueError("feed signature verification failed")
+
+
 def sign(pointer: Path, number: int, registry: dict) -> Path:
     rows = credentials(os.environ.get("FEED_SIGNING_KEYS_JSON", ""))
     row = rows.get(str(number))
@@ -55,19 +78,43 @@ def sign(pointer: Path, number: int, registry: dict) -> Path:
     if result.returncode:
         raise ValueError(f"feed signing failed for generation {number}")
     signature = Path(str(pointer) + ".sig")
-    check(signature.read_text(), file=pointer.name, version=version, number=number, registry=registry)
+    document = signature.read_text()
+    check(document, file=pointer.name, version=version, number=number, registry=registry)
+    public_key = next(row["feed_public_key"] for row in registry["generations"] if row["generation"] == number)
+    verify(pointer, document, public_key)
     return signature
 
 
+
+def check_credentials(registry: dict) -> None:
+    """Prove every retained feed can be signed before touching distribution."""
+    rows = credentials(os.environ.get("FEED_SIGNING_KEYS_JSON", ""))
+    for row in registry["generations"]:
+        number = row["generation"]
+        if str(number) not in rows:
+            raise ValueError(f"no feed signing credential for generation {number}")
+    with tempfile.TemporaryDirectory(prefix="feed-credentials-") as directory:
+        for row in registry["generations"]:
+            pointer = Path(directory) / f"latest-stable-key-{row['generation']}.json"
+            pointer.write_text('{"version":"0.0.0"}')
+            sign(pointer, row["generation"], registry)
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--file", type=Path, required=True)
-    parser.add_argument("--generation", type=int, required=True)
+    parser.add_argument("--check-credentials", action="store_true")
+    parser.add_argument("--file", type=Path)
+    parser.add_argument("--generation", type=int)
     parser.add_argument("--registry", type=Path)
     parser.add_argument("--storage-prefix", default="")
     args = parser.parse_args()
     try:
-        sign(args.file, args.generation, signing_registry(args.registry, args.storage_prefix))
+        registry = signing_registry(args.registry, args.storage_prefix)
+        if args.check_credentials:
+            check_credentials(registry)
+        elif args.file is not None and args.generation is not None:
+            sign(args.file, args.generation, registry)
+        else:
+            parser.error("supply --check-credentials or --file and --generation")
     except (OSError, ValueError, KeyError) as error:
         print(f"error: {error}", file=sys.stderr)
         raise SystemExit(1) from None

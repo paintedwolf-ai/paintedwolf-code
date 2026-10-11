@@ -1,6 +1,7 @@
 package anchor
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -192,4 +193,20 @@ func bindingTier(b *Binding) string {
 		return ""
 	}
 	return b.Tier
+}
+
+func TestResolverReleasePreservesReplacement(t *testing.T) {
+	oldRegistry, currentRegistry := &Registry{}, &Registry{}
+	releaseOld := SetAnchorsFor(func(context.Context, string) *Registry { return oldRegistry })
+	releaseCurrent := SetAnchorsFor(func(context.Context, string) *Registry { return currentRegistry })
+	t.Cleanup(releaseCurrent)
+	releaseOld()
+	releaseOld()
+	if got := RegistryFor(t.Context(), "session"); got != currentRegistry {
+		t.Fatal("old owner removed current registry")
+	}
+	releaseCurrent()
+	if got := RegistryFor(t.Context(), "session"); got == currentRegistry {
+		t.Fatal("released registry remains reachable")
+	}
 }

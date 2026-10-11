@@ -69,7 +69,7 @@ func (v RestorableVersion) Text() (string, bool) {
 }
 
 // ReadRestorableVersion resolves one retained state and its exact bytes.
-func (s *Store) ReadRestorableVersion(
+func (s *History) ReadRestorableVersion(
 	ctx context.Context,
 	projectID, versionID string,
 ) (RestorableVersion, error) {
@@ -94,7 +94,7 @@ func (s *Store) ReadRestorableVersion(
 	if row.State != "content" || row.CaptureState != "stored" || row.ContentSha256 == "" {
 		return RestorableVersion{}, ErrVersionUnavailable
 	}
-	raw, found, err := s.readVerifiedBlob(ctx, row.ContentSha256)
+	raw, found, err := s.retention.readVerifiedBlob(ctx, row.ContentSha256)
 	if err != nil {
 		return RestorableVersion{}, err
 	}
@@ -113,7 +113,7 @@ type VersionGitSource struct {
 }
 
 // ReadVersionGitSource resolves one retained state's repository source.
-func (s *Store) ReadVersionGitSource(
+func (s *History) ReadVersionGitSource(
 	ctx context.Context,
 	projectID, versionID string,
 ) (VersionGitSource, error) {
@@ -138,7 +138,7 @@ func (s *Store) ReadVersionGitSource(
 }
 
 // ResolveFile identifies the live logical file at a location on one branch.
-func (s *Store) ResolveFile(
+func (s *History) ResolveFile(
 	ctx context.Context,
 	projectID string, branch sourcebranch.ID, rootID, path string,
 ) (fileID, versionID string, err error) {
@@ -147,7 +147,7 @@ func (s *Store) ResolveFile(
 }
 
 // ResolveHead identifies the tracked state at a location on one branch.
-func (s *Store) ResolveHead(
+func (s *History) ResolveHead(
 	ctx context.Context,
 	projectID string, branch sourcebranch.ID, rootID, path string,
 ) (BranchHead, error) {
@@ -170,7 +170,7 @@ func (s *Store) ResolveHead(
 }
 
 // ResolveHeadByFile returns tombstones by logical file identity.
-func (s *Store) ResolveHeadByFile(
+func (s *History) ResolveHeadByFile(
 	ctx context.Context,
 	projectID string, branch sourcebranch.ID, fileID string,
 ) (BranchHead, error) {
@@ -193,7 +193,7 @@ func (s *Store) ResolveHeadByFile(
 }
 
 // QueryFileVersions returns retained states across branches, newest first.
-func (s *Store) QueryFileVersions(
+func (s *History) QueryFileVersions(
 	ctx context.Context,
 	projectID, fileID string,
 	limit int,
@@ -238,7 +238,7 @@ func (s *Store) QueryFileVersions(
 			Landing: row.Landing, CreatedTS: created,
 		})
 	}
-	if err := s.hydrateVersionAuthors(ctx, projectID, out.Versions); err != nil {
+	if err := s.walk.hydrateVersionAuthors(ctx, projectID, out.Versions); err != nil {
 		return FileVersionsResult{}, err
 	}
 	out.GitTransitions, err = s.gitTransitionsForVersions(ctx, out.Versions)
@@ -249,7 +249,7 @@ func (s *Store) QueryFileVersions(
 	for _, version := range out.Versions {
 		windowIDs = append(windowIDs, version.CommandWindowID)
 	}
-	out.CommandWindows, err = s.commandWindowsFor(ctx, windowIDs)
+	out.CommandWindows, err = s.commands.commandWindowsFor(ctx, windowIDs)
 	if err != nil {
 		return FileVersionsResult{}, err
 	}
@@ -257,7 +257,7 @@ func (s *Store) QueryFileVersions(
 }
 
 // gitTransitionsForVersions resolves transitions named by one page.
-func (s *Store) gitTransitionsForVersions(
+func (s *History) gitTransitionsForVersions(
 	ctx context.Context,
 	versions []Version,
 ) (map[string]GitTransition, error) {
@@ -277,5 +277,52 @@ func (s *Store) gitTransitionsForVersions(
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	return s.GitTransitionsByIDs(ctx, ids)
+	return s.git.GitTransitionsByIDs(ctx, ids)
+}
+
+// History reads retained file identities, states and provenance.
+type History struct {
+	queries     *db.Queries
+	sqlDB       db.Handle
+	commands    historyCommandsPort
+	comparisons historyComparisonsPort
+	git         historyGitPort
+	retention   historyRetentionPort
+	walk        historyWalkPort
+}
+
+type historyCommandsPort interface {
+	commandWindowsFor(ctx context.Context, ids []string) (map[string]CommandWindow, error)
+}
+
+type historyGitPort interface {
+	GitTransitionsByIDs(ctx context.Context, ids []string) (map[string]GitTransition, error)
+}
+
+type historyWalkPort interface {
+	hydrateEffectAuthors(ctx context.Context, projectID string, effects []Effect) error
+	hydrateVersionAuthors(ctx context.Context, projectID string, versions []Version) error
+	queryEffects(
+		ctx context.Context,
+		projectID string,
+		baseline Baseline,
+		limit int,
+		beforeOrdinal int64,
+	) ([]Effect, error)
+	walkCommandWindows(ctx context.Context, effects []Effect) ([]CommandWindow, error)
+	walkFileStates(
+		ctx context.Context,
+		projectID string,
+		rootBranches map[string]sourcebranch.ID,
+		effects []Effect,
+	) (map[string]walkFileState, error)
+}
+
+type historyRetentionPort interface {
+	readVerifiedBlob(ctx context.Context, sha256 string) ([]byte, bool, error)
+}
+
+type historyComparisonsPort interface {
+	comparisonSide(ctx context.Context, projectID, versionID string) (ComparisonSide, error)
+	savedTextAttribution(ctx context.Context, projectID, versionID string, fallback AttributionResult) (AttributionResult, error)
 }

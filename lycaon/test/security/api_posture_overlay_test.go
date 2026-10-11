@@ -37,7 +37,7 @@ func createAPISessionForProject(t *testing.T, serve http.Handler, projectDir, po
 func TestPostureOverlayWarmOnCreateSession(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
-	mgr := h.SessionMgr
+	mgr := h.Sessions.Manager
 
 	projectDir := t.TempDir()
 	overlayDir := filepath.Join(projectDir, settingsoverlay.DirName())
@@ -57,8 +57,8 @@ postures:
 	if sess.AgentType != "coordinator" {
 		t.Fatalf("agent_type = %q want coordinator", sess.AgentType)
 	}
-	got, err := mgr.ResolvePromptToolProfile(t.Context(), sess.ID)
-	testutil.FailErr(t, "mgr.ResolvePromptToolProfile failed", err)
+	got, err := mgr.Profiles.ResolvePromptToolProfile(t.Context(), sess.ID)
+	testutil.FailErr(t, "mgr.Profiles.ResolvePromptToolProfile failed", err)
 	if got != "coordinator" {
 		t.Fatalf("root coordinator profile = %q want coordinator (a posture overlay selects no profile)", got)
 	}
@@ -114,7 +114,7 @@ postures:
 func TestCreateProjectWarmsPostureOverlay(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
-	mgr := h.SessionMgr
+	mgr := h.Sessions.Manager
 
 	projectDir := t.TempDir()
 	overlayDir := filepath.Join(projectDir, settingsoverlay.DirName())
@@ -138,7 +138,7 @@ postures:
 		t.Fatalf("create status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	if err := mgr.WarmPostureOverlay(projectDir); err != nil {
-		testutil.FailErr(t, "mgr.WarmPostureOverlay failed", err)
+	if err := mgr.Profiles.WarmPostureOverlay(projectDir); err != nil {
+		testutil.FailErr(t, "mgr.Profiles.WarmPostureOverlay failed", err)
 	}
 }

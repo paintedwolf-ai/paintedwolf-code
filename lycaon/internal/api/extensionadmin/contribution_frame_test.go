@@ -55,7 +55,7 @@ func contributionTestFrame(t *testing.T, catalogRevision, mcpRevision string, tr
 }
 
 func TestRememberContributionFrameBoundsRetention(t *testing.T) {
-	srv := &Handler{}
+	srv := &Contributions{}
 	var revisions []string
 	for i := 0; i < contributionFrameLRUCap+3; i++ {
 		frame := contributionTestFrame(t, fmt.Sprintf("cat-%d", i), "mcp-1", true)
@@ -74,7 +74,7 @@ func TestRememberContributionFrameBoundsRetention(t *testing.T) {
 }
 
 func TestContributionFrameRetentionTouchesReads(t *testing.T) {
-	srv := &Handler{}
+	srv := &Contributions{}
 	frames := make([]*contribframe.Frame, 0, contributionFrameLRUCap+1)
 	for i := 0; i < contributionFrameLRUCap; i++ {
 		frame := contributionTestFrame(t, fmt.Sprintf("cat-%d", i), "mcp-1", true)
@@ -96,7 +96,7 @@ func TestContributionFrameRetentionTouchesReads(t *testing.T) {
 }
 
 func TestSubgraphCompareIsolatesUnaffectedCommands(t *testing.T) {
-	srv := &Handler{}
+	srv := &Contributions{}
 	prior := contributionTestFrame(t, "cat-1", "mcp-ready", true)
 	churned := contributionTestFrame(t, "cat-1", "mcp-broken", false)
 	srv.rememberContributionFrame(prior)
@@ -106,13 +106,13 @@ func TestSubgraphCompareIsolatesUnaffectedCommands(t *testing.T) {
 	mcpBacked, err := contribution.ParseID("acme/reviewer:search")
 	testutil.FailErr(t, "parse", err)
 
-	if !srv.subgraphUnchanged(prior.Revision, churned, navigate) {
+	if !(&Execution{Contributions: srv}).subgraphUnchanged(prior.Revision, churned, navigate) {
 		t.Fatal("readiness churn must not reject an unaffected navigate command")
 	}
-	if srv.subgraphUnchanged(prior.Revision, churned, mcpBacked) {
+	if (&Execution{Contributions: srv}).subgraphUnchanged(prior.Revision, churned, mcpBacked) {
 		t.Fatal("a requirement readiness flip must reject the MCP-backed command")
 	}
-	if srv.subgraphUnchanged("unknown-revision", churned, navigate) {
+	if (&Execution{Contributions: srv}).subgraphUnchanged("unknown-revision", churned, navigate) {
 		t.Fatal("an unretained caller frame must not proceed")
 	}
 }

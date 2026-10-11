@@ -56,11 +56,11 @@ func TestObserveCoordinatorCloseoutGrounding_publishesRealOffenders(t *testing.T
 	if !verdict.CitationsRequired && len(verdict.UnobservedHandles) == 0 {
 		t.Fatal("expected unobserved handle observation")
 	}
-	if len(gc.UnobservedCitedHandles) == 0 {
+	if len(gc.Grounding.UnobservedCitedHandles) == 0 {
 		t.Fatal("expected real unobserved handle facts")
 	}
 	found := false
-	for _, h := range gc.UnobservedCitedHandles {
+	for _, h := range gc.Grounding.UnobservedCitedHandles {
 		if h == "observed" {
 			t.Fatal("must not publish fake placeholder offender")
 		}
@@ -69,7 +69,7 @@ func TestObserveCoordinatorCloseoutGrounding_publishesRealOffenders(t *testing.T
 		}
 	}
 	if !found {
-		t.Fatalf("handles=%v", gc.UnobservedCitedHandles)
+		t.Fatalf("handles=%v", gc.Grounding.UnobservedCitedHandles)
 	}
 	if gc.RejectData[guidance.SynthHandleNotInLegsCode] == nil {
 		t.Fatal("expected PutRejectData for SYNTH_HANDLE_NOT_IN_LEGS")

@@ -19,7 +19,7 @@ func TestScanPackEnqueueFansOutBundledEngines(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	lycaonRoot := filepath.Join(root, "lycaon")
-	reg, err := registry.New(registry.Options{ModuleRoot: lycaonRoot})
+	reg, err := registry.New(t.Context(), registry.Options{ModuleRoot: lycaonRoot})
 	contractcheck.FailErr(t, "registry.New failed", err)
 
 	sqlDB := testdbfixture.Open(t, "scan-pack-fanout.db")

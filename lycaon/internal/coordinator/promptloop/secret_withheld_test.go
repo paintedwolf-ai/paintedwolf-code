@@ -44,9 +44,9 @@ func (c *withholdingLLMClient) Stream(ctx context.Context, req modelcall.Complet
 
 func withheldNudgeDeps(st *store.Memory, client modelcall.LLMClient) promptloop.PromptLoopDeps {
 	deps := promptloop.StoreDeps(st)
-	deps.LLM = client
-	deps.Policy = &recordingToolPolicy{}
-	deps.SecretWithheldNudge = func(_ context.Context, _ *api.Session, guidance string) promptloop.HostNudge {
+	deps.Model.LLM = client
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Nudges.SecretWithheldNudge = func(_ context.Context, _ *api.Session, guidance string) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "host: request not sent, user declined. guidance=" + guidance}
 	}
 	return deps

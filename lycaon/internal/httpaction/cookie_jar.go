@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -64,13 +65,13 @@ func openCookieJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args 
 		return nil, secretcap.CookieJarRequest{}, invalid(fmt.Errorf("cookie_jar must be a name"))
 	}
 	if deps.Secrets == nil {
-		return nil, secretcap.CookieJarRequest{}, &tools.ToolReject{
+		return nil, secretcap.CookieJarRequest{}, &toolrejection.ToolReject{
 			Code: CookieJarFailedCode, Data: map[string]any{"jar": name, "cookie_jar_name": name, "reason": "managed secrets are unavailable"},
 		}
 	}
 	req := secretcap.CookieJarRequest{
-		ProjectID: strings.TrimSpace(tctx.ProjectID), ChatSessionID: tctx.ChatSessionID(),
-		SessionID: strings.TrimSpace(tctx.SessionID), OperationID: strings.TrimSpace(tctx.ToolCallID), Name: name,
+		ProjectID: strings.TrimSpace(tctx.Identity.ProjectID), ChatSessionID: tctx.ChatSessionID(),
+		SessionID: strings.TrimSpace(tctx.Identity.SessionID), OperationID: strings.TrimSpace(tctx.Identity.ToolCallID), Name: name,
 	}
 	jar, err := deps.Secrets.OpenCookieJar(ctx, req)
 	if err != nil {
@@ -105,11 +106,11 @@ func saveCookieJar(ctx context.Context, deps Deps, req secretcap.CookieJarReques
 	return receipt
 }
 
-func cookieJarOpenReject(name string, err error) *tools.ToolReject {
+func cookieJarOpenReject(name string, err error) *toolrejection.ToolReject {
 	if errors.Is(err, secretcap.ErrInvalidCookieJar) {
 		return invalid(fmt.Errorf("cookie_jar name is invalid"))
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: CookieJarFailedCode, Data: map[string]any{"jar": name, "cookie_jar_name": name, "reason": err.Error()},
 	}
 }

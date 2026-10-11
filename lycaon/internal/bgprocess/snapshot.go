@@ -33,8 +33,8 @@ type Snapshot struct {
 }
 
 // Await blocks until exit, budget expiry, or cancellation.
-func (r *Registry) Await(ctx context.Context, sessionID, handle string, budget time.Duration) (bool, error) {
-	proc, err := r.lookup(sessionID, handle)
+func (r *ProcessLifecycle) Await(ctx context.Context, sessionID, handle string, budget time.Duration) (bool, error) {
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return false, err
 	}
@@ -56,11 +56,11 @@ func (r *Registry) Await(ctx context.Context, sessionID, handle string, budget t
 
 // Snapshot screens the full tail before applying its byte limit.
 func (r *Registry) Snapshot(ctx context.Context, sessionID, handle string, tailBytes int) (Snapshot, error) {
-	proc, err := r.lookup(sessionID, handle)
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return Snapshot{}, err
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	snap := Snapshot{
 		TerminationReason: proc.reason,
 		HasExit:           proc.hasExit,
@@ -68,8 +68,8 @@ func (r *Registry) Snapshot(ctx context.Context, sessionID, handle string, tailB
 		Failure:           proc.failure,
 		Stages:            append([]hostcmd.StageResult(nil), proc.Stages...),
 	}
-	r.mu.Unlock()
-	body, evicted, screening := r.safeOutput(ctx, proc)
+	r.jobs.mu.Unlock()
+	body, evicted, screening := r.Output.safeOutput(ctx, proc)
 	snap.Output = screenedOrSuppressed(body, screening)
 	snap.Tail = screenedOrSuppressed(CutTail(body, tailBytes), screening)
 	snap.OutputScreened = screening == tailScreened
@@ -79,24 +79,24 @@ func (r *Registry) Snapshot(ctx context.Context, sessionID, handle string, tailB
 
 // CommandLine renders the recorded pipeline; the handle remains its control identity.
 func (r *Registry) CommandLine(sessionID, handle string) (string, error) {
-	proc, err := r.lookup(sessionID, handle)
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return "", err
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	stages := append([]hostcmd.StageResult(nil), proc.Stages...)
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	return hostcmd.CommandLine(stages), nil
 }
 
 // RequireRunning reports nil when handle is a live process in sessionID.
 func (r *Registry) RequireRunning(sessionID, handle string) error {
-	proc, err := r.lookup(sessionID, handle)
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
 	if !proc.running {
 		return ErrProcessNotRunning
 	}
@@ -108,9 +108,9 @@ func (r *Registry) State(sessionID, handle string) (known, running bool) {
 	if r == nil {
 		return false, false
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	proc := r.sessions[trim(sessionID)][trim(handle)]
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
+	proc := r.jobs.sessions[trim(sessionID)][trim(handle)]
 	if proc == nil {
 		return false, false
 	}
@@ -133,9 +133,9 @@ func (r *Registry) HasRunningHandles(sessionID string, handles []string) bool {
 			wanted[handle] = struct{}{}
 		}
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for handle, proc := range r.sessions[trim(sessionID)] {
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
+	for handle, proc := range r.jobs.sessions[trim(sessionID)] {
 		if len(wanted) > 0 {
 			if _, ok := wanted[handle]; !ok {
 				continue
@@ -171,15 +171,15 @@ type OutputSnapshot struct {
 }
 
 // ReadRawOutput returns buffered output for internal tool observation.
-func (r *Registry) ReadRawOutput(sessionID, handle string, cursor int64) (OutputSnapshot, error) {
-	proc, err := r.lookup(sessionID, handle)
+func (r *Output) ReadRawOutput(sessionID, handle string, cursor int64) (OutputSnapshot, error) {
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return OutputSnapshot{}, err
 	}
 	chunks, next, truncated := proc.buffer.ReadSince(cursor)
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	running, hasExit, exitCode, failure := proc.running, proc.hasExit, proc.exitCode, proc.failure
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	out := RawOutput{
 		Handle:    handle,
 		From:      cursor,
@@ -195,8 +195,8 @@ func (r *Registry) ReadRawOutput(sessionID, handle string, cursor int64) (Output
 }
 
 // ReadOutput returns the safe Den-facing projection of the whole retained window.
-func (r *Registry) ReadOutput(ctx context.Context, sessionID, handle string) (api.BackgroundProcessOutput, error) {
-	proc, err := r.lookup(sessionID, handle)
+func (r *Output) ReadOutput(ctx context.Context, sessionID, handle string) (api.BackgroundProcessOutput, error) {
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return api.BackgroundProcessOutput{}, err
 	}
@@ -245,15 +245,15 @@ func toAPIStages(stages []hostcmd.StageResult) []api.BackgroundProcessStage {
 }
 
 // List returns running and recent handles for a session.
-func (r *Registry) List(ctx context.Context, sessionID string) []api.BackgroundProcess {
+func (r *Output) List(ctx context.Context, sessionID string) []api.BackgroundProcess {
 	if r == nil {
 		return nil
 	}
 	sessionID = trim(sessionID)
-	r.mu.Lock()
-	procs := r.sessions[sessionID]
+	r.jobs.mu.Lock()
+	procs := r.jobs.sessions[sessionID]
 	if len(procs) == 0 {
-		r.mu.Unlock()
+		r.jobs.mu.Unlock()
 		return nil
 	}
 	out := make([]api.BackgroundProcess, 0, len(procs))
@@ -275,7 +275,7 @@ func (r *Registry) List(ctx context.Context, sessionID string) []api.BackgroundP
 		scopes = append(scopes, processCaptureScope(proc))
 	}
 	projector := r.projector
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	for i := range out {
 		for j := range out[i].Stages {
 			if projector == nil {
@@ -301,9 +301,9 @@ func (r *Registry) HasPipelineHandles(sessionID string) bool {
 	if r == nil {
 		return false
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	for _, proc := range r.sessions[trim(sessionID)] {
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
+	for _, proc := range r.jobs.sessions[trim(sessionID)] {
 		if proc.kind == processKindPipeline && !proc.silent {
 			return true
 		}
@@ -316,10 +316,10 @@ func (r *Registry) ActiveJobs(sessionID string) []JobSnapshot {
 	if r == nil {
 		return nil
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
 	var out []JobSnapshot
-	for _, proc := range r.sessions[trim(sessionID)] {
+	for _, proc := range r.jobs.sessions[trim(sessionID)] {
 		if !proc.running || proc.kind != processKindPipeline || proc.silent {
 			continue
 		}
@@ -338,10 +338,10 @@ func (r *Registry) CountLivePTYs(sessionID string) int {
 	if r == nil {
 		return 0
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
 	n := 0
-	for _, proc := range r.sessions[trim(sessionID)] {
+	for _, proc := range r.jobs.sessions[trim(sessionID)] {
 		if proc.running && proc.kind == processKindPTY {
 			n++
 		}
@@ -349,8 +349,8 @@ func (r *Registry) CountLivePTYs(sessionID string) int {
 	return n
 }
 
-// exitState reads the wait goroutine's exit fields under r.mu.
-func (r *Registry) exitState(proc *Process) (running, hasExit bool, exitCode int) {
+// exitState reads the wait goroutine's exit fields under r.jobs.mu.
+func (r *processTable) exitState(proc *Process) (running, hasExit bool, exitCode int) {
 	if r == nil || proc == nil {
 		return false, false, 0
 	}

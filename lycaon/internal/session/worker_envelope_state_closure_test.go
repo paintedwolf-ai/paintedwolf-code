@@ -9,7 +9,8 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -37,7 +38,7 @@ func envelopeMessageForState(state string) api.Message {
 	jobID := "j-" + state
 	childSessionID := "child-" + state
 	status := api.WorkerSummaryStatus(state)
-	envelope := session.FormatWorkerCompletionEnvelope(session.WorkerCompletionEnvelope{
+	envelope := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{
 		JobID:          jobID,
 		ChildSessionID: childSessionID,
 		AgentType:      "implementer",
@@ -61,7 +62,7 @@ func TestWorkerEnvelopeStateVocabularyFullyClassified(t *testing.T) {
 		history := []api.Message{{Role: api.MessageRoleUser, Content: "do work"}, msg}
 		since := api.UserIntentBoundary(history)
 
-		blocks := session.OpenWorkerEnvelopeSince(history, since)
+		blocks := workeroutcomes.OpenWorkerEnvelopeSince(history, since)
 		finishedLeg := surface.TerminalWorkerCompletionMessage(msg)
 		_, deliberateStop := deliberateStopStates[state]
 		_, repairOnly := repairOnlyStates[state]

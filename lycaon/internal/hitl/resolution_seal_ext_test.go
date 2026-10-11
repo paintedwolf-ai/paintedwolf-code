@@ -40,9 +40,15 @@ func detectionCheckpointRequest(sessionID string) hitl.CheckpointRequest {
 		Kind:       api.CheckpointKindToolApproval,
 		ToolCallID: "call-detection",
 		ProposedAction: &hitl.ProposedAction{
-			Tool: "command", Args: map[string]any{"command": "aws iam create-user"},
-			SessionID: sessionID, ActionID: "call-detection",
-		},
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "aws iam create-user"},
+ActionID: "call-detection",
+},
+Scope: hitl.ActionScope{
+SessionID: sessionID,
+},
+},
 		Detection: &hitl.DetectionMatch{
 			PackID: "pack-cloud", RuleID: "rule-42", RuleTitle: "IAM principal creation", Level: "high",
 		},
@@ -87,7 +93,7 @@ func TestDetectionResolvedSurvivesRestart(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, detectionCheckpointRequest(sessionID))
 	testutil.FailErr(t, "RequestCheckpoint", err)
 
-	restarted := hitl.NewManager(hitl.NewSQLStore(sqlDB), nil, authzcontext.SQLRecorder(sqlDB))
+	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), nil, authzcontext.SQLRecorder(sqlDB))
 	restarted.SetCheckpointExpiry(func() time.Duration { return time.Nanosecond })
 	testutil.FailErr(t, "RestorePending", restarted.RestorePending(ctx))
 
@@ -124,7 +130,11 @@ func TestRejectSealedInResolvingTransaction(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID:      sessionID,
 		Kind:           api.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "write"},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+},
+},
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 	_, err = mgr.ResolveCheckpoint(ctx, sessionID, resp.CheckpointID, api.CheckpointKindToolApproval,
@@ -142,12 +152,16 @@ func TestRejectFailsClosedWhenLedgerAppendFails(t *testing.T) {
 	ctx := testdbseed.OwnerCaller(t, context.Background(), sqlDB)
 	sessionID := "sess-hitl-1"
 	insertSession(t, sqlDB, sessionID)
-	mgr := hitl.NewManager(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: events.NewMemoryHub()},
+	mgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), &events.Publisher{Hub: events.NewMemoryHub()},
 		authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: authzcontext.FailStore{}}})
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID:      sessionID,
 		Kind:           api.CheckpointKindToolApproval,
-		ProposedAction: &hitl.ProposedAction{Tool: "write"},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+},
+},
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 	_, err = mgr.ResolveCheckpoint(ctx, sessionID, resp.CheckpointID, api.CheckpointKindToolApproval,

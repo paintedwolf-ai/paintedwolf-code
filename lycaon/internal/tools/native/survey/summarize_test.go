@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,7 +42,7 @@ func decodeSummarizeResponse(t *testing.T, raw string) summarizeResponse {
 
 func assertSummarizeReject(t *testing.T, err error, wantCode string) {
 	t.Helper()
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != wantCode {
 		t.Fatalf("err = %v, want reject code %q", err, wantCode)
 	}
@@ -111,7 +113,7 @@ func TestSummarizeToolRejectCodes(t *testing.T) {
 
 	t.Run("path without task runs", func(t *testing.T) {
 		if _, err := tool.Run(ctx, map[string]any{"path": "pkg/a.go"}, tctx); err != nil {
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if errors.As(err, &reject) {
 				t.Fatalf("summarize(path) without task rejected: %v", reject.Code)
 			}
@@ -171,7 +173,7 @@ func TestSummarizePinsAuthorizationAndKeepsReferenceLeadsAtScale(t *testing.T) {
 		writeFile(t, dir, fmt.Sprintf("noise/file-%03d.go", i), fmt.Sprintf("package noise\nfunc Noise%03d() {}\n", i))
 	}
 
-	profile := sandbox.ToolProfile{ID: tools.DefaultToolProfileID, Tools: map[string]bool{"summarize": true}}
+	profile := sandbox.ToolProfile{ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"summarize": true}}
 	boundary := sandbox.NewBoundary(sandbox.Config{
 		ProjectRootRequired: true,
 		RejectSymlinkEscape: true,

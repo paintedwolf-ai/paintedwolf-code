@@ -39,10 +39,10 @@ func BenchmarkRecordBatchPromoteScale(b *testing.B) {
 				for i := range files {
 					content := fmt.Appendf(nil, "round %d file %d\n", round, i)
 					batch = append(batch, RecordInput{
-						ProjectID: "p1", RootID: "r1", Path: fmt.Sprintf("pkg/file%d.go", i),
-						Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-						After: content,
-					})
+						RecordLocation: RecordLocation{RootID: "r1", Path: fmt.Sprintf("pkg/file%d.go", i)},
+						ProjectID:      "p1",
+						Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
+						After: content})
 				}
 				if err := store.RecordBatch(ctx, batch); err != nil {
 					b.Fatalf("record batch: %v", err)

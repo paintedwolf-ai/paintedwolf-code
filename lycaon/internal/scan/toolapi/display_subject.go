@@ -12,7 +12,7 @@ import (
 )
 
 func scanDisplaySubject(ctx context.Context, tctx tools.ToolContext, coord scanbase.ScanCoordinator, ids []string) string {
-	if tctx.Out == nil {
+	if tctx.Effects.Out == nil {
 		return ""
 	}
 	canonical, err := scanbase.CanonicalPath(tctx.ActiveRootPath())
@@ -45,7 +45,7 @@ func scanLabel(rec *api.CodeScan) string {
 }
 
 func captureFullPassSubject(ctx context.Context, tctx tools.ToolContext, coord scanbase.ScanCoordinator, id string) {
-	if tctx.Out == nil {
+	if tctx.Effects.Out == nil {
 		return
 	}
 	store := scanbase.StoreFromCoordinator(coord)

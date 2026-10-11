@@ -1,6 +1,7 @@
 package session
 
 import (
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,7 +18,7 @@ import (
 )
 
 type scratchFixture struct {
-	mgr    *Manager
+	mgr    *Host
 	store  *store.Memory
 	root   *api.Session
 	worker *api.Session
@@ -29,7 +30,7 @@ func newScratchFixture(t *testing.T) scratchFixture {
 	ctx := t.Context()
 	stateRoot := t.TempDir()
 	sessions := store.NewMemory()
-	mgr := NewManager(sessions, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetScratchFolders(scratch.New(stateRoot))
 	root, err := sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create root session", err)
@@ -44,7 +45,7 @@ func newScratchFixture(t *testing.T) scratchFixture {
 
 func (f scratchFixture) toolContext(t *testing.T, sess *api.Session) tools.ToolContext {
 	t.Helper()
-	tctx, err := f.mgr.buildToolContext(t.Context(), sess, tools.DefaultToolProfileID, inject.Machine{})
+	tctx, err := f.mgr.ToolContext.Build(t.Context(), sess, toolprofiles.DefaultToolProfileID, inject.Machine{})
 	testutil.FailErr(t, "build tool context", err)
 	return tctx
 }
@@ -54,13 +55,13 @@ func TestEverySessionGetsItsOwnScratchFolder(t *testing.T) {
 
 	rootCtx := f.toolContext(t, f.root)
 	workerCtx := f.toolContext(t, f.worker)
-	if rootCtx.SessionScratchDir != f.dir(f.root.ID) {
-		t.Fatalf("coordinator scratch = %q, want %q", rootCtx.SessionScratchDir, f.dir(f.root.ID))
+	if rootCtx.Host.SessionScratchDir != f.dir(f.root.ID) {
+		t.Fatalf("coordinator scratch = %q, want %q", rootCtx.Host.SessionScratchDir, f.dir(f.root.ID))
 	}
-	if workerCtx.SessionScratchDir != f.dir(f.worker.ID) {
-		t.Fatalf("worker scratch = %q, want its own sibling folder %q", workerCtx.SessionScratchDir, f.dir(f.worker.ID))
+	if workerCtx.Host.SessionScratchDir != f.dir(f.worker.ID) {
+		t.Fatalf("worker scratch = %q, want its own sibling folder %q", workerCtx.Host.SessionScratchDir, f.dir(f.worker.ID))
 	}
-	for _, dir := range []string{rootCtx.SessionScratchDir, workerCtx.SessionScratchDir} {
+	for _, dir := range []string{rootCtx.Host.SessionScratchDir, workerCtx.Host.SessionScratchDir} {
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 			t.Fatalf("scratch folder %q was not prepared: %v", dir, err)
 		}
@@ -72,7 +73,7 @@ func TestScratchUnavailableLeavesContextWithoutScratch(t *testing.T) {
 	scratchRoot := filepath.Dir(f.dir(f.root.ID))
 	testutil.FailErr(t, "plant link", os.Symlink(t.TempDir(), scratchRoot))
 
-	if dir := f.toolContext(t, f.root).SessionScratchDir; dir != "" {
+	if dir := f.toolContext(t, f.root).Host.SessionScratchDir; dir != "" {
 		t.Fatalf("scratch prepared through a linked root: %q", dir)
 	}
 }
@@ -85,7 +86,7 @@ func TestDeletingAChatRemovesScratchForItsWholeTree(t *testing.T) {
 	testutil.FailErr(t, "create unrelated session", err)
 	f.toolContext(t, other)
 
-	testutil.FailErr(t, "delete chat", f.mgr.DeleteSession(t.Context(), f.root.ID))
+	testutil.FailErr(t, "delete chat", f.mgr.Chats.Delete(t.Context(), f.root.ID))
 	for _, id := range []string{f.root.ID, f.worker.ID} {
 		if _, err := os.Stat(f.dir(id)); !os.IsNotExist(err) {
 			t.Fatalf("scratch for %q survived its chat's deletion: %v", id, err)
@@ -103,9 +104,9 @@ func TestReclaimScratchKeepsChatsWithATurnInFlight(t *testing.T) {
 	busyFile := filepath.Join(f.dir(f.worker.ID), "draft.md")
 	testutil.FailErr(t, "write worker scratch", os.WriteFile(busyFile, []byte("x"), 0o600))
 
-	turn := f.mgr.promptState.Prompt.Acquire(f.worker.ID)
+	turn := f.mgr.Runner.Execution.Prompt.Acquire(f.worker.ID)
 	turn.Lock()
-	err := f.mgr.ReclaimScratch(t.Context())
+	err := f.mgr.Runner.Execution.ReclaimScratch(t.Context())
 	turn.Unlock()
 	testutil.FailErr(t, "reclaim scratch", err)
 

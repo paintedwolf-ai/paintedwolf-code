@@ -17,15 +17,23 @@ func TestApprovalPlanUsesCatalogRedactionForDisplayProjection(t *testing.T) {
 	})
 	t.Cleanup(func() { observability.SetCaptureRedactor(nil) })
 	action := ProposedAction{
-		Tool: "request", Args: map[string]any{"note": "pin=" + secret},
-		Files: []string{"notes-" + secret}, Command: "send " + secret,
-		EstimatedImpact: "uses " + secret,
-		FileChanges: []api.ApprovalFileChange{{
+Invocation: ActionInvocation{
+Tool: "request",
+Args: map[string]any{"note": "pin=" + secret},
+Files: []string{"notes-" + secret},
+},
+Presentation: ActionPresentation{
+Command: "send " + secret,
+EstimatedImpact: "uses " + secret,
+},
+Mutations: ActionMutations{
+FileChanges: []api.ApprovalFileChange{{
 			Path: "conf/" + secret + ".env", FromPath: "old-" + secret, Operation: "write",
 			Before: "TOKEN=" + secret + "\n", After: "TOKEN=" + secret + "\nNEXT=1\n",
 			BeforeSHA256: "before-sum", AfterSHA256: "after-sum", BeforeBytes: 11, AfterBytes: 18,
 		}},
-	}
+},
+}
 	_, decision := gate.Evaluate(gate.Facts{
 		Stage: gate.StagePreSpawn, Ran: gate.ProducerApprovalRequest,
 		ApprovalRequest: &gate.ApprovalRequest{Count: 1},

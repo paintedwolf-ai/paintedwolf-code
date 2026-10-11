@@ -1,6 +1,8 @@
 package tools_test
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
+
 	"errors"
 	"fmt"
 	"reflect"
@@ -9,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/gitexec"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestGitSerializedFailuresKeepPolicyIdentity(t *testing.T) {
@@ -25,7 +26,7 @@ func TestGitSerializedFailuresKeepPolicyIdentity(t *testing.T) {
 		if out == "" || !errors.Is(err, tc.cause) {
 			t.Fatalf("failure became successful or lost diagnostics: %q %v", out, err)
 		}
-		reject := tools.GitFailureObservation(err)
+		reject := toolrejection.GitFailureObservation(err)
 		if reject == nil || reject.Code != tc.code {
 			t.Fatalf("typed failure lost its OAR identity: %#v", reject)
 		}
@@ -33,7 +34,7 @@ func TestGitSerializedFailuresKeepPolicyIdentity(t *testing.T) {
 			t.Fatalf("unsafe keys lost: %#v", reject.Data)
 		}
 	}
-	if reject := tools.GitFailureObservation(errors.New("GIT_REPO_CONFIG_UNSAFE")); reject != nil {
+	if reject := toolrejection.GitFailureObservation(errors.New("GIT_REPO_CONFIG_UNSAFE")); reject != nil {
 		t.Fatal("ordinary error text became host authority")
 	}
 }

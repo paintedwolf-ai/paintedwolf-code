@@ -27,12 +27,12 @@ func TestSyncToolsContinuesWhenOneProviderFails(t *testing.T) {
 
 	// Enable each provider one-by-one (SetProviderEnabled calls Load -> SyncTools).
 	for _, id := range []string{"svca", "svcb"} {
-		if err := reg.SetProviderEnabled(context.Background(), mcp.CallScope{}, id, true, ""); err != nil {
+		if err := reg.Administration.SetProviderEnabled(context.Background(), mcp.CallScope{}, id, true, ""); err != nil {
 			t.Fatalf("SetProviderEnabled(%s) returned error: %v -- a single broken provider should not fail the call", id, err)
 		}
 	}
 
-	providers := reg.ListProviders(context.Background(), mcp.CallScope{})
+	providers := reg.Catalog.ListProviders(context.Background(), mcp.CallScope{})
 	byID := map[string]struct {
 		enabled bool
 		lastErr string
@@ -61,11 +61,11 @@ func TestSyncToolsDoesNotPropagateConnectorError(t *testing.T) {
 	}
 	reg := newTestRegistry(t, conn, "svca")
 
-	if err := reg.SetProviderEnabled(context.Background(), mcp.CallScope{}, "svca", true, ""); err != nil {
+	if err := reg.Administration.SetProviderEnabled(context.Background(), mcp.CallScope{}, "svca", true, ""); err != nil {
 		t.Fatalf("SetProviderEnabled returned error: %v -- broken MCP should not crash serve", err)
 	}
 	// LastSyncError must surface so a future Check call (or UI) can flag it.
-	if msg := reg.LastSyncError("svca"); msg == "" {
+	if msg := reg.Catalog.LastSyncError("svca"); msg == "" {
 		t.Fatal("expected non-empty LastSyncError after failed sync")
 	}
 }

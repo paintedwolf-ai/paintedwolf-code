@@ -13,7 +13,7 @@ INSERT INTO workflow_run_page_ordinals(run_id) VALUES (?);
 -- name: GetWorkflowRun :one
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE id = ?;
 
@@ -42,12 +42,14 @@ WHERE id = sqlc.arg(id);
 UPDATE workflow_runs
 SET blueprint_path = sqlc.arg(to_path), updated_at = sqlc.arg(updated_at), revision = revision + 1
 WHERE project_id = sqlc.arg(project_id) AND blueprint_path = sqlc.arg(from_path)
-RETURNING session_id;
+RETURNING id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
+       blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
+       created_at, updated_at, paused_at, completed_at, review_revision;
 
 -- name: ActiveWorkflowRunBySession :one
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE session_id = ? AND status IN ('running','paused','paused_on_child')
 ORDER BY CASE WHEN parent_run_id IS NOT NULL AND TRIM(parent_run_id) != '' THEN 0 ELSE 1 END,
@@ -57,7 +59,7 @@ LIMIT 1;
 -- name: ActiveWorkflowRunByProjectAndBlueprintPath :one
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE project_id = ? AND blueprint_path = ?
   AND status IN ('running','paused','paused_on_child')
@@ -68,7 +70,7 @@ LIMIT 1;
 -- name: LatestChildWorkflowRun :one
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE parent_run_id = ?
 ORDER BY created_at DESC, rowid DESC
@@ -79,7 +81,7 @@ LIMIT 1;
 -- name: ListWorkflowRunsBySession :many
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE session_id = ?
 ORDER BY created_at DESC, id DESC
@@ -88,7 +90,7 @@ LIMIT ?;
 -- name: ListWorkflowRunsBySessionWithStatus :many
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE session_id = ? AND status IN (sqlc.slice(statuses))
 ORDER BY created_at DESC, id DESC
@@ -97,7 +99,7 @@ LIMIT ?;
 -- name: ListRunningWorkflowRuns :many
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE status = 'running'
 ORDER BY created_at, id;
@@ -105,7 +107,7 @@ ORDER BY created_at, id;
 -- name: ListPausedOnChildWorkflowRuns :many
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE status = 'paused_on_child'
 ORDER BY created_at, id;
@@ -124,7 +126,7 @@ WITH page AS (
 )
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 JOIN workflow_run_page_ordinals AS page_ordinal ON page_ordinal.run_id = workflow_runs.id
 CROSS JOIN page
@@ -234,7 +236,7 @@ WHERE project_id = ? AND path = ? AND workflow_run_id = ? AND workflow_revision 
 
 -- name: GetWorkflowVerdictOperation :one
 SELECT tool_call_id, run_id, source_revision, phase, input_digest, evidence_record_id,
-       evidence_json, status, response_json, error, created_at, updated_at
+       evidence_json, status, response_json, error, created_at, updated_at, evidence_published
 FROM workflow_verdict_operations
 WHERE tool_call_id = ?;
 
@@ -252,16 +254,16 @@ INSERT INTO workflow_verdict_operations(
 ) VALUES (?, ?, ?, ?, ?, ?, ?, 'prepared', ?, ?)
 ON CONFLICT(tool_call_id) DO NOTHING;
 
--- name: MarkWorkflowVerdictEvidenceApplied :exec
+-- name: MarkWorkflowVerdictEvidencePublished :exec
 UPDATE workflow_verdict_operations
-SET status = 'evidence_applied', updated_at = ?
-WHERE tool_call_id = ? AND status = 'prepared';
+SET evidence_published = 1, updated_at = ?
+WHERE tool_call_id = ? AND status = 'committed';
 
 -- name: ListPendingWorkflowVerdictOperations :many
 SELECT tool_call_id, run_id, source_revision, phase, input_digest, evidence_record_id,
-       evidence_json, status, response_json, error, created_at, updated_at
+       evidence_json, status, response_json, error, created_at, updated_at, evidence_published
 FROM workflow_verdict_operations
-WHERE status IN ('prepared', 'evidence_applied')
+WHERE status IN ('prepared', 'evidence_applied') OR (status = 'committed' AND evidence_published = 0)
 ORDER BY created_at, tool_call_id;
 
 -- name: CommitWorkflowVerdictOperation :execrows

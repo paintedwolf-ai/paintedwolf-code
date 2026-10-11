@@ -86,8 +86,11 @@ const (
 	// running
 	ApiErrorCodeSessionNotIdle ApiErrorCode = "session_not_idle"
 	// ApiErrorCodePromptRecoveryStale a Keep going or Retry recovery no longer
-	// matches the chat (turn running, newer messages, or nothing interrupted);
-	// details.reason says which
+	// matches the chat (turn running, newer messages, or nothing interrupted).
+	// details.reason is one of turn_running, prompt_pending, turn_completed,
+	// turn_missing, transcript_changed, or retry_has_progress. details.explanation
+	// is display prose, never a discriminator. Malformed recovery requests return
+	// invalid_request.
 	ApiErrorCodePromptRecoveryStale ApiErrorCode = "prompt_recovery_stale"
 	// ApiErrorCodeRewindAnchorNotFound rewind anchor message id is not in the
 	// transcript
@@ -214,10 +217,11 @@ const (
 	ApiErrorCodeInvalidJson ApiErrorCode = "invalid_json"
 	// ApiErrorCodeInvalidPath path traversal or unsafe path argument
 	ApiErrorCodeInvalidPath ApiErrorCode = "invalid_path"
-	// ApiErrorCodeWriteRootIsFilesystemRoot project root or write_root grant is
-	// filesystem root
+	// ApiErrorCodeWriteRootIsFilesystemRoot Retired refusal: filesystem root is
+	// now permitted; per-path protected floors still apply.
 	ApiErrorCodeWriteRootIsFilesystemRoot ApiErrorCode = "write_root_is_filesystem_root"
-	// ApiErrorCodeWriteRootIsHome project root or write_root grant is bare $HOME
+	// ApiErrorCodeWriteRootIsHome Retired refusal: home directory is now
+	// permitted; per-path protected floors still apply.
 	ApiErrorCodeWriteRootIsHome ApiErrorCode = "write_root_is_home"
 	// ApiErrorCodeWriteRootNotAbsolute project root or write_root grant is not an
 	// absolute path
@@ -461,6 +465,9 @@ const (
 	ApiErrorCodeSourceMoveIncomplete ApiErrorCode = "source_move_incomplete"
 	// ApiErrorCodeSourcePathBusy another file operation reserves this path
 	ApiErrorCodeSourcePathBusy ApiErrorCode = "source_path_busy"
+	// ApiErrorCodeSourceTrashRecoveryUnavailable the exact native Trash item is no
+	// longer available for restoration
+	ApiErrorCodeSourceTrashRecoveryUnavailable ApiErrorCode = "source_trash_recovery_unavailable"
 	// ApiErrorCodeSourceRecoveryFailed recovery content could not be preserved or
 	// restored
 	ApiErrorCodeSourceRecoveryFailed ApiErrorCode = "source_recovery_failed"
@@ -1107,6 +1114,7 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeSourcePathProtected,
 	ApiErrorCodeSourceMoveIncomplete,
 	ApiErrorCodeSourcePathBusy,
+	ApiErrorCodeSourceTrashRecoveryUnavailable,
 	ApiErrorCodeSourceRecoveryFailed,
 	ApiErrorCodeSourceNotFound,
 	ApiErrorCodeSourceBinaryDenied,
@@ -1559,7 +1567,8 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeAskUserRejected:
 		return 409
 	case ApiErrorCodeArtifactUnavailable,
-		ApiErrorCodeArtifactDeleted:
+		ApiErrorCodeArtifactDeleted,
+		ApiErrorCodeSourceTrashRecoveryUnavailable:
 		return 410
 	case ApiErrorCodeSourceViewFrameTooLarge,
 		ApiErrorCodeBodyTooLarge,

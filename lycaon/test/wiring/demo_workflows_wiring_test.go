@@ -13,8 +13,10 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -25,21 +27,21 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
 	testutil.FailErr(t, "create session", err)
 
-	run, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.0"})
+	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.0"})
 	testutil.FailErr(t, "start security workflow", err)
 	settleScanObligationAndAdvance(t, h, ctx, run.ID, "plan")
-	satisfyFanoutPlannedAndAdvance(t, h, ctx, run.ID, dir, []workflow.FanoutPlanLeg{
+	satisfyFanoutPlannedAndAdvance(t, h, ctx, run.ID, dir, []runstate.FanoutPlanLeg{
 		{AgentType: "security-reviewer", Subject: "Dependencies", Prompt: "Survey dependency risk", DoneWhen: []string{"Account for dependency risk and unexamined scope"}},
 		{AgentType: "security-reviewer", Subject: "Sign-in", Prompt: "Survey auth patterns", DoneWhen: []string{"Trace authentication boundaries and unexamined scope"}},
 	}, "execute")
 	satisfyWorkerCycleAndAdvance(t, h, ctx, sess, run.ID, dir)
-	waitWorkflowPhase(t, ctx, h.WorkflowMgr, run.ID, "claims")
+	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "claims")
 
 	assertManifestBoundSurface(t, h, ctx, sess, surface.HostLoopWakeSentinel, "review_adjudicate")
 
-	scaffoldTopologyOutput(t, h.WorkflowMgr, run.ID, orchestration.TopologyBindStageFanOut)
+	scaffoldTopologyOutput(t, h.Workflows.Manager, run.ID, orchestration.TopologyBindStageFanOut)
 
-	h.SessionMgr.ClearPendingKickForTest(sess.ID)
+	h.Sessions.Manager.Runner.Coordinator.Kicks().ClearPending(sess.ID)
 
 	claimed := map[string]string{
 		"verdict":      "CLAIMED",
@@ -50,7 +52,7 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 	// Coverage citations use production grounding.
 	uncited := map[string]string{"verdict": "CLAIMED", "set_asides": "[]", "threat_model": claimed["threat_model"], "claims": `[{"id":"c1","title":"SQL injection","status":"claimed","statement":"SQLi"}]`}
 	uncited["coverage"] = securityCoverageFixture(t, h, ctx, run.ID)
-	out, err := h.WorkflowMgr.RecordReviewLoopVerdict(ctx, sess.ID, uncited, nil, nil)
+	out, err := h.Workflows.Manager.Verdicts.RecordReviewLoopVerdict(ctx, sess.ID, uncited, nil, nil)
 	testutil.FailErr(t, "RecordReviewLoopVerdict uncited claims", err)
 	if out.Valid || out.GroundingCode == "" {
 		t.Fatalf("unresolved coverage citations outcome = %+v, want grounding refusal", out)
@@ -63,15 +65,15 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 		Body:       []string{"id reaches Sprintf in query.go:88"},
 	}))
 	claimed["coverage"] = securityCoverageFixture(t, h, ctx, run.ID)
-	out, err = h.WorkflowMgr.RecordReviewLoopVerdict(ctx, sess.ID, claimed, nil, nil)
+	out, err = h.Workflows.Manager.Verdicts.RecordReviewLoopVerdict(ctx, sess.ID, claimed, nil, nil)
 	testutil.FailErr(t, "RecordReviewLoopVerdict claims", err)
 	if !out.Valid || !out.Terminal {
 		t.Fatalf("claims verdict = %+v, want valid terminal outcome", out)
 	}
-	waitWorkflowPhase(t, ctx, h.WorkflowMgr, run.ID, "challenge")
+	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "challenge")
 
-	skepticChild := appendSucceededReviewAgent(t, h, ctx, sess, "skeptic", "")
-	researcherChild := appendSucceededReviewAgent(t, h, ctx, sess, "web-researcher", "")
+	skepticChild := appendSucceededReviewAgent(t, h, ctx, sess, "skeptic", "review/skeptic")
+	researcherChild := appendSucceededReviewAgent(t, h, ctx, sess, "web-researcher", "review/web-researcher")
 
 	investigateSecurityQuestion(t, h, ctx, sess, run.ID)
 
@@ -83,13 +85,13 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 		"set_asides": `[]`,
 	}
 	challenged["coverage"] = securityCoverageFixture(t, h, ctx, run.ID)
-	out, err = h.WorkflowMgr.RecordReviewLoopVerdict(ctx, sess.ID, challenged,
+	out, err = h.Workflows.Manager.Verdicts.RecordReviewLoopVerdict(ctx, sess.ID, challenged,
 		[]api.CitationGroundingCitedEvidence{reviewerCitation(skepticChild, "skeptic"), reviewerCitation(researcherChild, "web-researcher")}, nil)
 	testutil.FailErr(t, "RecordReviewLoopVerdict challenge", err)
 	if !out.Valid || !out.Terminal {
 		t.Fatalf("challenge verdict = %+v, want valid terminal outcome", out)
 	}
-	waitWorkflowPhase(t, ctx, h.WorkflowMgr, run.ID, "report")
+	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "report")
 
 	deliverTopologyReport(t, h, ctx, sess, run.ID)
 }
@@ -102,17 +104,17 @@ func TestReconPackFanOutWorkflowEndToEnd(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 
 	run := startWorkflowRunAt(t, h, ctx, sess, "recon-pack", "plan")
-	satisfyFanoutPlannedAndAdvance(t, h, ctx, run.ID, dir, []workflow.FanoutPlanLeg{
+	satisfyFanoutPlannedAndAdvance(t, h, ctx, run.ID, dir, []runstate.FanoutPlanLeg{
 		{AgentType: "path-explorer", Subject: "Packages", Prompt: "List top-level packages"},
 		{AgentType: "path-explorer", Subject: "Test entrypoints", Prompt: "Find test entrypoints"},
 	}, "execute")
 	satisfyWorkerCycleAndAdvance(t, h, ctx, sess, run.ID, dir)
-	waitWorkflowPhase(t, ctx, h.WorkflowMgr, run.ID, "reconcile")
-	_, err = h.WorkflowMgr.FireTransition(ctx, run.ID, "report", workflowdef.TransitionActorCoordinator)
+	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "reconcile")
+	_, err = h.Workflows.Manager.Phases.FireTransition(ctx, run.ID, "report", workflowdef.TransitionActorCoordinator)
 	testutil.FailErr(t, "FireTransition report", err)
-	waitWorkflowPhase(t, ctx, h.WorkflowMgr, run.ID, "report")
+	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "report")
 
-	scaffoldTopologyOutput(t, h.WorkflowMgr, run.ID, orchestration.TopologyBindStageFanOut)
+	scaffoldTopologyOutput(t, h.Workflows.Manager, run.ID, orchestration.TopologyBindStageFanOut)
 
 	deliverTopologyReport(t, h, ctx, sess, run.ID)
 }
@@ -130,24 +132,24 @@ func TestBugbashWorkflowEndToEnd(t *testing.T) {
 	}
 
 	for _, stage := range []string{"hunt_correctness", "hunt_edges", "hunt_races"} {
-		waitTopologyStageComplete(t, h.WorkflowMgr, run.ID, stage)
+		waitTopologyStageComplete(t, h.Workflows.Manager, run.ID, stage)
 	}
-	waitWorkflowPhase(t, ctx, h.WorkflowMgr, run.ID, "triage")
-	waitTopologyStageComplete(t, h.WorkflowMgr, run.ID, "triage")
-	waitWorkflowPhase(t, ctx, h.WorkflowMgr, run.ID, "expand")
+	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "triage")
+	waitTopologyStageComplete(t, h.Workflows.Manager, run.ID, "triage")
+	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "expand")
 	blueprintPath := filepath.Join(dir, filepath.FromSlash(run.BlueprintPath))
 	testutil.FailErr(t, "create Bugbash blueprint dir", os.MkdirAll(filepath.Dir(blueprintPath), 0o755))
 	testutil.FailErr(t, "write Bugbash blueprint", os.WriteFile(blueprintPath, []byte(conditions.TestPlanContentStubOnly), 0o644))
 
-	run, err = h.WorkflowMgr.Advance(ctx, run.ID)
+	run, err = h.Workflows.Manager.Phases.Advance(ctx, run.ID)
 	testutil.FailErr(t, "advance written fix plan", err)
 	if run.CurrentPhase != "approve" {
 		t.Fatalf("phase = %q want approve", run.CurrentPhase)
 	}
-	run, err = h.WorkflowMgr.SyncHumanApproval(ctx, run.ID, dir)
+	run, err = h.Workflows.Manager.Approvals.SyncHumanApproval(ctx, run.ID, dir)
 	testutil.FailErr(t, "SyncHumanApproval approve", err)
 
-	child, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	child, err := h.Workflows.Manager.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "get implementation child", err)
 	if child == nil || child.WorkflowID != "implement" || child.ParentRunID == nil || *child.ParentRunID != run.ID {
 		t.Fatalf("active run = %+v want implementation child of %s", child, run.ID)
@@ -157,11 +159,11 @@ func TestBugbashWorkflowEndToEnd(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	child.Status, child.CompletedAt, child.UpdatedAt = api.WorkflowRunStatusComplete, &now, now
-	testutil.FailErr(t, "complete implementation child", h.WorkflowMgr.Store.Update(ctx, child))
-	testutil.FailErr(t, "resume bugbash after implementation", h.WorkflowMgr.ReconcileTerminalRun(ctx, child))
-	waitWorkflowPhase(t, ctx, h.WorkflowMgr, run.ID, "closeout")
+	testutil.FailErr(t, "complete implementation child", h.Workflows.Manager.Store.State.Update(ctx, child))
+	testutil.FailErr(t, "resume bugbash after implementation", h.Workflows.Manager.Children.ReconcileTerminalRun(ctx, child))
+	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "closeout")
 
-	vars, err := h.WorkflowMgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := h.Workflows.Manager.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	stages, _ := vars["topology_stages"].(map[string]any)
 	for _, stage := range []string{"hunt_correctness", "hunt_edges", "hunt_races", "triage"} {
@@ -174,29 +176,29 @@ func TestBugbashWorkflowEndToEnd(t *testing.T) {
 
 func investigateSecurityQuestion(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, runID string) {
 	t.Helper()
-	run, err := h.WorkflowMgr.Get(ctx, runID)
+	run, err := h.Workflows.Manager.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "load question run", err)
-	manifest, err := h.WorkflowMgr.ManifestForRunID(ctx, runID)
+	manifest, err := h.Workflows.Manager.Resolver.ForRunID(ctx, runID)
 	testutil.FailErr(t, "load question manifest", err)
-	facts, err := h.WorkflowMgr.CoverageFacts(ctx, run, manifest)
+	facts, err := h.Workflows.Manager.Coverage.CoverageFacts(ctx, run, manifest)
 	testutil.FailErr(t, "load question obligations", err)
 	obligations := make([]string, 0, len(facts.Obligations))
 	for _, fact := range facts.Obligations {
 		obligations = append(obligations, fact.ID)
 	}
-	claims, err := json.Marshal([]workflow.VerdictClaim{{ID: "c1", Status: "unresolved", Statement: "Trace the request id into the query", Question: &workflow.ReviewQuestion{MissingFact: "Does the public handler pass the request id unchanged?", Obligations: obligations}, CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "survey#1"}}}})
+	claims, err := json.Marshal([]workflowvalidation.VerdictClaim{{ID: "c1", Status: "unresolved", Statement: "Trace the request id into the query", Question: &workflowvalidation.ReviewQuestion{MissingFact: "Does the public handler pass the request id unchanged?", Obligations: obligations}, CitedEvidence: []api.CitationGroundingCitedEvidence{{Handle: "survey#1"}}}})
 	testutil.FailErr(t, "encode question", err)
 	verdict := map[string]string{"verdict": "NEEDS_INVESTIGATION", "challenges": string(claims), "set_asides": "[]", "coverage": securityCoverageFixture(t, h, ctx, runID)}
-	out, err := h.WorkflowMgr.RecordReviewLoopVerdict(ctx, sess.ID, verdict, nil, nil)
+	out, err := h.Workflows.Manager.Verdicts.RecordReviewLoopVerdict(ctx, sess.ID, verdict, nil, nil)
 	testutil.FailErr(t, "register question", err)
 	if !out.Valid || out.Terminal || out.Attempt != 0 {
 		t.Fatalf("question registration = %+v", out)
 	}
 	verdict["verdict"] = "CHALLENGED"
 	verdict["coverage"] = securityCoverageFixture(t, h, ctx, runID)
-	out, err = h.WorkflowMgr.RecordReviewLoopVerdict(ctx, sess.ID, verdict, nil, nil)
+	out, err = h.Workflows.Manager.Verdicts.RecordReviewLoopVerdict(ctx, sess.ID, verdict, nil, nil)
 	testutil.FailErr(t, "reject uninvestigated question", err)
-	if out.Valid || out.QuestionIssue == nil || out.QuestionIssue.Code != "SUBMIT_VERDICT_QUESTION_INVALID" || out.QuestionIssue.Data["reason"] != "investigation_required" {
+	if out.Valid || out.QuestionIssue == nil || out.QuestionIssue.Code != workflowreview.ReviewRequiredCode || out.QuestionIssue.Data["action"] != "dispatch_work" {
 		t.Fatalf("uninvestigated question outcome = %+v, want investigation-required rejection", out)
 	}
 	appendSucceededReviewAgent(t, h, ctx, sess, "repo-researcher", "question/c1")

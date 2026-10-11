@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/session/promotionstate"
 )
 
 // SnapshotWorkspaceFromRoots fingerprints every project root.
@@ -91,7 +92,7 @@ func FilterOverlayPromoteCandidatePathsForRoots(roots []projectroot.RootRef, pat
 		if rel == "" {
 			continue
 		}
-		if OmitOverlayPromotePath(rel) {
+		if promotionstate.OmitOverlayPromotePath(rel) {
 			continue
 		}
 		out = append(out, p)

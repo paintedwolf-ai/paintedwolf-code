@@ -1,16 +1,17 @@
 package session
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/llm"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"os"
-	"path/filepath"
 )
 
 func TestEffectiveLimitsAppliesLiveDerived(t *testing.T) {
@@ -40,18 +41,17 @@ agent_pool:
 	limStore, err := settings.NewLimitsStoreAt(globalLimits)
 	testutil.FailErr(t, "NewLimitsStoreAt", err)
 
-	mgr := NewManager(nil, nil, nil, settings.SessionLimits{})
-	mgr.SetLimitsProvider(settings.ProjectLimitsAdapter{Store: limStore})
-	mgr.llmSvc = &llm.Service{Policy: policy}
+	mgr := NewHost(sessionstore.NewMemory(), Models{Client: nil, Provider: &llm.Service{Policy: policy}, Limits: settings.SessionLimits{}, Cost: nil}, nil)
+	mgr.Limits.SetProvider(settings.ProjectLimitsAdapter{Store: limStore})
 
 	sess := &api.Session{WorkspacePath: tmp}
-	got := mgr.effectiveLimits(t.Context(), sess)
+	got := mgr.Limits.Effective(t.Context(), sess)
 	if got.MaxToolResultBytes != 524288 || got.MaxCoordinatorLoopCycles != 256 {
 		t.Fatalf("kimi derived limits = bytes %d cycles %d", got.MaxToolResultBytes, got.MaxCoordinatorLoopCycles)
 	}
 
 	testutil.FailErr(t, "PutGlobal overlay", limStore.PutGlobal(settings.SessionLimits{MaxToolResultBytes: 99999}))
-	got = mgr.effectiveLimits(t.Context(), sess)
+	got = mgr.Limits.Effective(t.Context(), sess)
 	if got.MaxToolResultBytes != 99999 {
 		t.Fatalf("overlay MaxToolResultBytes = %d want 99999", got.MaxToolResultBytes)
 	}

@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -114,7 +114,7 @@ func TestRestoreVersionBaseMismatchRejected(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SOURCE_VERSION_BASE_MISMATCH" {
 		t.Fatalf("err = %v, want SOURCE_VERSION_BASE_MISMATCH reject", err)
 	}
@@ -142,7 +142,7 @@ func TestRestoreVersionNotFoundRejected(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SOURCE_VERSION_NOT_FOUND" {
 		t.Fatalf("err = %v, want SOURCE_VERSION_NOT_FOUND reject", err)
 	}
@@ -173,7 +173,7 @@ func TestRestoreVersionNoPredecessorRejected(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SOURCE_VERSION_NO_PREDECESSOR" {
 		t.Fatalf("err = %v, want SOURCE_VERSION_NO_PREDECESSOR reject", err)
 	}

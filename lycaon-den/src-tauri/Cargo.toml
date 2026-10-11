@@ -78,7 +78,7 @@ objc2-web-kit = { version = "0.3", default-features = false, features = [
 
 [package]
 name = "painted-wolf-code"
-version = "1.0.1"
+version = "1.0.2"
 description = "Painted Wolf Code desktop shell"
 authors = ["Painted Wolf Code"]
 edition = "2021"
@@ -101,7 +101,7 @@ tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-shell = "2"
 tokio = { version = "1", features = ["sync", "time", "fs", "io-util", "macros"] }
-reqwest = { version = "0.13", default-features = false, features = ["stream"] }
+reqwest = { version = "0.13", default-features = false, features = ["stream", "rustls-no-provider"] }
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 sha2 = "0.11"
 hex = "0.4"

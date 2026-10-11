@@ -47,7 +47,7 @@ const revisionCandidates = `SELECT v.id, v.project_id, COALESCE(o.session_id,'')
  AND NOT EXISTS(SELECT 1 FROM source_manifest_entries e WHERE e.sha256 = v.content_sha256)
  THEN b.stored_size ELSE 0 END reclaimable_bytes
  FROM source_versions v JOIN source_blob_objects b ON b.sha256 = v.content_sha256 LEFT JOIN source_operations o ON o.id = v.operation_id
- WHERE v.capture_state = 'stored' AND NOT EXISTS(SELECT 1 FROM source_branch_heads h WHERE h.version_id = v.id)`
+ WHERE v.capture_state = 'stored' AND NOT EXISTS(SELECT 1 FROM source_branch_heads h WHERE h.version_id = v.id AND h.state != 'absent')`
 
 const scanCandidates = `SELECT scan.id, root.project_id, '' session_id, '' anchor_id, '' sha, scan.completed_at created_at,
  COALESCE(length(scan.result_json),0) + COALESCE(length(scan.ingest_json),0) + COALESCE(length(scan.guidance_json),0) logical_bytes,

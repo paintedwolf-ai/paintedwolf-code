@@ -36,7 +36,7 @@ func TestWorkflowVersionDualRun_Concurrent100And200Isolation(t *testing.T) {
 		UpdatedAt:       now,
 		Revision:        1,
 	}
-	err = h.WorkflowMgr.Store.CreateState(ctx, run100, dirA, map[string]any{})
+	err = h.Workflows.Manager.Store.State.CreateState(ctx, run100, dirA, map[string]any{})
 	testutil.FailErr(t, "create state for 1.0.0 run", err)
 
 	// Session B: runs 2.0.0
@@ -55,7 +55,7 @@ func TestWorkflowVersionDualRun_Concurrent100And200Isolation(t *testing.T) {
 		UpdatedAt:       now,
 		Revision:        1,
 	}
-	err = h.WorkflowMgr.Store.CreateState(ctx, run200, dirB, map[string]any{})
+	err = h.Workflows.Manager.Store.State.CreateState(ctx, run200, dirB, map[string]any{})
 	testutil.FailErr(t, "create state for 2.0.0 run", err)
 
 	// Verify both runs query anchors without interference
@@ -74,11 +74,11 @@ func TestWorkflowVersionDualRun_Concurrent100And200Isolation(t *testing.T) {
 	}
 
 	// Each run reads gate feedback from its own version.
-	active100, ok := h.WorkflowMgr.ActiveManifest(ctx, sessA.ID)
+	active100, ok := h.Workflows.Manager.Policy.ActiveManifest(ctx, sessA.ID)
 	if !ok || active100.Archive != "security-survey/1.0.0" {
 		t.Fatalf("1.0.0 run archive = %+v, want security-survey/1.0.0", active100)
 	}
-	if active200, ok := h.WorkflowMgr.ActiveManifest(ctx, sessB.ID); !ok || active200.Archive != "" {
+	if active200, ok := h.Workflows.Manager.Policy.ActiveManifest(ctx, sessB.ID); !ok || active200.Archive != "" {
 		t.Fatalf("2.0.0 run archive = %+v, want the live definition", active200)
 	}
 

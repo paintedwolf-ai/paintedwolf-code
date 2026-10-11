@@ -34,9 +34,10 @@ type provenanceFixture struct {
 	containers []dockerContainerInfo
 }
 
-func (f *provenanceFixture) resolver() *DefaultLoopbackProvenance {
+func (f *provenanceFixture) resolver(ctx context.Context) *DefaultLoopbackProvenance {
 	started := false
 	return newLoopbackProvenance(
+		ctx,
 		func(context.Context) ([]socketListener, error) {
 			if !started {
 				started = true
@@ -63,11 +64,11 @@ func TestLoopbackOwnershipByLaunchLineage(t *testing.T) {
 		now:      []socketListener{listenerAt(4242, "127.0.0.1:9999")},
 		sessions: map[int]string{4242: "chat-1"},
 	}
-	owned, evidence := f.resolver().IsSessionOwned(ctx, "chat-1", "/workspace", 9999)
+	owned, evidence := f.resolver(t.Context()).IsSessionOwned(ctx, "chat-1", "/workspace", 9999)
 	if !owned || evidence.Method != ProvenanceLineage {
 		t.Fatalf("listener launched by this session: owned=%v evidence=%+v", owned, evidence)
 	}
-	owned, evidence = f.resolver().IsSessionOwned(ctx, "chat-2", "/workspace", 9999)
+	owned, evidence = f.resolver(t.Context()).IsSessionOwned(ctx, "chat-2", "/workspace", 9999)
 	if owned {
 		t.Fatalf("another session's listener was attributed to this one: %+v", evidence)
 	}
@@ -79,7 +80,7 @@ func TestLoopbackOwnershipRefusesExposedChatListener(t *testing.T) {
 			now:      []socketListener{listenerAt(4242, addr)},
 			sessions: map[int]string{4242: "chat-1"},
 		}
-		owned, evidence := f.resolver().IsSessionOwned(context.Background(), "chat-1", "/workspace", 9999)
+		owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", "/workspace", 9999)
 		if owned || evidence.Method != ProvenanceExposed {
 			t.Errorf("chat listener on %s: owned=%v evidence=%+v, want external exposure", addr, owned, evidence)
 		}
@@ -90,7 +91,7 @@ func TestLoopbackOwnershipRefusesExposedChatListener(t *testing.T) {
 // is new: a service the person starts, or another session's, stays foreign.
 func TestLoopbackOwnershipIgnoresListenersThatMerelyAppeared(t *testing.T) {
 	f := &provenanceFixture{now: []socketListener{listenerAt(777, "127.0.0.1:5173")}}
-	owned, evidence := f.resolver().IsSessionOwned(context.Background(), "chat-1", "/workspace", 5173)
+	owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", "/workspace", 5173)
 	if owned {
 		t.Fatalf("a listener outside every chat lineage was owned: %+v", evidence)
 	}
@@ -103,7 +104,7 @@ func TestLoopbackOwnershipNeedsEveryHolder(t *testing.T) {
 		now:      []socketListener{listenerAt(4242, "127.0.0.1:9999"), listenerAt(900, "[::1]:9999")},
 		sessions: map[int]string{4242: "chat-1"},
 	}
-	if owned, evidence := f.resolver().IsSessionOwned(context.Background(), "chat-1", "/workspace", 9999); owned {
+	if owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", "/workspace", 9999); owned {
 		t.Fatalf("a port shared with a foreign process was owned: %+v", evidence)
 	}
 }
@@ -114,7 +115,7 @@ func TestLoopbackOwnershipIgnoresComposeManifests(t *testing.T) {
 	manifest := "services:\n  web:\n    ports:\n      - \"127.0.0.1:3001:80\"\n"
 	testutil.FailErr(t, "write compose manifest", os.WriteFile(filepath.Join(workspace, "compose.yaml"), []byte(manifest), 0o600))
 	f := &provenanceFixture{now: []socketListener{listenerAt(555, "127.0.0.1:3001")}}
-	if owned, evidence := f.resolver().IsSessionOwned(context.Background(), "chat-1", workspace, 3001); owned {
+	if owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 3001); owned {
 		t.Fatalf("a compose manifest established ownership: %+v", evidence)
 	}
 }
@@ -130,19 +131,19 @@ func TestLoopbackOwnershipByWorkspaceContainer(t *testing.T) {
 	wildcard := containerPortMapping{PublicPort: 3000}
 
 	f := &provenanceFixture{containers: []dockerContainerInfo{workspaceContainer(workspace, loopback)}}
-	owned, evidence := f.resolver().IsSessionOwned(ctx, "chat-1", workspace, 3000)
+	owned, evidence := f.resolver(t.Context()).IsSessionOwned(ctx, "chat-1", workspace, 3000)
 	if !owned || evidence.Method != ProvenanceContainer || evidence.OwnerID != "app-web-1" {
 		t.Fatalf("loopback workspace container: owned=%v evidence=%+v", owned, evidence)
 	}
 
 	f = &provenanceFixture{containers: []dockerContainerInfo{workspaceContainer(workspace, loopback, wildcard)}}
-	owned, evidence = f.resolver().IsSessionOwned(ctx, "chat-1", workspace, 3000)
+	owned, evidence = f.resolver(t.Context()).IsSessionOwned(ctx, "chat-1", workspace, 3000)
 	if owned || evidence.Method != ProvenanceExposed {
 		t.Fatalf("container also publishing on every interface: owned=%v evidence=%+v", owned, evidence)
 	}
 
 	f = &provenanceFixture{containers: []dockerContainerInfo{workspaceContainer("/workspace/other", loopback)}}
-	if owned, _ = f.resolver().IsSessionOwned(ctx, "chat-1", workspace, 3000); owned {
+	if owned, _ = f.resolver(t.Context()).IsSessionOwned(ctx, "chat-1", workspace, 3000); owned {
 		t.Fatal("another workspace's container was attributed to this one")
 	}
 }
@@ -153,7 +154,7 @@ func TestLoopbackOwnershipPreExistingPortIsForeign(t *testing.T) {
 		atStart:    []socketListener{listenerAt(555, "127.0.0.1:3000")},
 		containers: []dockerContainerInfo{workspaceContainer(workspace, containerPortMapping{PublicPort: 3000, LoopbackOnly: true})},
 	}
-	owned, evidence := f.resolver().IsSessionOwned(context.Background(), "chat-1", workspace, 3000)
+	owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 3000)
 	if owned || evidence.Method != ProvenancePreExisting {
 		t.Fatalf("port listening at start: owned=%v evidence=%+v", owned, evidence)
 	}
@@ -168,7 +169,7 @@ func TestLoopbackOwnershipUnknownBaselineNeverCountsAbsence(t *testing.T) {
 		sessions:   map[int]string{4242: "chat-1"},
 		containers: []dockerContainerInfo{workspaceContainer(workspace, containerPortMapping{PublicPort: 3000, LoopbackOnly: true})},
 	}
-	p := f.resolver()
+	p := f.resolver(t.Context())
 	owned, evidence := p.IsSessionOwned(context.Background(), "chat-1", workspace, 3000)
 	if owned || evidence.Method != ProvenanceUnverified {
 		t.Fatalf("container port under an unknown baseline: owned=%v evidence=%+v", owned, evidence)
@@ -184,7 +185,7 @@ func TestHeldByOtherSeparatesFreeOwnedAndForeignPorts(t *testing.T) {
 		now:      []socketListener{listenerAt(4242, "127.0.0.1:8000"), listenerAt(900, "127.0.0.1:6379")},
 		sessions: map[int]string{4242: "chat-1"},
 	}
-	p := f.resolver()
+	p := f.resolver(t.Context())
 	for port, want := range map[uint16]bool{8123: false, 8000: false, 6379: true} {
 		if got := p.HeldByOther(ctx, "chat-1", "/workspace", port); got != want {
 			t.Errorf("HeldByOther(%d) = %v, want %v", port, got, want)
@@ -269,7 +270,7 @@ func TestLoopbackOwnershipFollowsARealLaunch(t *testing.T) {
 		t.Fatalf("helper never reported its port: %v", lines.Err())
 	}
 
-	p := newLoopbackProvenance(hostListeners, lineageSessionOf, nil)
+	p := newLoopbackProvenance(t.Context(), hostListeners, lineageSessionOf, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if owned, evidence := p.IsSessionOwned(ctx, "chat-live", "", uint16(port)); !owned {
@@ -374,7 +375,7 @@ func TestStdoutContainerIDAttributesPublishedPort(t *testing.T) {
 			},
 		},
 	}
-	res := fixture.resolver()
+	res := fixture.resolver(t.Context())
 	owned, _ := res.IsSessionOwned(context.Background(), "session-1", "/workspace", 9000)
 	if owned {
 		t.Fatal("port should not be chat-owned before container is recorded")

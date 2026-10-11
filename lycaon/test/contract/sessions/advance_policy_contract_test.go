@@ -7,8 +7,8 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -64,6 +64,7 @@ func TestEffectiveAdvancePolicyShippedManifestContractParity(t *testing.T) {
 		"options@1.0.0":         {},
 		// bugbash host-advances so a human triage approval never sits waiting
 		// for the coordinator to call workflow_advance (see its manifest note).
+		"bugbash@1.1.0": {},
 		"bugbash@1.0.0": {},
 	}
 	coordKeys := map[string]struct{}{}
@@ -139,16 +140,16 @@ func TestPhaseExitProjectorPlanContract(t *testing.T) {
 		kind  string
 		auth  workflowdef.AdvanceWhenGateMet
 	}{
-		{"research", workflow.PhaseExitKindProof, workflowdef.AdvanceWhenGateMetCoordinator},
-		{"expand", workflow.PhaseExitKindProof, workflowdef.AdvanceWhenGateMetAuto},
-		{"approve", workflow.PhaseExitKindHumanApproval, workflowdef.AdvanceWhenGateMetAuto},
+		{"research", workflowpresentation.PhaseExitKindProof, workflowdef.AdvanceWhenGateMetCoordinator},
+		{"expand", workflowpresentation.PhaseExitKindProof, workflowdef.AdvanceWhenGateMetAuto},
+		{"approve", workflowpresentation.PhaseExitKindHumanApproval, workflowdef.AdvanceWhenGateMetAuto},
 	}
 	for _, tc := range cases {
 		def, ok := m.PhaseByID(tc.phase)
 		if !ok {
 			t.Fatalf("missing phase %q", tc.phase)
 		}
-		exit := workflow.ProjectPhaseExit(m, def, nil, nil)
+		exit := workflowpresentation.ProjectPhaseExit(m, def, nil, nil)
 		if exit.Kind != tc.kind {
 			t.Fatalf("%s kind = %q want %q", tc.phase, exit.Kind, tc.kind)
 		}

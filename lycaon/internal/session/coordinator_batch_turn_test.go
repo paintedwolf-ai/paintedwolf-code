@@ -21,15 +21,15 @@ func TestCoordinatorBatchTurn_oneSynthesisPerTurnLatch(t *testing.T) {
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load hints", err)
 	store := store.NewMemory()
-	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetRejectFormatter(guidance.NewStaticRejectFormatter(hints))
 
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: "coordinator"}, "coordinator")
 	testutil.FailErr(t, "create session", err)
 
-	mgr.BeginPromptTurnForTest(sess.ID, "")
-	mgr.AcceptCoordinatorGroundedSynthesisForTest(ctx, sess.ID)
+	mgr.Runner.Settlement.Begin(sess.ID, "")
+	mgr.Coordinator.Batch.AcceptSynthesis(ctx, sess.ID)
 
 	reject, block := guard.FormatHostNoToolTurnReject(
 		sess,
@@ -39,8 +39,8 @@ func TestCoordinatorBatchTurn_oneSynthesisPerTurnLatch(t *testing.T) {
 		"implement_synthesis",
 		true,
 		surface.ImplementSessionState{BatchPhase: batch.PhaseSynthesize},
-		mgr.RejectFormatterForTest(),
-		mgr.CoordinatorBatchTurnGuardForTest(sess.ID),
+		mgr.Coordinator.Guards.Rejects,
+		mgr.Coordinator.Batch.TurnGuard(sess.ID),
 	)
 	if !block || !strings.Contains(reject, guard.CoordinatorBatchAlreadyClosedCode) {
 		t.Fatalf("reject=%q block=%v want latch block before scaffold reads closed", reject, block)
@@ -49,14 +49,14 @@ func TestCoordinatorBatchTurn_oneSynthesisPerTurnLatch(t *testing.T) {
 
 func TestCoordinatorBatchTurn_groundingRetryDoesNotSetLatch(t *testing.T) {
 	store := store.NewMemory()
-	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{ProjectID: "coordinator"}, "coordinator")
 	testutil.FailErr(t, "create session", err)
 
-	mgr.BeginPromptTurnForTest(sess.ID, "")
-	if mgr.CoordinatorBatchTurnGuardForTest(sess.ID).SynthesisAcceptedThisTurn {
+	mgr.Runner.Settlement.Begin(sess.ID, "")
+	if mgr.Coordinator.Batch.TurnGuard(sess.ID).SynthesisAcceptedThisTurn {
 		t.Fatal("fresh turn should not have synthesis latch")
 	}
 }

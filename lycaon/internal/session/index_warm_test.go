@@ -79,21 +79,21 @@ func TestFirstPromptWithDeclaredURLFiresIndexWarmerAndAppendsMessage(t *testing.
 			Hosts: []string{"docs.example"}, Pages: 3,
 		},
 	}
-	mgr.SetIndexWarmer(warmer)
+	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	userText := "summarize https://docs.example/widget"
-	_, err = mgr.Prompt(ctx, sess.ID, userText)
+	_, err = mgr.Submissions.Prompt(ctx, sess.ID, userText)
 	testutil.FailErr(t, "prompt", err)
-	mgr.WaitForPromptCuration(t.Context())
+	mgr.Runner.Curation.Wait(t.Context())
 
 	declaredURLs := warmer.declaredURLsSeen()
 	if len(declaredURLs) != 1 || declaredURLs[0].urlSource != userText {
 		t.Fatalf("declared URL warms = %+v want urlSource=%q", declaredURLs, userText)
 	}
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "messages", err)
 	var row *api.Message
 	for i := range msgs {
@@ -120,18 +120,18 @@ func TestEachPromptOffersItsDeclaredURLsToWarming(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	mgr, store := newTestManager(t)
 	warmer := &fakeIndexWarmer{}
-	mgr.SetIndexWarmer(warmer)
+	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	first := "summarize https://docs.example/widget"
-	_, err = mgr.Prompt(ctx, sess.ID, first)
+	_, err = mgr.Submissions.Prompt(ctx, sess.ID, first)
 	testutil.FailErr(t, "first prompt", err)
-	mgr.WaitForPromptCuration(t.Context())
-	_, err = mgr.Prompt(ctx, sess.ID, "also compare https://other.example/widget")
+	mgr.Runner.Curation.Wait(t.Context())
+	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "also compare https://other.example/widget")
 	testutil.FailErr(t, "follow-up prompt", err)
-	mgr.WaitForPromptCuration(t.Context())
+	mgr.Runner.Curation.Wait(t.Context())
 
 	declaredURLs := warmer.declaredURLsSeen()
 	if len(declaredURLs) != 2 || declaredURLs[0].urlSource != first ||
@@ -144,18 +144,18 @@ func TestWarmDeclaredURLsWithoutCallbackResultAppendsNothing(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	mgr, store := newTestManager(t)
 	warmer := &fakeIndexWarmer{}
-	mgr.SetIndexWarmer(warmer)
+	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
-	_, err = mgr.Prompt(ctx, sess.ID, "read https://docs.example/widget")
+	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "read https://docs.example/widget")
 	testutil.FailErr(t, "prompt", err)
-	mgr.WaitForPromptCuration(t.Context())
+	mgr.Runner.Curation.Wait(t.Context())
 	if len(warmer.declaredURLsSeen()) != 1 {
 		t.Fatalf("declared URL warm calls = %v", warmer.declaredURLsSeen())
 	}
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "messages", err)
 	for _, msg := range msgs {
 		if msg.Kind == api.MessageKindIndexWarming {
@@ -167,17 +167,17 @@ func TestWarmDeclaredURLsWithoutCallbackResultAppendsNothing(t *testing.T) {
 func TestHostTurnsDoNotWarm(t *testing.T) {
 	mgr, store := newTestManager(t)
 	warmer := &fakeIndexWarmer{fire: true, meta: api.IndexWarmingMeta{Trigger: "declared_url", Pages: 1}}
-	mgr.SetIndexWarmer(warmer)
+	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
-	_, err = mgr.promptHostLoopWake(ctx, sess.ID)
+	_, err = mgr.Submissions.LoopWake(ctx, sess.ID)
 	testutil.FailErr(t, "prompt", err)
 	if len(warmer.declaredURLsSeen()) != 0 {
 		t.Fatalf("host turn warmed declared URLs: %v", warmer.declaredURLsSeen())
 	}
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "messages", err)
 	for _, msg := range msgs {
 		if msg.Kind == api.MessageKindHostLoopWake && msg.Origin == api.MessageOriginHost && msg.HostSignalID == anchor.LoopWake.String() {
@@ -191,18 +191,18 @@ func TestHostLoopWakeTextFromUserRemainsUserIntent(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	mgr, store := newTestManager(t)
 	warmer := &fakeIndexWarmer{}
-	mgr.SetIndexWarmer(warmer)
+	mgr.Chats.Research.SetWarmer(warmer)
 	ctx := context.Background()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
-	_, err = mgr.Prompt(ctx, sess.ID, surface.HostLoopWakeSentinel)
+	_, err = mgr.Submissions.Prompt(ctx, sess.ID, surface.HostLoopWakeSentinel)
 	testutil.FailErr(t, "prompt", err)
-	mgr.WaitForPromptCuration(t.Context())
+	mgr.Runner.Curation.Wait(t.Context())
 	if len(warmer.declaredURLsSeen()) != 1 {
 		t.Fatalf("first user prompt was not offered to declared-URL warmer: %v", warmer.declaredURLsSeen())
 	}
-	msgs, err := mgr.GetMessages(ctx, sess.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "messages", err)
 	for _, msg := range msgs {
 		if msg.Content == surface.HostLoopWakeSentinel && msg.Origin == api.MessageOriginUser && msg.Kind == "" {
@@ -210,23 +210,4 @@ func TestHostLoopWakeTextFromUserRemainsUserIntent(t *testing.T) {
 		}
 	}
 	t.Fatal("typed sentinel was not persisted as an ordinary user turn")
-}
-
-func TestIndexWarmingSummaryLine(t *testing.T) {
-	got := indexWarmingSummary(api.IndexWarmingMeta{
-		Topic: "steam machine", Hosts: []string{"a", "b"}, Pages: 1, DurationMs: 1200,
-	})
-	if got != "Warmed web index — 2 hosts, 1 page · steam machine" {
-		t.Fatalf("summary = %q", got)
-	}
-	skip := indexWarmingSummary(api.IndexWarmingMeta{Topic: "x", SkipReason: "hourly seed cap"})
-	if !strings.Contains(skip, "hourly seed cap") {
-		t.Fatalf("summary = %q", skip)
-	}
-	partial := indexWarmingSummary(api.IndexWarmingMeta{
-		Topic: "widget", Hosts: []string{"a.example"}, Pages: 2, SkipReason: "hourly seed cap",
-	})
-	if strings.Contains(partial, "hourly seed cap") {
-		t.Fatalf("summary = %q want no skip when crawl succeeded", partial)
-	}
 }

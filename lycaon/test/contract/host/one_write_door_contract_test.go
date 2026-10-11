@@ -55,8 +55,7 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/workspacebaseline/materialize.go": "rebuilds an unpublished branch under its provision lock; SnapshotComplete publishes the assembled tree",
 
 	// Desktop trash relocations and spec metadata outside workspace transactions.
-	"lycaon/internal/desktoptrash/trash_darwin_nocgo.go": "moves deleted files to user ~/.Trash directory when cgo is unavailable",
-	"lycaon/internal/desktoptrash/trash_linux.go":        "implements FreeDesktop Trash specification by writing .trashinfo and relocating to files directory",
+	"lycaon/internal/desktoptrash/trash_linux.go": "implements FreeDesktop Trash specification by writing .trashinfo and relocating to files directory",
 
 	// These paths have no prior content to preserve.
 	"lycaon/internal/browserengine/provision.go": "copies a downloaded browser tree into a fresh provisioning directory, then publishes a completion marker",
@@ -235,6 +234,7 @@ func skipDoorScanDir(name string) bool {
 func isDoorTestSupport(rel string) bool {
 	return strings.HasPrefix(rel, "lycaon/cmd/codegen-") ||
 		strings.HasPrefix(rel, "lycaon/internal/testutil/") ||
+		strings.HasPrefix(rel, "lycaon/internal/api/contractfixture/") ||
 		strings.HasPrefix(rel, "lycaon/internal/testbaseline/") ||
 		strings.HasPrefix(rel, "lycaon/test/") ||
 		strings.HasSuffix(rel, "_testsupport.go")

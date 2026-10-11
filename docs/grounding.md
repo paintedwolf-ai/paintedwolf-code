@@ -89,6 +89,20 @@ A citation must name enough structure for the host to resolve the observation:
 | URL | Resolves only when the URL was observed through an admitted tool path |
 | Artifact id | Resolves to a present, permitted visual or report artifact |
 
+Worker repair feedback describes the rejected handle's observation and names a
+replacement source handle only when exactly one current-job file-region record
+verifies the supplied path, line, and excerpt. This is a suggestion: the worker
+must resubmit the corrected report, and the host never substitutes provenance
+for an explicitly contradictory handle. Scanner-only findings cite the scanner
+handle without source coordinates; source findings cite the source observation.
+Web findings cite a web handle without source coordinates and put observed URLs
+in `cited_urls`.
+
+A resumed child keeps its conversation, but a new worker job has a new evidence
+boundary. Earlier reads and fetches must be reacquired before the new job can
+cite them. Filtering unsupported claims at retry exhaustion preserves useful
+partial output; it does not prove the original assignment complete.
+
 A bare path names a file, not a claim: useful for navigation, insufficient as line evidence. A bare handle is sufficient for non-line observations such as a directory listing, command result, or scan artifact, because the handle already identifies one record.
 
 Resolution produces one of five verdicts (`internal/evidence/resolve.go`):

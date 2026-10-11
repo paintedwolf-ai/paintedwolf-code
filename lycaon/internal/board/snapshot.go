@@ -32,16 +32,21 @@ const MaxBoardGitOthers = 4
 
 // WorkerTouchEnricher supplies live touched paths for in-flight worker jobs.
 type WorkerTouchEnricher interface {
-	WorkerTouchedPaths(jobID string) []string
+	Paths(jobID string) []string
 }
 
 // ActiveReservationLister returns handoff_reserve holds for a coordinator session.
 type ActiveReservationLister func(sessionID string) []api.BoardReservationEntry
 
-// WorkflowRunSource resolves the active workflow run for a coordinator session.
-type WorkflowRunSource interface {
-	GetActive(ctx context.Context, sessionID string) (*api.WorkflowRun, error)
-	AttachRunUI(ctx context.Context, run *api.WorkflowRun) error
+type WorkflowRuns interface {
+	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
+}
+type WorkflowPresentation interface {
+	AttachRunUI(context.Context, *api.WorkflowRun) error
+}
+type WorkflowRunSource struct {
+	Runs         WorkflowRuns
+	Presentation WorkflowPresentation
 }
 
 // ScanSource returns assessment authority visible for canonical paths.
@@ -60,7 +65,7 @@ type SnapshotBuilder struct {
 	Workers            worker.WorkerQueue
 	Touches            WorkerTouchEnricher
 	ActiveReservations ActiveReservationLister
-	Workflow           WorkflowRunSource
+	Workflow           *WorkflowRunSource
 	Repo               repoinfo.Provider
 	Git                git.GitManager                  // optional; fail-soft
 	StatusCache        *git.StatusCache                // optional; shared with the Git status read
@@ -109,7 +114,7 @@ func (b *SnapshotBuilder) Build(ctx context.Context, projectID, workspacePath, s
 		}
 		if b.Touches != nil {
 			for i := range tasks {
-				if paths := b.Touches.WorkerTouchedPaths(tasks[i].ID); len(paths) > 0 {
+				if paths := b.Touches.Paths(tasks[i].ID); len(paths) > 0 {
 					tasks[i].TouchedPaths = append([]string(nil), paths...)
 				}
 			}
@@ -125,9 +130,9 @@ func (b *SnapshotBuilder) Build(ctx context.Context, projectID, workspacePath, s
 
 	var activeRun *api.WorkflowRun
 	if b.Workflow != nil && sessionID != "" {
-		activeRun, _ = b.Workflow.GetActive(ctx, sessionID)
+		activeRun, _ = b.Workflow.Runs.ActiveBySession(ctx, sessionID)
 		if activeRun != nil {
-			_ = b.Workflow.AttachRunUI(ctx, activeRun)
+			_ = b.Workflow.Presentation.AttachRunUI(ctx, activeRun)
 		}
 	}
 

@@ -22,10 +22,10 @@ func TestProjectionUsesCompactIntentAndWeightedChildren(t *testing.T) {
 	catalog := sourcecatalog.New()
 	defer func() { testutil.FailErr(t, "drain catalog", catalog.Drain(context.Background())) }()
 	for _, dir := range []string{".", "a", "a/deep", "b"} {
-		_, err := catalog.ObserveDirectory(t.Context(), "project", root, dir, sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+		_, err := catalog.Directories.ObserveDirectory(t.Context(), "project", root, dir, sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 		testutil.FailErr(t, "observe directory", err)
 	}
-	navigation, err := catalog.OpenNavigation(t.Context(), "project", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "project", root)
 	testutil.FailErr(t, "pin navigation", err)
 	defer func() { _ = navigation.Close() }()
 	rules := &Rules{}

@@ -172,6 +172,12 @@ paths:
             application/json:
               schema:
                 $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '409':
           description: A file or folder already exists at that path
           content:
@@ -241,6 +247,12 @@ paths:
             application/json:
               schema:
                 $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '409':
           description: File changed on disk since it was loaded
           content:
@@ -271,11 +283,14 @@ paths:
       x-person-action: record
       summary: Move a project file or folder to Trash
       description: |
-        Moves one file or folder into the macOS Trash under the same path jail
+        Moves one file or folder into the host operating system Trash under the same path jail
         as the source read. The entry is never permanently deleted — if the
         Trash move fails the path is left untouched and the call returns 500
         source_trash_failed. Non-empty folders require recursive=true; without
-        it the call returns 409 source_not_empty. Engine and VCS metadata
+        it the call returns 409 source_not_empty. New operations can be undone while
+        the recorded native Trash item remains available; emptying Trash makes
+        restoration unavailable. Existing retained history keeps its recovery data.
+        Engine and VCS metadata
         paths (.git, the project overlay directory) and the root itself are refused.
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/ProjectId
@@ -331,6 +346,12 @@ paths:
                 $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '404':
           description: Project or path not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:
@@ -584,6 +605,12 @@ paths:
             application/json:
               schema:
                 $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '409':
           description: File bytes changed since the editor loaded them
           content:
@@ -717,6 +744,12 @@ paths:
             application/json:
               schema:
                 $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '409':
           description: Destination path already exists
           content:
@@ -784,6 +817,12 @@ paths:
                 $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '404':
           description: Project, root, or source path not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:

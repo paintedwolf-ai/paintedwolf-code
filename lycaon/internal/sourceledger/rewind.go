@@ -49,7 +49,7 @@ type rewindEffect struct {
 }
 
 // PlanRewind selects source effects by permanent opener identity.
-func (s *Store) PlanRewind(ctx context.Context, projectID, sessionID string, openingMessageIDs []string) (RewindPlan, error) {
+func (s *Comparisons) PlanRewind(ctx context.Context, projectID, sessionID string, openingMessageIDs []string) (RewindPlan, error) {
 	effects, err := s.readRewindEffects(ctx, projectID, sessionID, openingMessageIDs)
 	if err != nil {
 		return RewindPlan{}, err
@@ -60,7 +60,7 @@ func (s *Store) PlanRewind(ctx context.Context, projectID, sessionID string, ope
 	return s.planRewindEffects(ctx, projectID, effects)
 }
 
-func (s *Store) readRewindEffects(ctx context.Context, projectID, sessionID string, openingMessageIDs []string) ([]rewindEffect, error) {
+func (s *Comparisons) readRewindEffects(ctx context.Context, projectID, sessionID string, openingMessageIDs []string) ([]rewindEffect, error) {
 	encoded, err := json.Marshal(openingMessageIDs)
 	if err != nil {
 		return nil, err
@@ -98,7 +98,7 @@ func (s *Store) readRewindEffects(ctx context.Context, projectID, sessionID stri
 	return effects, nil
 }
 
-func (s *Store) planRewindEffects(ctx context.Context, projectID string, effects []rewindEffect) (RewindPlan, error) {
+func (s *Comparisons) planRewindEffects(ctx context.Context, projectID string, effects []rewindEffect) (RewindPlan, error) {
 	out := RewindPlan{Files: []RewindFile{}, Issues: []RewindIssue{}}
 	indexes := map[string]int{}
 	retainedBytes := 0
@@ -121,14 +121,14 @@ func (s *Store) planRewindEffects(ctx context.Context, projectID string, effects
 			issue("unsaved_agent_change")
 			continue
 		}
-		after, err := s.ReadRestorableVersion(ctx, projectID, e.after)
+		after, err := s.history.ReadRestorableVersion(ctx, projectID, e.after)
 		if err != nil {
 			issue("version_unavailable")
 			continue
 		}
 		before := RestorableVersion{FileID: e.fileID, ProjectID: projectID, RootID: after.RootID, Path: after.Path, State: "absent"}
 		if e.before != "" {
-			before, err = s.ReadRestorableVersion(ctx, projectID, e.before)
+			before, err = s.history.ReadRestorableVersion(ctx, projectID, e.before)
 			if err != nil {
 				issue("version_unavailable")
 				continue
@@ -168,11 +168,15 @@ func sameRestorableState(a, b RestorableVersion) bool {
 	return a.State == b.State && a.SHA256 == b.SHA256 && a.RootID == b.RootID && a.Path == b.Path
 }
 
-func (s *Store) checkRewindHead(ctx context.Context, projectID string, out *RewindPlan, file *RewindFile) error {
+func (s *Comparisons) checkRewindHead(ctx context.Context, projectID string, out *RewindPlan, file *RewindFile) error {
 
-	head, err := s.ResolveHeadByFile(ctx, projectID, file.BranchID, file.FileID)
+	head, err := s.history.ResolveHeadByFile(ctx, projectID, file.BranchID, file.FileID)
 	if err != nil {
 		return err
+	}
+	if head.Path != file.Expected.Path || head.RootID != file.Expected.RootID || head.State != file.Expected.State {
+		out.Issues = append(out.Issues, RewindIssue{RootID: file.Expected.RootID, Path: file.Expected.Path, Code: "later_change"})
+		return nil
 	}
 	equivalent := false
 	if head.VersionID != file.Expected.ID {
@@ -189,7 +193,7 @@ func (s *Store) checkRewindHead(ctx context.Context, projectID string, out *Rewi
 			return err
 		}
 		if restored != nil {
-			current, err := s.ReadRestorableVersion(ctx, projectID, head.VersionID)
+			current, err := s.history.ReadRestorableVersion(ctx, projectID, head.VersionID)
 			if err != nil {
 				return err
 			}

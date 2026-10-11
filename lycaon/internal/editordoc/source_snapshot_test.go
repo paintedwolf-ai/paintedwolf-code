@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -18,10 +19,11 @@ func TestSourceSnapshotUsesCurrentDiskOrPinnedUnsavedRevision(t *testing.T) {
 	root, projectID, rootID := t.TempDir(), testdbseed.DefaultProjectID, uuid.NewString()
 	testdbseed.InsertProjectRootWithID(t, db, projectID, rootID, root)
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	service := New(NewStore(db), sourceledger.New(db, ""), fixedRoots{p: p})
+	sourceHistory8 := sourceledger.New(db, "")
+	service := New(NewStore(db), sourceHistory8, sourceHistory8.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	path := filepath.Join(root, "source.txt")
-	req := project.SourceReadRequest{RootID: rootID, Path: "source.txt"}
+	req := projectsource.SourceReadRequest{RootID: rootID, Path: "source.txt"}
 	testutil.FailErr(t, "write initial source", os.WriteFile(path, []byte("saved\n"), 0600))
 	snapshot, err := service.ResolveSourceSnapshot(t.Context(), p, req, ObserveCurrent)
 	testutil.FailErr(t, "observe without admission", err)
