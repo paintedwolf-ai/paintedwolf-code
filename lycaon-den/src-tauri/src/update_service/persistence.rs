@@ -39,7 +39,7 @@ pub(super) fn read_install_source(
 
 pub(super) fn detect_install_source() -> (InstallSource, Option<UpdateChannel>, Option<UpdateError>)
 {
-    let Some(dir) = crate::den_state_dir() else {
+    let Some(dir) = crate::config_dir::host_config_dir().ok() else {
         return (
             InstallSource::Unknown,
             None,
@@ -158,7 +158,7 @@ struct LegacyPreferences {
 }
 /// Device-wide update records shared by every installation.
 pub fn preferences_dir() -> Result<PathBuf, UpdateError> {
-    crate::den_state_dir()
+    crate::config_dir::host_config_dir().ok()
         .map(|p| p.join("updates"))
         .ok_or_else(|| Failure::StateUnavailable.into())
 }

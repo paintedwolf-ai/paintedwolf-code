@@ -7,7 +7,7 @@ use std::time::Duration;
 use tauri::window::Color;
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, Theme, WebviewWindow, WindowEvent};
 
-use crate::window_backdrop;
+use crate::windows::window_backdrop;
 
 const MAIN_WINDOW_LABEL: &str = "main";
 

@@ -38,7 +38,7 @@ fn format() -> &'static Format {
     static FORMAT: OnceLock<Format> = OnceLock::new();
     FORMAT.get_or_init(|| {
         serde_json::from_str(include_str!(
-            "../../../lycaon/internal/editoroutbox/format.json"
+            "../../../../lycaon/internal/editoroutbox/format.json"
         ))
         .expect("embedded editor outbox format")
     })
@@ -125,7 +125,7 @@ fn record_name(record: &Value) -> Result<String, String> {
 }
 
 pub fn reconcile_windows(app: &tauri::AppHandle, destroyed: Option<&str>) {
-    let Some(root) = crate::den_state_dir() else {
+    let Some(root) = crate::config_dir::host_config_dir().ok() else {
         return;
     };
     let app = app.clone();
@@ -150,7 +150,7 @@ pub fn reconcile_windows(app: &tauri::AppHandle, destroyed: Option<&str>) {
 
 #[tauri::command]
 pub async fn list_document_outbox(project_id: Option<String>) -> Result<Vec<Value>, String> {
-    let root = crate::den_state_dir().ok_or("Editor storage is unavailable.")?;
+    let root = crate::config_dir::host_config_dir().ok().ok_or("Editor storage is unavailable.")?;
     let read_root = root.clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let _store = store_lock(&read_root)?;
@@ -164,7 +164,7 @@ pub async fn list_document_outbox(project_id: Option<String>) -> Result<Vec<Valu
 
 #[tauri::command]
 pub async fn inspect_document_outbox(document_id: String) -> Result<Option<Value>, String> {
-    let root = crate::den_state_dir().ok_or("Editor storage is unavailable.")?;
+    let root = crate::config_dir::host_config_dir().ok().ok_or("Editor storage is unavailable.")?;
     tauri::async_runtime::spawn_blocking(move || {
         let _store = store_lock(&root)?;
         inspect_at(&root, &document_id)
@@ -178,7 +178,7 @@ pub async fn read_document_outbox(
     document_id: String,
     max_bytes: Option<u64>,
 ) -> Result<Vec<Value>, String> {
-    let root = crate::den_state_dir().ok_or("Editor storage is unavailable.")?;
+    let root = crate::config_dir::host_config_dir().ok().ok_or("Editor storage is unavailable.")?;
     tauri::async_runtime::spawn_blocking(move || {
         let _store = store_lock(&root)?;
         read_bounded(
@@ -197,7 +197,7 @@ pub async fn commit_document_outbox(
     remove: Vec<Value>,
     retention: Option<Retention>,
 ) -> Result<(), String> {
-    let root = crate::den_state_dir().ok_or("Editor storage is unavailable.")?;
+    let root = crate::config_dir::host_config_dir().ok().ok_or("Editor storage is unavailable.")?;
     let Some(first) = records
         .first()
         .or_else(|| remove.first())

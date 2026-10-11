@@ -596,3 +596,14 @@ An engine that exits while the app runs is the shell's to answer, not the window
 - Approval options and authority are host-authored.
 - Live transcript projection remains separate from durable settlement.
 - Local persisted state accelerates boot but never outranks the host.
+
+### Native facilities
+
+`src-tauri/src/lib.rs` registers commands and application lifecycle hooks. Native
+implementation follows the facility that performs the operation: `app_state/`
+contains device slices and shared editing persistence; `files/` contains selected
+file grants and local path operations; `windows/` contains native window identity
+and appearance; `notifications/` contains platform notification delivery. Backup
+transfer recovery lives with `backup_transfer/`. Commands keep their explicit
+module paths in the registration list, and permission/parity tests resolve those
+paths directly. The command names, capabilities, and stored formats are unchanged.
