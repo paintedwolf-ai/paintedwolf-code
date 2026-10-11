@@ -7,6 +7,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// ErrCloseoutStopped ends repair without authorizing a completion.
+var ErrCloseoutStopped = errors.New("closeout cannot complete")
+
 // Refusal carries a rendered body and structured facts.
 type Refusal struct {
 	// Body is the rendered reject block the agent reads.

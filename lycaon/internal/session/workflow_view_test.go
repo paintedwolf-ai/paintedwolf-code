@@ -47,9 +47,9 @@ func (r *recordingWorkflowView) ActiveReviewVerdictPending(ctx context.Context, 
 	return false
 }
 
-func (r *recordingWorkflowView) ActiveCloseoutGateState(ctx context.Context, sessionID string) workflowfacts.WorkflowCloseoutGateState {
+func (r *recordingWorkflowView) ActiveCloseoutGateState(ctx context.Context, sessionID string) (workflowfacts.WorkflowCloseoutGateState, error) {
 	r.record("ActiveCloseoutGateState")
-	return workflowfacts.WorkflowCloseoutGateState{}
+	return workflowfacts.WorkflowCloseoutGateState{}, nil
 }
 
 func (r *recordingWorkflowView) ResolvedRequest(ctx context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest {
@@ -269,6 +269,8 @@ func TestKickGateObligationsFollowTheRunArchive(t *testing.T) {
 		t.Fatalf("sealed run obligations = %q, live = %q", sealed, live)
 	}
 }
+
+func (s *recordingWorkflowView) AssertSessionCompletion(context.Context, string) error { return nil }
 
 func (r *recordingWorkflowView) PolicySnapshot(context.Context, string) (toolpolicy.WorkflowSnapshot, error) {
 	r.record("PolicySnapshot")

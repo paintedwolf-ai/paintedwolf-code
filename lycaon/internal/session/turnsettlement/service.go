@@ -33,6 +33,7 @@ type WorkflowReports interface {
 	MaybeDeliverTopologyReport(ctx context.Context, sessionID, messageID string) error
 }
 type WorkflowPolicy interface {
+	AssertSessionCompletion(context.Context, string) error
 	CurrentPhase(ctx context.Context, sessionID string) string
 }
 

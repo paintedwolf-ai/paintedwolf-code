@@ -116,9 +116,8 @@ func TestStructuredModeExitRestoresImplementTripartiteAndTools(t *testing.T) {
 func TestStructuredModePlanTripartiteOnActiveRun(t *testing.T) {
 	fix := setupPlanTripartiteFixture(t)
 	ctx := context.Background()
-	if _, err := fix.mgr.Submissions.Prompt(ctx, fix.sess.ID, "what phase are we in"); err != nil {
-		testutil.FailErr(t, "fix.mgr.Submissions.Prompt failed", err)
-	}
+	_, err := fix.mgr.Submissions.Prompt(ctx, fix.sess.ID, "what phase are we in")
+	requireWorkflowCloseoutRejection(t, err)
 	foundPlan := false
 	for _, msg := range fix.rec.LastRequest().Messages {
 		if msg.Role == wire.MessageRoleSystem && strings.Contains(msg.Content, "Structured plan mode — research phase") {

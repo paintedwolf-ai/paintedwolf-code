@@ -53,7 +53,8 @@ type WorkflowPolicy interface {
 	ActivePhaseHasReviewLoop(ctx context.Context, sessionID string) bool
 	ActivePhaseGuardState(ctx context.Context, sessionID string) workflowfacts.WorkflowPhaseGuardState
 	ActiveReviewVerdictPending(ctx context.Context, sessionID string) bool
-	ActiveCloseoutGateState(ctx context.Context, sessionID string) workflowfacts.WorkflowCloseoutGateState
+	ActiveCloseoutGateState(ctx context.Context, sessionID string) (workflowfacts.WorkflowCloseoutGateState, error)
+	AssertSessionCompletion(context.Context, string) error
 	AllowedAgents(ctx context.Context, sessionID string) []string
 	ActiveManifest(ctx context.Context, sessionID string) (workflowfacts.ActiveWorkflowManifest, bool)
 	ResolvedRequest(ctx context.Context, sessionID string) workflowfacts.ResolvedWorkflowRequest

@@ -114,7 +114,7 @@ func firstCoordinatorPromptRequest(t *testing.T, fix coordinatorPromptFixture, p
 	t.Helper()
 	before := len(fix.rec.AllRequests())
 	_, err := fix.mgr.Submissions.Prompt(t.Context(), fix.sess.ID, prompt)
-	testutil.FailErr(t, "run coordinator prompt", err)
+	requireWorkflowCloseoutRejection(t, err)
 	requests := fix.rec.AllRequests()
 	if len(requests) <= before {
 		t.Fatal("coordinator prompt made no model request")

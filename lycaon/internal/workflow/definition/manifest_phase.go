@@ -231,8 +231,7 @@ type PhaseContentReview struct {
 // the turn, which is ambient-chat behavior and the default for every phase.
 type CloseoutPolicy string
 
-// CloseoutGated holds a no-tool prose finish (bounded per cycle) while the
-// completion condition is unmet and no coordinator→human wait is pending.
+// CloseoutGated requires completion gates or an explicit human wait before prose can finish.
 const CloseoutGated CloseoutPolicy = "gated"
 
 // Gated reports whether the policy is CloseoutGated.

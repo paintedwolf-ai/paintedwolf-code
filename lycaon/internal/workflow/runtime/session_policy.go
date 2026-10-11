@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/spawn"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -211,41 +210,6 @@ func (m *SessionPolicy) ActiveReviewVerdictPending(ctx context.Context, sessionI
 		return false
 	}
 	return !workflowgates.SatisfiedInVars(vars, "evidence_passed:"+key)
-}
-
-// ActiveCloseoutGateState reports open completion gates, excluding pending human input.
-func (m *SessionPolicy) ActiveCloseoutGateState(ctx context.Context, sessionID string) workflowfacts.WorkflowCloseoutGateState {
-	var state workflowfacts.WorkflowCloseoutGateState
-	if m == nil || strings.TrimSpace(sessionID) == "" {
-		return state
-	}
-	active, err := m.Runs.ActiveBySession(ctx, sessionID)
-	if err != nil || active == nil || active.Status != api.WorkflowRunStatusRunning {
-		return state
-	}
-	manifest, err := m.Resolver.ForRun(ctx, active)
-	if err != nil {
-		return state
-	}
-	def, ok := manifest.PhaseByID(active.CurrentPhase)
-	if !ok || !def.Closeout.Gated() {
-		return state
-	}
-	vars, err := m.Runs.GetScaffoldVars(ctx, active.ID)
-	if err != nil || scaffoldvars.HasPendingUserInput(vars) {
-		return state
-	}
-	met, result, err := m.gateEvaluator().PhaseGateMet(ctx, manifest, active, vars)
-	if err != nil || met {
-		return state
-	}
-	state.Gated = true
-	state.Phase = strings.TrimSpace(active.CurrentPhase)
-	state.OpenLeaves = append([]string(nil), result.FailedLeaves...)
-	if len(state.OpenLeaves) == 0 {
-		state.OpenLeaves = []string{strings.TrimSpace(def.CompleteWhen)}
-	}
-	return state
 }
 
 // ActiveManifest returns coordinator_profile and rules from the active workflow manifest.

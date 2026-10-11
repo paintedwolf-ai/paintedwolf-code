@@ -84,6 +84,7 @@ type ToolsDeps struct {
 }
 
 type CloseoutDeps struct {
+	AssertCompletion                    func(context.Context, *api.Session) error
 	RejectFmt                           *guidance.StaticRejectFormatter
 	HintConfig                          *guidance.HintConfig
 	EvaluateContentAnchor               func(ctx context.Context, sess *api.Session, anchor string, segments []oar.ContentSegment, tool string, args map[string]any) (reject *guidance.Refusal, blocked bool, content string, transformed bool)

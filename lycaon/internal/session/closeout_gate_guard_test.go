@@ -2,6 +2,8 @@ package session
 
 import (
 	"context"
+	"errors"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"strings"
 	"testing"
 
@@ -13,10 +15,11 @@ import (
 type gatedCloseoutView struct {
 	stubWorkflowManifest
 	state workflowfacts.WorkflowCloseoutGateState
+	err   error
 }
 
-func (v gatedCloseoutView) ActiveCloseoutGateState(context.Context, string) workflowfacts.WorkflowCloseoutGateState {
-	return v.state
+func (v gatedCloseoutView) ActiveCloseoutGateState(context.Context, string) (workflowfacts.WorkflowCloseoutGateState, error) {
+	return v.state, v.err
 }
 
 func gatedExecuteState() workflowfacts.WorkflowCloseoutGateState {
@@ -27,12 +30,12 @@ func gatedExecuteState() workflowfacts.WorkflowCloseoutGateState {
 	}
 }
 
-func TestGatedCloseoutSkipsWhenInvokeGated(t *testing.T) {
+func TestGatedCloseoutStopsWhenInvokeGated(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 
-	if _, block := mgr.Coordinator.Guards.OpenGates(context.Background(), sess, true, false); block {
-		t.Fatal("expected no open-gates hold when invokeAllowed=false")
+	if reject, block := mgr.Coordinator.Guards.OpenGates(context.Background(), sess, true, false); !block || !errors.Is(reject, guidance.ErrCloseoutStopped) {
+		t.Fatal("forced finish must stop with open gates")
 	}
 }
 
@@ -84,12 +87,32 @@ func TestGatedCloseoutBoundedPerPrompt(t *testing.T) {
 			t.Fatalf("delay %d should still block", i)
 		}
 	}
-	if _, block := mgr.Coordinator.Guards.OpenGates(ctx, sess, true, true); block {
-		t.Fatal("the bound must let the closeout through after the per-prompt budget")
+	if reject, block := mgr.Coordinator.Guards.OpenGates(ctx, sess, true, true); !block || !errors.Is(reject, guidance.ErrCloseoutStopped) {
+		t.Fatal("repair exhaustion must stop without authorizing completion")
 	}
 
 	mgr.Runner.Closeouts.BeginPrompt(ctx, sess, promptinput.Input{Text: "continue"})
 	if _, block := mgr.Coordinator.Guards.OpenGates(ctx, sess, true, true); !block {
 		t.Fatal("a fresh prompt should hold the closeout again")
+	}
+}
+
+func (v gatedCloseoutView) AssertSessionCompletion(context.Context, string) error {
+	if v.err != nil {
+		return v.err
+	}
+	if v.state.Gated {
+		return &workflowfacts.IncompleteCloseoutError{State: v.state}
+	}
+	return nil
+}
+
+func TestGatedCloseoutRejectsUnreadableState(t *testing.T) {
+	mgr, sess := newSynthesisDelayManager(t)
+	failure := errors.New("workflow ledger unavailable")
+	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{err: failure}))
+	reject, block := mgr.Coordinator.Guards.OpenGates(t.Context(), sess, true, true)
+	if !block || !errors.Is(reject, guidance.ErrCloseoutStopped) || !errors.Is(reject, failure) {
+		t.Fatalf("closeout=%v block=%t", reject, block)
 	}
 }

@@ -51,6 +51,7 @@ func (m *Closeout) Build() promptloop.CloseoutDeps {
 	deps.TurnCloseoutNudge = m.Nudges.Closeout
 	deps.IterationRunwayNudge = m.Nudges.IterationRunway
 	deps.BeforeFinishNoToolTurn = m.Guards.BeforeFinish
+	deps.AssertCompletion = m.Guards.AssertCompletion
 	deps.OnGroundedSynthesisAccepted = func(ctx context.Context, _ *api.Session, sessionID string) {
 		m.Batch.AcceptSynthesis(ctx, sessionID)
 	}
