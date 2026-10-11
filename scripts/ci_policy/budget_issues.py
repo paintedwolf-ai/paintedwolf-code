@@ -116,7 +116,8 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
             if retained(row):
                 suppressed += 1
                 continue
-            if not backfill and identity not in intake_keys:
+            renewed = row.get('review', {}).get('state') in {'boundary_changed', 'shape_changed', 'ceiling_exceeded'}
+            if not backfill and identity not in intake_keys and not renewed:
                 continue
             operations.append({'action': 'create', 'key': identity, 'body': {
                 'title': title(row),

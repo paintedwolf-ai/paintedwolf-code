@@ -14,6 +14,9 @@ func uniqueReviewKeys(raw []byte) error {
 	for {
 		token, err := decoder.Token()
 		if err == io.EOF {
+			if len(objects) != 0 {
+				return io.ErrUnexpectedEOF
+			}
 			return nil
 		}
 		if err != nil {

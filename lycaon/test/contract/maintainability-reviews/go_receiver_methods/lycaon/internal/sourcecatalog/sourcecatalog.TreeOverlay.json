@@ -4,11 +4,12 @@
   "kind": "algorithm",
   "workstream": "source-observations",
   "disposition": "retain",
-  "reason": "The overlay API coordinates one temporary tree projection, its reads, copying, and release. Preserve the cohesive resource lifetime instead of splitting sixteen methods among forwarding types.",
+  "reason": "The sparse review overlay provides one immutable publication consumed by bounded readers. Classification, weights, forks and release are the lifecycle of that publication, not unrelated services.",
   "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
   "ceiling": 16,
   "boundaries": {
-    "lycaon/internal/sourcecatalog/tree_overlay.go": "12b76b93e4b39e31209100ee37a25a14cf0823e502c13b2546171436739ead18"
+    "lycaon/internal/sourcetree/review_test.go": "355443078d37f3837a9fa75b2bfe01252f713d1c796654a43ed6853864f8afd4",
+    "lycaon/internal/sourcetree/review_cache_test.go": "d6f26bdf8b4ec0eecca48cd4ab640b0e317236441c5b99c09fab0d5ae5390360"
   },
-  "reviewed_shape": "9d2f02feab478a566b3a1615b1d2f17617283039e57bd7cdd20047055deaa25e"
+  "reviewed_shape": "0000000000000000000000000000000000000000000000000000000000000000"
 }

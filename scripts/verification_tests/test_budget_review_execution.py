@@ -57,6 +57,13 @@ class ArchitecturalReviewTests(unittest.TestCase):
     def test_retained_baseline_does_not_create_issue_noise(self):
         self.assertEqual(issues.plan([], artifacts(reviewed()), observation(), backfill=True), ([], 1))
 
+    def test_invalidated_retention_creates_review_without_source_intake(self):
+        self.assertEqual(issues.plan([], artifacts(reviewed()), observation(), intake_keys=set()), ([], 1))
+        for state in ['boundary_changed', 'shape_changed', 'ceiling_exceeded']:
+            entry = reviewed(state)
+            operations, _ = issues.plan([], artifacts(entry), observation('f' * 40), intake_keys=set())
+            self.assertEqual([op['action'] for op in operations], ['create'])
+
     def test_dismissal_is_bounded_by_intake_measurement_and_policy(self):
         closed = issue(state='closed', state_reason='not_planned')
         self.assertEqual(issues.plan([closed], artifacts(row()), observation(), intake_keys=set()), ([], 1))
@@ -85,8 +92,9 @@ class ArchitecturalReviewTests(unittest.TestCase):
         old = issue(state='closed', state_reason='completed', body=issues.block(reviewed(), observation(), True))
         entry = row('pkg/renamed.go')
         operations, _ = issues.plan([old], artifacts(entry), observation('f' * 40))
-        self.assertEqual([op['action'] for op in operations], ['create'])
+        self.assertEqual([op['action'] for op in operations], ['create', 'update'])
         self.assertNotIn('Retained by bounded', operations[0]['body']['body'])
+        self.assertFalse(issues.tracked(issue(body=operations[1]['body']['body']))['active'])
 
     def test_review_reason_cannot_escape_machine_block(self):
         entry = reviewed()

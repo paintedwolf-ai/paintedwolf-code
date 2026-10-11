@@ -34,6 +34,22 @@ class HistoryTests(unittest.TestCase):
                 identities = history.intake(run(), latest, prior)
             self.assertEqual({latest[identity]['category'] for identity in identities}, expected)
 
+    def test_removed_or_retargeted_review_enters_intake_without_source_change(self):
+        from subprocess import CompletedProcess
+        from ci_policy.budget_snapshot import key
+        first, second = key('source_files', 'pkg/one.go'), key('source_files', 'pkg/two.go')
+        records = [dict(category='source_files', artifact='pkg/one.go'),
+                   dict(category='source_files', artifact='pkg/two.go')]
+        path = 'lycaon/test/contract/maintainability-reviews/design.json'
+        with patch.object(history.change_report, 'git', side_effect=[
+                CompletedProcess([], 0, json.dumps(record)) for record in records]):
+            self.assertEqual(history.changed_reviews('root', 'a' * 40, 'b' * 40,
+                             [path], {first: {}, second: {}}), {first, second})
+        with patch.object(history.change_report, 'git', side_effect=[
+                CompletedProcess([], 0, json.dumps(records[0])), CompletedProcess([], 128, '')]):
+            self.assertEqual(history.changed_reviews('root', 'a' * 40, 'b' * 40,
+                             [path], {first: {}}), {first})
+
     def test_initial_intake_uses_installation_baseline_without_backfilling_untouched_debt(self):
         _, latest = validate(report([{**row(), 'touched': False}]), 'a' * 40, 'b' * 40)
         with patch.object(history, 'initial_base', return_value='c' * 40), \

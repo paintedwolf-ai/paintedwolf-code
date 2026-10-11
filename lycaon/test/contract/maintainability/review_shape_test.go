@@ -29,6 +29,8 @@ func TestTypeShapeIgnoresImplementationButDetectsContractChanges(t *testing.T) {
 		}
 	}
 	for _, body := range []string{
+		"package p; type Service struct { Value string }; func (s Service) Read() string { return s.Value }",
+		"package p; type Service[T any] struct { Value string }; func (s *Service[T]) Read() string { return s.Value }",
 		"package p; type Service struct { Other string }; func (s *Service) Read() string { return s.Other }",
 		"package p; type Service struct { Value int }; func (s *Service) Read() string { return \"\" }",
 		"package p; type Service struct { Value string }; func (s *Service) Read() (string, error) { return s.Value, nil }",
@@ -53,5 +55,22 @@ func TestTypeShapeRejectsMissingAndInvalidSource(t *testing.T) {
 	}
 	if _, err := typeShape(&workingTree{}, inv, "bad"); err == nil {
 		t.Fatal("invalid identity accepted")
+	}
+}
+
+func TestTypeShapeTracksImportIdentityRatherThanAlias(t *testing.T) {
+	base := measuredShape(t, `package p; import dep "example/first"; type Service struct { Value dep.Record }`)
+	if got := measuredShape(t, `package p; import other "example/first"; type Service struct { Value other.Record }`); got != base {
+		t.Fatal("import alias changed dependency shape")
+	}
+	if got := measuredShape(t, `package p; import dep "example/second"; type Service struct { Value dep.Record }`); got == base {
+		t.Fatal("changed import identity retained dependency shape")
+	}
+}
+
+func TestTypeShapeTracksUnaliasedImportWithDifferentPackageName(t *testing.T) {
+	base := measuredShape(t, `package p; import "example/first/v2"; type Service struct { Value custom.Record }`)
+	if got := measuredShape(t, `package p; import "example/second/v2"; type Service struct { Value custom.Record }`); got == base {
+		t.Fatal("unaliased dependency identity disappeared from shape")
 	}
 }

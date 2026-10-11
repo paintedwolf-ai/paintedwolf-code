@@ -232,6 +232,13 @@ checkpoint; later runs or another explicit backfill dispatch continue it. The wo
 
 #### Architectural review decisions
 
+See the [maintainability architecture review](operations/maintainability-review.md)
+for the current concern inventory and design rationale.
+
+Review records describe a design decision. The commit field records its stated
+provenance; fingerprints detect changes to selected source contracts. They do not
+prove tests passed. Verification receipts and CI retain that separate role.
+
 A warning measures concentration; it does not prescribe a package boundary.
 Review cohesive behavior, runtime dependencies, operation contracts, and state
 lifetimes before choosing a refactor. Construction bundles, domain records,
@@ -253,7 +260,9 @@ files to their SHA-256 digests. Select the contract tests and declarations that 
 boundaries whose changes invalidate the decision; avoid whole implementation
 files when the type shape and focused contracts express that boundary. Retained Go artifacts also record `reviewed_shape`, the signature printed in
 the tracking report. The checker derives that signature from the type declaration
-and method signatures, excluding bodies, comments, and declaration order. A
+and method signatures, including receiver kinds, type parameters, and dependency
+identity. Bodies, comments, and declaration order are excluded. Unaliased imports
+are conservatively included because import paths need not match package names. A
 changed signature renews review even when the size stays constant. Review state
 is measured, never authored.
 

@@ -3,7 +3,11 @@
   "artifact": "lycaon/internal/tools/capability_request_test.go",
   "kind": "test_suite",
   "workstream": "tool-domains",
-  "disposition": "refactor",
-  "reason": "Review the implementation seams and dependency contracts in this workstream; preserve behavior and operation settlement.",
-  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb"
+  "disposition": "retain",
+  "reason": "Capability-request tests cover parsing, catalog consistency, path authority and live socket resolution together. Their shared request boundary makes declared capability behavior reviewable without relocating white-box fixtures.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 454,
+  "boundaries": {
+    "lycaon/internal/tools/capability_request_test.go": "473bb50c237742f68729edaa32ade912c27c14795d64b221f692bd3d53a3fe5a"
+  }
 }

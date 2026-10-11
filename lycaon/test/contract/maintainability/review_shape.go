@@ -10,7 +10,9 @@ import (
 	"go/printer"
 	"go/scanner"
 	"go/token"
+	"path"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -31,13 +33,15 @@ func typeShape(tree *workingTree, inv *inventory, id string) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("parse shape source: %w", err)
 		}
+		imports := canonicalShapeImports(parsed)
+		before := len(declarations)
 		for _, declaration := range parsed.Decls {
 			switch decl := declaration.(type) {
 			case *ast.GenDecl:
 				for _, spec := range decl.Specs {
 					named, ok := spec.(*ast.TypeSpec)
 					if ok && named.Name.Name == name {
-						value, err := shapeText(fset, named.Type)
+						value, err := shapeText(fset, named)
 						if err != nil {
 							return "", err
 						}
@@ -50,9 +54,16 @@ func typeShape(tree *workingTree, inv *inventory, id string) (string, error) {
 					if err != nil {
 						return "", err
 					}
-					declarations = append(declarations, decl.Name.Name+":"+value)
+					receiver, err := shapeText(fset, decl.Recv.List[0].Type)
+					if err != nil {
+						return "", err
+					}
+					declarations = append(declarations, receiver+":"+decl.Name.Name+":"+value)
 				}
 			}
+		}
+		if len(declarations) > before && imports != "" {
+			declarations = append(declarations, "imports:"+imports)
 		}
 	}
 	if len(declarations) == 0 {
@@ -83,4 +94,36 @@ func shapeText(fset *token.FileSet, node ast.Node) (string, error) {
 	}
 	raw, err := json.Marshal(tokens)
 	return string(raw), err
+}
+
+// Import aliases do not change the dependency represented by a type selector.
+func canonicalShapeImports(file *ast.File) string {
+	imports := map[string]string{}
+	var unaliased []string
+	for _, spec := range file.Imports {
+		source, err := strconv.Unquote(spec.Path.Value)
+		if err != nil {
+			continue
+		}
+		name := path.Base(source)
+		if spec.Name != nil {
+			name = spec.Name.Name
+		} else {
+			unaliased = append(unaliased, source)
+		}
+		imports[name] = fmt.Sprintf("import_%x", sha256.Sum256([]byte(source)))
+	}
+	ast.Inspect(file, func(node ast.Node) bool {
+		selector, ok := node.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+		qualifier, ok := selector.X.(*ast.Ident)
+		if ok && imports[qualifier.Name] != "" {
+			qualifier.Name = imports[qualifier.Name]
+		}
+		return true
+	})
+	slices.Sort(unaliased)
+	return strings.Join(unaliased, "\n")
 }
