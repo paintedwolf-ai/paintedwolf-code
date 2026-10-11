@@ -146,7 +146,8 @@ describe("notification tier partition", () => {
       join(denSrc, "components/shell/Shell.tsx"),
       "utf8",
     );
-    expect(shell).toContain("StageErrorBoundary");
+    expect(readFileSync(join(denSrc, "components/shell/ChatWorkspace.tsx"), "utf8")).toContain("StageErrorBoundary");
+    expect(shell).toContain("ChatWorkspace");
   });
 
   it("reads readiness from the shared store, not per surface", () => {
@@ -182,8 +183,10 @@ describe("notification tier partition", () => {
       join(denSrc, "components/shell/Shell.tsx"),
       "utf8",
     );
-    expect(shell).toContain("ChatTopChromeStack");
-    for (const card of cards) expect(shell).toContain(card);
+    const chat = readFileSync(join(denSrc, "components/shell/ChatWorkspace.tsx"), "utf8");
+    expect(chat).toContain("ChatTopChromeStack");
+    expect(shell).toContain("ChatWorkspace");
+    for (const card of cards) expect(card === "NotificationStack" ? shell : chat).toContain(card);
   });
 
   it("mounts one shared standing-notification stack on Home and in chat", () => {
@@ -198,7 +201,7 @@ describe("notification tier partition", () => {
 
     const columns = readFileSync(join(denSrc, "components/shell/ShellColumns.tsx"), "utf8");
     expect(shell).toContain("const notificationStack = () =>");
-    expect(shell).toContain("notifications={{");
+    expect(readFileSync(join(denSrc, "components/shell/ChatWorkspace.tsx"), "utf8")).toContain("notifications={{");
     expect(shell).toContain("notifications={showHome() ? notificationStack() : null}");
     expect(columns).toContain("{props.notifications}");
     expect(chrome).toContain('slot="notifications"');
@@ -216,10 +219,10 @@ describe("notification tier partition", () => {
     const connectionEvents = readFileSync(join(denSrc, "platform/connection/connection-events.ts"), "utf8");
     expect(connectionEvents).toContain("ports.retire()?.project(");
 
-    const shell = readFileSync(join(denSrc, "components/shell/Shell.tsx"), "utf8");
+    const projects = readFileSync(join(denSrc, "components/shell/project-lifecycle.ts"), "utf8");
     const navigation = readFileSync(join(denSrc, "components/shell/session-navigation.ts"), "utf8");
     expect(navigation).toContain("getEntityRetire()?.session(");
-    expect(shell).toContain("getEntityRetire()?.project(");
+    expect(projects).toContain("getEntityRetire()?.project(");
 
     const events = readFileSync(join(denSrc, "api/events.ts"), "utf8");
     expect(events).toContain("clearSessionHostErrorNotices");

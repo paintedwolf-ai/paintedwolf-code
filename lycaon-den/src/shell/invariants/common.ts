@@ -25,7 +25,7 @@ export const PROJECTS_REGISTRY_ALLOWLIST = ["platform/connection/app-connection.
 /** Combines the shell with its sibling controllers and components. */
 export function shellSource(): string {
   const parts = loadSourceCorpus(join(denSrc, "components/shell"), { extensions: [".ts", ".tsx"], excludeTests: true })
-    .select((file) => /^(?:shell-[\w-]+\.ts|Shell\w+\.tsx)$/.test(file.rel));
+    .select((file) => /^(?:shell-[\w-]+\.tsx?|(?:Shell|Workspace|ChatWorkspace|ProjectDialogs)\w*\.tsx|session-navigation\.ts)$/.test(file.rel));
   return [readSourceText(join(denSrc, "components/shell/Shell.tsx")), ...parts.map((file) => file.text)].join("\n");
 }
 

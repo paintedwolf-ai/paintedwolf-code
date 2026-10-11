@@ -68,7 +68,7 @@ function assertNav06(): void {
   expect(shell).toMatch(/stageStack/);
   expect(shell).toMatch(/ChatTabChromeProvider/);
   expect(shell).toMatch(/const ChatStageBody/);
-  expect(shell).toMatch(/const ChatStageLayer/);
+  expect(shell).toMatch(/export function ChatWorkspace/);
   expect(shell).toMatch(/const StageSurface/);
   expect(shell).toMatch(/<ChatView[\s\S]*projects=\{props\.projects\}/);
   const chatViewIdx = shell.indexOf("<ChatView");
@@ -80,7 +80,7 @@ function assertNav06(): void {
   expect(columns).toMatch(/props\.children\(chat, \(\) => props\.stack\.presence\(key\)\)/);
   expect(shell).toMatch(/<ShellChatColumn[\s\S]*stack=\{chatStack\}/);
   expect(shell).toMatch(
-    /<ChatStageLayer[\s\S]*pending=\{\(\) => presence\(\) === "pending"\}/,
+    /<ChatWorkspace[\s\S]*pending=\{\(\) => presence\(\) === "pending"\}/,
   );
   expect(shell).toMatch(/surfaceActive=\{\(\) => presence\(\) !== "idle"\}/);
   expect(shell).toMatch(
@@ -201,7 +201,7 @@ export const NAV_INVARIANTS: InvariantEntry[] = [
     id: "INV-NAV-03",
     class: "required",
     pattern: "deriveStageScope",
-    roots: join(denSrc, "components/shell/Shell.tsx"),
+    roots: join(denSrc, "components/shell/shell-workspace-presentation.ts"),
     note: "Main stage reads deriveStageScope",
   },
   {

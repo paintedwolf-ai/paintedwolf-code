@@ -1,8 +1,12 @@
-import { createEffect, createSignal, untrack } from "solid-js";
-import type { AppStore } from "../../store/app-state-model.ts";
-import type { ProjectsStore } from "../../store/projects-store.ts";
-import type { SettingsStore } from "../../store/settings-store.ts";
+import { Show, createEffect, createSignal, untrack, type JSX } from "solid-js";
+import { contributionFrameReady } from "../../contributions/contribution-store.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
+import { OnboardingGate } from "../onboarding/OnboardingGate.tsx";
+import { ChromeDragSurface } from "./ChromeDragSurface.tsx";
+import { ProjectLoadingStage } from "./ProjectLoadingStage.tsx";
+import { type AppStore } from "../../store/app-state-model.ts";
+import { type ProjectsStore } from "../../store/projects-store.ts";
+import { type SettingsStore } from "../../store/settings-store.ts";
 import { dismissBootFallback } from "../../platform/connection/boot-fallback.ts";
 import { providerConfigGap } from "../../notices/no-provider-card.ts";
 import { hasDefaultModel, readyProviders } from "../../settings/providers/models-editor-model.ts";
@@ -74,4 +78,55 @@ export function createShellOnboarding(appStore: AppStore, projects: ProjectsStor
     modelsChecked, showOnboardingGate, suppressShellForFirstRun,
     providerGap, showNoProviderBanner, observeProviders, observeBootFallback
   };
+}
+
+export function ShellOnboardingGate(props: {
+  appStore: AppStore;
+  settingsStore: SettingsStore;
+  gate: Pick<ReturnType<typeof createShellOnboarding>, "modelsChecked" | "showOnboardingGate" | "suppressShellForFirstRun">;
+  children: JSX.Element;
+}) {
+  const { modelsChecked, showOnboardingGate, suppressShellForFirstRun } = props.gate;
+  return (
+    <Show
+      when={!showOnboardingGate()}
+      fallback={
+        <Show
+          when={contributionFrameReady()}
+          fallback={
+            <ProjectLoadingStage
+              label="Painted Wolf Code"
+              hint="Loading commands…"
+            />
+          }
+        >
+          <OnboardingGate
+            client={
+              // Client lookup is not reactive.
+              props.appStore.state.sidecarStatus === "connected"
+                ? getLycaonClient()
+                : null
+            }
+            settingsStore={props.settingsStore}
+            settingsChecked={modelsChecked()}
+          />
+        </Show>
+      }
+    >
+    <Show
+      when={!suppressShellForFirstRun()}
+      fallback={
+        <div
+          class="onboarding-first-run-pending"
+          data-testid="onboarding-first-run-pending"
+          aria-busy="true"
+        >
+          <ChromeDragSurface class="onboarding-first-run-pending__chrome-drag" />
+        </div>
+      }
+    >
+    {props.children}
+    </Show>
+    </Show>
+  );
 }
