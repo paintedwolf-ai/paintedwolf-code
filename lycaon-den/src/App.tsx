@@ -108,25 +108,31 @@ function App() {
       : mountUpdateNotice({ notices: noticeStore });
     let stopped = false;
     let stopUpdateRecovery = () => {};
+    const releaseUpdateRecovery = () => {
+      stopUpdateRecovery();
+      stopUpdateRecovery = () => {};
+    };
+    connectionBinding.signal.addEventListener("abort", releaseUpdateRecovery, { once: true });
     if (!subject && isTauriRuntime()) {
       void listenHostEvent("update-resume-engine", () => {
+        if (stopped || connectionBinding.signal.aborted) return;
         disconnectAppBackend();
         void connectAppBackend(appStore).catch(() => undefined);
       }).then((stop) => {
-        if (stopped) stop();
+        if (stopped || connectionBinding.signal.aborted) stop();
         else stopUpdateRecovery = stop;
       });
     }
     onCleanup(() => {
       stopped = true;
-      stopUpdateRecovery();
+      connectionBinding.signal.removeEventListener("abort", releaseUpdateRecovery);
+      releaseUpdateRecovery();
       stopDocumentDelivery();
       stopComposerDocumentMirror();
       unmountNotifications();
       unmountUpdates();
       rememberSessionChatFromStore(appStore);
       void flushTranscriptRowHeightsToDisk().catch(() => undefined);
-      disconnectAppBackend();
     });
   });
 
