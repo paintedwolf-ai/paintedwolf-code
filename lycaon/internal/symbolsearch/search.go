@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/projectsource"
+	"github.com/lycaon/lycaon/internal/runeclamp"
 )
 
 // Project symbol search bounds. The limit sets Limited; the other bounds set
@@ -316,13 +317,5 @@ func symbolMatchLess(a, b Match) bool {
 }
 
 func symbolSignature(content string, line int) string {
-	snippet := projectsource.DeclarationLine(content, line)
-	if len(snippet) <= 512 {
-		return snippet
-	}
-	end := 512
-	for end > 0 && !utf8.RuneStart(snippet[end]) {
-		end--
-	}
-	return snippet[:end] + "…"
+	return runeclamp.ClampBytes(projectsource.DeclarationLine(content, line), 512)
 }
