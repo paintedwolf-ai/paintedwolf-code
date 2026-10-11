@@ -5,10 +5,14 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourceblob"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // PreparedRecording holds immutable inputs and a retention lease until Close.
@@ -139,4 +143,59 @@ func (p *preparedRecording) commitObserved(ctx context.Context, tx *sql.Tx, scop
 	}
 	_, err := p.store.recordBatchIdentityTx(ctx, p.store.queries.WithTx(tx), admitted)
 	return len(admitted), err
+}
+
+func validateBatch(inputs []RecordInput) error {
+	first := inputs[0]
+	if strings.TrimSpace(first.ProjectID) == "" || strings.TrimSpace(first.RootID) == "" ||
+		strings.TrimSpace(first.Path) == "" || first.Op == "" || first.Origin == "" {
+		return fmt.Errorf("source history requires project, root, path, operation, and origin")
+	}
+	for _, in := range inputs[1:] {
+		if in.ProjectID != first.ProjectID || in.BranchID != first.BranchID ||
+			in.Origin != first.Origin ||
+			in.OperationID != first.OperationID || in.GitTransitionID != first.GitTransitionID ||
+			in.CommandWindowID != first.CommandWindowID {
+			return fmt.Errorf("source operation effects disagree on operation metadata")
+		}
+	}
+	return nil
+}
+
+func normalizedInput(in RecordInput) RecordInput {
+	if in.TS.IsZero() {
+		in.TS = time.Now().UTC()
+	}
+	if in.Cause == "" {
+		switch in.Origin {
+		case api.SourceChangeOriginAgent:
+			in.Cause = "agent_tool"
+		case api.SourceChangeOriginUser:
+			in.Cause = "human_edit"
+		default:
+			in.Cause = "external_observation"
+		}
+	}
+	if in.CaptureQuality == "" {
+		in.CaptureQuality = "exact"
+		if in.Origin == api.SourceChangeOriginExternal {
+			in.CaptureQuality = "observed"
+		}
+	}
+	if in.EntryKind == "" {
+		in.EntryKind = EntryKindFile
+	}
+	if in.BeforeSHA256 == "" && in.Before != nil {
+		in.BeforeSHA256 = sourceblob.ContentSHA(in.Before)
+	}
+	if in.AfterSHA256 == "" && in.After != nil {
+		in.AfterSHA256 = sourceblob.ContentSHA(in.After)
+	}
+	if in.BeforeSize == 0 && in.Before != nil {
+		in.BeforeSize = int64(len(in.Before))
+	}
+	if in.AfterSize == 0 && in.After != nil {
+		in.AfterSize = int64(len(in.After))
+	}
+	return in
 }
