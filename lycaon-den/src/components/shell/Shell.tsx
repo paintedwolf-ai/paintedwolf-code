@@ -22,7 +22,6 @@ import { ProjectRemovalDialog, createProjectRemovalReview } from "./ProjectRemov
 import { createSessionNavigation } from "./session-navigation.ts";
 import { createProjectLifecycle } from "./project-lifecycle.ts";
 import { createProjectRemoval } from "./project-removal.ts";
-import type { LycaonClient } from "../../api/client.ts";
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { CONTEXT_NAV_CATALOG, type ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { beginSessionSnapshotRead } from "../../api/session-snapshot-refresh.ts";
@@ -30,47 +29,35 @@ import type { Project } from "../../api/types.ts";
 import { withoutReadFinish } from "../../attention/attention-model.ts";
 import { createSeenMarker } from "../../attention/seen-marker.ts";
 import { captureUnreadBoundary } from "../../attention/unread-boundary.ts";
-
 import { registerComposerAttachmentSink } from "../../chat/composer/add-to-chat.ts";
-import { ChatTabChromeProvider } from "../../chat/composer/chat-tab-chrome.tsx";
-
 import { composerComposeBlockReason } from "../../chat/composer/composer-rules.ts";
-import { coordinatorModelVisionSupport } from "../../chat/composer/composer-vision.ts";
-import { hasSpendRecoveryDraft } from "../../chat/recovery/spend-ceiling-recovery.ts";
 import { buildMruEntries, createMruTracker } from "../../chat/session/mru-switcher-model.ts";
-
 import { isAnySessionActivityLive, isChatActivityLive } from "../../chat/session/session-activity.ts";
 import { rememberSessionChatFromStore, restoreCachedSessionChat } from "../../chat/session/session-chat-cache.ts";
 import { recordCreatedSessionInRecents } from "../../chat/session/session-lifecycle.ts";
 import { deleteSession, moveSessionPin, setSessionArchived, setSessionPinned } from "../../chat/session/session-retirement.ts";
 import { isPendingSessionId } from "../../chat/session/session-scope.ts";
 import { type SessionSwitchDeps } from "../../chat/session/session-switch.ts";
-
 import { setStatusChipNavigationSink } from "../../chat/status/status-navigation-sink.ts";
 import { completeChatHydrationAndReplay } from "../../chat/transcript/projection/message-events.ts";
 import { hasDenTranscriptMessages } from "../../chat/transcript/projection/message-transcript.ts";
 import { contributionFrame, contributionFrameReady, invalidateContributionFrame } from "../../contributions/contribution-store.ts";
-
 import { type ShellFactState } from "../../contributions/shell-facts.ts";
 import { filesCommandContext } from "../../files/commands/files-command-context.ts";
 import { mountedFilesEditorView } from "../../files/editor/files-editor-host.ts";
 import { EditorCommandBar } from "../../find/EditorCommandBar.tsx";
-
 import { editorCommandBarPlacement } from "../../find/find-controller.ts";
 import { DEFAULT_HOME_SECTION, draftCount, retainedHomeSummaries, type HomeSection } from "../../home/home-model.ts";
 import { forgetProjectThumbnail } from "../../home/thumbnail-store.ts";
 import { setShellNoticeActionSinks } from "../../notices/notice-actions.ts";
 import { APP_SCOPE, projectScope, sessionScope } from "../../notices/notice-scope.ts";
-import { hasSharedNotices, selectSessionNotices } from "../../notices/notice-select.ts";
 import type { NoticeStore } from "../../notices/notice-store.ts";
 import { getEntityRetire, getLycaonClient, noticeReporterFor, onCLIOpenEvent } from "../../platform/connection/app-connection.ts";
-
 import { confirmDestructive } from "../../platform/interaction/confirm-dialog.ts";
 import { closeDiffViewer, diffViewerRequest } from "../../platform/navigation/in-app-diff.ts";
 import { cancelItemWindowDrag, closeCurrentPeerWindow, closeItemWindow, finishItemWindowDrag, focusItemWindow, moveItemWindowDrag } from "../../platform/windows/item-windows.ts";
 import { resolveSourceRequest } from "../../platform/navigation/open-source.ts";
-import { isTauriRuntime, tauriDragRegionProps } from "../../platform/runtime.ts";
-
+import { isTauriRuntime } from "../../platform/runtime.ts";
 import { focusAppWindow, windowFocused } from "../../platform/windows/window-chrome.ts";
 import { windowSubject } from "../../platform/windows/window-subject.ts";
 import { focusEditorWindow } from "../../platform/windows/editor-windows.ts";
@@ -79,7 +66,6 @@ import type { ProjectSummary } from "../../project/project-summary.ts";
 import { searchHitToNavTarget } from "../../search/search-hit-nav.ts";
 import { openSearchHit } from "../../search/search-hit-open.ts";
 import { type CrossbarGotoTarget } from "../../search/crossbar-model.ts";
-
 import { isContextNavItemId } from "../../settings/editor/context-nav-prefs.ts";
 import { chatListSortPref, saveChatListSort } from "../../settings/chat/chat-list-prefs.ts";
 import { fileSummariesEnabled, fileSummariesSettingKnown } from "../../settings/editor/file-summary-settings.ts";
@@ -87,12 +73,9 @@ import { filesTreeCollapsed } from "../../files/tree/files-tree-window-state.ts"
 import { DEFAULT_PROJECT_CONTEXT_SECTION, type ProjectContextSection } from "../../settings/settings-nav-model.ts";
 import { findSettingDefinition } from "../../settings/settings-registry.ts";
 import { requestSettingReveal } from "../../settings/settings-reveal.ts";
-
-import { createVerifyTestSuggestion } from "../../settings/extensions/verify-test-suggestion.ts";
 import { dismissLayoutDockOnOutsidePress } from "../../shell/layout-dock-dismiss.ts";
 import { beginChatWidthResize, hiddenSplitPanePref, companionPref, companionStageId, currentSplitFocusRegion, effectiveNavWidthPx, effectiveChatWidthPx, layoutViewportWidthPx, narrowSurvivorPref, resetChatWidthPx, setSplitFocusRegion, setSplitHostWidth, setSplitProjectId, splitHostWidthPx, stagePlacementMode, toggleWorkspaceOrientation, swapSplitColumns, workspaceOrientationPref } from "../../shell/layout-store.ts";
 import { isHomePresentation } from "../../shell/project-presentation.ts";
-
 import { resolveSplitCompanion, resolveStageColumn, splitColumnsOnScreen } from "../../shell/stage-placement.ts";
 import { deriveStageScope, holdChatPresence, holdPresentedChat, stabilizeActiveChat, type ActiveChat, type ChatPresence } from "../../shell/stage-scope.ts";
 import { workspacePreparation } from "../../shell/workspace-preparation.ts";
@@ -112,34 +95,25 @@ import { chromeProps } from "../../styling/ui-chrome.ts";
 import { PresentationProvider } from "../../ui/presentation-context.tsx";
 import { SURFACE_HOME, SURFACE_SETTINGS, parseStageSurfaceKey } from "../../ui/resident-surfaces.ts";
 import { catalogWorkflowRun } from "../../workflow/workflow-run-stack.ts";
-import { ChatView } from "../chatview/ChatView.tsx";
 import { ComposerStatusChips } from "../chatview/ComposerStatusChips.tsx";
 import { FirstTimeTipsLayer } from "../first-time-tips/FirstTimeTipsLayer.tsx";
 import { CloneRepoDialog } from "../home/CloneRepoDialog.tsx";
-import { DraftPromoteBanner } from "../home/DraftPromoteBanner.tsx";
 import { HomeNav } from "../home/HomeNav.tsx";
 import { HomeView } from "../home/HomeView.tsx";
 import { MoveToProjectDialog } from "../home/MoveToProjectDialog.tsx";
-import { NoFolderBanner } from "../home/NoFolderBanner.tsx";
 import { OpenFolderConfirm } from "../home/OpenFolderConfirm.tsx";
-import { ChatTabRail } from "../nav/ChatTabRail.tsx";
-import { ChatTopChromeStack } from "../nav/ChatTopChromeStack.tsx";
 import { FocusedProjectNav } from "../nav/FocusedProjectNav.tsx";
 import { NavBrandIdentity } from "../nav/NavBrandIdentity.tsx";
 import { NavFold } from "../nav/NavFold.tsx";
 import { NavResizeHandle } from "../nav/NavResizeHandle.tsx";
 import { NavSidebarCollapseButton } from "../nav/NavSidebarToggle.tsx";
-import { NoProviderCard } from "../NoProviderCard.tsx";
-import { NoticeRail } from "../NoticeRail.tsx";
 import { NotificationStack } from "../NotificationStack.tsx";
-
 import { OnboardingGate } from "../onboarding/OnboardingGate.tsx";
 import { ThemeIcon } from "../primitives/ThemeIcon.tsx";
 import { clearFilesHotExitSuppress, suppressFilesHotExitWrite } from "../../files/documents/files-hot-exit.ts";
 import { selectedFileVersion } from "../../files/history/files-version-selection.ts";
 import { prepareFilesRootDetach } from "../../files/documents/project-files-buffers.ts";
 import { projectFilesState } from "../../files/documents/files-buffer-state.ts";
-
 import { ProjectChatsView } from "../project/ProjectChatsView.tsx";
 import { ProjectContextView } from "../project/ProjectContextView.tsx";
 import { ProjectLauncher } from "../project/ProjectLauncher.tsx";
@@ -148,30 +122,20 @@ import { SettingsNavSidebar } from "../settings/SettingsNavSidebar.tsx";
 import { SettingsView } from "../settings/SettingsView.tsx";
 import { ShortcutHelpOverlay } from "../shortcuts/ShortcutHelpOverlay.tsx";
 import { DiffViewerDrawer } from "../source/diff/DiffViewerDrawer.tsx";
-import { SpendCeilingApproachingNudge, spendCeilingApproachingVisible } from "../SpendCeilingApproachingNudge.tsx";
-import { SpendCeilingReachedNudge, spendCeilingReachedNotice } from "../SpendCeilingReachedNudge.tsx";
 import { stageDefinition, stageFeatureEnabled, stageLabelFor, type StageFeatureFlags } from "../stage/stage-registry.tsx";
-import { VerifyTestNudge } from "../VerifyTestNudge.tsx";
 import { WorkspaceFoldersPanel } from "../WorkspaceFoldersPanel.tsx";
 import { ChromeDragSurface } from "./ChromeDragSurface.tsx";
-import { ContextDrawerHost } from "./ContextDrawer.tsx";
 import { ShellNavRail } from "./ShellNavRail.tsx";
 import { LayoutDockButton, LayoutDockTray } from "./LayoutDock.tsx";
 import { PeerViewSwitcher, type PeerViewSwitcherHandle } from "./PeerViewSwitcher.tsx";
 import { createProjectOpening } from "./project-opening.ts";
 import { ProjectLoadingStage } from "./ProjectLoadingStage.tsx";
 import { RecentChatSwitcher, type RecentChatSwitcherHandle } from "./RecentChatSwitcher.tsx";
-import {
-  SessionProtectionBanners,
-  sessionProtectionPresent,
-  type ProtectionBannerId,
-} from "./SessionProtectionBanners.tsx";
 import { SplitDivider } from "./SplitDivider.tsx";
-import { StageErrorBoundary } from "./StageErrorBoundary.tsx";
 import { StageSplitHost } from "./StageSplitHost.tsx";
 import { ShellChatColumn, ShellStageColumn } from "./ShellColumns.tsx";
 import { WorkspaceOpeningVeil } from "./WorkspaceOpeningVeil.tsx";
-
+import { ChatWorkspace } from "./ChatWorkspace.tsx";
 /** Entering the sidebar lands on the current chat, then any chat, then any rail control. */
 const SIDEBAR_ENTRY_PRIORITY = [
   '.focused-session-list__row[aria-current="true"]',
@@ -1076,62 +1040,6 @@ export function Shell(props: Props) {
     else open();
   };
 
-  const ChatStageLayer = (layer: {
-    chat: ActiveChat;
-    pending: () => boolean;
-    surfaceActive: () => boolean;
-  }) => {
-    const dock = chatTopDock(layer.chat);
-    return (
-    <ChatTabChromeProvider sessionKey={layer.chat.sessionId}>
-      <ContextDrawerHost>
-        <div
-          class="den-shell-stage--chat den-shell-stage"
-          classList={{
-            "den-stage-boot": layer.pending() === true,
-            "den-stage-enter-fade": layer.pending() === true,
-          }}
-          data-boot={layer.pending() ? "ready" : undefined}
-        >
-          <header
-            class="den-shell-header-chat den-shell-header"
-            classList={{
-              "den-shell-header--window-leading": chatHeaderLeadsWindow(),
-            }}
-            {...chromeProps()}
-            {...tauriDragRegionProps()}
-          >
-            <ChromeDragSurface />
-            <ChatTabRail
-              appStore={props.appStore}
-              sessionId={layer.chat.sessionId}
-              selectedWorkerId={selectedWorkerId()}
-              onOpenWorker={openWorkers}
-              navCollapsed={
-                windowNavCollapsed() && (navTouchesChat() || splitLive())
-              }
-              navAutomaticallyCollapsed={navAutomaticallyCollapsed()}
-              navSplitFallback={!navTouchesChat() && !contextHidden()}
-              navSide={navSide()}
-              onNavExpand={() => void showWindowNav()}
-              conversationSeam={conversationSeam()}
-              dock={dock}
-            />
-          </header>
-          <main class="den-shell-main" aria-label="Chat">
-            <StageErrorBoundary stage="chat">
-              <ChatStageBody
-                chat={layer.chat}
-                surfaceActive={layer.surfaceActive}
-              />
-            </StageErrorBoundary>
-          </main>
-        </div>
-      </ContextDrawerHost>
-    </ChatTabChromeProvider>
-    );
-  };
-
   const settingsProjectDir = () =>
     projectDirForChat() ||
     activeProject()?.roots.find((r) => r.is_primary)?.path ||
@@ -1255,204 +1163,6 @@ export function Shell(props: Props) {
       onDismissApp={() => props.notices.dismissScope(APP_SCOPE)}
       announceLive={!isAnySessionActivityLive(props.appStore)}
     />
-  );
-
-  const chatTopDock = (chat: ActiveChat) => {
-    const [dismissedProtection, setDismissedProtection] = createSignal<
-      Partial<Record<ProtectionBannerId, boolean>>
-    >({});
-    const [providerDismissed, setProviderDismissed] = createSignal(false);
-    const protection = () => {
-      const sess = props.appStore.state.currentSession;
-      if (!sess || sess.id !== chat.sessionId) return undefined;
-      return sess.ui?.protection;
-    };
-    const spendLimits = () =>
-      props.settingsStore.state.effectiveLimits?.projectId === chat.projectId
-        ? props.settingsStore.state.effectiveLimits.limits
-        : props.settingsStore.state.limits ?? null;
-    const updateSpendLimits = (client: LycaonClient, update: import("../../settings/budgets/spend-ceiling-actions.ts").SpendCeilingUpdate) => {
-      if (update.scope === "project") {
-        props.settingsStore.actions.setEffectiveLimits(chat.projectId, update.limits);
-        return;
-      }
-      props.settingsStore.actions.setLimits(update.limits);
-      void client.getLimitsSettings(chat.projectId).then((limits) => {
-        props.settingsStore.actions.setEffectiveLimits(chat.projectId, limits);
-      });
-    };
-    const verify = createVerifyTestSuggestion({
-      client: connectedClient,
-      appStore: props.appStore,
-      projectId: () => chat.projectId,
-    });
-    return (
-      <ChatTopChromeStack
-        session={{
-          present: () =>
-            selectSessionNotices(noticeIndex(), chat.sessionId).length > 0,
-          children: () => (
-            <NoticeRail
-              notices={selectSessionNotices(noticeIndex(), chat.sessionId)}
-              onDismiss={(id) => props.notices.dismiss(id)}
-              onDismissAll={() =>
-                props.notices.dismissScope(
-                  sessionScope(chat.projectId, chat.sessionId),
-                )
-              }
-              announceLive={!isAnySessionActivityLive(props.appStore)}
-            />
-          ),
-        }}
-        spend={{
-          present: () =>
-            spendCeilingReachedNotice(props.notices, chat.sessionId) != null ||
-            spendCeilingApproachingVisible({
-              sessionId: chat.sessionId,
-              limits: spendLimits(),
-              summary: props.costStore.state.session,
-            }),
-          children: () => (
-            <Show when={connectedClient()} keyed>
-              {(client) => (
-                <>
-                  <SpendCeilingReachedNudge
-                    client={client}
-                    notices={props.notices}
-                    sessionId={chat.sessionId}
-                    projectId={chat.projectId}
-                    spentUsd={
-                      props.costStore.state.session?.estimated_nano_usd != null
-                        ? props.costStore.state.session.estimated_nano_usd / 1e9
-                        : undefined
-                    }
-                    hasUnsentContent={hasSpendRecoveryDraft(chat.sessionId)}
-                    onOpenBudgets={openBudgetsSettings}
-                    onResume={() => resumeSpendLimitedChat(chat)}
-                    onLimitsUpdated={(update) => updateSpendLimits(client, update)}
-                  />
-                  <SpendCeilingApproachingNudge
-                    client={client}
-                    sessionId={chat.sessionId}
-                    projectId={chat.projectId}
-                    summary={props.costStore.state.session}
-                    limits={spendLimits()}
-                    onLimitsUpdated={(update) => updateSpendLimits(client, update)}
-                    onOpenBudgets={openBudgetsSettings}
-                  />
-                </>
-              )}
-            </Show>
-          ),
-        }}
-        notifications={{
-          present: () => hasSharedNotices(noticeIndex()),
-          children: notificationStack,
-        }}
-        verify={{
-          present: () => verify.suggesting(),
-          children: () => (
-            <VerifyTestNudge
-              suggestion={verify}
-              onOpenSettings={() =>
-                routeToStage("context", () => selectContextSection("tests"))
-              }
-            />
-          ),
-        }}
-        protection={{
-          present: () =>
-            sessionProtectionPresent(protection(), dismissedProtection()),
-          children: () => (
-            <SessionProtectionBanners
-              protection={protection()}
-              onDismiss={(id) =>
-                setDismissedProtection((prev) => ({ ...prev, [id]: true }))
-              }
-            />
-          ),
-        }}
-        promote={{
-          present: showPromoteNudge,
-          children: () => (
-            <DraftPromoteBanner
-              onPromote={() => {
-                const id = props.shell.state.activeProjectId;
-                if (id) openMoveDialog(id);
-              }}
-              onDismiss={() => {
-                const projectId = props.shell.state.activeProjectId;
-                if (projectId) dismissDraftPromoteBanner(projectId);
-              }}
-            />
-          ),
-        }}
-        provider={{
-          present: () => showNoProviderBanner() && !providerDismissed(),
-          children: () => (
-            <Show when={providerGap()} keyed>
-              {(gap) => (
-                <NoProviderCard
-                  gap={gap}
-                  onOpenProviders={openProvidersSettings}
-                  onDismiss={() => setProviderDismissed(true)}
-                />
-              )}
-            </Show>
-          ),
-        }}
-        folder={{
-          present: showNoFolderBanner,
-          children: () => (
-            <NoFolderBanner
-              onAddFolder={() => void addFolderToActiveProject()}
-              onDismiss={() => {
-                const projectId = props.shell.state.activeProjectId;
-                if (projectId) dismissNoFolderBanner(projectId);
-              }}
-            />
-          ),
-        }}
-      />
-    );
-  };
-
-  const ChatStageBody = (body: {
-    chat: ActiveChat;
-    surfaceActive: () => boolean;
-  }) => (
-    <>
-      <ChatView
-        needsProvider={showNoProviderBanner()}
-        appStore={props.appStore}
-        recents={props.recents}
-        projects={props.projects}
-        projectId={body.chat.projectId}
-        projectDir={projectDirForChat()}
-        sessionId={body.chat.sessionId}
-        hasInitialPrompt={
-          props.shell.state.foreground?.sessionId === body.chat.sessionId &&
-          props.shell.state.foreground.initialPrompt === true
-        }
-        surfaceActive={body.surfaceActive()}
-        selectedWorkerId={selectedWorkerId()}
-        workersDrawerOpen={body.surfaceActive() && workersOpen()}
-        workerDrawerFocus={workerDrawerFocus()}
-        workersBackgroundHydrate={nav() === "projects"}
-        onWorkersClose={closeWorkers}
-        onWorkerDrawerFocusHandled={acknowledgeDrawerFocus}
-        onOpenWorker={openWorkers}
-        onOpenFiles={stageOpeners.files}
-        onSend={sendPrompt}
-        onStop={stopChat}
-        visionSupport={coordinatorModelVisionSupport(
-          props.settingsStore.state.providers,
-          props.settingsStore.state.modelPolicy,
-        )}
-        providers={props.settingsStore.state.providers}
-        providerKinds={props.settingsStore.state.providerKinds}
-      />
-    </>
   );
 
   const ProjectStage = (stageProps: { stage: ContextNavItemId }) => {
@@ -2064,7 +1774,20 @@ export function Shell(props: Props) {
             preparation={workspacePreparation}
           >
             {(chat, presence) => (
-              <ChatStageLayer
+              <ChatWorkspace
+                shell={props.shell} appStore={props.appStore} recents={props.recents} projects={props.projects}
+                settingsStore={props.settingsStore} costStore={props.costStore} notices={props.notices}
+                workerDrawer={workerDrawer} panes={panes}
+                actions={{ sendPrompt, stopChat, resumeSpendLimitedChat }}
+                onboarding={{ showNoProviderBanner, providerGap }}
+                projectDirForChat={projectDirForChat} nav={nav} splitLive={splitLive}
+                notificationStack={notificationStack} showPromoteNudge={showPromoteNudge}
+                showNoFolderBanner={showNoFolderBanner} onPromote={openMoveDialog}
+                dismissDraftPromoteBanner={dismissDraftPromoteBanner}
+                dismissNoFolderBanner={dismissNoFolderBanner} addFolderToActiveProject={addFolderToActiveProject}
+                onOpenBudgets={openBudgetsSettings} onOpenProviders={openProvidersSettings}
+                onOpenTests={() => routeToStage("context", () => selectContextSection("tests"))}
+                onOpenFiles={stageOpeners.files}
                 chat={chat}
                 pending={() => presence() === "pending"}
                 surfaceActive={() => presence() !== "idle"}
