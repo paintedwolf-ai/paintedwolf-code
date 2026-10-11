@@ -137,6 +137,12 @@ webE2e.describe("feedback + what's new den", () => {
       await expect(page.locator('[data-notice-code="whats_new"]')).toContainText(
         `What’s new in ${RELEASED_VERSION}`,
       );
+      const announcement = page.locator('[data-notice-code="whats_new"]');
+      await announcement.getByRole("button", { name: "Read more" }).click();
+      await expect(page.getByTestId("whats-new-dialog")).toBeVisible();
+      await page.getByTestId("whats-new-dialog-close").click();
+      await expect(announcement).toBeVisible();
+      expect(await whatsNewLatch(page)).toBe("0.9.0");
       await expect(page.getByRole("button", { name: "Got it", exact: true })).toBeVisible();
       await page.getByRole("button", { name: "Got it", exact: true }).click();
       await expect(page.locator('[data-notice-code="whats_new"]')).toHaveCount(0);

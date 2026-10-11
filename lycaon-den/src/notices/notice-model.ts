@@ -16,7 +16,7 @@ export type NoticeInteraction = {
     label: string;
     variant?: "primary" | "secondary";
     dismiss?: boolean;
-    run: () => void;
+    run?: () => void;
   }[];
 };
 

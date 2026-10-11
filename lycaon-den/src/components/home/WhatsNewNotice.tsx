@@ -93,12 +93,13 @@ export function WhatsNewNotice(props: WhatsNewNoticeProps): JSX.Element {
       severity: "info",
       title: `${CLIENT_NOTICES.whats_new.title} ${card.version}`,
       message: CLIENT_NOTICES.whats_new.message,
+      suggestedAction: CLIENT_NOTICES.whats_new.suggestedAction,
       interaction: {
         autoDismiss: false,
         onDismiss: () => void onGotIt(),
         actions: [
           { id: "read_release_notes", label: "Read more", variant: "secondary", dismiss: false, run: () => setReading(true) },
-          { id: "acknowledge_release", label: "Got it", variant: "primary", run: () => {} },
+          { id: "acknowledge_release", label: "Got it", variant: "primary" },
         ],
       },
     }, APP_SCOPE);

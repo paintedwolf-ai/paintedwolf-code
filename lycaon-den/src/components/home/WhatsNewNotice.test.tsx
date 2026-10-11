@@ -145,6 +145,13 @@ describe("WhatsNewNotice", () => {
     expect(saveLatch).not.toHaveBeenCalled();
   });
 
+  it("advances releases without notes without announcing them", async () => {
+    const saveLatch = vi.fn(async (version: string) => resetWhatsNewPrefsForTests({ lastSeenVersion: version }));
+    render(() => <Notice currentVersion="0.2.0" notesFor={() => ""} saveLatch={saveLatch} />);
+    await waitFor(() => expect(saveLatch).toHaveBeenCalledExactlyOnceWith("0.2.0"));
+    expect(rows()).toHaveLength(0);
+  });
+
   it("seeds silently on unset latch and shows nothing", async () => {
     resetWhatsNewPrefsForTests(undefined);
     const saveLatch = vi.fn(async (version: string) => {

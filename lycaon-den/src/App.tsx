@@ -146,13 +146,13 @@ function App() {
 
   return (
     <>
-      <Show when={!windowSubject()}><WhatsNewNotice notices={noticeStore} /></Show>
       {/* Context actions remain available during startup and recovery. */}
       <Show
         when={engineStartupState().status === "idle" && !nativeUpdateState.state()?.startup_pending}
         fallback={<EngineStartupStage />}
       >
         <Show when={!criticalStop.spec()} fallback={criticalStop.view()}>
+          <Show when={!windowSubject()}><WhatsNewNotice notices={noticeStore} /></Show>
           <Shell
             shell={shellStore}
             recents={recentsStore}

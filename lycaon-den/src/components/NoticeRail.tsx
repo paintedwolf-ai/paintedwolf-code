@@ -210,7 +210,7 @@ export function NoticeRail(props: Props) {
                               data-testid="notice-action"
                               {...chromeProps()}
                               onClick={() => {
-                                action.run();
+                                action.run?.();
                                 if (action.dismiss !== false) props.onDismiss(notice.id);
                               }}
                             >

@@ -252,6 +252,7 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
   whats_new: {
     title: "What’s new in",
     message: "Review the latest changes when you have a moment.",
+    suggestedAction: "Read more to review the release notes.",
     scope: "app",
   },
 };
