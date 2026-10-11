@@ -80,6 +80,9 @@ func (b *SessionOutcomeBridge) OnWorkerFailed(ctx context.Context, jobID string,
 	if projectErr := b.Results.ProjectFailure(ctx, task, err); projectErr != nil {
 		return fmt.Errorf("project worker failure: %w", projectErr)
 	}
+	if proofErr := b.Results.RecordTerminalProof(ctx, parentID, jobID, "failed"); proofErr != nil {
+		return fmt.Errorf("record worker failure proof: %w", proofErr)
+	}
 	if b.Inner != nil {
 		if innerErr := b.Inner.OnWorkerFailed(ctx, jobID, err); innerErr != nil {
 			errs = append(errs, innerErr)
@@ -148,4 +151,71 @@ type WorkerResultProjection interface {
 }
 type ProgressClosureArm interface {
 	Arm(context.Context, string, string)
+}
+
+// deliverPendingOutcomes retries unacknowledged side effects independently.
+func (p *LocalWorkerPoller) deliverPendingOutcomes(ctx context.Context) error {
+	if p.Queue == nil {
+		return nil
+	}
+	tasks, err := p.Queue.ListPendingOutcomes(ctx)
+	if err != nil {
+		return err
+	}
+	var failures []error
+	for i := range tasks {
+		if err := p.deliverOutcome(ctx, tasks[i]); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
+}
+
+// deliverOutcome projects and acknowledges a committed outcome.
+func (p *LocalWorkerPoller) deliverOutcome(ctx context.Context, task api.WorkerTask) error {
+	// A peer must observe earlier delivery acknowledgements before evaluating the cycle.
+	key := task.ParentSessionID
+	if key == "" {
+		key = task.ID
+	}
+	lock := p.outcomeLocks.Acquire(key)
+	lock.Lock()
+	defer lock.Unlock()
+
+	if p.Outcomes == nil {
+		return errors.New("outcome recorder required")
+	}
+	switch task.Status {
+	case api.WorkerStatusComplete, api.WorkerStatusHeld:
+		result := api.WorkerResult{Status: "complete"}
+		if task.Result != nil {
+			result = *task.Result
+		}
+		if err := p.Outcomes.OnWorkerComplete(ctx, task.ID, result); err != nil {
+			return fmt.Errorf("deliver completion for %s: %w", task.ID, err)
+		}
+	case api.WorkerStatusFailed:
+		if err := p.Outcomes.OnWorkerFailed(ctx, task.ID, errors.New(strings.TrimSpace(task.Error))); err != nil {
+			return fmt.Errorf("deliver failure for %s: %w", task.ID, err)
+		}
+	case api.WorkerStatusCanceled:
+		result := api.WorkerResult{Status: "canceled", Response: "canceled"}
+		if task.Result != nil {
+			result = *task.Result
+			result.Status = "canceled"
+		}
+		if err := p.Outcomes.OnWorkerComplete(ctx, task.ID, result); err != nil {
+			return fmt.Errorf("deliver cancellation for %s: %w", task.ID, err)
+		}
+	default:
+		return nil
+	}
+	if err := p.Queue.MarkOutcomeDelivered(ctx, task.ID); err != nil {
+		return fmt.Errorf("acknowledge outcome for %s: %w", task.ID, err)
+	}
+	p.Outcomes.OnOutcomeDelivered(ctx, task)
+	if p.ParentWaiter != nil {
+		p.ParentWaiter.NotifyParent(task.ParentSessionID)
+	}
+	return nil
 }

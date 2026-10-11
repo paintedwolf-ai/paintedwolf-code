@@ -22,6 +22,7 @@ type Control struct {
 	Processes      *processcontrol.Service
 	Runtime        *coordinator.Runtime
 	Workflow       WorkflowRunnable
+	WorkerCycles   WorkflowWorkerCycles
 }
 
 func (m *Control) Build() promptloop.ControlDeps {
@@ -55,7 +56,13 @@ func (m *Control) AssertRunnable(ctx context.Context, sessionID string) error {
 	if m == nil || m.Workflow == nil {
 		return nil
 	}
-	return m.Workflow.AssertSessionRunnable(ctx, sessionID)
+	if err := m.Workflow.AssertSessionRunnable(ctx, sessionID); err != nil {
+		return err
+	}
+	if m.WorkerCycles != nil {
+		return m.WorkerCycles.ReconcileWorkerCycle(ctx, sessionID)
+	}
+	return nil
 }
 
 func (m *Control) ParkBlockedLiveCommands(ctx context.Context, sessionID string) bool {

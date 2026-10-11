@@ -12,10 +12,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// runstate.FanoutLegCoverage accounts for attempts, independently of model conclusions.
-
-// runstate.FanoutCoverage retains every planned leg, including ones never dispatched.
-
 // WorkflowWork resolves planned survey legs and registered review questions.
 func (m *Fanout) WorkflowWork(ctx context.Context, sessionID, workID string) (spawn.WorkflowWork, bool, error) {
 	workID = strings.TrimSpace(workID)

@@ -46,11 +46,35 @@ func (m *Fanout) RecordWorkerTerminalProof(ctx context.Context, sessionID, compl
 	if m == nil || strings.TrimSpace(sessionID) == "" {
 		return nil
 	}
-	status := strings.TrimSpace(summaryStatus)
 	active, err := m.Runs.ActiveBySession(ctx, sessionID)
 	if err != nil || active == nil {
 		return err
 	}
+	if m.WorkerTasks != nil {
+		tasks, err := m.WorkerTasks(ctx, active.ID)
+		if err != nil {
+			return err
+		}
+		matched := false
+		for _, task := range tasks {
+			if task.ID == completingJobID && task.ParentSessionID == sessionID && task.WorkflowRunID == active.ID && task.WorkflowPhase == active.CurrentPhase && task.Status.IsTerminal() {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return nil
+		}
+	}
+	return m.recordWorkerTerminalProof(ctx, active, completingJobID, summaryStatus)
+}
+
+func (m *Fanout) recordWorkerTerminalProof(ctx context.Context, active *api.WorkflowRun, completingJobID, summaryStatus string) error {
+	sessionID := active.SessionID
+	lock := m.settlement.Acquire(sessionID)
+	lock.Lock()
+	defer lock.Unlock()
+	status := strings.TrimSpace(summaryStatus)
 	mutated := false
 	clearWorkerCycle := false
 	if _, err := m.Vars.Stamp(ctx, active.ID, func(ctx context.Context, run *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
@@ -62,6 +86,9 @@ func (m *Fanout) RecordWorkerTerminalProof(ctx context.Context, sessionID, compl
 		}
 		def, ok := manifest.PhaseByID(run.CurrentPhase)
 		if !ok {
+			return nil, false, nil
+		}
+		if run.ID != active.ID || run.CurrentPhase != active.CurrentPhase || run.Status != api.WorkflowRunStatusRunning {
 			return nil, false, nil
 		}
 		if workflowdef.PhaseHasGate(def, "worker_cycle_ready") {
@@ -102,5 +129,3 @@ func (m *Fanout) RecordWorkerTerminalProof(ctx context.Context, sessionID, compl
 	}
 	return nil
 }
-
-// ManifestForRunID resolves a run's manifest.

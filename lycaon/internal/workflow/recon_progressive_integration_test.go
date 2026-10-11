@@ -37,7 +37,7 @@ func TestReconProgressiveScoutCanReportOrDrill(t *testing.T) {
 				t.Fatalf("phase = %q want execute", run.CurrentPhase)
 			}
 
-			testutil.FailErr(t, "complete scout wave", mgr.Fanout.RecordWorkerTerminalProof(ctx, run.SessionID, "scout-1", "complete"))
+			testutil.FailErr(t, "complete scout wave", mgr.Fanout.RecordWorkerTerminalProof(ctx, run.SessionID, "wave-worker", "complete"))
 			run, err = mgr.Store.Runs.Get(ctx, run.ID)
 			testutil.FailErr(t, "get after scout", err)
 			if run.CurrentPhase != "reconcile" {
@@ -65,7 +65,7 @@ func TestReconProgressiveScoutCanReportOrDrill(t *testing.T) {
 			if run.CurrentPhase != "drill" {
 				t.Fatalf("phase = %q want drill", run.CurrentPhase)
 			}
-			testutil.FailErr(t, "complete drill wave", mgr.Fanout.RecordWorkerTerminalProof(ctx, run.SessionID, "drill-1", "complete"))
+			testutil.FailErr(t, "complete drill wave", mgr.Fanout.RecordWorkerTerminalProof(ctx, run.SessionID, "wave-worker", "complete"))
 			run, err = mgr.Store.Runs.Get(ctx, run.ID)
 			testutil.FailErr(t, "get after drill", err)
 			if run.CurrentPhase != "report" {
@@ -83,7 +83,7 @@ func stampReconWave(t *testing.T, ctx context.Context, mgr *RunManager, run *api
 	testutil.FailErr(t, "read wave manifest", err)
 	def, _ := manifest.PhaseByID(run.CurrentPhase)
 	workflowTaskQuery1 := func(context.Context, string) ([]api.WorkerTask, error) {
-		return []api.WorkerTask{{ID: "wave-worker", WorkflowPhase: def.Next, WorkflowWorkID: "leg-1", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}}, nil
+		return []api.WorkerTask{{ID: "wave-worker", WorkflowRunID: run.ID, ParentSessionID: run.SessionID, WorkflowPhase: def.Next, WorkflowWorkID: "leg-1", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}}, nil
 	}
 	mgr.Fanout.WorkerTasks = workflowTaskQuery1
 	mgr.Coverage.WorkerTasks = workflowTaskQuery1

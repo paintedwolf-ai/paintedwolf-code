@@ -2,6 +2,7 @@ package workeroutcomes
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -27,8 +28,7 @@ type WorkerDecisions interface {
 	GetByJob(context.Context, string) (api.WorkerDecisionRequest, bool, error)
 }
 type ActiveWorkflow interface {
-	ActiveRun(context.Context, string) (*api.WorkflowRun, error)
-	ScaffoldVars(context.Context, string) (map[string]any, error)
+	ScaffoldVarsForSession(context.Context, string) (map[string]any, error)
 }
 type SessionLimits interface {
 	Effective(context.Context, *api.Session) settings.SessionLimits
@@ -67,10 +67,18 @@ func (m *Results) SetProofs(proofs TerminalProofs)          { m.proofs = proofs 
 func (m *Results) SetDecisions(decisions WorkerDecisions)   { m.decisions = decisions }
 func (m *Results) SetWorkflowSource(source ActiveWorkflow)  { m.workflowSource = source }
 
+// ValidateWorkflow rejects incomplete worker-to-workflow composition.
+func (m *Results) ValidateWorkflow() error {
+	if m == nil || m.proofs == nil || m.workflowSource == nil {
+		return errors.New("worker outcomes require workflow proofs and run state")
+	}
+	return nil
+}
+
 // RecordTerminalProof records stored summary status.
 func (m *Results) RecordTerminalProof(ctx context.Context, parentID, jobID, status string) error {
-	if m == nil || m.proofs == nil {
-		return nil
+	if err := m.ValidateWorkflow(); err != nil {
+		return err
 	}
 	if strings.TrimSpace(jobID) == "" {
 		return nil
@@ -145,11 +153,7 @@ func (m *Results) workerCycleCompletingJobID(ctx context.Context, sessionID stri
 	if sessionID == "" {
 		return ""
 	}
-	run, err := m.workflowSource.ActiveRun(ctx, sessionID)
-	if err != nil || run == nil {
-		return ""
-	}
-	vars, err := m.workflowSource.ScaffoldVars(ctx, run.ID)
+	vars, err := m.workflowSource.ScaffoldVarsForSession(ctx, sessionID)
 	if err != nil {
 		return ""
 	}

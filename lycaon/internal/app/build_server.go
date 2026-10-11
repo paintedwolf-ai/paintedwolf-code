@@ -371,6 +371,9 @@ func (b *serveBuilder) wireOrchestrator() error {
 	}
 	b.workflows.Manager.Presentation.TopologyLegs = orchestration.TopologyLegView{Store: b.delegations.Store, Catalog: extpacks.CatalogForConsumers}
 
+	if err := b.sessions.Manager.Workers.Results.ValidateWorkflow(); err != nil {
+		return err
+	}
 	workerOutcomes := &worker.SessionOutcomeBridge{Workers: b.sessions.Manager.Coordinator.Workers, Loop: b.sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges, Results: b.sessions.Manager.Workers.Results, State: b.sessions.Manager.Workers.State, Closure: b.sessions.Manager.Coordinator.ProgressClosure, Inner: b.delegations.Manager}
 	var executor worker.WorkerExecutor = b.delegations.Executor
 	if configdir.IsHarnessChannel() {

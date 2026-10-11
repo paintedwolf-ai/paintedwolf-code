@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 	"time"
@@ -66,10 +67,73 @@ func TestPlannedFanoutDoesNotAdvancePastMissingOrPartialWork(t *testing.T) {
 	if err := mgr.Fanout.AssertWorkerTask(ctx, &first); err == nil {
 		t.Fatal("accepted attempt beyond recovery allowance")
 	}
+	for _, stale := range []api.WorkerTask{
+		{ID: "stale", WorkflowRunID: "other", WorkflowPhase: "execute", ParentSessionID: "sess-1", Status: api.WorkerStatusComplete},
+		{ID: "stale", WorkflowRunID: run.ID, WorkflowPhase: "plan", ParentSessionID: "sess-1", Status: api.WorkerStatusComplete},
+		{ID: "stale", WorkflowRunID: run.ID, WorkflowPhase: "execute", ParentSessionID: "other", Status: api.WorkerStatusComplete},
+		{ID: "stale", WorkflowRunID: run.ID, WorkflowPhase: "execute", ParentSessionID: "sess-1", Status: api.WorkerStatusRunning},
+	} {
+		tasks = append(tasks, stale)
+		testutil.FailErr(t, "ignore stale proof", mgr.Fanout.RecordWorkerTerminalProof(ctx, "sess-1", "stale", "complete"))
+		current, err = mgr.Store.Runs.Get(ctx, run.ID)
+		testutil.FailErr(t, "read fenced phase", err)
+		if current.CurrentPhase != "execute" {
+			t.Fatal("unrelated terminal proof advanced workflow")
+		}
+		tasks = tasks[:len(tasks)-1]
+	}
 	testutil.FailErr(t, "exhausted proof", mgr.Fanout.RecordWorkerTerminalProof(ctx, "sess-1", "retry", "partial"))
 	current, err = mgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "read settled phase", err)
 	if current.CurrentPhase != "claims" {
 		t.Fatalf("settled phase=%s", current.CurrentPhase)
+	}
+}
+
+func TestPlannedFanoutRecoveryRequiresCompleteReadableLedger(t *testing.T) {
+	mgr, _, _, dir := testManagerWithRegistry(t)
+	ctx := t.Context()
+	run, err := startRun(ctx, mgr, "sess-1", "security-survey", "2.0.0")
+	testutil.FailErr(t, "start recovery run", err)
+	run.CurrentPhase = "execute"
+	testutil.FailErr(t, "enter execution", mgr.Store.State.Update(ctx, run))
+	plan := runstate.FanoutPlan{Phase: "execute", MaxAttempts: 2, Legs: []runstate.FanoutPlanLeg{{ID: "leg-1", AgentType: "security-reviewer", Prompt: "Review the boundary"}}}
+	testutil.FailErr(t, "retain plan", mgr.Store.State.UpdateVars(ctx, run, dir, runstate.StampFanoutPlan(nil, plan)))
+	before, err := mgr.Store.Runs.Get(ctx, run.ID)
+	testutil.FailErr(t, "read initial revision", err)
+	if err := mgr.Fanout.ReconcileWorkerCycle(ctx, "sess-1"); err == nil {
+		t.Fatal("missing ledger accepted")
+	}
+	unavailable := errors.New("worker ledger unavailable")
+	mgr.Fanout.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) { return nil, unavailable }
+	if err := mgr.Fanout.ReconcileWorkerCycle(ctx, "sess-1"); !errors.Is(err, unavailable) {
+		t.Fatalf("recovery error=%v", err)
+	}
+	if err := mgr.Fanout.RecordWorkerTerminalProof(ctx, "sess-1", "one", "complete"); !errors.Is(err, unavailable) {
+		t.Fatalf("proof error=%v", err)
+	}
+	var tasks []api.WorkerTask
+	mgr.Fanout.WorkerTasks = func(context.Context, string) ([]api.WorkerTask, error) { return tasks, nil }
+	testutil.FailErr(t, "retain missing work", mgr.Fanout.ReconcileWorkerCycle(ctx, "sess-1"))
+	tasks = []api.WorkerTask{{ID: "one", ParentSessionID: "sess-1", WorkflowRunID: run.ID, WorkflowPhase: "execute", WorkflowWorkID: "leg-1", Status: api.WorkerStatusRunning}}
+	testutil.FailErr(t, "retain active work", mgr.Fanout.ReconcileWorkerCycle(ctx, "sess-1"))
+	current, err := mgr.Store.Runs.Get(ctx, run.ID)
+	testutil.FailErr(t, "read unmodified run", err)
+	if current.Revision != before.Revision || current.CurrentPhase != "execute" {
+		t.Fatalf("incomplete ledger mutated run: %+v", current)
+	}
+	tasks[0].Status = api.WorkerStatusComplete
+	tasks[0].Result = &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}
+	testutil.FailErr(t, "recover completed work", mgr.Fanout.ReconcileWorkerCycle(ctx, "sess-1"))
+	current, err = mgr.Store.Runs.Get(ctx, run.ID)
+	testutil.FailErr(t, "read recovered run", err)
+	if current.CurrentPhase != "claims" {
+		t.Fatalf("recovered phase=%s", current.CurrentPhase)
+	}
+	testutil.FailErr(t, "repeat recovery", mgr.Fanout.ReconcileWorkerCycle(ctx, "sess-1"))
+	replayed, err := mgr.Store.Runs.Get(ctx, run.ID)
+	testutil.FailErr(t, "read replayed run", err)
+	if replayed.Revision != current.Revision {
+		t.Fatal("recovery repeated settled work")
 	}
 }
