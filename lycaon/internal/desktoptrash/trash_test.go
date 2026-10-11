@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestMoveValidatesAbsolutePath(t *testing.T) {
@@ -70,9 +71,7 @@ func TestMoveDirectoryToTrash(t *testing.T) {
 func TestRestoreRefusesUnknownReceiptVersion(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "recorded")
-	if err := os.WriteFile(path, []byte("preserved"), 0600); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "write retained receipt fixture", os.WriteFile(path, []byte("preserved"), 0600))
 	err := Restore(t.Context(), Receipt{FormatVersion: 999, Platform: runtime.GOOS, Path: path, Identity: "unknown"}, fseffect.Location{Root: root, Rel: "destination"})
 	if !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("unknown receipt = %v", err)

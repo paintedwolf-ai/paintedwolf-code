@@ -140,7 +140,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	sa, err := app.Build(t.Context(), cfg)
 	testutil.FailErr(t, "build app", err)
 	t.Cleanup(func() {
-		_ = sa.Close()
+		testutil.FailErr(t, "close test app", sa.Close())
 		_ = db.RemoveStore(dbPath)
 	})
 	project.SetDefaultOpenPolicy(project.TestOpenPolicy())

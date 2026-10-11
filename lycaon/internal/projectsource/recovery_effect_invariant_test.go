@@ -31,7 +31,9 @@ func TestRecoveryClassifiesExecutedEffectsAcrossOperationKinds(t *testing.T) {
 				ctx := WithSourceEffect(t.Context(), func() error { panic(interruption) })
 				func() {
 					defer func() {
-						if got := recover(); got != interruption {
+						got := recover()
+						err, ok := got.(error)
+						if !ok || !errors.Is(err, interruption) {
 							t.Fatalf("operation did not reach crash boundary: %v", got)
 						}
 					}()
@@ -148,7 +150,9 @@ func TestRecoveryRefusesUnacknowledgedNativeMoves(t *testing.T) {
 			id := uuid.NewString()
 			func() {
 				defer func() {
-					if got := recover(); got != crash {
+					got := recover()
+					err, ok := got.(error)
+					if !ok || !errors.Is(err, crash) {
 						t.Fatalf("native crash boundary=%v", got)
 					}
 				}()
