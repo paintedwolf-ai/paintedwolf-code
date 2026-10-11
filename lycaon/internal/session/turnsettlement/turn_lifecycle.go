@@ -89,6 +89,11 @@ func (m *Service) Finish(ctx context.Context, sessionID string, promptFailed, ho
 		m.deferredTurnSettlement.remove(sessionID)
 		return nil
 	}
+	if m.workflows != nil {
+		if err := m.workflows.Policy.AssertSessionCompletion(hostCtx, sessionID); err != nil {
+			return m.Failure(sessionID, err)
+		}
+	}
 	m.deferredTurnSettlement.put(sessionID, api.SessionIdleDispositionCompleted)
 	return nil
 }
@@ -101,6 +106,11 @@ func (m *Service) Failure(sessionID string, turnErr error) error {
 func (m *Service) Settle(ctx context.Context, sessionID string, disposition api.SessionIdleDisposition) error {
 	if m == nil || m.store == nil {
 		return nil
+	}
+	if disposition == api.SessionIdleDispositionCompleted && m.workflows != nil {
+		if err := m.workflows.Policy.AssertSessionCompletion(ctx, sessionID); err != nil {
+			disposition = m.Disposition(true)
+		}
 	}
 	if err := m.store.SetSessionStatus(ctx, sessionID, api.SessionStatusIdle); err != nil {
 		return fmt.Errorf("mark user turn idle: %w", err)

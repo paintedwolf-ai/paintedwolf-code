@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -67,12 +68,15 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 		return history, nil, false, nil
 	}
 	draftSlotID := ""
-	if st != nil && st.usesCoordinatorDraftSlot(assistantMessageID) {
+	if st != nil && st.usesCoordinatorDraftSlot(assistantMessageID) && !errors.Is(reject, guidance.ErrCloseoutStopped) {
 		draftSlotID = st.draftSlotID
 	}
 	history, err = l.rejectBlockedAssistantTurn(ctx, sessionID, history, assistantMessageID, draftSlotID, reject, st)
 	if err != nil {
 		return nil, reject, false, err
+	}
+	if errors.Is(reject, guidance.ErrCloseoutStopped) {
+		return history, reject, true, reject
 	}
 	return history, reject, true, nil
 }

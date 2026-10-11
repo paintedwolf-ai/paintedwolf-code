@@ -47,7 +47,8 @@ func TestActiveCloseoutGateStateReportsOpenLeaves(t *testing.T) {
 	mgr, sess, run := newCloseoutGateHarness(t)
 	ctx := context.Background()
 
-	state := mgr.Policy.ActiveCloseoutGateState(ctx, sess.ID)
+	state, stateErr := mgr.Policy.ActiveCloseoutGateState(ctx, sess.ID)
+	testutil.FailErr(t, "read closeout gates", stateErr)
 	if !state.Gated || state.Phase != "research" {
 		t.Fatalf("state = %+v want gated research", state)
 	}
@@ -60,7 +61,7 @@ func TestActiveCloseoutGateStateReportsOpenLeaves(t *testing.T) {
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	vars = runstate.SetGateSatisfied(vars, "research_satisfied", true)
 	testutil.FailErr(t, "UpdateVars", mgr.Store.State.UpdateVars(ctx, run, "", vars))
-	if state := mgr.Policy.ActiveCloseoutGateState(ctx, sess.ID); state.Gated {
+	if state, err := mgr.Policy.ActiveCloseoutGateState(ctx, sess.ID); err != nil || state.Gated {
 		t.Fatalf("state = %+v want cleared after the gate stamped", state)
 	}
 }
@@ -74,7 +75,7 @@ func TestActiveCloseoutGateStateClearedByPendingUserInput(t *testing.T) {
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	vars = runstate.SetFeedbackPending(vars, "ask-test", "Which direction?")
 	testutil.FailErr(t, "UpdateVars", mgr.Store.State.UpdateVars(ctx, run, "", vars))
-	if state := mgr.Policy.ActiveCloseoutGateState(ctx, sess.ID); state.Gated {
+	if state, err := mgr.Policy.ActiveCloseoutGateState(ctx, sess.ID); err != nil || state.Gated {
 		t.Fatalf("state = %+v want cleared while an ask is pending", state)
 	}
 }

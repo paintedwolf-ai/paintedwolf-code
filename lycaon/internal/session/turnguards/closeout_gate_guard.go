@@ -2,6 +2,7 @@ package turnguards
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -12,36 +13,50 @@ import (
 )
 
 const workflowGatesOpenCode = "WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT"
-
 const closeoutGateDelayMaxPerPrompt = 2
 
-// Gate repair is offered only when the coordinator can invoke tools.
-func (m *Service) OpenGates(ctx context.Context, sess *api.Session, workersIdle bool, invokeAllowed bool) (*guidance.Refusal, bool) {
-	if m == nil || sess == nil || m.workflows == nil {
+// OpenGates bounds repair attempts independently of completion admission.
+func (m *Service) OpenGates(ctx context.Context, sess *api.Session, workersIdle, invokeAllowed bool) (*guidance.Refusal, bool) {
+	if m == nil || sess == nil || sess.IsWorkerChild() || m.workflows == nil {
 		return nil, false
 	}
-	if !invokeAllowed {
-		return nil, false
+	state, err := m.workflows.Policy.ActiveCloseoutGateState(ctx, sess.ID)
+	if err != nil {
+		return guidance.NewRefusal("", err.Error()).WithCause(errors.Join(guidance.ErrCloseoutStopped, err)), true
 	}
-	state := m.workflows.Policy.ActiveCloseoutGateState(ctx, sess.ID)
-	if !state.Gated || len(state.OpenLeaves) == 0 {
+	if !state.Gated || len(state.OpenLeaves) == 0 || !workersIdle {
 		return nil, false
 	}
 	root := sessiontree.RootID(ctx, m.store, sess.ID)
 	leaves := strings.Join(state.OpenLeaves, ", ")
-	delayCount, delayed := m.closeouts.Delay(sess.ID, root, closeouts.GateDelay, workersIdle, closeoutGateDelayMaxPerPrompt)
-	return m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
+	count, retry := m.closeouts.Delay(sess.ID, root, closeouts.GateDelay, invokeAllowed, closeoutGateDelayMaxPerPrompt)
+	reject, blocked := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
 		gc.Workers.WorkersIdle = workersIdle
 		gc.Session.Phase = state.Phase
 		gc.Workflow.CloseoutGatesOpen = true
 		gc.Workflow.CloseoutGateOpenLeaves = leaves
-		gc.Workflow.CloseoutGateDelayCount = int64(delayCount)
-		if delayed {
-			gc.PutRejectData(workflowGatesOpenCode, map[string]any{
-				"phase":                     state.Phase,
-				"closeout_gate_open_leaves": leaves,
-			})
-		}
+		gc.Workflow.CloseoutGateDelayCount = int64(count)
+		gc.PutRejectData(workflowGatesOpenCode, map[string]any{"phase": state.Phase, "closeout_gate_open_leaves": leaves})
 		return nil
 	})
+	if blocked && !retry {
+		reject.WithCause(guidance.ErrCloseoutStopped)
+	}
+	return reject, blocked
+}
+
+// AssertCompletion also covers host-assembled and forced closeouts.
+func (m *Service) AssertCompletion(ctx context.Context, sess *api.Session) error {
+	if m == nil || sess == nil || sess.IsWorkerChild() {
+		return nil
+	}
+	idle := m.state.ForSession(ctx, sess).WorkersInFlight == 0
+	reject, blocked := m.OpenGates(ctx, sess, idle, false)
+	if blocked {
+		return reject
+	}
+	if !idle || m.workflows == nil {
+		return nil
+	}
+	return m.workflows.Policy.AssertSessionCompletion(ctx, sess.ID)
 }

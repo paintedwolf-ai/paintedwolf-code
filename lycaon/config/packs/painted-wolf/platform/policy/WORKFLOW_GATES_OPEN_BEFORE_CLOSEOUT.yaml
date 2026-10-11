@@ -9,7 +9,7 @@ requires:
     - paintedwolf.closeout_gate_delay_count
     - paintedwolf.workers_idle
     - paintedwolf.phase
-when: paintedwolf.workers_idle && paintedwolf.closeout_gates_open && paintedwolf.closeout_gate_delay_count < 2
+when: paintedwolf.workers_idle && paintedwolf.closeout_gates_open
 effect: block
 copy:
   what: 'Ended the turn with prose while phase `{{ paintedwolf.phase }}` runs to completion and its gates are still open: {{ paintedwolf.closeout_gate_open_leaves }}.'
