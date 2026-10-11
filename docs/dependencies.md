@@ -1,6 +1,6 @@
 # Dependencies
 
-When the Go module may take a third-party library, and the constraints that ride on particular ones. The [dependency inventory](operations/dependency-inventory.md) lists every pin and its update policy; its source is [`dependencies/`](../dependencies/README.md).
+When the Go module may take a third-party library, and the constraints that ride on particular ones. The [dependency inventory](operations/dependency-inventory.md) highlights update priorities and constraints, with links to every pin and its update policy; its source is [`dependencies/`](../dependencies/README.md).
 
 **See also:** [Licensing](licensing.md) · [Security](security.md) · [Dependency inventory](operations/dependency-inventory.md) · [Docs map](README.md)
 

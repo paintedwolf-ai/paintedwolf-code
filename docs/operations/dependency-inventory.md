@@ -2,18 +2,18 @@
 
 # Dependency inventory and update guide
 
-The languages, bundled engines, dev tools, vendored datasets, and every direct package
-across Painted Wolf Code. The judgement lives in the
-[dependency policy](../../dependencies/README.md), which also generates
-`.github/dependabot.yml`. The lockfiles remain the source for transitive packages.
+Update priorities and upgrade constraints across Painted Wolf Code. The complete
+[dependency policy](../../dependencies/README.md) and manifests retain the inventory;
+this page surfaces the entries that need attention. The policy also generates
+`.github/dependabot.yml`.
 
-Each entry has two independent ratings. **Update urgency** reflects threat model and
-protocol decay. **Update friction** reflects engineering cost and verification surface.
+**Update urgency** reflects threat model and protocol decay. **Update friction** reflects
+engineering cost and verification surface. Review both before choosing an update.
 
 **See also:** [Dependencies policy](../dependencies.md) ·
 [Licensing](../licensing.md) · [Compatibility](../compatibility.md) · [Dev tasks](../dev-tasks.md)
 
-Pinned values are read from the tree when this page is generated. Upstream values come from `dependencies/upstream.json`, last refreshed on **2026-10-07**. The dependency inventory workflow regenerates this page after dependency changes land on main and refreshes upstream weekly. A blank rating or note means the entry has no judgement in `dependencies/` yet. A blank Dependabot cell means default grouped updates.
+Pinned values are read from the tree when this page is generated. Upstream values come from `dependencies/upstream.json`, last refreshed on **2026-10-07**. The dependency inventory workflow regenerates this page after dependency changes land on main and refreshes upstream weekly. This page highlights priority updates and upgrade constraints; the complete policy and pin sources are linked below.
 
 ---
 
@@ -70,365 +70,61 @@ because the migration is hard.
 
 An entry counts as high urgency when rated Critical or High, and as high friction when rated High. Entries missing either rating are not placed.
 
-| Quadrant | Stance | Members |
+| Quadrant | Stance | Entries |
 |---|---|---|
-| **High urgency, high friction** | Planned precision updates. Watch upstream advisories continuously. Run each update as an isolated task with full cross-platform regression testing. | Chrome headless shell (Chrome for Testing), Dugite Git and Git LFS, Opengrep, Document core, `yjs`, `tokenizers`, `yrs` |
-| **High urgency, low or moderate friction** | Fast-follow. The nightly `lint:vuln:fresh` run, Dependabot, and the behind-upstream list surface these; take patches promptly. | Go point releases, Go vulnerability database (`lycaon/vulndb`), Vendored scanner rules, `isomorphic-dompurify`, `marked`, `js-yaml`, `nanoid`, `postcss`, `undici`, `dompurify` · via `isomorphic-dompurify`, `codeberg.org/readeck/go-readability/v2`, `filippo.io/age`, `github.com/aws/aws-sdk-go-v2`, `github.com/aws/aws-sdk-go-v2/config`, `github.com/aws/aws-sdk-go-v2/credentials`, `github.com/aws/aws-sdk-go-v2/service/bedrock`, `github.com/aws/aws-sdk-go-v2/service/bedrockruntime`, `github.com/aws/smithy-go`, `github.com/go-chi/chi/v5`, `github.com/go-git/go-git/v5`, `github.com/go-rod/rod`, `github.com/google/osv-scalibr`, `github.com/klauspost/compress`, `github.com/modelcontextprotocol/go-sdk`, `github.com/sashabaranov/go-openai`, `github.com/tsawler/tabula`, `github.com/ulikunitz/xz`, `github.com/yuin/goldmark`, `github.com/zricethezav/gitleaks/v8`, `golang.org/x/net`, `golang.org/x/oauth2`, `modernc.org/sqlite`, `ed25519-dalek`, `flate2`, `minisign-verify`, `rand`, `reqwest`, `rustls`, `tar`, `tauri`, `tauri-build`, `serde_json` |
-| **Low or moderate urgency, high friction** | Deliberate upgrades only. Do not chase releases. Upgrade when a defect, required feature, or security fix calls for it. | `third_party/gotreesitter`, `@codemirror/view`, `overlayscrollbars`, `typescript`, Charm v2 (`charm.land/bubbletea/v2`, `charm.land/bubbles/v2`), `objc2`, `objc2-app-kit`, `objc2-foundation`, `objc2-local-authentication`, `objc2-user-notifications`, `objc2-web-kit`, `ureq`, `candle-core`, `candle-nn`, `mlx-rs` |
-| **Low or moderate urgency, low or moderate friction** | Opportunistic maintenance during routine windows. | Go release, Bun, Node, Rust, macOS floor, Task (`task`), golangci-lint, deadcode, sqlc, oasdiff, go-licenses, cargo-about, Open Agent Rules spec (`schemas/oar/`), Common-password list (`secret-mint`), `@codemirror/autocomplete`, `@codemirror/commands`, `@codemirror/language`, `@codemirror/lint`, `@codemirror/merge`, `@codemirror/search`, `@codemirror/state`, `@playwright/test`, `@redocly/cli`, `@replit/codemirror-emacs`, `@tailwindcss/vite`, `@tanstack/solid-virtual`, `@tauri-apps/api`, `@tauri-apps/cli`, `@vitest/coverage-v8`, `diff`, `eslint`, `jsdom`, `msw`, `openapi-typescript`, `browserslist`, `solid-js`, `tailwindcss`, `vite`, `vitest`, `github.com/charmbracelet/bubbles`, `github.com/charmbracelet/bubbletea`, `github.com/charmbracelet/lipgloss`, `github.com/flosch/pongo2/v6`, `github.com/getkin/kin-openapi`, `github.com/itchyny/gojq`, `github.com/mikefarah/yq/v4`, `github.com/santhosh-tekuri/jsonschema/v6`, `github.com/tiktoken-go/tokenizer`, `arboard`, `rfd`, `tauri-plugin-dialog`, `tauri-plugin-notification`, `tauri-plugin-shell`, `tokio`, `which`, `windows`, `windows-sys`, `clap`, `indexmap`, `serde`, `thiserror`, `github.com/odvcencio/gotreesitter` |
+| **High urgency, high friction** | Planned precision updates. Watch upstream advisories continuously. Run each update as an isolated task with full cross-platform regression testing. | 7 |
+| **High urgency, low or moderate friction** | Fast-follow. The nightly `lint:vuln:fresh` run, Dependabot, and the behind-upstream list surface these; take patches promptly. | 42 |
+| **Low or moderate urgency, high friction** | Deliberate upgrades only. Do not chase releases. Upgrade when a defect, required feature, or security fix calls for it. | 15 |
+| **Low or moderate urgency, low or moderate friction** | Opportunistic maintenance during routine windows. | 62 |
 
 ---
 
-## Languages, runtimes, and platform floor
+## Upgrade constraints
 
-| Name | Pinned | Upstream | Urgency | Friction | Notes |
-|---|---|---|---|---|---|
-| Go point releases | `1.26.9` | `1.26.8` | **High** | **Low** | **Urgency:** The standard library (`net/http`, `crypto/tls`, `os`, `archive/*`) forms the sidecar's execution boundary, and point releases carry its security fixes.<br>**Friction:** Set by the `go` directive in `lycaon/go.mod`. Wrapper scripts derive `GOTOOLCHAIN` from it, CI reads it as `go-version-file`, and `scripts/setup-dev.sh` checks against it. |
-| Go release | `1.26.9` | `1.27.1` | **Moderate** | **Moderate** | **Urgency:** Go supports the two newest releases, and upstream modules raise their minimum Go version over time.<br>**Friction:** Run `./task build:cross` and `./task test:race`. Confirm the pinned `golangci-lint` and `deadcode` understand the new release; `deadcode` is pinned separately from the module's `golang.org/x/tools`. |
-| Bun | `1.3.14` | `1.4.2` | **Moderate** | **Low** | **Urgency:** Runs Den installs, Vite, and Vitest.<br>**Friction:** Pinned in `.bun-version`, which CI and `scripts/setup-dev.sh` read. Check `bun install --frozen-lockfile` against `bun.lock`. |
-| Node | `26.3.0` | `26.10.0` | **Low** | **Low** | **Urgency:** Offline tool runner for `@redocly/cli`, `scripts/codegen-den-types.sh`, and `scripts/den-coverage-check.sh`.<br>**Friction:** Pinned in `.node-version`, which CI and `scripts/setup-dev.sh` read. |
-| Rust | `1.97.1` | `1.99.0` | **Moderate** | **Moderate** | **Urgency:** Compiles the Tauri shell and the document-core WASM.<br>**Friction:** rustup, CI, and `scripts/setup-dev.sh` read `rust-toolchain.toml`. `scripts/build-document-core.sh` pins the same version for its reproducible WASM sysroot, so a bump also updates it, rebuilds `core.wasm`, and refreshes `core.manifest.json`. |
-| macOS floor | `14.0` |  | **Low** | **Moderate** | **Urgency:** A platform target, not an upstream dependency. Raise it only when a required API or a dependency floor demands it.<br>**Friction:** `macos_floor.txt` is the source of truth. `tauri.conf.json` `minimumSystemVersion` must match, and a contract test enforces it. Staging scripts derive `MACOSX_DEPLOYMENT_TARGET` and `LSMinimumSystemVersion` from it, and `./task bundle:verify` audits the result. Raising the floor drops every user on older macOS. |
-
----
-
-## Bundled engines and hermetic binaries
-
-Bundled binaries are hermetic-or-fail: the host never falls back to an unpinned system binary.
-Pin, fetch, prune, and signing details live in
-[Dependencies policy](../dependencies.md#bundled-git-toolchain).
-
-| Name | Pinned | Upstream | Urgency | Friction | Notes |
-|---|---|---|---|---|---|
-| Chrome headless shell (Chrome for Testing) | `154.0.8037.92` | Stable `155.0.8059.39` | **Critical** | **High** | **Urgency:** Renders adversarial web content. `internal/browser` launches it with `NoSandbox` because host confinement replaces Chrome's own sandbox, so V8 and Blink fixes matter directly.<br>**Friction:** Update the version and the per-platform SHA-256 values in `chrome_pin.go`. Provision with `./task browser:ensure` and check that `go-rod` still drives the new CDP protocol. Re-verify confinement with `./task test:seatbelt` and the CI `confinement` job. The macOS bundle Developer ID–signs the tree. |
-| Dugite Git and Git LFS | Git `2.53.0`<br>LFS `3.7.1`<br>dugite build `f49d009` | Git `2.56.0`<br>LFS `3.8.0`<br>dugite `2.53.0-4` | **Critical** | **High** | **Urgency:** Git runs against untrusted repositories and remotes on the workstation.<br>**Friction:** Pinned per platform in `lycaon/config/gitengine/pin.yaml`. Dugite trails upstream Git, so a newer Git is usable only once a dugite release ships it. Follow the [bump procedure](../dependencies.md#bump-procedure), including the parity suite. The fetch fails closed on a hash mismatch, prunes to a 40 MB Unix and 140 MB Windows budget, and the macOS bundle signs every Mach-O with Developer ID and hardened runtime. |
-| Opengrep | `1.30.0+paintedwolf.39` | Opengrep `1.30.1`<br>fork current | **High** | **High** | **Urgency:** SAST engine for secret screening and code policy.<br>**Friction:** Downstream fork in `paintedwolf-ai/paintedwolf-opengrep`, recorded in `bundled-manifest.yaml`, which ships a darwin-arm64 artifact only. Authenticate a release with `./task scan:opengrep:select -- --tag <tag> --expected-commit <sha> <release.json>`, then run `./task test:scanners` so first-party and vendored rules still load. |
-| Document core | yrs `0.27.4` | yrs `0.28.0` | **High** | **High** | **Urgency:** Divergence in CRDT state loses user edits.<br>**Friction:** Built by `scripts/build-document-core.sh` into the native `pw-document-core`, which the host runs confined beside itself and every release signs and probes. Den binds CodeMirror to Yjs text and the host applies Yrs updates, so a bump must stay update-compatible with Den's `yjs`. Treat a 0.x minor bump as breaking. |
-
----
-
-## Development, build, and verification tools
-
-| Name | Pinned | Upstream | Urgency | Friction | Notes |
-|---|---|---|---|---|---|
-| Task (`task`) | `v3.51.1` | `v3.54.0` | **Moderate** | **Moderate** | **Urgency:** Runs every repository target behind the verification queue.<br>**Friction:** Pinned in `scripts/task.sh`, which reinstalls when the pin changes. Check the queue with `./task test:runner` after a bump. |
-| golangci-lint | `v2.12.2` | `v2.14.0` | **Moderate** | **Moderate** | Pinned in `scripts/lint-go.sh` and configured in `lycaon/.golangci.yml`. New linters and checks usually need code fixes. |
-| deadcode | `v0.33.0` | `v0.51.0` | **Moderate** | **Low** | Pinned in `scripts/deadcode-check.sh`, with exclusions in `lycaon/.deadcode-exclude`. |
-| sqlc | `v1.29.0` | `v1.31.1` | **Low** | **Moderate** | Codegen only. Review regenerated queries from `./task db:sqlc`, then run `db:sqlc:check` and `db:sqlc:vet`. |
-| oasdiff | `v1.26.1` | `v1.33.0` | **Low** | **Low** | Reports breaking wire changes for release review (`./task openapi:diff`). |
-| go-licenses | `v2.0.1` | current | **Moderate** | **Low** | `./task licenses:notices` generates `THIRD-PARTY-NOTICES.md` and fails closed on unknown licenses. |
-| cargo-about | `0.9.1` | `0.9.2` | **Moderate** | **Low** | Rust half of `./task licenses:notices`. |
-
----
-
-## Vendored catalogs, datasets, and specifications
-
-Copied into the repository, pinned to an upstream commit or release, and hash-verified by a
-`:check` target.
-
-| Name | Pinned | Upstream | Urgency | Friction | Notes |
-|---|---|---|---|---|---|
-| `third_party/gotreesitter` | `v0.52.0` | `v0.55.1` | **Moderate** | **High** | **Urgency:** Parses repository source into symbols and outlines.<br>**Friction:** `third_party/gotreesitter.patch` covers Swift optional-binding recovery, comment-only PowerShell programs, and TypeScript/TSX finalization inside the parse timeout. The rationale and update procedure are in [`third_party/README.md`](../../third_party/README.md). |
-| Go vulnerability database (`lycaon/vulndb`) | snapshot `2026-10-08T22:31:09Z`<br>entries `4613`<br>modules `1435` |  | **Critical** | **Low** | **Urgency:** The offline `./task lint:vuln` gate reads this snapshot, and nightly `./task lint:vuln:fresh` checks the live database. `vendor-vulndb.py` prunes the snapshot to `go list -m all` and always keeps the `stdlib` and `toolchain` pseudo-modules, which that list never names; `--check` fails if either row is missing. Both runs cover standard-library advisories; the offline gate sees those published up to the pin.<br>**Friction:** Re-materialize with `./task lint:vuln:vendor`. Because `lint:vuln:vendor:check` also verifies the module set, every `go.mod` change needs a re-vendor. `scripts/govulncheck-gate.py` enforces reviewed suppressions in `lycaon/govulncheck-allowlist.yaml`. |
-| Open Agent Rules spec (`schemas/oar/`) | OAR `1.0`<br>fixtures `265` |  | **Moderate** | **Moderate** | Defines the policy grammar and observation vocabulary. `./task oar:vendor` copies from the `open-agent-rules` checkout; then run `oar:vendor:check` and `oar:conformance`. |
-| Vendored scanner rules | catalogs `6` |  | **High** | **Moderate** | **Urgency:** Detection coverage for scanned project code.<br>**Friction:** Pinned commits live in `rules-provenance.yaml`. Patches under `rules/patches/<id>/` keep rules loadable by the shipped Opengrep; see the [patch README](../../lycaon/config/runtime/scanners/rules/patches/README.md). Move a pin with `./task scan:rules:vendor:bump -- <id>=<ref>`, then run `scan:rules:vendor:check`. |
-| Common-password list (`secret-mint`) | `67c4ece9ef` | current | **Low** | **Low** | Static dictionary for screening trivial passwords. Move with `./task secret-mint:vendor:bump`, then run `secret-mint:vendor:check`. |
-
----
-
-## Frontend packages (`lycaon-den`)
-
-Declared in `lycaon-den/package.json`; the Pinned column shows the `bun.lock` resolution.
-
-### Locally patched packages
-
-`patchedDependencies` applies these patches to one exact version, so a bump requires
-rebasing the patch.
+Held packages, restricted update policies, and high-friction upgrades, even when current. A blank Dependabot cell means default grouped updates; — means the entry is not managed by Dependabot.
 
 | Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
 |---|---|---|---|---|---|---|
+| Chrome headless shell (Chrome for Testing) | `154.0.8037.92` | Stable `155.0.8059.39` | **Critical** | **High** | — | **Urgency:** Renders adversarial web content. `internal/browser` launches it with `NoSandbox` because host confinement replaces Chrome's own sandbox, so V8 and Blink fixes matter directly.<br>**Friction:** Update the version and the per-platform SHA-256 values in `chrome_pin.go`. Provision with `./task browser:ensure` and check that `go-rod` still drives the new CDP protocol. Re-verify confinement with `./task test:seatbelt` and the CI `confinement` job. The macOS bundle Developer ID–signs the tree. |
+| Dugite Git and Git LFS | Git `2.53.0`<br>LFS `3.7.1`<br>dugite build `f49d009` | Git `2.56.0`<br>LFS `3.8.0`<br>dugite `2.53.0-4` | **Critical** | **High** | — | **Urgency:** Git runs against untrusted repositories and remotes on the workstation.<br>**Friction:** Pinned per platform in `lycaon/config/gitengine/pin.yaml`. Dugite trails upstream Git, so a newer Git is usable only once a dugite release ships it. Follow the [bump procedure](../dependencies.md#bump-procedure), including the parity suite. The fetch fails closed on a hash mismatch, prunes to a 40 MB Unix and 140 MB Windows budget, and the macOS bundle signs every Mach-O with Developer ID and hardened runtime. |
+| Opengrep | `1.30.0+paintedwolf.39` | Opengrep `1.30.1`<br>fork current | **High** | **High** | — | **Urgency:** SAST engine for secret screening and code policy.<br>**Friction:** Downstream fork in `paintedwolf-ai/paintedwolf-opengrep`, recorded in `bundled-manifest.yaml`, which ships a darwin-arm64 artifact only. Authenticate a release with `./task scan:opengrep:select -- --tag <tag> --expected-commit <sha> <release.json>`, then run `./task test:scanners` so first-party and vendored rules still load. |
+| Document core | yrs `0.27.4` | yrs `0.28.0` | **High** | **High** | — | **Urgency:** Divergence in CRDT state loses user edits.<br>**Friction:** Built by `scripts/build-document-core.sh` into the native `pw-document-core`, which the host runs confined beside itself and every release signs and probes. Den binds CodeMirror to Yjs text and the host applies Yrs updates, so a bump must stay update-compatible with Den's `yjs`. Treat a 0.x minor bump as breaking. |
+| `third_party/gotreesitter` | `v0.52.0` | `v0.55.1` | **Moderate** | **High** | — | **Urgency:** Parses repository source into symbols and outlines.<br>**Friction:** `third_party/gotreesitter.patch` covers Swift optional-binding recovery, comment-only PowerShell programs, and TypeScript/TSX finalization inside the parse timeout. The rationale and update procedure are in [`third_party/README.md`](../../third_party/README.md). |
 | `@codemirror/view` | `6.43.6` + local patch | `6.43.13` | **Low** | **High** | Held | **Urgency:** Text rendering only; no HTML evaluation.<br>**Friction:** The patch adds a measure-timing facet, line-padding measurement, and scroll and wrapped-line height changes, duplicated across `dist/index.cjs` and `dist/index.js`. |
 | `@replit/codemirror-emacs` | `6.1.0` + local patch | current | **Low** | **Moderate** | Held | **Friction:** The patch drops the pure annotations on key and command registration, which otherwise let bundlers remove every Emacs command. |
 | `overlayscrollbars` | `2.16.0` + local patch | current | **Low** | **High** | Held | Themed scrollbar chrome. |
-
-### Framework, state, and client libraries
-
-| Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
-|---|---|---|---|---|---|---|
-| `@codemirror/autocomplete` | `6.20.3` | current | **Low** | **Moderate** |  |  |
-| `@codemirror/commands` | `6.11.1` | current | **Low** | **Moderate** |  |  |
-| `@codemirror/language` | `6.12.4` | current | **Low** | **Moderate** |  |  |
-| `@codemirror/lint` | `6.9.7` | current | **Low** | **Moderate** |  |  |
-| `@codemirror/merge` | `6.12.2` | current | **Low** | **Moderate** |  | Exact pin. |
-| `@codemirror/search` | `6.7.2` | current | **Low** | **Moderate** |  |  |
-| `@codemirror/state` | `6.7.6` | current | **Low** | **Moderate** |  | Bump the CodeMirror packages together with `@codemirror/view`. |
-| `@tanstack/solid-virtual` | `3.13.40` | current | **Moderate** | **Moderate** |  | The transcript virtualizer uses `anchorTo: "start"` with `followOnAppend: false`, and its own motion controller owns tail anchoring and `shiftContent` corrections. Re-verify scroll retention after a bump. |
-| `@tauri-apps/api` | `2.12.0` | `2.12.1` | **Moderate** | **Low** |  | Keep in step with the `tauri` crate. |
-| `diff` | `9.0.0` | current | **Low** | **Moderate** |  | Audit hunk and patch APIs used by diff rendering and edit playback on a major bump. |
-| `isomorphic-dompurify` | `4.4.0` | `4.5.0` | **Critical** | **Moderate** |  | **Urgency:** `chat/markdown/markdown-render.ts` sanitizes all rendered Markdown HTML against XSS.<br>**Friction:** Before a major bump, audit the configured hooks and allow-lists. |
-| `marked` | `18.0.14` | `18.1.0` | **High** | **Low** |  | Parses model and file Markdown ahead of the sanitizer. Exact pin. |
-| `solid-js` | `1.9.15` | `1.9.16` | **Moderate** | **Low** |  |  |
-| `yjs` | `13.6.32` | `13.6.33` | **High** | **High** | Held | Den's replica of the editor document. Must stay update-compatible with the host's `yrs`; bump both together and test end to end against the WASM core. |
-| `dompurify` · via `isomorphic-dompurify` | `3.4.16` | current | **Critical** | **Low** | — | The sanitizer itself. Patch releases arrive with a lockfile refresh inside `isomorphic-dompurify`'s range. |
-
-### Dev, build, and test tooling
-
-| Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
-|---|---|---|---|---|---|---|
-| `@playwright/test` · dev | `1.63.0` | current | **Moderate** | **Moderate** |  | Bumps the Chromium and WebKit builds that `scripts/e2e-den.sh` installs. |
-| `@redocly/cli` · dev | `2.57.0` | `2.59.0` | **Low** | **Low** |  | Offline OpenAPI bundler and linter; `scripts/redocly-version.sh` reads this pin. Verify with `./task openapi:bundle` and `./task openapi:lint`. |
-| `@tailwindcss/vite` · dev | `4.3.3` | current | **Low** | **Low** |  |  |
-| `@tauri-apps/cli` · dev | `2.12.0` | `2.12.1` | **Moderate** | **Low** |  | Keep in step with the `tauri` crate. |
-| `@vitest/coverage-v8` · dev | `5.0.3` | current | **Moderate** | **Moderate** |  |  |
-| `eslint` · dev | `10.12.0` | current | **Low** | **Moderate** |  |  |
-| `jsdom` · dev | `30.1.2` | current | **Low** | **Moderate** |  | Check DOM behavior in component tests when bumping a major. |
-| `msw` · dev | `3.0.2` | current | **Low** | **Low** |  |  |
-| `openapi-typescript` · dev | `7.13.0` | current | **Moderate** | **Moderate** |  | Exact pin. `scripts/codegen-den-types.sh` refuses a mismatched install, and a bump regenerates `src/api/types.ts` through `./task codegen:den-types`. |
-| `tailwindcss` · dev | `4.3.3` | current | **Low** | **Low** |  |  |
 | `typescript` · dev | `6.0.3` | `7.0.2` | **Moderate** | **High** | No majors | TypeScript 7 is the native compiler port. `typescript-eslint` and the Solid toolchain must support it first; plan it as dedicated work. |
-| `vite` · dev | `8.3.2` | `8.3.3` | **Moderate** | **Low** |  |  |
-| `vitest` · dev | `5.0.3` | current | **Moderate** | **Moderate** |  |  |
-
-### Transitive overrides
-
-`overrides` floors for vulnerable transitive versions. Drop one once every parent requires
-a fixed version on its own.
-
-| Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
-|---|---|---|---|---|---|---|
-| `browserslist` · override | `^4.28.7` | `4.29.3` | **Moderate** | **Low** | — |  |
-| `js-yaml` · override | `^4.3.1` | `5.4.3` | **High** | **Low** | — |  |
-| `nanoid` · override | `^3.3.18` | `6.0.2` | **High** | **Low** | — |  |
-| `postcss` · override | `^8.5.23` | `8.5.29` | **High** | **Low** | — |  |
-| `undici` · override | `^7.29.0` | `8.11.2` | **High** | **Low** | — |  |
-
-### Other entries
-
-| Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
-|---|---|---|---|---|---|---|
-| `@codemirror/lang-css` | `6.3.1` | current |  |  |  |  |
-| `@codemirror/lang-go` | `6.0.1` | current |  |  |  |  |
-| `@codemirror/lang-html` | `6.4.12` | current |  |  |  |  |
-| `@codemirror/lang-javascript` | `6.2.5` | current |  |  |  |  |
-| `@codemirror/lang-json` | `6.0.2` | current |  |  |  |  |
-| `@codemirror/lang-markdown` | `6.5.2` | current |  |  |  |  |
-| `@codemirror/lang-python` | `6.2.1` | current |  |  |  |  |
-| `@codemirror/lang-rust` | `6.0.2` | current |  |  |  |  |
-| `@codemirror/lang-yaml` | `6.1.3` | current |  |  |  |  |
-| `@codemirror/legacy-modes` | `6.5.4` | current |  |  |  |  |
-| `@replit/codemirror-vim` | `6.4.0` | current |  |  |  |  |
-| `@solidjs/testing-library` · dev | `0.8.10` | current |  |  |  |  |
-| `@tauri-apps/plugin-dialog` | `2.8.0` | `2.8.1` |  |  |  |  |
-| `@tauri-apps/plugin-notification` | `2.5.0` | `2.5.1` |  |  |  |  |
-| `@tauri-apps/plugin-shell` | `2.4.0` | current |  |  |  |  |
-| `@thisbeyond/solid-dnd` | `0.7.5` | current |  |  |  |  |
-| `@types/node` · dev | `26.6.4` | current |  |  |  |  |
-| `@types/semver` · dev | `7.8.0` | current |  |  |  |  |
-| `@typescript-eslint/eslint-plugin` · dev | `8.71.0` | `8.71.1` |  |  |  |  |
-| `@typescript-eslint/parser` · dev | `8.71.0` | `8.71.1` |  |  |  |  |
-| `axe-core` · dev | `4.13.0` | `4.14.0` |  |  |  |  |
-| `eslint-plugin-solid` · dev | `0.18.1` | current |  |  |  |  |
-| `eslint-plugin-tailwindcss` · dev | `4.4.0` | current |  |  |  |  |
-| `lightningcss` · dev | `1.33.0` | current |  |  |  |  |
-| `@codemirror/state` · override | `^6.7.6` | `6.7.6` |  |  | — |  |
-| `semver` | `7.8.5` | current |  |  |  |  |
-| `tailwind-merge` | `3.7.0` | current |  |  |  |  |
-| `typescript-eslint` · dev | `8.71.0` | `8.71.1` |  |  |  |  |
-| `undici` · dev | `7.29.1` | `8.11.2` |  |  |  |  |
-| `vite-plugin-solid` · dev | `2.11.14` | current |  |  |  |  |
-| `yaml` · dev | `2.9.1` | current |  |  |  |  |
-
----
-
-## Backend Go modules (`lycaon`)
-
-Direct requirements in `lycaon/go.mod`, run in the host process. After any change, re-vendor
-the vulnerability database.
-
-### Architecture-critical modules
-
-| Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
-|---|---|---|---|---|---|---|
-| `filippo.io/age` | `v1.3.2` | current | **Critical** | **Moderate** |  | Encrypts credential vaults in `internal/credentialstore`. Before any change, prove existing vaults still decrypt. |
-| `github.com/flosch/pongo2/v6` | `v6.1.0` | current | **Moderate** | **Moderate** |  | The single template engine. `internal/pongoplain` enforces the bounded dialect, and engine changes must not widen it. |
-| `github.com/getkin/kin-openapi` | `v0.149.0` | current | **Low** | **Low** |  | Test-only (`test/openapi`, `test/contract`, `test/security`). |
-| `github.com/odvcencio/gotreesitter` | `v0.52.0` → `../third_party/gotreesitter` | `v0.55.1` |  |  |  | Replaced by the vendored copy; see the vendored catalogs section. |
-| `github.com/tiktoken-go/tokenizer` | `v0.8.1` | current | **Low** | **Low** |  | Embedded offline token estimator (`internal/tokenest`). |
-| `modernc.org/sqlite` | `v1.60.1` | current | **High** | **Moderate** |  | **Urgency:** The single SQL driver: pure Go, FTS5, no CGO. It stores sessions, ledgers, and history.<br>**Friction:** Verify with `./task test:integration` (randomized SQLite lifecycle properties) and `./task test:stress`. |
-
-### Protocols, providers, and security engines
-
-| Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
-|---|---|---|---|---|---|---|
-| `github.com/aws/aws-sdk-go-v2` | `v1.47.1` | current | **High** | **Low** |  | Bedrock streaming and Converse API. Bump the AWS modules together. |
-| `github.com/aws/aws-sdk-go-v2/config` | `v1.33.6` | `v1.33.7` | **High** | **Low** |  |  |
-| `github.com/aws/aws-sdk-go-v2/credentials` | `v1.20.6` | `v1.20.7` | **High** | **Low** |  |  |
-| `github.com/aws/aws-sdk-go-v2/service/bedrock` | `v1.73.1` | `v1.73.2` | **High** | **Low** |  |  |
-| `github.com/aws/aws-sdk-go-v2/service/bedrockruntime` | `v1.63.1` | `v1.63.2` | **High** | **Low** |  |  |
-| `github.com/aws/smithy-go` | `v1.28.2` | `v1.28.3` | **High** | **Low** |  |  |
-| `github.com/go-chi/chi/v5` | `v5.3.2` | current | **High** | **Low** |  | Sidecar HTTP routing. |
-| `github.com/go-rod/rod` | `v0.116.2` | current | **High** | **Moderate** |  | CDP driver for the managed browser. Its protocol bindings age as the Chrome pin advances. |
-| `github.com/google/osv-scalibr` | `v0.5.3` | current | **High** | **Moderate** |  | SCA extraction. Pulls the legacy `docker/docker` module, which carries reviewed suppressions in `lycaon/govulncheck-allowlist.yaml`; re-check them after a bump. |
-| `github.com/modelcontextprotocol/go-sdk` | `v1.8.0` | current | **Critical** | **Moderate** |  | Talks to untrusted MCP servers, and the spec moves quickly. Expect API deprecations; `test/security` and `test/wiring` cover it. |
-| `github.com/sashabaranov/go-openai` | `v1.43.0` | current | **High** | **Low** |  | Provider wire API (`internal/llm`). |
-| `github.com/zricethezav/gitleaks/v8` | `v8.30.1` | current | **High** | **Low** |  | Secret-detection patterns (`internal/scan`, `internal/secretmatch`). |
-| `golang.org/x/oauth2` | `v0.37.0` | current | **High** | **Low** |  | Provider and MCP OAuth. |
-
-### Parsers of untrusted content
-
-| Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
-|---|---|---|---|---|---|---|
-| `codeberg.org/readeck/go-readability/v2` | `v2.1.3` | current | **High** | **Low** |  | Extracts articles from fetched web pages. |
-| `github.com/go-git/go-git/v5` | `v5.19.3` | current | **High** | **Low** |  | Reads repository state in `internal/sourcescope`. |
-| `github.com/itchyny/gojq` | `v0.12.19` | current | **Moderate** | **Low** |  | Native query tool. |
-| `github.com/klauspost/compress` | `v1.20.1` | current | **High** | **Low** |  | Decompression of attachments and blobs. |
-| `github.com/mikefarah/yq/v4` | `v4.54.1` | current | **Moderate** | **Low** |  | Native query tool. |
-| `github.com/santhosh-tekuri/jsonschema/v6` | `v6.0.3` | current | **Moderate** | **Low** |  | Schema validation for MCP, OAR, and tools. |
-| `github.com/tsawler/tabula` | `v1.6.14` | current | **High** | **Low** |  | Document extraction for prompt attachments. |
-| `github.com/ulikunitz/xz` | `v0.5.17` | current | **High** | **Low** |  | Decompression of attachments. |
-| `github.com/yuin/goldmark` | `v1.8.6` | current | **High** | **Low** |  | Markdown parsing for reports, repo maps, and navigation. |
-| `golang.org/x/net` | `v0.60.0` | `v0.59.0` | **High** | **Low** |  | HTML, HTTP/2, and proxy code used by web research, egress, and scanning. |
-
-### Terminal UI
-
-| Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
-|---|---|---|---|---|---|---|
-| `github.com/charmbracelet/bubbles` | `v1.0.0` | current | **Low** | **Low** |  | The interactive log browser (`./task logs:tui`, `internal/logview`). v1.0.0 on this path is a ceremonial release; the breaking line is Charm v2. |
-| `github.com/charmbracelet/bubbletea` | `v1.3.10` | current | **Low** | **Low** |  | The v1 line is in maintenance. |
-| `github.com/charmbracelet/lipgloss` | `v1.1.0` | current | **Low** | **Low** |  |  |
+| `yjs` | `13.6.32` | `13.6.33` | **High** | **High** | Held | Den's replica of the editor document. Must stay update-compatible with the host's `yrs`; bump both together and test end to end against the WASM core. |
 | Charm v2 (`charm.land/bubbletea/v2`, `charm.land/bubbles/v2`) | — | bubbletea `v2.0.10`<br>bubbles `v2.2.1` | **Low** | **High** | — | New import paths and a breaking redesign. Migrate the whole log browser at once, and only when it is scheduled. |
-
-### Other entries
-
-| Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
-|---|---|---|---|---|---|---|
-| `github.com/BurntSushi/toml` | `v1.6.0` | current |  |  |  |  |
-| `github.com/Masterminds/semver/v3` | `v3.5.0` | current |  |  |  |  |
-| `github.com/alecthomas/chroma/v2` | `v2.27.0` | current |  |  |  |  |
-| `github.com/andybalholm/brotli` | `v1.2.6` | current |  |  |  |  |
-| `github.com/atotto/clipboard` | `v0.1.4` | current |  |  |  |  |
-| `github.com/aymanbagabas/go-udiff` | `v0.4.1` | current |  |  |  |  |
-| `github.com/charmbracelet/x/ansi` | `v0.11.8` | current |  |  |  |  |
-| `github.com/charmbracelet/x/vt` | `v0.0.0-20260713092006-0d683c34c74b` | `v0.0.0-20261004011457-ad85c59fdf4e` |  |  |  |  |
-| `github.com/creack/pty` | `v1.1.24` | current |  |  |  |  |
-| `github.com/fatih/semgroup` | `v1.3.0` | current |  |  |  |  |
-| `github.com/fsnotify/fsevents` | `v0.2.0` | current |  |  |  |  |
-| `github.com/fsnotify/fsnotify` | `v1.10.1` | current |  |  |  |  |
-| `github.com/go-chi/cors` | `v1.2.2` | current |  |  |  |  |
-| `github.com/go-enry/go-enry/v2` | `v2.9.6` | current |  |  |  |  |
-| `github.com/google/go-cmp` | `v0.7.0` | current |  |  |  |  |
-| `github.com/google/uuid` | `v1.6.0` | current |  |  |  |  |
-| `github.com/jimsmart/grobotstxt` | `v1.0.3` | current |  |  |  |  |
-| `github.com/johnfercher/go-tree` | `v1.1.0` | current |  |  |  |  |
-| `github.com/johnfercher/maroto/v2` | `v2.4.3` | current |  |  |  |  |
-| `github.com/keybase/go-keychain` | `v0.0.1` | current |  |  |  |  |
-| `github.com/ossf/osv-schema/bindings/go` | `v0.0.0-20260424063704-83285ce2a866` | `v0.0.0-20261006214857-64befd6cdc39` |  |  |  |  |
-| `github.com/owenrumney/go-sarif/v2` | `v2.3.3` | current |  |  |  |  |
-| `github.com/pandatix/go-cvss` | `v0.6.4` | current |  |  |  |  |
-| `github.com/pelletier/go-toml/v2` | `v2.4.3` | current |  |  |  |  |
-| `github.com/phpdave11/gofpdf` | `v1.4.3` | current |  |  |  |  |
-| `github.com/sony/gobreaker` | `v1.0.0` | current |  |  |  |  |
-| `github.com/ysmood/gson` | `v0.7.3` | current |  |  |  |  |
-| `go.uber.org/goleak` | `v1.3.0` | current |  |  |  |  |
-| `golang.org/x/image` | `v0.46.0` | current |  |  |  |  |
-| `golang.org/x/mod` | `v0.41.0` | current |  |  |  |  |
-| `golang.org/x/sync` | `v0.23.0` | current |  |  |  |  |
-| `golang.org/x/sys` | `v0.48.0` | current |  |  |  |  |
-| `golang.org/x/text` | `v0.42.0` | current |  |  |  |  |
-| `golang.org/x/time` | `v0.16.0` | current |  |  |  |  |
-| `golang.org/x/tools` | `v0.51.0` | current |  |  |  |  |
-| `google.golang.org/protobuf` | `v1.36.12` | current |  |  |  |  |
-| `gopkg.in/op/go-logging.v1` | `v1.0.0-20160211212156-b2cb9fa56473` | current |  |  |  |  |
-| `gopkg.in/yaml.v3` | `v3.0.1` | current |  |  |  |  |
-| `pgregory.net/rapid` | `v1.3.0` | current |  |  |  |  |
-
----
-
-## Tauri shell crates (`lycaon-den/src-tauri`)
-
-Declared in `Cargo.toml`; the Pinned column shows the `Cargo.lock` resolution. No CI job or
-`./task` target builds the Windows shell, so Windows-only crates remain unverified until a
-Windows build runs.
-
-| Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
-|---|---|---|---|---|---|---|
-| `arboard` | `3.6.1` | current | **Low** | **Low** |  | Clipboard. |
-| `base64` | `0.23.1` | current |  |  |  |  |
-| `block2` · macOS | `0.6.2` | current |  |  |  |  |
-| `ed25519-dalek` | `3.0.0` | current | **High** | **Moderate** |  | Signs secret-reveal requests to the sidecar (`sidecar.rs`). Bump a major together with `rand`. |
-| `flate2` | `1.1.10` | current | **High** | **Low** |  | Decompresses signed update archives after their signature is verified; bounded by `packaging/update-limits.json`. |
-| `futures-util` | `0.3.34` | current |  |  |  |  |
-| `hex` | `0.4.3` | not refreshed |  |  |  |  |
-| `libc` | `0.2.190` | current |  |  |  |  |
-| `minisign-verify` | `0.3.0` | current | **Critical** | **Low** |  | Verifies release artifacts and signed channel pointers in the native updater, and backs `scripts/verify-updater-signature.sh` through the `verify_updater_signature` example. Prove the chain with `scripts/release-validate-updater-manifest.sh` and `scripts/feed_signature.py` against the keys in `packaging/update-keys.json`. |
 | `objc2` · macOS | `0.6.4` | `0.6.5` | **Moderate** | **High** |  | Cocoa, WebKit, LocalAuthentication, and notification bindings. Treat 0.x minor bumps as breaking. |
 | `objc2-app-kit` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `objc2-foundation` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `objc2-local-authentication` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `objc2-user-notifications` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `objc2-web-kit` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
-| `rand` | `0.9.5` | `0.10.3` | **High** | **Moderate** |  | Supplies `OsRng` to `ed25519-dalek`. |
-| `reqwest` | `0.13.5` | current | **High** | **Low** |  | Async HTTP. |
-| `rfd` | `0.17.2` | current | **Low** | **Low** |  | File picker. |
-| `rustls` | `0.23.45` | current | **High** | **Low** |  | TLS with the `ring` provider. |
-| `semver` | `1.0.28` | current |  |  |  |  |
-| `serde` | `1.0.229` | current |  |  |  |  |
-| `serde_json` | `1.0.151` | current |  |  |  |  |
-| `sha2` | `0.11.0` | current |  |  |  |  |
-| `tar` | `0.4.46` | current | **High** | **Low** |  | Extracts signed update archives entry by entry; the updater applies its own path, type, link, and mode rules before any entry is written. |
-| `tauri` | `2.12.1` | current | **Critical** | **Moderate** |  | Webview host, IPC, and asset isolation. Keep `@tauri-apps/cli` and `@tauri-apps/api` in step. |
-| `tauri-build` · build | `2.7.1` | current | **Critical** | **Moderate** |  | Moves with `tauri`. |
-| `tauri-plugin-dialog` | `2.8.1` | current | **Moderate** | **Low** |  |  |
-| `tauri-plugin-notification` · not macOS | `2.5.1` | current | **Moderate** | **Low** |  |  |
-| `tauri-plugin-shell` | `2.4.0` | current | **Moderate** | **Low** |  |  |
-| `tokio` | `1.53.2` | current | **Moderate** | **Low** |  |  |
 | `ureq` | `2.12.1` | `3.4.2` | **Low** | **High** | No majors | Blocking localhost calls to the sidecar (attachment import, secret reveal). Version 3 rewrites the API. |
-| `uuid` | `1.27.0` | current |  |  |  |  |
-| `wheel-glide` | `0.1.0` | not refreshed |  |  |  |  |
-| `which` | `8.0.6` | current | **Low** | **Low** |  | Executable lookup. |
-| `windows` · Windows | `0.62.2` | current | **Moderate** | **Moderate** |  | Credential UI and window APIs; unverified on Windows. |
-| `windows-sys` · Windows | `0.61.2` | current | **Moderate** | **Moderate** |  |  |
-
----
-
-## Bialy decision engine crates (`lycaon/internal/decide/native`)
-
-The packaged local inference engine uses Candle on every platform and MLX on Apple silicon.
-Model weights and trained heads are a separate, coordinated release described in
-[Decision engine](../decision-engine.md). Crate updates do not update those artifacts.
-
-| Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
-|---|---|---|---|---|---|---|
 | `candle-core` | `0.11.0` | current | **Moderate** | **High** |  | Update with candle-nn. Validate CPU and the shipped GPU backends with `./task decide:test` and the decision-engine evaluation procedure before release. |
 | `candle-nn` | `0.11.0` | current | **Moderate** | **High** |  | Keep aligned with candle-core; numerical changes can affect the trained heads. |
-| `clap` | `4.6.7` | current | **Low** | **Low** |  |  |
-| `indexmap` | `2.14.2` | current | **Low** | **Low** |  |  |
 | `mlx-rs` · cfg(all(target_os = "macos", target_arch = "aarch64")) | `0.32.0` | current | **Moderate** | **High** |  | Apple silicon backend. Review its compiled MLX version and bundled notices, rebuild the metallib, and verify inference on Apple silicon. |
-| `serde` | `1.0.229` | current | **Moderate** | **Low** |  |  |
-| `serde_json` | `1.0.151` | current | **High** | **Low** |  |  |
-| `thiserror` | `2.0.21` | current | **Low** | **Low** |  |  |
 | `tokenizers` | `0.23.2` | current | **High** | **High** |  | Tokenization must agree with the pinned checkpoint and trained heads. Treat 0.x minor upgrades as breaking and compare token IDs and ranking results before adoption. |
-
----
-
-## Document core crates (`lycaon/internal/documentcore/native`)
-
-| Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
-|---|---|---|---|---|---|---|
-| `base64` | `0.23.1` | current |  |  |  |  |
-| `serde` | `1.0.229` | current |  |  |  |  |
-| `serde_json` | `1.0.151` | current |  |  |  |  |
 | `yrs` | `0.27.4` | `0.28.0` | **High** | **High** | Held | Exact pin; see the document core engine row. Bump together with Den's `yjs`. |
 
----
+## Complete inventory sources
 
-## Comment linter module (`scripts/commentlint`)
+Policy files retain every declared entry, package rating, rationale, and verification note. Manifests list all direct packages; lockfiles resolve transitive packages. Declared runtime, engine, tool, and catalog pins are named in their policy files. [Upstream snapshot](../../dependencies/upstream.json) records the queried versions.
 
-| Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
-|---|---|---|---|---|---|---|
-| `github.com/odvcencio/gotreesitter` | `v0.55.1` | current | **Low** | **Low** |  | Upstream module, independent of the vendored copy the host uses. |
-
----
+| Area | Entries | Policy | Manifest and lockfile |
+|---|---|---|---|
+| Languages, runtimes, and platform floor | 6 | [Policy](../../dependencies/sections/runtimes.yaml) | Declared pin sources in policy |
+| Bundled engines and hermetic binaries | 4 | [Policy](../../dependencies/sections/engines.yaml) | Declared pin sources in policy |
+| Development, build, and verification tools | 7 | [Policy](../../dependencies/sections/tools.yaml) | Declared pin sources in policy |
+| Vendored catalogs, datasets, and specifications | 5 | [Policy](../../dependencies/sections/vendored.yaml) | Declared pin sources in policy |
+| Frontend packages (`lycaon-den`) | 67 | [Policy](../../dependencies/sections/frontend.yaml) | [Manifest](../../lycaon-den/package.json) · [Lockfile](../../lycaon-den/bun.lock) |
+| Backend Go modules (`lycaon`) | 72 | [Policy](../../dependencies/sections/backend-go.yaml) | [Manifest](../../lycaon/go.mod) |
+| Tauri shell crates (`lycaon-den/src-tauri`) | 36 | [Policy](../../dependencies/sections/tauri.yaml) | [Manifest](../../lycaon-den/src-tauri/Cargo.toml) · [Lockfile](../../lycaon-den/src-tauri/Cargo.lock) |
+| Bialy decision engine crates (`lycaon/internal/decide/native`) | 9 | [Policy](../../dependencies/sections/decision-engine.yaml) | [Manifest](../../lycaon/internal/decide/native/Cargo.toml) · [Lockfile](../../lycaon/internal/decide/native/Cargo.lock) |
+| Document core crates (`lycaon/internal/documentcore/native`) | 4 | [Policy](../../dependencies/sections/document-core.yaml) | [Manifest](../../lycaon/internal/documentcore/native/Cargo.toml) · [Lockfile](../../lycaon/internal/documentcore/native/Cargo.lock) |
+| Comment linter module (`scripts/commentlint`) | 1 | [Policy](../../dependencies/sections/commentlint.yaml) | [Manifest](../../scripts/commentlint/go.mod) |
 
 ## Operational runbooks
 

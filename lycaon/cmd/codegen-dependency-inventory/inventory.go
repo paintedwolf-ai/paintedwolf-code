@@ -6,9 +6,6 @@ import (
 	"strconv"
 )
 
-// ungrouped marks a row that renders after a section's groups.
-const ungrouped = -1
-
 type section struct {
 	cfg  *sectionConfig
 	rows []row
@@ -31,23 +28,14 @@ func collect(repo string, p *policy) ([]section, error) {
 			errs = append(errs, annotate(sc, rows))
 			s.rows = rows
 		}
-		declared := []struct {
-			group int
-			rows  []rowConfig
-		}{{ungrouped, sc.Rows}}
-		for g, group := range sc.Groups {
-			declared = append(declared, struct {
-				group int
-				rows  []rowConfig
-			}{g, group.Rows})
+		declared := append([]rowConfig(nil), sc.Rows...)
+		for _, group := range sc.Groups {
+			declared = append(declared, group.Rows...)
 		}
-		for _, d := range declared {
-			for _, rc := range d.rows {
-				rw, err := declaredRow(reader, rc)
-				rw.group = d.group
-				errs = append(errs, err)
-				s.rows = append(s.rows, rw)
-			}
+		for _, rc := range declared {
+			rw, err := declaredRow(reader, rc)
+			errs = append(errs, err)
+			s.rows = append(s.rows, rw)
 		}
 		sections = append(sections, s)
 	}
@@ -57,28 +45,23 @@ func collect(repo string, p *policy) ([]section, error) {
 // annotate attaches each package judgement to its discovered row and rejects
 // judgement for packages the manifest no longer lists.
 func annotate(sc *sectionConfig, rows []row) error {
-	type placed struct {
-		judgement
-		group int
-	}
-	judged := map[string]placed{}
+	judged := map[string]judgement{}
 	for name, j := range sc.Packages {
-		judged[name] = placed{j, ungrouped}
+		judged[name] = j
 	}
-	for g, group := range sc.Groups {
+	for _, group := range sc.Groups {
 		for name, j := range group.Packages {
-			judged[name] = placed{j, g}
+			judged[name] = j
 		}
 	}
 	var errs []error
 	for i := range rows {
-		rows[i].group = ungrouped
 		p, ok := judged[rows[i].key]
 		if !ok {
 			continue
 		}
 		delete(judged, rows[i].key)
-		rows[i].group, rows[i].judgement = p.group, p.judgement
+		rows[i].judgement = p
 		if p.Updates != "" && rows[i].dependency == "" {
 			errs = append(errs, fmt.Errorf("%s: package %s: Dependabot does not manage this entry", sc.file, rows[i].key))
 		}
@@ -91,7 +74,7 @@ func annotate(sc *sectionConfig, rows []row) error {
 }
 
 func declaredRow(p *pinReader, rc rowConfig) (row, error) {
-	rw := row{key: rc.ID, name: rc.Name, title: rc.Name, judgement: rc.judgement}
+	rw := row{key: rc.ID, name: rc.Name, judgement: rc.judgement}
 	var errs []error
 	for _, ref := range rc.Pins {
 		text, err := p.resolve(ref)
