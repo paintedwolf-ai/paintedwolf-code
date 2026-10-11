@@ -3,6 +3,7 @@ package sourceapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -177,7 +178,7 @@ func TestSymbolProgressWaitCancellationPreservesEntry(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 	_, _, err = e.progress.acquire(ctx, p, leg, nil, true)
-	if err != context.Canceled {
+	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("waiting error=%v", err)
 	}
 	release()

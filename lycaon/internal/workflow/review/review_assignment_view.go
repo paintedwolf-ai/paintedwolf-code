@@ -143,7 +143,8 @@ func (m *Assignments) View(ctx context.Context, args map[string]any, tctx tools.
 		if err != nil {
 			return "", rejectReviewView("invalid_cursor", "cursor")
 		}
-		facts := append(page.Facts.Obligations, page.Facts.Gaps...)
+		facts := page.Facts.Obligations
+		facts = append(facts, page.Facts.Gaps...)
 		out = map[string]any{"assignment_id": id, "purpose": binding.Purpose, "coverage_required": binding.CoverageRequired, "revision": binding.Subject.Facts.Revision, "facts": facts, "candidate": page.Candidate, "next_cursor": next}
 	default:
 		return "", rejectReviewView("unknown_view", "review_view")

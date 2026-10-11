@@ -46,6 +46,10 @@ func TestSymbolFederationDoesNotCycleBeyondRetainedProjectCapacity(t *testing.T)
 						t.Fatalf("retention bound has wrong units: %+v", gap)
 					}
 					terminal++
+				case projectsource.DeclarationTimeBudget, projectsource.DeclarationFilesSkipped,
+					projectsource.DeclarationCatalogWarming, projectsource.DeclarationCatalogIncomplete,
+					projectsource.DeclarationCatalogRefreshing, projectsource.DeclarationIndexWarming:
+					t.Fatalf("prepared project has unexpected coverage gap: %+v", gap)
 				}
 			}
 		}
@@ -79,7 +83,7 @@ func TestSymbolActiveCacheCapacityDoesNotAdvertiseLostProgress(t *testing.T) {
 		leg.Name = fmt.Sprintf("active%d", i)
 		_, release, err := e.progress.acquire(t.Context(), p, leg, nil, true)
 		testutil.FailErr(t, "hold active query", err)
-		defer release()
+		t.Cleanup(release)
 	}
 	leg.Name = "Target"
 	filter, err := search.CompileSymbolFilter(leg)

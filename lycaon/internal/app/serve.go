@@ -112,17 +112,29 @@ func (a *ServeApp) Close() error {
 		a.Sessions.Manager.BeginEngineShutdown()
 	}
 
-	a.stopRunners()
-	drainCtx, cancel := context.WithTimeout(context.Background(), resourceReleaseTimeout)
-	defer cancel()
+	drainCtx, cancelDrain := context.WithTimeout(context.Background(), serveDrainTimeout)
+	a.stopRunnersWithin(drainCtx)
 	if a.Server != nil {
 		a.Server.StopBackground(drainCtx)
 		a.Server.WaitForBackground(drainCtx)
 	}
+	cancelDrain()
+
+	// Resource release has its own budget; rejoin API work if the serve drain expired.
+	releaseCtx, cancelRelease := context.WithTimeout(context.Background(), resourceReleaseTimeout)
+	defer cancelRelease()
+	if a.Server != nil {
+		a.Server.WaitForBackground(releaseCtx)
+		if err := releaseCtx.Err(); err != nil {
+			return err
+		}
+	}
 	// Store shutdown retains its reserved cleanup floor.
-	err := a.resources.Close(drainCtx)
+	err := a.resources.Close(releaseCtx)
 	a.runners.profileWG.Wait()
-	a.DB = nil
+	if err == nil {
+		a.DB = nil
+	}
 	return err
 }
 

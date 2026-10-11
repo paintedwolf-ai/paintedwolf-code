@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowinputs "github.com/lycaon/lycaon/internal/workflow/inputs"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
@@ -100,6 +101,7 @@ type RunControl struct {
 }
 
 type Topology struct {
+	Requests           *workflowinputs.Requests
 	Orchestrator       orchestration.Orchestrator
 	Runs               *runstate.Repository
 	Store              session.Store
@@ -123,7 +125,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 	h.Composition = &Composition{Composer: deps.Composer, EventPublisher: deps.EventPublisher, Persister: deps.Persister, SessionView: deps.SessionView, Sessions: deps.Sessions, Store: deps.Store, responses: responses}
 	h.Reports = &Reports{Runs: deps.Runs, Projects: deps.Projects, Scans: deps.Scans, Store: deps.Store, VisualStore: deps.VisualStore, Workers: deps.Workers, Workflows: deps.Workflows, responses: responses}
 	h.RunControl = &RunControl{Runs: deps.Runs, Catalog: deps.Catalog, ManagedSecrets: deps.ManagedSecrets, Projects: deps.Projects, SessionView: deps.SessionView, Sessions: deps.Sessions, Store: deps.Store, Workflows: deps.Workflows, responses: responses}
-	h.Topology = &Topology{Runs: deps.Runs, Orchestrator: deps.Orchestrator, Store: deps.Store, background: background}
+	h.Topology = &Topology{Requests: deps.Workflows.Requests, Runs: deps.Runs, Orchestrator: deps.Orchestrator, Store: deps.Store, background: background}
 
 	h.BlueprintRoutes.Topology = h.Topology
 

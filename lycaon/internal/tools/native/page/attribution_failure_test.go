@@ -81,6 +81,11 @@ func TestSVGArtifactViewportRefusalKeepsStructuredBoundsAndNoVisual(t *testing.T
 		Bytes: source,
 	})
 	testutil.FailErr(t, "store SVG artifact", err)
+	unknownIcon, err := store.Put(t.Context(), "session", visual.Entry{
+		Meta:  wire.VisualArtifact{Mime: "image/svg+xml", Source: wire.VisualArtifactSourceCapture, Perceive: true},
+		Bytes: []byte(`<svg xmlns="http://www.w3.org/2000/svg"><use href="#kit-not-a-real-icon-zz"/></svg>`),
+	})
+	testutil.FailErr(t, "store unknown icon artifact", err)
 	effects := &tools.ToolInvocationOut{}
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}, Effects: tools.InvocationEffects{Out: effects}}
 	for _, item := range []struct {
@@ -92,6 +97,7 @@ func TestSVGArtifactViewportRefusalKeepsStructuredBoundsAndNoVisual(t *testing.T
 		{"unavailable renderer", nil, map[string]any{"handle": artifact.ID}, ""},
 		{"invalid scale", &browser.Rasterizer{}, map[string]any{"handle": artifact.ID, "scale": 5}, "TOOL_ARGS_INVALID"},
 		{"oversized viewport", &browser.Rasterizer{}, map[string]any{"handle": artifact.ID, "viewport": map[string]any{"width": browser.MaxViewportDim + 1, "height": 320}}, "RENDER_MARKUP_OVERSIZED"},
+		{"unknown source icon", &browser.Rasterizer{}, map[string]any{"handle": unknownIcon.ID}, "RENDER_KIT_UNKNOWN"},
 	} {
 		t.Run(item.name, func(t *testing.T) {
 			out, err := ViewImageHandler(ViewImageDeps{VisualStore: store, Raster: item.raster})(t.Context(), item.args, tc)
@@ -105,6 +111,9 @@ func TestSVGArtifactViewportRefusalKeepsStructuredBoundsAndNoVisual(t *testing.T
 				}
 				if item.code == "RENDER_MARKUP_OVERSIZED" && (reject.Data["width"] != browser.MaxViewportDim+1 || reject.Data["height"] != 320 || reject.Data["render_viewport_exceeded"] != true) {
 					t.Fatalf("SVG bounds lost: %v", reject.Data)
+				}
+				if item.code == "RENDER_KIT_UNKNOWN" && reject.Data["render_kit_kind"] != "icon" {
+					t.Fatalf("SVG source refusal lost icon facts: %v", reject.Data)
 				}
 			}
 		})
