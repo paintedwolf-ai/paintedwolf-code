@@ -21,6 +21,7 @@ import (
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -87,11 +88,12 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	call.Identity.ProjectID, call.Identity.Agent = sess.ProjectID, "coordinator"
 	testutil.FailErr(t, "resolve source root", h.DB.QueryRowContext(ctx, "SELECT id FROM project_roots WHERE project_id = ? AND is_primary = 1", sess.ProjectID).Scan(&call.Source.ActiveRootID))
 	call.Source.Roots[0].ID = call.Source.ActiveRootID
-	invoke := func(name string, args map[string]any) {
+	invoke := func(name string, args map[string]any) string {
 		t.Helper()
 		call.Identity.ToolCallID = uuid.NewString()
-		_, err := h.ToolRegistry.Run(ctx, name, args, call)
+		out, err := h.ToolRegistry.Run(ctx, name, args, call)
 		testutil.FailErr(t, "invoke "+name, err)
+		return out
 	}
 	var legs []any
 	for i := 1; i <= 5; i++ {
@@ -105,8 +107,13 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	}
 	testutil.FailErr(t, "execute survey workers", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "claims")
-	invoke("read", map[string]any{"path": "audit.go"})
-	coverage := func() string {
+	surveyTasks, err := h.Delegations.Queue.ListByWorkflowRunID(ctx, run.ID)
+	testutil.FailErr(t, "read survey workers", err)
+	if len(surveyTasks) != 5 {
+		t.Fatalf("survey workers=%d", len(surveyTasks))
+	}
+	surveyCitation := api.CitationGroundingCitedEvidence{Handle: surveyTasks[0].ChildSessionID + ":read#1", Excerpt: "package audit"}
+	coverage := func() map[string]any {
 		current, err := h.Workflows.Manager.Store.Runs.Get(ctx, run.ID)
 		testutil.FailErr(t, "read coverage phase", err)
 		manifest, err := h.Workflows.Manager.Resolver.ForRun(ctx, current)
@@ -116,16 +123,22 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		if len(facts.Gaps) != 0 {
 			t.Fatalf("normal run has coverage gaps: %+v", facts.Gaps)
 		}
-		raw, err := json.Marshal(completeCoverageReview(facts, api.CitationGroundingCitedEvidence{Path: "audit.go", Line: 1, Excerpt: "package audit"}))
+		raw, err := json.Marshal(completeCoverageReview(facts, surveyCitation))
 		testutil.FailErr(t, "encode coverage review", err)
-		return string(raw)
+		var value map[string]any
+		testutil.FailErr(t, "decode coverage arguments", json.Unmarshal(raw, &value))
+		return value
 	}
-	claimed := map[string]string{"verdict": "CLAIMED", "threat_model": "Local application reading untrusted project content.", "claims": "[]", "set_asides": "[]", "coverage": coverage()}
-	outcome, err := h.Workflows.Manager.Verdicts.RecordReviewLoopVerdict(ctx, sess.ID, claimed, nil, nil)
-	testutil.FailErr(t, "accept claims", err)
-	if !outcome.Valid || !outcome.Terminal {
-		t.Fatalf("claims outcome=%+v", outcome)
+	submit := func(verdict map[string]any, cited []any) {
+		t.Helper()
+		out := invoke("submit_verdict", map[string]any{"verdict": verdict, "cited_evidence": cited})
+		var result workflowreview.SubmitVerdictToolResult
+		testutil.FailErr(t, "decode accepted verdict", json.Unmarshal([]byte(out), &result))
+		if !result.OK || !result.Terminal {
+			t.Fatalf("verdict result=%+v", result)
+		}
 	}
+	submit(map[string]any{"verdict": "CLAIMED", "threat_model": "Local application reading untrusted project content.", "claims": []any{}, "set_asides": []any{}, "coverage": coverage()}, nil)
 	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "challenge")
 	for _, agent := range []string{"skeptic", "web-researcher"} {
 		invoke("task", map[string]any{"workflow_work_id": "review/" + agent, "agent_type": agent, "prompt": "Independently review the assigned coverage and source evidence.", "scope": map[string]any{"mode": "read"}})
@@ -133,23 +146,18 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	testutil.FailErr(t, "execute independent review", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 	tasks, err := h.Delegations.Queue.ListByWorkflowRunID(ctx, run.ID)
 	testutil.FailErr(t, "read completed work", err)
-	var citations []api.CitationGroundingCitedEvidence
+	var citations []any
 	for _, task := range tasks {
 		if task.WorkflowPhase == "challenge" {
-			citations = append(citations, api.CitationGroundingCitedEvidence{Handle: task.ChildSessionID + ":read#1", Excerpt: "package audit"})
+			citations = append(citations, map[string]any{"handle": task.ChildSessionID + ":read#1", "excerpt": "package audit"})
 		}
 	}
-	challenged := map[string]string{"verdict": "CHALLENGED", "challenges": "[]", "set_asides": "[]", "coverage": coverage()}
-	outcome, err = h.Workflows.Manager.Verdicts.RecordReviewLoopVerdict(ctx, sess.ID, challenged, citations, nil)
-	testutil.FailErr(t, "accept independent challenge", err)
-	if !outcome.Valid || !outcome.Terminal {
-		t.Fatalf("challenge outcome=%+v", outcome)
-	}
+	submit(map[string]any{"verdict": "CHALLENGED", "challenges": []any{}, "set_asides": []any{}, "coverage": coverage()}, citations)
 	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "report")
 	manifest, err := h.Workflows.Manager.Resolver.ForRunID(ctx, run.ID)
 	testutil.FailErr(t, "load report brief", err)
 	levels := manifest.ReportBrief().LevelLabels()
-	raw, err := json.Marshal(map[string]any{"synthesis": "Reviewed all five assigned boundaries and independently checked the coverage. No security issue was found in the fixture.", "cited_evidence": []any{map[string]any{"path": "audit.go", "line": 1, "excerpt": "package audit"}}, "cited_urls": []any{}, "rating": map[string]any{"level": levels[len(levels)-1], "why": "All required work completed without a supported finding."}, "findings": []any{}, "set_asides": []any{}})
+	raw, err := json.Marshal(map[string]any{"synthesis": "Reviewed all five assigned boundaries and independently checked the coverage. No security issue was found in the fixture.", "cited_evidence": []api.CitationGroundingCitedEvidence{surveyCitation}, "cited_urls": []any{}, "rating": map[string]any{"level": levels[len(levels)-1], "why": "All required work completed without a supported finding."}, "findings": []any{}, "set_asides": []any{}})
 	testutil.FailErr(t, "encode final report", err)
 	mu.Lock()
 	reportBody = string(raw)
