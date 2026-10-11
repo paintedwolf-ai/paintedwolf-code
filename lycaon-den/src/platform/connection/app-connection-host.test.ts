@@ -39,6 +39,7 @@ describe("app connection host", () => {
     let rejectDiscovery!: (error: Error) => void;
     discoverBackend.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectDiscovery = reject; }));
     const connecting = mod.connectAppBackend(store);
+    await vi.waitFor(() => expect(discoverBackend).toHaveBeenCalledOnce());
     const replacement = stubClient({});
     createLycaonClient.mockReturnValueOnce(replacement);
     mod.attachKnownBackend(store, { baseUrl: "http://127.0.0.1:8788", apiToken: "replacement" });

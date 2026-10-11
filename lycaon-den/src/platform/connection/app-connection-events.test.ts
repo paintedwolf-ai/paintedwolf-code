@@ -299,7 +299,7 @@ describe("app connection events", () => {
     bindFixtureServices(mod, { recents: recents });
     bindFixtureServices(mod, { shell: shell });
     bindFixtureServices(mod, { retire: testEntityRetire(recents) });
-    bindFixtureServices(mod, { projects: 
+    bindFixtureServices(mod, { projects:
       createProjectsStore(() => null, { onProjectEvent: () => () => {} }),
      });
     await mod.connectAppBackend(appStore);

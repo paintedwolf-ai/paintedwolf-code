@@ -15,9 +15,8 @@ import { cancelWorkerTranscriptCoalesce } from "../../chat/worker/worker-transcr
 import { clearChildMessageBuffer } from "../../chat/transcript/projection/worker-child-message-buffer.ts";
 import { reconcileActiveScope } from "../../chat/session/session-reconcile.ts";
 import type { BackendConnection } from "./backend.ts";
-import { clearBackendConnection, discoverBackend, fetchHealth, getBackendConnection, readSidecarInfo, restartBackend, setBackendConnection } from "./backend.ts";
-import { watchEngineState } from "./engine-supervision.ts";
-import { CLIENT_NOTICES } from "../../notices/client-notices.generated.ts";
+import { clearBackendConnection, discoverBackend, fetchHealth, getBackendConnection,  restartBackend, setBackendConnection } from "./backend.ts";
+import { createEngineFollower } from "./connection-engine-follower.ts";
 import { noteHealthResponse, noteStoreRevision, resetStoreRevisionTracking } from "./health.ts";
 import { incompatibleHost } from "./host-identity.ts";
 import { setBackendReachabilityObserver } from "./request-connectivity.ts";
@@ -26,10 +25,9 @@ import { createConnectionReconcile } from "./connection-reconcile.ts";
 import { ConnectionInvalidation } from "./connection-invalidation.ts";
 import { createConnectionEvents } from "./connection-events.ts";
 
-const ENGINE_RESTARTING_NOTICE = "engine_restarting";
-
 const host = new ConnectionHost();
 let services: ConnectionServices | null = null;
+let engineFollower: ReturnType<typeof createEngineFollower> | undefined;
 let connectInFlight: Promise<LycaonClient> | null = null;
 /** OR-merged across concurrent connect callers for this in-flight attempt. */
 let connectFailureNotices = false;
@@ -71,6 +69,8 @@ export const subscribeProjectEvents = events.subscribeProjectEvents;
 
 /** Rebinding retires asynchronous work before exposing replacement services. */
 export function bindAppConnection(next: ConnectionServices): () => void {
+  engineFollower?.dispose();
+  engineFollower = undefined;
   disconnectAppBackend();
   const binding = services = Object.freeze({ ...next });
   invalidation.resetSettings();
@@ -81,6 +81,8 @@ export function bindAppConnection(next: ConnectionServices): () => void {
   });
   return () => {
     if (services !== binding) return;
+    engineFollower?.dispose();
+    engineFollower = undefined;
     disconnectAppBackend();
     setBackendReachabilityObserver(null);
     registerNoticePublisher(null);
@@ -310,46 +312,21 @@ export function boundEngineGeneration(): number | undefined {
   return (host.connection ?? getBackendConnection())?.engineGeneration;
 }
 
-/**
- * Follows the engine the shell supervises. A new generation is a replacement
- * process with its own port and token, so the window rebinds to it; while
- * the engine is down the window holds its place instead of reporting each
- * failed request.
- */
+/** Follows engine replacements for the active service binding. */
 export async function followEngineState(appStore: AppStore): Promise<() => void> {
-  let sawEngineDown = false;
-  return watchEngineState((engine) => {
-    const notices = appNoticeReporter();
-    if (engine.state === "restarting") {
-      sawEngineDown = true;
-      appStore.actions.setSidecarStatus("disconnected");
-      notices.publish({
-        code: ENGINE_RESTARTING_NOTICE,
-        severity: "warning",
-        title: CLIENT_NOTICES.engine_restarting.title,
-        message: CLIENT_NOTICES.engine_restarting.message,
-      });
-      return;
-    }
-    services?.notices.withdraw(ENGINE_RESTARTING_NOTICE, APP_SCOPE);
-    if (engine.state === "stopped") {
-      sawEngineDown = true;
-      appStore.actions.setSidecarStatus("disconnected");
-      return;
-    }
-    if (engine.state !== "running" || connectInFlight) return;
-    const bound = boundEngineGeneration();
-    // An unbound window that never lost an engine is still booting; its own connect binds it.
-    if (bound === engine.generation || (bound === undefined && !sawEngineDown)) return;
-    sawEngineDown = false;
-    void readSidecarInfo()
-      .then((connection) => {
-        if (!connection || connection.engineGeneration !== engine.generation) return;
-        if (boundEngineGeneration() === engine.generation) return;
-        return connectAppBackend(appStore, { connection });
-      })
-      .catch(() => undefined);
+  engineFollower?.dispose();
+  const follower = engineFollower = createEngineFollower({
+    app: appStore,
+    notices: services?.notices ?? null,
+    connecting: () => connectInFlight !== null,
+    boundGeneration: boundEngineGeneration,
+    connect: (connection) => connectAppBackend(appStore, { connection }),
   });
+  await follower.ready;
+  return () => {
+    follower.dispose();
+    if (engineFollower === follower) engineFollower = undefined;
+  };
 }
 
 export function disconnectAppBackend(): void {

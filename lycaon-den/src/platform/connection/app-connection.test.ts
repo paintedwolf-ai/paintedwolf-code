@@ -254,7 +254,7 @@ describe("app connection cache", () => {
 
     const mod = await loadModule();
     bindFixtureServices(mod, { shell: shell });
-    bindFixtureServices(mod, { projects: 
+    bindFixtureServices(mod, { projects:
       createProjectsStore(() => null, { onProjectEvent: () => () => {} }),
      });
     await mod.connectAppBackend(appStore);
