@@ -6,7 +6,7 @@ func SourceNamespace(target Baseline) Step {
 	return Step{
 		ID:       "source-directory-identity",
 		Source:   source,
-		Checksum: "71fec6ba812a71c6f74832311e59aba4e44b4cfcbe1b207f4adf9e8abd1b5151",
+		Checksum: "2c2ab73c3ecb902d1b8627c118fc9953ce1e5b9cc2d855caa1f7bd93c19d371e",
 		From:     Baseline{Revision: 1, Shape: "4c183bce0a7e107596c03a44a68b384cf216b3932ddf31e17d95f400772f478a"},
 		To:       target,
 		Apply:    migrateSourceNamespace,

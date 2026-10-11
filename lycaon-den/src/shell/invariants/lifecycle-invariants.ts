@@ -68,15 +68,15 @@ function assertFilesChat01(): void {
 function assertView01(): void {
   const subject = readSourceText(join(denSrc, "platform/windows/window-subject.ts"));
   const registry = readSourceText(join(denSrc, "platform/windows/workspace-view-registry.ts"));
-  const host = readSourceText(join(denSrc, "../src-tauri/src/item_windows.rs"));
+  const host = readSourceText(join(denSrc, "../src-tauri/src/windows/item_windows.rs"));
   expect(subject).toMatch(/WindowSubject[\s\S]*viewId: string/);
   expect(registry).toMatch(/setCurrentWorkspaceContexts/);
   expect(host).toMatch(/Window \{view_id\}/);
 }
 
 function assertView02(): void {
-  const items = readSourceText(join(denSrc, "../src-tauri/src/item_windows.rs"));
-  const appearance = readSourceText(join(denSrc, "../src-tauri/src/window_appearance.rs"));
+  const items = readSourceText(join(denSrc, "../src-tauri/src/windows/item_windows.rs"));
+  const appearance = readSourceText(join(denSrc, "../src-tauri/src/windows/window_appearance.rs"));
   expect(items).toMatch(/close_item_window/);
   expect(appearance).toMatch(/CloseRequested[\s\S]*main\.hide\(\)/);
 }

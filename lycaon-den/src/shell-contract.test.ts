@@ -17,7 +17,7 @@ describe("shell contract", () => {
 
   // An unguarded stage that throws keeps its last frame with nothing reported.
   it("every stage body mounts under StageErrorBoundary", () => {
-    const shell = ["Shell.tsx", "ShellColumns.tsx"]
+    const shell = ["ChatWorkspace.tsx", "ShellColumns.tsx"]
       .map((file) => readFileSync(join(root, "src/components/shell", file), "utf8"))
       .join("\n");
     const mounts = [...shell.matchAll(/<main class="den-shell-main"[^>]*>/g)];

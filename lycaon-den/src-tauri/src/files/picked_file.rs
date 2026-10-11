@@ -225,3 +225,49 @@ mod tests {
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'));
     }
 }
+
+/// Redeems a save-panel grant before writing to its selected destination.
+#[tauri::command]
+pub(crate) fn save_bytes(grant: String, bytes: Vec<u8>) -> Result<(), String> {
+    let dest = redeem(&grant, GrantMode::Write)?;
+    save_atomic(&dest, bytes.as_slice())
+}
+
+#[cfg(test)]
+mod command_tests {
+    use super::*;
+    use crate::test_support::TempDir;
+    use std::fs;
+
+    #[test]
+    fn byte_commands_refuse_an_unminted_grant() {
+        save_bytes("forged-handle".to_string(), b"content".to_vec())
+            .expect_err("save_bytes must refuse a handle it never minted");
+    }
+
+    #[test]
+    fn a_write_grant_round_trips_and_does_not_replay() {
+        let dir = TempDir::new("app-state-byte-commands");
+        let target = dir.join("nested").join("export.bin");
+        let grant = mint(&target, GrantMode::Write).expect("mint write grant");
+
+        save_bytes(grant.clone(), b"payload".to_vec()).expect("save through grant");
+        assert_eq!(fs::read(&target).expect("read back"), b"payload".to_vec());
+
+        // A spent handle cannot write again.
+        save_bytes(grant, b"second".to_vec()).expect_err("grant is single-use");
+        assert_eq!(fs::read(&target).expect("unchanged"), b"payload".to_vec());
+    }
+
+    #[test]
+    fn a_read_grant_cannot_be_used_to_write() {
+        let dir = TempDir::new("app-state-byte-commands-direction");
+        let target = dir.join("readonly.bin");
+        fs::write(&target, b"original").expect("seed file");
+
+        let grant = mint(&target, GrantMode::Read).expect("mint read grant");
+        save_bytes(grant, b"overwritten".to_vec())
+            .expect_err("a read pick may not be written through");
+        assert_eq!(fs::read(&target).expect("unchanged"), b"original".to_vec());
+    }
+}

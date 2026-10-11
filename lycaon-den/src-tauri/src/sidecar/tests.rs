@@ -345,7 +345,7 @@ fn full_debug_logging_reads_app_state_flag() {
 
     assert!(!full_debug_logging_enabled_in(cfg));
 
-    crate::apply_app_state_patch_at(
+    crate::app_state::apply_app_state_patch_at(
         cfg,
         &[(
             "debug".to_string(),
@@ -357,7 +357,7 @@ fn full_debug_logging_reads_app_state_flag() {
     .expect("write app state");
     assert!(!full_debug_logging_enabled_in(cfg));
 
-    crate::apply_app_state_patch_at(
+    crate::app_state::apply_app_state_patch_at(
         cfg,
         &[(
             ("debug").to_string(),

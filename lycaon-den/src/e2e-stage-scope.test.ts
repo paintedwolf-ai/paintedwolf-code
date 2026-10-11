@@ -16,7 +16,7 @@ const e2eSources = loadSourceCorpus(e2eDir, { extensions: [".ts"] });
 describe("chat stage scope contract", () => {
   it("Shell stamps the stage class and resident presence the selectors rely on", () => {
     const shell = readFileSync(
-      join(src, "components", "shell", "Shell.tsx"),
+      join(src, "components", "shell", "ChatWorkspace.tsx"),
       "utf8",
     );
     const resident = readFileSync(

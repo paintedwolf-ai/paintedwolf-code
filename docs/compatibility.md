@@ -91,7 +91,9 @@ reserved key is additive; existing runs without it have no repair episode.
 
 Review subjects and assignments are durable run-scoped records. Schema revision
 2 adds them and a review-input revision through a registered migration from the
-released revision-1 shape. Existing results and verdicts remain unchanged. Active
+released revision-1 shape. Existing results and verdicts remain unchanged. Released verdict receipts in
+`evidence_applied` or `committed` state retain their publication acknowledgement;
+upgrading does not replay already-published evidence. Active
 reviews without recorded assignment context require replacement work; the host
 does not reconstruct historical inputs from current state. The optional
 `assignment_binding` manifest member affects only definitions that declare it.
@@ -180,6 +182,11 @@ A backup must identify the current schema or a recognized released schema with a
 The archive always names its SQLite payload `store.db`. An internal restore marker maps that payload to the configured local database filename; archive metadata cannot choose the destination. Recovery pre-images preserve the configured database and its journals under canonical archive names. Native transfer journals are local operational data, excluded from exports and reclaimed on startup by process lock and recorded file identity without touching active transfers.
 
 A failed apply is not a dead end. The marker records the failure, so the boot enters recovery mode and an explicit restore, recovery snapshot, or start fresh replaces the stuck transaction instead of being refused as a pending restart. The pre-image that transaction displaced is kept.
+
+Pending rewind journals belong to the installation. Their durable references resolve
+inside the restored checkpoint tree, independent of the original configuration
+directory. Restore validates journal identity and required bytes before publication;
+external project roots keep their explicit project identity.
 
 Transcript export is a separate portable representation of one session and is not a backup of host state.
 

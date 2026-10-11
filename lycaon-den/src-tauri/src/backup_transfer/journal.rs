@@ -281,7 +281,7 @@ mod tests {
         let status = std::process::Command::new(std::env::current_exe().expect("test binary"))
             .args([
                 "--exact",
-                "backup_transfer_journal::tests::crash_fixture_child",
+                "backup_transfer::journal::tests::crash_fixture_child",
                 "--nocapture",
             ])
             .env("PW_BACKUP_CRASH_CONFIG", config)

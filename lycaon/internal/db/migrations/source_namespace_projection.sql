@@ -79,3 +79,5 @@ CREATE TRIGGER IF NOT EXISTS history_clock_source_directories_delete AFTER DELET
 CREATE TRIGGER IF NOT EXISTS history_clock_source_head_entries_insert AFTER INSERT ON source_head_entries BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
 CREATE TRIGGER IF NOT EXISTS history_clock_source_head_entries_update AFTER UPDATE ON source_head_entries BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
 CREATE TRIGGER IF NOT EXISTS history_clock_source_head_entries_delete AFTER DELETE ON source_head_entries BEGIN UPDATE history_storage_clock SET generation = generation + 1 WHERE id = 1; END;
+
+ALTER TABLE rewind_operations DROP COLUMN journal_path;
