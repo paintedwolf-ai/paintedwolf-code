@@ -109,7 +109,7 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 	}
 	if b.db != nil && b.dataDir != "" {
 		byName["content-blob-gc"] = registration{run: func(ctx context.Context) error {
-			return contentblob.RunGC(ctx, contentblob.GCDeps{Database: b.db, Queries: db.New(b.db), DataDir: b.dataDir, Guard: b.storeClaim})
+			return contentblob.RunGC(ctx, contentblob.GCDeps{Database: b.db, Queries: db.New(b.db), DataDir: b.dataDir, Guard: storeAccessGuard{store: b.db, claim: b.storeClaim}})
 		}}
 		byName["history-retention"] = registration{run: b.historyStorage.Run}
 		byName["prompt-attachment-maintenance"] = registration{run: b.srv.Prompt.RunPromptAttachmentMaintenance}
@@ -145,10 +145,8 @@ func (b delegationWiring) registerBackgroundRunners(app *ServeApp) {
 // names. It refuses once the store path is replaced: the registry then describes
 // another store and every tree would look orphaned.
 func (b delegationWiring) reconcileStoreCoupledStorage(ctx context.Context) error {
-	if b.storeClaim != nil {
-		if err := b.storeClaim.Verify(); err != nil {
-			return err
-		}
+	if err := (storeAccessGuard{store: b.db, claim: b.storeClaim}).Verify(); err != nil {
+		return err
 	}
 	projects, err := b.registry.List(ctx)
 	if err != nil {
