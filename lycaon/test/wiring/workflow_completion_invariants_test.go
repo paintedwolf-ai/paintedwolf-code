@@ -99,7 +99,7 @@ func seedCompletionInvariantRun(t *testing.T, h *Harness, dir string, manifest w
 	if invoked {
 		parent := *run
 		parent.ID = uuid.NewString()
-		parent.Status = api.WorkflowRunStatusComplete
+		parent.Status = api.WorkflowRunStatusPausedOnChild
 		testutil.FailErr(t, "create parent identity", h.Workflows.Manager.Store.State.CreateState(ctx, &parent, dir, map[string]any{}))
 		run.ParentRunID = &parent.ID
 	}
