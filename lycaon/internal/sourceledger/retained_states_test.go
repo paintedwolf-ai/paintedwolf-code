@@ -176,5 +176,6 @@ func swapRetainedBytes(t *testing.T, store *Store, relPath string) {
 	compressed, err := zstdcodec.Compress(bytes.NewReader([]byte("tampered\n")))
 	testutil.FailErr(t, "compress replacement bytes", err)
 	target := filepath.Join(store.objects.Root(), relPath)
+	testutil.FailErr(t, "make corruption fixture writable", os.Chmod(target, 0o600))
 	testutil.FailErr(t, "swap retained bytes", os.WriteFile(target, compressed, 0o600))
 }
