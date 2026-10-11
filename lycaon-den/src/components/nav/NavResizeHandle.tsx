@@ -3,10 +3,7 @@ import {
   NAV_WIDTH_MIN_PX,
 } from "../../../shared/app-state-types.ts";
 import { dragRequestsHide, PANE_HIDDEN_PX } from "../../layout/drag-to-hide.ts";
-import {
-  beginNavWidthResize,
-  resetNavWidthPx,
-} from "../../shell/layout-store.ts";
+import { beginNavWidthResize, resetNavWidthPx } from "../../shell/workspace-layout.ts";
 import {
   clampNavWidthPx,
   maxNavWidthPx,

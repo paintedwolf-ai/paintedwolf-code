@@ -1,4 +1,4 @@
-import { setLayoutViewportWidth } from "./layout-store.ts";
+import { setLayoutViewportWidth } from "./workspace-layout.ts";
 import { sustainShellLayoutBusy } from "./shell-layout-busy.ts";
 
 /** Marks the layout epoch and publishes viewport width once per frame. */

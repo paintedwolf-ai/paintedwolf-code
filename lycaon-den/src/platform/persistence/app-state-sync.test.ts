@@ -55,7 +55,7 @@ vi.mock("@tauri-apps/api/event", () => ({
     listenMock(...(args as [string, (event: { payload: unknown }) => void])),
 }));
 
-vi.mock("../../shell/layout-store.ts", () => ({
+vi.mock("../../layout/layout-preferences.ts", () => ({
   syncLayoutFromSnapshot: (...args: unknown[]) =>
     syncLayoutFromSnapshot(...args),
 }));

@@ -69,8 +69,8 @@ modelIndependentWebE2e("chat path actions reselect an active file after a folder
     },
   });
   await page.evaluate(async () => {
-    const url = "/src/shell/layout-store.ts";
-    const layout = await import(/* @vite-ignore */ url) as typeof import("../src/shell/layout-store.ts");
+    const url = "/src/shell/workspace-layout.ts";
+    const layout = await import(/* @vite-ignore */ url) as typeof import("../src/shell/workspace-layout.ts");
     await layout.saveStagePlacementMode({ mode: "split", companion: "files" });
     const prefsUrl = "/src/settings/editor/editor-prefs.ts";
     const prefs = await import(/* @vite-ignore */ prefsUrl) as typeof import("../src/settings/editor/editor-prefs.ts");

@@ -27,9 +27,9 @@ import {
   saveSplitOrder,
   splitOrderPref,
   startupCompanionPref,
-  syncLayoutFromSnapshot,
   workspaceOrientationPref,
-} from "../../../shell/layout-store.ts";
+} from "../../../shell/workspace-layout.ts";
+import { syncLayoutFromSnapshot } from "../../../layout/layout-preferences.ts";
 import { CONTEXT_NAV_CATALOG } from "../../../../shared/app-state-types.ts";
 import { isContextNavItemId } from "../../../settings/editor/context-nav-prefs.ts";
 import { stageLabelFor } from "../../stage/stage-registry.tsx";

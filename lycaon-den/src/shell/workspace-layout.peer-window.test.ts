@@ -8,7 +8,7 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe("layout store in a peer window", () => {
+describe("layout contracts in a peer window", () => {
   it("seeds from main preferences once, then keeps peer layout ephemeral", async () => {
     window.history.replaceState(
       {},
@@ -19,14 +19,8 @@ describe("layout store in a peer window", () => {
     const { getAppStateSnapshot, setAppStateSnapshot } = await import(
       "../store/app-state-snapshot.ts"
     );
-    const {
-      navCollapsedPref,
-      saveStagePlacementMode,
-      stagePlacementMode,
-      syncLayoutFromSnapshot,
-      splitOrderPref,
-      swapSplitColumns,
-    } = await import("./layout-store.ts");
+    const { navCollapsedPref, saveStagePlacementMode, stagePlacementMode, splitOrderPref, swapSplitColumns } = await import("./workspace-layout.ts");
+    const { syncLayoutFromSnapshot } = await import("../layout/layout-preferences.ts");
 
     setAppStateSnapshot({
       ...EMPTY_APP_STATE_V1,

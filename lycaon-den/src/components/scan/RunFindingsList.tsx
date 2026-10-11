@@ -18,7 +18,7 @@ import {
   scanEmptyState,
 } from "../../lib/scan-display.ts";
 import { relativeTimeLabel } from "../../time/time-copy.ts";
-import { listPanePrefs } from "../../shell/layout-store.ts";
+import { listPanePrefs } from "../../list/list-layout.ts";
 import { ListColumnHeader } from "../list/ListColumnHeader.tsx";
 import { TablePager } from "../list/TablePager.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";

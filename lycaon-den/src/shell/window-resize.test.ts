@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { layoutViewportWidthPx, resetLayoutStoreForTests } from "./layout-store.ts";
+import { layoutViewportWidthPx } from "./workspace-layout.ts";
+import { resetLayoutForTests } from "../layout/layout-test-support.ts";
 import {
   flushShellLayoutSettleForTests,
   isShellLayoutBusy,
@@ -12,7 +13,7 @@ afterEach(async () => {
   vi.useRealTimers();
   await flushShellLayoutSettleForTests();
   resetShellLayoutBusyForTests();
-  resetLayoutStoreForTests();
+  resetLayoutForTests();
   vi.restoreAllMocks();
 });
 

@@ -4,7 +4,7 @@ import { captureProjectThumbnail } from "../../home/capture-thumbnail.ts";
 import { draftPromoteFirstTurnComplete, rememberDraftProjectExchange, shouldShowDraftPromoteBanner } from "../../home/draft-promote.ts";
 import { shouldShowNoFolderBanner } from "../../home/nofolder-banner.ts";
 import { shouldCaptureProjectThumbnail } from "../../home/thumbnail-store.ts";
-import { navHidePreviewed } from "../../shell/layout-store.ts";
+import { navHidePreviewed } from "../../shell/workspace-layout.ts";
 import { getAppStateSnapshot } from "../../store/app-state-snapshot.ts";
 import { persistAppStateInBackground } from "../../store/app-state-background-write.ts";
 import type { ShellScope } from "./shell-scope.ts";

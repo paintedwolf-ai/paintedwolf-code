@@ -17,7 +17,7 @@ import {
   reorderContextNavVisible,
   saveContextNavVisible,
 } from "../../settings/editor/context-nav-prefs.ts";
-import { setSplitFocusRegion } from "../../shell/layout-store.ts";
+import { setSplitFocusRegion } from "../../shell/workspace-layout.ts";
 import { focusRegion } from "../../shortcuts/focus-region.ts";
 import { isTauriRuntime } from "../../platform/runtime.ts";
 import type { ItemWindowView } from "../../platform/windows/item-windows.ts";

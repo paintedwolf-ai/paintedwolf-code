@@ -4,7 +4,7 @@ import { resolveColumnWidths, sortRows } from "../../list/list-columns.ts";
 import { createFittedColumns } from "../../list/create-fitted-columns.ts";
 import type { SortState } from "../../list/list-sort.ts";
 import { resolveListPaneSort } from "../../list/list-pane-model.ts";
-import { listPanePrefs } from "../../shell/layout-store.ts";
+import { listPanePrefs } from "../../list/list-layout.ts";
 import { groupHitsByProject } from "../../search/search-query-model.ts";
 import { searchHitDisplay } from "../../search/search-hit-display.ts";
 type Options = Pick<SearchResultsController, "response" | "currentPage" | "pageIndex" | "searchPages" | "searchFrame" | "selectedHit" | "loading" | "searchFailed"> & {

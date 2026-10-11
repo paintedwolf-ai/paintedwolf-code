@@ -5,21 +5,17 @@ import {
   resolveStageColumn,
   type StageColumnInput,
 } from "./stage-placement.ts";
-import {
-  companionStageId,
-  resetLayoutStoreForTests,
-  saveStagePlacementMode,
-  setSplitProjectId,
-  syncLayoutFromSnapshot,
-} from "./layout-store.ts";
+import { companionStageId, saveStagePlacementMode, setSplitProjectId } from "./workspace-layout.ts";
+import { resetLayoutForTests } from "../layout/layout-test-support.ts";
+import { syncLayoutFromSnapshot } from "../layout/layout-preferences.ts";
 import { resetAppStateSnapshotForTests } from "../store/app-state-snapshot.ts";
 
 beforeEach(() => {
   resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1 });
-  resetLayoutStoreForTests();
+  resetLayoutForTests();
 });
 
-afterEach(() => resetLayoutStoreForTests());
+afterEach(() => resetLayoutForTests());
 
 const column = (over: Partial<StageColumnInput> = {}) =>
   resolveStageColumn({

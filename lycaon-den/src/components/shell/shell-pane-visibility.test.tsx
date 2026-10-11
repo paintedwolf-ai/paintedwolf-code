@@ -2,10 +2,11 @@ import { createRoot } from "solid-js";
 import { afterEach, describe, expect, it } from "vitest";
 import { EMPTY_APP_STATE_V1, type SplitOrder, type WorkspaceOrientation } from "../../../shared/app-state-types.ts";
 import { resetAppStateSnapshotForTests } from "../../store/app-state-snapshot.ts";
-import { resetLayoutStoreForTests, syncLayoutFromSnapshot } from "../../shell/layout-store.ts";
+import { resetLayoutForTests } from "../../layout/layout-test-support.ts";
+import { syncLayoutFromSnapshot } from "../../layout/layout-preferences.ts";
 import { createShellPaneVisibility } from "./shell-pane-visibility.ts";
 
-afterEach(() => resetLayoutStoreForTests());
+afterEach(() => resetLayoutForTests());
 
 function panes(orientation: WorkspaceOrientation, splitOrder: SplitOrder, hidden: boolean) {
   resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1,

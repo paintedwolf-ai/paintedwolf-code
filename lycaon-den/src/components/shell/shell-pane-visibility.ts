@@ -3,10 +3,21 @@ import type { ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { widenWindowBy, windowGeometryClaimPending } from "../../platform/windows/window-chrome.ts";
 import type { WindowSubject } from "../../platform/windows/window-subject.ts";
 import {
-  hiddenSplitPanePref, commitHiddenSplitPane, commitNavCollapsedPref, conversationHidePreviewed, effectiveNavWidthPx,
-  layoutViewportWidthPx, narrowSurvivorPref, navCollapsedPref, navHidePreviewed, requestedChatWidthPx,
-  preferredNavWidthPx, setSplitFocusRegion, splitOrderPref, workspaceOrientationPref,
-} from "../../shell/layout-store.ts";
+  hiddenSplitPanePref,
+  commitHiddenSplitPane,
+  commitNavCollapsedPref,
+  conversationHidePreviewed,
+  effectiveNavWidthPx,
+  layoutViewportWidthPx,
+  narrowSurvivorPref,
+  navCollapsedPref,
+  navHidePreviewed,
+  requestedChatWidthPx,
+  preferredNavWidthPx,
+  setSplitFocusRegion,
+  splitOrderPref,
+  workspaceOrientationPref,
+} from "../../shell/workspace-layout.ts";
 import { createSplitPaneVisibility } from "../../shell/split-pane-visibility.ts";
 import { createPaneVisibilityIntent } from "../../shell/pane-visibility-intent.ts";
 import { shouldAutomaticallyCollapseNav, stageOpenWindowDeficitPx, workspaceStageFloorPx } from "../../shell/responsive-collapse.ts";

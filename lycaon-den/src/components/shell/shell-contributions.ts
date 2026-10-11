@@ -13,7 +13,7 @@ import { isTauriRuntime } from "../../platform/runtime.ts";
 import { windowSubject } from "../../platform/windows/window-subject.ts";
 import { fileSummariesEnabled, fileSummariesSettingKnown } from "../../settings/editor/file-summary-settings.ts";
 import { filesTreeCollapsed } from "../../files/tree/files-tree-window-state.ts";
-import { hiddenSplitPanePref } from "../../shell/layout-store.ts";
+import { hiddenSplitPanePref } from "../../shell/workspace-layout.ts";
 import { invokeCommand, isComposerFocused, registerHostCommandInvoker } from "../../shortcuts/dispatcher.ts";
 import { focusRegionsVersion, mountedFocusRegions } from "../../shortcuts/focus-region.ts";
 import { workspaceKindOf, type PeerOpenSubject } from "../../shortcuts/peer-view-subject.ts";

@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal } from "solid-js";
 import type { ContextNavItemId } from "../../../shared/app-state-types.ts";
-import { rememberCompanionStage } from "../../shell/layout-store.ts";
+import { rememberCompanionStage } from "../../shell/workspace-layout.ts";
 import { isHomePresentation, type ProjectPresentation } from "../../shell/project-presentation.ts";
 import { useStageLayoutPresentation } from "../../shell/stage-layout-presentation.ts";
 import type { resolveStageColumn } from "../../shell/stage-placement.ts";

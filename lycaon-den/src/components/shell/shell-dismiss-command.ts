@@ -1,7 +1,7 @@
 import { chatTabRailBindings } from "../../chat/composer/chat-tab-rail-bindings.ts";
 import { contributionCommandAvailable, nativeCommandId } from "../../contributions/dispatch.ts";
 import { tryConsumeEscapeLadder } from "../../find/escape-ladder.ts";
-import { currentSplitFocusRegion } from "../../shell/layout-store.ts";
+import { currentSplitFocusRegion } from "../../shell/workspace-layout.ts";
 import { invokeCommand, registerCommandHandler } from "../../shortcuts/dispatcher.ts";
 import { isWalking, leaveWalk } from "../../files/walk/walk-store.ts";
 import { tryDismissOnboardingWelcome } from "../onboarding/onboarding-welcome-dismiss.ts";

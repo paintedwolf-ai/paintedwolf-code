@@ -7,7 +7,7 @@ import { cleanup } from "@solidjs/testing-library";
 
 import { resetDispatcherForTests } from "../../shortcuts/dispatcher.ts";
 import { setAppStateSnapshot } from "../../store/app-state-snapshot.ts";
-import { resetLayoutStoreForTests } from "../../shell/layout-store.ts";
+import { resetLayoutForTests } from "../../layout/layout-test-support.ts";
 import { resetSearchMatchPrefsForTests } from "../../search/search-match-prefs.ts";
 import { EMPTY_APP_STATE_V1 } from "../../../shared/app-state-types.ts";
 export const searchMock = vi.fn();
@@ -54,7 +54,7 @@ export function setupGlobalSearchViewTests() {
     resetSearchMatchPrefsForTests();
     setAppStateSnapshot({ ...EMPTY_APP_STATE_V1 });
     resetDispatcherForTests();
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
     searchMock.mockReset();
     exportMock.mockReset();
     replacePreviewMock.mockReset();

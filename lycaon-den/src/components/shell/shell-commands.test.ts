@@ -76,8 +76,9 @@ describe("layout.swapColumns", () => {
   });
 
   it("changes split order only while a split is live", async () => {
-    const { resetLayoutStoreForTests, splitOrderPref, workspaceOrientationPref } = await import("../../shell/layout-store.ts");
-    resetLayoutStoreForTests();
+    const { resetLayoutForTests } = await import("../../layout/layout-test-support.ts");
+    const { splitOrderPref, workspaceOrientationPref } = await import("../../shell/workspace-layout.ts");
+    resetLayoutForTests();
     dispose = mountCommands({ splitLive: () => false });
     invokeCommand("layout.swapColumns");
     expect(splitOrderPref()).toBe("context-first");
@@ -88,6 +89,6 @@ describe("layout.swapColumns", () => {
     expect(workspaceOrientationPref()).toBe("standard");
     invokeCommand("layout.swapColumns");
     expect(splitOrderPref()).toBe("context-first");
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
   });
 });

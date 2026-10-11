@@ -603,6 +603,15 @@ An engine that exits while the app runs is the shell's to answer, not the window
 - Live transcript projection remains separate from durable settlement.
 - Local persisted state accelerates boot but never outranks the host.
 
+### Layout contracts
+
+Workspace geometry lives in `src/shell/workspace-layout.ts`; list-pane size,
+column width, and sorting live in `src/list/list-layout.ts`. Both commit through
+`src/layout/layout-preferences.ts` and share `src/layout/resize-transaction.ts`.
+The preference store persists only the main window and seeds peer windows once.
+The transaction coordinator allows one active drag and rejects late callbacks
+from a replaced drag. Rendering reads previews without persisting them.
+
 ### Native facilities
 
 `src-tauri/src/lib.rs` registers commands and application lifecycle hooks. Native

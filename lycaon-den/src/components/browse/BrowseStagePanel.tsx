@@ -10,11 +10,7 @@ import {
   resolveListPaneSizePx,
   type ListPaneAxis,
 } from "../../list/list-pane-model.ts";
-import {
-  beginListPaneResize,
-  listPanePrefs,
-  resetListPaneSize,
-} from "../../shell/layout-store.ts";
+import { beginListPaneResize, listPanePrefs, resetListPaneSize } from "../../list/list-layout.ts";
 import { observeElementExtent } from "../../layout/element-extent.ts";
 import { ResizeHandle } from "../primitives/ResizeHandle.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";

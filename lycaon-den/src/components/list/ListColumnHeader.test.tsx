@@ -4,10 +4,8 @@ import { fireEvent, render } from "@solidjs/testing-library";
 import { ListColumnHeader } from "./ListColumnHeader.tsx";
 import type { ColumnSpec } from "../../list/list-columns.ts";
 import { compareStrings, type SortState } from "../../list/list-sort.ts";
-import {
-  listPanePrefs,
-  resetLayoutStoreForTests,
-} from "../../shell/layout-store.ts";
+import { listPanePrefs } from "../../list/list-layout.ts";
+import { resetLayoutForTests } from "../../layout/layout-test-support.ts";
 import { resetAppStateSnapshotForTests } from "../../store/app-state-snapshot.ts";
 
 type Row = { name: string };
@@ -57,7 +55,7 @@ function renderHeader(initial: SortState = null) {
 describe("ListColumnHeader", () => {
   beforeEach(() => {
     resetAppStateSnapshotForTests();
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
   });
   // Fixed tracks are minmax(0, width).
   it("lays the header on the shared column template", () => {

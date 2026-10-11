@@ -12,7 +12,7 @@ vi.mock("./add-findings-to-chat.ts", () => ({
   addFindingsToChat: (...args: unknown[]) => addFindingsToChat(...args),
 }));
 import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
-import { resetLayoutStoreForTests } from "../../shell/layout-store.ts";
+import { resetLayoutForTests } from "../../layout/layout-test-support.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import type { CodeScanEvent, CodeScan, SecurityFullPass, SecurityOverview, ScanQueryRequest } from "../../api/types.ts";
 import {
@@ -226,7 +226,7 @@ describe("SecurityFindingsPane", () => {
     resetSecurityFoldersForTests();
     client = mockClient();
     // Layout preferences are shared across component instances.
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
   });
 
   it("isolates folder coverage and discards a late response from the previous folder", async () => {

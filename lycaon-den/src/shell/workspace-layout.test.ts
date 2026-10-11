@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRoot, createComputed } from "solid-js";
+import { PANE_HIDDEN_PX } from "../layout/drag-to-hide.ts";
 import { EMPTY_APP_STATE_V1 } from "../../shared/app-state-types.ts";
+import { beginListColumnResize, beginListPaneResize, listPanePrefs } from "../list/list-layout.ts";
 import {
-  beginListColumnResize,
-  beginListPaneResize,
   beginNavWidthResize,
   beginChatWidthResize,
   companionStageId,
@@ -13,12 +13,10 @@ import {
   currentSplitFocusRegion,
   effectiveNavWidthPx,
   effectiveChatWidthPx,
-  listPanePrefs,
   preferredNavWidthPx,
   preferredChatWidthPx,
   requestedChatWidthPx,
   resetChatWidthPx,
-  resetLayoutStoreForTests,
   saveStagePlacementMode,
   saveStartupCompanion,
   setLayoutViewportWidth,
@@ -27,12 +25,13 @@ import {
   setSplitProjectId,
   stagePlacementMode,
   startupCompanionPref,
-  syncLayoutFromSnapshot,
   workspaceOrientationPref,
   splitOrderPref,
   swapSplitColumns,
   toggleWorkspaceOrientation,
-} from "./layout-store.ts";
+} from "./workspace-layout.ts";
+import { resetLayoutForTests } from "../layout/layout-test-support.ts";
+import { syncLayoutFromSnapshot } from "../layout/layout-preferences.ts";
 import {
   flushShellLayoutSettleForTests,
   isShellLayoutUnstable,
@@ -47,15 +46,15 @@ import {
   STAGE_COL_MIN,
 } from "./stage-placement.ts";
 
-describe("layout store", () => {
+describe("layout contracts", () => {
   beforeEach(() => {
     localStorage.clear();
     resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1 });
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
   });
 
   afterEach(() => {
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
   });
 
   it("persists independent split order without disturbing pane state", async () => {
@@ -260,6 +259,36 @@ describe("layout store", () => {
     });
   });
 
+  it("settles layout even when a hide action fails", async () => {
+    const drag = beginNavWidthResize(() => {
+      throw new Error("hide failed");
+    });
+    drag.preview(PANE_HIDDEN_PX);
+    expect(() => drag.commit()).toThrow("hide failed");
+    expect(effectiveNavWidthPx()).toBe(preferredNavWidthPx());
+    await flushShellLayoutSettleForTests();
+    expect(isShellLayoutUnstable()).toBe(false);
+  });
+
+  it("replaces workspace drags with list drags and ignores late callbacks", async () => {
+    const split = beginChatWidthResize(1500);
+    split.preview(600);
+    const column = beginListColumnResize("search", "name", 120, {
+      basis: 120, min: 80, max: 200,
+    });
+    expect(effectiveChatWidthPx(1500)).toBe(CHAT_WIDTH_DEFAULT_PX);
+    split.preview(700);
+    split.commit();
+    column.preview(180);
+    expect(listPanePrefs("search").columnWidths?.name).toBe(180);
+    expect(isShellLayoutUnstable()).toBe(true);
+    column.commit();
+    expect(getAppStateSnapshot().layout?.chatWidthPx).toBeUndefined();
+    expect(getAppStateSnapshot().layout?.listPanes?.search?.columnWidths?.name).toBe(180);
+    await flushShellLayoutSettleForTests();
+    expect(isShellLayoutUnstable()).toBe(false);
+  });
+
   it("keeps the stored split intent independent of the measured host", async () => {
     await saveStagePlacementMode({ mode: "split", companion: "files" });
     setSplitProjectId("project-a");
@@ -330,11 +359,11 @@ describe("split column state", () => {
   beforeEach(() => {
     localStorage.clear();
     resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1 });
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
   });
 
   afterEach(() => {
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
   });
 
   it("starts on the conversation", () => {

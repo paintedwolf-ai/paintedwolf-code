@@ -8,7 +8,7 @@ import { SEARCH_LIST_SURFACE } from "../../search/search-columns.ts";
 import { resolveColumnWidths } from "../../list/list-columns.ts";
 import type { FittedColumns } from "../../list/create-fitted-columns.ts";
 import type { SortState } from "../../list/list-sort.ts";
-import { commitListSort } from "../../shell/layout-store.ts";
+import { commitListSort } from "../../list/list-layout.ts";
 import { ListColumnHeader } from "../list/ListColumnHeader.tsx";
 import { SearchResultGroup } from "./SearchResultGroup.tsx";
 const EMPTY_STATE_EXAMPLES = ["kind:code", "kind:evidence verified:false", "kind:message"] as const;

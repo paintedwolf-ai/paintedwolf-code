@@ -4,7 +4,7 @@ import {
   startupCompanionPref,
   workspaceOrientationPref,
   splitOrderPref,
-} from "../../shell/layout-store.ts";
+} from "../../shell/workspace-layout.ts";
 import { DenRadioControl } from "../primitives/DenRadio.tsx";
 import { stageLabelFor } from "../stage/stage-registry.tsx";
 import {

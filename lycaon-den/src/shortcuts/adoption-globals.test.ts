@@ -12,11 +12,8 @@ import {
   stockId,
 } from "../contributions/stock-frame-test.ts";
 import { resetContributionStoreForTest } from "../contributions/contribution-store.ts";
-import {
-  commitNavCollapsedPref,
-  navCollapsedPref,
-  resetLayoutStoreForTests,
-} from "../shell/layout-store.ts";
+import { commitNavCollapsedPref, navCollapsedPref } from "../shell/workspace-layout.ts";
+import { resetLayoutForTests } from "../layout/layout-test-support.ts";
 
 // Keep availability gates open in dispatch cases.
 beforeEach(() => {
@@ -26,7 +23,7 @@ beforeEach(() => {
 afterEach(() => {
   resetDispatcherForTests();
   setDispatcherPlatformForTests(null);
-  resetLayoutStoreForTests();
+  resetLayoutForTests();
   resetContributionStoreForTest();
 });
 
