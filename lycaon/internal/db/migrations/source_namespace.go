@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	_ "embed"
+	"errors"
 	"fmt"
 	"path"
 	"strings"
@@ -70,7 +71,7 @@ func migrateDirectoryPath(ctx context.Context, tx *sql.Tx, project, branch, root
 	}
 	var id string
 	err := tx.QueryRowContext(ctx, `SELECT id FROM source_directories WHERE project_id=? AND branch_id=? AND root_id=? AND parent_id IS NULL`, project, branch, root).Scan(&id)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		id = uuid.NewString()
 		_, err = tx.ExecContext(ctx, `INSERT INTO source_directories(id,project_id,branch_id,root_id,parent_id,name,present,ordinal,observed_ts) VALUES(?,?,?,?,NULL,'',1,0,'')`, id, project, branch, root)
 	}
@@ -83,7 +84,7 @@ func migrateDirectoryPath(ctx context.Context, tx *sql.Tx, project, branch, root
 	for _, name := range strings.Split(rel, "/") {
 		var next string
 		err = tx.QueryRowContext(ctx, `SELECT id FROM source_directories WHERE parent_id=? AND name=? AND present=1`, id, name).Scan(&next)
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			next = uuid.NewString()
 			_, err = tx.ExecContext(ctx, `INSERT INTO source_directories(id,project_id,branch_id,root_id,parent_id,name,present,ordinal,observed_ts) VALUES(?,?,?,?,?,?,1,0,'')`, next, project, branch, root, id, name)
 		}
