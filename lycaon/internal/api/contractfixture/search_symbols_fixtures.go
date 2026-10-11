@@ -48,6 +48,7 @@ func SettledSearch(t *testing.T, srv *hostapi.Server, p *project.Project, body m
 		wait := SearchSettlePoll
 		switch w.Code {
 		case http.StatusOK:
+			resp = wire.SearchResponse{}
 			testutil.FailErr(t, "decode search", json.Unmarshal(w.Body.Bytes(), &resp))
 			if len(resp.Issues) == 0 {
 				return resp
