@@ -16,7 +16,7 @@ import (
 
 func TestPutRejectsMismatchedHash(t *testing.T) {
 	store := New(t.TempDir())
-	if _, _, _, err := store.Put(ContentSHA([]byte("a")), []byte("b")); err == nil {
+	if _, _, _, err := store.Put(t.Context(), ContentSHA([]byte("a")), []byte("b")); err == nil {
 		t.Fatal("mismatched content hash accepted")
 	}
 }
@@ -166,9 +166,9 @@ func TestSameFileVersionRejectsARewrittenFile(t *testing.T) {
 
 func TestPruneOrphansKeepsLiveObjectsAndClearsStaging(t *testing.T) {
 	store := New(t.TempDir())
-	keepRel, _, _, err := store.Put(ContentSHA([]byte("keep\n")), []byte("keep\n"))
+	keepRel, _, _, err := store.Put(t.Context(), ContentSHA([]byte("keep\n")), []byte("keep\n"))
 	testutil.FailErr(t, "store kept object", err)
-	dropRel, _, _, err := store.Put(ContentSHA([]byte("drop\n")), []byte("drop\n"))
+	dropRel, _, _, err := store.Put(t.Context(), ContentSHA([]byte("drop\n")), []byte("drop\n"))
 	testutil.FailErr(t, "store dropped object", err)
 
 	staging := filepath.Join(store.Root(), stagingDirName)

@@ -33,7 +33,9 @@ func TestSourceHistoryFixtureReadsDurableBodiesWithoutOriginalWorkspace(t *testi
 	}
 	rel, err := sourceblob.RelPath(evidence.BodySHA256)
 	testutil.FailErr(t, "locate retained fixture body", err)
-	testutil.FailErr(t, "inject corrupt retained bytes", os.WriteFile(filepath.Join(dataDir, enginepaths.SourceContentDirName, rel), []byte("corrupt"), 0o600))
+	target := filepath.Join(dataDir, enginepaths.SourceContentDirName, rel)
+	testutil.FailErr(t, "make corruption fixture writable", os.Chmod(target, 0o600))
+	testutil.FailErr(t, "inject corrupt retained bytes", os.WriteFile(target, []byte("corrupt"), 0o600))
 	if err := VerifySourceHistory(t.Context(), database, dataDir, testdbseed.DefaultProjectID, "session", evidence); err == nil {
 		t.Fatal("corrupt retained content passed fixture verification")
 	}
