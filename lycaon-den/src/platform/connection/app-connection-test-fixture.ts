@@ -1,3 +1,6 @@
+import { createAppStore } from "../../store/app-state.ts";
+import { connectionServicesFixture } from "../../test/connection-services-fixture.ts";
+import type { ConnectionServices } from "./connection-services.ts";
 import { createSettingsStore } from "../../store/settings-store.ts";
 import { createCostStore } from "../../store/cost-store.ts";
 
@@ -138,6 +141,21 @@ export let closeMock: ReturnType<typeof vi.fn<() => Promise<void>>>;
 
 export let registeredShell: ReturnType<typeof createShellStore>;
 
+let fixtureServices: ConnectionServices;
+let fixtureModule: typeof import("./app-connection.ts");
+let releaseConnection = () => {};
+
+export function createFixtureApp() {
+  const app = createAppStore();
+  bindFixtureServices(fixtureModule, { app });
+  return app;
+}
+
+export function bindFixtureServices(mod: typeof import("./app-connection.ts"), overrides: Partial<ConnectionServices>): void {
+  fixtureServices = { ...fixtureServices, ...overrides };
+  releaseConnection = mod.bindAppConnection(fixtureServices).dispose;
+}
+
 export function installConnectionFixtureCleanup() {
   beforeEach(async () => {
     watchWindowExit.mockClear();
@@ -154,6 +172,7 @@ export function installConnectionFixtureCleanup() {
     subscribeEvents.mockReset();
     resetSessionEventRevisions.mockReset();
     refreshPreflight.mockClear();
+    readSidecarInfo.mockReset();
     getHost.mockReset();
     getHost.mockResolvedValue(TEST_HOST_INFO);
     lastSubscribeOptions = undefined;
@@ -192,20 +211,18 @@ export function installConnectionFixtureCleanup() {
     refreshCodeScanCache.mockResolvedValue(undefined);
     reconcileRecentsWithStores.mockResolvedValue([]);
     reconcileActiveScope.mockResolvedValue(undefined);
-    const mod = await import("./app-connection.ts");
+    const mod = fixtureModule = await import("./app-connection.ts");
+    fixtureServices = connectionServicesFixture();
     registeredShell = createShellStore("connected");
-    mod.registerShellStore(registeredShell);
-    mod.registerProjectsStore(createProjectsStore(mod.getLycaonClient, {
-      onProjectEvent: () => () => {},
-    }));
-    mod.registerSettingsStore(createSettingsStore());
-    mod.registerCostStore(createCostStore());
-    mod.registerRecentsStore(createRecentsStore());
+    bindFixtureServices(mod, {
+      shell: registeredShell,
+      projects: createProjectsStore(mod.getLycaonClient, { onProjectEvent: () => () => {} }),
+      settings: createSettingsStore(), costs: createCostStore(), recents: createRecentsStore(),
+    });
   });
 
-  afterEach(async () => {
-    const mod = await import("./app-connection.ts");
-    mod.disconnectAppBackend();
+  afterEach(() => {
+    releaseConnection();
     resetSourceTreeStoreForTests();
   });
 
@@ -228,7 +245,7 @@ export function testEntityRetire(recents: ReturnType<typeof createRecentsStore>)
 export async function loadModuleWithNotices() {
     const mod = await import("./app-connection.ts");
     const notices = createNoticeStore();
-    mod.registerNoticeStore(notices);
+    bindFixtureServices(mod, { notices: notices });
     const all = () => [...notices.index().values()].flat();
     return { mod, all };
   }
