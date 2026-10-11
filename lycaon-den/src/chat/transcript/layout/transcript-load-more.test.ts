@@ -3,6 +3,7 @@ import { stubClient } from "../../../test/client-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import {
   ensureTranscriptRevealAnchorLoaded,
+  loadTranscriptPage,
   watchTranscriptLoadMore,
 } from "./transcript-load-more.ts";
 import {
@@ -275,6 +276,36 @@ describe("watchTranscriptLoadMore", () => {
       stop();
       el.remove();
     }
+  });
+
+  it("rejects a page after the session view generation changes", async () => {
+    const appStore = createAppStore();
+    appStore.actions.installTranscriptBaseline("s-generation", [older(50)], 51, { hasMoreBefore: true });
+    let resolve!: (value: { messages: Message[]; turn_clocks: {}; turn_loads: {} }) => void;
+    const response = new Promise<{ messages: Message[]; turn_clocks: {}; turn_loads: {} }>(done => { resolve = done; });
+    const pending = loadTranscriptPage(stubClient({ listSessionMessages: () => response }), appStore, "s-generation", "older");
+    appStore.actions.invalidateSessionViewRequests();
+    resolve({ messages: [older(40)], turn_clocks: {}, turn_loads: {} });
+    expect(await pending).toBe(false);
+    expect(appStore.state.messages.map(row => row.id)).toEqual(["old-50"]);
+  });
+
+  it("retries a transient failure after renewed reader input", async () => {
+    const appStore = createAppStore();
+    appStore.actions.installTranscriptBaseline("s-retry", [older(50)], 51, { hasMoreBefore: true });
+    const { el } = mockStreamHost({ scrollTop: 0, scrollHeight: () => 10_000, clientHeight: 500 });
+    const listSessionMessages = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue({
+      messages: [older(40)], turn_clocks: {}, turn_loads: {},
+    });
+    const stop = watchTranscriptLoadMore(el, {
+      client: () => stubClient({ listSessionMessages }), appStore, sessionId: () => "s-retry",
+    });
+    try {
+      await vi.waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(1));
+      el.dispatchEvent(new WheelEvent("wheel", { deltaY: -30 }));
+      await vi.waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(2));
+      expect(appStore.state.messages.map(row => row.id)).toEqual(["old-40", "old-50"]);
+    } finally { stop(); el.remove(); }
   });
 
   it("walks through deep history until the anchor is resident", async () => {
