@@ -347,12 +347,7 @@ type worktreeWatcher struct {
 	scope           *sourcescope.Scope
 	reported        bool
 	faulted         bool
-	// Repository metadata also emits ref and index signals.
-	refDirs        map[string]struct{}
-	refState       map[string]refFileState
-	refNotifyTimer *time.Timer
-	// closed fences callbacks already running.
-	closed bool
+	refs            refObserver
 }
 
 func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *watchfd.Budget) (*worktreeWatcher, error) {
@@ -382,7 +377,7 @@ func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *w
 	if w.addMeasuredDir(root) != addRegistered {
 		w.setTruncated(1)
 	}
-	w.armRefWatch()
+	w.refs.arm(w.root, w.addMeasuredDir)
 	return w, nil
 }
 
@@ -457,7 +452,7 @@ func (w *worktreeWatcher) repriceDir(path string, cost int) bool {
 	if cost > watchfd.DirCeiling() || (delta > 0 && !w.budget.Take(delta)) {
 		_ = w.watcher.Remove(path)
 		delete(w.watched, path)
-		delete(w.refDirs, path)
+		w.refs.forget(path)
 		w.spent -= previous
 		w.budget.Give(previous)
 		return false
@@ -482,7 +477,7 @@ func (w *worktreeWatcher) forgetRemovedTree(path string) {
 		}
 		_ = w.watcher.Remove(watched)
 		delete(w.watched, watched)
-		delete(w.refDirs, watched)
+		w.refs.forget(watched)
 		w.spent -= cost
 		w.budget.Give(cost)
 	}
@@ -602,8 +597,8 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 					}
 				}
 			}
-			if w.isRefEvent(ev.Name) {
-				w.handleRefEvent(ctx, ev)
+			if w.refs.contains(ev.Name) {
+				w.refs.observe(ctx, w.root, ev, w.addMeasuredDir)
 			}
 			rel, err := filepath.Rel(w.root, ev.Name)
 			if err == nil && (rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator))) && w.physicalRoot != "" {
@@ -628,7 +623,7 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 			if ev.Op&fsnotify.Create != 0 && isDir && relSlash == ".git" {
 				// A repository appeared under a watched root; start watching
 				// its ref surfaces.
-				w.armRefWatch()
+				w.refs.arm(w.root, w.addMeasuredDir)
 			}
 			if ev.Op&fsnotify.Create != 0 && isDir && !w.recursive && w.scope.BoundaryDir(relSlash) == "" {
 				if w.addMeasuredDir(ev.Name) != addRegistered {
@@ -672,10 +667,7 @@ func classifyWatcherChange(op fsnotify.Op, isDir bool, statErr error) WorktreeCh
 
 func (w *worktreeWatcher) close() {
 	w.once.Do(func() {
-		w.mu.Lock()
-		w.closed = true
-		w.mu.Unlock()
-		w.stopRefNotify()
+		w.refs.close()
 		if w.watcher != nil {
 			_ = w.watcher.Close()
 		}
