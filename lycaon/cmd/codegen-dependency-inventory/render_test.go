@@ -1,6 +1,7 @@
 package main
 
 import (
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -54,9 +55,9 @@ func TestInventoryFocusesOnUpdatesAndPreservesSourceAccess(t *testing.T) {
 			Path: "app/package.json", Lock: "app/bun.lock",
 		}},
 		rows: []row{
-			{name: "urgent", title: "urgent", pins: []value{{text: "1.0.0"}}, upstream: []upstreamRef{{key: "urgent"}},
+			{name: "urgent", pins: []value{{text: "1.0.0"}}, upstream: []upstreamRef{{key: "urgent"}},
 				judgement: judgement{Urgency: "critical", Friction: "low"}},
-			{name: "routine", title: "routine", judgement: judgement{Urgency: "low", Friction: "low"}},
+			{name: "routine", judgement: judgement{Urgency: "low", Friction: "low"}},
 			{name: "unrated"},
 			{name: "held", dependency: "held", judgement: judgement{Updates: updatesHold, Notes: "Rebase patch first."}},
 			{name: "restricted", dependency: "restricted", judgement: judgement{Updates: updatesNoMajor}},
@@ -99,5 +100,27 @@ func TestInventoryWithoutPriorityUpdatesOrConstraints(t *testing.T) {
 	}
 	if strings.Contains(body, "| Name |") {
 		t.Error("empty inventory rendered a constraint table")
+	}
+}
+
+func TestCollectedInventoryRetainsAllPolicySections(t *testing.T) {
+	t.Parallel()
+	repo := filepath.Join("..", "..", "..")
+	p, err := loadPolicy(filepath.Join(repo, policyDir))
+	testutil.FailErr(t, "load dependency policy", err)
+	sections, err := collect(repo, p)
+	testutil.FailErr(t, "collect dependency inventory", err)
+	snap, err := loadSnapshot(filepath.Join(repo, snapshotRel))
+	testutil.FailErr(t, "load upstream snapshot", err)
+	body := string(renderInventory(p, sections, snap))
+	for _, s := range sections {
+		if !strings.Contains(body, "../../dependencies/"+s.cfg.file) {
+			t.Errorf("inventory lost access to section %s", s.cfg.file)
+		}
+		for _, r := range s.rows {
+			if (r.Friction == "high" || r.Updates != "") && !strings.Contains(body, r.name) {
+				t.Errorf("inventory lost upgrade constraint for %s", r.name)
+			}
+		}
 	}
 }
