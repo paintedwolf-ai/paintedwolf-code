@@ -111,14 +111,9 @@ export function createNoticeStore() {
 
     /** Dismiss one notice across every rendered surface. */
     dismiss(id: string): void {
-      setState((prev) => {
-        const buckets: Record<string, AppNotice[]> = {};
-        for (const [key, rows] of Object.entries(prev.buckets)) {
-          const kept = rows.filter((n) => n.id !== id);
-          if (kept.length > 0) buckets[key] = kept;
-        }
-        return { buckets, order: prev.order.filter((k) => buckets[k]) };
-      });
+      const removed = [...index().values()].flat().filter((n) => n.id === id);
+      dropWhere((n) => n.id === id);
+      for (const notice of removed) notice.interaction?.onDismiss?.();
     },
 
     /** Withdraw a condition's notice once the condition has passed. */
@@ -130,12 +125,9 @@ export function createNoticeStore() {
     /** Dismiss every notice in one scope. */
     dismissScope(scope: NoticeScope): void {
       const key = noticeScopeKey(scope);
-      setState((prev) => {
-        if (!prev.buckets[key]) return prev;
-        const buckets = { ...prev.buckets };
-        delete buckets[key];
-        return { buckets, order: prev.order.filter((k) => k !== key) };
-      });
+      const removed = [...(index().get(key) ?? [])];
+      dropWhere((n) => noticeScopeKey(n.scope) === key);
+      for (const notice of removed) notice.interaction?.onDismiss?.();
     },
 
     /** Drop a session's notices. */

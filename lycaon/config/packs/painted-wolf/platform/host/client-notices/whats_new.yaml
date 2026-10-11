@@ -1,0 +1,8 @@
+scope: app
+title: What’s new in
+message: Review the latest changes when you have a moment.
+suggested_action: Read more to review the release notes.
+scenarios:
+  - id: default
+    expect_contains:
+      - What’s new

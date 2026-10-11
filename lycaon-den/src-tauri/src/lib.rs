@@ -29,6 +29,7 @@ mod system_appearance;
 #[cfg(test)]
 mod test_support;
 pub mod update_service;
+mod diagnostic_log;
 mod vault_lock;
 pub mod webkit_features;
 mod webview_policy;

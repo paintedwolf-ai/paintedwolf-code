@@ -50,8 +50,10 @@ export type ClientNoticeKind =
   | "unexpected_client_error"
   | "update_available"
   | "update_failed"
+  | "update_feed_rejected"
   | "update_ready"
-  | "view_render_failed";
+  | "view_render_failed"
+  | "whats_new";
 
 export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>> = {
   contribution_frame_unavailable: {
@@ -236,6 +238,12 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     suggestedAction: "Open Settings → General → Updates to review the failure and retry.",
     scope: "app",
   },
+  update_feed_rejected: {
+    title: "Update feed could not be verified",
+    message: "Painted Wolf Code could not verify the published update information. No update was installed.",
+    suggestedAction: "Open Settings → General → Updates for details and check again later.",
+    scope: "app",
+  },
   update_ready: {
     title: "Update ready",
     message: "A verified update is ready for Painted Wolf Code.",
@@ -247,5 +255,11 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     message: "Something went wrong while drawing this view. Your work is safe — the session and everything in it are intact.",
     suggestedAction: "Reload the view to try again. The rest of the app still works.",
     scope: "session",
+  },
+  whats_new: {
+    title: "What’s new in",
+    message: "Review the latest changes when you have a moment.",
+    suggestedAction: "Read more to review the release notes.",
+    scope: "app",
   },
 };

@@ -19,6 +19,15 @@ function report(
 }
 
 describe("notification tier partition", () => {
+  it("publishes release announcements from the app boundary through the shared store", () => {
+    const home = readFileSync(join(denSrc, "components/home/HomeView.tsx"), "utf8");
+    const app = readFileSync(join(denSrc, "App.tsx"), "utf8");
+    const release = readFileSync(join(denSrc, "components/home/WhatsNewNotice.tsx"), "utf8");
+    expect(home).not.toContain("WhatsNew");
+    expect(app).toContain("<WhatsNewNotice notices={noticeStore}");
+    expect(release).toContain("props.notices.publish");
+    expect(release).not.toContain("SystemNudge");
+  });
   it("stops the stage only when unreachable or the host declares catastrophic", () => {
     expect(resolveCriticalStop({ sidecarStatus: "disconnected" })).toBeDefined();
     expect(

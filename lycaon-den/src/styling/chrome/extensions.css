@@ -266,22 +266,6 @@
   border-radius: var(--den-radius-sm);
   background: var(--den-background);
 }
-.whats-new-card .system-nudge {
-  align-items: flex-start;
-}
-.whats-new-card .system-nudge__title {
-  font-size: var(--text-den-subhead);
-}
-.whats-new-card .system-nudge__actions {
-  align-self: center;
-}
-.whats-new-card__summary {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  margin-top: 2px;
-}
-.whats-new-card__eyebrow,
 .whats-new-dialog__eyebrow {
   color: var(--den-accent-text);
   font-size: var(--text-den-caption);
