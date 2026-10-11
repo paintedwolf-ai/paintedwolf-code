@@ -259,16 +259,16 @@ describe("layout contracts", () => {
     });
   });
 
-  it("settles layout even when a hide action fails", () => {
+  it("settles layout even when a hide action fails", async () => {
     const drag = beginNavWidthResize(() => { throw new Error("hide failed"); });
     drag.preview(PANE_HIDDEN_PX);
     expect(() => drag.commit()).toThrow("hide failed");
     expect(effectiveNavWidthPx()).toBe(preferredNavWidthPx());
-    flushShellLayoutSettleForTests();
+    await flushShellLayoutSettleForTests();
     expect(isShellLayoutUnstable()).toBe(false);
   });
 
-  it("replaces workspace drags with list drags and ignores late callbacks", () => {
+  it("replaces workspace drags with list drags and ignores late callbacks", async () => {
     const split = beginChatWidthResize(1500);
     split.preview(600);
     const column = beginListColumnResize("search", "name", 120, {
@@ -283,7 +283,7 @@ describe("layout contracts", () => {
     column.commit();
     expect(getAppStateSnapshot().layout?.chatWidthPx).toBeUndefined();
     expect(getAppStateSnapshot().layout?.listPanes?.search?.columnWidths?.name).toBe(180);
-    flushShellLayoutSettleForTests();
+    await flushShellLayoutSettleForTests();
     expect(isShellLayoutUnstable()).toBe(false);
   });
 
