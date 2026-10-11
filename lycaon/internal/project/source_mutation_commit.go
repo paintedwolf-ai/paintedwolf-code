@@ -49,7 +49,7 @@ func (s *SourceMutationService) commitOnce(ctx context.Context, row *sourceMutat
 	defer func() { _ = tx.Rollback() }()
 	response := append(json.RawMessage(nil), row.Plan.Response...)
 	updatedAt := time.Now().UTC()
-	delivery, err := s.commitTx(ctx, tx, row, response, updatedAt, history, prepared)
+	delivery, err := commitSourceMutationTx(ctx, tx, row, response, updatedAt, history, prepared)
 	if err != nil {
 		return nil, err
 	}
@@ -60,7 +60,7 @@ func (s *SourceMutationService) commitOnce(ctx context.Context, row *sourceMutat
 	return delivery, nil
 }
 
-func (s *SourceMutationService) commitTx(ctx context.Context, tx *sql.Tx, row *sourceMutationRow, response json.RawMessage, updatedAt time.Time, history *sourceHistoryEntry, prepared sourceledger.PreparedRecording) (*sourcefeed.StagedDelivery, error) {
+func commitSourceMutationTx(ctx context.Context, tx *sql.Tx, row *sourceMutationRow, response json.RawMessage, updatedAt time.Time, history *sourceHistoryEntry, prepared sourceledger.PreparedRecording) (*sourcefeed.StagedDelivery, error) {
 	var delivery *sourcefeed.StagedDelivery
 	if row.Plan.Changed {
 		if prepared != nil {
