@@ -114,11 +114,8 @@ func (m *Service) BeforeFinish(
 	if reject, block := m.SourceEvidence(ctx, sess, history, surfaceID, invokeAllowed); block {
 		return reject, true
 	}
-	assessment := LatestAssessment(history)
-	if !assessment.Valid() || assessment.Method != "blocked" {
-		if reject, block := m.OpenGates(ctx, sess, workersIdle, invokeAllowed); block {
-			return reject, true
-		}
+	if reject, block := m.OpenGates(ctx, sess, workersIdle, invokeAllowed); block {
+		return reject, true
 	}
 	return m.OpenProgress(
 		ctx, sess, history, surfaceID, workersIdle, implState, invokeAllowed,
