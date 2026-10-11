@@ -6,5 +6,5 @@ across Painted Wolf Code. The judgement lives in the
 Each entry has two independent ratings. **Update urgency** reflects threat model and
 protocol decay. **Update friction** reflects engineering cost and verification surface.
 
-**See also:** [Dependencies policy](../dependencies.md) · [Release operations](release.md) ·
+**See also:** [Dependencies policy](../dependencies.md) ·
 [Licensing](../licensing.md) · [Compatibility](../compatibility.md) · [Dev tasks](../dev-tasks.md)
