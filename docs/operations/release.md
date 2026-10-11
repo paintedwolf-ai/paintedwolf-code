@@ -29,6 +29,32 @@ Before enabling these workflows, replace the publication environment's two unnum
 {"format_version":1,"generations":{"1":{"private_key":"<generation-1 private key>","password":""}}}
 ```
 
+When the two legacy secrets are already provisioned, migrate them without
+reading their values locally:
+
+1. From an authenticated admin shell, capture the environment public key and set
+   its **public** encryption target variable:
+   ```sh
+   gh api repos/paintedwolf-ai/paintedwolf-code/environments/release-publication/secrets/public-key > /tmp/feed-encryption-key.json
+   gh variable set FEED_CREDENTIAL_ENCRYPTION_KEY --env release-publication --body "$(cat /tmp/feed-encryption-key.json)"
+   ```
+2. After the maintenance workflow lands on `main`, dispatch
+   `gh workflow run release-secrets-check.yml --ref main -f feed_credentials=migrate`.
+   This mode signs a disposable pointer against the registered public key and
+   exports only a Libsodium sealed-box ciphertext. It refuses an existing map
+   or a registry that has advanced beyond generation 1. It performs no storage,
+   tap, website, or release publication probes.
+3. Download the successful run's `encrypted-feed-credentials` artifact into an
+   empty directory, then install it:
+   ```sh
+   gh api --method PUT repos/paintedwolf-ai/paintedwolf-code/environments/release-publication/secrets/FEED_SIGNING_KEYS_JSON --input feed-secret-request.json
+   gh workflow run release-secrets-check.yml --ref main -f feed_credentials=verify
+   ```
+   The second run proves the installed secret can sign every retained feed.
+   Preserve the legacy secrets until that proof succeeds. If GitHub rotates the
+   environment encryption key before installation, refresh the public variable
+   and rerun migration. No private credential belongs in logs or artifacts.
+
 Retain every generation's feed credential while its feed may need a halt; add a separate entry before publishing a bridge. Each signing invocation receives only its selected credential. Build jobs never receive the map. The registered public key is checked even in rehearsals, which use an explicit fixture registry restricted to `release-system-tests/`.
 
 The `release-rehearsal` environment serves the weekly [release system live
