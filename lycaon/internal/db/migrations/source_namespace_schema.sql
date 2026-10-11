@@ -1,3 +1,6 @@
+ALTER TABLE source_history_entries ADD COLUMN availability TEXT NOT NULL DEFAULT 'available' CHECK (availability IN ('available', 'unavailable'));
+ALTER TABLE source_branch_heads RENAME TO source_branch_heads_v1;
+
 -- Directory identity is independent of its current parent and name.
 CREATE TABLE IF NOT EXISTS source_directories (
     id TEXT PRIMARY KEY,
