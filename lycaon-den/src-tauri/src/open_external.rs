@@ -1,7 +1,7 @@
 //! File opening is confined to supplied project roots.
 //! Editor commands come from the shared detection catalog.
 
-use crate::reveal_in_file_manager::path_under_roots;
+use crate::files::reveal_in_file_manager::path_under_roots;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -250,7 +250,7 @@ fn spawn_system_browser(url: &str) -> Result<(), String> {
     }
     #[cfg(target_os = "windows")]
     {
-        crate::open_local_path::windows_open_associated(url)
+        crate::files::open_local_path::windows_open_associated(url)
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
