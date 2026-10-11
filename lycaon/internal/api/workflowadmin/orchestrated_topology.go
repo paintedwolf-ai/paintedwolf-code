@@ -8,12 +8,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func (s *Topology) StartOrchestratedTopologyForRun(ctx context.Context, sessionID string, run *wire.WorkflowRun) {
-	if s == nil || s.Orchestrator == nil || s.Runs == nil || s.Runs.Runs == nil || run == nil {
+	if s == nil || s.Orchestrator == nil || s.Requests == nil || run == nil {
 		return
 	}
 	// Workflow bytes come from the resolved catalog.
@@ -29,8 +28,8 @@ func (s *Topology) StartOrchestratedTopologyForRun(ctx context.Context, sessionI
 	if !manifest.BoundPhases[strings.TrimSpace(run.CurrentPhase)] {
 		return
 	}
-	vars, err := s.Runs.Runs.GetScaffoldVars(ctx, run.ID)
-	if err != nil || runstate.RequestPending(vars) {
+	ready, err := s.Requests.TopologyRequestReady(ctx, run.ID)
+	if err != nil || !ready {
 		return
 	}
 
