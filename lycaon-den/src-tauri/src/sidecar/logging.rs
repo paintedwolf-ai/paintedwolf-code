@@ -1,11 +1,10 @@
-use std::fs::{self, OpenOptions};
-use std::io::{Read, Seek, Write};
+use std::fs;
+use std::io::{Read, Seek};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use crate::diagnostic_log::append as append_engine_log;
 
 pub(super) const ENGINE_LOG_NAME: &str = "engine.log";
 pub(super) const ENGINE_LOG_TAIL_BYTES: usize = 4096;
-pub(super) const ENGINE_LOG_MAX_BYTES: u64 = 4 * 1024 * 1024;
 
 pub(super) fn engine_failure_message(reason: String) -> String {
     let mut err = reason;
@@ -19,33 +18,6 @@ pub(super) fn engine_failure_message(reason: String) -> String {
 pub(super) fn engine_log_path() -> Option<PathBuf> {
     let dir = crate::config_dir::host_config_dir().ok()?;
     Some(dir.join(ENGINE_LOG_NAME))
-}
-
-static ENGINE_LOG_WRITER: Mutex<()> = Mutex::new(());
-
-// A shared writer keeps the child's stderr pipe independent of log rotation.
-pub(super) fn append_engine_log(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
-    let _guard = ENGINE_LOG_WRITER
-        .lock()
-        .map_err(|_| std::io::Error::other("Engine log lock failed."))?;
-    if let Some(parent) = path.parent() {
-        crate::config_dir::ensure_private_dir(parent)?;
-    }
-    for chunk in bytes.chunks(ENGINE_LOG_MAX_BYTES as usize) {
-        let size = fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-        if size > 0 && size.saturating_add(chunk.len() as u64) > ENGINE_LOG_MAX_BYTES {
-            crate::atomic_file::replace(path, &path.with_extension("log.1"), false)?;
-        }
-        let mut options = OpenOptions::new();
-        options.create(true).append(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        options.open(path)?.write_all(chunk)?;
-    }
-    Ok(())
 }
 
 pub(super) fn drain_engine_stderr(mut source: impl Read, path: Option<PathBuf>) {

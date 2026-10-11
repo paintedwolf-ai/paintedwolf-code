@@ -21,6 +21,15 @@ async function fixture() {
 }
 
 describe("update notices", () => {
+  it("keeps unavailable development builds quiet", async () => {
+    const f = await fixture();
+    try {
+      const state = updateFixture({ last_error: { code: "feed_rejected" } });
+      state.capabilities.blocked_reason = "development_build";
+      await f.send(state);
+      expect(f.rows()).toHaveLength(0);
+    } finally { f.stop(); }
+  });
   it("announces readiness once, respects dismissal, and withdraws obsolete offers", async () => {
     const f = await fixture();
     try {
@@ -42,7 +51,8 @@ describe("update notices", () => {
     try {
       await f.send(stagedFixture());
       await f.send(stagedFixture({ offer_confirmed_at: null, last_error: { code: "feed_rejected" } }));
-      expect(f.rows().map(row => row.code)).toEqual(["update_failed"]);
+      expect(f.rows().map(row => row.code)).toEqual(["update_feed_rejected"]);
+      expect(f.rows()[0]!.message).toContain("No update was installed");
       await f.send(stagedFixture({ offer_confirmed_at: null, last_error: { code: "check_failed" } }));
       expect(f.rows()).toHaveLength(0);
       await f.send(stagedFixture());

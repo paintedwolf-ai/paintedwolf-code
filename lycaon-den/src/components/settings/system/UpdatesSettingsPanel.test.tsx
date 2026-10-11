@@ -6,6 +6,20 @@ import { setConfirmDestructivePresenter } from "../../../platform/interaction/co
 
 afterEach(() => { cleanup(); setConfirmDestructivePresenter(null); });
 describe("update settings", () => {
+  it("explains development availability and disables update controls", async () => {
+    const capabilities = { can_check: false, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "development_build" };
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => updateFixture({ candidate: null, automatic_updates_enabled: false, capabilities }) })} />);
+    expect((await screen.findByTestId("updates-development-build")).textContent).toContain("development builds");
+    expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", true);
+    expect(screen.getByRole("checkbox", { name: "Automatic updates" })).toHaveProperty("disabled", true);
+    expect(screen.getByTestId("updates-channel")).toHaveProperty("disabled", true);
+    expect(screen.queryByTestId("updates-install")).toBeNull();
+  });
+  it("shows the rejected feed cause without claiming an installation failure", async () => {
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => updateFixture({ last_error: { code: "feed_rejected", detail: "latest.json.sig returned HTTP 404" } }) })} />);
+    expect((await screen.findByRole("alert")).textContent).toContain("feed could not be verified");
+    expect(screen.getByText("latest.json.sig returned HTTP 404")).toBeTruthy();
+  });
   it("does not invoke native updates in a web app", () => {
     render(() => <UpdatesSettingsPanel />); expect(screen.getByTestId("updates-unavailable").textContent).toContain("desktop app");
   });

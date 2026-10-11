@@ -1,5 +1,6 @@
 //! The native host runs update discovery, preparation, and lifecycle activation.
 pub(crate) mod check;
+mod diagnostics;
 pub(crate) mod download;
 mod error;
 pub(crate) mod feed;
@@ -63,6 +64,7 @@ impl UpdateService {
         let channel = receipt_channel
             .unwrap_or_else(|| default_channel(&version).expect("compiled product version"));
         let mut state = NativeUpdateState::new(version, channel, source);
+        state.development = cfg!(debug_assertions) && installer::bundle().is_err();
         state.last_error = error;
         // A process outside an installed bundle has nothing to coordinate.
         state.coordinated = launch.lease.is_some() || installer::bundle().is_err();
@@ -73,45 +75,52 @@ impl UpdateService {
             rollout_bucket: check::draw_rollout_bucket(),
         };
         let mut preferences_writable = false;
-        match persistence::preferences_dir().and_then(|dir| {
-            persistence::load_preferences(&dir, channel, preferences.rollout_bucket)
-        }) {
-            Ok(p) => {
-                preferences_writable = true;
-                state.automatic_updates_enabled = p.automatic_updates_enabled;
-                state.channel = p.channel;
-                preferences = p;
+        let blocked_release = if !state.development {
+            match persistence::preferences_dir().and_then(|dir| {
+                persistence::load_preferences(&dir, channel, preferences.rollout_bucket)
+            }) {
+                Ok(p) => {
+                    preferences_writable = true;
+                    state.automatic_updates_enabled = p.automatic_updates_enabled;
+                    state.channel = p.channel;
+                    preferences = p;
+                }
+                Err(e) => {
+                    state.automatic_updates_enabled = false;
+                    state.last_error = Some(e);
+                }
             }
-            Err(e) => {
-                state.automatic_updates_enabled = false;
+            if let Err(e) = persistence::preferences_dir()
+                .and_then(|dir| persistence::reconcile_legacy(&dir, &state.running_version))
+            {
                 state.last_error = Some(e);
             }
-        }
-        if let Err(e) = persistence::preferences_dir()
-            .and_then(|dir| persistence::reconcile_legacy(&dir, &state.running_version))
-        {
-            state.last_error = Some(e);
-        }
-        if let Err(e) = staging::restore(&mut state) {
-            state.last_error = Some(e);
-        }
-        let blocked_release = match transaction::restore(&mut state) {
-            Ok(id) => id,
-            Err(error) => {
-                state.last_error = Some(error);
-                None
+            if let Err(e) = staging::restore(&mut state) {
+                state.last_error = Some(e);
             }
-        };
-        let blocked_release = match staging::rejected() {
-            Ok(rejected) => blocked_release.or(rejected),
-            Err(error) => {
+            let blocked_release = match transaction::restore(&mut state) {
+                Ok(id) => id,
+                Err(error) => {
+                    state.last_error = Some(error);
+                    None
+                }
+            };
+            let blocked_release = match staging::rejected() {
+                Ok(rejected) => blocked_release.or(rejected),
+                Err(error) => {
+                    state.last_error = Some(error);
+                    blocked_release
+                }
+            };
+            if let Some(error) = launch.error {
                 state.last_error = Some(error);
-                blocked_release
             }
+            blocked_release
+        } else {
+            state.automatic_updates_enabled = false;
+            state.last_error = None;
+            None
         };
-        if let Some(error) = launch.error {
-            state.last_error = Some(error);
-        }
         state.refresh_capabilities(installer::supported());
         Self {
             inner: tokio::sync::Mutex::new(Inner {
@@ -178,6 +187,7 @@ impl UpdateService {
 }
 fn emit(app: &AppHandle, state: &mut NativeUpdateState) {
     state.refresh_capabilities(installer::supported());
+    diagnostics::record(state);
     state.revision += 1;
     let _ = app.emit(UPDATE_STATE_EVENT, &*state);
 }

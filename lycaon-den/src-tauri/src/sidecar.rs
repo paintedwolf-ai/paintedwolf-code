@@ -362,7 +362,7 @@ pub(crate) fn setup_supervision(app: &tauri::AppHandle) {
     state.observe(Box::new(move |engine| {
         if let (Some(line), Some(path)) = (supervisor::log_line(engine), logging::engine_log_path())
         {
-            let _ = logging::append_engine_log(&path, line.as_bytes());
+            let _ = crate::diagnostic_log::append(&path, line.as_bytes());
         }
         let _ = events.emit(supervisor::ENGINE_STATE_EVENT, engine);
     }));
