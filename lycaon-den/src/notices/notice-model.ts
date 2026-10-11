@@ -7,6 +7,18 @@ import type { NoticeScope } from "./notice-scope.ts";
 import { scopeOfKind } from "./notice-routing.ts";
 import { clientNoticeScope } from "./notice-routing.ts";
 
+export type NoticeInteraction = {
+  autoDismiss?: boolean;
+  onDismiss?: () => void;
+  actions: readonly {
+    id: string;
+    label: string;
+    variant?: "primary" | "secondary";
+    dismiss?: boolean;
+    run: () => void;
+  }[];
+};
+
 type NoticeSeverity = "error" | "warning" | "info";
 
 export type AppNotice = {
@@ -17,6 +29,7 @@ export type AppNotice = {
   code?: string;
   suggestedAction?: string;
   actions?: readonly string[];
+  interaction?: NoticeInteraction;
   createdAt: number;
   scope: NoticeScope;
   resolution?: string;
@@ -32,6 +45,7 @@ export type NoticeInput = {
   code?: string;
   suggestedAction?: string;
   actions?: readonly string[];
+  interaction?: NoticeInteraction;
 };
 
 const UNKNOWN_NOTICE = CLIENT_NOTICES.unexpected_client_error;
@@ -218,6 +232,7 @@ export function noticeFromInput(input: NoticeInput, callSite: NoticeScope): AppN
   );
   return {
     ...notice,
+    interaction: input.interaction,
     severity: input.severity ?? "error",
   };
 }
