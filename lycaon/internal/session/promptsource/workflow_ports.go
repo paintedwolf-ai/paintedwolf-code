@@ -6,6 +6,9 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 )
 
+type WorkflowWorkerCycles interface {
+	ReconcileWorkerCycle(context.Context, string) error
+}
 type WorkflowRunnable interface {
 	AssertSessionRunnable(context.Context, string) error
 }

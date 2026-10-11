@@ -98,6 +98,7 @@ type WorkflowAsks interface {
 }
 
 type WorkflowFanout interface {
+	ReconcileWorkerCycle(context.Context, string) error
 	RecordWorkerTerminalProof(ctx context.Context, sessionID, completingJobID, summaryStatus string) error
 	RecordBoardOrientReady(ctx context.Context, sessionID, injectKey string) error
 }
@@ -145,12 +146,14 @@ func (a workflowManifestAdapter) ActiveManifest(ctx context.Context, sessionID s
 func (m *Host) SetWorkflowDomains(v *WorkflowDomains) {
 
 	m.Coordinator.Control.Workflow = nil
+	m.Coordinator.Control.WorkerCycles = nil
 	m.Coordinator.Projection.Workflow = nil
 	m.Coordinator.Projection.Reviews = nil
 	m.Coordinator.Assembly.Workflow = promptsource.AssemblyWorkflow{}
 	m.Coordinator.Loop.ActiveRuns = nil
 	if v != nil {
 		m.Coordinator.Control.Workflow = v.Policy
+		m.Coordinator.Control.WorkerCycles = v.Fanout
 		m.Coordinator.Projection.Workflow = v.Asks
 		m.Coordinator.Projection.Reviews = v.Reviews
 		var manifests assembly.WorkflowManifestSource
@@ -201,7 +204,7 @@ func (m *Host) SetWorkflowDomains(v *WorkflowDomains) {
 	m.Runner.SetSlash(v.Slash)
 	m.Workers.State.SetWorkflows(v.Policy)
 	m.Workers.Results.SetProofs(v.Fanout)
-	m.Workers.Results.SetWorkflowSource(v.Runs)
+	m.Workers.Results.SetWorkflowSource(v.Policy)
 	m.Runner.Transcript.SetPageReconciler(v.Recovery)
 	policy := v.Policy
 	m.Profiles.SetCoordinatorProfile(func(ctx context.Context, id string) string {

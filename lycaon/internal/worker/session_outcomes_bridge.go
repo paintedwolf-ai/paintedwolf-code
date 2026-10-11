@@ -80,6 +80,9 @@ func (b *SessionOutcomeBridge) OnWorkerFailed(ctx context.Context, jobID string,
 	if projectErr := b.Results.ProjectFailure(ctx, task, err); projectErr != nil {
 		return fmt.Errorf("project worker failure: %w", projectErr)
 	}
+	if proofErr := b.Results.RecordTerminalProof(ctx, parentID, jobID, "failed"); proofErr != nil {
+		return fmt.Errorf("record worker failure proof: %w", proofErr)
+	}
 	if b.Inner != nil {
 		if innerErr := b.Inner.OnWorkerFailed(ctx, jobID, err); innerErr != nil {
 			errs = append(errs, innerErr)

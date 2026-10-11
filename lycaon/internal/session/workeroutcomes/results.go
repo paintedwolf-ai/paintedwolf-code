@@ -28,8 +28,7 @@ type WorkerDecisions interface {
 	GetByJob(context.Context, string) (api.WorkerDecisionRequest, bool, error)
 }
 type ActiveWorkflow interface {
-	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
-	GetScaffoldVars(context.Context, string) (map[string]any, error)
+	ScaffoldVarsForSession(context.Context, string) (map[string]any, error)
 }
 type SessionLimits interface {
 	Effective(context.Context, *api.Session) settings.SessionLimits
@@ -154,11 +153,7 @@ func (m *Results) workerCycleCompletingJobID(ctx context.Context, sessionID stri
 	if sessionID == "" {
 		return ""
 	}
-	run, err := m.workflowSource.ActiveBySession(ctx, sessionID)
-	if err != nil || run == nil {
-		return ""
-	}
-	vars, err := m.workflowSource.GetScaffoldVars(ctx, run.ID)
+	vars, err := m.workflowSource.ScaffoldVarsForSession(ctx, sessionID)
 	if err != nil {
 		return ""
 	}

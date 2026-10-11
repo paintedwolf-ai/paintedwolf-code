@@ -66,6 +66,21 @@ func TestPlannedFanoutDoesNotAdvancePastMissingOrPartialWork(t *testing.T) {
 	if err := mgr.Fanout.AssertWorkerTask(ctx, &first); err == nil {
 		t.Fatal("accepted attempt beyond recovery allowance")
 	}
+	for _, stale := range []api.WorkerTask{
+		{ID: "stale", WorkflowRunID: "other", WorkflowPhase: "execute", ParentSessionID: "sess-1", Status: api.WorkerStatusComplete},
+		{ID: "stale", WorkflowRunID: run.ID, WorkflowPhase: "plan", ParentSessionID: "sess-1", Status: api.WorkerStatusComplete},
+		{ID: "stale", WorkflowRunID: run.ID, WorkflowPhase: "execute", ParentSessionID: "other", Status: api.WorkerStatusComplete},
+		{ID: "stale", WorkflowRunID: run.ID, WorkflowPhase: "execute", ParentSessionID: "sess-1", Status: api.WorkerStatusRunning},
+	} {
+		tasks = append(tasks, stale)
+		testutil.FailErr(t, "ignore stale proof", mgr.Fanout.RecordWorkerTerminalProof(ctx, "sess-1", "stale", "complete"))
+		current, err = mgr.Store.Runs.Get(ctx, run.ID)
+		testutil.FailErr(t, "read fenced phase", err)
+		if current.CurrentPhase != "execute" {
+			t.Fatal("unrelated terminal proof advanced workflow")
+		}
+		tasks = tasks[:len(tasks)-1]
+	}
 	testutil.FailErr(t, "exhausted proof", mgr.Fanout.RecordWorkerTerminalProof(ctx, "sess-1", "retry", "partial"))
 	current, err = mgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "read settled phase", err)
