@@ -98,7 +98,7 @@ func (b *Runtime) Open(ctx context.Context, dbPath string, startup startupprotoc
 	releasePolicyRoots := wireAgentPolicyRoots(ctx, b.Projects)
 	b.resources.Track("agent-policy-roots", 160, func(context.Context) error { releasePolicyRoots(); return nil })
 	b.SourceLedger = sourceledger.New(b.Database, filepath.Join(b.Directory, enginepaths.SourceContentDirName))
-	b.SourceLedger.Content.SetGuard(b.Claim)
+	b.SourceLedger.Content.SetGuard(b)
 	b.SourceLedger.Git.SetGitReader(gitStateReader{mgr: git.NewManager()})
 	b.trackSourceStorage()
 	return nil
