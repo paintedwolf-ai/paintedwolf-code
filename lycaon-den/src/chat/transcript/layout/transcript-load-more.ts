@@ -1,4 +1,4 @@
-import { scrollportMotionForViewport, scrollportMotionContaining } from "../../../platform/scrolling/scrollport-motion.ts";
+import { scrollportMotionForViewport } from "../../../platform/scrolling/scrollport-motion.ts";
 import { TranscriptPageIntent } from "./transcript-page-intent.ts";
 import type { LycaonClient } from "../../../api/client.ts";
 import type { Message } from "../../../api/types.ts";
@@ -77,30 +77,34 @@ export async function loadTranscriptHistoryUntil(
   sessionId: string,
   resident: () => boolean,
 ): Promise<boolean> {
+  const epoch = appStore.state.sessionViewEpoch;
+  const current = () => appStore.state.transcriptSessionId === sessionId && appStore.state.sessionViewEpoch === epoch;
+  if (!current()) return false;
   if (resident()) return true;
   // A tail gap requires a contiguous scan from the tail.
   if (appStore.state.transcript.hasTailGap) {
     appStore.actions.resetOlderTranscriptPages();
     if (resident()) return true;
   }
-  while (await loadTranscriptPage(client, appStore, sessionId, "older")) {
+  while (current() && await loadTranscriptPage(client, appStore, sessionId, "older")) {
+    if (!current()) return false;
     if (resident()) return true;
   }
-  return resident();
+  return current() && resident();
 }
 
 /**
  * Load history while the reader nears a resident edge: older pages near the top, and,
  * across a tail gap, the pages that lead back to the live tail near the bottom.
  */
-export function watchTranscriptLoadMore(
+export function createTranscriptPaging(
   streamTarget: HTMLElement,
   opts: {
     client: () => LycaonClient | undefined;
     appStore: AppStore;
     sessionId: () => string | undefined;
   },
-): () => void {
+): { dispose(): void; readerInput(direction: "up" | "down"): void } {
   let inFlight = false;
   let stopped = false;
   const intent = new TranscriptPageIntent();
@@ -152,12 +156,6 @@ export function watchTranscriptLoadMore(
       });
   };
 
-  const onWheel = (event: WheelEvent) => {
-    if (motion && event.target instanceof Element && scrollportMotionContaining(event.target) !== motion) return;
-    if (event.ctrlKey || event.deltaY === 0 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
-    intent.noteInput(event.deltaY < 0 ? "older" : "newer");
-    maybeLoad();
-  };
   const stopCommits = motion?.subscribeCommits((source, position) => {
     if ((source === "thumb_drag" || source === "track_click") && position.top !== previousOffset) {
       intent.noteInput(position.top < previousOffset ? "older" : "newer");
@@ -172,14 +170,18 @@ export function watchTranscriptLoadMore(
     previousOffset = offset;
     maybeLoad();
   });
-  streamTarget.addEventListener("wheel", onWheel, { passive: true });
   queueMicrotask(maybeLoad);
-  return () => {
-    stopped = true;
-    unsubscribe();
-    stopCommits?.();
-    streamTarget.removeEventListener("wheel", onWheel);
-    if (retryTimer !== undefined) clearTimeout(retryTimer);
-    if (settleFrame !== undefined) cancelAnimationFrame(settleFrame);
+  return {
+    readerInput: (direction) => {
+      intent.noteInput(direction === "up" ? "older" : "newer");
+      maybeLoad();
+    },
+    dispose: () => {
+      stopped = true;
+      unsubscribe();
+      stopCommits?.();
+      if (retryTimer !== undefined) clearTimeout(retryTimer);
+      if (settleFrame !== undefined) cancelAnimationFrame(settleFrame);
+    },
   };
 }

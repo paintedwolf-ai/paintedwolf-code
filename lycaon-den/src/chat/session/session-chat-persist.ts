@@ -24,7 +24,7 @@ import { cachedProjectsFromRegistry } from "../../store/boot-cache-model.ts";
 import {
   materializeTranscriptWindow,
   TRANSCRIPT_PAGE_BUDGET,
-  TRANSCRIPT_PERSIST_TAIL_LIMIT,
+  TRANSCRIPT_TAIL_BUDGET,
   type TranscriptWindow,
 } from "../transcript/layout/transcript-window.ts";
 
@@ -151,8 +151,8 @@ export function trimSnapshotForPersist(
       trimmedPages = true;
     }
   }
-  // Persist enough tail rows for the first restored viewport.
-  const tail = snap.transcript.tail.slice(-TRANSCRIPT_PERSIST_TAIL_LIMIT);
+  // Persistence preserves the complete bounded live tail.
+  const tail = snap.transcript.tail.slice(-TRANSCRIPT_TAIL_BUDGET);
   const trimmedTail = tail.length < snap.transcript.tail.length;
   const transcript: TranscriptWindow = {
     tail,
