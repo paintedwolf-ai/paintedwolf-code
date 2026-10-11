@@ -383,7 +383,7 @@ mod tests {
                         offenders.push(format!("{} sets {var}", path.display()));
                     }
                 }
-        }
+            }
         }
         assert!(
             offenders.is_empty(),

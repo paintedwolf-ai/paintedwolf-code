@@ -1,15 +1,15 @@
 //! Device app-state slices and shared editing persistence.
 
-pub(crate) mod views;
 pub(crate) mod document_outbox;
 pub(crate) mod shared_composer_documents;
+pub(crate) mod views;
 
 use crate::{atomic_file, config_dir};
-use tauri::Emitter;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::{LazyLock, Mutex};
+use tauri::Emitter;
 
 static APP_STATE_WRITER: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 

@@ -233,12 +233,12 @@ pub(crate) fn save_bytes(grant: String, bytes: Vec<u8>) -> Result<(), String> {
     save_atomic(&dest, bytes.as_slice())
 }
 
-
 #[cfg(test)]
 mod command_tests {
     use super::*;
     use crate::test_support::TempDir;
     use std::fs;
+
     #[test]
     fn byte_commands_refuse_an_unminted_grant() {
         save_bytes("forged-handle".to_string(), b"content".to_vec())
@@ -249,8 +249,7 @@ mod command_tests {
     fn a_write_grant_round_trips_and_does_not_replay() {
         let dir = TempDir::new("app-state-byte-commands");
         let target = dir.join("nested").join("export.bin");
-        let grant =
-            mint(&target, GrantMode::Write).expect("mint write grant");
+        let grant = mint(&target, GrantMode::Write).expect("mint write grant");
 
         save_bytes(grant.clone(), b"payload".to_vec()).expect("save through grant");
         assert_eq!(fs::read(&target).expect("read back"), b"payload".to_vec());
@@ -266,8 +265,7 @@ mod command_tests {
         let target = dir.join("readonly.bin");
         fs::write(&target, b"original").expect("seed file");
 
-        let grant =
-            mint(&target, GrantMode::Read).expect("mint read grant");
+        let grant = mint(&target, GrantMode::Read).expect("mint read grant");
         save_bytes(grant, b"overwritten".to_vec())
             .expect_err("a read pick may not be written through");
         assert_eq!(fs::read(&target).expect("unchanged"), b"original".to_vec());
