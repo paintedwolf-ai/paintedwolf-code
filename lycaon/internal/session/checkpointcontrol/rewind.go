@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -187,7 +186,7 @@ func (m *Rewinds) executeRewind(ctx context.Context, cpStore *sessioncheckpoint.
 	}
 	err = m.store.PrepareRewind(ctx, store.RewindOperation{
 		ID: operationID, SessionID: sessionID, AnchorMessageID: anchorMessageID,
-		InputDigest: inputDigest, ProjectDir: cpStore.ProjectDir(), JournalPath: journal.Path(), Status: string(sessioncheckpoint.PhasePrepared),
+		InputDigest: inputDigest, ProjectDir: cpStore.ProjectDir(), Status: string(sessioncheckpoint.PhasePrepared),
 		CheckpointAnchorIDs: anchorIDs,
 	})
 	if err != nil {
@@ -291,15 +290,9 @@ func (m *Rewinds) resolveOneRewindOperation(ctx context.Context, op store.Rewind
 		_ = m.store.SetRewindPhase(ctx, op.ID, "diverged", err.Error())
 		return err
 	}
-	journal, loadErr := sessioncheckpoint.LoadJournal(op.JournalPath)
+	journal, loadErr := sessioncheckpoint.LoadOperationJournal(m.captures.dataDir, op)
 	if loadErr != nil {
-		_ = m.store.SetRewindPhase(ctx, op.ID, "diverged", loadErr.Error())
 		return fmt.Errorf("recover rewind %s: %w", op.ID, loadErr)
-	}
-	if journal.ID != op.ID || journal.TranscriptID != op.SessionID || journal.AnchorMessageID != op.AnchorMessageID || filepath.Clean(journal.ProjectDir) != filepath.Clean(op.ProjectDir) {
-		err := fmt.Errorf("rewind operation identity diverged")
-		_ = m.store.SetRewindPhase(ctx, op.ID, "diverged", err.Error())
-		return fmt.Errorf("recover rewind %s: %w", op.ID, err)
 	}
 	if err := m.bindSourceRewindJournal(ctx, journal); err != nil {
 		return err
@@ -363,7 +356,7 @@ func (m *Rewinds) sweepCommittedRewinds(ctx context.Context) error {
 	for _, row := range rows {
 		checkpoint := sessioncheckpoint.New(m.captures.dataDir, row.ProjectDir, m.store)
 		if checkpoint != nil {
-			if journal, loadErr := sessioncheckpoint.LoadJournal(row.JournalPath); loadErr == nil {
+			if journal, loadErr := sessioncheckpoint.LoadOperationJournal(m.captures.dataDir, store.RewindOperation{ID: row.ID, SessionID: row.SessionID, AnchorMessageID: row.AnchorMessageID, ProjectDir: row.ProjectDir}); loadErr == nil {
 				sweepErr = errors.Join(sweepErr, journal.Cleanup(checkpoint))
 			} else if !errors.Is(loadErr, os.ErrNotExist) {
 				sweepErr = errors.Join(sweepErr, fmt.Errorf("sweep rewind %s journal: %w", row.ID, loadErr))

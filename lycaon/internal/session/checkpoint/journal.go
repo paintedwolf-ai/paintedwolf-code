@@ -127,12 +127,13 @@ func (j *Journal) Cleanup(checkpoint *Store) error {
 func (j *Journal) Path() string { return j.path }
 
 func NewJournal(cp *Store, man *Manifest, id, sessionID string, source *sourcerewind.Operation) (*Journal, error) {
-	if _, ok := safeIDSegment(id); !ok {
-		return nil, fmt.Errorf("invalid rewind operation id")
+	rel, err := JournalRelPath(cp.projectDir, id)
+	if err != nil {
+		return nil, err
 	}
 	j := &Journal{Version: rewindJournalVersion, ID: id, SessionID: man.SessionID, TranscriptID: sessionID,
 		AnchorMessageID: man.AnchorMessageID, ProjectDir: cp.projectDir, Phase: PhasePrepared, Source: source,
-		path: filepath.Join(cp.rewindsRoot(), id, rewindJournalName)}
+		path: filepath.Join(cp.stateRoot, rel)}
 	if err := os.MkdirAll(filepath.Dir(j.path), checkpointDirPerm); err != nil {
 		return nil, err
 	}

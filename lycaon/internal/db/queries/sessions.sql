@@ -573,12 +573,11 @@ ORDER BY session_id, admission_seq;
 
 -- name: PrepareRewindOperation :execrows
 INSERT INTO rewind_operations(
-    id, session_id, anchor_message_id, input_digest, project_dir, journal_path, status, error,
+    id, session_id, anchor_message_id, input_digest, project_dir, status, error,
     checkpoint_anchor_ids_json, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, 'prepared', '', ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, 'prepared', '', ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
     project_dir = excluded.project_dir,
-    journal_path = excluded.journal_path,
     status = 'prepared',
     error = '',
     response_json = NULL,
@@ -591,7 +590,7 @@ WHERE rewind_operations.status = 'rolled_back'
   AND rewind_operations.input_digest = excluded.input_digest;
 
 -- name: GetRewindOperation :one
-SELECT id, session_id, anchor_message_id, input_digest, project_dir, journal_path,
+SELECT id, session_id, anchor_message_id, input_digest, project_dir,
        status, error, COALESCE(response_json, '') AS response_json, checkpoint_anchor_ids_json
 FROM rewind_operations WHERE id = ?;
 
@@ -621,14 +620,14 @@ WHERE id = ? AND status = 'files_applied';
 -- Committed rewinds are excluded: the sweep below cleans any journal a crash
 -- left behind, so this listing stays proportional to in-flight rewinds.
 -- name: ListRewindOperationsForRecovery :many
-SELECT id, session_id, anchor_message_id, input_digest, project_dir, journal_path, status, error,
+SELECT id, session_id, anchor_message_id, input_digest, project_dir, status, error,
        COALESCE(response_json, '') AS response_json, checkpoint_anchor_ids_json
 FROM rewind_operations
 WHERE status IN ('prepared', 'applying', 'files_applied')
 ORDER BY created_at, id;
 
 -- name: ListRewindOperationsForRecoverySession :many
-SELECT id, session_id, anchor_message_id, input_digest, project_dir, journal_path, status, error,
+SELECT id, session_id, anchor_message_id, input_digest, project_dir, status, error,
        COALESCE(response_json, '') AS response_json, checkpoint_anchor_ids_json
 FROM rewind_operations
 WHERE status IN ('prepared', 'applying', 'files_applied') AND session_id = ?
@@ -637,7 +636,7 @@ ORDER BY created_at, id;
 -- Bounded GC for committed rewinds: the sweep removes leftover journals and
 -- checkpoint anchors, then deletes rows past retention.
 -- name: ListCommittedRewindOperationsForSweep :many
-SELECT id, session_id, anchor_message_id, project_dir, journal_path, checkpoint_anchor_ids_json, created_at
+SELECT id, session_id, anchor_message_id, project_dir, checkpoint_anchor_ids_json, created_at
 FROM rewind_operations
 WHERE status = 'committed'
 ORDER BY created_at, id

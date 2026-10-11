@@ -18,21 +18,21 @@ type RewindOperation struct {
 	AnchorMessageID string
 	InputDigest     string
 	ProjectDir      string
-	JournalPath     string
-	Status          string
-	Error           string
-	ResponseJSON    string
+
+	Status       string
+	Error        string
+	ResponseJSON string
 	// CheckpointAnchorIDs retains the committed cleanup worklist across interruptions.
 	CheckpointAnchorIDs []string
 }
 
 // RewindOperationSweepItem identifies committed journal and anchor cleanup.
 type RewindOperationSweepItem struct {
-	ID                  string
-	SessionID           string
-	AnchorMessageID     string
-	ProjectDir          string
-	JournalPath         string
+	ID              string
+	SessionID       string
+	AnchorMessageID string
+	ProjectDir      string
+
 	CheckpointAnchorIDs []string
 	CreatedAt           time.Time
 }
@@ -75,7 +75,7 @@ func (s *SQL) PrepareRewind(ctx context.Context, op RewindOperation) error {
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	rows, err := s.queries.PrepareRewindOperation(ctx, db.PrepareRewindOperationParams{
 		ID: op.ID, SessionID: op.SessionID, AnchorMessageID: op.AnchorMessageID,
-		InputDigest: op.InputDigest, ProjectDir: op.ProjectDir, JournalPath: op.JournalPath,
+		InputDigest: op.InputDigest, ProjectDir: op.ProjectDir,
 		CheckpointAnchorIdsJson: anchorIDsJSON,
 		CreatedAt:               now, UpdatedAt: now,
 	})
@@ -105,7 +105,7 @@ func (s *SQL) GetRewindOperation(ctx context.Context, id string) (*RewindOperati
 	}
 	return &RewindOperation{
 		ID: row.ID, SessionID: row.SessionID, AnchorMessageID: row.AnchorMessageID,
-		InputDigest: row.InputDigest, ProjectDir: row.ProjectDir, JournalPath: row.JournalPath,
+		InputDigest: row.InputDigest, ProjectDir: row.ProjectDir,
 		Status: row.Status, Error: row.Error, ResponseJSON: row.ResponseJson,
 		CheckpointAnchorIDs: anchorIDs,
 	}, nil
@@ -213,7 +213,7 @@ func (s *SQL) RewindOperationsForRecovery(ctx context.Context) ([]RewindOperatio
 		}
 		out = append(out, RewindOperation{
 			ID: row.ID, SessionID: row.SessionID, AnchorMessageID: row.AnchorMessageID,
-			InputDigest: row.InputDigest, ProjectDir: row.ProjectDir, JournalPath: row.JournalPath,
+			InputDigest: row.InputDigest, ProjectDir: row.ProjectDir,
 			Status: row.Status, Error: row.Error, ResponseJSON: row.ResponseJson,
 			CheckpointAnchorIDs: anchorIDs,
 		})
@@ -236,7 +236,7 @@ func (s *SQL) RewindOperationsForRecoverySession(ctx context.Context, sessionID 
 		}
 		out = append(out, RewindOperation{
 			ID: row.ID, SessionID: row.SessionID, AnchorMessageID: row.AnchorMessageID,
-			InputDigest: row.InputDigest, ProjectDir: row.ProjectDir, JournalPath: row.JournalPath,
+			InputDigest: row.InputDigest, ProjectDir: row.ProjectDir,
 			Status: row.Status, Error: row.Error, ResponseJSON: row.ResponseJson,
 			CheckpointAnchorIDs: anchorIDs,
 		})
@@ -263,7 +263,7 @@ func (s *SQL) CommittedRewindOperationsForSweep(ctx context.Context) ([]RewindOp
 		}
 		out = append(out, RewindOperationSweepItem{
 			ID: row.ID, SessionID: row.SessionID, AnchorMessageID: row.AnchorMessageID,
-			ProjectDir: row.ProjectDir, JournalPath: row.JournalPath,
+			ProjectDir:          row.ProjectDir,
 			CheckpointAnchorIDs: anchorIDs, CreatedAt: createdAt,
 		})
 	}

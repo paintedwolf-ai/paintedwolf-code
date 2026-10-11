@@ -2136,7 +2136,6 @@ CREATE TABLE IF NOT EXISTS rewind_operations (
     anchor_message_id TEXT NOT NULL,
     input_digest TEXT NOT NULL,
     project_dir TEXT NOT NULL,
-    journal_path TEXT NOT NULL,
     status TEXT NOT NULL CHECK (
         status IN ('prepared', 'applying', 'files_applied', 'committed', 'rolled_back', 'diverged')
     ),

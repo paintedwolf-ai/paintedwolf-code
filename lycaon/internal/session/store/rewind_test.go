@@ -30,7 +30,7 @@ func commitFixtureRewind(t *testing.T, ctx context.Context, st rewindTestStore, 
 	opID := uuid.NewString()
 	testutil.FailErr(t, "prepare rewind", st.PrepareRewind(ctx, RewindOperation{
 		ID: opID, SessionID: sessionID, AnchorMessageID: anchorID,
-		InputDigest: "digest", ProjectDir: "/project", JournalPath: "/journal.json",
+		InputDigest: "digest", ProjectDir: "/project",
 		CheckpointAnchorIDs: []string{anchorID},
 	}))
 	testutil.FailErr(t, "phase applying", st.SetRewindPhase(ctx, opID, "applying", ""))

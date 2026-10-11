@@ -1083,7 +1083,6 @@ type RewindOperations struct {
 	AnchorMessageID         string         `json:"anchor_message_id"`
 	InputDigest             string         `json:"input_digest"`
 	ProjectDir              string         `json:"project_dir"`
-	JournalPath             string         `json:"journal_path"`
 	Status                  string         `json:"status"`
 	Error                   string         `json:"error"`
 	ResponseJson            sql.NullString `json:"response_json"`
