@@ -258,6 +258,25 @@ describe("layout contracts", () => {
     });
   });
 
+  it("replaces workspace drags with list drags and ignores late callbacks", () => {
+    const split = beginChatWidthResize(1500);
+    split.preview(600);
+    const column = beginListColumnResize("search", "name", 120, {
+      basis: 120, min: 80, max: 200,
+    });
+    expect(effectiveChatWidthPx(1500)).toBe(CHAT_WIDTH_DEFAULT_PX);
+    split.preview(700);
+    split.commit();
+    column.preview(180);
+    expect(listPanePrefs("search").columnWidths?.name).toBe(180);
+    expect(isShellLayoutUnstable()).toBe(true);
+    column.commit();
+    expect(getAppStateSnapshot().layout?.chatWidthPx).toBeUndefined();
+    expect(getAppStateSnapshot().layout?.listPanes?.search?.columnWidths?.name).toBe(180);
+    flushShellLayoutSettleForTests();
+    expect(isShellLayoutUnstable()).toBe(false);
+  });
+
   it("keeps the stored split intent independent of the measured host", async () => {
     await saveStagePlacementMode({ mode: "split", companion: "files" });
     setSplitProjectId("project-a");

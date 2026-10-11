@@ -1,3 +1,4 @@
+import { createFilesTreeLayout } from "../tree/files-tree-layout.ts";
 import { editorWordWrapPref, editorLineNumbersPref, saveEditorWordWrap, saveEditorLineNumbers } from "../../settings/editor/editor-prefs.ts";
 import { EDITOR_STANDARD_COMMANDS } from "../../components/source/editor/editor-standard-commands.ts";
 import { focusRegion } from "../../shortcuts/focus-region.ts";
@@ -44,32 +45,13 @@ import { EditorCommandBar } from "../../find/EditorCommandBar.tsx";
 import { registerEscapeLadderLayer } from "../../find/escape-ladder.ts";
 import { editorCommandBarPlacement } from "../../find/find-controller.ts";
 import { bindFindableView } from "../../find/use-findable-view.ts";
-import { observeElementExtent } from "../../layout/element-extent.ts";
-import { FILES_TREE_SURFACE, clampListPaneSizePx, listPaneSizeMinPx, maxListPaneSizePx, resolveListPaneSizePx, type ListPaneAxis } from "../../list/list-pane-model.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { basenameOfPath } from "../../api/project-path.ts";
 import { type FileTabWindowDrag, type ItemWindowDropPosition } from "../../platform/windows/item-windows.ts";
 
 import { specialTabKind } from "../tabs/files-tab-kind.ts";
 import { isBackendReachable } from "../../platform/connection/sidecar-status.ts";
-import { widenWindowBy } from "../../platform/windows/window-chrome.ts";
 import { editorIndentStylePref, editorIndentWidthPref, editorRevealInTreePref } from "../../settings/editor/editor-prefs.ts";
-import { dragRequestsHide, PANE_HIDDEN_PX } from "../../layout/drag-to-hide.ts";
-import {
-  beginListPaneResize,
-  listPaneHidePreviewed,
-  listPanePrefs,
-  resetListPaneSize,
-} from "../../list/list-layout.ts";
-import {
-  layoutViewportWidthPx,
-  navCollapsedPref,
-  preferredChatWidthPx,
-  preferredNavWidthPx,
-  splitHostWidthPx,
-  workspaceOrientationPref,
-} from "../../shell/workspace-layout.ts";
-import { filesShowWindowDeficitPx } from "../../shell/responsive-collapse.ts";
 
 import { attachDispatcher, registerCommandHandler } from "../../shortcuts/dispatcher.ts";
 import { openFilesSurface } from "../../platform/navigation/open-files-surface.ts";
@@ -116,7 +98,7 @@ import { createFilesEditorSynchronization } from "../editor/files-editor-synchro
 import { filesPaneKey, parseFilesPaneKey } from "./files-pane-key.ts";
 
 import { orderWithPinnedGroup } from "../tabs/files-tab-strip.ts";
-import { filesTreeClaimed, filesTreeCollapsed, setFilesTreeClaimed, setFilesTreeCollapsed } from "../tree/files-tree-window-state.ts";
+import { filesTreeClaimed, filesTreeCollapsed } from "../tree/files-tree-window-state.ts";
 import { createFilesVersionHistory } from "../history/files-version-history.ts";
 import { selectedFileVersion, setSelectedFileVersion, toggleVersionComparison } from "../history/files-version-selection.ts";
 import { versionRestoreOffered } from "../history/file-version-restore.ts";
@@ -1057,56 +1039,8 @@ export function ProjectFilesView(props: Props) {
 
   observeDeleteGuard();
 
-  // Observed extent avoids layout reads during dragging.
-  const stageExtent = observeElementExtent(stageEl);
-  const bodySize = (axis: ListPaneAxis) =>
-    axis === "width" ? stageExtent.width() : stageExtent.height();
-  const treeStyle = () => {
-    // A drag past the hide threshold previews the tree closed.
-    if (listPaneHidePreviewed(FILES_TREE_SURFACE, "width")) {
-      return { "--den-files-tree-w": `${PANE_HIDDEN_PX}px` };
-    }
-    const prefs = listPanePrefs(FILES_TREE_SURFACE);
-    if (prefs.widthPx == null) return undefined;
-    return {
-      "--den-files-tree-w": `${clampListPaneSizePx(FILES_TREE_SURFACE, "width", prefs.widthPx, bodySize("width"))}px`,
-    };
-  };
-  let lastFilesClaimViewport = layoutViewportWidthPx();
-  createEffect(() => {
-    const viewport = layoutViewportWidthPx();
-    if (viewport === lastFilesClaimViewport) return;
-    lastFilesClaimViewport = viewport;
-    setFilesTreeClaimed(false);
-  });
-
-  const showFilesTree = () => {
-    setFilesTreeCollapsed(false);
-    setFilesTreeClaimed(true);
-    const viewportWidth = layoutViewportWidthPx();
-    const hostWidth = splitHostWidthPx();
-    const stageWidth = bodySize("width");
-    const splitLive = stageWidth != null && hostWidth - stageWidth > 1;
-    void widenWindowBy(
-      filesShowWindowDeficitPx({
-        viewportWidthPx: viewportWidth,
-        navWidthPx: preferredNavWidthPx(),
-        navCurrentlyVisible: viewportWidth - hostWidth > 1,
-        navUserCollapsed: navCollapsedPref(),
-        splitColumns: splitLive,
-        chatWidthPx: preferredChatWidthPx(),
-      }),
-    );
-  };
-  const stripSide = () => workspaceOrientationPref() === "mirrored" ? "right" : "left";
-  const hideFilesTree = () => {
-    setFilesTreeClaimed(false);
-    setFilesTreeCollapsed(true);
-  };
-  const toggleFilesTree = () => {
-    if (filesTreeCollapsed()) showFilesTree();
-    else hideFilesTree();
-  };
+  const treeLayout = createFilesTreeLayout(stageEl);
+  const { treeStyle, showFilesTree, toggleFilesTree, stripSide } = treeLayout;
 
   const hasRoots = () => filesRoots().length > 0;
 
@@ -1333,42 +1267,15 @@ export function ProjectFilesView(props: Props) {
             class="den-files-split"
             hidden={filesTreeCollapsed()}
             axis="width"
-            direction={workspaceOrientationPref() === "mirrored" ? -1 : 1}
-            size={(axis) =>
-              resolveListPaneSizePx(
-                FILES_TREE_SURFACE,
-                listPanePrefs(FILES_TREE_SURFACE),
-                axis,
-                bodySize(axis),
-              )
-            }
-            clamp={(value, axis) =>
-              axis === "width" &&
-              dragRequestsHide(value, listPaneSizeMinPx(FILES_TREE_SURFACE, axis))
-                ? PANE_HIDDEN_PX
-                : clampListPaneSizePx(
-                    FILES_TREE_SURFACE,
-                    axis,
-                    value,
-                    bodySize(axis),
-                  )
-            }
-            onBegin={(axis, startSize) =>
-              beginListPaneResize(
-                FILES_TREE_SURFACE,
-                axis,
-                startSize,
-                bodySize(axis),
-                axis === "width" ? hideFilesTree : undefined,
-              )
-            }
-            onReset={(axis) => void resetListPaneSize(FILES_TREE_SURFACE, axis)}
+            direction={treeLayout.resizeDirection()}
+            size={treeLayout.size}
+            clamp={treeLayout.clamp}
+            onBegin={treeLayout.beginResize}
+            onReset={treeLayout.resetSize}
             rootClass="den-stage--split-resizing"
             ariaLabel="Resize file tree"
-            ariaMin={(axis) => listPaneSizeMinPx(FILES_TREE_SURFACE, axis)}
-            ariaMax={(axis) =>
-              maxListPaneSizePx(FILES_TREE_SURFACE, axis, bodySize(axis))
-            }
+            ariaMin={treeLayout.minSize}
+            ariaMax={treeLayout.maxSize}
             tip="Drag to resize or hide the file tree — double-click to reset"
             testId="files-tree-resize"
           />
