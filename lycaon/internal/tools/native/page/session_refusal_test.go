@@ -30,6 +30,7 @@ func TestPageToolsRefuseInvalidTargetsAndMissingSessions(t *testing.T) {
 		{"open conflicting target", OpenHandler(nil, pages, nil, nil), map[string]any{"url": "https://example.com", "project_dir": "."}, "CAPTURE_TARGET_INVALID"},
 		{"open path without root", OpenHandler(nil, pages, nil, nil), map[string]any{"url": "https://example.com", "path": "index.html"}, "CAPTURE_TARGET_INVALID"},
 		{"open process with static root", OpenHandler(nil, pages, nil, nil), map[string]any{"project_dir": ".", "process_handle": "process"}, "CAPTURE_TARGET_INVALID"},
+		{"open process unavailable", OpenHandler(nil, pages, nil, nil), map[string]any{"url": "https://example.com", "process_handle": "missing"}, "CAPTURE_PROCESS_NOT_RUNNING"},
 		{"act missing id", ActHandler(pages, nil), map[string]any{}, "PAGE_ID_REQUIRED"},
 		{"act missing actions", ActHandler(pages, nil), map[string]any{"id": "page"}, "CAPTURE_TARGET_INVALID"},
 		{"act missing session", ActHandler(pages, nil), map[string]any{"id": "page", "actions": []any{map[string]any{"type": "click", "selector": "button"}}}, "PAGE_NOT_FOUND"},
@@ -72,6 +73,10 @@ func TestRecordedFailurePreservesProjectedEvidenceAndOriginalReject(t *testing.T
 	}
 	if effect.Visual == nil || !effect.Visual.Projected || effect.Visual.Perceive || string(effect.Visual.Bytes) != "recording" {
 		t.Fatalf("lost projected recording: %+v", effect.Visual)
+	}
+	err = recordedFailure(tools.ToolContext{}, capture, original)
+	if !errors.As(err, &reject) || reject.Code != original.Code || reject.Data["recorded"] != true || reject.Data["timeline"] != capture.Timeline {
+		t.Fatalf("recorded rejection without invocation effects=%v", err)
 	}
 	capture.Bytes[0] = 'X'
 	if string(effect.Visual.Bytes) != "recording" {
