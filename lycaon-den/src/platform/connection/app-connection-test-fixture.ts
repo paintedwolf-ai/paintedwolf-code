@@ -221,8 +221,7 @@ export function installConnectionFixtureCleanup() {
     });
   });
 
-  afterEach(async () => {
-    const mod = await import("./app-connection.ts");
+  afterEach(() => {
     releaseConnection();
     resetSourceTreeStoreForTests();
   });
