@@ -16,7 +16,11 @@ func TestWorkerAssignmentForwardsAttachments(t *testing.T) {
 		t.Fatal("WorkerTaskAssignment DTO must carry forwarded attachments")
 	}
 
-	compose := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/build_tools.go")
+	binding := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/build_tools.go")
+	if !strings.Contains(binding, "ComposePrompt: b.composeWorkerAssignment") {
+		t.Fatal("task() ComposePrompt must bind the worker assignment composer")
+	}
+	compose := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/worker_assignment.go")
 	if !strings.Contains(compose, "SessionForwardedAttachments") {
 		t.Fatal("task() ComposePrompt must collect parent attachments")
 	}
