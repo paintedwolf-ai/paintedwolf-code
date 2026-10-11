@@ -307,8 +307,10 @@ public_headers "${POINTER_REL}.sig" "${WORKDIR}/pointer-signature-headers"
 require_header_tokens "${WORKDIR}/pointer-signature-headers" Cache-Control \
   no-cache no-store must-revalidate
 curl --fail --silent --show-error -H 'Cache-Control: no-cache' \
+  "${DOWNLOAD_BASE_URL}/${POINTER_REL}?live_test=${RUN_ID}" --output "${WORKDIR}/pointer.json"
+curl --fail --silent --show-error -H 'Cache-Control: no-cache' \
   "${DOWNLOAD_BASE_URL}/${POINTER_REL}.sig?live_test=${RUN_ID}" --output "${WORKDIR}/pointer.sig"
-python3 "${ROOT}/scripts/feed_signature.py" --signature "${WORKDIR}/pointer.sig" \
+python3 "${ROOT}/scripts/feed_signature.py" --signature "${WORKDIR}/pointer.sig" --pointer "${WORKDIR}/pointer.json" \
   --file "latest-stable-key-${GENERATION}.json" --version "${VERSIONS[1]}" \
   --generation "${GENERATION}" --registry "${FEED_TEST_REGISTRY}" --storage-prefix "${STORAGE_PREFIX}" >/dev/null
 echo "release-live-test: pointer activation, retry, public bytes, signature, and caching verified" >&2
