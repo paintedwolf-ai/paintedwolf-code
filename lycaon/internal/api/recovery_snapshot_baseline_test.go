@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testbackup"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -85,10 +86,8 @@ func TestRecoveryStateKeepsTheDiagnosticDetail(t *testing.T) {
 }
 
 func TestQuarantinedStoreExposesRecoveryAndRefusesRoutes(t *testing.T) {
-	store, err := db.Open(filepath.Join(t.TempDir(), "store.db"))
-	testutil.FailErr(t, "open store", err)
-	t.Cleanup(func() { _ = store.Close() })
-	_, err = store.ExecContext(t.Context(), `PRAGMA foreign_keys=OFF`)
+	store := testdbfixture.Open(t, "store.db")
+	_, err := store.ExecContext(t.Context(), `PRAGMA foreign_keys=OFF`)
 	testutil.FailErr(t, "disable fixture foreign keys", err)
 	_, err = store.ExecContext(t.Context(), `INSERT INTO project_roots(id,project_id,path,label,added_at) VALUES('invalid','absent','/absent','absent','2026-01-01T00:00:00Z')`)
 	testutil.FailErr(t, "inject damaged relation", err)
