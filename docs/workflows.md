@@ -270,6 +270,10 @@ Phase-entry obligations are machine state. Prompt bindings render what is true a
 
 A phase transition is a lifecycle event, not automatically new user-facing work. The coordinator wakes when the entered phase has an active obligation or newer worker, decision, or overlay state to reconcile. If the current user intent already has a committed completion report and the entered phase contains only dormant event-scoped gates, the host records the transition without requesting a second report.
 
+Worker outcome delivery projects the committed result, records workflow completion proof, and acknowledges delivery before releasing the parent cycle. Deliveries for one parent are serialized so the last completion observes its peers' acknowledgements. Proofs are bound to the worker's run and phase; a late result cannot advance unrelated work.
+
+Before a coordinator request, the host reconciles settled planned fanouts from the retained worker ledger. Recovery requires every planned leg to settle and all outcome deliveries to finish. It reuses committed results without dispatching replacement work; unplanned ambient cycles retain their event-driven behavior.
+
 Bindings are scoped by workflow and phase so guidance cannot leak into unrelated sessions. Same-phase re-entry uses an explicit event rather than pretending the phase was newly entered.
 
 A phase's entry guidance reaches the coordinator on the next model call, whether that call opens a turn or continues one: a coordinator whose own `submit_verdict` advances the phase reads the new phase's guidance before it acts again, so a phase entered and left inside one turn is never skipped. Only the current phase's guidance is delivered; guidance for a phase the run already left is dropped with it.
