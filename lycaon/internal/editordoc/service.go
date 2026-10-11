@@ -2,7 +2,6 @@ package editordoc
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"strings"
 	"sync"
@@ -18,11 +17,8 @@ import (
 
 type Ledger interface {
 	sourceledger.FileTracker
-	RecordTx(context.Context, *sql.Tx, sourceledger.RecordInput) error
-	// RecordFileTx records a publication and answers the file identity it
-	// landed on, which a recreated path receives fresh.
-	RecordFileTx(context.Context, *sql.Tx, sourceledger.RecordInput) (sourceledger.TrackedFile, error)
-	RecordHeldEditTx(context.Context, *sql.Tx, sourceledger.HeldEdit) (string, error)
+	Prepare(context.Context, []sourceledger.RecordInput) (sourceledger.PreparedRecording, error)
+	PrepareHeldEdit(context.Context, sourceledger.HeldEdit) (sourceledger.PreparedHeldEdit, error)
 }
 
 type Service struct {

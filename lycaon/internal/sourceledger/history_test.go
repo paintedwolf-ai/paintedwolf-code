@@ -477,14 +477,15 @@ func TestMaintenanceReclaimsContentAfterProjectDeletion(t *testing.T) {
 	}
 }
 
-func TestRecordTxRollsBackHistoryWithCaller(t *testing.T) {
+func TestPreparedHistoryRollsBackWithCaller(t *testing.T) {
 	store, ctx := openLedger(t)
+	prepared, err := store.Prepare(ctx, []RecordInput{{RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"}, ProjectID: "p1", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, After: []byte("a")}})
+	testutil.FailErr(t, "prepare", err)
+	defer prepared.Close()
 	tx, err := store.sqlDB.BeginTx(ctx, nil)
-	testutil.FailErr(t, "begin transaction", err)
-	err = store.RecordTx(ctx, tx, RecordInput{
-		RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
-		ProjectID:      "p1", Op: api.SourceChangeOpCreate,
-		Origin: api.SourceChangeOriginUser, After: []byte("a")})
+	testutil.FailErr(t, "begin", err)
+	defer tx.Rollback()
+	_, err = prepared.CommitTx(ctx, tx)
 	testutil.FailErr(t, "record transaction", err)
 	testutil.FailErr(t, "rollback transaction", tx.Rollback())
 	var count int

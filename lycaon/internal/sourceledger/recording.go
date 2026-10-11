@@ -23,9 +23,11 @@ func (s *Store) RecordBatch(ctx context.Context, inputs []RecordInput) error {
 	if s == nil || s.sqlDB == nil || len(inputs) == 0 {
 		return nil
 	}
-	if err := validateBatch(inputs); err != nil {
+	prepared, err := s.Prepare(ctx, inputs)
+	if err != nil {
 		return err
 	}
+	defer prepared.Close()
 	s.recordMu.Lock()
 	tx, err := s.sqlDB.BeginTx(ctx, nil)
 	if err != nil {
@@ -33,7 +35,7 @@ func (s *Store) RecordBatch(ctx context.Context, inputs []RecordInput) error {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := s.recordBatchTx(ctx, s.queries.WithTx(tx), inputs); err != nil {
+	if _, err := prepared.CommitTx(ctx, tx); err != nil {
 		s.recordMu.Unlock()
 		return err
 	}
@@ -42,40 +44,12 @@ func (s *Store) RecordBatch(ctx context.Context, inputs []RecordInput) error {
 		return err
 	}
 	s.recordMu.Unlock()
+	prepared.Close()
 	// Leased or slow-to-reclaim blobs remain queued for a later pass.
 	bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 	_, _ = s.Retention.reclaimBlobBatch(bg)
 	cancel()
 	return nil
-}
-
-// RecordTx joins a caller transaction for a single-effect operation.
-func (s *Store) RecordTx(ctx context.Context, tx *sql.Tx, in RecordInput) error {
-	return s.RecordBatchTx(ctx, tx, []RecordInput{in})
-}
-
-// RecordFileTx records one effect and answers the file identity it landed on,
-// which is new when the effect creates a path the ledger holds no file for.
-func (s *Store) RecordFileTx(ctx context.Context, tx *sql.Tx, in RecordInput) (TrackedFile, error) {
-	if s == nil || s.sqlDB == nil || tx == nil {
-		return TrackedFile{}, fmt.Errorf("ledger not configured")
-	}
-	inputs := []RecordInput{in}
-	if err := validateBatch(inputs); err != nil {
-		return TrackedFile{}, err
-	}
-	return s.recordBatchIdentityTx(ctx, s.queries.WithTx(tx), inputs)
-}
-
-// RecordBatchTx joins a caller transaction for a multi-effect operation.
-func (s *Store) RecordBatchTx(ctx context.Context, tx *sql.Tx, inputs []RecordInput) error {
-	if s == nil || s.sqlDB == nil || tx == nil || len(inputs) == 0 {
-		return nil
-	}
-	if err := validateBatch(inputs); err != nil {
-		return err
-	}
-	return s.recordBatchTx(ctx, s.queries.WithTx(tx), inputs)
 }
 
 func validateBatch(inputs []RecordInput) error {
@@ -95,16 +69,16 @@ func validateBatch(inputs []RecordInput) error {
 	return nil
 }
 
-func (s *Store) recordBatchTx(ctx context.Context, q *db.Queries, inputs []RecordInput) error {
+func (s *Store) recordBatchTx(ctx context.Context, q *db.Queries, inputs []preparedRecord) error {
 	_, err := s.recordBatchIdentityTx(ctx, q, inputs)
 	return err
 }
 
 // recordBatchIdentityTx records the batch and answers the last effect's file
 // identity. A replayed operation key answers an empty identity.
-func (s *Store) recordBatchIdentityTx(ctx context.Context, q *db.Queries, inputs []RecordInput) (TrackedFile, error) {
+func (s *Store) recordBatchIdentityTx(ctx context.Context, q *db.Queries, inputs []preparedRecord) (TrackedFile, error) {
 	var recorded TrackedFile
-	first := normalizedInput(inputs[0])
+	first := inputs[0].RecordInput
 	if first.OperationID != "" {
 		_, err := q.GetSourceOperationByKey(ctx, db.GetSourceOperationByKeyParams{
 			ProjectID: first.ProjectID, OperationKey: first.OperationID,
@@ -135,8 +109,7 @@ func (s *Store) recordBatchIdentityTx(ctx context.Context, q *db.Queries, inputs
 	}); err != nil {
 		return recorded, err
 	}
-	for _, raw := range inputs {
-		in := normalizedInput(raw)
+	for _, in := range inputs {
 		if err := s.recordEffect(ctx, q, operationID, in, &recorded); err != nil {
 			return recorded, err
 		}
@@ -198,7 +171,7 @@ func normalizedInput(in RecordInput) RecordInput {
 }
 
 // recordEffect lands one effect and reports the file and version it produced.
-func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID string, in RecordInput, recorded *TrackedFile) error {
+func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID string, in preparedRecord, recorded *TrackedFile) error {
 	if recovery := in.NativeRecovery; recovery != nil && recovery.Restore && recovery.Key != "" {
 		fileID, err := q.GetSourceRecoveryFile(ctx, db.GetSourceRecoveryFileParams{ProjectID: in.ProjectID, BranchID: in.BranchID.String(), RootID: in.RootID, OperationKey: recovery.Key})
 		if err != nil {
@@ -279,12 +252,12 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 	}
 
 	parentVersionID := beforeVersionID
-	state, afterSHA, afterBytes, afterSize := "content", in.AfterSHA256, in.After, in.AfterSize
+	state, afterSHA, afterSize := "content", in.AfterSHA256, in.AfterSize
 	switch {
 	case in.Op == api.SourceChangeOpDelete:
-		state, afterSHA, afterBytes, afterSize = "absent", "", nil, 0
+		state, afterSHA, afterSize = "absent", "", 0
 	case in.EntryKind == EntryKindDirectory:
-		state, afterSHA, afterBytes, afterSize = "directory", "", nil, 0
+		state, afterSHA, afterSize = "directory", "", 0
 	case in.Op == api.SourceChangeOpRename && afterSHA == "" && headErr == nil:
 		afterSHA = head.ContentSha256
 		parent, err := q.GetSourceVersion(ctx, head.VersionID)
@@ -298,7 +271,7 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 		ParentVersionID:      parentVersionID,
 		DerivedFromVersionID: in.DerivedFromVersionID, OperationID: operationID,
 		RootID: in.RootID, Path: in.Path, EntryKind: in.EntryKind, State: state,
-		SHA256: afterSHA, Content: afterBytes, Size: afterSize,
+		SHA256: afterSHA, Object: in.objects[afterSHA], Size: afterSize,
 		CaptureQuality: in.CaptureQuality, TS: in.TS,
 	})
 	if err != nil {
@@ -325,7 +298,7 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 	}); err != nil {
 		return err
 	}
-	if err := transitionDirectory(ctx, q, in, ordinal); err != nil {
+	if err := transitionDirectory(ctx, q, in.RecordInput, ordinal); err != nil {
 		return err
 	}
 	if err := upsertSourceHead(ctx, q, db.SourceBranchHeads{
@@ -336,7 +309,7 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 	}); err != nil {
 		return err
 	}
-	hasAgent, err := recordPublicationAuthorship(ctx, q, beforeVersionID, afterVersionID, effectID, in)
+	hasAgent, err := recordPublicationAuthorship(ctx, q, beforeVersionID, afterVersionID, effectID, in.RecordInput)
 	if err != nil {
 		return err
 	}
@@ -347,7 +320,7 @@ func (s *Store) recordEffect(ctx context.Context, q *db.Queries, operationID str
 			return err
 		}
 	}
-	if err := updateLineAttribution(ctx, q, in, fileID, effectID); err != nil {
+	if err := updateLineAttribution(ctx, q, in.RecordInput, fileID, effectID); err != nil {
 		return err
 	}
 
