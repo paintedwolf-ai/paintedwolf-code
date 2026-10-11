@@ -172,6 +172,12 @@ paths:
             application/json:
               schema:
                 $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '409':
           description: A file or folder already exists at that path
           content:
@@ -237,6 +243,12 @@ paths:
                 $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '404':
           description: Project or file not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:
@@ -334,6 +346,12 @@ paths:
                 $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '404':
           description: Project or path not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:
@@ -587,6 +605,12 @@ paths:
             application/json:
               schema:
                 $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '409':
           description: File bytes changed since the editor loaded them
           content:
@@ -720,6 +744,12 @@ paths:
             application/json:
               schema:
                 $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '409':
           description: Destination path already exists
           content:
@@ -787,6 +817,12 @@ paths:
                 $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '404':
           description: Project, root, or source path not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:

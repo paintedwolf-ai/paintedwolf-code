@@ -65,6 +65,12 @@ paths:
                 $ref: ../../components/schemas/project/source-history.yaml#/components/schemas/SourceHistoryMutationResponse
         '401':
           $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '409':
           description: History moved or the filesystem no longer matches the recorded operation
           content:
@@ -118,6 +124,12 @@ paths:
                 $ref: ../../components/schemas/project/source-history.yaml#/components/schemas/SourceHistoryMutationResponse
         '401':
           $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '409':
           description: History moved or the filesystem no longer matches the recorded operation
           content:

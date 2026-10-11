@@ -19487,6 +19487,15 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            /** @description The exact native Trash item is no longer available for restoration */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             413: components["responses"]["ContentTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["UnprocessableContent"];
@@ -19678,6 +19687,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description The exact native Trash item is no longer available for restoration */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             /** @description Content exceeds the editor cap (source_content_too_large) */
             413: {
                 headers: {
@@ -19774,6 +19792,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description The exact native Trash item is no longer available for restoration */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             413: components["responses"]["ContentTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["UnprocessableContent"];
@@ -19849,6 +19876,15 @@ export interface operations {
             };
             /** @description Directory is not empty and recursive was not set */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The exact native Trash item is no longer available for restoration */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -21199,6 +21235,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description The exact native Trash item is no longer available for restoration */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             413: components["responses"]["ContentTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             /** @description Host filesystem refused the permission transition */
@@ -21370,6 +21415,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description The exact native Trash item is no longer available for restoration */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             413: components["responses"]["ContentTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["UnprocessableContent"];
@@ -21419,6 +21473,15 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description History moved or the filesystem no longer matches the recorded operation */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The exact native Trash item is no longer available for restoration */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -21506,6 +21569,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description The exact native Trash item is no longer available for restoration */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             413: components["responses"]["ContentTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             422: components["responses"]["UnprocessableContent"];
@@ -21579,6 +21651,15 @@ export interface operations {
             };
             /** @description Destination path already exists */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The exact native Trash item is no longer available for restoration */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -22170,6 +22251,15 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            /** @description The exact native Trash item is no longer available for restoration */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
             413: components["responses"]["ContentTooLarge"];
             415: components["responses"]["UnsupportedMediaType"];
             /** @description Exact bytes for this retained version are unavailable */
@@ -22235,6 +22325,15 @@ export interface operations {
             };
             /** @description The working file changed since it was loaded */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The exact native Trash item is no longer available for restoration */
+            410: {
                 headers: {
                     [name: string]: unknown;
                 };
