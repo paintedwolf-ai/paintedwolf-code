@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourceblob"
+	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -27,10 +28,10 @@ func (d observedWriter) BeginTx(ctx context.Context, options *sql.TxOptions) (*s
 }
 
 func TestHistoryPublishesObjectsBeforeAcquiringWriter(t *testing.T) {
-	for _, kind := range []string{"record", "batch", "track", "refresh"} {
+	for _, kind := range []string{"record", "batch", "track", "refresh", "observation", "path_drift"} {
 		t.Run(kind, func(t *testing.T) {
 			store, ctx := openLedger(t)
-			if kind == "refresh" {
+			if kind == "refresh" || kind == "observation" || kind == "path_drift" {
 				_, err := store.TrackFile(ctx, TrackInput{ProjectID: "p1", RootID: "r1", Path: "a", Content: []byte("original")})
 				testutil.FailErr(t, "baseline", err)
 			}
@@ -51,6 +52,16 @@ func TestHistoryPublishesObjectsBeforeAcquiringWriter(t *testing.T) {
 				err = store.Record(ctx, input)
 			case "batch":
 				err = store.RecordBatch(ctx, []RecordInput{input})
+			case "observation", "path_drift":
+				head, readErr := store.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{ProjectID: "p1", BranchID: sourcebranch.Trunk.String(), RootID: "r1", Path: "a"})
+				testutil.FailErr(t, "read observed head", readErr)
+				after := &observedFile{rootID: "r1", path: "a", sha: sourceblob.ContentSHA(content), bytes: content, size: int64(len(content))}
+				if kind == "observation" {
+					_, err = store.recordObservation(ctx, "p1", head, after, newID(), observationCause{})
+				} else {
+					_, err = store.recordPathDrift(ctx, "p1", nil, []pathDrift{{head: head, observed: after, rootID: "r1"}}, nil, nil)
+				}
+
 			default:
 				_, err = store.TrackFile(ctx, TrackInput{ProjectID: "p1", RootID: "r1", Path: "a", Content: content})
 			}

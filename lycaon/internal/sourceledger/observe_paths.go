@@ -99,6 +99,20 @@ func (s *Store) recordPathDrift(ctx context.Context, projectID string, roots []R
 		return 0, nil
 	}
 	cause := observationCause{actor: actor, batchID: newID(), window: s.attributionWindow(projectID, roots)}
+	prepared := make([]*preparedObservation, 0, len(drifts))
+	defer func() {
+		for _, item := range prepared {
+			item.recording.Close()
+		}
+	}()
+	for _, drift := range drifts {
+		cause.gitTransitionID = transitionByRoot[drift.rootID]
+		item, err := s.prepareObservation(ctx, projectID, drift.head, drift.observed, newID(), cause)
+		if err != nil {
+			return 0, fmt.Errorf("prepare %s: %w", drift.head.Path, err)
+		}
+		prepared = append(prepared, item)
+	}
 	s.recordMu.Lock()
 	defer s.recordMu.Unlock()
 	tx, err := s.sqlDB.BeginTx(ctx, nil)
@@ -106,13 +120,11 @@ func (s *Store) recordPathDrift(ctx context.Context, projectID string, roots []R
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	q := s.queries.WithTx(tx)
 	recorded := 0
-	for _, drift := range drifts {
-		cause.gitTransitionID = transitionByRoot[drift.rootID]
-		landed, err := s.recordObservationTx(ctx, q, projectID, drift.head, drift.observed, newID(), cause)
+	for _, item := range prepared {
+		landed, err := item.commit(ctx, tx)
 		if err != nil {
-			return 0, fmt.Errorf("record %s: %w", drift.head.Path, err)
+			return 0, fmt.Errorf("record %s: %w", item.head.Path, err)
 		}
 		if landed {
 			recorded++
