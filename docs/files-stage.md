@@ -14,7 +14,7 @@ The stage lives in `lycaon-den/src/files/`, one directory per concern:
 
 | Directory | Holds |
 |-----------|-------|
-| `components/` | `ProjectFilesView` and the parts it composes: `FilesTreePane`, `FilesPaneDeck`, `FilesStageDialogs`, `FilesEmptyEditor`, plus the stage model, presentation tracking, and agent presence |
+| `components/` | `ProjectFilesView` assembles the workspace. `FilesNavigationPane` and `FilesEditorWorkspace` compose the mounted navigation and editor surfaces; stage dialogs, readiness, pane publication, and presentation tracking live beside them |
 | `tree/` | `FilesTree`, its paged model, selection, keys, drag, reveal, sticky rows, and virtual scrolling |
 | `tabs/` | The buffer strip, tab commands, measurements, and drag |
 | `editor/` | `FilesEditor`, its chrome, CodeMirror attachment, annotations, symbol and definition navigation, and preview and image viewers |
@@ -25,7 +25,9 @@ The stage lives in `lycaon-den/src/files/`, one directory per concern:
 | `source/` | Source reads, comparisons, workspace identity and roots, invalidation, and caches |
 | `commands/` | File mutations, confirmations, context actions, and the stage context menu |
 
-`ProjectFilesView` and `FilesEditor` each build one scope object, typed `FilesScope` and `FilesEditorScope` in `components/files-scope.ts`. A controller declares the members it reads as a `Pick` of one of them, plus its own inputs.
+`ProjectFilesView` assembles workspace, document, navigation, review, walk, and command integrations in one Solid lifetime. Mounted surfaces receive reactive props; readiness and pane publication share the workspace presentation model. Integrations declare the operations they need through narrow `Pick` types and explicit accessors from `FilesScope` or `FilesEditorScope` in `components/files-scope.ts`.
+
+Buffer event registrations have an instance identity. Disposing an older registration cannot remove its replacement, and asynchronous document observations and source refreshes check that identity before applying results or reporting errors.
 
 ## Read-only source ranges
 
