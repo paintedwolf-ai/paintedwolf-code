@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/api/workflowadmin/workflowadmin.Deps",
+  "kind": "construction",
+  "workstream": "http-composition",
+  "disposition": "retain",
+  "reason": "This dependency record is consumed once by a route-family constructor. Runtime handlers retain selected dependencies. Nesting the construction fields would hide the composition graph without narrowing runtime capabilities.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 17,
+  "boundaries": {
+    "lycaon/internal/api/operations_contract_test.go": "b12b3bbbfa9eceaee01e4c1d500f92c85076d87f55a07956bc24c83462d620ca",
+    "lycaon/internal/api/host_test.go": "8f850fa4b484e81f8c36332b9b428a4d384e89045bc313c32f0f10f23a322449"
+  },
+  "reviewed_shape": "0ced186e47d719ffa1ac2bc40cc18dac6ad880df712f333096a35c621ea4671c"
+}

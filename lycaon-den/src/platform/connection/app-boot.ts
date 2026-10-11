@@ -51,6 +51,7 @@ import { lastSeenStoreRevision } from "./health.ts";
 import {
   attachKnownBackend,
   connectAppBackend,
+  captureConnectionGuard,
   disconnectAppBackend,
   followEngineState,
   getLycaonClient,
@@ -108,22 +109,25 @@ function bootSessionSwitchDeps(
 }
 
 /** Clear boot-painted projects absent from the hydrated registry. */
-async function clearStaleBootScope(stores: AppBootStores): Promise<boolean> {
+async function clearStaleBootScope(stores: AppBootStores, signal?: AbortSignal): Promise<boolean> {
   const projectId = stores.shell.state.activeProjectId?.trim();
   if (!projectId) return false;
   if (!isLoaded(stores.projects.state.registry)) return false;
   if (stores.projects.byId(projectId)) return false;
 
-  await abandonPersistedBootScope(stores);
+  await abandonPersistedBootScope(stores, signal);
   return true;
 }
 
-async function abandonPersistedBootScope(stores: AppBootStores): Promise<void> {
+async function abandonPersistedBootScope(stores: AppBootStores, signal?: AbortSignal): Promise<void> {
+  if (signal?.aborted) return;
   await clearPersistedLastSessionSnapshot();
+  if (signal?.aborted) return;
   await persistAppState({
     lastActiveProjectId: undefined,
     cachedProjects: undefined,
   });
+  if (signal?.aborted) return;
   stores.appStore.actions.resetChatForSessionSwitch();
   stores.shell.clearToHome();
 }
@@ -152,14 +156,14 @@ function applyPersistedBootScope(stores: AppBootStores): boolean {
   return true;
 }
 
-async function reconcileBootScope(stores: AppBootStores): Promise<void> {
+async function reconcileBootScope(stores: AppBootStores, signal?: AbortSignal): Promise<void> {
   const client = getLycaonClient();
   const fg = stores.shell.state.foreground;
   const projectId = stores.shell.state.activeProjectId?.trim();
   if (!client || !fg?.projectId || !fg.sessionId || !projectId) return;
 
   if (!stores.projects.byId(projectId)) {
-    await clearStaleBootScope(stores);
+    await clearStaleBootScope(stores, signal);
     return;
   }
 
@@ -176,14 +180,14 @@ async function reconcileBootScope(stores: AppBootStores): Promise<void> {
       stores.appStore,
       client,
       stores.projects.state.projects,
-      { resumeVisible: true },
+      { resumeVisible: true, shouldApply: () => !signal?.aborted },
     );
   } catch {
-    await abandonPersistedBootScope(stores);
+    await abandonPersistedBootScope(stores, signal);
   }
 }
 
-async function restoreLastActiveProject(stores: AppBootStores): Promise<void> {
+async function restoreLastActiveProject(stores: AppBootStores, signal?: AbortSignal): Promise<void> {
   const projectId = getAppStateSnapshot().lastActiveProjectId?.trim();
   if (!projectId) return;
 
@@ -192,6 +196,7 @@ async function restoreLastActiveProject(stores: AppBootStores): Promise<void> {
 
   if (!stores.projects.byId(projectId)) {
     await persistAppState({ lastActiveProjectId: undefined });
+    if (signal?.aborted) return;
     stores.shell.clearToHome();
     return;
   }
@@ -307,10 +312,11 @@ async function restoreRequestedProject(
   subscribeProjectEvents(stores.appStore, projectId);
 }
 
-async function discardStaleBootSnapshot(stores: AppBootStores): Promise<void> {
+async function discardStaleBootSnapshot(stores: AppBootStores, signal?: AbortSignal): Promise<void> {
   const scope = stores.shell.state.foreground;
   const projectId = stores.shell.state.activeProjectId;
   await clearPersistedLastSessionSnapshot();
+  if (signal?.aborted) return;
   if (scope) dropSessionChatCache(scope);
   stores.appStore.actions.resetChatForSessionSwitch();
   // The cached transcript expires with the host revision; the navigation target does not.
@@ -321,7 +327,9 @@ async function discardStaleBootSnapshot(stores: AppBootStores): Promise<void> {
 async function bootstrapAppBackend(
   stores: AppBootStores,
   bootScopeApplied: boolean,
+  signal?: AbortSignal,
 ): Promise<void> {
+  if (signal?.aborted) return;
   stores.appStore.actions.setSidecarStatus("connecting");
   disconnectAppBackend();
 
@@ -329,6 +337,7 @@ async function bootstrapAppBackend(
   try {
     if (stores.attachOnly) {
       const connection = await readSidecarInfo();
+      if (signal?.aborted) return;
       if (connection) {
         attachKnownBackend(stores.appStore, connection);
         connected = true;
@@ -341,10 +350,12 @@ async function bootstrapAppBackend(
     /* offline — shell still mounts from persisted state */
   }
 
+  if (signal?.aborted) return;
   let scopeFromDisk = bootScopeApplied;
   const revision = lastSeenStoreRevision();
   if (scopeFromDisk && !persistedSnapshotMatchesRevision(revision)) {
-    await discardStaleBootSnapshot(stores);
+    await discardStaleBootSnapshot(stores, signal);
+    if (signal?.aborted) return;
     scopeFromDisk = false;
   }
 
@@ -357,54 +368,66 @@ async function bootstrapAppBackend(
     /* offline boot still needs loaded=true without a second listProjects race */
   }
 
-  if (await clearStaleBootScope(stores)) {
+  if (signal?.aborted) return;
+  if (await clearStaleBootScope(stores, signal)) {
     return;
   }
 
+  if (signal?.aborted) return;
   const client = getLycaonClient();
   if (!client || !connected) {
     if (scopeFromDisk) {
-      await abandonPersistedBootScope(stores);
+      await abandonPersistedBootScope(stores, signal);
     }
     return;
   }
 
+  const connectionCurrent = captureConnectionGuard(client);
+  const shouldApply = () => !signal?.aborted && connectionCurrent();
   try {
     if (stores.requestedSession) {
       await restoreRequestedSession(stores, stores.requestedSession);
     } else if (stores.requestedProjectId) {
       await restoreRequestedProject(stores, stores.requestedProjectId);
     } else if (scopeFromDisk) {
-      await reconcileBootScope(stores);
+      await reconcileBootScope(stores, signal);
     } else {
-      await restoreLastActiveProject(stores);
+      await restoreLastActiveProject(stores, signal);
     }
   } catch {
     if (scopeFromDisk) {
-      await abandonPersistedBootScope(stores);
+      await abandonPersistedBootScope(stores, signal);
     }
   }
 
+  if (signal?.aborted) return;
   void prefetchRecentSessionCaches(
     client,
     stores.recents.state.recents,
-    stores.projects.state.projects,
     handleSessionGone,
+    shouldApply,
   ).catch(() => undefined);
 }
 
 /** Load persisted state, reveal the shell, then attach the backend in the background. */
-export async function startAppBoot(stores: AppBootStores): Promise<void> {
-  const releaseBoot = appBootPreparation.register("backend", () => false);
+export async function startAppBoot(stores: AppBootStores, signal: AbortSignal): Promise<void> {
+  if (signal?.aborted) return;
+  signal?.addEventListener("abort", () => { shellSessionSwitchGeneration.next(); }, { once: true });
+  const releasePreparation = appBootPreparation.register("backend", () => false);
+  const releaseBoot = () => {
+    signal?.removeEventListener("abort", releaseBoot);
+    releasePreparation();
+  };
+  signal?.addEventListener("abort", releaseBoot, { once: true });
   try {
-    await loadAppBoot(stores, releaseBoot);
+    await loadAppBoot(stores, releaseBoot, signal);
   } catch (error) {
     releaseBoot();
     throw error;
   }
 }
 
-async function loadAppBoot(stores: AppBootStores, releaseBoot: () => void): Promise<void> {
+async function loadAppBoot(stores: AppBootStores, releaseBoot: () => void, signal?: AbortSignal): Promise<void> {
   // Keep the connection state stable during bootstrap.
   stores.appStore.actions.setSidecarStatus("connecting");
   // Install preservation before loading state, so quit also works during boot
@@ -415,10 +438,12 @@ async function loadAppBoot(stores: AppBootStores, releaseBoot: () => void): Prom
   let bootScopeApplied = false;
   try {
     await loadSharedAppState();
+    if (signal?.aborted) return;
     await Promise.all([
       resolveFilesTreeWindowLabel(),
       resolveTranscriptViewportWindowLabel(),
     ]);
+    if (signal?.aborted) return;
     applyBootAppStateSnapshot();
     const cached = getAppStateSnapshot().cachedProjects;
     if (cached?.length) {
@@ -430,6 +455,7 @@ async function loadAppBoot(stores: AppBootStores, releaseBoot: () => void): Prom
     // Reloading ends pending drag gestures.
     void discardPendingItemWindowDrags();
     await stores.recents.load();
+    if (signal?.aborted) return;
     seedSessionChatCacheFromPersisted();
     // Addressed item windows skip the default session restore.
     bootScopeApplied =
@@ -440,7 +466,9 @@ async function loadAppBoot(stores: AppBootStores, releaseBoot: () => void): Prom
     // Unlatched first-run keeps splash until Shell mounts OnboardingGate (or goes offline).
     const holdSplashForFirstRun =
       onboardingPrefsReady() && !firstRunSetupCompletedPref();
-    if (stores.attachOnly) {
+    if (signal?.aborted) {
+      releaseBoot();
+    } else if (stores.attachOnly) {
       // Attached views skip the brand reveal.
       await dismissBootFallback({ immediate: true });
     } else if (!holdSplashForFirstRun) {
@@ -449,6 +477,8 @@ async function loadAppBoot(stores: AppBootStores, releaseBoot: () => void): Prom
   }
 
   // Listen first, so the engine this boot connects to is the one followed.
-  await followEngineState(stores.appStore);
-  void bootstrapAppBackend(stores, bootScopeApplied).finally(releaseBoot);
+  if (signal?.aborted) return;
+  const stopFollowing = await followEngineState(stores.appStore);
+  if (signal?.aborted) { stopFollowing(); return; }
+  void bootstrapAppBackend(stores, bootScopeApplied, signal).finally(releaseBoot);
 }

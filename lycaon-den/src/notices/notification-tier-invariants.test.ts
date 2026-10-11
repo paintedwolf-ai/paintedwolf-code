@@ -222,7 +222,7 @@ describe("notification tier partition", () => {
     expect(retire).toContain("clearProject(");
 
     const connection = readFileSync(join(denSrc, "platform/connection/app-connection.ts"), "utf8");
-    expect(connection).toContain("retire: () => entityRetireRef");
+    expect(connection).toContain("retire: () => services?.retire ?? null");
     const reconcile = readFileSync(join(denSrc, "platform/connection/connection-reconcile.ts"), "utf8");
     expect(reconcile).toContain("ports.retire()?.session(");
     const connectionEvents = readFileSync(join(denSrc, "platform/connection/connection-events.ts"), "utf8");

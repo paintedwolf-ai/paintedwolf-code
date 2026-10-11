@@ -31,6 +31,7 @@ import { watchWindowExitForAppState } from "../persistence/app-state-window.ts";
 vi.mock("./app-connection.ts", () => ({
   connectAppBackend: vi.fn().mockResolvedValue({}),
   disconnectAppBackend: vi.fn(),
+  captureConnectionGuard: () => () => true,
   followEngineState: vi.fn().mockResolvedValue(() => {}),
   getLycaonClient: vi.fn().mockReturnValue({}),
   attachKnownBackend: vi.fn(),
@@ -112,7 +113,7 @@ describe("startAppBoot", () => {
       projects: { hydrate: vi.fn().mockResolvedValue(undefined), state: { registry: loaded(null), projects: [] } } as never,
       recents: { load: vi.fn().mockResolvedValue(undefined), state: { recents: [] } } as never,
       shell: createShellStore("offline"),
-    });
+    }, new AbortController().signal);
     expect(watchWindowExitForHotExit).toHaveBeenCalledOnce();
     expect(watchWindowExitForFilesTreeView).toHaveBeenCalledOnce();
     expect(watchWindowExitForAppState).toHaveBeenCalledOnce();
@@ -133,7 +134,7 @@ describe("startAppBoot", () => {
       projects: { hydrate: vi.fn().mockResolvedValue(undefined), state: { registry: loaded(null), projects: [] } } as never,
       recents: { load: vi.fn().mockResolvedValue(undefined), state: { recents: [] } } as never,
       shell: createShellStore("offline"),
-    });
+    }, new AbortController().signal);
     expect(appBootPreparation.ready()).toBe(false);
     await vi.waitFor(() => expect(dismiss).toBeTypeOf("function"));
     expect(appBootPreparation.ready()).toBe(false);
@@ -189,7 +190,7 @@ describe("startAppBoot", () => {
         state: { recents: [{ projectId: "another-project", sessionId: "another-chat" }, scope] },
       } as never,
       shell,
-    });
+    }, new AbortController().signal);
     await vi.waitFor(() => expect(resetChatForSessionSwitch).toHaveBeenCalled());
     if (exists) {
       await vi.waitFor(() => expect(resume).toHaveBeenCalled());
@@ -221,7 +222,7 @@ describe("startAppBoot", () => {
       projects: projects as never,
       recents: recents as never,
       shell,
-    });
+    }, new AbortController().signal);
 
     expect(recents.load).toHaveBeenCalledOnce();
     expect(dismissBootFallback).toHaveBeenCalledOnce();
@@ -259,7 +260,7 @@ describe("startAppBoot", () => {
       projects: projects as never,
       recents: recents as never,
       shell,
-    });
+    }, new AbortController().signal);
 
     expect(dismissBootFallback).toHaveBeenCalledOnce();
     expect(connectAppBackend).toHaveBeenCalledOnce();
@@ -290,7 +291,7 @@ describe("startAppBoot", () => {
       projects: projects as never,
       recents: recents as never,
       shell,
-    });
+    }, new AbortController().signal);
 
     expect(applyBootAppStateSnapshot).toHaveBeenCalledOnce();
     expect(dismissBootFallback).not.toHaveBeenCalled();
@@ -310,7 +311,7 @@ describe("startAppBoot", () => {
         projects: projects as never,
         recents: recents as never,
         shell,
-      }),
+      }, new AbortController().signal),
     ).rejects.toThrow("recents failed");
 
     // Dismissing the splash reveals the root after boot failure.
@@ -396,7 +397,7 @@ describe("startAppBoot", () => {
       projects: projects as never,
       recents: recents as never,
       shell,
-    });
+    }, new AbortController().signal);
 
     await vi.waitFor(() => expect(projects.hydrate).toHaveBeenCalledOnce());
     await vi.waitFor(() => expect(resetChatForSessionSwitch).toHaveBeenCalledOnce());
@@ -424,7 +425,7 @@ describe("startAppBoot", () => {
       projects: projects as never,
       recents: recents as never,
       shell,
-    });
+    }, new AbortController().signal);
 
     await vi.waitFor(() => expect(hydrate).toHaveBeenCalledOnce());
   });
@@ -451,7 +452,7 @@ describe("startAppBoot", () => {
       recents: recents as never,
       shell: createShellStore("offline"),
       attachOnly: true,
-    });
+    }, new AbortController().signal);
 
     await vi.waitFor(() => expect(attachKnownBackend).toHaveBeenCalledOnce());
     expect(connectAppBackend).not.toHaveBeenCalled();
@@ -481,7 +482,7 @@ describe("startAppBoot", () => {
       shell,
       requestedProjectId: "project-1",
       attachOnly: true,
-    });
+    }, new AbortController().signal);
 
     await vi.waitFor(() =>
       expect(shell.state.activeProjectId).toBe("project-1"),
@@ -508,7 +509,7 @@ describe("startAppBoot", () => {
       projects: projects as never,
       recents: recents as never,
       shell,
-    });
+    }, new AbortController().signal);
 
     expect(applyBootAppStateSnapshot).toHaveBeenCalledOnce();
     expect(subscribeAppStateBroadcast).toHaveBeenCalledOnce();

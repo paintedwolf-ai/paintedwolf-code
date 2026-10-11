@@ -1,6 +1,7 @@
 import { render, screen } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import App from "./App.tsx";
+import { disconnectAppBackend, getRegisteredNoticeStore } from "./platform/connection/app-connection.ts";
 
 vi.mock("./platform/runtime.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./platform/runtime.ts")>()),
@@ -27,7 +28,7 @@ vi.mock("./platform/connection/app-connection.ts", async (importOriginal) => {
   return {
     ...actual,
     connectAppBackend: vi.fn().mockRejectedValue(new Error("offline")),
-    disconnectAppBackend: vi.fn(),
+    disconnectAppBackend: vi.fn(actual.disconnectAppBackend),
   };
 });
 
@@ -39,6 +40,19 @@ vi.mock("./settings/system/onboarding-prefs.ts", () => ({
 }));
 
 describe("App boot", () => {
+  it("does not disconnect a replacement binding when an earlier root unmounts", () => {
+    const first = render(() => <App />);
+    const second = render(() => <App />);
+    vi.mocked(disconnectAppBackend).mockClear();
+    const notices = getRegisteredNoticeStore();
+    expect(notices).not.toBeNull();
+    first.unmount();
+    expect(disconnectAppBackend).not.toHaveBeenCalled();
+    expect(getRegisteredNoticeStore()).toBe(notices);
+    second.unmount();
+    expect(getRegisteredNoticeStore()).toBeNull();
+  });
+
   it("renders den-shell UI even when the backend is offline", async () => {
     render(() => <App />);
     expect(await screen.findByTestId("home-view")).toBeTruthy();

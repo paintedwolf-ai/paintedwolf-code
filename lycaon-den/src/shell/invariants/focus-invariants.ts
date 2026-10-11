@@ -19,12 +19,16 @@ function assertFocusKey01(): void {
 
   const files = readSourceText(join(denSrc, "files/components/ProjectFilesView.tsx"));
   const deck = readSourceText(join(denSrc, "files/components/FilesPaneDeck.tsx"));
+  const presentation = readSourceText(join(denSrc, "files/components/files-workspace-presentation.ts"));
+  const editor = readSourceText(join(denSrc, "files/components/FilesEditorWorkspace.tsx"));
   // The resident deck mounts one pane per primitive pane key, never per buffer object.
-  expect(files).toMatch(/return filesPaneKey\(key, buf\.kind\);/);
+  expect(files).toMatch(/createFilesWorkspacePresentation\(/);
+  expect(presentation).toMatch(/return filesPaneKey\(key, buf\.kind\);/);
   expect(files).toMatch(/activePane=\{activePane\(\) \?\? null\}/);
+  expect(editor).toMatch(/<FilesPaneDeck[\s\S]*?activePane=\{props\.activePane\}/);
   expect(deck).toMatch(/<SurfaceDeck active=\{props\.activePane\}/);
   expect(deck).toMatch(/const parsed = parseFilesPaneKey\(paneKey\);/);
-  expect(files + deck).not.toMatch(/return \{ key, kind: buf\.kind \}/);
+  expect(files + presentation + editor + deck).not.toMatch(/return \{ key, kind: buf\.kind \}/);
   const paneKey = readSourceText(join(denSrc, "files/components/files-pane-key.ts"));
   expect(paneKey).toMatch(/kind: FileBufferKind,\n\): string \{/);
 

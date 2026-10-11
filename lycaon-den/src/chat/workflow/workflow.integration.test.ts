@@ -1,9 +1,10 @@
+import { bindAppConnection } from "../../platform/connection/app-connection.ts";
+import { connectionServicesFixture } from "../../test/connection-services-fixture.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { wireProject } from "../../api/mocks/project-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import { createAppStore } from "../../store/app-state.ts";
 import { createProjectsStore } from "../../store/projects-store.ts";
-import { registerProjectsStore } from "../../platform/connection/app-connection.ts";
 import { refreshWorkflowState } from "./workflow-actions.ts";
 
 describe("workflow integration", () => {
@@ -24,7 +25,7 @@ describe("workflow integration", () => {
       onProjectEvent: () => () => {},
     });
     projects.load([wireProject("/tmp/p", "proj-1")]);
-    registerProjectsStore(projects);
+    bindAppConnection(connectionServicesFixture({ projects: projects }));
 
     const client = stubClient({
       getActiveWorkflowRun: vi.fn().mockResolvedValue({

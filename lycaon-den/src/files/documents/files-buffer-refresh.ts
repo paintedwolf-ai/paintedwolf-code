@@ -23,11 +23,12 @@ type BufferRefreshDependencies = Pick<FilesScope, "projectId" | "client" | "sour
   "dropFileVersionState" | "loadVersionHistory" | "setSaveError" | "versionForBuffer"> & {
   reloadEditorConfig: (key: FileBufferKey) => void;
   flashUpdatedNote: () => void;
+  shouldApply: () => boolean;
 };
 
 export function createBufferRefresh({ projectId, client, sourceSessionId, state, dropFileVersionState,
   loadVersionHistory, setSaveError, versionForBuffer,
-  reloadEditorConfig, flashUpdatedNote }: BufferRefreshDependencies) {
+  reloadEditorConfig, flashUpdatedNote, shouldApply }: BufferRefreshDependencies) {
   const cleanRefreshRequests = new FilesBufferLatestRequests();
   type CleanBufferRefresh = {
     requestKey: string;
@@ -40,7 +41,7 @@ export function createBufferRefresh({ projectId, client, sourceSessionId, state,
   const canApplyCleanRefresh = (buf: FileBuffer, refresh: CleanBufferRefresh) => {
     const current = projectFilesState(projectId()).byKey[buf.key];
     return (
-      cleanRefreshRequests.isCurrent(refresh.requestKey, refresh.generation) &&
+      shouldApply() && cleanRefreshRequests.isCurrent(refresh.requestKey, refresh.generation) &&
       current != null &&
       !filesBufferNeedsBody(current) &&
       current.path === refresh.path &&
@@ -63,7 +64,7 @@ export function createBufferRefresh({ projectId, client, sourceSessionId, state,
     const canApply = () => canApplyCleanRefresh(buf, refresh);
     const discardStale = () => {
       if (
-        staleReported ||
+        !shouldApply() || staleReported ||
         !cleanRefreshRequests.isCurrent(
           refresh.requestKey,
           refresh.generation,
@@ -77,6 +78,7 @@ export function createBufferRefresh({ projectId, client, sourceSessionId, state,
       if (!current || filesBufferNeedsBody(current)) return;
       void observeEditorDocument(projectId(), current).catch(() => undefined);
     };
+    if (!shouldApply()) return;
     flushFilesDraftSyncFor(projectId(), buf.key);
     if (!canApply()) {
       discardStale();
@@ -86,7 +88,7 @@ export function createBufferRefresh({ projectId, client, sourceSessionId, state,
     if (!current) return;
     if (current.kind === "text" && editorReplica(current.documentId) && !res.deleted && !res.binary && !res.over_limit) {
       cleanRefreshRequests.finish(refresh.requestKey, refresh.generation);
-      void observeEditorDocument(projectId(), current).catch((error) => setSaveError(sourceSaveErrorMessage(error)));
+      void observeEditorDocument(projectId(), current).catch((error) => { if (shouldApply()) setSaveError(sourceSaveErrorMessage(error)); });
       return;
     }
     const before = filesBufferText(current);
@@ -104,7 +106,7 @@ export function createBufferRefresh({ projectId, client, sourceSessionId, state,
       const settled = projectFilesState(projectId()).byKey[settledKey];
       // A tombstone, binary, or over-limit rewrite leaves no text document behind.
       if (previousDocumentId && (settled?.deleted || res.binary || res.over_limit)) {
-        void evictEditorDocument(previousDocumentId).catch((error) => setSaveError(sourceSaveErrorMessage(error)));
+        void evictEditorDocument(previousDocumentId).catch((error) => { if (shouldApply()) setSaveError(sourceSaveErrorMessage(error)); });
       }
       if (settled?.deleted) {
         dropFileVersionState(settledKey);
@@ -171,7 +173,7 @@ export function createBufferRefresh({ projectId, client, sourceSessionId, state,
   const refreshBufferPresentation = (buf: FileBuffer) => {
     const c = client();
     if (
-      !c ||
+      !shouldApply() || !c ||
       isComposedBufferKind(buf.kind) ||
       filesBufferNeedsBody(buf) ||
       buf.loading ||
@@ -189,7 +191,7 @@ export function createBufferRefresh({ projectId, client, sourceSessionId, state,
     };
     void readFileBufferSource(c, projectId(), buf, sourceSessionId()).then(
       (res) => {
-        if (!cleanRefreshRequests.isCurrent(requestKey, generation)) return;
+        if (!shouldApply() || !cleanRefreshRequests.isCurrent(requestKey, generation)) return;
         const expectedKind = buf.jobId ? "worker" : "project";
         if (res.workspace_kind !== expectedKind) {
           cleanRefreshRequests.finish(requestKey, generation);
@@ -198,6 +200,7 @@ export function createBufferRefresh({ projectId, client, sourceSessionId, state,
         applyCleanDiskContent(buf, res.content, res, refresh);
       },
       (err: unknown) => {
+        if (!shouldApply()) return;
         flushFilesDraftSyncFor(projectId(), buf.key);
         const canApply = canApplyCleanRefresh(buf, refresh);
         cleanRefreshRequests.finish(requestKey, generation);

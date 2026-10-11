@@ -80,7 +80,7 @@ func TestRecoveryResolvesPreparedAndAppliedRewindReceipts(t *testing.T) {
 				_, err := journal.Apply()
 				testutil.FailErr(t, "apply before interruption", err)
 			}
-			op := sessionstore.RewindOperation{ID: journal.ID, SessionID: journal.TranscriptID, AnchorMessageID: journal.AnchorMessageID, ProjectDir: journal.ProjectDir, JournalPath: journal.Path(), InputDigest: rewindInputDigest(journal.TranscriptID, journal.AnchorMessageID), Status: "prepared"}
+			op := sessionstore.RewindOperation{ID: journal.ID, SessionID: journal.TranscriptID, AnchorMessageID: journal.AnchorMessageID, ProjectDir: journal.ProjectDir, InputDigest: rewindInputDigest(journal.TranscriptID, journal.AnchorMessageID), Status: "prepared"}
 			testutil.FailErr(t, "persist interrupted receipt", mgr.store.PrepareRewind(t.Context(), op))
 			testutil.FailErr(t, "recover session rewind", mgr.RecoverRewindsForSession(t.Context(), op.SessionID))
 			retained, err := mgr.store.GetRewindOperation(t.Context(), op.ID)
