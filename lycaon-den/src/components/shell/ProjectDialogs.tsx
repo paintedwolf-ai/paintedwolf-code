@@ -20,17 +20,60 @@ function projectPromotionPending(
 
 type Props = Pick<ShellScope, "projects" | "activeProject"> & {
   review: ReturnType<typeof createProjectRemovalReview>;
-  lifecycle: Pick<ReturnType<typeof createProjectLifecycle>, "moveTarget" | "moveBusy" | "moveError" | "setMoveError" | "submitMove" | "setMoveTarget" | "dialogError" | "detachProjectRoot">;
-  opening: Pick<ReturnType<typeof createProjectOpening>, "cloneOpen" | "cloneBusy" | "cloneError" | "setCloneError" | "setCloneOpen" | "submitClone" | "openFolderPath" | "openFolderDetect" | "openFolderBusy" | "confirmOpenFolder" | "closeOpenFolder">;
+  lifecycle: Pick<
+    ReturnType<typeof createProjectLifecycle>,
+    | "moveTarget"
+    | "moveBusy"
+    | "moveError"
+    | "setMoveError"
+    | "submitMove"
+    | "setMoveTarget"
+    | "dialogError"
+    | "detachProjectRoot"
+  >;
+  opening: Pick<
+    ReturnType<typeof createProjectOpening>,
+    | "cloneOpen"
+    | "cloneBusy"
+    | "cloneError"
+    | "setCloneError"
+    | "setCloneOpen"
+    | "submitClone"
+    | "openFolderPath"
+    | "openFolderDetect"
+    | "openFolderBusy"
+    | "confirmOpenFolder"
+    | "closeOpenFolder"
+  >;
   foldersPanelProjectId: () => string | null;
   setFoldersPanelProjectId: (id: string | null) => void;
 };
 
 export function ProjectDialogs(props: Props) {
   const { activeProject, foldersPanelProjectId, setFoldersPanelProjectId } = props;
-  const { moveTarget, moveBusy, moveError, setMoveError, submitMove, setMoveTarget, dialogError, detachProjectRoot } = props.lifecycle;
-  const { cloneOpen, cloneBusy, cloneError, setCloneError, setCloneOpen, submitClone,
-    openFolderPath, openFolderDetect, openFolderBusy, confirmOpenFolder, closeOpenFolder } = props.opening;
+  const {
+    moveTarget,
+    moveBusy,
+    moveError,
+    setMoveError,
+    submitMove,
+    setMoveTarget,
+    dialogError,
+    detachProjectRoot,
+  } = props.lifecycle;
+  const {
+    cloneOpen,
+    cloneBusy,
+    cloneError,
+    setCloneError,
+    setCloneOpen,
+    submitClone,
+    openFolderPath,
+    openFolderDetect,
+    openFolderBusy,
+    confirmOpenFolder,
+    closeOpenFolder,
+  } = props.opening;
   return <>
       <ProjectRemovalDialog review={props.review} />
       <MoveToProjectDialog

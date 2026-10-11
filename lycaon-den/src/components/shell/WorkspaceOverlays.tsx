@@ -25,12 +25,27 @@ import { createProjectOpening } from "./project-opening.ts";
 import { RecentChatSwitcher, type RecentChatSwitcherHandle } from "./RecentChatSwitcher.tsx";
 import { createShellAttention } from "./shell-attention.ts";
 
-type Props = Pick<ShellScope, "shell" | "appStore" | "projects" | "launcherOpen" | "setLauncherOpen" | "helpOpen" | "setHelpOpen"> & {
+type Props = Pick<
+    ShellScope,
+    | "shell"
+    | "appStore"
+    | "projects"
+    | "launcherOpen"
+    | "setLauncherOpen"
+    | "helpOpen"
+    | "setHelpOpen"
+  > & {
   openProject: (id: string) => void;
   newProject: () => void;
   goHome: () => void;
   setHomeSection: (section: HomeSection) => void;
-  search: Pick<ReturnType<typeof createShellSearchState>, "crossbarOpen" | "crossbarArgs" | "closeCrossbar" | "escalateCrossbarToSearch">;
+  search: Pick<
+    ReturnType<typeof createShellSearchState>,
+    | "crossbarOpen"
+    | "crossbarArgs"
+    | "closeCrossbar"
+    | "escalateCrossbarToSearch"
+  >;
   crossbarGotoTargets: () => ReturnType<typeof shellSearchTargets>;
   crossbarActions: ReturnType<typeof createShellContributions>["crossbarActions"];
   navigateFromCrossbarGoto: (target: CrossbarGotoTarget) => void;
@@ -45,10 +60,25 @@ type Props = Pick<ShellScope, "shell" | "appStore" | "projects" | "launcherOpen"
 };
 
 export function WorkspaceOverlays(props: Props) {
-  const { launcherOpen, setLauncherOpen, helpOpen, setHelpOpen, openProject, newProject, goHome,
-    setHomeSection, crossbarGotoTargets, crossbarActions, navigateFromCrossbarGoto,
-    navigateFromSearch, proposeFolderAsProject, recentChatEntries, focusedPeerViews,
-    openKeyboardSettings, navSlotWidthCss } = props;
+  const {
+    launcherOpen,
+    setLauncherOpen,
+    helpOpen,
+    setHelpOpen,
+    openProject,
+    newProject,
+    goHome,
+    setHomeSection,
+    crossbarGotoTargets,
+    crossbarActions,
+    navigateFromCrossbarGoto,
+    navigateFromSearch,
+    proposeFolderAsProject,
+    recentChatEntries,
+    focusedPeerViews,
+    openKeyboardSettings,
+    navSlotWidthCss,
+  } = props;
   const { crossbarOpen, crossbarArgs, closeCrossbar, escalateCrossbarToSearch } = props.search;
   return <>
       <Show when={editorCommandBarPlacement() === "shell"}>

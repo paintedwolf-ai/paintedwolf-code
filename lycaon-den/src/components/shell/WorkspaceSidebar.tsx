@@ -11,9 +11,22 @@ import { closeItemWindow, focusItemWindow } from "../../platform/windows/item-wi
 import { type ProjectSummary } from "../../project/project-summary.ts";
 import { saveChatListSort } from "../../settings/chat/chat-list-prefs.ts";
 import { dismissLayoutDockOnOutsidePress } from "../../shell/layout-dock-dismiss.ts";
-import { hiddenSplitPanePref, effectiveNavWidthPx, resetChatWidthPx, stagePlacementMode, toggleWorkspaceOrientation, swapSplitColumns, workspaceOrientationPref } from "../../shell/layout-store.ts";
+import {
+  hiddenSplitPanePref,
+  effectiveNavWidthPx,
+  resetChatWidthPx,
+  stagePlacementMode,
+  toggleWorkspaceOrientation,
+  swapSplitColumns,
+  workspaceOrientationPref,
+} from "../../shell/layout-store.ts";
 import { workspacePreparation } from "../../shell/workspace-preparation.ts";
-import { isRegionEntry, regionEntryTarget, registerFocusRegion, releaseFocusRegion } from "../../shortcuts/focus-region.ts";
+import {
+  isRegionEntry,
+  regionEntryTarget,
+  registerFocusRegion,
+  releaseFocusRegion,
+} from "../../shortcuts/focus-region.ts";
 import { type AttentionStore } from "../../store/attention-store.ts";
 import { type CostStore } from "../../store/cost-store.ts";
 import { sidebarChatSections } from "../../store/projects-sidebar-model.ts";
@@ -51,15 +64,77 @@ function projectPromotionPending(
   return project?.promotion != null && project.promotion.phase !== "committed";
 }
 
-type Props = Pick<ShellScope, "shell" | "appStore" | "projects" | "projectSessions" | "activeProject" | "activeChat" | "readyChat" | "nav" | "setNav" | "stageAvailable" | "splitLive" | "setLauncherOpen"> &
-  Pick<ShellNavigation, "dockTray" | "closeLayoutTray" | "settingsSection" | "selectSettingsSection" | "closeSettingsNav" | "openSettings" | "toggleLayoutTray"> &
-  Pick<ShellPaneVisibility, "windowNavCollapsed" | "navSlotWidthCss" | "hideWindowNav" | "toggleConversation" | "contextHidden" | "toggleContext"> &
-  Pick<SessionNavigation, "goHome" | "startNewChat" | "selectSidebarSession" | "sessionRetirementDeps" | "sidebarRowAsRecent" | "archiveSidebarSession" | "deleteSidebarSession" | "openSessionInNewWindow"> & {
+type Props = Pick<
+    ShellScope,
+    | "shell"
+    | "appStore"
+    | "projects"
+    | "projectSessions"
+    | "activeProject"
+    | "activeChat"
+    | "readyChat"
+    | "nav"
+    | "setNav"
+    | "stageAvailable"
+    | "splitLive"
+    | "setLauncherOpen"
+  > &
+  Pick<
+    ShellNavigation,
+    | "dockTray"
+    | "closeLayoutTray"
+    | "settingsSection"
+    | "selectSettingsSection"
+    | "closeSettingsNav"
+    | "openSettings"
+    | "toggleLayoutTray"
+  > &
+  Pick<
+    ShellPaneVisibility,
+    | "windowNavCollapsed"
+    | "navSlotWidthCss"
+    | "hideWindowNav"
+    | "toggleConversation"
+    | "contextHidden"
+    | "toggleContext"
+  > &
+  Pick<
+    SessionNavigation,
+    | "goHome"
+    | "startNewChat"
+    | "selectSidebarSession"
+    | "sessionRetirementDeps"
+    | "sidebarRowAsRecent"
+    | "archiveSidebarSession"
+    | "deleteSidebarSession"
+    | "openSessionInNewWindow"
+  > & {
   settingsStore: SettingsStore;
   costStore: CostStore;
   notices: NoticeStore;
-  peerWindows: Pick<ShellPeerWindows, "sessionWindowIds" | "sessionWindowCounts" | "sessionWindowViewNumbers" | "raiseSessionWindow" | "closeSessionWindow" | "detachedStageIds" | "contextWindowViewNumbers" | "projectPeerViews" | "raiseStageWindow" | "closeStageWindow" | "stageInPeerWindow">;
-  projectLifecycle: Pick<ReturnType<typeof createProjectLifecycle>, "activeProjectRoots" | "addFolderToActiveProject" | "detachFolderFromActiveProject" | "retryActiveProjectPromotion" | "cancelActiveProjectPromotion" | "openMoveDialog">;
+  peerWindows: Pick<
+    ShellPeerWindows,
+    | "sessionWindowIds"
+    | "sessionWindowCounts"
+    | "sessionWindowViewNumbers"
+    | "raiseSessionWindow"
+    | "closeSessionWindow"
+    | "detachedStageIds"
+    | "contextWindowViewNumbers"
+    | "projectPeerViews"
+    | "raiseStageWindow"
+    | "closeStageWindow"
+    | "stageInPeerWindow"
+  >;
+  projectLifecycle: Pick<
+    ReturnType<typeof createProjectLifecycle>,
+    | "activeProjectRoots"
+    | "addFolderToActiveProject"
+    | "detachFolderFromActiveProject"
+    | "retryActiveProjectPromotion"
+    | "cancelActiveProjectPromotion"
+    | "openMoveDialog"
+  >;
   homeSection: () => HomeSection;
   setHomeSection: (section: HomeSection) => void;
   homeSummaries: () => ProjectSummary[];
@@ -89,10 +164,71 @@ type Props = Pick<ShellScope, "shell" | "appStore" | "projects" | "projectSessio
 };
 
 export function WorkspaceSidebar(props: Props) {
-  const { activeProject, activeChat, readyChat, nav, setNav, stageAvailable, splitLive, setLauncherOpen, dockTray, closeLayoutTray, settingsSection, selectSettingsSection, closeSettingsNav, openSettings, toggleLayoutTray, windowNavCollapsed, navSlotWidthCss, hideWindowNav, toggleConversation, contextHidden, toggleContext, goHome, startNewChat, selectSidebarSession, sessionRetirementDeps, sidebarRowAsRecent, archiveSidebarSession, deleteSidebarSession, openSessionInNewWindow, homeSection, setHomeSection, homeSummaries, sidebarSections, sidebarChatsPublished, attentionIndex, identityReady, workspaceRevealed, onFreshSession, renameSession, showStage, goToContextStage, stageEntryActive, detachStageToWindow, closeStageWindows, openConfiguration, conversationInLayout, railStatusProject, railStatusSessionId, layoutTrayStageId, stageColumnStageId, stageChromeDeficitPx, applyStagePlacement, presentedSplitLive, peerWindows } = props;
+  const {
+    activeProject,
+    activeChat,
+    readyChat,
+    nav,
+    setNav,
+    stageAvailable,
+    splitLive,
+    setLauncherOpen,
+    dockTray,
+    closeLayoutTray,
+    settingsSection,
+    selectSettingsSection,
+    closeSettingsNav,
+    openSettings,
+    toggleLayoutTray,
+    windowNavCollapsed,
+    navSlotWidthCss,
+    hideWindowNav,
+    toggleConversation,
+    contextHidden,
+    toggleContext,
+    goHome,
+    startNewChat,
+    selectSidebarSession,
+    sessionRetirementDeps,
+    sidebarRowAsRecent,
+    archiveSidebarSession,
+    deleteSidebarSession,
+    openSessionInNewWindow,
+    homeSection,
+    setHomeSection,
+    homeSummaries,
+    sidebarSections,
+    sidebarChatsPublished,
+    attentionIndex,
+    identityReady,
+    workspaceRevealed,
+    onFreshSession,
+    renameSession,
+    showStage,
+    goToContextStage,
+    stageEntryActive,
+    detachStageToWindow,
+    closeStageWindows,
+    openConfiguration,
+    conversationInLayout,
+    railStatusProject,
+    railStatusSessionId,
+    layoutTrayStageId,
+    stageColumnStageId,
+    stageChromeDeficitPx,
+    applyStagePlacement,
+    presentedSplitLive,
+    peerWindows,
+  } = props;
   const { searchOpen, crossbarOpen, closeSearch, closeCrossbar, openSearch } = props.search;
-  const { activeProjectRoots, addFolderToActiveProject, detachFolderFromActiveProject,
-    retryActiveProjectPromotion, cancelActiveProjectPromotion, openMoveDialog } = props.projectLifecycle;
+  const {
+    activeProjectRoots,
+    addFolderToActiveProject,
+    detachFolderFromActiveProject,
+    retryActiveProjectPromotion,
+    cancelActiveProjectPromotion,
+    openMoveDialog,
+  } = props.projectLifecycle;
   const noticeIndex = () => props.notices.index();
   const sidebarFocusClaim = {};
   const [sidebarEl, setSidebarEl] = createSignal<HTMLElement | null>(null);

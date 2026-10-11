@@ -11,7 +11,10 @@ import { createShellSearchNavigation } from "./shell-search-navigation.ts";
 import { createShellSearchState } from "./shell-search-state.ts";
 import { createShellStagePlacement, createStageAvailability } from "./shell-stage-placement.ts";
 import { createShellPaneVisibility } from "./shell-pane-visibility.ts";
-import { createShellWorkspacePresentation, createWorkspaceIdentity } from "./shell-workspace-presentation.ts";
+import {
+  createShellWorkspacePresentation,
+  createWorkspaceIdentity,
+} from "./shell-workspace-presentation.ts";
 import { type ShellScope, type ShellProps } from "./shell-scope.ts";
 import { createShellChatActions } from "./shell-chat-actions.ts";
 import { createShellPeerWindows } from "./shell-peer-windows.ts";
@@ -27,9 +30,31 @@ import { noticeReporterFor, onCLIOpenEvent } from "../../platform/connection/app
 import { focusAppWindow, windowFocused } from "../../platform/windows/window-chrome.ts";
 import { windowSubject } from "../../platform/windows/window-subject.ts";
 import { isContextNavItemId } from "../../settings/editor/context-nav-prefs.ts";
-import { DEFAULT_PROJECT_CONTEXT_SECTION, type ProjectContextSection } from "../../settings/settings-nav-model.ts";
-import { beginChatWidthResize, hiddenSplitPanePref, companionPref, companionStageId, effectiveChatWidthPx, layoutViewportWidthPx, narrowSurvivorPref, resetChatWidthPx, setSplitFocusRegion, setSplitHostWidth, setSplitProjectId, splitHostWidthPx, stagePlacementMode, workspaceOrientationPref } from "../../shell/layout-store.ts";
-import { resolveSplitCompanion, resolveStageColumn, splitColumnsOnScreen } from "../../shell/stage-placement.ts";
+import {
+  DEFAULT_PROJECT_CONTEXT_SECTION,
+  type ProjectContextSection,
+} from "../../settings/settings-nav-model.ts";
+import {
+  beginChatWidthResize,
+  hiddenSplitPanePref,
+  companionPref,
+  companionStageId,
+  effectiveChatWidthPx,
+  layoutViewportWidthPx,
+  narrowSurvivorPref,
+  resetChatWidthPx,
+  setSplitFocusRegion,
+  setSplitHostWidth,
+  setSplitProjectId,
+  splitHostWidthPx,
+  stagePlacementMode,
+  workspaceOrientationPref,
+} from "../../shell/layout-store.ts";
+import {
+  resolveSplitCompanion,
+  resolveStageColumn,
+  splitColumnsOnScreen,
+} from "../../shell/stage-placement.ts";
 import { workspacePreparation } from "../../shell/workspace-preparation.ts";
 import { NotificationStack } from "../NotificationStack.tsx";
 import { createProjectOpening } from "./project-opening.ts";
@@ -57,8 +82,18 @@ export function Shell(props: ShellProps) {
     () => props.shell.state.activeProjectId,
     () => { if (hiddenSplitPanePref() === "stage") void panes.showContext(); },
   );
-  const { homeSection, setHomeSection, nav, setNav, navigationIntent, routedReturn, routeToStage,
-    selectSettingsSection, openSettings, openContextSection } = navigation;
+  const {
+    homeSection,
+    setHomeSection,
+    nav,
+    setNav,
+    navigationIntent,
+    routedReturn,
+    routeToStage,
+    selectSettingsSection,
+    openSettings,
+    openContextSection,
+  } = navigation;
 
   const { securityScannersFeatureOn, stageFeatureFlags, stageAvailable, setSecurityScannersFeature } =
     createStageAvailability({ appStore: props.appStore, shell: props.shell, nav, setNav });
@@ -120,9 +155,20 @@ export function Shell(props: ShellProps) {
     selectContextSection: (section) => selectContextSection(section), showNoProviderBanner,
   });
 
-  const { projectPresentation, identityReady, workspaceMounted, workspaceOpen, workspacePending,
-    workspaceRevealed, workspaceVeilKey, workspaceVeilLabel, workspaceVeilNotice,
-    sidebarChatsPublished, railStatusProject, showHome } = createShellWorkspacePresentation(scope);
+  const {
+    projectPresentation,
+    identityReady,
+    workspaceMounted,
+    workspaceOpen,
+    workspacePending,
+    workspaceRevealed,
+    workspaceVeilKey,
+    workspaceVeilLabel,
+    workspaceVeilNotice,
+    sidebarChatsPublished,
+    railStatusProject,
+    showHome,
+  } = createShellWorkspacePresentation(scope);
 
   const projectDirForChat = () =>
     props.appStore.state.currentSession?.workspace_path?.trim() ?? "";
@@ -147,10 +193,26 @@ export function Shell(props: ShellProps) {
     closeLauncher: () => setLauncherOpen(false),
     focusComposer: () => setPendingRegionFocus("composer"),
   });
-  const { onFreshSession, sidebarSections, renameSession, openProject, newProject, goHome, sidebarRowAsRecent, resumeSession, beginWorkspaceOpening,
-    abandonWorkspaceOpening, startEmptySession, startNewChat } = sessionNavigation;
+  const {
+    onFreshSession,
+    sidebarSections,
+    renameSession,
+    openProject,
+    newProject,
+    goHome,
+    sidebarRowAsRecent,
+    resumeSession,
+    beginWorkspaceOpening,
+    abandonWorkspaceOpening,
+    startEmptySession,
+    startNewChat,
+  } = sessionNavigation;
 
-  const { sendPrompt, resumeSpendLimitedChat, stopChat } = createShellChatActions({ ...scope, projectDirForChat });
+  const {
+    sendPrompt,
+    resumeSpendLimitedChat,
+    stopChat,
+  } = createShellChatActions({ ...scope, projectDirForChat });
 
   const openBudgetsSettings = () =>
     routeToStage("settings", () => openSettings("debug"));

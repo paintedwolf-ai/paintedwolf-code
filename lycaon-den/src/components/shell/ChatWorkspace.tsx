@@ -26,12 +26,22 @@ import { ChatTabRail } from "../nav/ChatTabRail.tsx";
 import { ChatTopChromeStack } from "../nav/ChatTopChromeStack.tsx";
 import { NoProviderCard } from "../NoProviderCard.tsx";
 import { NoticeRail } from "../NoticeRail.tsx";
-import { SpendCeilingApproachingNudge, spendCeilingApproachingVisible } from "../SpendCeilingApproachingNudge.tsx";
-import { SpendCeilingReachedNudge, spendCeilingReachedNotice } from "../SpendCeilingReachedNudge.tsx";
+import {
+  SpendCeilingApproachingNudge,
+  spendCeilingApproachingVisible,
+} from "../SpendCeilingApproachingNudge.tsx";
+import {
+  SpendCeilingReachedNudge,
+  spendCeilingReachedNotice,
+} from "../SpendCeilingReachedNudge.tsx";
 import { VerifyTestNudge } from "../VerifyTestNudge.tsx";
 import { ChromeDragSurface } from "./ChromeDragSurface.tsx";
 import { ContextDrawerHost } from "./ContextDrawer.tsx";
-import { SessionProtectionBanners, sessionProtectionPresent, type ProtectionBannerId } from "./SessionProtectionBanners.tsx";
+import {
+  SessionProtectionBanners,
+  sessionProtectionPresent,
+  type ProtectionBannerId,
+} from "./SessionProtectionBanners.tsx";
 import { StageErrorBoundary } from "./StageErrorBoundary.tsx";
 import { type ShellChatActions } from "./shell-chat-actions.ts";
 
@@ -42,8 +52,26 @@ type Props = Pick<ShellScope, "shell" | "appStore" | "recents" | "projects"> & {
   settingsStore: SettingsStore;
   costStore: CostStore;
   notices: NoticeStore;
-  workerDrawer: Pick<ReturnType<typeof createShellWorkerDrawer>, "selectedWorkerId" | "workersOpen" | "workerDrawerFocus" | "closeWorkers" | "acknowledgeDrawerFocus" | "openWorkers">;
-  panes: Pick<ReturnType<typeof createShellPaneVisibility>, "chatHeaderLeadsWindow" | "windowNavCollapsed" | "navTouchesChat" | "navAutomaticallyCollapsed" | "contextHidden" | "navSide" | "showWindowNav" | "conversationSeam">;
+  workerDrawer: Pick<
+    ReturnType<typeof createShellWorkerDrawer>,
+    | "selectedWorkerId"
+    | "workersOpen"
+    | "workerDrawerFocus"
+    | "closeWorkers"
+    | "acknowledgeDrawerFocus"
+    | "openWorkers"
+  >;
+  panes: Pick<
+    ReturnType<typeof createShellPaneVisibility>,
+    | "chatHeaderLeadsWindow"
+    | "windowNavCollapsed"
+    | "navTouchesChat"
+    | "navAutomaticallyCollapsed"
+    | "contextHidden"
+    | "navSide"
+    | "showWindowNav"
+    | "conversationSeam"
+  >;
   actions: ShellChatActions;
   onboarding: Pick<ReturnType<typeof createShellOnboarding>, "showNoProviderBanner" | "providerGap">;
   projectDirForChat: () => string;
@@ -64,12 +92,35 @@ type Props = Pick<ShellScope, "shell" | "appStore" | "recents" | "projects"> & {
 
 export function ChatWorkspace(props: Props) {
   const layer = props;
-  const { projectDirForChat, nav, splitLive, notificationStack, showPromoteNudge,
-    showNoFolderBanner, dismissDraftPromoteBanner, dismissNoFolderBanner, addFolderToActiveProject } = props;
-  const { selectedWorkerId, workersOpen, workerDrawerFocus, closeWorkers,
-    acknowledgeDrawerFocus, openWorkers } = props.workerDrawer;
-  const { chatHeaderLeadsWindow, windowNavCollapsed, navTouchesChat, navAutomaticallyCollapsed,
-    contextHidden, navSide, showWindowNav, conversationSeam } = props.panes;
+  const {
+    projectDirForChat,
+    nav,
+    splitLive,
+    notificationStack,
+    showPromoteNudge,
+    showNoFolderBanner,
+    dismissDraftPromoteBanner,
+    dismissNoFolderBanner,
+    addFolderToActiveProject,
+  } = props;
+  const {
+    selectedWorkerId,
+    workersOpen,
+    workerDrawerFocus,
+    closeWorkers,
+    acknowledgeDrawerFocus,
+    openWorkers,
+  } = props.workerDrawer;
+  const {
+    chatHeaderLeadsWindow,
+    windowNavCollapsed,
+    navTouchesChat,
+    navAutomaticallyCollapsed,
+    contextHidden,
+    navSide,
+    showWindowNav,
+    conversationSeam,
+  } = props.panes;
   const { sendPrompt, stopChat, resumeSpendLimitedChat } = props.actions;
   const { showNoProviderBanner, providerGap } = props.onboarding;
   const noticeIndex = () => props.notices.index();
