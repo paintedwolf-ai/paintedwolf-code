@@ -41,7 +41,7 @@ fn validate_file(raw: &str, roots: &[String]) -> Result<PathBuf, String> {
     let path = Path::new(raw);
     if !path.is_absolute() { return Err("An absolute file path is required.".into()); }
     let path = path.canonicalize().map_err(|error| format!("The file is unavailable: {error}"))?;
-    if !crate::reveal_in_file_manager::path_under_roots(&path, roots) {
+    if !crate::files::reveal_in_file_manager::path_under_roots(&path, roots) {
         return Err("The file is outside the available project folders.".into());
     }
     if !path.is_file() { return Err("This destination requires a file.".into()); }
@@ -52,7 +52,7 @@ fn browser_can_open_path(path: &Path) -> bool {
     #[derive(serde::Deserialize)]
     struct Formats { browser: Vec<String> }
     static FORMATS: std::sync::OnceLock<Formats> = std::sync::OnceLock::new();
-    let formats = FORMATS.get_or_init(|| serde_json::from_str(include_str!("../../shared/local-file-formats.json")).expect("valid bundled file formats"));
+    let formats = FORMATS.get_or_init(|| serde_json::from_str(include_str!("../../../shared/local-file-formats.json")).expect("valid bundled file formats"));
     let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("").to_ascii_lowercase();
     formats.browser.contains(&extension)
 }

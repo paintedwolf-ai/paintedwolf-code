@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::picked_file::{self, GrantMode};
+use crate::files::picked_file::{self, GrantMode};
 
 #[derive(Deserialize)]
 pub struct PickOptions {

@@ -91,7 +91,7 @@ const HOST_WIRE_MIRRORS: &[Entry] = &[
         },
     },
     Entry {
-        file: "src/external_attachment_import.rs",
+        file: "src/files/external_attachment_import.rs",
         rust_type: "ImportedAttachmentReceipt",
         binding: Binding::Mirror {
             fixture: "attachment_upload_response",
@@ -100,7 +100,7 @@ const HOST_WIRE_MIRRORS: &[Entry] = &[
         },
     },
     Entry {
-        file: "src/external_attachment_import.rs",
+        file: "src/files/external_attachment_import.rs",
         rust_type: "ImportedVideoFacts",
         binding: Binding::Mirror {
             fixture: "attachment_video_facts",
@@ -109,7 +109,7 @@ const HOST_WIRE_MIRRORS: &[Entry] = &[
         },
     },
     Entry {
-        file: "src/external_attachment_import.rs",
+        file: "src/files/external_attachment_import.rs",
         rust_type: "SidecarErrorBody",
         binding: Binding::Mirror {
             fixture: "error_response",

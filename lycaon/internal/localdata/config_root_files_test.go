@@ -307,9 +307,9 @@ func TestNativeEditorOutboxBelongsToDurableInstallation(t *testing.T) {
 	if strings.HasPrefix(format.Lock, format.Directory+"/") {
 		t.Fatal("capture lock moves with replaced editor data")
 	}
-	native, err := os.ReadFile(filepath.Join("..", "..", "..", "lycaon-den", "src-tauri", "src", "document_outbox.rs"))
+	native, err := os.ReadFile(filepath.Join("..", "..", "..", "lycaon-den", "src-tauri", "src", "app_state", "document_outbox.rs"))
 	testutil.FailErr(t, "read native editor owner", err)
-	if !strings.Contains(strings.Join(strings.Fields(string(native)), ""), `include_str!("../../../lycaon/internal/editoroutbox/format.json")`) {
+	if !strings.Contains(strings.Join(strings.Fields(string(native)), ""), `include_str!("../../../../lycaon/internal/editoroutbox/format.json")`) {
 		t.Fatal("native editor owner does not use the shared durable layout")
 	}
 }

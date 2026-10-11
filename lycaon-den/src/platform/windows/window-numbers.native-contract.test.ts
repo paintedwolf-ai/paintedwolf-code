@@ -15,10 +15,10 @@ function nativeNumber(source: string, name: string): number {
 }
 
 describe("window numbers mirror the native registry", () => {
-  const registry = loadSourceCorpus(join(tauriRoot, "src"), { extensions: [".rs"] }).file("item_windows.rs");
+  const registry = loadSourceCorpus(join(tauriRoot, "src"), { extensions: [".rs"] }).file("windows/item_windows.rs");
 
   it("Window 1 is the main window on both sides, and peers start after it", () => {
-    if (!registry) expect.fail("src-tauri/src/item_windows.rs is missing");
+    if (!registry) expect.fail("src-tauri/src/windows/item_windows.rs is missing");
     expect(nativeNumber(registry.text, "MAIN_VIEW_NUMBER")).toBe(MAIN_WINDOW_NUMBER);
     expect(
       nativeNumber(registry.text, "FIRST_PEER_VIEW_NUMBER"),

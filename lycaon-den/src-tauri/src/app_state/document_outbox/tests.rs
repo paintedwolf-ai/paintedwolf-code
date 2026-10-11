@@ -515,7 +515,7 @@ fn orphan_sweep_releases_windows_absent_from_native_inventory() {
         commit_retaining(&root, &[checkpoint], &[], Some(&retention))
             .expect("retain window history");
     }
-    crate::write_app_state_slice(
+    crate::app_state::write_app_state_slice(
         &root,
         "filesHotExit",
         &serde_json::json!({"byProject": {"project": {"buffers": [

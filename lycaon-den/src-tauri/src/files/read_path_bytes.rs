@@ -16,7 +16,7 @@ use std::os::unix::ffi::OsStrExt;
 
 use serde::Serialize;
 
-use crate::reveal_in_file_manager::path_under_roots;
+use crate::files::reveal_in_file_manager::path_under_roots;
 
 #[tauri::command]
 pub async fn path_kind(abs_path: String, project_roots: Vec<String>) -> Result<String, String> {

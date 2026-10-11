@@ -243,7 +243,7 @@ describe("SpendCeilingApproachingNudge", () => {
     const root = join(import.meta.dirname, "..", "..");
     for (const rel of [
       "shared/app-state-types.ts",
-      "src-tauri/src/lib.rs",
+      "src-tauri/src/app_state.rs",
       "src/platform/persistence/app-state-parse.ts",
     ]) {
       const body = readFileSync(join(root, rel), "utf8");

@@ -43,7 +43,7 @@ describe("backdrop hex", () => {
   it("keeps stock literals in step with the boot style and the native memo", () => {
     const indexHtml = readFileSync(join(here, "../../../index.html"), "utf8");
     const rust = readFileSync(
-      join(here, "../../../src-tauri/src/window_backdrop.rs"),
+      join(here, "../../../src-tauri/src/windows/window_backdrop.rs"),
       "utf8",
     );
     expect(indexHtml).toContain(STOCK_LIGHT_BACKDROP_HEX);

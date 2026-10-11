@@ -12,7 +12,7 @@ use serde::Deserialize;
 use tauri::window::Color;
 use tauri::{Theme, WebviewWindow};
 
-use crate::den_state_dir;
+use crate::config_dir;
 
 /// Pinned to the `index.html` fallbacks.
 const LIGHT_BACKGROUND: Color = Color(0xff, 0xff, 0xff, 0xff);
@@ -237,7 +237,7 @@ fn memo_lock() -> std::sync::MutexGuard<'static, Option<BackdropMemo>> {
 pub fn current_memo() -> BackdropMemo {
     let mut guard = memo_lock();
     if guard.is_none() {
-        *guard = Some(match den_state_dir() {
+        *guard = Some(match config_dir::host_config_dir().ok() {
             Some(dir) => load_memo(&dir),
             None => BackdropMemo::default(),
         });
@@ -260,7 +260,7 @@ fn persist_palette(mode: AppearanceMode, light: Color, dark: Color) -> Result<()
         *guard = Some(next.clone());
     }
     let dir =
-        den_state_dir().ok_or_else(|| "window backdrop state directory unavailable".to_string())?;
+        config_dir::host_config_dir().ok().ok_or_else(|| "window backdrop state directory unavailable".to_string())?;
     store_memo(&dir, &next)
 }
 

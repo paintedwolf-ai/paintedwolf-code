@@ -14,7 +14,7 @@ On macOS, Den follows System Settings → Accessibility → Display → **Text s
 
 ## macOS text-size signal
 
-Accessibility → Display → Text size is read from the Sonoma+ content-size category. `NSFont.preferredFont(forTextStyle:)` and `NSAccessibilityPreferredTextAttributesChangedNotification` do not track it and are not the scale source. Implementation: [`accessibility_text_size.rs`](../lycaon-den/src-tauri/src/accessibility_text_size.rs).
+Accessibility → Display → Text size is read from the Sonoma+ content-size category. `NSFont.preferredFont(forTextStyle:)` and `NSAccessibilityPreferredTextAttributesChangedNotification` do not track it and are not the scale source. Implementation: [`accessibility_text_size.rs`](../lycaon-den/src-tauri/src/windows/accessibility_text_size.rs).
 
 | Item | Contract |
 |------|----------|
@@ -60,7 +60,7 @@ app launch / OS text-size change
 
 ## macOS display preferences
 
-Accessibility → Display also carries **Increase contrast** and **Reduce transparency**, and Appearance carries the accent colour. The shipped web view does not expose these to CSS dependably, so the host reads all three and Den follows host facts rather than media queries ([`system_appearance.rs`](../lycaon-den/src-tauri/src/system_appearance.rs), [`system-appearance.ts`](../lycaon-den/src/platform/desktop/system-appearance.ts)).
+Accessibility → Display also carries **Increase contrast** and **Reduce transparency**, and Appearance carries the accent colour. The shipped web view does not expose these to CSS dependably, so the host reads all three and Den follows host facts rather than media queries ([`system_appearance.rs`](../lycaon-den/src-tauri/src/windows/system_appearance.rs), [`system-appearance.ts`](../lycaon-den/src/platform/desktop/system-appearance.ts)).
 
 | Item | Contract |
 |------|----------|

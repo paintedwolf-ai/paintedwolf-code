@@ -283,7 +283,7 @@ fn open_item_window(
     .min_inner_size(MIN_WIDTH, MIN_HEIGHT)
     .resizable(true)
     .visible(false)
-    .background_color(crate::window_appearance::background_for_new_window(&app))
+    .background_color(crate::windows::window_appearance::background_for_new_window(&app))
     .decorations(true);
 
     if is_drag {
@@ -318,7 +318,7 @@ fn open_item_window(
             return Err(err.to_string());
         }
     }
-    crate::window_appearance::prepare(&window);
+    crate::windows::window_appearance::prepare(&window);
     let view = ItemWindowView {
         label: label.clone(),
         title,
@@ -370,8 +370,8 @@ fn open_item_window(
             targets.remove(&label_on_destroy);
         }
         // Release the destroyed window's paint state.
-        crate::window_backdrop::forget_painted(&label_on_destroy);
-        crate::document_outbox::reconcile_windows(&app_on_destroy, Some(&label_on_destroy));
+        crate::windows::window_backdrop::forget_painted(&label_on_destroy);
+        crate::app_state::document_outbox::reconcile_windows(&app_on_destroy, Some(&label_on_destroy));
         emit_item_window_views_changed(&app_on_destroy);
         emit_workspace_view_presentations_changed(&app_on_destroy);
     });

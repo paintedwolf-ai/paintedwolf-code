@@ -14,7 +14,7 @@ const tauriReveal = join(
   "..",
   "src-tauri",
   "src",
-  "reveal_in_file_manager.rs",
+  "files/reveal_in_file_manager.rs",
 );
 
 function rgHits(pattern: string, cwd: string): string[] {
