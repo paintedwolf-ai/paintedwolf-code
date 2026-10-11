@@ -1,0 +1,16 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/projectpaths/projectpaths.go",
+  "kind": "module",
+  "workstream": "tool-domains",
+  "disposition": "retain",
+  "reason": "Path resolution applies one authority protocol across explicit admitted project roots, session scratch, host data and worker mutation branches. Keep the selection and rejection sequence visible together; cached reads already have a separate read-session implementation.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 424,
+  "boundaries": {
+    "lycaon/internal/tools/projectpaths/approval_identity_test.go": "2a6f3e7b3b1c88babe218dee1d88510f1bf632a57be182acd75c63971ca9ba46",
+    "lycaon/internal/tools/projectpaths/session_scratch_test.go": "ffb3fcc69fce361865f20a3703f58b4d1be79976b820e885bcf6179c161565ae",
+    "lycaon/internal/tools/projectpaths/host_data_read_test.go": "8386da5937a9a4ff21357ee6241a811b25ed4a0e6cc7bb3913f9178c28855d4e",
+    "lycaon/internal/tools/projectpaths/projectpaths_worker_branch_test.go": "6d780286386e65e89f12a7d090ab01aa1c676c5fd0062cb25663c5fd9093fc4d"
+  }
+}

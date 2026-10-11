@@ -62,7 +62,11 @@ Persisted app state contains preferences, recents, and a bounded last-view snaps
 
 ### Shell controllers
 
-`Shell.tsx` creates its controllers in its body, so their effects live under the Shell's owner. Each controller owns one concern: navigation state, pane visibility, workspace presentation and context, stage placement, search, commands, peer windows, session navigation, project lifecycle and removal, and contribution dispatch. A controller that reads Shell state declares it as a `Pick` of the type-only `ShellScope` (`shell-scope.ts`) or of another controller's result. The stage and chat columns are components with props in `ShellColumns.tsx`. Controllers retain their own interaction state and dispose their subscriptions with the Solid owner. Session navigation uses the shared generation fences and host hydration path; contribution dispatch submits the host's commands and publishes local view facts.
+`Shell.tsx` composes navigation, pane placement, residency, and feature surfaces. It does not assemble chat banners, sidebar controls, project dialogs, or stage-specific request adapters. `ChatWorkspace`, `WorkspaceSidebar`, `WorkspaceStage`, `WorkspaceOverlays`, and `ProjectDialogs` receive typed data and actions for their surface; their reactive effects and local state end when the mounted surface ends. Session identity stays bound to the resident chat key, including during a pending switch.
+
+Controllers provide distinct interaction contracts. Session navigation includes inventory, hydration, retirement, and rename fencing; workspace presentation derives the coherent project and chat scope; contributions project command facts and register command dispatch; navigation sinks connect external entry points to the same navigation actions. Each consumer declares a narrow `Pick` of the required contract. The type-only `ShellScope` describes those shared inputs without introducing another runtime store.
+
+`StageSplitHost` measures its own element, publishes the latest observer width once per animation frame, and cancels pending publication when removed. The layout store remains the shared geometry source. Moving feature code does not change hidden-stage residency, focus registration, project preparation, or host authority.
 
 The removal controller requests host evidence and submits the person's explicit selection. It never enumerates other projects to decide which extensions are unused. Uncertain network responses retain the operation id for retry, and a successful project deletion retires its client projections even when optional extension cleanup fails. The review dialog disables retained or unknown entries and initially selects none. Project retirement clears file buffers by project identity, including when a deleted-project event arrives before the removal response or from another window; it does not depend on the deleted project's cached root list.
 
@@ -78,7 +82,7 @@ A chat is retired through one call, `EntityRetire.session` (`lifecycle/entity-re
 
 SSE may collapse message snapshots and sort their rendering by transcript sequence. Replay checkpoints still advance only through the fully applied prefix of the original delivery order. Retries carry their cursor through that same ordered prefix; a failed handler reconnects without skipping unapplied events or reapplying successful deliveries.
 
-The app connection composes host attachment and handshake, project event subscription lifetime, cache reconciliation, and invalidation schedulers. Each service owns its state and cleanup; the public integration module binds their operations and registers stores. Async health and host replies check the bound generation before updating caches, so a replaced backend cannot publish its old response.
+The app connection composes host attachment and handshake, project event subscription lifetime, cache reconciliation, and invalidation schedulers. Each service has its state and cleanup. The window binds all connection services together for one lifetime, and retiring that binding disconnects its backend and removes its publishers and reachability observer. A stale cleanup cannot retire a replacement binding. Boot uses the binding’s abort signal, so completing a prerequisite after teardown cannot start subscriptions or backend work. Connection entry points reject an app store from a retired binding before touching the current connection. Concurrent connection requests share discovery and cached-backend verification. Async health and host replies check the bound generation before updating caches, so a replaced backend cannot publish its old response.
 
 Details: [Den session switch](den-session-switch.md) · [Den chat items](den-chat-items.md).
 
@@ -308,6 +312,8 @@ Scrollbar chrome never rides the content it scrolls. WebKit scrolls on its own t
 The project rail follows the same rule. `ShellNavRail` hosts its scrollbar in `.den-shell-nav-frame`, and its content element is the scroll extent (`extent` option): it grows to fill the rail but never shrinks below its rows, so the resize observation of it and of the viewport reports every range change without mutation probes. In the rail alone the handle sits flush with the edge (`--os-size: 8px`, no perpendicular padding), clear of the rows' 10px gutter, and its interactive area still reaches the shared 12px.
 
 ### Reading position and following
+
+History paging follows one reader direction at a time. Layout compensation does not reverse that direction. A request captures the session view generation and its resident boundary; an obsolete response cannot mutate the replacement view. Unchanged boundaries wait for renewed reader input, and failed requests retry with bounded backoff after renewed input. The live tail remains retained while older history is read; returning to latest resolves the gap explicitly. Persistence keeps the complete bounded live tail, so saving an ordinary contiguous window does not manufacture a gap. Measured-height retention counts transcript rows, with up to four recent presentations per row; resizing one row cannot consume another row’s cache allocation. Native scrollbar geometry describes resident content and its estimates; unseen variable-height history is not a measured physical extent.
 
 Each transcript has one reading position. While following, the scrollport is pinned to the latest message. Otherwise the position is the row under the scrollport top and the offset into it, resolved from virtual geometry and the motion controller's latest captured offset on each scroll frame, with no additional DOM read. Persisted view state per window and session stores that row key and offset (absent while following) plus user-set disclosure keys, never raw `scrollTop`, after an idle window; semantically unchanged snapshots do not rewrite app state. Reopening a session restores the position once its row is resident, loading older history when needed; when the row is gone it opens at the latest message, and reader input cancels a pending restore.
 
@@ -596,3 +602,14 @@ An engine that exits while the app runs is the shell's to answer, not the window
 - Approval options and authority are host-authored.
 - Live transcript projection remains separate from durable settlement.
 - Local persisted state accelerates boot but never outranks the host.
+
+### Native facilities
+
+`src-tauri/src/lib.rs` registers commands and application lifecycle hooks. Native
+implementation follows the facility that performs the operation: `app_state/`
+contains device slices and shared editing persistence; `files/` contains selected
+file grants and local path operations; `windows/` contains native window identity
+and appearance; `notifications/` contains platform notification delivery. Backup
+transfer recovery lives with `backup_transfer/`. Commands keep their explicit
+module paths in the registration list, and permission/parity tests resolve those
+paths directly. The command names, capabilities, and stored formats are unchanged.

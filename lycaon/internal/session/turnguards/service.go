@@ -50,7 +50,8 @@ type WorkflowDomains struct {
 }
 type WorkflowPolicy interface {
 	PolicySnapshot(context.Context, string) (toolpolicy.WorkflowSnapshot, error)
-	ActiveCloseoutGateState(ctx context.Context, sessionID string) workflowfacts.WorkflowCloseoutGateState
+	ActiveCloseoutGateState(ctx context.Context, sessionID string) (workflowfacts.WorkflowCloseoutGateState, error)
+	AssertSessionCompletion(context.Context, string) error
 	ActiveManifest(ctx context.Context, sessionID string) (workflowfacts.ActiveWorkflowManifest, bool)
 	ActivePhaseGuardState(ctx context.Context, sessionID string) workflowfacts.WorkflowPhaseGuardState
 	ActivePhaseHasReviewLoop(ctx context.Context, sessionID string) bool

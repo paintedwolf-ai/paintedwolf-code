@@ -1,9 +1,10 @@
+import { bindFixtureServices } from "./app-connection-test-fixture.ts";
 import { installConnectionFixtureCleanup, reconcileActiveScope, reconcileRecentsWithStores, fetchHealth, noteStoreRevision, discoverBackend, createLycaonClient, subscribeEvents, resetSessionEventRevisions, refreshPreflight, getHost, lastSubscribeOptions, closeMock, registeredShell, loadModule } from "./app-connection-test-fixture.ts";
 
 import { stubClient } from "../../test/client-fixture.ts";
 
 import { describe, expect, it, vi } from "vitest";
-import { createAppStore } from "../../store/app-state.ts";
+import { createFixtureApp } from "./app-connection-test-fixture.ts";
 
 import { createProjectsStore } from "../../store/projects-store.ts";
 import { createRecentsStore } from "../../store/recents-store.ts";
@@ -18,7 +19,7 @@ import { testHostInfo } from "./host-identity-test.ts";
 installConnectionFixtureCleanup();
 describe("app connection cache", () => {
   it("replaces the event stream when cached backend verification finds a new store", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const client = { listProjects: vi.fn(async () => []) };
     createLycaonClient.mockReturnValue(client);
     const mod = await loadModule();
@@ -40,7 +41,7 @@ describe("app connection cache", () => {
   });
 
   it("reloads file-summary settings after cached verification resets the store", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const client = stubClient({
       listProjects: vi.fn(async () => []),
       getFileSummariesSettings: vi.fn().mockResolvedValue({ enabled: false }),
@@ -65,7 +66,7 @@ describe("app connection cache", () => {
 
   it("reconciles recents and active session when store revision changes on connect", async () => {
     noteStoreRevision.mockReturnValue(true);
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     appStore.actions.setCurrentSession({
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
@@ -82,7 +83,7 @@ describe("app connection cache", () => {
 
     const mod = await loadModule();
     const recents = createRecentsStore();
-    mod.registerRecentsStore(recents);
+    bindFixtureServices(mod, { recents: recents });
     await mod.connectAppBackend(appStore);
 
     expect(reconcileRecentsWithStores).toHaveBeenCalledWith(
@@ -100,13 +101,13 @@ describe("app connection cache", () => {
 
   it("reconciles recents even when no session is active", async () => {
     noteStoreRevision.mockReturnValue(true);
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const client = { listProjects: vi.fn(async () => []) };
     createLycaonClient.mockReturnValue(client);
 
     const mod = await loadModule();
     const recents = createRecentsStore();
-    mod.registerRecentsStore(recents);
+    bindFixtureServices(mod, { recents: recents });
     await mod.connectAppBackend(appStore);
 
     expect(reconcileRecentsWithStores).toHaveBeenCalledWith(
@@ -121,13 +122,13 @@ describe("app connection cache", () => {
   it("rehydrates like a store change when the connected install is a different host", async () => {
     noteStoreRevision.mockReturnValue(false);
     getHost.mockResolvedValue(testHostInfo({ host_id: "00000000-0000-4000-8000-0000000000a2" }));
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const client = { listProjects: vi.fn(async () => []) };
     createLycaonClient.mockReturnValue(client);
 
     const mod = await loadModule();
     const recents = createRecentsStore();
-    mod.registerRecentsStore(recents);
+    bindFixtureServices(mod, { recents: recents });
     await mod.connectAppBackend(appStore);
 
     expect(reconcileRecentsWithStores).toHaveBeenCalledWith(
@@ -141,7 +142,7 @@ describe("app connection cache", () => {
 
   it("skips reconcile on first connect when revision is new", async () => {
     noteStoreRevision.mockReturnValue(false);
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const mod = await loadModule();
     await mod.connectAppBackend(appStore);
     expect(reconcileRecentsWithStores).not.toHaveBeenCalled();
@@ -156,13 +157,13 @@ describe("app connection cache", () => {
       store_revision: 2,
       schema_version: 1,
     });
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const client = { listProjects: vi.fn(async () => []) };
     createLycaonClient.mockReturnValue(client);
 
     const mod = await loadModule();
     const recents = createRecentsStore();
-    mod.registerRecentsStore(recents);
+    bindFixtureServices(mod, { recents: recents });
     await mod.connectAppBackend(appStore);
     mod.subscribeProjectEvents(appStore, "proj-1");
 
@@ -180,13 +181,13 @@ describe("app connection cache", () => {
 
   it("rehydrates after SSE reconnect reaches a different host", async () => {
     noteStoreRevision.mockReturnValue(false);
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const client = { listProjects: vi.fn(async () => []) };
     createLycaonClient.mockReturnValue(client);
 
     const mod = await loadModule();
     const recents = createRecentsStore();
-    mod.registerRecentsStore(recents);
+    bindFixtureServices(mod, { recents: recents });
     await mod.connectAppBackend(appStore);
     mod.subscribeProjectEvents(appStore, "proj-1");
     expect(reconcileRecentsWithStores).not.toHaveBeenCalled();
@@ -212,7 +213,7 @@ describe("app connection cache", () => {
       store_revision: 1,
       schema_version: 1,
     });
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     appStore.actions.setCurrentSession({
       id: "sess-1",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
@@ -244,7 +245,7 @@ describe("app connection cache", () => {
   });
 
   it("clears shell scope when connect loads an empty registry", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const shell = createShellStore("connected");
     shell.commitStageScope({
       projectId: "gone-project",
@@ -252,10 +253,10 @@ describe("app connection cache", () => {
     });
 
     const mod = await loadModule();
-    mod.registerShellStore(shell);
-    mod.registerProjectsStore(
+    bindFixtureServices(mod, { shell: shell });
+    bindFixtureServices(mod, { projects:
       createProjectsStore(() => null, { onProjectEvent: () => () => {} }),
-    );
+     });
     await mod.connectAppBackend(appStore);
 
     expect(shell.state.activeProjectId).toBeNull();
@@ -264,7 +265,7 @@ describe("app connection cache", () => {
   });
 
   it("reconciles an active shell project omitted from a stale listProjects snapshot", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const shell = createShellStore("connected");
     const project = wireProject("/tmp/draft", "draft-1");
     shell.commitStageScope({ projectId: project.id, sessionId: "sess-1" });
@@ -275,11 +276,11 @@ describe("app connection cache", () => {
     createLycaonClient.mockReturnValue(client);
 
     const mod = await loadModule();
-    mod.registerShellStore(shell);
+    bindFixtureServices(mod, { shell: shell });
     const projects = createProjectsStore(() => client as never, {
       onProjectEvent: () => () => {},
     });
-    mod.registerProjectsStore(projects);
+    bindFixtureServices(mod, { projects: projects });
     await mod.connectAppBackend(appStore);
 
     expect(client.getProject).toHaveBeenCalledWith("draft-1");
@@ -289,7 +290,7 @@ describe("app connection cache", () => {
   });
 
   it("reconnects when the warm client fails project sync after a sidecar restart", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const listProjects = vi
       .fn()
       .mockResolvedValueOnce([])
@@ -307,7 +308,7 @@ describe("app connection cache", () => {
   });
 
   it("rehydrates the selected chat after rediscovery without a store revision change", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const client = { listProjects: vi.fn(async () => []) };
     createLycaonClient.mockReturnValue(client);
     const mod = await loadModule();
@@ -325,7 +326,7 @@ describe("app connection cache", () => {
   });
 
   it("re-verifies a warm client before returning it", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const listProjects = vi.fn(async () => []);
     createLycaonClient.mockReturnValue({ listProjects });
     const mod = await loadModule();

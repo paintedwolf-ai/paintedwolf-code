@@ -23,14 +23,18 @@ const pendingResync = new Set<string>();
 export function setBufferLiveHandlers(
   projectId: string,
   handlers: BufferLiveHandlers | null,
-): void {
+): { isCurrent(): boolean; dispose(): void } {
   const id = projectId.trim();
-  if (!id) return;
+  if (!id) return { isCurrent: () => false, dispose: () => {} };
   if (!handlers) handlersByProject.delete(id);
   else {
     handlersByProject.set(id, handlers);
     if (pendingResync.delete(id)) applyBufferSourceResync(id);
   }
+  const isCurrent = () => handlersByProject.get(id) === handlers;
+  return { isCurrent, dispose: () => {
+    if (isCurrent()) handlersByProject.delete(id);
+  } };
 }
 
 // Initial reads resolve loading buffers; settled buffers follow their own branch.

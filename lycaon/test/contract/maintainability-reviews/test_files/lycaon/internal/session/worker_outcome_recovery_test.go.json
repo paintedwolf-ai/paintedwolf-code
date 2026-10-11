@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/session/worker_outcome_recovery_test.go",
+  "kind": "test_suite",
+  "workstream": "worker-workflow-lifecycle",
+  "disposition": "retain",
+  "reason": "These tests jointly qualify worker summary grounding, retry, pending-decision parking and fallback closeout through the session host. Keeping the related failure matrix together makes outcome precedence inspectable.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 401,
+  "boundaries": {
+    "lycaon/internal/session/worker_outcome_recovery_test.go": "124f7e9b4bcf65bbefe0674a1d831a40782df3903312a5ce4a7ae4c908aac1c0"
+  }
+}

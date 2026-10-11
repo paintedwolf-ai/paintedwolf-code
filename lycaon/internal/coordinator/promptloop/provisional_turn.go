@@ -97,6 +97,9 @@ func (l *turnProjection) commitGuardedAssistantTurn(
 	userPrompt, surfaceID string,
 	msg api.Message,
 ) (api.Message, error) {
+	if err := l.assertCoordinatorCompletion(ctx, sess, sessionID, history, msg); err != nil {
+		return api.Message{}, err
+	}
 	coordinatorSession := sess == nil || strings.TrimSpace(sess.ParentSessionID) == ""
 	// Only prose responses become user drafts; tool-step text stays in model history.
 	if len(msg.ToolCalls) == 0 {

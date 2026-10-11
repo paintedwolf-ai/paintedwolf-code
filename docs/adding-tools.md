@@ -19,7 +19,7 @@ The six read-only analysis tools (`jq`, `grep`, `find`, `list_dir`, `stat`, `wc`
 
 ```mermaid
 flowchart TD
-    invoke["DefaultToolExecutor.Invoke"] --> gate["PolicyEngine.Evaluate<br/>(pre-handler, envelope-agnostic)"]
+    invoke["toolexecution.Executor.Invoke"] --> gate["PolicyEngine.Evaluate<br/>(pre-handler, envelope-agnostic)"]
     gate --> native["First-party Go handler"]
     gate --> wrap["Per-call MCP wrapper<br/>(caps + zoom + code bridge)"]
     launch["Confined MCP server launch<br/>(Confine + roots at handshake)"] --> wrap
@@ -37,7 +37,7 @@ flowchart TD
 | **Resource caps** | Bound input size, execution time, and result volume | `safecmd.Caps` and named shipping constants |
 | **Altitude shaping** | Return a shape or sample instead of an oversized raw dump | `safecmd.Shape`; the zoom strategy stays tool-local |
 | **Structured reject** | Return machine `code` plus typed data for recovery | `safecmd.Reject`; catalog policy renders guidance |
-| **Gating** | Apply policy or approval before the handler runs | `DefaultToolExecutor.Invoke` → `PolicyEngine.Evaluate` |
+| **Gating** | Apply policy or approval before the handler runs | `toolexecution.Executor.Invoke` → `PolicyEngine.Evaluate` |
 
 ## Caps
 

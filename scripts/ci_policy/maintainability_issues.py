@@ -39,6 +39,13 @@ def reconcile(run, dry_run=False, backfill=False, save_plan=None):
     observation.update(repository=repo, run_id=run['id'], run_attempt=run['run_attempt'],
                        run_url=f"https://github.com/{repo}/actions/runs/{run['id']}",
                        merged_prs=sorted(p['number'] for p in pulls))
+    workstreams = {}
+    for identity, row in artifacts.items():
+        review = row.get('review')
+        if review:
+            workstreams.setdefault(review['workstream'], []).append({
+                'key': identity, 'category': row['category'], 'artifact': row['id'],
+                'measured': row['measured'], 'state': review['state']})
     prior = None if backfill else checkpoint()
     intake_keys = set(artifacts) if backfill else intake(run, artifacts, prior)
     operations, suppressed = plan(list(pages(f'{repository()}/issues?state=all')), artifacts, observation, backfill, intake_keys)
@@ -53,7 +60,7 @@ def reconcile(run, dry_run=False, backfill=False, save_plan=None):
     deferred = max(0, creations - 25)
     report = {'run_id': run['id'], 'source_sha': run['head_sha'], 'dry_run': dry_run,
               'backfill': backfill, 'intake_base_sha': prior['source_sha'] if prior else None, 'above_threshold': dict(Counter(row['category'] for row in artifacts.values())),
-              'suppressed': suppressed, 'deferred_creations': deferred, 'applied_operations': 0, 'actions': dict(Counter(op['action'] for op in operations)),
+              'suppressed': suppressed, 'workstreams': workstreams, 'deferred_creations': deferred, 'applied_operations': 0, 'actions': dict(Counter(op['action'] for op in operations)),
               'operations': selected}
     if not current_main(run['head_sha']):
         return {'skipped': 'main advanced during planning'}

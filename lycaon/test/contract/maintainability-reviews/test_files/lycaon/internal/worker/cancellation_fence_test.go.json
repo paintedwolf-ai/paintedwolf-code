@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/worker/cancellation_fence_test.go",
+  "kind": "test_suite",
+  "workstream": "worker-workflow-lifecycle",
+  "disposition": "retain",
+  "reason": "These tests exercise the same cancellation fence across admission, claims, runtime joining, recovery and replacement attempts. Keep that end-to-end contract and shared fixture together.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 420,
+  "boundaries": {
+    "lycaon/internal/worker/cancellation_fence_test.go": "561922a3d991473041986b5c2338cec56b79a29f8f1b7e044723968f7607ed33"
+  }
+}

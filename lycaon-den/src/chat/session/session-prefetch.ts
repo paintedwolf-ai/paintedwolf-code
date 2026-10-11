@@ -1,5 +1,4 @@
 import type { LycaonClient } from "../../api/client.ts";
-import type { Project } from "../../api/types.ts";
 import type { RecentSession } from "../../../shared/app-state-types.ts";
 import {
   getSessionChatCache,
@@ -46,14 +45,15 @@ export function firstRecentSessionByProject(
 export async function warmSessionChatCache(
   client: LycaonClient,
   scope: SessionChatScope,
-  _projects: readonly Project[],
   onSessionGone: (scope: SessionChatScope) => void,
+  shouldApply: () => boolean,
 ): Promise<void> {
-  if (getSessionChatCache(scope)) return;
+  if (!shouldApply() || getSessionChatCache(scope)) return;
   try {
     const { session, transcript } = await client.getSessionBootstrap(
       scope.sessionId,
     );
+    if (!shouldApply()) return;
     putSessionChatCache({
       scope,
       touchedAt: Date.now(),
@@ -78,19 +78,20 @@ export async function warmSessionChatCache(
       pendingCheckpoints: [],
     });
   } catch (err) {
-    if (isSessionNotFoundError(err)) onSessionGone(scope);
+    if (shouldApply() && isSessionNotFoundError(err)) onSessionGone(scope);
   }
 }
 
 export async function prefetchRecentSessionCaches(
   client: LycaonClient,
   recents: readonly RecentSession[],
-  projects: readonly Project[],
   onSessionGone: (scope: SessionChatScope) => void,
+  shouldApply: () => boolean,
 ): Promise<void> {
   const projectIds = prefetchProjectIds(recents);
   const scopes = firstRecentSessionByProject(recents, projectIds);
   for (const scope of scopes) {
-    await warmSessionChatCache(client, scope, projects, onSessionGone);
+    if (!shouldApply()) return;
+    await warmSessionChatCache(client, scope, onSessionGone, shouldApply);
   }
 }

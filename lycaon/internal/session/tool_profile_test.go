@@ -113,8 +113,8 @@ func (s stubWorkflowManifest) ActiveReviewVerdictPending(context.Context, string
 	return false
 }
 
-func (s stubWorkflowManifest) ActiveCloseoutGateState(context.Context, string) workflowfacts.WorkflowCloseoutGateState {
-	return workflowfacts.WorkflowCloseoutGateState{}
+func (s stubWorkflowManifest) ActiveCloseoutGateState(context.Context, string) (workflowfacts.WorkflowCloseoutGateState, error) {
+	return workflowfacts.WorkflowCloseoutGateState{}, nil
 }
 
 func (s stubWorkflowManifest) ActivePhaseHasReviewLoop(context.Context, string) bool {
@@ -187,6 +187,10 @@ func (s stubWorkflowManifest) RecordReviewToolResult(context.Context, string, ap
 	return nil
 }
 
+func (s stubWorkflowManifest) AssertSessionCompletion(context.Context, string) error { return nil }
+
 func (s stubWorkflowManifest) PolicySnapshot(context.Context, string) (toolpolicy.WorkflowSnapshot, error) {
 	return toolpolicy.WorkflowSnapshot{ManifestRules: s.manifest.Rules}, nil
 }
+
+func (s stubWorkflowManifest) ReconcileWorkerCycle(context.Context, string) error { return nil }

@@ -167,7 +167,7 @@ func (s *Memory) CommittedRewindOperationsForSweep(ctx context.Context) ([]Rewin
 		}
 		out = append(out, RewindOperationSweepItem{
 			ID: op.ID, SessionID: op.SessionID, AnchorMessageID: op.AnchorMessageID,
-			ProjectDir: op.ProjectDir, JournalPath: op.JournalPath,
+			ProjectDir:          op.ProjectDir,
 			CheckpointAnchorIDs: op.CheckpointAnchorIDs, CreatedAt: s.rewindCreatedAt[id],
 		})
 	}

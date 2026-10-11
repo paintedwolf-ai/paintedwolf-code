@@ -104,8 +104,9 @@ describe("resize invalidation", () => {
   it("declares tree geometry on the pane that reads it", () => {
     expect(registered).toContain("--den-files-tree-w");
     expect(read("files/components/ProjectFilesView.tsx")).toMatch(
-      /<FilesTreePane[\s\S]*?style=\{treeStyle\(\)\}/,
+      /<FilesNavigationPane[\s\S]*?style=\{treeStyle\(\)\}/,
     );
+    expect(read("files/components/FilesNavigationPane.tsx")).toMatch(/<FilesTreePane[\s\S]*?style=\{props\.style\}/);
     expect(read("files/components/FilesTreePane.tsx")).toMatch(/class="den-files-tree-pane"[\s\S]*?style=\{props\.style\}/);
   });
 
@@ -114,10 +115,10 @@ describe("resize invalidation", () => {
     const shellRoot = /class="den-shell"[\s\S]{0,400}?>/.exec(shell)?.[0] ?? "";
     expect(shellRoot).not.toContain("--den-nav-slot-width");
     // Both readers declare it themselves.
-    expect(shell).toMatch(
+    expect(read("components/shell/WorkspaceSidebar.tsx")).toMatch(
       /class="den-shell-aside"\s*\n\s*style=\{\{ "--den-nav-slot-width"/,
     );
-    expect(shell).toMatch(
+    expect(read("components/shell/WorkspaceOverlays.tsx")).toMatch(
       /class="den-find-bar-host"[\s\S]{0,160}?"--den-nav-slot-width"/,
     );
   });
@@ -242,11 +243,8 @@ describe("resize measurement", () => {
   });
 
   it("does not re-measure the split host through a forced layout read", () => {
-    const shell = read("components/shell/Shell.tsx");
-    const effect =
-      /createEffect\(\(\) => \{\s*const el = stageHostEl\(\);[\s\S]*?\n  \}\);/.exec(
-        shell,
-      )?.[0] ?? "";
+    const host = read("components/shell/StageSplitHost.tsx");
+    const effect = host.slice(host.indexOf("    let applied:"), host.indexOf("    publish(el.getBoundingClientRect().width)"));
     expect(effect).not.toBe("");
     expect(effect).toContain("ResizeObserver");
     expect(effect).not.toContain("getBoundingClientRect");
@@ -294,11 +292,8 @@ describe("layout epoch", () => {
   });
 
   it("publishes split-host width on the next frame while resizing", () => {
-    const shell = read("components/shell/Shell.tsx");
-    const effect =
-      /createEffect\(\(\) => \{\s*const el = stageHostEl\(\);[\s\S]*?\n  \}\);/.exec(
-        shell,
-      )?.[0] ?? "";
+    const host = read("components/shell/StageSplitHost.tsx");
+    const effect = host.slice(host.indexOf("    let applied:"), host.indexOf("    publish(el.getBoundingClientRect().width)"));
     expect(effect).toContain("schedulePublish(width)");
     expect(effect).toContain("requestAnimationFrame");
     expect(effect).not.toContain("isShellLayoutBusy");
