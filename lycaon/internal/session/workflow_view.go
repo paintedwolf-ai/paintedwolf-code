@@ -180,6 +180,8 @@ func (m *Host) SetWorkflowDomains(v *WorkflowDomains) {
 		m.Runner.SetRequests(nil)
 		m.Runner.SetSlash(nil)
 		m.Workers.State.SetWorkflows(nil)
+		m.Workers.Results.SetProofs(nil)
+		m.Workers.Results.SetWorkflowSource(nil)
 		m.Runner.Transcript.SetPageReconciler(nil)
 		m.Profiles.SetCoordinatorProfile(nil)
 		return
@@ -198,6 +200,8 @@ func (m *Host) SetWorkflowDomains(v *WorkflowDomains) {
 	m.Runner.SetRequests(v.Requests)
 	m.Runner.SetSlash(v.Slash)
 	m.Workers.State.SetWorkflows(v.Policy)
+	m.Workers.Results.SetProofs(v.Fanout)
+	m.Workers.Results.SetWorkflowSource(v.Runs)
 	m.Runner.Transcript.SetPageReconciler(v.Recovery)
 	policy := v.Policy
 	m.Profiles.SetCoordinatorProfile(func(ctx context.Context, id string) string {
