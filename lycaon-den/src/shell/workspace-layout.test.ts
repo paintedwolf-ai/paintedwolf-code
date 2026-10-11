@@ -260,7 +260,9 @@ describe("layout contracts", () => {
   });
 
   it("settles layout even when a hide action fails", async () => {
-    const drag = beginNavWidthResize(() => { throw new Error("hide failed"); });
+    const drag = beginNavWidthResize(() => {
+      throw new Error("hide failed");
+    });
     drag.preview(PANE_HIDDEN_PX);
     expect(() => drag.commit()).toThrow("hide failed");
     expect(effectiveNavWidthPx()).toBe(preferredNavWidthPx());
