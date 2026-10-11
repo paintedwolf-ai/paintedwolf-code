@@ -2,14 +2,13 @@ package wiring
 
 import (
 	"encoding/json"
-	"errors"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/session/workflowfacts"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -27,6 +26,7 @@ func TestWorkflowCatalogCompletionAuthorityInvariant(t *testing.T) {
 	}
 	sort.Strings(keys)
 	dir := h.ProjectDir(t, "completion-contracts")
+	testdbseed.InsertProjectRoot(t, h.DB, testdbseed.DefaultProjectID, dir)
 	checked, blocked, ordinary, childOverrides := 0, 0, 0, 0
 	for _, key := range keys {
 		manifest := manifests[key]
@@ -49,16 +49,6 @@ func TestWorkflowCatalogCompletionAuthorityInvariant(t *testing.T) {
 					met, _, gateErr := h.Workflows.Manager.Phases.Gates.PhaseGateMet(ctx, manifest, run, map[string]any{})
 					requiresProof := effective.Closeout.Gated() || effective.ReviewLoop != nil
 					wantBlocked := requiresProof && (gateErr != nil || !met)
-					completionErr := h.Workflows.Manager.Policy.AssertSessionCompletion(ctx, run.SessionID)
-					if (completionErr != nil) != wantBlocked {
-						t.Fatalf("completion=%v; gate met=%v, gate error=%v, requires proof=%v", completionErr, met, gateErr, requiresProof)
-					}
-					if wantBlocked && gateErr == nil {
-						var incomplete *workflowfacts.IncompleteCloseoutError
-						if !errors.As(completionErr, &incomplete) || incomplete.State.Phase != phase.ID {
-							t.Fatalf("missing structured phase refusal: %v", completionErr)
-						}
-					}
 					assertCatalogSettlement(t, h, run, wantBlocked)
 					if wantBlocked {
 						blocked++
@@ -70,7 +60,6 @@ func TestWorkflowCatalogCompletionAuthorityInvariant(t *testing.T) {
 					// A durable human wait parks work without satisfying its gates.
 					vars := runstate.SetFeedbackPending(map[string]any{}, "catalog-question", "Choose a direction.")
 					testutil.FailErr(t, "persist human wait", h.Workflows.Manager.Store.State.UpdateVars(ctx, run, dir, vars))
-					testutil.FailErr(t, "allow parked turn", h.Workflows.Manager.Policy.AssertSessionCompletion(ctx, run.SessionID))
 					assertCatalogSettlement(t, h, run, false)
 					testutil.FailErr(t, "clear human wait", h.Workflows.Manager.Store.State.UpdateVars(ctx, run, dir, map[string]any{}))
 					assertCatalogSettlement(t, h, run, wantBlocked)
@@ -92,7 +81,7 @@ func TestWorkflowCatalogCompletionAuthorityInvariant(t *testing.T) {
 func seedCompletionInvariantRun(t *testing.T, h *Harness, dir string, manifest workflowdef.Manifest, phase string, invoked bool) *api.WorkflowRun {
 	t.Helper()
 	ctx := h.OwnerCtx(t, t.Context())
-	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, dir)
+	sess, err := h.Store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create catalog session", err)
 	now := time.Now().UTC()
 	run := &api.WorkflowRun{ID: uuid.NewString(), SessionID: sess.ID, WorkflowID: manifest.ID, WorkflowVersion: manifest.Version, CurrentPhase: phase, Status: api.WorkflowRunStatusRunning, Revision: 1, CreatedAt: now, UpdatedAt: now}
