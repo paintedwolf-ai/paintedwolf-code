@@ -270,7 +270,7 @@ describe("split responsive authority", () => {
       /export function resolveStageColumn\([\s\S]*?\n\}/.exec(placement)?.[0] ?? "";
     expect(resolver).not.toBe("");
     expect(resolver).not.toMatch(/hostWidth|WidthPx/);
-    expect(read("shell/layout-store.ts")).not.toMatch(/isSplitAvailable/);
+    expect(read("shell/workspace-layout.ts")).not.toMatch(/isSplitAvailable/);
   });
 
   it("lets the split divider claim the viewport width as the sidebar yields", () => {

@@ -174,7 +174,7 @@ describe("workspace placement contract", () => {
   it("stores one conversation width for the workspace", () => {
     const types = read("shared/app-state-types.ts");
     expect(types).toMatch(/chatWidthPx\?: number/);
-    const store = read("src/shell/layout-store.ts");
+    const store = read("src/shell/workspace-layout.ts");
     expect(store).toContain("export function preferredChatWidthPx()");
     expect(store).toContain("export function beginChatWidthResize");
     const collapse = read("src/shell/responsive-collapse.ts");

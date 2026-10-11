@@ -18,7 +18,7 @@ import {
   ledgerStateLabel,
 } from "../../lib/ledger-display.ts";
 import { relativeTimeLabel } from "../../time/time-copy.ts";
-import { listPanePrefs } from "../../shell/layout-store.ts";
+import { listPanePrefs } from "../../list/list-layout.ts";
 import { ListColumnHeader } from "../list/ListColumnHeader.tsx";
 import { TablePager } from "../list/TablePager.tsx";
 import { DenCheckboxControl } from "../primitives/DenCheckbox.tsx";

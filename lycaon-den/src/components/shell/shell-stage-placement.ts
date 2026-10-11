@@ -1,7 +1,15 @@
 import { createEffect } from "solid-js";
 import { type ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { widenWindowBy } from "../../platform/windows/window-chrome.ts";
-import { companionPref, preferredChatWidthPx, layoutViewportWidthPx, preferredNavWidthPx, saveStagePlacementMode, stagePlacementMode, startupCompanionPref } from "../../shell/layout-store.ts";
+import {
+  companionPref,
+  preferredChatWidthPx,
+  layoutViewportWidthPx,
+  preferredNavWidthPx,
+  saveStagePlacementMode,
+  stagePlacementMode,
+  startupCompanionPref,
+} from "../../shell/workspace-layout.ts";
 import { stageOpenWindowDeficitPx, workspaceStageFloorPx } from "../../shell/responsive-collapse.ts";
 import { runShellLayoutTransaction } from "../../shell/shell-layout-busy.ts";
 import { resolveSplitCompanion, startupPlacementDecision } from "../../shell/stage-placement.ts";

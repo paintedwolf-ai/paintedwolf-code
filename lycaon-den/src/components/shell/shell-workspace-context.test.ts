@@ -20,7 +20,7 @@ vi.mock("../../platform/windows/workspace-view-registry.ts", () => ({
   workspaceContextEqual: (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b),
   workspaceContextIsOpen: () => registry.visible,
 }));
-vi.mock("../../shell/layout-store.ts", () => ({ hiddenSplitPanePref: () => registry.collapsed ? "conversation" : null }));
+vi.mock("../../shell/workspace-layout.ts", () => ({ hiddenSplitPanePref: () => registry.collapsed ? "conversation" : null }));
 vi.mock("../stage/stage-registry.tsx", () => ({
   stageLabelFor: (id: string) => id,
   stageDefinition: () => ({ backPlacement: registry.placement }),

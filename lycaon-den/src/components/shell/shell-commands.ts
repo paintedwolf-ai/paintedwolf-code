@@ -10,7 +10,14 @@ import { fileSummariesEnabled, saveFileSummariesEnabled } from "../../settings/e
 import { APP_SETTINGS } from "../../settings/settings-nav-model.ts";
 import { pendingReplaceArm } from "../../search/replace-arm.ts";
 import { projectScopedCodeQuery } from "../../search/search-query-model.ts";
-import { hiddenSplitPanePref, resetChatWidthPx, setSplitFocusRegion, stagePlacementMode, toggleWorkspaceOrientation, swapSplitColumns } from "../../shell/layout-store.ts";
+import {
+  hiddenSplitPanePref,
+  resetChatWidthPx,
+  setSplitFocusRegion,
+  stagePlacementMode,
+  toggleWorkspaceOrientation,
+  swapSplitColumns,
+} from "../../shell/workspace-layout.ts";
 import { registerCommandHandler } from "../../shortcuts/dispatcher.ts";
 import { focusRegion, cycleFocusRegion, type FocusRegionId } from "../../shortcuts/focus-region.ts";
 import { adjacentSession, sidebarChatSections, sidebarNavigationOrder } from "../../store/projects-sidebar-model.ts";

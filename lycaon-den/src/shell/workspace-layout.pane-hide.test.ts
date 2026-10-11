@@ -10,8 +10,8 @@ import {
   getAppStateSnapshot,
   resetAppStateSnapshotForTests,
 } from "../store/app-state-snapshot.ts";
+import { beginListPaneResize, listPaneHidePreviewed, listPanePrefs } from "../list/list-layout.ts";
 import {
-  beginListPaneResize,
   beginNavWidthResize,
   beginChatWidthResize,
   hiddenSplitPanePref,
@@ -19,25 +19,23 @@ import {
   conversationHidePreviewed,
   effectiveNavWidthPx,
   effectiveChatWidthPx,
-  listPaneHidePreviewed,
-  listPanePrefs,
   navHidePreviewed,
-  resetLayoutStoreForTests,
   saveStagePlacementMode,
   setLayoutViewportWidth,
-} from "./layout-store.ts";
+} from "./workspace-layout.ts";
+import { resetLayoutForTests } from "../layout/layout-test-support.ts";
 import { CHAT_WIDTH_DEFAULT_PX, withPlacement } from "./stage-placement.ts";
 
 function freshStore() {
   localStorage.clear();
   resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1 });
-  resetLayoutStoreForTests();
+  resetLayoutForTests();
   setLayoutViewportWidth(1200);
 }
 
 describe("hidden split pane", () => {
   beforeEach(freshStore);
-  afterEach(resetLayoutStoreForTests);
+  afterEach(resetLayoutForTests);
 
   it.each(["conversation", "stage"] as const)("persists hidden %s and drops the key once shown", async (pane) => {
     commitHiddenSplitPane(pane);
@@ -65,7 +63,7 @@ describe("hidden split pane", () => {
 
 describe("drag to hide", () => {
   beforeEach(freshStore);
-  afterEach(resetLayoutStoreForTests);
+  afterEach(resetLayoutForTests);
 
   it("previews a hidden sidebar and hides it on release without losing its width", () => {
     const onHide = vi.fn();

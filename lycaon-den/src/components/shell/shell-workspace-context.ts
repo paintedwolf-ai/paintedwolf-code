@@ -3,7 +3,7 @@ import type { ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { clearSourceReturn, returnToSource, sourceReturn } from "../../files/source/source-return.ts";
 import { workspaceContextEqual, workspaceContextIsOpen, type WorkspaceContext } from "../../platform/windows/workspace-view-registry.ts";
 import { isContextNavItemId } from "../../settings/editor/context-nav-prefs.ts";
-import { hiddenSplitPanePref } from "../../shell/layout-store.ts";
+import { hiddenSplitPanePref } from "../../shell/workspace-layout.ts";
 import { isHomePresentation, type ProjectPresentation } from "../../shell/project-presentation.ts";
 import { routedReturnOffer, type RoutedOrigin } from "../../shell/routed-return.ts";
 import type { ActiveChat } from "../../shell/stage-scope.ts";

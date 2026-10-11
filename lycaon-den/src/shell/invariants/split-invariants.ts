@@ -21,7 +21,7 @@ function assertSplit01(): void {
 function assertSplit02(): void {
   const placement = readSourceText(join(denSrc, "shell/stage-placement.ts"));
   expect(placement).toMatch(/SPLIT_/);
-  const store = readSourceText(join(denSrc, "shell/layout-store.ts"));
+  const store = readSourceText(join(denSrc, "shell/workspace-layout.ts"));
   expect(store).toMatch(/setSplitHostWidth/);
   const shell = shellSource();
   expect(shell).not.toMatch(/isSplitAvailable/);
@@ -49,7 +49,7 @@ function assertSplit04(): void {
 function assertSplit05(): void {
   const types = readSourceText(join(denSrc, "../shared/app-state-types.ts"));
   expect(types).toMatch(/chatWidthPx\?: number/);
-  const store = readSourceText(join(denSrc, "shell/layout-store.ts"));
+  const store = readSourceText(join(denSrc, "shell/workspace-layout.ts"));
   expect(store).toMatch(/export function preferredChatWidthPx\(\)/);
   const collapse = readSourceText(join(denSrc, "shell/responsive-collapse.ts"));
   expect(collapse).toContain("export function workspaceStageFloorPx");

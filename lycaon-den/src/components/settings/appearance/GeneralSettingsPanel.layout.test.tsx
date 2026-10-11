@@ -7,7 +7,7 @@ import {
   getAppStateSnapshot,
   resetAppStateSnapshotForTests,
 } from "../../../store/app-state-snapshot.ts";
-import { syncLayoutFromSnapshot } from "../../../shell/layout-store.ts";
+import { syncLayoutFromSnapshot } from "../../../layout/layout-preferences.ts";
 
 vi.mock("../../../store/app-state-snapshot.ts", async (importOriginal) => {
   const actual =

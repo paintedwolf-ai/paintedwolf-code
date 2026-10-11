@@ -14,7 +14,7 @@ import {
   type SortState,
 } from "../../list/list-sort.ts";
 import { ResizeHandle } from "../primitives/ResizeHandle.tsx";
-import { beginListColumnResize } from "../../shell/layout-store.ts";
+import { beginListColumnResize } from "../../list/list-layout.ts";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 
 type ListColumnHeaderProps<T> = {

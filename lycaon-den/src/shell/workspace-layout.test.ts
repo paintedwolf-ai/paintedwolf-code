@@ -2,9 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createRoot, createComputed } from "solid-js";
 import { EMPTY_APP_STATE_V1 } from "../../shared/app-state-types.ts";
+import { beginListColumnResize, beginListPaneResize, listPanePrefs } from "../list/list-layout.ts";
 import {
-  beginListColumnResize,
-  beginListPaneResize,
   beginNavWidthResize,
   beginChatWidthResize,
   companionStageId,
@@ -13,12 +12,10 @@ import {
   currentSplitFocusRegion,
   effectiveNavWidthPx,
   effectiveChatWidthPx,
-  listPanePrefs,
   preferredNavWidthPx,
   preferredChatWidthPx,
   requestedChatWidthPx,
   resetChatWidthPx,
-  resetLayoutStoreForTests,
   saveStagePlacementMode,
   saveStartupCompanion,
   setLayoutViewportWidth,
@@ -27,12 +24,13 @@ import {
   setSplitProjectId,
   stagePlacementMode,
   startupCompanionPref,
-  syncLayoutFromSnapshot,
   workspaceOrientationPref,
   splitOrderPref,
   swapSplitColumns,
   toggleWorkspaceOrientation,
-} from "./layout-store.ts";
+} from "./workspace-layout.ts";
+import { resetLayoutForTests } from "../layout/layout-test-support.ts";
+import { syncLayoutFromSnapshot } from "../layout/layout-preferences.ts";
 import {
   flushShellLayoutSettleForTests,
   isShellLayoutUnstable,
@@ -47,15 +45,15 @@ import {
   STAGE_COL_MIN,
 } from "./stage-placement.ts";
 
-describe("layout store", () => {
+describe("layout contracts", () => {
   beforeEach(() => {
     localStorage.clear();
     resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1 });
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
   });
 
   afterEach(() => {
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
   });
 
   it("persists independent split order without disturbing pane state", async () => {
@@ -330,11 +328,11 @@ describe("split column state", () => {
   beforeEach(() => {
     localStorage.clear();
     resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1 });
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
   });
 
   afterEach(() => {
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
   });
 
   it("starts on the conversation", () => {

@@ -55,7 +55,20 @@ import { isBackendReachable } from "../../platform/connection/sidecar-status.ts"
 import { widenWindowBy } from "../../platform/windows/window-chrome.ts";
 import { editorIndentStylePref, editorIndentWidthPref, editorRevealInTreePref } from "../../settings/editor/editor-prefs.ts";
 import { dragRequestsHide, PANE_HIDDEN_PX } from "../../layout/drag-to-hide.ts";
-import { beginListPaneResize, layoutViewportWidthPx, listPaneHidePreviewed, listPanePrefs, navCollapsedPref, preferredChatWidthPx, preferredNavWidthPx, resetListPaneSize, splitHostWidthPx, workspaceOrientationPref } from "../../shell/layout-store.ts";
+import {
+  beginListPaneResize,
+  listPaneHidePreviewed,
+  listPanePrefs,
+  resetListPaneSize,
+} from "../../list/list-layout.ts";
+import {
+  layoutViewportWidthPx,
+  navCollapsedPref,
+  preferredChatWidthPx,
+  preferredNavWidthPx,
+  splitHostWidthPx,
+  workspaceOrientationPref,
+} from "../../shell/workspace-layout.ts";
 import { filesShowWindowDeficitPx } from "../../shell/responsive-collapse.ts";
 
 import { attachDispatcher, registerCommandHandler } from "../../shortcuts/dispatcher.ts";

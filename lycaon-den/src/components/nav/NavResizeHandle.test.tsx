@@ -5,12 +5,9 @@ import {
   NAV_WIDTH_DEFAULT_PX,
   NAV_WIDTH_MIN_PX,
 } from "../../../shared/app-state-types.ts";
-import {
-  preferredNavWidthPx,
-  resetLayoutStoreForTests,
-  setLayoutViewportWidth,
-  syncLayoutFromSnapshot,
-} from "../../shell/layout-store.ts";
+import { preferredNavWidthPx, setLayoutViewportWidth } from "../../shell/workspace-layout.ts";
+import { resetLayoutForTests } from "../../layout/layout-test-support.ts";
+import { syncLayoutFromSnapshot } from "../../layout/layout-preferences.ts";
 import {
   getAppStateSnapshot,
   resetAppStateSnapshotForTests,
@@ -40,14 +37,14 @@ describe("NavResizeHandle", () => {
       ...EMPTY_APP_STATE_V1,
       layout: { navWidthPx: 280 },
     });
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
     syncLayoutFromSnapshot();
     setLayoutViewportWidth(1200);
   });
 
   afterEach(() => {
     cleanup();
-    resetLayoutStoreForTests();
+    resetLayoutForTests();
     document.documentElement.classList.remove("den-shell--nav-resizing");
   });
 

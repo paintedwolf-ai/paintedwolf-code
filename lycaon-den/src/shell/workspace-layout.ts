@@ -1,39 +1,16 @@
-import { batch, createSignal, untrack } from "solid-js";
+import { createSignal, untrack } from "solid-js";
 import type {
   ContextNavItemId,
-  DenLayoutPrefs,
-  DenListPanePrefs,
-  DenListPanesPrefs,
   NarrowSplitSurvivor,
   StagePlacement,
   SplitOrder,
   SplitPane,
   WorkspaceOrientation,
 } from "../../shared/app-state-types.ts";
-import {
-  clampListPaneSizePx,
-  resolveListPanePrefs,
-  type ListPaneAxis,
-} from "../list/list-pane-model.ts";
-import {
-  clampColumnWidthPx,
-  type ColumnWidth,
-} from "../list/list-columns.ts";
-import type { SortState } from "../list/list-sort.ts";
 import type { ResizeSession } from "../layout/resize-session.ts";
 import { PANE_HIDDEN_PX } from "../layout/drag-to-hide.ts";
-import { windowSubject } from "../platform/windows/window-subject.ts";
-import { getAppStateSnapshot } from "../store/app-state-snapshot.ts";
-import { persistAppStateInBackground } from "../store/app-state-background-write.ts";
-import {
-  beginShellLayoutBusy,
-  endShellLayoutBusy,
-  resetShellLayoutBusyForTests,
-} from "./shell-layout-busy.ts";
 import { clampNavWidthPx, resolveNavWidthPx } from "./shell-layout-model.ts";
 import {
-  DEFAULT_PLACEMENT,
-  DEFAULT_WORKSPACE_ORIENTATION,
   clampChatWidthPx,
   narrowSurvivorFollowsLaunch,
   resolveHiddenSplitPane,
@@ -53,25 +30,9 @@ import {
   type StagePlacementCommit,
 } from "./stage-placement.ts";
 
-type LayoutScope = "persistent-main" | "ephemeral-peer";
-type ResizeKey =
-  | "nav"
-  | "split"
-  | `pane:${string}:${ListPaneAxis}`
-  | `column:${string}:${string}`;
+import { currentPreferences, commitPreferences } from "../layout/layout-preferences.ts";
+import { resizePreview, beginResize, cancelActiveResize } from "../layout/resize-transaction.ts";
 
-type ResizeTransaction = {
-  id: number;
-  key: ResizeKey;
-  startValue: number;
-  previewValue: number;
-  movementThreshold: number;
-  commit: (value: number) => void;
-};
-
-const scope: LayoutScope =
-  windowSubject() == null ? "persistent-main" : "ephemeral-peer";
-const [preferences, setPreferences] = createSignal<DenLayoutPrefs>({});
 const [viewportWidthPx, setViewportWidthPx] = createSignal(
   typeof window === "undefined" ? 0 : Math.round(window.innerWidth),
 );
@@ -84,113 +45,6 @@ const SPLIT_COLUMN_DEFAULT = "chat" as const;
 const [splitFocusRegion, setSplitFocusRegionSignal] = createSignal<
   "stage" | "chat"
 >(SPLIT_COLUMN_DEFAULT);
-const [resize, setResize] = createSignal<ResizeTransaction | null>(null);
-
-let peerInitialized = false;
-let nextResizeId = 0;
-
-function currentPreferences(): DenLayoutPrefs {
-  return preferences();
-}
-
-async function commitPreferences(
-  next: DenLayoutPrefs,
-  options?: {
-    settleLayout?: boolean;
-    applyRelatedState?: () => void;
-  },
-): Promise<void> {
-  if (options?.settleLayout) beginShellLayoutBusy();
-  try {
-    batch(() => {
-      setPreferences(next);
-      options?.applyRelatedState?.();
-    });
-  } finally {
-    if (options?.settleLayout) endShellLayoutBusy();
-  }
-  if (scope === "persistent-main") {
-    await persistAppStateInBackground({ layout: next });
-  }
-}
-
-function resizePreview(key: ResizeKey): number | null {
-  const current = resize();
-  return current?.key === key ? current.previewValue : null;
-}
-
-function finishResize(id: number, outcome: "commit" | "cancel"): void {
-  const current = resize();
-  if (!current || current.id !== id) return;
-  batch(() => {
-    setResize(null);
-    if (
-      outcome === "commit" &&
-      Math.abs(current.previewValue - current.startValue) >= current.movementThreshold
-    ) {
-      current.commit(current.previewValue);
-    }
-  });
-  endShellLayoutBusy();
-}
-
-function cancelActiveResize(): void {
-  const current = resize();
-  if (current) finishResize(current.id, "cancel");
-}
-
-function beginResize(
-  key: ResizeKey,
-  startValue: number,
-  normalize: (value: number) => number,
-  movementThreshold: number,
-  commitValue: (value: number) => void,
-): ResizeSession {
-  cancelActiveResize();
-  const id = ++nextResizeId;
-  const initial = normalize(Number.isFinite(startValue) ? startValue : 0);
-  setResize({
-    id,
-    key,
-    startValue: initial,
-    previewValue: initial,
-    movementThreshold,
-    commit: commitValue,
-  });
-  beginShellLayoutBusy();
-
-  return {
-    preview(value) {
-      if (!Number.isFinite(value)) return;
-      const next = normalize(value);
-      setResize((current) => {
-        if (!current || current.id !== id || current.previewValue === next) return current;
-        return {
-          ...current,
-          previewValue: next,
-        };
-      });
-    },
-    commit() {
-      finishResize(id, "commit");
-    },
-    cancel() {
-      finishResize(id, "cancel");
-    },
-  };
-}
-
-/** Peer windows seed once and keep local state. */
-export function syncLayoutFromSnapshot(): void {
-  const stored = getAppStateSnapshot().layout ?? {};
-  if (scope === "ephemeral-peer") {
-    if (peerInitialized) return;
-    setPreferences({ ...stored, mode: "inline", navCollapsed: true });
-    peerInitialized = true;
-    return;
-  }
-  setPreferences(stored);
-}
 
 export function setLayoutViewportWidth(px: number): void {
   setViewportWidthPx(Number.isFinite(px) ? Math.max(0, Math.round(px)) : 0);
@@ -438,150 +292,11 @@ export function setSplitFocusRegion(region: "stage" | "chat"): void {
   setSplitFocusRegionSignal(region);
 }
 
-function baseListPanePrefs(surface: string): DenListPanePrefs {
-  return resolveListPanePrefs(currentPreferences(), surface);
-}
-
-export function listPanePrefs(surface: string): DenListPanePrefs {
-  const base = baseListPanePrefs(surface);
-  const width = resizePreview(`pane:${surface}:width`);
-  const height = resizePreview(`pane:${surface}:height`);
-  const current = resize();
-  if (width != null) {
-    return width === PANE_HIDDEN_PX ? base : { ...base, widthPx: width };
-  }
-  if (height != null) {
-    return height === PANE_HIDDEN_PX ? base : { ...base, heightPx: height };
-  }
-  if (current?.key.startsWith(`column:${surface}:`)) {
-    const key = current.key.slice(`column:${surface}:`.length);
-    return {
-      ...base,
-      columnWidths: {
-        ...(base.columnWidths ?? {}),
-        [key]: current.previewValue,
-      },
-    };
-  }
-  return base;
-}
-
-async function writeListPane(
-  surface: string,
-  pane: DenListPanePrefs,
-): Promise<void> {
-  const next = { ...currentPreferences() };
-  const listPanes: DenListPanesPrefs = { ...(next.listPanes ?? {}) };
-  if (Object.keys(pane).length > 0) listPanes[surface] = pane;
-  else delete listPanes[surface];
-  if (Object.keys(listPanes).length > 0) next.listPanes = listPanes;
-  else delete next.listPanes;
-  await commitPreferences(next);
-}
-
-/** A pane drag has passed the point where releasing hides the pane. */
-export function listPaneHidePreviewed(
-  surface: string,
-  axis: ListPaneAxis,
-): boolean {
-  return resizePreview(`pane:${surface}:${axis}`) === PANE_HIDDEN_PX;
-}
-
-/** With `onHide`, a drag may preview and commit {@link PANE_HIDDEN_PX}. */
-export function beginListPaneResize(
-  surface: string,
-  axis: ListPaneAxis,
-  effectivePx: number,
-  bodySize?: number,
-  onHide?: () => void,
-): ResizeSession {
-  const normalize = (value: number) =>
-    onHide && value === PANE_HIDDEN_PX
-      ? value
-      : clampListPaneSizePx(surface, axis, value, bodySize);
-  return beginResize(
-    `pane:${surface}:${axis}`,
-    effectivePx,
-    normalize,
-    0.5,
-    (value) => {
-      untrack(() => {
-        if (value === PANE_HIDDEN_PX) {
-          onHide?.();
-          return;
-        }
-        const pane = baseListPanePrefs(surface);
-        void writeListPane(
-          surface,
-          axis === "width"
-            ? { ...pane, widthPx: value }
-            : { ...pane, heightPx: value },
-        );
-      });
-    },
-  );
-}
-
-export function beginListColumnResize(
-  surface: string,
-  column: string,
-  effectivePx: number,
-  width: ColumnWidth,
-): ResizeSession {
-  return beginResize(
-    `column:${surface}:${column}`,
-    effectivePx,
-    (value) => clampColumnWidthPx(width, value),
-    0.5,
-    (value) => {
-      untrack(() => {
-        const pane = baseListPanePrefs(surface);
-        void writeListPane(surface, {
-          ...pane,
-          columnWidths: { ...(pane.columnWidths ?? {}), [column]: value },
-        });
-      });
-    },
-  );
-}
-
-export async function resetListPaneSize(
-  surface: string,
-  axis: ListPaneAxis,
-): Promise<void> {
-  const pane = { ...baseListPanePrefs(surface) };
-  if (axis === "width") delete pane.widthPx;
-  else delete pane.heightPx;
-  await writeListPane(surface, pane);
-}
-
-export async function commitListSort(
-  surface: string,
-  state: SortState,
-): Promise<void> {
-  const pane = { ...baseListPanePrefs(surface) };
-  if (state) {
-    pane.sortKey = state.key;
-    pane.sortDir = state.dir;
-  } else {
-    delete pane.sortKey;
-    delete pane.sortDir;
-  }
-  await writeListPane(surface, pane);
-}
-
-export function resetLayoutStoreForTests(): void {
-  peerInitialized = false;
-  setResize(null);
-  setPreferences({
-    mode: DEFAULT_PLACEMENT,
-    workspaceOrientation: DEFAULT_WORKSPACE_ORIENTATION,
-  });
+export function resetWorkspaceLayoutForTests(): void {
   setViewportWidthPx(
     typeof window === "undefined" ? 0 : Math.round(window.innerWidth),
   );
   setSplitHostWidth(0);
   setSplitProjectIdSignal(null);
   setSplitFocusRegionSignal(SPLIT_COLUMN_DEFAULT);
-  resetShellLayoutBusyForTests();
 }
