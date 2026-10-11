@@ -39,7 +39,13 @@ func acquireCoordinatorSources(m *Host, store Store, client modelcall.LLMClient,
 		return scanWait.InFlight != nil && scanWait.InFlight(ctx, id)
 	}
 	m.Coordinator.Context = &promptsource.Context{Frame: nil, Guards: m.Coordinator.Guards, Limits: m.Limits, Loading: m.Coordinator.Loading, Pages: nil, Policy: m.ToolPolicy, Processes: m.Processes, Profiles: m.Profiles, Prompts: nil, Runtime: nil, Sessions: store, ToolContext: m.ToolContext, Tools: registry, WebResearch: nil, WorkerState: m.Workers.State, Workspace: m.Workspace, Workspaces: m.Workers.Workspaces}
-	m.Coordinator.Tools = &promptsource.Tools{Batch: m.Coordinator.Batch, DataDir: m.Workspace.DataDir, Enricher: nil, Feedback: m.Coordinator.Feedback, Frame: nil, Guards: m.Coordinator.Guards, Guidance: m.Coordinator.Guidance, History: m.Runner.History, Invocations: nil, Naming: m.Chats.Naming, Policy: m.ToolPolicy, Presence: nil, Processes: m.Processes, Projects: nil, Runtime: nil, Sessions: store, Verification: m.Verification, Visual: nil, WorkerState: m.Workers.State, Workers: nil, Workspace: m.Workspace}
+	m.Coordinator.Tools = &promptsource.Tools{
+		Results: &promptsource.ToolResults{Batch: m.Coordinator.Batch, Guards: m.Coordinator.Guards,
+			Guidance: m.Coordinator.Guidance, Policy: m.ToolPolicy, WorkerState: m.Workers.State},
+		DataDir: m.Workspace.DataDir, Feedback: m.Coordinator.Feedback, Guards: m.Coordinator.Guards,
+		History: m.Runner.History, Naming: m.Chats.Naming, Processes: m.Processes,
+		Sessions: store, Verification: m.Verification, Workspace: m.Workspace,
+	}
 	m.Coordinator.Control = &promptsource.Control{Batch: m.Coordinator.Batch, GracefulCancel: m.Workers.Cancel, Approvals: nil, Obligations: nil, Processes: m.Processes, Runtime: nil, Workflow: nil}
 	m.Coordinator.Inbox = &promptsource.Inbox{Guidance: m.Coordinator.Guidance, Submissions: m.Submissions}
 	m.Coordinator.Model = &promptsource.Model{Cost: tracker, History: m.Runner.History, LLM: client, LLMService: svc, Limits: m.Limits, Workspace: m.Workspace}
@@ -58,7 +64,7 @@ func bindCoordinatorRuntime(m *Host, store Store) {
 	m.Coordinator.Guidance.Bind(runtime.Kicks(), runtime.Anchors())
 	m.ToolPolicy.SetSurface(runtime)
 	m.Coordinator.Context.Runtime = runtime
-	m.Coordinator.Tools.Runtime = runtime
+	m.Coordinator.Tools.Results.Runtime = runtime
 	m.Coordinator.Control.Runtime = runtime
 	m.Coordinator.Assembly.Runtime = runtime
 	m.Coordinator.Loop.Runtime = runtime
