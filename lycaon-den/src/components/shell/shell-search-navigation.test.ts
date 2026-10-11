@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from "vitest";
+import { createRoot } from "solid-js";
+import { describe, expect, it, vi, onTestFinished } from "vitest";
 import { createShellStore } from "../../store/shell-store.ts";
 import { createShellSearchNavigation } from "./shell-search-navigation.ts";
 
@@ -17,9 +18,16 @@ describe("shell search navigation", () => {
     const resumeSession = vi.fn(() => restoring);
     const openWorkers = vi.fn();
     const showProjects = vi.fn();
-    const navigation = createShellSearchNavigation({
+    const navigation = createRoot((dispose) => {
+      onTestFinished(dispose);
+      return createShellSearchNavigation({
       shell, recents: { state: { recents: [recent] } } as never, closeSearch: vi.fn(), closeLauncher: vi.fn(),
       showProjects, openProject: vi.fn(), resumeSession, openWorkers,
+      projects: { state: { projects: [] } } as never, activeProject: () => undefined,
+      setNav: vi.fn(), attentionIndex: () => new Map(), securityScannersFeatureOn: () => true,
+      routeToStage: vi.fn(), selectSettingsSection: vi.fn(), openSettings: vi.fn(),
+      openStageWithPlacement: vi.fn(), openConfiguration: vi.fn(), goHome: vi.fn(),
+    });
     });
     const pending = navigation.navigateFromSearch({
       projectId: "project", sessionId: "session",

@@ -274,3 +274,26 @@ func (r *recordingWorkflowView) PolicySnapshot(context.Context, string) (toolpol
 	r.record("PolicySnapshot")
 	return toolpolicy.WorkflowSnapshot{Phase: "phase-a", AllowedAgents: []string{"coordinator"}, ManifestRules: []string{"manifest-rules.yaml"}, BlueprintPath: "plan-1", PlanContent: "plan body", Vars: map[string]any{"k": "v"}}, nil
 }
+
+func (r *recordingWorkflowView) ReconcileWorkerCycle(context.Context, string) error {
+	r.record("ReconcileWorkerCycle")
+	return nil
+}
+
+func TestWorkflowCompositionRequiresCompletionAndRecovery(t *testing.T) {
+	mgr := NewHost(store.NewMemory(), Models{Limits: settings.DefaultSessionLimits()}, nil)
+	if mgr.Workers.Results.ValidateWorkflow() == nil {
+		t.Fatal("accepted absent workflow completion services")
+	}
+	view := &recordingWorkflowView{}
+	mgr.SetWorkflowDomains(workflowDomainFixture(view))
+	testutil.FailErr(t, "validate workflow services", mgr.Workers.Results.ValidateWorkflow())
+	testutil.FailErr(t, "reconcile before coordinator request", mgr.Coordinator.Control.AssertRunnable(t.Context(), "session"))
+	if strings.Join(view.calls, ",") != "AssertSessionRunnable,ReconcileWorkerCycle" {
+		t.Fatalf("request preparation=%v", view.calls)
+	}
+	mgr.SetWorkflowDomains(nil)
+	if mgr.Workers.Results.ValidateWorkflow() == nil {
+		t.Fatal("retained detached workflow services")
+	}
+}

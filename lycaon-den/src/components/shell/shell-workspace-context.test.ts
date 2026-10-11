@@ -17,6 +17,7 @@ vi.mock("../../files/source/source-return.ts", () => ({
   returnToSource: sourceReturns.returnTo,
 }));
 vi.mock("../../platform/windows/workspace-view-registry.ts", () => ({
+  setCurrentWorkspaceContexts: vi.fn(),
   workspaceContextEqual: (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b),
   workspaceContextIsOpen: () => registry.visible,
 }));
@@ -69,9 +70,9 @@ describe("shell workspace context", () => {
     registry.placement = "titlebar";
   });
 
-  it("reads current presentation lazily and keeps the outgoing chat visible during handoff", () => {
+  it("publishes initial presentation and keeps the outgoing chat visible during handoff", () => {
     const f = fixture();
-    expect(f.readProject).not.toHaveBeenCalled();
+    expect(f.readProject).toHaveBeenCalledOnce();
     expect(f.controller.shownWorkspaceContexts()).toEqual([
       { kind: "session", projectId: "project", sessionId: "previous" },
       { kind: "stage", projectId: "project", stageId: "files" },

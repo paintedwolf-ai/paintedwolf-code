@@ -179,7 +179,7 @@ fn full_debug_logging_enabled() -> bool {
 }
 
 pub(super) fn full_debug_logging_enabled_in(config_dir: &Path) -> bool {
-    let Ok(state) = crate::read_app_state_doc(config_dir) else {
+    let Ok(state) = crate::app_state::read_app_state_doc(config_dir) else {
         return false;
     };
     state
