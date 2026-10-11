@@ -60,7 +60,11 @@ func TestIntegrityFailureQuarantinesEveryWriterDoor(t *testing.T) {
 	if _, err := store.BeginTx(t.Context(), nil); !errors.Is(err, ErrStoreIncompatible) {
 		t.Fatalf("transaction = %v", err)
 	}
-	if _, err := store.PrepareContext(t.Context(), `SELECT 1`); !errors.Is(err, ErrStoreIncompatible) {
+	rejected, err := store.PrepareContext(t.Context(), `SELECT 1`)
+	if rejected != nil {
+		defer func() { _ = rejected.Close() }()
+	}
+	if !errors.Is(err, ErrStoreIncompatible) {
 		t.Fatalf("prepare = %v", err)
 	}
 	if _, err := statement.ExecContext(t.Context()); err == nil {
