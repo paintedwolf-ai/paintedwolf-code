@@ -33,8 +33,8 @@ func seedCredentialRead(t *testing.T, body string) (string, tools.ToolContext, *
 	testutil.FailErr(t, "seed .env", os.WriteFile(filepath.Join(dir, ".env"), []byte(body), 0o600))
 	recorder := &deliveredRecorder{}
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID = "project"
-	tctx.CredentialFiles = recorder
+	tctx.Identity.ProjectID = "project"
+	tctx.Effects.CredentialFiles = recorder
 	return dir, tctx, recorder
 }
 
@@ -54,7 +54,7 @@ func TestReadDeliversCredentialFileTextToEvidence(t *testing.T) {
 	}
 	read := recorder.reads[0]
 	if read.Path != ".env" || read.RootID != "r1" || read.Content != body ||
-		read.ProjectID != "project" || read.SessionID != tctx.SessionID {
+		read.ProjectID != "project" || read.SessionID != tctx.Identity.SessionID {
 		t.Fatalf("delivered = %+v", read)
 	}
 }

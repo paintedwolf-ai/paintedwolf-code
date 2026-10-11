@@ -29,7 +29,7 @@ func (o *OrchestratorImpl) Cancel(ctx context.Context, runID string, reason Term
 	}
 	o.mu.Unlock()
 	if o.workflows != nil && workflowRunID != "" {
-		run, err := o.workflows.Cancel(ctx, workflowRunID, string(reason))
+		run, err := o.workflows.Controls.Cancel(ctx, workflowRunID, string(reason))
 		if err != nil {
 			return err
 		}

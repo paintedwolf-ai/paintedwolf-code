@@ -242,7 +242,7 @@ func TestConfinementIntegrityForeignVarFoldersWriteDenied(t *testing.T) {
 	}
 }
 
-func TestConfinementIntegrityProjectRootFilesystemRefused(t *testing.T) {
+func TestConfinementIntegrityProjectRootFilesystemAccepted(t *testing.T) {
 	srv := wiring.BuildForTest(t).Server
 	body := `{"roots":[{"path":"/"}]}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects", strings.NewReader(body))
@@ -250,13 +250,8 @@ func TestConfinementIntegrityProjectRootFilesystemRefused(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("POST /v1/projects root=/ status=%d want 400 body=%s", w.Code, w.Body.String())
-	}
-	var errResp wire.ErrorResponse
-	testutil.FailErr(t, "decode error", json.Unmarshal(w.Body.Bytes(), &errResp))
-	if errResp.Code != confine.WriteRootCodeFilesystemRoot {
-		t.Fatalf("code=%q want %q", errResp.Code, confine.WriteRootCodeFilesystemRoot)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("POST project root /: status=%d body=%s", w.Code, w.Body.String())
 	}
 
 	okDir := t.TempDir()
@@ -286,10 +281,11 @@ func TestConfinementIntegrityCompositeChain(t *testing.T) {
 		assertInProjectWriteOK(t, self, c, proj)
 	})
 
-	t.Run("b_token_in_hand_still_refuses_filesystem_root", func(t *testing.T) {
+	t.Run("b_token_in_hand_still_refuses_control_plane_root", func(t *testing.T) {
 		srv := wiring.BuildForTest(t).Server
+		cfg := os.Getenv("LYCAON_CONFIG_DIR")
 		req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects",
-			strings.NewReader(`{"roots":[{"path":"/"}]}`))
+			strings.NewReader(`{"roots":[{"path":`+jsonQuote(cfg)+`}]}`))
 		req.Header.Set("Authorization", api.TestAuthHeader())
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
@@ -299,8 +295,8 @@ func TestConfinementIntegrityCompositeChain(t *testing.T) {
 		}
 		var errResp wire.ErrorResponse
 		testutil.FailErr(t, "decode", json.Unmarshal(w.Body.Bytes(), &errResp))
-		if errResp.Code != confine.WriteRootCodeFilesystemRoot {
-			t.Fatalf("composite (b): code=%q want %q", errResp.Code, confine.WriteRootCodeFilesystemRoot)
+		if errResp.Code != confine.WriteRootCodeSecretStore {
+			t.Fatalf("composite (b): code=%q want %q", errResp.Code, confine.WriteRootCodeSecretStore)
 		}
 	})
 }

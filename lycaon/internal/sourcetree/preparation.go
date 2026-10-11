@@ -22,7 +22,7 @@ type directoryDemand struct {
 
 // A complete head wins; unfinished updates can use the last complete structure.
 func (v *View) openPreparedNavigation(ctx context.Context, root sourcecatalog.Root, rules *Rules) (*sourcecatalog.Navigation, error) {
-	navigation, err := v.catalog.OpenNavigation(ctx, v.scope.Project, root)
+	navigation, err := v.catalog.Directories.OpenNavigation(ctx, v.scope.Project, root)
 	if err != nil {
 		return nil, err
 	}
@@ -35,7 +35,7 @@ func (v *View) openPreparedNavigation(ctx context.Context, root sourcecatalog.Ro
 	if pending == 0 {
 		return navigation, nil
 	}
-	completed, err := v.catalog.OpenCompletedNavigation(ctx, v.scope.Project, root)
+	completed, err := v.catalog.Directories.OpenCompletedNavigation(ctx, v.scope.Project, root)
 	if errors.Is(err, pagedview.ErrPreparing) {
 		return navigation, nil
 	}
@@ -54,7 +54,7 @@ func (v *View) openPreparedNavigation(ctx context.Context, root sourcecatalog.Ro
 		return navigation, nil
 	}
 	_ = navigation.Close()
-	if err := v.catalog.RequestCoverage(ctx, v.scope.Project, root, "."); err != nil {
+	if err := v.catalog.Directories.RequestCoverage(ctx, v.scope.Project, root, "."); err != nil {
 		_ = completed.Close()
 		return nil, err
 	}
@@ -119,6 +119,13 @@ func (p *Projection) collectDemand(ctx context.Context, dir string, root sourcec
 		return err
 	}
 	if rule.Recursive {
+		// Explicit child disclosures must settle before the inherited parent demand;
+		// background coverage deliberately stops at lazy boundaries.
+		for _, child := range p.Rules.Branches(Address{Root: p.Root, Path: dir}) {
+			if err := p.collectDemand(ctx, child, root, demands); err != nil && !errors.Is(err, pagedview.ErrMissing) {
+				return err
+			}
+		}
 		pending, err := p.unresolved(ctx, dir)
 		if err != nil {
 			return err
@@ -195,7 +202,7 @@ func (v *View) completeCoverage(ctx context.Context) error {
 					return err
 				}
 			} else {
-				if err := v.catalog.ObserveDirectories(ctx, v.scope.Project, demand.root, []string{demand.path}, backgroundwork.PriorityInteractive); err != nil {
+				if err := v.catalog.Directories.ObserveDirectories(ctx, v.scope.Project, demand.root, []string{demand.path}, backgroundwork.PriorityInteractive); err != nil {
 					return err
 				}
 			}
@@ -207,7 +214,7 @@ func (v *View) completeCoverage(ctx context.Context) error {
 // resolves the subtree beneath it, so the opened tree finishes while collapsed
 // trees are still being discovered.
 func (v *View) awaitDisclosedSubtree(ctx context.Context, demand directoryDemand, rules *Rules) error {
-	return v.catalog.AwaitSubtree(ctx, v.scope.Project, demand.root, demand.path,
+	return v.catalog.Directories.AwaitSubtree(ctx, v.scope.Project, demand.root, demand.path,
 		func(ctx context.Context, navigation *sourcecatalog.Navigation) (bool, error) {
 			projection := Projection{Root: demand.root.ID, Navigation: navigation, Rules: rules}
 			pending, err := projection.unresolved(ctx, demand.path)

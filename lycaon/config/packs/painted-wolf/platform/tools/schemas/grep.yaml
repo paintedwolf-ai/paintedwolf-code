@@ -1,4 +1,4 @@
-description: "Search files with RE2 text patterns or tree-sitter structural patterns. Recurses under path with optional path_glob, searches ignored files unless include_ignored is false, and skips engine/VCS metadata. Wide results may return a view digest. Replaces command: rg / grep -r."
+description: "Paths accept @scratch/<path> for this chat or worker’s private working files. Search files with RE2 text patterns or tree-sitter structural patterns. Recurses under path with optional path_glob, searches ignored files unless include_ignored is false, and skips engine/VCS metadata. Wide results may return a view digest. Replaces command: rg / grep -r."
 schema:
   type: object
   properties:

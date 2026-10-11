@@ -16,7 +16,7 @@ import (
 
 var errDurableStoreUnavailable = errors.New("durable store is unavailable")
 
-func (s *Server) handleBackup(w http.ResponseWriter, r *http.Request) {
+func (s *Storage) handleBackup(w http.ResponseWriter, r *http.Request) {
 	sqlDB, dbPath, err := s.liveBackupStore()
 	if err != nil {
 		s.responses.Fail(w, wire.ApiErrorCodeBackupUnavailable, "backup needs the durable store on disk")
@@ -83,7 +83,7 @@ func unusedTempPath(dir, pattern string) (string, error) {
 	return path, nil
 }
 
-func (s *Server) liveBackupStore() (db.DBTX, string, error) {
+func (s *Storage) liveBackupStore() (db.DBTX, string, error) {
 	path := strings.TrimSpace(s.storePath)
 	if path == "" {
 		return nil, "", errDurableStoreUnavailable
@@ -96,7 +96,7 @@ type restoreTarget struct {
 	path     string
 }
 
-func (s *Server) restoreTarget() (restoreTarget, error) {
+func (s *Storage) restoreTarget() (restoreTarget, error) {
 	if s.recovery != nil {
 		path := strings.TrimSpace(s.storePath)
 		if path == "" {
@@ -111,7 +111,7 @@ func (s *Server) restoreTarget() (restoreTarget, error) {
 	return restoreTarget{snapshot: sqlDB, path: path}, nil
 }
 
-func (s *Server) handleBackupCapabilities(w http.ResponseWriter, _ *http.Request) {
+func (s *Storage) handleBackupCapabilities(w http.ResponseWriter, _ *http.Request) {
 	expanded := backup.MaxExpandedArchiveBytes
 	if expanded > math.MaxInt64 {
 		s.responses.Fail(w, wire.ApiErrorCodeBackupUnavailable, "Backup transfer limits are invalid")

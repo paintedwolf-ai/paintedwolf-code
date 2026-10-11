@@ -36,6 +36,12 @@ done
 eval "$(python3 "${ROOT}/scripts/release-metadata.py" --root "${ROOT}" --format shell)"
 VERSION="${PRODUCT_VERSION}"
 
+# Pinned shipped workflows must match their released bytes before publication.
+for sealed in "painted-wolf/security-survey security-survey v1.0.1" "painted-wolf/bugbash bugbash v1.0.1"; do
+  read -r pack workflow tag <<<"${sealed}"
+  (cd "${ROOT}/lycaon" && go run ./cmd/codegen-workflow-archive --check "${pack}" "${workflow}" "${tag}")
+done
+
 fail=0
 check_equal() {
   local label="$1" got="$2" want="$3"

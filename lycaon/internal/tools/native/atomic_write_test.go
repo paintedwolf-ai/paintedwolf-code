@@ -2,6 +2,7 @@ package native
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -118,7 +119,7 @@ func testMutationTarget(path string) mutationTarget {
 
 func assertTextWriteConflict(t *testing.T, err error) {
 	t.Helper()
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "TEXT_WRITE_CONFLICT" {
 		t.Fatalf("error = %v, want TEXT_WRITE_CONFLICT", err)
 	}

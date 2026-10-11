@@ -16,7 +16,7 @@ func TestStructuralPublicationKeepsQueuedChangesForNextPass(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "changed/removed/old.txt", "old")
 	writeIndexFile(t, root.Path, "stable/nested/keep.txt", "keep")
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get changing store", err)
 	pin, err := store.retainGeneration(headGeneration, true)
 	testutil.FailErr(t, "retain cold basis", err)
@@ -55,7 +55,7 @@ func TestStructuralPublicationKeepsQueuedChangesForNextPass(t *testing.T) {
 	if after != stable.observation {
 		t.Fatal("reconciliation rescanned unaffected directory")
 	}
-	navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open reconciled tree", err)
 	defer func() { _ = navigation.Close() }()
 	_, err = navigation.Entry(t.Context(), "changed/newdir/leaf.txt")
@@ -70,7 +70,7 @@ func TestStructuralPublicationDoesNotRequireQuietCollection(t *testing.T) {
 	for i := range 20 {
 		writeIndexFile(t, root.Path, fmt.Sprintf("d%d/file.txt", i), "source")
 	}
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get busy store", err)
 	pin, err := store.retainGeneration(headGeneration, true)
 	testutil.FailErr(t, "retain cold basis", err)
@@ -97,7 +97,7 @@ func TestStructuralPublicationDoesNotRequireQuietCollection(t *testing.T) {
 
 func TestStructuralPublicationGateCancellationKeepsReadersAvailable(t *testing.T) {
 	catalog, root := indexFixture(t)
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get publication store", err)
 	release, err := store.acquireStructurePublication(t.Context())
 	testutil.FailErr(t, "hold publication gate", err)
@@ -115,7 +115,7 @@ func TestStructuralPublicationGateCancellationKeepsReadersAvailable(t *testing.T
 
 func TestStructuralFailedCollectionRetainsPreOpenInvalidation(t *testing.T) {
 	catalog, root := indexFixture(t)
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get failed repair store", err)
 	pin, err := store.retainGeneration(headGeneration, true)
 	testutil.FailErr(t, "retain failed repair basis", err)
@@ -150,7 +150,7 @@ func TestStructuralFailedCollectionRetainsPreOpenInvalidation(t *testing.T) {
 	if recovered.Failure != "" || !recovered.Complete {
 		t.Fatalf("recovered directory kept terminal failure: %+v", recovered)
 	}
-	navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open recovered tree", err)
 	defer func() { _ = navigation.Close() }()
 	_, err = navigation.Entry(t.Context(), "missing/recovered.txt")
@@ -162,7 +162,7 @@ func TestStructuralFailedCollectionRetainsPreOpenInvalidation(t *testing.T) {
 
 func TestRepeatedInvalidationsAtCapacityStayLocal(t *testing.T) {
 	catalog, root := indexFixture(t)
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get invalidation store", err)
 	store.mu.Lock()
 	defer store.mu.Unlock()

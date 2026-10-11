@@ -1,4 +1,4 @@
-description: "Read a file and return its content or structure in JSON; unscoped large files return a structure digest. For literal content, set mode / offset / limit / ranges / symbol. Replaces command: cat / head / sed -n."
+description: "Paths accept @scratch/<path> for this chat or worker’s private working files. Read a file and return its content or structure in JSON; unscoped large files return a structure digest. For literal content, set mode / offset / limit / ranges / symbol. Replaces command: cat / head / sed -n."
 schema:
   type: object
   properties:

@@ -2,18 +2,17 @@ package loopwake
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/pkg/api"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/coordinator/kick"
-	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // drainAsyncTurns waits for host turns before temporary resources close.
@@ -21,7 +20,7 @@ func drainAsyncTurns(t *testing.T, engine *LoopEngine) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	engine.WaitForAsyncTurns(ctx)
+	engine.Turns.WaitForAsyncTurns(ctx)
 }
 
 func TestBudgetRequestRunsWhileWorkerInFlight(t *testing.T) {
@@ -34,9 +33,9 @@ func TestBudgetRequestRunsWhileWorkerInFlight(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: ws}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) {
 		return false, nil
 	}
@@ -51,7 +50,7 @@ func TestBudgetRequestRunsWhileWorkerInFlight(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
 	drainAsyncTurns(t, engine)
 	if requestKicks.Load() != 1 {
 		t.Fatalf("budget-request kicks = %d want 1 while worker running", requestKicks.Load())
@@ -77,9 +76,9 @@ func TestBudgetRequestKickCarriesRequestWhileBusy(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: ws}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.WorkerCycleIdle = func(context.Context, *api.Session, string) (bool, error) {
 		return false, nil
 	}
@@ -91,7 +90,7 @@ func TestBudgetRequestKickCarriesRequestWhileBusy(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-A", budgetRequestEnvelope("job-A"))
+	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-A", budgetRequestEnvelope("job-A"))
 	drainAsyncTurns(t, engine)
 
 	wantID := anchor.InformRender(anchor.WorkerBudgetRequested)
@@ -111,12 +110,12 @@ func TestBudgetRequestKickCarriesRequestWhileBusy(t *testing.T) {
 
 func TestBudgetRequestDeferralIsJobScoped(t *testing.T) {
 	engine := NewLoopEngine()
-	q := engine.sessionDeferredQueue("s1")
+	q := engine.Nudges.sessionDeferredQueue("s1")
 	q.push(pendingLoopWake{wake: anchor.WorkerBudgetRequested, inform: anchor.WorkerBudgetRequested, legID: "job-1"})
 	q.push(pendingLoopWake{wake: anchor.WorkerBudgetRequested, inform: anchor.WorkerBudgetRequested, legID: "job-2"})
 	q.push(pendingLoopWake{wake: anchor.LegFinished, inform: anchor.LegFinished, legID: "leg-1"})
 
-	engine.dropDeferredBudgetRequestForJob("s1", "job-1")
+	engine.Nudges.dropDeferredBudgetRequestForJob("s1", "job-1")
 
 	remaining := q.drain()
 	if len(remaining) != 2 {
@@ -138,9 +137,9 @@ func TestDrainPendingSkipsNonActionable(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: ws}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
@@ -148,13 +147,13 @@ func TestDrainPendingSkipsNonActionable(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.enqueuePending("s1", pendingLoopWake{wake: anchor.WaitTimerFired, seq: engine.nudgeSeq.Add(1)})
-	engine.DrainPending(context.Background(), "s1")
+	engine.Nudges.enqueuePending("s1", pendingLoopWake{wake: anchor.WaitTimerFired, seq: engine.Nudges.nudgeSeq.Add(1)})
+	engine.Nudges.DrainPending(context.Background(), "s1")
 
 	if prompts.Load() != 0 {
 		t.Fatalf("prompts = %d want 0 — non-actionable drained nudge bypassed the skip gate", prompts.Load())
 	}
-	if _, ok := engine.PendingForTest("s1"); ok {
+	if _, ok := engine.Nudges.Pending("s1"); ok {
 		t.Fatal("skipped pending nudge should be consumed, not left queued")
 	}
 }

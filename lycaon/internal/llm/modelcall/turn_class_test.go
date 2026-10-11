@@ -1,6 +1,8 @@
 package modelcall
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/tools"
@@ -16,14 +18,14 @@ func TestClassifyTurn(t *testing.T) {
 	}{
 		{
 			name: "no tools open",
-			req:  CompletionRequest{Debug: RequestDebug{Surface: tools.SurfaceImplementDispatch}},
+			req:  CompletionRequest{Debug: RequestDebug{Surface: toolcontract.SurfaceImplementDispatch}},
 			want: TurnClassOpen,
 		},
 		{
 			name: "dispatch orchestration",
 			req: CompletionRequest{
 				Tools: toolsPresent,
-				Debug: RequestDebug{Surface: tools.SurfaceImplementDispatch},
+				Debug: RequestDebug{Surface: toolcontract.SurfaceImplementDispatch},
 			},
 			want: TurnClassOrchestration,
 		},
@@ -31,7 +33,7 @@ func TestClassifyTurn(t *testing.T) {
 			name: "investigate orchestration",
 			req: CompletionRequest{
 				Tools: toolsPresent,
-				Debug: RequestDebug{Surface: tools.SurfaceImplementInvestigate},
+				Debug: RequestDebug{Surface: toolcontract.SurfaceImplementInvestigate},
 			},
 			want: TurnClassOrchestration,
 		},

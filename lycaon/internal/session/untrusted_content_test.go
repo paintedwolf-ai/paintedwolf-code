@@ -2,18 +2,20 @@ package session_test
 
 import (
 	"context"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestSessionUntrustedContentFreshIsClean(t *testing.T) {
@@ -82,7 +84,7 @@ func TestSessionUntrustedContentWebAndMCP(t *testing.T) {
 func TestSessionUntrustedContentSpawnInheritance(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	if err := store.UpsertEvidenceRecord(ctx, parent.ID, evidence.Record{
@@ -92,7 +94,7 @@ func TestSessionUntrustedContentSpawnInheritance(t *testing.T) {
 		testutil.FailErr(t, "upsert parent", err)
 	}
 
-	child, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "implementer", Prompt: "do work"})
+	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "implementer", Prompt: "do work"})
 	testutil.FailErr(t, "SpawnChild", err)
 	if !child.UntrustedContent {
 		t.Fatal("spawned child must be born untrusted when parent is")
@@ -103,7 +105,7 @@ func TestSessionUntrustedContentSpawnInheritance(t *testing.T) {
 
 	clean, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create clean parent", err)
-	cleanChild, err := mgr.SpawnChild(ctx, clean.ID, api.SpawnChildRequest{AgentType: "implementer", Prompt: "do work"})
+	cleanChild, err := mgr.Workers.SpawnChild(ctx, clean.ID, api.SpawnChildRequest{AgentType: "implementer", Prompt: "do work"})
 	testutil.FailErr(t, "SpawnChild clean", err)
 	if cleanChild.UntrustedContent || store.SessionUntrustedContent(cleanChild.ID) {
 		t.Fatal("child of trusted parent must stay clean until its own untrusted ingest")
@@ -113,7 +115,7 @@ func TestSessionUntrustedContentSpawnInheritance(t *testing.T) {
 func TestMergeWorkerUntrustedIntoParent(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: orchestration.ProfileWebResearcher})
@@ -127,7 +129,7 @@ func TestMergeWorkerUntrustedIntoParent(t *testing.T) {
 		testutil.FailErr(t, "upsert child url", err)
 	}
 
-	if _, err := mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		Summary:        "research done",
 		JobID:          "job-web-1",
 		ChildSessionID: child.ID,
@@ -156,7 +158,7 @@ func TestMergeWorkerUntrustedIntoParent(t *testing.T) {
 func TestMergeWorkerUntrustedIntoParentUsesChildEvidenceNotAgentName(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	child, err := store.CreateChild(ctx, parent, api.SpawnChildRequest{AgentType: "custom-all-tools"})
@@ -168,7 +170,7 @@ func TestMergeWorkerUntrustedIntoParentUsesChildEvidenceNotAgentName(t *testing.
 		testutil.FailErr(t, "upsert child url", err)
 	}
 
-	if _, err := mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		Summary: "done", JobID: "job-custom", ChildSessionID: child.ID, AgentType: "custom-all-tools",
 	}); err != nil {
 		testutil.FailErr(t, "AppendWorkerSummary", err)
@@ -181,7 +183,7 @@ func TestMergeWorkerUntrustedIntoParentUsesChildEvidenceNotAgentName(t *testing.
 	testutil.FailErr(t, "create clean parent", err)
 	cleanChild, err := store.CreateChild(ctx, cleanParent, api.SpawnChildRequest{AgentType: orchestration.ProfileWebResearcher})
 	testutil.FailErr(t, "create clean child", err)
-	if _, err := mgr.AppendWorkerSummary(ctx, cleanParent.ID, session.WorkerSummaryInput{
+	if _, err := mgr.Workers.Summaries.Append(ctx, cleanParent.ID, workeroutcomes.SummaryInput{
 		Summary: "done", JobID: "job-clean", ChildSessionID: cleanChild.ID, AgentType: orchestration.ProfileWebResearcher,
 	}); err != nil {
 		testutil.FailErr(t, "AppendWorkerSummary clean", err)

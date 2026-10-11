@@ -19,7 +19,7 @@ func TestWorkerMultiRootDiscoveryUnionFind(t *testing.T) {
 	ctx := context.Background()
 	tctx := fix.tctx("worker-2")
 	// ToolContext.Agent carries the resolved sandbox profile, not the agent role.
-	tctx.Agent = "explore_readonly"
+	tctx.Identity.Agent = "explore_readonly"
 	out, err := reg.Run(ctx, "find", map[string]any{
 		"path":      ".",
 		"name_glob": "*-sentinel.txt",
@@ -33,7 +33,11 @@ func TestWorkerMultiRootDiscoveryUnionFind(t *testing.T) {
 func TestWorkerZeroRootsStructuredReject(t *testing.T) {
 	reg := toolfixture.ContractServeBootRegistry(t)
 	ctx := context.Background()
-	tctx := tools.ToolContext{Agent: "explore_readonly", SessionID: "w0", WorkerJobID: "job"}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: "explore_readonly",
+			SessionID:   "w0",
+			WorkerJobID: "job"},
+	}
 	for _, name := range []string{"read", "find", "grep", "list_dir", "command"} {
 		t.Run(name, func(t *testing.T) {
 			args := multiRootExerciseArgs(name, "x.go", true)

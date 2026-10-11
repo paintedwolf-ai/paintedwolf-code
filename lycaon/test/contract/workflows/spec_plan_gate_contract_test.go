@@ -9,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/rules"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -62,11 +62,11 @@ func TestSpecPlanGateRejectCodesSubset(t *testing.T) {
 		{"handoff not ready", "handoff_implement", nil, scopeBreaking, nil, "", "SPEC_POSTURE_HANDOFF_FORBIDDEN", "6", "Phase 6"},
 		{"scope required research", "task", map[string]any{"agent_type": "repo-researcher"}, stubMissingScope, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1", "research_depth"},
 		{"breaking required research", "task", map[string]any{"agent_type": "repo-researcher"}, stubMissingBreaking, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1", "research_depth"},
-		{"research phase skipped", "task", map[string]any{"agent_type": "repo-researcher"}, scopeBreaking, workflow.SetHostVar(nil, "phase_skipped.research", true), "", "SPEC_POSTURE_PHASE_SKIPPED", "2", "Tier"},
-		{"stub required critic incomplete", "task", map[string]any{"agent_type": "plan-reviewer"}, "## Goal\n\nx\n", workflow.SetHostVar(nil, "phase_skipped.research", true), "", "SPEC_POSTURE_STUB_REQUIRED", "1", "critic"},
-		{"review depth required", "task", map[string]any{"agent_type": "plan-reviewer"}, scopeBreaking, workflow.SetHostVar(nil, "phase_skipped.research", true), "", "SPEC_POSTURE_REVIEW_DEPTH_REQUIRED", "4", "Plan review depth"},
+		{"research phase skipped", "task", map[string]any{"agent_type": "repo-researcher"}, scopeBreaking, runstate.SetHostVar(nil, "phase_skipped.research", true), "", "SPEC_POSTURE_PHASE_SKIPPED", "2", "Tier"},
+		{"stub required critic incomplete", "task", map[string]any{"agent_type": "plan-reviewer"}, "## Goal\n\nx\n", runstate.SetHostVar(nil, "phase_skipped.research", true), "", "SPEC_POSTURE_STUB_REQUIRED", "1", "critic"},
+		{"review depth required", "task", map[string]any{"agent_type": "plan-reviewer"}, scopeBreaking, runstate.SetHostVar(nil, "phase_skipped.research", true), "", "SPEC_POSTURE_REVIEW_DEPTH_REQUIRED", "4", "Plan review depth"},
 		{"research required before critic", "task", map[string]any{"agent_type": "plan-reviewer"}, expandPlan, nil, "expand", "SPEC_POSTURE_RESEARCH_REQUIRED", "2", "research"},
-		{"critic phase skipped", "task", map[string]any{"agent_type": "plan-reviewer"}, expandPlan, workflow.SetHostVar(workflow.SetHostVar(nil, "phase_skipped.review", true), "research_satisfied", true), "", "SPEC_POSTURE_PHASE_SKIPPED", "5", "critics"},
+		{"critic phase skipped", "task", map[string]any{"agent_type": "plan-reviewer"}, expandPlan, runstate.SetHostVar(runstate.SetHostVar(nil, "phase_skipped.review", true), "research_satisfied", true), "", "SPEC_POSTURE_PHASE_SKIPPED", "5", "critics"},
 		{"handoff not approved", "handoff_implement", nil, expandApproved, nil, "approve", "SPEC_POSTURE_HANDOFF_FORBIDDEN", "6", "approval"},
 		{"research stub required", "task", map[string]any{"agent_type": "repo-researcher"}, stubInvalid, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1", "research"},
 		{"critic stub required", "task", map[string]any{"agent_type": "plan-reviewer"}, stubInvalid, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1", "critic"},

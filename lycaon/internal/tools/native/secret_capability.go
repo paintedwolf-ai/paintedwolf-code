@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
 
@@ -47,8 +48,8 @@ func generateSecret(ctx context.Context, service *secretcap.Service, args map[st
 		return "", err
 	}
 	meta, err := service.Generate(ctx, secretcap.GenerateRequest{
-		ProjectID: tctx.ProjectID, ChatSessionID: tctx.ChatSessionID(), SessionID: tctx.SessionID,
-		OperationID: tctx.ToolCallID, Name: name, Purpose: purpose, Scope: scope, Format: format,
+		ProjectID: tctx.Identity.ProjectID, ChatSessionID: tctx.ChatSessionID(), SessionID: tctx.Identity.SessionID,
+		OperationID: tctx.Identity.ToolCallID, Name: name, Purpose: purpose, Scope: scope, Format: format,
 		Bytes: byteCount, AgentUseTTL: time.Duration(agentUseTTLSeconds) * time.Second,
 	})
 	if err != nil {
@@ -77,7 +78,7 @@ func secretCapabilityFailure(err error) error {
 	case errors.Is(err, secretcap.ErrInvalidGenerate):
 		code, retryable = "SECRET_GENERATE_INVALID", true
 	}
-	reject := &tools.ToolReject{Code: code, Retryable: retryable}
+	reject := &toolrejection.ToolReject{Code: code, Retryable: retryable}
 	var invalid *secretcap.ValidationError
 	if code == "SECRET_GENERATE_INVALID" && errors.As(err, &invalid) {
 		reject.Data = map[string]any{"field": invalid.Field, "reason": invalid.Reason}
@@ -114,7 +115,7 @@ func secretGenerateInteger(args map[string]any, field string, minimum, maximum, 
 }
 
 func invalidSecretGenerateInteger(field string, minimum, maximum int) error {
-	return &tools.ToolReject{Code: "SECRET_GENERATE_INVALID", Retryable: true, Data: map[string]any{"field": field, "reason": "must be an integer within the declared bounds", "min": minimum, "max": maximum}}
+	return &toolrejection.ToolReject{Code: "SECRET_GENERATE_INVALID", Retryable: true, Data: map[string]any{"field": field, "reason": "must be an integer within the declared bounds", "min": minimum, "max": maximum}}
 }
 
 func secretGenerateString(args map[string]any, field string, optional bool) (string, error) {
@@ -124,7 +125,7 @@ func secretGenerateString(args map[string]any, field string, optional bool) (str
 	}
 	value, ok := raw.(string)
 	if !ok || strings.TrimSpace(value) == "" {
-		return "", &tools.ToolReject{Code: "SECRET_GENERATE_INVALID", Retryable: true, Data: map[string]any{"field": field, "reason": "must be a nonempty string when supplied"}}
+		return "", &toolrejection.ToolReject{Code: "SECRET_GENERATE_INVALID", Retryable: true, Data: map[string]any{"field": field, "reason": "must be a nonempty string when supplied"}}
 	}
 	return value, nil
 }
@@ -137,7 +138,7 @@ func GenerateHandler(service *secretcap.Service) tools.ToolHandler {
 
 func ListHandler(service *secretcap.Service) tools.ToolHandler {
 	return func(ctx context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
-		items, err := service.List(ctx, tctx.ProjectID, tctx.ChatSessionID())
+		items, err := service.List(ctx, tctx.Identity.ProjectID, tctx.ChatSessionID())
 		if err != nil {
 			return "", secretCapabilityFailure(err)
 		}
@@ -149,7 +150,7 @@ func ListHandler(service *secretcap.Service) tools.ToolHandler {
 func RevokeHandler(service *secretcap.Service) tools.ToolHandler {
 	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		reference, _ := args["reference"].(string)
-		meta, err := service.RevokeByAgent(ctx, tctx.ProjectID, tctx.ChatSessionID(), reference)
+		meta, err := service.RevokeByAgent(ctx, tctx.Identity.ProjectID, tctx.ChatSessionID(), reference)
 		if err != nil {
 			return "", secretCapabilityFailure(err)
 		}

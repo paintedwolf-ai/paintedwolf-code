@@ -15,7 +15,7 @@ import (
 // maxEventClientID bounds the client identity a stream may name.
 const maxEventClientID = 100
 
-func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+func (s *Activity) handleEvents(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	projectID := strings.TrimSpace(query.Get("project_id"))
 	after := strings.TrimSpace(query.Get("after"))
@@ -58,8 +58,8 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	defer unsubscribe()
 
 	// An editing lease lives only as long as its holder's stream.
-	if s.Sources.EditorClients != nil && clientID != "" {
-		defer s.Sources.EditorClients.Connected(clientID)()
+	if s.editorClients != nil && clientID != "" {
+		defer s.editorClients.Connected(clientID)()
 	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
@@ -70,7 +70,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		if s.projectLiveness != nil {
 			defer s.projectLiveness.ClaimWorkspace(projectID)()
 		}
-		s.Sources.ScheduleSourceWatch(r.Context(), projectID)
+		s.scheduleSourceWatch(r.Context(), projectID)
 	}
 
 	if _, err := fmt.Fprintf(w, ": connected\n\n"); err != nil {

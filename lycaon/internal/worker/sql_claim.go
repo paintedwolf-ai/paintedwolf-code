@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -92,7 +93,7 @@ func (s *SQLStore) claimJob(ctx context.Context, id string, req ClaimRequest, ma
 		if err != nil {
 			return err
 		}
-		task, err = workerTaskFromRow(ctx, tx, row)
+		task, err = jobstate.FromRow(ctx, tx, row)
 		return err
 	})
 	if db.IsNoRows(claimErr) {

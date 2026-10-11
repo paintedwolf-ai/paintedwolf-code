@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -62,7 +62,7 @@ func TestChmodToolRejects777(t *testing.T) {
 		"paths": []any{"a.txt"},
 		"mode":  "777",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "CHMOD_MODE_DENIED" {
 		t.Fatalf("err = %v want CHMOD_MODE_DENIED", err)
 	}
@@ -78,7 +78,7 @@ func TestChmodToolRejectsSetuidOctal(t *testing.T) {
 		"paths": []any{"a.txt"},
 		"mode":  "4755",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "CHMOD_SPECIAL_BIT_DENIED" {
 		t.Fatalf("err = %v want CHMOD_SPECIAL_BIT_DENIED", err)
 	}
@@ -97,7 +97,7 @@ func TestChmodToolRejectsGitPath(t *testing.T) {
 		"paths": []any{".git/config"},
 		"mode":  "+x",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
 		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED", err)
 	}
@@ -114,7 +114,7 @@ func TestChmodToolRejectsBulk(t *testing.T) {
 		"paths": paths,
 		"mode":  "+x",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "CHMOD_BULK_DENIED" {
 		t.Fatalf("err = %v want CHMOD_BULK_DENIED", err)
 	}
@@ -127,7 +127,7 @@ func TestChmodToolRejectsNotFound(t *testing.T) {
 		"paths": []any{"missing.sh"},
 		"mode":  "+x",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "CHMOD_NOT_FOUND" {
 		t.Fatalf("err = %v want CHMOD_NOT_FOUND", err)
 	}
@@ -177,7 +177,7 @@ func TestDeleteToolFilesOnlyRejectsEmptyDir(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"paths": []any{"empty"}, "files_only": true,
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "DELETE_IS_DIRECTORY" {
 		t.Fatalf("err = %v want DELETE_IS_DIRECTORY", err)
 	}
@@ -199,7 +199,7 @@ func TestDeleteToolRejectsNonEmptyDir(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"paths": []any{"pkg"},
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "DELETE_NOT_EMPTY" {
 		t.Fatalf("err = %v want DELETE_NOT_EMPTY", err)
 	}
@@ -213,7 +213,7 @@ func TestDeleteToolRejectsBulk(t *testing.T) {
 	}
 	tool := &DeleteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{"paths": paths}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "DELETE_BULK_DENIED" {
 		t.Fatalf("err = %v want DELETE_BULK_DENIED", err)
 	}
@@ -225,7 +225,7 @@ func TestDeleteToolRejectsNotFound(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"paths": []any{"missing.go"},
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "DELETE_NOT_FOUND" {
 		t.Fatalf("err = %v want DELETE_NOT_FOUND", err)
 	}
@@ -243,14 +243,14 @@ func TestDeleteToolRejectsGitPath(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"paths": []any{".git/HEAD"},
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" || reject.Data["class"] != "metadata" {
 		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED for repository metadata", err)
 	}
 }
 
 func TestChmodRecoveryModesMatchAcceptedPermissions(t *testing.T) {
-	reject := tools.AsToolReject(chmodModeDenied("777"))
+	reject := toolrejection.AsToolReject(chmodModeDenied("777"))
 	modes, ok := reject.Data["chmod_allowed_modes"].([]string)
 	if !ok || len(modes) == 0 {
 		t.Fatalf("missing recoverable modes: %+v", reject.Data)

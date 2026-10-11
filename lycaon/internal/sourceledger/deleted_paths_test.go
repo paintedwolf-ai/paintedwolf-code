@@ -12,7 +12,8 @@ func TestDeletedPathsScopePaginationAndCurrentOccupant(t *testing.T) {
 	checkout := sourcebranch.ForWorktree("checkout")
 	record := func(branch sourcebranch.ID, path string, op api.SourceChangeOp, origin api.SourceChangeOrigin) {
 		t.Helper()
-		input := RecordInput{ProjectID: "p1", RootID: "r1", Path: path, BranchID: branch, Op: op, Origin: origin, SessionID: "chat"}
+		input := RecordInput{
+			RecordLocation: RecordLocation{RootID: "r1", Path: path}, ProjectID: "p1", BranchID: branch, Op: op, Origin: origin, SessionID: "chat"}
 		if op == api.SourceChangeOpDelete {
 			input.Before = []byte("old\n")
 		} else {
@@ -30,7 +31,7 @@ func TestDeletedPathsScopePaginationAndCurrentOccupant(t *testing.T) {
 		before := int64(0)
 		found := make(map[string]bool)
 		for {
-			page, err := store.DeletedPaths(ctx, "p1", baseline, 1, before)
+			page, err := store.History.DeletedPaths(ctx, "p1", baseline, 1, before)
 			testutil.FailErr(t, "read deleted paths", err)
 			for _, path := range page.Paths {
 				found[path.Path] = true
@@ -47,7 +48,7 @@ func TestDeletedPathsScopePaginationAndCurrentOccupant(t *testing.T) {
 			t.Fatalf("without user=%v paths=%v", withoutUser, found)
 		}
 	}
-	page, err := store.DeletedPaths(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "chat", RootBranches: map[string]sourcebranch.ID{"r1": checkout}}, 200, 0)
+	page, err := store.History.DeletedPaths(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "chat", RootBranches: map[string]sourcebranch.ID{"r1": checkout}}, 200, 0)
 	testutil.FailErr(t, "read checkout deletions", err)
 	if len(page.Paths) != 1 || page.Paths[0].Path != "checkout.go" {
 		t.Fatalf("checkout paths=%+v", page)

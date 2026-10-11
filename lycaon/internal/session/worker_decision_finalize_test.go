@@ -16,7 +16,7 @@ func TestWorkerFinalizationSuspendsDespiteBlockedCompletion(t *testing.T) {
 	opts := finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
 		DecisionPending: func(context.Context, string) bool { decisionChecks++; return true },
 	})
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, "child", "implementer", opts)
+	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, resolver, "child", "implementer", opts)
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
 	t.Logf("status=%s provenance=%s pending-decision checks=%d", out.Status, out.Provenance, decisionChecks)
 	if out.Status != "needs_decision" || decisionChecks == 0 {
@@ -29,7 +29,7 @@ func TestDecisionRequestedDuringCloseoutStopsFinalizationPrompts(t *testing.T) {
 	opts := finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{
 		DecisionPending: func(context.Context, string) bool { return resolver.prompts > 0 },
 	})
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, "child", "implementer", opts)
+	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, resolver, "child", "implementer", opts)
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
 	if out.Status != "needs_decision" || resolver.prompts != 1 {
 		t.Fatalf("status=%s prompts=%d", out.Status, resolver.prompts)

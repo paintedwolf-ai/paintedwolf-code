@@ -4,13 +4,13 @@ const ApprovalGrantCategoryExecutionCapability = "execution_capability"
 
 // ExecutionCapabilityForAction uses the resolved boundary and process operation.
 func ExecutionCapabilityForAction(action ProposedAction) string {
-	if action.Contained.HostExecution {
+	if action.Execution.Contained.HostExecution {
 		return "host_execution"
 	}
-	if action.Contained.ProcessControl {
+	if action.Execution.Contained.ProcessControl {
 		return "process_control"
 	}
-	switch action.ProcessAccess {
+	switch action.Execution.ProcessAccess {
 	case "list":
 		return "process_list"
 	case "signal":

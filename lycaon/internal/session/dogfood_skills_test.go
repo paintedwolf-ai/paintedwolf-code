@@ -183,13 +183,13 @@ func TestProjectSkillFixtureGateMatrix(t *testing.T) {
 			}
 			m.SetProjectRegistry(reg)
 			m.SetEffectiveCatalogDeps("", extpacks.Active(), surfaces)
-			m.SetSkillsGate(&settings.ProjectSurfaceGate{
+			m.Profiles.SetSkillsGate(&settings.ProjectSurfaceGate{
 				Surface:  projectcontrib.SurfaceSkills,
 				Surfaces: surfaces,
 				Projects: reg,
 			})
 
-			loaded, _ := m.EffectiveSkills(ctx, p.ID, []string{root})
+			loaded, _ := m.Profiles.EffectiveSkills(ctx, p.ID, []string{root})
 			found := map[string]bool{}
 			for _, sk := range loaded {
 				if sk.Project && (sk.Name == primaryTestSkill || sk.Name == secondaryTestSkill) {

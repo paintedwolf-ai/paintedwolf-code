@@ -2,6 +2,7 @@ package survey
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
@@ -27,7 +27,7 @@ func BenchmarkGrepEngine_PrefilterDominatedTree(b *testing.B) {
 		ProjectRootRequired: true,
 		RejectSymlinkEscape: true,
 	}, []sandbox.ToolProfile{{
-		ID:    tools.DefaultToolProfileID,
+		ID:    toolprofiles.DefaultToolProfileID,
 		Tools: map[string]bool{"grep": true, "read": true},
 	}})
 	tool := &GrepTool{Boundary: boundary}
@@ -71,7 +71,7 @@ func BenchmarkGrepEngine_ArtifactRepository(b *testing.B) {
 		}
 	}
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
-		ID: tools.DefaultToolProfileID, Tools: map[string]bool{"grep": true, "read": true},
+		ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"grep": true, "read": true},
 	}})
 	tool := &GrepTool{Boundary: boundary}
 	filter, err := sandbox.CompileEntryGlob("**/*.{yml,yaml,sh,json,toml,go,rs,ts}")
@@ -130,7 +130,7 @@ func BenchmarkGrepFileCost(b *testing.B) {
 		return nil
 	}))
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
-		ID: tools.DefaultToolProfileID, Tools: map[string]bool{"grep": true, "read": true},
+		ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"grep": true, "read": true},
 	}})
 	tctx := nativefixture.Context(dir)
 	ctx := context.Background()

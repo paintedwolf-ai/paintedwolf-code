@@ -185,6 +185,9 @@ components:
         sends the word under the caret; the host narrows whole-word search
         hits to AST-confirmed declarations. Empty symbol is a client no-op.
       properties:
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
         root_id:
           type: string
           format: uuid

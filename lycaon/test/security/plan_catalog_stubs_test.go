@@ -16,7 +16,7 @@ import (
 func TestResearchDepthNoneSetsPlanCatalogPredicate(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
-	workflowStore := h.WorkflowMgr.Store
+	workflowStore := h.Workflows.Manager.Store
 	projectDir := t.TempDir()
 	sess := createSessionHTTP(t, srv, projectDir)
 
@@ -38,7 +38,7 @@ func TestResearchDepthNoneSetsPlanCatalogPredicate(t *testing.T) {
 	}
 	run = completePlanDepthAtNoneHTTP(t, h, run.ID, "research")
 
-	vars, err := workflowStore.GetScaffoldVars(t.Context(), run.ID)
+	vars, err := workflowStore.Runs.GetScaffoldVars(t.Context(), run.ID)
 	testutil.FailErr(t, "workflowStore.GetScaffoldVars failed", err)
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)

@@ -296,7 +296,7 @@ func (b *Boundary) resolveAbs(projectDir, relPath string, evalSymlinks bool) (st
 		}
 		rel, err := filepath.Rel(root, clean)
 		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-			return "", fmt.Errorf("path %q escapes project boundary", relPath)
+			return "", fmt.Errorf("%w: %q", ErrPathEscape, relPath)
 		}
 		full := clean
 		if evalSymlinks {
@@ -317,7 +317,7 @@ func (b *Boundary) resolveAbs(projectDir, relPath string, evalSymlinks bool) (st
 		return "", fmt.Errorf("path resolution failed: %w", err)
 	}
 	if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return "", fmt.Errorf("path %q escapes project boundary", relPath)
+		return "", fmt.Errorf("%w: %q", ErrPathEscape, relPath)
 	}
 
 	if evalSymlinks {
@@ -360,7 +360,7 @@ func canonicalizeWithinRoot(root, full, relPath string) (string, error) {
 	}
 	rel, err := filepath.Rel(root, resolved)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-		return "", fmt.Errorf("path %q escapes project boundary via symlink", relPath)
+		return "", fmt.Errorf("%w via symlink: %q", ErrPathEscape, relPath)
 	}
 	return resolved, nil
 }

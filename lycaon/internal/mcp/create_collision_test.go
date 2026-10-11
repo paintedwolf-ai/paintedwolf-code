@@ -13,16 +13,16 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newCreateRegistry(t *testing.T, distroYAML, globalPath string) *mcp.RegistryImpl {
+func newCreateRegistry(t *testing.T, distroYAML, globalPath string) *mcp.Runtime {
 	t.Helper()
 	stageDistro(t, distroYAML)
-	reg, err := mcp.NewRegistryImpl(mcp.RegistryOptions{
+	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		GlobalOverridePath: globalPath,
 		Connector:          &mcp.MockConnector{},
 	})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	reg.SetToolRegistry(tools.NewDefaultRegistry())
-	testutil.FailErr(t, "Load", reg.Load(context.Background()))
+	testutil.FailErr(t, "NewRuntime", err)
+	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())
+	testutil.FailErr(t, "Load", reg.Catalog.Load(context.Background()))
 	return reg
 }
 
@@ -38,16 +38,16 @@ func TestCreateProviderRejectsIDClaimedByRejectedRow(t *testing.T) {
 	reg := newCreateRegistry(t, "providers: []\n", globalPath)
 
 	rejected := false
-	for _, row := range reg.ListProviders(context.Background(), mcp.CallScope{}) {
+	for _, row := range reg.Catalog.ListProviders(context.Background(), mcp.CallScope{}) {
 		if row.ID == "team" && row.Status == api.McpStatusRejected {
 			rejected = true
 		}
 	}
 	if !rejected {
-		t.Fatalf("fixture must produce a rejected team row: %+v", reg.ListProviders(context.Background(), mcp.CallScope{}))
+		t.Fatalf("fixture must produce a rejected team row: %+v", reg.Catalog.ListProviders(context.Background(), mcp.CallScope{}))
 	}
 
-	_, err := reg.CreateProvider(context.Background(), mcp.CallScope{}, api.CreateMcpProviderRequest{
+	_, err := reg.Administration.CreateProvider(context.Background(), mcp.CallScope{}, api.CreateMcpProviderRequest{
 		Source: "custom",
 		ID:     "team",
 		URL:    "http://127.0.0.1:8765/mcp",
@@ -69,7 +69,7 @@ func TestCreateProviderRollsBackRejectedWrite(t *testing.T) {
 	globalPath := filepath.Join(t.TempDir(), "mcp.yaml")
 	reg := newCreateRegistry(t, "providers: []\n", globalPath)
 
-	_, err := reg.CreateProvider(context.Background(), mcp.CallScope{}, api.CreateMcpProviderRequest{
+	_, err := reg.Administration.CreateProvider(context.Background(), mcp.CallScope{}, api.CreateMcpProviderRequest{
 		Source: "custom",
 		ID:     "team",
 		URL:    "http://intel.example/mcp",
@@ -77,7 +77,7 @@ func TestCreateProviderRollsBackRejectedWrite(t *testing.T) {
 	if !mcp.IsAdminCode(err, mcp.RejectRemoteRequiresHTTPS) {
 		t.Fatalf("remote http create must be refused, got %v", err)
 	}
-	for _, row := range reg.ListProviders(context.Background(), mcp.CallScope{}) {
+	for _, row := range reg.Catalog.ListProviders(context.Background(), mcp.CallScope{}) {
 		if row.ID == "team" {
 			t.Fatalf("refused create left a row behind: %+v", row)
 		}
@@ -86,7 +86,7 @@ func TestCreateProviderRollsBackRejectedWrite(t *testing.T) {
 		t.Fatalf("refused create left an overlay row on disk: %s", data)
 	}
 
-	row, err := reg.CreateProvider(context.Background(), mcp.CallScope{}, api.CreateMcpProviderRequest{
+	row, err := reg.Administration.CreateProvider(context.Background(), mcp.CallScope{}, api.CreateMcpProviderRequest{
 		Source: "custom",
 		ID:     "team",
 		URL:    "https://intel.example/mcp",

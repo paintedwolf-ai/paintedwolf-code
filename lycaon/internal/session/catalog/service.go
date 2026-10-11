@@ -20,6 +20,9 @@ type SessionReader interface {
 }
 type Service struct {
 	work                    workscope.Group
+	lifecycleMu             sync.Mutex
+	stopped                 bool
+	releaseRefresher        func()
 	store                   SessionReader
 	projects                project.Registry
 	catalogMu               sync.RWMutex
@@ -38,14 +41,31 @@ func (m *Service) Configure(moduleRoot string, boot *extpacks.EffectiveCatalog, 
 	if m == nil {
 		return
 	}
+	m.lifecycleMu.Lock()
+	defer m.lifecycleMu.Unlock()
+	if m.stopped {
+		return
+	}
+	if m.releaseRefresher != nil {
+		m.releaseRefresher()
+	}
 	m.catalogModuleRoot = strings.TrimSpace(moduleRoot)
 	m.bootCatalog = boot
 	m.trustSurfaces = surfaces
-	extpacks.SetActiveRefresher(m.reinstallActive)
+	m.releaseRefresher = extpacks.SetActiveRefresher(m.reinstallActive)
 }
 
 // Stop cancels detached resolutions and prevents new catalog work.
-func (m *Service) Stop() { m.work.Stop() }
+func (m *Service) Stop() {
+	m.lifecycleMu.Lock()
+	m.stopped = true
+	if m.releaseRefresher != nil {
+		m.releaseRefresher()
+		m.releaseRefresher = nil
+	}
+	m.lifecycleMu.Unlock()
+	m.work.Stop()
+}
 
 // Wait joins resolutions before their device dependencies are released.
 func (m *Service) Wait(ctx context.Context) error { return m.work.Wait(ctx) }

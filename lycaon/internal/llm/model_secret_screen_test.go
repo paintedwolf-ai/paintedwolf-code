@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"strings"
 	"testing"
 
@@ -305,8 +306,8 @@ func TestModelSecretScreenWithoutAskFaults(t *testing.T) {
 }
 
 func TestModelSecretScreenRelaysCompletedPublicFetchWithoutApproval(t *testing.T) {
-	exec := tools.NewDefaultToolExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	screen := NewModelSecretScreen(modelScreenMatcher(t), exec.AskSecretScreen)
+	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
+	screen := NewModelSecretScreen(modelScreenMatcher(t), exec.Secrets.AskSecretScreen)
 	req := modelcall.CompletionRequest{
 		Messages: []api.Message{{
 			Role:    api.MessageRoleTool,
@@ -346,8 +347,8 @@ func TestModelSecretScreenCarriesDestinationTrustOnTheAlert(t *testing.T) {
 
 // Trusted destinations bypass the approval card.
 func TestModelSecretScreenTrustedDestinationSendsUnchangedWithoutACard(t *testing.T) {
-	exec := tools.NewDefaultToolExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	screen := NewModelSecretScreen(modelScreenMatcher(t), exec.AskSecretScreen)
+	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
+	screen := NewModelSecretScreen(modelScreenMatcher(t), exec.Secrets.AskSecretScreen)
 	req := modelSecretRequest()
 
 	got, err := screen.Screen(context.Background(), ScreenDestination{ID: "ollama-1", Trusted: true}, req)
@@ -375,8 +376,8 @@ func TestModelSecretScreenTrustedDestinationStillWithholdsNonDisclosableValues(t
 			Reference: reference, NonDisclosable: true,
 		}}
 	})
-	exec := tools.NewDefaultToolExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	screen := NewModelSecretScreen(m, exec.AskSecretScreen)
+	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
+	screen := NewModelSecretScreen(m, exec.Secrets.AskSecretScreen)
 	req := modelcall.CompletionRequest{
 		Messages: []api.Message{{
 			Role:    api.MessageRoleTool,

@@ -53,7 +53,10 @@ func TestSentHeadersStateReferencesAndSchemeNotCredentials(t *testing.T) {
 			}))
 			resolved, err := service.Resolve(t.Context(), args, secretcap.ResolveContext{ProjectID: testdbseed.DefaultProjectID, ToolName: "http_request", ToolCallID: tc.name})
 			testutil.FailErr(t, "resolve request", err)
-			out, err := registry.Run(t.Context(), "http_request", resolved.Arguments, tools.ToolContext{CanonicalArgs: args, Secrets: resolved})
+			out, err := registry.Run(t.Context(), "http_request", resolved.Arguments, tools.ToolContext{
+				Effects: tools.InvocationEffects{CanonicalArgs: args,
+					Secrets: resolved},
+			})
 			resolved.Finish(t.Context())
 			testutil.FailErr(t, "send request", err)
 
@@ -102,7 +105,10 @@ func TestFinalURLStatesSecretReferencesAndKeepsTheRedirectChain(t *testing.T) {
 	}))
 	resolved, err := service.Resolve(t.Context(), args, secretcap.ResolveContext{ProjectID: testdbseed.DefaultProjectID, ToolName: "http_request", ToolCallID: "final-url"})
 	testutil.FailErr(t, "resolve request", err)
-	out, err := registry.Run(t.Context(), "http_request", resolved.Arguments, tools.ToolContext{CanonicalArgs: args, Secrets: resolved})
+	out, err := registry.Run(t.Context(), "http_request", resolved.Arguments, tools.ToolContext{
+		Effects: tools.InvocationEffects{CanonicalArgs: args,
+			Secrets: resolved},
+	})
 	resolved.Finish(t.Context())
 	testutil.FailErr(t, "send request", err)
 

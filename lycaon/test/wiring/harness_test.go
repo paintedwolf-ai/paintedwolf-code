@@ -22,17 +22,17 @@ func TestBuildForTestComposition(t *testing.T) {
 	h := BuildForTest(t, WithRecordingLLM(), WithManifestRegistry(map[string]workflowdef.Manifest{
 		manifest.ID + "@" + manifest.Version: manifest,
 	}))
-	if h.Server == nil || h.SessionMgr == nil || h.WorkflowMgr == nil || h.DB == nil || h.ToolRegistry == nil {
+	if h.Server == nil || h.Sessions.Manager == nil || h.Workflows.Manager == nil || h.DB == nil || h.ToolRegistry == nil {
 		t.Fatalf("incomplete harness composition: %+v", h)
 	}
-	if h.SessionMgr.PromptToolPolicy() == nil {
+	if h.Sessions.Manager.Coordinator.Guards.Policy() == nil {
 		t.Fatal("rule engine required for posture-aware prompts")
 	}
 	if h.Recording == nil {
 		t.Fatal("recording client required")
 	}
-	got, err := h.WorkflowMgr.Manifests.Get(manifest.ID, manifest.Version)
-	testutil.FailErr(t, "h.WorkflowMgr.Manifests.Get failed", err)
+	got, err := h.Workflows.Manager.Resolver.Overlay.Get(manifest.ID, manifest.Version)
+	testutil.FailErr(t, "h.Workflows.Manager.Resolver.Overlay.Get failed", err)
 	if got.ID != manifest.ID {
 		t.Fatalf("manifest = %+v", got)
 	}
@@ -46,18 +46,18 @@ func TestBuildForTestBackgroundWorkersCompleteJob(t *testing.T) {
 	dir := h.ProjectDir(t, "worker")
 	testdbseed.InsertProjectRoot(t, h.DB, testdbseed.DefaultProjectID, dir)
 
-	r, err := h.DelegationMgr.Create(ctx, wire.CreateDelegationRequest{
+	r, err := h.Delegations.Manager.Create(ctx, wire.CreateDelegationRequest{
 		ProjectID: testdbseed.DefaultProjectID,
 		Task:      "implement feature",
 		Strategy:  wire.HuntStrategyFileBased,
 	})
-	testutil.FailErr(t, "h.DelegationMgr.Create failed", err)
-	if _, err := h.DelegationMgr.DispatchLeg(ctx, r.ID, r.Legs[0].ID, ""); err != nil {
-		testutil.FailErr(t, "h.DelegationMgr.DispatchLeg failed", err)
+	testutil.FailErr(t, "h.Delegations.Manager.Create failed", err)
+	if _, err := h.Delegations.Manager.DispatchLeg(ctx, r.ID, r.Legs[0].ID, ""); err != nil {
+		testutil.FailErr(t, "h.Delegations.Manager.DispatchLeg failed", err)
 	}
 
 	testutil.WaitFor(t, 8*time.Second, func() bool {
-		st, err := h.DelegationMgr.GetStatus(ctx, r.ID)
+		st, err := h.Delegations.Manager.GetStatus(ctx, r.ID)
 		return err == nil && st.Phase == wire.DelegationPhaseDone
 	})
 }

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -36,7 +37,7 @@ type testReplaceStore struct {
 }
 
 func (s testReplaceStore) ReadReplaceContent(rootID, path string) (ReplaceContentRead, error) {
-	read, err := project.ReadProjectSource(s.project, project.SourceReadRequest{
+	read, err := projectsource.ReadProjectSource(s.project, projectsource.SourceReadRequest{
 		Path: path, RootID: rootID,
 	})
 	if err != nil {
@@ -202,7 +203,7 @@ func TestPlanReplacePreservesSelfIdentifyingEncodings(t *testing.T) {
 			path := filepath.Join(dir, "wide.txt")
 			testutil.FailErr(t, "write fixture", os.WriteFile(path, disk, 0o644))
 
-			read, err := project.ReadProjectSource(p, project.SourceReadRequest{Path: "wide.txt", RootID: rootID})
+			read, err := projectsource.ReadProjectSource(p, projectsource.SourceReadRequest{Path: "wide.txt", RootID: rootID})
 			testutil.FailErr(t, "read fixture", err)
 			result, err := PlanReplace(ReplacePlanRequest{
 				Query:       TextExpr{Text: "old"},

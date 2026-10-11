@@ -230,7 +230,20 @@ class HostedVerificationTests(unittest.TestCase):
     def test_resource_line_reports_memory_disk_and_largest_processes(self):
         line = ci.resource_line()
         self.assertRegex(line, r"available \d+ MiB, swap free \d+ MiB; disk free / \d+ GiB")
-        self.assertRegex(line, r"largest \S+\[\d+\] \d+ MiB")
+        self.assertRegex(line, r"largest .+\[\d+\] \d+ MiB")
+
+    def test_resource_line_preserves_process_names_with_spaces(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            proc = root / "proc"
+            process = proc / "123"
+            process.mkdir(parents=True)
+            (proc / "meminfo").write_text("MemAvailable: 2048 kB\nSwapFree: 1024 kB\n")
+            (process / "status").write_text("Name:\tIsolated Web Co\nVmRSS:\t3072 kB\n")
+            with patch.object(ci, "Path", side_effect=lambda path: root / path.lstrip("/")):
+                line = ci.resource_line()
+            self.assertIn("available 2 MiB, swap free 1 MiB", line)
+            self.assertIn("largest Isolated Web Co[123] 3 MiB", line)
 
     def test_sharded_lane_expands_into_jobs_that_each_select_their_slice(self):
         count = ci.lanes()["race"]["shards"]

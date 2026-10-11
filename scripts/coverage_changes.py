@@ -1,7 +1,7 @@
 """Coverage of the statements a change adds or modifies.
 
 `go` measures each changed package with its own short tests, then measures a
-package that falls short again with the tests of the packages that import it,
+package that falls short again with the short tests that transitively reach it,
 crediting coverage across them. `den` runs the Vitest tests related to the
 changed files and measures those files. A unit (a Go package, a Den file)
 fails when more than `grace` of its changed statements are uncovered and fewer
@@ -90,15 +90,28 @@ def exempt_packages():
 
 
 def go_packages():
-    fields = ("{{.ImportPath}}\t{{.Dir}}\t{{join .Imports \" \"}} {{join .TestImports \" \"}} {{join .XTestImports \" \"}}"
+    fields = ("{{.ImportPath}}\t{{.Dir}}\t{{join .Imports \" \"}}\t{{join .TestImports \" \"}} {{join .XTestImports \" \"}}"
               "\t{{len .TestGoFiles}} {{len .XTestGoFiles}}")
     listing = subprocess.run(["go", "list", "-e", "-f", fields, "./..."], cwd=GO_DIR, capture_output=True, text=True, check=True)
     packages = {}
     for row in listing.stdout.splitlines():
-        path, directory, imports, tests = row.split("\t")
+        path, directory, imports, test_imports, tests = row.split("\t")
         packages[path] = {"dir": Path(directory).resolve().relative_to(ROOT).as_posix(),
-                          "imports": set(imports.split()), "tested": sum(map(int, tests.split())) > 0}
+                          "imports": set(imports.split()), "test_imports": set(test_imports.split()),
+                          "tested": sum(map(int, tests.split())) > 0}
     return packages
+
+
+def go_test_importers(packages, targets, tiers):
+    """Follow production dependencies; test-only edges terminate at their test binary."""
+    reached = set(targets)
+    while True:
+        expanded = reached | {path for path, info in packages.items() if info["imports"] & reached}
+        if expanded == reached:
+            break
+        reached = expanded
+    return {path for path, info in packages.items() if info["tested"] and not tiers.search(path)
+            and (path in reached or info["test_imports"] & reached)}
 
 
 def go_changed_files(scope):
@@ -114,7 +127,7 @@ def go_changed_files(scope):
 
 
 def read_go_profile(profile, module):
-    """Blocks by file: (first line, last line, statements, covered), merged across test binaries."""
+    """Blocks by file: (start coordinate, end coordinate, statements, covered)."""
     blocks = {}
     for row in profile.read_text().splitlines()[1:]:
         location, statements, count = row.rsplit(" ", 2)
@@ -127,8 +140,20 @@ def read_go_profile(profile, module):
     by_file = {}
     for (name, start, end), (statements, covered) in blocks.items():
         path = "lycaon" + name[len(module):] if name.startswith(module) else name
-        by_file.setdefault(path, []).append((int(start.split(".")[0]), int(end.split(".")[0]), statements, covered))
+        by_file.setdefault(path, []).append((start, end, statements, covered))
     return by_file
+
+
+def merge_go_blocks(first, second):
+    """A successful later test binary cannot erase an earlier covered block."""
+    merged = {}
+    for profile in (first, second):
+        for path, rows in profile.items():
+            blocks = merged.setdefault(path, {})
+            for start, end, statements, covered in rows:
+                key = (start, end, statements)
+                blocks[key] = covered or blocks.get(key, False)
+    return {path: [(*key, covered) for key, covered in blocks.items()] for path, blocks in merged.items()}
 
 
 def measure_go(name, coverpkg, tested, module):
@@ -147,7 +172,8 @@ def go_units(touched, blocks, lines, module):
     for package, files in touched.items():
         unit = units.setdefault(package, Unit(package.removeprefix(module + "/")))
         for path in files:
-            for first, last, statements, covered in blocks.get(path, []):
+            for start, end, statements, covered in blocks.get(path, []):
+                first, last = int(start.split(".")[0]), int(end.split(".")[0])
                 if any(line in lines.get(path, ()) for line in range(first, last + 1)):
                     unit.add(path, first, last, statements, covered, lines[path])
     return units
@@ -174,8 +200,7 @@ def run_go(scope):
         return [], False, "changed Go source is exempt or outside measured packages"
 
     def importers(targets):
-        return {path for path, info in packages.items()
-                if info["tested"] and not tiers.search(path) and info["imports"] & targets}
+        return go_test_importers(packages, targets, tiers)
 
     findings = []
     for package in sorted(touched):
@@ -191,7 +216,7 @@ def run_go(scope):
         return findings, bool(findings), measured
     lines = change_report.changed_lines(ROOT, scope.base, changed)
     # Packages are measured by their own tests first; one that falls short is
-    # measured again with the tests of the packages that import it.
+    # measured again with the short test binaries that transitively reach it.
     own = {package for package in touched if packages[package]["tested"]}
     blocks = measure_go("changes-go", touched, own, module) if own else {}
     if blocks is None:
@@ -203,9 +228,8 @@ def run_go(scope):
         wider = measure_go("changes-go-importers", short, (own & short) | importers(short), module)
         if wider is None:
             return [Finding("error", "go", "tests failed, so changed coverage was not measured; fix the tests above")], True, measured
-        units.update(go_units({p: touched[p] for p in short}, wider, lines, module))
-        blocks = {**blocks, **{path: rows for path, rows in wider.items() if Path(path).parent.as_posix()
-                               in {packages[p]["dir"] for p in short}}}
+        blocks = merge_go_blocks(blocks, wider)
+        units = go_units(touched, blocks, lines, module)
     for package in sorted(touched):
         rows = [row for path, file_rows in blocks.items() if Path(path).parent.as_posix() == packages[package]["dir"]
                 for row in file_rows]

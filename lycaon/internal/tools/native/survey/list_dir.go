@@ -188,7 +188,7 @@ func (t *ListDirTool) listRoot(
 	maxDepth int,
 	includeHidden bool,
 ) ([]listDirEntry, error) {
-	if strings.TrimSpace(tctx.WorkerBranchRoot) == "" && t.Catalog != nil {
+	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" && t.Catalog != nil {
 		if entries, ok := t.listRootCatalog(ctx, tctx, root, fullPath, maxDepth, includeHidden); ok {
 			return entries, nil
 		}

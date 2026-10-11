@@ -11,21 +11,23 @@ import (
 
 func TestProvisionalAssistantStreamsInternalUntilCommit(t *testing.T) {
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		UpdateMessage: func(_ context.Context, _, messageID string, msg api.Message) error {
-			if messageID != "a1" {
-				t.Fatalf("messageID = %q want a1", messageID)
-			}
-			if msg.Visibility != api.MessageVisibilityTranscript {
-				t.Fatalf("update visibility = %q want transcript", msg.Visibility)
-			}
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, messageID string, msg api.Message) error {
+				if messageID != "a1" {
+					t.Fatalf("messageID = %q want a1", messageID)
+				}
+				if msg.Visibility != api.MessageVisibilityTranscript {
+					t.Fatalf("update visibility = %q want transcript", msg.Visibility)
+				}
+				return nil
+			},
 		},
 	})
 	msg := newProvisionalAssistantMessage(api.Message{ID: "a1", Content: "draft summary"})
 	if msg.Visibility != api.MessageVisibilityInternal {
 		t.Fatalf("visibility = %q want internal", msg.Visibility)
 	}
-	committed, err := loop.commitProvisionalAssistantTurn(context.Background(), "s1", msg)
+	committed, err := loop.Projection.commitProvisionalAssistantTurn(context.Background(), "s1", msg)
 	testutil.FailErr(t, "loop.commitProvisionalAssistantTurn failed", err)
 	if committed.Visibility != api.MessageVisibilityTranscript {
 		t.Fatalf("committed visibility = %q want transcript", committed.Visibility)
@@ -38,15 +40,17 @@ func TestProvisionalAssistantStreamsInternalUntilCommit(t *testing.T) {
 func TestCommitProvisionalAssistantInHistorySkipsAlreadyTranscript(t *testing.T) {
 	updateCalls := 0
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		UpdateMessage: func(_ context.Context, _, _ string, _ api.Message) error {
-			updateCalls++
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, _ api.Message) error {
+				updateCalls++
+				return nil
+			},
 		},
 	})
 	history := []api.Message{
 		{ID: "a1", Role: api.MessageRoleAssistant, Content: "ok", Visibility: api.MessageVisibilityTranscript},
 	}
-	out, err := loop.commitProvisionalAssistantInHistory(context.Background(), &api.Session{}, "s1", history, "", "", "a1")
+	out, err := loop.Projection.commitProvisionalAssistantInHistory(context.Background(), &api.Session{}, "s1", history, "", "", "a1")
 	testutil.FailErr(t, "loop.commitProvisionalAssistantInHistory failed", err)
 	if updateCalls != 0 {
 		t.Fatalf("update calls = %d want 0 for already-transcript row", updateCalls)
@@ -60,25 +64,29 @@ func TestCommitProvisionalAssistantInHistoryAttachesGrounding(t *testing.T) {
 	var committed api.Message
 	grounding := &api.CitationGrounding{Traced: true}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			committed = msg
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				committed = msg
+				return nil
+			},
 		},
-		ProseCitationGrounding: func(_ context.Context, _ *api.Session, _ []api.Message, _, prose, surfaceID string) *api.CitationGrounding {
-			if surfaceID != "implement_synthesis" {
-				t.Fatalf("surfaceID = %q want implement_synthesis", surfaceID)
-			}
-			if prose != "the fix landed" {
-				t.Fatalf("prose = %q", prose)
-			}
-			return grounding
+		Closeout: CloseoutDeps{
+			ProseCitationGrounding: func(_ context.Context, _ *api.Session, _ []api.Message, _, prose, surfaceID string) *api.CitationGrounding {
+				if surfaceID != "implement_synthesis" {
+					t.Fatalf("surfaceID = %q want implement_synthesis", surfaceID)
+				}
+				if prose != "the fix landed" {
+					t.Fatalf("prose = %q", prose)
+				}
+				return grounding
+			},
 		},
 	})
 	history := []api.Message{
 		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
 		{ID: "a1", Role: api.MessageRoleAssistant, Content: "the fix landed", Visibility: api.MessageVisibilityInternal},
 	}
-	out, err := loop.commitProvisionalAssistantInHistory(
+	out, err := loop.Projection.commitProvisionalAssistantInHistory(
 		context.Background(), &api.Session{}, "s1", history, "go", "implement_synthesis", "a1",
 	)
 	testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
@@ -104,16 +112,18 @@ func TestCommitKeepsRawCloseoutEnvelopeInternal(t *testing.T) {
 	} {
 		var patched api.Message
 		loop := NewPromptLoopForTest(PromptLoopDeps{
-			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-				patched = msg
-				return nil
+			Projection: ProjectionDeps{
+				UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+					patched = msg
+					return nil
+				},
 			},
 		})
 		history := []api.Message{
 			{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
 			{ID: "slot-1", Role: api.MessageRoleAssistant, Content: raw, Visibility: api.MessageVisibilityInternal},
 		}
-		out, err := loop.commitProvisionalAssistantInHistory(
+		out, err := loop.Projection.commitProvisionalAssistantInHistory(
 			context.Background(), &api.Session{}, "s1", history, "go", "implement_investigate", "slot-1",
 		)
 		testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
@@ -134,16 +144,18 @@ func TestCommitKeepsPoisonedSynthesisEnvelopeInternal(t *testing.T) {
 
 	var patched api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			patched = msg
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				patched = msg
+				return nil
+			},
 		},
 	})
 	history := []api.Message{
 		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
 		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: raw, Visibility: api.MessageVisibilityInternal},
 	}
-	out, err := loop.commitProvisionalAssistantInHistory(
+	out, err := loop.Projection.commitProvisionalAssistantInHistory(
 		context.Background(), &api.Session{}, "s1", history, "go", "implement_investigate", "slot-1",
 	)
 	testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
@@ -164,16 +176,18 @@ func TestCommitStampsDraftOnInvestigateProseNotEnvelope(t *testing.T) {
 	// Investigation prose commits as a visible draft.
 	var committed api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			committed = msg
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				committed = msg
+				return nil
+			},
 		},
 	})
 	history := []api.Message{
 		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
 		{ID: "a1", Role: api.MessageRoleAssistant, Content: "I'll scan the CLI entry point next.", Visibility: api.MessageVisibilityInternal},
 	}
-	_, err := loop.commitProvisionalAssistantInHistory(
+	_, err := loop.Projection.commitProvisionalAssistantInHistory(
 		context.Background(), &api.Session{}, "s1", history, "go", "implement_investigate", "a1",
 	)
 	testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
@@ -188,9 +202,11 @@ func TestCommitStampsDraftOnInvestigateProseNotEnvelope(t *testing.T) {
 func TestCommitProvisionalAssistantInHistoryStampsDraftOnOrchestrationSurface(t *testing.T) {
 	var committed api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			committed = msg
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				committed = msg
+				return nil
+			},
 		},
 	})
 	history := []api.Message{
@@ -202,7 +218,7 @@ func TestCommitProvisionalAssistantInHistoryStampsDraftOnOrchestrationSurface(t 
 			Visibility: api.MessageVisibilityInternal,
 		},
 	}
-	out, err := loop.commitProvisionalAssistantInHistory(
+	out, err := loop.Projection.commitProvisionalAssistantInHistory(
 		context.Background(), &api.Session{}, "s1", history, "go", "implement_dispatch", "a1",
 	)
 	testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
@@ -217,9 +233,11 @@ func TestCommitProvisionalAssistantInHistoryStampsDraftOnOrchestrationSurface(t 
 func TestCommitProvisionalAssistantInHistoryStampsDraftOnInvestigateOrchestration(t *testing.T) {
 	var committed api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			committed = msg
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				committed = msg
+				return nil
+			},
 		},
 	})
 	history := []api.Message{
@@ -231,7 +249,7 @@ func TestCommitProvisionalAssistantInHistoryStampsDraftOnInvestigateOrchestratio
 			Visibility: api.MessageVisibilityInternal,
 		},
 	}
-	out, err := loop.commitProvisionalAssistantInHistory(
+	out, err := loop.Projection.commitProvisionalAssistantInHistory(
 		context.Background(), &api.Session{}, "s1", history, "go", "implement_investigate", "a1",
 	)
 	testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
@@ -246,9 +264,11 @@ func TestCommitProvisionalAssistantInHistoryStampsDraftOnInvestigateOrchestratio
 func TestCommitProvisionalAssistantInHistoryDoesNotStampDraftOnWorkerChild(t *testing.T) {
 	var committed api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			committed = msg
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				committed = msg
+				return nil
+			},
 		},
 	})
 	report := `{"leg_status":"complete","brief":"## Summary\n\nAll set."}`
@@ -262,7 +282,7 @@ func TestCommitProvisionalAssistantInHistoryDoesNotStampDraftOnWorkerChild(t *te
 		},
 	}
 	child := &api.Session{ID: "child", ParentSessionID: "parent"}
-	out, err := loop.commitProvisionalAssistantInHistory(
+	out, err := loop.Projection.commitProvisionalAssistantInHistory(
 		context.Background(), child, "child", history, "go", "", "a1",
 	)
 	testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
@@ -279,10 +299,12 @@ func TestCommitDoesNotStampDraftOnToolStep(t *testing.T) {
 		t.Run(prose, func(t *testing.T) {
 			var committed api.Message
 			loop := NewPromptLoopForTest(PromptLoopDeps{
-				CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
-				UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-					committed = msg
-					return nil
+				Projection: ProjectionDeps{
+					CountDraftVersions: func(_ context.Context, _, _ string) (int, error) { return 0, nil },
+					UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+						committed = msg
+						return nil
+					},
 				},
 			})
 			history := []api.Message{
@@ -296,7 +318,7 @@ func TestCommitDoesNotStampDraftOnToolStep(t *testing.T) {
 					ToolCalls:   []api.ToolCall{{ID: "call_1", Name: "read", Args: map[string]any{"path": "a.go"}}},
 				},
 			}
-			out, err := loop.commitProvisionalAssistantInHistory(
+			out, err := loop.Projection.commitProvisionalAssistantInHistory(
 				context.Background(), &api.Session{ID: "s1"}, "s1", history, "go", "implement_dispatch", "a1",
 			)
 			testutil.FailErr(t, "commitProvisionalAssistantInHistory", err)
@@ -320,22 +342,26 @@ func TestRejectBlockedAssistantTurnRetractsProvisionalRow(t *testing.T) {
 	var patched api.Message
 	var nudged []api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		HintConfig: loadCoordinatorTestHintConfig(t),
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			patched = msg
-			return nil
+		Closeout: CloseoutDeps{
+			HintConfig: loadCoordinatorTestHintConfig(t),
 		},
-		AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-			nudged = append(nudged, msgs...)
-			return nil
+		Projection: ProjectionDeps{
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				patched = msg
+				return nil
+			},
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				nudged = append(nudged, msgs...)
+				return nil
+			},
+			AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
 		},
-		AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
 	})
 	history := []api.Message{
 		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
 		{ID: "a1", Role: api.MessageRoleAssistant, Content: "bad synthesis", Visibility: api.MessageVisibilityInternal},
 	}
-	out, err := toolInvocations{loop}.rejectBlockedAssistantTurn(
+	out, err := loop.Tools.rejectBlockedAssistantTurn(
 		context.Background(),
 		"s1",
 		history,

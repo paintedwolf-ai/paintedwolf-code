@@ -2,9 +2,9 @@ package oar
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/oarcore"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -90,8 +90,8 @@ func TestTransformAccumulatesAndApplies(t *testing.T) {
 	p := NewGuardPipeline(NewRuleSet([]*Rule{rule}), l, NewCounterStore())
 	p.EnableAnchor(AnchorContentOutput)
 	gc := NewGuardContext()
-	gc.Content = "secret"
-	gc.ContentSet = true
+	gc.Content.Content = "secret"
+	gc.Content.ContentSet = true
 	res, err := p.EvaluateBlock(context.Background(), AnchorContentOutput, gc)
 	testutil.FailErr(t, "eval", err)
 	if res.Decision == nil || res.Decision.Effect != EffectTransform {

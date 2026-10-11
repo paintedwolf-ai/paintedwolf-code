@@ -2,9 +2,9 @@ package promptloop
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -32,12 +32,12 @@ func resultHasOwnerFailed(tr *api.ToolResult) bool {
 		return false
 	}
 	for _, code := range tr.Codes {
-		if strings.TrimSpace(code) == tools.ToolOwnerFailedCode {
+		if strings.TrimSpace(code) == toolrejection.ToolOwnerFailedCode {
 			return true
 		}
 	}
 	if tr.Invocation != nil && tr.Invocation.Failure != nil {
-		return strings.TrimSpace(tr.Invocation.Failure.Code) == tools.ToolOwnerFailedCode &&
+		return strings.TrimSpace(tr.Invocation.Failure.Code) == toolrejection.ToolOwnerFailedCode &&
 			strings.TrimSpace(tr.Invocation.Failure.Class) == "owner_error"
 	}
 	return false

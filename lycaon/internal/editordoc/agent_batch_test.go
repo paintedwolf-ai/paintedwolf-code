@@ -86,7 +86,7 @@ func TestAgentBatchPublishesOnlyAfterBothHeadsCommitAndReplaysAfterRestart(t *te
 		t.Fatalf("accepted events = %d", seen)
 	}
 	testutil.FailErr(t, "close first service", f.service.Close(t.Context()))
-	restarted := New(f.store, f.recorder, fixedRoots{p: f.project})
+	restarted := New(f.store, f.recorder, f.recorder.History, fixedRoots{p: f.project})
 	closeServiceAtCleanup(t, restarted)
 	replayed, err := restarted.ApplyAgentEdits(t.Context(), inputs)
 	testutil.FailErr(t, "replay batch", err)

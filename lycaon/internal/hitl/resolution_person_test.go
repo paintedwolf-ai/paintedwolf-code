@@ -22,7 +22,12 @@ func commandCheckpoint(sessionID string) hitl.CheckpointRequest {
 	return hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval, Type: hitl.DecisionTypeApprove,
 		Title:          "Approve command",
-		ProposedAction: &hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "echo hi"}},
+		ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo hi"},
+},
+},
 	}
 }
 
@@ -123,8 +128,8 @@ func TestAnsweringWithoutACallerIsRefusedBeforeTheStore(t *testing.T) {
 
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, commandCheckpoint(sessionID))
 	testutil.FailErr(t, "request checkpoint", err)
-	mgr.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
-	_, err = mgr.ResolveApprovalOption(ctx, sessionID, resp.CheckpointID, "approve_current_action")
+	mgr.Authority.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
+	_, err = mgr.Authority.ResolveApprovalOption(ctx, sessionID, resp.CheckpointID, "approve_current_action")
 	if !errors.Is(err, people.ErrNoDecidingPerson) {
 		t.Fatalf("answer without a caller err = %v, want %v", err, people.ErrNoDecidingPerson)
 	}
@@ -144,9 +149,9 @@ func TestPolicyResolutionRecordsNobodyInTheRowAndLedger(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, commandCheckpoint(sessionID))
 	testutil.FailErr(t, "request checkpoint", err)
 
-	mgr.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
+	mgr.Authority.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
 	policy := authzledger.PolicyIdentity{PackID: "acme-policy", UnitID: "approvals/ci", RuleID: "allow-echo"}
-	_, err = mgr.ResolveApprovalOptionBy(ctx, sessionID, resp.CheckpointID, "approve_current_action", hitl.PolicyApproval(policy))
+	_, err = mgr.Authority.ResolveApprovalOptionBy(ctx, sessionID, resp.CheckpointID, "approve_current_action", hitl.PolicyApproval(policy))
 	testutil.FailErr(t, "resolve checkpoint by policy", err)
 
 	resolvedBy, personID := storedResolver(t, sqlDB, resp.CheckpointID)
@@ -172,9 +177,9 @@ func TestPolicyResolutionWithoutIdentityIsRejectedBeforeTheStore(t *testing.T) {
 
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, commandCheckpoint(sessionID))
 	testutil.FailErr(t, "request checkpoint", err)
-	mgr.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
+	mgr.Authority.SetApprovalAuthorityInstaller(noopApprovalInstaller{})
 	for _, policy := range []authzledger.PolicyIdentity{{}, {PackID: "acme-policy", UnitID: "approvals/ci"}} {
-		_, err = mgr.ResolveApprovalOptionBy(ctx, sessionID, resp.CheckpointID, "approve_current_action", hitl.PolicyApproval(policy))
+		_, err = mgr.Authority.ResolveApprovalOptionBy(ctx, sessionID, resp.CheckpointID, "approve_current_action", hitl.PolicyApproval(policy))
 		if !errors.Is(err, hitl.ErrApprovalResolverInvalid) {
 			t.Fatalf("incomplete policy %+v resolved: %v", policy, err)
 		}

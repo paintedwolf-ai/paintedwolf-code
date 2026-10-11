@@ -24,11 +24,12 @@ func TestExternalWatchRevalidatesDirectoriesAndHeadOnlyBatches(t *testing.T) {
 			database := testdbfixture.Open(t, "editor.db")
 			var documents *editordoc.Service
 			srv := newTestServer(t, func(d *Dependencies) {
-				documents = editordoc.New(editordoc.NewStore(database), sourceledger.New(database, ""), d.Projects)
-				d.EditorDocuments = documents
+				sourceHistory15 := sourceledger.New(database, "")
+				documents = editordoc.New(editordoc.NewStore(database), sourceHistory15, sourceHistory15.History, d.Core.Projects)
+				d.Source.EditorDocuments = documents
 			})
 			root := t.TempDir()
-			p, err := project.CreateWithRoot(t.Context(), srv.projectRegistry, root)
+			p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, root)
 			testutil.FailErr(t, "create project", err)
 			testdbseed.InsertProjectRootWithID(t, database, p.ID, p.Roots[0].ID, root)
 			testutil.FailErr(t, "create directory", os.Mkdir(filepath.Join(root, "src"), 0o755))
@@ -42,7 +43,7 @@ func TestExternalWatchRevalidatesDirectoriesAndHeadOnlyBatches(t *testing.T) {
 			if headOnly {
 				batch = sourcefeed.ExternalBatch{HeadMoved: true}
 			}
-			srv.Sources.RevalidateEditorDocuments(t.Context(), p, batch)
+			srv.Sources.Watch.RevalidateEditorDocuments(t.Context(), p, batch)
 			srv.background.Wait(context.Background())
 			current, err := documents.CurrentSnapshot(t.Context(), p.ID, document.ID)
 			testutil.FailErr(t, "load current document", err)
@@ -59,8 +60,8 @@ func TestEnsureSourceWatchBindsBeforeTheCatalogWalk(t *testing.T) {
 	walkStarted := make(chan struct{})
 	release := make(chan struct{})
 	srv := newTestServer(t, func(d *Dependencies) {
-		d.WatchNeedsSeed = func(string) bool { return true }
-		d.CatalogSnapshot = func(ctx context.Context, _ string, _ []sourcecatalog.Root) (sourcecatalog.Snapshot, error) {
+		d.Source.WatchNeedsSeed = func(string) bool { return true }
+		d.Source.CatalogSnapshot = func(ctx context.Context, _ string, _ []sourcecatalog.Root) (sourcecatalog.Snapshot, error) {
 			close(walkStarted)
 			select {
 			case <-release:
@@ -70,14 +71,14 @@ func TestEnsureSourceWatchBindsBeforeTheCatalogWalk(t *testing.T) {
 		}
 	})
 	dir := t.TempDir()
-	p, err := project.CreateWithRoot(t.Context(), srv.projectRegistry, dir)
+	p, err := project.CreateWithRoot(t.Context(), srv.Sources.Workspace.ProjectRegistry, dir)
 	testutil.FailErr(t, "create project", err)
 	t.Cleanup(func() { sourcefeed.StopProjectWatch(context.Background(), p.ID) })
 
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		srv.Sources.EnsureSourceWatch(t.Context(), p.ID)
+		srv.Sources.Watch.EnsureSourceWatch(t.Context(), p.ID)
 	}()
 	select {
 	case <-walkStarted:

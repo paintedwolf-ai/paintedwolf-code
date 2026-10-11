@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
@@ -32,8 +33,10 @@ func TestCompleteLegRejectsAddressedSession(t *testing.T) {
 	_, err := invokeCompleteLeg(t, map[string]any{
 		"leg_status": "complete",
 		"brief":      "done",
-	}, tools.ToolContext{SessionID: "child"})
-	var reject *tools.ToolReject
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "child"},
+	})
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "COMPLETE_LEG_ADDRESSED_SESSION" {
 		t.Fatalf("err = %v want COMPLETE_LEG_ADDRESSED_SESSION", err)
 	}
@@ -56,7 +59,10 @@ func TestCompleteLegAcksWithoutEchoingReport(t *testing.T) {
 			"line":    12,
 			"excerpt": "return nil",
 		}},
-	}, tools.ToolContext{SessionID: "child", ParentSessionID: "parent"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "child",
+			ParentSessionID: "parent"},
+	})
 	testutil.FailErr(t, "invoke", err)
 	var ack struct {
 		Recorded         bool   `json:"recorded"`
@@ -85,7 +91,10 @@ func TestCompleteLegAcceptedArgsAlwaysExtractable(t *testing.T) {
 			"excerpt": "return nil",
 		}},
 	}
-	_, err := invokeCompleteLeg(t, args, tools.ToolContext{SessionID: "child", ParentSessionID: "parent"})
+	_, err := invokeCompleteLeg(t, args, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "child",
+			ParentSessionID: "parent"},
+	})
 	testutil.FailErr(t, "invoke", err)
 	report, ok := workercompletion.ReportFromCompleteLegArgs(args)
 	if !ok || report.LegStatus != "partial" || report.Brief != "half surveyed" || len(report.Findings) != 1 {
@@ -96,8 +105,11 @@ func TestCompleteLegAcceptedArgsAlwaysExtractable(t *testing.T) {
 func TestCompleteLegRejectsMissingStatus(t *testing.T) {
 	_, err := invokeCompleteLeg(t, map[string]any{
 		"brief": "done",
-	}, tools.ToolContext{SessionID: "child", ParentSessionID: "parent"})
-	var reject *tools.ToolReject
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "child",
+			ParentSessionID: "parent"},
+	})
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "COMPLETE_LEG_STATUS_REQUIRED" {
 		t.Fatalf("err = %v", err)
 	}
@@ -108,8 +120,11 @@ func TestCompleteLegRejectsAliasStatus(t *testing.T) {
 		_, err := invokeCompleteLeg(t, map[string]any{
 			"leg_status": status,
 			"brief":      "done",
-		}, tools.ToolContext{SessionID: "child", ParentSessionID: "parent"})
-		var reject *tools.ToolReject
+		}, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "child",
+				ParentSessionID: "parent"},
+		})
+		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code != "COMPLETE_LEG_STATUS_REQUIRED" {
 			t.Fatalf("status %q err = %v", status, err)
 		}
@@ -117,14 +132,18 @@ func TestCompleteLegRejectsAliasStatus(t *testing.T) {
 }
 
 func TestCompleteLegPreservesHostContractRejection(t *testing.T) {
-	rejection := &tools.ToolReject{Code: "COMPLETE_LEG_COVERAGE_INVALID", Data: map[string]any{"detail": "missing assessment"}}
+	rejection := &toolrejection.ToolReject{Code: "COMPLETE_LEG_COVERAGE_INVALID", Data: map[string]any{"detail": "missing assessment"}}
 	handler := workertools.CompleteLegHandler(func(_ context.Context, _ map[string]any, tc tools.ToolContext) (workertools.CompleteLegRecord, error) {
-		if tc.WorkerJobID != "job" {
+		if tc.Identity.WorkerJobID != "job" {
 			t.Fatal("lost worker identity")
 		}
 		return workertools.CompleteLegRecord{}, rejection
 	})
-	body, err := handler(t.Context(), map[string]any{"leg_status": "complete"}, tools.ToolContext{SessionID: "child", ParentSessionID: "parent", WorkerJobID: "job"})
+	body, err := handler(t.Context(), map[string]any{"leg_status": "complete"}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "child",
+			ParentSessionID: "parent",
+			WorkerJobID:     "job"},
+	})
 	if body != "" || !errors.Is(err, rejection) {
 		t.Fatalf("host rejection became ack: %q, %v", body, err)
 	}

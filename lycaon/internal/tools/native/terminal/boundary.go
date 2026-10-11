@@ -45,7 +45,7 @@ func stampBoundary(tctx tools.ToolContext, tool string, obs observation) confine
 	}
 	stamped := confine.StampRefusal(
 		tool,
-		tctx.SessionID,
+		tctx.Identity.SessionID,
 		obs.Boundary,
 		confine.RefusalContext{
 			MediatedNetwork:        obs.Network,
@@ -55,8 +55,8 @@ func stampBoundary(tctx tools.ToolContext, tool string, obs observation) confine
 		},
 	)
 	report.BoundaryRefusal = string(stamped.Attribution)
-	if tctx.Out != nil {
-		tctx.Out.Facts = tools.ApplyRefusalFacts(tctx.Out.Facts, stamped)
+	if tctx.Effects.Out != nil {
+		tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, stamped)
 	}
 	return report.WithSandboxRefusals(obs.Refusals)
 }

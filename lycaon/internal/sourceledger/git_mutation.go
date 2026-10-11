@@ -14,7 +14,7 @@ import (
 
 // GitMutationContext binds managed repository effects to their invoking turn.
 // Watchers share the observation lock, so they cannot consume the movement first.
-func (s *Store) GitMutationContext(ctx context.Context, projectID string, roots []RootSpec, actor Contributor) context.Context {
+func (s *Git) GitMutationContext(ctx context.Context, projectID string, roots []RootSpec, actor Contributor) context.Context {
 	if s == nil || s.gitReader == nil {
 		return ctx
 	}
@@ -28,7 +28,7 @@ func (s *Store) GitMutationContext(ctx context.Context, projectID string, roots 
 	})
 }
 
-func (s *Store) beginGitMutation(ctx context.Context, projectID string, roots []RootSpec, root RootSpec, paths []string, actor Contributor) (func(context.Context) error, error) {
+func (s *Git) beginGitMutation(ctx context.Context, projectID string, roots []RootSpec, root RootSpec, paths []string, actor Contributor) (func(context.Context) error, error) {
 	release, err := s.gitObservations.Acquire(ctx, gitObservationKey(projectID, root))
 	if err != nil {
 		return nil, err
@@ -49,7 +49,7 @@ func (s *Store) beginGitMutation(ctx context.Context, projectID string, roots []
 	for _, path := range paths {
 		refs = append(refs, PathRef{RootID: root.ID, Path: path})
 	}
-	if _, err := s.observePaths(ctx, projectID, roots, refs, map[string]string{root.ID: prior}, nil); err != nil {
+	if _, err := s.inventory.observePaths(ctx, projectID, roots, refs, map[string]string{root.ID: prior}, nil); err != nil {
 		release()
 		return nil, err
 	}
@@ -58,7 +58,7 @@ func (s *Store) beginGitMutation(ctx context.Context, projectID string, roots []
 		observation, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 		defer cancel()
 		id, gitErr := s.observeRootGitState(observation, projectID, root, gitAttribution{actor: actor})
-		_, pathErr := s.observePaths(observation, projectID, roots, refs, map[string]string{root.ID: id}, &actor)
+		_, pathErr := s.inventory.observePaths(observation, projectID, roots, refs, map[string]string{root.ID: id}, &actor)
 		var signalErr error
 		if id != "" {
 			signalErr = sourcefeed.EmitGitSignal(observation, projectID, rootRefsOf(roots))
@@ -77,7 +77,7 @@ type gitAttribution struct {
 }
 
 // Stable ordering prevents multi-root inventory from deadlocking a path observer.
-func (s *Store) lockObservations(ctx context.Context, projectID string, roots []RootSpec) (func(), error) {
+func (s *Git) lockObservations(ctx context.Context, projectID string, roots []RootSpec) (func(), error) {
 	keys := make([]string, 0, len(roots))
 	for _, root := range roots {
 		keys = append(keys, gitObservationKey(projectID, root))

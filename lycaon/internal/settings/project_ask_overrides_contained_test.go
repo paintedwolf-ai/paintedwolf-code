@@ -30,12 +30,18 @@ func TestProjectAskRuleOverridesContainedAutoApprove(t *testing.T) {
 
 	contained := hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{proj}}
 	res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-		Tool:       "write",
-		Args:       map[string]any{"path": "a.txt", "content": "x"},
-		Files:      []string{filepath.Join(proj, "a.txt")},
-		ProjectDir: proj,
-		Contained:  contained,
-	})
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Args: map[string]any{"path": "a.txt", "content": "x"},
+Files: []string{filepath.Join(proj, "a.txt")},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+Execution: hitl.ActionExecution{
+Contained: contained,
+},
+})
 	testutil.FailErr(t, "evaluate write", err)
 	if !res.Required() {
 		t.Fatalf("project ask rule must pend a contained in-project write: %#v", res)

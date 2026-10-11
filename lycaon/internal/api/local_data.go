@@ -12,7 +12,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) localDataRegistry() (*localdata.Registry, error) {
+func (s *LocalData) localDataRegistry() (*localdata.Registry, error) {
 	if s.localData != nil {
 		return s.localData, nil
 	}
@@ -21,11 +21,11 @@ func (s *Server) localDataRegistry() (*localdata.Registry, error) {
 		return nil, err
 	}
 	reg.SetWebIndexClear(s.clearWebIndex)
-	reg.SetSourceObservationsClear(s.Sources.SourceLedger.ClearObservationCache)
-	reg.SetSourceCatalogClear(sourcecatalog.Process().ClearTreeStores)
+	reg.SetSourceObservationsClear(s.sourceLedger.Snapshots.ClearObservations)
+	reg.SetSourceCatalogClear(sourcecatalog.Process().Trees.ClearTreeStores)
 	reg.SetSourceCatalogSpilled(sourcecatalog.SpilledBytes)
-	reg.SetExtensionCacheClear(s.Extensions.Owner.ClearCache)
-	reg.SetSessionScratchReclaim(s.sessions.ReclaimScratch)
+	reg.SetExtensionCacheClear(s.extensionOwner.ClearCache)
+	reg.SetSessionScratchReclaim(s.sessions.Runner.Execution.ReclaimScratch)
 	if s.workerBranchRoot != "" {
 		deps := s.branchRetentionDeps()
 		reg.SetWorkerBranches(
@@ -41,7 +41,7 @@ func (s *Server) localDataRegistry() (*localdata.Registry, error) {
 }
 
 // branchRetentionDeps binds branch retention to this server's queue and root.
-func (s *Server) branchRetentionDeps() branchretention.Deps {
+func (s *LocalData) branchRetentionDeps() branchretention.Deps {
 	return branchretention.Deps{
 		BranchRoot: s.workerBranchRoot,
 		Jobs: func(ctx context.Context) (map[string]branchretention.JobState, error) {
@@ -59,14 +59,14 @@ func (s *Server) branchRetentionDeps() branchretention.Deps {
 	}
 }
 
-func (s *Server) clearWebIndex(ctx context.Context) error {
+func (s *LocalData) clearWebIndex(ctx context.Context) error {
 	if s.webIndex == nil {
 		return nil
 	}
 	return s.webIndex.Clear(ctx)
 }
 
-func (s *Server) handleGetLocalData(w http.ResponseWriter, r *http.Request) {
+func (s *LocalData) handleGetLocalData(w http.ResponseWriter, r *http.Request) {
 	reg, err := s.localDataRegistry()
 	if err != nil {
 		s.responses.InternalError(w, r, err)
@@ -104,7 +104,7 @@ func (s *Server) handleGetLocalData(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) handleClearLocalData(w http.ResponseWriter, r *http.Request) {
+func (s *LocalData) handleClearLocalData(w http.ResponseWriter, r *http.Request) {
 	var req wire.LocalDataClearRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)

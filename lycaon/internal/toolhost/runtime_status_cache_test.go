@@ -15,19 +15,19 @@ func TestSetGitStatusCacheReleasesReplacedDefault(t *testing.T) {
 	r, err := NewRuntime(RuntimeConfig{ConfigRoot: configlayout.FindModuleRoot(), Catalog: extpackstest.StockCatalog(t)})
 	testutil.FailErr(t, "build tool runtime", err)
 	releases := 0
-	release := r.gitStatusCache.releaseOwned
-	r.gitStatusCache.releaseOwned = func() { releases++; release() }
+	release := r.Survey.gitStatusCache.releaseOwned
+	r.Survey.gitStatusCache.releaseOwned = func() { releases++; release() }
 
-	r.SetGitStatusCache(r.gitStatusCache.Load())
+	r.Survey.SetGitStatusCache(r.Survey.gitStatusCache.Load())
 	if releases != 0 {
 		t.Fatalf("re-setting the default cache released it %d times", releases)
 	}
 	host := git.NewStatusCache(git.NewManager())
-	r.SetGitStatusCache(host)
+	r.Survey.SetGitStatusCache(host)
 	if releases != 1 {
 		t.Fatalf("replacing the default cache released it %d times, want 1", releases)
 	}
-	if r.gitStatusCache.Load() != host {
+	if r.Survey.gitStatusCache.Load() != host {
 		t.Fatal("runtime does not serve the host cache")
 	}
 }

@@ -44,6 +44,13 @@ func (g *Group) Begin(parent context.Context) (context.Context, func(), error) {
 	}, nil
 }
 
+// Seal ends admission while allowing registered operations to finish naturally.
+func (g *Group) Seal() {
+	g.mu.Lock()
+	g.stopped = true
+	g.mu.Unlock()
+}
+
 // Stop seals admission before cancelling every registered operation.
 func (g *Group) Stop() {
 	g.mu.Lock()

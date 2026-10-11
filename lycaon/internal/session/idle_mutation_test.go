@@ -7,20 +7,20 @@ import (
 )
 
 func TestTryIdleMutationSerializesWithSessionLock(t *testing.T) {
-	m := newForgetTestManager()
-	unlock, ok := m.TryIdleMutation("sess-1")
+	m := newForgetTestManager(t)
+	unlock, ok := m.Runner.Execution.TryIdleMutation("sess-1")
 	if !ok || unlock == nil {
 		t.Fatal("expected idle mutation lock")
 	}
 
-	if _, ok := m.TryIdleMutation("sess-1"); ok {
+	if _, ok := m.Runner.Execution.TryIdleMutation("sess-1"); ok {
 		t.Fatal("second TryIdleMutation must fail while held")
 	}
 
 	held := make(chan struct{})
 	released := make(chan struct{})
 	go func() {
-		lock := m.promptState.Prompt.Acquire("sess-1")
+		lock := m.Runner.Execution.Prompt.Acquire("sess-1")
 		close(held)
 		lock.Lock()
 		defer lock.Unlock()
@@ -45,8 +45,8 @@ func TestTryIdleMutationSerializesWithSessionLock(t *testing.T) {
 }
 
 func TestTryIdleMutationSameMutexAsPrompt(t *testing.T) {
-	m := newForgetTestManager()
-	unlock, ok := m.TryIdleMutation("sess-1")
+	m := newForgetTestManager(t)
+	unlock, ok := m.Runner.Execution.TryIdleMutation("sess-1")
 	if !ok {
 		t.Fatal("expected lock")
 	}
@@ -56,7 +56,7 @@ func TestTryIdleMutationSameMutexAsPrompt(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		close(blocked)
-		lock := m.promptState.Prompt.Acquire("sess-1")
+		lock := m.Runner.Execution.Prompt.Acquire("sess-1")
 		lock.Lock()
 		defer lock.Unlock()
 	}()

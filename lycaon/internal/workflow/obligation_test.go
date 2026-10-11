@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
@@ -42,7 +43,7 @@ func obligationTestManifest() workflowdef.Manifest {
 			{
 				ID:           "ingest",
 				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
-				Gates:        []string{ObligationGateLeaf("scan")},
+				Gates:        []string{workflowdef.ObligationGateLeaf("scan")},
 				OnEnter: workflowdef.PhaseOnEnter{Obligations: []workflowdef.ObligationDef{{
 					Kind: "scan", Params: map[string]any{"categories": []any{"security"}},
 				}}},
@@ -55,7 +56,7 @@ func obligationTestManifest() workflowdef.Manifest {
 
 func wireTestObligation(t *testing.T, mgr *RunManager, obligation *stubWorkflowObligation) {
 	t.Helper()
-	mgr.RegisterObligationKind(obligation)
+	mgr.Obligations.Register(obligation)
 	deps := conditions.TestRegistryDeps()
 	deps.ObligationResolvers = map[string]conditions.ObligationStatusReader{"scan": obligation}
 	reg, err := conditions.NewDefaultRegistry(deps)
@@ -69,12 +70,12 @@ func TestRecordObligationTerminalAdvancesPhase(t *testing.T) {
 		Kind: "scan", Status: api.ObligationStatusPending,
 	}}
 	wireTestObligation(t, mgr, obligation)
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"obligationtest@1.0.0": obligationTestManifest()})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"obligationtest@1.0.0": obligationTestManifest()})
 
 	ctx := context.Background()
 	run, err := startRun(ctx, mgr, "sess-1", "obligationtest", "1.0.0")
 	testutil.FailErr(t, "start run", err)
-	state := mgr.ActivePhaseGuardState(ctx, "sess-1")
+	state := mgr.Policy.ActivePhaseGuardState(ctx, "sess-1")
 	if !state.PhaseObligationPending || len(state.PendingObligationKinds) != 1 || state.PendingObligationKinds[0] != "scan" {
 		t.Fatalf("phase guard state = %#v", state)
 	}
@@ -82,14 +83,14 @@ func TestRecordObligationTerminalAdvancesPhase(t *testing.T) {
 	obligation.status = api.WorkflowRunObligation{
 		Kind: "scan", Status: api.ObligationStatusComplete, Detail: map[string]any{"findings_count": 4},
 	}
-	testutil.FailErr(t, "record terminal obligation", mgr.RecordObligationTerminal(ctx, run.ID, "scan"))
+	testutil.FailErr(t, "record terminal obligation", mgr.Obligations.RecordObligationTerminal(ctx, run.ID, "scan"))
 
-	after, err := mgr.Get(ctx, run.ID)
+	after, err := mgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "get run", err)
 	if after.CurrentPhase != "done" {
 		t.Fatalf("phase = %q, want done", after.CurrentPhase)
 	}
-	vars, err := mgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := mgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "get vars", err)
 	scanSummary, _ := ObligationsFromVars(vars)["scan"].(map[string]any)
 	// Scaffold vars round-trip through JSON, so numbers come back as float64.
@@ -105,12 +106,12 @@ func TestObligationEnqueueFailureSettlesPhase(t *testing.T) {
 		enterErr: errors.New("snapshot unavailable"),
 	}
 	wireTestObligation(t, mgr, obligation)
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"obligationtest@1.0.0": obligationTestManifest()})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"obligationtest@1.0.0": obligationTestManifest()})
 
 	ctx := context.Background()
 	run, err := startRun(ctx, mgr, "sess-1", "obligationtest", "1.0.0")
 	testutil.FailErr(t, "start run", err)
-	vars, err := mgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := mgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "get vars", err)
 	scanSummary, _ := ObligationsFromVars(vars)["scan"].(map[string]any)
 	if scanSummary["status"] != api.ObligationStatusFailed || scanSummary["error"] != "snapshot unavailable" {
@@ -142,7 +143,7 @@ func TestAdvanceConvergesAcrossSettledObligation(t *testing.T) {
 			{
 				ID:           "ingest",
 				CompleteWhen: workflowdef.CompleteWhenGatesSatisfied,
-				Gates:        []string{ObligationGateLeaf("scan")},
+				Gates:        []string{workflowdef.ObligationGateLeaf("scan")},
 				OnEnter: workflowdef.PhaseOnEnter{Obligations: []workflowdef.ObligationDef{{
 					Kind: "scan", Params: map[string]any{"categories": []any{"security"}},
 				}}},
@@ -155,17 +156,17 @@ func TestAdvanceConvergesAcrossSettledObligation(t *testing.T) {
 			{ID: "done", Terminal: true, CompleteWhen: "orchestration_complete"},
 		},
 	})
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"convergeobligation@1.0.0": manifest})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"convergeobligation@1.0.0": manifest})
 
 	ctx := context.Background()
 	run, err := startRun(ctx, mgr, "sess-1", "convergeobligation", "1.0.0")
 	testutil.FailErr(t, "start run", err)
-	vars, err := mgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := mgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "get vars", err)
-	vars = SatisfyGateInVars(vars, "fanout_planned")
-	testutil.FailErr(t, "update vars", mgr.Store.UpdateVars(ctx, run, projectDir, vars))
+	vars = runstate.SatisfyGateInVars(vars, "fanout_planned")
+	testutil.FailErr(t, "update vars", mgr.Store.State.UpdateVars(ctx, run, projectDir, vars))
 
-	advanced, err := mgr.Advance(ctx, run.ID)
+	advanced, err := mgr.Phases.Advance(ctx, run.ID)
 	testutil.FailErr(t, "advance", err)
 	if advanced.CurrentPhase != "execute" {
 		t.Fatalf("phase = %q, want execute", advanced.CurrentPhase)

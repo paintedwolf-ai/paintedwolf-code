@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/eval/episode"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionobservation "github.com/lycaon/lycaon/internal/session/observation"
 	"github.com/lycaon/lycaon/internal/session/store"
 )
 
@@ -67,7 +67,7 @@ func settleCapturedExecution(ctx context.Context, capture string, result *CaseRe
 	if err != nil {
 		return err
 	}
-	var observation session.ExecutionObservation
+	var observation sessionobservation.ExecutionObservation
 	if err := json.Unmarshal(body, &observation); err != nil {
 		return err
 	}

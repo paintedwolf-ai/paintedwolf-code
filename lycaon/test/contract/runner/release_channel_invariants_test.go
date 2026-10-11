@@ -487,7 +487,7 @@ func TestUpdaterSignaturesBindTheProductVersion(t *testing.T) {
 		t.Fatal("the pointer publisher must validate the new manifest strictly and read the current one as existing")
 	}
 	if !strings.Contains(pointer, `feed_signing.py" --file "${SIGNED_COPY}"`) ||
-		!strings.Contains(pointer, `feed_signature.py" --signature "${SIGNATURE}" --file "${FEED_NAME}"`) ||
+		!strings.Contains(pointer, `feed_signature.py" --signature "${SIGNATURE}" --pointer "${SIGNED_COPY}" --file "${FEED_NAME}"`) ||
 		strings.Index(pointer, "publish_signature()") > strings.Index(pointer, `r2 object put "${R2_BUCKET}/${OBJECT_KEY}"`) {
 		t.Fatal("the pointer publisher must sign the pointer under its feed name and publish the signature before the pointer")
 	}

@@ -2,6 +2,7 @@ package httpaction
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/outboundhttp"
@@ -94,9 +95,9 @@ func primaryMatch(matches []secretmatch.Match) secretmatch.Match {
 	return primary
 }
 
-func screenFaultReject(stage string) *tools.ToolReject {
-	return &tools.ToolReject{
-		Code: tools.OutboundSecretScreenFailedCode,
+func screenFaultReject(stage string) *toolrejection.ToolReject {
+	return &toolrejection.ToolReject{
+		Code: toolrejection.OutboundSecretScreenFailedCode,
 		Data: map[string]any{"surface": "http_request", "fault_stage": stage},
 	}
 }
@@ -105,8 +106,8 @@ func screenFaultReject(stage string) *tools.ToolReject {
 func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[string]any, tc tools.ToolContext) (outboundRequest, error) {
 	classification := deps.SecretMatcher.ClassificationSnapshot(ctx)
 	ctx = deps.SecretMatcher.WithClassifications(ctx, classification)
-	sending := requestWire(spec, args, tc.Secrets)
-	evidence, err := requestArgumentEvidence(ctx, deps.SecretMatcher, args, tc.Secrets)
+	sending := requestWire(spec, args, tc.Effects.Secrets)
+	evidence, err := requestArgumentEvidence(ctx, deps.SecretMatcher, args, tc.Effects.Secrets)
 	if err != nil {
 		return outboundRequest{}, screenFaultReject(secretmatch.FaultStageScreenUnwired)
 	}
@@ -153,11 +154,11 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 		return outboundRequest{}, screenFaultReject(secretmatch.FaultStageRaise)
 	}
 	if resolution.Decision.Blocks() {
-		tc.Secrets.Withhold(ctx)
-		reject := &tools.ToolReject{Code: tools.OutboundSecretDeniedCode, Data: map[string]any{
+		tc.Effects.Secrets.Withhold(ctx)
+		reject := &toolrejection.ToolReject{Code: toolrejection.OutboundSecretDeniedCode, Data: map[string]any{
 			"surface": "http_request", "rule_id": match.RuleID, "host": destinationLabel, "shape": match.GenericShape,
 		}}
-		tools.AttachUserGuidance(reject, resolution.Guidance)
+		toolrejection.AttachUserGuidance(reject, resolution.Guidance)
 		return outboundRequest{}, reject
 	}
 	if resolution.Decision != secretmatch.SendRedacted {
@@ -168,12 +169,12 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 	if err != nil {
 		return outboundRequest{}, screenFaultReject(secretmatch.FaultStageRedactUnsupported)
 	}
-	rewritten := requestWire(rebuilt, redactedArgs, tc.Secrets).redact(ctx, deps.SecretMatcher)
+	rewritten := requestWire(rebuilt, redactedArgs, tc.Effects.Secrets).redact(ctx, deps.SecretMatcher)
 	// A receipt may only claim what the rewrite actually removed.
 	if len(screenFields(ctx, deps.SecretMatcher, rewritten.fields())) > 0 {
 		return outboundRequest{}, screenFaultReject(secretmatch.FaultStageRedactUnsupported)
 	}
-	tc.Secrets.Redacted(spec.outgoing)
+	tc.Effects.Secrets.Redacted(spec.outgoing)
 	rewritten.redacted, rewritten.receipt = true, resolution.ReceiptToken
 	return rewritten, nil
 }

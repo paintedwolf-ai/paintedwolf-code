@@ -11,8 +11,8 @@ import (
 
 func TestTreeEvictionRechecksPinAdmittedAfterSelection(t *testing.T) {
 	store := checkpointTestStore(t)
-	store.catalog.trees = map[string]projectionStore{"eviction": store}
-	t.Cleanup(func() { testutil.FailErr(t, "drain eviction fixture", store.catalog.Drain(t.Context())) })
+	store.stores.trees = map[string]projectionStore{"eviction": store}
+	t.Cleanup(func() { testutil.FailErr(t, "drain eviction fixture", store.stores.Drain(t.Context())) })
 	generation, segment, page := lifecycleGeneration(t, store, 1)
 	store.mu.Lock()
 	store.initializeStructureLocked()
@@ -78,13 +78,13 @@ func TestTreeEvictionSkipsHeldRoot(t *testing.T) {
 	catalog := New()
 	t.Cleanup(func() { testutil.FailErr(t, "drain catalog", catalog.Drain(context.Background())) })
 	held := Root{ID: "held", Path: t.TempDir()}
-	release, err := catalog.HoldRoot(t.Context(), "project", held)
+	release, err := catalog.Trees.HoldRoot(t.Context(), "project", held)
 	testutil.FailErr(t, "hold root", err)
-	store, err := catalog.indexStore(t.Context(), "project", held)
+	store, err := catalog.Trees.indexStore(t.Context(), "project", held)
 	testutil.FailErr(t, "resolve held store", err)
 	churn := func(prefix string) {
-		for i := range catalog.rootLimit + catalog.scopedLimit + 4 {
-			_, err := catalog.indexStore(t.Context(), "project", Root{ID: fmt.Sprintf("%s-%d", prefix, i), Path: t.TempDir()})
+		for i := range catalog.Trees.limit + 4 {
+			_, err := catalog.Trees.indexStore(t.Context(), "project", Root{ID: fmt.Sprintf("%s-%d", prefix, i), Path: t.TempDir()})
 			testutil.FailErr(t, "open another root", err)
 		}
 	}

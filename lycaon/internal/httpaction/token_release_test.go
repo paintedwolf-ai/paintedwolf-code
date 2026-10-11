@@ -3,6 +3,7 @@ package httpaction
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // issuerServer hands out one token from /login.
@@ -54,7 +54,7 @@ func TestTokenIssuedElsewhereIsReviewedBeforePlacement(t *testing.T) {
 		wantCode   string
 		wantOnWire string
 	}{
-		"withheld":       {decision: secretmatch.Withhold, wantCode: tools.OutboundSecretDeniedCode},
+		"withheld":       {decision: secretmatch.Withhold, wantCode: toolrejection.OutboundSecretDeniedCode},
 		"sent unchanged": {decision: secretmatch.SendUnchanged, wantOnWire: "Bearer issued-token-4411"},
 		"sent redacted":  {decision: secretmatch.SendRedacted, wantOnWire: "Bearer " + secretmatch.RedactedMarker},
 	} {
@@ -96,7 +96,7 @@ func TestTokenIssuedElsewhereIsReviewedBeforePlacement(t *testing.T) {
 				t.Fatalf("alert fingerprints = %v review value = %q, want one fingerprint and no value", alert.Fingerprints, alert.ReviewValue)
 			}
 			if tc.wantCode != "" {
-				var reject *tools.ToolReject
+				var reject *toolrejection.ToolReject
 				if !errors.As(err, &reject) || reject.Code != tc.wantCode {
 					t.Fatalf("err = %v, want %s", err, tc.wantCode)
 				}
@@ -169,9 +169,9 @@ func TestTokenIssuedElsewhereWithoutAScreenIsAFault(t *testing.T) {
 		"headers":            []any{map[string]any{"name": "Authorization", "value": "Bearer {{token:api}}"}},
 		"capability_request": loopbackCapability(t, relying.URL),
 	}, sessionContext(root, "relying"))
-	var reject *tools.ToolReject
-	if !errors.As(err, &reject) || reject.Code != tools.OutboundSecretScreenFailedCode {
-		t.Fatalf("err = %v, want %s", err, tools.OutboundSecretScreenFailedCode)
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != toolrejection.OutboundSecretScreenFailedCode {
+		t.Fatalf("err = %v, want %s", err, toolrejection.OutboundSecretScreenFailedCode)
 	}
 	if seen != "" {
 		t.Fatalf("the relying service received %q", seen)

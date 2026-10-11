@@ -77,6 +77,11 @@ class FeedPublicationTests(unittest.TestCase):
                 path = commands / command
                 path.write_text(shim)
                 path.chmod(0o700)
+            verifier = commands / "minisign"
+            verifier.write_text("#!" + sys.executable + "\n" +
+                                "import pathlib,sys\n" +
+                                f"sys.exit(1 if pathlib.Path({str(work / 'reject-signature')!r}).exists() else 0)\n")
+            verifier.chmod(0o700)
             env = {key: value for key, value in os.environ.items() if key not in {"FEED_SIGNING_KEYS_JSON", "FEED_TEST_REGISTRY"}}
             env.update(PATH=str(commands) + os.pathsep + env["PATH"], PW_TEST_STORAGE=str(store), R2_BUCKET="test", CLOUDFLARE_ACCOUNT_ID="test", CLOUDFLARE_API_TOKEN="test", DOWNLOAD_BASE_URL="https://downloads.paintedwolf.dev")
             command = ["bash", str(scripts / "release-r2-publish-pointer.sh"), "--file", str(pointer), "--signature", str(signature), "--channel", "stable", "--generation", "1", "--from-version", "0.2.0"]
@@ -90,6 +95,12 @@ class FeedPublicationTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual((store / "puts").read_text().splitlines(), ["latest.json.sig"])
             (store / "puts").write_text("")
+            (work / "reject-signature").write_text("cryptographic verification fails")
+            result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=60)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual((store / "puts").read_text(), "")
+            self.assertEqual(current.read_bytes(), pointer.read_bytes())
+            (work / "reject-signature").unlink()
             signature.write_text(signed("0.1.1"))
             result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=60)
             self.assertNotEqual(result.returncode, 0)

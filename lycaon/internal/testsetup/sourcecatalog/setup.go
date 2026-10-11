@@ -16,7 +16,7 @@ func AwaitIndex(ctx context.Context, catalog *sourcecatalog.Catalog, projectID s
 	tick := time.NewTicker(10 * time.Millisecond)
 	defer tick.Stop()
 	for {
-		status, err := catalog.IndexStatus(ctx, projectID, root)
+		status, err := catalog.Trees.IndexStatus(ctx, projectID, root)
 		if err != nil {
 			return err
 		}

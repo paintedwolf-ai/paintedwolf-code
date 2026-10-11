@@ -29,10 +29,10 @@ func ObserveCoordinatorCloseoutGrounding(
 	if gc == nil {
 		return verdict, nil
 	}
-	gc.Surface = strings.TrimSpace(surfaceID)
-	gc.CitationFieldsPresent = len(report.CitedEvidence) > 0 || len(report.CitedURLs) > 0
+	gc.Session.Surface = strings.TrimSpace(surfaceID)
+	gc.Grounding.CitationFieldsPresent = len(report.CitedEvidence) > 0 || len(report.CitedURLs) > 0
 	if verdict.CitationsRequired {
-		gc.RejectObservation = "citations_required"
+		gc.Rejection.RejectObservation = "citations_required"
 		putCloseoutRejectData(gc, verdict.HintData,
 			guidance.SynthCitationsRequiredCode, guidance.InvestCitationsRequiredCode)
 		return verdict, nil
@@ -49,18 +49,18 @@ func publishCloseoutCitationFacts(gc *oar.GuardContext, verdict CloseoutGroundin
 	offenders := append([]string(nil), verdict.Offenders...)
 	switch {
 	case len(verdict.UnobservedHandles) > 0:
-		gc.UnobservedCitedHandles = append([]string(nil), verdict.UnobservedHandles...)
+		gc.Grounding.UnobservedCitedHandles = append([]string(nil), verdict.UnobservedHandles...)
 		putCloseoutRejectData(gc, verdict.HintData,
 			guidance.SynthHandleNotInLegsCode, guidance.InvestHandleNotObservedCode)
 	case len(verdict.UnobservedURLs) > 0:
-		gc.UnobservedCitedURLs = append([]string(nil), verdict.UnobservedURLs...)
+		gc.Grounding.UnobservedCitedURLs = append([]string(nil), verdict.UnobservedURLs...)
 		putCloseoutRejectData(gc, verdict.HintData,
 			guidance.SynthURLNotObservedCode, guidance.InvestURLNotObservedCode)
 	case verdict.CitationUnverifiable:
 		if len(offenders) == 0 {
 			return
 		}
-		gc.CitationUnverifiable = true
+		gc.Grounding.CitationUnverifiable = true
 		putCloseoutRejectData(gc, verdict.HintData,
 			guidance.SynthCitationUnverifiableCode, guidance.InvestCitationUnverifiableCode)
 	}

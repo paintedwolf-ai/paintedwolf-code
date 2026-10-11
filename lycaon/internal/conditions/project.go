@@ -25,6 +25,14 @@ func RegisterProjectToolConditions(reg *ConditionRegistry) error {
 	// The complement of the catalog's no_folder_allowlist, which the coordinator
 	// surface also reads to hide the same tools.
 	return reg.Register("tool_requires_project_roots", func(ec EvalContext) (bool, error) {
+		if ec.ToolName == "summarize" {
+			_, path := ec.ToolArgs["path"]
+			_, paths := ec.ToolArgs["paths"]
+			_, pattern := ec.ToolArgs["pattern"]
+			_, cursor := ec.ToolArgs["cursor"]
+			_, content := ec.ToolArgs["content"]
+			return path || paths || pattern || cursor || !content, nil
+		}
 		return toolscope.RequiresProjectRoots(ec.ToolName), nil
 	})
 }

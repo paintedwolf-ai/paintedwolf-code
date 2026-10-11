@@ -22,7 +22,9 @@ func (e *ProseTurnToolCallError) Error() string {
 }
 
 // NoticeCode routes the turn failure to its own notice.
-func (e *ProseTurnToolCallError) NoticeCode() api.NoticeCode { return api.NoticeCodeTurnCloseoutToolCall }
+func (e *ProseTurnToolCallError) NoticeCode() api.NoticeCode {
+	return api.NoticeCodeTurnCloseoutToolCall
+}
 
 // NoticeProseTurnToolCalls supplies the notice's facts.
 func (e *ProseTurnToolCallError) NoticeProseTurnToolCalls() (tools []string, closeoutReason string) {

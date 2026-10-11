@@ -117,6 +117,12 @@ paths:
             application/json:
               schema:
                 $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '409':
           description: The working file changed since it was loaded
           content:
@@ -187,6 +193,12 @@ paths:
                 $ref: ../../components/schemas/common.yaml#/components/schemas/Error
         '404':
           description: Project, logical file, or retained version not found
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/common.yaml#/components/schemas/Error
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:

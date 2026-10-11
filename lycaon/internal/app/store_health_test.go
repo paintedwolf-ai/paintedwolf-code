@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/app/persistence"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -34,10 +35,10 @@ func TestIntegrityFailureStopsRunnerAndStoreCoupledMaintenance(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("integrity runner did not settle")
 	}
-	if err := (storeAccessGuard{store: store}).Verify(); !errors.Is(err, db.ErrStoreIncompatible) {
+	if err := (&persistence.Runtime{Database: store}).Verify(); !errors.Is(err, db.ErrStoreIncompatible) {
 		t.Fatalf("maintenance guard = %v", err)
 	}
-	if err := (delegationWiring{&serveBuilder{db: store}}).reconcileStoreCoupledStorage(t.Context()); !errors.Is(err, db.ErrStoreIncompatible) {
+	if err := reconcileStoreCoupledStorage(&serveBuilder{storage: persistence.Runtime{Database: store}}, t.Context()); !errors.Is(err, db.ErrStoreIncompatible) {
 		t.Fatalf("reconcile = %v", err)
 	}
 }

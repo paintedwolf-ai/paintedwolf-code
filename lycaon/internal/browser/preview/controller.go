@@ -178,7 +178,7 @@ func (c *Controller) Attach(ctx context.Context, opts AttachOpts) {
 	stopPrev := func() {}
 	c.mu.Lock()
 	if prev := c.pages[key]; prev != nil {
-		stopPrev = c.stopCastLocked(prev)
+		stopPrev = c.stopCastLocked(ctx, prev)
 		delete(c.pages, key)
 	}
 	c.pages[key] = st
@@ -240,7 +240,7 @@ func (c *Controller) Detach(ctx context.Context, sessionID, pageID string) {
 	c.mu.Lock()
 	st := c.pages[key]
 	if st != nil {
-		stop = c.stopCastLocked(st)
+		stop = c.stopCastLocked(ctx, st)
 		delete(c.pages, key)
 	}
 	c.mu.Unlock()
@@ -285,7 +285,7 @@ func (c *Controller) SetWatching(ctx context.Context, sessionID string, watching
 		if watching {
 			starts = append(starts, st)
 		} else if !c.streamWatchedLocked(st) {
-			stops = append(stops, c.stopCastLocked(st))
+			stops = append(stops, c.stopCastLocked(ctx, st))
 		}
 	}
 	c.mu.Unlock()
@@ -421,14 +421,14 @@ func (c *Controller) PublishAction(ctx context.Context, sessionID, pageID string
 }
 
 // Close tears down every stream.
-func (c *Controller) Close() {
+func (c *Controller) Close(ctx context.Context) {
 	if c == nil {
 		return
 	}
 	var stops []func()
 	c.mu.Lock()
 	for key, st := range c.pages {
-		stops = append(stops, c.stopCastLocked(st))
+		stops = append(stops, c.stopCastLocked(ctx, st))
 		delete(c.pages, key)
 	}
 	clear(c.watching)
@@ -508,7 +508,7 @@ func (c *Controller) startCast(ctx context.Context, st *stream) {
 		close(h.done)
 		if err == nil {
 			// Cancellation can race screencast startup.
-			stopPageCast(st.held.Page)
+			stopPageCast(ctx, st.held.Page)
 		}
 		return
 	}
@@ -517,7 +517,7 @@ func (c *Controller) startCast(ctx context.Context, st *stream) {
 }
 
 // stopCastLocked returns unlocked screencast cleanup.
-func (c *Controller) stopCastLocked(st *stream) func() {
+func (c *Controller) stopCastLocked(ctx context.Context, st *stream) func() {
 	h := st.cast
 	if h == nil {
 		return func() {}
@@ -531,14 +531,14 @@ func (c *Controller) stopCastLocked(st *stream) func() {
 	return func() {
 		h.cancel()
 		if page != nil {
-			stopPageCast(page)
+			stopPageCast(ctx, page)
 		}
 		<-h.done
 	}
 }
 
-func stopPageCast(page *rod.Page) {
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(page.GetContext()), 2*time.Second)
+func stopPageCast(parent context.Context, page *rod.Page) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(parent), 2*time.Second)
 	defer cancel()
 	_ = proto.PageStopScreencast{}.Call(page.Context(ctx))
 }

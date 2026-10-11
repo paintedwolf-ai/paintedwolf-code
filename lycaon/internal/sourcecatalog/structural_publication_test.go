@@ -19,12 +19,12 @@ import (
 
 func TestStructuralPublicationReleasesWritersBeforeNotifyingReaders(t *testing.T) {
 	catalog, root := indexFixture(t)
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get publication store", err)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
 	defer cancel()
 	entered, resume := make(chan struct{}), make(chan struct{})
-	unsubscribe := catalog.SubscribeNavigation(root, func() {
+	unsubscribe := catalog.Directories.SubscribeNavigation(root, func() {
 		close(entered)
 		<-resume
 	})
@@ -49,10 +49,10 @@ func TestStructuralTerminalFailureSettlesKnownUnresolvedChildren(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "failed/unknown/file.txt", "source")
 	for _, dir := range []string{".", "failed"} {
-		_, err := catalog.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{})
+		_, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{})
 		testutil.FailErr(t, "observe known parent", err)
 	}
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get failure store", err)
 	complete, err := store.subtreeComplete(t.Context(), ".")
 	testutil.FailErr(t, "read pending subtree coverage", err)
@@ -70,7 +70,7 @@ func TestStructuralTerminalFailureSettlesKnownUnresolvedChildren(t *testing.T) {
 			t.Fatalf("terminal failure left %q preparation unresolved", dir)
 		}
 	}
-	navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open failed generation", err)
 	defer func() { _ = navigation.Close() }()
 	_, err = navigation.Entry(t.Context(), "failed/unknown")
@@ -86,7 +86,7 @@ func TestStructuralRebasePreservesForegroundRevalidation(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "same/unchanged.txt", "source")
 	writeIndexFile(t, root.Path, "other/original.txt", "source")
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get rebase store", err)
 	testutil.FailErr(t, "build initial membership", store.buildStructure(t.Context(), map[string]struct{}{".": {}}, true))
 	pin, err := store.retainGeneration(headGeneration, true)
@@ -101,7 +101,7 @@ func TestStructuralRebasePreservesForegroundRevalidation(t *testing.T) {
 	before, err := store.readObservation(t.Context(), "same")
 	testutil.FailErr(t, "capture foreground basis", err)
 	store.fenceObservationSubtree("same")
-	foreground, err := catalog.ObserveDirectory(t.Context(), "p", root, "same", DirectoryRead{})
+	foreground, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, "same", DirectoryRead{})
 	testutil.FailErr(t, "refresh unchanged foreground membership", err)
 	if foreground.Sequence != before.Sequence || foreground.Invalidation == before.Invalidation {
 		t.Fatal("fixture did not preserve membership sequence across revalidation")
@@ -112,7 +112,7 @@ func TestStructuralRebasePreservesForegroundRevalidation(t *testing.T) {
 	if after != foreground {
 		t.Fatalf("bulk replaced foreground observation: got %+v, want %+v", after, foreground)
 	}
-	navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open merged generation", err)
 	defer func() { _ = navigation.Close() }()
 	_, err = navigation.Entry(t.Context(), "other/bulk.txt")
@@ -121,7 +121,7 @@ func TestStructuralRebasePreservesForegroundRevalidation(t *testing.T) {
 
 func TestStructuralRebaseDoesNotResurrectForegroundRemovedSubtree(t *testing.T) {
 	catalog, root := indexFixture(t)
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get removal store", err)
 	testutil.FailErr(t, "publish empty root", store.buildStructure(t.Context(), map[string]struct{}{".": {}}, true))
 	pin, err := store.retainGeneration(headGeneration, true)
@@ -135,13 +135,13 @@ func TestStructuralRebaseDoesNotResurrectForegroundRemovedSubtree(t *testing.T) 
 	testutil.FailErr(t, "finalize transient membership", bulk.finalize(t.Context()))
 	testutil.FailErr(t, "remove transient directory", os.RemoveAll(filepath.Join(root.Path, "transient")))
 	store.fenceObservationSubtree(".")
-	_, err = catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
 	testutil.FailErr(t, "publish foreground removal", err)
 	testutil.FailErr(t, "rebase stale transient scan", store.publishStructure(t.Context(), bulk, pin.Generation))
 	if _, err := store.readObservation(t.Context(), "transient"); !errors.Is(err, pagedview.ErrMissing) {
 		t.Fatalf("removed subtree observation resurrected: %v", err)
 	}
-	navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open post-removal generation", err)
 	defer func() { _ = navigation.Close() }()
 	if _, err := navigation.Entry(t.Context(), "transient"); !errors.Is(err, pagedview.ErrMissing) {
@@ -163,7 +163,7 @@ func TestForegroundPublicationCompletesWhileBulkCoverageWaits(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "bulk/original.txt", "source")
 	writeIndexFile(t, root.Path, "foreground/original.txt", "source")
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get publication store", err)
 	testutil.FailErr(t, "build initial structure", store.buildStructure(t.Context(), map[string]struct{}{".": {}}, true))
 	pin, err := store.retainGeneration(headGeneration, true)
@@ -190,14 +190,14 @@ func TestForegroundPublicationCompletesWhileBulkCoverageWaits(t *testing.T) {
 	<-coverageStarted
 	writeIndexFile(t, root.Path, "foreground/new.txt", "source")
 	store.fenceObservationSubtree("foreground")
-	foreground, err := catalog.ObserveDirectory(t.Context(), "p", root, "foreground", DirectoryRead{})
+	foreground, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, "foreground", DirectoryRead{})
 	testutil.FailErr(t, "publish foreground while bulk coverage waits", err)
 	if !foreground.Complete || foreground.Entries != 2 {
 		t.Fatalf("foreground observation = %+v", foreground)
 	}
 	close(coverageRelease)
 	testutil.FailErr(t, "publish bulk after foreground", <-bulkDone)
-	navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open merged navigation", err)
 	defer func() { _ = navigation.Close() }()
 	_, err = navigation.Entry(t.Context(), "bulk/new.txt")
@@ -210,7 +210,7 @@ func TestStructuralPublicationMergePreservesPreparedParentMembership(t *testing.
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "a/original.txt", "source")
 	writeIndexFile(t, root.Path, "z/original.txt", "source")
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get publication store", err)
 	testutil.FailErr(t, "build initial structure", store.buildStructure(t.Context(), map[string]struct{}{".": {}}, true))
 	pin, err := store.retainGeneration(headGeneration, true)
@@ -238,11 +238,11 @@ func TestStructuralPublicationMergePreservesPreparedParentMembership(t *testing.
 	<-coverageStarted
 	writeIndexFile(t, root.Path, "a/foreground.txt", "source")
 	store.fenceObservationSubtree("a")
-	_, err = catalog.ObserveDirectory(t.Context(), "p", root, "a", DirectoryRead{})
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, "a", DirectoryRead{})
 	testutil.FailErr(t, "publish foreground child repair", err)
 	close(coverageRelease)
 	testutil.FailErr(t, "publish bulk parent membership", <-bulkDone)
-	navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open merged navigation", err)
 	defer func() { _ = navigation.Close() }()
 	_, err = navigation.Entry(t.Context(), "new-parent/file.txt")
@@ -255,7 +255,7 @@ func TestStructuralPublicationMergeKeepsCompletePreparedListingOverPartialForegr
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "target/actual-a.txt", "source")
 	writeIndexFile(t, root.Path, "target/actual-b.txt", "source")
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get publication store", err)
 	testutil.FailErr(t, "build initial structure", store.buildStructure(t.Context(), map[string]struct{}{".": {}}, true))
 	pin, err := store.retainGeneration(headGeneration, true)
@@ -281,14 +281,14 @@ func TestStructuralPublicationMergeKeepsCompletePreparedListingOverPartialForegr
 	go func() { bulkDone <- store.publishStructure(t.Context(), bulk, pin.Generation) }()
 	<-coverageStarted
 	store.fenceObservationSubtree("target")
-	partial, err := catalog.ObserveDirectory(t.Context(), "p", root, "target", DirectoryRead{Entries: 1})
+	partial, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, "target", DirectoryRead{Entries: 1})
 	testutil.FailErr(t, "publish partial foreground listing", err)
 	if partial.Complete {
 		t.Fatal("foreground fixture unexpectedly completed")
 	}
 	close(coverageRelease)
 	testutil.FailErr(t, "publish bulk over partial foreground", <-bulkDone)
-	navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open merged navigation", err)
 	defer func() { _ = navigation.Close() }()
 	_, err = navigation.Entry(t.Context(), "target/bulk-only.txt")
@@ -300,7 +300,7 @@ func TestStructuralPublicationSurvivesSuccessiveForegroundHeads(t *testing.T) {
 	writeIndexFile(t, root.Path, "bulk/original.txt", "source")
 	writeIndexFile(t, root.Path, "foreground-one/original.txt", "source")
 	writeIndexFile(t, root.Path, "foreground-two/original.txt", "source")
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get publication store", err)
 	testutil.FailErr(t, "build initial structure", store.buildStructure(t.Context(), map[string]struct{}{".": {}}, true))
 	pin, err := store.retainGeneration(headGeneration, true)
@@ -320,7 +320,7 @@ func TestStructuralPublicationSurvivesSuccessiveForegroundHeads(t *testing.T) {
 	<-coverage.started[0]
 	writeIndexFile(t, root.Path, "foreground-one/new.txt", "source")
 	store.fenceObservationSubtree("foreground-one")
-	_, err = catalog.ObserveDirectory(t.Context(), "p", root, "foreground-one", DirectoryRead{})
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, "foreground-one", DirectoryRead{})
 	testutil.FailErr(t, "publish first foreground head", err)
 	close(coverage.released[0])
 	<-coverage.started[1]
@@ -332,16 +332,16 @@ func TestStructuralPublicationSurvivesSuccessiveForegroundHeads(t *testing.T) {
 		writeIndexFile(t, root.Path, fmt.Sprintf("fallback-%03d/file.txt", i), "source")
 	}
 	store.fenceObservationSubtree(".")
-	_, err = catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
 	testutil.FailErr(t, "publish partition-changing root head", err)
 	for i := range fallbackDirs {
 		dir := fmt.Sprintf("fallback-%03d", i)
-		_, err = catalog.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{})
+		_, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{})
 		testutil.FailErr(t, "publish partition-changing child head", err)
 	}
 	close(coverage.released[1])
 	testutil.FailErr(t, "publish bulk after partition fallback", <-bulkDone)
-	navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open merged navigation", err)
 	defer func() { _ = navigation.Close() }()
 	for _, entry := range []string{"bulk/bulk-new.txt", "foreground-one/new.txt", "fallback-000/file.txt", fmt.Sprintf("fallback-%03d/file.txt", fallbackDirs-1)} {

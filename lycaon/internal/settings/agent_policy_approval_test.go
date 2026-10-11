@@ -34,10 +34,20 @@ func agentPolicyWrite(t *testing.T, project, rel string) hitl.ProposedAction {
 		t.Fatalf("%s is not agent policy", rel)
 	}
 	return hitl.ProposedAction{
-		Tool: "write", Files: []string{path}, ProjectID: "project", ProjectDir: project,
-		SessionID: "task", AgentPolicy: []hitl.AgentPolicyTarget{target},
-		FileChanges: []api.ApprovalFileChange{{Path: path, Operation: "write", After: "changed"}},
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Files: []string{path},
+},
+Scope: hitl.ActionScope{
+ProjectID: "project",
+ProjectDir: project,
+SessionID: "task",
+},
+Mutations: hitl.ActionMutations{
+AgentPolicy: []hitl.AgentPolicyTarget{target},
+FileChanges: []api.ApprovalFileChange{{Path: path, Operation: "write", After: "changed"}},
+},
+}
 }
 
 func asksAgentPolicy(result *hitl.ApprovalResult) bool {
@@ -165,9 +175,16 @@ func TestAgentPolicyLeaseCoversItsSubject(t *testing.T) {
 func TestIndexOnlyInstructionChangeDoesNotEditInstructions(t *testing.T) {
 	approvalGate, project := agentPolicyGate(t, gate.PostureStrict)
 	result, err := approvalGate.Evaluate(t.Context(), hitl.ProposedAction{
-		Tool: "git_restore", ProjectDir: project,
-		FileChanges: []api.ApprovalFileChange{{Path: "AGENTS.md", Target: "index"}},
-	})
+Invocation: hitl.ActionInvocation{
+Tool: "git_restore",
+},
+Scope: hitl.ActionScope{
+ProjectDir: project,
+},
+Mutations: hitl.ActionMutations{
+FileChanges: []api.ApprovalFileChange{{Path: "AGENTS.md", Target: "index"}},
+},
+})
 	testutil.FailErr(t, "evaluate index-only change", err)
 	if asksAgentPolicy(result) {
 		t.Fatal("staging existing bytes asked to change instructions")

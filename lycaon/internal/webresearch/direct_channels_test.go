@@ -139,7 +139,7 @@ func TestProviderSeedChannelDedupesURL(t *testing.T) {
 		}},
 	})
 
-	store, err := webindex.Open(filepath.Join(t.TempDir(), "web-index.db"))
+	store, err := webindex.Open(t.Context(), filepath.Join(t.TempDir(), "web-index.db"))
 	testutil.FailErr(t, "open index", err)
 	t.Cleanup(func() { _ = store.Close() })
 	store.QueuePage(t.Context(), webindex.Page{URL: pageURL + "/", Title: "Widget frobnicator review", Verified: true})
@@ -243,7 +243,7 @@ func TestProviderHitIngestedToIndex(t *testing.T) {
 		}},
 	})
 
-	store, err := webindex.Open(filepath.Join(t.TempDir(), "web-index.db"))
+	store, err := webindex.Open(t.Context(), filepath.Join(t.TempDir(), "web-index.db"))
 	testutil.FailErr(t, "open index", err)
 	t.Cleanup(func() { _ = store.Close() })
 

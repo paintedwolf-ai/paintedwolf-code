@@ -46,7 +46,7 @@ func validateFiredTransform(r *Rule, gc *GuardContext) error {
 	facts := activation(gc)
 	contentLen := 0
 	if gc != nil {
-		contentLen = len([]rune(gc.Content))
+		contentLen = len([]rune(gc.Content.Content))
 	}
 	return oarcore.ValidateTransformTarget(r.Transform.Target, facts, contentLen)
 }
@@ -69,15 +69,15 @@ func finishContent(res *PipelineResult, gc *GuardContext, contributions []transf
 			res.Transforms = append(res.Transforms, contribution.spec)
 		}
 	}
-	if gc == nil || !gc.ContentSet {
+	if gc == nil || !gc.Content.ContentSet {
 		return
 	}
 	res.ContentSet = true
 	if len(contributions) == 0 {
-		res.Content = gc.Content
+		res.Content = gc.Content.Content
 		return
 	}
-	res.Content, res.SkippedTransforms = applyRuleTransforms(gc.Content, contributions)
+	res.Content, res.SkippedTransforms = applyRuleTransforms(gc.Content.Content, contributions)
 }
 
 func applyRuleTransforms(content string, contributions []transformContribution) (string, []oarcore.SkippedTransform) {

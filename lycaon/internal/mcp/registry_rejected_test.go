@@ -30,19 +30,19 @@ func TestCheckSurfacesRejectedRows(t *testing.T) {
     command: /bin/evil
 `), 0o600))
 
-	reg, err := mcp.NewRegistryImpl(mcp.RegistryOptions{
+	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		GlobalOverridePath: globalPath,
 		Connector:          &mcp.MockConnector{},
 	})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	reg.SetToolRegistry(tools.NewDefaultRegistry())
+	testutil.FailErr(t, "NewRuntime", err)
+	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())
 	// The project layer is gated on Applies("project_mcp", p); this test exercises the
 	// structural RejectedRow path, so open the gate explicitly.
-	reg.SetProjectOverlayGate(func(context.Context, string) bool { return true })
-	testutil.FailErr(t, "Load", reg.Load(context.Background()))
+	reg.Catalog.SetProjectOverlayGate(func(context.Context, string) bool { return true })
+	testutil.FailErr(t, "Load", reg.Catalog.Load(context.Background()))
 
 	scope := mcp.ProjectScope("proj-1", projectDir, []string{projectDir})
-	rows := reg.Check(context.Background(), scope)
+	rows := reg.Administration.Check(context.Background(), scope)
 	found := false
 	for _, row := range rows {
 		if row.ProviderID == "evil" && row.Status == api.McpCheckRowStatusError && row.Code == mcp.RejectProjectStdioForbidden {
@@ -53,7 +53,7 @@ func TestCheckSurfacesRejectedRows(t *testing.T) {
 		t.Fatalf("check missing rejected evil row: %+v", rows)
 	}
 
-	list := reg.ListProviders(context.Background(), scope)
+	list := reg.Catalog.ListProviders(context.Background(), scope)
 	foundList := false
 	for _, s := range list {
 		if s.ID == "evil" && !s.Enabled && s.LastError == mcp.RejectProjectStdioForbidden {
@@ -79,14 +79,14 @@ func TestSetProviderEnabledPreservesOverlayURL(t *testing.T) {
     url: https://intel.example/mcp
     enabled: false
 `), 0o600))
-	reg, err := mcp.NewRegistryImpl(mcp.RegistryOptions{
+	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath:          dir,
 		GlobalOverridePath: path,
 		Connector:          &mcp.MockConnector{},
 	})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	testutil.FailErr(t, "Load", reg.Load(context.Background()))
-	testutil.FailErr(t, "enable", reg.SetProviderEnabled(context.Background(), mcp.CallScope{}, "team", true, ""))
+	testutil.FailErr(t, "NewRuntime", err)
+	testutil.FailErr(t, "Load", reg.Catalog.Load(context.Background()))
+	testutil.FailErr(t, "enable", reg.Administration.SetProviderEnabled(context.Background(), mcp.CallScope{}, "team", true, ""))
 	data, err := os.ReadFile(path)
 	testutil.FailErr(t, "read", err)
 	text := string(data)
@@ -117,13 +117,13 @@ func TestConcurrentProviderUpdatesRetainBothRows(t *testing.T) {
     url: https://second.example/mcp
     enabled: false
 `), 0o600))
-	reg, err := mcp.NewRegistryImpl(mcp.RegistryOptions{
+	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath:          dir,
 		GlobalOverridePath: path,
 		Connector:          &mcp.MockConnector{},
 	})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	testutil.FailErr(t, "Load", reg.Load(t.Context()))
+	testutil.FailErr(t, "NewRuntime", err)
+	testutil.FailErr(t, "Load", reg.Catalog.Load(t.Context()))
 	start := make(chan struct{})
 	errs := make(chan error, 2)
 	var wg sync.WaitGroup
@@ -132,7 +132,7 @@ func TestConcurrentProviderUpdatesRetainBothRows(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			errs <- reg.SetProviderEnabled(t.Context(), mcp.CallScope{}, id, true, "")
+			errs <- reg.Administration.SetProviderEnabled(t.Context(), mcp.CallScope{}, id, true, "")
 		}()
 	}
 	close(start)
@@ -165,14 +165,14 @@ func TestSpawnEnvTokenOnlyForSelf(t *testing.T) {
 `)
 	globalPath := filepath.Join(t.TempDir(), "mcp.yaml")
 	conn := &capturingConnector{inner: &mcp.MockConnector{}, envs: map[string][]string{}}
-	reg, err := mcp.NewRegistryImpl(mcp.RegistryOptions{
+	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		GlobalOverridePath: globalPath,
 		Connector:          conn,
 	})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	reg.SetToolRegistry(tools.NewDefaultRegistry())
-	reg.SetAPIAccess("secret-token")
-	testutil.FailErr(t, "Load", reg.Load(context.Background()))
+	testutil.FailErr(t, "NewRuntime", err)
+	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())
+	reg.Connections.SetAPIAccess("secret-token")
+	testutil.FailErr(t, "Load", reg.Catalog.Load(context.Background()))
 	if got := conn.env("selfish"); len(got) != 1 || got[0] != "LYCAON_API_TOKEN=secret-token" {
 		t.Fatalf("selfish env=%v", got)
 	}

@@ -95,7 +95,7 @@ func boundCitationGroundingReport(
 			return report, "", workercompletion.WorkerSummaryEvalResult{}, err
 		}
 		retryStart := len(msgs)
-		if _, err := resolver.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginGroundingRetry, prompt); err != nil {
+		if _, err := opts.hostTurns.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginGroundingRetry, prompt); err != nil {
 			return hostAssembleWorkerExit(ctx, report, opts, childSessionID, eval)
 		}
 

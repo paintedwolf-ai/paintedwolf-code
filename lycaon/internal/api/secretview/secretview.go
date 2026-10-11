@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -112,7 +113,7 @@ func ReferenceLines(store session.Store, secrets *secretcap.Service,
 	if secrets == nil {
 		return nil, fmt.Errorf("managed secret storage not configured")
 	}
-	chatSessionID := session.RootSessionID(ctx, store, sess.ID)
+	chatSessionID := sessiontree.RootID(ctx, store, sess.ID)
 	seen := make(map[string]struct{}, len(refs))
 	lines := make([]string, 0, len(refs))
 	for _, ref := range refs {

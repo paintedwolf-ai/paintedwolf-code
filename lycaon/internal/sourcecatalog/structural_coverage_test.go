@@ -23,7 +23,7 @@ func (s *indexStore) subtreeComplete(ctx context.Context, dir string) (bool, err
 
 // observeSubtree waits for complete coverage of a subtree.
 func (c *Catalog) observeSubtree(ctx context.Context, project string, root Root, dir string) error {
-	return c.AwaitSubtree(ctx, project, root, dir, func(ctx context.Context, navigation *Navigation) (bool, error) {
+	return c.Directories.AwaitSubtree(ctx, project, root, dir, func(ctx context.Context, navigation *Navigation) (bool, error) {
 		return SubtreeCovered(ctx, navigation, normalizeDir(dir))
 	})
 }
@@ -35,7 +35,7 @@ func TestStructuralCoveragePreservesSelectedMembershipAndSettlesMissingBranches(
 	filesystem, err := os.OpenRoot(root.Path)
 	testutil.FailErr(t, "open coverage root", err)
 	defer func() { _ = filesystem.Close() }()
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get coverage store", err)
 	builder, err := newStructuralBuilder(store, nil)
 	testutil.FailErr(t, "create coverage builder", err)
@@ -97,7 +97,7 @@ func TestStructuralCoveragePreservesSelectedMembershipAndSettlesMissingBranches(
 	if gone.Failure == "" {
 		t.Fatal("missing selected directory did not receive terminal failure")
 	}
-	navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open coverage navigation", err)
 	defer func() { _ = navigation.Close() }()
 	_, err = navigation.Entry(t.Context(), "partial/nested/fresh.txt")
@@ -128,7 +128,7 @@ func TestStructuralFinalizationOrdersVirtualRootAfterPunctuationDirectories(t *t
 		}
 		t.Run(name, func(t *testing.T) {
 			catalog, root := indexFixture(t)
-			store, err := catalog.indexStore(t.Context(), "p", root)
+			store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 			testutil.FailErr(t, "get punctuation store", err)
 			builder, err := newStructuralBuilder(store, nil)
 			testutil.FailErr(t, "create punctuation builder", err)
@@ -140,7 +140,7 @@ func TestStructuralFinalizationOrdersVirtualRootAfterPunctuationDirectories(t *t
 			observePublicationFixture(t, builder, store, "!dir", []string{"nested"}, true)
 			observePublicationFixture(t, builder, store, "!dir/nested", []string{"file.txt"}, false)
 			testutil.FailErr(t, "publish punctuation structure", store.publishStructure(t.Context(), builder, 0))
-			navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+			navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 			testutil.FailErr(t, "open punctuation navigation", err)
 			defer func() { _ = navigation.Close() }()
 			if extent := navigationExtent(t, navigation); extent != 3 {

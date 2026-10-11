@@ -8,7 +8,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) ingestPromptSecrets(
+func (s *Submission) ingestPromptSecrets(
 	ctx context.Context,
 	sess *wire.Session,
 	refs []wire.PromptSecretReferencePart,

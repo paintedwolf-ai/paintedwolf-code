@@ -6,5 +6,5 @@ this page surfaces the entries that need attention. The policy also generates
 **Update urgency** reflects threat model and protocol decay. **Update friction** reflects
 engineering cost and verification surface. Review both before choosing an update.
 
-**See also:** [Dependencies policy](../dependencies.md) · [Release operations](release.md) ·
+**See also:** [Dependencies policy](../dependencies.md) ·
 [Licensing](../licensing.md) · [Compatibility](../compatibility.md) · [Dev tasks](../dev-tasks.md)

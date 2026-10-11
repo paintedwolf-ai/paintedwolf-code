@@ -1,9 +1,10 @@
 package surface
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -15,7 +16,7 @@ func TestSelectSurfaceBatchPhasePreDispatchAllowsInvestigate(t *testing.T) {
 		"fix the auth bug",
 		ImplementSessionState{BatchPhase: "pre_dispatch"},
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("surface = %q want investigate in pre_dispatch", profile.SurfaceID)
 	}
 }
@@ -28,7 +29,7 @@ func TestSelectSurfaceBatchPhaseDispatchBlocksInvestigateOnHostTurn(t *testing.T
 		HostLoopWakeSentinel,
 		ImplementSessionState{BatchPhase: "dispatch"},
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("surface = %q want investigate on host turn without batch readiness", profile.SurfaceID)
 	}
 }
@@ -41,7 +42,7 @@ func TestSelectSurfaceVisibleUserTurnReopensInvestigateDuringBatchResidue(t *tes
 		"fix the auth bug",
 		ImplementSessionState{BatchPhase: "dispatch"},
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("visible user turn surface = %q want investigate despite dispatch residue", profile.SurfaceID)
 	}
 }
@@ -86,7 +87,7 @@ func TestSelectSurfaceBatchPhaseClosedBlocksInvestigateOnLoopWake(t *testing.T) 
 		HostLoopWakeSentinel,
 		ImplementSessionState{BatchPhase: "closed"},
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("closed batch loop wake surface = %q want investigate without batch readiness", profile.SurfaceID)
 	}
 }

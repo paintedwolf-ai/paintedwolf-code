@@ -14,10 +14,10 @@ func (r *Registry) ActiveExecutionJobs(sessionID string) []ActiveExecutionJob {
 	if r == nil {
 		return nil
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
 	var jobs []ActiveExecutionJob
-	for _, process := range r.sessions[trim(sessionID)] {
+	for _, process := range r.jobs.sessions[trim(sessionID)] {
 		if process.hasExit {
 			continue
 		}

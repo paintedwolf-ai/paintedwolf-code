@@ -51,7 +51,7 @@ func TestReloadHistoryReassemblesDiet(t *testing.T) {
 	}
 	testutil.FailErr(t, "append messages", store.AppendMessages(ctx, sess.ID, msgs...))
 
-	assembled, err := mgr.reloadAssembledHistory(ctx, sess.ID, sess, "")
+	assembled, err := mgr.Runner.History.Reload(ctx, sess.ID, sess, "")
 	testutil.FailErr(t, "reloadAssembledHistory", err)
 	if len(assembled) == 0 {
 		t.Fatal("expected assembled projection")
@@ -142,7 +142,7 @@ func TestReloadHistoryDoesNotWriteStore(t *testing.T) {
 		beforeLens[i] = len(m.Content)
 	}
 
-	assembled, err := mgr.reloadAssembledHistory(ctx, sess.ID, sess, "")
+	assembled, err := mgr.Runner.History.Reload(ctx, sess.ID, sess, "")
 	testutil.FailErr(t, "reloadAssembledHistory", err)
 	if len(assembled) == 0 {
 		t.Fatal("expected assembled projection")
@@ -165,7 +165,7 @@ func TestReloadHistoryDoesNotWriteStore(t *testing.T) {
 
 func TestReloadHistoryFailsClosedWithoutSession(t *testing.T) {
 	mgr, _ := newCompactionManager(t, compaction.DefaultCompactionConfig())
-	_, err := mgr.reloadAssembledHistory(context.Background(), "sess", nil, "")
+	_, err := mgr.Runner.History.Reload(context.Background(), "sess", nil, "")
 	if err == nil {
 		t.Fatal("expected error when sess is nil")
 	}

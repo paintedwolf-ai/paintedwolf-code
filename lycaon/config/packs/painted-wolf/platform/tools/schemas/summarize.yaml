@@ -1,4 +1,4 @@
-description: "Explain a named file or area with a bounded, source-cited briefing. Path sets scope; task ranks within it. Use next_actions only when more evidence is needed."
+description: "Paths accept @scratch/<path> for this chat or worker’s private working files. In a project with no attached folders, use inline `content` only; omit `path` and `paths`. Explain a named file or area with a bounded, source-cited briefing. Path sets scope; task ranks within it. Use next_actions only when more evidence is needed."
 schema:
   type: object
   properties:

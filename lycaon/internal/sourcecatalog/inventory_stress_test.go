@@ -11,7 +11,7 @@ import (
 
 func TestStressStructuralInventoryRanksAndRetainedExtents(t *testing.T) {
 	catalog, root := indexFixture(t)
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "open structural catalog", err)
 	const directories, files = 1000, 1000
 	parents := make([]indexNode, directories)
@@ -30,7 +30,7 @@ func TestStressStructuralInventoryRanksAndRetainedExtents(t *testing.T) {
 	testutil.FailErr(t, "publish directory inventory", store.publishStructure(t.Context(), builder, pin.Generation))
 	builder.close()
 	pin.Release()
-	initial, err := catalog.OpenNavigation(t.Context(), "p", root)
+	initial, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "retain initial extent", err)
 	defer func() { _ = initial.Close() }()
 	pin, err = store.retainGeneration(headGeneration, true)
@@ -52,7 +52,7 @@ func TestStressStructuralInventoryRanksAndRetainedExtents(t *testing.T) {
 	testutil.FailErr(t, "publish file inventory", store.publishStructure(t.Context(), builder, pin.Generation))
 	builder.close()
 	pin.Release()
-	complete, err := catalog.OpenNavigation(t.Context(), "p", root)
+	complete, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "retain complete inventory", err)
 	defer func() { _ = complete.Close() }()
 	const total = directories * (files + 1)
@@ -93,7 +93,7 @@ func TestStressStructuralInventoryRanksAndRetainedExtents(t *testing.T) {
 	testutil.FailErr(t, "publish added file", store.publishStructure(t.Context(), builder, pin.Generation))
 	builder.close()
 	pin.Release()
-	updated, err := catalog.OpenNavigation(t.Context(), "p", root)
+	updated, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "read updated extent", err)
 	defer func() { _ = updated.Close() }()
 	if old, next := navigationExtent(t, complete), navigationExtent(t, updated); old != total || next != total+1 {

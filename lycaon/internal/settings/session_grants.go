@@ -55,7 +55,7 @@ func (s *sessionGrants) put(grant hitl.ApprovalGrant) bool {
 }
 
 func (s *sessionGrants) matching(action hitl.ProposedAction, witness hitl.ApprovalGrantWitness) (hitl.ApprovalGrant, bool) {
-	sessionID := action.ChatSession()
+	sessionID := action.Scope.ChatSession()
 	if sessionID == "" {
 		return hitl.ApprovalGrant{}, false
 	}
@@ -185,7 +185,7 @@ func grantMatchesAction(grant hitl.ApprovalGrant, action hitl.ProposedAction) bo
 		// Typed overlays match through their own cover functions.
 		return false
 	}
-	if strings.TrimSpace(grant.ProjectID) != strings.TrimSpace(action.ProjectID) {
+	if strings.TrimSpace(grant.ProjectID) != strings.TrimSpace(action.Scope.ProjectID) {
 		return false
 	}
 	if len(grant.ExactActionSet) > 0 {
@@ -203,34 +203,34 @@ func grantMatchesAction(grant hitl.ApprovalGrant, action hitl.ProposedAction) bo
 	rule := ApprovalRule{Category: ApprovalCategory(grant.Predicate.Category), Pattern: grant.Predicate.Pattern, Effect: ApprovalEffectAsk}
 	if rule.Category == ApprovalCategoryMCP {
 		// Provider identity is literal in a grant.
-		return ingestion.IsMCPToolName(action.Tool) && action.ApprovalCategory == string(ApprovalCategoryMCP) &&
-			strings.TrimSpace(action.ApprovalSubject) != "" && rule.Pattern == strings.TrimSpace(action.ApprovalSubject)
+		return ingestion.IsMCPToolName(action.Invocation.Tool) && action.Resources.ApprovalCategory == string(ApprovalCategoryMCP) &&
+			strings.TrimSpace(action.Resources.ApprovalSubject) != "" && rule.Pattern == strings.TrimSpace(action.Resources.ApprovalSubject)
 	}
 	if rule.Category == ApprovalCategoryPath {
 		return exactPathGrantMatches(grant, action)
 	}
 	if rule.Category == ApprovalCategoryTool {
-		return rule.Pattern != "" && rule.Pattern == strings.TrimSpace(action.Tool)
+		return rule.Pattern != "" && rule.Pattern == strings.TrimSpace(action.Invocation.Tool)
 	}
 	if rule.Category == ApprovalCategoryCommand {
-		return rule.Pattern == CommandTextFromActionArgs(action.Args)
+		return rule.Pattern == CommandTextFromActionArgs(action.Invocation.Args)
 	}
 	if grant.Predicate.Category == hitl.ApprovalGrantCategoryEgressCommand {
 		// The command's mediated network: any host, this exact command text.
-		return action.Tool == "network" && strings.TrimSpace(action.Command) != "" &&
-			strings.TrimSpace(action.Command) == strings.TrimSpace(rule.Pattern)
+		return action.Invocation.Tool == "network" && strings.TrimSpace(action.Presentation.Command) != "" &&
+			strings.TrimSpace(action.Presentation.Command) == strings.TrimSpace(rule.Pattern)
 	}
 	if grant.Predicate.Category == hitl.ApprovalGrantCategoryPackageCoordinate {
-		return action.PackageExecution != nil && rule.Pattern != "" &&
-			rule.Pattern == hitl.PackageCoordinatePattern(action.PackageExecution)
+		return action.Execution.PackageExecution != nil && rule.Pattern != "" &&
+			rule.Pattern == hitl.PackageCoordinatePattern(action.Execution.PackageExecution)
 	}
 	if rule.Category == ApprovalCategoryHost {
-		host, _ := action.Args["host"].(string)
+		host, _ := action.Invocation.Args["host"].(string)
 		host = strings.ToLower(strings.TrimSpace(host))
 		site, port := hostscope.SplitTunnelPattern(rule.Pattern)
-		if opaqueEgressAction(action.Args) {
+		if opaqueEgressAction(action.Invocation.Args) {
 			// Tunnel grants bind both site and port.
-			return port != 0 && port == egressActionPort(action.Args) && matchHostPattern(site, host)
+			return port != 0 && port == egressActionPort(action.Invocation.Args) && matchHostPattern(site, host)
 		}
 		if port != 0 {
 			return false
@@ -244,18 +244,18 @@ func grantMatchesAction(grant hitl.ApprovalGrant, action hitl.ProposedAction) bo
 // Exact path grants cover every declared target without interpreting filename syntax.
 func exactPathGrantMatches(grant hitl.ApprovalGrant, action hitl.ProposedAction) bool {
 	pattern := exactGrantPath(grant.Predicate.Pattern, grant.ProjectDir)
-	if pattern == "" || len(action.Files) == 0 {
+	if pattern == "" || len(action.Invocation.Files) == 0 {
 		return false
 	}
-	files, root := action.Files, action.ProjectDir
-	if action.ResolvedFiles != nil {
-		if len(action.ResolvedFiles) != len(files) {
+	files, root := action.Invocation.Files, action.Scope.ProjectDir
+	if action.Invocation.ResolvedFiles != nil {
+		if len(action.Invocation.ResolvedFiles) != len(files) {
 			return false
 		}
-		files, root = action.ResolvedFiles, ""
+		files, root = action.Invocation.ResolvedFiles, ""
 	}
 	for _, file := range files {
-		if action.ResolvedFiles != nil && !filepath.IsAbs(file) {
+		if action.Invocation.ResolvedFiles != nil && !filepath.IsAbs(file) {
 			return false
 		}
 		if exactGrantPath(file, root) != pattern {
@@ -297,7 +297,7 @@ func grantedPathCoversTarget(
 	g *RuleApprovalGate, durable []ApprovalGrant, action hitl.ProposedAction, target *gate.FileTarget,
 ) bool {
 	if g.grants != nil {
-		for _, grant := range g.grants.live(action.ChatSession()) {
+		for _, grant := range g.grants.live(action.Scope.ChatSession()) {
 			if grantedPathGrantApplies(grant, action, target) {
 				return true
 			}
@@ -333,13 +333,13 @@ func grantedPathGrantApplies(grant hitl.ApprovalGrant, action hitl.ProposedActio
 }
 
 func writeRootGrantCovers(g *RuleApprovalGate, durable []ApprovalGrant, action hitl.ProposedAction) bool {
-	root, _ := action.Args["proposed_write_root"].(string)
+	root, _ := action.Invocation.Args["proposed_write_root"].(string)
 	root = strings.TrimSpace(root)
 	if root == "" {
 		return false
 	}
 	if g != nil && g.grants != nil {
-		for _, grant := range g.grants.live(action.ChatSession()) {
+		for _, grant := range g.grants.live(action.Scope.ChatSession()) {
 			if writeRootGrantApplies(grant, action, root) {
 				return true
 			}
@@ -367,12 +367,12 @@ func writeRootGrantApplies(grant hitl.ApprovalGrant, action hitl.ProposedAction,
 }
 
 func hostResourceGrantCovers(g *RuleApprovalGate, durable []ApprovalGrant, action hitl.ProposedAction) bool {
-	if len(action.HostResources) == 0 {
+	if len(action.Resources.HostResources) == 0 {
 		return false
 	}
 	covered := map[string]struct{}{}
 	if g != nil && g.grants != nil {
-		for _, grant := range g.grants.live(action.ChatSession()) {
+		for _, grant := range g.grants.live(action.Scope.ChatSession()) {
 			if hostResourceGrantApplies(grant, action) {
 				addHostResourcePattern(covered, grant.Predicate.Pattern)
 			}
@@ -383,7 +383,7 @@ func hostResourceGrantCovers(g *RuleApprovalGate, durable []ApprovalGrant, actio
 			addHostResourcePattern(covered, grant.Pattern)
 		}
 	}
-	for _, id := range action.HostResources {
+	for _, id := range action.Resources.HostResources {
 		if _, ok := covered[strings.TrimSpace(id)]; !ok {
 			return false
 		}
@@ -407,10 +407,10 @@ func GrantScopeApplies(grant hitl.ApprovalGrant, action hitl.ProposedAction) boo
 	case hitl.ApprovalGrantScopeDevice:
 		return true
 	case hitl.ApprovalGrantScopeProject:
-		return strings.TrimSpace(grant.ProjectID) != "" && strings.TrimSpace(grant.ProjectID) == strings.TrimSpace(action.ProjectID)
+		return strings.TrimSpace(grant.ProjectID) != "" && strings.TrimSpace(grant.ProjectID) == strings.TrimSpace(action.Scope.ProjectID)
 	case hitl.ApprovalGrantScopeChat:
-		return strings.TrimSpace(grant.ChatSessionID) == strings.TrimSpace(action.ChatSession()) &&
-			strings.TrimSpace(grant.ProjectID) == strings.TrimSpace(action.ProjectID)
+		return strings.TrimSpace(grant.ChatSessionID) == strings.TrimSpace(action.Scope.ChatSession()) &&
+			strings.TrimSpace(grant.ProjectID) == strings.TrimSpace(action.Scope.ProjectID)
 	default:
 		return false
 	}

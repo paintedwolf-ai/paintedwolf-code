@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -127,14 +128,14 @@ func (f *fakeEditorDocuments) ApplyAgentEdit(_ context.Context, _ string, edit t
 
 func editorCtx(dir string, documents tools.EditorDocuments) tools.ToolContext {
 	tctx := nativefixture.Context(dir)
-	tctx.ProjectID = "p1"
-	tctx.ToolCallID = "call-7"
-	tctx.UserTurn = 3
-	tctx.EditorDocuments = documents
+	tctx.Identity.ProjectID = "p1"
+	tctx.Identity.ToolCallID = "call-7"
+	tctx.Identity.UserTurn = 3
+	tctx.Source.EditorDocuments = documents
 	// These tool fixtures begin with a prior agent read of each declared document.
 	if fake, ok := documents.(*fakeEditorDocuments); ok {
 		for _, document := range fake.docs {
-			fake.RememberAgentRead(tctx.ProjectID, tctx.SessionID, *document)
+			fake.RememberAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, *document)
 		}
 	}
 	return tctx
@@ -245,7 +246,7 @@ func TestEditMatchesAgainstTheDocumentNotDisk(t *testing.T) {
 	_, err := edit.Run(context.Background(), map[string]any{
 		"path": "a.go", "old_string": "disk", "new_string": "agent",
 	}, editorCtx(dir, docs))
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "EDIT_OLD_STRING_NOT_FOUND" {
 		t.Fatalf("err = %v, want EDIT_OLD_STRING_NOT_FOUND against the editor text", err)
 	}
@@ -267,7 +268,7 @@ func TestEditRetriesKeepTheAgentRead(t *testing.T) {
 	_, err := edit.Run(context.Background(), map[string]any{
 		"path": "a.txt", "old_string": "target", "new_string": "done",
 	}, editorCtx(dir, docs))
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "EDITOR_DOCUMENT_CHANGING" {
 		t.Fatalf("stale edit rejection: %v", err)
 	}
@@ -293,7 +294,7 @@ func TestEditReportsADocumentThatKeepsChanging(t *testing.T) {
 	_, err := edit.Run(context.Background(), map[string]any{
 		"path": "a.txt", "old_string": "target", "new_string": "done",
 	}, editorCtx(dir, docs))
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "EDITOR_DOCUMENT_CHANGING" {
 		t.Fatalf("err = %v, want EDITOR_DOCUMENT_CHANGING", err)
 	}
@@ -375,7 +376,7 @@ func TestWorkerBranchReadsTheFile(t *testing.T) {
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("disk\n"), 0o644))
 	docs := &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{"r1/a.txt": openDoc("doc-a", "draft\n", true)}}
 	tctx := editorCtx(dir, docs)
-	tctx.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
+	tctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
 	read := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
 	out, err := read.Run(context.Background(), map[string]any{"path": "a.txt"}, tctx)
 	testutil.FailErr(t, "read", err)
@@ -498,7 +499,7 @@ func TestMutationRequiresASuccessfulRead(t *testing.T) {
 	assertReadRequired := func() {
 		t.Helper()
 		_, err := write.Run(t.Context(), args, tctx)
-		reject := tools.AsToolReject(err)
+		reject := toolrejection.AsToolReject(err)
 		if reject == nil || reject.Code != "EDITOR_DOCUMENT_READ_REQUIRED" {
 			t.Fatalf("read requirement: %v", err)
 		}
@@ -532,11 +533,11 @@ func TestRewritePreviewDoesNotRequireOrAuthorizeAnAgentRead(t *testing.T) {
 	}}
 	tctx := editorCtx(dir, fake)
 	fake.reads = nil
-	resolved := projectpaths.Resolved{Root: tctx.Roots[0], ScopeRel: "a.go", DisplayPath: "a.go"}
+	resolved := projectpaths.Resolved{Root: tctx.Source.Roots[0], ScopeRel: "a.go", DisplayPath: "a.go"}
 	_, err := loadRewriteSource(t.Context(), tctx, resolved, true)
 	testutil.FailErr(t, "preview without a prior read", err)
 	_, err = loadRewriteSource(t.Context(), tctx, resolved, false)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EDITOR_DOCUMENT_READ_REQUIRED" {
 		t.Fatalf("preview authorized an unseen full snapshot: %v", err)
 	}

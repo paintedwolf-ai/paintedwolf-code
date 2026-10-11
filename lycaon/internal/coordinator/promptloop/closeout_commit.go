@@ -36,14 +36,14 @@ type closeoutCommitOutcome struct {
 	assistantMsg       api.Message
 }
 
-func (l turnCloseout) maxCitationGroundingRetries() int {
-	if l.PromptLoop != nil && l.Deps.MaxCloseoutCitationGroundingRetries > 0 {
+func (l *turnCloseout) maxCitationGroundingRetries() int {
+	if l != nil && l.Deps.MaxCloseoutCitationGroundingRetries > 0 {
 		return l.Deps.MaxCloseoutCitationGroundingRetries
 	}
 	return limits.DefaultCitationGroundingRetries
 }
 
-func (l turnCloseout) handleAcceptedCloseoutReport(
+func (l *turnCloseout) handleAcceptedCloseoutReport(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, userPrompt, surfaceID string,
@@ -53,7 +53,7 @@ func (l turnCloseout) handleAcceptedCloseoutReport(
 	read guidance.CloseoutRead,
 ) (closeoutCommitOutcome, error) {
 	var out closeoutCommitOutcome
-	if l.PromptLoop == nil {
+	if l == nil {
 		return out, fmt.Errorf("closeout grounding not configured")
 	}
 	report := read.Report
@@ -87,7 +87,7 @@ func (l turnCloseout) handleAcceptedCloseoutReport(
 		if err != nil {
 			return out, err
 		}
-		if observation.facts.RejectObservation == "closeout_no_new_evidence" && decision.Code == guidance.CloseoutNoNewEvidenceCode(surfaceID) {
+		if observation.facts.Rejection.RejectObservation == "closeout_no_new_evidence" && decision.Code == guidance.CloseoutNoNewEvidenceCode(surfaceID) {
 			out.retry = false
 			out.exhausted = false
 			out.endWithoutAssemble = true
@@ -130,7 +130,7 @@ func (l turnCloseout) handleAcceptedCloseoutReport(
 			break
 		}
 	}
-	committed, err := l.commitGuardedAssistantTurn(ctx, sess, sessionID, history, userPrompt, surfaceID, assistantMsg)
+	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, userPrompt, surfaceID, assistantMsg)
 	if err != nil {
 		return out, err
 	}
@@ -140,12 +140,12 @@ func (l turnCloseout) handleAcceptedCloseoutReport(
 			break
 		}
 	}
-	if err := turnNudges(l).closeCoordinatorDraftSlot(ctx, sessionID, st, committed.ID); err != nil {
+	if err := l.Nudges.closeCoordinatorDraftSlot(ctx, sessionID, st, committed.ID); err != nil {
 		return out, err
 	}
 	l.completeCloseout(ctx, sessionID, st)
 	if committed.Grounding != nil && committed.Grounding.Traced {
-		l.maybeNotifyGroundedSynthesisAccepted(ctx, sess, sessionID, surfaceID, history, workersIdleForSynthesis(l.PromptLoop, ctx, sess))
+		l.maybeNotifyGroundedSynthesisAccepted(ctx, sess, sessionID, surfaceID, history, workersIdleForSynthesis(l.Context, ctx, sess))
 	}
 	out.committed = true
 	out.history = history
@@ -153,7 +153,7 @@ func (l turnCloseout) handleAcceptedCloseoutReport(
 	return out, nil
 }
 
-func (l turnCloseout) rejectCloseoutGrounding(
+func (l *turnCloseout) rejectCloseoutGrounding(
 	ctx context.Context,
 	sessionID string,
 	st *promptLoopTurnState,
@@ -193,11 +193,11 @@ func (l turnCloseout) rejectCloseoutGrounding(
 	if err != nil {
 		return out, err
 	}
-	history, err = toolInvocations(l).retractRejectedAssistantTurn(ctx, sessionID, history, assistantMessageID, closeoutDraftSlotID(st, assistantMessageID), guidance.NewRefusal(code, nudge))
+	history, err = l.Tools.retractRejectedAssistantTurn(ctx, sessionID, history, assistantMessageID, closeoutDraftSlotID(st, assistantMessageID), guidance.NewRefusal(code, nudge))
 	if err != nil {
 		return out, err
 	}
-	history, err = turnNudges(l).appendHostNudge(ctx, sessionID, history, HostNudge{Content: nudge, SignalID: string(budget.kick)}, "", st)
+	history, err = l.Nudges.appendHostNudge(ctx, sessionID, history, HostNudge{Content: nudge, SignalID: string(budget.kick)}, "", st)
 	if err != nil {
 		return out, err
 	}
@@ -216,8 +216,8 @@ func (l turnCloseout) rejectCloseoutGrounding(
 }
 
 // Rendering failures retain the host marker for the requested kick.
-func (l turnCloseout) hostKickRenderer(ctx context.Context) guard.HostKickRenderer {
-	if l.PromptLoop == nil || l.Deps.RenderHostKick == nil {
+func (l *turnCloseout) hostKickRenderer(ctx context.Context) guard.HostKickRenderer {
+	if l == nil || l.Deps.RenderHostKick == nil {
 		return nil
 	}
 	render := l.Deps.RenderHostKick
@@ -237,8 +237,8 @@ func closeoutDraftSlotID(st *promptLoopTurnState, assistantMessageID string) str
 	return ""
 }
 
-func (l turnCloseout) pinnedCloseoutSynthesis(ctx context.Context, sessionID string) string {
-	if l.PromptLoop == nil || l.Deps.CloseoutStallState == nil {
+func (l *turnCloseout) pinnedCloseoutSynthesis(ctx context.Context, sessionID string) string {
+	if l == nil || l.Deps.CloseoutStallState == nil {
 		return ""
 	}
 	retained := l.Deps.CloseoutStallState(ctx, sessionID)
@@ -250,8 +250,8 @@ func (l turnCloseout) pinnedCloseoutSynthesis(ctx context.Context, sessionID str
 
 // repairsReportDocument reports whether the session's closeout is in a report
 // document repair: a refusal of its fields is retained and not yet answered.
-func (l turnCloseout) repairsReportDocument(ctx context.Context, sessionID string) bool {
-	if l.PromptLoop == nil || l.Deps.CloseoutStallState == nil {
+func (l *turnCloseout) repairsReportDocument(ctx context.Context, sessionID string) bool {
+	if l == nil || l.Deps.CloseoutStallState == nil {
 		return false
 	}
 	retained := l.Deps.CloseoutStallState(ctx, sessionID)
@@ -262,10 +262,10 @@ func closeoutHasCitationIssues(gc *oar.GuardContext) bool {
 	if gc == nil {
 		return false
 	}
-	return gc.RejectObservation == "citations_required" || len(gc.UnobservedCitedHandles) > 0 || len(gc.UnobservedCitedURLs) > 0 || gc.CitationUnverifiable
+	return gc.Rejection.RejectObservation == "citations_required" || len(gc.Grounding.UnobservedCitedHandles) > 0 || len(gc.Grounding.UnobservedCitedURLs) > 0 || gc.Grounding.CitationUnverifiable
 }
 
-func (l turnCloseout) completeCloseout(ctx context.Context, sessionID string, st *promptLoopTurnState) {
+func (l *turnCloseout) completeCloseout(ctx context.Context, sessionID string, st *promptLoopTurnState) {
 	if st != nil {
 		st.closeoutRetry = closeoutRetryState{}
 	}

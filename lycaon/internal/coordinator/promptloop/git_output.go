@@ -2,15 +2,15 @@ package promptloop
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/tooloutput"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // projectGitDiff retains the screened observation before fitting its model view.
-func projectGitDiff(hostDir string, content tooloutput.ScreenedOutput, maxSpillBytes int) (string, *tools.ToolReject) {
+func projectGitDiff(hostDir string, content tooloutput.ScreenedOutput, maxSpillBytes int) (string, *toolrejection.ToolReject) {
 	var page git.DiffToolResponse
 	if err := json.Unmarshal([]byte(content.String()), &page); err != nil || !page.Available || page.Stat || page.MaxBytes <= 0 {
 		return content.String(), nil //nolint:nilerr // output that is not a diff page passes through unchanged
@@ -47,7 +47,7 @@ func projectGitDiff(hostDir string, content tooloutput.ScreenedOutput, maxSpillB
 	return out, nil
 }
 
-func retainDiffHunks(hostDir string, file *git.DiffToolEntry, maxSpillBytes int) *tools.ToolReject {
+func retainDiffHunks(hostDir string, file *git.DiffToolEntry, maxSpillBytes int) *toolrejection.ToolReject {
 	diff := file.Diff
 	file.DiffLines = strings.Count(diff, "\n")
 	if !strings.HasSuffix(diff, "\n") {
@@ -61,11 +61,11 @@ func retainDiffHunks(hostDir string, file *git.DiffToolEntry, maxSpillBytes int)
 	return nil
 }
 
-func gitSpillReject(out tooloutput.WireSpillOutcome) *tools.ToolReject {
+func gitSpillReject(out tooloutput.WireSpillOutcome) *toolrejection.ToolReject {
 	if out.RejectCode != "" {
-		return &tools.ToolReject{Code: out.RejectCode, Data: out.RejectData}
+		return &toolrejection.ToolReject{Code: out.RejectCode, Data: out.RejectData}
 	}
-	return &tools.ToolReject{Code: tooloutput.ToolOutputSpillUnavailableCode, Data: map[string]any{
+	return &toolrejection.ToolReject{Code: tooloutput.ToolOutputSpillUnavailableCode, Data: map[string]any{
 		"tool": "git_diff", "bytes": out.OriginalBytes, "reason": "spill_unavailable",
 	}}
 }

@@ -21,15 +21,21 @@ func TestCompleteStreamPublishesLLMErrorWhenTheCallFails(t *testing.T) {
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
 	gated := newGatedFailingStreamLLM(errors.New("provider hung up"))
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		LLM:    gated,
-		Events: pub,
-		Policy: &recordingToolPolicy{},
-		BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-			return history, nil
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			LLM:              gated,
+			CompactionConfig: staticCompactionConfig,
 		},
-		CompactionConfig: staticCompactionConfig,
-	}}
+		Projection: ProjectionDeps{
+			Events: pub,
+		},
+		Context: ContextDeps{
+			Policy: &recordingToolPolicy{},
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
+		},
+	})
 	sess := &api.Session{ID: "s1", ProjectID: projectID, WorkspacePath: t.TempDir()}
 	subCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -40,7 +46,7 @@ func TestCompleteStreamPublishesLLMErrorWhenTheCallFails(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _, streamErr := modelTurn{loop}.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil)
+		_, _, streamErr := loop.Model.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil)
 		if streamErr == nil {
 			t.Error("completeStream returned nil error for a failing stream")
 		}
@@ -85,15 +91,21 @@ func TestCompleteStreamPublishesLLMActiveBeforeUserTurnCompletes(t *testing.T) {
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
 	gated := newGatedUsageStreamLLM(modelcall.TokenUsage{PromptTokens: 1, CompletionTokens: 1})
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		LLM:    gated,
-		Events: pub,
-		Policy: &recordingToolPolicy{},
-		BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-			return history, nil
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			LLM:              gated,
+			CompactionConfig: staticCompactionConfig,
 		},
-		CompactionConfig: staticCompactionConfig,
-	}}
+		Projection: ProjectionDeps{
+			Events: pub,
+		},
+		Context: ContextDeps{
+			Policy: &recordingToolPolicy{},
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
+		},
+	})
 	sess := &api.Session{ID: "s1", ProjectID: projectID, WorkspacePath: t.TempDir()}
 	subCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -104,7 +116,7 @@ func TestCompleteStreamPublishesLLMActiveBeforeUserTurnCompletes(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _, err := modelTurn{loop}.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil)
+		_, _, err := loop.Model.completeStream(context.Background(), sess, "s1", []api.Message{{Role: api.MessageRoleUser, Content: "go"}}, "coordinator", "go", 0, 8, false, nil, nil)
 		testutil.FailErr(t, "completeStream failed", err)
 	}()
 
@@ -149,15 +161,21 @@ func TestCompleteStreamPublishesLLMForCoordinatorTurns(t *testing.T) {
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
 	client := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		LLM:    client,
-		Events: pub,
-		Policy: &recordingToolPolicy{},
-		BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-			return history, nil
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			LLM:              client,
+			CompactionConfig: staticCompactionConfig,
 		},
-		CompactionConfig: staticCompactionConfig,
-	}}
+		Projection: ProjectionDeps{
+			Events: pub,
+		},
+		Context: ContextDeps{
+			Policy: &recordingToolPolicy{},
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
+		},
+	})
 	sess := &api.Session{ID: "s1", ProjectID: projectID, WorkspacePath: t.TempDir()}
 	worker := &api.Session{ID: "w1", ProjectID: projectID, WorkspacePath: t.TempDir(), ParentSessionID: "s1"}
 	history := []api.Message{{Role: api.MessageRoleUser, Content: "go"}}
@@ -169,7 +187,7 @@ func TestCompleteStreamPublishesLLMForCoordinatorTurns(t *testing.T) {
 	defer unsub()
 
 	// Worker turns do not publish session LLM events.
-	if _, _, err := (modelTurn{loop}).completeStream(context.Background(), worker, "w1", history, "implementer", "go", 0, 8, false, nil, nil); err != nil {
+	if _, _, err := loop.Model.completeStream(context.Background(), worker, "w1", history, "implementer", "go", 0, 8, false, nil, nil); err != nil {
 		testutil.FailErr(t, "worker completeStream failed", err)
 	}
 	hub.FlushDebounced()
@@ -179,7 +197,7 @@ func TestCompleteStreamPublishesLLMForCoordinatorTurns(t *testing.T) {
 	}
 
 	// Coordinator turns publish usage and loop progress.
-	if _, _, err := (modelTurn{loop}).completeStream(context.Background(), sess, "s1", history, "coordinator", "go", 0, 8, false, nil, nil); err != nil {
+	if _, _, err := loop.Model.completeStream(context.Background(), sess, "s1", history, "coordinator", "go", 0, 8, false, nil, nil); err != nil {
 		testutil.FailErr(t, "non-host coordinator completeStream failed", err)
 	}
 	hub.FlushDebounced()
@@ -210,7 +228,7 @@ func TestCompleteStreamPublishesLLMForCoordinatorTurns(t *testing.T) {
 		t.Fatalf("compaction_threshold = %d want > 0", plainEv.Tokens.CompactionThreshold)
 	}
 
-	if _, _, err := (modelTurn{loop}).completeStream(context.Background(), sess, "s1", history, "coordinator", "go", 0, 8, true, nil, nil); err != nil {
+	if _, _, err := loop.Model.completeStream(context.Background(), sess, "s1", history, "coordinator", "go", 0, 8, true, nil, nil); err != nil {
 		testutil.FailErr(t, "host first iteration completeStream failed", err)
 	}
 	hub.FlushDebounced()
@@ -229,7 +247,7 @@ func TestCompleteStreamPublishesLLMForCoordinatorTurns(t *testing.T) {
 		t.Fatalf("first iteration coordinator_loop = %+v want iteration 1", firstEv.CoordinatorLoop)
 	}
 
-	if _, _, err := (modelTurn{loop}).completeStream(context.Background(), sess, "s1", history, "coordinator", "go", 1, 8, true, nil, nil); err != nil {
+	if _, _, err := loop.Model.completeStream(context.Background(), sess, "s1", history, "coordinator", "go", 1, 8, true, nil, nil); err != nil {
 		testutil.FailErr(t, "host completeStream failed", err)
 	}
 	hub.FlushDebounced()

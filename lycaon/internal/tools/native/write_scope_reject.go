@@ -4,25 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // writeScopeReject maps profile write-scope failures to WRITE_SCOPE_DENIED.
 // Coordinator profile errors stay raw for ScopeObservation (COORDINATOR_INVESTIGATE_DENIED_PATH).
 func writeScopeReject(ctx context.Context, boundary *sandbox.Boundary, path, profileID, tool string, err error) error {
 	return mapWriteScopeDenied(ctx, boundary, path, profileID, tool, err, writeScopeMapOpts{})
-}
-
-// redirectWriteScopeReject maps command/verify redirect write-scope failures to
-// WRITE_SCOPE_DENIED with kind=redirect, including coordinator.
-func redirectWriteScopeReject(ctx context.Context, boundary *sandbox.Boundary, path, profileID, tool string, err error) error {
-	return mapWriteScopeDenied(ctx, boundary, path, profileID, tool, err, writeScopeMapOpts{
-		kind:           "redirect",
-		mapCoordinator: true,
-	})
 }
 
 type writeScopeMapOpts struct {
@@ -49,7 +41,7 @@ func mapWriteScopeDenied(ctx context.Context, boundary *sandbox.Boundary, path, 
 		globs = boundary.WriteGlobsForProfile(ctx, profileID)
 	}
 	if profileID == "" {
-		profileID = tools.DefaultToolProfileID
+		profileID = toolprofiles.DefaultToolProfileID
 	}
 	data := map[string]any{
 		"path":           path,
@@ -61,7 +53,7 @@ func mapWriteScopeDenied(ctx context.Context, boundary *sandbox.Boundary, path, 
 	if opts.kind != "" {
 		data["kind"] = opts.kind
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "WRITE_SCOPE_DENIED",
 		Data: data,
 	}

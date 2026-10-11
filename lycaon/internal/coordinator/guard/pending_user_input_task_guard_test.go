@@ -48,6 +48,6 @@ func TestObserveTaskWhilePendingUserInput(t *testing.T) {
 		gc,
 	)
 	if !observeHasCode(gc, guard.PendingUserInputTaskForbiddenCode) {
-		t.Fatalf("want %s in %v", guard.PendingUserInputTaskForbiddenCode, gc.ArgValidationErrors)
+		t.Fatalf("want %s in %v", guard.PendingUserInputTaskForbiddenCode, gc.Invocation.ArgValidationErrors)
 	}
 }

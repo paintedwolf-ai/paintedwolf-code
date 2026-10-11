@@ -1,0 +1,106 @@
+[
+  {
+    "executor": "symbol",
+    "reason": "result_limit",
+    "count": 2,
+    "limit": 22,
+    "retry": false,
+    "refine": true
+  },
+  {
+    "executor": "symbol",
+    "reason": "executor_error",
+    "count": 3,
+    "limit": 33,
+    "retry": false,
+    "refine": false
+  },
+  {
+    "executor": "symbol",
+    "reason": "files_skipped",
+    "count": 4,
+    "limit": 44,
+    "retry": false,
+    "refine": false
+  },
+  {
+    "executor": "symbol",
+    "reason": "time_budget",
+    "count": 5,
+    "limit": 55,
+    "retry": false,
+    "refine": true
+  },
+  {
+    "executor": "symbol",
+    "reason": "catalog_warming",
+    "count": 6,
+    "limit": 66,
+    "retry": true,
+    "refine": true
+  },
+  {
+    "executor": "symbol",
+    "reason": "catalog_incomplete",
+    "count": 7,
+    "limit": 77,
+    "retry": true,
+    "refine": true
+  },
+  {
+    "executor": "symbol",
+    "reason": "catalog_bounded",
+    "count": 8,
+    "limit": 88,
+    "retry": false,
+    "refine": false
+  },
+  {
+    "executor": "symbol",
+    "reason": "catalog_failed",
+    "count": 9,
+    "limit": 99,
+    "retry": false,
+    "refine": false
+  },
+  {
+    "executor": "symbol",
+    "reason": "catalog_refresh_failed",
+    "count": 10,
+    "limit": 110,
+    "retry": false,
+    "refine": false
+  },
+  {
+    "executor": "symbol",
+    "reason": "catalog_refreshing",
+    "count": 11,
+    "limit": 121,
+    "retry": true,
+    "refine": true
+  },
+  {
+    "executor": "symbol",
+    "reason": "index_warming",
+    "count": 12,
+    "limit": 132,
+    "retry": true,
+    "refine": true
+  },
+  {
+    "executor": "symbol",
+    "reason": "symbol_pending",
+    "count": 13,
+    "limit": 143,
+    "retry": true,
+    "refine": true
+  },
+  {
+    "executor": "symbol",
+    "reason": "symbol_budget",
+    "count": 14,
+    "limit": 154,
+    "retry": false,
+    "refine": false
+  }
+]

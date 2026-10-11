@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
+
 	"go/ast"
 	"go/token"
 	"os"
@@ -19,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/pkg/testcorpus"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -75,8 +76,8 @@ func TestIsolationOutcomesAreApprovalTripwires(t *testing.T) {
 		}
 	}
 	sort.Strings(terminal)
-	if len(terminal) != 1 || terminal[0] != isolation.CodeControlPlaneDenied {
-		t.Fatalf("system-terminal isolation outcomes = %v, want only %s", terminal, isolation.CodeControlPlaneDenied)
+	if len(terminal) != 2 || terminal[0] != isolation.CodeControlPlaneDenied || terminal[1] != isolation.CodeTerminalPathRefused {
+		t.Fatalf("system-terminal isolation outcomes = %v, want preflight and observed control-plane refusals", terminal)
 	}
 }
 
@@ -286,8 +287,14 @@ func TestIsolationBypassReachesEffectsButNotControlPlane(t *testing.T) {
 	contractcheck.FailErr(t, "load approval store", err)
 	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
 	result, err := gate.Evaluate(t.Context(), hitl.ProposedAction{
-		Tool: "write", Files: []string{"/etc/hosts"}, ProjectDir: project,
-	})
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Files: []string{"/etc/hosts"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: project,
+},
+})
 	contractcheck.FailErr(t, "evaluate bypassed action", err)
 	if !result.AutoApproved() || result.Denied {
 		t.Fatalf("approval bypass did not reach the effect: %+v", result)
@@ -295,14 +302,20 @@ func TestIsolationBypassReachesEffectsButNotControlPlane(t *testing.T) {
 
 	configDir := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", configDir)
-	for _, capability := range []string{"read_path", "write_root"} {
-		_, reject := tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
-			capability: filepath.Join(configDir, "approvals.yaml"),
-		}})
-		if reject == nil || reject.Code != isolation.CodeControlPlaneDenied {
-			t.Errorf("%s control-plane request reject = %+v, want %s", capability, reject, isolation.CodeControlPlaneDenied)
+	for _, write := range []bool{false, true} {
+		path := filepath.Join(configDir, "approvals.yaml")
+		if !confine.ControlPlanePathDenied(path, write, "") {
+			t.Errorf("write=%t: approval bypass opened the host control plane", write)
+		}
+		scratch := filepath.Join(configDir, "debug", "sessions", "mine")
+		if confine.ControlPlanePathDenied(filepath.Join(scratch, "output.txt"), write, scratch) {
+			t.Errorf("write=%t: own invocation scratch was refused", write)
+		}
+		if !confine.ControlPlanePathDenied(filepath.Join(configDir, "debug", "sessions", "other", "output.txt"), write, scratch) {
+			t.Errorf("write=%t: another invocation scratch was admitted", write)
 		}
 	}
+
 }
 
 // Isolation settlement preserves the selected owner and receipt.
@@ -492,7 +505,7 @@ func TestProtectedPathsRemainDeclarableForApproval(t *testing.T) {
 		filepath.Join(t.TempDir(), "outside-project"),
 	} {
 		for _, capability := range []string{"read_path", "write_root"} {
-			request, reject := tools.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
+			request, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{
 				capability: path,
 			}})
 			if reject != nil {

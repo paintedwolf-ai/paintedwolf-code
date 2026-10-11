@@ -4,17 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/findings"
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/packboard"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // ToolDeps holds dependencies for board orientation tools.
 type ToolDeps struct {
+	ReviewView         func(context.Context, map[string]any, tools.ToolContext) (string, error)
 	Builder            *SnapshotBuilder
 	Findings           func() findings.Store
 	RootSession        func(context.Context, string) string
@@ -29,6 +31,12 @@ func RegisterBoardTools(reg *tools.DefaultRegistry, deps ToolDeps) error {
 		return fmt.Errorf("registry and snapshot builder required")
 	}
 	if err := reg.Register("pack_board", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
+		if args["review_view"] != nil || args["assignment_id"] != nil || args["cursor"] != nil {
+			if deps.ReviewView == nil {
+				return "", &toolrejection.ToolReject{Code: "WORKFLOW_REVIEW_VIEW_INVALID", Data: map[string]any{"reason": "review_unavailable", "field": "review_view"}}
+			}
+			return deps.ReviewView(ctx, args, tctx)
+		}
 		if args["finding_id"] != nil || args["findings_after"] != nil {
 			return readFindings(ctx, args, tctx, deps)
 		}
@@ -43,7 +51,7 @@ func RegisterBoardTools(reg *tools.DefaultRegistry, deps ToolDeps) error {
 		if sessionID == "" {
 			return "", fmt.Errorf("session_id required")
 		}
-		snap, err := deps.Builder.Build(ctx, tctx.ProjectID, tctx.ActiveRootPath(), sessionID, level, tctx.Roots)
+		snap, err := deps.Builder.Build(ctx, tctx.Identity.ProjectID, tctx.ActiveRootPath(), sessionID, level, tctx.Source.Roots)
 		if err != nil {
 			return "", err
 		}

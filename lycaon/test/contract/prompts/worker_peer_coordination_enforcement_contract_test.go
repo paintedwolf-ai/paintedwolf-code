@@ -96,11 +96,14 @@ func TestRecordFindingAppendUsesDelegationScopeNotOverlayToolDir(t *testing.T) {
 	raw, err := os.ReadFile(path)
 	contractcheck.FailErr(t, "read record_finding.go", err)
 	text := string(raw)
-	if !strings.Contains(text, "scopeKey(ctx, tctx.SessionID)") {
+	if !strings.Contains(text, "scopeKey(ctx, tctx.Identity.SessionID)") {
 		t.Fatal("record_finding must resolve delegation scope via FindingsScopeKey(sessionID)")
 	}
 	if strings.Contains(text, "return strings.TrimSpace(tctx.ProjectDir)") {
 		t.Fatal("record_finding must not fall back to tctx.ProjectDir for findings scope")
+	}
+	if !strings.Contains(text, "store.Append(ctx, rootSession,") {
+		t.Fatal("record_finding must append under the resolved root session, not an overlay directory")
 	}
 	if strings.Contains(text, "store.Append(tctx.ProjectDir") {
 		t.Fatal("record_finding must not append findings keyed on tctx.ProjectDir overlay")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
@@ -225,7 +226,7 @@ func (t *CodeRewriteTool) prepareMultiApply(ctx context.Context, args map[string
 		if parseData == nil {
 			parseData = map[string]any{"tool": "code_rewrite", "path": parseBlocked, "parse_error": parseError}
 		}
-		return "", &tools.ToolReject{Code: parseCode, Data: parseData}
+		return "", &toolrejection.ToolReject{Code: parseCode, Data: parseData}
 	}
 	if !dryRun {
 		if err := landRewritePlans(ctx, tctx, plans, &out); err != nil {
@@ -287,7 +288,7 @@ func (t *CodeRewriteTool) prepareRewriteFile(ctx context.Context, tctx tools.Too
 // so the open-document lookup and the write door see the same identity.
 func walkFileResolved(tctx tools.ToolContext, walkRoot, relSlash, absPath string) projectpaths.Resolved {
 	root := projectroot.RootRef{Path: walkRoot}
-	for _, candidate := range tctx.Roots {
+	for _, candidate := range tctx.Source.Roots {
 		if filepath.Clean(candidate.Path) == filepath.Clean(walkRoot) {
 			root = candidate
 			break
@@ -300,7 +301,7 @@ func (t *CodeRewriteTool) planRewriteFile(ctx context.Context, tctx tools.ToolCo
 	relSlash := resolved.DisplayPath
 	st, err := loadRewriteSource(ctx, tctx, resolved, dryRun)
 	if err != nil {
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if errors.As(err, &reject) {
 			return fileApplyResult{blockCode: reject.Code, rejectData: reject.Data}
 		}
@@ -338,7 +339,7 @@ func (t *CodeRewriteTool) planRewriteFile(ctx context.Context, tctx tools.ToolCo
 		}
 		before := st.Content
 		if healthErr := rejectIfSyntaxUnhealthy(ctx, "code_rewrite", relSlash, &before, finalContent, mutationSeam{}); healthErr != nil {
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if errors.As(healthErr, &reject) {
 				fr.syntaxIssue = &rewriteBlocked{Path: relSlash, Code: reject.Code, Details: reject.Data}
 				fr.parseError, _ = reject.Data["parse_error"].(string)
@@ -362,7 +363,7 @@ func (t *CodeRewriteTool) planRewriteFile(ctx context.Context, tctx tools.ToolCo
 		var gateErr error
 		finalContent, gateErr = t.ContentApply.GateApply(ctx, "code_rewrite", relSlash, &before, finalContent, tctx)
 		if gateErr != nil {
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if errors.As(gateErr, &reject) {
 				return fileApplyResult{matches: len(res.Matches), blockCode: reject.Code, rejectData: reject.Data}
 			}
@@ -378,7 +379,7 @@ func (t *CodeRewriteTool) planRewriteFile(ctx context.Context, tctx tools.ToolCo
 	}
 	before := st.Content
 	if healthErr := rejectIfSyntaxUnhealthy(ctx, "code_rewrite", relSlash, &before, finalContent, mutationSeam{}); healthErr != nil {
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if errors.As(healthErr, &reject) {
 			parseError, _ := reject.Data["parse_error"].(string)
 			return fileApplyResult{
@@ -394,7 +395,7 @@ func (t *CodeRewriteTool) planRewriteFile(ctx context.Context, tctx tools.ToolCo
 
 // contentBlocked records a file whose planned text the gateway cannot retain.
 func contentBlocked(relSlash string, matches int, content string) (fileApplyResult, bool) {
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(guardMutationContent("code_rewrite", relSlash, content), &reject) {
 		return fileApplyResult{}, false
 	}
@@ -411,7 +412,7 @@ func isWriteScopeDenied(err error) bool {
 }
 
 func toolRejectCode(err error) (string, bool) {
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if errors.As(err, &reject) {
 		return reject.Code, true
 	}
@@ -427,7 +428,7 @@ func multiUnsupportedNote(paths []string) string {
 }
 
 func publishRewriteBlocked(tctx tools.ToolContext, blocked []rewriteBlocked) {
-	if tctx.Out == nil {
+	if tctx.Effects.Out == nil {
 		return
 	}
 	for _, item := range blocked {
@@ -436,7 +437,7 @@ func publishRewriteBlocked(tctx tools.ToolContext, blocked []rewriteBlocked) {
 			details[key] = value
 		}
 		details["path"] = item.Path
-		tctx.Out.Facts = tctx.Out.Facts.WithFeedback(item.Code, details, &api.FeedbackSubject{Kind: "path", ID: item.Path})
+		tctx.Effects.Out.Facts = tctx.Effects.Out.Facts.WithFeedback(item.Code, details, &api.FeedbackSubject{Kind: "path", ID: item.Path})
 	}
 }
 

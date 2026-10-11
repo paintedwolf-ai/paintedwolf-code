@@ -67,7 +67,7 @@ func SourceOperationDTO(r fileops.Request) wire.SourceOperationStatus {
 	return status
 }
 
-func (s *Handler) sourceRequestForCaller(w http.ResponseWriter, r *http.Request) (fileops.Request, bool) {
+func (s *Mutations) sourceRequestForCaller(w http.ResponseWriter, r *http.Request) (fileops.Request, bool) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return fileops.Request{}, false
@@ -86,7 +86,7 @@ func (s *Handler) sourceRequestForCaller(w http.ResponseWriter, r *http.Request)
 	return job, true
 }
 
-func (s *Handler) HandleGetSourceOperation(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleGetSourceOperation(w http.ResponseWriter, r *http.Request) {
 	job, ok := s.sourceRequestForCaller(w, r)
 	if ok {
 		httpio.WriteJSON(w, http.StatusOK, SourceOperationDTO(job))
@@ -103,7 +103,7 @@ type sourceOperationPosition struct {
 	After string `json:"after"`
 }
 
-func (s *Handler) HandleListSourceOperations(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleListSourceOperations(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.ProjectRegistry, s.responses, w, r)
 	if !ok {
 		return
@@ -156,7 +156,7 @@ func (s *Handler) HandleListSourceOperations(w http.ResponseWriter, r *http.Requ
 	httpio.WriteJSON(w, http.StatusOK, result)
 }
 
-func (s *Handler) HandleCancelSourceOperation(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleCancelSourceOperation(w http.ResponseWriter, r *http.Request) {
 	job, ok := s.sourceRequestForCaller(w, r)
 	if !ok {
 		return
@@ -168,7 +168,7 @@ func (s *Handler) HandleCancelSourceOperation(w http.ResponseWriter, r *http.Req
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Handler) HandleRetrySourceOperation(w http.ResponseWriter, r *http.Request) {
+func (s *Mutations) HandleRetrySourceOperation(w http.ResponseWriter, r *http.Request) {
 	job, ok := s.sourceRequestForCaller(w, r)
 	if !ok {
 		return

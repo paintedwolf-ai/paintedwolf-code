@@ -11,8 +11,8 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) StartOrchestratedTopologyForRun(ctx context.Context, sessionID string, run *wire.WorkflowRun) {
-	if s == nil || s.Orchestrator == nil || run == nil {
+func (s *Topology) StartOrchestratedTopologyForRun(ctx context.Context, sessionID string, run *wire.WorkflowRun) {
+	if s == nil || s.Orchestrator == nil || s.Requests == nil || run == nil {
 		return
 	}
 	// Workflow bytes come from the resolved catalog.
@@ -28,10 +28,11 @@ func (s *Handler) StartOrchestratedTopologyForRun(ctx context.Context, sessionID
 	if !manifest.BoundPhases[strings.TrimSpace(run.CurrentPhase)] {
 		return
 	}
-	ready, err := s.Workflows.TopologyRequestReady(ctx, run.ID)
+	ready, err := s.Requests.TopologyRequestReady(ctx, run.ID)
 	if err != nil || !ready {
 		return
 	}
+
 	sess, err := s.Store.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return
@@ -61,11 +62,11 @@ func (s *Handler) StartOrchestratedTopologyForRun(ctx context.Context, sessionID
 }
 
 // RecoverOrchestratedTopologies restarts settlement for durable running runs.
-func (s *Handler) RecoverOrchestratedTopologies(ctx context.Context) error {
+func (s *Topology) RecoverOrchestratedTopologies(ctx context.Context) error {
 	if s.Orchestrator == nil {
 		return nil
 	}
-	runs, err := s.Runs.ListRunning(ctx)
+	runs, err := s.Runs.Runs.ListRunning(ctx)
 	if err != nil {
 		return fmt.Errorf("list running workflow topologies: %w", err)
 	}

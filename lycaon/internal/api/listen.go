@@ -2,9 +2,10 @@ package api
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/egress"
 	"net"
 	"os"
+
+	"github.com/lycaon/lycaon/internal/egress"
 )
 
 const DefaultListenAddr = "127.0.0.1:8787"

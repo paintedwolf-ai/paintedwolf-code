@@ -34,7 +34,7 @@ type harnessProviderToolsRequest struct {
 	Model     string `json:"model"`
 }
 
-func (s *Server) handleHarnessProviderTools(w http.ResponseWriter, r *http.Request) {
+func (s *HarnessProviders) handleHarnessProviderTools(w http.ResponseWriter, r *http.Request) {
 	var request harnessProviderToolsRequest
 	if err := httpio.DecodeJSON(w, r, &request); err != nil {
 		s.responses.DecodeError(w, r, err)

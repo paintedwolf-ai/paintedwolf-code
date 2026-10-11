@@ -3,6 +3,8 @@ package httpaction
 import (
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,8 +17,9 @@ import (
 
 func responsePathContext(root string) tools.ToolContext {
 	return tools.ToolContext{
-		Agent: tools.DefaultToolProfileID,
-		Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}, ActiveRootID: "root",
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "root"},
 	}
 }
 
@@ -66,7 +69,7 @@ func TestHTTPRequestResponsePathRejectsProtectedDestinations(t *testing.T) {
 			"url": server.URL + "/", "response_path": dest,
 			"capability_request": loopbackCapability(t, server.URL),
 		}, responsePathContext(t.TempDir()))
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code != "HTTP_REQUEST_RESPONSE_PATH_DENIED" {
 			t.Fatalf("response_path %q error = %v, want HTTP_REQUEST_RESPONSE_PATH_DENIED", dest, err)
 		}
@@ -86,7 +89,7 @@ func TestHTTPRequestResponsePathExcludesDiscard(t *testing.T) {
 		{"url": "https://example.test", "response_path": "  "},
 	} {
 		_, err := registry.Run(t.Context(), "http_request", args, responsePathContext(t.TempDir()))
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" {
 			t.Fatalf("args %v error = %v, want TOOL_ARGS_INVALID", args, err)
 		}

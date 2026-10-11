@@ -34,7 +34,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			testutil.FailErr(t, "register directory tool", registry.Register("list_dir", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				return "[]", nil
 			}))
-			mgr := session.NewManager(mem, recorder, registry, settings.DefaultSessionLimits())
+			mgr := session.NewHost(mem, session.Models{Client: recorder, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, registry)
 			projects := project.NewMemoryRegistry()
 			proj, err := project.CreateWithRoot(t.Context(), projects, root)
 			testutil.FailErr(t, "create rooted project", err)
@@ -51,7 +51,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			mgr.SetOARPipeline(pipeline, oar.NewRenderer(nil, nil))
 			sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, proj.ID)
 			testutil.FailErr(t, "create session", err)
-			_, err = mgr.Prompt(t.Context(), sess.ID, "continue")
+			_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "continue")
 			testutil.FailErr(t, "run prompt", err)
 			if anchor == oar.AnchorCoordinatorPreInvoke && len(recorder.AllRequests()) < 2 {
 				t.Fatal("tool invocation did not reach a second model request")

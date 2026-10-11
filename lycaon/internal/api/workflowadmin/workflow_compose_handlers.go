@@ -9,11 +9,12 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleComposeWorkflow(w http.ResponseWriter, r *http.Request) {
+func (s *Composition) HandleComposeWorkflow(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	sess, ok := requestscope.Session(s.Store, s.responses, w, r, sessionID)
 	if !ok {
@@ -33,16 +34,16 @@ func (s *Handler) HandleComposeWorkflow(w http.ResponseWriter, r *http.Request) 
 		s.responses.InvalidQuery(w, err)
 		return
 	}
-	result, err := s.Composer.Compose(r.Context(), workflow.ComposeRequest{
+	result, err := s.Composer.Compose(r.Context(), workflowcomposition.ComposeRequest{
 		SessionID:      sessionID,
 		ProjectDir:     sess.WorkspacePath,
 		ManifestYAML:   body,
 		SessionPosture: sess.Posture,
-		CreatedBy:      workflow.ComposeActorUser,
+		CreatedBy:      workflowdrafts.User,
 		DryRun:         dryRun,
 	})
 	if err != nil {
-		var vf *workflow.ComposeValidationFailed
+		var vf *workflowcomposition.ComposeValidationFailed
 		if errors.As(err, &vf) {
 			s.responses.FailDetails(w, wire.ApiErrorCodeWorkflowValidationFailed, map[string]any{"errors": vf.Errors}, "workflow validation failed")
 			return
@@ -64,11 +65,11 @@ func (s *Handler) HandleComposeWorkflow(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (s *Handler) queueComposeKick(ctx context.Context, sessionID string) {
-	s.Sessions.Emit(ctx, sessionID, anchor.ComposeDone, anchor.Envelope{})
+func (s *Composition) queueComposeKick(ctx context.Context, sessionID string) {
+	s.Sessions.Coordinator.Guidance.Emit(ctx, sessionID, anchor.ComposeDone, anchor.Envelope{})
 }
 
-func (s *Handler) HandleListWorkflowTemplates(w http.ResponseWriter, r *http.Request) {
+func (s *Composition) HandleListWorkflowTemplates(w http.ResponseWriter, r *http.Request) {
 	if s.Composer.Templates == nil {
 		httpio.WriteJSON(w, http.StatusOK, wire.WorkflowTemplateListResponse{Templates: []wire.WorkflowTemplateSummary{}})
 		return
@@ -80,7 +81,7 @@ func (s *Handler) HandleListWorkflowTemplates(w http.ResponseWriter, r *http.Req
 	httpio.WriteJSON(w, http.StatusOK, wire.WorkflowTemplateListResponse{Templates: templates})
 }
 
-func (s *Handler) HandleComposeFromTemplate(w http.ResponseWriter, r *http.Request) {
+func (s *Composition) HandleComposeFromTemplate(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	sess, ok := requestscope.Session(s.Store, s.responses, w, r, sessionID)
 	if !ok {
@@ -96,17 +97,17 @@ func (s *Handler) HandleComposeFromTemplate(w http.ResponseWriter, r *http.Reque
 		s.responses.InvalidQuery(w, err)
 		return
 	}
-	result, err := s.Composer.ComposeFromTemplate(r.Context(), workflow.ComposeFromTemplateRequest{
+	result, err := s.Composer.ComposeFromTemplate(r.Context(), workflowcomposition.ComposeFromTemplateRequest{
 		SessionID:      sessionID,
 		ProjectDir:     sess.WorkspacePath,
 		TemplateID:     req.TemplateID,
 		Params:         req.Params,
 		SessionPosture: sess.Posture,
-		CreatedBy:      workflow.ComposeActorUser,
+		CreatedBy:      workflowdrafts.User,
 		DryRun:         dryRun,
 	})
 	if err != nil {
-		var vf *workflow.ComposeValidationFailed
+		var vf *workflowcomposition.ComposeValidationFailed
 		if errors.As(err, &vf) {
 			s.responses.FailDetails(w, wire.ApiErrorCodeWorkflowValidationFailed, map[string]any{"errors": vf.Errors}, "workflow validation failed")
 			return

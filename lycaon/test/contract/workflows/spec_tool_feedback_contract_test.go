@@ -2,6 +2,8 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,8 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -98,7 +99,7 @@ func TestSpecToolFeedbackRejectShape(t *testing.T) {
 		},
 		{
 			name: "stub required critic incomplete", tool: "task", args: map[string]any{"agent_type": "plan-reviewer"},
-			plan: "## Goal\n\nx\n", vars: workflow.SetHostVar(nil, "phase_skipped.research", true),
+			plan: "## Goal\n\nx\n", vars: runstate.SetHostVar(nil, "phase_skipped.research", true),
 			wantCode: "SPEC_POSTURE_STUB_REQUIRED", wantPhase: "1",
 			blockContains: []string{"Code: SPEC_POSTURE_STUB_REQUIRED"},
 		},
@@ -114,7 +115,7 @@ func TestSpecToolFeedbackRejectShape(t *testing.T) {
 		},
 		{
 			name: "phase skipped research", tool: "task", args: map[string]any{"agent_type": "repo-researcher"},
-			plan: scopeBreaking, vars: workflow.SetHostVar(nil, "phase_skipped.research", true),
+			plan: scopeBreaking, vars: runstate.SetHostVar(nil, "phase_skipped.research", true),
 			wantCode: "SPEC_POSTURE_PHASE_SKIPPED", wantPhase: "2",
 			blockContains: []string{"Code: SPEC_POSTURE_PHASE_SKIPPED"},
 		},
@@ -151,7 +152,7 @@ func TestSpecToolFeedbackRejectShape(t *testing.T) {
 			if sc.wantPhase == "" {
 				return
 			}
-			rejected := bp.RejectObservation(ctx, sc.tool, "coordinator", sc.args, &tools.ToolReject{Code: code})
+			rejected := bp.RejectObservation(ctx, sc.tool, "coordinator", sc.args, &toolrejection.ToolReject{Code: code})
 			refusal, ok := guidance.RefusalFromError(rejected)
 			if !ok || refusal.Copy == nil {
 				t.Fatalf("host denial did not resolve through OAR: %v", rejected)
@@ -281,7 +282,7 @@ func (v specOutcomeView) GetPhaseRequiredName() string {
 func (v specOutcomeView) GetMinRequired() string { return strings.TrimSpace(v.out.MinRequired) }
 func (v specOutcomeView) GetMaxPlaybook() string { return strings.TrimSpace(v.out.MaxPlaybook) }
 
-func phaseTestBlockPlane(t *testing.T) *tools.BlockPlane {
+func phaseTestBlockPlane(t *testing.T) *toolfeedback.BlockPlane {
 	t.Helper()
 	root := testutil.CheckoutRoot(t)
 	testutil.FailErr(t, "install anchors", anchorcatalog.InstallFile(filepath.Join(root, "lycaon/config/packs/painted-wolf/platform/host/anchors/catalog.yaml")))
@@ -291,5 +292,5 @@ func phaseTestBlockPlane(t *testing.T) *tools.BlockPlane {
 	testutil.FailErr(t, "load policy", err)
 	pipeline := oar.NewGuardPipeline(rules, loader, oar.NewCounterStore())
 	pipeline.EnableAnchor(oar.AnchorToolRejected)
-	return &tools.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)}
+	return &toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)}
 }

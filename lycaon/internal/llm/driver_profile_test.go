@@ -48,7 +48,7 @@ func TestNewProviderForEntryDispatch(t *testing.T) {
 			if tc.kind == "cloudflare-workers-ai" {
 				entry.BaseURL = "https://api.cloudflare.com/client/v4/accounts/acct-test/ai/v1"
 			}
-			reg, err := NewRegistry(
+			reg, err := NewRegistry(t.Context(),
 				mustTestProviderCatalog(t, entry),
 				providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")),
 			)

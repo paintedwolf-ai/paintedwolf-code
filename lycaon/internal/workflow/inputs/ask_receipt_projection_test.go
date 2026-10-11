@@ -1,0 +1,177 @@
+package inputs
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
+	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
+)
+
+func TestAskReceiptReplayPreservesPromptAndRejectsChangedInput(t *testing.T) {
+	ask := runstate.CoordinatorAsk{ID: "ask", RunID: "run", State: runstate.CoordinatorAskPending, ToolCallID: "operation", InputDigest: "digest", Prompt: "Review retained evidence", ResponseType: workflowdef.FeedbackResponseSingleChoice, Options: []string{"Approve", "Reject"}, ArtifactIDs: []string{"first", "second"}, IssuedRevision: 3}
+	vars := runstate.SetCoordinatorAsk(nil, ask)
+	handle, ok, err := replayUserInputFromVars(vars, "run", "operation", "digest")
+	if err != nil || !ok || handle.Prompt != ask.Prompt || handle.IssuedRevision != 3 {
+		t.Fatalf("replayed handle=%+v ok=%v err=%v", handle, ok, err)
+	}
+	_, _, err = replayUserInputFromVars(vars, "run", "operation", "changed")
+	var reject *AskUserReject
+	if !errors.As(err, &reject) || reject.Code != "ASK_USER_OPERATION_CONFLICT" {
+		t.Fatalf("changed input replay=%v", err)
+	}
+	id, prompt, pending := pendingCoordinatorAskFromVars(vars)
+	if !pending || id != "ask" || prompt.Prompt != ask.Prompt || len(prompt.ArtifactIDs) != 2 {
+		t.Fatalf("pending projection=%+v id=%s", prompt, id)
+	}
+	prompt.Options[0] = "mutated"
+	prompt.ArtifactIDs[0] = "mutated"
+	_, again, _ := pendingCoordinatorAskFromVars(vars)
+	if again.Options[0] != "Approve" || again.ArtifactIDs[0] != "first" {
+		t.Fatalf("projection mutated receipt=%+v", again)
+	}
+	for _, v := range []map[string]any{
+		{"user_feedback": map[string]any{"phase": map[string]any{"pending": true}}},
+		{"user_decision": map[string]any{"ignore": "invalid", "phase": map[string]any{"pending": true}}},
+	} {
+		data := pendingAskRejectData(v)
+		if data["phase_id"] != "phase" || data["pending_input_id"] != "phase" {
+			t.Fatalf("pending refusal context=%v", data)
+		}
+	}
+	if pendingAskRejectData(nil) != nil {
+		t.Fatal("absent pending input synthesized refusal context")
+	}
+}
+
+type scaffoldFixture struct{ vars map[string]any }
+
+func (s *scaffoldFixture) GetVars(context.Context, string) (map[string]any, error) {
+	return s.vars, nil
+}
+func (s *scaffoldFixture) UpsertVars(_ context.Context, _ string, vars map[string]any) error {
+	s.vars = vars
+	return nil
+}
+func TestDeferredBlueprintLaunchIsConsumedOnceWithoutLosingScaffold(t *testing.T) {
+	store := &scaffoldFixture{vars: map[string]any{"retained": "fact"}}
+	service := &Scaffold{Store: store}
+	if err := service.NoteWorkflowStartProposal(t.Context(), "session", "catalog", "1.0.0"); err != nil {
+		t.Fatalf("record start proposal: %v", err)
+	}
+	if err := service.SetPendingBlueprintLaunchPath(t.Context(), "session", "plans/launch.md"); err != nil {
+		t.Fatalf("record deferred path: %v", err)
+	}
+	if path := service.TakePendingBlueprintLaunchPath(t.Context(), "session"); path != "plans/launch.md" {
+		t.Fatalf("deferred path=%q", path)
+	}
+	if path := service.TakePendingBlueprintLaunchPath(t.Context(), "session"); path != "" {
+		t.Fatalf("deferred path replay=%q", path)
+	}
+	service.ClearStartState(t.Context(), "session")
+	if store.vars["retained"] != "fact" {
+		t.Fatalf("scaffold clearing lost unrelated fact=%v", store.vars)
+	}
+}
+
+type feedbackReceiptRuns struct {
+	runstate.RunsRepository
+	vars   map[string]any
+	active *api.WorkflowRun
+}
+
+func (r feedbackReceiptRuns) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
+	return r.active, nil
+}
+func (r feedbackReceiptRuns) GetScaffoldVars(context.Context, string) (map[string]any, error) {
+	return r.vars, nil
+}
+func TestFeedbackToolReturnsRetainedInputWithoutIssuingAnotherQuestion(t *testing.T) {
+	for _, pending := range []bool{false, true} {
+		runs := feedbackReceiptRuns{}
+		if pending {
+			runs.active = &api.WorkflowRun{ID: "run"}
+			runs.vars = map[string]any{"user_feedback": map[string]any{"phase": map[string]any{"pending": true, "prompt": "Retained question"}}}
+		}
+		reg := tools.NewDefaultRegistry()
+		if err := RegisterFeedbackTool(reg, &Feedback{Runs: runs}); err != nil {
+			t.Fatalf("register feedback: %v", err)
+		}
+		out, err := reg.Run(t.Context(), "workflow_user_feedback", nil, tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator", SessionID: "session"}})
+		if err != nil {
+			t.Fatalf("project pending input: %v", err)
+		}
+		var result FeedbackToolResult
+		if err := json.Unmarshal([]byte(out), &result); err != nil {
+			t.Fatalf("decode feedback projection: %v", err)
+		}
+		if result.Pending != pending || (pending && result.PhaseID != "phase") {
+			t.Fatalf("feedback projection=%+v pending=%v", result, pending)
+		}
+	}
+}
+
+func TestProtectedInputWireMetadataRetainsBoundedLifetime(t *testing.T) {
+	for _, ttl := range []any{float64(60), int(60), int64(60)} {
+		req, err := parseAskUserArgs(map[string]any{"prompt": " Provide key ", "response_type": "secret", "secret": map[string]any{"name": " Deploy key ", "purpose": " release ", "scope": "project", "agent_use_ttl_seconds": ttl}})
+		if err != nil || req.Secret == nil || req.Secret.Name != "Deploy key" || req.Secret.Purpose != "release" || req.Secret.Scope != "project" || req.Secret.AgentUseTTLSeconds != 60 {
+			t.Fatalf("protected wire metadata=%+v err=%v", req.Secret, err)
+		}
+	}
+	for _, ttl := range []any{float64(1.5), float64(-1), float64(maxAskSecretAgentUseLifetimeSeconds + 1), "60"} {
+		_, err := parseAskUserArgs(map[string]any{"prompt": "Provide key", "secret": map[string]any{"name": "Key", "agent_use_ttl_seconds": ttl}})
+		var reject *toolrejection.ToolReject
+		if !errors.As(err, &reject) || reject.Code != "ASK_USER_SECRET_METADATA_INVALID" || reject.Data["field"] != "secret.agent_use_ttl_seconds" {
+			t.Fatalf("unusable lifetime %v refusal=%v", ttl, err)
+		}
+	}
+}
+
+type askAnswerRows struct {
+	Sessions
+	rows    []api.Message
+	updated []api.Message
+}
+
+func (s *askAnswerRows) GetMessages(context.Context, string) ([]api.Message, error) {
+	return s.rows, nil
+}
+func (s *askAnswerRows) UpdateMessage(_ context.Context, _ string, _ string, msg api.Message) (api.Message, error) {
+	s.updated = append(s.updated, msg)
+	return msg, nil
+}
+func TestAnswerProjectionUpdatesOnlyTheMatchingAskToolRow(t *testing.T) {
+	rows := &askAnswerRows{rows: []api.Message{
+		{ID: "target", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{ToolCallID: "operation", Tool: "ask_user"}},
+		{ID: "foreign tool", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{ToolCallID: "operation", Tool: "other"}},
+		{ID: "foreign operation", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{ToolCallID: "other", Tool: "ask_user"}},
+		{ID: "missing result", Role: api.MessageRoleTool}, {ID: "user", Role: api.MessageRoleUser},
+	}}
+	cards := &Cards{Sessions: rows}
+	cards.PersistAskUserAnswerForToolCall(t.Context(), "session", "operation", AskUserAnswerBody{Status: "answered", PhaseID: "phase", Response: "retained answer"})
+	if len(rows.updated) != 1 || rows.updated[0].ID != "target" || rows.updated[0].Content != rows.updated[0].ToolResult.Content {
+		t.Fatalf("answer changed unrelated rows=%+v", rows.updated)
+	}
+	var answer AskUserAnswerBody
+	if err := json.Unmarshal([]byte(rows.updated[0].Content), &answer); err != nil {
+		t.Fatalf("decode persisted answer: %v", err)
+	}
+	if answer.Response != "retained answer" || answer.PhaseID != "phase" {
+		t.Fatalf("answer projection=%+v", answer)
+	}
+}
+func TestAskToolPreservesStructuredRequestRejection(t *testing.T) {
+	reg := tools.NewDefaultRegistry()
+	if err := RegisterAskUserTool(reg, &Asks{}, nil); err != nil {
+		t.Fatalf("register ask tool: %v", err)
+	}
+	_, err := reg.Run(t.Context(), "ask_user", map[string]any{"prompt": "Provide input", "response_type": "unsupported"}, tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator", SessionID: "session"}})
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "ASK_USER_RESPONSE_TYPE_INVALID" || reject.Data["response_type"] != "unsupported" {
+		t.Fatalf("structured request refusal=%v", err)
+	}
+}

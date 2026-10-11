@@ -3,12 +3,12 @@ package sourceview
 import (
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tooloutput"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
@@ -37,7 +37,7 @@ func ReadTextDocument(tool string, access Access, resolved projectpaths.Resolved
 	case ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico", ".bmp", ".tiff":
 		data["is_image"] = true
 	}
-	return textfile.UntrustedDocument{}, &tools.ToolReject{Code: "READ_BINARY_DENIED", Data: data}
+	return textfile.UntrustedDocument{}, &toolrejection.ToolReject{Code: "READ_BINARY_DENIED", Data: data}
 }
 
 // EncodeText encodes mutation content in the opened file's representation,

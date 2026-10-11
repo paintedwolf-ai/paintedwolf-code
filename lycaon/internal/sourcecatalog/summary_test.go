@@ -19,14 +19,14 @@ import (
 func treeTestCatalog(t *testing.T) *Catalog {
 	t.Helper()
 	c := New()
-	c.treeDir = t.TempDir()
+	c.Trees.treeDir = t.TempDir()
 	t.Cleanup(func() { testutil.FailErr(t, "drain tree indexing", c.Drain(context.Background())) })
 	return c
 }
 
 func readySummary(t *testing.T, c *Catalog, root Root, scope TreeScope) *SummaryReader {
 	t.Helper()
-	r, status, err := c.OpenSummary(t.Context(), "project", root, scope, 30*time.Second)
+	r, status, err := c.Trees.OpenSummary(t.Context(), "project", root, scope, 30*time.Second)
 	testutil.FailErr(t, "open summary tree", err)
 	if r == nil || status.State != StateReady || !status.Complete {
 		t.Fatalf("summary status=%+v", status)
@@ -40,7 +40,7 @@ func readyIndex(t *testing.T, c *Catalog, root Root) *IndexReader {
 	t.Helper()
 	deadline := time.Now().Add(30 * time.Second)
 	for {
-		r, status, err := c.OpenIndex(t.Context(), "project", root, 5*time.Second)
+		r, status, err := c.Trees.OpenIndex(t.Context(), "project", root, 5*time.Second)
 		testutil.FailErr(t, "open file index", err)
 		if r != nil && status.Complete {
 			t.Cleanup(func() { _ = r.Close() })
@@ -57,7 +57,7 @@ func readyIndex(t *testing.T, c *Catalog, root Root) *IndexReader {
 // drive one reconciliation pass directly.
 func summaryStoreFor(t *testing.T, c *Catalog, root Root, scope TreeScope) *summaryStore {
 	t.Helper()
-	s, err := c.summaryStore(t.Context(), "project", root, scope)
+	s, err := c.Trees.summaryStore(t.Context(), "project", root, scope)
 	testutil.FailErr(t, "summary store", err)
 	return s
 }

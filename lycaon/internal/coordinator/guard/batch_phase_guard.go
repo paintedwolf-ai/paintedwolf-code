@@ -42,8 +42,8 @@ func ObserveCoordinatorBatchPhaseTool(
 	if toolName == "" {
 		return
 	}
-	gc.Tool = toolName
+	gc.Invocation.Tool = toolName
 	gc.DeriveToolClassFacts()
-	gc.BatchPhase = implState.BatchPhase
-	gc.BatchClosed = batchAlreadyClosed(latch, implState.BatchPhase)
+	gc.Workflow.BatchPhase = implState.BatchPhase
+	gc.Workflow.BatchClosed = batchAlreadyClosed(latch, implState.BatchPhase)
 }

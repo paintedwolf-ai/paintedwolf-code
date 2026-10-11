@@ -94,7 +94,7 @@ func TestQuarantinedStoreExposesRecoveryAndRefusesRoutes(t *testing.T) {
 	if err := db.AuditIntegrity(t.Context(), store); !errors.Is(err, db.ErrStoreIncompatible) {
 		t.Fatalf("audit = %v", err)
 	}
-	server := &Server{database: store, router: chi.NewRouter()}
+	server := &Server{Routes: routeHandlers{Storage: &Storage{database: store}}, router: chi.NewRouter()}
 	server.router.Get("/health", server.handleHealth)
 	reached := false
 	server.router.Post("/v1/backup/restore", func(http.ResponseWriter, *http.Request) { reached = true })

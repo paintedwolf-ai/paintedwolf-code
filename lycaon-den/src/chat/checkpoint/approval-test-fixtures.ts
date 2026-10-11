@@ -17,6 +17,7 @@ type PlanFixture = {
   subject?: Partial<ApprovalSubject>;
   presentation?: Partial<ApprovalPlanPresentation>;
   options?: ApprovalOption[];
+  directoryScopes?: string[];
   reasons?: ApprovalGate[];
   recommendedOptionId?: string;
   joinedCount?: number;
@@ -66,6 +67,7 @@ export function approvalPlanFixture(input: PlanFixture = {}): ApprovalPlan {
     },
     reasons: input.reasons ?? [primaryGate],
     options,
+    directory_scopes: input.directoryScopes,
     elevated_effects: input.elevatedEffects,
     recommended_option_id:
       input.recommendedOptionId ?? options[0]?.id ?? "approve_current_action",

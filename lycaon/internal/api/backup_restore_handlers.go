@@ -14,7 +14,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) handleRestoreBackup(w http.ResponseWriter, r *http.Request) {
+func (s *Storage) handleRestoreBackup(w http.ResponseWriter, r *http.Request) {
 	if err := httpio.RequireRequestMediaType(r, "application/zip", "application/x-zip-compressed"); err != nil {
 		s.responses.DecodeError(w, r, err)
 		return
@@ -78,7 +78,7 @@ func (s *Server) handleRestoreBackup(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleRestoreRecoverySnapshot(w http.ResponseWriter, r *http.Request) {
+func (s *Storage) handleRestoreRecoverySnapshot(w http.ResponseWriter, r *http.Request) {
 	target, err := s.restoreTarget()
 	if err != nil {
 		s.responses.Fail(w, wire.ApiErrorCodeBackupUnavailable, "backup restore target is unavailable")
@@ -114,7 +114,7 @@ func (s *Server) handleRestoreRecoverySnapshot(w http.ResponseWriter, r *http.Re
 	})
 }
 
-func (s *Server) handleResetStore(w http.ResponseWriter, r *http.Request) {
+func (s *Storage) handleResetStore(w http.ResponseWriter, r *http.Request) {
 	target, err := s.restoreTarget()
 	if err != nil {
 		s.responses.Fail(w, wire.ApiErrorCodeBackupUnavailable, "backup restore target is unavailable")

@@ -10,6 +10,8 @@ type Props = {
   facets: SearchFacet[];
   query: string;
   onQueryChange: (query: string) => void;
+  includeDependencies?: boolean;
+  onIncludeDependenciesChange?: (value: boolean) => void;
   include: string;
   exclude: string;
   onIncludeChange: (value: string) => void;
@@ -29,7 +31,7 @@ export function SearchFilterChip(props: Props) {
     },
   );
   const active = () =>
-    hasSearchRefinements(props.query, props.include, props.exclude);
+    !!props.includeDependencies || hasSearchRefinements(props.query, props.include, props.exclude);
 
   return (
     <>
@@ -61,6 +63,8 @@ export function SearchFilterChip(props: Props) {
             facets={props.facets}
             query={props.query}
             onQueryChange={props.onQueryChange}
+            includeDependencies={props.includeDependencies}
+            onIncludeDependenciesChange={props.onIncludeDependenciesChange}
             include={props.include}
             exclude={props.exclude}
             onIncludeChange={props.onIncludeChange}

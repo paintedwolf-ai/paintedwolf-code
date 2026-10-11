@@ -270,8 +270,8 @@ func TestProjectDeleteCascadesDurableProjectState(t *testing.T) {
 		"source_operations": 0, "source_versions": 0,
 		"source_effects":                 0,
 		"source_presentation_watermarks": 0, "source_agent_presentations": 0,
-		"source_checkpoints": 0, "source_checkpoint_entries": 0,
-		"source_line_attr": 0, "source_blob_objects": 1,
+		"source_checkpoints": 0,
+		"source_line_attr":   0, "source_blob_objects": 1,
 		"evidence_index": 0,
 		"worker_jobs":    0, "delegations": 0, "delegation_legs": 0,
 	} {
@@ -376,10 +376,6 @@ func seedProjectDeleteSourceHistory(t *testing.T, sqlDB interface {
 		INSERT INTO source_checkpoints (id, project_id, kind, created_ts)
 		VALUES ('delete-checkpoint', ?, 'named', ?)
 	`, projectID, now)
-	mustExec("insert checkpoint entry", `
-		INSERT INTO source_checkpoint_entries (checkpoint_id, file_id, version_id, ordinal)
-		VALUES ('delete-checkpoint', 'delete-file', 'delete-after', 1)
-	`)
 	mustExec("insert line attribution", `
 		INSERT INTO source_line_attr (project_id, file_id, start_line, end_line, effect_id)
 		VALUES (?, 'delete-file', 1, 1, 'delete-effect')

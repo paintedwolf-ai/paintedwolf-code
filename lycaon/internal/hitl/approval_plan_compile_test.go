@@ -7,7 +7,17 @@ import (
 )
 
 func TestSocketApprovalOptionsContinueTheHeldSocketSet(t *testing.T) {
-	action := ProposedAction{Tool: "command", Command: "docker version", SessionID: "session-1"}
+	action := ProposedAction{
+Invocation: ActionInvocation{
+Tool: "command",
+},
+Presentation: ActionPresentation{
+Command: "docker version",
+},
+Scope: ActionScope{
+SessionID: "session-1",
+},
+}
 	req := CheckpointRequest{
 		SessionID: "session-1", ToolCallID: "call-1",
 		SocketCapability: &SocketCapability{Targets: []SocketCapabilityTarget{{

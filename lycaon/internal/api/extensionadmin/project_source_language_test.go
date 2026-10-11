@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -14,7 +14,7 @@ func TestSourceReadPublishesContributionLanguage(t *testing.T) {
 		{"README.md", ""}, {"unknown.fixture", ""},
 	} {
 		t.Run(tc.path, func(t *testing.T) {
-			got := sourceapi.ToProjectSourceReadDTO(&project.SourceReadResult{Path: tc.path}, "workspace", wire.SourceWorkspaceKindProject)
+			got := sourceapi.ToProjectSourceReadDTO(&projectsource.SourceReadResult{Path: tc.path}, "workspace", wire.SourceWorkspaceKindProject)
 			if got.Language != tc.language {
 				t.Errorf("source language = %q, want %q", got.Language, tc.language)
 			}

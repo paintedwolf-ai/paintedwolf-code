@@ -13,22 +13,35 @@ export function searchWarming(result: Pick<SearchResponse, "issues">): boolean {
 /** Detects an incomplete interactive response. */
 export function searchNeedsRefinement(result: Pick<SearchResponse, "issues">): boolean {
   return searchWarming(result) || (result.issues?.some((issue) =>
-    issue.reason === "result_limit" || issue.reason === "time_budget",
+    issue.reason === "result_limit" || issue.reason === "time_budget" || issue.reason === "symbol_pending",
   ) ?? false);
 }
 
-/** Retries one visible query while indexing. */
+/** Pending symbols retain a frontier and can advance without background indexing. */
+function searchCanAdvance(result: Pick<SearchResponse, "issues">): boolean {
+  return searchWarming(result) || (result.issues?.some((issue) =>
+    issue.reason === "symbol_pending",
+  ) ?? false);
+}
+
+/** Retries one visible query while work can advance. */
 export function createSearchRefresh() {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let attempt = 0;
+  let symbolAttempts = 0;
   const clear = () => {
     if (timer !== undefined) clearTimeout(timer);
     timer = undefined;
   };
-  const reset = () => { clear(); attempt = 0; };
+  const reset = () => { clear(); attempt = 0; symbolAttempts = 0; };
   const schedule = (result: Pick<SearchResponse, "issues">, rerun: () => void) => {
     clear();
-    if (!searchWarming(result)) { reset(); return; }
+    if (!searchCanAdvance(result)) { reset(); return; }
+    const pendingSymbols = result.issues?.some((issue) => issue.reason === "symbol_pending") ?? false;
+    if (pendingSymbols) {
+      if (symbolAttempts >= 20) return;
+      symbolAttempts++;
+    }
     const delay = Math.min(750 * 2 ** attempt, 5000);
     attempt = Math.min(attempt + 1, 3);
     timer = setTimeout(() => { timer = undefined; rerun(); }, delay);

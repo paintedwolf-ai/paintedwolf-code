@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"math"
 	"path/filepath"
 	"strings"
@@ -113,13 +114,13 @@ func resolveEffectiveRender(in renderViewArgs, sessionID string, handleStore ren
 			patched, err := handleStore.Patch(sessionID, handleID, in.OldString, in.NewString, in.ReplaceAll)
 			if err != nil {
 				if errors.Is(err, renderhandle.ErrHandleNotFound) {
-					return eff, &tools.ToolReject{
+					return eff, &toolrejection.ToolReject{
 						Code: "RENDER_HANDLE_NOT_FOUND",
 						Data: map[string]any{"handle": handleID},
 					}
 				}
 				if errors.Is(err, renderhandle.ErrPatchNotFound) {
-					return eff, &tools.ToolReject{
+					return eff, &toolrejection.ToolReject{
 						Code: "RENDER_PATCH_NOT_FOUND",
 						Data: map[string]any{"handle": handleID},
 					}
@@ -130,7 +131,7 @@ func resolveEffectiveRender(in renderViewArgs, sessionID string, handleStore ren
 					if existing != nil {
 						matchCount = strings.Count(existing.Markup, in.OldString)
 					}
-					return eff, &tools.ToolReject{
+					return eff, &toolrejection.ToolReject{
 						Code: "RENDER_PATCH_AMBIGUOUS",
 						Data: map[string]any{
 							"handle":      handleID,
@@ -139,7 +140,7 @@ func resolveEffectiveRender(in renderViewArgs, sessionID string, handleStore ren
 					}
 				}
 				if errors.Is(err, renderhandle.ErrPatchEmptyTarget) {
-					return eff, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
+					return eff, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
 						"reason": "empty_old_string",
 					})
 				}
@@ -166,12 +167,12 @@ func resolveEffectiveRender(in renderViewArgs, sessionID string, handleStore ren
 			}
 		} else if eff.markup != "" {
 			if eff.mime == "" {
-				return eff, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "missing_mime"})
+				return eff, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "missing_mime"})
 			}
 		} else {
 			existing, ok := handleStore.Get(sessionID, handleID)
 			if !ok {
-				return eff, &tools.ToolReject{
+				return eff, &toolrejection.ToolReject{
 					Code: "RENDER_HANDLE_NOT_FOUND",
 					Data: map[string]any{"handle": handleID},
 				}
@@ -198,10 +199,10 @@ func resolveEffectiveRender(in renderViewArgs, sessionID string, handleStore ren
 		}
 	} else {
 		if eff.markup == "" {
-			return eff, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "missing_markup"})
+			return eff, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "missing_markup"})
 		}
 		if eff.mime == "" {
-			return eff, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "missing_mime"})
+			return eff, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "missing_mime"})
 		}
 	}
 
@@ -209,7 +210,7 @@ func resolveEffectiveRender(in renderViewArgs, sessionID string, handleStore ren
 		eff.scale = 1.0
 	}
 	if eff.scale > 0 && (eff.scale < 0.1 || eff.scale > 4.0) {
-		return eff, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
+		return eff, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
 			"reason": "invalid_scale",
 			"scale":  eff.scale,
 			"min":    0.1,
@@ -228,7 +229,7 @@ func RenderViewHandler(raster *browser.Rasterizer, destWriter DestWriter, handle
 			return "", err
 		}
 
-		eff, err := resolveEffectiveRender(in, tctx.SessionID, handleStore)
+		eff, err := resolveEffectiveRender(in, tctx.Identity.SessionID, handleStore)
 		if err != nil {
 			return "", err
 		}
@@ -249,15 +250,15 @@ func RenderViewHandler(raster *browser.Rasterizer, destWriter DestWriter, handle
 		if err != nil {
 			rej := &browserengine.RejectError{}
 			if errors.As(err, &rej) {
-				return "", &tools.ToolReject{Code: rej.Code, Data: rej.Data}
+				return "", &toolrejection.ToolReject{Code: rej.Code, Data: rej.Data}
 			}
 			return "", err
 		}
 		revision := 0
 		if in.Handle != "" && handleStore != nil {
-			stored, err := handleStore.Put(tctx.SessionID, &renderhandle.RenderHandle{
+			stored, err := handleStore.Put(tctx.Identity.SessionID, &renderhandle.RenderHandle{
 				ID:        in.Handle,
-				SessionID: tctx.SessionID,
+				SessionID: tctx.Identity.SessionID,
 				Markup:    eff.markup,
 				Mime:      eff.mime,
 				Theme:     eff.theme,
@@ -275,7 +276,7 @@ func RenderViewHandler(raster *browser.Rasterizer, destWriter DestWriter, handle
 			}, eff.base)
 			if err != nil {
 				if errors.Is(err, renderhandle.ErrHandleConflict) {
-					return "", &tools.ToolReject{Code: "RENDER_HANDLE_CONFLICT", Data: map[string]any{"handle": in.Handle}}
+					return "", &toolrejection.ToolReject{Code: "RENDER_HANDLE_CONFLICT", Data: map[string]any{"handle": in.Handle}}
 				}
 				return "", err
 			}
@@ -290,14 +291,14 @@ func RenderViewHandler(raster *browser.Rasterizer, destWriter DestWriter, handle
 			}
 		}
 
-		if tctx.Out == nil {
-			tctx.Out = &tools.ToolInvocationOut{}
+		if tctx.Effects.Out == nil {
+			tctx.Effects.Out = &tools.ToolInvocationOut{}
 		}
 		caption, err := raster.ProjectCaption(ctx, captureScope(tctx), strings.TrimSpace(in.Caption))
 		if err != nil {
 			return "", err
 		}
-		tctx.Out.Visual = &tools.VisualCapture{
+		tctx.Effects.Out.Visual = &tools.VisualCapture{
 			Mime:      out.Mime,
 			Bytes:     append([]byte(nil), out.Bytes...),
 			Source:    api.VisualArtifactSourceRender,
@@ -352,7 +353,7 @@ func parseRenderViewArgs(args map[string]any) (renderViewArgs, error) {
 	if in.Dest != "" {
 		ext := strings.ToLower(filepath.Ext(in.Dest))
 		if ext != ".png" {
-			return renderViewArgs{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
+			return renderViewArgs{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
 				"reason":   "invalid_dest_extension",
 				"expected": ".png",
 				"got":      ext,
@@ -365,7 +366,7 @@ func parseRenderViewArgs(args map[string]any) (renderViewArgs, error) {
 		in.Viewport.Fit = strings.TrimSpace(in.Viewport.Fit)
 	}
 	if in.Handle == "" && in.Markup == "" {
-		return renderViewArgs{}, tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "missing_markup_or_handle"})
+		return renderViewArgs{}, toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "missing_markup_or_handle"})
 	}
 	return in, nil
 }

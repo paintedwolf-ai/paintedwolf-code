@@ -44,7 +44,7 @@ func (g *RuleApprovalGate) offersForCard(action hitl.ProposedAction, result *hit
 	if executionCapabilityDecision(result) {
 		return g.executionCapabilityOffers(action, result, ownsCard, group)
 	}
-	if action.PackageExecution != nil && (slices.Contains(result.Decision.Gates(), api.GateRemotePackageExecution) || slices.Contains(result.Decision.Gates(), api.GateRemotePackageExecutionKnown)) {
+	if action.Execution.PackageExecution != nil && (slices.Contains(result.Decision.Gates(), api.GateRemotePackageExecution) || slices.Contains(result.Decision.Gates(), api.GateRemotePackageExecutionKnown)) {
 		offers := withinReuse(g.packageCoordinateOffers(action, reuse, ownsCard, group), reuse)
 		return append(offers, g.hostResourceGroupOffers(action, result, false)...)
 	}
@@ -59,7 +59,7 @@ func (g *RuleApprovalGate) offersForCard(action hitl.ProposedAction, result *hit
 		return append(offers, g.hostResourceGroupOffers(action, result, false)...)
 	}
 	predicate := GrantPredicateForAction(action)
-	if action.Tool == "network" && opaqueEgressAction(action.Args) && predicate.Pattern != "" {
+	if action.Invocation.Tool == "network" && opaqueEgressAction(action.Invocation.Args) && predicate.Pattern != "" {
 		offers := withinReuse(g.opaqueEgressOffers(action, predicate, ownsCard, reuse, group), reuse)
 		return append(offers, g.hostResourceGroupOffers(action, result, false)...)
 	}
@@ -101,7 +101,7 @@ func (g *RuleApprovalGate) offersForCard(action hitl.ProposedAction, result *hit
 func (g *RuleApprovalGate) hostResourceGroupOffers(
 	action hitl.ProposedAction, result *hitl.ApprovalResult, hostResourcePrimary bool,
 ) []hitl.ApprovalGrantOffer {
-	if hostResourcePrimary || len(action.HostResources) == 0 {
+	if hostResourcePrimary || len(action.Resources.HostResources) == 0 {
 		return nil
 	}
 	hrReuse := gate.HostResourceReuse()
@@ -114,7 +114,7 @@ func (g *RuleApprovalGate) grantOffersForPredicate(action hitl.ProposedAction, p
 	if predicate.Category == ApprovalCategoryCommand || predicate.Pattern == "" {
 		return nil
 	}
-	witness := hitl.BoundaryWitness(action.Contained)
+	witness := hitl.BoundaryWitness(action.Execution.Contained)
 	offers := make([]hitl.ApprovalGrantOffer, 0, 3)
 	if mintsTimeRung {
 		day := hitl.DayRung(g.makeGrantOffer(action, predicate, dayCarrierScope(reuse, action), witness, group))
@@ -138,7 +138,7 @@ func durableSlotScope(cat ApprovalCategory, reuse gate.Reuse) hitl.ApprovalGrant
 // durableSlotOffer keeps unavailable authority visible with its disabling reason.
 func durableSlotOffer(durable hitl.ApprovalGrantOffer, action hitl.ProposedAction, reuse gate.Reuse) hitl.ApprovalGrantOffer {
 	switch {
-	case !action.HasProjectIdentity():
+	case !action.Scope.HasProjectIdentity():
 		return hitl.DisabledOffer(durable, hitl.NoteNoProjectOpen)
 	case !scopeWithin(durable.Scope, reuse.Scope):
 		return hitl.DisabledOffer(durable, hitl.NoteEndsWithChat)
@@ -150,7 +150,7 @@ func durableSlotOffer(durable hitl.ApprovalGrantOffer, action hitl.ProposedActio
 func (g *RuleApprovalGate) opaqueEgressOffers(action hitl.ProposedAction, family ApprovalRule, mintsTimeRung bool, reuse gate.Reuse, group string) []hitl.ApprovalGrantOffer {
 	exact := gate.Reuse{Shape: reuse.Shape, Scope: gate.ScopeChat, DayCarrier: reuse.DayCarrier}
 	offers := exactActionTimeRungs(action, exact, mintsTimeRung)
-	witness := hitl.BoundaryWitness(action.Contained)
+	witness := hitl.BoundaryWitness(action.Execution.Contained)
 	durable := g.makeGrantOffer(action, family, hitl.ApprovalGrantScopeProject, witness, group)
 	durable.ReaskWhen = hitl.ReaskWhenDifferentSiteOrPort
 	durable.Grant.ReaskWhen = durable.ReaskWhen
@@ -171,7 +171,7 @@ func deviceRungCategory(cat ApprovalCategory) bool {
 
 // dayCarrierScope returns the scope carried by the one-day option.
 func dayCarrierScope(reuse gate.Reuse, action hitl.ProposedAction) hitl.ApprovalGrantScope {
-	if reuse.DayScope() == gate.ScopeChat || !action.HasProjectIdentity() {
+	if reuse.DayScope() == gate.ScopeChat || !action.Scope.HasProjectIdentity() {
 		return hitl.ApprovalGrantScopeChat
 	}
 	return hitl.ApprovalGrantScopeProject
@@ -211,9 +211,9 @@ func (g *RuleApprovalGate) makeGrantOffer(action hitl.ProposedAction, rule Appro
 	grant := hitl.ApprovalGrant{
 		Scope:         scope,
 		Predicate:     hitl.ApprovalGrantPredicate{Category: string(rule.Category), Pattern: rule.Pattern},
-		ChatSessionID: action.ChatSession(),
-		ProjectID:     action.ProjectID,
-		ProjectDir:    action.ProjectDir,
+		ChatSessionID: action.Scope.ChatSession(),
+		ProjectID:     action.Scope.ProjectID,
+		ProjectDir:    action.Scope.ProjectDir,
 		Coverage:      coverage,
 		GrantedAt:     now,
 		Witness:       idWitness,
@@ -261,7 +261,7 @@ func deviceSpatialCategory(cat ApprovalCategory) bool {
 func bindPredicateOfferIdentity(
 	action hitl.ProposedAction, rule ApprovalRule, scope hitl.ApprovalGrantScope, witness hitl.ApprovalGrantWitness,
 ) (idChat, idProject string, idWitness hitl.ApprovalGrantWitness, reaskWhen string) {
-	idChat, idProject, idWitness = action.ChatSession(), action.ProjectID, witness
+	idChat, idProject, idWitness = action.Scope.ChatSession(), action.Scope.ProjectID, witness
 	reaskWhen = "the destination, project, tool definition, or confinement changes"
 	switch rule.Category {
 	case ApprovalCategory(hitl.ApprovalGrantCategoryExecutionCapability):
@@ -362,7 +362,7 @@ func (g *RuleApprovalGate) ApplyGrant(grant hitl.ApprovalGrant) (bool, error) {
 // approvalScopeRef resolves the settings layer an action is evaluated against.
 // An action carrying either project identity reads the project layer.
 func approvalScopeRef(action hitl.ProposedAction) (llm.SettingsScope, ProjectRef) {
-	ref := ProjectRef{ID: action.ProjectID, Dir: action.ProjectDir}
+	ref := ProjectRef{ID: action.Scope.ProjectID, Dir: action.Scope.ProjectDir}
 	if ref.Dir != "" || ref.ID != "" {
 		return llm.SettingsScopeProject, ref
 	}
@@ -385,7 +385,7 @@ func (g *RuleApprovalGate) GrantCovers(action hitl.ProposedAction) bool {
 }
 
 func (g *RuleApprovalGate) HostResourceLeaseCovers(action hitl.ProposedAction) bool {
-	if g == nil || g.store == nil || len(action.HostResources) == 0 {
+	if g == nil || g.store == nil || len(action.Resources.HostResources) == 0 {
 		return false
 	}
 	return hostResourceGrantCovers(g, g.effectiveConfig(action).Grants, action)
@@ -491,10 +491,10 @@ func scopeWithin(scope hitl.ApprovalGrantScope, ceiling gate.Scope) bool {
 }
 
 func (g *RuleApprovalGate) packageCoordinateOffers(action hitl.ProposedAction, reuse gate.Reuse, mintsTimeRung bool, group string) []hitl.ApprovalGrantOffer {
-	if action.PackageExecution == nil || len(action.PackageExecution.Packages) == 0 {
+	if action.Execution.PackageExecution == nil || len(action.Execution.PackageExecution.Packages) == 0 {
 		return nil
 	}
-	pattern := hitl.PackageCoordinatePattern(action.PackageExecution)
+	pattern := hitl.PackageCoordinatePattern(action.Execution.PackageExecution)
 	if pattern == "" {
 		return nil
 	}
@@ -503,7 +503,7 @@ func (g *RuleApprovalGate) packageCoordinateOffers(action hitl.ProposedAction, r
 		Pattern:  pattern,
 	}
 	offers := g.grantOffersForPredicate(action, rule, mintsTimeRung, reuse, group)
-	pkgSummary := packageNamesSummary(action.PackageExecution)
+	pkgSummary := packageNamesSummary(action.Execution.PackageExecution)
 	coverage := "execution of package " + pkgSummary + " for this project"
 	reaskWhen := "a different package version is requested or revoked"
 	for i := range offers {

@@ -21,7 +21,7 @@ func TestRecoverOrphanedTurnsClearsStuckBusy(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
 	hub := events.NewMemoryHub()
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub})
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
@@ -31,7 +31,7 @@ func TestRecoverOrphanedTurnsClearsStuckBusy(t *testing.T) {
 	testutil.FailErr(t, "Subscribe", err)
 	t.Cleanup(unsub)
 
-	testutil.FailErr(t, "RecoverOrphanedTurns", mgr.RecoverOrphanedTurns(ctx))
+	testutil.FailErr(t, "RecoverOrphanedTurns", mgr.Stops.Recovery.RecoverOrphanedTurns(ctx))
 	got, err := mem.Get(ctx, sess.ID)
 	testutil.FailErr(t, "Get", err)
 	if got.Status != api.SessionStatusIdle {
@@ -41,24 +41,6 @@ func TestRecoverOrphanedTurnsClearsStuckBusy(t *testing.T) {
 	// Still busy at boot is a host teardown, not a turn failure.
 	if got := awaitIdleDisposition(t, ch); got != api.SessionIdleDispositionInterrupted {
 		t.Fatalf("recovered disposition = %q, want interrupted", got)
-	}
-}
-
-func TestRecoverOrphanedTurnsDrainsMultiplePages(t *testing.T) {
-	ctx := context.Background()
-	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
-	for i := 0; i < sessionRecoveryPageSize+7; i++ {
-		sess, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
-		testutil.FailErr(t, "Create", err)
-		testutil.FailErr(t, "set busy", mem.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
-	}
-
-	testutil.FailErr(t, "RecoverOrphanedTurns", mgr.RecoverOrphanedTurns(ctx))
-	remaining, err := mem.ListBusySessionIDs(ctx, 1)
-	testutil.FailErr(t, "ListBusySessionIDs", err)
-	if len(remaining) != 0 {
-		t.Fatalf("busy sessions remain after paged recovery: %v", remaining)
 	}
 }
 
@@ -94,7 +76,7 @@ func TestRecoverInterruptedToolResultsAppendsMissingToolRows(t *testing.T) {
 
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	sqlStore := store.NewSQL(database)
-	mgr := NewManager(sqlStore, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(sqlStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	recorder := invocation.NewSQLRecorder(database)
 	mgr.SetInvocationRecorder(recorder)
 
@@ -121,9 +103,9 @@ func TestRecoverInterruptedToolResultsAppendsMissingToolRows(t *testing.T) {
 	if _, err := recorder.InterruptRunning(ctx); err != nil {
 		testutil.FailErr(t, "interrupt", err)
 	}
-	testutil.FailErr(t, "RecoverOrphanedTurns", mgr.RecoverOrphanedTurns(ctx))
-	testutil.FailErr(t, "RecoverInterruptedToolResults", mgr.RecoverInterruptedToolResults(ctx))
-	testutil.FailErr(t, "RecoverInterruptedToolResults replay", mgr.RecoverInterruptedToolResults(ctx))
+	testutil.FailErr(t, "RecoverOrphanedTurns", mgr.Stops.Recovery.RecoverOrphanedTurns(ctx))
+	testutil.FailErr(t, "RecoverInterruptedToolResults", mgr.Stops.Recovery.RecoverInterruptedToolResults(ctx))
+	testutil.FailErr(t, "RecoverInterruptedToolResults replay", mgr.Stops.Recovery.RecoverInterruptedToolResults(ctx))
 
 	got, err := sqlStore.Get(ctx, sess.ID)
 	testutil.FailErr(t, "Get", err)

@@ -3,6 +3,7 @@ package capabilityadmin
 import (
 	"context"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -40,7 +41,7 @@ func TestApprovalRecoveryRevokesOnlyItsOwnedGrant(t *testing.T) {
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
 	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
-	s := &Handler{Deps: Deps{Gate: gate}}
+	s := &Installation{Gate: gate, authorityMu: &sync.Mutex{}}
 	grant := hitl.ApprovalGrant{
 		ID: "grant_device", Scope: hitl.ApprovalGrantScopeDevice,
 		Predicate: hitl.ApprovalGrantPredicate{Category: string(settings.ApprovalCategoryHost), Pattern: "example.test"},
@@ -66,7 +67,7 @@ func TestApprovalRecoveryRevokesOnlyItsInstalledAskQuiet(t *testing.T) {
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
 	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
-	s := &Handler{Deps: Deps{Gate: gate}}
+	s := &Installation{Gate: gate, authorityMu: &sync.Mutex{}}
 	const chatID = "chat-1"
 	const key = "authority_misuse:pack/rule"
 	quietID := hitl.QuietRecordID(chatID, key, 0)
@@ -89,7 +90,7 @@ func TestApprovalRecoveryRevokesOnlyItsInstalledAskQuiet(t *testing.T) {
 
 func TestTaskApprovalDoesNotReplaceLiveWriteAuthority(t *testing.T) {
 	runtime := approvalstate.NewSandboxPathGrantRuntime()
-	s := &Handler{Deps: Deps{Authority: Authority{WriteRoots: runtime}}}
+	s := &Installation{WriteRoots: runtime, authorityMu: &sync.Mutex{}}
 	root := t.TempDir()
 	option := func(id string) hitl.ApprovalOption {
 		grant := hitl.ApprovalGrant{ID: id}
@@ -115,7 +116,7 @@ func TestTaskApprovalRenewsExpiredListenAuthority(t *testing.T) {
 	runtime := approvalstate.NewSandboxPortGrantRuntime()
 	past := time.Now().UTC().Add(-time.Minute)
 	runtime.GrantChat("chat-1", []uint16{8000}, "grant_a", "checkpoint-old", &past)
-	s := &Handler{Deps: Deps{Authority: Authority{Listen: runtime}}}
+	s := &Installation{Listen: runtime, authorityMu: &sync.Mutex{}}
 	grant := hitl.ApprovalGrant{ID: "grant_a"}
 	option := hitl.ApprovalOption{Authority: []hitl.ApprovalAuthorityDelta{{
 		Kind: hitl.AuthorityLocalListenChat, Grant: &grant,
@@ -133,7 +134,7 @@ func TestTaskApprovalRenewsExpiredListenAuthority(t *testing.T) {
 
 func TestInstallGrantedPathWidensAccess(t *testing.T) {
 	rt := grantedpath.NewRuntime()
-	s := &Handler{Deps: Deps{Authority: Authority{GrantedPaths: rt}}}
+	s := &Installation{GrantedPaths: rt, authorityMu: &sync.Mutex{}}
 
 	rollback, err := s.InstallApprovalOption(context.Background(), "cp-1", grantedPathOption(t, "/etc/hosts", true))
 	if err != nil {
@@ -150,7 +151,7 @@ func TestInstallGrantedPathWidensAccess(t *testing.T) {
 
 func TestInstallGrantedPathKeepsDirection(t *testing.T) {
 	rt := grantedpath.NewRuntime()
-	s := &Handler{Deps: Deps{Authority: Authority{GrantedPaths: rt}}}
+	s := &Installation{GrantedPaths: rt, authorityMu: &sync.Mutex{}}
 
 	if _, err := s.InstallApprovalOption(context.Background(), "cp-1", grantedPathOption(t, "/mnt/report.pdf", false)); err != nil {
 		t.Fatalf("install: %v", err)
@@ -165,7 +166,7 @@ func TestInstallGrantedPathKeepsDirection(t *testing.T) {
 
 func TestGrantedPathRollbackPreservesIndependentApproval(t *testing.T) {
 	rt := grantedpath.NewRuntime()
-	s := &Handler{Deps: Deps{Authority: Authority{GrantedPaths: rt}}}
+	s := &Installation{GrantedPaths: rt, authorityMu: &sync.Mutex{}}
 	first := grantedPathOption(t, "/etc/hosts", true)
 	second := grantedPathOption(t, "/etc/hosts", true)
 	second.Authority[0].Grant.ID = "grant_fs_second"
@@ -185,7 +186,7 @@ func TestGrantedPathRollbackPreservesIndependentApproval(t *testing.T) {
 
 func TestGrantedPathIDCollisionFailsInstallation(t *testing.T) {
 	rt := grantedpath.NewRuntime()
-	s := &Handler{Deps: Deps{Authority: Authority{GrantedPaths: rt}}}
+	s := &Installation{GrantedPaths: rt, authorityMu: &sync.Mutex{}}
 
 	_, err := s.InstallApprovalOption(t.Context(), "cp-1", grantedPathOption(t, "/etc/hosts", true))
 	testutil.FailErr(t, "install first path approval", err)
@@ -198,7 +199,7 @@ func TestGrantedPathIDCollisionFailsInstallation(t *testing.T) {
 }
 
 func TestInstallGrantedPathWithoutRuntimeFails(t *testing.T) {
-	s := &Handler{}
+	s := &Installation{authorityMu: &sync.Mutex{}}
 	if _, err := s.InstallApprovalOption(context.Background(), "cp-1", grantedPathOption(t, "/etc/hosts", true)); err == nil {
 		t.Fatal("installing granted-path authority with no runtime must fail")
 	}
@@ -206,7 +207,7 @@ func TestInstallGrantedPathWithoutRuntimeFails(t *testing.T) {
 
 func TestInstallGrantedPathTreeCoversDescendants(t *testing.T) {
 	rt := grantedpath.NewRuntime()
-	s := &Handler{Deps: Deps{Authority: Authority{GrantedPaths: rt}}}
+	s := &Installation{GrantedPaths: rt, authorityMu: &sync.Mutex{}}
 
 	folder := "/srv/sdk"
 	_, err := s.InstallApprovalOption(context.Background(), "cp-1", grantedPathOptionAccess(t, hitl.GrantedPathDelta{

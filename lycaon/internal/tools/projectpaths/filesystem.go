@@ -15,7 +15,7 @@ import (
 
 // Default filesystem authority does not attach paths to the project.
 func resolveFilesystemPath(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, modelPath string, op sandbox.PathOp) (Resolved, bool, error) {
-	root, err := confine.FilesystemRootForPath(tctx.ProjectID, workspaceRoots(tctx), tctx.GrantedWriteRoots, tctx.SessionScratchDir, modelPath)
+	root, err := confine.FilesystemRootForPath(tctx.Identity.ProjectID, workspaceRoots(tctx), tctx.Files.GrantedWriteRoots, tctx.Host.SessionScratchDir, modelPath)
 	if err != nil || root == "" {
 		return Resolved{}, false, err
 	}

@@ -37,7 +37,7 @@ func TestKnownModelMetadataDoesNotWaitForCatalogRefresh(t *testing.T) {
 	t.Cleanup(server.Close)
 	yaml := "providers:\n  - id: local\n    kind: openai-compatible\n    base_url: " + server.URL + "/v1\n    api_key_env: \"\"\n    models:\n      - id: known\n        capabilities:\n          vision:\n            state: supported\n            sources: [local-config]\n" + MinimalShipHTTPRetryYAML
 	catalog := mustCatalogCloneShipToLocal(t, yaml)
-	reg, err := NewRegistry(catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	reg, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
 	testutil.FailErr(t, "build registry", err)
 	t.Cleanup(func() { testutil.FailErr(t, "close discovery", reg.discovery.Close(context.Background())) })
 	entry, _ := catalog.Get("local")

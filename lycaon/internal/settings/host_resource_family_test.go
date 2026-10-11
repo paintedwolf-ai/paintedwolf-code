@@ -33,8 +33,11 @@ func TestHostResourceFamilyAskDoesNotChangeConcreteGrantSubject(t *testing.T) {
 		t.Fatalf("rule=%+v matched=%t", rule, matched)
 	}
 	predicate := hostResourceGrantPredicate(hitl.ProposedAction{
-		HostResources: []string{"docker"}, HostResourceFamilies: []string{"containers.local"},
-	})
+Resources: hitl.ActionResources{
+HostResources: []string{"docker"},
+HostResourceFamilies: []string{"containers.local"},
+},
+})
 	if predicate.Pattern != "docker" {
 		t.Fatalf("grant pattern = %q, want concrete id", predicate.Pattern)
 	}

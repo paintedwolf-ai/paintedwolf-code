@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -156,7 +156,7 @@ func TestStatPathEscape(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"paths": []any{"../etc/passwd"},
 	}, nativefixture.Context(t.TempDir()))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
 		t.Fatalf("err = %v want SURVEY_PATH_ESCAPE", err)
 	}
@@ -167,7 +167,7 @@ func TestWcPathEscape(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"paths": []any{"../etc/passwd"},
 	}, nativefixture.Context(t.TempDir()))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
 		t.Fatalf("err = %v want SURVEY_PATH_ESCAPE", err)
 	}
@@ -178,7 +178,7 @@ func TestListDirPathEscape(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "../etc",
 	}, nativefixture.Context(t.TempDir()))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
 		t.Fatalf("err = %v want SURVEY_PATH_ESCAPE", err)
 	}

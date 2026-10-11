@@ -62,14 +62,14 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 		{
 			name: "malformed JSON text",
 			data: map[string]any{
-				"field":              "verdict",
-				"json_malformed":     true,
-				"json_open_paths":    []string{"verdict"},
-				"expected_type":      "object",
-				"misplaced_fields":   []string{"set_asides", "threat_model", "verdict"},
-				"found_under":        "verdict.coverage",
-				"belongs_under":      "verdict",
-				"close_before":       "set_asides",
+				"field":            "verdict",
+				"json_malformed":   true,
+				"json_open_paths":  []string{"verdict"},
+				"expected_type":    "object",
+				"misplaced_fields": []string{"set_asides", "threat_model", "verdict"},
+				"found_under":      "verdict.coverage",
+				"belongs_under":    "verdict",
+				"close_before":     "set_asides",
 			},
 			wantWhat:  "`verdict`",
 			wantCause: "`verdict.coverage`",
@@ -78,10 +78,10 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 		{
 			name: "malformed JSON text at an offset",
 			data: map[string]any{
-				"field":              "body_json",
+				"field":                    "body_json",
 				"json_malformed":           true,
 				"json_unexpected_token_at": 42,
-				"expected_type":      "object",
+				"expected_type":            "object",
 			},
 			wantWhat:  "`body_json`",
 			wantCause: "42",
@@ -112,9 +112,9 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			gc := NewGuardContext()
-			gc.Tool = "command"
+			gc.Invocation.Tool = "command"
 			gc.ObservedRejectCode = "TOOL_ARGS_INVALID"
-			gc.ArgValidationErrors = []string{"TOOL_ARGS_INVALID"}
+			gc.Invocation.ArgValidationErrors = []string{"TOOL_ARGS_INVALID"}
 			gc.PutRejectData("TOOL_ARGS_INVALID", tc.data)
 
 			res, err := p.EvaluateBlock(context.Background(), AnchorToolRejected, gc)

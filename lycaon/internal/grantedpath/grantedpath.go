@@ -63,7 +63,11 @@ func CoversPath(grantPath string, tree bool, abs string) bool {
 	if !tree {
 		return false
 	}
-	return strings.HasPrefix(abs, grantPath+string(filepath.Separator))
+	prefix := grantPath
+	if !strings.HasSuffix(prefix, string(filepath.Separator)) {
+		prefix += string(filepath.Separator)
+	}
+	return strings.HasPrefix(abs, prefix)
 }
 
 // DurableSource returns durable grants for one project.
