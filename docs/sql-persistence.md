@@ -266,6 +266,8 @@ Source-object maintenance never makes the ledger wait. A capture holds the objec
 
 Source writes check exact queued candidates without scanning the filesystem. Inventory completion also repairs bounded staging and content-addressed batches, and reference deletion enqueues exact object candidates for bounded checks. Attachment metadata supplies project usage without a filesystem walk; exact unclaimed candidates and bounded directory cursors repair interrupted writes, and filesystem guards exist only while admission commits. Transcript spill references are updated with transcript mutations. Project session activity advances bounded pages of settled spill files and checks each candidate through the reference index; recent writes remain candidates so a new publication cannot race old-reference cleanup.
 
+Source-object publication verifies an existing encoded body before reusing its content identity. Both memory and file captures replace damaged bodies from their verified input; successful publication reports the size of the validated or replaced object.
+
 ## sqlc and generated access
 
 Generated query code is useful where the SQL shape is static and maps cleanly to domain types. It does not replace the operation-level transaction boundary or become a second schema source. Handwritten repositories remain appropriate for dynamic search, multi-step transitions, and carefully bounded maintenance.

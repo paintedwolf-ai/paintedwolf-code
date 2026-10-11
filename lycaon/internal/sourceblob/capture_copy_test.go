@@ -38,6 +38,7 @@ func TestCaptureRepairsAnExistingDamagedObject(t *testing.T) {
 	damaged, err := os.ReadFile(filepath.Join(store.Root(), rel))
 	testutil.FailErr(t, "read encoded object", err)
 	damaged[len(damaged)-1] ^= 0xff
+	testutil.FailErr(t, "allow damage injection", os.Chmod(filepath.Join(store.Root(), rel), 0o600))
 	testutil.FailErr(t, "damage existing object without changing its size", os.WriteFile(filepath.Join(store.Root(), rel), damaged, 0o600))
 	path := filepath.Join(t.TempDir(), "file")
 	testutil.FailErr(t, "seed source", os.WriteFile(path, body, 0o600))
