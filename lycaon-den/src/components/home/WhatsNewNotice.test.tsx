@@ -24,7 +24,7 @@ describe("WhatsNewNotice", () => {
       notices.publish({ title: "Other condition", message: "Still works" }, APP_SCOPE);
       fireEvent.click(screen.getAllByRole("button", { name: "Dismiss all" })[0]!);
     } else {
-      fireEvent.click(screen.getAllByRole("button", { name: action, exact: true })[0]!);
+      fireEvent.click(screen.getAllByRole("button", { name: action })[0]!);
     }
     await waitFor(() => expect(saveLatch).toHaveBeenCalledExactlyOnceWith("0.2.0"));
     expect(rows()).toHaveLength(0);
