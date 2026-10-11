@@ -121,7 +121,7 @@ when it is provisioned and ad hoc otherwise, always with `--options runtime`.
 They differ from release only in `get-task-allow`, so debuggers can attach.
 Code that generates machine code at run time is killed here exactly as in a
 release. Developer ID signing of engine components and notarization of the
-final app follow [Release operations](operations/release.md#engine-selection).
+final app are enforced by the [bundle build](../scripts/den-build-bundle.sh).
 
 ## Den local dev (backend logs visible)
 
@@ -398,8 +398,8 @@ while it is paused. Add `-- --open` to launch afterward; `--debug` and
 invocation still use normal queue admission.
 
 On macOS, the release profile requires `APPLE_SIGNING_IDENTITY` and
-`APPLE_ENGINE_PROVISIONING_PROFILE` for the credential-owning helper. See
-[release signing](operations/release.md#macos-credential-host-signing). Use
+`APPLE_ENGINE_PROVISIONING_PROFILE` for the credential-owning helper, enforced
+by the [bundle build](../scripts/den-build-bundle.sh). Use
 `./task den:app -- --debug` for development without provisioning; it uses the
 separate development credential store.
 
@@ -440,9 +440,8 @@ LYCAON_SSE_DEBUG=1 ./task den:sidecar  # sse-events.jsonl
 ### Tool-use evaluation (`eval:tool-usage`)
 
 `BENCHMARK=providers` runs the bounded cloud provider integration suite against
-its checked-in reference models. See the
-[release integration checklist](operations/release.md#provider-integration-checks)
-for credentials, local operation and retained diagnostic evidence.
+its checked-in reference models. The cases live in
+[`provider-checks.json`](../scripts/coordinator-benchmark/provider-checks.json).
 
 ```bash
 ./task eval:tool-usage -- --from /path/to/capture --table # replay, zero model calls
@@ -822,7 +821,8 @@ Mark an ordinary object schema `x-go-generate: true`. Required properties retain
 
 ## Release & versioning
 
-The candidate, signing, publication, installed-update proof, rollout, and recovery steps live in [Release operations](operations/release.md).
+Release automation lives in the [release workflow](../.github/workflows/release.yml);
+platform selection and update keys live in [`packaging/`](../packaging/).
 
 Product SemVer lives in repo-root [`VERSION`](../VERSION) (**no** `v` prefix)
 and may include a prerelease (`1.0.0-rc.1`). Git tags are `v` plus that exact
@@ -879,7 +879,7 @@ flowchart TD
 
 **Third-party notices.** `./task licenses:notices` generates `THIRD-PARTY-NOTICES.md` at the repo root from Go, Den npm, and Tauri crate dependency manifests plus a bundled-binaries catalog. Opengrep's catalog entry refers to the selected verified release artifact, so its version, license, notices, and corresponding-source path follow that pin. The file is gitignored and never hand-maintained. The release workflow runs generation before bundling; the fast and full verification gates run it explicitly (fail-closed on unknown licenses); the artifact audit asserts presence. About → **Third-party software** opens the shipped file.
 
-Local release packaging uses `./task den:bundle`, which injects `VERSION` into the sidecar and syncs Den package/Tauri/Cargo versions. On macOS it requires the [Developer ID identity and engine provisioning profile](operations/release.md#macos-credential-host-signing). Use `./task den:app -- --debug` for local development without provisioning.
+Local release packaging uses `./task den:bundle`, which injects `VERSION` into the sidecar and syncs Den package/Tauri/Cargo versions. On macOS it requires the Developer ID identity and engine provisioning profile enforced by the [bundle build](../scripts/den-build-bundle.sh). Use `./task den:app -- --debug` for local development without provisioning.
 
 ### Updates
 

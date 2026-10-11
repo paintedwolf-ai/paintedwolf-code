@@ -82,7 +82,7 @@ func TestHostObligationHeldFalseWithoutDeclaredObligations(t *testing.T) {
 func TestHostObligationHeldWhileTopologyPhaseIsRunning(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	ctx := context.Background()
-	run, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "bugbash", "1.1.0")
 	testutil.FailErr(t, "start bugbash run", err)
 
 	held, err := mgr.Obligations.HostObligationHeld(ctx, "sess-1")

@@ -10,7 +10,7 @@ across Painted Wolf Code. The judgement lives in the
 Each entry has two independent ratings. **Update urgency** reflects threat model and
 protocol decay. **Update friction** reflects engineering cost and verification surface.
 
-**See also:** [Dependencies policy](../dependencies.md) · [Release operations](release.md) ·
+**See also:** [Dependencies policy](../dependencies.md) ·
 [Licensing](../licensing.md) · [Compatibility](../compatibility.md) · [Dev tasks](../dev-tasks.md)
 
 Pinned values are read from the tree when this page is generated. Upstream values come from `dependencies/upstream.json`, last refreshed on **2026-10-07**. The dependency inventory workflow regenerates this page after dependency changes land on main and refreshes upstream weekly. A blank rating or note means the entry has no judgement in `dependencies/` yet. A blank Dependabot cell means default grouped updates.
@@ -32,11 +32,8 @@ Critical- and high-urgency entries whose pinned version trails the upstream snap
 * **`github.com/aws/aws-sdk-go-v2/credentials`** (high): `v1.20.6` → `v1.20.7`
 * **`github.com/aws/aws-sdk-go-v2/service/bedrock`** (high): `v1.73.1` → `v1.73.2`
 * **`github.com/aws/aws-sdk-go-v2/service/bedrockruntime`** (high): `v1.63.1` → `v1.63.2`
-* **`github.com/aws/smithy-go`** (high): `v1.28.1` → `v1.28.3`
-* **`github.com/go-git/go-git/v5`** (high): `v5.19.2` → `v5.19.3`
-* **`ed25519-dalek`** (high): `2.2.0` → `3.0.0`
-* **`flate2`** (high): `1.1.9` → `1.1.10`
-* **`rand`** (high): `0.8.6` → `0.10.3`
+* **`github.com/aws/smithy-go`** (high): `v1.28.2` → `v1.28.3`
+* **`rand`** (high): `0.9.5` → `0.10.3`
 * **`yrs`** (high): `0.27.4` → `0.28.0`
 
 ---
@@ -132,7 +129,7 @@ Copied into the repository, pinned to an upstream commit or release, and hash-ve
 | Name | Pinned | Upstream | Urgency | Friction | Notes |
 |---|---|---|---|---|---|
 | `third_party/gotreesitter` | `v0.52.0` | `v0.55.1` | **Moderate** | **High** | **Urgency:** Parses repository source into symbols and outlines.<br>**Friction:** `third_party/gotreesitter.patch` covers Swift optional-binding recovery, comment-only PowerShell programs, and TypeScript/TSX finalization inside the parse timeout. The rationale and update procedure are in [`third_party/README.md`](../../third_party/README.md). |
-| Go vulnerability database (`lycaon/vulndb`) | snapshot `2026-10-01T20:24:15Z`<br>entries `409`<br>modules `72` |  | **Critical** | **Low** | **Urgency:** The offline `./task lint:vuln` gate reads this snapshot, and nightly `./task lint:vuln:fresh` checks the live database. `vendor-vulndb.py` prunes the snapshot to `go list -m all` and always keeps the `stdlib` and `toolchain` pseudo-modules, which that list never names; `--check` fails if either row is missing. Both runs cover standard-library advisories; the offline gate sees those published up to the pin.<br>**Friction:** Re-materialize with `./task lint:vuln:vendor`. Because `lint:vuln:vendor:check` also verifies the module set, every `go.mod` change needs a re-vendor. `scripts/govulncheck-gate.py` enforces reviewed suppressions in `lycaon/govulncheck-allowlist.yaml`. |
+| Go vulnerability database (`lycaon/vulndb`) | snapshot `2026-10-08T22:31:09Z`<br>entries `4613`<br>modules `1435` |  | **Critical** | **Low** | **Urgency:** The offline `./task lint:vuln` gate reads this snapshot, and nightly `./task lint:vuln:fresh` checks the live database. `vendor-vulndb.py` prunes the snapshot to `go list -m all` and always keeps the `stdlib` and `toolchain` pseudo-modules, which that list never names; `--check` fails if either row is missing. Both runs cover standard-library advisories; the offline gate sees those published up to the pin.<br>**Friction:** Re-materialize with `./task lint:vuln:vendor`. Because `lint:vuln:vendor:check` also verifies the module set, every `go.mod` change needs a re-vendor. `scripts/govulncheck-gate.py` enforces reviewed suppressions in `lycaon/govulncheck-allowlist.yaml`. |
 | Open Agent Rules spec (`schemas/oar/`) | OAR `1.0`<br>fixtures `265` |  | **Moderate** | **Moderate** | Defines the policy grammar and observation vocabulary. `./task oar:vendor` copies from the `open-agent-rules` checkout; then run `oar:vendor:check` and `oar:conformance`. |
 | Vendored scanner rules | catalogs `6` |  | **High** | **Moderate** | **Urgency:** Detection coverage for scanned project code.<br>**Friction:** Pinned commits live in `rules-provenance.yaml`. Patches under `rules/patches/<id>/` keep rules loadable by the shipped Opengrep; see the [patch README](../../lycaon/config/runtime/scanners/rules/patches/README.md). Move a pin with `./task scan:rules:vendor:bump -- <id>=<ref>`, then run `scan:rules:vendor:check`. |
 | Common-password list (`secret-mint`) | `67c4ece9ef` | current | **Low** | **Low** | Static dictionary for screening trivial passwords. Move with `./task secret-mint:vendor:bump`, then run `secret-mint:vendor:check`. |
@@ -167,7 +164,7 @@ rebasing the patch.
 | `@codemirror/state` | `6.7.6` | current | **Low** | **Moderate** |  | Bump the CodeMirror packages together with `@codemirror/view`. |
 | `@tanstack/solid-virtual` | `3.13.40` | current | **Moderate** | **Moderate** |  | The transcript virtualizer uses `anchorTo: "start"` with `followOnAppend: false`, and its own motion controller owns tail anchoring and `shiftContent` corrections. Re-verify scroll retention after a bump. |
 | `@tauri-apps/api` | `2.12.0` | `2.12.1` | **Moderate** | **Low** |  | Keep in step with the `tauri` crate. |
-| `diff` | `8.0.4` | `9.0.0` | **Low** | **Moderate** |  | Audit hunk and patch APIs used by diff rendering and edit playback on a major bump. |
+| `diff` | `9.0.0` | current | **Low** | **Moderate** |  | Audit hunk and patch APIs used by diff rendering and edit playback on a major bump. |
 | `isomorphic-dompurify` | `4.4.0` | `4.5.0` | **Critical** | **Moderate** |  | **Urgency:** `chat/markdown/markdown-render.ts` sanitizes all rendered Markdown HTML against XSS.<br>**Friction:** Before a major bump, audit the configured hooks and allow-lists. |
 | `marked` | `18.0.14` | `18.1.0` | **High** | **Low** |  | Parses model and file Markdown ahead of the sanitizer. Exact pin. |
 | `solid-js` | `1.9.15` | `1.9.16` | **Moderate** | **Low** |  |  |
@@ -184,13 +181,13 @@ rebasing the patch.
 | `@tauri-apps/cli` · dev | `2.12.0` | `2.12.1` | **Moderate** | **Low** |  | Keep in step with the `tauri` crate. |
 | `@vitest/coverage-v8` · dev | `5.0.3` | current | **Moderate** | **Moderate** |  |  |
 | `eslint` · dev | `10.12.0` | current | **Low** | **Moderate** |  |  |
-| `jsdom` · dev | `26.1.0` | `30.1.2` | **Low** | **Moderate** |  | Check DOM behavior in component tests when bumping a major. |
-| `msw` · dev | `2.14.6` | `3.0.2` | **Low** | **Low** |  |  |
+| `jsdom` · dev | `30.1.2` | current | **Low** | **Moderate** |  | Check DOM behavior in component tests when bumping a major. |
+| `msw` · dev | `3.0.2` | current | **Low** | **Low** |  |  |
 | `openapi-typescript` · dev | `7.13.0` | current | **Moderate** | **Moderate** |  | Exact pin. `scripts/codegen-den-types.sh` refuses a mismatched install, and a bump regenerates `src/api/types.ts` through `./task codegen:den-types`. |
 | `tailwindcss` · dev | `4.3.3` | current | **Low** | **Low** |  |  |
 | `typescript` · dev | `6.0.3` | `7.0.2` | **Moderate** | **High** | No majors | TypeScript 7 is the native compiler port. `typescript-eslint` and the Solid toolchain must support it first; plan it as dedicated work. |
 | `vite` · dev | `8.3.2` | `8.3.3` | **Moderate** | **Low** |  |  |
-| `vitest` · dev | `5.0.2` | `5.0.3` | **Moderate** | **Moderate** |  |  |
+| `vitest` · dev | `5.0.3` | current | **Moderate** | **Moderate** |  |  |
 
 ### Transitive overrides
 
@@ -225,7 +222,7 @@ a fixed version on its own.
 | `@tauri-apps/plugin-notification` | `2.5.0` | `2.5.1` |  |  |  |  |
 | `@tauri-apps/plugin-shell` | `2.4.0` | current |  |  |  |  |
 | `@thisbeyond/solid-dnd` | `0.7.5` | current |  |  |  |  |
-| `@types/node` · dev | `26.6.3` | `26.6.4` |  |  |  |  |
+| `@types/node` · dev | `26.6.4` | current |  |  |  |  |
 | `@types/semver` · dev | `7.8.0` | current |  |  |  |  |
 | `@typescript-eslint/eslint-plugin` · dev | `8.71.0` | `8.71.1` |  |  |  |  |
 | `@typescript-eslint/parser` · dev | `8.71.0` | `8.71.1` |  |  |  |  |
@@ -268,7 +265,7 @@ the vulnerability database.
 | `github.com/aws/aws-sdk-go-v2/credentials` | `v1.20.6` | `v1.20.7` | **High** | **Low** |  |  |
 | `github.com/aws/aws-sdk-go-v2/service/bedrock` | `v1.73.1` | `v1.73.2` | **High** | **Low** |  |  |
 | `github.com/aws/aws-sdk-go-v2/service/bedrockruntime` | `v1.63.1` | `v1.63.2` | **High** | **Low** |  |  |
-| `github.com/aws/smithy-go` | `v1.28.1` | `v1.28.3` | **High** | **Low** |  |  |
+| `github.com/aws/smithy-go` | `v1.28.2` | `v1.28.3` | **High** | **Low** |  |  |
 | `github.com/go-chi/chi/v5` | `v5.3.2` | current | **High** | **Low** |  | Sidecar HTTP routing. |
 | `github.com/go-rod/rod` | `v0.116.2` | current | **High** | **Moderate** |  | CDP driver for the managed browser. Its protocol bindings age as the Chrome pin advances. |
 | `github.com/google/osv-scalibr` | `v0.5.3` | current | **High** | **Moderate** |  | SCA extraction. Pulls the legacy `docker/docker` module, which carries reviewed suppressions in `lycaon/govulncheck-allowlist.yaml`; re-check them after a bump. |
@@ -282,7 +279,7 @@ the vulnerability database.
 | Name | Pinned | Upstream | Urgency | Friction | Dependabot | Notes |
 |---|---|---|---|---|---|---|
 | `codeberg.org/readeck/go-readability/v2` | `v2.1.3` | current | **High** | **Low** |  | Extracts articles from fetched web pages. |
-| `github.com/go-git/go-git/v5` | `v5.19.2` | `v5.19.3` | **High** | **Low** |  | Reads repository state in `internal/sourcescope`. |
+| `github.com/go-git/go-git/v5` | `v5.19.3` | current | **High** | **Low** |  | Reads repository state in `internal/sourcescope`. |
 | `github.com/itchyny/gojq` | `v0.12.19` | current | **Moderate** | **Low** |  | Native query tool. |
 | `github.com/klauspost/compress` | `v1.20.1` | current | **High** | **Low** |  | Decompression of attachments and blobs. |
 | `github.com/mikefarah/yq/v4` | `v4.54.1` | current | **Moderate** | **Low** |  | Native query tool. |
@@ -323,7 +320,7 @@ the vulnerability database.
 | `github.com/google/uuid` | `v1.6.0` | current |  |  |  |  |
 | `github.com/jimsmart/grobotstxt` | `v1.0.3` | current |  |  |  |  |
 | `github.com/johnfercher/go-tree` | `v1.1.0` | current |  |  |  |  |
-| `github.com/johnfercher/maroto/v2` | `v2.4.2` | `v2.4.3` |  |  |  |  |
+| `github.com/johnfercher/maroto/v2` | `v2.4.3` | current |  |  |  |  |
 | `github.com/keybase/go-keychain` | `v0.0.1` | current |  |  |  |  |
 | `github.com/ossf/osv-schema/bindings/go` | `v0.0.0-20260424063704-83285ce2a866` | `v0.0.0-20261006214857-64befd6cdc39` |  |  |  |  |
 | `github.com/owenrumney/go-sarif/v2` | `v2.3.3` | current |  |  |  |  |
@@ -339,7 +336,7 @@ the vulnerability database.
 | `golang.org/x/sys` | `v0.48.0` | current |  |  |  |  |
 | `golang.org/x/text` | `v0.42.0` | current |  |  |  |  |
 | `golang.org/x/time` | `v0.16.0` | current |  |  |  |  |
-| `golang.org/x/tools` | `v0.50.0` | `v0.51.0` |  |  |  |  |
+| `golang.org/x/tools` | `v0.51.0` | current |  |  |  |  |
 | `google.golang.org/protobuf` | `v1.36.12` | current |  |  |  |  |
 | `gopkg.in/op/go-logging.v1` | `v1.0.0-20160211212156-b2cb9fa56473` | current |  |  |  |  |
 | `gopkg.in/yaml.v3` | `v3.0.1` | current |  |  |  |  |
@@ -358,37 +355,38 @@ Windows build runs.
 | `arboard` | `3.6.1` | current | **Low** | **Low** |  | Clipboard. |
 | `base64` | `0.23.1` | current |  |  |  |  |
 | `block2` · macOS | `0.6.2` | current |  |  |  |  |
-| `ed25519-dalek` | `2.2.0` | `3.0.0` | **High** | **Moderate** |  | Signs secret-reveal requests to the sidecar (`sidecar.rs`). Bump a major together with `rand`. |
-| `flate2` | `1.1.9` | `1.1.10` | **High** | **Low** |  | Decompresses signed update archives after their signature is verified; bounded by `packaging/update-limits.json`. |
+| `ed25519-dalek` | `3.0.0` | current | **High** | **Moderate** |  | Signs secret-reveal requests to the sidecar (`sidecar.rs`). Bump a major together with `rand`. |
+| `flate2` | `1.1.10` | current | **High** | **Low** |  | Decompresses signed update archives after their signature is verified; bounded by `packaging/update-limits.json`. |
 | `futures-util` | `0.3.34` | current |  |  |  |  |
-| `libc` | `0.2.189` | `0.2.190` |  |  |  |  |
-| `minisign-verify` | `0.3.0` | current | **Critical** | **Low** |  | Verifies release artifacts and signed channel pointers in the native updater, and backs `scripts/verify-updater-signature.sh` through the `verify_updater_signature` example. Prove the chain with `scripts/release-validate-updater-manifest.sh` and `scripts/feed_signature.py` against the keys in `packaging/update-keys.json`; see [Release operations](release.md). |
+| `hex` | `0.4.3` | not refreshed |  |  |  |  |
+| `libc` | `0.2.190` | current |  |  |  |  |
+| `minisign-verify` | `0.3.0` | current | **Critical** | **Low** |  | Verifies release artifacts and signed channel pointers in the native updater, and backs `scripts/verify-updater-signature.sh` through the `verify_updater_signature` example. Prove the chain with `scripts/release-validate-updater-manifest.sh` and `scripts/feed_signature.py` against the keys in `packaging/update-keys.json`. |
 | `objc2` · macOS | `0.6.4` | `0.6.5` | **Moderate** | **High** |  | Cocoa, WebKit, LocalAuthentication, and notification bindings. Treat 0.x minor bumps as breaking. |
 | `objc2-app-kit` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `objc2-foundation` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `objc2-local-authentication` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `objc2-user-notifications` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `objc2-web-kit` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
-| `rand` | `0.8.6` | `0.10.3` | **High** | **Moderate** |  | Supplies `OsRng` to `ed25519-dalek`. |
+| `rand` | `0.9.5` | `0.10.3` | **High** | **Moderate** |  | Supplies `OsRng` to `ed25519-dalek`. |
 | `reqwest` | `0.13.5` | current | **High** | **Low** |  | Async HTTP. |
 | `rfd` | `0.17.2` | current | **Low** | **Low** |  | File picker. |
 | `rustls` | `0.23.45` | current | **High** | **Low** |  | TLS with the `ring` provider. |
 | `semver` | `1.0.28` | current |  |  |  |  |
 | `serde` | `1.0.229` | current |  |  |  |  |
 | `serde_json` | `1.0.151` | current |  |  |  |  |
-| `sha2` | `0.10.9` | `0.11.0` |  |  |  |  |
+| `sha2` | `0.11.0` | current |  |  |  |  |
 | `tar` | `0.4.46` | current | **High** | **Low** |  | Extracts signed update archives entry by entry; the updater applies its own path, type, link, and mode rules before any entry is written. |
 | `tauri` | `2.12.1` | current | **Critical** | **Moderate** |  | Webview host, IPC, and asset isolation. Keep `@tauri-apps/cli` and `@tauri-apps/api` in step. |
 | `tauri-build` · build | `2.7.1` | current | **Critical** | **Moderate** |  | Moves with `tauri`. |
 | `tauri-plugin-dialog` | `2.8.1` | current | **Moderate** | **Low** |  |  |
 | `tauri-plugin-notification` · not macOS | `2.5.1` | current | **Moderate** | **Low** |  |  |
 | `tauri-plugin-shell` | `2.4.0` | current | **Moderate** | **Low** |  |  |
-| `tokio` | `1.53.1` | `1.53.2` | **Moderate** | **Low** |  |  |
+| `tokio` | `1.53.2` | current | **Moderate** | **Low** |  |  |
 | `ureq` | `2.12.1` | `3.4.2` | **Low** | **High** | No majors | Blocking localhost calls to the sidecar (attachment import, secret reveal). Version 3 rewrites the API. |
-| `uuid` | `1.26.1` | `1.27.0` |  |  |  |  |
+| `uuid` | `1.27.0` | current |  |  |  |  |
 | `wheel-glide` | `0.1.0` | not refreshed |  |  |  |  |
 | `which` | `8.0.6` | current | **Low** | **Low** |  | Executable lookup. |
-| `windows` · Windows | `0.61.3` | `0.62.2` | **Moderate** | **Moderate** |  | Credential UI and window APIs; unverified on Windows. |
+| `windows` · Windows | `0.62.2` | current | **Moderate** | **Moderate** |  | Credential UI and window APIs; unverified on Windows. |
 | `windows-sys` · Windows | `0.61.2` | current | **Moderate** | **Moderate** |  |  |
 
 ---

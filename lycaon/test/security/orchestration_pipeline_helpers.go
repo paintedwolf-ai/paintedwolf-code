@@ -25,7 +25,7 @@ type orchestrationPipelineHarness struct {
 func startBugcommandRun(t *testing.T, h *orchestrationPipelineHarness) wire.WorkflowRun {
 	t.Helper()
 	run, err := h.workflowMgr.Starts.StartHuman(context.Background(), h.sess.ID, wire.StartWorkflowRunRequest{
-		WorkflowID: "bugbash", WorkflowVersion: "1.0.0",
+		WorkflowID: "bugbash", WorkflowVersion: "1.1.0",
 	})
 	if err != nil {
 		t.Fatal(err)

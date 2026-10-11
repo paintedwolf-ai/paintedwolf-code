@@ -81,7 +81,7 @@ Selection authenticates the descriptor before accepting its hashes: it uses the 
 
 The manifest's `opengrep_selection` reference binds the producer commit, tag, descriptor digest, and retained evidence digest; its receipt is committed under `config/runtime/scanners/opengrep-attestations/`. Receipts never bypass verification when selecting a new release. Application packaging compares the bundled engine payload against the selection and publishes a separate `.opengrep.json` audit; a reviewed pin without selection evidence is labeled `reviewed-pin-only`, which is not an attestation claim.
 
-The manifest currently pins a darwin/arm64 artifact, matching the public release platform; Linux and Windows are candidate platforms. The engine release workflow isolates compilation from Apple credentials, enforces its committed signer policy, and attests final release assets before draft creation. See [Release operations](operations/release.md#engine-selection).
+The manifest currently pins a darwin/arm64 artifact, matching the public release platform; Linux and Windows are candidate platforms. The engine release workflow isolates compilation from Apple credentials, enforces its committed signer policy, and attests final release assets before draft creation. See the [release selection script](../scripts/select-opengrep-release.sh).
 
 Development binaries accept `LYCAON_OPENGREP_CANDIDATE` pointing to an absolute directory containing the executable, provenance, and source lock; that selection verifies its own identity and fails without fallback. Release builds and release packaging reject it. For isolated conformance, `OPENGREP` and `OPENGREP_SHA256` select an explicit executable and pin its bytes; both are required together and cannot be combined with the candidate selector. Neither override supplies the normal build identity or authorizes a release artifact.
 
@@ -168,7 +168,7 @@ An ignore is reviewed data in the project's committed `ignores.yaml`: host-owned
 
 Production and conformance share a typed invocation contract. The selected analysis mode is `intrafile`, bound into definition/execution identity and SAST engine proof; alternative modes are explicit evaluation choices, not environment overrides. The driver requests native data-flow traces and reads the complete JSON report from the private output file; a process with an unexpected exit code cannot establish a successful scan by leaving parseable JSON behind.
 
-Engine revisions and analysis options are qualified separately using the language corpus, vulnerable and safe helper controls, and ordinary-project fixtures; the [release runbook](operations/release.md#engine-selection) requires replay against the final signed artifact. Intrafile analysis resolves supported same-file calls; it does not establish cross-file flows, dynamic callback identity, or unmodeled framework behavior. Changing either the engine or its semantic options changes the execution identity.
+Engine revisions and analysis options are qualified separately using the language corpus, vulnerable and safe helper controls, and ordinary-project fixtures; qualification must exercise the final signed artifact. Intrafile analysis resolves supported same-file calls; it does not establish cross-file flows, dynamic callback identity, or unmodeled framework behavior. Changing either the engine or its semantic options changes the execution identity.
 
 Rules must demonstrate a security problem and distinguish safe alternatives. The selection excludes prose markers, correctly handled errors with TODO comments, normal command arguments, ordinary temporary directories, and optional hardening that cannot be inferred from a local file. Terraform checks model explicit resource configuration, including standalone ingress resources and IAM Allow versus Deny, and do not infer missing S3 encryption from a bucket block alone.
 
@@ -194,7 +194,7 @@ The default selection prioritizes actionable security evidence over advisory vol
 
 The language corpus keeps retired examples as silent regressions and adds paired safe/unsafe controls. A clean run is evidence about these models and inputs, not proof that an application is vulnerability-free; unknown wrappers and cross-file flows need additional modeling, not a lower reporting threshold. Background: [Python's hashlib API](https://docs.python.org/3/library/hashlib.html), Go's [custom TLS verification](https://pkg.go.dev/crypto/tls), and Rails' [bound array and hash conditions](https://guides.rubyonrails.org/v7.2/active_record_querying.html).
 
-The [engine repository](https://github.com/paintedwolf-ai/paintedwolf-opengrep) owns source builds and engine contracts; [Release operations](operations/release.md#engine-selection) describes artifact selection. Evidence for an experimental revision does not qualify the selected release.
+The [engine repository](https://github.com/paintedwolf-ai/paintedwolf-opengrep) owns source builds and engine contracts; the [release selection script](../scripts/select-opengrep-release.sh) controls artifact selection. Evidence for an experimental revision does not qualify the selected release.
 
 ## Authoring and updates
 
