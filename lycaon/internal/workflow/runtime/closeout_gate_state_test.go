@@ -4,6 +4,9 @@ import (
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 
 	"context"
+	"errors"
+	"github.com/lycaon/lycaon/internal/session/workflowfacts"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -77,5 +80,62 @@ func TestActiveCloseoutGateStateClearedByPendingUserInput(t *testing.T) {
 	testutil.FailErr(t, "UpdateVars", mgr.Store.State.UpdateVars(ctx, run, "", vars))
 	if state, err := mgr.Policy.ActiveCloseoutGateState(ctx, sess.ID); err != nil || state.Gated {
 		t.Fatalf("state = %+v want cleared while an ask is pending", state)
+	}
+}
+
+func TestReviewPhaseRequiresStructuredCompletion(t *testing.T) {
+	mgr, sess, run := newCloseoutGateHarness(t)
+	run.CurrentPhase = "review"
+	testutil.FailErr(t, "enter review fixture", mgr.Store.State.Update(t.Context(), run))
+	var incomplete *workflowfacts.IncompleteCloseoutError
+	if err := mgr.Policy.AssertSessionCompletion(t.Context(), sess.ID); !errors.As(err, &incomplete) {
+		t.Fatalf("review completion=%v", err)
+	}
+	if incomplete.State.Phase != "review" {
+		t.Fatalf("phase=%s", incomplete.State.Phase)
+	}
+}
+
+type unavailableCloseoutRuns struct {
+	runstate.RunsRepository
+	failure error
+	atVars  bool
+}
+
+func (r unavailableCloseoutRuns) ActiveBySession(ctx context.Context, id string) (*api.WorkflowRun, error) {
+	if !r.atVars {
+		return nil, r.failure
+	}
+	return r.RunsRepository.ActiveBySession(ctx, id)
+}
+func (r unavailableCloseoutRuns) GetScaffoldVars(context.Context, string) (map[string]any, error) {
+	return nil, r.failure
+}
+
+type unavailableCloseoutGates struct{ failure error }
+
+func (g unavailableCloseoutGates) PhaseGateMet(context.Context, workflowdef.Manifest, *api.WorkflowRun, map[string]any) (bool, workflowgates.GateCheckResult, error) {
+	return false, workflowgates.GateCheckResult{}, g.failure
+}
+
+func TestCompletionStateErrorsNeverAuthorizeCloseout(t *testing.T) {
+	for _, at := range []string{"run", "vars", "gates", "phase"} {
+		t.Run(at, func(t *testing.T) {
+			mgr, sess, run := newCloseoutGateHarness(t)
+			failure := errors.New("completion ledger unavailable")
+			switch at {
+			case "run", "vars":
+				mgr.Policy.Runs = unavailableCloseoutRuns{RunsRepository: mgr.Store.Runs, failure: failure, atVars: at == "vars"}
+			case "gates":
+				mgr.Policy.Gates = unavailableCloseoutGates{failure: failure}
+			case "phase":
+				run.CurrentPhase = "missing"
+				testutil.FailErr(t, "set unavailable phase", mgr.Store.State.Update(t.Context(), run))
+			}
+			err := mgr.Policy.AssertSessionCompletion(t.Context(), sess.ID)
+			if err == nil || at != "phase" && !errors.Is(err, failure) {
+				t.Fatalf("completion error=%v", err)
+			}
+		})
 	}
 }

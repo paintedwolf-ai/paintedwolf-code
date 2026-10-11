@@ -28,7 +28,7 @@ func (m *SessionPolicy) ActiveCloseoutGateState(ctx context.Context, sessionID s
 	if !ok {
 		return state, fmt.Errorf("workflow closeout phase %s unavailable", active.CurrentPhase)
 	}
-	if !def.Closeout.Gated() {
+	if !def.Closeout.Gated() && def.ReviewLoop == nil {
 		return state, nil
 	}
 	vars, err := m.Runs.GetScaffoldVars(ctx, active.ID)

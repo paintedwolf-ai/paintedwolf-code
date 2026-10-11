@@ -6,7 +6,6 @@ requires:
   facts:
     - paintedwolf.closeout_gates_open
     - paintedwolf.closeout_gate_open_leaves
-    - paintedwolf.closeout_gate_delay_count
     - paintedwolf.workers_idle
     - paintedwolf.phase
 when: paintedwolf.workers_idle && paintedwolf.closeout_gates_open

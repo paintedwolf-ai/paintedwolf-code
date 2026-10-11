@@ -29,13 +29,12 @@ func (m *Service) OpenGates(ctx context.Context, sess *api.Session, workersIdle,
 	}
 	root := sessiontree.RootID(ctx, m.store, sess.ID)
 	leaves := strings.Join(state.OpenLeaves, ", ")
-	count, retry := m.closeouts.Delay(sess.ID, root, closeouts.GateDelay, invokeAllowed, closeoutGateDelayMaxPerPrompt)
+	_, retry := m.closeouts.Delay(sess.ID, root, closeouts.GateDelay, invokeAllowed, closeoutGateDelayMaxPerPrompt)
 	reject, blocked := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
 		gc.Workers.WorkersIdle = workersIdle
 		gc.Session.Phase = state.Phase
 		gc.Workflow.CloseoutGatesOpen = true
 		gc.Workflow.CloseoutGateOpenLeaves = leaves
-		gc.Workflow.CloseoutGateDelayCount = int64(count)
 		gc.PutRejectData(workflowGatesOpenCode, map[string]any{"phase": state.Phase, "closeout_gate_open_leaves": leaves})
 		return nil
 	})
