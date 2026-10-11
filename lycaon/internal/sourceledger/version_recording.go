@@ -15,7 +15,7 @@ type versionSpec struct {
 	FileID, ProjectID, ParentVersionID, DerivedFromVersionID string
 	OperationID, RootID, Path, EntryKind, State, SHA256      string
 	BranchID                                                 sourcebranch.ID
-	Content                                                  []byte
+	Object                                                   *db.UpsertSourceBlobObjectParams
 	Size                                                     int64
 	CaptureQuality                                           string
 	// Landing defaults to the working file.
@@ -46,19 +46,11 @@ func (s *Store) insertVersion(ctx context.Context, q *db.Queries, spec versionSp
 		if spec.Size > MaxRevisionContentBytes {
 			captureReason = "content_too_large"
 		}
-		if spec.Content != nil && len(spec.Content) <= MaxRevisionContentBytes {
-			rel, stored, oids, err := s.Content.Put(spec.SHA256, spec.Content)
-			if err != nil {
+		if spec.Object != nil {
+			if err := q.UpsertSourceBlobObject(ctx, *spec.Object); err != nil {
 				return "", err
 			}
-			if err := q.UpsertSourceBlobObject(ctx, db.UpsertSourceBlobObjectParams{
-				Sha256: spec.SHA256, Size: int64(len(spec.Content)), StoredSize: stored,
-				StorageRelpath: rel,
-				GitOidSha1:     oids.SHA1, GitOidSha256: oids.SHA256,
-			}); err != nil {
-				return "", err
-			}
-			captureState, captureReason, spec.Size = "stored", "", int64(len(spec.Content))
+			captureState, captureReason, spec.Size = "stored", "", spec.Object.Size
 		} else if object, err := q.GetSourceBlobObject(ctx, spec.SHA256); err == nil {
 			captureState, captureReason, spec.Size = "stored", "", object.Size
 		} else if !errors.Is(err, sql.ErrNoRows) {
@@ -94,13 +86,13 @@ func (s *Store) insertVersion(ctx context.Context, q *db.Queries, spec versionSp
 	return id, nil
 }
 
-func (s *Store) preserveObservedPreimage(ctx context.Context, q *db.Queries, in RecordInput, tracked TrackedFile, head *db.SourceBranchHeads) (string, error) {
+func (s *Store) preserveObservedPreimage(ctx context.Context, q *db.Queries, in preparedRecord, tracked TrackedFile, head *db.SourceBranchHeads) (string, error) {
 	// Preserve the observed pre-image when it differs from the tracked head.
-	preSHA, preBytes, preSize, preRoot, prePath := in.BeforeSHA256, in.Before, in.BeforeSize, in.RootID, in.Path
+	preSHA, preSize, preRoot, prePath := in.BeforeSHA256, in.BeforeSize, in.RootID, in.Path
 	if in.Op == api.SourceChangeOpRename {
 		preRoot, prePath = in.RootID, in.FromPath
 		if preSHA == "" {
-			preSHA, preBytes, preSize = in.AfterSHA256, in.After, in.AfterSize
+			preSHA, preSize = in.AfterSHA256, in.AfterSize
 		}
 	}
 	needsPreimage := in.Op != api.SourceChangeOpCreate && tracked.VersionID == ""
@@ -125,7 +117,7 @@ func (s *Store) preserveObservedPreimage(ctx context.Context, q *db.Queries, in 
 			ParentVersionID:      tracked.VersionID,
 			DerivedFromVersionID: in.DerivedFromVersionID,
 			RootID:               preRoot, Path: prePath, EntryKind: in.EntryKind,
-			SHA256: preSHA, Content: preBytes, Size: preSize,
+			SHA256: preSHA, Object: in.objects[preSHA], Size: preSize,
 			CaptureQuality: in.CaptureQuality, TS: in.TS,
 		})
 	}

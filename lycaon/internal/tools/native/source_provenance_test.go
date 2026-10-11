@@ -37,8 +37,10 @@ type fakeSourceLedger struct {
 }
 
 func (f *fakeSourceLedger) Record(context.Context, sourceledger.RecordInput) error { return nil }
-func (f *fakeSourceLedger) RecordTx(context.Context, *sql.Tx, sourceledger.RecordInput) error {
-	return nil
+func (f *fakeSourceLedger) Prepare(context.Context, []sourceledger.RecordInput) (sourceledger.PreparedRecording, error) {
+	return preparedCapture(func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error) {
+		return sourceledger.TrackedFile{}, nil
+	}), nil
 }
 
 func (f *fakeSourceLedger) ReadRestorableVersion(_ context.Context, projectID, versionID string) (sourceledger.RestorableVersion, error) {
@@ -349,6 +351,12 @@ func TestReadSourceStampPreservesWorkerDestination(t *testing.T) {
 	}
 }
 
+type preparedCapture func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error)
+
+func (p preparedCapture) CommitTx(ctx context.Context, tx *sql.Tx) (sourceledger.TrackedFile, error) {
+	return p(ctx, tx)
+}
+func (p preparedCapture) Close() {}
 func (f *fakeSourceLedger) ResolveHeadByFile(context.Context, string, sourcebranch.ID, string) (sourceledger.BranchHead, error) {
 	return sourceledger.BranchHead{}, sourceledger.ErrHistoryNotFound
 }

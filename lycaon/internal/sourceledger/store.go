@@ -151,7 +151,7 @@ type RecordInput struct {
 
 type Recorder interface {
 	Record(context.Context, RecordInput) error
-	RecordTx(context.Context, *sql.Tx, RecordInput) error
+	Prepare(context.Context, []RecordInput) (PreparedRecording, error)
 }
 
 // TrackInput identifies a file entering sparse history.
@@ -176,7 +176,6 @@ type FileTracker interface {
 type BatchRecorder interface {
 	Recorder
 	RecordBatch(context.Context, []RecordInput) error
-	RecordBatchTx(context.Context, *sql.Tx, []RecordInput) error
 }
 
 type PromoteRecorder interface {
@@ -205,6 +204,12 @@ func (s *Store) TrackFile(ctx context.Context, raw TrackInput) (TrackedFile, err
 	if in.ProjectID == "" || in.RootID == "" || in.Path == "" {
 		return TrackedFile{}, fmt.Errorf("source tracking requires project, root, and path")
 	}
+	release := s.Content.AcquireReferenceLease()
+	defer release()
+	object, err := prepareContent(ctx, s.Content, in.SHA256, in.Content, in.EntryKind)
+	if err != nil {
+		return TrackedFile{}, err
+	}
 	s.recordMu.Lock()
 	defer s.recordMu.Unlock()
 	tx, err := s.sqlDB.BeginTx(ctx, nil)
@@ -213,7 +218,7 @@ func (s *Store) TrackFile(ctx context.Context, raw TrackInput) (TrackedFile, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := s.queries.WithTx(tx)
-	tracked, err := s.trackFileTx(ctx, q, in)
+	tracked, err := s.trackFileTx(ctx, q, preparedTrack{TrackInput: in, object: object})
 	if err != nil {
 		return TrackedFile{}, err
 	}
@@ -281,7 +286,7 @@ func normalizeTrackInput(in TrackInput) TrackInput {
 	return in
 }
 
-func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in TrackInput) (TrackedFile, error) {
+func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in preparedTrack) (TrackedFile, error) {
 	head, err := q.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{
 		ProjectID: in.ProjectID, BranchID: in.BranchID.String(), RootID: in.RootID, Path: in.Path,
 	})
@@ -290,12 +295,12 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in TrackInput) (
 	}
 	if err == nil {
 		if in.SHA256 != "" && head.ContentSha256 != "" && head.ContentSha256 != in.SHA256 {
-			if err := s.recordBatchTx(ctx, q, []RecordInput{{
+			if err := s.recordBatchTx(ctx, q, []preparedRecord{{RecordInput: normalizedInput(RecordInput{
 				RecordLocation: RecordLocation{RootID: in.RootID, Path: in.Path, EntryKind: in.EntryKind},
 				ProjectID:      in.ProjectID, BranchID: in.BranchID, FileID: head.FileID,
 				Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginExternal,
 				AfterSHA256: in.SHA256, After: in.Content, AfterSize: in.Size,
-				Cause: "open_observation", CaptureQuality: "observed", TS: in.TS}}); err != nil {
+				Cause: "open_observation", CaptureQuality: "observed", TS: in.TS}), objects: map[string]*db.UpsertSourceBlobObjectParams{in.SHA256: in.object}}}); err != nil {
 				return TrackedFile{}, err
 			}
 			updated, err := q.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{
@@ -314,7 +319,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in TrackInput) (
 			FileID: head.FileID, ProjectID: in.ProjectID, BranchID: in.BranchID,
 			ParentVersionID: head.VersionID,
 			RootID:          in.RootID, Path: in.Path, EntryKind: in.EntryKind,
-			SHA256: in.SHA256, Content: in.Content, Size: in.Size,
+			SHA256: in.SHA256, Object: in.object, Size: in.Size,
 			CaptureQuality: "exact", TS: in.TS,
 		})
 		if err != nil {
@@ -364,7 +369,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in TrackInput) (
 		FileID: fileID, ProjectID: in.ProjectID, BranchID: in.BranchID,
 		DerivedFromVersionID: derivedFromVersionID,
 		RootID:               in.RootID, Path: in.Path,
-		EntryKind: in.EntryKind, State: state, SHA256: in.SHA256, Content: in.Content,
+		EntryKind: in.EntryKind, State: state, SHA256: in.SHA256, Object: in.object,
 		Size: in.Size, CaptureQuality: "exact", TS: in.TS,
 	})
 	if err != nil {

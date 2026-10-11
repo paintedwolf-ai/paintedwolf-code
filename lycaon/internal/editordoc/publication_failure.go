@@ -9,16 +9,48 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
-// Terminal publication and its retained agent bytes commit together. An intent
-// whose filesystem effect still needs attribution stays pending for recovery.
+type publicationSettlement struct {
+	store  *Store
+	ledger Ledger
+}
+
 func (s *Service) settlePublicationFailure(ctx context.Context, d *Document, m *Mutation, status string, cause error) error {
+	changed, err := (publicationSettlement{store: s.store, ledger: s.ledger}).settle(ctx, d, m, status, cause)
+	if err != nil {
+		return err
+	}
+	if changed {
+		s.changed(ctx, d, false)
+	}
+	return nil
+}
+
+// Terminal publication and retained agent bytes commit together.
+func (s publicationSettlement) settle(ctx context.Context, d *Document, m *Mutation, status string, cause error) (bool, error) {
 	next, failed := *d, *m
 	next.replicaCommit = nil
 	failed.Status, failed.Error, failed.UpdatedAt = status, cause.Error(), time.Now().UTC()
 	if status == "conflict" {
 		next.Diverged = true
 	}
-	err := s.store.Tx(ctx, func(tx *sql.Tx) error {
+	var existing string
+	err := s.store.db.QueryRowContext(ctx, `SELECT held_version_id FROM editor_agent_receipts WHERE document_id=? AND operation_id=?`, d.ID, m.ID).Scan(&existing)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return false, err
+	}
+	var prepared sourceledger.PreparedHeldEdit
+	if err == nil && existing == "" {
+		prepared, err = s.ledger.PrepareHeldEdit(ctx, sourceledger.HeldEdit{
+			BranchID: d.BranchID, ProjectID: m.ProjectID, FileID: m.FileID, RootID: m.RootID, Path: m.Path,
+			Content: m.AfterBytes, SHA256: m.AfterSHA256, Size: int64(len(m.AfterBytes)),
+			SessionID: m.SessionID, Turn: m.Turn, ToolCallID: m.ToolCallID, ToolName: m.ToolName, TS: m.CreatedAt,
+		})
+		if err != nil {
+			return false, err
+		}
+		defer prepared.Close()
+	}
+	err = s.store.Tx(ctx, func(tx *sql.Tx) error {
 		var held string
 		err := tx.QueryRowContext(ctx, `SELECT held_version_id FROM editor_agent_receipts WHERE document_id=? AND operation_id=?`, d.ID, m.ID).Scan(&held)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -26,12 +58,10 @@ func (s *Service) settlePublicationFailure(ctx context.Context, d *Document, m *
 		}
 		if err == nil {
 			if held == "" {
-				held, err = s.ledger.RecordHeldEditTx(ctx, tx, sourceledger.HeldEdit{
-					BranchID:  d.BranchID,
-					ProjectID: m.ProjectID, FileID: m.FileID, RootID: m.RootID, Path: m.Path,
-					Content: m.AfterBytes, SHA256: m.AfterSHA256, Size: int64(len(m.AfterBytes)),
-					SessionID: m.SessionID, Turn: m.Turn, ToolCallID: m.ToolCallID, ToolName: m.ToolName, TS: m.CreatedAt,
-				})
+				if prepared == nil {
+					return errors.New("agent receipt changed during publication settlement")
+				}
+				held, err = prepared.CommitTx(ctx, tx)
 				if err != nil {
 					return err
 				}
@@ -58,12 +88,9 @@ func (s *Service) settlePublicationFailure(ctx context.Context, d *Document, m *
 		return s.store.UpdateMutationTx(ctx, tx, &failed)
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
 	changed := next.Revision != d.Revision
 	*d, *m = next, failed
-	if changed {
-		s.changed(ctx, d, false)
-	}
-	return nil
+	return changed, nil
 }

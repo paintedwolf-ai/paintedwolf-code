@@ -68,8 +68,10 @@ func (c *captureFeed) workspaceKinds() []api.SourceWorkspaceKind {
 	return append([]api.SourceWorkspaceKind(nil), c.kinds...)
 }
 
-func (s *promoteLedgerStub) RecordTx(ctx context.Context, _ *sql.Tx, in sourceledger.RecordInput) error {
-	return s.Record(ctx, in)
+func (s *promoteLedgerStub) Prepare(_ context.Context, inputs []sourceledger.RecordInput) (sourceledger.PreparedRecording, error) {
+	return preparedCapture(func(ctx context.Context, _ *sql.Tx) (sourceledger.TrackedFile, error) {
+		return sourceledger.TrackedFile{}, s.RecordBatch(ctx, inputs)
+	}), nil
 }
 
 func (s *promoteLedgerStub) RecordBatch(ctx context.Context, inputs []sourceledger.RecordInput) error {
@@ -81,14 +83,9 @@ func (s *promoteLedgerStub) RecordBatch(ctx context.Context, inputs []sourceledg
 	return nil
 }
 
-func (s *promoteLedgerStub) RecordBatchTx(ctx context.Context, _ *sql.Tx, inputs []sourceledger.RecordInput) error {
-	return s.RecordBatch(ctx, inputs)
-}
-
 func (s *promoteLedgerStub) JobVersionForPath(context.Context, string, string, string, string) (string, string, error) {
 	return "", "", nil
 }
-
 func (s *promoteLedgerStub) JobPathFirstWriteOrder(context.Context, string, string) ([]string, error) {
 	return append([]string(nil), s.firstWrite...), nil
 }
@@ -423,3 +420,10 @@ func TestFailedPromotionDiscardsEditorImportsAfterRollback(t *testing.T) {
 		t.Fatalf("failed promotion recorded source history: %+v", f.ledger.records)
 	}
 }
+
+type preparedCapture func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error)
+
+func (p preparedCapture) CommitTx(ctx context.Context, tx *sql.Tx) (sourceledger.TrackedFile, error) {
+	return p(ctx, tx)
+}
+func (p preparedCapture) Close() {}

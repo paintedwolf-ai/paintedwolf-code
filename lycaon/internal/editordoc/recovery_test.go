@@ -21,15 +21,15 @@ type selectiveRecoveryRecorder struct {
 	failedPath string
 }
 
-func (r *selectiveRecoveryRecorder) RecordTx(_ context.Context, _ *sql.Tx, in sourceledger.RecordInput) error {
-	if in.Path == r.failedPath {
-		return errors.New("injected ledger outage")
-	}
-	return nil
-}
-
-func (r *selectiveRecoveryRecorder) RecordFileTx(ctx context.Context, tx *sql.Tx, in sourceledger.RecordInput) (sourceledger.TrackedFile, error) {
-	return sourceledger.TrackedFile{}, r.RecordTx(ctx, tx, in)
+func (r *selectiveRecoveryRecorder) Prepare(_ context.Context, inputs []sourceledger.RecordInput) (sourceledger.PreparedRecording, error) {
+	return preparedCapture(func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error) {
+		for _, in := range inputs {
+			if in.Path == r.failedPath {
+				return sourceledger.TrackedFile{}, errors.New("injected ledger outage")
+			}
+		}
+		return sourceledger.TrackedFile{}, nil
+	}), nil
 }
 
 func TestRecoverySettlesOtherDocumentsAfterOneLedgerFailure(t *testing.T) {

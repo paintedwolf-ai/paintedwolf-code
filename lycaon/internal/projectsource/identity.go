@@ -3,7 +3,6 @@ package projectsource
 
 import (
 	"context"
-	"database/sql"
 	"io"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -14,7 +13,7 @@ import (
 type SourceMutationRecorder interface {
 	Record(context.Context, sourceledger.RecordInput) error
 	RecordBatch(context.Context, []sourceledger.RecordInput) error
-	RecordBatchTx(context.Context, *sql.Tx, []sourceledger.RecordInput) error
+	Prepare(context.Context, []sourceledger.RecordInput) (sourceledger.PreparedRecording, error)
 }
 
 type SourceHeadReader interface {

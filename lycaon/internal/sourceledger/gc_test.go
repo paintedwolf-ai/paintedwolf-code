@@ -105,7 +105,7 @@ func TestSweepJudgesEveryShardAndDrainsTheQueue(t *testing.T) {
 	}
 }
 
-func TestMaintenanceWaitsForARecordTransactionToCommit(t *testing.T) {
+func TestMaintenanceDefersUntilPreparedRecordCommits(t *testing.T) {
 	store, ctx := openLedger(t)
 	content := []byte("recorded through a caller transaction\n")
 	sha := sourceblob.ContentSHA(content)
@@ -119,27 +119,23 @@ func TestMaintenanceWaitsForARecordTransactionToCommit(t *testing.T) {
 		GitOidSha1: oids.SHA1, GitOidSha256: oids.SHA256,
 	}))
 
+	prepared, err := store.Prepare(ctx, []RecordInput{{RecordLocation: RecordLocation{RootID: "r1", Path: "joined.txt"}, ProjectID: "p1", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, After: content}})
+	testutil.FailErr(t, "prepare", err)
+	defer prepared.Close()
+	if err := store.Retention.SweepBlobs(ctx); !errors.Is(err, ErrBlobMaintenanceDeferred) {
+		t.Fatalf("sweep during preparation: %v", err)
+	}
 	tx, err := store.sqlDB.BeginTx(ctx, nil)
-	testutil.FailErr(t, "begin caller transaction", err)
-	testutil.FailErr(t, "record inside caller transaction", store.RecordTx(ctx, tx, RecordInput{
-		RecordLocation: RecordLocation{RootID: "r1", Path: "joined.txt"},
-		ProjectID:      "p1",
-		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, After: content}))
-
-	swept := make(chan error, 1)
-	go func() { swept <- store.Retention.SweepBlobs(ctx) }()
-	select {
-	case err := <-swept:
-		t.Fatalf("sweep finished (%v) while a record transaction held the writer", err)
-	case <-time.After(300 * time.Millisecond):
+	testutil.FailErr(t, "begin", err)
+	defer tx.Rollback()
+	_, err = prepared.CommitTx(ctx, tx)
+	testutil.FailErr(t, "record", err)
+	if err := store.Retention.SweepBlobs(ctx); !errors.Is(err, ErrBlobMaintenanceDeferred) {
+		t.Fatalf("sweep during transaction: %v", err)
 	}
-	testutil.FailErr(t, "commit caller transaction", tx.Commit())
-	select {
-	case err := <-swept:
-		testutil.FailErr(t, "sweep after commit", err)
-	case <-time.After(10 * time.Second):
-		t.Fatal("sweep never finished after the record committed")
-	}
+	testutil.FailErr(t, "commit", tx.Commit())
+	prepared.Close()
+	testutil.FailErr(t, "sweep after commit", store.Retention.SweepBlobs(ctx))
 	if exists, err := store.Content.Exists(rel); err != nil || !exists {
 		t.Fatalf("object a committed version references was reclaimed: exists=%v err=%v", exists, err)
 	}

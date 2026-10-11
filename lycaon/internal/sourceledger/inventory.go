@@ -432,8 +432,7 @@ type Inventory struct {
 
 // Observation recording shares mutation admission and the writer's transaction.
 type observationRecorder interface {
-	RecordBatchTx(context.Context, *sql.Tx, []RecordInput) error
-	recordBatchTx(context.Context, *db.Queries, []RecordInput) error
+	prepare(context.Context, []RecordInput) (*preparedRecording, error)
 	mutationObservationScope(context.Context, *sql.Tx, string) (MutationObservationScope, error)
 }
 

@@ -306,8 +306,13 @@ func (s *Service) commit(ctx context.Context, p *project.Project, d *Document, m
 		record.TextBefore = textBefore
 		record.Before, record.BeforeSize = m.BeforeBytes, int64(len(m.BeforeBytes))
 	}
+	prepared, err := s.ledger.Prepare(ctx, []sourceledger.RecordInput{record})
+	if err != nil {
+		return err
+	}
+	defer prepared.Close()
 	err = s.store.Tx(ctx, func(tx *sql.Tx) error {
-		tracked, err := s.ledger.RecordFileTx(ctx, tx, record)
+		tracked, err := prepared.CommitTx(ctx, tx)
 		if err != nil {
 			return err
 		}
