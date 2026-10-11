@@ -298,7 +298,7 @@ func searchCompletion(issues []Issue) (ResultStatus, bool, CountRelation) {
 			if status == ResultStatusComplete {
 				status = ResultStatusLimited
 			}
-		case IssueExecutorError, IssueFilesSkipped, IssueTimeBudget, IssueSymbolBudget,
+		case IssueExecutorError, IssueFilesSkipped, IssueTimeBudget, IssueSymbolBudget, IssueSymbolPending,
 			IssueCatalogWarming, IssueCatalogIncomplete, IssueCatalogBounded, IssueCatalogFailed, IssueCatalogRefreshFailed, IssueCatalogRefreshing, IssueIndexWarming:
 			status = ResultStatusPartial
 		}
