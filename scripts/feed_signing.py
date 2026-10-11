@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 from pathlib import Path
@@ -11,7 +12,7 @@ import sys
 import tempfile
 
 from feed_signature import check
-from update_keys import load_registry
+from update_keys import decode_public_key, load_registry
 
 
 def credentials(document: str) -> dict:
@@ -40,6 +41,27 @@ def signing_registry(path: Path | None, prefix: str) -> dict:
     return load_registry(path) if path else load_registry()
 
 
+def verify(pointer: Path, signature: str, public_key: str) -> None:
+    """Verify the exact pointer and trusted comment with maintained minisign."""
+    decode_public_key(public_key)
+    with tempfile.TemporaryDirectory(prefix="feed-verification-") as directory:
+        signature_path = Path(directory) / "pointer.minisig"
+        public_path = Path(directory) / "feed.pub"
+        signature_path.write_bytes(base64.b64decode(signature.strip(), validate=True))
+        public_path.write_bytes(base64.b64decode(public_key, validate=True))
+        # Verification needs only public data; neither credentials nor tool diagnostics escape.
+        try:
+            result = subprocess.run(
+                ["minisign", "-V", "-q", "-m", str(pointer.resolve()),
+                 "-x", str(signature_path), "-p", str(public_path)],
+                env={"PATH": os.environ.get("PATH", os.defpath)},
+                capture_output=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            raise ValueError("feed signature verification could not complete") from None
+        if result.returncode:
+            raise ValueError("feed signature verification failed")
+
+
 def sign(pointer: Path, number: int, registry: dict) -> Path:
     rows = credentials(os.environ.get("FEED_SIGNING_KEYS_JSON", ""))
     row = rows.get(str(number))
@@ -56,7 +78,10 @@ def sign(pointer: Path, number: int, registry: dict) -> Path:
     if result.returncode:
         raise ValueError(f"feed signing failed for generation {number}")
     signature = Path(str(pointer) + ".sig")
-    check(signature.read_text(), file=pointer.name, version=version, number=number, registry=registry)
+    document = signature.read_text()
+    check(document, file=pointer.name, version=version, number=number, registry=registry)
+    public_key = next(row["feed_public_key"] for row in registry["generations"] if row["generation"] == number)
+    verify(pointer, document, public_key)
     return signature
 
 

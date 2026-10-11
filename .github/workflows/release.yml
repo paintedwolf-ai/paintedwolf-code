@@ -89,6 +89,8 @@ jobs:
       - name: Install the pinned Tauri CLI for credential validation
         run: bun install --frozen-lockfile
         working-directory: lycaon-den
+      - name: Install minisign for cryptographic feed verification
+        run: sudo apt-get update && sudo apt-get install -y minisign
       - name: Prove all retained feed credentials before publication
         env:
           FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
@@ -591,6 +593,8 @@ jobs:
       - name: Install the pinned Tauri CLI for pointer signing
         run: bun install --frozen-lockfile
         working-directory: lycaon-den
+      - name: Install minisign for cryptographic feed verification
+        run: sudo apt-get update && sudo apt-get install -y minisign
 
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
