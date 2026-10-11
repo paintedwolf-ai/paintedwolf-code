@@ -76,7 +76,9 @@ fn validate_app_state_patch(
     Ok(())
 }
 
-fn read_app_state_doc(dir: &Path) -> Result<serde_json::Map<String, serde_json::Value>, String> {
+pub(crate) fn read_app_state_doc(
+    dir: &Path,
+) -> Result<serde_json::Map<String, serde_json::Value>, String> {
     let mut doc = serde_json::Map::new();
     doc.insert("version".into(), serde_json::json!(APP_STATE_VERSION));
     let slices = app_state_slices_dir(dir);
@@ -163,7 +165,7 @@ fn delete_app_state_slice(dir: &Path, key: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn apply_app_state_patch_at(
+pub(crate) fn apply_app_state_patch_at(
     dir: &Path,
     patch: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<(), String> {
