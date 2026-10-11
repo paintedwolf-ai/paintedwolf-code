@@ -2,11 +2,15 @@ package processes
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
+	"testing/fstest"
 
+	"github.com/lycaon/lycaon/config"
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/userpath"
@@ -45,6 +49,24 @@ func TestResolvePathRefusesInvalidConfigurationWithoutReplacingSnapshot(t *testi
 		if runtime.Path.Value() != dir || execpkg.ResolvedPathValue() != dir {
 			t.Fatalf("refused configuration replaced snapshot: runtime=%q, process=%q", runtime.Path.Value(), execpkg.ResolvedPathValue())
 		}
+	}
+	for _, tc := range []struct {
+		name    string
+		catalog fstest.MapFS
+		wantErr error
+	}{
+		{name: "missing catalog", catalog: fstest.MapFS{}, wantErr: fs.ErrNotExist},
+		{name: "invalid catalog", catalog: fstest.MapFS{config.UserPath.String(): &fstest.MapFile{Data: []byte("version: 1\n")}}, wantErr: userpath.ErrConfigInvalid},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Cleanup(config.UseFS(tc.catalog))
+			if err := runtime.ResolvePath(t.Context()); !errors.Is(err, tc.wantErr) {
+				t.Fatalf("unusable catalog error = %v; want %v", err, tc.wantErr)
+			}
+			if runtime.Path.Value() != dir || execpkg.ResolvedPathValue() != dir {
+				t.Fatalf("unusable catalog replaced snapshot: runtime=%q, process=%q", runtime.Path.Value(), execpkg.ResolvedPathValue())
+			}
+		})
 	}
 }
 
