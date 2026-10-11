@@ -29,6 +29,16 @@ policy before editing. Start unfamiliar work at [docs](docs/README.md) and
 - **Report the crux, changes, verification, and unresolved work.** Surface findings
   that contradict the request before changing direction. Report verification
   results once available; do not narrate queued or running checks.
+- **Never merge unmerged feature branches into an omnibus integration PR.**
+  If PR B depends on PR A, PR A must land on `main` through the merge queue
+  first. If PR A fails or stalls in the queue, fix PR A in isolation. Absorbing
+  dependent PRs into a single combined branch to bypass queue serialization is
+  forbidden.
+- **Keep backend and frontend presentation changes decoupled.** Backend PRs must
+  not touch unrelated frontend presentation components. If an existing frontend
+  file exceeds a maintainability threshold, leave it alone unless the PR is
+  specifically a frontend change. Do not allow speculative UI file-budget cleanup
+  to expand backend PR scope or risk coverage failures.
 
 ## Don't touch concurrent WIP
 

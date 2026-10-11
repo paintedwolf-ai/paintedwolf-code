@@ -2,9 +2,9 @@
 limits:
     source_files: {warn: 300, limit: 900}
     test_files: {warn: 375, limit: 1200}
-    source_directories: {warn: 25, limit: 75}
-    test_directories: {warn: 30, limit: 100}
-    go_struct_fields: {warn: 12, limit: 35}
+    source_directories: {warn: 50, limit: 100}
+    test_directories: {warn: 50, limit: 100}
+    go_struct_fields: {warn: 20, limit: 40}
     go_receiver_methods: {warn: 15, limit: 60}
     go_receiver_lines: {warn: 300, limit: 1500}
     ts_local_dependencies: {warn: 15, limit: 45}

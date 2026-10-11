@@ -23,6 +23,8 @@ Full catalog: [`../docs/dev-tasks.md`](../docs/dev-tasks.md).
 
 Den is a **thin cache with a UI** — session state, gates, plan approval timing, and tool card status come from the sidecar, not client inference.
 
+**Decoupled presentation changes:** Do not bundle presentation component refactorings into backend PRs. Keep UI cleanup and refactoring in dedicated frontend PRs to avoid cross-domain coverage and review blockages.
+
 Wire contract: [`../docs/host-contract.md`](../docs/host-contract.md). `src/api/types.ts` is **generated** (`./task codegen:den-types` after `./task openapi:bundle`) — never hand-edit. Non-DTO helpers live beside it; the EventTopic payload relation is generated as `event-payloads.generated.ts`. See [`../lycaon/AGENTS.md`](../lycaon/AGENTS.md).
 
 ## Naming
