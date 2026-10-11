@@ -40,8 +40,7 @@ func (s *Retention) StorageUsage(ctx context.Context) (storageusage.Usage, error
 	}, nil
 }
 
-// MaintainBlobs runs one bounded pass: one orphan batch and one reclaim batch.
-// Inventory completion runs it so interactive work repairs a little each time.
+// MaintainBlobs runs bounded recovery, orphan, and object reclamation batches.
 func (s *Retention) MaintainBlobs(ctx context.Context) error {
 	if s == nil || s.sqlDB == nil {
 		return nil

@@ -182,6 +182,7 @@ var tableLifetimes = map[string]TableLifetime{
 	"source_operations":              cascadeOwnedBy("projects"),
 	"source_recovery_entries":        cascadeOwnedBy("projects"),
 	"source_recovery_objects":        cascadeOwnedBy("projects"),
+	"source_recovery_reclaim_queue":  cascadeOwnedBy("projects"),
 	"source_versions":                cascadeOwnedBy("projects"),
 	"source_worktrees":               cascadeOwnedBy("projects"),
 	"turn_attempt_closeouts":         cascadeOwnedBy("turn_attempts"),

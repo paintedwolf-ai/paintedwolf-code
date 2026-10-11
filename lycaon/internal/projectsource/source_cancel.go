@@ -19,24 +19,7 @@ func (s *SourceMutationService) cancelSourcePreparation(ctx context.Context, row
 		plan.StageIdentity = ""
 	}
 	if plan.RecoveryID == row.ID {
-		if s.Journal.db != nil {
-			tx, err := s.Journal.db.BeginTx(ctx, nil)
-			if err != nil {
-				return err
-			}
-			defer func() { _ = tx.Rollback() }()
-			for _, query := range []string{
-				`DELETE FROM source_recovery_entries WHERE project_id=? AND recovery_id=?`,
-				`DELETE FROM source_recovery_objects WHERE project_id=? AND recovery_id=?`,
-			} {
-				if _, err := tx.ExecContext(ctx, query, plan.ProjectID, plan.RecoveryID); err != nil {
-					return err
-				}
-			}
-			if err := tx.Commit(); err != nil {
-				return err
-			}
-		} else {
+		if s.Journal.db == nil {
 			s.recovery.stateMu.Lock()
 			delete(s.recovery.recoveryEntries, plan.RecoveryID)
 			s.recovery.stateMu.Unlock()
