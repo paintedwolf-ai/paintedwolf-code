@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { readSourceText } from "../test/stylesheet-source.ts";
 import { denRoot, denSourceRoot } from "../test/source-corpus.ts";
 
-import { CHAT_WIDTH_DEFAULT_PX, DIVIDER_PX, SPLIT_MIN_HOST, STAGE_COL_MIN, clampChatWidthPx } from "../shell/stage-placement.ts";
+import { CHAT_COL_MIN, CHAT_WIDTH_DEFAULT_PX, DIVIDER_PX, SPLIT_MIN_HOST, STAGE_COL_MIN, clampChatWidthPx } from "../shell/stage-placement.ts";
 import { shouldAutomaticallyCollapseNav, workspaceStageFloorPx } from "../shell/responsive-collapse.ts";
 
 const read = (rel: string) => readSourceText(join(denSourceRoot, rel));
