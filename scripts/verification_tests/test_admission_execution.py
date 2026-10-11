@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-import ci_verification as ci
+from ci_policy import hosted_plan as ci
 from ci_policy import impact, evidence, resources, recovery
 
 
