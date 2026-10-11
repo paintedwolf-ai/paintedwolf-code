@@ -2,6 +2,8 @@ package repochange
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -9,8 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/watchfd"
 )
 
-// Stop cannot recall a timer whose function has already started, so the
-// notification checks the close itself.
+// A running timer callback must observe closure.
 func TestScheduleHeadNotifyStaysSilentOnceClosed(t *testing.T) {
 	t.Cleanup(ResetObserversForTest)
 
@@ -28,23 +29,49 @@ func TestScheduleHeadNotifyStaysSilentOnceClosed(t *testing.T) {
 		}
 	})
 
-	// The debounce window is already running when the close lands — the race a
-	// stopped timer cannot win.
-	w.scheduleHeadNotify(context.Background())
-	w.mu.Lock()
-	w.closed = true
-	w.mu.Unlock()
+	// Leave the timer running to exercise the callback fence.
+	w.refs.schedule(context.Background(), root)
+	w.refs.mu.Lock()
+	w.refs.closed = true
+	w.refs.mu.Unlock()
 	time.Sleep(refNotifyDebounce + 150*time.Millisecond)
 	if moved.Load() != 0 {
 		t.Fatalf("closed watcher emitted HeadMoved x%d", moved.Load())
 	}
 
 	// A ref event arriving after the close arms nothing at all.
-	w.scheduleHeadNotify(context.Background())
-	w.mu.Lock()
-	armed := w.refNotifyTimer != nil
-	w.mu.Unlock()
+	w.refs.schedule(context.Background(), root)
+	w.refs.mu.Lock()
+	armed := w.refs.timer != nil
+	w.refs.mu.Unlock()
 	if armed {
 		t.Fatal("closed watcher armed a fresh HeadMoved timer")
+	}
+}
+
+func TestReferenceRemovalPreservesWorktreeCoverage(t *testing.T) {
+	root := t.TempDir()
+	gitDir := filepath.Join(root, ".git")
+	if err := os.MkdirAll(filepath.Join(gitDir, "refs", "heads"), 0o755); err != nil {
+		t.Fatalf("create reference directory: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
+		t.Fatalf("create HEAD: %v", err)
+	}
+	w, err := newWorktreeWatcher(t.Context(), root, watchfd.MaxDirs, watchfd.NewProcessBudget())
+	if err != nil {
+		t.Fatalf("new watcher: %v", err)
+	}
+	defer w.close()
+	head := filepath.Join(gitDir, "HEAD")
+	if !w.refs.contains(head) {
+		t.Fatal("HEAD is not registered")
+	}
+	w.forgetRemovedTree(gitDir)
+	if w.refs.contains(head) {
+		t.Fatal("removed reference surface remains registered")
+	}
+	if !w.watchesDir(root) {
+		t.Fatal("reference removal discarded worktree coverage")
 	}
 }

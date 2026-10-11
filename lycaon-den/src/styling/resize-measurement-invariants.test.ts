@@ -22,11 +22,8 @@ describe("resize measurement", () => {
   });
 
   it("does not re-measure the split host through a forced layout read", () => {
-    const shell = read("components/shell/Shell.tsx");
-    const effect =
-      /createEffect\(\(\) => \{\s*const el = stageHostEl\(\);[\s\S]*?\n  \}\);/.exec(
-        shell,
-      )?.[0] ?? "";
+    const host = read("components/shell/StageSplitHost.tsx");
+    const effect = host.slice(host.indexOf("    let applied:"), host.indexOf("    publish(el.getBoundingClientRect().width)"));
     expect(effect).not.toBe("");
     expect(effect).toContain("ResizeObserver");
     expect(effect).not.toContain("getBoundingClientRect");
@@ -56,11 +53,8 @@ describe("layout epoch", () => {
   });
 
   it("publishes split-host width on the next frame while resizing", () => {
-    const shell = read("components/shell/Shell.tsx");
-    const effect =
-      /createEffect\(\(\) => \{\s*const el = stageHostEl\(\);[\s\S]*?\n  \}\);/.exec(
-        shell,
-      )?.[0] ?? "";
+    const host = read("components/shell/StageSplitHost.tsx");
+    const effect = host.slice(host.indexOf("    let applied:"), host.indexOf("    publish(el.getBoundingClientRect().width)"));
     expect(effect).toContain("schedulePublish(width)");
     expect(effect).toContain("requestAnimationFrame");
     expect(effect).not.toContain("isShellLayoutBusy");

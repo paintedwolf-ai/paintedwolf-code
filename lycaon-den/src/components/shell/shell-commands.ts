@@ -1,8 +1,13 @@
-import { onCleanup } from "solid-js";
-import { CONTEXT_NAV_CATALOG, type ContextNavItemId } from "../../../shared/app-state-types.ts";
+import { attachDispatcher, setFilesStageActive, registerCommandHandler } from "../../shortcuts/dispatcher.ts";
+import { type ShellScope } from "./shell-scope.ts";
+import { createEffect, createSignal, onCleanup } from "solid-js";
+import { type ContextNavItemId, CONTEXT_NAV_CATALOG } from "../../../shared/app-state-types.ts";
+import { getLycaonClient } from "../../platform/connection/app-connection.ts";
+import { hiddenSplitPanePref, resetChatWidthPx, setSplitFocusRegion, stagePlacementMode, toggleWorkspaceOrientation, swapSplitColumns } from "../../shell/workspace-layout.ts";
+import { focusRegion, focusRegionsVersion, isFocusRegionMounted, type FocusRegionId, cycleFocusRegion } from "../../shortcuts/focus-region.ts";
+import { sidebarNavigationOrder, adjacentSession, sidebarChatSections } from "../../store/projects-sidebar-model.ts";
 import { isChatActivityLive } from "../../chat/session/session-activity.ts";
 import { findEverywhereSeed, findNext, findPrev, selectAllFindMatches, toggleFind, toggleFindReplace } from "../../find/find-controller.ts";
-import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { installShellCommand } from "../../platform/desktop/shell-command.ts";
 import { isTauriRuntime } from "../../platform/runtime.ts";
 import { closeCurrentPeerWindow } from "../../platform/windows/item-windows.ts";
@@ -10,25 +15,13 @@ import { fileSummariesEnabled, saveFileSummariesEnabled } from "../../settings/e
 import { APP_SETTINGS } from "../../settings/settings-nav-model.ts";
 import { pendingReplaceArm } from "../../search/replace-arm.ts";
 import { projectScopedCodeQuery } from "../../search/search-query-model.ts";
-import {
-  hiddenSplitPanePref,
-  resetChatWidthPx,
-  setSplitFocusRegion,
-  stagePlacementMode,
-  toggleWorkspaceOrientation,
-  swapSplitColumns,
-} from "../../shell/workspace-layout.ts";
-import { registerCommandHandler } from "../../shortcuts/dispatcher.ts";
-import { focusRegion, cycleFocusRegion, type FocusRegionId } from "../../shortcuts/focus-region.ts";
-import { adjacentSession, sidebarChatSections, sidebarNavigationOrder } from "../../store/projects-sidebar-model.ts";
-import type { SessionNavigation } from "./session-navigation.ts";
-import type { ShellChatActions } from "./shell-chat-actions.ts";
-import type { ShellNavigation } from "./shell-navigation-state.ts";
-import type { ShellPaneVisibility } from "./shell-pane-visibility.ts";
-import type { ShellPeerWindows } from "./shell-peer-windows.ts";
-import type { ShellScope } from "./shell-scope.ts";
-import type { ShellSearchState } from "./shell-search-state.ts";
-import type { ShellStagePlacement } from "./shell-stage-placement.ts";
+import { type SessionNavigation } from "./session-navigation.ts";
+import { type ShellChatActions } from "./shell-chat-actions.ts";
+import { type ShellNavigation } from "./shell-navigation-state.ts";
+import { type ShellPaneVisibility } from "./shell-pane-visibility.ts";
+import { type ShellPeerWindows } from "./shell-peer-windows.ts";
+import { type ShellSearchState } from "./shell-search-state.ts";
+import { type ShellStagePlacement } from "./shell-stage-placement.ts";
 
 type Dependencies = Pick<ShellScope,
   "activeProjectId" | "activeChat" | "readyChat" | "appStore" | "nav" | "setNav" | "showProjects" | "stageAvailable"
@@ -43,6 +36,7 @@ type Dependencies = Pick<ShellScope,
   & Pick<ShellPeerWindows, "openFocusedSubjectInNewWindow" | "focusWindowByNumber" | "cycleNextPeerWindow" | "raiseSessionWindow" | "raiseFileWindow" | "sessionPeer" | "isThisSessionWindow" | "filePeer"> & {
   sidebarSections: () => ReturnType<typeof sidebarChatSections>;
   layoutTargetStage: () => ContextNavItemId | null;
+  stageColumnStageId: () => ContextNavItemId | null;
   conversationInLayout: () => boolean;
   setPendingRegionFocus: (region: FocusRegionId | null) => void;
   goToContextStage: (stage: ContextNavItemId) => void;
@@ -54,6 +48,8 @@ type Dependencies = Pick<ShellScope,
  * commands until the calling component unmounts.
  */
 export function registerShellCommands(deps: Dependencies) {
+  onCleanup(attachDispatcher());
+  createEffect(() => setFilesStageActive(deps.stageColumnStageId() === "files"));
   const on = (id: string, handler: () => void) => onCleanup(registerCommandHandler(id, handler));
 
   on("go.nextRegion", () => cycleFocusRegion(1));
@@ -340,4 +336,26 @@ export function registerShellCommands(deps: Dependencies) {
     if (!isChatActivityLive(deps.appStore, chat.sessionId)) return;
     void deps.stopChat();
   });
+}
+
+export function createShellFocusRequest() {
+  const [pendingRegionFocus, setPendingRegionFocus] = createSignal<FocusRegionId | null>(null);
+  createEffect(() => {
+    const region = pendingRegionFocus();
+    if (!region) return;
+    focusRegionsVersion();
+    if (!isFocusRegionMounted(region) && (region !== "files" || !isFocusRegionMounted("filesTree"))) return;
+    // Region commands run after chat mount focus settles.
+    queueMicrotask(() => {
+      queueMicrotask(() => {
+        if (focusRegion(region)) {
+          setPendingRegionFocus(null);
+        } else if (region === "files" && focusRegion("filesTree")) {
+          setPendingRegionFocus(null);
+        }
+      });
+    });
+  });
+
+  return setPendingRegionFocus;
 }

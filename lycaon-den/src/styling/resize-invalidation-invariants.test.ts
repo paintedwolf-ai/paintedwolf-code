@@ -107,10 +107,10 @@ describe("resize invalidation", () => {
     const shellRoot = /class="den-shell"[\s\S]{0,400}?>/.exec(shell)?.[0] ?? "";
     expect(shellRoot).not.toContain("--den-nav-slot-width");
     // Both readers declare it themselves.
-    expect(shell).toMatch(
+    expect(read("components/shell/WorkspaceSidebar.tsx")).toMatch(
       /class="den-shell-aside"\s*\n\s*style=\{\{ "--den-nav-slot-width"/,
     );
-    expect(shell).toMatch(
+    expect(read("components/shell/WorkspaceOverlays.tsx")).toMatch(
       /class="den-find-bar-host"[\s\S]{0,160}?"--den-nav-slot-width"/,
     );
   });

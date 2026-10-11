@@ -1,30 +1,24 @@
-import { createEffect } from "solid-js";
+import { type ShellScope } from "./shell-scope.ts";
+import { createEffect, createSignal } from "solid-js";
 import { type ContextNavItemId } from "../../../shared/app-state-types.ts";
-import { widenWindowBy } from "../../platform/windows/window-chrome.ts";
-import {
-  companionPref,
-  preferredChatWidthPx,
-  layoutViewportWidthPx,
-  preferredNavWidthPx,
-  saveStagePlacementMode,
-  stagePlacementMode,
-  startupCompanionPref,
-} from "../../shell/workspace-layout.ts";
-import { stageOpenWindowDeficitPx, workspaceStageFloorPx } from "../../shell/responsive-collapse.ts";
-import { runShellLayoutTransaction } from "../../shell/shell-layout-busy.ts";
+import { getLycaonClient } from "../../platform/connection/app-connection.ts";
+import { companionPref, layoutViewportWidthPx, stagePlacementMode, preferredChatWidthPx, preferredNavWidthPx, saveStagePlacementMode, startupCompanionPref } from "../../shell/workspace-layout.ts";
 import { resolveSplitCompanion, startupPlacementDecision } from "../../shell/stage-placement.ts";
 import { workspacePreparation } from "../../shell/workspace-preparation.ts";
-import type { SidebarChatRow } from "../../store/projects-sidebar-model.ts";
-import type { SessionNavigation } from "./session-navigation.ts";
-import type { ShellNavigation } from "./shell-navigation-state.ts";
-import type { ShellPaneVisibility } from "./shell-pane-visibility.ts";
-import type { ShellScope } from "./shell-scope.ts";
-import type { ShellSearchState } from "./shell-search-state.ts";
+import { sidebarNavigationOrder, type SidebarChatRow } from "../../store/projects-sidebar-model.ts";
+import { stageFeatureEnabled, type StageFeatureFlags } from "../stage/stage-registry.tsx";
+import { widenWindowBy } from "../../platform/windows/window-chrome.ts";
+import { stageOpenWindowDeficitPx, workspaceStageFloorPx } from "../../shell/responsive-collapse.ts";
+import { runShellLayoutTransaction } from "../../shell/shell-layout-busy.ts";
+import { type SessionNavigation } from "./session-navigation.ts";
+import { type ShellNavigation } from "./shell-navigation-state.ts";
+import { type ShellPaneVisibility } from "./shell-pane-visibility.ts";
+import { type ShellSearchState } from "./shell-search-state.ts";
 
 type StagePlacementDependencies = Pick<ShellScope, "isPeerWindow" | "activeProjectId" | "readyChat" | "nav" | "stageAvailable">
   & Pick<ShellPaneVisibility, "windowNavUserCollapsed"> & Pick<ShellNavigation, "navigationIntent">
   & Pick<ShellSearchState, "ensureSearch"> & Pick<SessionNavigation, "startNewChat"> & {
-  firstConversation: () => SidebarChatRow | null;
+  sidebarSections: SessionNavigation["sidebarSections"];
   resumeConversation: (row: SidebarChatRow) => Promise<void>;
   openStage: (stage: ContextNavItemId) => void;
   suppressShellForFirstRun: () => boolean;
@@ -34,7 +28,7 @@ type StagePlacementDependencies = Pick<ShellScope, "isPeerWindow" | "activeProje
 export type ShellStagePlacement = ReturnType<typeof createShellStagePlacement>;
 
 export function createShellStagePlacement({ isPeerWindow, activeProjectId, windowNavUserCollapsed,
-  readyChat, firstConversation, resumeConversation, startNewChat, nav, openStage,
+  readyChat, sidebarSections, resumeConversation, startNewChat, nav, openStage,
   ensureSearch, navigationIntent, suppressShellForFirstRun, chatReady, stageAvailable }: StagePlacementDependencies) {
   /** Peer windows keep the size the person set. */
   const stageChromeDeficitPx = (
@@ -70,7 +64,7 @@ export function createShellStagePlacement({ isPeerWindow, activeProjectId, windo
     const activeConversation = readyChat();
     const conversation = activeConversation
       ? null
-      : firstConversation();
+      : sidebarNavigationOrder(sidebarSections())[0] ?? null;
     await runShellLayoutTransaction(async () => {
       // Pending width prevents automatic collapse; immediate placement keeps repeated presses consistent.
       const widening = claimStageChrome(placement === "split", stageId);
@@ -140,4 +134,35 @@ export function createShellStagePlacement({ isPeerWindow, activeProjectId, windo
   });
 
   return { claimStageChrome, applyStagePlacement, stageChromeDeficitPx };
+}
+
+export function createStageAvailability(props: Pick<ShellScope, "appStore" | "shell" | "nav" | "setNav">) {
+  const { nav, setNav } = props;
+  const [securityScannersFeatureOn, setSecurityScannersFeatureOn] = createSignal(true);
+  const stageFeatureFlags = (): StageFeatureFlags => ({
+    securityScannersEnabled: securityScannersFeatureOn(),
+  });
+  const stageAvailable = (id: ContextNavItemId): boolean =>
+    stageFeatureEnabled(id, stageFeatureFlags());
+  createEffect(() => {
+    props.appStore.state.extensionsRevision;
+    const client = getLycaonClient();
+    if (!client) return;
+    void workspacePreparation(props.shell.state.activeProjectId ?? "app").run(
+      "project-stage-features",
+      () => client.getSecurityScannersSettings(),
+    ).then(
+      (res) => setSecurityScannersFeatureOn(res.enabled),
+      () => undefined,
+    );
+  });
+
+  const setSecurityScannersFeature = (enabled: boolean) => {
+    setSecurityScannersFeatureOn(enabled);
+    if (!enabled && nav() === "security") {
+      setNav("projects");
+    }
+  };
+
+  return { securityScannersFeatureOn, stageFeatureFlags, stageAvailable, setSecurityScannersFeature };
 }
