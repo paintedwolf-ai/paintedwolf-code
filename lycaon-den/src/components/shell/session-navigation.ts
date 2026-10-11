@@ -1,35 +1,131 @@
+import { createEffect, createMemo } from "solid-js";
+import { chatListSortPref } from "../../settings/chat/chat-list-prefs.ts";
+import { type ShellScope } from "./shell-scope.ts";
+import { beginSessionSnapshotRead } from "../../api/session-snapshot-refresh.ts";
+import { rememberSessionChatFromStore, restoreCachedSessionChat } from "../../chat/session/session-chat-cache.ts";
+import { isPendingSessionId, type SessionScope } from "../../chat/session/session-scope.ts";
+import { type SessionSwitchDeps, runResumeSession, shellSessionSwitchGeneration } from "../../chat/session/session-switch.ts";
+import { completeChatHydrationAndReplay } from "../../chat/transcript/projection/message-events.ts";
+import { hasDenTranscriptMessages } from "../../chat/transcript/projection/message-transcript.ts";
+import { sessionScope } from "../../notices/notice-scope.ts";
+import { getEntityRetire, getLycaonClient, noticeReporterFor, connectAppBackend } from "../../platform/connection/app-connection.ts";
+import { sessionSummaryFromSession } from "../../store/project-sessions-store.ts";
+import { sidebarChatSections, type SidebarChatRow } from "../../store/projects-sidebar-model.ts";
 import { type RecentSession } from "../../../shared/app-state-types.ts";
 import { prepareProjectScope } from "../../chat/session/prepare-project.ts";
-import { rememberSessionChatFromStore } from "../../chat/session/session-chat-cache.ts";
 import { resumeChatSession } from "../../chat/session/session-lifecycle.ts";
 import { deleteSession, retireSessionLocally, setSessionArchived, type LocalRetirementDeps, type SessionRetirementDeps } from "../../chat/session/session-retirement.ts";
-import { isPendingSessionId, type SessionScope } from "../../chat/session/session-scope.ts";
-import { runResumeSession, shellSessionSwitchGeneration, type SessionSwitchDeps } from "../../chat/session/session-switch.ts";
 import { resolveSidebarPick } from "../../chat/session/sidebar-pick.ts";
-import { sessionScope } from "../../notices/notice-scope.ts";
-import { connectAppBackend, getEntityRetire, getLycaonClient, noticeReporterFor } from "../../platform/connection/app-connection.ts";
 import { focusItemWindow, itemWindowViews, openItemWindow } from "../../platform/windows/item-windows.ts";
 import { workspaceContextIsOpen } from "../../platform/windows/workspace-view-registry.ts";
 import { confirmChatDelete } from "../../session/confirm-chat-delete.ts";
-import { type SidebarChatRow } from "../../store/projects-sidebar-model.ts";
-import type { SwitchKind } from "../../store/shell-store.ts";
+import { type SwitchKind } from "../../store/shell-store.ts";
 import { assertHydratedForeground, createSessionCreation, stageSwitchKind } from "./session-creation.ts";
-import type { ShellPaneVisibility } from "./shell-pane-visibility.ts";
-import type { ShellScope } from "./shell-scope.ts";
-import type { ShellSearchState } from "./shell-search-state.ts";
+import { type ShellPaneVisibility } from "./shell-pane-visibility.ts";
+import { type ShellSearchState } from "./shell-search-state.ts";
 
 export type SessionNavigation = ReturnType<typeof createSessionNavigation>;
 
 export function createSessionNavigation(options: Pick<ShellScope,
-  "shell" | "appStore" | "projects" | "recents" | "projectSessions" | "activeChat" | "showProjects">
+  "shell" | "appStore" | "projects" | "recents" | "projectSessions" | "activeChat" | "showProjects" | "nav">
   & Pick<ShellPaneVisibility, "revealConversation"> & Pick<ShellSearchState, "closeSearch" | "closeCrossbar"> & {
-  activeChatScope: () => SessionScope | null;
   conversationInLayout: () => boolean;
-  onFreshSession: () => boolean;
-  sessionSwitchDeps: () => SessionSwitchDeps;
   closeLauncher: () => void;
   focusComposer: () => void;
 }) {
+  // Refresh chat inventory with project and connection state.
+  createEffect(() => {
+    options.projectSessions.setProject(options.shell.state.activeProjectId ?? null);
+  });
+  createEffect(() => {
+    options.projectSessions.setSort(chatListSortPref());
+  });
+
+  const activeChatScope = createMemo(() => {
+    const chat = options.activeChat();
+    return chat ? { projectId: chat.projectId, sessionId: chat.sessionId } : null;
+  });
+
+  /** The sidebar's groups; a selected chat outside them is listed last. */
+  const sidebarSections = createMemo(() => {
+    const chat = options.activeChat();
+    const current = options.appStore.state.currentSession;
+    const selected =
+      chat && current && current.id === chat.sessionId &&
+      current.project_id === options.projectSessions.state.projectId &&
+      current.archived_at == null && !current.parent_session_id
+        ? { ...sessionSummaryFromSession(current), message_count: options.appStore.state.messages.length }
+        : null;
+    return sidebarChatSections(
+      options.projectSessions.state.rows,
+      options.projectSessions.state.sort,
+      selected,
+    );
+  });
+
+  // Internal-only rows leave the chat fresh.
+  const onFreshSession = createMemo(
+    () =>
+      options.nav() === "projects" &&
+      options.activeChat() != null &&
+      !hasDenTranscriptMessages(options.appStore.state.messages),
+  );
+
+  const sessionSwitchDeps = (): SessionSwitchDeps => ({
+    // Failed session transitions return to Home.
+    returnToHome: () => {
+      options.shell.clearToHome();
+      options.showProjects();
+    },
+    clearChatForSessionSwitch: (hydrationLock) =>
+      options.appStore.actions.clearChatForSessionSwitch(hydrationLock),
+    beginSessionResumeSwitch: (hydrationLock) =>
+      options.appStore.actions.beginSessionResumeSwitch(hydrationLock),
+    completeChatSessionHydration: () =>
+      completeChatHydrationAndReplay(options.appStore),
+    resetChat: () => options.appStore.actions.resetChatForSessionSwitch(),
+    reportError: (err, scope) => noticeReporterFor(scope).reportError(err),
+    openSession: (scope) =>
+      options.shell.commitStageScope({
+        projectId: scope.projectId,
+        sessionId: scope.sessionId,
+        initialPrompt: scope.initialPrompt,
+      }),
+    setConnected: () => options.shell.setConnection("connected"),
+    snapshotSessionChat: () => rememberSessionChatFromStore(options.appStore),
+    restoreCachedSessionChat: (scope) =>
+      restoreCachedSessionChat(options.appStore, {
+        projectId: scope.projectId,
+        sessionId: scope.sessionId,
+      }),
+  });
+
+  const renameSession = async (
+    row: { projectId: string; sessionId: string },
+    title: string,
+  ) => {
+    const client = getLycaonClient();
+    if (!client) return;
+    const read = beginSessionSnapshotRead(options.appStore, row.sessionId);
+    try {
+      const updated = await client.updateSession(row.sessionId, { title });
+      const nextTitle = updated.title?.trim() || title.trim();
+      if (read.isCurrent()) {
+        options.appStore.actions.setSessionTitle(row.sessionId, nextTitle);
+      }
+      await options.recents.registerSession({
+        projectId: row.projectId,
+        sessionId: row.sessionId,
+        title: nextTitle,
+      });
+      void options.projectSessions.refresh();
+    } catch (err) {
+      noticeReporterFor(sessionScope(row.projectId, row.sessionId)).reportError(err);
+    } finally {
+      read.finish();
+    }
+  };
+
   const openProject = (projectId: string) => {
     options.closeSearch();
     const kind = stageSwitchKind(options.shell, projectId);
@@ -76,7 +172,7 @@ export function createSessionNavigation(options: Pick<ShellScope,
   };
 
   const localRetirementDeps = (): LocalRetirementDeps => ({
-    activeChat: options.activeChatScope,
+    activeChat: activeChatScope,
     recents: options.recents,
     retireEntity: (scope) => getEntityRetire()?.session(scope),
     resumeSession: (next, options) => resumeSession(next, options),
@@ -127,7 +223,7 @@ export function createSessionNavigation(options: Pick<ShellScope,
       options.shell.beginStageSwitch({ projectId: row.projectId, kind });
     }
     // The current session needs no rehydration.
-    const fg = options.activeChatScope();
+    const fg = activeChatScope();
     const currentId = options.appStore.state.currentSession?.id?.trim();
     if (
       fg &&
@@ -157,7 +253,7 @@ export function createSessionNavigation(options: Pick<ShellScope,
       scope,
       kind,
       deps: {
-        ...options.sessionSwitchDeps(),
+        ...sessionSwitchDeps(),
         prepareProject: (projectId) =>
           prepareProjectScope(options.appStore, options.projects, projectId),
       },
@@ -188,7 +284,7 @@ export function createSessionNavigation(options: Pick<ShellScope,
   /** Resolve a sidebar pick from local and peer visibility. */
   const selectSidebarSession = async (row: SidebarChatRow) => {
     void options.revealConversation();
-    const subject = options.activeChatScope();
+    const subject = activeChatScope();
     const peer = itemWindowViews().find(
       (view) => view.kind === "session" && view.sessionId === row.sessionId,
     );
@@ -251,14 +347,14 @@ export function createSessionNavigation(options: Pick<ShellScope,
     shell: options.shell, appStore: options.appStore, projects: options.projects, recents: options.recents,
     projectSessions: options.projectSessions,
     showProjects: () => options.showProjects(), beginWorkspaceOpening,
-    conversationInLayout: () => options.conversationInLayout(), sessionSwitchDeps: options.sessionSwitchDeps,
+    conversationInLayout: () => options.conversationInLayout(), sessionSwitchDeps: sessionSwitchDeps,
   });
 
   const startNewChat = async (projectId: string) => {
     options.closeSearch();
     void options.revealConversation();
     if (!options.conversationInLayout()) options.showProjects();
-    if (options.onFreshSession() && options.activeChat()?.projectId === projectId) {
+    if (onFreshSession() && options.activeChat()?.projectId === projectId) {
       options.focusComposer();
       return;
     }
@@ -278,7 +374,7 @@ export function createSessionNavigation(options: Pick<ShellScope,
   };
 
   return {
-    openProject, newProject, goHome, sidebarRowAsRecent, sessionRetirementDeps,
+    onFreshSession, sidebarSections, renameSession, openProject, newProject, goHome, sidebarRowAsRecent, sessionRetirementDeps,
     archiveSidebarSession, deleteSidebarSession, resumeSession, selectSidebarSession,
     openSessionInNewWindow, beginWorkspaceOpening, abandonWorkspaceOpening,
     startEmptySession, startNewChat,

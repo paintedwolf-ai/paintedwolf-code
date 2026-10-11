@@ -1,4 +1,4 @@
-import { Show, type JSX } from "solid-js";
+import { Show, onCleanup, type JSX } from "solid-js";
 import type { NarrowSplitSurvivor } from "../../../shared/app-state-types.ts";
 import { LAYOUT_BAND_SCALES, bindLayoutBand } from "../../layout/layout-bands.ts";
 
@@ -24,7 +24,7 @@ export type StageSplitHostProps = {
   washed: boolean;
   stageColDual: boolean;
   chatColDual: boolean;
-  hostRef?: (el: HTMLDivElement) => void;
+  onWidth?: (width: number) => void;
   /** Marks stage focus on pointer or focus entry. */
   onStageEnter: () => void;
   /** Marks chat focus on pointer or focus entry. */
@@ -36,6 +36,41 @@ export type StageSplitHostProps = {
 
 /** Split host with stable stage and chat columns. */
 export function StageSplitHost(props: StageSplitHostProps) {
+  const measureHost = (el: HTMLDivElement) => {
+    if (!props.onWidth) return;
+    let applied: number | undefined;
+    let pending: number | undefined;
+    let publishFrame: number | undefined;
+    const publish = (width: number) => {
+      if (width === applied) return;
+      applied = width;
+      props.onWidth?.(width);
+    };
+    const schedulePublish = (width: number) => {
+      pending = width;
+      if (publishFrame !== undefined) return;
+      publishFrame = requestAnimationFrame(() => {
+        publishFrame = undefined;
+        if (pending === undefined) return;
+        const next = pending;
+        pending = undefined;
+        publish(next);
+      });
+    };
+    const observer = new ResizeObserver((entries) => {
+      const box = entries[entries.length - 1]?.contentRect;
+      if (!box) return;
+      const width = Number.isFinite(box.width) ? Math.round(box.width) : 0;
+      schedulePublish(width);
+    });
+    observer.observe(el);
+    onCleanup(() => {
+      observer.disconnect();
+      if (publishFrame !== undefined) cancelAnimationFrame(publishFrame);
+    });
+    publish(el.getBoundingClientRect().width);
+  };
+
   const stageCol = () => (
     <div
       ref={(el) => bindLayoutBand(el, LAYOUT_BAND_SCALES.stageColumn)}
@@ -77,7 +112,7 @@ export function StageSplitHost(props: StageSplitHostProps) {
     <div
       ref={(el) => {
         bindLayoutBand(el, LAYOUT_BAND_SCALES.stageHost);
-        props.hostRef?.(el);
+        measureHost(el);
       }}
       class="den-shell-stage-host"
       classList={{

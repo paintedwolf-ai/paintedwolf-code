@@ -1,26 +1,29 @@
+import { type ShellScope } from "./shell-scope.ts";
 import { createEffect, createMemo } from "solid-js";
 import { type ContextNavItemId } from "../../../shared/app-state-types.ts";
+import { type WindowSubject } from "../../platform/windows/window-subject.ts";
+import { isContextNavItemId } from "../../settings/editor/context-nav-prefs.ts";
+import { currentSplitFocusRegion } from "../../shell/layout-store.ts";
+import { resolvePeerOpenSubject, type PeerOpenSubject, peerWindowsForSubject } from "../../shortcuts/peer-view-subject.ts";
+import { projectFilesState } from "../../files/documents/files-buffer-state.ts";
+import { stageLabelFor } from "../stage/stage-registry.tsx";
 import { beginFileItemWindowDrag, closeItemWindow, focusItemWindow, itemWindowViews, openItemWindow, type ItemWindowDropPosition } from "../../platform/windows/item-windows.ts";
 import { clientIdentity } from "../../platform/connection/client-identity.ts";
 import { isTauriRuntime } from "../../platform/runtime.ts";
 import { resolveSourceRequest } from "../../platform/navigation/open-source.ts";
-import type { WindowSubject } from "../../platform/windows/window-subject.ts";
 import { currentWindowNumber, nextWindowLabel, windowLabelForNumber } from "../../platform/windows/window-numbers.ts";
 import { mainWorkspaceViewPresents } from "../../platform/windows/workspace-view-registry.ts";
-import { isContextNavItemId } from "../../settings/editor/context-nav-prefs.ts";
-import { peerWindowsForSubject, type PeerOpenSubject } from "../../shortcuts/peer-view-subject.ts";
 import { editorDocumentParticipantsFor } from "../../files/documents/editor-document.ts";
-import { projectFilesState } from "../../files/documents/files-buffer-state.ts";
-import type { FileBufferKey } from "../../files/components/project-files-model.ts";
+import { type FileBufferKey } from "../../files/components/project-files-model.ts";
 import { openSourceInFilesStage } from "../../files/components/project-files-open.ts";
-import { stageLabelFor } from "../stage/stage-registry.tsx";
-import type { ShellScope } from "./shell-scope.ts";
 
 type PeerWindowDependencies = Pick<ShellScope,
-  "shell" | "appStore" | "projects" | "activeProjectId" | "activeProject" | "stageAvailable"> & {
+  "shell" | "appStore" | "projects" | "activeProjectId" | "activeProject" | "stageAvailable" | "projectSessions" | "activeChat"> & {
   /** What this window presents when it is itself a peer window. */
   itemSubject: WindowSubject | null;
-  focusedPeerSubject: () => PeerOpenSubject | null;
+  stageColumnStageId: () => ContextNavItemId | null;
+  placeableStageId: () => ContextNavItemId | null;
+  splitLive: () => boolean;
   openStage: (stage: ContextNavItemId) => void;
 };
 
@@ -29,7 +32,55 @@ export type ShellPeerWindows = ReturnType<typeof createShellPeerWindows>;
 /** The peer windows beside this one: what they show, and opening, raising, and closing them.
  * A peer window presents its own subject once its project is known. */
 export function createShellPeerWindows({ shell, appStore, projects, activeProjectId, activeProject,
-  stageAvailable, itemSubject, focusedPeerSubject, openStage }: PeerWindowDependencies) {
+  stageAvailable, itemSubject, stageColumnStageId, placeableStageId, splitLive, projectSessions, activeChat, openStage }: PeerWindowDependencies) {
+  const activeFileBuffer = () => {
+    const projectId = shell.state.activeProjectId;
+    const filesState = projectId != null ? projectFilesState(projectId) : null;
+    const activeKey = filesState?.activeKey ?? null;
+    return activeKey && filesState ? filesState.byKey[activeKey] ?? null : null;
+  };
+
+  /** Title of the selected chat, which may not be the one bound mid-switch. */
+  const selectedChatTitle = (sessionId: string): string => {
+    const current = appStore.state.currentSession;
+    const bound = current?.id === sessionId ? current.title?.trim() : undefined;
+    const row = projectSessions.state.rows.find((r) => r.id === sessionId);
+    return bound || row?.title?.trim() || sessionId;
+  };
+
+  const focusedPeerSubject = (): PeerOpenSubject | null => {
+    const projectId = shell.state.activeProjectId;
+    const chat = activeChat();
+    const stageId = stageColumnStageId() ?? placeableStageId();
+    const activeBuf = activeFileBuffer();
+    return resolvePeerOpenSubject({
+      windowSubject: itemSubject,
+      projectId,
+      session: chat
+        ? { sessionId: chat.sessionId, title: selectedChatTitle(chat.sessionId) }
+        : null,
+      contextStage: stageId,
+      contextTitle: stageId ? stageLabelFor(stageId) : null,
+      activeFile:
+        activeBuf && stageId === "files"
+          ? {
+              rootId: activeBuf.rootId,
+              path: activeBuf.path,
+              title: activeBuf.name,
+            }
+          : itemSubject?.kind === "file"
+            ? {
+                rootId: itemSubject.rootId,
+                path: itemSubject.path,
+                title: itemSubject.path.split("/").pop() || "File",
+              }
+            : null,
+      filesStageWithoutEditor: stageId === "files" && activeBuf == null,
+      splitFocusRegion: splitLive() ? currentSplitFocusRegion() : null,
+      splitLive: splitLive(),
+    });
+  };
+
   let itemFileOpened = false;
   createEffect(() => {
     if (
@@ -311,7 +362,8 @@ export function createShellPeerWindows({ shell, appStore, projects, activeProjec
     }
   };
 
-  return { detachStageToWindow, openFocusedSubjectInNewWindow, openFileWindow,
+  return {
+    focusedPeerSubject, detachStageToWindow, openFocusedSubjectInNewWindow, openFileWindow,
     openFileInNewWindow, beginFileWindowDrag, closeStageWindows,
     sessionWindowIds, sessionWindowCounts, sessionWindowViewNumbers, contextWindowViewNumbers,
     detachedStageIds, stageInPeerWindow, projectPeerViews, focusedPeerViews,

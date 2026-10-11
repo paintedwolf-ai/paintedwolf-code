@@ -1,5 +1,6 @@
+import { DEFAULT_HOME_SECTION, type HomeSection } from "../../home/home-model.ts";
 import { createEffect, createSignal, on, onCleanup } from "solid-js";
-import type { ContextNavItemId } from "../../../shared/app-state-types.ts";
+import { type ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { focusWithoutScroll } from "../../platform/interaction/focus.ts";
 import { DEFAULT_PROJECT_CONTEXT_SECTION, DEFAULT_SETTINGS_SECTION, type AdvancedSettingsTab, type GeneralSettingsTab, type ProjectContextSection, type SettingsSection } from "../../settings/settings-nav-model.ts";
 import { navDockTray, type NavDockTray } from "../../shell/nav-dock-tray.ts";
@@ -25,6 +26,7 @@ export function createShellNavigationState(
   activeProjectId: () => string | null,
   revealContext: () => void = () => {},
 ) {
+  const [homeSection, setHomeSection] = createSignal<HomeSection>(DEFAULT_HOME_SECTION);
   const [nav, setNavForeground] = createSignal<Nav>("projects");
   const navigationIntent = createPresentationIntent();
   onCleanup(navigationIntent.dispose);
@@ -123,6 +125,7 @@ export function createShellNavigationState(
   };
 
   return {
+    homeSection, setHomeSection,
     nav, setNav, navigationIntent, dockTray, closeLayoutTray,
     toggleLayoutTray, isSettingsNav, closeSettingsNav, routedReturn, routeToStage,
     settingsSection, generalInitialTab, advancedInitialTab, contextSection,

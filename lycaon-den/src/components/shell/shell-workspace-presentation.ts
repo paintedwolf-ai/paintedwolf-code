@@ -1,11 +1,15 @@
+import { type ShellScope, type ShellProps } from "./shell-scope.ts";
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { isPendingSessionId } from "../../chat/session/session-scope.ts";
 import { contributionFrameReady } from "../../contributions/contribution-store.ts";
-import { deriveProjectPresentation, retainMountedProjectPresentation, type ProjectPresentation } from "../../shell/project-presentation.ts";
-import { recordWorkspaceOpen } from "../../shell/workspace-open-diagnostic.ts";
+import { retainedHomeSummaries } from "../../home/home-model.ts";
+import { type ProjectSummary } from "../../project/project-summary.ts";
+import { isHomePresentation, deriveProjectPresentation, retainMountedProjectPresentation, type ProjectPresentation } from "../../shell/project-presentation.ts";
+import { deriveStageScope, holdChatPresence, holdPresentedChat, stabilizeActiveChat, type ActiveChat, type ChatPresence } from "../../shell/stage-scope.ts";
 import { workspacePreparation } from "../../shell/workspace-preparation.ts";
+import { recordWorkspaceOpen } from "../../shell/workspace-open-diagnostic.ts";
 import { isResolved } from "../../store/load-state.ts";
 import { useSurfaceReveal } from "../../ui/surface-reveal.ts";
-import type { ShellScope } from "./shell-scope.ts";
 
 type WorkspacePresentationDependencies =
   Pick<ShellScope, "shell" | "appStore" | "projects" | "recents" | "projectSessions" | "stageScope" | "nav">;
@@ -115,9 +119,70 @@ export function createShellWorkspacePresentation({ shell, appStore, projects, re
     workspaceMounted() ? projectPresentation().projectId : null,
   );
 
+  const showHome = () =>
+    nav() === "projects" && isHomePresentation(projectPresentation());
+
   return {
+    showHome,
     projectPresentation, identityReady, workspaceMounted, workspaceOpen, workspacePending,
     workspaceRevealed, workspaceVeilKey, workspaceVeilLabel, workspaceVeilNotice,
     sidebarChatsPublished, railStatusProject,
   };
+}
+
+export function createWorkspaceIdentity(props: Pick<ShellProps, "shell" | "appStore" | "projects">) {
+  const activeProject = createMemo(() => {
+    const id = props.shell.state.activeProjectId;
+    return id ? props.projects.byId(id) : undefined;
+  });
+
+  const stageScope = createMemo(() =>
+    deriveStageScope(props.shell.state, props.appStore.state),
+  );
+
+  const activeChat = (): ActiveChat | null => {
+    const fg = props.shell.state.foreground;
+    if (!fg?.projectId || !fg.sessionId || isPendingSessionId(fg.sessionId)) {
+      return null;
+    }
+    return { projectId: fg.projectId, sessionId: fg.sessionId };
+  };
+
+  // Stable scope ids retain chat identity.
+  const readyChat = createMemo((prev: ActiveChat | null | undefined): ActiveChat | null => {
+    const scope = stageScope();
+    return stabilizeActiveChat(
+      prev,
+      scope.project_id,
+      scope.session_id,
+      scope.phase === "ready" &&
+        contributionFrameReady(),
+    );
+  });
+
+  const presentedChat = createMemo(
+    (prev: ActiveChat | null | undefined): ActiveChat | null =>
+      holdPresentedChat(prev, readyChat(), {
+        currentSessionId: props.appStore.state.currentSession?.id,
+        transcriptSessionId: props.appStore.state.transcriptSessionId,
+        hydrationLock: props.appStore.state.chatHydrationLock,
+        projectId: props.shell.state.activeProjectId,
+      }),
+  );
+
+  // Same-project switches retain the outgoing chat.
+  const chatPresence = createMemo((prev: ChatPresence | undefined) =>
+    holdChatPresence(prev, stageScope()),
+  );
+
+  /** Home rows and counts hold still while a submitted idea becomes a project. */
+  const homeSummaries = createMemo<ProjectSummary[]>((previous) =>
+    retainedHomeSummaries(
+      previous,
+      props.projects.summaries(),
+      props.shell.state.materializingDraft,
+    ),
+  );
+
+  return { activeProject, activeChat, stageScope, readyChat, presentedChat, chatPresence, homeSummaries };
 }

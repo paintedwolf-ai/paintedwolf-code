@@ -354,7 +354,7 @@ describe("den-shell drawer layout contract", () => {
   });
 
   it("limits outside dismissal to the transient Layout tray", () => {
-    const shell = readSourceText(join(root, "components/shell/Shell.tsx"), "utf8");
+    const shell = ["Shell.tsx", "WorkspaceSidebar.tsx", "ChatWorkspace.tsx"].map((file) => readSourceText(join(root, "components/shell", file), "utf8")).join("\n");
     expect(shell).toMatch(/dismissLayoutDockOnOutsidePress/);
     expect(shell).toMatch(/open: \(\) => dockTray\(\) === "layout"/);
     expect(shell).toMatch(/dock: \(\) => navDockEl/);
@@ -362,7 +362,7 @@ describe("den-shell drawer layout contract", () => {
   });
 
   it("adapts main navigation and chat spacing to the actual column", () => {
-    const shell = readSourceText(join(root, "components/shell/Shell.tsx"), "utf8");
+    const shell = ["Shell.tsx", "WorkspaceSidebar.tsx", "ChatWorkspace.tsx"].map((file) => readSourceText(join(root, "components/shell", file), "utf8")).join("\n");
     const settings = readSourceText(
       join(root, "components/settings/appearance/GeneralSettingsPanel.tsx"),
       "utf8",
@@ -418,7 +418,7 @@ describe("den-shell drawer layout contract", () => {
   });
 
   it("titlebar is a slim drag region with window controls; chat rail controls tabs", () => {
-    const shell = readSourceText(join(root, "components/shell/Shell.tsx"), "utf8");
+    const shell = ["Shell.tsx", "WorkspaceSidebar.tsx", "ChatWorkspace.tsx"].map((file) => readSourceText(join(root, "components/shell", file), "utf8")).join("\n");
     const columns = readSourceText(join(root, "components/shell/ShellColumns.tsx"), "utf8");
     const titlebar = readSourceText(
       join(root, "components/shell/ShellHeaderTitlebar.tsx"),
@@ -460,14 +460,14 @@ describe("den-shell drawer layout contract", () => {
   });
 
   it("session workers drawer lives in its conversation's ChatView", () => {
-    const shell = readSourceText(join(root, "components/shell/Shell.tsx"), "utf8");
+    const shell = ["Shell.tsx", "WorkspaceSidebar.tsx", "ChatWorkspace.tsx"].map((file) => readSourceText(join(root, "components/shell", file), "utf8")).join("\n");
     expect(shell).not.toMatch(/SessionWorkersDrawer/);
     const chat = readSourceText(join(root, "components/chatview/ChatView.tsx"), "utf8");
     expect(chat).toMatch(/SessionWorkersDrawer/);
   });
 
   it("Shell controls the workers drawer state while ChatView controls its placement", () => {
-    const shell = readSourceText(join(root, "components/shell/Shell.tsx"), "utf8");
+    const shell = ["Shell.tsx", "WorkspaceSidebar.tsx", "ChatWorkspace.tsx"].map((file) => readSourceText(join(root, "components/shell", file), "utf8")).join("\n");
     expect(shell).toMatch(/closeWorkers/);
     expect(shell).toMatch(
       /workersDrawerOpen=\{body\.surfaceActive\(\) && workersOpen\(\)\}/,

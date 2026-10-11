@@ -8,9 +8,11 @@ function Host(props: {
   contextHidden?: boolean;
   mirrored?: boolean;
   narrowSurvivor?: "conversation" | "stage";
+  onWidth?: (width: number) => void;
 }) {
   return (
     <StageSplitHost
+      onWidth={props.onWidth}
       splitLive={props.splitLive ?? true}
       contextHidden={props.contextHidden}
       stageColumnOccupied
@@ -31,6 +33,64 @@ function Host(props: {
 }
 
 describe("StageSplitHost", () => {
+  it("publishes the latest observed width once per frame and releases pending work", () => {
+    const observers: Array<{ callback: ResizeObserverCallback; observed: Element[]; disconnect: ReturnType<typeof vi.fn> }> = [];
+    vi.stubGlobal("ResizeObserver", class {
+      observed: Element[] = [];
+      disconnect = vi.fn();
+      constructor(readonly callback: ResizeObserverCallback) { observers.push(this); }
+      observe(element: Element) { this.observed.push(element); }
+      unobserve() {}
+    });
+    const frames = new Map<number, FrameRequestCallback>();
+    let nextFrame = 0;
+    vi.spyOn(globalThis, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.set(++nextFrame, callback);
+      return nextFrame;
+    });
+    vi.spyOn(globalThis, "cancelAnimationFrame").mockImplementation((id) => { frames.delete(id); });
+    const flush = () => {
+      const pending = [...frames.values()];
+      frames.clear();
+      for (const callback of pending) callback(0);
+    };
+    const onWidth = vi.fn();
+    let unmount: (() => void) | undefined;
+    try {
+      const view = render(() => <Host onWidth={onWidth} />);
+      unmount = view.unmount;
+      const host = screen.getByTestId("shell-stage-host");
+      const observer = observers.filter((entry) => entry.observed.includes(host)).at(-1)!;
+      const resize = (width: number) => observer.callback(
+        [{ target: host, contentRect: { width } } as unknown as ResizeObserverEntry],
+        observer as unknown as ResizeObserver,
+      );
+      expect(onWidth).toHaveBeenCalledWith(0);
+      onWidth.mockClear();
+      resize(100.4);
+      resize(200.6);
+      expect(onWidth).not.toHaveBeenCalled();
+      flush();
+      expect(onWidth.mock.calls).toEqual([[201]]);
+      resize(201);
+      flush();
+      expect(onWidth).toHaveBeenCalledOnce();
+      resize(Number.NaN);
+      flush();
+      expect(onWidth).toHaveBeenLastCalledWith(0);
+      resize(500);
+      view.unmount();
+      unmount = undefined;
+      expect(observer.disconnect).toHaveBeenCalledOnce();
+      flush();
+      expect(onWidth.mock.calls).toEqual([[201], [0]]);
+    } finally {
+      unmount?.();
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("hides context without remounting its content", () => {
     const [hidden, setHidden] = createSignal(false);
     render(() => <Host contextHidden={hidden()} />);

@@ -1,11 +1,17 @@
+import { type ShellProps } from "./shell-scope.ts";
+import { createProjectRemovalReview } from "./ProjectRemovalDialog.tsx";
+import { createProjectRemoval } from "./project-removal.ts";
 import { createSignal } from "solid-js";
-import type { Project } from "../../api/types.ts";
-import { LycaonApiError } from "../../api/http.ts";
-import { getLycaonClient } from "../../platform/connection/app-connection.ts";
+import { invalidateContributionFrame } from "../../contributions/contribution-store.ts";
+import { forgetProjectThumbnail } from "../../home/thumbnail-store.ts";
+import { APP_SCOPE } from "../../notices/notice-scope.ts";
+import { getEntityRetire, getLycaonClient, noticeReporterFor } from "../../platform/connection/app-connection.ts";
 import { confirmDestructive } from "../../platform/interaction/confirm-dialog.ts";
-import { pickProjectFolder } from "../../platform/files/folder.ts";
-import type { createProjectsStore } from "../../store/projects-store.ts";
 import { prepareFilesRootDetach, dropFilesBuffersForRoot } from "../../files/documents/project-files-buffers.ts";
+import { type Project } from "../../api/types.ts";
+import { LycaonApiError } from "../../api/http.ts";
+import { pickProjectFolder } from "../../platform/files/folder.ts";
+import { type createProjectsStore } from "../../store/projects-store.ts";
 
 export function createProjectLifecycle(options: {
   projects: Pick<ReturnType<typeof createProjectsStore>, "byId" | "upsert" | "applyPatch">;
@@ -208,4 +214,29 @@ export function createProjectLifecycle(options: {
     retryActiveProjectPromotion, cancelActiveProjectPromotion, addFolderToActiveProject,
     detachFolderFromActiveProject, detachProjectRoot,
   };
+}
+
+export function createWorkspaceProjectRemoval(props: Pick<ShellProps, "projects" | "shell" | "recents">) {
+  const projectRemovalReview = createProjectRemovalReview();
+  const deleteProject = createProjectRemoval({
+    review: (assessment, projectId) => projectRemovalReview.show(assessment, props.projects.summary(projectId)?.displayName ?? "this project"),
+    client: getLycaonClient,
+    confirm: confirmDestructive,
+    prepare: async (projectId) => {
+      const roots = props.projects.byId(projectId)?.roots ?? [];
+      await Promise.all(roots.map((root) => prepareFilesRootDetach(projectId, root.id)));
+    },
+    retire: async (projectId) => {
+      getEntityRetire()?.project(projectId);
+      props.projects.drop(projectId);
+      forgetProjectThumbnail(projectId);
+      if (props.shell.state.activeProjectId === projectId) props.shell.clearToHome();
+      await props.recents.removeRecentsForProject(projectId);
+    },
+    report: (error) => noticeReporterFor(APP_SCOPE).reportError(error),
+    notify: (notice) => noticeReporterFor(APP_SCOPE).publish(notice),
+    extensionsChanged: () => { void invalidateContributionFrame(); },
+  });
+
+  return { projectRemovalReview, deleteProject };
 }

@@ -109,7 +109,7 @@ describe("workspace placement contract", () => {
     expect(backs).toContain('stageDefinition(stage).backPlacement !== "titlebar"');
     expect(backs).toContain('stageDefinition(stage).backPlacement !== "stage"');
     const shell = read("src/components/shell/Shell.tsx");
-    expect(shell).toContain("back: () => stageBack(stage)");
+    expect(read("src/components/shell/WorkspaceStage.tsx")).toContain("back: () => stageBack(stage)");
     expect(shell).toMatch(/<ShellStageColumn[\s\S]*?back=\{titlebarBack\(\)\}/);
     expect(read("src/components/shell/ShellColumns.tsx")).toMatch(/<ShellHeaderTitlebar back=\{props\.back\}/);
   });
