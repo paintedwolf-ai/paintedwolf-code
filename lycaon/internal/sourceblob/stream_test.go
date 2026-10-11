@@ -17,7 +17,7 @@ func TestCopySHAVerifiesContent(t *testing.T) {
 	store := New(t.TempDir())
 	body := []byte("complete content\n")
 	sha := ContentSHA(body)
-	rel, _, _, err := store.Put(sha, body)
+	rel, _, _, err := store.Put(t.Context(), sha, body)
 	testutil.FailErr(t, "put object", err)
 	var out bytes.Buffer
 	testutil.FailErr(t, "stream object", store.CopySHA(t.Context(), sha, &out))
@@ -26,6 +26,7 @@ func TestCopySHAVerifiesContent(t *testing.T) {
 	}
 	compressed, err := zstdcodec.Compress(bytes.NewReader([]byte("different content")))
 	testutil.FailErr(t, "compress corrupt object", err)
+	testutil.FailErr(t, "allow damage injection", os.Chmod(filepath.Join(store.Root(), rel), 0o600))
 	testutil.FailErr(t, "replace corrupt object", os.WriteFile(filepath.Join(store.Root(), rel), compressed, 0o600))
 	if err := store.CopySHA(t.Context(), sha, io.Discard); err == nil {
 		t.Fatal("corrupt object accepted")

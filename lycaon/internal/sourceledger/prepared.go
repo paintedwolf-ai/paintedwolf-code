@@ -84,7 +84,7 @@ func prepareContent(ctx context.Context, objects *sourceblob.Store, sha string, 
 	if kind == EntryKindDirectory || content == nil || len(content) > MaxRevisionContentBytes {
 		return nil, nil
 	}
-	rel, stored, oids, err := objects.Put(sha, content)
+	rel, stored, oids, err := objects.Put(ctx, sha, content)
 	if err != nil {
 		return nil, err
 	}

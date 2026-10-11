@@ -199,7 +199,7 @@ func (s *Store) CapturePreImage(ctx context.Context, sessionID, anchorMessageID,
 		man.Truncated = true
 		return s.write(ctx, man)
 	}
-	entry, skip, err := s.capturePath(rel)
+	entry, skip, err := s.capturePath(ctx, rel)
 	if err != nil {
 		return err
 	}
@@ -271,7 +271,7 @@ func (s *Store) write(ctx context.Context, man *Manifest) error {
 }
 
 // capturePath snapshots readable regular files within the byte cap.
-func (s *Store) capturePath(rel string) (entry PathEntry, skip bool, err error) {
+func (s *Store) capturePath(ctx context.Context, rel string) (entry PathEntry, skip bool, err error) {
 	abs := filepath.Join(s.projectDir, filepath.FromSlash(rel))
 	info, statErr := os.Lstat(abs)
 	if os.IsNotExist(statErr) {
@@ -291,7 +291,7 @@ func (s *Store) capturePath(rel string) (entry PathEntry, skip bool, err error) 
 		return PathEntry{}, true, nil //nolint:nilerr // unreadable path is skipped, not an error
 	}
 	digest := sourceblob.ContentSHA(data)
-	objectRel, storedSize, oids, err := s.objects.Put(digest, data)
+	objectRel, storedSize, oids, err := s.objects.Put(ctx, digest, data)
 	if err != nil {
 		return PathEntry{}, false, err
 	}
