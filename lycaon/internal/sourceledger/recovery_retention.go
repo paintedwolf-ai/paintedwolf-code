@@ -47,8 +47,11 @@ func (s *Retention) reclaimRecoveryBatch(ctx context.Context) (int64, error) {
 	}
 	var deleted int64
 	if !claimed {
-		for _, table := range []struct{ name, key string }{{"source_recovery_entries", "ordinal"}, {"source_recovery_objects", "sha256"}} {
-			result, err := tx.ExecContext(ctx, `DELETE FROM `+table.name+` WHERE project_id=?1 AND recovery_id=?2 AND `+table.key+` IN (SELECT `+table.key+` FROM `+table.name+` WHERE project_id=?1 AND recovery_id=?2 ORDER BY `+table.key+` LIMIT ?3)`, projectID, recoveryID, blobMaintenanceBatchSize)
+		for _, query := range []string{
+			`DELETE FROM source_recovery_entries WHERE project_id=?1 AND recovery_id=?2 AND ordinal IN (SELECT ordinal FROM source_recovery_entries WHERE project_id=?1 AND recovery_id=?2 ORDER BY ordinal LIMIT ?3)`,
+			`DELETE FROM source_recovery_objects WHERE project_id=?1 AND recovery_id=?2 AND sha256 IN (SELECT sha256 FROM source_recovery_objects WHERE project_id=?1 AND recovery_id=?2 ORDER BY sha256 LIMIT ?3)`,
+		} {
+			result, err := tx.ExecContext(ctx, query, projectID, recoveryID, blobMaintenanceBatchSize)
 			if err != nil {
 				return 0, err
 			}

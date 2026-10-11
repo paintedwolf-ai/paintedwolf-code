@@ -19,45 +19,9 @@ type schemaAuditIndex struct {
 
 func redundantExplicitIndexes(t *testing.T, store DBTX) []string {
 	t.Helper()
-	rows, err := store.QueryContext(t.Context(), `
-		SELECT s.tbl_name, s.name, s.sql
-		FROM sqlite_schema s, pragma_index_list(s.tbl_name) il
-		WHERE s.type = 'index' AND il.name = s.name
-		  AND il.partial = 0 AND il.origin = 'c' AND il."unique" = 0
-		ORDER BY s.tbl_name, s.name`)
-	testutil.FailErr(t, "list explicit indexes", err)
-	var indexes []schemaAuditIndex
-	for rows.Next() {
-		var index schemaAuditIndex
-		testutil.FailErr(t, "read explicit index", rows.Scan(&index.table, &index.name, &index.definition))
-		indexes = append(indexes, index)
-	}
-	testutil.FailErr(t, "iterate explicit indexes", rows.Err())
-	testutil.FailErr(t, "close explicit indexes", rows.Close())
+	indexes := explicitSchemaIndexes(t, store)
 	for i := range indexes {
-		index := &indexes[i]
-		terms, err := sqliteIndexTerms(index.definition)
-		testutil.FailErr(t, "read terms for "+index.name, err)
-		keys, err := store.QueryContext(t.Context(), `
-			SELECT seqno, cid, name, desc, coll
-			FROM pragma_index_xinfo(?) WHERE key = 1 ORDER BY seqno`, index.name)
-		testutil.FailErr(t, "read index metadata", err)
-		for keys.Next() {
-			var seqno, cid, descending int
-			var name sql.NullString
-			var collation string
-			testutil.FailErr(t, "read index key", keys.Scan(&seqno, &cid, &name, &descending, &collation))
-			identity := fmt.Sprintf("column:%d", cid)
-			if cid == -2 {
-				if seqno >= len(terms) {
-					t.Fatalf("index %s key %d has no expression term", index.name, seqno)
-				}
-				identity = "expression:" + terms[seqno]
-			}
-			index.keys = append(index.keys, fmt.Sprintf("%s:%d:%s", identity, descending, strings.ToLower(collation)))
-		}
-		testutil.FailErr(t, "iterate index keys", keys.Err())
-		testutil.FailErr(t, "close index keys", keys.Close())
+		readSchemaIndexKeys(t, store, &indexes[i])
 	}
 	var redundant []string
 	for _, short := range indexes {
@@ -69,6 +33,53 @@ func redundantExplicitIndexes(t *testing.T, store DBTX) []string {
 	}
 	sort.Strings(redundant)
 	return redundant
+}
+
+func explicitSchemaIndexes(t *testing.T, store DBTX) []schemaAuditIndex {
+	t.Helper()
+	rows, err := store.QueryContext(t.Context(), `
+		SELECT s.tbl_name, s.name, s.sql
+		FROM sqlite_schema s, pragma_index_list(s.tbl_name) il
+		WHERE s.type = 'index' AND il.name = s.name
+		  AND il.partial = 0 AND il.origin = 'c' AND il."unique" = 0
+		ORDER BY s.tbl_name, s.name`)
+	testutil.FailErr(t, "list explicit indexes", err)
+	defer func() { _ = rows.Close() }()
+	var indexes []schemaAuditIndex
+	for rows.Next() {
+		var index schemaAuditIndex
+		testutil.FailErr(t, "read explicit index", rows.Scan(&index.table, &index.name, &index.definition))
+		indexes = append(indexes, index)
+	}
+	testutil.FailErr(t, "iterate explicit indexes", rows.Err())
+	return indexes
+}
+
+func readSchemaIndexKeys(t *testing.T, store DBTX, index *schemaAuditIndex) {
+	t.Helper()
+	terms, err := sqliteIndexTerms(index.definition)
+	testutil.FailErr(t, "read terms for "+index.name, err)
+	keys, err := store.QueryContext(t.Context(), `
+		SELECT seqno, cid, name, desc, coll
+		FROM pragma_index_xinfo(?) WHERE key = 1 ORDER BY seqno`, index.name)
+	testutil.FailErr(t, "read index metadata", err)
+	defer func() { _ = keys.Close() }()
+	for keys.Next() {
+		var seqno, cid, descending int
+		var name sql.NullString
+		var collation string
+		testutil.FailErr(t, "read index key", keys.Scan(&seqno, &cid, &name, &descending, &collation))
+		identity := fmt.Sprintf("column:%d", cid)
+		if cid == -2 {
+			if seqno >= len(terms) {
+				t.Fatalf("index %s key %d has no expression term", index.name, seqno)
+			}
+			identity = "expression:" + terms[seqno]
+		}
+		index.keys = append(index.keys, fmt.Sprintf("%s:%d:%s", identity, descending, strings.ToLower(collation)))
+	}
+	testutil.FailErr(t, "iterate index keys", keys.Err())
+
 }
 
 func TestNoRedundantExplicitIndexes(t *testing.T) {
