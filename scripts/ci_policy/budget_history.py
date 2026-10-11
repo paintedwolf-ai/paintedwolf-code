@@ -97,10 +97,10 @@ def changed_reviews(root, base, head, paths, rows):
         if not path.startswith(prefix) or not path.endswith('.json'):
             continue
         for revision in (base, head):
-            result = change_report.git(root, 'show', f'{revision}:{path}', check=False)
-            if result.returncode:
+            entry = change_report.git(root, 'ls-tree', revision, '--', path)
+            if not entry.stdout.strip():
                 continue
-            review = json.loads(result.stdout)
+            review = json.loads(change_report.git(root, 'show', f'{revision}:{path}').stdout)
             identity = key(review['category'], review['artifact'])
             if identity in rows:
                 identities.add(identity)

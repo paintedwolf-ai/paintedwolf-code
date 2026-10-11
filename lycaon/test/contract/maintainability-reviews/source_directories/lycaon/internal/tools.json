@@ -1,0 +1,16 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/tools",
+  "kind": "module",
+  "workstream": "tool-domains",
+  "disposition": "retain",
+  "reason": "The root tools package defines handler contracts, registry and invocation context consumed by executor and native families. Implementations already live in native domain packages, while execution policy lives in toolexecution. Further splitting the shared contract package would create dependency cycles or duplicate contract vocabulary.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 49,
+  "boundaries": {
+    "lycaon/internal/tools/catalog_registry_test.go": "49c960f1e5ac9cec5d62967b6dc340524dbc66487064975248fe2e3792da89ca",
+    "lycaon/internal/tools/confine_request_parity_test.go": "c571018230a22c0985b430376cc7216a66c98065a6aa39a92a3ffe9f2a819415",
+    "lycaon/internal/tools/source_context_test.go": "bd7d89bb3ad46c1dc63f198f906e0a35b9f4f1dabae33b0a1c743cfc2281bef6",
+    "lycaon/internal/tools/file_change_review_test.go": "5909d66ac6b182e59a85077f11e04c8543923791444085f791f58554f945796b"
+  }
+}

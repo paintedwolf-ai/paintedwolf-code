@@ -103,6 +103,7 @@ and type/dependency changes that do not increase field or method counts.
 | [#534](https://github.com/paintedwolf-ai/paintedwolf-code/pull/534) | Source observation and preparation boundaries. |
 | [#535](https://github.com/paintedwolf-ai/paintedwolf-code/pull/535) | Tool-result preparation and feedback. |
 | [#536](https://github.com/paintedwolf-ai/paintedwolf-code/pull/536) | Connection binding and lifecycle. |
+| [#537](https://github.com/paintedwolf-ai/paintedwolf-code/pull/537) | Hosted verification responsibilities and test organization. |
 
 Each implementation is delivered independently through the merge queue. Scoped
 local checks qualify only their captured source and requested contracts. Ready
@@ -110,7 +111,26 @@ PR checks and merge-group integration qualify the actual landing sequence;
 main qualification remains separate. Transcript unit/integration checks do not
 claim physical WebKit qualification of unchanged native scrolling algorithms.
 
-Earlier API/tool issues #342 and #352 require reconciliation against the domain
-work already landed in [#471](https://github.com/paintedwolf-ai/paintedwolf-code/pull/471),
-not repetition of the obsolete monolith decomposition plan. Current warnings are
-reviewed individually above and in the retained-decision records.
+The older API/tool concerns #342 and #352 were checked against current source,
+not just the merge reference for [#471](https://github.com/paintedwolf-ai/paintedwolf-code/pull/471).
+`sourceapi.Handler` now has 13 named collaborators and no receiver methods;
+`toolhost.Runtime` has nine collaborators and no receiver methods. The survey
+gatherer has five methods/eight fields, and `toolexecution.Executor` has ten
+methods/nine fields, with invocation settlement retained in `Invoke`.
+`GuardContext` contains 21 typed occurrence domains and local evaluation state.
+
+The API ticket's old requirement of fewer than 50 production files is not met
+by `sourceapi` (52) or the API root (50). The current hard limit is 75. The
+recommended disposition intentionally supersedes that old numeric prescription:
+keep the package-private source-view/cache/revision protocol and HTTP composition,
+with bounded review records and focused contracts. The tool ticket's listed
+monoliths now fall below its old limits; additional current warnings are retained
+explicitly where they describe cohesive contracts. These ten supplemental review
+records are separate from the original 40-finding inventory.
+
+The dependency-search tests exercise default versus explicit dependencies through
+HTTP code/declaration search and source definition. Source-view tests preserve
+access and revision fences, while watch coverage distinguishes policy-unwatched
+paths from truncation. Tool tests preserve cancellation, exact settlement, scratch
+authority and direct-IP lease settlement. OAR catalog, differential and runtime
+isolation tests qualify the typed projection.

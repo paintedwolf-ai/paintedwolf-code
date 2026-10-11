@@ -4,7 +4,7 @@
   "kind": "module",
   "workstream": "worker-workflow-lifecycle",
   "disposition": "retain",
-  "reason": "Workflow implementation already has catalog, composition, inputs, lifecycle and runstate packages. Root integration tests verify their assembled behavior and recovery. Relocating tests solely to reduce the root count would weaken discoverability or require exporting internal fixtures.",
+  "reason": "Workflow root composes the run manager with catalog, composition, inputs, lifecycle and runstate packages. Its remaining files bind phase evaluation, topology execution and feedback to the same run lifecycle. Further division would export private coordination state across packages rather than separate an independent operation.",
   "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
   "ceiling": 26,
   "boundaries": {

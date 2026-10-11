@@ -11,5 +11,5 @@
     "lycaon/internal/session/rewind_state_test.go": "6f2180f2e10e2b943068c2482e26a2a6aae52c2885afaba2437d7004f1231edd",
     "lycaon/internal/session/checkpointcontrol/checkpoint_refusal_test.go": "d0eb15ccaaaad97a4b89ddb943c53b6f6fae42a9f8be5e677488fa924527f35e"
   },
-  "reviewed_shape": "0000000000000000000000000000000000000000000000000000000000000000"
+  "reviewed_shape": "70243ea2dd1b894322119731c37a2e1717bdd3879c4923620302bf8e5bfeaee0"
 }

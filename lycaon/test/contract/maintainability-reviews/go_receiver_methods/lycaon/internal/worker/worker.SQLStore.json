@@ -11,5 +11,5 @@
     "lycaon/internal/worker/sql_store_test.go": "ac00126032baf10e5e3b11da41b399c25149042471f2804dedf29f3478d863e1",
     "lycaon/internal/worker/cancellation_fence_test.go": "561922a3d991473041986b5c2338cec56b79a29f8f1b7e044723968f7607ed33"
   },
-  "reviewed_shape": "0000000000000000000000000000000000000000000000000000000000000000"
+  "reviewed_shape": "8b797bdd9e2cef075d07d3fa40746bd3987de649ceb27d95f29b92379dcf8e34"
 }

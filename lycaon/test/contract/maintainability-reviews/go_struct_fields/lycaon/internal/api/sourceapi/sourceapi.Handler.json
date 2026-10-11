@@ -1,0 +1,18 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/api/sourceapi/sourceapi.Handler",
+  "kind": "construction",
+  "workstream": "api-domains",
+  "disposition": "retain",
+  "reason": "This method-free composition record names the source route collaborators; handlers receive selected collaborators rather than the entire record. Grouping these thirteen named dependencies would obscure route composition without reducing runtime coupling.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 13,
+  "boundaries": {
+    "lycaon/internal/api/sourceapi/source_view_lifecycle_test.go": "5e50cf0379403741341607e8d001625f443aa7fc0e234909c31dc6edd6417449",
+    "lycaon/internal/api/sourceapi/source_view_access_test.go": "ff3c6ec3a6b1b5451eba50e501c7758462165d4a268140a438984352c9a5b865",
+    "lycaon/internal/api/sourceapi/source_view_receipts_test.go": "6cd5876b5652fb2408c3ecb22f028e55657722f9355a57b116ebc1c3f1d0421e",
+    "lycaon/internal/api/sourceapi/watch_coverage_policy_test.go": "1f9a7d26e43541b8edf02fddd37d8aafe85ceeedddc04c5ddc59d7f5b3fb9919",
+    "lycaon/internal/api/searchcontracts/search_dependencies_test.go": "66fc176faf903446181e052dd3f4a7fd621fd8b6611be83f53f41d8b783b325e"
+  },
+  "reviewed_shape": "be463acdca7408291500d16526deccfac0e901b6799af9438ab993fa10bf34b1"
+}

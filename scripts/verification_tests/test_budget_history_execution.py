@@ -35,19 +35,36 @@ class HistoryTests(unittest.TestCase):
             self.assertEqual({latest[identity]['category'] for identity in identities}, expected)
 
     def test_removed_or_retargeted_review_enters_intake_without_source_change(self):
-        from subprocess import CompletedProcess
+        import subprocess
+        import tempfile
+        from pathlib import Path
         from ci_policy.budget_snapshot import key
         first, second = key('source_files', 'pkg/one.go'), key('source_files', 'pkg/two.go')
         records = [dict(category='source_files', artifact='pkg/one.go'),
                    dict(category='source_files', artifact='pkg/two.go')]
         path = 'lycaon/test/contract/maintainability-reviews/design.json'
-        with patch.object(history.change_report, 'git', side_effect=[
-                CompletedProcess([], 0, json.dumps(record)) for record in records]):
-            self.assertEqual(history.changed_reviews('root', 'a' * 40, 'b' * 40,
+        with tempfile.TemporaryDirectory() as directory:
+            def git(*arguments):
+                return subprocess.check_output(['git', '-C', directory, *arguments], text=True).strip()
+            git('init', '-q')
+            git('config', 'user.name', 'Fixture')
+            git('config', 'user.email', 'fixture@example.invalid')
+            file = Path(directory) / path
+            file.parent.mkdir(parents=True)
+            file.write_text(json.dumps(records[0]))
+            git('add', '--', path)
+            git('commit', '-qm', 'Initial decision')
+            base = git('rev-parse', 'HEAD')
+            file.write_text(json.dumps(records[1]))
+            git('add', '--', path)
+            git('commit', '-qm', 'Retarget decision')
+            changed = git('rev-parse', 'HEAD')
+            self.assertEqual(history.changed_reviews(directory, base, changed,
                              [path], {first: {}, second: {}}), {first, second})
-        with patch.object(history.change_report, 'git', side_effect=[
-                CompletedProcess([], 0, json.dumps(records[0])), CompletedProcess([], 128, '')]):
-            self.assertEqual(history.changed_reviews('root', 'a' * 40, 'b' * 40,
+            file.unlink()
+            git('add', '--', path)
+            git('commit', '-qm', 'Remove decision')
+            self.assertEqual(history.changed_reviews(directory, base, git('rev-parse', 'HEAD'),
                              [path], {first: {}}), {first})
 
     def test_initial_intake_uses_installation_baseline_without_backfilling_untouched_debt(self):

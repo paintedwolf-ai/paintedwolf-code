@@ -1,0 +1,17 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/toolexecution/toolexecution.Executor",
+  "kind": "runtime_service",
+  "workstream": "tool-domains",
+  "disposition": "retain",
+  "reason": "Executor settles one invocation across validation, canonical arguments, scoped confinement, approval, handler dispatch and secret effects. Named approval, boundary, capability, network and secret collaborators contain their domain logic. Keep the ordered dispatch and deferred settlement in one operation.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 566,
+  "boundaries": {
+    "lycaon/internal/toolexecution/executor_settled_join_test.go": "0c7b1b398a08ecdb4fc13b10150f30d6c12a4182315bb9ed3264bf42964ea0c7",
+    "lycaon/internal/toolexecution/policy_block_reject_test.go": "327c6e018546bcc903a538a5db7425365b356faa0d272f9e3f31e34ebdd929b1",
+    "lycaon/internal/toolexecution/executor_file_access_test.go": "b9c2b5b9d2836b5fc65fbe87cbc81594e4373a55fac2404076d70ef354570ca2",
+    "lycaon/internal/toolexecution/direct_ip_lease_settles_test.go": "7c658e2733ee69cfbfc877ad8567c7116a95d6eda106162929bc8046dfd888b9"
+  },
+  "reviewed_shape": "c1955ad423a3fb8bc59ae25a750226c98d51928c276d39eb14fcd15f415f3389"
+}

@@ -1,0 +1,16 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/api/api.Server",
+  "kind": "runtime_service",
+  "workstream": "api-domains",
+  "disposition": "retain",
+  "reason": "Server binds route families and the shared HTTP admission and shutdown boundary. Runtime domain behavior remains in its explicit collaborators; the construction graph should stay visible.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 21,
+  "boundaries": {
+    "lycaon/internal/api/auth_test.go": "859503f743f556d1914fb8c635c5ac12efce13f34370fb17d752ccb626931f4d",
+    "lycaon/internal/api/operations_contract_test.go": "b12b3bbbfa9eceaee01e4c1d500f92c85076d87f55a07956bc24c83462d620ca",
+    "lycaon/internal/api/person_actions_test.go": "b41da5c4058be247f99758d1a8c286e95c11ab6d4d1c260db95925b3423c1536"
+  },
+  "reviewed_shape": "ec153db51fae1f0e1560af044c70ce1758156799a19d30d3b26ba8c0560e90b4"
+}

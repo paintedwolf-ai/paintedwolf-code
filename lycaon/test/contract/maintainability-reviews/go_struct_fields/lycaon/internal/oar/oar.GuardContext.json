@@ -1,0 +1,17 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/oar/oar.GuardContext",
+  "kind": "projection",
+  "workstream": "tool-domains",
+  "disposition": "retain",
+  "reason": "This anchor-occurrence value composes typed fact domains and occurrence-local lazy evaluation and feedback state. It is a fact projection, not a service capability bag. The flat public catalog is derived from these domains; hiding domains in extra nested records would obscure the projection.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 21,
+  "boundaries": {
+    "lycaon/internal/oar/catalogue_test.go": "ce7b081696e3b9e013dadad7c1766919fc403ca541ba115c339f7a674ec7cbe2",
+    "lycaon/internal/oar/corpus_differential_test.go": "a237075ff15f94805628f0667eddb318de867d1bce71ab6738091e9a024273b1",
+    "lycaon/internal/oar/runtime_isolation_test.go": "26fced91dce0146edc651c92b6e0c0747b62c467982714acff514168239c86ae",
+    "lycaon/internal/oar/tool_observation_test.go": "bcdc5e231edd5090d25635755e815cd78a6acae267eed1db78785f32d38c19fd"
+  },
+  "reviewed_shape": "194e88bfcfdf1ddb5fd7923114e19636ad086382ffdd03810cdeb9aaa6de44fb"
+}
