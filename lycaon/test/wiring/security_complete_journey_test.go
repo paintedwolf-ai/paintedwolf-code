@@ -1,9 +1,12 @@
 package wiring
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/report"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/scan"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
@@ -157,6 +161,18 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	testutil.FailErr(t, "read finished survey", err)
 	if current.Status != api.WorkflowRunStatusComplete {
 		t.Fatalf("workflow status=%s phase=%s", current.Status, current.CurrentPhase)
+	}
+	input, available, err := h.Server.Admin.Workflow.Reports.BuildRunReportInput(ctx, run.ID)
+	testutil.FailErr(t, "assemble accepted report", err)
+	if !available || input.Completeness() != report.CompletenessComplete {
+		t.Fatalf("report available=%t completeness=%s gaps=%+v", available, input.Completeness(), input.Gaps)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/v1/workflow-runs/"+run.ID+"/report", nil).WithContext(ctx)
+	request.Header.Set("Authorization", "Bearer "+h.APIToken)
+	response := httptest.NewRecorder()
+	h.Server.ServeHTTP(response, request)
+	if response.Code != http.StatusOK || !bytes.HasPrefix(response.Body.Bytes(), []byte("%PDF-")) {
+		t.Fatalf("report response=%d %s", response.Code, response.Body.String())
 	}
 	if len(tasks) != 7 {
 		t.Fatalf("worker count=%d, want five survey workers and two reviewers", len(tasks))

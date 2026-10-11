@@ -24,7 +24,7 @@ func (m *SessionPolicy) ActiveCloseoutGateState(ctx context.Context, sessionID s
 	if err != nil {
 		return state, err
 	}
-	def, ok := manifest.PhaseByID(active.CurrentPhase)
+	def, ok := manifest.PhaseForRun(active, active.CurrentPhase)
 	if !ok {
 		return state, fmt.Errorf("workflow closeout phase %s unavailable", active.CurrentPhase)
 	}
