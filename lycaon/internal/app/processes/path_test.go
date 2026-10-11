@@ -80,11 +80,6 @@ func preserveResolvedPath(t *testing.T) {
 
 func unsetCommandPath(t *testing.T) {
 	t.Helper()
-	value, present := os.LookupEnv("LYCAON_COMMAND_PATH")
+	t.Setenv("LYCAON_COMMAND_PATH", "")
 	testutil.FailErr(t, "unset configured command path", os.Unsetenv("LYCAON_COMMAND_PATH"))
-	t.Cleanup(func() {
-		if present {
-			testutil.FailErr(t, "restore configured command path", os.Setenv("LYCAON_COMMAND_PATH", value))
-		}
-	})
 }

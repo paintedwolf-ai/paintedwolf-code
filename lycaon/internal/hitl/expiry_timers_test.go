@@ -110,7 +110,7 @@ func TestExpiryDrainHonorsShutdownCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	if err := timers.stop(ctx); err != context.Canceled {
+	if err := timers.stop(ctx); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled shutdown drain = %v", err)
 	}
 	close(release)
