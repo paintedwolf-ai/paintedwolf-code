@@ -1,6 +1,7 @@
 package sourceledger
 
 import (
+	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -41,4 +42,27 @@ func TestRecoveryQueueCascadesWithProject(t *testing.T) {
 	if count != 0 {
 		t.Fatal("project left reclamation candidates")
 	}
+}
+
+func TestRecoveryReclamationRollsBackTheWholePage(t *testing.T) {
+	s, ctx := openLedger(t)
+	seedRecoveryManifest(t, s, "orphan", 2)
+	mustRecord(t, s, ctx, RecordInput{RecordLocation: RecordLocation{RootID: "r1", Path: "body.txt"}, ProjectID: "p1", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, After: []byte("retained body")})
+	_, err := s.sqlDB.ExecContext(ctx, `INSERT INTO source_recovery_objects(project_id,recovery_id,sha256) SELECT 'p1','orphan',sha256 FROM source_blob_objects LIMIT 1`)
+	testutil.FailErr(t, "reference recovery object", err)
+	_, err = s.sqlDB.ExecContext(ctx, `CREATE TRIGGER interrupt_recovery_reclaim BEFORE DELETE ON source_recovery_objects BEGIN SELECT RAISE(ABORT,'injected reclaim failure'); END`)
+	testutil.FailErr(t, "interrupt object retirement", err)
+	if _, err := s.Retention.reclaimRecoveryBatch(ctx); err == nil {
+		t.Fatal("expected reclamation failure")
+	}
+	for table, want := range map[string]int{"source_recovery_entries": 2, "source_recovery_objects": 1, "source_recovery_reclaim_queue": 1} {
+		var count int
+		testutil.FailErr(t, "inspect rolled-back reclamation", s.sqlDB.QueryRowContext(ctx, "SELECT count(*) FROM "+table).Scan(&count))
+		if count != want {
+			t.Fatalf("%s has %d rows after rollback, want %d", table, count, want)
+		}
+	}
+	_, err = s.sqlDB.ExecContext(ctx, `DROP TRIGGER interrupt_recovery_reclaim`)
+	testutil.FailErr(t, "remove interruption", err)
+	testutil.FailErr(t, "resume reclamation", s.Retention.SweepBlobs(ctx))
 }
