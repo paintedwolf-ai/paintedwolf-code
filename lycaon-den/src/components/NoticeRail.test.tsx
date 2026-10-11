@@ -10,6 +10,15 @@ import { NoticeRail } from "./NoticeRail.tsx";
 afterEach(() => resetNoticeActionSinksForTest());
 
 describe("NoticeRail", () => {
+  it("keeps acknowledgement notices past informational expiry", () => {
+    vi.useFakeTimers();
+    try {
+      const onDismiss = vi.fn();
+      render(() => <NoticeRail notices={[{ id: "release", severity: "info", title: "Release", message: "Notes", createdAt: Date.now(), scope: APP_SCOPE, interaction: { autoDismiss: false, actions: [] } }]} onDismiss={onDismiss} />);
+      vi.advanceTimersByTime(60_000);
+      expect(onDismiss).not.toHaveBeenCalled();
+    } finally { vi.useRealTimers(); }
+  });
   it("renders inline rail with expanded latest notice", () => {
     const onDismiss = vi.fn();
     render(() => (

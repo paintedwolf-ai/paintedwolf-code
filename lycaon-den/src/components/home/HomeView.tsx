@@ -3,7 +3,6 @@ import { noticeReporterFor } from "../../platform/connection/app-connection.ts";
 import { APP_SCOPE } from "../../notices/notice-scope.ts";
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { PreflightNudge } from "./PreflightNudge.tsx";
-import { WhatsNewCard } from "./WhatsNewCard.tsx";
 import { AttentionBand } from "./AttentionBand.tsx";
 import type { AttentionRow } from "../../api/types.ts";
 import type { ProjectSummary } from "../../project/project-summary.ts";
@@ -320,7 +319,6 @@ export function HomeView(props: Props) {
         <ChromeDragSurface class="home-view__chrome-drag" />
         {/* Contextual cards share one Home column. */}
         <div class="home-view__notices" data-testid="home-notices">
-          <WhatsNewCard />
           <Show when={!providerDismissed() ? props.providerGap : undefined} keyed>
             {(gap) => (
               <NoProviderCard

@@ -1,7 +1,4 @@
-/**
- * Gate for the Home What's New card. Latch: unset → seed silently; equal → hide;
- * changed + notes → show; changed + empty → advance latch; onboarding defers show.
- */
+/** Unseen releases wait for onboarding and nonempty notes. */
 
 export type WhatsNewGateDecision =
   | { kind: "hide" }

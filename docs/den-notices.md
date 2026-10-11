@@ -97,7 +97,7 @@ The tier answers *can the user still use the app*. Scope answers *where does thi
 
 ## Contextual cards
 
-Home renders contextual cards in one column (`.home-view__notices`, above the idea composer): what changed, then what is missing, then a degraded capability. These are shared `SystemNudge` components driven by live conditions.
+Home renders contextual cards in one column (`.home-view__notices`, above the idea composer): what is missing, then a degraded capability. These are shared `SystemNudge` components driven by live conditions.
 
 | Rule | Detail |
 |------|--------|
@@ -106,6 +106,10 @@ Home renders contextual cards in one column (`.home-view__notices`, above the id
 | A card that states a condition stands down the probe | `PreflightNudge` takes `statedElsewhere` (probe **codes**, exact match) and reports the *next* candidate rather than going quiet, so a second, unrelated problem is still surfaced |
 | Every card names the next step | The host's `suggested_action` renders on the card (`.system-nudge__hint`). Catalog `actions` name members of a closed vocabulary and Den turns each into a button: `open_ai_providers` navigates to Settings, `retry_contribution_frame` re-fetches and renders as **Retry**. Prompt recovery actions (`prompt_retry`, `prompt_keep_going`, `prompt_rewind_and_retry`) run in the chat the notice's session scope names, never whichever chat mounted last; a notice without a session scope, or whose chat is not mounted in this window, renders no prompt button. A destination that needs a Shell sink renders no button until that sink is wired. Den never parses remedy prose |
 | The dock sets the page rhythm | The card's base margin carries the chat gutter for a transcript underneath; Home restates margins on the column so the cards line up with the page's own inset. Dark mode lifts them to `--den-surface` with Home's other cards |
+
+Release announcements are app-scoped entries in the shared notice store, visible on Home and in the chat dock. The existing `whatsNew.lastSeenVersion` preference records acknowledgement. Read more opens the release notes dialog without dismissing the notice; closing the dialog also leaves it available. Got it, Dismiss, and Dismiss all acknowledge the displayed version. An announcement remains until explicitly acknowledged; it has no informational expiry. First use seeds the version silently, onboarding defers announcements, and releases without notes advance the acknowledgement silently.
+
+Client-owned notices may attach a local interaction containing actions, an expiry policy, and a dismissal callback. These callbacks never cross the host wire. The store invokes dismissal callbacks only for explicit dismissal, after removing entries; withdrawal, supersession, and eviction do not acknowledge a condition. Host actions retain their catalog vocabulary.
 
 **Scope state is not foreground state.** `notices/notice-store.ts` is keyed by scope and lives outside the app store, which holds the chat in view. It has a per-scope cap with a bucket LRU and supersedes by `(scope, code)`, so a flapping condition refreshes one row instead of filling a bucket. Nothing is persisted; a notice describes the live process. Home readiness-card dismissals follow the same process lifetime: they suppress the current `(probe, code)` pair until the app restarts.
 

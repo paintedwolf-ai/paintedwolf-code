@@ -131,16 +131,26 @@ webE2e.describe("feedback + what's new den", () => {
       });
       expect(await whatsNewLatch(page)).toBe("0.9.0");
 
-      await expect(page.getByTestId("whats-new-card")).toBeVisible({
+      await expect(page.locator('[data-notice-code="whats_new"]')).toBeVisible({
         timeout: 30_000,
       });
-      await expect(page.getByTestId("whats-new-nudge")).toContainText(
+      await expect(page.locator('[data-notice-code="whats_new"]')).toContainText(
         `What’s new in ${RELEASED_VERSION}`,
       );
-      await expect(page.getByTestId("whats-new-got-it")).toBeVisible();
-      await page.getByTestId("whats-new-got-it").click();
-      await expect(page.getByTestId("whats-new-card")).toHaveCount(0);
+      const announcement = page.locator('[data-notice-code="whats_new"]');
+      await announcement.getByRole("button", { name: "Read more" }).click();
+      await expect(page.getByTestId("whats-new-dialog")).toBeVisible();
+      await page.getByTestId("whats-new-dialog-close").click();
+      await expect(announcement).toBeVisible();
+      expect(await whatsNewLatch(page)).toBe("0.9.0");
+      await expect(page.getByRole("button", { name: "Got it", exact: true })).toBeVisible();
+      await page.getByRole("button", { name: "Got it", exact: true }).click();
+      await expect(page.locator('[data-notice-code="whats_new"]')).toHaveCount(0);
 
+      await expect.poll(() => whatsNewLatch(page)).toBe(RELEASED_VERSION);
+      await page.reload();
+      await expect(page.getByTestId("home-view")).toBeVisible({ timeout: 30_000 });
+      await expect(announcement).toHaveCount(0);
       expect(await whatsNewLatch(page)).toBe(RELEASED_VERSION);
     },
   );
@@ -150,15 +160,15 @@ webE2e.describe("feedback + what's new den", () => {
     async ({ page }) => {
       await seedAppState(page, {
         onboarding: { firstRunSetupCompleted: true },
-        // whatsNew omitted → unset
+        // An absent acknowledgement seeds the running version.
       });
       await page.goto("/");
       await expect(page.getByTestId("home-view")).toBeVisible({
         timeout: 30_000,
       });
-      // The first observed version seeds without a card.
+      // First use records the version without an announcement.
       await expect
-        .poll(async () => page.getByTestId("whats-new-card").count(), {
+        .poll(async () => page.locator('[data-notice-code="whats_new"]').count(), {
           timeout: 10_000,
         })
         .toBe(0);
