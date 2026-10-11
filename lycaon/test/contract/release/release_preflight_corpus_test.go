@@ -58,11 +58,11 @@ func TestReleasePreflightVerifiesOnlyACompleteCorpus(t *testing.T) {
 				contractcheck.FailErr(t, "link preflight archive dependency "+rel,
 					os.Symlink(filepath.Join(repo, rel), filepath.Join(root, rel)))
 			}
-
-
 			cmd := exec.CommandContext(t.Context(), "bash", filepath.Join(root, "scripts", "release-preflight.sh"), "--require-corpus")
 			cmd.Env = append(os.Environ(), "PATH="+filepath.Join(root, "tools")+string(os.PathListSeparator)+os.Getenv("PATH"))
 			cmd.Env = append(cmd.Env, paths.Env()...)
+			// The Go child uses the captured, verified Git payload, not the synthetic build directory.
+			cmd.Env = append(cmd.Env, "LYCAON_ENGINE_ROOT="+filepath.Join(repo, "lycaon-den", "src-tauri", "engine-root"))
 			out, err := cmd.CombinedOutput()
 			raw, readErr := os.ReadFile(calls)
 			if readErr != nil && !os.IsNotExist(readErr) {
