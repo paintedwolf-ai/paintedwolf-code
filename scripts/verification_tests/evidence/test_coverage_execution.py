@@ -8,7 +8,7 @@ import unittest
 
 from coverage_policy import main, percentage
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[3]
 
 
 class CoverageExecutionTests(unittest.TestCase):

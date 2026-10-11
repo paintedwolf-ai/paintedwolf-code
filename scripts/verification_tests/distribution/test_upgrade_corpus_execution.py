@@ -9,7 +9,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-SPEC = importlib.util.spec_from_file_location("fixture_files", Path(__file__).resolve().parents[1].joinpath("upgrade-fixture-files.py"))
+SPEC = importlib.util.spec_from_file_location("fixture_files", Path(__file__).resolve().parents[2].joinpath("upgrade-fixture-files.py"))
 fixture_files = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(fixture_files)
 

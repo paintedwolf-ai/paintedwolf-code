@@ -17,7 +17,7 @@ from unittest.mock import patch
 import verification_cancel as cancel
 from verification_state import read_state
 
-SCRIPT = Path(__file__).resolve().parents[1].joinpath("test-execution.py")
+SCRIPT = Path(__file__).resolve().parents[2].joinpath("test-execution.py")
 spec = importlib.util.spec_from_file_location("test_execution", SCRIPT)
 execution = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(execution)

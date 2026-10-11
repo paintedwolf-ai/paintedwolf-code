@@ -23,6 +23,6 @@ const github = { paginate: async () => [tracked], rest: { issues: {
 markStale({ github, context: { repo: { owner: "owner", repo: "repo" } },
   core: { info: () => {} } }).then(() => assert.deepEqual(writes, []));
 '''
-        result = subprocess.run(['node', '-e', source], cwd=Path(__file__).resolve().parents[2],
+        result = subprocess.run(['node', '-e', source], cwd=Path(__file__).resolve().parents[3],
                                 capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
