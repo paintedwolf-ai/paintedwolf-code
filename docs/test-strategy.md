@@ -232,9 +232,6 @@ checkpoint; later runs or another explicit backfill dispatch continue it. The wo
 
 #### Architectural review decisions
 
-See the [maintainability architecture review](operations/maintainability-review.md)
-for the current concern inventory and design rationale.
-
 Review records describe a design decision. The commit field records its stated
 provenance; fingerprints detect changes to selected source contracts. They do not
 prove tests passed. Verification receipts and CI retain that separate role.
