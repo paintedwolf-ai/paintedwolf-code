@@ -246,3 +246,35 @@ describe("publishNotice (module-level publish, outside a component)", () => {
     ).not.toThrow();
   });
 });
+
+
+describe("client notice dismissal", () => {
+  it("does not acknowledge superseded or evicted entries", () => {
+    const store = createNoticeStore();
+    const onDismiss = vi.fn();
+    const input = { code: "release", title: "Release", message: "Notes", interaction: { actions: [], onDismiss } };
+    store.publish(input, APP_SCOPE);
+    store.publish(input, APP_SCOPE);
+    for (let index = 0; index < MAX_NOTICES_PER_SCOPE; index++) {
+      store.publish({ title: "Condition", message: "Details", code: `condition-${index}` }, APP_SCOPE);
+    }
+    expect(selectAppNotices(store.index()).some((notice) => notice.code === "release")).toBe(false);
+    expect(onDismiss).not.toHaveBeenCalled();
+  });
+  it("removes entries before acknowledging them and acknowledges only explicit dismissal", () => {
+    const store = createNoticeStore();
+    const onDismiss = vi.fn(() => expect(selectAppNotices(store.index())).toHaveLength(0));
+    const input = { code: "release", title: "Release", message: "Notes", interaction: { actions: [], onDismiss } };
+    store.publish(input, APP_SCOPE);
+    store.withdraw("release", APP_SCOPE);
+    expect(onDismiss).not.toHaveBeenCalled();
+    store.publish(input, APP_SCOPE);
+    store.dismiss(selectAppNotices(store.index())[0]!.id);
+    expect(onDismiss).toHaveBeenCalledOnce();
+    store.publish(input, APP_SCOPE);
+    store.dismissScope(APP_SCOPE);
+    expect(onDismiss).toHaveBeenCalledTimes(2);
+    store.dismissScope(APP_SCOPE);
+    expect(onDismiss).toHaveBeenCalledTimes(2);
+  });
+});
