@@ -246,3 +246,23 @@ describe("publishNotice (module-level publish, outside a component)", () => {
     ).not.toThrow();
   });
 });
+
+
+describe("client notice dismissal", () => {
+  it("removes entries before acknowledging them and acknowledges only explicit dismissal", () => {
+    const store = createNoticeStore();
+    const onDismiss = vi.fn(() => expect(selectAppNotices(store.index())).toHaveLength(0));
+    const input = { code: "release", title: "Release", message: "Notes", interaction: { actions: [], onDismiss } };
+    store.publish(input, APP_SCOPE);
+    store.withdraw("release", APP_SCOPE);
+    expect(onDismiss).not.toHaveBeenCalled();
+    store.publish(input, APP_SCOPE);
+    store.dismiss(selectAppNotices(store.index())[0]!.id);
+    expect(onDismiss).toHaveBeenCalledOnce();
+    store.publish(input, APP_SCOPE);
+    store.dismissScope(APP_SCOPE);
+    expect(onDismiss).toHaveBeenCalledTimes(2);
+    store.dismissScope(APP_SCOPE);
+    expect(onDismiss).toHaveBeenCalledTimes(2);
+  });
+});

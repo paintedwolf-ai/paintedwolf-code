@@ -5,28 +5,59 @@ import {
   resetStoreRevisionTracking,
 } from "../../platform/connection/health.ts";
 import { resetWhatsNewPrefsForTests } from "../../settings/system/whats-new-prefs.ts";
-import { WhatsNewCard } from "./WhatsNewCard.tsx";
+import { createNoticeStore } from "../../notices/notice-store.ts";
+import { NoticeRail } from "../NoticeRail.tsx";
+import { APP_SCOPE, noticeScopeKey } from "../../notices/notice-scope.ts";
+import { WhatsNewNotice } from "./WhatsNewNotice.tsx";
 
 vi.mock("../../settings/system/onboarding-prefs.ts", () => ({
   onboardingPrefsReady: () => true,
   firstRunSetupCompletedPref: () => true,
 }));
 
-describe("WhatsNewCard", () => {
+describe("WhatsNewNotice", () => {
+  it.each(["Got it", "Dismiss", "Dismiss all"])("acknowledges through %s across shared surfaces", async (action) => {
+    const saveLatch = vi.fn(async (version: string) => resetWhatsNewPrefsForTests({ lastSeenVersion: version }));
+    render(() => <><Notice currentVersion="0.2.0" notesFor={() => "Release notes"} saveLatch={saveLatch} /><NoticeRail notices={rows()} onDismiss={notices.dismiss} /></>);
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    if (action === "Dismiss all") {
+      notices.publish({ title: "Other condition", message: "Still works" }, APP_SCOPE);
+      fireEvent.click(screen.getAllByRole("button", { name: "Dismiss all" })[0]!);
+    } else {
+      fireEvent.click(screen.getAllByRole("button", { name: action, exact: true })[0]!);
+    }
+    await waitFor(() => expect(saveLatch).toHaveBeenCalledExactlyOnceWith("0.2.0"));
+    expect(rows()).toHaveLength(0);
+  });
+
+  it("withdraws on disposal without acknowledging the release", async () => {
+    const saveLatch = vi.fn(async () => {});
+    const { unmount } = render(() => <Notice currentVersion="0.2.0" notesFor={() => "Release notes"} saveLatch={saveLatch} />);
+    await waitFor(() => expect(rows()).toHaveLength(1));
+    unmount();
+    expect(rows()).toHaveLength(0);
+    expect(saveLatch).not.toHaveBeenCalled();
+  });
+  let notices: ReturnType<typeof createNoticeStore>;
+  const rows = () => notices.index().get(noticeScopeKey(APP_SCOPE)) ?? [];
+  function Notice(props: Omit<Parameters<typeof WhatsNewNotice>[0], "notices">) {
+    return <><WhatsNewNotice {...props} notices={notices} /><NoticeRail notices={rows()} onDismiss={notices.dismiss} onDismissAll={() => notices.dismissScope(APP_SCOPE)} /></>;
+  }
   beforeEach(() => {
+    notices = createNoticeStore();
     resetStoreRevisionTracking();
     resetWhatsNewPrefsForTests({ lastSeenVersion: "0.1.0" });
   });
 
-  it("shows when backend health arrives after Home mounts", async () => {
+  it("shows when backend health arrives after the notice publisher mounts", async () => {
     render(() => (
-      <WhatsNewCard
+      <Notice
         notesFor={() => "### Added\n\n- Cool feature"}
         saveLatch={vi.fn(async () => undefined)}
       />
     ));
 
-    expect(screen.queryByTestId("whats-new-card")).toBeNull();
+    expect(screen.queryByTestId("notice-rail")).toBeNull();
     noteHealthResponse({
       status: "ok",
       version: "0.2.0",
@@ -36,7 +67,7 @@ describe("WhatsNewCard", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("whats-new-card")).toBeTruthy();
+      expect(screen.getByTestId("notice-rail")).toBeTruthy();
     });
   });
 
@@ -46,7 +77,7 @@ describe("WhatsNewCard", () => {
     });
 
     render(() => (
-      <WhatsNewCard
+      <Notice
         currentVersion="0.2.0"
         notesFor={() => "### Added\n\n- Cool feature"}
         saveLatch={saveLatch}
@@ -54,16 +85,16 @@ describe("WhatsNewCard", () => {
     ));
 
     await waitFor(() => {
-      expect(screen.getByTestId("whats-new-card")).toBeTruthy();
+      expect(screen.getByTestId("notice-rail")).toBeTruthy();
     });
-    expect(screen.getByTestId("whats-new-nudge").textContent).toMatch(
+    expect(screen.getByTestId("notice-rail").textContent).toMatch(
       /What’s new in 0\.2\.0/,
     );
-    expect(screen.getByTestId("whats-new-summary").textContent).toMatch(
+    expect(screen.getByTestId("notice-rail").textContent).toMatch(
       /Review the latest changes/,
     );
 
-    fireEvent.click(screen.getByTestId("whats-new-read-more"));
+    fireEvent.click(screen.getByRole("button", { name: "Read more" }));
     expect(screen.getByTestId("whats-new-dialog-notes").textContent).toMatch(
       /Cool feature/,
     );
@@ -72,7 +103,7 @@ describe("WhatsNewCard", () => {
 
     await waitFor(() => {
       expect(saveLatch).toHaveBeenCalledWith("0.2.0");
-      expect(screen.queryByTestId("whats-new-card")).toBeNull();
+      expect(screen.queryByTestId("notice-rail")).toBeNull();
     });
   });
 
@@ -81,7 +112,7 @@ describe("WhatsNewCard", () => {
     const saveLatch = vi.fn(async () => undefined);
 
     render(() => (
-      <WhatsNewCard
+      <Notice
         currentVersion="0.2.0"
         notesFor={() => "### Added\n\n- Cool"}
         saveLatch={saveLatch}
@@ -89,7 +120,7 @@ describe("WhatsNewCard", () => {
     ));
 
     await waitFor(() => {
-      expect(screen.queryByTestId("whats-new-card")).toBeNull();
+      expect(screen.queryByTestId("notice-rail")).toBeNull();
     });
     expect(saveLatch).not.toHaveBeenCalled();
   });
@@ -97,7 +128,7 @@ describe("WhatsNewCard", () => {
   it("keeps the notice until Got it when the reader is closed", async () => {
     const saveLatch = vi.fn(async () => undefined);
     render(() => (
-      <WhatsNewCard
+      <Notice
         currentVersion="0.2.0"
         notesFor={() => "### Changed\n\n- Cool"}
         saveLatch={saveLatch}
@@ -105,12 +136,12 @@ describe("WhatsNewCard", () => {
     ));
 
     await waitFor(() => {
-      expect(screen.getByTestId("whats-new-card")).toBeTruthy();
+      expect(screen.getByTestId("notice-rail")).toBeTruthy();
     });
-    fireEvent.click(screen.getByTestId("whats-new-read-more"));
+    fireEvent.click(screen.getByRole("button", { name: "Read more" }));
     fireEvent.click(screen.getByTestId("whats-new-dialog-close"));
 
-    expect(screen.getByTestId("whats-new-card")).toBeTruthy();
+    expect(screen.getByTestId("notice-rail")).toBeTruthy();
     expect(saveLatch).not.toHaveBeenCalled();
   });
 
@@ -121,7 +152,7 @@ describe("WhatsNewCard", () => {
     });
 
     render(() => (
-      <WhatsNewCard
+      <Notice
         currentVersion="0.1.0"
         notesFor={() => "### Added\n\n- First"}
         saveLatch={saveLatch}
@@ -131,6 +162,6 @@ describe("WhatsNewCard", () => {
     await waitFor(() => {
       expect(saveLatch).toHaveBeenCalledWith("0.1.0");
     });
-    expect(screen.queryByTestId("whats-new-card")).toBeNull();
+    expect(screen.queryByTestId("notice-rail")).toBeNull();
   });
 });

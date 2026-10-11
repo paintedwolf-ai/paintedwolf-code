@@ -1,0 +1,7 @@
+scope: app
+title: What’s new in
+message: Review the latest changes when you have a moment.
+scenarios:
+  - id: default
+    expect_contains:
+      - What’s new

@@ -7,6 +7,7 @@ import type { NoticeScope } from "./notice-scope.ts";
 import { scopeOfKind } from "./notice-routing.ts";
 import { clientNoticeScope } from "./notice-routing.ts";
 
+/** Client callbacks stay local to the process and never enter the host wire. */
 export type NoticeInteraction = {
   autoDismiss?: boolean;
   onDismiss?: () => void;

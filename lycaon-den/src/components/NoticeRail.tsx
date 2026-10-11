@@ -45,6 +45,10 @@ function summaryLine(notice: AppNotice): string {
   return notice.message.trim();
 }
 
+function actionsFor(notice: AppNotice) {
+  return notice.interaction?.actions ?? noticeActions(notice).map((action) => ({ ...action, dismiss: true }));
+}
+
 /** Inline status rail — document flow, never modal or fixed overlay. */
 export function NoticeRail(props: Props) {
   // SpendCeilingReachedNudge presents the spend-ceiling stop.
@@ -81,26 +85,22 @@ export function NoticeRail(props: Props) {
     for (const id of live) seenIds.add(id);
   });
 
-  // Each notice keeps its expiry timer across store updates.
+  // Membership changes do not restart an existing expiry timer.
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
   createEffect(() => {
-    noticeIds();
-    const rows = untrack(notices);
-    const live = new Set(rows.map((n) => n.id));
-    for (const [id, timer] of [...timers]) {
-      if (live.has(id)) continue;
+    const rows = notices();
+    const expiring = new Set(rows.filter((notice) => notice.severity === "info" && notice.interaction?.autoDismiss !== false).map((notice) => notice.id));
+    for (const [id, timer] of timers) {
+      if (expiring.has(id)) continue;
       clearTimeout(timer);
       timers.delete(id);
     }
-    for (const notice of rows) {
-      if (notice.severity !== "info" || timers.has(notice.id)) continue;
-      timers.set(
-        notice.id,
-        setTimeout(() => {
-          timers.delete(notice.id);
-          props.onDismiss(notice.id);
-        }, INFO_AUTO_DISMISS_MS),
-      );
+    for (const id of expiring) {
+      if (timers.has(id)) continue;
+      timers.set(id, setTimeout(() => {
+        timers.delete(id);
+        props.onDismiss(id);
+      }, INFO_AUTO_DISMISS_MS));
     }
   });
   onCleanup(() => {
@@ -180,6 +180,7 @@ export function NoticeRail(props: Props) {
                 }}
                 data-testid="notice"
                 data-notice-id={notice.id}
+                data-notice-code={notice.code}
               >
                 {/* Header chrome would block selecting the notice text. */}
                 <div class="den-notice-body" {...proseProps()}>
@@ -199,9 +200,9 @@ export function NoticeRail(props: Props) {
                         <p class="den-notice-action">{action}</p>
                       )}
                     </Show>
-                    <Show when={noticeActions(notice).length > 0}>
+                    <Show when={actionsFor(notice).length > 0}>
                       <div class="den-notice-actions">
-                        <For each={noticeActions(notice)}>
+                        <For each={actionsFor(notice)}>
                           {(action) => (
                             <DenButton
                               variant={action.variant ?? "secondary"}
@@ -210,7 +211,7 @@ export function NoticeRail(props: Props) {
                               {...chromeProps()}
                               onClick={() => {
                                 action.run();
-                                props.onDismiss(notice.id);
+                                if (action.dismiss !== false) props.onDismiss(notice.id);
                               }}
                             >
                               {action.label}

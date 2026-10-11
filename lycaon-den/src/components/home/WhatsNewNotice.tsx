@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal } from "solid-js";
+import { Show, createEffect, createSignal, createMemo, on, onCleanup } from "solid-js";
 import type { JSX } from "solid-js";
 import { lastSeenHealth } from "../../platform/connection/health.ts";
 import {
@@ -15,33 +15,30 @@ import { decideWhatsNew } from "../../whats-new/whats-new-gate.ts";
 import { shouldShowOnboardingHardGate } from "../onboarding/onboarding-gate-model.ts";
 import type { NoticeStore } from "../../notices/notice-store.ts";
 import { APP_SCOPE } from "../../notices/notice-scope.ts";
+import { CLIENT_NOTICES } from "../../notices/client-notices.generated.ts";
 import { WhatsNewDialog } from "./WhatsNewDialog.tsx";
 
 export type WhatsNewNoticeProps = {
   notices: NoticeStore;
-  /** Override /health version (tests). */
   currentVersion?: string | null;
-  /** Override notes lookup (tests). */
   notesFor?: (version: string) => string;
-  /** Override latch write (tests). */
   saveLatch?: (version: string) => Promise<void>;
 };
 
-type VisibleCard = { version: string; notes: string };
+type ReleaseNotes = { version: string; notes: string };
 
 /** Release acknowledgement belongs to the shared app notice. */
 export function WhatsNewNotice(props: WhatsNewNoticeProps): JSX.Element {
-  const [visible, setVisible] = createSignal<VisibleCard | null>(null);
+  const [visible, setVisible] = createSignal<ReleaseNotes | null>(null);
   const [applying, setApplying] = createSignal(false);
   const [reading, setReading] = createSignal(false);
 
+  const currentVersion = createMemo(() => props.currentVersion !== undefined
+    ? props.currentVersion : lastSeenHealth()?.version);
+
   createEffect(() => {
     if (applying()) return;
-
-    const current =
-      props.currentVersion !== undefined
-        ? props.currentVersion
-        : (lastSeenHealth()?.version ?? undefined);
+    const current = currentVersion();
     if (current === undefined) return;
 
     const notesFn = props.notesFor ?? notesForVersion;
@@ -87,15 +84,15 @@ export function WhatsNewNotice(props: WhatsNewNoticeProps): JSX.Element {
     }
   };
 
-  createEffect(() => {
-    const card = visible();
+  onCleanup(() => props.notices.withdraw("whats_new", APP_SCOPE));
+  createEffect(on(visible, (card) => {
     props.notices.withdraw("whats_new", APP_SCOPE);
     if (!card) return;
     props.notices.publish({
       code: "whats_new",
       severity: "info",
-      title: `What’s new in ${card.version}`,
-      message: "Review the latest changes when you have a moment.",
+      title: `${CLIENT_NOTICES.whats_new.title} ${card.version}`,
+      message: CLIENT_NOTICES.whats_new.message,
       interaction: {
         autoDismiss: false,
         onDismiss: () => void onGotIt(),
@@ -105,7 +102,7 @@ export function WhatsNewNotice(props: WhatsNewNoticeProps): JSX.Element {
         ],
       },
     }, APP_SCOPE);
-  });
+  }));
 
   return <Show when={visible()} keyed>{(card) => <WhatsNewDialog
     open={reading()}

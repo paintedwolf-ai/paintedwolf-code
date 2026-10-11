@@ -51,7 +51,8 @@ export type ClientNoticeKind =
   | "update_available"
   | "update_failed"
   | "update_ready"
-  | "view_render_failed";
+  | "view_render_failed"
+  | "whats_new";
 
 export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>> = {
   contribution_frame_unavailable: {
@@ -247,5 +248,10 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     message: "Something went wrong while drawing this view. Your work is safe — the session and everything in it are intact.",
     suggestedAction: "Reload the view to try again. The rest of the app still works.",
     scope: "session",
+  },
+  whats_new: {
+    title: "What’s new in",
+    message: "Review the latest changes when you have a moment.",
+    scope: "app",
   },
 };
