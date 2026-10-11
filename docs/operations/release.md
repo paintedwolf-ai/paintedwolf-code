@@ -308,4 +308,4 @@ and is not a release gate.
 
 ## 1.0.2 release review
 
-The [independent readiness review](release-readiness-1.0.2.md) records the reviewed candidate, corrections, and outstanding qualification. Review fixes are not release qualification. Provision the retained feed signing key map, qualify the exact assembled commit, and complete the packaged Preview updater rehearsal before publishing Stable.
+Review fixes are not release qualification. Provision the retained feed signing key map, qualify the exact assembled commit, and complete the packaged Preview updater rehearsal before publishing Stable.
