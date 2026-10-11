@@ -5,23 +5,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"os"
-	"path/filepath"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/browser/renderhandle"
-	"github.com/lycaon/lycaon/internal/browserengine"
-	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/visualscreen"
 	"github.com/lycaon/lycaon/pkg/api"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 const ViewImageToolName = "view_image"
@@ -78,25 +75,6 @@ type viewImageResult struct {
 	ScreeningGap string `json:"screening_gap,omitempty"`
 }
 
-// screened is what one visual screen released for perception.
-type screened struct {
-	text       string
-	bytes      []byte
-	mime       string
-	perception visualscreen.Perception
-	gap        string
-}
-
-func (s screened) perceive() bool { return s.perception != visualscreen.PerceptionWithheld }
-
-// resultPerception is empty for the original-perception default.
-func (s screened) resultPerception() string {
-	if s.perception == visualscreen.PerceptionOriginal {
-		return ""
-	}
-	return string(s.perception)
-}
-
 // ViewImageHandler builds the view_image handler for inspecting images visually.
 func ViewImageHandler(deps ViewImageDeps) tools.ToolHandler {
 	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
@@ -109,69 +87,6 @@ func ViewImageHandler(deps ViewImageDeps) tools.ToolHandler {
 		}
 		return handleViewImageByPath(ctx, deps, tctx, in)
 	}
-}
-
-// screenVisual runs the secret screen for tool, mapping bound and decode failures to
-// the image rejections a path read uses.
-func screenVisual(ctx context.Context, gate *visualscreen.Gate, tool string, tctx tools.ToolContext, in visualscreen.VisualScreenInput, rejectData map[string]any) (screened, error) {
-	out := screened{bytes: in.RawBytes, mime: in.Mime, perception: visualscreen.PerceptionOriginal}
-	if gate == nil {
-		kind, err := visualscreen.Classify(in.Mime, in.RawBytes)
-		if err == nil {
-			switch kind {
-			case visualscreen.KindRaster:
-				if _, err := visualscreen.CheckRasterBounds(in.RawBytes); err != nil {
-					return out, imageRejectFor(err, rejectData)
-				}
-			case visualscreen.KindSVG:
-				if scanned, err := visualscreen.NewScanner(nil).Scan(ctx, in.Mime, in.RawBytes); err == nil {
-					out.text = scanned.ExtractedText
-				}
-			}
-		}
-		return out, nil
-	}
-	in.SessionID, in.ProjectID = tctx.Identity.SessionID, tctx.Identity.ProjectID
-	in.ToolName, in.ToolCallID = tool, tctx.Identity.ToolCallID
-	outcome, err := gate.Screen(ctx, in)
-	if err != nil {
-		if errors.Is(err, visualscreen.ErrVisualSecretWithheld) {
-			return out, &toolrejection.ToolReject{Code: "IMAGE_SECRET_WITHHELD", Data: rejectData}
-		}
-		return out, imageRejectFor(err, rejectData)
-	}
-	out.text = outcome.ExtractedText
-	out.bytes = outcome.PerceiveBytes
-	out.mime = outcome.Mime
-	out.perception = outcome.Perception
-	out.gap = string(outcome.Gap)
-	return out, nil
-}
-
-func imageRejectFor(err error, data map[string]any) error {
-	var dims *visualscreen.DimensionsError
-	if errors.As(err, &dims) {
-		return &toolrejection.ToolReject{Code: "IMAGE_DIMENSIONS_EXCEEDED", Data: withImageFacts(data, map[string]any{
-			"width": dims.Width, "height": dims.Height, "max_dimension": dims.Max,
-		})}
-	}
-	if errors.Is(err, visualscreen.ErrImageUndecodable) {
-		return &toolrejection.ToolReject{Code: "IMAGE_CORRUPTED", Data: withImageFacts(data, map[string]any{
-			"rejection_reason": err.Error(),
-		})}
-	}
-	return err
-}
-
-func withImageFacts(base, extra map[string]any) map[string]any {
-	out := make(map[string]any, len(base)+len(extra))
-	for k, v := range base {
-		out[k] = v
-	}
-	for k, v := range extra {
-		out[k] = v
-	}
-	return out
 }
 
 // handleViewImageByHandle re-inspects a render handle or a stored artifact.
@@ -339,127 +254,6 @@ func imageBytesExceeded(modelPath string, size int64, maxBytes int) error {
 	return &toolrejection.ToolReject{Code: "IMAGE_BYTES_EXCEEDED", Data: map[string]any{
 		"path": modelPath, "bytes": size, "max_bytes": maxBytes,
 	}}
-}
-
-// renderSVGView rasterizes the screened markup; redaction already rewrote it.
-func renderSVGView(
-	ctx context.Context,
-	raster *browser.Rasterizer,
-	tctx tools.ToolContext,
-	svgBytes []byte,
-	displayPath string,
-	in viewImageArgs,
-	view screened,
-) (string, error) {
-	if raster == nil {
-		return "", errors.New("browser rasterizer unavailable for svg rendering")
-	}
-	scale := in.Scale
-	if scale <= 0 {
-		scale = 1.0
-	}
-	if scale < 0.1 || scale > 4.0 {
-		return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
-			"reason": "invalid_scale",
-			"scale":  scale,
-			"min":    0.1,
-			"max":    4.0,
-		})
-	}
-	res := viewImageResult{
-		Path:         displayPath,
-		Format:       "svg",
-		SizeBytes:    int64(len(svgBytes)),
-		Transparent:  true,
-		Text:         runeclamp.Clamp(view.text, 4000),
-		Perception:   view.resultPerception(),
-		ScreeningGap: view.gap,
-	}
-	if !view.perceive() {
-		raw, _ := surveyjson.Marshal(res)
-		return string(raw), nil
-	}
-	width, height := 0, 0
-	if in.Viewport != nil {
-		width = in.Viewport.Width
-		height = in.Viewport.Height
-	}
-	out, err := raster.Rasterize(ctx, browser.RasterizeRequest{
-		Markup:       string(view.bytes),
-		Mime:         "svg",
-		Width:        width,
-		Height:       height,
-		Scale:        scale,
-		Theme:        "transparent",
-		ProjectRoot:  tctx.ActiveRootPath(),
-		CaptureScope: captureScope(tctx),
-	})
-	if err != nil {
-		rej := &browserengine.RejectError{}
-		if errors.As(err, &rej) {
-			return "", &toolrejection.ToolReject{Code: rej.Code, Data: rej.Data}
-		}
-		return "", err
-	}
-	if tctx.Effects.Out == nil {
-		tctx.Effects.Out = &tools.ToolInvocationOut{}
-	}
-	caption, err := raster.ProjectCaption(ctx, captureScope(tctx), displayPath)
-	if err != nil {
-		caption = displayPath
-	}
-	tctx.Effects.Out.Visual = &tools.VisualCapture{
-		Mime:      out.Mime,
-		Bytes:     append([]byte(nil), out.Bytes...),
-		Source:    api.VisualArtifactSourceRender,
-		Caption:   caption,
-		Perceive:  true,
-		Projected: true,
-	}
-	res.Width, res.Height = out.Canvas.Width, out.Canvas.Height
-	raw, _ := surveyjson.Marshal(res)
-	return string(raw), nil
-}
-
-// renderRasterView reports the source dimensions and attaches the screened
-// pixels normalized for the model.
-func renderRasterView(tctx tools.ToolContext, rawBytes []byte, displayPath string, view screened) (string, error) {
-	header, err := visualscreen.CheckRasterBounds(rawBytes)
-	rejectData := map[string]any{"path": displayPath, "format": header.Format}
-	if err != nil {
-		return "", imageRejectFor(err, rejectData)
-	}
-	res := viewImageResult{
-		Path:         displayPath,
-		Format:       header.Format,
-		Width:        header.Width,
-		Height:       header.Height,
-		SizeBytes:    int64(len(rawBytes)),
-		Text:         runeclamp.Clamp(view.text, 4000),
-		Perception:   view.resultPerception(),
-		ScreeningGap: view.gap,
-	}
-	if view.perceive() {
-		norm, err := providerwire.NormalizeImageBytes(view.bytes, view.mime, visual.MaxRasterBytes())
-		if err != nil {
-			return "", &toolrejection.ToolReject{Code: "IMAGE_CORRUPTED", Data: withImageFacts(rejectData, map[string]any{
-				"rejection_reason": err.Error(),
-			})}
-		}
-		if tctx.Effects.Out == nil {
-			tctx.Effects.Out = &tools.ToolInvocationOut{}
-		}
-		tctx.Effects.Out.Visual = &tools.VisualCapture{
-			Mime:      norm.Mime,
-			Bytes:     norm.Bytes,
-			Source:    api.VisualArtifactSourceWorkspace,
-			Caption:   displayPath,
-			Perceive:  true,
-			Projected: true,
-		}
-	}
-	raw, _ := surveyjson.Marshal(res)
-	return string(raw), nil
 }
 
 func parseViewImageArgs(args map[string]any) (viewImageArgs, error) {
