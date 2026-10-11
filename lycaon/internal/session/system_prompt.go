@@ -28,7 +28,7 @@ func (m *Host) SetPromptEngine(engine prompts.PromptTemplateEngine) {
 func (m *Host) SetCoordinatorTurnFrameSource(source inject.CoordinatorTurnFrameSource) {
 	if m != nil {
 		m.Coordinator.Context.Frame = source
-		m.Coordinator.Tools.Frame = source
+		m.Coordinator.Tools.Results.Frame = source
 		m.Coordinator.Assembly.Frame = source
 		m.Coordinator.Loop.Frame = source
 
@@ -64,9 +64,9 @@ func (m *Host) SetWorkflowHints(cfg *guidance.HintConfig, gateFeedback *feedback
 		m.Coordinator.Feedback.Rejects = guidance.NewToolRejectFormatter(guidance.NewFeedbackDeduper())
 		m.Resources.Tools.Rejects = m.Coordinator.Feedback.Rejects
 		m.Coordinator.Guards.SetRejects(m.Coordinator.Completion.Rejects, m.Coordinator.Feedback.Rejects)
-		m.Coordinator.Tools.Enricher = guidance.NewToolOutputEnricher(cfg, gateFeedback)
+		m.Coordinator.Tools.Results.Enricher = guidance.NewToolOutputEnricher(cfg, gateFeedback)
 
-		m.Resources.Tools.Outputs = m.Coordinator.Tools.Enricher
+		m.Resources.Tools.Outputs = m.Coordinator.Tools.Results.Enricher
 	}
 }
 
