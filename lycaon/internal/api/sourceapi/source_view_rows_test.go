@@ -18,16 +18,16 @@ import (
 
 func TestSourceViewComparisonFramesPreserveSourceAnchors(t *testing.T) {
 	server := newSourceHandlerFixture(t)
-	defer server.sourceReaders.Close()
+	defer server.Views.sourceReaders.Close()
 	p := &project.Project{ID: uuid.NewString()}
 	request := wire.SourceComparisonViewCreate{Kind: "comparison", ClientID: uuid.NewString(), OperationID: uuid.NewString(), Intent: wire.SourceComparisonIntent{Mode: "full"}}
-	view := server.newComparisonView(pagedview.Scope{Person: "person", Project: p.ID}, p, request)
+	view := server.ComparisonViews.newComparisonView(pagedview.Scope{Person: "person", Project: p.ID}, p, request)
 	view.id = uuid.NewString()
 	defer view.close()
 	text := strings.Repeat("const value = 1;\n", 500)
 	comparison, err := loadTextComparison(wire.TextComparisonSource{Kind: "text", Path: "source.ts", Before: &text, After: &text})
 	testutil.FailErr(t, "resolve text comparison", err)
-	testutil.FailErr(t, "install comparison", server.installComparison(view, comparison))
+	testutil.FailErr(t, "install comparison", server.ComparisonViews.installComparison(view, comparison))
 	snapshot, err := view.snapshot(t.Context())
 	testutil.FailErr(t, "read source view state", err)
 	if snapshot.Comparison.State != "ready" || snapshot.Comparison.Extent.Rows != 500 {
@@ -96,29 +96,29 @@ func TestSourceAnchorRejectsForeignFieldsAndTrailingValues(t *testing.T) {
 
 func TestSourceViewsShareTextWhileKeepingSelectedEndpointMetadata(t *testing.T) {
 	server := newSourceHandlerFixture(t)
-	defer server.sourceReaders.Close()
+	defer server.Views.sourceReaders.Close()
 	p := &project.Project{ID: uuid.NewString()}
 	scope := pagedview.Scope{Person: "person", Project: p.ID}
 	request := wire.SourceComparisonViewCreate{Kind: "comparison", ClientID: "window:main", Intent: wire.SourceComparisonIntent{Mode: "full"}}
-	first := server.newComparisonView(scope, p, request)
+	first := server.ComparisonViews.newComparisonView(scope, p, request)
 	defer first.close()
-	second := server.newComparisonView(scope, p, request)
+	second := server.ComparisonViews.newComparisonView(scope, p, request)
 	defer second.close()
 	before := readerTextSide("shared.go", "old\n")
 	after := readerTextSide("shared.go", "new\n")
 	before.RootID, after.RootID = "root-one", "root-one"
 	before.VersionID, after.VersionID = "before-one", "after-one"
-	testutil.FailErr(t, "install first endpoints", server.installComparison(first, wire.SourceComparison{InRange: true, Before: &before, After: &after}))
+	testutil.FailErr(t, "install first endpoints", server.ComparisonViews.installComparison(first, wire.SourceComparison{InRange: true, Before: &before, After: &after}))
 	before.RootID, after.RootID = "root-two", "root-two"
 	before.VersionID, after.VersionID = "before-two", "after-two"
-	testutil.FailErr(t, "install second endpoints", server.installComparison(second, wire.SourceComparison{InRange: true, Before: &before, After: &after}))
-	if first.comparison != second.comparison {
+	testutil.FailErr(t, "install second endpoints", server.ComparisonViews.installComparison(second, wire.SourceComparison{InRange: true, Before: &before, After: &after}))
+	if first.comparisonData.comparison != second.comparisonData.comparison {
 		t.Fatal("identical source plans were not shared")
 	}
-	if second.comparisonBefore.RootID != "root-two" || second.comparisonAfter.VersionID != "after-two" {
+	if second.comparisonData.comparisonBefore.RootID != "root-two" || second.comparisonData.comparisonAfter.VersionID != "after-two" {
 		t.Fatal("shared plan replaced the selected endpoint metadata")
 	}
-	if first.comparisonBefore.RootID != "root-one" || first.comparisonAfter.VersionID != "after-one" {
+	if first.comparisonData.comparisonBefore.RootID != "root-one" || first.comparisonData.comparisonAfter.VersionID != "after-one" {
 		t.Fatal("new selection changed another view's endpoints")
 	}
 }

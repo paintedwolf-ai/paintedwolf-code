@@ -79,3 +79,22 @@ func TestOversizedVerdictFeedbackRetainsRepairIssues(t *testing.T) {
 		t.Fatal("projection changed durable diagnostics or exceeded budget")
 	}
 }
+
+func TestReviewFeedbackRetainsExactIDsOnModelProjection(t *testing.T) {
+	for _, code := range []string{"SUBMIT_VERDICT_REVIEW_REQUIRED", "SUBMIT_VERDICT_INVALID", "COMPLETE_LEG_REVIEW_ASSIGNMENT_MISSING"} {
+		msg := feedbackMessage()
+		msg.ToolResult.Tool = "submit_verdict"
+		msg.ToolResult.Feedback = []api.ToolFeedback{{Code: code, Details: map[string]any{"action": "dispatch_work", "work_id": "review/skeptic", "work_ids": []string{"question/claim-7/review"}, "job_ids": []string{"job-42"}, "missing_claim_ids": []string{"claim-7"}, "expected_claim_ids": []string{"claim-7", "claim-8"}}}}
+		for _, oversized := range []bool{false, true} {
+			if oversized {
+				msg.ToolResult.Feedback[0].Details["expected_call"] = strings.Repeat("x", maxToolFeedbackBytes)
+			}
+			projected := projectOne(t, msg)
+			for _, id := range []string{code, "dispatch_work", "review/skeptic", "question/claim-7/review", "job-42", "claim-7", "claim-8"} {
+				if !strings.Contains(projected.Content, id) {
+					t.Fatalf("%s missing from projected feedback (%s oversized=%v)", id, code, oversized)
+				}
+			}
+		}
+	}
+}

@@ -13,7 +13,7 @@ const componentsDir = join(denSrc, "components");
 const filesDir = join(denSrc, "files");
 const platformDir = join(denSrc, "platform");
 const tauriSrc = join(denSrc, "..", "src-tauri", "src");
-const goProjectDir = join(denSrc, "..", "..", "lycaon", "internal", "project");
+const goProjectSourceDir = join(denSrc, "..", "..", "lycaon", "internal", "projectsource");
 
 function rg(
   pattern: string,
@@ -100,12 +100,12 @@ describe("source navigation invariants", () => {
   });
 
   it("INV-SRC-05 — Go /source handler reuses evidence sandbox normalize", () => {
-    const sourceRead = read(join(goProjectDir, "source_read.go"));
+    const sourceRead = read(join(goProjectSourceDir, "source_read.go"));
     expect(sourceRead).toMatch(/evidence\.ResolveCitationAbs/);
-    const sourceWrite = read(join(goProjectDir, "source_write.go"));
+    const sourceWrite = read(join(goProjectSourceDir, "source_write.go"));
     expect(sourceWrite).toMatch(/evidence\.ResolveCitationAbs/);
-    const handlers = read(join(goProjectDir, "..", "api", "sourceapi", "project_source_handlers.go"));
-    expect(handlers).toMatch(/project\.ErrSourcePathDenied\):\s*\n\s*s\.responses\.Fail\(w, wire\.ApiErrorCodeSourcePathDenied,/);
+    const handlers = read(join(goProjectSourceDir, "..", "api", "sourceapi", "project_source_handlers.go"));
+    expect(handlers).toMatch(/projectsource\.ErrSourcePathDenied\):\s*\n\s*s\.responses\.Fail\(w, wire\.ApiErrorCodeSourcePathDenied,/);
     const vocabulary = YAML.parse(read(join(denSrc, "..", "..", "docs", "openapi", "vocab", "ApiErrorCode.yaml"))) as { values: { id: string; status: number }[] };
     expect(vocabulary.values.find(value => value.id === "source_path_denied")?.status).toBe(403);
   });

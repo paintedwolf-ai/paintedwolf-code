@@ -18,10 +18,10 @@ func (r *Registry) ActiveDirectIPJobs(sessionID string) []ActiveDirectIPJob {
 	if r == nil {
 		return nil
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
 	var out []ActiveDirectIPJob
-	for _, proc := range r.sessions[trim(sessionID)] {
+	for _, proc := range r.jobs.sessions[trim(sessionID)] {
 		status, ok := proc.directIPProtectionStatusLocked()
 		if !ok {
 			continue
@@ -51,12 +51,12 @@ func (proc *Process) directIPProtectionStatusLocked() (JobLiveness, bool) {
 
 // MarkDirectIPLivenessUnknown records uncertain liveness without assigning an exit state.
 func (r *Registry) MarkDirectIPLivenessUnknown(sessionID, handle string) error {
-	proc, err := r.lookup(sessionID, handle)
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
 	if proc.boundary.Network != confine.NetworkDirectIP || proc.kind != processKindPipeline {
 		return ErrProcessNotFound
 	}

@@ -29,3 +29,14 @@ sql:
         out: "."
         emit_json_tags: true
         emit_exact_table_names: true
+        overrides:
+          - column: "source_branch_heads.path"
+            go_type: "string"
+          - column: "source_branch_heads.state"
+            go_type: "string"
+          - column: "source_branch_heads.content_sha256"
+            go_type: "string"
+          - column: "source_branch_heads.ordinal"
+            go_type: "int64"
+          - column: "source_branch_heads.observed_ts"
+            go_type: "string"

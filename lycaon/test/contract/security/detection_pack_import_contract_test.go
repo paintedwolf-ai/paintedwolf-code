@@ -288,8 +288,15 @@ func TestDetectionPackImportedStillAskOnly(t *testing.T) {
 	}
 
 	res, err = approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
-		Tool: "write", Files: []string{"/etc/hosts"}, ProjectDir: t.TempDir(), SessionID: "s1",
-	})
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Files: []string{"/etc/hosts"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: t.TempDir(),
+SessionID: "s1",
+},
+})
 	testutil.FailErr(t, "Evaluate deny", err)
 	if !res.Required() || res.Gate() != api.GateOutsideRootsWrite {
 		t.Fatalf("native path escape must ask outside_roots (not a detection card): %+v", res)

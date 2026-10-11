@@ -6,7 +6,8 @@ import (
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,15 +24,15 @@ func readBoundaries(ctx context.Context, database *sql.DB, id string) ([]api.Che
 		}
 		cards = append(cards, card)
 	}
-	runs, err := readRuns(ctx, workflow.NewSQLStore(database), id)
+	runs, err := readRuns(ctx, workflowpersistence.New(database), id)
 	return cards, runs, err
 }
 
-func readRuns(ctx context.Context, store *workflow.SQLStore, sessionID string) ([]api.WorkflowRun, error) {
+func readRuns(ctx context.Context, store *runstate.Repository, sessionID string) ([]api.WorkflowRun, error) {
 	runs := []api.WorkflowRun{}
 	cursor := ""
 	for {
-		page, err := store.ListPageBySession(ctx, sessionID, 100, nil, cursor)
+		page, err := store.Runs.ListPageBySession(ctx, sessionID, 100, nil, cursor)
 		if err != nil {
 			return nil, err
 		}

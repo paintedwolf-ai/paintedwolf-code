@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,7 +24,7 @@ func TestTurnLoadWireProjectsAToolEvent(t *testing.T) {
 		Decisions: decisionsJSON(t, map[string]any{"tool_event": outcome, "preloaded_skill": &read}),
 		ElapsedMs: 640,
 	}
-	got := TurnLoadWire(receipt)
+	got := transcript.TurnLoadWire(receipt)
 	if got.Trigger != api.TurnLoadTriggerToolEvent || got.ToolCallID != "call-4" || got.Abstained {
 		t.Fatalf("identity = %+v", got)
 	}
@@ -40,12 +41,12 @@ func TestTurnLoadWireProjectsAToolEvent(t *testing.T) {
 	// A pointer names the skill without a read; an empty ranking matches nothing.
 	pointer := turnload.SkillRank{Name: "commit-in-logical-groups", Score: 3.0}
 	receipt.Decisions = decisionsJSON(t, map[string]any{"tool_event": turnload.ToolEventOutcome{Tool: "git_commit", Pointer: &pointer, Engine: engine}})
-	got = TurnLoadWire(receipt)
+	got = transcript.TurnLoadWire(receipt)
 	if got.PreloadedSkill != nil || got.Match == nil || got.Match.Names[0] != "commit-in-logical-groups" || got.Match.By != api.TurnLoadMatchByEngine {
 		t.Fatalf("pointer projection = %+v", got)
 	}
 	receipt.Decisions = decisionsJSON(t, map[string]any{"tool_event": turnload.ToolEventOutcome{Tool: "git_commit", Engine: engine}})
-	got = TurnLoadWire(receipt)
+	got = transcript.TurnLoadWire(receipt)
 	if got.Match == nil || got.Match.By != api.TurnLoadMatchByNone || len(got.Match.Names) != 0 {
 		t.Fatalf("no-match projection = %+v", got.Match)
 	}

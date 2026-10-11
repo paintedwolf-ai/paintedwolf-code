@@ -1,5 +1,5 @@
 tags: [edit, filesystem]
-description: "Create a new file, or write a whole file from scratch: HTML, JavaScript, CSS, Markdown, config, any text; also replaces a file's full content, or appends with append: true. Supported source must parse (MUTATION_BROKE_PARSE). Scope violation: WRITE_SCOPE_DENIED. Read existing editable files in an earlier response; concurrent edits rebase against it. EDITOR_DOCUMENT_READ_REQUIRED or EDITOR_DOCUMENT_CHANGING requires rereading."
+description: "Paths accept @scratch/<path> for this chat or worker’s private working files. Create a new file, or write a whole file from scratch: HTML, JavaScript, CSS, Markdown, config, any text; also replaces a file's full content, or appends with append: true. Supported source must parse (MUTATION_BROKE_PARSE). Scope violation: WRITE_SCOPE_DENIED. Read existing editable files in an earlier response; concurrent edits rebase against it. EDITOR_DOCUMENT_READ_REQUIRED or EDITOR_DOCUMENT_CHANGING requires rereading."
 schema:
   type: object
   properties:

@@ -31,7 +31,7 @@ func testMockConfig(t *testing.T) *llm.MockConfig {
 	return cfg
 }
 
-func wireExecutionCloseoutPolicy(t *testing.T, manager *session.Manager) {
+func wireExecutionCloseoutPolicy(t *testing.T, manager *session.Host) {
 	t.Helper()
 	loader, err := oar.NewLoader(filepath.Join(configlayout.FindModuleRoot(), "..", "schemas"))
 	testutil.FailErr(t, "create closeout policy loader", err)
@@ -47,15 +47,15 @@ func wireExecutionCloseoutPolicy(t *testing.T, manager *session.Manager) {
 	manager.SetOARPipeline(pipeline, oar.NewRenderer(formatter, nil))
 }
 
-func newExecutionStack(t *testing.T) (*session.Manager, *InMemoryQueue, *LocalWorkerExecutor, *LocalWorkerPoller) {
+func newExecutionStack(t *testing.T) (*session.Host, *InMemoryQueue, *LocalWorkerExecutor, *LocalWorkerPoller) {
 	t.Helper()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	wireExecutionCloseoutPolicy(t, mgr)
 	cfg := DefaultWorkersConfig()
 	queue := NewInMemoryQueue(cfg.Poller.MaxConcurrency)
 	queue.SetWorkersConfig(cfg)
-	exec := NewLocalWorkerExecutor(mgr, queue)
+	exec := NewLocalWorkerExecutor(mgr.Workers, queue, mgr.Workspace, mgr.Submissions, mgr.Runner.Transcript, mgr.Runner.Execution, mgr.Workers.Cancel, mgr.Workers.Cancellations)
 	exec.SetPromptInjects(promptstest.InjectRenderer(t))
 	poller := NewLocalWorkerPoller(queue, exec, cfg, discardOutcomeRecorder{})
 	queue.SetRunningCancel(poller.Abort)
@@ -172,7 +172,7 @@ func TestParentMessageCapAfterWorkers(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 
-	parent, err := mgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	parent, err := mgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "mgr.Create failed", err)
 	pollCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -195,7 +195,7 @@ func TestParentMessageCapAfterWorkers(t *testing.T) {
 		return len(tasks) >= 5
 	})
 
-	msgs, err := mgr.GetMessages(ctx, parent.ID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, parent.ID)
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	if len(msgs) > 20 {
 		t.Fatalf("parent messages = %d, want <= 20", len(msgs))

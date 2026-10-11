@@ -91,20 +91,21 @@ type DefaultLoopbackProvenance struct {
 }
 
 // NewLoopbackProvenance snapshots the listening ports present at engine start.
-func NewLoopbackProvenance() *DefaultLoopbackProvenance {
+func NewLoopbackProvenance(ctx context.Context) *DefaultLoopbackProvenance {
 	sockets := discoverDockerSockets()
-	return newLoopbackProvenance(hostListeners, lineageSessionOf, func(ctx context.Context) []dockerContainerInfo {
+	return newLoopbackProvenance(ctx, hostListeners, lineageSessionOf, func(ctx context.Context) []dockerContainerInfo {
 		return queryDockerContainers(ctx, sockets)
 	})
 }
 
 func newLoopbackProvenance(
+	parent context.Context,
 	listeners func(context.Context) ([]socketListener, error),
 	lineageSession func(int) (string, bool),
 	containers func(context.Context) []dockerContainerInfo,
 ) *DefaultLoopbackProvenance {
 	p := &DefaultLoopbackProvenance{listeners: listeners, lineageSession: lineageSession, containers: containers}
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 2*time.Second)
 	defer cancel()
 	if current, err := listeners(ctx); err == nil {
 		p.baseline = make(map[uint16]bool, len(current))

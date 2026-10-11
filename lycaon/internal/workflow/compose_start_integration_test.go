@@ -12,7 +12,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -33,8 +36,8 @@ func TestComposeThenStartRun(t *testing.T) {
 		Posture: wire.SessionPostureSpec,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "sessionStore.Create failed", err)
-	wfSessionStore := NewSessionWorkflowSQLStore(sqlDB)
-	composer := &Composer{
+	wfSessionStore := workflowdrafts.NewSQL(sqlDB)
+	composer := &workflowcomposition.Composer{
 		SessionStore: wfSessionStore,
 		Registry:     reg,
 		Agents:       agents,
@@ -53,32 +56,32 @@ phases:
       set_posture: build
     complete_when: delegation_closeout_complete
 `
-	if _, err := composer.Compose(context.Background(), ComposeRequest{
+	if _, err := composer.Compose(context.Background(), workflowcomposition.ComposeRequest{
 		SessionID: sess.ID, ManifestYAML: []byte(manifest), SessionPosture: sess.Posture, CreatedBy: "coordinator",
 	}); err != nil {
 		t.Fatal(err)
 	}
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs failed", err)
-	runStore := NewSQLStore(sqlDB)
+	runStore := workflowpersistence.New(sqlDB)
 	mgr := NewManager(runStore, sessionStore, manifestRegistry, nil)
-	mgr.Resolver = ManifestResolver{SessionStore: wfSessionStore}
+	mgr.Resolver.SessionStore = wfSessionStore
 	WireBlueprintDepsForTest(mgr, dir)
 	run, err := startRun(context.Background(), mgr, sess.ID, "hotfix-session", "1.0.0")
 	testutil.FailErr(t, "startRun failed", err)
 	if run.CurrentPhase != "research" {
 		t.Fatalf("phase = %q", run.CurrentPhase)
 	}
-	vars, err := mgr.Store.GetScaffoldVars(context.Background(), run.ID)
-	testutil.FailErr(t, "mgr.Store.GetScaffoldVars failed", err)
+	vars, err := mgr.Store.Runs.GetScaffoldVars(context.Background(), run.ID)
+	testutil.FailErr(t, "mgr.Store.Runs.GetScaffoldVars failed", err)
 	if vars["workflow_compose_summary_id"] != workflowdef.ManifestKey("hotfix-session", "1.0.0") {
 		t.Fatalf("vars = %v", vars)
 	}
 }
 
-func mustLoadComposePolicy(t *testing.T) *ComposePolicy {
+func mustLoadComposePolicy(t *testing.T) *workflowcomposition.ComposePolicy {
 	t.Helper()
-	p, err := LoadComposePolicy()
-	testutil.FailErr(t, "LoadComposePolicy failed", err)
+	p, err := workflowcomposition.LoadComposePolicy()
+	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
 	return p
 }

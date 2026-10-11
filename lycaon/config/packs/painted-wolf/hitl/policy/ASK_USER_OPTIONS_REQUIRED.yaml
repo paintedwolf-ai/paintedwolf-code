@@ -20,7 +20,7 @@ copy:
   cause: response_type is single_choice or multi_choice but options were missing, empty, or fewer than two
     after trim.
   why: Choice cards need a real option set for the user to pick from.
-  fix: Provide at least {{ paintedwolf.ask_option_limit }} meaningful non-empty options. Use text only when
+  fix: Provide at least {{ paintedwolf.ask_option_limit }} meaningful non-empty options. Move choices written in `prompt` into `options` and ask again. Use text only when
     a nonsecret question is better answered freely; never move protected input into text.
   instead: Branch on Code ASK_USER_OPTIONS_REQUIRED; provide a real choice set or a suitable nonsecret text
     question

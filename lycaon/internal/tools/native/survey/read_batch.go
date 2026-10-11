@@ -2,10 +2,10 @@ package survey
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"sort"
 
 	"github.com/lycaon/lycaon/internal/hostmarker"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
@@ -97,7 +97,7 @@ func parseReadRangeSpecs(args map[string]any) ([]readRangeSpec, string, error) {
 
 func (t *ReadTool) runBatch(path, text string, args map[string]any, source *surveyreceipt.SourceContext, capture *readCapture) (string, error) {
 	if readArgsConflict(args) {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "READ_ARGS_CONFLICT",
 			Data: map[string]any{
 				"detail": "use ranges alone, or offset/limit/mode=content — not both",

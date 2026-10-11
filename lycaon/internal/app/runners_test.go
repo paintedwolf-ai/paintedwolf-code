@@ -74,7 +74,7 @@ func TestBackgroundRunnerRestartsAfterFailure(t *testing.T) {
 		<-ctx.Done()
 		return ctx.Err()
 	})
-	app.runners[0].retryDelay = func(int) time.Duration { return time.Millisecond }
+	app.runners.runners[0].retryDelay = func(int) time.Duration { return time.Millisecond }
 	if err := app.startRunners(context.Background()); err != nil {
 		t.Fatalf("start runners: %v", err)
 	}
@@ -102,7 +102,7 @@ func TestBackgroundRunnerRestartsAfterPanic(t *testing.T) {
 		<-ctx.Done()
 		return ctx.Err()
 	})
-	app.runners[0].retryDelay = func(int) time.Duration { return time.Millisecond }
+	app.runners.runners[0].retryDelay = func(int) time.Duration { return time.Millisecond }
 	if err := app.startRunners(context.Background()); err != nil {
 		t.Fatalf("start runners: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestOneShotRunnerFailureAbortsStartup(t *testing.T) {
 	if got := attempts.Load(); got != 1 {
 		t.Fatalf("attempts = %d want 1", got)
 	}
-	if app.runnersActive {
+	if app.runners.active {
 		t.Fatal("runners remained active after startup failure")
 	}
 }
@@ -137,7 +137,7 @@ func TestOneShotRunnerFailureAbortsStartup(t *testing.T) {
 func TestReportRecoveryBlocksNormalServing(t *testing.T) {
 	boom := errors.New("source mutation journal remained unsettled")
 	b := &serveBuilder{}
-	err := delegationWiring{b}.reportRecovery(bootrecovery.Report{
+	err := b.reportRecovery(bootrecovery.Report{
 		Phase: bootrecovery.PhaseBuild,
 		Outcomes: []bootrecovery.Outcome{{
 			Name: "source-mutations", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild, Err: boom,
@@ -169,7 +169,7 @@ func TestRunnerRegistryRejectsMalformedEntries(t *testing.T) {
 			if err := app.startRunners(t.Context()); err == nil {
 				t.Fatal("expected runner registry error")
 			}
-			if app.runnersActive {
+			if app.runners.active {
 				t.Fatal("malformed registry started runners")
 			}
 		})

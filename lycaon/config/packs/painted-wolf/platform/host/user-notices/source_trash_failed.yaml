@@ -1,11 +1,11 @@
 surfaces: [http]
 notification: { tier: non_catastrophic, scope: session }
-title: "Couldn\u2019t move to trash"
+title: "Couldn\u2019t move to Trash"
 retryable: true
-message: "The system could not complete the move to trash. {{ reason }}"
-suggested_action: "Retry to finish the move. Recovery data has been preserved."
+message: "The system could not complete the move to Trash. {{ reason }}"
+suggested_action: "Check file permissions and close applications using the item, then retry."
 scenarios:
   - id: default
     vars: {reason: "The disk is full."}
     expect_contains:
-      - "The system could not complete the move to trash"
+      - "The system could not complete the move to Trash"

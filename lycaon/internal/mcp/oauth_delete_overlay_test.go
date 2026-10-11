@@ -9,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func newOAuthDeleteHarness(t *testing.T) (*mcp.RegistryImpl, *mcp.OAuthTokenStore) {
+func newOAuthDeleteHarness(t *testing.T) (*mcp.Runtime, *mcp.OAuthTokenStore) {
 	t.Helper()
 	store := mcp.NewOAuthTokenStoreAt(filepath.Join(t.TempDir(), "credential-vault.age"))
 	testutil.FailErr(t, "seed oauth token", store.Put("svca", mcp.OAuthTokenRecord{
@@ -19,21 +19,21 @@ func newOAuthDeleteHarness(t *testing.T) (*mcp.RegistryImpl, *mcp.OAuthTokenStor
 		t.Fatal("expected the seeded token to be present before delete")
 	}
 	stageFakeDistro(t, "svca")
-	reg, err := mcp.NewRegistryImpl(mcp.RegistryOptions{
+	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath:          t.TempDir(),
 		GlobalOverridePath: filepath.Join(t.TempDir(), "mcp.yaml"),
 		Connector:          &mcp.MockConnector{},
 		OAuthStore:         store,
 	})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	testutil.FailErr(t, "Load", reg.Load(t.Context()))
+	testutil.FailErr(t, "NewRuntime", err)
+	testutil.FailErr(t, "Load", reg.Catalog.Load(t.Context()))
 	return reg, store
 }
 
 // Removing a provider at device scope must also revoke its stored OAuth token.
 func TestDeleteOverlayRevokesStoredOAuthToken(t *testing.T) {
 	reg, store := newOAuthDeleteHarness(t)
-	if err := reg.DeleteOverlay(context.Background(), "svca", ""); err != nil {
+	if err := reg.Administration.DeleteOverlay(context.Background(), "svca", ""); err != nil {
 		testutil.FailErr(t, "DeleteOverlay", err)
 	}
 	if store.SignedIn("svca") {
@@ -45,7 +45,7 @@ func TestDeleteOverlayRevokesStoredOAuthToken(t *testing.T) {
 // device provider's token intact.
 func TestDeleteOverlayProjectScopeKeepsDeviceOAuthToken(t *testing.T) {
 	reg, store := newOAuthDeleteHarness(t)
-	if err := reg.DeleteOverlay(context.Background(), "svca", t.TempDir()); err != nil {
+	if err := reg.Administration.DeleteOverlay(context.Background(), "svca", t.TempDir()); err != nil {
 		testutil.FailErr(t, "DeleteOverlay project scope", err)
 	}
 	if !store.SignedIn("svca") {

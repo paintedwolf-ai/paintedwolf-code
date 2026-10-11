@@ -53,7 +53,8 @@ The plan is stamped, not automatically dispatched. If no leg from this plan has 
 When no phase work is required below, work the user's request directly.
 {% if phase_exit.kind == "terminal" %}
 This is the last phase. There is no further advance to call.
-{% elif phase_exit.kind == "review_loop" %}{% if phase_exit.review_agents %}
+{% elif phase_exit.kind == "review_loop" %}{% if phase_exit.review_work_ids %}Use these exact `workflow_work_id` values: {% for agent, work_id in phase_exit.review_work_ids %}`{{ agent }}` → `{{ work_id }}`. {% endfor %}
+{% endif %}{% if phase_exit.review_agents %}
 1. Dispatch every owed reviewer ({% for a in phase_exit.review_agents %}`{{ a }}`{% if not forloop.Last %}, {% endif %}{% endfor %}) as `task` legs in **one assistant message**, within user limits. Ask before conflicting review. A terminal verdict needs each successful envelope.
 {% endif %}{% if phase_exit.review_agents %}2{% else %}1{% endif %}. Weigh the critique, then call `submit_verdict`{% if phase_exit.verdict_outline %} with `verdict` shaped `{{ phase_exit.verdict_outline }}` (the first `verdict` value is terminal; the tool schema gives each member's type); arrays may be empty when no entry exists{% endif %}. Only that call records a verdict.{% if phase_exit.review_loop_key %}
 {% if phase_exit.review_agents %}3{% else %}2{% endif %}. A terminal verdict satisfies `evidence_passed:{{ phase_exit.review_loop_key }}`. {% if phase_exit.followup_attempts %}A non-terminal verdict registers open questions; dispatch their `workflow_work_id` for focused investigation ({{ phase_exit.followup_attempts }} completed attempts each).{% else %}A non-terminal verdict runs the loop again{% if phase_exit.review_loop_cap %}, up to {{ phase_exit.review_loop_cap }} time(s){% endif %}.{% endif %}{% endif %}
@@ -141,5 +142,5 @@ Answer in Markdown, then end with one `json` fence of the report's fields, not a
 
 {{ coverage_review }}
 
-Assess each obligation and gap in the declared `coverage_review` verdict member using the current revision. `satisfied` means the planned question is answered; gaps use `covered` for alternative evidence or `immaterial` with an evidence-backed reason. `material_open` leaves bounded work unanswered; `essential_open` leaves the review incomplete. Name affected obligation IDs and cite evidence for every assessment; a fact's `evidence` lists handles its legs cited and may be cited directly. Scanner limits and small counts alone establish neither completion nor failure. Path lists are samples; inspect the named scans for the full affected scope. Include unexamined in-scope areas in their obligation assessments. During a reconciling review, give the reviewer the candidate coverage assessments and challenge exclusions as well as findings. Carry the accepted assessment into the report; disclose limitations without treating accounted scanner findings as uncovered work.
+Assess the obligations and gaps in the current reconciliation subject, citing evidence and affected obligation IDs. Normal scanner limitations are disclosed; they do not alone reduce completeness. Mark work open when a planned question remains materially unanswered. Submit the supplied revision; the host checks review applicability and prerequisites. Read `pack_board(review_view: summary)` for current context and exact review work IDs.
 {% endif %}

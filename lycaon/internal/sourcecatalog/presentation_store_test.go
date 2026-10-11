@@ -10,10 +10,10 @@ import (
 
 func TestPresentationPagerSharesBoundsAndDiscardsReleasedState(t *testing.T) {
 	c := New()
-	first, releaseFirst, err := c.acquirePresentation(t.Context())
+	first, releaseFirst, err := c.Directories.acquirePresentation(t.Context())
 	testutil.FailErr(t, "open presentation pager", err)
 	defer releaseFirst()
-	second, releaseSecond, err := c.acquirePresentation(t.Context())
+	second, releaseSecond, err := c.Directories.acquirePresentation(t.Context())
 	testutil.FailErr(t, "join presentation pager", err)
 	defer releaseSecond()
 	if first != second {
@@ -28,7 +28,7 @@ func TestPresentationPagerSharesBoundsAndDiscardsReleasedState(t *testing.T) {
 		t.Fatalf("retained rows=%d", count)
 	}
 	releaseSecond()
-	third, releaseThird, err := c.acquirePresentation(t.Context())
+	third, releaseThird, err := c.Directories.acquirePresentation(t.Context())
 	testutil.FailErr(t, "open fresh presentation pager", err)
 	defer releaseThird()
 	testutil.FailErr(t, "verify no orphaned data", third.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM projection_meta`).Scan(&count))
@@ -47,7 +47,7 @@ func TestProjectionRowsPropagatesPagerStorageFull(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	catalog := New()
 	t.Cleanup(func() { testutil.FailErr(t, "drain catalog", catalog.Drain(t.Context())) })
-	projection, err := catalog.NewProjectionRows(t.Context(), "project", Root{ID: "root", Path: t.TempDir()})
+	projection, err := catalog.Directories.NewProjectionRows(t.Context(), "project", Root{ID: "root", Path: t.TempDir()})
 	testutil.FailErr(t, "create projection", err)
 	defer projection.Close()
 	_, err = projection.db.ExecContext(t.Context(), `PRAGMA max_page_count=64`)

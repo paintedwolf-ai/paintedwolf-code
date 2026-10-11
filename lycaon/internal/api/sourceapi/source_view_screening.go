@@ -20,32 +20,32 @@ type comparisonScreenKey struct {
 type comparisonScreenResult struct{ before, after *wire.SecretScreen }
 
 // Screening publishes annotations after the comparison becomes readable.
-func (s *Handler) screenComparisonView(ctx context.Context, view *sourceView) {
+func (s *ComparisonViews) screenComparisonView(ctx context.Context, view *sourceView) {
 	if s.SecretSpans == nil || !s.SecretSpans.Ready() {
 		return
 	}
-	view.secretScreenMu.Lock()
-	defer view.secretScreenMu.Unlock()
+	view.screening.secretScreenMu.Lock()
+	defer view.screening.secretScreenMu.Unlock()
 	s.screenComparisonLocked(ctx, view)
 }
 
 // A read schedules fresh annotations without waiting for initial preparation.
-func (s *Handler) refreshComparisonScreen(view *sourceView) {
-	if s.SecretSpans == nil || !s.SecretSpans.Ready() || !view.secretScreenMu.TryLock() {
+func (s *ComparisonViews) refreshComparisonScreen(view *sourceView) {
+	if s.SecretSpans == nil || !s.SecretSpans.Ready() || !view.screening.secretScreenMu.TryLock() {
 		return
 	}
-	if view.secretScreenKey == nil {
-		view.secretScreenMu.Unlock()
+	if view.screening.secretScreenKey == nil {
+		view.screening.secretScreenMu.Unlock()
 		return
 	}
-	_, release, err := s.sourceViewRegistry().registry.Acquire(view.scope, view.id)
+	_, release, err := s.Views.sourceViewRegistry().registry.Acquire(view.scope, view.id)
 	if err != nil {
-		view.secretScreenMu.Unlock()
+		view.screening.secretScreenMu.Unlock()
 		return
 	}
 	s.background.Go(view.ctx, func(ctx context.Context) {
 		defer release()
-		defer view.secretScreenMu.Unlock()
+		defer view.screening.secretScreenMu.Unlock()
 		ctx, cancel := context.WithCancel(ctx)
 		stop := context.AfterFunc(view.ctx, cancel) //nolint:contextcheck // View release cancels its annotations.
 		defer cancel()
@@ -54,10 +54,10 @@ func (s *Handler) refreshComparisonScreen(view *sourceView) {
 	})
 }
 
-func (s *Handler) screenComparisonLocked(ctx context.Context, view *sourceView) {
+func (s *ComparisonViews) screenComparisonLocked(ctx context.Context, view *sourceView) {
 	view.mu.Lock()
-	before, after := view.comparisonBefore, view.comparisonAfter
-	readable := view.comparison != nil
+	before, after := view.comparisonData.comparisonBefore, view.comparisonData.comparisonAfter
+	readable := view.comparisonData.comparison != nil
 	view.mu.Unlock()
 	if !readable {
 		return
@@ -69,7 +69,7 @@ func (s *Handler) screenComparisonLocked(ctx context.Context, view *sourceView) 
 	key := comparisonScreenKey{scope: view.scope, evidence: evidence + s.SecretSpans.ClassificationRevision(screenCtx),
 		before: sourcecomparison.Hash(before.Content), after: sourcecomparison.Hash(after.Content),
 		beforeAvailable: before.Availability == "available", afterAvailable: after.Availability == "available"}
-	if view.secretScreenKey != nil && *view.secretScreenKey == key {
+	if view.screening.secretScreenKey != nil && *view.screening.secretScreenKey == key {
 		return
 	}
 	screens, err := s.sourceViews.comparisonScreens.Do(screenCtx, key, func(work context.Context) (comparisonScreenResult, error) {
@@ -90,11 +90,11 @@ func (s *Handler) screenComparisonLocked(ctx context.Context, view *sourceView) 
 		return
 	}
 	if reflect.DeepEqual(before.SecretScreen, screens.before) && reflect.DeepEqual(after.SecretScreen, screens.after) {
-		view.secretScreenKey = &key
+		view.screening.secretScreenKey = &key
 		return
 	}
 	if err := view.publishComparisonScreens(ctx, screens); err == nil {
-		view.secretScreenKey = &key
+		view.screening.secretScreenKey = &key
 		view.notifier.Notify(true)
 	}
 }
@@ -107,17 +107,17 @@ func (view *sourceView) publishComparisonScreens(ctx context.Context, screens co
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	projection, err := view.comparisonProjection(ctx, view.comparison, view.comparisonIntent, screens.before, screens.after)
+	projection, err := view.comparisonProjection(ctx, view.comparisonData.comparison, view.comparisonData.comparisonIntent, screens.before, screens.after)
 	if err != nil {
 		return err
 	}
-	before, after := view.comparisonBefore, view.comparisonAfter
+	before, after := view.comparisonData.comparisonBefore, view.comparisonData.comparisonAfter
 	before.SecretScreen, after.SecretScreen = screens.before, screens.after
-	details := *view.details
+	details := *view.comparisonData.details
 	details.Before, details.After = readerEndpoint(before), readerEndpoint(after)
-	previous := view.projection
-	view.projection, view.details = projection, &details
-	view.comparisonBefore, view.comparisonAfter = before, after
+	previous := view.comparisonData.projection
+	view.comparisonData.projection, view.comparisonData.details = projection, &details
+	view.comparisonData.comparisonBefore, view.comparisonData.comparisonAfter = before, after
 	view.projectionRevision = uuid.NewString()
 	previous.release()
 	return nil

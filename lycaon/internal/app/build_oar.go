@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"fmt"
-
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -11,23 +10,23 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/mcp/bindings"
 	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // wireOARBlockPlane loads OAR rules, enables catalog Anchors for active
 // families, and attaches the Emit/Binding block plane.
-func (b toolWiring) wireOARBlockPlane() error {
-	if b.toolRuntime == nil || b.mgr == nil {
+func (b *serveBuilder) wireOARBlockPlane() error {
+	if b.execution.Host == nil || b.sessions == nil || b.sessions.Manager == nil {
 		return fmt.Errorf("oar: tool runtime and session manager required")
 	}
-	if b.deviceView == nil || b.deviceView.Rules == nil {
+	if b.catalog.DeviceView == nil || b.catalog.DeviceView.Rules == nil {
 		return fmt.Errorf("oar: device catalog view required")
 	}
-	schemaDir := configlayout.SchemasDir(b.configRoot)
+	schemaDir := configlayout.SchemasDir(b.catalog.ModuleRoot)
 	if schemaDir == "" {
 		return fmt.Errorf("oar: no %s/ tree beside config root %s — desktop bundles must stage it (scripts/den-build-bundle.sh)",
-			configlayout.SchemasDirName, b.configRoot)
+			configlayout.SchemasDirName, b.catalog.ModuleRoot)
 	}
 	if err := anchorcatalog.InstallBundled(); err != nil {
 		return fmt.Errorf("oar: load anchor catalog: %w", err)
@@ -39,7 +38,7 @@ func (b toolWiring) wireOARBlockPlane() error {
 	if err := oar.InstallCapabilityBundled(schemaDir); err != nil {
 		return fmt.Errorf("oar: %w", err)
 	}
-	matcher, err := sessionWiring(b).loadSecretMatcher()
+	matcher, err := b.security.LoadMatcher(b.startup.ctx, b.startup.cfg.TestSecretMatcher)
 	if err != nil {
 		return fmt.Errorf("oar secretmatch detector: %w", err)
 	}
@@ -49,12 +48,11 @@ func (b toolWiring) wireOARBlockPlane() error {
 		return fmt.Errorf("oar loader: %w", err)
 	}
 	loader.SetDetectors(detectors)
-	rs := b.deviceView.Rules
+	rs := b.catalog.DeviceView.Rules
 	if err := oar.ValidateHostRuleSet(rs); err != nil {
 		return err
 	}
 	pipeline := oar.NewGuardPipeline(rs, loader, oar.NewCounterStore())
-	pipeline.SetEventPublisher(oarHostEventPublisher{publisher: b.eventPub})
 	pipeline.SetDetectors(detectors)
 	pipeline.SetFactProvider("secret_matches", func(gc *oar.GuardContext) error {
 		findings, err := (oar.SecretMatchDetector{Matcher: matcher}).Inspect(gc)
@@ -79,29 +77,31 @@ func (b toolWiring) wireOARBlockPlane() error {
 	pipeline.EnableAnchor(oar.AnchorContentOutput)
 	pipeline.EnableAnchor(oar.AnchorContentToolResult)
 
-	mgr := b.mgr
+	mgr := b.sessions.Manager
 	pipeline.SetRuleSetFor(func(ctx context.Context, sessionID string) *oar.RuleSet {
-		view := mgr.Catalog().ViewForSessionID(ctx, sessionID)
+		view := mgr.Catalog.ViewForSessionID(ctx, sessionID)
 		if view == nil {
 			return nil
 		}
 		return view.Rules
 	})
-	anchor.SetAnchorsFor(func(ctx context.Context, sessionID string) *anchor.Registry {
-		view := mgr.Catalog().ViewForSessionID(ctx, sessionID)
+	releaseAnchors := anchor.SetAnchorsFor(func(ctx context.Context, sessionID string) *anchor.Registry {
+		view := mgr.Catalog.ViewForSessionID(ctx, sessionID)
 		if view == nil {
 			return nil
 		}
 		return view.Anchors
 	})
 
-	renderer := oar.NewRenderer(b.rejectFmt, nudgeFormatter{f: b.rejectFmt})
-	bp := &tools.BlockPlane{Pipeline: pipeline, Renderer: renderer}
-	b.toolRuntime.Executor.SetBlockPlane(bp)
-	b.mgr.SetOARPipeline(pipeline, renderer)
+	b.startup.resources.Track("session-anchor-resolver", 22, func(context.Context) error { releaseAnchors(); return nil })
+
+	renderer := oar.NewRenderer(b.execution.Rejections, nudgeFormatter{f: b.execution.Rejections})
+	bp := &toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: renderer}
+	b.execution.Host.Executor.Rejections.SetBlockPlane(bp)
+	b.sessions.Manager.SetOARPipeline(pipeline, renderer)
 
 	pipeline.SetMCPBindingsFor(func(ctx context.Context, sessionID string) []bindings.Binding {
-		view := mgr.Catalog().ViewForSessionID(ctx, sessionID)
+		view := mgr.Catalog.ViewForSessionID(ctx, sessionID)
 		if view == nil {
 			return nil
 		}

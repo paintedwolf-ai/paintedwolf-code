@@ -14,7 +14,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) writeSecretIgnoreError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Secrets) writeSecretIgnoreError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, projectignore.ErrReviewUnavailable):
 		s.responses.Fail(w, wire.ApiErrorCodeSecretReviewNotFound, "the secret review is no longer available")
@@ -35,7 +35,7 @@ func (s *Handler) writeSecretIgnoreError(w http.ResponseWriter, r *http.Request,
 	}
 }
 
-func (s *Handler) writeSecretIgnoresWithStatus(w http.ResponseWriter, r *http.Request, projectID, filterRootID string, status int) {
+func (s *Secrets) writeSecretIgnoresWithStatus(w http.ResponseWriter, r *http.Request, projectID, filterRootID string, status int) {
 	catalog, err := s.SecretIgnores.List(r.Context(), projectID)
 	if err != nil {
 		s.writeSecretIgnoreError(w, r, err)
@@ -76,7 +76,7 @@ func (s *Handler) writeSecretIgnoresWithStatus(w http.ResponseWriter, r *http.Re
 	httpio.WriteJSON(w, status, wire.SecretIgnoreList{Rules: rules})
 }
 
-func (s *Handler) HandleListSecretIgnores(w http.ResponseWriter, r *http.Request) {
+func (s *Secrets) HandleListSecretIgnores(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.Registry, s.responses, w, r)
 	if !ok {
 		return
@@ -91,7 +91,7 @@ func (s *Handler) HandleListSecretIgnores(w http.ResponseWriter, r *http.Request
 	s.writeSecretIgnoresWithStatus(w, r, p.ID, rootID, http.StatusOK)
 }
 
-func (s *Handler) HandleCreateProjectSecretIgnore(w http.ResponseWriter, r *http.Request) {
+func (s *Secrets) HandleCreateProjectSecretIgnore(w http.ResponseWriter, r *http.Request) {
 	release := requestscope.BeginRuntime(s.MutationGate, s.responses, w, r, chi.URLParam(r, "id"))
 	if release == nil {
 		return
@@ -124,7 +124,7 @@ func (s *Handler) HandleCreateProjectSecretIgnore(w http.ResponseWriter, r *http
 	s.writeSecretIgnoresWithStatus(w, r, p.ID, "", http.StatusCreated)
 }
 
-func (s *Handler) HandleDeleteProjectSecretIgnore(w http.ResponseWriter, r *http.Request) {
+func (s *Secrets) HandleDeleteProjectSecretIgnore(w http.ResponseWriter, r *http.Request) {
 	release := requestscope.BeginRuntime(s.MutationGate, s.responses, w, r, chi.URLParam(r, "id"))
 	if release == nil {
 		return
@@ -147,7 +147,7 @@ func (s *Handler) HandleDeleteProjectSecretIgnore(w http.ResponseWriter, r *http
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Handler) HandleSecretIgnoreCandidate(w http.ResponseWriter, r *http.Request) {
+func (s *Secrets) HandleSecretIgnoreCandidate(w http.ResponseWriter, r *http.Request) {
 	p, ok := requestscope.ProjectByURLID(s.Registry, s.responses, w, r)
 	if !ok {
 		return

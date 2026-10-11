@@ -84,6 +84,18 @@ schema:
   allOf:
     - if:
         properties:
+          response_type: {enum: [single_choice, multi_choice]}
+        required: [response_type]
+        not:
+          properties:
+            artifacts: {minItems: 1}
+          required: [artifacts]
+      then:
+        required: [options]
+        properties:
+          options: {minItems: 2}
+    - if:
+        properties:
           response_type: {const: secret}
         required: [response_type]
       then:

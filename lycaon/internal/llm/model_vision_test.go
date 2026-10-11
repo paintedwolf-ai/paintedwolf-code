@@ -31,7 +31,7 @@ func TestRegistryModelHasVision(t *testing.T) {
 	writeProvidersLocal(t, localPath, []byte(yaml))
 	catalog, err := NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "catalog", err)
-	reg, err := NewRegistry(catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")))
+	reg, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")))
 	testutil.FailErr(t, "registry", err)
 	reg.discoveryClient = srv.Client()
 	if !reg.ModelHasVision(t.Context(), "openai", "gpt-4o") {

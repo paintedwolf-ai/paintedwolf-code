@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/app/configuration"
+	"github.com/lycaon/lycaon/internal/app/deviceidentity"
 	"log/slog"
 	"path/filepath"
 
@@ -12,16 +14,16 @@ import (
 )
 
 // buildRecoveryApp serves recovery routes without opening the refused store.
-func buildRecoveryApp(ctx context.Context, cfg Config, b *serveBuilder, openErr error) (*ServeApp, error) {
-	dbPath, err := cfg.resolvedDBPath()
+func buildRecoveryApp(ctx context.Context, cfg configuration.Config, b *serveBuilder, openErr error) (*ServeApp, error) {
+	dbPath, err := cfg.ResolveDBPath()
 	if err != nil {
 		return nil, err
 	}
-	addr, err := cfg.resolvedListenAddr()
+	addr, err := cfg.ResolveListenAddr()
 	if err != nil {
 		return nil, fmt.Errorf("listen address: %w", err)
 	}
-	token, generated, err := resolveServeAPIToken()
+	token, generated, err := deviceidentity.ResolveToken()
 	if err != nil {
 		return nil, fmt.Errorf("api token: %w", err)
 	}
@@ -29,7 +31,7 @@ func buildRecoveryApp(ctx context.Context, cfg Config, b *serveBuilder, openErr 
 	var incompatible *db.StoreIncompatibleError
 	_ = errors.As(openErr, &incompatible)
 
-	logger := b.logger
+	logger := b.startup.logger
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -63,7 +65,7 @@ func buildRecoveryApp(ctx context.Context, cfg Config, b *serveBuilder, openErr 
 		ListenAddr:     addr,
 		APIToken:       token,
 		TokenGenerated: generated,
-		resources:      b.resources,
+		resources:      b.startup.resources,
 		// Recovery emits readiness so the shell can render restore controls.
 		startup: cfg.Startup,
 	}, nil

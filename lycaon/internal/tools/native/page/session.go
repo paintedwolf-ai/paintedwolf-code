@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/browser"
@@ -76,7 +77,7 @@ type pageActResult struct {
 	ID            string            `json:"id"`
 	ActionResults []json.RawMessage `json:"action_results,omitempty"`
 	browser.PageEvidence
-	RoutesActive int                      `json:"routes_active,omitempty"`
+	RoutesActive int                     `json:"routes_active,omitempty"`
 	Timeline     *timelinearchive.Report `json:"timeline,omitempty"`
 	// Coverage tells the reader whether the recording's text was fully screened.
 	Coverage  *browser.MaskCoverage `json:"coverage,omitempty"`
@@ -111,7 +112,7 @@ func OpenHandler(pool *browser.Pool, pages *pagesession.Registry, bg *bgprocess.
 		if err != nil {
 			return "", err
 		}
-		if err := requireCaptureProcess(bg, tctx.SessionID, in.URL, in.ProcessHandle); err != nil {
+		if err := requireCaptureProcess(bg, tctx.Identity.SessionID, in.URL, in.ProcessHandle); err != nil {
 			return "", err
 		}
 		if err := requireLoopbackAuthority(in.URL, tctx); err != nil {
@@ -137,24 +138,24 @@ func OpenHandler(pool *browser.Pool, pages *pagesession.Registry, bg *bgprocess.
 			if err != nil {
 				return "", mapBrowserReject(err)
 			}
-			if entry, err = pages.Open(ctx, tctx.SessionID, held); err != nil {
-				return "", capacityReject(err, tctx.SessionID)
+			if entry, err = pages.Open(ctx, tctx.Identity.SessionID, held); err != nil {
+				return "", capacityReject(err, tctx.Identity.SessionID)
 			}
 		}
 		if live != nil {
 			live.Attach(ctx, preview.AttachOpts{
-				ProjectID:          tctx.ProjectID,
-				SessionID:          tctx.SessionID,
-				ParentSessionID:    tctx.ParentSessionID,
+				ProjectID:          tctx.Identity.ProjectID,
+				SessionID:          tctx.Identity.SessionID,
+				ParentSessionID:    tctx.Identity.ParentSessionID,
 				PageID:             entry.ID,
 				AssistantMessageID: tctx.Invocation.MessageID,
-				ToolCallID:         tctx.ToolCallID,
+				ToolCallID:         tctx.Identity.ToolCallID,
 				Held:               entry.Held,
 			})
 		}
 		payload, _ := surveyjson.Marshal(OpenResult{
 			ID: entry.ID, FinalURL: entry.TargetURL, RoutesActive: len(in.Routes),
-			LivePages: pages.List(tctx.SessionID), MaxPages: pages.MaxPages(),
+			LivePages: pages.List(tctx.Identity.SessionID), MaxPages: pages.MaxPages(),
 		})
 		return string(payload), nil
 	}
@@ -166,11 +167,11 @@ func reopenHeld(ctx context.Context, pages *pagesession.Registry, tctx tools.Too
 	if err != nil {
 		return nil, nil //nolint:nilerr // An unresolvable target opens fresh and reports its own rejection.
 	}
-	liveID, ok := pages.FindByTarget(tctx.SessionID, target)
+	liveID, ok := pages.FindByTarget(tctx.Identity.SessionID, target)
 	if !ok {
 		return nil, nil
 	}
-	entry, err := pages.RequireRunning(tctx.SessionID, liveID)
+	entry, err := pages.RequireRunning(tctx.Identity.SessionID, liveID)
 	if err != nil || entry == nil || entry.Held == nil {
 		return nil, nil //nolint:nilerr // A page that stopped running is replaced by a fresh one.
 	}
@@ -183,7 +184,7 @@ func reopenHeld(ctx context.Context, pages *pagesession.Registry, tctx tools.Too
 func capacityReject(err error, sessionID string) error {
 	var capacity *pagesession.CapacityError
 	if errors.As(err, &capacity) {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "PAGE_CAP_REACHED",
 			Data: map[string]any{
 				"max_pages":     capacity.Limit,
@@ -211,16 +212,16 @@ func mapPageLifecycleReject(err error, id string) error {
 		code = "PAGE_NOT_RUNNING"
 		reason = "not_running"
 	}
-	return &tools.ToolReject{Code: code, Data: map[string]any{"id": id, "reason": reason}}
+	return &toolrejection.ToolReject{Code: code, Data: map[string]any{"id": id, "reason": reason}}
 }
 
 // attachPageVisual makes a page result's raster or recording the tool's visual. A timeline
 // is perceived as its contact sheet.
 func attachPageVisual(tctx tools.ToolContext, out browser.CaptureResult) {
-	if tctx.Out == nil {
+	if tctx.Effects.Out == nil {
 		return
 	}
-	tctx.Out.Visual = &tools.VisualCapture{
+	tctx.Effects.Out.Visual = &tools.VisualCapture{
 		Mime:      out.Mime,
 		Bytes:     append([]byte(nil), out.Bytes...),
 		Source:    api.VisualArtifactSourceCapture,
@@ -236,7 +237,7 @@ func attachPageVisual(tctx tools.ToolContext, out browser.CaptureResult) {
 func mapBrowserReject(err error) error {
 	rej := &browserengine.RejectError{}
 	if errors.As(err, &rej) {
-		return &tools.ToolReject{Code: rej.Code, Data: rej.Data}
+		return &toolrejection.ToolReject{Code: rej.Code, Data: rej.Data}
 	}
 	return err
 }
@@ -259,5 +260,5 @@ func recordedFailure(tctx tools.ToolContext, out browser.CaptureResult, err erro
 	}
 	data["timeline"] = out.Timeline
 	data["recorded"] = true
-	return &tools.ToolReject{Code: rej.Code, Data: data}
+	return &toolrejection.ToolReject{Code: rej.Code, Data: data}
 }

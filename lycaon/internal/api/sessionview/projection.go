@@ -15,7 +15,7 @@ import (
 type Projector struct {
 	Workflows *workflow.RunManager
 	Store     session.Store
-	Sessions  *session.Manager
+	Sessions  *session.Host
 	Projects  project.Registry
 }
 
@@ -36,11 +36,11 @@ func (s *Projector) EnrichSession(ctx context.Context, sess *wire.Session) {
 	}
 	s.HydrateSessionWorkspace(ctx, sess)
 	sess.UntrustedContent = s.Store.SessionUntrustedContent(sess.ID)
-	sess.PromptPending = s.Sessions.PromptPending(ctx, sess.ID)
-	if ui, err := s.Workflows.ComputeSessionUI(ctx, sess.ID); err == nil {
+	sess.PromptPending = s.Sessions.Runner.SubmissionState.PromptPending(ctx, sess.ID)
+	if ui, err := s.Workflows.Presentation.ComputeSessionUI(ctx, sess.ID); err == nil {
 		sess.UI = ui
 	}
-	if protection := s.Sessions.ProtectionStateForSession(sess.ID); protection != nil {
+	if protection := s.Sessions.Chats.Protection.ProtectionStateForSession(sess.ID); protection != nil {
 		if sess.UI == nil {
 			sess.UI = &wire.SessionUiState{}
 		}
@@ -70,12 +70,12 @@ func (s *Projector) EnrichWorkflowRun(ctx context.Context, run *wire.WorkflowRun
 	if run == nil {
 		return
 	}
-	_ = s.Workflows.AttachRunUI(ctx, run)
+	_ = s.Workflows.Presentation.AttachRunUI(ctx, run)
 }
 
 func (s *Projector) EnrichWorkflowRuns(ctx context.Context, runs []*wire.WorkflowRun) {
 	for _, run := range runs {
-		_ = s.Workflows.AttachRunUI(ctx, run)
+		_ = s.Workflows.Presentation.AttachRunUI(ctx, run)
 	}
 }
 

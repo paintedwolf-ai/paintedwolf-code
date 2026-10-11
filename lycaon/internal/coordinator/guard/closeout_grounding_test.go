@@ -1,6 +1,8 @@
 package guard_test
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"time"
 
@@ -15,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -178,7 +179,7 @@ func TestEvaluateCoordinatorCloseoutGrounding_investigateSurface(t *testing.T) {
 		}},
 	}
 	verdict, err := guard.EvaluateCoordinatorCloseoutGrounding(
-		context.Background(), ledger, sess, history, tools.SurfaceImplementInvestigate, report, []string{"read"}, evidence.CitationRoots{ProjectDir: root},
+		context.Background(), ledger, sess, history, toolcontract.SurfaceImplementInvestigate, report, []string{"read"}, evidence.CitationRoots{ProjectDir: root},
 	)
 	testutil.FailErr(t, "guard.EvaluateCoordinatorCloseoutGrounding failed", err)
 	if verdict.Code != guidance.InvestHandleNotObservedCode {
@@ -206,7 +207,7 @@ func TestEvaluateCoordinatorCloseoutGrounding_investigateCoordinatorEvidence(t *
 		}},
 	}
 	verdict, err := guard.EvaluateCoordinatorCloseoutGrounding(
-		context.Background(), ledger, sess, history, tools.SurfaceImplementInvestigate, report, []string{"read"}, evidence.CitationRoots{ProjectDir: root},
+		context.Background(), ledger, sess, history, toolcontract.SurfaceImplementInvestigate, report, []string{"read"}, evidence.CitationRoots{ProjectDir: root},
 	)
 	testutil.FailErr(t, "guard.EvaluateCoordinatorCloseoutGrounding failed", err)
 	if strings.TrimSpace(verdict.Code) != "" {

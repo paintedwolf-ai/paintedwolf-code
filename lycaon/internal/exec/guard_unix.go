@@ -19,7 +19,9 @@ const DefaultBelowNormalNice = 5
 type unixGuard struct {
 	belowNormal bool
 	// pgid is captured before the leader can be reaped.
-	pgid atomic.Int64
+	pgid            atomic.Int64
+	supervised      bool
+	supervisorStart int64
 	// untrack releases the group from the reaper that kills it if the engine dies.
 	untrack func()
 
@@ -55,7 +57,14 @@ func (g *unixGuard) onStarted(cmd *exec.Cmd) error {
 	if cmd == nil || cmd.Process == nil {
 		return nil
 	}
+	g.supervised = commandSupervisor(cmd)
+	if g.supervised {
+		g.supervisorStart, _ = osprocess.StartTime(cmd.Process.Pid)
+	}
 	g.recordProcessGroup(cmd.Process.Pid)
+	if err := supervisorStartupError(cmd); err != nil {
+		return err
+	}
 	if !g.belowNormal {
 		return nil
 	}
@@ -79,7 +88,11 @@ func (g *unixGuard) recordProcessGroup(pid int) {
 		return
 	}
 	g.pgid.Store(int64(pgid))
-	g.untrack = TrackProcessGroup(pgid)
+	if g.supervised {
+		g.untrack = trackPID(reaperSupervisor, pgid)
+	} else {
+		g.untrack = TrackProcessGroup(pgid)
+	}
 }
 
 // terminate sends SIGTERM to the tree and arms a SIGKILL for whatever is still
@@ -117,6 +130,9 @@ func (g *unixGuard) kill(cmd *exec.Cmd) {
 // Without a recorded group it falls back to the leader alone.
 func (g *unixGuard) signal(cmd *exec.Cmd, sig syscall.Signal) bool {
 	pgid := int(g.pgid.Load())
+	if g.supervised && pgid > 0 {
+		return signalSupervisor(pgid, g.supervisorStart, sig == syscall.SIGKILL)
+	}
 	if pgid <= 0 {
 		if cmd == nil || cmd.Process == nil {
 			return false

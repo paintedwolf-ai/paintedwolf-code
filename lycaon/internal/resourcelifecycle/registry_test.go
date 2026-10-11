@@ -3,6 +3,7 @@ package resourcelifecycle
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"sync"
 	"testing"
@@ -138,5 +139,45 @@ func TestDisposalRulesRunOnlyWhenTheScopeIsDisposed(t *testing.T) {
 	testutil.FailErr(t, "dispose", registry.Dispose(context.Background(), scope))
 	if !reflect.DeepEqual(calls, []string{"run", "lifetime"}) {
 		t.Fatalf("dispose ran %v, want both rules in order", calls)
+	}
+}
+
+func TestCanceledCleanupPreservesTrackedResourcesAndRegisteredRulesForRetry(t *testing.T) {
+	for _, stopError := range []error{context.Canceled, context.DeadlineExceeded} {
+		t.Run(stopError.Error(), func(t *testing.T) {
+			registry, scope := New(), DeviceScope()
+			var calls []string
+			first := true
+			testutil.FailErr(t, "track earlier cleanup", registry.Track(scope, "earlier", 10, func(context.Context, Scope) error {
+				calls = append(calls, "earlier")
+				return nil
+			}))
+			testutil.FailErr(t, "register ordered drain", registry.RegisterDisposal(ScopeDevice, "drain", 20, func(context.Context, Scope) error {
+				calls = append(calls, "drain")
+				if first {
+					first = false
+					return fmt.Errorf("drain interrupted: %w", stopError)
+				}
+				return nil
+			}))
+			testutil.FailErr(t, "track deferred cleanup", registry.Track(scope, "deferred", 30, func(context.Context, Scope) error {
+				calls = append(calls, "deferred")
+				return nil
+			}))
+			testutil.FailErr(t, "register final cleanup", registry.RegisterDisposal(ScopeDevice, "final", 40, func(context.Context, Scope) error {
+				calls = append(calls, "final")
+				return nil
+			}))
+			if err := registry.Dispose(t.Context(), scope); !errors.Is(err, stopError) {
+				t.Fatalf("interrupted disposal=%v", err)
+			}
+			if !reflect.DeepEqual(calls, []string{"earlier", "drain"}) {
+				t.Fatalf("cleanup crossed interrupted drain: %v", calls)
+			}
+			testutil.FailErr(t, "retry disposal", registry.Dispose(t.Context(), scope))
+			if !reflect.DeepEqual(calls, []string{"earlier", "drain", "drain", "deferred", "final"}) {
+				t.Fatalf("retry lost or repeated tracked cleanup: %v", calls)
+			}
+		})
 	}
 }

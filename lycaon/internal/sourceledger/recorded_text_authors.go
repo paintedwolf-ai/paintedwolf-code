@@ -4,7 +4,7 @@ import "context"
 
 // Use each publication's character identities even when the comparison spans
 // an older snapshot-only version or an intervening filesystem observation.
-func (s *Store) recordedTextAuthors(ctx context.Context, beforeID, afterID string) (*ComparisonAttribution, []Contributor, error) {
+func (s *Comparisons) recordedTextAuthors(ctx context.Context, beforeID, afterID string) (*ComparisonAttribution, []Contributor, error) {
 	after, err := s.versionTextState(ctx, afterID)
 	if err != nil {
 		return nil, nil, err

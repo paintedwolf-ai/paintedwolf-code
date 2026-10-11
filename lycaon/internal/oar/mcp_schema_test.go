@@ -36,16 +36,16 @@ func TestMCPFieldAccessors(t *testing.T) {
 	testutil.FailErr(t, "LoadDir", err)
 
 	gc := NewGuardContext()
-	gc.MCPProviderID = "fixture"
-	gc.MCPToolName = "echo"
-	gc.MCPResultText = `{"id":"ISSUE-1","count":3,"state":{"type":"started","name":"In Progress"}}`
-	matched, fields, err := bindings.Apply(list, "fixture", "echo", gc.MCPResultText)
+	gc.MCP.MCPProviderID = "fixture"
+	gc.MCP.MCPToolName = "echo"
+	gc.MCP.MCPResultText = `{"id":"ISSUE-1","count":3,"state":{"type":"started","name":"In Progress"}}`
+	matched, fields, err := bindings.Apply(list, "fixture", "echo", gc.MCP.MCPResultText)
 	testutil.FailErr(t, "Apply", err)
 	if !matched {
 		t.Fatal("expected match")
 	}
-	gc.MCPSchemaMatched = matched
-	gc.MCPFields = fields
+	gc.MCP.MCPSchemaMatched = matched
+	gc.MCP.MCPFields = fields
 
 	ok, err := EvaluateCondition(`mcp_schema_matched && mcp_has_field("issue_id") && mcp_field_string("issue_id") == "ISSUE-1" && mcp_field_bool("is_started") && mcp_field_int("item_count") == 3`, gc)
 	testutil.FailErr(t, "eval", err)
@@ -83,17 +83,17 @@ func TestLazyMCPSchemaApplyOnPost(t *testing.T) {
 	})
 
 	gc := NewGuardContext()
-	gc.Tool = "mcp_fixture_echo"
-	gc.MCPProviderID = "fixture"
-	gc.MCPToolName = "echo"
-	gc.MCPResultText = `{"id":"ISSUE-1","count":1,"state":{"type":"started","name":"x"}}`
+	gc.Invocation.Tool = "mcp_fixture_echo"
+	gc.MCP.MCPProviderID = "fixture"
+	gc.MCP.MCPToolName = "echo"
+	gc.MCP.MCPResultText = `{"id":"ISSUE-1","count":1,"state":{"type":"started","name":"x"}}`
 
 	res, err := pipeline.EvaluateBlock(context.Background(), AnchorToolPost, gc)
 	testutil.FailErr(t, "EvaluateBlock", err)
 	if calls != 1 {
 		t.Fatalf("Apply calls=%d want 1", calls)
 	}
-	if !gc.MCPSchemaMatched {
+	if !gc.MCP.MCPSchemaMatched {
 		t.Fatal("expected schema matched")
 	}
 	if res == nil || res.Decision == nil {
@@ -122,18 +122,18 @@ func TestLazyMCPSchemaSkippedWithoutRefs(t *testing.T) {
 	})
 
 	gc := NewGuardContext()
-	gc.Tool = "mcp_fixture_echo"
-	gc.MCPProviderID = "fixture"
-	gc.MCPToolName = "echo"
-	gc.MCPCallOK = true
-	gc.MCPResultText = `{"id":"ISSUE-1","count":1,"state":{"type":"started","name":"x"}}`
+	gc.Invocation.Tool = "mcp_fixture_echo"
+	gc.MCP.MCPProviderID = "fixture"
+	gc.MCP.MCPToolName = "echo"
+	gc.MCP.MCPCallOK = true
+	gc.MCP.MCPResultText = `{"id":"ISSUE-1","count":1,"state":{"type":"started","name":"x"}}`
 
 	_, err = pipeline.EvaluateBlock(context.Background(), AnchorToolPost, gc)
 	testutil.FailErr(t, "EvaluateBlock", err)
 	if calls != 0 {
 		t.Fatalf("Apply should be skipped, calls=%d", calls)
 	}
-	if gc.MCPSchemaMatched {
+	if gc.MCP.MCPSchemaMatched {
 		t.Fatal("schema matched must stay false when skipped")
 	}
 }
@@ -159,9 +159,9 @@ func TestLazyMCPSchemaNeverOnPreInvoke(t *testing.T) {
 	})
 
 	gc := NewGuardContext()
-	gc.MCPProviderID = "fixture"
-	gc.MCPToolName = "echo"
-	gc.MCPResultText = `{"id":"x"}`
+	gc.MCP.MCPProviderID = "fixture"
+	gc.MCP.MCPToolName = "echo"
+	gc.MCP.MCPResultText = `{"id":"x"}`
 
 	_, err = pipeline.EvaluateBlock(context.Background(), AnchorToolPreInvoke, gc)
 	testutil.FailErr(t, "EvaluateBlock", err)
@@ -179,8 +179,8 @@ func TestGoldenFixtureWidgetCondition(t *testing.T) {
 		t.Fatal("expected match")
 	}
 	gc := NewGuardContext()
-	gc.MCPSchemaMatched = matched
-	gc.MCPFields = fields
+	gc.MCP.MCPSchemaMatched = matched
+	gc.MCP.MCPFields = fields
 	when := `mcp_schema_matched && mcp_field_bool("is_ready")`
 	ok, err := EvaluateCondition(when, gc)
 	testutil.FailErr(t, "eval", err)
@@ -191,8 +191,8 @@ func TestGoldenFixtureWidgetCondition(t *testing.T) {
 	matchedBad, fieldsBad, err := bindings.Apply(list, "fixture", "widget", `{"nope":true}`)
 	testutil.FailErr(t, "Apply bad", err)
 	gc2 := NewGuardContext()
-	gc2.MCPSchemaMatched = matchedBad
-	gc2.MCPFields = fieldsBad
+	gc2.MCP.MCPSchemaMatched = matchedBad
+	gc2.MCP.MCPFields = fieldsBad
 	ok, err = EvaluateCondition(when, gc2)
 	testutil.FailErr(t, "eval bad", err)
 	if ok {

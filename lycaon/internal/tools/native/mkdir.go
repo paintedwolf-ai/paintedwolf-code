@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -36,10 +37,10 @@ func (t *MkdirTool) Run(ctx context.Context, args map[string]any, tctx tools.Too
 	}
 	mode, err := parseOctalChmodMode(modeSpec)
 	if err != nil {
-		reject := &tools.ToolReject{}
+		reject := &toolrejection.ToolReject{}
 		if errors.As(err, &reject) {
 			reject.Data["chmod_allowed_modes"] = allowedChmodModes()
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "MKDIR_MODE_DENIED",
 				Data: reject.Data,
 			}
@@ -66,7 +67,7 @@ func (t *MkdirTool) Run(ctx context.Context, args map[string]any, tctx tools.Too
 		info, err := os.Lstat(fullPath)
 		if err == nil {
 			if !info.IsDir() {
-				return "", &tools.ToolReject{
+				return "", &toolrejection.ToolReject{
 					Code: "MKDIR_FILE_EXISTS",
 					Data: map[string]any{"path": relSlash},
 				}

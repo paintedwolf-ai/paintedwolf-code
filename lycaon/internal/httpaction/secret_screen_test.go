@@ -3,6 +3,8 @@ package httpaction
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -49,7 +51,9 @@ func runTokenRequest(t *testing.T, deps Deps, serverURL string) (result, error) 
 		"url":                serverURL + "/res/v1/web/search?q=test",
 		"headers":            []any{map[string]any{"name": "X-Subscription-Token", "value": plantedBraveKey}},
 		"capability_request": loopbackCapability(t, serverURL),
-	}, tools.ToolContext{Agent: tools.DefaultToolProfileID})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
+	})
 	if err != nil {
 		return result{}, err
 	}
@@ -119,9 +123,9 @@ func TestWithholdBlocksTheSend(t *testing.T) {
 			return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
 		},
 	}, server.URL)
-	reject := tools.AsToolReject(err)
-	if reject == nil || reject.Code != tools.OutboundSecretDeniedCode {
-		t.Fatalf("err = %v, want %s", err, tools.OutboundSecretDeniedCode)
+	reject := toolrejection.AsToolReject(err)
+	if reject == nil || reject.Code != toolrejection.OutboundSecretDeniedCode {
+		t.Fatalf("err = %v, want %s", err, toolrejection.OutboundSecretDeniedCode)
 	}
 	if seen != "" {
 		t.Fatalf("withheld request still dialed with %q", seen)

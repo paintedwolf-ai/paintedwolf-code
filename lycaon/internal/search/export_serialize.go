@@ -190,3 +190,66 @@ func ExportFilename(format, scope string, ts string) string {
 	ext := strings.ToLower(strings.TrimSpace(format))
 	return fmt.Sprintf("search-export-%s-%s.%s", scope, ts, ext)
 }
+
+const (
+	ExportFormatJSONL = "jsonl"
+	ExportFormatCSV   = "csv"
+	ExportFormatSARIF = "sarif"
+)
+
+var (
+	exportFormats    = []string{ExportFormatJSONL, ExportFormatCSV, ExportFormatSARIF}
+	exportCSVColumns = []string{
+		"hit_id", "kind", "source", "score", "project_id", "root_id", "project_name", "session_id",
+		"parent_session_id", "worker_id", "source_ref", "leg_id", "handle", "tool", "title", "context",
+		"path", "line", "url", "trust", "verified", "hint_code", "timestamp", "snippet",
+	}
+)
+
+func ExportFormats() []string {
+	return append([]string(nil), exportFormats...)
+}
+
+func ExportCSVColumns() []string {
+	return append([]string(nil), exportCSVColumns...)
+}
+
+// PlanSARIFScoped reports whether the compiled plan may export SARIF (scan findings only).
+func PlanSARIFScoped(plan *RoutedPlan) bool {
+	if plan == nil || plan.Code != nil || plan.Store == nil {
+		return false
+	}
+	scanScoped := false
+	for _, f := range plan.Interpretation.Filters {
+		if f.Negated {
+			continue
+		}
+		switch {
+		case f.Field == "kind" && strings.EqualFold(f.Value, scanKind),
+			f.Field == "shape" && strings.EqualFold(f.Value, "artifact"):
+			scanScoped = true
+		case f.Field == "kind":
+			return false
+		}
+	}
+	if len(plan.Interpretation.FTSTerms) > 0 && !scanScoped {
+		return false
+	}
+	return scanScoped
+}
+
+// HitsSARIFEligible reports whether every hit can map to a scan finding.
+func HitsSARIFEligible(hits []Hit) bool {
+	for _, hit := range hits {
+		if !hitSARIFEligible(hit) {
+			return false
+		}
+	}
+	return true
+}
+
+func hitSARIFEligible(hit Hit) bool {
+	kind := strings.TrimSpace(hit.HitKind)
+	source := strings.TrimSpace(hit.Source)
+	return kind == HitKindFinding || source == SourceFinding
+}

@@ -107,6 +107,12 @@ func layeringRules() []layeringRule {
 			forbidden: modulePath + "/internal/usernotice",
 			why:       "notice loading is a separate consumer of the catalog; folding it into the view would put user-facing copy behind the view LRU",
 		},
+		{
+			name:      "tools/native/command must not import tools/native",
+			fromGlob:  modulePath + "/internal/tools/native/command",
+			forbidden: modulePath + "/internal/tools/native",
+			why:       "native command tool family was decomposed into subpackage; it must consume toolkit or leaves, never native hub",
+		},
 	}
 }
 

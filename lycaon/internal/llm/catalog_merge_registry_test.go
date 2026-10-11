@@ -43,7 +43,7 @@ providers:
 	testutil.FailErr(t, "creds", err)
 	testutil.FailErr(t, "set key", creds.Set("openai", "sk-test"))
 
-	reg, err := NewRegistry(cat, creds)
+	reg, err := NewRegistry(t.Context(), cat, creds)
 	testutil.FailErr(t, "registry", err)
 
 	_, thisFile, _, ok := runtime.Caller(0)
@@ -60,7 +60,7 @@ providers:
 	testutil.FailErr(t, "feed", err)
 	_, err = feed.Refresh(context.Background())
 	testutil.FailErr(t, "refresh", err)
-	reg.SetModelFeed(feed)
+	reg.SetModelFeed(t.Context(), feed)
 
 	// Empty discovery (no live /models) must keep eligible catalog.
 	models := reg.EffectiveModels(t.Context(), "openai")

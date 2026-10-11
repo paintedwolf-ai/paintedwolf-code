@@ -1,0 +1,4 @@
+source_catalog:
+  retention_days: 14
+  max_total_bytes: 1610612736
+  vacuum_pages: 2048

@@ -96,7 +96,7 @@ func TestSummarizeReaderDecodesSelfIdentifyingEncodings(t *testing.T) {
 				t.Fatalf("write fixture: %v", err)
 			}
 			g := testSummarizeGatherer(t, dir, summarize.DefaultCaps())
-			content, err := g.readFileCached(context.Background(), path)
+			content, err := g.sources.readFileCached(context.Background(), path)
 			if err != nil || string(content) != "# Guide\n\n世界\n" {
 				t.Fatalf("summarize read %s = %q err=%v", encoding, content, err)
 			}

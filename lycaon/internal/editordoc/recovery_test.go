@@ -40,7 +40,7 @@ func TestRecoverySettlesOtherDocumentsAfterOneLedgerFailure(t *testing.T) {
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
 	recorder := &selectiveRecoveryRecorder{captureRecorder: captureRecorder{Store: sourceledger.New(database, "")}}
 	store := NewStore(database)
-	service := New(store, recorder, fixedRoots{p: p})
+	service := New(store, recorder, recorder.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	operations := make([]string, 0, 2)
 	for _, name := range []string{"blocked.txt", "available.txt"} {
@@ -81,7 +81,7 @@ func TestRecoveryPreservesDraftAndSettlesUnavailableTarget(t *testing.T) {
 			p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
 			recorder := &captureRecorder{Store: sourceledger.New(database, ""), err: errors.New("injected ledger outage")}
 			store := NewStore(database)
-			service := New(store, recorder, fixedRoots{p: p})
+			service := New(store, recorder, recorder.History, fixedRoots{p: p})
 			closeServiceAtCleanup(t, service)
 			doc, err := service.Open(t.Context(), p, "a.txt", rootID, "", "window", nil)
 			testutil.FailErr(t, "open document", err)

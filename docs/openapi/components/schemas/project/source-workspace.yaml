@@ -22,6 +22,10 @@ components:
         recursive:
           type: boolean
           description: One root registration observes every descendant.
+        policy_unwatched:
+          type: integer
+          minimum: 0
+          description: Lazy boundary roots intentionally refreshed on demand, distinct from failed watcher registrations.
         unwatched_directories:
           type: integer
           minimum: 0

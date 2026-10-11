@@ -7,7 +7,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -32,12 +33,12 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 		SpawnReason:     wire.SpawnReasonHumanRequest,
 	}
 	testutil.FailErr(t, "enqueue defaults", worker.ApplyEnqueueDefaults(&task, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
-	jobID, err := h.WorkerQueue.Enqueue(ctx, task)
+	jobID, err := h.Delegations.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue", err)
 	child, err := h.Store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "Wire the parser"})
 	testutil.FailErr(t, "create child", err)
-	testutil.FailErr(t, "set child", h.WorkerQueue.SetChildSessionID(ctx, jobID, child.ID))
-	claimed, err := h.WorkerQueue.ClaimNext(ctx, worker.ClaimRequest{
+	testutil.FailErr(t, "set child", h.Delegations.Queue.SetChildSessionID(ctx, jobID, child.ID))
+	claimed, err := h.Delegations.Queue.ClaimNext(ctx, worker.ClaimRequest{
 		ProjectID:       sess.ProjectID,
 		ExecutionTarget: wire.ExecutionTargetLocal,
 		ClaimedBy:       "needs-decision-test",
@@ -51,7 +52,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 		testutil.FailErr(t, "request_decision", err)
 	}
 
-	status, err := h.SessionMgr.AppendWorkerSummary(ctx, sess.ID, session.WorkerSummaryInput{
+	status, err := h.Sessions.Manager.Workers.Summaries.Append(ctx, sess.ID, workeroutcomes.SummaryInput{
 		JobID:          jobID,
 		ChildSessionID: child.ID,
 		AgentType:      "implementer",
@@ -61,7 +62,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 	if status != "needs_decision" {
 		t.Fatalf("status = %q want needs_decision", status)
 	}
-	completed, err := h.WorkerQueue.Complete(ctx, claimed, wire.WorkerResult{Status: status})
+	completed, err := h.Delegations.Queue.Complete(ctx, claimed, wire.WorkerResult{Status: status})
 	testutil.FailErr(t, "complete worker", err)
 	if !completed {
 		t.Fatal("worker completion claim lost")
@@ -81,7 +82,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 			break
 		}
 	}
-	env, ok := session.ParseWorkerCompletionEnvelope(envelope)
+	env, ok := workercompletion.ParseWorkerCompletionEnvelope(envelope)
 	if !ok || env.DecisionRequest == nil {
 		t.Fatalf("structured decision missing: ok=%v", ok)
 	}
@@ -105,11 +106,11 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 	if !anyMessageContains(childMsgs, "write a new parser") {
 		t.Fatalf("child did not receive the decision")
 	}
-	if _, ok, err := h.SessionMgr.Decisions().Get(ctx, child.ID); err != nil || ok {
+	if _, ok, err := h.Sessions.Manager.Decisions.Get(ctx, child.ID); err != nil || ok {
 		t.Fatal("decision stash not cleared after answer")
 	}
 
-	pending, err := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
+	pending, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 	testutil.FailErr(t, "list pending", err)
 	resume := false
 	for _, p := range pending {
@@ -133,10 +134,14 @@ func anyMessageContains(msgs []wire.Message, sub string) bool {
 
 func wiringToolContext(sessionID, dir string, workerJobID ...string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	tctx := tools.ToolContext{SessionID: sessionID, Roots: roots, ActiveRootID: "r1"}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sessionID},
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: "r1"},
+	}
 	if len(workerJobID) > 0 {
-		tctx.WorkerJobID = workerJobID[0]
-		tctx.ParentSessionID = "parent"
+		tctx.Identity.WorkerJobID = workerJobID[0]
+		tctx.Identity.ParentSessionID = "parent"
 	}
 	return tctx
 }

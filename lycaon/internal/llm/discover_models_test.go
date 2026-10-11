@@ -138,7 +138,7 @@ func TestRegistryListDiscoversLocalProviderModels(t *testing.T) {
 	writeProvidersLocal(t, user, []byte(yaml))
 	catalog, err := NewProviderCatalogAt(user)
 	testutil.FailErr(t, "NewProviderCatalogAt failed", err)
-	registry, err := NewRegistry(catalog, providercredentials.NewAt(tmp+"/credential-vault.age"))
+	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(tmp+"/credential-vault.age"))
 	testutil.FailErr(t, "NewRegistry failed", err)
 	registry.discoveryClient = srv.Client()
 
@@ -197,7 +197,7 @@ func TestRegistryListUntypedCompatRequiresAllowlist(t *testing.T) {
 	if err := creds.Set("openai-compatible", wantAuth); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
-	registry, err := NewRegistry(catalog, creds)
+	registry, err := NewRegistry(t.Context(), catalog, creds)
 	testutil.FailErr(t, "NewRegistry failed", err)
 	registry.discoveryClient = srv.Client()
 
@@ -272,7 +272,7 @@ func TestRegistryListDiscoversConfiguredGeminiProvider(t *testing.T) {
 	if err := creds.Set("gemini", wantAuth); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
-	registry, err := NewRegistry(catalog, creds)
+	registry, err := NewRegistry(t.Context(), catalog, creds)
 	testutil.FailErr(t, "NewRegistry failed", err)
 	registry.discoveryClient = srv.Client()
 

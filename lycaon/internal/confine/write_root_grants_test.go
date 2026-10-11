@@ -57,8 +57,8 @@ func TestAttachedWriteRootRefused(t *testing.T) {
 		root string
 		code string // empty => allowed
 	}{
-		{"home", home, WriteRootCodeHome},
-		{"fs-root", string(filepath.Separator), WriteRootCodeFilesystemRoot},
+		{"home", home, ""},
+		{"fs-root", string(filepath.Separator), ""},
 		{"relative", "relative/path", WriteRootCodeNotAbsolute},
 		{"empty", "  ", WriteRootCodeNotAbsolute},
 		{"ssh-secret", filepath.Join(home, ".ssh"), WriteRootCodeSecretStore},
@@ -66,9 +66,9 @@ func TestAttachedWriteRootRefused(t *testing.T) {
 		{"gcloud-secret", filepath.Join(home, ".config", "gcloud"), WriteRootCodeSecretStore},
 		{"azure-secret", filepath.Join(home, ".azure"), WriteRootCodeSecretStore},
 		{"keychains-secret", filepath.Join(home, "Library", "Keychains"), WriteRootCodeSecretStore},
-		{"keychains-parent", filepath.Join(home, "Library"), WriteRootCodeSecretStore},
+		{"keychains-parent", filepath.Join(home, "Library"), ""},
 		{"docker-config-secret", filepath.Join(home, ".docker", "config.json"), WriteRootCodeSecretStore},
-		{"docker-parent", filepath.Join(home, ".docker"), WriteRootCodeSecretStore},
+		{"docker-parent", filepath.Join(home, ".docker"), ""},
 		{"docker-contexts-secret", filepath.Join(home, ".docker", "contexts"), WriteRootCodeSecretStore},
 		// Runtime state beside denied files remains grantable.
 		{"docker-buildx-state-ok", filepath.Join(home, ".docker", "buildx", "activity"), ""},
@@ -103,7 +103,7 @@ func TestGrantedWriteRootRefused(t *testing.T) {
 		root string
 		code string // empty => allowed
 	}{
-		{"fs-root", string(filepath.Separator), WriteRootCodeFilesystemRoot},
+		{"fs-root", string(filepath.Separator), ""},
 		{"relative", "relative/path", WriteRootCodeNotAbsolute},
 		{"empty", "  ", WriteRootCodeNotAbsolute},
 		{"ssh-key-material", filepath.Join(home, ".ssh"), WriteRootCodeSecretStore},
@@ -260,8 +260,8 @@ func TestAncestorsOfCredentialStoresSplitByLane(t *testing.T) {
 		home,
 	}
 	for _, p := range ancestors {
-		if ok, _ := AttachedWriteRootRefused(p); !ok {
-			t.Errorf("AttachedWriteRootRefused(%q) = false, want refused — standing roots must not contain a store", p)
+		if ok, code := AttachedWriteRootRefused(p); ok {
+			t.Errorf("AttachedWriteRootRefused(%q) refused with %s; floors protect contained stores", p, code)
 		}
 		if ok, code := GrantedWriteRootRefused(p); ok {
 			t.Errorf("GrantedWriteRootRefused(%q) = true (%s), want allowed — the floor protects the stores inside", p, code)

@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/scan"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -34,7 +34,7 @@ type WorkerContextLoader struct {
 	Tasks         WorkerContextTasks
 	Runs          WorkflowRunPhaseResolver
 	MatcherFor    func(*api.Session) PlaybookMatcherInterface
-	AgentsFor     func(*api.Session) session.AgentProfileResolver
+	AgentsFor     func(*api.Session) profiles.AgentProfileResolver
 	Topology      func(workflowID string) string
 	Tools         LegToolLister
 	Scans         scan.WorkerScanLister
@@ -74,7 +74,7 @@ func (l *WorkerContextLoader) BuildWorkerPromptContext(childID string, sess *api
 			out.PhaseID = strings.TrimSpace(phase)
 		}
 	}
-	var agents session.AgentProfileResolver
+	var agents profiles.AgentProfileResolver
 	if l.AgentsFor != nil {
 		agents = l.AgentsFor(sess)
 	}

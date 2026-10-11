@@ -11,19 +11,21 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestStateToolsRespectProjectDir(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "wf.db")
 
-	wfStore := workflow.NewSQLStore(sqlDB)
+	wfStore := workflowpersistence.New(sqlDB)
 	sessStore := store.NewMemory()
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
 	mgr := workflow.NewManager(wfStore, sessStore, reg, nil)
 	toolReg := tools.NewDefaultRegistry()
-	if err := workflow.RegisterStateTools(toolReg, workflow.StateToolDeps{Runs: mgr, Sessions: sessStore}); err != nil {
+	if err := workflowstatetools.RegisterStateTools(toolReg, workflowstatetools.StateToolDeps{Runs: mgr.Store.Runs, Vars: mgr.Phases.Vars, Journal: mgr.Phases.Journal, Resolver: &mgr.Resolver, Starts: mgr.Starts, Controls: mgr.Controls, Scaffold: mgr.Blueprints.Scaffold, Sessions: sessStore}); err != nil {
 		testutil.FailErr(t, "workflow.RegisterStateTools failed", err)
 	}
 

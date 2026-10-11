@@ -13,76 +13,76 @@ import (
 // GrantKey returns an empty, unusable identity when the action cannot be encoded.
 // Arguments stay out of the ledger because they may contain credentials.
 func GrantKey(action ProposedAction) string {
-	args, err := json.Marshal(grantIdentityArgs(action.Tool, action.Args))
+	args, err := json.Marshal(grantIdentityArgs(action.Invocation.Tool, action.Invocation.Args))
 	if err != nil {
 		return ""
 	}
-	roots := append([]string(nil), action.Contained.Roots...)
+	roots := append([]string(nil), action.Execution.Contained.Roots...)
 	for i := range roots {
 		roots[i] = strings.TrimSpace(roots[i])
 	}
 	sort.Strings(roots)
-	hostResources := canonicalIDs(action.HostResources)
-	families := canonicalIDs(action.HostResourceFamilies)
+	hostResources := canonicalIDs(action.Resources.HostResources)
+	families := canonicalIDs(action.Resources.HostResourceFamilies)
 	packageIdentity := packageExecutionIdentity(action)
 	boundary, err := json.Marshal(struct {
 		FSJailed bool     `json:"fs_jailed"`
 		Egress   string   `json:"egress"`
 		Roots    []string `json:"roots"`
 	}{
-		FSJailed: action.Contained.FSJailed,
-		Egress:   strings.TrimSpace(action.Contained.Egress),
+		FSJailed: action.Execution.Contained.FSJailed,
+		Egress:   strings.TrimSpace(action.Execution.Contained.Egress),
 		Roots:    roots,
 	})
 	if err != nil {
 		return ""
 	}
-	identity := strings.TrimSpace(action.Tool) + "\x00" +
-		strings.TrimSpace(action.ProjectDir) + "\x00" + string(args) + "\x00" +
+	identity := strings.TrimSpace(action.Invocation.Tool) + "\x00" +
+		strings.TrimSpace(action.Scope.ProjectDir) + "\x00" + string(args) + "\x00" +
 		strings.Join(hostResources, "\x1f") + "\x00" +
 		strings.Join(families, "\x1f") + "\x00" + string(boundary) + "\x00" +
 		packageIdentity
-	if action.ProcessAccess != "" {
-		raw, err := json.Marshal(action.ProcessTargets)
+	if action.Execution.ProcessAccess != "" {
+		raw, err := json.Marshal(action.Execution.ProcessTargets)
 		if err != nil {
 			return ""
 		}
-		identity += "\x00process:" + action.ProcessAccess + string(raw)
+		identity += "\x00process:" + action.Execution.ProcessAccess + string(raw)
 	}
-	if action.ExecutionBoundaryDigest != "" {
-		identity += "\x00execution:" + action.ExecutionBoundaryDigest
+	if action.Execution.ExecutionBoundaryDigest != "" {
+		identity += "\x00execution:" + action.Execution.ExecutionBoundaryDigest
 	}
-	if action.Contained.ProcessControl {
+	if action.Execution.Contained.ProcessControl {
 		identity += "\x00process_control"
 	}
-	if action.Contained.HostExecution {
+	if action.Execution.Contained.HostExecution {
 		identity += "\x00host_execution"
 	}
-	if len(action.FileChanges) > 0 {
-		changes, err := json.Marshal(action.FileChanges)
+	if len(action.Mutations.FileChanges) > 0 {
+		changes, err := json.Marshal(action.Mutations.FileChanges)
 		if err != nil {
 			return ""
 		}
 		identity += "\x00" + string(changes)
 	}
-	if len(action.AgentPolicy) > 0 {
-		identity += "\x00" + strings.Join(canonicalIDs(AgentPolicyPaths(action.AgentPolicy)), "\x1f")
+	if len(action.Mutations.AgentPolicy) > 0 {
+		identity += "\x00" + strings.Join(canonicalIDs(AgentPolicyPaths(action.Mutations.AgentPolicy)), "\x1f")
 	}
 	digest := sha256.Sum256([]byte(identity))
 	return "action_" + base64.RawURLEncoding.EncodeToString(digest[:])
 }
 
 func packageExecutionIdentity(action ProposedAction) string {
-	if action.PackageExecution == nil {
+	if action.Execution.PackageExecution == nil {
 		return ""
 	}
-	identities := make([]string, 0, len(action.PackageExecution.Packages))
-	for _, pkg := range action.PackageExecution.Packages {
+	identities := make([]string, 0, len(action.Execution.PackageExecution.Packages))
+	for _, pkg := range action.Execution.PackageExecution.Packages {
 		identities = append(identities, pkg.ExactIdentity())
 	}
 	sort.Strings(identities)
-	return strings.TrimSpace(action.PackageExecution.Manager) + "\x1e" +
-		string(action.PackageExecution.Operation) + "\x1e" + strings.Join(identities, "\x1d")
+	return strings.TrimSpace(action.Execution.PackageExecution.Manager) + "\x1e" +
+		string(action.Execution.PackageExecution.Operation) + "\x1e" + strings.Join(identities, "\x1d")
 }
 
 // grantIdentityArgs normalizes grant identity without changing the invocation.

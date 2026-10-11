@@ -6,6 +6,8 @@ import (
 	"errors"
 	"strings"
 	"sync"
+
+	"github.com/lycaon/lycaon/internal/session/tree"
 )
 
 // ErrStopping rejects work after session stop begins.
@@ -22,10 +24,24 @@ type Turn struct {
 }
 
 type State struct {
+	store       tree.Reader
 	mu          sync.Mutex
 	generations map[string]uint64
 	active      map[string]*Flight
 	gates       map[string]*admissionGate
+}
+
+func New(store tree.Reader) *State { return &State{store: store} }
+
+func (m *State) RootID(ctx context.Context, sessionID string) string {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" || m == nil || m.store == nil {
+		return sessionID
+	}
+	if root := strings.TrimSpace(tree.RootID(ctx, m.store, sessionID)); root != "" {
+		return root
+	}
+	return sessionID
 }
 
 type admissionGate struct {
@@ -70,7 +86,8 @@ func (m *State) Finish(rootID string, flight *Flight, err error) {
 	m.mu.Unlock()
 }
 
-func (m *State) Capture(rootID string) (Turn, error) {
+func (m *State) Capture(ctx context.Context, sessionID string) (Turn, error) {
+	rootID := m.RootID(ctx, sessionID)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.active[rootID] != nil {
@@ -88,7 +105,8 @@ func (m *State) MayDrain(token Turn) bool {
 	return m.active[token.root] == nil && m.generations[token.root] == token.generation
 }
 
-func (m *State) InProgress(rootID string) bool {
+func (m *State) InProgress(ctx context.Context, sessionID string) bool {
+	rootID := m.RootID(ctx, sessionID)
 	if m == nil {
 		return false
 	}
@@ -97,8 +115,9 @@ func (m *State) InProgress(rootID string) bool {
 	return m.active[rootID] != nil
 }
 
-// WithAdmission serializes new work against session stop.
-func (m *State) WithAdmission(rootID string, fn func() error) error {
+// WithSessionTreeAdmission serializes new work against session stop.
+func (m *State) WithSessionTreeAdmission(ctx context.Context, sessionID string, fn func() error) error {
+	rootID := m.RootID(ctx, sessionID)
 	gate := m.retainGate(rootID)
 	defer m.releaseGate(rootID, gate)
 	gate.mu.RLock()
@@ -158,7 +177,7 @@ func (m *State) Commit(ctx context.Context, rootID string, transition func(conte
 	defer m.releaseGate(rootID, gate)
 	gate.mu.Lock()
 	defer gate.mu.Unlock()
-	if m.InProgress(rootID) {
+	if m.InProgress(ctx, rootID) {
 		return nil, ErrStopping
 	}
 	// Only a committed decision advances the turn generation.

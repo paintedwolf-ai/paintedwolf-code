@@ -3,9 +3,8 @@ package toolkit
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
-
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // BoundedInt is the effective value of an integer tool argument after defaults
@@ -95,7 +94,7 @@ func ParseStringSliceArg(args map[string]any, key string, maxItems int) ([]strin
 // MissingArg is the fail-closed last line when a catalog schema should have
 // rejected the call before the subsystem owner ran.
 func MissingArg(key string) error {
-	return tools.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
+	return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{
 		"reason": fmt.Sprintf("missing %q argument", key),
 		"field":  key,
 	})
@@ -104,7 +103,7 @@ func MissingArg(key string) error {
 // PathEscapeReject is the shared rejection for a tool argument that resolves
 // outside every attached root.
 func PathEscapeReject(path string) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "SURVEY_PATH_ESCAPE",
 		Data: map[string]any{"path": strings.TrimSpace(path)},
 	}

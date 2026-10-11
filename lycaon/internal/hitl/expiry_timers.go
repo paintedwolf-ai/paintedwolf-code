@@ -12,6 +12,7 @@ const expiryReason = "approval request timed out — denied (fail-safe)"
 // them; an armed timer keeps the manager and its store reachable until it fires.
 type expiryTimers struct {
 	mu      sync.Mutex
+	active  sync.WaitGroup
 	stopped bool
 	next    uint64
 	timers  map[uint64]*time.Timer
@@ -35,29 +36,45 @@ func (e *expiryTimers) schedule(ctx context.Context, checkpointID string, d time
 	}
 	e.next++
 	id := e.next
+	e.active.Add(1)
 	e.timers[id] = time.AfterFunc(d, func() {
 		e.mu.Lock()
 		delete(e.timers, id)
+		stopped := e.stopped
 		e.mu.Unlock()
+		defer e.active.Done()
+		if stopped {
+			return
+		}
 		_ = expire(expiryCtx, checkpointID, expiryReason)
 	})
 }
 
-func (e *expiryTimers) stop() {
+func (e *expiryTimers) stop(ctx context.Context) error {
 	e.mu.Lock()
-	defer e.mu.Unlock()
 	e.stopped = true
 	for id, timer := range e.timers {
-		timer.Stop()
+		if timer.Stop() {
+			e.active.Done()
+		}
 		delete(e.timers, id)
+	}
+	e.mu.Unlock()
+	done := make(chan struct{})
+	go func() { e.active.Wait(); close(done) }()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
-// StopExpiryTimers disarms pending expiries at host shutdown. Rows stay
+// StopExpiryTimers disarms pending expiries and drains callbacks at host shutdown. Rows stay
 // pending in the store; RestorePending re-arms them in the next host.
-func (m *Manager) StopExpiryTimers() {
+func (m *Checkpoints) StopExpiryTimers(ctx context.Context) error {
 	if m == nil {
-		return
+		return nil
 	}
-	m.expiries.stop()
+	return m.expiries.stop(ctx)
 }

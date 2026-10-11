@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -22,7 +23,7 @@ func FormatCompareReject(err error, formatter *guidance.StaticRejectFormatter) e
 	if !errors.As(err, &reject) || reject == nil || reject.Code == "" {
 		return err
 	}
-	return tools.FormatDecisionReject(reject.Code, reject.Data, formatter)
+	return toolrejection.FormatDecisionReject(reject.Code, reject.Data, formatter)
 }
 
 func runScanCompare(

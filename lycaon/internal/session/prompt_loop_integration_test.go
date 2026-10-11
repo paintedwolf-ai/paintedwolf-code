@@ -18,7 +18,7 @@ func TestPromptLoopParitySpecPosture(t *testing.T) {
 	}))
 	fix := setupContextualToolsFixtureWithLLM(t, api.SessionPostureSpec, rec)
 	ctx := context.Background()
-	if _, err := fix.Mgr.Prompt(ctx, fix.Sess.ID, "hello"); err != nil {
+	if _, err := fix.Mgr.Submissions.Prompt(ctx, fix.Sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "fix.Mgr.Prompt failed", err)
 	}
 	for _, tool := range rec.LastRequest().Tools {
@@ -30,16 +30,40 @@ func TestPromptLoopParitySpecPosture(t *testing.T) {
 
 func TestWorkerAndCoordinatorSharePromptLoop(t *testing.T) {
 	fix := setupContextualToolsFixture(t, api.SessionPostureBuild)
-	coordLoop := fix.Mgr.PromptLoopForTest()
+	runtime := fix.Mgr.Coordinator.Runtime
+	if runtime == nil || fix.Mgr.Runner.Coordinator != runtime {
+		t.Fatal("coordinator and turn execution must share one prompt runtime")
+	}
+	wakeLoop := runtime.CoordinatorLoop()
+	coordinatorSnapshot := runtime.PromptLoop()
+	coordinatorSnapshot.Context.Deps.SetPromptTurnSurface(fix.Sess.ID, "parent-surface")
+	t.Cleanup(func() { runtime.EndPromptTurn(fix.Sess.ID) })
 	ctx := context.Background()
-	child, err := fix.Mgr.SpawnChild(ctx, fix.Sess.ID, api.SpawnChildRequest{
+	child, err := fix.Mgr.Workers.SpawnChild(ctx, fix.Sess.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer,
 		Prompt:    "implement",
 	})
 	testutil.FailErr(t, "fix.Mgr.SpawnChild failed", err)
-	_ = child
-	if fix.Mgr.PromptLoopForTest() != coordLoop {
-		t.Fatal("coordinator and child must share the same PromptLoop instance")
+	if child.ParentSessionID != fix.Sess.ID {
+		t.Fatalf("child parent=%q, want %q", child.ParentSessionID, fix.Sess.ID)
+	}
+	t.Cleanup(func() { runtime.EndPromptTurn(child.ID) })
+	workerSnapshot := fix.Mgr.Runner.Coordinator.PromptLoop()
+	if fix.Mgr.Runner.Coordinator != runtime || fix.Mgr.Coordinator.Runtime != runtime || runtime.CoordinatorLoop() != wakeLoop {
+		t.Fatal("worker creation and dependency refresh must retain the shared runtime and wake owner")
+	}
+	if workerSnapshot == coordinatorSnapshot {
+		t.Fatal("prompt turns must receive fresh dependency snapshots")
+	}
+	if got := workerSnapshot.Context.Deps.PromptTurnSurface(fix.Sess.ID); got != "parent-surface" {
+		t.Fatalf("refreshed worker snapshot lost shared parent state: %q", got)
+	}
+	workerSnapshot.Context.Deps.SetPromptTurnSurface(child.ID, "child-surface")
+	if got := coordinatorSnapshot.Context.Deps.PromptTurnSurface(child.ID); got != "child-surface" {
+		t.Fatalf("coordinator snapshot cannot read shared child state: %q", got)
+	}
+	if got := coordinatorSnapshot.Context.Deps.PromptTurnSurface(fix.Sess.ID); got != "parent-surface" {
+		t.Fatalf("child state replaced the parent turn surface: %q", got)
 	}
 }
 
@@ -47,14 +71,14 @@ func TestWorkerChildPromptUsesToolPolicy(t *testing.T) {
 	fix := setupContextualToolsFixture(t, api.SessionPostureBuild)
 	ctx := context.Background()
 	parent := fix.Sess
-	child, err := fix.Mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := fix.Mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: orchestration.ProfileImplementer,
 		Prompt:    "implement feature",
 	})
 	testutil.FailErr(t, "fix.Mgr.SpawnChild failed", err)
-	profile, err := fix.Mgr.ResolvePromptToolProfile(ctx, child.ID)
-	testutil.FailErr(t, "fix.Mgr.ResolvePromptToolProfile failed", err)
-	listed := fix.Mgr.PromptToolPolicy().ListForPrompt(ctx, child, profile)
+	profile, err := fix.Mgr.Profiles.ResolvePromptToolProfile(ctx, child.ID)
+	testutil.FailErr(t, "fix.Mgr.Profiles.ResolvePromptToolProfile failed", err)
+	listed := fix.Mgr.Coordinator.Guards.Policy().ListForPrompt(ctx, child, profile)
 	for _, meta := range listed {
 		if meta.Name == "delegate_dispatch" {
 			t.Fatal("worker child must not list delegate_dispatch")

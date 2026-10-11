@@ -48,7 +48,7 @@ func ResolveExplanationKey(action hitl.ProposedAction, tier settings.Reversibili
 	if settings.PathEscapesWorkspace(action) {
 		return KeyPathOutsideProject
 	}
-	tool := strings.TrimSpace(action.Tool)
+	tool := strings.TrimSpace(action.Invocation.Tool)
 	if settings.IsCommandToolName(tool) {
 		if tier == settings.TierIrreversible {
 			return KeyCommandDestructive
@@ -67,26 +67,26 @@ func ResolveExplanationKey(action hitl.ProposedAction, tier settings.Reversibili
 // ActionTemplateVars builds approval template data.
 func ActionTemplateVars(action hitl.ProposedAction) map[string]any {
 	vars := map[string]any{
-		"tool":         strings.TrimSpace(action.Tool),
-		"project":      strings.TrimSpace(action.ProjectDir),
-		"command":      strings.TrimSpace(action.Command),
-		"action_label": strings.TrimSpace(action.Tool),
+		"tool":         strings.TrimSpace(action.Invocation.Tool),
+		"project":      strings.TrimSpace(action.Scope.ProjectDir),
+		"command":      strings.TrimSpace(action.Presentation.Command),
+		"action_label": strings.TrimSpace(action.Invocation.Tool),
 	}
-	if action.ApprovalCategory == "mcp" && strings.TrimSpace(action.ApprovalSubject) != "" {
-		vars["action_label"] = strings.TrimSpace(action.ApprovalSubject)
+	if action.Resources.ApprovalCategory == "mcp" && strings.TrimSpace(action.Resources.ApprovalSubject) != "" {
+		vars["action_label"] = strings.TrimSpace(action.Resources.ApprovalSubject)
 	}
 	if vars["command"] == "" {
-		vars["command"] = settings.CommandTextFromActionArgs(action.Args)
+		vars["command"] = settings.CommandTextFromActionArgs(action.Invocation.Args)
 	}
-	if action.Args != nil {
+	if action.Invocation.Args != nil {
 		for _, k := range []string{"remote", "branch", "provider", "surface", "surface_label", "destination_label", "destination_kind", "rule_id", "rule_title", "host"} {
-			if v, ok := action.Args[k]; ok {
+			if v, ok := action.Invocation.Args[k]; ok {
 				vars[k] = v
 			}
 		}
 	}
-	if len(action.Files) > 0 {
-		vars["path"] = action.Files[0]
+	if len(action.Invocation.Files) > 0 {
+		vars["path"] = action.Invocation.Files[0]
 	}
 	return vars
 }

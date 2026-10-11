@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 )
@@ -21,7 +23,7 @@ func TestWriteToolRejectsBinaryContent(t *testing.T) {
 		"path":    "bad.py",
 		"content": "a\x00b",
 	}, nativefixture.AgentContext(tmpDir, "implement"))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "WRITE_BINARY_DENIED" {
 		t.Fatalf("err = %v want WRITE_BINARY_DENIED", err)
 	}
@@ -32,7 +34,7 @@ func TestWriteToolAtomic(t *testing.T) {
 	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	out := &tools.ToolInvocationOut{}
 	ctx := nativefixture.AgentContext(tmpDir, "implement")
-	ctx.Out = out
+	ctx.Effects.Out = out
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path":    "test.txt",
 		"content": "test content",
@@ -66,7 +68,7 @@ func TestWriteToolRejectsParseRegression(t *testing.T) {
 		"path":    "a.go",
 		"content": "package p\n\nfunc A() int {\n\treturn (\n}\n",
 	}, nativefixture.AgentContext(tmpDir, "implement"))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
 		t.Fatalf("err = %v want MUTATION_BROKE_PARSE", err)
 	}
@@ -83,7 +85,7 @@ func TestWriteToolAppend(t *testing.T) {
 	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	out := &tools.ToolInvocationOut{}
 	ctx := nativefixture.AgentContext(tmpDir, "implement")
-	ctx.Out = out
+	ctx.Effects.Out = out
 	receipt, err := tool.Run(context.Background(), map[string]any{
 		"path":    "big.html",
 		"content": "<body></body>\n",
@@ -127,7 +129,7 @@ func TestWriteToolCaptureOverwrite(t *testing.T) {
 	tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	out := &tools.ToolInvocationOut{}
 	ctx := nativefixture.AgentContext(tmpDir, "implement")
-	ctx.Out = out
+	ctx.Effects.Out = out
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path":    "a.txt",
 		"content": "new",
@@ -150,7 +152,7 @@ func TestEditToolOldStringNotFound(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "file.go", "old_string": "missing", "new_string": "x",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_NOT_FOUND" {
 		t.Fatalf("err = %v want EDIT_OLD_STRING_NOT_FOUND", err)
 	}
@@ -165,7 +167,7 @@ func TestEditToolOldStringAmbiguous(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "file.go", "old_string": "foo", "new_string": "baz",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_AMBIGUOUS" {
 		t.Fatalf("err = %v want EDIT_OLD_STRING_AMBIGUOUS", err)
 	}
@@ -200,14 +202,14 @@ func TestEditToolReplaceAllFalseStillAmbiguous(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "file.go", "old_string": "foo", "new_string": "baz", "replace_all": false,
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "EDIT_OLD_STRING_AMBIGUOUS" {
 		t.Fatalf("err = %v want EDIT_OLD_STRING_AMBIGUOUS", err)
 	}
 }
 
 func TestCommandToolRequiresRunner(t *testing.T) {
-	tool := &CommandTool{}
+	tool := &command.CommandTool{}
 	_, err := tool.Run(context.Background(), map[string]any{"command": "echo hi"}, nativefixture.Context(t.TempDir()))
 	if err == nil || !strings.Contains(err.Error(), "not configured") {
 		t.Fatalf("err = %v", err)

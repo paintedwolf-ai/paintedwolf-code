@@ -17,7 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
 
 // Invariant: a denied capability ask leaves no authority, leases, or cached grants across broker entry points.
@@ -140,13 +140,13 @@ func denialInvariantCases(t *testing.T) []denialInvariantCase {
 		}},
 		{name: "WriteRootCheckpointBroker.Authorize", request: func(ctx context.Context, s *denialInvariantStores, call string) (denialInvariantOutcome, error) {
 			b := &WriteRootCheckpointBroker{Checkpoints: s.checkpoints, Runtime: s.write, ReadRuntime: s.read, Posture: strict}
-			res, err := b.Authorize(ctx, native.SandboxWriteRootAsk{SessionID: denialInvariantChat, ToolCallID: call, ProjectDir: projectDir,
+			res, err := b.Authorize(ctx, command.SandboxWriteRootAsk{SessionID: denialInvariantChat, ToolCallID: call, ProjectDir: projectDir,
 				ProposedWriteRoot: outsideWriteRoot})
 			return denialInvariantOutcome{res.Raised, res.Authorized, res.Denied}, err
 		}},
 		{name: "WriteRootCheckpointBroker.AuthorizeRead", request: func(ctx context.Context, s *denialInvariantStores, call string) (denialInvariantOutcome, error) {
 			b := &WriteRootCheckpointBroker{Checkpoints: s.checkpoints, Runtime: s.write, ReadRuntime: s.read, Posture: strict}
-			res, err := b.AuthorizeRead(ctx, native.SandboxReadPathAsk{SessionID: denialInvariantChat, ToolCallID: call, ProjectDir: projectDir,
+			res, err := b.AuthorizeRead(ctx, command.SandboxReadPathAsk{SessionID: denialInvariantChat, ToolCallID: call, ProjectDir: projectDir,
 				ProposedReadPath: outsidePath, ReadDenyPaths: []string{outsidePath}})
 			return denialInvariantOutcome{res.Raised, res.Authorized, res.Denied}, err
 		}},

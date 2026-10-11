@@ -2,13 +2,12 @@ package loopwake_test
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func idleImplementSessionState() surface.ImplementSessionState {

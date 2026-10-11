@@ -119,7 +119,7 @@ func decodeSourceAnchor[T any](encoded string, required ...string) (*T, error) {
 	return &out, nil
 }
 
-func (s *Handler) HandleGetSourceViewRows(w http.ResponseWriter, r *http.Request) {
+func (s *Presentation) HandleGetSourceViewRows(w http.ResponseWriter, r *http.Request) {
 	view, r, release, ok := s.requestedSourcePresentation(w, r)
 	if !ok {
 		return
@@ -133,7 +133,7 @@ func (s *Handler) HandleGetSourceViewRows(w http.ResponseWriter, r *http.Request
 	encoded, err := s.sourceFrame(r, chi.URLParam(r, "presentation_id"), view, query)
 
 	if err != nil {
-		s.writeSourceViewError(w, r, err)
+		s.Views.writeSourceViewError(w, r, err)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -142,7 +142,7 @@ func (s *Handler) HandleGetSourceViewRows(w http.ResponseWriter, r *http.Request
 }
 
 func (view *sourceViewRead) treeFrame(r *http.Request, query sourceFrameQuery) (*wire.SourceTreeFrame, error) {
-	if view.reviewPreparing {
+	if view.reviewing.reviewPreparing {
 		return nil, treeReviewPreparing()
 	}
 	anchor, err := decodeSourceAnchor[wire.SourceTreeAddress](query.anchor, "root_id", "path")
@@ -155,11 +155,11 @@ func (view *sourceViewRead) treeFrame(r *http.Request, query sourceFrameQuery) (
 		request.Anchor = &address
 	}
 	var frame sourcetree.Frame
-	if view.treeIntent.Filter != "" {
-		if view.filtered == nil {
+	if view.navigation.treeIntent.Filter != "" {
+		if view.filtering.filtered == nil {
 			return nil, &comparisonFailure{wire.ApiErrorCodeSourceViewPreparing, "The source filter is being prepared."}
 		}
-		frame, err = view.filtered.Frame(r.Context(), request)
+		frame, err = view.filtering.filtered.Frame(r.Context(), request)
 	} else {
 		frame, err = view.presentation.Frame(r.Context(), request)
 	}
@@ -182,8 +182,8 @@ func (view *sourceViewRead) treeFrame(r *http.Request, query sourceFrameQuery) (
 		out.Ancestors = append(out.Ancestors, wire.SourceTreeAncestor{Index: ancestor.Index, End: ancestor.End,
 			Row: wire.SourceTreeRow{Address: wireTreeAddress(ancestor.Address), Name: ancestor.Name, Kind: "directory", Depth: ancestor.Depth, Expanded: true, Deleted: ancestor.Deleted}})
 	}
-	if out.Anchor.RootID == "" && len(view.roots) > 0 {
-		out.Anchor = wire.SourceTreeAddress{RootID: view.roots[0].ID, Path: "."}
+	if out.Anchor.RootID == "" && len(view.navigation.roots) > 0 {
+		out.Anchor = wire.SourceTreeAddress{RootID: view.navigation.roots[0].ID, Path: "."}
 	}
 	rows := out.Rows
 	out.Rows = nil
@@ -215,16 +215,16 @@ func (view *sourceViewRead) comparisonFrame(r *http.Request, query sourceFrameQu
 	revision := viewProjectionRevision(view.intentRevision, view.projectionRevision)
 	out := &wire.SourceComparisonFrame{Kind: "comparison", ViewID: view.id, IntentRevision: view.intentRevision, ProjectionRevision: revision,
 		Extent: wire.SourceViewExtent{Complete: true}, Rows: []wire.SourceReaderRow{}, Span: wire.SourceViewSpan{Start: query.offset, End: query.offset}}
-	if view.projection == nil {
+	if view.comparisonData.projection == nil {
 		return out, nil
 	}
 	offset := query.offset
 	if anchor != nil {
-		rank, _, err := view.projection.Locate(r.Context(), anchor.Row)
+		rank, _, err := view.comparisonData.projection.Locate(r.Context(), anchor.Row)
 		if err != nil {
 			return nil, err
 		}
-		total, err := view.projection.Extent(r.Context())
+		total, err := view.comparisonData.projection.Extent(r.Context())
 		if err != nil {
 			return nil, err
 		}
@@ -235,7 +235,7 @@ func (view *sourceViewRead) comparisonFrame(r *http.Request, query sourceFrameQu
 		out.Target = &target
 		offset = max(0, target-int64(query.before))
 	}
-	rows, total, err := view.projection.Frame(r.Context(), offset, query.limit)
+	rows, total, err := view.comparisonData.projection.Frame(r.Context(), offset, query.limit)
 	if err != nil {
 		return nil, err
 	}

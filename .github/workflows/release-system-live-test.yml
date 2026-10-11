@@ -36,6 +36,8 @@ jobs:
       - name: Install the pinned Tauri CLI for pointer signing
         run: bun install --frozen-lockfile
         working-directory: lycaon-den
+      - name: Install minisign for cryptographic feed verification
+        run: sudo apt-get update && sudo apt-get install -y minisign
 
       - name: Exercise isolated R2 release system
         env:

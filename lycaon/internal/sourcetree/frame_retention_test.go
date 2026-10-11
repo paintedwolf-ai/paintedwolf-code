@@ -30,7 +30,7 @@ func TestFrameRetentionRejectsChangesBeforeCachedRows(t *testing.T) {
 		rel := filepath.Join(dir, "added.txt")
 		testutil.FailErr(t, "insert directory child", os.WriteFile(filepath.Join(root.Path, rel), []byte("added"), 0600))
 		view.catalog.InvalidateRoot(root.Path, filepath.ToSlash(rel))
-		_, err := view.catalog.ObserveDirectory(t.Context(), view.scope.Project, root, dir, sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+		_, err := view.catalog.Directories.ObserveDirectory(t.Context(), view.scope.Project, root, dir, sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 		testutil.FailErr(t, "publish changed child", err)
 		frame, err := frameForTest(t, view, t.Context(), request)
 		testutil.FailErr(t, "validate retained prefix", err)
@@ -78,7 +78,7 @@ func TestFrameRetentionPreservesClosedExceptionsAndSelectsLargestProof(t *testin
 	request.Retain = []FramePrefix{*short.Prefix, *first.Prefix}
 	testutil.FailErr(t, "change closed descendant", os.WriteFile(filepath.Join(root.Path, "a", "nested", "added.txt"), []byte("added"), 0600))
 	view.catalog.InvalidateRoot(root.Path, "a/nested/added.txt")
-	_, err = view.catalog.ObserveDirectory(t.Context(), view.scope.Project, root, "a/nested", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err = view.catalog.Directories.ObserveDirectory(t.Context(), view.scope.Project, root, "a/nested", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe closed descendant", err)
 	frame, err := frameForTest(t, view, t.Context(), request)
 	testutil.FailErr(t, "retain unchanged exception", err)
@@ -87,13 +87,13 @@ func TestFrameRetentionPreservesClosedExceptionsAndSelectsLargestProof(t *testin
 	}
 	testutil.FailErr(t, "insert preceding directory", os.Mkdir(filepath.Join(root.Path, "0"), 0700))
 	view.catalog.InvalidateRoot(root.Path, "0")
-	_, err = view.catalog.ObserveDirectory(t.Context(), view.scope.Project, root, ".", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err = view.catalog.Directories.ObserveDirectory(t.Context(), view.scope.Project, root, ".", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe inserted directory", err)
 	covered := func(ctx context.Context, navigation *sourcecatalog.Navigation) (bool, error) {
 		return sourcecatalog.SubtreeCovered(ctx, navigation, ".")
 	}
 	testutil.FailErr(t, "complete inserted directory before comparing updated coordinates",
-		view.catalog.AwaitSubtree(t.Context(), view.scope.Project, root, ".", covered))
+		view.catalog.Directories.AwaitSubtree(t.Context(), view.scope.Project, root, ".", covered))
 	frame, err = frameForTest(t, view, t.Context(), request)
 	testutil.FailErr(t, "retain smaller valid prefix", err)
 	if frame.RetainedPrefix == nil || *frame.RetainedPrefix != *short.Prefix {

@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -51,7 +52,7 @@ func ResolveSessionProject(storeReader session.Store, ctx context.Context, p *pr
 		BaseBranch:   row.BaseBranch,
 	}
 	if err := git.NewManager().ValidateWorktree(ctx, binding.Toplevel, binding.WorktreePath, binding.Branch); err != nil {
-		return SessionProject{}, session.ErrSessionWorktreeStale
+		return SessionProject{}, sessionscope.ErrWorktreeStale
 	}
 	roots = project.SubstituteWorktreeRoots(roots, binding)
 	scope.Project = project.WithWorktree(p, binding)
@@ -90,7 +91,7 @@ func ProjectForSession(storeReader session.Store, responses *httpio.Responder, w
 
 func writeSessionProjectError(responses *httpio.Responder, w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, session.ErrSessionWorktreeStale):
+	case errors.Is(err, sessionscope.ErrWorktreeStale):
 		responses.Fail(w, wire.ApiErrorCodeWorktreeStale, "This chat's worktree is missing or invalid. Unbind it in the Git tab to continue.")
 	case errors.Is(err, store.ErrSessionNotFound):
 		responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "Session not found.")

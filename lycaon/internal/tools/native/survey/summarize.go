@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"regexp"
 	"strings"
@@ -161,13 +162,13 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 	}
 
 	if pattern != "" && pathArg == "" && len(paths) == 0 {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SUMMARIZE_PATTERN_NEEDS_PATH",
 			Data: map[string]any{},
 		}
 	}
 	if content == "" && !hasRepo {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SUMMARIZE_NO_INPUT",
 			Data: map[string]any{
 				"need_one_of": []string{"path", "paths", "content"},
@@ -178,7 +179,7 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 	if content != "" {
 		n := len(content)
 		if n > t.Caps.Gather.InlineMaxBytes {
-			return "", &tools.ToolReject{Code: "SUMMARIZE_CONTENT_TOO_LARGE", Data: map[string]any{"bytes": n, "cap": t.Caps.Gather.InlineMaxBytes}}
+			return "", &toolrejection.ToolReject{Code: "SUMMARIZE_CONTENT_TOO_LARGE", Data: map[string]any{"bytes": n, "cap": t.Caps.Gather.InlineMaxBytes}}
 		}
 		// Preserve short unstructured content verbatim.
 		if n < t.Caps.Gather.InlineMinBytes && !hasRepo {
@@ -210,10 +211,10 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 	rerank := t.Rerank.WithLedger(rerankLedger)
 	reads := projectpaths.NewReadSession(t.Boundary, tctx)
 	defer reads.Close()
-	gatherer := &summarizeGatherer{boundary: t.Boundary, reads: reads, caps: t.Caps, tctx: tctx, catalog: t.Catalog, rerank: rerank}
-	defer gatherer.closeTrees()
+	gatherer := newSummarizeGatherer(t.Boundary, reads, t.Caps, tctx, t.Catalog, rerank)
+	defer gatherer.trees.closeTrees()
 	engine := summarize.NewEngine(gatherer, t.Caps)
-	engine.Outliner = gatherer
+	engine.Outliner = gatherer.sources
 	engine.Rerank = rerank
 	// Reserve room for the complete response envelope.
 	engine.WireFit = func(r summarize.Result) int {
@@ -230,27 +231,27 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 	}
 
 	res, err := engine.Run(ctx, req)
-	if err == nil && gatherer.treeErr != nil {
-		err = gatherer.treeErr
+	if err == nil && gatherer.trees.treeErr != nil {
+		err = gatherer.trees.treeErr
 	}
 	if err != nil {
 		if errors.Is(err, summarize.ErrNoMaterial) {
-			return "", &tools.ToolReject{Code: "SUMMARIZE_NO_MATERIAL", Data: gatherer.noMaterialData(req)}
+			return "", &toolrejection.ToolReject{Code: "SUMMARIZE_NO_MATERIAL", Data: gatherer.sources.noMaterialData(req)}
 		}
 		if errors.Is(err, summarize.ErrInvalidCursor) || errors.Is(err, sourcecatalog.ErrTreeCursor) {
-			return "", &tools.ToolReject{Code: "SUMMARIZE_CURSOR_STALE", Data: map[string]any{"cursor": cursor}}
+			return "", &toolrejection.ToolReject{Code: "SUMMARIZE_CURSOR_STALE", Data: map[string]any{"cursor": cursor}}
 		}
 		return "", err
 	}
 
-	res.NextActions = validateNextActions(ctx, t.Boundary, tctx, gatherer.actionableSources(res.NextActions))
+	res.NextActions = validateNextActions(ctx, t.Boundary, tctx, gatherer.sources.actionableSources(res.NextActions))
 	gatherer.stampWork(&res)
 	if t.Observe != nil {
 		t.Observe(res)
 	}
 	observability.LogSummarizeCall(observability.SummarizeDebugCapture{
 		Tool: "summarize", Task: res.Task, Mode: string(res.Gather.Mode), Work: res.Orchestration,
-		Diagnostics: map[string]any{"sources": res.Pack.Identity, "parse_failures": gatherer.parseFailures},
+		Diagnostics: map[string]any{"sources": res.Pack.Identity, "parse_failures": gatherer.sources.parseFailures},
 	})
 
 	resp := buildSummarizeResponse(res)

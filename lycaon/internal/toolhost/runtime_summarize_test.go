@@ -1,6 +1,7 @@
 package toolhost
 
 import (
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -10,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestBuildNativeRegistryConstructsSummarizeWithoutProviderServices(t *testing.T) {
@@ -22,14 +22,14 @@ func TestBuildNativeRegistryConstructsSummarizeWithoutProviderServices(t *testin
 	toolSchemas, _, err := extpacks.LoadEffectiveToolSchemas(extpackstest.StockCatalog(t))
 	testutil.FailErr(t, "load tool schemas", err)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{{
-		ID: tools.DefaultToolProfileID, Tools: map[string]bool{"summarize": true},
+		ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"summarize": true},
 	}})
 
 	registry, mutationTools, err := buildNativeRegistry(buildDeps{
 		boundary: boundary, nativeConfig: nativeConfig, toolSchemas: toolSchemas,
 	})
 	testutil.FailErr(t, "build native registry", err)
-	if mutationTools.summarize == nil {
+	if mutationTools.Survey.summarizeTool == nil {
 		t.Fatal("native summarize tool was not constructed")
 	}
 	for _, metadata := range registry.List() {

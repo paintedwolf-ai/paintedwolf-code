@@ -20,7 +20,7 @@ func TestObserveCoordinatorWorkerBranchPathBlocksSandboxPath(t *testing.T) {
 		gc)
 
 	if !observeHasCode(gc, guard.CoordinatorOverlayPathReadForbiddenCode) {
-		t.Fatalf("want %s in %v", guard.CoordinatorOverlayPathReadForbiddenCode, gc.ArgValidationErrors)
+		t.Fatalf("want %s in %v", guard.CoordinatorOverlayPathReadForbiddenCode, gc.Invocation.ArgValidationErrors)
 	}
 	if gc.RejectData[guard.CoordinatorOverlayPathReadForbiddenCode]["path"] != "shellsim/builtins.py" {
 		t.Fatalf("reject path = %#v want repo-relative", gc.RejectData[guard.CoordinatorOverlayPathReadForbiddenCode])
@@ -93,7 +93,7 @@ func TestObserveCoordinatorWorkerBranchPathChecksEveryCandidate(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			gc := oar.NewGuardContext()
 			guard.ObserveCoordinatorWorkerBranchPath(&api.Session{ID: "parent", AgentType: "coordinator"}, "read", args, gc)
-			if !gc.PathIsWorkerBranch || gc.RejectData[guard.CoordinatorOverlayPathReadForbiddenCode]["path"] != "shellsim/builtins.py" {
+			if !gc.Workers.PathIsWorkerBranch || gc.RejectData[guard.CoordinatorOverlayPathReadForbiddenCode]["path"] != "shellsim/builtins.py" {
 				t.Fatalf("worker path hidden by earlier primary path: %+v", gc.RejectData)
 			}
 		})

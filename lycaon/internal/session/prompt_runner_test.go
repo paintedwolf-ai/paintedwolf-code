@@ -12,7 +12,7 @@ import (
 func TestWorkerFinalizeUsesJobScopedTranscriptRead(t *testing.T) {
 	resolver := &stubSummaryResolver{msgs: []api.Message{completeLegToolRow(map[string]any{"leg_status": "complete", "brief": "done"})}}
 	outcome, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(
-		context.Background(), resolver, "reused-child", "survey",
+		context.Background(), resolver, resolver, "reused-child", "survey",
 		workercloseout.WorkerSummaryFinalizeOpts{WorkerJobID: "job-current"},
 	)
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)

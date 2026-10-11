@@ -10,16 +10,19 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func TestManagerImplLineBudget(t *testing.T) {
+func TestHostConstructionLineBudget(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "internal", "session", "manager_impl.go")
-	data, err := os.ReadFile(path)
-	contractcheck.FailErr(t, "read file", err)
+	lines := 0
+	for _, name := range []string{"host.go", "coordinator_wire.go"} {
+		path := filepath.Join(root, "lycaon", "internal", "session", name)
+		data, err := os.ReadFile(path)
+		contractcheck.FailErr(t, "read constructor "+name, err)
+		lines += strings.Count(string(data), "\n") + 1
+	}
 	const maxLines = 400
-	lines := strings.Count(string(data), "\n") + 1
 	if lines > maxLines {
-		t.Fatalf("manager_impl.go has %d lines, want <= %d", lines, maxLines)
+		t.Fatalf("Host construction has %d lines, want <= %d", lines, maxLines)
 	}
 }
 

@@ -1,3 +1,4 @@
+import { deliverSourceOperationCompletion } from "./source-operation-completion.ts";
 import { traceSourceViewDelivery } from "./source-view-event-trace.ts";
 import {
   clearSessionHostErrorNotices,
@@ -414,6 +415,7 @@ export function subscribeEvents(
       options.storeActions?.releasePromptSubmissionsThrough(envelope.data.id, envelope.entity_revision);
     }
     options.onInvalidate?.(TOPIC_STORE_INVALIDATION[envelope.topic], envelope.scope);
+    if (envelope.topic === "source_operation") deliverSourceOperationCompletion(connection, envelope.data);
     traceSourceViewDelivery(envelope, "applied");
   };
 

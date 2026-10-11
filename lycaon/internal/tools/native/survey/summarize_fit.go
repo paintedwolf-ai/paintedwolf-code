@@ -16,21 +16,21 @@ import (
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools/docrefs"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/odvcencio/gotreesitter"
 	"golang.org/x/mod/modfile"
 )
 
-// callSiteExcerptMaxRunes bounds call-site excerpts.
 const callSiteExcerptMaxRunes = 120
 
 // fitDocExts identifies documentation targets by extension.
+
 var fitDocExts = map[string]bool{
 	".md": true, ".markdown": true, ".txt": true, ".rst": true, ".adoc": true,
 }
 
 // gatherFitEdges builds one-hop context for single-file summaries.
-func (g *summarizeGatherer) gatherFitEdges(
+
+func (g *summaryRelations) gatherFitEdges(
 	ctx context.Context,
 	req summarize.Request,
 	structure []summarize.StructureCandidate,
@@ -70,11 +70,11 @@ func isFitDocTarget(rel, language string) bool {
 	return fitDocExts[strings.ToLower(filepath.Ext(rel))]
 }
 
-func (g *summarizeGatherer) fitDocNeighbors(ctx context.Context, target summarize.StructureCandidate) []summarize.PackNeighbor {
+func (g *summaryRelations) fitDocNeighbors(ctx context.Context, target summarize.StructureCandidate) []summarize.PackNeighbor {
 	if g.caps.Gather.NeighborMax <= 0 {
 		return nil
 	}
-	resolved, err := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, target.RelPath)
+	resolved, err := g.access.reads.Resolve(ctx, target.RelPath)
 	if err != nil {
 		return nil
 	}
@@ -125,7 +125,8 @@ func (g *summarizeGatherer) fitDocNeighbors(ctx context.Context, target summariz
 }
 
 // resolveDocRef resolves references to files.
-func (g *summarizeGatherer) resolveDocRef(ctx context.Context, docDir, tok string) (string, bool) {
+
+func (g *summaryRelations) resolveDocRef(ctx context.Context, docDir, tok string) (string, bool) {
 	tok = strings.TrimPrefix(filepath.ToSlash(tok), "./")
 	candidates := []string{tok}
 	if docDir != "" && docDir != "." {
@@ -136,7 +137,7 @@ func (g *summarizeGatherer) resolveDocRef(ctx context.Context, docDir, tok strin
 		if cand == "." || strings.HasPrefix(cand, "../") {
 			continue
 		}
-		resolved, err := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, cand)
+		resolved, err := g.access.reads.Resolve(ctx, cand)
 		if err != nil {
 			continue
 		}
@@ -149,7 +150,7 @@ func (g *summarizeGatherer) resolveDocRef(ctx context.Context, docDir, tok strin
 	return "", false
 }
 
-func (g *summarizeGatherer) fitCodeEdges(ctx context.Context, target summarize.StructureCandidate) (summarize.FitEdges, error) {
+func (g *summaryRelations) fitCodeEdges(ctx context.Context, target summarize.StructureCandidate) (summarize.FitEdges, error) {
 	tokens := fitGrepTokens(target)
 	files, err := g.fitCodeReferenceCounts(ctx, g.referenceRoot(ctx, target.RelPath), target.RelPath, tokens)
 	if err != nil {
@@ -162,12 +163,12 @@ func (g *summarizeGatherer) fitCodeEdges(ctx context.Context, target summarize.S
 	}, nil
 }
 
-func (g *summarizeGatherer) referenceRoot(ctx context.Context, target string) string {
-	resolved, err := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, target)
+func (g *summaryRelations) referenceRoot(ctx context.Context, target string) string {
+	resolved, err := g.access.reads.Resolve(ctx, target)
 	if err != nil {
 		return "."
 	}
-	return projectpaths.QualifyAbs(g.tctx, resolved.Root, resolved.Root.Path)
+	return g.access.qualify(resolved.Root, resolved.Root.Path)
 }
 
 type fitFileHit struct {
@@ -178,10 +179,10 @@ type fitFileHit struct {
 	samples []grepMatch
 }
 
-func (g *summarizeGatherer) fitCodeReferenceCounts(ctx context.Context, grepRoot, targetPath string, tokens []string) ([]fitFileHit, error) {
+func (g *summaryRelations) fitCodeReferenceCounts(ctx context.Context, grepRoot, targetPath string, tokens []string) ([]fitFileHit, error) {
 	byPath := map[string]*fitFileHit{}
 	docFreq := make(map[string]int, len(tokens))
-	err := scanLiteralMatches(ctx, g.boundary, g.catalog, g.tctx, grepRoot, tokens, g.surveyPruneOpts(sandbox.SurveyOptions{}), func(m grepMatch) {
+	err := g.access.literals(ctx, grepRoot, tokens, g.nested.surveyPruneOpts(sandbox.SurveyOptions{}), func(m grepMatch) {
 		if m.Path == "" || m.Path == targetPath {
 			return
 		}
@@ -220,7 +221,7 @@ func (g *summarizeGatherer) fitCodeReferenceCounts(ctx context.Context, grepRoot
 	return files, nil
 }
 
-func (g *summarizeGatherer) fitCodeNeighbors(files []fitFileHit) []summarize.PackNeighbor {
+func (g *summaryRelations) fitCodeNeighbors(files []fitFileHit) []summarize.PackNeighbor {
 	if g.caps.Gather.NeighborMax <= 0 {
 		return nil
 	}
@@ -235,7 +236,7 @@ func (g *summarizeGatherer) fitCodeNeighbors(files []fitFileHit) []summarize.Pac
 	return neighbors
 }
 
-func (g *summarizeGatherer) fitCodeCallSites(files []fitFileHit) []summarize.PackCallSite {
+func (g *summaryRelations) fitCodeCallSites(files []fitFileHit) []summarize.PackCallSite {
 	limit := g.caps.Gather.CallSiteMax
 	if limit <= 0 {
 		return nil
@@ -256,7 +257,8 @@ func (g *summarizeGatherer) fitCodeCallSites(files []fitFileHit) []summarize.Pac
 }
 
 // fitImportEdges builds one-hop inbound and outbound module edges.
-func (g *summarizeGatherer) fitImportEdges(ctx context.Context, target summarize.StructureCandidate, files []fitFileHit) []summarize.PackImportEdge {
+
+func (g *summaryRelations) fitImportEdges(ctx context.Context, target summarize.StructureCandidate, files []fitFileHit) []summarize.PackImportEdge {
 	max := g.caps.Gather.ImportEdgeMax
 	if max <= 0 {
 		return nil
@@ -275,9 +277,9 @@ func (g *summarizeGatherer) fitImportEdges(ctx context.Context, target summarize
 		out = append(out, e)
 	}
 
-	resolved, err := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, target.RelPath)
+	resolved, err := g.access.reads.Resolve(ctx, target.RelPath)
 	if err == nil {
-		content, rerr := g.readFileCached(ctx, resolved.Abs)
+		content, rerr := g.sources.readFileCached(ctx, resolved.Abs)
 		if rerr == nil {
 			for _, mod := range outboundImportModules(ctx, target.RelPath, content) {
 				add(summarize.PackImportEdge{
@@ -309,6 +311,7 @@ func (g *summarizeGatherer) fitImportEdges(ctx context.Context, target summarize
 }
 
 // outboundImportModules returns structured import module paths.
+
 func outboundImportModules(ctx context.Context, rel string, content []byte) []string {
 	entry := filekind.Detect(ctx, filekind.DetectReq{
 		Filename: filepath.Base(rel),
@@ -358,6 +361,7 @@ func fitGrepTokens(target summarize.StructureCandidate) []string {
 
 // clampExcerpt bounds a call-site excerpt. No ellipsis: the excerpt is matched
 // verbatim against captured source when a citation is verified.
+
 func clampExcerpt(s string, max int) string {
 	if max <= 0 || s == "" {
 		return s
@@ -370,7 +374,8 @@ func clampExcerpt(s string, max int) string {
 }
 
 // goPackageImportPath resolves the nearest module path.
-func (g *summarizeGatherer) goPackageImportPath(ctx context.Context, rel string) string {
+
+func (g *summaryRelations) goPackageImportPath(ctx context.Context, rel string) string {
 	if !strings.EqualFold(filepath.Ext(rel), ".go") {
 		return ""
 	}
@@ -397,14 +402,14 @@ func (g *summarizeGatherer) goPackageImportPath(ctx context.Context, rel string)
 	return ip
 }
 
-func (g *summarizeGatherer) resolveGoPackageImportPath(ctx context.Context, rel string) string {
+func (g *summaryRelations) resolveGoPackageImportPath(ctx context.Context, rel string) string {
 	dir := path.Dir(rel)
 	for {
 		modRel := "go.mod"
 		if dir != "" && dir != "." {
 			modRel = path.Join(dir, "go.mod")
 		}
-		resolved, err := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, modRel)
+		resolved, err := g.access.reads.Resolve(ctx, modRel)
 		if err == nil {
 			info, serr := os.Stat(resolved.Abs)
 			if serr == nil && !info.IsDir() {
@@ -446,7 +451,7 @@ func (g *summarizeGatherer) resolveGoPackageImportPath(ctx context.Context, rel 
 	}
 }
 
-func (g *summarizeGatherer) parseGoModCached(ctx context.Context, abs string) *modfile.File {
+func (g *summaryRelations) parseGoModCached(ctx context.Context, abs string) *modfile.File {
 	g.memoMu.Lock()
 	if g.goModByAbs != nil {
 		if f, ok := g.goModByAbs[abs]; ok {
@@ -455,7 +460,7 @@ func (g *summarizeGatherer) parseGoModCached(ctx context.Context, abs string) *m
 		}
 	}
 	g.memoMu.Unlock()
-	data, err := g.readFileCached(ctx, abs)
+	data, err := g.sources.readFileCached(ctx, abs)
 	if err != nil {
 		return nil
 	}

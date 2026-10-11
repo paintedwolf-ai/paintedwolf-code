@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
@@ -21,7 +22,7 @@ type approvalAuthorityRecovery interface {
 }
 
 // SetApprovalAuthorityInstaller wires the one authority mutation boundary.
-func (m *Manager) SetApprovalAuthorityInstaller(installer ApprovalAuthorityInstaller) {
+func (m *ApprovalAuthority) SetApprovalAuthorityInstaller(installer ApprovalAuthorityInstaller) {
 	if m != nil {
 		m.authorityInstaller = installer
 	}
@@ -85,21 +86,21 @@ func (o ApprovalOption) grantedBy(resolution Resolution) ApprovalOption {
 
 // ResolveApprovalOption installs authority before committing the checkpoint.
 // A failed commit rolls back the installed authority.
-func (m *Manager) ResolveApprovalOption(ctx context.Context, sessionID, checkpointID, optionID string) (*CheckpointResponse, error) {
+func (m *ApprovalAuthority) ResolveApprovalOption(ctx context.Context, sessionID, checkpointID, optionID string) (*CheckpointResponse, error) {
 	return m.ResolveApprovalOptionBy(ctx, sessionID, checkpointID, optionID, HumanApproval())
 }
 
 // ResolveApprovalOptionBy installs authority before committing the checkpoint as the given resolver.
-func (m *Manager) ResolveApprovalOptionBy(ctx context.Context, sessionID, checkpointID, optionID string, resolver ApprovalResolver) (*CheckpointResponse, error) {
+func (m *ApprovalAuthority) ResolveApprovalOptionBy(ctx context.Context, sessionID, checkpointID, optionID string, resolver ApprovalResolver) (*CheckpointResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	if err := resolver.validate(); err != nil {
 		return nil, err
 	}
-	if m.sessionAdmission != nil {
+	if m.sessions.admission != nil {
 		var response *CheckpointResponse
-		err := m.sessionAdmission(ctx, sessionID, func() error {
+		err := m.sessions.admission(ctx, sessionID, func() error {
 			var resolveErr error
 			response, resolveErr = m.resolveApprovalOptionAdmitted(ctx, sessionID, checkpointID, optionID, resolver)
 			return resolveErr
@@ -109,10 +110,10 @@ func (m *Manager) ResolveApprovalOptionBy(ctx context.Context, sessionID, checkp
 	return m.resolveApprovalOptionAdmitted(ctx, sessionID, checkpointID, optionID, resolver)
 }
 
-func (m *Manager) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, checkpointID, optionID string, resolver ApprovalResolver) (*CheckpointResponse, error) {
+func (m *ApprovalAuthority) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, checkpointID, optionID string, resolver ApprovalResolver) (*CheckpointResponse, error) {
 	releaseAuthority := m.LockApprovalAuthority()
 	defer releaseAuthority()
-	unlock := m.resolutionLocks.Lock(checkpointID)
+	unlock := m.checkpoints.LockResolution(checkpointID)
 	defer unlock()
 
 	row, err := m.store.Get(ctx, checkpointID)
@@ -153,7 +154,7 @@ func (m *Manager) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, 
 	now := time.Now().UTC()
 	var opened *presence.Unlock
 	if plan.releasesHeld(option) {
-		if opened, err = m.heldAnswer(sessionID, checkpointID, *plan, option, resolver, resolution); err != nil {
+		if opened, err = m.presence.heldAnswer(sessionID, checkpointID, *plan, option, resolver, resolution); err != nil {
 			return nil, err
 		}
 	}
@@ -202,7 +203,7 @@ func (m *Manager) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, 
 			return err
 		}
 		if opened != nil {
-			if err := m.vault.recorder.RecordUnlockTx(ctx, tx, plan.Held.ProjectID, *opened); err != nil {
+			if err := m.presence.RecordUnlockTx(ctx, tx, plan.Held.ProjectID, *opened); err != nil {
 				return err
 			}
 		}
@@ -223,20 +224,19 @@ func (m *Manager) resolveApprovalOptionAdmitted(ctx context.Context, sessionID, 
 	}
 	// The chat unlocks only after the approval commits.
 	if opened != nil {
-		m.vault.unlocks.Open(*opened)
-		m.answerUnlockCards(ctx, *opened, checkpointID)
+		m.presence.CommitUnlock(ctx, *opened, checkpointID)
 	}
 	row.Status = DecisionStatusApproved
 	row.Result = result
 	row.ResolvedAt = &now
 	row.Resolution = &resolution
-	m.announceResolved(ctx, *row, viaOutbox)
+	m.checkpoints.announceResolved(ctx, *row, viaOutbox)
 	m.notifyToolApprovalTerminal(*row, DecisionStatusApproved)
 	return storedToCheckpointResponse(row), nil
 }
 
 // RecoverApprovalOperations rolls back authority installed without a committed checkpoint.
-func (m *Manager) RecoverApprovalOperations(ctx context.Context) error {
+func (m *ApprovalAuthority) RecoverApprovalOperations(ctx context.Context) error {
 	pending, err := m.store.preparedApprovalOperations(ctx)
 	if err != nil {
 		return err
@@ -257,4 +257,39 @@ func (m *Manager) RecoverApprovalOperations(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+type ApprovalAuthority struct {
+	store                      approvalAuthorityStore
+	authzRecorder              AuthzRecorder
+	authorityMutation          sync.Mutex
+	authorityInstaller         ApprovalAuthorityInstaller
+	checkpoints                checkpointSettlement
+	sessions                   *SessionCoupling
+	presence                   heldPresence
+	onToolApprovalTerminal     func(string, string, DecisionStatus)
+	onToolApprovalRestored     func(StoredCheckpoint)
+	onToolApprovalDenyRestored func(StoredCheckpoint)
+}
+
+type approvalAuthorityStore interface {
+	Get(context.Context, string) (*StoredCheckpoint, error)
+	ListRejectedToolApprovals(context.Context) ([]StoredCheckpoint, error)
+	prepareApprovalOperation(context.Context, string, string, ApprovalOption) error
+	commitApprovalOperation(context.Context, StoredCheckpoint, *DecisionResult, time.Time, Resolution, func(*sql.Tx) error) (bool, error)
+	rollbackApprovalOperation(context.Context, string) error
+	preparedApprovalOperations(context.Context) ([]preparedApprovalOperation, error)
+	chatGrants(context.Context, time.Time) ([]ChatGrant, error)
+	forgetChatGrant(context.Context, string) (bool, error)
+}
+
+type heldPresence interface {
+	heldAnswer(string, string, ApprovalPlan, ApprovalOption, ApprovalResolver, Resolution) (*presence.Unlock, error)
+	RecordUnlockTx(context.Context, *sql.Tx, string, presence.Unlock) error
+	CommitUnlock(context.Context, presence.Unlock, string)
+}
+
+type AuthzRecorder interface {
+	authzledger.Recorder
+	authzledger.TransactionalRecorder
 }

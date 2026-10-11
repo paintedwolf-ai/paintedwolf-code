@@ -4,10 +4,6 @@ package orchestration_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"sync"
 	"testing"
 	"time"
@@ -16,6 +12,10 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -33,11 +33,11 @@ func packTopologySpec(count int, merge orchestration.MergeStrategy) orchestratio
 	}
 }
 
-func newPackTestOrchestrator(t *testing.T, del orchestration.PipelineDelegation) (*orchestration.OrchestratorImpl, *delegation.MemoryStore, *session.Manager, *store.Memory) {
+func newPackTestOrchestrator(t *testing.T, del orchestration.PipelineDelegation) (*orchestration.OrchestratorImpl, *delegation.MemoryStore, *session.Host, *store.Memory) {
 	t.Helper()
 	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewManager(sessStore, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	queue := worker.NewInMemoryQueue(10)
 	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 	if del == nil {
@@ -58,7 +58,7 @@ func newPackTestOrchestrator(t *testing.T, del orchestration.PipelineDelegation)
 	return orch, delStore, sessMgr, sessStore
 }
 
-func newPackTimestampOrchestrator(t *testing.T) (*orchestration.OrchestratorImpl, *packTimestampRecording, *session.Manager, *store.Memory) {
+func newPackTimestampOrchestrator(t *testing.T) (*orchestration.OrchestratorImpl, *packTimestampRecording, *session.Host, *store.Memory) {
 	t.Helper()
 	rec := &packTimestampRecording{recordingDelegation: recordingDelegation{order: make([]string, 0, 4)}}
 	orch, _, sessMgr, sessStore := newPackTestOrchestrator(t, rec)
@@ -69,7 +69,7 @@ func TestPackParallelProbeDispatch(t *testing.T) {
 	ctx := context.Background()
 	orch, rec, sessMgr, sessStore := newPackTimestampOrchestrator(t)
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
@@ -108,7 +108,7 @@ func TestPackFirstValidSkipsFailedProbe(t *testing.T) {
 	ctx := context.Background()
 	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewManager(sessStore, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	queue := worker.NewInMemoryQueue(10)
 	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 	failDel := &failProbeDelegation{
@@ -122,7 +122,7 @@ func TestPackFirstValidSkipsFailedProbe(t *testing.T) {
 		Agents:     reg,
 	})
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
@@ -147,7 +147,7 @@ func TestPackProbeYamlMockRun(t *testing.T) {
 		t.Fatalf("pattern = %q", spec.Pattern)
 	}
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
@@ -172,7 +172,7 @@ func TestPackAllFailReturnsError(t *testing.T) {
 	ctx := context.Background()
 	delStore := delegation.NewMemoryStore()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewManager(sessStore, llm.NewMockProvider(nil), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	queue := worker.NewInMemoryQueue(10)
 	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 	failDel := &failProbeDelegation{
@@ -186,7 +186,7 @@ func TestPackAllFailReturnsError(t *testing.T) {
 		Agents:     reg,
 	})
 
-	sess, err := sessMgr.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
+	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 

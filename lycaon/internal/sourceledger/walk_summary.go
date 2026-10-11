@@ -9,7 +9,7 @@ import (
 )
 
 // WalkSummary counts the same grouped steps as Walk, only for requested transcript turns.
-func (s *Store) WalkSummary(ctx context.Context, projectID, sessionID string, messageIDs []string) ([]api.SourceWalkTurnSummary, error) {
+func (s *Walk) WalkSummary(ctx context.Context, projectID, sessionID string, messageIDs []string) ([]api.SourceWalkTurnSummary, error) {
 	if len(messageIDs) > 100 {
 		return nil, fmt.Errorf("at most 100 message ids are allowed")
 	}

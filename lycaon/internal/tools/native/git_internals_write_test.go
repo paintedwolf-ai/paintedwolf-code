@@ -3,12 +3,12 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -30,7 +30,7 @@ func TestWriteEditGitInternalsDenied(t *testing.T) {
 				"path":    tc.path,
 				"content": "#!/bin/sh\n",
 			}, nativefixture.Context(dir))
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
 				t.Fatalf("err = %v, want GIT_INTERNALS_WRITE_DENIED", err)
 			}
@@ -49,7 +49,7 @@ func TestWriteEditGitInternalsDenied(t *testing.T) {
 				"old_string": "old",
 				"new_string": "new",
 			}, nativefixture.Context(dir))
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
 				t.Fatalf("err = %v, want GIT_INTERNALS_WRITE_DENIED", err)
 			}
@@ -67,7 +67,7 @@ func TestWriteGitIndexRequiresNativeGitRoute(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": ".git/index", "content": "not-a-real-index",
 	}, nativefixture.Context(dir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" || reject.Data["class"] != "metadata" {
 		t.Fatalf("index write did not require the native Git route: %v", err)
 	}

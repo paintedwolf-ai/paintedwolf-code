@@ -17,20 +17,19 @@ func TestSessionResourceDisposalStaysReachableFromProduction(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	session := filepath.Join(root, "lycaon", "internal", "session")
 
-	if sites := receiverCallSites(t, session, "m", "DisposeSessionResources", "forget.go"); len(sites) == 0 {
-		t.Fatal("Manager.DisposeSessionResources has no production caller")
+	chats := filepath.Join(session, "chats")
+	if sites := receiverCallSites(t, chats, "m", "DisposeRuntime", ""); len(sites) == 0 {
+		t.Fatal("chat deletion does not dispose its runtime resource scope")
 	}
-	if sites := receiverCallSites(t, session, "m", "disposeSessionRuntime", ""); len(sites) == 0 {
-		t.Fatal("session deletion does not dispose its resource scope")
+	if sites := receiverCallSites(t, chats, "m.resources", "Dispose", ""); len(sites) == 0 {
+		t.Fatal("chat runtime disposal does not reach the lifecycle registry")
 	}
-
-	if sites := receiverCallSites(t, session, "m", "ForgetJob", "forget.go"); len(sites) == 0 {
-		t.Fatal("Manager.ForgetJob has no production caller; job-keyed wake payloads " +
-			"are released at terminal job transition and nowhere else.")
+	terminal := filepath.Join(session, "coordinatorcontrol")
+	if sites := receiverCallSites(t, terminal, "m.Digests", "Forget", ""); len(sites) == 0 {
+		t.Fatal("terminal worker transition does not release job-keyed wake digests")
 	}
-
 	app := filepath.Join(root, "lycaon", "internal", "app")
-	if sites := receiverCallSites(t, app, "", "RegisterSessionCleanup", ""); len(sites) == 0 {
+	if sites := receiverCallSites(t, app, "", "RegisterCleanup", ""); len(sites) == 0 {
 		t.Fatal("session cleanup registration is missing from app wiring")
 	}
 }
@@ -220,8 +219,7 @@ func receiverCallSites(t *testing.T, dir, recv, name, declaredIn string) []strin
 				return true
 			}
 			if recv != "" {
-				ident, ok := sel.X.(*ast.Ident)
-				if !ok || ident.Name != recv {
+				if hookReceiverPath(sel.X) != recv {
 					return true
 				}
 			}

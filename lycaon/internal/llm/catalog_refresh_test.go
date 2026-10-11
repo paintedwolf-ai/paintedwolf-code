@@ -56,7 +56,7 @@ providers:
 	testutil.FailErr(t, "creds", err)
 	testutil.FailErr(t, "set key", creds.Set("openai", "sk-test"))
 
-	reg, err := NewRegistry(cat, creds)
+	reg, err := NewRegistry(t.Context(), cat, creds)
 	testutil.FailErr(t, "registry", err)
 	reg.discoveryClient = srv.Client()
 
@@ -73,7 +73,7 @@ providers:
 	testutil.FailErr(t, "feed", err)
 	_, err = feed.Refresh(context.Background())
 	testutil.FailErr(t, "refresh feed", err)
-	reg.SetModelFeed(feed)
+	reg.SetModelFeed(t.Context(), feed)
 
 	before := reg.EffectiveModels(t.Context(), "openai")
 	if len(before) == 0 {

@@ -54,24 +54,24 @@ var serveRunnerOrder = []string{
 }
 
 func (a *ServeApp) registerRunner(name string, run func(context.Context) error) {
-	a.runners = append(a.runners, backgroundRunner{name: name, run: run, retryDelay: backgroundRunnerBackoff})
+	a.runners.runners = append(a.runners.runners, backgroundRunner{name: name, run: run, retryDelay: backgroundRunnerBackoff})
 }
 
 func (a *ServeApp) registerOneShotRunner(name string, run func(context.Context) error) {
-	a.runners = append(a.runners, backgroundRunner{name: name, run: run, oneShot: true})
+	a.runners.runners = append(a.runners.runners, backgroundRunner{name: name, run: run, oneShot: true})
 }
 
 func (a *ServeApp) startRunners(ctx context.Context) error {
-	if a.runnersActive || len(a.runners) == 0 {
+	if a.runners.active || len(a.runners.runners) == 0 {
 		return nil
 	}
-	names := make(map[string]struct{}, len(a.runners))
-	for i := range a.runners {
-		name := strings.TrimSpace(a.runners[i].name)
-		if name == "" || a.runners[i].run == nil {
+	names := make(map[string]struct{}, len(a.runners.runners))
+	for i := range a.runners.runners {
+		name := strings.TrimSpace(a.runners.runners[i].name)
+		if name == "" || a.runners.runners[i].run == nil {
 			return fmt.Errorf("background runner %d requires a name and function", i)
 		}
-		if !a.runners[i].oneShot && a.runners[i].retryDelay == nil {
+		if !a.runners.runners[i].oneShot && a.runners.runners[i].retryDelay == nil {
 			return fmt.Errorf("background runner %q requires a retry policy", name)
 		}
 		if _, duplicate := names[name]; duplicate {
@@ -80,10 +80,10 @@ func (a *ServeApp) startRunners(ctx context.Context) error {
 		names[name] = struct{}{}
 	}
 	runnerCtx, cancel := context.WithCancel(ctx)
-	a.runnersCancel = cancel
-	a.runnersActive = true
-	for i := range a.runners {
-		r := &a.runners[i]
+	a.runners.cancel = cancel
+	a.runners.active = true
+	for i := range a.runners.runners {
+		r := &a.runners.runners[i]
 		if !r.oneShot {
 			continue
 		}
@@ -95,23 +95,23 @@ func (a *ServeApp) startRunners(ctx context.Context) error {
 		}
 		stopErr := ctx.Err()
 		cancel()
-		a.runnersCancel = nil
-		a.runnersActive = false
+		a.runners.cancel = nil
+		a.runners.active = false
 		if stopErr != nil {
 			return stopErr
 		}
 		return fmt.Errorf("background startup runner %s: %w", r.name, err)
 	}
-	for i := range a.runners {
-		if a.runners[i].oneShot {
+	for i := range a.runners.runners {
+		if a.runners.runners[i].oneShot {
 			continue
 		}
-		a.runners[i].done = make(chan struct{})
-		r := &a.runners[i]
-		a.runnersWG.Add(1)
+		a.runners.runners[i].done = make(chan struct{})
+		r := &a.runners.runners[i]
+		a.runners.runnersWG.Add(1)
 		go func() {
 			// Accounting remains outside panic recovery.
-			defer a.runnersWG.Done()
+			defer a.runners.runnersWG.Done()
 			defer close(r.done)
 			a.superviseRunner(runnerCtx, r)
 		}()
@@ -183,16 +183,16 @@ func (a *ServeApp) stopRunners() {
 // stopRunnersWithin cancels the runners and waits for them, giving up at the
 // earlier of the caller's deadline and the runner drain timeout.
 func (a *ServeApp) stopRunnersWithin(ctx context.Context) {
-	if !a.runnersActive {
+	if !a.runners.active {
 		return
 	}
-	if a.runnersCancel != nil {
-		a.runnersCancel()
-		a.runnersCancel = nil
+	if a.runners.cancel != nil {
+		a.runners.cancel()
+		a.runners.cancel = nil
 	}
 	drained := make(chan struct{})
 	go func() {
-		a.runnersWG.Wait()
+		a.runners.runnersWG.Wait()
 		close(drained)
 	}()
 	timer := time.NewTimer(serveRunnerDrainTimeout)
@@ -206,20 +206,20 @@ func (a *ServeApp) stopRunnersWithin(ctx context.Context) {
 		slog.WarnContext(ctx, "background runners did not stop; continuing shutdown",
 			"runners", a.unfinishedRunners(), "timeout", serveRunnerDrainTimeout)
 	}
-	a.runnersActive = false
+	a.runners.active = false
 }
 
 // unfinishedRunners names the runners still executing, for the drain warning.
 func (a *ServeApp) unfinishedRunners() []string {
 	var names []string
-	for i := range a.runners {
-		if a.runners[i].done == nil {
+	for i := range a.runners.runners {
+		if a.runners.runners[i].done == nil {
 			continue
 		}
 		select {
-		case <-a.runners[i].done:
+		case <-a.runners.runners[i].done:
 		default:
-			names = append(names, a.runners[i].name)
+			names = append(names, a.runners.runners[i].name)
 		}
 	}
 	return names

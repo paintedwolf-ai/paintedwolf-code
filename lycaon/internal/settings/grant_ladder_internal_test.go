@@ -49,12 +49,16 @@ func ladderGate(t *testing.T) *RuleApprovalGate {
 
 func ladderAction() hitl.ProposedAction {
 	return hitl.ProposedAction{
-		Tool:       "network",
-		Args:       map[string]any{"host": "api.example.com"},
-		SessionID:  "sess-ladder",
-		ProjectID:  "proj-ladder",
-		ProjectDir: "/tmp/proj",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "network",
+Args: map[string]any{"host": "api.example.com"},
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-ladder",
+ProjectID: "proj-ladder",
+ProjectDir: "/tmp/proj",
+},
+}
 }
 
 func TestGrantOfferLadderShape(t *testing.T) {
@@ -164,9 +168,19 @@ func TestGrantOfferLadderShape(t *testing.T) {
 func TestStructuredMCPGrantIdentityGetsMCPDeviceLadder(t *testing.T) {
 	approvals := ladderGate(t)
 	action := hitl.ProposedAction{
-		Tool: "mcp_docs_search", ApprovalCategory: "mcp", ApprovalSubject: "docs.search",
-		SessionID: "sess-mcp", ProjectID: "proj-mcp", ProjectDir: "/tmp/proj",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "mcp_docs_search",
+},
+Resources: hitl.ActionResources{
+ApprovalCategory: "mcp",
+ApprovalSubject: "docs.search",
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-mcp",
+ProjectID: "proj-mcp",
+ProjectDir: "/tmp/proj",
+},
+}
 	predicate := GrantPredicateForAction(action)
 	if predicate.Category != ApprovalCategoryMCP || predicate.Pattern != "docs.search" {
 		t.Fatalf("predicate = %+v, want structured MCP identity", predicate)
@@ -221,7 +235,7 @@ func TestTimeRungIdentityDistinctFromScopeRungs(t *testing.T) {
 func TestCombinedPredicatesMintOneTimeRungAndOneRecommended(t *testing.T) {
 	approvals := ladderGate(t)
 	action := ladderAction()
-	action.HostResources = []string{"camera"}
+	action.Resources.HostResources = []string{"camera"}
 	offers := approvals.GrantOffers(action, &hitl.ApprovalResult{
 		Decision: askDecision(api.GateUserRule), HostResourceApproval: true,
 	})
@@ -245,10 +259,18 @@ func TestCombinedPredicatesMintOneTimeRungAndOneRecommended(t *testing.T) {
 func TestDetectionCardsNeverMintAFamilyPredicate(t *testing.T) {
 	approvals := ladderGate(t)
 	action := hitl.ProposedAction{
-		Tool: "command", Args: map[string]any{"command": "aws s3 rb s3://bucket --force"},
-		SessionID: "sess-detect", ProjectDir: "/tmp/proj",
-		Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/proj"}},
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "aws s3 rb s3://bucket --force"},
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-detect",
+ProjectDir: "/tmp/proj",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/proj"}},
+},
+}
 	offers := approvals.GrantOffers(action, &hitl.ApprovalResult{
 		Decision: askDecision(api.GateAuthorityMisuse),
 	})
@@ -351,22 +373,28 @@ func TestApplyGrantMaterializesTTLAtApproval(t *testing.T) {
 func TestDeclaredEndpointSetMintsNoHostGrant(t *testing.T) {
 	approvals := ladderGate(t)
 	setAction := hitl.ProposedAction{
-		Tool: "network",
-		Args: map[string]any{
+Invocation: hitl.ActionInvocation{
+Tool: "network",
+Args: map[string]any{
 			"hosts":                 []string{"crates.io", "pkg.go.dev"},
 			"host_count":            2,
 			"declared_hosts_digest": "set-digest",
 		},
-		SessionID:  "sess-ladder",
-		ProjectDir: "/tmp/proj",
-		Contained: hitl.Contained{
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-ladder",
+ProjectDir: "/tmp/proj",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{
 			FSJailed:            true,
 			Egress:              hitl.ContainedEgressProxy,
 			Roots:               []string{"/tmp/proj"},
 			DeclaredHostsDigest: "set-digest",
 			DeclaredHostCount:   2,
 		},
-	}
+},
+}
 	if predicate := GrantPredicateForAction(setAction); predicate.Pattern != "" {
 		t.Fatalf("a set action must yield no host pattern, got %q", predicate.Pattern)
 	}
@@ -436,9 +464,16 @@ func TestDurableGrantWithoutAProjectIsRejected(t *testing.T) {
 func TestWriteRootGrantOffersDespiteFilesystemPrimary(t *testing.T) {
 	approvals := ladderGate(t)
 	action := hitl.ProposedAction{
-		Tool: "write_root", Args: map[string]any{"proposed_write_root": "/tmp/cache"},
-		SessionID: "sess-wr", ProjectID: "proj-wr", ProjectDir: "/tmp/proj",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "write_root",
+Args: map[string]any{"proposed_write_root": "/tmp/cache"},
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-wr",
+ProjectID: "proj-wr",
+ProjectDir: "/tmp/proj",
+},
+}
 	// Broker evaluates sensitive_location / outside_roots; authority is still a
 	// write-root lease, not a granted path.
 	offers := approvals.GrantOffers(action, &hitl.ApprovalResult{
@@ -472,10 +507,10 @@ func TestWriteRootGrantOffersDespiteFilesystemPrimary(t *testing.T) {
 		t.Fatal("write-root ladder omitted the device rung")
 	}
 	other := action
-	other.SessionID = "sess-other"
-	other.ProjectID = "proj-other"
-	other.ProjectDir = "/tmp/other"
-	other.Contained.Roots = []string{"/tmp/other"}
+	other.Scope.SessionID = "sess-other"
+	other.Scope.ProjectID = "proj-other"
+	other.Scope.ProjectDir = "/tmp/other"
+	other.Execution.Contained.Roots = []string{"/tmp/other"}
 	otherOffers := approvals.GrantOffers(other, &hitl.ApprovalResult{
 		Decision: askDecision(api.GateSensitiveLocation),
 	})
@@ -493,9 +528,15 @@ func TestWriteRootGrantOffersDespiteFilesystemPrimary(t *testing.T) {
 func TestDayRungRidesProjectIdentityWithoutFolder(t *testing.T) {
 	approvals := ladderGate(t)
 	action := hitl.ProposedAction{
-		Tool: "write_root", Args: map[string]any{"proposed_write_root": "/tmp/cache"},
-		SessionID: "sess-wr", ProjectID: "proj-nofolder",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "write_root",
+Args: map[string]any{"proposed_write_root": "/tmp/cache"},
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-wr",
+ProjectID: "proj-nofolder",
+},
+}
 	offers := approvals.GrantOffers(action, &hitl.ApprovalResult{
 		Decision: askDecision(api.GateSensitiveLocation),
 	})
@@ -510,9 +551,15 @@ func TestDayRungRidesProjectIdentityWithoutFolder(t *testing.T) {
 func TestFolderWithoutProjectIdentityKeepsTheDurableSlotDisabled(t *testing.T) {
 	approvals := ladderGate(t)
 	action := hitl.ProposedAction{
-		Tool: "write_root", Args: map[string]any{"proposed_write_root": "/tmp/cache"},
-		SessionID: "sess-wr", ProjectDir: "/tmp/proj",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "write_root",
+Args: map[string]any{"proposed_write_root": "/tmp/cache"},
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-wr",
+ProjectDir: "/tmp/proj",
+},
+}
 	offers := approvals.GrantOffers(action, &hitl.ApprovalResult{
 		Decision: askDecision(api.GateSensitiveLocation),
 	})
@@ -560,7 +607,7 @@ func TestTaskCeilingKeepsDayRungOnCard(t *testing.T) {
 func TestAbsorbedHostResourceOffersDeviceOnUnobservedChannel(t *testing.T) {
 	approvals := ladderGate(t)
 	action := ladderAction()
-	action.HostResources = []string{"docker"}
+	action.Resources.HostResources = []string{"docker"}
 	offers := approvals.AbsorbedGrantOffers(action, &hitl.ApprovalResult{
 		Decision: askDecision(api.GateUnobservedChannel),
 	})
@@ -595,10 +642,19 @@ func TestAbsorbedHostResourceOffersDeviceOnUnobservedChannel(t *testing.T) {
 func TestExactActionGrantOffersSpanTheLadder(t *testing.T) {
 	approvals := ladderGate(t)
 	action := hitl.ProposedAction{
-		Tool: "command", Args: map[string]any{"command": "echo hi"},
-		SessionID: "sess-cmd", ProjectID: "proj-cmd", ProjectDir: "/tmp/proj",
-		Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/proj"}},
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo hi"},
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-cmd",
+ProjectID: "proj-cmd",
+ProjectDir: "/tmp/proj",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/proj"}},
+},
+}
 	if got := GrantPredicateForAction(action); got.Category != ApprovalCategoryCommand {
 		t.Fatalf("predicate = %+v, want command so the exact-action ladder applies", got)
 	}

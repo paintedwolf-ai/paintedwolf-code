@@ -12,6 +12,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 )
 
 func TestComposeToolOmitsEffectiveYAML(t *testing.T) {
@@ -20,10 +22,10 @@ func TestComposeToolOmitsEffectiveYAML(t *testing.T) {
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
-	policy, err := workflow.LoadComposePolicy()
-	testutil.FailErr(t, "workflow.LoadComposePolicy failed", err)
-	composer := &workflow.Composer{
-		SessionStore: workflow.NewMemorySessionWorkflowStore(),
+	policy, err := workflowcomposition.LoadComposePolicy()
+	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
+	composer := &workflowcomposition.Composer{
+		SessionStore: workflowdrafts.NewMemory(),
 		Registry:     condReg,
 		Agents:       agents,
 		Policy:       policy,
@@ -48,12 +50,10 @@ phases:
 	out, err := reg.Run(context.Background(), "workflow_compose", map[string]any{
 		"manifest_yaml": manifest,
 		"dry_run":       true,
-	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    "sess-1",
-		Agent:        orchestration.ProfileCoordinator,
-	})
+	}, tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+		ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "sess-1",
+			Agent: orchestration.ProfileCoordinator}})
 	testutil.FailErr(t, "reg.Run failed", err)
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {

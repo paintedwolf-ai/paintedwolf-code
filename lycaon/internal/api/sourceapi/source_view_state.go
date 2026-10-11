@@ -49,10 +49,10 @@ func (view *sourceView) snapshot(ctx context.Context) (wire.SourceView, error) {
 
 func (view *sourceViewRead) snapshot(ctx context.Context) (wire.SourceView, error) {
 	intentRevision := view.intentRevision
-	if view.tree == nil {
+	if view.navigation.tree == nil {
 		extent := wire.SourceViewExtent{Complete: view.state == "ready"}
-		if view.projection != nil {
-			rows, err := view.projection.Extent(ctx)
+		if view.comparisonData.projection != nil {
+			rows, err := view.comparisonData.projection.Extent(ctx)
 			if err != nil {
 				return wire.SourceView{}, err
 			}
@@ -61,16 +61,16 @@ func (view *sourceViewRead) snapshot(ctx context.Context) (wire.SourceView, erro
 		return wire.SourceView{Comparison: &wire.SourceComparisonView{Kind: "comparison", ID: view.id,
 			IntentRevision: intentRevision, ProjectionRevision: viewProjectionRevision(intentRevision, view.projectionRevision),
 			State: view.state, Extent: extent, ExpiresAt: view.expires, Failure: view.failure,
-			Intent: view.comparisonIntent, Comparison: view.details}}, nil
+			Intent: view.comparisonData.comparisonIntent, Comparison: view.comparisonData.details}}, nil
 	}
 	revision := pagedview.Revision{Projection: view.projectionRevision}
 	extent := pagedview.Extent{}
 	var err error
-	if !view.reviewPreparing {
+	if !view.reviewing.reviewPreparing {
 		if view.presentation != nil {
 			revision, extent = view.presentation.Revision()
 		} else {
-			revision, extent, err = view.tree.Revision(ctx)
+			revision, extent, err = view.navigation.tree.Revision(ctx)
 		}
 		var preparation *sourcetree.PreparationError
 		if errors.As(err, &preparation) {
@@ -84,9 +84,9 @@ func (view *sourceViewRead) snapshot(ctx context.Context) (wire.SourceView, erro
 			revision = pagedview.Revision{Projection: view.projectionRevision}
 		}
 	}
-	if view.treeIntent.Filter != "" {
-		if view.filtered != nil {
-			revision, extent = view.filtered.Revision()
+	if view.navigation.treeIntent.Filter != "" {
+		if view.filtering.filtered != nil {
+			revision, extent = view.filtering.filtered.Revision()
 		} else {
 			revision = pagedview.Revision{Projection: view.projectionRevision}
 			extent = pagedview.Extent{}
@@ -95,10 +95,10 @@ func (view *sourceViewRead) snapshot(ctx context.Context) (wire.SourceView, erro
 	if err != nil {
 		return wire.SourceView{}, err
 	}
-	intent := view.treeIntent
-	if view.treeInitialized {
+	intent := view.navigation.treeIntent
+	if view.navigation.treeInitialized {
 		intent.Disclosures = make([]wire.SourceTreeDisclosure, 0)
-		for _, entry := range view.tree.Intent() {
+		for _, entry := range view.navigation.tree.Intent() {
 			disclosure := wire.SourceTreeDisclosure{Address: wireTreeAddress(entry.Address), Open: entry.Disclosure.Open, Recursive: entry.Disclosure.Recursive}
 
 			intent.Disclosures = append(intent.Disclosures, disclosure)
@@ -107,7 +107,7 @@ func (view *sourceViewRead) snapshot(ctx context.Context) (wire.SourceView, erro
 	return wire.SourceView{Tree: &wire.SourceTreeView{Kind: "tree", ID: view.id,
 		IntentRevision: intentRevision, ProjectionRevision: revision.Projection,
 		State: view.state, Extent: wireViewExtent(extent), ExpiresAt: view.expires, Failure: view.failure,
-		WorkspaceID: view.workspaceID, Intent: intent, Roots: view.roots, LoadingDirectories: view.tree.LoadingDirectories()}}, nil
+		WorkspaceID: view.workspaceID, Intent: intent, Roots: view.navigation.roots, LoadingDirectories: view.navigation.tree.LoadingDirectories()}}, nil
 }
 
 // sourceViewPublication identifies what a client can observe; renewing the lease is not a change.
@@ -130,7 +130,7 @@ func sourceViewPublication(snapshot wire.SourceView) ([sha256.Size]byte, error) 
 
 // Notifications carry observable changes only; notifier delivery is serialized per view,
 // so published needs no lock.
-func (s *Handler) publishSourceView(view *sourceView) {
+func (s *Views) publishSourceView(view *sourceView) {
 	if s.Events == nil || view.ctx.Err() != nil {
 		return
 	}
@@ -157,14 +157,14 @@ func (s *Handler) publishSourceView(view *sourceView) {
 }
 
 //nolint:contextcheck,nolintlint // Invalidation delivery survives the request and view cancellation.
-func (s *Handler) publishSourceViewInvalidated(view *sourceView) {
+func (s *Views) publishSourceViewInvalidated(view *sourceView) {
 	if s.Events == nil {
 		return
 	}
 	view.intentMu.RLock()
 	view.mu.Lock()
 	kind := "comparison"
-	if view.tree != nil {
+	if view.navigation.tree != nil {
 		kind = "tree"
 	}
 	event := wire.SourceViewEvent{ViewID: view.id, Kind: kind, IntentRevision: view.commands.Revision(), ProjectionRevision: view.projectionRevision, Terminal: true, Invalidated: true}

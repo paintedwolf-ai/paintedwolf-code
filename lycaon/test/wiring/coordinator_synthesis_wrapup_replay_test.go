@@ -9,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/pkg/api"
 	dealfinder "github.com/lycaon/lycaon/test/wiring/fixtures/synthesis_wrapup_deal_finder"
 )
@@ -24,10 +24,10 @@ func TestCoordinatorSynthesisWrapupReplay(t *testing.T) {
 	for _, tc := range fix.Surface {
 		t.Run("surface/"+tc.Name, func(t *testing.T) {
 			state := wrapupStateFromSnapshot(tc.State, tc.History, tc.Progress, tc.WantVerifyPassed, tc.WantVerifyFailed)
-			if got := session.BatchReadyForSynthesis(state, tc.History, tc.Progress, true, tc.WantVerifyPassed); got != tc.WantBatchReady {
+			if got := workeroutcomes.BatchReadyForSynthesis(state, tc.History, tc.Progress, true, tc.WantVerifyPassed); got != tc.WantBatchReady {
 				t.Fatalf("BatchReadyForSynthesis = %v want %v", got, tc.WantBatchReady)
 			}
-			if got := session.OpenRepairSinceUserIntent(tc.History, tc.WantVerifyFailed); got != tc.WantOpenRepair {
+			if got := workeroutcomes.OpenRepairSinceUserIntent(tc.History, tc.WantVerifyFailed); got != tc.WantOpenRepair {
 				t.Fatalf("OpenRepairSinceUserIntent = %v want %v", got, tc.WantOpenRepair)
 			}
 
@@ -57,9 +57,9 @@ func TestCoordinatorSynthesisWrapupReplay(t *testing.T) {
 			// The guard records facts and reject data for policy evaluation.
 			data, observed := gc.RejectData[tc.WantCode]
 			if !observed {
-				t.Fatalf("guard did not stamp reject data for %q; forbidden=%v", tc.WantCode, gc.SynthesisWrapupToolForbidden)
+				t.Fatalf("guard did not stamp reject data for %q; forbidden=%v", tc.WantCode, gc.Workflow.SynthesisWrapupToolForbidden)
 			}
-			if tc.WantCode == guard.CoordinatorSynthesisWrapupOnlyCode && !gc.SynthesisWrapupToolForbidden {
+			if tc.WantCode == guard.CoordinatorSynthesisWrapupOnlyCode && !gc.Workflow.SynthesisWrapupToolForbidden {
 				t.Fatal("synthesis_wrapup_tool_forbidden fact is unset")
 			}
 			formatted, err := rejectFmt.Format(tc.WantCode, data)
@@ -80,8 +80,8 @@ func wrapupStateFromSnapshot(snap dealfinder.SnapshotState, history []api.Messag
 		BatchPhase:        snap.BatchPhase,
 		WrapupGatesLoaded: true,
 	}
-	state.BatchReadyForSynthesis = session.BatchReadyForSynthesis(state, history, progress, true, verifyPassed)
-	state.OpenRepairSinceUserIntent = session.OpenRepairSinceUserIntent(history, verifyFailed)
+	state.BatchReadyForSynthesis = workeroutcomes.BatchReadyForSynthesis(state, history, progress, true, verifyPassed)
+	state.OpenRepairSinceUserIntent = workeroutcomes.OpenRepairSinceUserIntent(history, verifyFailed)
 	return state
 }
 

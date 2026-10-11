@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 
@@ -51,7 +52,7 @@ func (t *DeleteTool) Run(ctx context.Context, args map[string]any, tctx tools.To
 		info, err := os.Lstat(fullPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return "", &tools.ToolReject{
+				return "", &toolrejection.ToolReject{
 					Code: "DELETE_NOT_FOUND",
 					Data: map[string]any{"path": relSlash},
 				}
@@ -60,14 +61,14 @@ func (t *DeleteTool) Run(ctx context.Context, args map[string]any, tctx tools.To
 		}
 		if info.IsDir() {
 			if filesOnly {
-				return "", &tools.ToolReject{Code: "DELETE_IS_DIRECTORY", Data: map[string]any{"path": relSlash}}
+				return "", &toolrejection.ToolReject{Code: "DELETE_IS_DIRECTORY", Data: map[string]any{"path": relSlash}}
 			}
 			entries, readErr := os.ReadDir(fullPath)
 			if readErr != nil {
 				return "", fmt.Errorf("delete %s: %w", relPath, readErr)
 			}
 			if len(entries) > 0 {
-				return "", &tools.ToolReject{
+				return "", &toolrejection.ToolReject{
 					Code: "DELETE_NOT_EMPTY",
 					Data: map[string]any{"path": relSlash, "entries": len(entries)},
 				}

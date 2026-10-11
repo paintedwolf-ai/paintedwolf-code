@@ -10,7 +10,7 @@ import (
 )
 
 // Git movements and file effects consume the same bounded history page.
-func (s *Store) walkPage(ctx context.Context, projectID string, baseline Baseline, limit int, before int64) ([]Effect, []GitTransition, int64, error) {
+func (s *Walk) walkPage(ctx context.Context, projectID string, baseline Baseline, limit int, before int64) ([]Effect, []GitTransition, int64, error) {
 	// Both streams share a ceiling: commits arriving between reads belong to
 	// the next refresh, never a page whose file read has already completed.
 	latest, err := s.queries.LatestSourceOrdinal(ctx, projectID)
@@ -62,7 +62,7 @@ func (s *Store) walkPage(ctx context.Context, projectID string, baseline Baselin
 			known[effect.GitTransitionID] = true
 		}
 	}
-	referenced, err := s.GitTransitionsByIDs(ctx, ids)
+	referenced, err := s.git.GitTransitionsByIDs(ctx, ids)
 	if err != nil {
 		return nil, nil, 0, err
 	}
@@ -76,7 +76,7 @@ func (s *Store) walkPage(ctx context.Context, projectID string, baseline Baselin
 	return effects, git, next, nil
 }
 
-func (s *Store) queryWalkGit(ctx context.Context, projectID string, baseline Baseline, limit int, before int64) ([]GitTransition, error) {
+func (s *Walk) queryWalkGit(ctx context.Context, projectID string, baseline Baseline, limit int, before int64) ([]GitTransition, error) {
 	roots, err := encodeRootBranches(baseline.RootBranches)
 	if err != nil {
 		return nil, err
@@ -120,7 +120,7 @@ func (s *Store) queryWalkGit(ctx context.Context, projectID string, baseline Bas
 	if err != nil {
 		return nil, err
 	}
-	byID, err := s.GitTransitionsByIDs(ctx, ids)
+	byID, err := s.git.GitTransitionsByIDs(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +139,7 @@ func rootsJSON(roots string) string {
 }
 
 // queryTransitionIDs reads the ids and closes its rows before the caller's next query.
-func (s *Store) queryTransitionIDs(ctx context.Context, query string, args []any, limit int) ([]string, error) {
+func (s *Walk) queryTransitionIDs(ctx context.Context, query string, args []any, limit int) ([]string, error) {
 	rows, err := s.sqlDB.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err

@@ -27,14 +27,14 @@ func RegisterPlanTools(reg *tools.DefaultRegistry, mgr *Manager) error {
 		if strings.TrimSpace(evidence) == "" {
 			return "", fmt.Errorf("evidence required")
 		}
-		blueprintDoc, err := mgr.Get(ctx, tctx.ProjectID, path)
+		blueprintDoc, err := mgr.Get(ctx, tctx.Identity.ProjectID, path)
 		if err != nil {
 			return "", err
 		}
-		if blueprintDoc.ProjectID != tctx.ProjectID {
+		if blueprintDoc.ProjectID != tctx.Identity.ProjectID {
 			return "", fmt.Errorf("blueprint not in session project")
 		}
-		if err := mgr.AppendCriticEvidence(ctx, tctx.ProjectID, path, []byte(evidence)); err != nil {
+		if err := mgr.AppendCriticEvidence(ctx, tctx.Identity.ProjectID, path, []byte(evidence)); err != nil {
 			return "", err
 		}
 		raw, _ := json.Marshal(map[string]any{"blueprint_path": path, "ok": true})

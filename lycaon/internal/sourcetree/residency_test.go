@@ -21,7 +21,7 @@ func TestOpenViewSurvivesCatalogStoreChurn(t *testing.T) {
 
 	for i := range 48 {
 		other := sourcecatalog.Root{ID: fmt.Sprintf("other-%d", i), Path: t.TempDir()}
-		testutil.FailErr(t, "open another root", view.catalog.WarmNavigation(t.Context(), fmt.Sprintf("project-%d", i), other))
+		testutil.FailErr(t, "open another root", view.catalog.Directories.WarmNavigation(t.Context(), fmt.Sprintf("project-%d", i), other))
 	}
 
 	_, after, err := view.Revision(t.Context())

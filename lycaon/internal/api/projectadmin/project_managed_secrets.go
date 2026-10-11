@@ -29,7 +29,7 @@ var (
 	secretUsePages  = pagecursor.For[secretUsePosition]("managed_secret_uses")
 )
 
-func (s *Handler) secretTarget(w http.ResponseWriter, r *http.Request) (*project.Project, bool) {
+func (s *Secrets) secretTarget(w http.ResponseWriter, r *http.Request) (*project.Project, bool) {
 	p, ok := requestscope.ProjectByURLID(s.Registry, s.responses, w, r)
 	if !ok {
 		return nil, false
@@ -42,7 +42,7 @@ func secretReference(r *http.Request) string {
 	return secretmatch.ReferenceToken(strings.TrimSpace(chi.URLParam(r, "secret_id")))
 }
 
-func (s *Handler) HandleListProjectManagedSecrets(w http.ResponseWriter, r *http.Request) {
+func (s *Secrets) HandleListProjectManagedSecrets(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.secretTarget(w, r)
 	if !ok {
 		return
@@ -59,7 +59,7 @@ func (s *Handler) HandleListProjectManagedSecrets(w http.ResponseWriter, r *http
 	httpio.WriteJSON(w, http.StatusOK, wire.ManagedSecretList{Secrets: out})
 }
 
-func (s *Handler) HandleCreateProjectManagedSecret(w http.ResponseWriter, r *http.Request) {
+func (s *Secrets) HandleCreateProjectManagedSecret(w http.ResponseWriter, r *http.Request) {
 	var body wire.CreateManagedSecretRequest
 	if err := httpio.DecodeJSON(w, r, &body); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -87,7 +87,7 @@ func (s *Handler) HandleCreateProjectManagedSecret(w http.ResponseWriter, r *htt
 	httpio.WriteJSON(w, http.StatusCreated, secretview.Metadata(meta))
 }
 
-func (s *Handler) HandleUpdateProjectManagedSecret(w http.ResponseWriter, r *http.Request) {
+func (s *Secrets) HandleUpdateProjectManagedSecret(w http.ResponseWriter, r *http.Request) {
 	var raw map[string]any
 	var body wire.UpdateManagedSecretRequest
 	if err := httpio.DecodeJSONWithRaw(w, r, &body, &raw); err != nil {
@@ -117,7 +117,7 @@ func (s *Handler) HandleUpdateProjectManagedSecret(w http.ResponseWriter, r *htt
 	httpio.WriteJSON(w, http.StatusOK, secretview.Metadata(meta))
 }
 
-func (s *Handler) HandleReplaceProjectManagedSecretValue(w http.ResponseWriter, r *http.Request) {
+func (s *Secrets) HandleReplaceProjectManagedSecretValue(w http.ResponseWriter, r *http.Request) {
 	var body wire.ReplaceManagedSecretValueRequest
 	if err := httpio.DecodeJSON(w, r, &body); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -137,7 +137,7 @@ func (s *Handler) HandleReplaceProjectManagedSecretValue(w http.ResponseWriter, 
 	httpio.WriteJSON(w, http.StatusOK, secretview.Metadata(meta))
 }
 
-func (s *Handler) HandleHoldProjectManagedSecret(w http.ResponseWriter, r *http.Request) {
+func (s *Secrets) HandleHoldProjectManagedSecret(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.secretTarget(w, r)
 	if !ok {
 		return
@@ -150,7 +150,7 @@ func (s *Handler) HandleHoldProjectManagedSecret(w http.ResponseWriter, r *http.
 	httpio.WriteJSON(w, http.StatusOK, secretview.Metadata(meta))
 }
 
-func (s *Handler) HandleRevokeProjectManagedSecret(w http.ResponseWriter, r *http.Request) {
+func (s *Secrets) HandleRevokeProjectManagedSecret(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.secretTarget(w, r)
 	if !ok {
 		return
@@ -163,7 +163,7 @@ func (s *Handler) HandleRevokeProjectManagedSecret(w http.ResponseWriter, r *htt
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Handler) HandleListProjectManagedSecretUses(w http.ResponseWriter, r *http.Request) {
+func (s *Secrets) HandleListProjectManagedSecretUses(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.secretTarget(w, r)
 	if !ok {
 		return
@@ -234,7 +234,7 @@ func wireUseRecipients(recipients []secretcap.UseRecipient) []wire.ManagedSecret
 	return out
 }
 
-func (s *Handler) HandleBeginProjectManagedSecretReveal(w http.ResponseWriter, r *http.Request) {
+func (s *Secrets) HandleBeginProjectManagedSecretReveal(w http.ResponseWriter, r *http.Request) {
 	var body wire.BeginManagedSecretRevealRequest
 	if err := httpio.DecodeJSON(w, r, &body); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -261,7 +261,7 @@ func (s *Handler) HandleBeginProjectManagedSecretReveal(w http.ResponseWriter, r
 	})
 }
 
-func (s *Handler) HandleCompleteProjectManagedSecretReveal(w http.ResponseWriter, r *http.Request) {
+func (s *Secrets) HandleCompleteProjectManagedSecretReveal(w http.ResponseWriter, r *http.Request) {
 	var body wire.CompleteManagedSecretRevealRequest
 	if err := httpio.DecodeJSON(w, r, &body); err != nil {
 		s.responses.DecodeError(w, r, err)

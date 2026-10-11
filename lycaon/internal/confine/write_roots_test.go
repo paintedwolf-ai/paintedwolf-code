@@ -41,3 +41,10 @@ func TestPathWithinWriteRootsSymlinkParity(t *testing.T) {
 		t.Fatal("/etc/hosts must not be inside default write roots")
 	}
 }
+
+func TestFilesystemRootRemainsInBoundaryAndCoversOrdinaryFiles(t *testing.T) {
+	roots := confine.WriteRootsForBoundary("", []string{"/"}, nil, "")
+	if !confine.PathWithinWriteRoots("/etc/hosts", roots) {
+		t.Fatalf("filesystem root was lost: %v", roots)
+	}
+}

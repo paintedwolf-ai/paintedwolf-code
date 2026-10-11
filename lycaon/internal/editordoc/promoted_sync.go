@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
@@ -96,7 +97,7 @@ func (s *Service) HoldPromotedDocuments(ctx context.Context, p *project.Project,
 		}
 		release, err := s.reserveDocumentSource(ctx, p, d)
 		// Another file operation owns the path; observation settles the document after it.
-		if errors.Is(err, project.ErrSourceBusy) {
+		if errors.Is(err, projectsource.ErrSourceBusy) {
 			continue
 		}
 		if err != nil {
@@ -230,8 +231,8 @@ func (s *Service) stagePromotedDocument(ctx context.Context, p *project.Project,
 	}
 	read, err := readDocumentSource(p, d)
 	if err != nil {
-		var unsupported *project.SourceUnsupportedEncodingError
-		if errors.Is(err, os.ErrNotExist) || errors.Is(err, project.ErrSourceNotFound) || errors.As(err, &unsupported) {
+		var unsupported *projectsource.SourceUnsupportedEncodingError
+		if errors.Is(err, os.ErrNotExist) || errors.Is(err, projectsource.ErrSourceNotFound) || errors.As(err, &unsupported) {
 			return nil, PromotedDocumentResult{}, nil
 		}
 		return nil, PromotedDocumentResult{}, err

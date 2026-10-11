@@ -259,7 +259,7 @@ class HaltPlanTests(unittest.TestCase):
                     "before_pointer_sha256": hashlib.sha256(json.dumps(before).encode()).hexdigest(), "before_signature_sha256": None}
             index = {"format_version": 1, "plan": plan, "distribution": self.plan.distribution_plan(list(rows.values())), "feeds": [item]}
             (directory / "prepared.json").write_text(json.dumps(index))
-            with patch.object(self.plan, "read_storage_bytes", side_effect=lambda key: None if key.endswith(".sig") else json.dumps(before).encode()) as read:
+            with patch("feed_signing.verify") as verify, patch.object(self.plan, "read_storage_bytes", side_effect=lambda key: None if key.endswith(".sig") else json.dumps(before).encode()) as read:
                 self.plan.validate_prepared(rows, plan, directory, registry)
                 read.side_effect = lambda key: signature.read_bytes() if key.endswith(".sig") else pointer.read_bytes()
                 self.plan.validate_prepared(rows, plan, directory, registry)
@@ -267,6 +267,13 @@ class HaltPlanTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "feed changed"):
                     self.plan.validate_prepared(rows, plan, directory, registry)
                 read.side_effect = lambda key: None if key.endswith(".sig") else json.dumps(before).encode()
+                verify.side_effect = ValueError("feed signature verification failed")
+                read.reset_mock()
+                with self.assertRaisesRegex(ValueError, "verification failed"):
+                    self.plan.validate_prepared(rows, plan, directory, registry)
+                read.assert_not_called()
+                verify.assert_called_with(pointer, fixture["signature"], fixture["feed_public_key"])
+                verify.side_effect = None
                 pointer.write_text(json.dumps(manifest) + "\n")
                 with self.assertRaisesRegex(ValueError, "bytes changed"):
                     self.plan.validate_prepared(rows, plan, directory, registry)

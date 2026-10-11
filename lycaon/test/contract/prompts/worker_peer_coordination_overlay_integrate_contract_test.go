@@ -35,7 +35,7 @@ func TestCoordinatorOverlayPathReadForbiddenContractP3(t *testing.T) {
 		gc)
 
 	if !observeHasCode(gc, guard.CoordinatorOverlayPathReadForbiddenCode) {
-		t.Fatalf("want observation %s got %v", guard.CoordinatorOverlayPathReadForbiddenCode, gc.ArgValidationErrors)
+		t.Fatalf("want observation %s got %v", guard.CoordinatorOverlayPathReadForbiddenCode, gc.Invocation.ArgValidationErrors)
 	}
 	// Copy parity still comes from the hint registry renderer (OAR block plane in production).
 	formatted, err := rejectFmt.Format(guard.CoordinatorOverlayPathReadForbiddenCode, gc.RejectData[guard.CoordinatorOverlayPathReadForbiddenCode])
@@ -52,7 +52,7 @@ func observeHasCode(gc *oar.GuardContext, code string) bool {
 	if gc == nil {
 		return false
 	}
-	for _, c := range gc.ArgValidationErrors {
+	for _, c := range gc.Invocation.ArgValidationErrors {
 		if c == code {
 			return true
 		}

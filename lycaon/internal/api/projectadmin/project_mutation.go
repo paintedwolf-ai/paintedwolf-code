@@ -7,13 +7,13 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/projectcontrol"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // requireProject loads the project a route addresses; an unknown id answers
 // project_not_found before any child lookup or mutation gate.
-func (s *Handler) requireProject(w http.ResponseWriter, r *http.Request, projectID string) (*project.Project, bool) {
+func (s *Projects) requireProject(w http.ResponseWriter, r *http.Request, projectID string) (*project.Project, bool) {
 	p, err := s.Registry.Get(r.Context(), projectID)
 	if err != nil {
 		s.responses.ProjectLookupError(w, r, err)
@@ -22,7 +22,7 @@ func (s *Handler) requireProject(w http.ResponseWriter, r *http.Request, project
 	return p, true
 }
 
-func (s *Handler) beginProjectMutation(w http.ResponseWriter, r *http.Request, projectID string) func() {
+func (s *Projects) beginProjectMutation(w http.ResponseWriter, r *http.Request, projectID string) func() {
 	if err := s.MutationGate.BeginMutation(projectID); err != nil {
 		s.writeMutationGateError(w, r, err)
 		return nil
@@ -30,7 +30,7 @@ func (s *Handler) beginProjectMutation(w http.ResponseWriter, r *http.Request, p
 	return func() { s.MutationGate.EndMutation(projectID) }
 }
 
-func (s *Handler) beginDrainingProjectMutation(w http.ResponseWriter, r *http.Request, projectID string) (func(), func(context.Context) error) {
+func (s *Projects) beginDrainingProjectMutation(w http.ResponseWriter, r *http.Request, projectID string) (func(), func(context.Context) error) {
 	wait, err := s.MutationGate.BeginDrainingMutation(projectID)
 	if err != nil {
 		s.writeMutationGateError(w, r, err)
@@ -39,7 +39,7 @@ func (s *Handler) beginDrainingProjectMutation(w http.ResponseWriter, r *http.Re
 	return func() { s.MutationGate.EndMutation(projectID) }, wait
 }
 
-func (s *Handler) writeMutationGateError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Projects) writeMutationGateError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, project.ErrMutationInProgress):
 		s.responses.Fail(w, wire.ApiErrorCodeProjectMutationInProgress, "this project is already changing")
@@ -50,7 +50,7 @@ func (s *Handler) writeMutationGateError(w http.ResponseWriter, r *http.Request,
 	}
 }
 
-func (s *Handler) queryForce(w http.ResponseWriter, r *http.Request) (bool, bool) {
+func (s *Projects) queryForce(w http.ResponseWriter, r *http.Request) (bool, bool) {
 	force, _, err := httpio.OptionalBoolQuery(r, "force")
 	if err != nil {
 		s.responses.InvalidQuery(w, err)
@@ -59,7 +59,7 @@ func (s *Handler) queryForce(w http.ResponseWriter, r *http.Request) (bool, bool
 	return force, true
 }
 
-func (s *Handler) writeRootBusy(w http.ResponseWriter, dependents session.RootDependents) {
+func (s *Projects) writeRootBusy(w http.ResponseWriter, dependents projectcontrol.RootDependents) {
 	details := dependents.Details()
 
 	s.responses.FailDetails(w, wire.ApiErrorCodeRootBusy, details, "folder has in-flight dependents")

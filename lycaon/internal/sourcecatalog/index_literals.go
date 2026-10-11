@@ -7,6 +7,12 @@ import (
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 )
 
+// LiteralSearch owns content bloom preparation and its retained candidate cache.
+type LiteralSearch struct {
+	cache  *literalIndexCache
+	broker *backgroundwork.Broker
+}
+
 // contentBuild fills per-file literal filters to reduce content reads.
 type contentBuild struct {
 	revision uint64
@@ -25,7 +31,7 @@ type LiteralPage struct {
 
 // IndexLiteralCandidates probes a bounded page. Missing observations remain
 // candidates while one independent scan prepares reusable per-file blooms.
-func (c *Catalog) IndexLiteralCandidates(ctx context.Context, reader *IndexReader, query LiteralQuery, entries []Entry) LiteralPage {
+func (c *LiteralSearch) IndexLiteralCandidates(ctx context.Context, reader *IndexReader, query LiteralQuery, entries []Entry) LiteralPage {
 	result := LiteralPage{Candidates: make([]Entry, 0, len(entries))}
 	if ctx.Err() != nil || query.Open == nil || query.IncludeKey == "" {
 		result.Candidates = entries
@@ -35,7 +41,7 @@ func (c *Catalog) IndexLiteralCandidates(ctx context.Context, reader *IndexReade
 	folded := foldRequirement(query.Require)
 
 	for _, entry := range entries {
-		bloom, searchable, cached := c.literals.cachedBloom(reader.store.root.Path, entry)
+		bloom, searchable, cached := c.cache.cachedBloom(reader.store.root.Path, entry)
 		if cached {
 			result.CachedFiles++
 		}
@@ -46,7 +52,7 @@ func (c *Catalog) IndexLiteralCandidates(ctx context.Context, reader *IndexReade
 	return result
 }
 
-func (c *Catalog) prepareIndexLiterals(ctx context.Context, reader *IndexReader, query LiteralQuery) bool {
+func (c *LiteralSearch) prepareIndexLiterals(ctx context.Context, reader *IndexReader, query LiteralQuery) bool {
 	s := reader.store
 	key := indexLiteralScopeKey(query)
 	s.mu.Lock()
@@ -106,7 +112,7 @@ func (c *Catalog) prepareIndexLiterals(ctx context.Context, reader *IndexReader,
 
 // buildIndexLiterals releases metadata transactions before content I/O and
 // yields between pages.
-func (c *Catalog) buildIndexLiterals(ctx context.Context, s *indexStore, query LiteralQuery) bool {
+func (c *LiteralSearch) buildIndexLiterals(ctx context.Context, s *indexStore, query LiteralQuery) bool {
 	after := ""
 	for ctx.Err() == nil {
 		db, tx, status, err := s.readTx(ctx, TreeStatus{})
@@ -130,7 +136,7 @@ func (c *Catalog) buildIndexLiterals(ctx context.Context, s *indexStore, query L
 			if query.Include != nil && !query.Include(entry) {
 				continue
 			}
-			if _, _, cached := c.literals.cachedBloom(s.root.Path, entry); !cached {
+			if _, _, cached := c.cache.cachedBloom(s.root.Path, entry); !cached {
 				misses = append(misses, entry)
 			}
 		}
@@ -149,7 +155,7 @@ func (c *Catalog) buildIndexLiterals(ctx context.Context, s *indexStore, query L
 			indices[i] = i
 		}
 		results := make([]literalFileResult, len(misses))
-		err = c.literals.readBlooms(ctx, s.root.Path, misses, indices, results, query.Open)
+		err = c.cache.readBlooms(ctx, s.root.Path, misses, indices, results, query.Open)
 		release()
 		if err != nil {
 			return false

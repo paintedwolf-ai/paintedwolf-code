@@ -22,7 +22,7 @@ func TestSchemaRejectsMissingRequiredFields(t *testing.T) {
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir failed", err)
 	exec := toolfixture.ContractToolExecutor(t)
-	exec.SetToolSchemas(schemas)
+	exec.Metadata.SetToolSchemas(schemas)
 
 	cases := []struct {
 		tool string
@@ -37,8 +37,8 @@ func TestSchemaRejectsMissingRequiredFields(t *testing.T) {
 	}
 	for _, tc := range cases {
 		_, err := exec.Invoke(context.Background(), tc.tool, tc.args, tools.ToolContext{
-			Agent:        "coordinator",
-			TurnToolPlan: toolsurface.Compile([]string{"write", "edit", "code_rewrite"}, nil),
+			Identity: tools.InvocationIdentity{Agent: "coordinator"},
+			Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"write", "edit", "code_rewrite"}, nil)},
 		})
 		if err == nil {
 			t.Fatalf("%s: expected schema reject", tc.tool)
@@ -56,11 +56,11 @@ func TestEditSchemaRejectNamesWriteSibling(t *testing.T) {
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir failed", err)
 	exec := toolfixture.ContractToolExecutor(t)
-	exec.SetToolSchemas(schemas)
+	exec.Metadata.SetToolSchemas(schemas)
 
 	_, err = exec.Invoke(context.Background(), "edit", map[string]any{"path": "ntp_check.py", "symbol": "query_server"}, tools.ToolContext{
-		Agent:        "implementer",
-		TurnToolPlan: toolsurface.Compile([]string{"write", "edit"}, nil),
+		Identity: tools.InvocationIdentity{Agent: "implementer"},
+		Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"write", "edit"}, nil)},
 	})
 	if err == nil {
 		t.Fatal("expected edit schema reject")

@@ -64,8 +64,8 @@ func ComposeSecretPermission(plan *ApprovalPlan, action ProposedAction, permissi
 		// A compound day permission cannot outlive its chat-scoped capability.
 		if option.Scope == ApprovalGrantScopeChat && grant.Scope != ApprovalGrantScopeChat {
 			grant.Scope = ApprovalGrantScopeChat
-			grant.ChatSessionID = action.ChatSession()
-			grant.ID += "-chat-" + action.ChatSession()
+			grant.ChatSessionID = action.Scope.ChatSession()
+			grant.ID += "-chat-" + action.Scope.ChatSession()
 		}
 		delta := ApprovalAuthorityDelta{Kind: AuthorityGenericGrant, Grant: &grant}
 		option.Authority = append(append([]ApprovalAuthorityDelta(nil), option.Authority...), delta)
@@ -74,7 +74,7 @@ func ComposeSecretPermission(plan *ApprovalPlan, action ProposedAction, permissi
 				option.Disabled = true
 				option.Note = "Local service connections last only for this chat."
 			} else {
-				missing := uncoveredServicePorts(permission.ConnectPorts, option.Authority, action.ChatSession())
+				missing := uncoveredServicePorts(permission.ConnectPorts, option.Authority, action.Scope.ChatSession())
 				if len(missing) > 0 {
 					connection := *permission
 					connection.ConnectPorts = missing

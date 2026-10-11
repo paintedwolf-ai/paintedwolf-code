@@ -2,6 +2,27 @@ package observability
 
 import "sync"
 
+type captureRedactorRegistration struct{ fn CaptureRedactor }
+
+var captureRedactorMu sync.Mutex
+var activeCaptureRedactor *captureRedactorRegistration
+
+// SetCaptureRedactor sets runtime catalog redaction until its owner releases it.
+func SetCaptureRedactor(fn CaptureRedactor) func() {
+	registration := &captureRedactorRegistration{fn: fn}
+	captureRedactorMu.Lock()
+	activeCaptureRedactor = registration
+	captureRedactorMu.Unlock()
+	return func() {
+		captureRedactorMu.Lock()
+		defer captureRedactorMu.Unlock()
+		if activeCaptureRedactor == registration {
+			activeCaptureRedactor = nil
+		}
+		registration.fn = nil
+	}
+}
+
 // CloseHTTPDebug closes HTTP capture and clears its lazy state.
 func CloseHTTPDebug() {
 	httpDebug.close()

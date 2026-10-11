@@ -6,22 +6,20 @@ import (
 )
 
 func TestSessionLockReleasesIdleEntry(t *testing.T) {
-	m := &State{}
-	for _, lock := range []*Lock{m.Prompt.Acquire("sess-1"), m.Submission.Acquire("sess-1")} {
+	m := &MutexRegistry{}
+	for _, lock := range []*Lock{m.Acquire("sess-1")} {
 		if refs := lockRefCountAndRelease(lock); refs < 1 {
 			t.Fatalf("lock refs = %d, want at least 1", refs)
 		}
 	}
-	if got := m.Prompt.len(); got != 0 {
+	if got := m.len(); got != 0 {
 		t.Fatalf("prompt mutex entries = %d, want 0", got)
 	}
-	if got := m.Submission.len(); got != 0 {
-		t.Fatalf("prompt submission mutex entries = %d, want 0", got)
-	}
+
 }
 
 func TestSessionLockIsStableUnderConcurrency(t *testing.T) {
-	m := &State{}
+	m := &MutexRegistry{}
 	const goroutines = 64
 	got := make([]*Lock, goroutines)
 	var start, done sync.WaitGroup
@@ -31,7 +29,7 @@ func TestSessionLockIsStableUnderConcurrency(t *testing.T) {
 		go func(idx int) {
 			defer done.Done()
 			start.Wait()
-			got[idx] = m.Prompt.Acquire("sess-1")
+			got[idx] = m.Acquire("sess-1")
 		}(i)
 	}
 	start.Done()
@@ -46,7 +44,7 @@ func TestSessionLockIsStableUnderConcurrency(t *testing.T) {
 			t.Fatalf("lock refs = %d, want at least 1", refs)
 		}
 	}
-	if got := m.Prompt.len(); got != 0 {
+	if got := m.len(); got != 0 {
 		t.Fatalf("prompt mutex entries = %d, want 0", got)
 	}
 }
@@ -56,4 +54,18 @@ func lockRefCountAndRelease(lock *Lock) int {
 	refs := lock.entry.refs
 	lock.Unlock()
 	return refs
+}
+
+func TestPromptLockFailedTryReleasesReference(t *testing.T) {
+	var state MutexRegistry
+	first := state.Acquire("session")
+	first.Lock()
+	second := state.Acquire("session")
+	if second.TryLock() {
+		t.Fatal("matching prompt acquired an already-held lock")
+	}
+	first.Unlock()
+	if got := state.len(); got != 0 {
+		t.Fatalf("failed try retained %d idle lock entries", got)
+	}
 }

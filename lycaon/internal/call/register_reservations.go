@@ -42,8 +42,8 @@ func registerHandoffReservationTools(reg *tools.DefaultRegistry, deps HandoffToo
 		if err != nil {
 			return "", err
 		}
-		if tctx.Presence != nil && out != nil {
-			tctx.Presence.Reserved(reservationTargets(tctx, out.Reserved))
+		if tctx.Effects.Presence != nil && out != nil {
+			tctx.Effects.Presence.Reserved(reservationTargets(tctx, out.Reserved))
 		}
 		raw, _ := json.Marshal(out)
 		return string(raw), nil
@@ -61,8 +61,8 @@ func registerHandoffReservationTools(reg *tools.DefaultRegistry, deps HandoffToo
 		if err := deps.Calls.Release(ctx, sessionID, paths, agent); err != nil {
 			return "", err
 		}
-		if targets := reservationTargets(tctx, paths); tctx.Presence != nil && len(targets) > 0 {
-			tctx.Presence.Released(targets)
+		if targets := reservationTargets(tctx, paths); tctx.Effects.Presence != nil && len(targets) > 0 {
+			tctx.Effects.Presence.Released(targets)
 		}
 		return `{"released":true}`, nil
 	}); err != nil {
@@ -75,8 +75,8 @@ func registerHandoffReservationTools(reg *tools.DefaultRegistry, deps HandoffToo
 		if err := deps.Calls.ReleaseAll(ctx, sessionID, agent); err != nil {
 			return "", err
 		}
-		if tctx.Presence != nil {
-			tctx.Presence.Released(nil)
+		if tctx.Effects.Presence != nil {
+			tctx.Effects.Presence.Released(nil)
 		}
 		return `{"released_all":true}`, nil
 	}); err != nil {
@@ -115,7 +115,7 @@ func handoffDelegationProjectDir(ctx context.Context, deps HandoffToolDeps, sess
 // reservationTargets places reserved paths in the session's active root. Only
 // normalized project-relative paths name files.
 func reservationTargets(tctx tools.ToolContext, paths []string) []agentpresence.Target {
-	rootID := strings.TrimSpace(tctx.ActiveRootID)
+	rootID := strings.TrimSpace(tctx.Source.ActiveRootID)
 	if rootID == "" {
 		return nil
 	}

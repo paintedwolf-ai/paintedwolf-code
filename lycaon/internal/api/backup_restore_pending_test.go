@@ -61,7 +61,7 @@ func TestStagedRecoveryRemainsReadableAcrossOrigins(t *testing.T) {
 					testutil.FailErr(t, "remove refused fixture", os.Remove(dbPath))
 					database := testdbfixture.OpenPath(t, dbPath)
 					srv = newTestServer(t, withSessionStore(store.NewSQL(database)), func(d *Dependencies) {
-						d.DataDir, d.StorePath = configDir, dbPath
+						d.Storage.DataDir, d.Storage.StorePath = configDir, dbPath
 					})
 				}
 				var archive []byte

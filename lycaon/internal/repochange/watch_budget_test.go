@@ -1,10 +1,12 @@
 package repochange
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -409,5 +411,47 @@ func TestTruncatedCoverageHealsWhenCapacityFrees(t *testing.T) {
 	reg.mu.Unlock()
 	if w == nil || !w.watchesForTest(small) {
 		t.Fatal("healed coverage left the root directory itself unwatched")
+	}
+}
+
+func TestCoverageShortfallDoesNotPublishMutation(t *testing.T) {
+	root := t.TempDir()
+	var changes atomic.Int32
+	RegisterObserver(func(_ context.Context, event Event) {
+		if event.ProjectDir == root && event.Kind == WorktreeChanged {
+			changes.Add(1)
+		}
+	})
+	defer ResetObserversForTest()
+	defer ResetDebouncerForTest(context.Background())
+	watcher := &worktreeWatcher{root: root, watched: make(map[string]int)}
+	before := CurrentEpoch(root)
+	for _, count := range []int{4, 9, 0} {
+		watcher.setTruncated(count)
+		if got := watcher.coverage().Truncated; got != count {
+			t.Fatalf("coverage shortfall = %d, want %d", got, count)
+		}
+	}
+	ResetDebouncerForTest(t.Context())
+	if changes.Load() != 0 || CurrentEpoch(root) != before {
+		t.Fatal("coverage change published a filesystem mutation")
+	}
+}
+
+func TestWatchCoverageSeparatesLazyPolicyFromTruncation(t *testing.T) {
+	root := t.TempDir()
+	reg := NewWatcherRegistry()
+	t.Cleanup(reg.CloseAll)
+	if err := os.MkdirAll(filepath.Join(root, "node_modules", "library"), 0700); err != nil {
+		t.Fatalf("create lazy library: %v", err)
+	}
+	reg.Seed(t.Context(), root, []WatchDirectory{{Path: root}, {Path: filepath.Join(root, "node_modules")}, {Path: filepath.Join(root, "node_modules", "library")}})
+	coverage := reg.Coverage(root)
+	if coverage.PolicyUnwatched != 1 {
+		t.Fatalf("policy boundary count: %+v", coverage)
+	}
+	if coverage.Truncated != 0 {
+		t.Fatalf("lazy policy reported as missing registrations: %+v", coverage)
+
 	}
 }

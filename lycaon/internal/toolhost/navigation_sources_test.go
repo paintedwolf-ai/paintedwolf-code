@@ -11,11 +11,16 @@ import (
 )
 
 func TestSourceContextUsesReturnedGitStatusPage(t *testing.T) {
-	ctx := tools.ToolContext{ProjectID: "p", ActiveRootID: "r", Roots: []projectroot.RootRef{{ID: "r", Path: t.TempDir()}}, Out: &tools.ToolInvocationOut{}}
+	ctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{ProjectID: "p"},
+		Source: tools.InvocationSource{ActiveRootID: "r",
+			Roots: []projectroot.RootRef{{ID: "r", Path: t.TempDir()}}},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+	}
 	status := &git.GitStatus{Branch: "main", Files: []git.GitStatusEntry{{Path: "first/a.go"}, {Path: ".ignored/a.go"}, {Path: "third/a.go"}}}
 	_, err := gitStatusOutput(status, git.StatusToolPage{Offset: 1, Limit: 1}, nil, ctx)
 	testutil.FailErr(t, "return status page", err)
-	got := ctx.Out.SourceContext
+	got := ctx.Effects.Out.SourceContext
 	if got == nil || got.Truncated || len(got.Locations) != 1 || got.Locations[0].Path != ".ignored/a.go" || got.Locations[0].EntryKind != api.NavigationEntryKindFile {
 		t.Fatalf("status page sources = %+v", got)
 	}

@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/google/uuid"
@@ -13,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -21,12 +23,11 @@ import (
 
 // TaskToolDeps wires the native task spawn tool.
 type TaskToolDeps struct {
-	Sessions         session.PromptRunner
 	Queue            WorkerQueue
 	Agents           orchestration.AgentRegistry
 	Workers          WorkersConfig
 	ToolBudget       func(projectDir string) spawn.WorkerToolBudget
-	ComposePrompt    func(ctx context.Context, tctx tools.ToolContext, agentType string, brief api.WorkerTaskCharter, workerJobID string, scope *api.TaskScope, maxToolLoops int) (string, error)
+	ComposePrompt    func(ctx context.Context, tctx tools.ToolContext, agentType string, brief api.WorkerTaskCharter, task *api.WorkerTask) (string, error)
 	WebSearchEnabled func() bool
 	// PendingDecision returns a child's open decision.
 	PendingDecision  func(context.Context, string) (jobID string, ok bool, err error)
@@ -50,7 +51,7 @@ func overlayDiscarded(status api.WorkerMergeStatus) bool {
 
 // RegisterTaskTool registers task(agent_type, brief, files?) for coordinator spawns.
 func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
-	if reg == nil || deps.Sessions == nil || deps.Queue == nil || deps.Agents == nil {
+	if reg == nil || deps.Queue == nil || deps.Agents == nil {
 		return fmt.Errorf("registry, sessions, queue, and agents required")
 	}
 	return reg.Register("task", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
@@ -58,20 +59,20 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		if err != nil {
 			return "", err
 		}
-		if deps.TaskReceipt != nil && strings.TrimSpace(tctx.ToolCallID) != "" {
-			prior, err := deps.TaskReceipt(ctx, tctx.SessionID, strings.TrimSpace(tctx.ToolCallID))
+		if deps.TaskReceipt != nil && strings.TrimSpace(tctx.Identity.ToolCallID) != "" {
+			prior, err := deps.TaskReceipt(ctx, tctx.Identity.SessionID, strings.TrimSpace(tctx.Identity.ToolCallID))
 			if err != nil {
 				return "", err
 			}
 			if prior != nil {
-				if err := compareTaskReceipt(prior, api.WorkerTask{SourceToolCallID: tctx.ToolCallID, SourceArgsDigest: sourceDigest}); err != nil {
+				if err := compareTaskReceipt(prior, api.WorkerTask{SourceToolCallID: tctx.Identity.ToolCallID, SourceArgsDigest: sourceDigest}); err != nil {
 					return "", err
 				}
-				scope := project.ScopeFromToolContext(tctx.ProjectID, tctx.ActiveRootID, tctx.Roots, tctx.ActiveRootPath())
+				scope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
 				return taskEnqueueOutput(tctx, scope, *prior)
 			}
 		}
-		maxToolLoops, err := session.ParseTaskMaxToolLoopsFromArgs(args)
+		maxToolLoops, err := workeradmission.ParseTaskMaxToolLoopsFromArgs(args)
 		if err != nil {
 			return "", err
 		}
@@ -79,8 +80,8 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		if deps.ToolBudget != nil {
 			budget = deps.ToolBudget(tctx.ActiveRootPath())
 		}
-		if code := session.ValidateTaskMaxToolLoopsCode(maxToolLoops, budget); code != "" {
-			return "", &tools.ToolReject{Code: code, Data: map[string]any{"max_tool_loops": maxToolLoops, "min_required": budget.Min, "host_max": budget.Max}}
+		if code := workeradmission.ValidateTaskMaxToolLoopsCode(maxToolLoops, budget); code != "" {
+			return "", &toolrejection.ToolReject{Code: code, Data: map[string]any{"max_tool_loops": maxToolLoops, "min_required": budget.Min, "host_max": budget.Max}}
 		}
 		identity, err := resolveTaskIdentity(ctx, deps, tctx, args, maxToolLoops, budget)
 		if err != nil {
@@ -88,7 +89,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		}
 		agentType := identity.AgentType
 		if _, err := deps.Agents.Get(agentType); err != nil {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WORKER_TYPE_UNAVAILABLE",
 				Data: map[string]any{"agent_type": agentType, "reason": "unknown_agent_type"},
 			}
@@ -118,7 +119,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 				return "", fmt.Errorf("load pending decision: %w", err)
 			}
 			if ok {
-				return "", &tools.ToolReject{
+				return "", &toolrejection.ToolReject{
 					Code: "TASK_DECISION_PENDING",
 					Data: map[string]any{
 						"child_session_id": childSessionID,
@@ -131,15 +132,8 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		effectiveMaxToolLoops := identity.MaxToolLoops
 		scopePtr := &normalizedScope
 		jobID := uuid.NewString()
-		if deps.ComposePrompt != nil {
-			composed, err := deps.ComposePrompt(ctx, tctx, agentType, brief, jobID, scopePtr, effectiveMaxToolLoops)
-			if err != nil {
-				return "", err
-			}
-			prompt = composed
-		}
 		if prior := identity.Prior; prior != nil && overlayDiscarded(prior.MergeStatus) {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WORKER_RESUME_OVERLAY_DISCARDED",
 				Data: map[string]any{
 					"child_session_id": childSessionID,
@@ -149,15 +143,15 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			}
 		}
 
-		projScope := project.ScopeFromToolContext(tctx.ProjectID, tctx.ActiveRootID, tctx.Roots, tctx.ActiveRootPath())
+		projScope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
 		if !projScope.HasRoots && !prompts.AgentRunsWithoutWorkspace(agentType) {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WORKER_WORKSPACE_REQUIRED",
 				Data: map[string]any{"agent_type": agentType, "reason": "project_roots_required"},
 			}
 		}
 		if agentdef.DeclaresAny(agentType, agentdef.CapabilityExternal) && deps.WebSearchEnabled != nil && !deps.WebSearchEnabled() {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "WEB_SEARCH_DISABLED",
 				Data: map[string]any{"agent_type": agentType},
 			}
@@ -165,7 +159,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		task := api.WorkerTask{
 			ID:              jobID,
 			AfterWorkers:    after,
-			ParentSessionID: tctx.SessionID,
+			ParentSessionID: tctx.Identity.SessionID,
 			ChildSessionID:  childSessionID,
 			AgentType:       agentType,
 			Prompt:          prompt,
@@ -183,15 +177,27 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		if err := ApplyEnqueueDefaults(&task, projScope, deps.Workers); err != nil {
 			return "", err
 		}
-		task.SourceToolCallID = strings.TrimSpace(tctx.ToolCallID)
+		task.SourceToolCallID = strings.TrimSpace(tctx.Identity.ToolCallID)
 		if deps.BindWorkflowTask != nil {
 			if err := deps.BindWorkflowTask(ctx, tctx, identity.WorkflowWorkID, &task); err != nil {
 				return "", err
 			}
 		}
+		if deps.ComposePrompt != nil {
+			composed, err := deps.ComposePrompt(ctx, tctx, agentType, brief, &task)
+			if err != nil {
+				return "", err
+			}
+			task.Prompt = composed
+		}
+
 		task.SourceArgsDigest = sourceDigest
 		enqueuedID, err := deps.Queue.Enqueue(ctx, task)
 		if err != nil {
+			var active *ReviewAssignmentActiveError
+			if errors.As(err, &active) {
+				return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "task", "field": "workflow_work_id", "reason": "review_assignment_already_active", "action": "wait_for_work", "job_ids": []string{active.JobID}, "workflow_work_id": task.WorkflowWorkID}}
+			}
 			return "", err
 		}
 		task.ID = enqueuedID
@@ -201,14 +207,14 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 
 func taskEnqueueOutput(tctx tools.ToolContext, scope project.ProjectScope, task api.WorkerTask) (string, error) {
 	jobID, childSessionID, agentType := task.ID, task.ChildSessionID, task.AgentType
-	if tctx.Out != nil {
-		tctx.Out.OwnerRef = jobID
-		tctx.Out.Dispatch = &api.WorkerDispatch{
+	if tctx.Effects.Out != nil {
+		tctx.Effects.Out.OwnerRef = jobID
+		tctx.Effects.Out.Dispatch = &api.WorkerDispatch{
 			WorkerID: jobID, ChildSessionID: childSessionID, AgentType: agentType,
 		}
 	}
 	taskToolLog.Info("task enqueued",
-		"parent_session_id", tctx.SessionID,
+		"parent_session_id", tctx.Identity.SessionID,
 		"job_id", jobID,
 		"agent_type", agentType,
 		"project_id", scope.ProjectID,
@@ -245,8 +251,8 @@ func taskToolArgsDigest(args map[string]any, tctx tools.ToolContext) (string, er
 		ActiveRootID string         `json:"active_root_id"`
 		Args         map[string]any `json:"args"`
 	}{
-		SessionID: strings.TrimSpace(tctx.SessionID), ProjectID: strings.TrimSpace(tctx.ProjectID),
-		ActiveRootID: strings.TrimSpace(tctx.ActiveRootID), Args: args,
+		SessionID: strings.TrimSpace(tctx.Identity.SessionID), ProjectID: strings.TrimSpace(tctx.Identity.ProjectID),
+		ActiveRootID: strings.TrimSpace(tctx.Source.ActiveRootID), Args: args,
 	}
 	raw, err := json.Marshal(canonical)
 	if err != nil {

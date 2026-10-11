@@ -1,6 +1,6 @@
 # Patterns match directories at any depth. A group's directories are traversed
 # after ordinary source and, unless it sets `collapse: false`, left closed by
-# Expand all. Neither excludes anything.
+# Expand all. Boundary groups stay lazy until a path is requested; nothing is excluded.
 # A pattern named by any non-collapsing group is never collapsed by name.
 # All groups apply to every project; languages records grammar coverage.
 # Broad source names such as src, lib, bin, packages, deps, and Modules stay early.
@@ -8,6 +8,7 @@
 version: 1
 groups:
   - id: shared
+    tier: boundary
     why: Build products, packaged output, test reports, caches, and temporary work shared across ecosystems.
     languages: [bash, dockerfile, json, powershell, promql, proto, scheme, xml, yaml]
     patterns:
@@ -41,6 +42,7 @@ groups:
       - third_party
 
   - id: version-control
+    tier: boundary
     why: Git, Mercurial, Subversion, Bazaar, Darcs, CVS, RCS, SCCS, Fossil, Pijul, Jujutsu, Sapling, TFVC, and Plastic workspace metadata.
     languages: []
     patterns:
@@ -61,6 +63,7 @@ groups:
       - .plastic
 
   - id: node-and-web
+    tier: boundary
     why: Package installations, bundler caches, framework builds, generated sites, and browser-test reports.
     languages: [javascript, typescript, vue, html]
     patterns:
@@ -99,6 +102,7 @@ groups:
       - web_modules
 
   - id: python
+    tier: boundary
     why: Virtual environments, installed distributions, bytecode, packaging output, and analysis caches.
     languages: [python]
     patterns:
@@ -125,6 +129,7 @@ groups:
       - .ipynb_checkpoints
 
   - id: jvm
+    tier: boundary
     why: Maven, Gradle, sbt, Kotlin, and Clojure build caches and generated state; shared build and target patterns cover their output.
     languages: [java, kotlin, scala, clojure, groovy]
     patterns:
@@ -141,6 +146,7 @@ groups:
       - .lein
 
   - id: dotnet
+    tier: boundary
     why: MSBuild intermediates, configuration-specific binaries, NuGet caches, IDE caches, and test output.
     languages: [c_sharp]
     patterns:
@@ -156,6 +162,7 @@ groups:
       - _ReSharper*
 
   - id: native
+    tier: boundary
     why: CMake, Autotools, Meson, SCons, and compiler caches; shared build and third_party patterns cover other output and vendoring.
     languages: [c, cpp]
     patterns:
@@ -173,6 +180,7 @@ groups:
       - ipch
 
   - id: multi-language-builds
+    tier: boundary
     why: Bazel, Buck, Pants, and Nix build or dependency workspaces.
     languages: []
     patterns:
@@ -185,101 +193,121 @@ groups:
       - .nix-cache
 
   - id: go
+    tier: boundary
     why: Module and compilation caches plus local dependency workspaces.
     languages: [go]
     patterns: [.gocache, .gomodcache, pkg/mod, pkg/sumdb, Godeps/_workspace]
 
   - id: rust-and-cairo
+    tier: boundary
     why: Cargo and Scarb compiled output and vendored dependencies.
     languages: [rust, cairo]
     patterns: [target, vendor]
 
   - id: solidity-and-circom
+    tier: boundary
     why: Hardhat, Foundry, Truffle, and Circom products, dependency trees, generated bindings, and proof-build output.
     languages: [solidity, circom]
     patterns: [artifacts, cache, out, build, node_modules, typechain, typechain-types, '*_js', '*_cpp']
 
   - id: move
+    tier: boundary
     why: Aptos and Sui compiled modules and fetched dependencies.
     languages: [move]
     patterns: [build, .move]
 
   - id: swift
+    tier: boundary
     why: SwiftPM, CocoaPods, Carthage, and Xcode products and dependency checkouts.
     languages: [swift]
     patterns: [.build, Pods, Carthage/Build, Carthage/Checkouts, DerivedData, .swiftpm/cache]
 
   - id: dart
+    tier: boundary
     why: Dart and Flutter package caches, generated tooling, and plugin links.
     languages: [dart]
     patterns: [.dart_tool, .pub-cache, .pub, .symlinks, Flutter/ephemeral, flutter/ephemeral]
 
   - id: beam
+    tier: boundary
     why: Mix and Erlang build output and editor analysis caches; deps stays early because Julia uses it for source.
     languages: [elixir]
     patterns: [_build, .elixir_ls, .fetch]
 
   - id: ocaml
+    tier: boundary
     why: Dune build output and local opam switches.
     languages: [ocaml]
     patterns: [_build, _opam]
 
   - id: ruby
+    tier: boundary
     why: Bundler installations, Sass caches, and static-site output.
     languages: [ruby]
     patterns: [vendor, .bundle, .sass-cache, .jekyll-cache, _site]
 
   - id: php-and-hack
+    tier: boundary
     why: Composer dependencies, PHPUnit caches, and generated framework caches.
     languages: [php, hack]
     patterns: [vendor, .phpunit.cache, bootstrap/cache, storage/framework/cache, storage/framework/views, var/cache]
 
   - id: jsonnet
+    tier: boundary
     why: jsonnet-bundler dependency trees.
     languages: [jsonnet]
     patterns: [vendor]
 
   - id: julia
+    tier: boundary
     why: Project-local Julia depots; deps stays early because it contains package build source.
     languages: [julia]
     patterns: [.julia]
 
   - id: r
+    tier: boundary
     why: renv and packrat libraries, project session state, and rendered-document caches.
     languages: [r]
     patterns: [renv/library, renv/staging, renv/cache, packrat/lib, packrat/lib-ext, packrat/src, .Rproj.user, .quarto, '*_cache', '*_files']
 
   - id: lua
+    tier: boundary
     why: LuaRocks local installations.
     languages: [lua]
     patterns: [lua_modules, .luarocks]
 
   - id: perl
+    tier: boundary
     why: Perl distribution builds and local module installations.
     languages: [perl]
     patterns: [blib, _build, local/lib, local/man, local/bin]
 
   - id: common-lisp
+    tier: boundary
     why: Project-local Quicklisp installations and ASDF compiled caches.
     languages: [commonlisp]
     patterns: [.quicklisp, .cache/common-lisp]
 
   - id: terraform
+    tier: boundary
     why: Terraform providers and modules, Terragrunt scratch trees, and CDK output.
     languages: [hcl]
     patterns: [.terraform, .terragrunt-cache, cdktf.out, cdk.out]
 
   - id: salesforce
+    tier: boundary
     why: Salesforce CLI local project state.
     languages: [apex]
     patterns: [.sfdx, .sf]
 
   - id: codeql
+    tier: boundary
     why: Project-local CodeQL package and compilation caches.
     languages: [ql]
     patterns: [.codeql]
 
   - id: local-history
+    tier: boundary
     why: Editor-maintained local file history and operating-system trash or metadata.
     languages: []
     patterns: [.history, .local-history, .Trash, .Trashes, .Spotlight-V100, .fseventsd, __MACOSX]

@@ -41,11 +41,15 @@ func TestDirectIPGrantNeverReachesTheDurableStore(t *testing.T) {
 // Direct-IP leases are checked by runtime identity, outside generic rule matching.
 func TestDirectIPGrantNeverMatchesGenerically(t *testing.T) {
 	action := hitl.ProposedAction{
-		Tool:       "command",
-		Args:       map[string]any{"command": "ntpdate time.nist.gov"},
-		ProjectDir: "/tmp/proj",
-		SessionID:  "sess-ladder",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "ntpdate time.nist.gov"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/tmp/proj",
+SessionID: "sess-ladder",
+},
+}
 	if grantMatchesAction(directIPGrant(), action) {
 		t.Fatal("a direct-IP lease matched through generic action matching")
 	}
@@ -72,7 +76,7 @@ func TestDirectIPCategoryIsNotDurableOrPolicy(t *testing.T) {
 func TestAbsorbedGrantOffersCarryNoTimeRung(t *testing.T) {
 	approvals := ladderGate(t)
 	action := ladderAction()
-	action.HostResources = []string{"camera"}
+	action.Resources.HostResources = []string{"camera"}
 	result := &hitl.ApprovalResult{Decision: askDecision(api.GateUserRule), HostResourceApproval: true}
 
 	offered := approvals.GrantOffers(action, result)

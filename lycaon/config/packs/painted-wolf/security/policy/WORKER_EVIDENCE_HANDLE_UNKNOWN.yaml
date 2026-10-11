@@ -19,7 +19,7 @@ copy:
   what: 'Worker cited {{ paintedwolf.offender_count }} finding reference(s) that did not resolve in this leg evidence.'
   cause: 'A findings evidence handle or path did not match a recorded observation for this leg.'
   why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
-  fix: 'Correct complete_leg using an exact observed evidence handle, or a recorded path, line and verbatim excerpt{% if paintedwolf.cited_handle_ranges %}. The cited handles observed {{ paintedwolf.cited_handle_ranges }}; cite a line inside those ranges or read the lines first{% endif %}{% if paintedwolf.observed_paths_sample %}; observed paths include {{ paintedwolf.observed_paths_sample }}{% endif %}. Scanner output is cited with its scan#N handle in evidence, not as file text at a path. For web evidence, cite the exact URL in cited_urls{% if paintedwolf.observed_urls_sample %}; observed URLs include {{ paintedwolf.observed_urls_sample }}{% endif %}.{% if paintedwolf.unobserved_cited_urls %} Also drop or fetch these unobserved URLs: {{ paintedwolf.unobserved_cited_urls }}.{% endif %} Observe missing scope with the offered tools or drop the finding before submitting again.'
+  fix: 'Correct complete_leg using an exact observed evidence handle, or a recorded path, line and verbatim excerpt{% if paintedwolf.cited_handle_ranges %}. Citation observations: {{ paintedwolf.cited_handle_ranges }}; use the matching source observation or read the cited lines first{% endif %}{% if paintedwolf.observed_paths_sample %}; observed paths include {{ paintedwolf.observed_paths_sample }}{% endif %}. For source text, use the matching read#N or other source observation in evidence, never scan#N. A scanner-only finding uses its scan#N handle in evidence with no path, line or excerpt; put the conclusion in note. For web evidence, cite the exact URL in cited_urls{% if paintedwolf.observed_urls_sample %}; observed URLs include {{ paintedwolf.observed_urls_sample }}{% endif %}.{% if paintedwolf.unobserved_cited_urls %} Also drop or fetch these unobserved URLs: {{ paintedwolf.unobserved_cited_urls }}.{% endif %} Observe missing scope with the offered tools or drop the finding before submitting again.'
   instead: 'Fix or drop only the listed citations and keep the rest of the report; leg_status reflects whether the remaining evidence delivers the assignment. Do not repeat a worker assignment solely to replace a bad citation.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:worker_summary
@@ -56,7 +56,7 @@ x-paintedwolf-scenarios:
       unobserved_cited_urls:
         - https://example.com/unfetched
     expect_contains:
-      - 'scan#N handle in evidence'
+      - 'scan#N handle in evidence with no path, line or excerpt'
       - 'Also drop or fetch these unobserved URLs: https://example.com/unfetched'
   - id: line_outside_observed_range
     vars:
@@ -65,5 +65,15 @@ x-paintedwolf-scenarios:
       offenders_sample: internal/auth.go:412
       cited_handle_ranges: 'read#3 internal/auth.go lines 1-120'
     expect_contains:
-      - 'The cited handles observed read#3 internal/auth.go lines 1-120'
-      - 'cite a line inside those ranges'
+      - 'Citation observations: read#3 internal/auth.go lines 1-120'
+      - 'read the cited lines first'
+  - id: scanner_source_handle_repair
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: fixture.go:7
+      cited_handle_ranges: 'scan#2 shape artifact; fixture.go:7 excerpt matches read#9; use that handle in evidence for this source citation'
+    expect_contains:
+      - 'fixture.go:7 excerpt matches read#9'
+      - 'never scan#N'
+      - 'no path, line or excerpt'

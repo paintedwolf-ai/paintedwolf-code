@@ -95,7 +95,7 @@ func TestWebResearchCatalogRegistrySubset(t *testing.T) {
 	contractcheck.FailErr(t, "LoadCatalog", err)
 
 	reg := webresearch.NewRegistry(cat)
-	contractcheck.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(reg))
+	contractcheck.FailErr(t, "RegisterCatalogProviders", webresearch.RegisterCatalogProviders(t.Context(), reg))
 
 	for _, id := range cat.IDs() {
 		entry, ok := cat.Entry(id)

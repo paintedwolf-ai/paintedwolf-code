@@ -2,24 +2,24 @@ package promptloop
 
 import (
 	"context"
+	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
-	"encoding/json"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/datamark"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/tooloutput"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (l toolInvocations) composeToolResultMessage(
+func (l *toolInvocations) composeToolResultMessage(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -28,15 +28,15 @@ func (l toolInvocations) composeToolResultMessage(
 	origin api.MessageOrigin,
 	run *toolInvocation,
 ) api.Message {
-	result := guidance.ComposeToolResult(run.content, run.facts, l.Deps.HintConfig)
+	result := guidance.ComposeToolResult(run.content, run.facts, l.Closeout.Deps.HintConfig)
 	if result != nil {
 		result.Tool = call.Name
 		result.ToolCallID = call.ID
 		result.AssistantMessageID = strings.TrimSpace(assistantMessageID)
 		result.ToolArgs = call.Args
 		rootSessionID := ""
-		if l.Deps.RootSessionID != nil {
-			rootSessionID = l.Deps.RootSessionID(ctx, sessionID)
+		if l.Context.Deps.RootSessionID != nil {
+			rootSessionID = l.Context.Deps.RootSessionID(ctx, sessionID)
 		}
 		projectID := ""
 		if sess != nil {
@@ -67,7 +67,7 @@ func (l toolInvocations) composeToolResultMessage(
 var spillWireLog = observability.LazyComponent("tool_spill")
 
 // truncateToolResultForSession fits screened tool output to the session wire.
-func (l toolInvocations) truncateToolResultForSession(
+func (l *toolInvocations) truncateToolResultForSession(
 	ctx context.Context,
 	tool string,
 	projection toolResultStorageProjection,
@@ -97,7 +97,7 @@ func (l toolInvocations) truncateToolResultForSession(
 	}
 	// Clamp after redaction so truncation cannot split a matched secret.
 	if clamp, ok := surveyreceipt.ClampSessionToolOutput(durableContent, maxBytes); ok {
-		msg := guidance.EnvelopeHintMessage(ctx, l.Deps.HintConfig, "TOOL_SURVEY_BYTE_CLAMPED", clamp.Vars)
+		msg := guidance.EnvelopeHintMessage(ctx, l.Closeout.Deps.HintConfig, "TOOL_SURVEY_BYTE_CLAMPED", clamp.Vars)
 		return toolResultProjection{
 			content: guidance.AppendOutputBanner(clamp.Output, "TOOL_SURVEY_BYTE_CLAMPED", msg),
 			limit:   agentpresence.OutputLimit{KeptEntries: clamp.KeptEntries, KeptThroughLine: clamp.KeptThroughLine},
@@ -132,7 +132,7 @@ func (l toolInvocations) truncateToolResultForSession(
 			"tool", tool,
 			"original_bytes", out.OriginalBytes,
 			"reason", rejectData["reason"])
-		return toolResultProjection{reject: &tools.ToolReject{Code: out.RejectCode, Data: rejectData}}
+		return toolResultProjection{reject: &toolrejection.ToolReject{Code: out.RejectCode, Data: rejectData}}
 	}
 	if !out.Truncated {
 		// Uncut output preserves the original one-request overlay.
@@ -156,7 +156,7 @@ func (l toolInvocations) truncateToolResultForSession(
 	hintVars := spillHintVars(out)
 	if overlayPromote {
 		hintVars["job_id"] = extractOverlayIDFromToolOutput(durableContent)
-		hint := guidance.EnvelopeHintMessage(ctx, l.Deps.HintConfig, "OVERLAY_PROMOTE_SPILL", hintVars)
+		hint := guidance.EnvelopeHintMessage(ctx, l.Closeout.Deps.HintConfig, "OVERLAY_PROMOTE_SPILL", hintVars)
 		return toolResultProjection{
 			content: guidance.AppendOutputBanner(out.Preview, "OVERLAY_PROMOTE_SPILL", hint),
 			limit:   agentpresence.OutputLimit{Spilled: true},
@@ -168,7 +168,7 @@ func (l toolInvocations) truncateToolResultForSession(
 		hintVars["cap"] = tooloutput.EffectiveMaxSpillFileBytes(maxSpillBytes)
 	}
 
-	hint := guidance.EnvelopeHintMessage(ctx, l.Deps.HintConfig, hintCode, hintVars)
+	hint := guidance.EnvelopeHintMessage(ctx, l.Closeout.Deps.HintConfig, hintCode, hintVars)
 	return toolResultProjection{
 		content: guidance.AppendOutputBanner(out.Preview, hintCode, hint),
 		limit:   agentpresence.OutputLimit{Spilled: true},
@@ -207,7 +207,7 @@ func extractOverlayIDFromToolOutput(content string) string {
 	return ""
 }
 
-func (l toolInvocations) reloadHistoryAfterToolCompaction(ctx context.Context, sessionID string, sess *api.Session, surfaceID string, history []api.Message, st *promptLoopTurnState) ([]api.Message, error) {
+func (l *toolInvocations) reloadHistoryAfterToolCompaction(ctx context.Context, sessionID string, sess *api.Session, surfaceID string, history []api.Message, st *promptLoopTurnState) ([]api.Message, error) {
 	if l.Deps.CompactOversizedToolResults != nil {
 		if err := l.Deps.CompactOversizedToolResults(ctx, sessionID, sess); err != nil {
 			return history, err

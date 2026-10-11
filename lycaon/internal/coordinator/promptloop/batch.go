@@ -23,7 +23,6 @@ import (
 )
 
 // toolBatch runs one assistant message's tool calls: ordering, concurrency, holds, and settlement.
-type toolBatch struct{ *PromptLoop }
 
 const concurrentToolCallLimit = spawn.MaxConcurrentToolCalls
 
@@ -125,26 +124,26 @@ func partitionToolBatchRuns(reg tools.ToolRegistry, calls []api.ToolCall) [][]ap
 }
 
 // toolContextForCall refreshes the session tool context before execution.
-func (l toolBatch) toolContextForCall(ctx context.Context, sess *api.Session, base tools.ToolContext, machine inject.Machine) (tools.ToolContext, error) {
-	if l.PromptLoop == nil || l.Deps.RefreshToolContext == nil || sess == nil {
+func (l *toolBatch) toolContextForCall(ctx context.Context, sess *api.Session, base tools.ToolContext, machine inject.Machine) (tools.ToolContext, error) {
+	if l == nil || l.Context.Deps.RefreshToolContext == nil || sess == nil {
 		return base, nil
 	}
-	refreshed, err := l.Deps.RefreshToolContext(ctx, sess, machine)
+	refreshed, err := l.Context.Deps.RefreshToolContext(ctx, sess, machine)
 	if err != nil {
 		return tools.ToolContext{}, err
 	}
-	refreshed.TurnSurfaceID = base.TurnSurfaceID
-	refreshed.TurnToolPlan = base.TurnToolPlan
-	refreshed.TurnOfferedToolNames = slices.Clone(base.TurnOfferedToolNames)
-	refreshed.TurnOfferedToolSchemas = base.TurnOfferedToolSchemas
-	refreshed.ModelSourceContext = base.ModelSourceContext
-	refreshed.EditorReadBases = base.EditorReadBases
-	refreshed.TurnWritePinRootID = base.TurnWritePinRootID
-	refreshed.TurnWritePinGlobs = append([]string(nil), base.TurnWritePinGlobs...)
+	refreshed.Turn.TurnSurfaceID = base.Turn.TurnSurfaceID
+	refreshed.Turn.TurnToolPlan = base.Turn.TurnToolPlan
+	refreshed.Turn.TurnOfferedToolNames = slices.Clone(base.Turn.TurnOfferedToolNames)
+	refreshed.Turn.TurnOfferedToolSchemas = base.Turn.TurnOfferedToolSchemas
+	refreshed.Source.ModelSourceContext = base.Source.ModelSourceContext
+	refreshed.Source.EditorReadBases = base.Source.EditorReadBases
+	refreshed.Turn.TurnWritePinRootID = base.Turn.TurnWritePinRootID
+	refreshed.Turn.TurnWritePinGlobs = append([]string(nil), base.Turn.TurnWritePinGlobs...)
 	return refreshed, nil
 }
 
-func (l toolBatch) executeToolCallsInTurn(
+func (l *toolBatch) executeToolCallsInTurn(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -156,28 +155,28 @@ func (l toolBatch) executeToolCallsInTurn(
 	turnSurfaceID string,
 	st *promptLoopTurnState,
 ) ([]api.Message, []string, bool, int, string, bool, error) {
-	startHolds := l.batchStartHolds(ctx, sessionID, turnSurfaceID)
+	startHolds := l.Control.batchStartHolds(ctx, sessionID, turnSurfaceID)
 	if st != nil && st.spendSoftStopGranted {
 		toolCalls = filterSpendSoftStopToolCalls(toolCalls)
 	}
-	toolCalls = reorderToolBatchExecution(l.Deps.Tools, toolCalls)
+	toolCalls = reorderToolBatchExecution(l.Context.Deps.Tools, toolCalls)
 	toolCalls = sanitizeToolCallsForExecution(toolCalls)
 	// Persist only storage-safe tool results.
 	history = patchAssistantToolCalls(history, assistantMessageID, toolCalls)
 	l.syncAssistantToolCallsOnStore(ctx, sessionID, assistantMessageID, history, toolCalls)
 	hasAssistant := strings.TrimSpace(assistantMessageID) != ""
-	if l.Deps.AssertRunnable != nil {
-		if err := l.Deps.AssertRunnable(ctx, sessionID); err != nil {
+	if l.Control.Deps.AssertRunnable != nil {
+		if err := l.Control.Deps.AssertRunnable(ctx, sessionID); err != nil {
 			if hasAssistant {
 				return history, nil, false, 0, "", true, nil
 			}
 			return history, nil, false, 0, "", false, err
 		}
 	}
-	if baseToolCtx.EditorDocuments != nil {
-		baseToolCtx.EditorReadBases = tools.NewAgentReadBases(baseToolCtx.EditorDocuments.FreezeAgentReads(baseToolCtx.ProjectID, baseToolCtx.SessionID))
+	if baseToolCtx.Source.EditorDocuments != nil {
+		baseToolCtx.Source.EditorReadBases = tools.NewAgentReadBases(baseToolCtx.Source.EditorDocuments.FreezeAgentReads(baseToolCtx.Identity.ProjectID, baseToolCtx.Identity.SessionID))
 	}
-	baseToolCtx.TurnSurfaceID = strings.TrimSpace(turnSurfaceID)
+	baseToolCtx.Turn.TurnSurfaceID = strings.TrimSpace(turnSurfaceID)
 	frame := inject.CoordinatorTurnFrame{}
 	machine := inject.Machine{}
 	if st != nil {
@@ -185,10 +184,10 @@ func (l toolBatch) executeToolCallsInTurn(
 		machine = st.machine
 	}
 	if st != nil {
-		baseToolCtx.TurnToolPlan = st.turnToolPlan
-		baseToolCtx.TurnOfferedToolNames = slices.Clone(st.offeredToolNames)
-		baseToolCtx.TurnOfferedToolSchemas = st.offeredToolSchemas
-		baseToolCtx.ModelSourceContext = st.sourceContext
+		baseToolCtx.Turn.TurnToolPlan = st.turnToolPlan
+		baseToolCtx.Turn.TurnOfferedToolNames = slices.Clone(st.offeredToolNames)
+		baseToolCtx.Turn.TurnOfferedToolSchemas = st.offeredToolSchemas
+		baseToolCtx.Source.ModelSourceContext = st.sourceContext
 	}
 	taskAllowlist := taskSpawnAllowlistForTurn(frame)
 	var turnTools []string
@@ -202,7 +201,7 @@ func (l toolBatch) executeToolCallsInTurn(
 			return nil
 		}
 		var err error
-		history, err = l.commitProvisionalAssistantInHistory(ctx, sess, sessionID, history, userPrompt, turnSurfaceID, assistantMessageID)
+		history, err = l.Projection.commitProvisionalAssistantInHistory(ctx, sess, sessionID, history, userPrompt, turnSurfaceID, assistantMessageID)
 		if err != nil {
 			return err
 		}
@@ -215,12 +214,12 @@ func (l toolBatch) executeToolCallsInTurn(
 		return history, nil, false, 0, "", false, err
 	}
 	// Batch closure survives request cancellation.
-	l.publishWorkerProgress(ctx, sess, st.workerRunID(), st.progress().BeginBatch(len(toolCalls)), false)
+	l.Nudges.publishWorkerProgress(ctx, sess, st.workerRunID(), st.progress().BeginBatch(len(toolCalls)), false)
 	defer func() {
-		l.publishWorkerProgress(context.WithoutCancel(ctx), sess, st.workerRunID(), st.progress().EndBatch(), false)
+		l.Nudges.publishWorkerProgress(context.WithoutCancel(ctx), sess, st.workerRunID(), st.progress().EndBatch(), false)
 	}()
 
-	for _, run := range partitionToolBatchRuns(l.Deps.Tools, toolCalls) {
+	for _, run := range partitionToolBatchRuns(l.Context.Deps.Tools, toolCalls) {
 		if len(run) == 1 {
 			tctx, refreshErr := l.toolContextForCall(ctx, sess, baseToolCtx, machine)
 			if refreshErr != nil {
@@ -253,7 +252,7 @@ func (l toolBatch) executeToolCallsInTurn(
 			if out.breakToolLoop || loopwake.WaitCompletionEndsCycle(out.toolName, out.completion) ||
 				loopwake.AskUserEndsCycle(out.toolName, out.toolMsg.Content, true) ||
 				native.WorkerToolEndsCycle(out.toolName, out.toolMsg.ToolResult) ||
-				l.hostHITLParked(ctx, sessionID, startHolds) {
+				l.Control.hostHITLParked(ctx, sessionID, startHolds) {
 				history, turnTools, err = l.settleUnattemptedCalls(ctx, sess, sessionID, assistantMessageID, history, toolCalls, turnTools, &lastToolTS, st)
 				return history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, true, err
 			}
@@ -274,7 +273,7 @@ func (l toolBatch) executeToolCallsInTurn(
 		if err != nil {
 			return history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, false, err
 		}
-		if l.hostHITLParked(ctx, sessionID, startHolds) {
+		if l.Control.hostHITLParked(ctx, sessionID, startHolds) {
 			history, turnTools, err = l.settleUnattemptedCalls(ctx, sess, sessionID, assistantMessageID, history, toolCalls, turnTools, &lastToolTS, st)
 			return history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, true, err
 		}
@@ -290,13 +289,13 @@ type batchHolds struct {
 	answeringUnderHost bool
 }
 
-func (l toolBatch) batchStartHolds(ctx context.Context, sessionID, turnSurfaceID string) batchHolds {
-	if l.PromptLoop == nil {
+func (l *turnControl) batchStartHolds(ctx context.Context, sessionID, turnSurfaceID string) batchHolds {
+	if l == nil {
 		return batchHolds{}
 	}
 	return batchHolds{
 		approval: l.Deps.HumanApprovalAwaiting != nil && l.Deps.HumanApprovalAwaiting(ctx, sessionID),
-		answeringUnderHost: strings.TrimSpace(turnSurfaceID) == tools.SurfaceAwaitHost &&
+		answeringUnderHost: strings.TrimSpace(turnSurfaceID) == toolcontract.SurfaceAwaitHost &&
 			l.Deps.HostObligationHeld != nil && l.Deps.HostObligationHeld(ctx, sessionID),
 	}
 }
@@ -304,8 +303,8 @@ func (l toolBatch) batchStartHolds(ctx context.Context, sessionID, turnSurfaceID
 // hostHITLParked reports a host-managed wait that ends the batch. A turn
 // already running under one continues to its reply: review edits under an
 // awaiting approval, and the person's turns while the host holds the phase.
-func (l toolBatch) hostHITLParked(ctx context.Context, sessionID string, holds batchHolds) bool {
-	if l.PromptLoop == nil {
+func (l *turnControl) hostHITLParked(ctx context.Context, sessionID string, holds batchHolds) bool {
+	if l == nil {
 		return false
 	}
 	if !holds.approval && l.Deps.HumanApprovalAwaiting != nil && l.Deps.HumanApprovalAwaiting(ctx, sessionID) {
@@ -315,7 +314,7 @@ func (l toolBatch) hostHITLParked(ctx context.Context, sessionID string, holds b
 }
 
 // runConcurrentToolBatch executes bounded concurrent calls and preserves call order.
-func (l toolBatch) runConcurrentToolBatch(
+func (l *toolBatch) runConcurrentToolBatch(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID, userPrompt string,
@@ -330,7 +329,7 @@ func (l toolBatch) runConcurrentToolBatch(
 	proseTurn bool,
 ) []toolCallOutcome {
 	outcomes := make([]toolCallOutcome, len(run))
-	sem := make(chan struct{}, concurrentRunLimit(l.Deps.Tools, run))
+	sem := make(chan struct{}, concurrentRunLimit(l.Context.Deps.Tools, run))
 	var wg sync.WaitGroup
 	for idx, tc := range run {
 		wg.Add(1)
@@ -356,7 +355,7 @@ func (l toolBatch) runConcurrentToolBatch(
 				outcomes[i] = toolCallOutcome{index: i, err: refreshErr}
 				return
 			}
-			tctx.Out = &tools.ToolInvocationOut{}
+			tctx.Effects.Out = &tools.ToolInvocationOut{}
 			out := l.executeOneToolCall(ctx, sess, sessionID, userPrompt, history, call, tctx, taskAllowlist, assistantMessageID, runCtx, proseTurn)
 			outcomes[i] = toolCallOutcome{
 				index:          i,
@@ -377,7 +376,7 @@ func (l toolBatch) runConcurrentToolBatch(
 }
 
 // applyParallelToolOutcomes retains every settled result before returning a host error.
-func (l toolBatch) applyParallelToolOutcomes(
+func (l *toolBatch) applyParallelToolOutcomes(
 	ctx context.Context,
 	outcomes []toolCallOutcome,
 	commit *parallelBatchCommit,
@@ -403,13 +402,13 @@ func commitSnapshot(commit *parallelBatchCommit) ([]api.Message, []string, bool,
 	return commit.history, commit.turnTools, commit.anyTaskEnqueued, commit.taskEnqueuedThisTurn, commit.lastTaskMessageID
 }
 
-func (l toolBatch) syncAssistantToolCallsOnStore(
+func (l *toolBatch) syncAssistantToolCallsOnStore(
 	ctx context.Context,
 	sessionID, assistantMessageID string,
 	history []api.Message,
 	toolCalls []api.ToolCall,
 ) {
-	if l.PromptLoop == nil || l.Deps.UpdateMessage == nil {
+	if l == nil || l.Projection.Deps.UpdateMessage == nil {
 		return
 	}
 	assistantMessageID = strings.TrimSpace(assistantMessageID)
@@ -422,20 +421,20 @@ func (l toolBatch) syncAssistantToolCallsOnStore(
 		}
 		patch := msg
 		patch.ToolCalls = toolCalls
-		_ = l.Deps.UpdateMessage(ctx, sessionID, assistantMessageID, patch)
+		_ = l.Projection.Deps.UpdateMessage(ctx, sessionID, assistantMessageID, patch)
 		return
 	}
 }
 
 // announceToolAskAfterCommit adds the question card after its tool row is durable.
-func (l toolBatch) announceToolAskAfterCommit(ctx context.Context, sessionID, toolName string) {
-	if l.PromptLoop == nil || l.Deps.AnnouncePendingToolAsk == nil {
+func (l *toolBatch) announceToolAskAfterCommit(ctx context.Context, sessionID, toolName string) {
+	if l == nil || l.Projection.Deps.AnnouncePendingToolAsk == nil {
 		return
 	}
 	if strings.TrimSpace(strings.ToLower(toolName)) != "ask_user" {
 		return
 	}
-	l.Deps.AnnouncePendingToolAsk(ctx, sessionID)
+	l.Projection.Deps.AnnouncePendingToolAsk(ctx, sessionID)
 }
 
 type singleToolOutcome struct {
@@ -450,7 +449,7 @@ type singleToolOutcome struct {
 	endTurn error
 }
 
-func (l toolBatch) executeOneToolCall(
+func (l *toolBatch) executeOneToolCall(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -463,16 +462,16 @@ func (l toolBatch) executeOneToolCall(
 	runCtx api.CoordinatorRunContext,
 	proseTurn bool,
 ) singleToolOutcome {
-	ctx = tools.WithRecoveryTools(ctx, toolCtx.TurnOfferedToolNames)
+	ctx = tools.WithRecoveryTools(ctx, toolCtx.Turn.TurnOfferedToolNames)
 	if proseTurn && !workerProseAllowsTool(sess, tc.Name) {
-		return l.refuseToolCall(tc, assistantMessageID, toolInvocations(l).rejectToolOccurrence(ctx, sess, tc, toolCtx, "TOOL_INVOKE_PROSE_TURN", nil))
+		return l.refuseToolCall(tc, assistantMessageID, l.Tools.rejectToolOccurrence(ctx, sess, tc, toolCtx, "TOOL_INVOKE_PROSE_TURN", nil))
 	}
 	ctx, doomPreCount, reject := l.preflightToolCall(ctx, sess, sessionID, assistantMessageID, tc, taskAllowlist)
 	if reject != nil {
 		return l.refuseToolCall(tc, assistantMessageID, reject)
 	}
 
-	run := toolInvocations(l).executeToolCall(ctx, sess, sessionID, userPrompt, history, tc, toolCtx, taskAllowlist, doomPreCount, assistantMessageID, runCtx)
+	run := l.Tools.executeToolCall(ctx, sess, sessionID, userPrompt, history, tc, toolCtx, taskAllowlist, doomPreCount, assistantMessageID, runCtx)
 	if !run.invoked && run.reject != nil {
 		settled, err := l.settlePreInvokeReject(ctx, run)
 		if err != nil {
@@ -489,7 +488,7 @@ func (l toolBatch) executeOneToolCall(
 				"tool", tc.Name,
 				"bytes", data["bytes"],
 				"cap", data["cap"])
-			run = toolInvocations(l).refuseOutputDelivery(ctx, sess, tc, toolCtx, run, code, data)
+			run = l.Tools.refuseOutputDelivery(ctx, sess, tc, toolCtx, run, code, data)
 		}
 	}
 	if !run.succeeded() {
@@ -500,8 +499,8 @@ func (l toolBatch) executeOneToolCall(
 	}
 
 	// Compact only after stamping evidence handles.
-	storageProjection := toolInvocations(l).projectToolResultForStorage(ctx, run.content, tc.Args)
-	projected := toolInvocations(l).truncateToolResultForSession(
+	storageProjection := l.Projection.projectToolResultForStorage(ctx, run.content, tc.Args)
+	projected := l.Tools.truncateToolResultForSession(
 		ctx,
 		tc.Name,
 		storageProjection,
@@ -511,7 +510,7 @@ func (l toolBatch) executeOneToolCall(
 		sess,
 	)
 	if projected.reject != nil {
-		run = toolInvocations(l).refuseOutputDelivery(ctx, sess, tc, toolCtx, run, projected.reject.Code, projected.reject.Data)
+		run = l.Tools.refuseOutputDelivery(ctx, sess, tc, toolCtx, run, projected.reject.Code, projected.reject.Data)
 		return l.settleRejectedInvocation(ctx, sess, sessionID, tc, assistantMessageID, run)
 	}
 	run.content = projected.content
@@ -527,11 +526,11 @@ func (l toolBatch) executeOneToolCall(
 	if ingestion.IsRetrievalTool(tc.Name) {
 		toolOrigin = api.MessageOriginRetrieval
 	}
-	if reject, blocked, transformed, changed := modelTurn(l).evaluateContentAnchor(ctx, sess, oar.AnchorContentToolResult, []oar.ContentSegment{
+	if reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentToolResult, []oar.ContentSegment{
 		oarContentSegment(run.content, api.MessageRoleTool, toolOrigin, api.ContentAuthorityNone, api.ContentTrustTierUntrusted, tc.Name),
 	}, tc.Name, tc.Args); blocked {
 		run.failure = rejectionFailure(reject.Code(), "content_policy_rejection", invocationFailureOwner(run.contract, run.captures), reject.Facts.FeedbackFor(reject.Code()).Details)
-		settled, settleErr := toolInvocations(l).settleInvocation(ctx, run, api.InvocationStatusRejected, "content_policy", reject.Code(), run.captures.ownerRef)
+		settled, settleErr := l.Tools.settleInvocation(ctx, run, api.InvocationStatusRejected, "content_policy", reject.Code(), run.captures.ownerRef)
 		if settleErr != nil {
 			return l.settlementHostFault(tc, assistantMessageID, run, settleErr)
 		}
@@ -540,16 +539,16 @@ func (l toolBatch) executeOneToolCall(
 		run.replaceContent(transformed)
 	}
 
-	toolMsg := toolInvocations(l).composeToolResultMessage(ctx, sess, sessionID, tc, assistantMessageID, toolOrigin, &run)
+	toolMsg := l.Tools.composeToolResultMessage(ctx, sess, sessionID, tc, assistantMessageID, toolOrigin, &run)
 	settled, settleErr := l.settleToolResult(ctx, tc, toolCtx, toolMsg, run)
 	if settleErr != nil {
 		return l.settlementHostFault(tc, assistantMessageID, run, settleErr)
 	}
 	run = settled
-	l.recordReturnedText(ctx, sessionID, tc, run)
-	toolInvocations(l).recordSourceRunEvidence(ctx, sessionID, sess, tc.Name, run)
-	if run.succeeded() && l.Deps.ToolObserved != nil {
-		l.Deps.ToolObserved(ctx, sess, toolCtx, tc.Name)
+	l.Tools.recordReturnedText(ctx, sessionID, tc, run)
+	l.Tools.recordSourceRunEvidence(ctx, sessionID, sess, tc.Name, run)
+	if run.succeeded() && l.Context.Deps.ToolObserved != nil {
+		l.Context.Deps.ToolObserved(ctx, sess, toolCtx, tc.Name)
 	}
 	if toolMsg.ToolResult != nil {
 		toolMsg.ToolResult.Invocation = run.receipt

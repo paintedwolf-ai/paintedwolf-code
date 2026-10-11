@@ -62,7 +62,7 @@ func TestEditorOutboxSurvivesRelocatedRestoreAndRecoveryPreimage(t *testing.T) {
 	result, err := backup.Stage(t.Context(), backup.StageOpts{ConfigDir: target, DBPath: filepath.Join(target, "store.db"), SQLDB: targetDB, ArchivePath: archivePath(t, archive), SchemaVersion: db.SchemaVersion})
 	testutil.FailErr(t, "stage relocated installation", err)
 	testutil.FailErr(t, "close target store", targetDB.Close())
-	testutil.FailErr(t, "apply relocated installation", backup.ApplyPending(target))
+	testutil.FailErr(t, "apply relocated installation", backup.ApplyPending(t.Context(), target))
 	testutil.FailErr(t, "validate restored editor envelope", editoroutbox.Validate(t.Context(), target))
 	for _, root := range []string{target, result.RecoveryCopyPath} {
 		actual, err := os.ReadFile(filepath.Join(root, relative))
@@ -94,7 +94,7 @@ func TestExplicitFreshStartRetainsOldEditorWorkWithItsRecoveryDatabase(t *testin
 	result, err := backup.StageFreshStart(t.Context(), backup.FreshStartOpts{ConfigDir: root, DBPath: filepath.Join(root, "store.db"), SQLDB: database, AppVersion: "test"})
 	testutil.FailErr(t, "stage explicit fresh start", err)
 	testutil.FailErr(t, "close old store", database.Close())
-	testutil.FailErr(t, "apply explicit fresh start", backup.ApplyPending(root))
+	testutil.FailErr(t, "apply explicit fresh start", backup.ApplyPending(t.Context(), root))
 	if _, err := os.Stat(filepath.Join(root, relative)); !os.IsNotExist(err) {
 		t.Fatalf("old editor identity remained beside a fresh store: %v", err)
 	}

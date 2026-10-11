@@ -16,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -66,18 +66,18 @@ func (i writeRootPlanInstaller) InstallApprovalOption(_ context.Context, checkpo
 func TestWriteRootCardAlwaysHasAnOption(t *testing.T) {
 	events := make(chan api.CheckpointEvent, 1)
 	store, rec, owner := newApprovalPlanStore(t, "session-floor")
-	mgr := hitl.NewManager(store, approvalPlanEvents{events: events}, rec)
+	mgr := hitl.NewCheckpoints(store, approvalPlanEvents{events: events}, rec)
 	mgr.SetCheckpointExpiry(func() time.Duration { return 0 })
 	runtime := approvalstate.NewSandboxPathGrantRuntime()
-	mgr.SetApprovalAuthorityInstaller(writeRootPlanInstaller{runtime: runtime})
+	mgr.Authority.SetApprovalAuthorityInstaller(writeRootPlanInstaller{runtime: runtime})
 	broker := &session.WriteRootCheckpointBroker{
 		Checkpoints: mgr, Runtime: runtime,
 		Posture: func(string) gate.Posture { return gate.PostureStrict },
 	}
 	project, outside := t.TempDir(), "/Users/approval-plan-contract/floor-cache"
-	resultCh := make(chan native.SandboxWriteRootResult, 1)
+	resultCh := make(chan command.SandboxWriteRootResult, 1)
 	go func() {
-		result, _ := broker.Authorize(context.Background(), native.SandboxWriteRootAsk{
+		result, _ := broker.Authorize(context.Background(), command.SandboxWriteRootAsk{
 			SessionID: "session-floor", ProjectDir: project, ToolCallID: "floor-call", Command: "build",
 			ProposedWriteRoot: outside,
 		})
@@ -97,7 +97,7 @@ func TestWriteRootCardAlwaysHasAnOption(t *testing.T) {
 	if plan.RecommendedOptionID != plan.Options[0].ID {
 		t.Fatalf("face = %q, want %q", plan.RecommendedOptionID, plan.Options[0].ID)
 	}
-	_, err := mgr.ResolveApprovalOption(owner, "session-floor", event.ID, plan.Options[0].ID)
+	_, err := mgr.Authority.ResolveApprovalOption(owner, "session-floor", event.ID, plan.Options[0].ID)
 	testutil.FailErr(t, "resolve floor option", err)
 	<-resultCh
 }
@@ -107,12 +107,12 @@ func TestWriteRootBrokerHomeChildFromUnquotedMkdir(t *testing.T) {
 	home, err := os.UserHomeDir()
 	testutil.FailErr(t, "UserHomeDir", err)
 	store, rec, _ := newApprovalPlanStore(t, "session-unquoted-mkdir")
-	mgr := hitl.NewManager(store, approvalPlanEvents{events: make(chan api.CheckpointEvent, 1)}, rec)
+	mgr := hitl.NewCheckpoints(store, approvalPlanEvents{events: make(chan api.CheckpointEvent, 1)}, rec)
 	runtime := approvalstate.NewSandboxPathGrantRuntime()
 	broker := &session.WriteRootCheckpointBroker{
 		Checkpoints: mgr, Runtime: runtime, ApprovalsDisabled: func(string) bool { return true },
 	}
-	result, err := broker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	result, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "session-unquoted-mkdir", ProjectDir: t.TempDir(), ToolCallID: "mkdir-cache",
 		Command: "build", ProposedWriteRoot: filepath.Join(home, "cache"),
 	})
@@ -131,13 +131,13 @@ func TestWriteRootBrokerHomeChildFromBSDMkdir(t *testing.T) {
 	home, err := os.UserHomeDir()
 	testutil.FailErr(t, "UserHomeDir", err)
 	store, rec, _ := newApprovalPlanStore(t, "session-bsd-mkdir")
-	mgr := hitl.NewManager(store, approvalPlanEvents{events: make(chan api.CheckpointEvent, 1)}, rec)
+	mgr := hitl.NewCheckpoints(store, approvalPlanEvents{events: make(chan api.CheckpointEvent, 1)}, rec)
 	runtime := approvalstate.NewSandboxPathGrantRuntime()
 	broker := &session.WriteRootCheckpointBroker{
 		Checkpoints: mgr, Runtime: runtime, ApprovalsDisabled: func(string) bool { return true },
 	}
 	blocked := filepath.Join(home, ".tool")
-	result, err := broker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	result, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "session-bsd-mkdir", ProjectDir: t.TempDir(), ToolCallID: "mkdir-tool",
 		Command: "mkdir -p " + blocked, ProposedWriteRoot: blocked,
 	})
@@ -153,18 +153,18 @@ func TestWriteRootBrokerHomeChildFromBSDMkdir(t *testing.T) {
 func TestWriteRootBrokerRaisesBalancedCardOutsideRoots(t *testing.T) {
 	events := make(chan api.CheckpointEvent, 1)
 	store, rec, owner := newApprovalPlanStore(t, "session-balanced-outside-roots")
-	mgr := hitl.NewManager(store, approvalPlanEvents{events: events}, rec)
+	mgr := hitl.NewCheckpoints(store, approvalPlanEvents{events: events}, rec)
 	mgr.SetCheckpointExpiry(func() time.Duration { return 0 })
 	runtime := approvalstate.NewSandboxPathGrantRuntime()
-	mgr.SetApprovalAuthorityInstaller(writeRootPlanInstaller{runtime: runtime})
+	mgr.Authority.SetApprovalAuthorityInstaller(writeRootPlanInstaller{runtime: runtime})
 	broker := &session.WriteRootCheckpointBroker{
 		Checkpoints: mgr, Runtime: runtime,
 		Posture: func(string) gate.Posture { return gate.PostureBalanced },
 	}
 	blocked := "/Users/approval-plan-contract/outside-root"
-	resultCh := make(chan native.SandboxWriteRootResult, 1)
+	resultCh := make(chan command.SandboxWriteRootResult, 1)
 	go func() {
-		result, _ := broker.Authorize(context.Background(), native.SandboxWriteRootAsk{
+		result, _ := broker.Authorize(context.Background(), command.SandboxWriteRootAsk{
 			SessionID: "session-balanced-outside-roots", ProjectDir: t.TempDir(),
 			ToolCallID: "mkdir-tool", Command: "mkdir -p " + blocked, ProposedWriteRoot: blocked,
 		})
@@ -182,7 +182,7 @@ func TestWriteRootBrokerRaisesBalancedCardOutsideRoots(t *testing.T) {
 	if event.ToolApproval.Plan.Subject.Targets[0].Label != blocked {
 		t.Fatalf("card target = %q want %q", event.ToolApproval.Plan.Subject.Targets[0].Label, blocked)
 	}
-	_, err := mgr.ResolveApprovalOption(owner, "session-balanced-outside-roots", event.ID, event.ToolApproval.Plan.Options[0].ID)
+	_, err := mgr.Authority.ResolveApprovalOption(owner, "session-balanced-outside-roots", event.ID, event.ToolApproval.Plan.Options[0].ID)
 	testutil.FailErr(t, "resolve outside-root option", err)
 	result := <-resultCh
 	if !result.Raised || !result.Authorized || result.ProposedWriteRoot != blocked {
@@ -193,13 +193,13 @@ func TestWriteRootBrokerRaisesBalancedCardOutsideRoots(t *testing.T) {
 func TestAdvancedOffGrantsWriteRootWithoutCard(t *testing.T) {
 	t.Parallel()
 	store, rec, _ := newApprovalPlanStore(t, "session")
-	mgr := hitl.NewManager(store, approvalPlanEvents{events: make(chan api.CheckpointEvent, 1)}, rec)
+	mgr := hitl.NewCheckpoints(store, approvalPlanEvents{events: make(chan api.CheckpointEvent, 1)}, rec)
 	runtime := approvalstate.NewSandboxPathGrantRuntime()
 	broker := &session.WriteRootCheckpointBroker{
 		Checkpoints: mgr, Runtime: runtime, ApprovalsDisabled: func(string) bool { return true },
 	}
 	project, outside := t.TempDir(), "/Users/approval-plan-contract/cache"
-	result, err := broker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	result, err := broker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "session", ProjectDir: project, ToolCallID: "call", Command: "build",
 		ProposedWriteRoot: outside,
 	})
@@ -217,19 +217,19 @@ func TestAdvancedOffGrantsWriteRootWithoutCard(t *testing.T) {
 func TestWriteRootUsesToolApprovalPlanAndInstallsBeforeRelease(t *testing.T) {
 	events := make(chan api.CheckpointEvent, 1)
 	store, rec, owner := newApprovalPlanStore(t, "session")
-	mgr := hitl.NewManager(store, approvalPlanEvents{events: events}, rec)
+	mgr := hitl.NewCheckpoints(store, approvalPlanEvents{events: events}, rec)
 	mgr.SetCheckpointExpiry(func() time.Duration { return 0 })
 	runtime := approvalstate.NewSandboxPathGrantRuntime()
-	mgr.SetApprovalAuthorityInstaller(writeRootPlanInstaller{runtime: runtime})
+	mgr.Authority.SetApprovalAuthorityInstaller(writeRootPlanInstaller{runtime: runtime})
 	broker := &session.WriteRootCheckpointBroker{
 		Checkpoints: mgr, Runtime: runtime, Posture: func(string) gate.Posture { return gate.PostureStrict },
 	}
 	project, outside := t.TempDir(), "/Users/approval-plan-contract/cache"
 
-	resultCh := make(chan native.SandboxWriteRootResult, 1)
+	resultCh := make(chan command.SandboxWriteRootResult, 1)
 	errCh := make(chan error, 1)
 	go func() {
-		result, err := broker.Authorize(context.Background(), native.SandboxWriteRootAsk{
+		result, err := broker.Authorize(context.Background(), command.SandboxWriteRootAsk{
 			SessionID: "session", ProjectDir: project, ToolCallID: "call",
 			ToolName: "verify", Command: "build",
 			ProposedWriteRoot: outside,
@@ -268,7 +268,7 @@ func TestWriteRootUsesToolApprovalPlanAndInstallsBeforeRelease(t *testing.T) {
 	if quiet != 0 {
 		t.Fatalf("write-root card with task lease unexpectedly carried quiet rung: %+v", plan.Options)
 	}
-	_, err := mgr.ResolveApprovalOption(owner, "session", event.ID, affirmative[0].ID)
+	_, err := mgr.Authority.ResolveApprovalOption(owner, "session", event.ID, affirmative[0].ID)
 	testutil.FailErr(t, "resolve write-root option", err)
 	approvedRoot := plan.Subject.Targets[0].Label
 	if roots := runtime.SessionWriteRoots("session"); len(roots) != 1 || roots[0] != approvedRoot {
@@ -284,10 +284,10 @@ func TestWriteRootUsesToolApprovalPlanAndInstallsBeforeRelease(t *testing.T) {
 func TestWriteRootRulesEnforceDenyAndRouteAskThroughGate(t *testing.T) {
 	store, rec, owner := newApprovalPlanStore(t, "session")
 	events := make(chan api.CheckpointEvent, 1)
-	mgr := hitl.NewManager(store, approvalPlanEvents{events: events}, rec)
+	mgr := hitl.NewCheckpoints(store, approvalPlanEvents{events: events}, rec)
 	mgr.SetCheckpointExpiry(func() time.Duration { return 0 })
 	runtime := approvalstate.NewSandboxPathGrantRuntime()
-	mgr.SetApprovalAuthorityInstaller(writeRootPlanInstaller{runtime: runtime})
+	mgr.Authority.SetApprovalAuthorityInstaller(writeRootPlanInstaller{runtime: runtime})
 	project, outside := t.TempDir(), "/Users/approval-plan-contract/rule-cache"
 
 	denyBroker := &session.WriteRootCheckpointBroker{
@@ -299,7 +299,7 @@ func TestWriteRootRulesEnforceDenyAndRouteAskThroughGate(t *testing.T) {
 			}, true
 		},
 	}
-	denied, err := denyBroker.Authorize(t.Context(), native.SandboxWriteRootAsk{
+	denied, err := denyBroker.Authorize(t.Context(), command.SandboxWriteRootAsk{
 		SessionID: "session", ProjectDir: project, ToolCallID: "deny-call", Command: "build",
 		ProposedWriteRoot: outside,
 	})
@@ -319,9 +319,9 @@ func TestWriteRootRulesEnforceDenyAndRouteAskThroughGate(t *testing.T) {
 		},
 		Posture: func(string) gate.Posture { return gate.PostureLight },
 	}
-	resultCh := make(chan native.SandboxWriteRootResult, 1)
+	resultCh := make(chan command.SandboxWriteRootResult, 1)
 	go func() {
-		result, _ := askBroker.Authorize(context.Background(), native.SandboxWriteRootAsk{
+		result, _ := askBroker.Authorize(context.Background(), command.SandboxWriteRootAsk{
 			SessionID: "session", ProjectDir: project, ToolCallID: "ask-call", Command: "build",
 			ProposedWriteRoot: outside,
 		})
@@ -331,7 +331,7 @@ func TestWriteRootRulesEnforceDenyAndRouteAskThroughGate(t *testing.T) {
 	if event.ToolApproval == nil || event.ToolApproval.Plan.Presentation.Gate != api.GateUserRule {
 		t.Fatalf("ask-rule event = %+v", event)
 	}
-	_, err = mgr.ResolveApprovalOption(owner, "session", event.ID, event.ToolApproval.Plan.Options[0].ID)
+	_, err = mgr.Authority.ResolveApprovalOption(owner, "session", event.ID, event.ToolApproval.Plan.Options[0].ID)
 	testutil.FailErr(t, "resolve ask-rule checkpoint", err)
 	if result := <-resultCh; !result.Raised || !result.Authorized {
 		t.Fatalf("ask result = %+v", result)

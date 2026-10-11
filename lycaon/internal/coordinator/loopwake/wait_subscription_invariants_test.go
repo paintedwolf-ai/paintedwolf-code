@@ -1,10 +1,9 @@
 package loopwake
 
 import (
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"reflect"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 )
 
 // Wait subscription invariants: trigger parsing edges, match matrix exhaustiveness,

@@ -12,13 +12,13 @@ import (
 
 // diagnosticsExportFailed answers a bundle that could not be built; the cause
 // stays in the log because it names local paths.
-func (s *Server) diagnosticsExportFailed(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Activity) diagnosticsExportFailed(w http.ResponseWriter, r *http.Request, err error) {
 	s.responses.Logger.ErrorContext(r.Context(), "diagnostics export failed", "err", err)
 	s.responses.Fail(w, wire.ApiErrorCodeDiagnosticsExportFailed, "the diagnostics bundle could not be built")
 }
 
 // handleExportDiagnostics writes a redacted local diagnostics bundle.
-func (s *Server) handleExportDiagnostics(w http.ResponseWriter, r *http.Request) {
+func (s *Activity) handleExportDiagnostics(w http.ResponseWriter, r *http.Request) {
 	redactor, err := diagnostics.NewRedactor()
 	if err != nil {
 		s.diagnosticsExportFailed(w, r, err)
@@ -38,7 +38,7 @@ func (s *Server) handleExportDiagnostics(w http.ResponseWriter, r *http.Request)
 		Preflight: wire.PreflightReport{
 			Overall:                string(overall),
 			Probes:                 probes,
-			AttachmentCapabilities: attachmentCapabilitiesWire(s.Prompt.Caps),
+			AttachmentCapabilities: attachmentCapabilitiesWire(s.attachmentCaps),
 		},
 		ConfigDir:   s.dataDir,
 		LogDir:      s.dataDir,

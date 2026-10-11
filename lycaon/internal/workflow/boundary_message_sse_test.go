@@ -12,6 +12,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,7 +25,7 @@ func TestStartBoundaryMessagesPublishMessageSSE(t *testing.T) {
 	pub := &events.Publisher{Hub: hub}
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	mgr := NewManager(NewSQLStore(sqlDB), store, reg, pub)
+	mgr := NewManager(workflowpersistence.New(sqlDB), store, reg, pub)
 
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -48,11 +50,11 @@ func TestStartBoundaryMessagesPublishMessageSSE(t *testing.T) {
 		Status:          api.WorkflowRunStatusRunning,
 		CurrentPhase:    "stub",
 	}
-	if err := mgr.Store.CreateState(ctx, run, "", nil); err != nil {
+	if err := mgr.Store.State.CreateState(ctx, run, "", nil); err != nil {
 		testutil.FailErr(t, "create run failed", err)
 	}
-	messages, _ := startBoundaryMessages(run, "/plan", "11111111-1111-4111-8111-111111111111")
-	if err := mgr.appendSessionMessages(ctx, sess.ID, messages...); err != nil {
+	messages, _ := runstate.StartBoundaryMessages(run, "/plan", "11111111-1111-4111-8111-111111111111")
+	if err := mgr.Transcript.Append(ctx, sess.ID, messages...); err != nil {
 		testutil.FailErr(t, "append start messages failed", err)
 	}
 

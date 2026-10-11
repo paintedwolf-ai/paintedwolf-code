@@ -83,9 +83,9 @@ func (p *GuardPipeline) EvaluateBlock(ctx context.Context, anchor string, gc *Gu
 	if gc == nil {
 		gc = NewGuardContext()
 	}
-	unlock := p.counters.beginOccurrence(gc.SessionID)
+	unlock := p.counters.beginOccurrence(gc.Session.SessionID)
 	defer unlock()
-	rules := p.effectiveRules(ctx, gc.SessionID)
+	rules := p.effectiveRules(ctx, gc.Session.SessionID)
 	if rules == nil {
 		return res, nil
 	}
@@ -102,8 +102,8 @@ func (p *GuardPipeline) EvaluateBlock(ctx context.Context, anchor string, gc *Gu
 	if err := p.deliverAdvisories(ctx, anchor, gc, res); err != nil {
 		return res, err
 	}
-	if gc.Anchor == CoreAnchorToolPreInvoke && gc.Tool != "" && (res.Decision == nil || res.Decision.Effect != EffectBlock) {
-		p.AdmitTool(gc.SessionID, gc.Tool)
+	if gc.Anchor == CoreAnchorToolPreInvoke && gc.Invocation.Tool != "" && (res.Decision == nil || res.Decision.Effect != EffectBlock) {
+		p.AdmitTool(gc.Session.SessionID, gc.Invocation.Tool)
 	}
 	return res, nil
 }
@@ -121,15 +121,15 @@ func rejectDataFor(gc *GuardContext, code string) map[string]any {
 		out = map[string]any{}
 	}
 	maps.Copy(out, d)
-	if _, ok := out["tool"]; !ok && gc.Tool != "" {
-		out["tool"] = gc.Tool
+	if _, ok := out["tool"]; !ok && gc.Invocation.Tool != "" {
+		out["tool"] = gc.Invocation.Tool
 	}
-	if gc.Profile != "" {
+	if gc.Session.Profile != "" {
 		if _, ok := out["profile"]; !ok {
-			out["profile"] = gc.Profile
+			out["profile"] = gc.Session.Profile
 		}
 	}
-	out["worker_leg"] = gc.WorkerLeg
+	out["worker_leg"] = gc.Session.WorkerLeg
 	return out
 }
 

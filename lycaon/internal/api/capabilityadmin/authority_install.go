@@ -11,7 +11,7 @@ import (
 )
 
 // InstallApprovalOption rolls back applied deltas if installation fails.
-func (s *Handler) InstallApprovalOption(ctx context.Context, checkpointID string, option hitl.ApprovalOption) (func(), error) {
+func (s *Installation) InstallApprovalOption(ctx context.Context, checkpointID string, option hitl.ApprovalOption) (func(), error) {
 	s.authorityMu.Lock()
 	defer s.authorityMu.Unlock()
 	rollbacks := make([]func(), 0, len(option.Authority))
@@ -45,7 +45,7 @@ func (s *Handler) InstallApprovalOption(ctx context.Context, checkpointID string
 	return rollbackAll, nil
 }
 
-func (s *Handler) installApprovalDelta(ctx context.Context, checkpointID string, delta hitl.ApprovalAuthorityDelta) (func(), error) {
+func (s *Installation) installApprovalDelta(ctx context.Context, checkpointID string, delta hitl.ApprovalAuthorityDelta) (func(), error) {
 	switch delta.Kind {
 	case hitl.AuthorityCurrentAction:
 		return nil, nil
@@ -170,7 +170,7 @@ func (s *Handler) installApprovalDelta(ctx context.Context, checkpointID string,
 }
 
 // RollbackApprovalOption revokes every authority delta in reverse order.
-func (s *Handler) RollbackApprovalOption(ctx context.Context, checkpointID string, option hitl.ApprovalOption) error {
+func (s *Installation) RollbackApprovalOption(ctx context.Context, checkpointID string, option hitl.ApprovalOption) error {
 	for i := len(option.Authority) - 1; i >= 0; i-- {
 		delta := option.Authority[i]
 		switch delta.Kind {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"strings"
 
@@ -115,7 +116,7 @@ func (t *CodeRewriteTool) runSingleApply(ctx context.Context, tctx tools.ToolCon
 			if errors.As(err, &invalid) {
 				return "", sourceview.PatternInvalid(path, err)
 			}
-			return "", &tools.ToolReject{Code: "STRUCTURAL_APPLY_FAILED", Data: map[string]any{"path": path, "reason": err.Error()}}
+			return "", &toolrejection.ToolReject{Code: "STRUCTURAL_APPLY_FAILED", Data: map[string]any{"path": path, "reason": err.Error()}}
 		}
 		if !res.Changed {
 			return fmt.Sprintf("No matches for pattern in %s; file unchanged", path), nil
@@ -181,7 +182,7 @@ func codeRewriteDiffResult(ctx context.Context, path, language string, matches i
 	}
 	beforeCopy := before
 	if err := rejectIfSyntaxUnhealthy(ctx, "code_rewrite", path, &beforeCopy, after, mutationSeam{}); err != nil {
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if errors.As(err, &reject) {
 			out.SyntaxIssue = &rewriteBlocked{Path: path, Code: reject.Code, Details: reject.Data}
 			out.ParseError, _ = reject.Data["parse_error"].(string)
@@ -201,7 +202,7 @@ func codeRewriteDiffResult(ctx context.Context, path, language string, matches i
 }
 
 func codeRewritePatternTooBroad(path, operator, pattern string) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "CODE_REWRITE_PATTERN_TOO_BROAD",
 		Data: map[string]any{
 			"path":     path,

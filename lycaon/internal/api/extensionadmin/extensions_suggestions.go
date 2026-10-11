@@ -16,7 +16,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleGetExtensionSuggestions(w http.ResponseWriter, r *http.Request) {
+func (s *Suggestions) HandleGetExtensionSuggestions(w http.ResponseWriter, r *http.Request) {
 	projectID, projectDir, ok := requestscope.ProjectIDQuery(s.Projects, s.responses, w, r)
 	if !ok {
 		return
@@ -43,12 +43,12 @@ func (s *Handler) HandleGetExtensionSuggestions(w http.ResponseWriter, r *http.R
 	httpio.WriteJSON(w, http.StatusOK, response)
 }
 
-func (s *Handler) extensionSuggestionsResponse(
+func (s *Suggestions) extensionSuggestionsResponse(
 	r *http.Request,
 	projectID string,
 	manifest extpacks.SuggestionManifest,
 ) (wire.ExtensionSuggestionsResponse, error) {
-	effective, _, err := s.resolveExtensionsCatalog(r)
+	effective, _, err := s.Mutations.resolveExtensionsCatalog(r)
 	if err != nil {
 		return wire.ExtensionSuggestionsResponse{}, err
 	}
@@ -59,7 +59,7 @@ func (s *Handler) extensionSuggestionsResponse(
 	}, nil
 }
 
-func (s *Handler) HandleAcceptExtensionSuggestions(w http.ResponseWriter, r *http.Request) {
+func (s *Suggestions) HandleAcceptExtensionSuggestions(w http.ResponseWriter, r *http.Request) {
 	projectID, projectDir, ok := requestscope.ProjectIDQuery(s.Projects, s.responses, w, r)
 	if !ok {
 		return
@@ -122,29 +122,29 @@ func (s *Handler) HandleAcceptExtensionSuggestions(w http.ResponseWriter, r *htt
 	revision := req.ExpectedRevision
 	for i, row := range selected {
 		id := req.PackIDs[i]
-		res, err := s.submitExtensionIntent(r, wire.ExtensionsScopeDevice, "", revision,
+		res, err := s.Mutations.submitExtensionIntent(r, wire.ExtensionsScopeDevice, "", revision,
 			extensionstate.InstallOp{
 				Source: row.Source, Version: row.Version, Ref: row.Ref, ExpectedPackID: id,
 			})
 		if err != nil {
-			s.writeExtensionMutationError(w, r, err)
+			s.Mutations.writeExtensionMutationError(w, r, err)
 			return
 		}
 		revision = res.Revision
-		res, err = s.submitExtensionIntent(r, wire.ExtensionsScopeDevice, "", revision,
+		res, err = s.Mutations.submitExtensionIntent(r, wire.ExtensionsScopeDevice, "", revision,
 			extensionstate.SetInstalledFromOp{PackID: id, ProjectID: projectID})
 		if err != nil {
-			s.writeExtensionMutationError(w, r, err)
+			s.Mutations.writeExtensionMutationError(w, r, err)
 			return
 		}
 		revision = res.Revision
 	}
-	if _, err := s.submitExtensionIntent(r, wire.ExtensionsScopeDevice, "", revision,
+	if _, err := s.Mutations.submitExtensionIntent(r, wire.ExtensionsScopeDevice, "", revision,
 		extensionstate.UndeclineOp{PackIDs: req.PackIDs}); err != nil {
-		s.writeExtensionMutationError(w, r, err)
+		s.Mutations.writeExtensionMutationError(w, r, err)
 		return
 	}
-	view, err := s.buildExtensionsCatalogViewFresh(r)
+	view, err := s.Catalog.buildExtensionsCatalogViewFresh(r)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
@@ -284,7 +284,7 @@ func plural(n int, one, many string) string {
 	return many
 }
 
-func (s *Handler) writeSuggestionFileError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Suggestions) writeSuggestionFileError(w http.ResponseWriter, r *http.Request, err error) {
 	var invalid *extpacks.SuggestionInvalidError
 	if errors.As(err, &invalid) {
 		s.responses.Fail(w, wire.ApiErrorCodeExtensionSuggestionInvalid, "the project's extension suggestions are invalid")

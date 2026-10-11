@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -26,8 +26,8 @@ func TestDocumentFollowsItsPathThroughDeletionAndRecreation(t *testing.T) {
 	testutil.FailErr(t, "type an unsaved line", err)
 
 	testutil.FailErr(t, "remove on disk", os.Remove(filepath.Join(f.root, "a.txt")))
-	testutil.FailErr(t, "record the deletion", ledger.Record(t.Context(), sourceledger.RecordInput{ProjectID: f.project.ID, RootID: f.rootID,
-		Path: "a.txt", OperationID: uuid.NewString(), Op: api.SourceChangeOpDelete,
+	testutil.FailErr(t, "record the deletion", ledger.Record(t.Context(), sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: f.rootID, Path: "a.txt"}, ProjectID: f.project.ID, OperationID: uuid.NewString(), Op: api.SourceChangeOpDelete,
 		Origin: api.SourceChangeOriginExternal, Before: []byte("old file\n")}))
 	testutil.FailErr(t, "observe the deletion", f.service.ObserveExternal(t.Context(), f.project, []PathRef{{RootID: f.rootID, Path: "a.txt"}}))
 	absent, err := f.store.Get(t.Context(), d.ID)
@@ -75,8 +75,8 @@ func TestSavingAnAbsentDocumentRecreatesTheFile(t *testing.T) {
 		Content:         "kept draft\n", EOL: "lf"})
 	testutil.FailErr(t, "type", err)
 	testutil.FailErr(t, "remove on disk", os.Remove(filepath.Join(f.root, "a.txt")))
-	testutil.FailErr(t, "record the deletion", ledger.Record(t.Context(), sourceledger.RecordInput{ProjectID: f.project.ID, RootID: f.rootID,
-		Path: "a.txt", OperationID: uuid.NewString(), Op: api.SourceChangeOpDelete,
+	testutil.FailErr(t, "record the deletion", ledger.Record(t.Context(), sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: f.rootID, Path: "a.txt"}, ProjectID: f.project.ID, OperationID: uuid.NewString(), Op: api.SourceChangeOpDelete,
 		Origin: api.SourceChangeOriginExternal, Before: []byte("old file\n")}))
 	absent, err := f.service.ObserveDisk(t.Context(), f.project, d.ID, "window")
 	testutil.FailErr(t, "observe", err)
@@ -114,7 +114,7 @@ func TestSavingAnAbsentDocumentYieldsToAFileThatReappeared(t *testing.T) {
 	// Someone put a file back before the save published.
 	f.write(t, "a.txt", "theirs\n")
 	_, err = f.service.Save(t.Context(), f.project, d.ID, "window", uuid.NewString(), "", 0, pinned.Revision)
-	if !errors.Is(err, project.ErrSourceWriteConflict) {
+	if !errors.Is(err, projectsource.ErrSourceWriteConflict) {
 		t.Fatalf("save replaced a file it did not expect: %v", err)
 	}
 	if f.disk(t, "a.txt") != "theirs\n" {

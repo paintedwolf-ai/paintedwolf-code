@@ -13,7 +13,7 @@ func QuietOptions(action ProposedAction, decision *gate.Decision, secret *Secret
 	if decision == nil {
 		return nil
 	}
-	chat := action.ChatSession()
+	chat := action.Scope.ChatSession()
 	if chat == "" {
 		return nil
 	}

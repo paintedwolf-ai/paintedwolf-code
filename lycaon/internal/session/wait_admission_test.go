@@ -20,14 +20,14 @@ func TestWaitResumeAcquiresItsOwnDispatchLane(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			manager, sessions := newReceiptTestManager(t)
 			session := newReceiptTestSession(t, manager, sessions)
-			ctx, release := manager.lockPromptSubmissionDispatch(t.Context(), session.ID)
+			ctx, release := manager.Submissions.LockDispatch(t.Context(), session.ID)
 			defer func() { release() }()
 			admitted := make(chan struct{}, 1)
 			finished := make(chan error, 1)
 			leaseID := uuid.NewString()
 			pending := true
 			go func() {
-				_, err := manager.promptWaitResume(context.WithoutCancel(ctx), session.ID, loopwake.WaitDelivery{
+				_, err := manager.Submissions.WaitResume(context.WithoutCancel(ctx), session.ID, loopwake.WaitDelivery{
 					LeaseID: leaseID, Condition: awaitstore.Condition{Kind: "timer", Outcome: "timed_out"},
 					Pending: func() bool { return pending }, Admitted: func() error { admitted <- struct{}{}; return nil },
 				})

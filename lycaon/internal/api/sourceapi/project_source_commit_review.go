@@ -49,8 +49,8 @@ func commitReviewSnapshot(paths []commitReviewPath, roots []wire.SourceCommitRoo
 }
 
 // collectCommitPaths uses status as membership, including both sides of moves.
-func (s *Handler) collectCommitPaths(ctx context.Context, p *project.Project) ([]commitReviewPath, []wire.SourceCommitRoot) {
-	lens := s.CommitLens(ctx, p)
+func (s *Review) collectCommitPaths(ctx context.Context, p *project.Project) ([]commitReviewPath, []wire.SourceCommitRoot) {
+	lens := s.Comparisons.CommitLens(ctx, p)
 	mgr := s.Git.Manager()
 	byRoot := make(map[string]sourceledger.LensRoot)
 	for _, root := range lens.Roots {
@@ -101,7 +101,7 @@ func (s *Handler) collectCommitPaths(ctx context.Context, p *project.Project) ([
 
 // writeCommitReview pages Git status paths; scope binds cursors to the
 // project workspace the first page read.
-func (s *Handler) writeCommitReview(w http.ResponseWriter, r *http.Request, p *project.Project, scope string, page httpio.PageQuery) {
+func (s *Review) writeCommitReview(w http.ResponseWriter, r *http.Request, p *project.Project, scope string, page httpio.PageQuery) {
 	paths, roots := s.collectCommitPaths(r.Context(), p)
 	out := MapSourceWalk(sourceledger.WalkResult{Baseline: sourceledger.Baseline{Kind: sourceledger.BaselineCommit}})
 	out.CommitRoots = roots
@@ -138,7 +138,7 @@ func (s *Handler) writeCommitReview(w http.ResponseWriter, r *http.Request, p *p
 	}
 	for _, path := range paths[start:end] {
 		working := readWorkingCommit(p, path.rootID, path.rootAbs, path.path)
-		history, err := s.SourceLedger.ReviewPathHistory(r.Context(), p.ID, p.BranchForRoot(path.rootID), path.rootID, path.path, working.Side.State == "absent")
+		history, err := s.SourceLedger.History.ReviewPathHistory(r.Context(), p.ID, p.BranchForRoot(path.rootID), path.rootID, path.path, working.Side.State == "absent")
 		if err != nil {
 			s.responses.InternalError(w, r, err)
 			return
@@ -217,7 +217,7 @@ func commitReviewFile(path commitReviewPath, before string, working commitWorkin
 	return file
 }
 
-func (s *Handler) commitPageOIDs(ctx context.Context, paths []commitReviewPath) (map[string]string, error) {
+func (s *Review) commitPageOIDs(ctx context.Context, paths []commitReviewPath) (map[string]string, error) {
 	mgr := s.Git.Manager()
 	out := make(map[string]string)
 	for start := 0; start < len(paths); {

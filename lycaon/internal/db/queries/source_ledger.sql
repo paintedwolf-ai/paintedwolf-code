@@ -99,25 +99,50 @@ INSERT INTO source_files (id, project_id, entry_kind, created_ts) VALUES (?, ?, 
 SELECT id, project_id, entry_kind, created_ts FROM source_files WHERE id = ?;
 
 -- name: GetSourceBranchHeadByPath :one
-SELECT project_id, branch_id, file_id, version_id, root_id,
-       path, state, content_sha256, ordinal, observed_ts
-FROM source_branch_heads
-WHERE project_id = ? AND branch_id = ? AND root_id = ? AND path = ? AND state != 'absent';
+WITH RECURSIVE location(id, rest) AS (
+    SELECT root.id, CAST(sqlc.arg(path) AS TEXT) AS rest FROM source_directories root
+    WHERE root.project_id = sqlc.arg(project_id) AND root.branch_id = sqlc.arg(branch_id)
+      AND root.root_id = sqlc.arg(root_id) AND root.parent_id IS NULL
+    UNION ALL
+    SELECT d.id, substr(l.rest, instr(l.rest, '/') + 1) AS rest
+    FROM location l JOIN source_directories d ON d.parent_id = l.id
+      AND d.name = substr(l.rest, 1, instr(l.rest, '/') - 1) AND d.present = 1
+    WHERE instr(l.rest, '/') > 0
+)
+SELECT h.project_id, h.branch_id, h.file_id, h.version_id, h.root_id,
+       h.path, h.state, h.content_sha256, h.ordinal, h.observed_ts
+FROM source_branch_heads h
+WHERE h.project_id = sqlc.arg(project_id) AND h.branch_id = sqlc.arg(branch_id)
+  AND h.file_id = (
+    SELECT e.file_id FROM location l CROSS JOIN source_head_entries e
+    WHERE e.directory_id = l.id AND instr(l.rest, '/') = 0 AND e.name = l.rest AND e.state != 'absent'
+  );
+
 
 -- name: GetDeletedSourcePathHead :one
-WITH latest AS (
-  SELECT s.id, s.project_id, s.branch_id, s.file_id, s.root_id, s.path
-  FROM source_versions s
-  WHERE s.project_id = ? AND s.branch_id = ? AND s.root_id = ? AND s.path = ?
-    AND s.landing = 'working_file'
-  ORDER BY s.seq DESC LIMIT 1
+WITH RECURSIVE location(id, rest) AS (
+    SELECT root.id, CAST(sqlc.arg(path) AS TEXT) AS rest FROM source_directories root
+    WHERE root.project_id = sqlc.arg(project_id) AND root.branch_id = sqlc.arg(branch_id)
+      AND root.root_id = sqlc.arg(root_id) AND root.parent_id IS NULL
+    UNION ALL
+    SELECT d.id, substr(l.rest, instr(l.rest, '/') + 1) AS rest
+    FROM location l JOIN source_directories d ON d.parent_id = l.id
+      AND d.name = substr(l.rest, 1, instr(l.rest, '/') - 1)
+    WHERE instr(l.rest, '/') > 0
 )
 SELECT h.file_id, h.version_id, h.observed_ts, f.entry_kind
-FROM latest v
-JOIN source_branch_heads h ON h.project_id = v.project_id AND h.branch_id = v.branch_id
-  AND h.file_id = v.file_id AND h.version_id = v.id AND h.root_id = v.root_id AND h.path = v.path
+FROM location l CROSS JOIN source_head_entries e ON e.directory_id = l.id AND e.name = l.rest
+JOIN source_branch_heads h ON h.project_id = e.project_id AND h.branch_id = e.branch_id AND h.file_id = e.file_id
 JOIN source_files f ON f.id = h.file_id
-WHERE h.state = 'absent';
+JOIN source_versions v ON v.id = h.version_id
+WHERE instr(l.rest, '/') = 0 AND h.state = 'absent'
+  AND NOT EXISTS (
+    SELECT 1 FROM source_versions later
+    WHERE later.project_id = h.project_id AND later.branch_id = h.branch_id
+      AND later.root_id = h.root_id AND later.path = h.path
+      AND later.landing = 'working_file' AND later.seq > h.ordinal
+  )
+ORDER BY h.ordinal DESC, v.seq DESC LIMIT 1;
 
 -- name: GetSourceBranchHeadByFile :one
 SELECT project_id, branch_id, file_id, version_id, root_id,
@@ -128,12 +153,25 @@ FROM source_branch_heads WHERE project_id = ? AND branch_id = ? AND file_id = ?;
 -- resolves file identity through this so overlay edits extend that file's
 -- history rather than starting a second one.
 -- name: GetTrunkSourceHeadByPath :one
-SELECT project_id, branch_id, file_id, version_id, root_id,
-       path, state, content_sha256, ordinal, observed_ts
-FROM source_branch_heads
-WHERE project_id = ? AND branch_id = '' AND root_id = ? AND path = ?
-  AND state != 'absent'
-LIMIT 1;
+WITH RECURSIVE location(id, rest) AS (
+    SELECT root.id, CAST(sqlc.arg(path) AS TEXT) AS rest FROM source_directories root
+    WHERE root.project_id = sqlc.arg(project_id) AND root.branch_id = ''
+      AND root.root_id = sqlc.arg(root_id) AND root.parent_id IS NULL
+    UNION ALL
+    SELECT d.id, substr(l.rest, instr(l.rest, '/') + 1) AS rest
+    FROM location l JOIN source_directories d ON d.parent_id = l.id
+      AND d.name = substr(l.rest, 1, instr(l.rest, '/') - 1) AND d.present = 1
+    WHERE instr(l.rest, '/') > 0
+)
+SELECT h.project_id, h.branch_id, h.file_id, h.version_id, h.root_id,
+       h.path, h.state, h.content_sha256, h.ordinal, h.observed_ts
+FROM source_branch_heads h
+WHERE h.project_id = sqlc.arg(project_id) AND h.branch_id = ''
+  AND h.file_id = (
+    SELECT e.file_id FROM location l CROSS JOIN source_head_entries e
+    WHERE e.directory_id = l.id AND instr(l.rest, '/') = 0 AND e.name = l.rest AND e.state != 'absent'
+  );
+
 
 -- name: LatestJobSourceVersionForPath :one
 SELECT e.file_id, e.after_version_id
@@ -149,34 +187,37 @@ FROM source_branch_heads WHERE project_id = ? AND branch_id = ? AND root_id = ?
 ORDER BY path;
 
 -- name: ListSourceBranchHeadsUnderPath :many
-SELECT project_id, branch_id, file_id, version_id, root_id,
-       path, state, content_sha256, ordinal, observed_ts
-FROM source_branch_heads
-WHERE project_id = sqlc.arg(project_id)
-  AND branch_id = sqlc.arg(branch_id)
-  AND root_id = sqlc.arg(root_id)
-  AND state != 'absent'
-  AND substr(path, 1, length(sqlc.arg(parent_path)) + 1) = sqlc.arg(parent_path) || '/'
-ORDER BY length(path), path;
+WITH RECURSIVE location(id, rest) AS (
+    SELECT root.id, CAST(sqlc.arg(parent_path) AS TEXT) || '/' FROM source_directories root
+    WHERE root.project_id = sqlc.arg(project_id) AND root.branch_id = sqlc.arg(branch_id)
+      AND root.root_id = sqlc.arg(root_id) AND root.parent_id IS NULL
+    UNION ALL
+    SELECT d.id, substr(l.rest, instr(l.rest, '/') + 1)
+    FROM location l JOIN source_directories d ON d.parent_id = l.id
+      AND d.name = substr(l.rest, 1, instr(l.rest, '/') - 1) AND d.present = 1
+    WHERE instr(l.rest, '/') > 0
+), subtree(id) AS (
+    SELECT id FROM location WHERE rest = ''
+    UNION ALL
+    SELECT d.id FROM subtree s JOIN source_directories d ON d.parent_id = s.id AND d.present = 1
+)
+SELECT h.project_id, h.branch_id, h.file_id, h.version_id, h.root_id,
+       h.path, h.state, h.content_sha256, h.ordinal, h.observed_ts
+FROM subtree s CROSS JOIN source_head_entries e ON e.directory_id = s.id AND e.state != 'absent'
+CROSS JOIN source_branch_heads h ON h.project_id = e.project_id AND h.branch_id = e.branch_id AND h.file_id = e.file_id
+WHERE h.state != 'absent'
+ORDER BY length(h.path), h.path;
 
--- Checkpoint membership is the trunk's own advance; a worker branch's heads
--- are not the project's state.
--- name: ListTrunkSourceHeadsAfterOrdinal :many
-SELECT project_id, branch_id, file_id, version_id, root_id,
-       path, state, content_sha256, ordinal, observed_ts
-FROM source_branch_heads
-WHERE project_id = ? AND branch_id = '' AND ordinal > ? ORDER BY file_id;
-
--- name: UpsertSourceBranchHead :exec
-INSERT INTO source_branch_heads (
+-- name: UpsertSourceHeadEntry :exec
+INSERT INTO source_head_entries (
     project_id, branch_id, file_id, version_id, root_id,
-    path, state, content_sha256, ordinal, observed_ts
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    directory_id, name, state, content_sha256, ordinal, observed_ts
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 ON CONFLICT(project_id, branch_id, file_id) DO UPDATE SET
     version_id = excluded.version_id,
-    root_id = excluded.root_id, path = excluded.path, state = excluded.state,
-    content_sha256 = excluded.content_sha256, ordinal = excluded.ordinal,
-    observed_ts = excluded.observed_ts;
+    root_id = excluded.root_id, directory_id = excluded.directory_id, name = excluded.name,
+    state = excluded.state, content_sha256 = excluded.content_sha256,
+    ordinal = excluded.ordinal, observed_ts = excluded.observed_ts;
 
 -- name: InsertSourceVersion :exec
 INSERT INTO source_versions (
@@ -676,10 +717,6 @@ ORDER BY e.ordinal DESC LIMIT sqlc.arg(page_limit);
 INSERT INTO source_checkpoints (
     id, project_id, kind, label, parent_id, session_id, turn, created_ordinal, created_ts
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-
--- name: InsertSourceCheckpointEntry :exec
-INSERT INTO source_checkpoint_entries (checkpoint_id, file_id, version_id, ordinal)
-VALUES (?, ?, ?, ?);
 
 -- name: InsertSourceCheckpointGitState :exec
 INSERT INTO source_checkpoint_git_states (checkpoint_id, root_id, repo_state, head_commit, head_ref)

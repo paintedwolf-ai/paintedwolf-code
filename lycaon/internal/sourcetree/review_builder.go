@@ -44,7 +44,7 @@ func (b *ReviewBuilder) Add(address Address) error {
 		b.pendingRoot = address.Root
 	}
 	if b.facts[address.Root] == nil {
-		overlay, err := b.catalog.NewTreeOverlay(b.ctx, b.project, root)
+		overlay, err := b.catalog.Directories.NewTreeOverlay(b.ctx, b.project, root)
 		if err != nil {
 			return err
 		}

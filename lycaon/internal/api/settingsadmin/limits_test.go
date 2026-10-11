@@ -6,7 +6,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 

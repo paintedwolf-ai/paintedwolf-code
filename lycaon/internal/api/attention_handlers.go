@@ -7,7 +7,7 @@ import (
 )
 
 // handleGetAttention returns attention state across all projects.
-func (s *Server) handleGetAttention(w http.ResponseWriter, r *http.Request) {
+func (s *Activity) handleGetAttention(w http.ResponseWriter, r *http.Request) {
 	view, err := s.attention.BuildView(r.Context())
 	if err != nil {
 		s.responses.InternalError(w, r, err)

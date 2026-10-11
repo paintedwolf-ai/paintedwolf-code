@@ -15,8 +15,8 @@ func TestRegistryConstructionFailsWhenMandatoryOAuthStoreCannotOpen(t *testing.T
 	testutil.FailErr(t, "write blocking file", os.WriteFile(blocked, []byte("x"), 0o600))
 	t.Setenv(configdir.EnvConfigDir, blocked)
 
-	_, err := NewRegistryImpl(RegistryOptions{})
+	_, err := NewRuntime(RuntimeOptions{})
 	if err == nil || !strings.Contains(err.Error(), "mcp oauth credentials:") {
-		t.Fatalf("NewRegistryImpl error = %v", err)
+		t.Fatalf("NewRuntime error = %v", err)
 	}
 }

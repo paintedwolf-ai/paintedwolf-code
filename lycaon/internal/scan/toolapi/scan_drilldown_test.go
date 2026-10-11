@@ -228,7 +228,9 @@ func TestNativeScanQueryOnCompleteScan(t *testing.T) {
 
 func TestNativeScanListRequiresProjectRoot(t *testing.T) {
 	reg, _, _, _ := registerNativeScanTools(t)
-	tctx := tools.ToolContext{SessionID: "sess-1"}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
+	}
 
 	_, err := reg.Run(context.Background(), "scan_list", nil, tctx)
 	if err == nil || !strings.Contains(err.Error(), "no project_dir") {

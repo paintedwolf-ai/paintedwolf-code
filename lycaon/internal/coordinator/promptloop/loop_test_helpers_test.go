@@ -37,22 +37,22 @@ func (emptyEvidenceLedger) WorkerLegs(context.Context, string, time.Time) ([]gui
 
 // NewPromptLoopForTest wires a PromptLoop for unit and integration tests.
 func NewPromptLoopForTest(deps PromptLoopDeps) *PromptLoop {
-	if deps.Policy == nil && deps.Tools != nil {
-		deps.Policy = registryTestPolicy{metas: deps.Tools.List()}
+	if deps.Context.Policy == nil && deps.Context.Tools != nil {
+		deps.Context.Policy = registryTestPolicy{metas: deps.Context.Tools.List()}
 	}
-	if deps.UpdateMessage == nil {
-		deps.UpdateMessage = func(_ context.Context, _, _ string, _ api.Message) error { return nil }
+	if deps.Projection.UpdateMessage == nil {
+		deps.Projection.UpdateMessage = func(_ context.Context, _, _ string, _ api.Message) error { return nil }
 	}
-	if deps.EvidenceLedger == nil {
-		deps.EvidenceLedger = emptyEvidenceLedger{}
+	if deps.Closeout.EvidenceLedger == nil {
+		deps.Closeout.EvidenceLedger = emptyEvidenceLedger{}
 	}
-	if deps.EvaluateCloseoutBlock == nil {
+	if deps.Closeout.EvaluateCloseoutBlock == nil {
 		// Unit harnesses that assert OAR closeout blocks wire a real EvaluateCloseoutBlock.
-		deps.EvaluateCloseoutBlock = func(context.Context, *api.Session, *oar.GuardContext) (*oar.Decision, error) {
+		deps.Closeout.EvaluateCloseoutBlock = func(context.Context, *api.Session, *oar.GuardContext) (*oar.Decision, error) {
 			return nil, nil
 		}
 	}
-	return &PromptLoop{Deps: deps}
+	return NewPromptLoop(deps)
 }
 
 type registryTestPolicy struct {

@@ -34,7 +34,7 @@ func TestPresentationSurvivesIntentAndStructureChanges(t *testing.T) {
 	}
 	testutil.FailErr(t, "delete directory", os.RemoveAll(filepath.Join(root.Path, "dir-5")))
 	view.catalog.InvalidateRoot(root.Path, "dir-5")
-	_, err := view.catalog.ObserveDirectory(t.Context(), view.scope.Project, root, ".", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err := view.catalog.Directories.ObserveDirectory(t.Context(), view.scope.Project, root, ".", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "publish deletion", err)
 	current := captureForTest(t, view)
 	_, latest := current.Revision()
@@ -66,12 +66,12 @@ func TestPresentationFrameSurvivesCatalogClearAndRebuild(t *testing.T) {
 	before, err := presentation.Frame(t.Context(), FrameRequest{Offset: 0, Limit: 10})
 	testutil.FailErr(t, "read frame before clear", err)
 
-	testutil.FailErr(t, "clear source catalog", view.catalog.ClearTreeStores(t.Context(), func() error {
+	testutil.FailErr(t, "clear source catalog", view.catalog.Trees.ClearTreeStores(t.Context(), func() error {
 		return os.RemoveAll(enginepaths.SourceCatalogCacheRootUnder(os.Getenv("LYCAON_CONFIG_DIR")))
 	}))
 	testutil.FailErr(t, "remove retained file", os.Remove(filepath.Join(root.Path, "retained.txt")))
 	testutil.FailErr(t, "create replacement file", os.WriteFile(filepath.Join(root.Path, "replacement.txt"), []byte("new"), 0o600))
-	_, err = view.catalog.ObserveDirectory(t.Context(), view.scope.Project, root, ".", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err = view.catalog.Directories.ObserveDirectory(t.Context(), view.scope.Project, root, ".", sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "rebuild catalog head", err)
 
 	after, err := presentation.Frame(t.Context(), FrameRequest{Offset: 0, Limit: 10})

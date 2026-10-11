@@ -7,7 +7,10 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/session"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -18,8 +21,8 @@ import (
 func TestAppendWorkerSummaryCarriesStructuredDecisionRequest(t *testing.T) {
 	ctx := context.Background()
 	store := store.NewMemory()
-	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	decisions := session.NewMemoryDecisionStore()
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	decisions := sessiondecisions.NewMemory()
 	mgr.SetDecisionStore(decisions)
 
 	parent, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -45,7 +48,7 @@ func TestAppendWorkerSummaryCarriesStructuredDecisionRequest(t *testing.T) {
 		BlockerClass: api.WorkerBlockerSandbox,
 	}))
 
-	status, err := mgr.AppendWorkerSummary(ctx, parent.ID, session.WorkerSummaryInput{
+	status, err := mgr.Workers.Summaries.Append(ctx, parent.ID, workeroutcomes.SummaryInput{
 		JobID:          "job-dec",
 		ChildSessionID: child.ID,
 		AgentType:      "implementer",
@@ -70,7 +73,7 @@ func TestAppendWorkerSummaryCarriesStructuredDecisionRequest(t *testing.T) {
 			break
 		}
 	}
-	env, ok := session.ParseWorkerCompletionEnvelope(content)
+	env, ok := workercompletion.ParseWorkerCompletionEnvelope(content)
 	if !ok || env.DecisionRequest == nil {
 		t.Fatalf("parse decision: ok=%v content=%q", ok, content)
 	}
@@ -87,7 +90,7 @@ func TestAppendWorkerSummaryCarriesStructuredDecisionRequest(t *testing.T) {
 		t.Fatalf("unexpected envelope digest=%q content=%q", env.Digest, content)
 	}
 
-	anchorEnv := mgr.CoordinatorEnvelopeForWorkerCycleTerminal(ctx, parent.ID, "job-dec")
+	anchorEnv := mgr.Workers.Results.EnvelopeForTerminal(ctx, parent.ID, "job-dec")
 	req, ok := kick.WorkerDecisionRequestFromOptions(anchorEnv.KickOptions())
 	if !ok {
 		t.Fatal("envelope missing last_worker_decision_request")

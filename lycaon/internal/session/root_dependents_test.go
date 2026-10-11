@@ -74,7 +74,7 @@ func TestRootDependentsInFlightWorkerAndBusySession(t *testing.T) {
 	rootID := p.Roots[0].ID
 
 	store := store.NewMemory()
-	mgr := NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetProjectRegistry(reg)
 	mgr.SetWorkerQueue(&stubProjectWorkerLister{tasks: []api.WorkerTask{{
 		ID:              "job-1",
@@ -95,8 +95,8 @@ func TestRootDependentsInFlightWorkerAndBusySession(t *testing.T) {
 		testutil.FailErr(t, "mark busy", err)
 	}
 
-	dep, err := mgr.RootDependents(ctx, p.ID, rootID)
-	testutil.FailErr(t, "RootDependents", err)
+	dep, err := mgr.ProjectControl.RootDependents(ctx, p.ID, rootID)
+	testutil.FailErr(t, "projectcontrol.RootDependents", err)
 	if len(dep.Workers) != 1 || dep.Workers[0].JobID != "job-1" {
 		t.Fatalf("workers = %+v want job-1", dep.Workers)
 	}
@@ -116,7 +116,7 @@ func TestRootDependentsIncludesBusySessionAcrossMultiRootUnion(t *testing.T) {
 	}})
 	testutil.FailErr(t, "create project", err)
 	store := store.NewMemory()
-	mgr := NewManager(store, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetProjectRegistry(reg)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create session", err)
@@ -124,7 +124,7 @@ func TestRootDependentsIncludesBusySessionAcrossMultiRootUnion(t *testing.T) {
 		s.WorkspaceRootID = p.Roots[0].ID
 		s.Status = api.SessionStatusBusy
 	}))
-	dependents, err := mgr.RootDependents(ctx, p.ID, p.Roots[1].ID)
+	dependents, err := mgr.ProjectControl.RootDependents(ctx, p.ID, p.Roots[1].ID)
 	testutil.FailErr(t, "root dependents", err)
 	if len(dependents.Sessions) != 1 || dependents.Sessions[0].SessionID != sess.ID {
 		t.Fatalf("sessions = %+v", dependents.Sessions)

@@ -339,4 +339,4 @@ observe_synthesis:
 
 # Rootless turns intersect this floor with their surface.
 no_folder_allowlist:
-  floor: [recall, web_search, fetch_url, wait, update_progress, answer_decision, task, worker_cancel, extend_worker_budget, decline_worker_budget, ask_user, surface_note]
+  floor: [recall, web_search, fetch_url, summarize, wait, update_progress, answer_decision, task, worker_cancel, extend_worker_budget, decline_worker_budget, ask_user, surface_note]

@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/scan/bundled"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -70,6 +71,11 @@ func TestAPIScanBundledScannerFindingsE2E(t *testing.T) {
 			created := enqueueCodeScan(t, srv, projectDir, []wire.ScanCategory{tc.category})
 			got := waitScanComplete(t, srv, created.ProjectID, created.ID, tc.timeout)
 			assertScanFindings(t, got, tc.wantFile, tc.minCount)
+			if tc.category == wire.ScanCategorySCA {
+				if _, err := os.Stat(project.OSVCacheDir("")); !os.IsNotExist(err) {
+					t.Fatalf("provisioned dependency scan created a mutable OSV refresh cache: %v", err)
+				}
+			}
 		})
 	}
 }

@@ -3,6 +3,7 @@ package session
 import (
 	"bytes"
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -23,7 +24,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newPostToolGuidanceManager(t *testing.T) *Manager {
+func newPostToolGuidanceManager(t *testing.T) *Host {
 	t.Helper()
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	hints, err := guidance.LoadHintConfigStock()
@@ -39,8 +40,8 @@ func newPostToolGuidanceManager(t *testing.T) *Manager {
 	pipeline.EnableAnchor(oar.AnchorToolPost)
 	pipeline.EnableAnchor(oar.AnchorToolRejected)
 	pipeline.EnableAnchor(oar.AnchorCredentialAssignment)
-	mgr := &Manager{rejectFmt: rejectFmt}
-	mgr.ensureCoordinatorRuntime()
+	mgr, _ := newTestManager(t)
+	mgr.SetRejectFormatter(rejectFmt)
 	mgr.SetOARPipeline(pipeline, oar.NewRenderer(rejectFmt, nil))
 	return mgr
 }
@@ -49,9 +50,9 @@ var doomLoopWarnFloor = regexp.MustCompile(`paintedwolf\.repeat_count >= (\d+)`)
 
 // doomLoopWarnAfter reads the repeat count DOOM_LOOP_REPEAT_WARN first fires at
 // from the loaded policy unit.
-func doomLoopWarnAfter(t *testing.T, mgr *Manager) int {
+func doomLoopWarnAfter(t *testing.T, mgr *Host) int {
 	t.Helper()
-	for _, rule := range mgr.oarPipeline.Rules().All() {
+	for _, rule := range mgr.ToolPolicy.Pipeline.Rules().All() {
 		if rule.ID != "DOOM_LOOP_REPEAT_WARN" {
 			continue
 		}
@@ -75,7 +76,7 @@ func TestDoomLoopWarnBannerFiresOnOARPath(t *testing.T) {
 	args := map[string]any{"path": "lycaon/internal/api/mcp_handlers.go", "pattern": "mcpProjectDir"}
 
 	for count := doomLoopWarnAfter(t, mgr); count <= loopguard.DoomLoopMaxAttempts; count++ {
-		out, _ := mgr.appendPostToolGuidance(context.Background(), sess, "grep", args, `{"matches":[]}`, count, guidance.ToolResultFacts{})
+		out, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "grep", args, `{"matches":[]}`, count, guidance.ToolResultFacts{})
 		if !strings.Contains(out, "DOOM_LOOP_REPEAT_WARN") {
 			t.Fatalf("identical completion #%d carried no warn banner: %q", count, out)
 		}
@@ -87,7 +88,7 @@ func TestDoomLoopWarnForCommandOutputRoutesToProcessWait(t *testing.T) {
 	sess := &api.Session{ID: "sess-1"}
 	args := map[string]any{"handle": "cmd-docker-1", "cursor": 15395}
 
-	out, _ := mgr.appendPostToolGuidance(
+	out, _ := mgr.ToolPolicy.AfterTool(
 		context.Background(), sess, "command_output", args, `{"running":true,"next_cursor":15395}`,
 		doomLoopWarnAfter(t, mgr), guidance.ToolResultFacts{},
 	)
@@ -105,8 +106,8 @@ func TestDoomLoopWarnForCommandOutputRoutesToProcessWait(t *testing.T) {
 
 func TestDoomLoopBlockForCommandOutputRoutesToProcessWait(t *testing.T) {
 	mgr := newPostToolGuidanceManager(t)
-	mgr.oarPipeline.EnableAnchor(oar.AnchorToolPreInvoke)
-	reject, err := mgr.formatDoomLoopReject(
+	mgr.ToolPolicy.Pipeline.EnableAnchor(oar.AnchorToolPreInvoke)
+	reject, err := mgr.ToolPolicy.FormatDoomLoopReject(
 		context.Background(), "sess-1", "command_output",
 		map[string]any{"handle": "cmd-docker-1", "cursor": 15395},
 		loopguard.DoomLoopMaxAttempts, "",
@@ -146,7 +147,7 @@ func TestFruitlessSearchBannerFiresOnOARPath(t *testing.T) {
 		if _, err := guard.RecordSearchOutcome(ctx, sess.ID, "grep", args, false); err != nil {
 			testutil.FailErr(t, "record fruitless", err)
 		}
-		out, _ = mgr.appendPostToolGuidance(ctx, sess, "grep", args, `{"matches":[]}`, 1, guidance.ToolResultFacts{})
+		out, _ = mgr.ToolPolicy.AfterTool(ctx, sess, "grep", args, `{"matches":[]}`, 1, guidance.ToolResultFacts{})
 	}
 	if !strings.Contains(out, "DOOM_LOOP_FRUITLESS_SEARCH") {
 		t.Fatalf("third fruitless rewording carried no banner: %q", out)
@@ -160,7 +161,7 @@ func TestDoomLoopWarnBannerQuietBelowThreshold(t *testing.T) {
 	sess := &api.Session{ID: "sess-1"}
 	args := map[string]any{"path": "README.md"}
 
-	out, _ := mgr.appendPostToolGuidance(context.Background(), sess, "read", args, "body", 1, guidance.ToolResultFacts{})
+	out, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "read", args, "body", 1, guidance.ToolResultFacts{})
 	if strings.Contains(out, "DOOM_LOOP_REPEAT_WARN") {
 		t.Fatalf("first attempt must not warn: %q", out)
 	}
@@ -175,7 +176,7 @@ func TestRemotePackageDestinationBannerGivesNonWideningRecovery(t *testing.T) {
 		Destination:   "gitea.example.com",
 		Signals:       []string{confine.SignalBoundaryRefused, confine.SignalRemotePackageDestinationDenied},
 	}
-	out, facts := mgr.appendPostToolGuidance(
+	out, facts := mgr.ToolPolicy.AfterTool(
 		context.Background(), sess, "command", map[string]any{"command": "go run code.gitea.io/tea@v1.3.3"},
 		`{"exit_code":1,"network_mode":"proxy_only"}`, 1, guidance.ToolResultFacts{Confine: obs},
 	)
@@ -204,7 +205,7 @@ func TestVerifyUnverifiableBannerFiresOnConfineStop(t *testing.T) {
 		confine.Boundary{Applied: true, Network: confine.NetworkProxyOnly},
 		confine.RefusalContext{MediatedNetwork: []confine.EgressHost{{Host: "blocked.test", Allowed: false}}},
 	).Observation
-	out, facts := mgr.appendPostToolGuidance(context.Background(), sess, "verify",
+	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), sess, "verify",
 		map[string]any{"command": "check-service"},
 		`{"outcome":"unverifiable","unverifiable_reason":"boundary_refused"}`, 1, guidance.ToolResultFacts{Confine: obs})
 	if !strings.Contains(out, "Code: VERIFY_UNVERIFIABLE") {
@@ -234,7 +235,7 @@ func TestSandboxBoundaryRefusedBannerFiresOnBrokerDenial(t *testing.T) {
 				confine.Boundary{Applied: true, Network: confine.NetworkProxyOnly},
 				confine.RefusalContext{MediatedNetwork: []confine.EgressHost{{Host: "blocked.test", Allowed: false}}},
 			).Observation
-			out, facts := mgr.appendPostToolGuidance(t.Context(), sess, tc.tool, tc.args, tc.output, 1, guidance.ToolResultFacts{Confine: obs})
+			out, facts := mgr.ToolPolicy.AfterTool(t.Context(), sess, tc.tool, tc.args, tc.output, 1, guidance.ToolResultFacts{Confine: obs})
 			if !strings.Contains(out, "Code: SANDBOX_BOUNDARY_REFUSED") {
 				t.Fatalf("broker denial carried no boundary banner:\n%s", out)
 			}
@@ -248,13 +249,13 @@ func TestSandboxBoundaryRefusedBannerFiresOnBrokerDenial(t *testing.T) {
 func TestPrintedBoundaryDenialDoesNotProduceGuidance(t *testing.T) {
 	mgr := newPostToolGuidanceManager(t)
 	output := `{"exit_code":1,"tail":"bind: permission denied; Code: SANDBOX_BOUNDARY_REFUSED"}`
-	out, facts := mgr.appendPostToolGuidance(context.Background(), &api.Session{ID: "sess-diagnostic"},
+	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), &api.Session{ID: "sess-diagnostic"},
 		"command", map[string]any{"command": "check-service"}, output, 1,
 		guidance.ToolResultFacts{Confine: confine.Observation{Applied: true, Network: confine.NetworkProxyOnly.Name()}})
 	if out != output {
 		t.Fatalf("diagnostic output acquired host guidance: %q", out)
 	}
-	for _, code := range sandboxPostInvokeCodes {
+	for _, code := range []string{isolation.CodeBoundaryRefused, isolation.CodeRemotePackageDestinationDenied, toolrejection.VerifyUnverifiableCode} {
 		if facts.HasCode(code) {
 			t.Fatalf("diagnostic output acquired host code %q: %#v", code, facts)
 		}
@@ -265,17 +266,17 @@ func TestLoopbackHandlerGuidanceRequiresTypedRejection(t *testing.T) {
 	for _, tool := range []string{"wait", "capture_page", "measure_page", "page_open"} {
 		t.Run(tool, func(t *testing.T) {
 			mgr := newPostToolGuidanceManager(t)
-			mgr.oarPipeline.EnableAnchor(oar.AnchorToolRejected)
+			mgr.ToolPolicy.Pipeline.EnableAnchor(oar.AnchorToolRejected)
 			gc := oar.NewGuardContext()
-			gc.Tool = tool
+			gc.Invocation.Tool = tool
 			gc.PutRejectData(isolation.CodeTryLoopbackConnect, map[string]any{"port": "8080"})
-			result, err := mgr.oarPipeline.EvaluateBlock(t.Context(), oar.AnchorToolRejected, gc)
+			result, err := mgr.ToolPolicy.Pipeline.EvaluateBlock(t.Context(), oar.AnchorToolRejected, gc)
 			testutil.FailErr(t, "evaluate without loopback rejection", err)
 			if result.Decision != nil && result.Decision.Code == isolation.CodeTryLoopbackConnect {
 				t.Fatal("port alone asserted a loopback rejection")
 			}
 			gc.ObservedRejectCode = isolation.CodeTryLoopbackConnect
-			result, err = mgr.oarPipeline.EvaluateBlock(t.Context(), oar.AnchorToolRejected, gc)
+			result, err = mgr.ToolPolicy.Pipeline.EvaluateBlock(t.Context(), oar.AnchorToolRejected, gc)
 			testutil.FailErr(t, "evaluate typed loopback rejection", err)
 			if !result.Enforced || result.Decision == nil || result.Decision.Code != isolation.CodeTryLoopbackConnect {
 				t.Fatalf("typed loopback rejection = %#v", result)
@@ -287,7 +288,7 @@ func TestLoopbackHandlerGuidanceRequiresTypedRejection(t *testing.T) {
 	}
 }
 
-func newWeakSecretMintGuidanceManager(t *testing.T) (*Manager, *secretharvest.Runtime) {
+func newWeakSecretMintGuidanceManager(t *testing.T) (*Host, *secretharvest.Runtime) {
 	t.Helper()
 	mgr := newPostToolGuidanceManager(t)
 	ins, err := secretmint.LoadBundled()
@@ -295,9 +296,9 @@ func newWeakSecretMintGuidanceManager(t *testing.T) (*Manager, *secretharvest.Ru
 	fp, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x11}, 32))
 	testutil.FailErr(t, "NewFingerprinter", err)
 	harvest := secretharvest.NewRuntime(fp)
-	mgr.SetCredentialSlotProvider(func(context.Context, *api.Session) *secretmint.Inspector { return ins })
-	mgr.SetSecretFingerprinter(fp)
-	mgr.SetHarvestedFingerprint(func(root string, fp secretmatch.SecretFingerprint) bool {
+	mgr.ToolPolicy.SetCredentialSlotProvider(func(context.Context, *api.Session) *secretmint.Inspector { return ins })
+	mgr.ToolPolicy.SetSecretFingerprinter(fp)
+	mgr.ToolPolicy.SetHarvestedFingerprint(func(root string, fp secretmatch.SecretFingerprint) bool {
 		return harvest.Has(root, fp)
 	})
 	return mgr, harvest
@@ -306,7 +307,7 @@ func newWeakSecretMintGuidanceManager(t *testing.T) (*Manager, *secretharvest.Ru
 func TestWeakSecretMintBannerFiresOnHtpasswd(t *testing.T) {
 	mgr, _ := newWeakSecretMintGuidanceManager(t)
 	sess := &api.Session{ID: "sess-mint"}
-	out, facts := mgr.appendPostToolGuidance(context.Background(), sess, "command",
+	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), sess, "command",
 		map[string]any{"command": "htpasswd -b user password"},
 		`{"exit_code":0}`, 1, guidance.ToolResultFacts{})
 	if !strings.Contains(out, "Code: WEAK_CREDENTIAL_LITERAL") {
@@ -320,7 +321,7 @@ func TestWeakSecretMintBannerFiresOnHtpasswd(t *testing.T) {
 func TestWeakSecretMintSilentOnUse(t *testing.T) {
 	mgr, _ := newWeakSecretMintGuidanceManager(t)
 	sess := &api.Session{ID: "sess-use"}
-	out, _ := mgr.appendPostToolGuidance(context.Background(), sess, "command",
+	out, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "command",
 		map[string]any{"command": "mysql -p password"},
 		`{"exit_code":0}`, 1, guidance.ToolResultFacts{})
 	if strings.Contains(out, "WEAK_CREDENTIAL_LITERAL") {
@@ -332,7 +333,7 @@ func TestWeakSecretMintSilentOnHarvest(t *testing.T) {
 	mgr, harvest := newWeakSecretMintGuidanceManager(t)
 	sess := &api.Session{ID: "sess-harvest"}
 	harvest.Harvest(secretharvest.ContainerRead{RootSessionID: sess.ID, Container: ".env", Content: []byte("MYSQL_PASSWORD=password\n")})
-	out, _ := mgr.appendPostToolGuidance(context.Background(), sess, "command",
+	out, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "command",
 		map[string]any{"command": "htpasswd -b user password"},
 		`{"exit_code":0}`, 1, guidance.ToolResultFacts{})
 	if strings.Contains(out, "WEAK_CREDENTIAL_LITERAL") {
@@ -344,11 +345,11 @@ func TestWeakSecretMintCounterSuppressesSecondIdenticalMint(t *testing.T) {
 	mgr, _ := newWeakSecretMintGuidanceManager(t)
 	sess := &api.Session{ID: "sess-dedup"}
 	args := map[string]any{"command": "htpasswd -b user password"}
-	first, _ := mgr.appendPostToolGuidance(context.Background(), sess, "command", args, `{"exit_code":0}`, 1, guidance.ToolResultFacts{})
+	first, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "command", args, `{"exit_code":0}`, 1, guidance.ToolResultFacts{})
 	if !strings.Contains(first, "Code: WEAK_CREDENTIAL_LITERAL") {
 		t.Fatalf("first mint must hint:\n%s", first)
 	}
-	second, _ := mgr.appendPostToolGuidance(context.Background(), sess, "command", args, `{"exit_code":0}`, 1, guidance.ToolResultFacts{})
+	second, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "command", args, `{"exit_code":0}`, 1, guidance.ToolResultFacts{})
 	if strings.Contains(second, "WEAK_CREDENTIAL_LITERAL") {
 		t.Fatalf("second identical mint must be counted only once:\n%s", second)
 	}
@@ -357,7 +358,7 @@ func TestWeakSecretMintCounterSuppressesSecondIdenticalMint(t *testing.T) {
 func TestWeakSecretMintBannerFiresOnComposeWrite(t *testing.T) {
 	mgr, _ := newWeakSecretMintGuidanceManager(t)
 	sess := &api.Session{ID: "sess-write-mint"}
-	out, facts := mgr.appendPostToolGuidance(context.Background(), sess, "write",
+	out, facts := mgr.ToolPolicy.AfterTool(context.Background(), sess, "write",
 		map[string]any{"path": "compose.yaml", "content": "MYSQL_PASSWORD=password\n"},
 		`{"ok":true}`, 1, guidance.ToolResultFacts{})
 	if !strings.Contains(out, "Code: WEAK_CREDENTIAL_LITERAL") {
@@ -371,13 +372,13 @@ func TestWeakSecretMintBannerFiresOnComposeWrite(t *testing.T) {
 func TestWeakSecretMintCounterSpansWriteThenEdit(t *testing.T) {
 	mgr, _ := newWeakSecretMintGuidanceManager(t)
 	sess := &api.Session{ID: "sess-write-edit-dedup"}
-	first, _ := mgr.appendPostToolGuidance(context.Background(), sess, "write",
+	first, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "write",
 		map[string]any{"content": "MYSQL_PASSWORD=password\n"},
 		`{"ok":true}`, 1, guidance.ToolResultFacts{})
 	if !strings.Contains(first, "Code: WEAK_CREDENTIAL_LITERAL") {
 		t.Fatalf("first write mint must hint:\n%s", first)
 	}
-	second, _ := mgr.appendPostToolGuidance(context.Background(), sess, "edit",
+	second, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "edit",
 		map[string]any{"old_string": "x", "new_string": "MYSQL_PASSWORD=password\n"},
 		`{"ok":true}`, 1, guidance.ToolResultFacts{})
 	if strings.Contains(second, "WEAK_CREDENTIAL_LITERAL") {
@@ -389,7 +390,7 @@ func TestWeakSecretMintSilentWhenHarvestThenWrite(t *testing.T) {
 	mgr, harvest := newWeakSecretMintGuidanceManager(t)
 	sess := &api.Session{ID: "sess-harvest-write"}
 	harvest.Harvest(secretharvest.ContainerRead{RootSessionID: sess.ID, Container: ".env", Content: []byte("MYSQL_PASSWORD=password\n")})
-	out, _ := mgr.appendPostToolGuidance(context.Background(), sess, "write",
+	out, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "write",
 		map[string]any{"content": "MYSQL_PASSWORD=password\n"},
 		`{"ok":true}`, 1, guidance.ToolResultFacts{})
 	if strings.Contains(out, "WEAK_CREDENTIAL_LITERAL") {
@@ -400,13 +401,13 @@ func TestWeakSecretMintSilentWhenHarvestThenWrite(t *testing.T) {
 func TestWeakSecretMintCounterSpansCommandThenWrite(t *testing.T) {
 	mgr, _ := newWeakSecretMintGuidanceManager(t)
 	sess := &api.Session{ID: "sess-cmd-write-dedup"}
-	first, _ := mgr.appendPostToolGuidance(context.Background(), sess, "command",
+	first, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "command",
 		map[string]any{"command": "htpasswd -b user password"},
 		`{"exit_code":0}`, 1, guidance.ToolResultFacts{})
 	if !strings.Contains(first, "Code: WEAK_CREDENTIAL_LITERAL") {
 		t.Fatalf("command mint must hint:\n%s", first)
 	}
-	second, _ := mgr.appendPostToolGuidance(context.Background(), sess, "write",
+	second, _ := mgr.ToolPolicy.AfterTool(context.Background(), sess, "write",
 		map[string]any{"content": "MYSQL_PASSWORD=password\n"},
 		`{"ok":true}`, 1, guidance.ToolResultFacts{})
 	if strings.Contains(second, "WEAK_CREDENTIAL_LITERAL") {
@@ -429,7 +430,7 @@ func TestWeakSecretPolicyOwnsMeasurementThresholds(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.value, func(t *testing.T) {
-			output, facts := mgr.appendPostToolGuidance(t.Context(), &api.Session{ID: tc.value}, "write", map[string]any{"content": "MYSQL_PASSWORD=" + tc.value + "\n"}, "written", 1, guidance.ToolResultFacts{})
+			output, facts := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: tc.value}, "write", map[string]any{"content": "MYSQL_PASSWORD=" + tc.value + "\n"}, "written", 1, guidance.ToolResultFacts{})
 			if facts.HasCode("WEAK_CREDENTIAL_LITERAL") != tc.warn {
 				t.Fatalf("threshold for %q: warn=%v output=%s", tc.value, tc.warn, output)
 			}
@@ -442,11 +443,11 @@ func TestFire5CredentialWarningsAreScopedBySessionAndFingerprint(t *testing.T) {
 	args := map[string]any{"content": "MYSQL_PASSWORD=password\nPOSTGRES_PASSWORD=password1\n"}
 	for _, sessionID := range []string{"first", "second"} {
 		sess := &api.Session{ID: sessionID}
-		output, _ := mgr.appendPostToolGuidance(t.Context(), sess, "write", args, "written", 1, guidance.ToolResultFacts{})
+		output, _ := mgr.ToolPolicy.AfterTool(t.Context(), sess, "write", args, "written", 1, guidance.ToolResultFacts{})
 		if got := strings.Count(output, "Code: WEAK_CREDENTIAL_LITERAL"); got != 2 {
 			t.Fatalf("[OAR-FIRE-5] %s warned %d times: %s", sessionID, got, output)
 		}
-		output, _ = mgr.appendPostToolGuidance(t.Context(), sess, "write", args, "written", 1, guidance.ToolResultFacts{})
+		output, _ = mgr.ToolPolicy.AfterTool(t.Context(), sess, "write", args, "written", 1, guidance.ToolResultFacts{})
 		if strings.Contains(output, "WEAK_CREDENTIAL_LITERAL") {
 			t.Fatalf("[OAR-FIRE-5] repeated credential warned again: %s", output)
 		}
@@ -456,7 +457,7 @@ func TestFire5CredentialWarningsAreScopedBySessionAndFingerprint(t *testing.T) {
 func TestEval10CredentialMonitorDoesNotConsumeWarning(t *testing.T) {
 	mgr, _ := newWeakSecretMintGuidanceManager(t)
 	var rule *oar.Rule
-	for _, candidate := range mgr.oarPipeline.Rules().All() {
+	for _, candidate := range mgr.ToolPolicy.Pipeline.Rules().All() {
 		if candidate.ID == "WEAK_CREDENTIAL_LITERAL" {
 			rule = candidate
 		}
@@ -467,12 +468,12 @@ func TestEval10CredentialMonitorDoesNotConsumeWarning(t *testing.T) {
 	sess := &api.Session{ID: "monitor"}
 	args := map[string]any{"content": "MYSQL_PASSWORD=password\n"}
 	rule.Enforcement = "monitor"
-	output, _ := mgr.appendPostToolGuidance(t.Context(), sess, "write", args, "written", 1, guidance.ToolResultFacts{})
+	output, _ := mgr.ToolPolicy.AfterTool(t.Context(), sess, "write", args, "written", 1, guidance.ToolResultFacts{})
 	if strings.Contains(output, "WEAK_CREDENTIAL_LITERAL") {
 		t.Fatal("[OAR-EVAL-10] monitored warning was delivered")
 	}
 	rule.Enforcement = "enforce"
-	output, _ = mgr.appendPostToolGuidance(t.Context(), sess, "write", args, "written", 1, guidance.ToolResultFacts{})
+	output, _ = mgr.ToolPolicy.AfterTool(t.Context(), sess, "write", args, "written", 1, guidance.ToolResultFacts{})
 	if !strings.Contains(output, "Code: WEAK_CREDENTIAL_LITERAL") {
 		t.Fatalf("[OAR-EVAL-10] monitor consumed warning: %s", output)
 	}

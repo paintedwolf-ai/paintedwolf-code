@@ -18,7 +18,7 @@ import (
 // maxSourceViewCreateAttempts bounds re-reads while project folders keep changing.
 const maxSourceViewCreateAttempts = 3
 
-func (s *Handler) HandleCreateSourceView(w http.ResponseWriter, r *http.Request) {
+func (s *Views) HandleCreateSourceView(w http.ResponseWriter, r *http.Request) {
 	// The generation precedes the project read, so a view built from folders
 	// that change before it is registered is rebuilt rather than retained.
 	projectID := strings.TrimSpace(chi.URLParam(r, "id"))
@@ -45,7 +45,7 @@ func (s *Handler) HandleCreateSourceView(w http.ResponseWriter, r *http.Request)
 
 // createSourceView answers the request, or reports false when the project's
 // folders changed while the view was built and the caller should retry.
-func (s *Handler) createSourceView(w http.ResponseWriter, r *http.Request, p *project.Project, request wire.SourceViewCreate, generation uint64, final bool) bool {
+func (s *Views) createSourceView(w http.ResponseWriter, r *http.Request, p *project.Project, request wire.SourceViewCreate, generation uint64, final bool) bool {
 	if err := validateSourceViewCreate(p, request); err != nil {
 		s.writeSourceViewError(w, r, err)
 		return true
@@ -58,7 +58,7 @@ func (s *Handler) createSourceView(w http.ResponseWriter, r *http.Request, p *pr
 	}
 	p = scoped.Project
 	if request.Tree != nil && request.Tree.WorkspaceID != p.WorkspaceID() {
-		s.writeSourceWorkspaceMismatch(w, request.Tree.WorkspaceID, p.WorkspaceID())
+		s.Workspace.writeSourceWorkspaceMismatch(w, request.Tree.WorkspaceID, p.WorkspaceID())
 		return true
 	}
 	canonical, err := sourceViewCanonical(request)
@@ -71,9 +71,9 @@ func (s *Handler) createSourceView(w http.ResponseWriter, r *http.Request, p *pr
 	//nolint:contextcheck // Accepted views follow server shutdown and explicit release, not request cancellation.
 	view, release, created, err := s.sourceViewRegistry().create(r.Context(), key, canonical, generation, func() *sourceView {
 		if request.Tree != nil {
-			return s.newTreeView(scope, p, *request.Tree)
+			return s.Trees.newTreeView(scope, p, *request.Tree)
 		}
-		return s.newComparisonView(scope, p, *request.Comparison)
+		return s.ComparisonViews.newComparisonView(scope, p, *request.Comparison)
 	})
 	if errors.Is(err, errSourceViewProjectChanged) && !final {
 		return false
@@ -94,10 +94,10 @@ func (s *Handler) createSourceView(w http.ResponseWriter, r *http.Request, p *pr
 	}
 	snapshot, snapshotErr := view.snapshot(r.Context())
 	if created {
-		if view.tree != nil {
-			s.prepareTreeView(view, release)
+		if view.navigation.tree != nil {
+			s.Trees.prepareTreeView(view, release)
 		} else {
-			s.prepareComparisonView(view, p, release)
+			s.ComparisonViews.prepareComparisonView(view, p, release)
 		}
 	} else {
 		release()

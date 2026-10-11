@@ -104,7 +104,7 @@ func TestPromptReferencePathOutOfJail(t *testing.T) {
 func TestPromptReferenceArtifactRelink(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
-	visualStore := h.VisualStore
+	visualStore := h.Boards.Visual
 	dir := t.TempDir()
 	proj := createProjectHTTP(t, srv, dir)
 	sess := createSessionForProjectHTTP(t, srv, proj.ID, wire.SessionPostureBuild)

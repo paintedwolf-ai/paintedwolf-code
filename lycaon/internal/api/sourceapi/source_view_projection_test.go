@@ -29,11 +29,11 @@ func TestMountedComparisonsShareBoundedContentAndSmallPresentations(t *testing.T
 			key := sourceViewCreateKey{scope: scope, client: "window", operation: fmt.Sprintf("%d/%d", i, fork)}
 			view, release, _, err := service.create(t.Context(), key, []byte("intent"), 0, func() *sourceView {
 				ctx, cancel := context.WithCancel(t.Context())
-				return &sourceView{ctx: ctx, cancel: cancel, state: "ready", comparison: document,
-					comparisonBudget: budget, comparisonRelease: releaseDocument, commands: pagedview.NewCommands[string](&service.receipts)}
+				return &sourceView{ctx: ctx, cancel: cancel, state: "ready", commands: pagedview.NewCommands[string](&service.receipts), comparisonData: sourceViewComparisonData{comparison: document,
+					comparisonBudget: budget, comparisonRelease: releaseDocument}}
 			})
 			testutil.FailErr(t, "retain mounted presentation", err)
-			view.projection, err = view.comparisonProjection(t.Context(), document, wire.SourceComparisonIntent{Mode: "changes"}, nil, nil)
+			view.comparisonData.projection, err = view.comparisonProjection(t.Context(), document, wire.SourceComparisonIntent{Mode: "changes"}, nil, nil)
 			testutil.FailErr(t, "project shared content", err)
 			t.Cleanup(release)
 		}
@@ -52,9 +52,9 @@ func TestComparisonReadRetainsProjectionWithoutBlockingIntent(t *testing.T) {
 	testutil.FailErr(t, "prepare comparison", err)
 	defer release()
 	ctx, cancel := context.WithCancel(t.Context())
-	view := &sourceView{ctx: ctx, cancel: cancel, state: "ready", comparison: document, comparisonBudget: budget, commands: pagedview.NewCommands[string](nil)}
+	view := &sourceView{ctx: ctx, cancel: cancel, state: "ready", commands: pagedview.NewCommands[string](nil), comparisonData: sourceViewComparisonData{comparison: document, comparisonBudget: budget}}
 	defer view.close()
-	view.projection, err = view.comparisonProjection(t.Context(), document, wire.SourceComparisonIntent{Mode: "full"}, nil, nil)
+	view.comparisonData.projection, err = view.comparisonProjection(t.Context(), document, wire.SourceComparisonIntent{Mode: "full"}, nil, nil)
 	testutil.FailErr(t, "prepare original projection", err)
 	read, releaseRead := view.read()
 	defer releaseRead()
@@ -74,7 +74,7 @@ func TestComparisonReadRetainsProjectionWithoutBlockingIntent(t *testing.T) {
 	if budget.Used() <= before {
 		t.Fatal("replaced projection lost its charge during an active read")
 	}
-	rows, _, err := read.projection.Frame(t.Context(), 0, 10)
+	rows, _, err := read.comparisonData.projection.Frame(t.Context(), 0, 10)
 	testutil.FailErr(t, "read retained projection", err)
 	if len(rows) != 2 {
 		t.Fatalf("old projection has %d rows", len(rows))

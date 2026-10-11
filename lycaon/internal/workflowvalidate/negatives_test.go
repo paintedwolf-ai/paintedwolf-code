@@ -71,6 +71,48 @@ phases:
 `, workflowdiag.MustCode("missing_tool_for_advance_policy"))
 }
 
+func TestNegativeReachablePhaseCycle(t *testing.T) {
+	assertPathsCode(t, `id: bad-cycle
+version: 1.0.0
+agents:
+  - { id: implementer, tools: profile }
+phases:
+  - id: first
+    activity_label: First
+    coordinator_surface: await_user
+    surface_template: agents/coordinator-surface-plan.md
+    mode_refs: [await-user-input]
+    complete_when: gates_satisfied
+    gates: [hitl_consulted:first]
+    next: second
+  - id: second
+    activity_label: Second
+    coordinator_surface: await_user
+    surface_template: agents/coordinator-surface-plan.md
+    mode_refs: [await-user-input]
+    complete_when: gates_satisfied
+    gates: [hitl_consulted:second]
+    next: first
+`, workflowdiag.MustCode("phase_cycle"))
+}
+
+func TestNegativeMissingRuleFile(t *testing.T) {
+	assertPathsCode(t, `id: bad-rule
+version: 1.0.0
+agents:
+  - { id: implementer, tools: profile }
+rules: [missing-review-rule.md]
+phases:
+  - id: only
+    activity_label: Running
+    coordinator_surface: await_user
+    surface_template: agents/coordinator-surface-plan.md
+    mode_refs: [await-user-input]
+    complete_when: orchestration_complete
+    terminal: true
+`, workflowdiag.MustCode("rules_path_missing"))
+}
+
 func assertPathsCode(t *testing.T, yaml string, want workflowdiag.Code) {
 	t.Helper()
 	root := configlayout.FindModuleRoot()

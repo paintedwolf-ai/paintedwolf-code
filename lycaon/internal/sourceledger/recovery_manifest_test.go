@@ -17,7 +17,7 @@ func TestRecoveryWalkReleasesCursorBeforeCallbacksAcrossPages(t *testing.T) {
 	database := store.sqlDB.(*db.Store)
 	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
-	writer, err := store.BeginRecovery(ctx, "p1", "paged")
+	writer, err := store.Retention.BeginRecovery(ctx, "p1", "paged")
 	testutil.FailErr(t, "begin recovery", err)
 	defer writer.Close()
 	const count = recoveryPageSize + 3
@@ -28,7 +28,7 @@ func TestRecoveryWalkReleasesCursorBeforeCallbacksAcrossPages(t *testing.T) {
 	testutil.FailErr(t, "flush manifest", writer.Flush(ctx))
 	for _, reverse := range []bool{false, true} {
 		seen := 0
-		err := store.WalkRecovery(ctx, "p1", "paged", count, reverse, func(entry RecoveryEntry) error {
+		err := store.Retention.WalkRecovery(ctx, "p1", "paged", count, reverse, func(entry RecoveryEntry) error {
 			if active := database.Stats().Reader.InUse; active != 0 {
 				return fmt.Errorf("recovery callback retains %d reader connections", active)
 			}
@@ -49,13 +49,13 @@ func TestRecoveryWalkReleasesCursorBeforeCallbacksAcrossPages(t *testing.T) {
 		}
 	}
 	interrupted := errors.New("stop recovery")
-	if err := store.WalkRecovery(ctx, "p1", "paged", count, false, func(RecoveryEntry) error { return interrupted }); !errors.Is(err, interrupted) {
+	if err := store.Retention.WalkRecovery(ctx, "p1", "paged", count, false, func(RecoveryEntry) error { return interrupted }); !errors.Is(err, interrupted) {
 		t.Fatalf("callback failure lost: %v", err)
 	}
 	if active := database.Stats().Reader.InUse; active != 0 {
 		t.Fatalf("interrupted walk retains %d reader connections", active)
 	}
-	if err := store.WalkRecovery(ctx, "p1", "paged", count+1, false, func(RecoveryEntry) error { return nil }); !errors.Is(err, os.ErrNotExist) {
+	if err := store.Retention.WalkRecovery(ctx, "p1", "paged", count+1, false, func(RecoveryEntry) error { return nil }); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("incomplete manifest accepted: %v", err)
 	}
 }

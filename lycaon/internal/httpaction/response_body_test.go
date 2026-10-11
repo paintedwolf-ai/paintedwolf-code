@@ -2,6 +2,7 @@ package httpaction
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -43,7 +44,7 @@ func TestOversizeTextBodyLandsWholeUnderHostData(t *testing.T) {
 	server := bodyServer(t, "application/json", []byte(payload))
 	hostData := t.TempDir()
 	tctx := sessionContext(t.TempDir(), "call-1")
-	tctx.HostDataDir = hostData
+	tctx.Host.HostDataDir = hostData
 
 	got, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
 		"url": server.URL, "capability_request": loopbackCapability(t, server.URL),
@@ -91,7 +92,7 @@ func TestOversizeBodyWithoutHostDataSaysItIsUnavailable(t *testing.T) {
 func TestBinaryBodyIsOmittedRatherThanLanded(t *testing.T) {
 	server := bodyServer(t, "application/octet-stream", []byte{0x00, 0x01, 0x02})
 	tctx := sessionContext(t.TempDir(), "call-1")
-	tctx.HostDataDir = t.TempDir()
+	tctx.Host.HostDataDir = t.TempDir()
 	got, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
 		"url": server.URL, "capability_request": loopbackCapability(t, server.URL),
 	}, tctx)
@@ -194,7 +195,7 @@ func TestFailureRetryabilityComesFromTheFault(t *testing.T) {
 	_, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
 		"url": oversize.URL, "capability_request": loopbackCapability(t, oversize.URL),
 	}, sessionContext(t.TempDir(), "call-1"))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "HTTP_REQUEST_FAILED" {
 		t.Fatalf("error = %v", err)
 	}
@@ -214,7 +215,7 @@ func TestDeadlineFailureNamesTheDeadlineArgument(t *testing.T) {
 	_, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
 		"url": slow.URL, "timeout_ms": 1000, "capability_request": loopbackCapability(t, slow.URL),
 	}, sessionContext(t.TempDir(), "call-1"))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {
 		t.Fatalf("error = %v", err)
 	}

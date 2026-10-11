@@ -2,10 +2,10 @@ package capabilityadmin
 
 import (
 	"errors"
+	"github.com/go-chi/chi/v5"
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/projectview"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
@@ -17,7 +17,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleListCheckpoints(w http.ResponseWriter, r *http.Request) {
+func (s *CheckpointActions) HandleListCheckpoints(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
 		return
@@ -65,7 +65,7 @@ func (s *Handler) HandleListCheckpoints(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (s *Handler) HandleResolveCheckpoint(w http.ResponseWriter, r *http.Request) {
+func (s *CheckpointActions) HandleResolveCheckpoint(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
 		return
@@ -122,7 +122,7 @@ func (s *Handler) HandleResolveCheckpoint(w http.ResponseWriter, r *http.Request
 // HandleBeginUnlockChallenge binds presence to one option that sends values
 // a person holds while their chat is locked. Only the desktop shell can
 // answer it.
-func (s *Handler) HandleBeginUnlockChallenge(w http.ResponseWriter, r *http.Request) {
+func (s *CheckpointActions) HandleBeginUnlockChallenge(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
 		return
@@ -136,7 +136,7 @@ func (s *Handler) HandleBeginUnlockChallenge(w http.ResponseWriter, r *http.Requ
 		s.responses.InvalidField(w, "window_label", "must be 1 to 120 characters without control characters")
 		return
 	}
-	challenge, err := s.options.BeginUnlockChallenge(r.Context(), sessionID, chi.URLParam(r, "checkpoint_id"),
+	challenge, err := s.presence.BeginUnlockChallenge(r.Context(), sessionID, chi.URLParam(r, "checkpoint_id"),
 		strings.TrimSpace(body.OptionID), strings.TrimSpace(body.WindowLabel))
 	if err != nil {
 		s.writeCheckpointResolveError(w, r, err)
@@ -148,7 +148,7 @@ func (s *Handler) HandleBeginUnlockChallenge(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-func (s *Handler) writeCheckpointResolveError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *CheckpointActions) writeCheckpointResolveError(w http.ResponseWriter, r *http.Request, err error) {
 	if secretview.WritePresenceError(s.responses, w, err) {
 		return
 	}

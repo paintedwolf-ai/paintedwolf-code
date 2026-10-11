@@ -3,12 +3,12 @@ package survey
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -29,7 +29,7 @@ func TestListDirRejectsFileWithStructuredCode(t *testing.T) {
 
 func assertListDirRejectCode(t *testing.T, err error, code string) {
 	t.Helper()
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != code {
 		t.Fatalf("error = %v, want %s ToolReject", err, code)
 	}

@@ -2,7 +2,9 @@ package confine
 
 import (
 	"context"
+	"runtime"
 	"testing"
+	"weak"
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/ingestion"
@@ -265,5 +267,44 @@ func TestMCPCallDialIsTreatedAsRetrieval(t *testing.T) {
 	b.decideAttributedEndpoint(context.Background(), cmd, ep)
 	if asked != 0 {
 		t.Fatalf("an MCP transport dial raised %d card(s)", asked)
+	}
+}
+
+func ownedIngestion(tainted map[string]bool) (func(), weak.Pointer[stubIngestion]) {
+	owner := &stubIngestion{tainted: tainted}
+	return SetUntrustedIngestionSource(owner), weak.Make(owner)
+}
+
+func TestIngestionOwnerReleasePreservesCurrentPreDialEvidence(t *testing.T) {
+	SetEgressPosture(PostureObserve)
+	t.Cleanup(func() { SetEgressPosture(PostureObserve) })
+	oldRelease, oldOwner := ownedIngestion(map[string]bool{})
+	t.Cleanup(oldRelease)
+	currentRelease, currentOwner := ownedIngestion(map[string]bool{"root-chat": true})
+	t.Cleanup(currentRelease)
+	oldRelease()
+	oldRelease()
+	runtime.GC()
+	if oldOwner.Value() != nil {
+		t.Fatal("released registration retained the old evidence reader")
+	}
+	broker := newTestBroker()
+	decisions := 0
+	broker.resolver = func(context.Context, EgressCommand, egressproxy.Endpoint, *EgressDetectionCitation) bool {
+		decisions++
+		return false
+	}
+	cmd := EgressCommand{SessionID: "worker", RootSessionID: "root-chat", ToolCallID: "call"}
+	endpoint := egressproxy.Endpoint{Host: "paste.example", Transport: egressproxy.TransportHTTPRequest, Port: 443}
+	if broker.decideAttributedEndpoint(t.Context(), cmd, endpoint) || decisions != 1 {
+		t.Fatal("old owner release erased current root-chat ingestion evidence before dial")
+	}
+	currentRelease()
+	runtime.GC()
+	if currentOwner.Value() != nil {
+		t.Fatal("closed evidence registration retained its reader")
+	}
+	if sessionIngestedUntrusted(t.Context(), cmd) {
+		t.Fatal("closed owner still supplied ingestion facts")
 	}
 }

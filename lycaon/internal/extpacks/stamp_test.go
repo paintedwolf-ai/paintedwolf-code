@@ -1,6 +1,7 @@
 package extpacks
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -88,5 +89,26 @@ func TestRefusedResolveStopsRetrying(t *testing.T) {
 	}
 	if !Active().PackContributed("painted-wolf/platform") {
 		t.Fatal("previous catalog must survive a refused resolve")
+	}
+}
+
+func TestActiveRefresherReleasePreservesReplacement(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
+	t.Cleanup(ClearActive)
+	setActiveWithStamp(&EffectiveCatalog{}, "stale")
+	oldCalls, newCalls := 0, 0
+	releaseOld := SetActiveRefresher(func(context.Context) { oldCalls++ })
+	releaseNew := SetActiveRefresher(func(context.Context) { newCalls++ })
+	t.Cleanup(releaseNew)
+	releaseOld()
+	releaseOld()
+	RefreshActiveIfStale(t.Context())
+	if oldCalls != 0 || newCalls != 1 {
+		t.Fatalf("refresh calls old=%d latest=%d", oldCalls, newCalls)
+	}
+	releaseNew()
+	RefreshActiveIfStale(t.Context())
+	if newCalls != 1 {
+		t.Fatal("released refresher was invoked")
 	}
 }

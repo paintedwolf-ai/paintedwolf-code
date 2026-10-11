@@ -15,7 +15,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleGetProjectTrust(w http.ResponseWriter, r *http.Request) {
+func (s *Trust) HandleGetProjectTrust(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.trustProject(w, r)
 	if !ok {
 		return
@@ -23,7 +23,7 @@ func (s *Handler) HandleGetProjectTrust(w http.ResponseWriter, r *http.Request) 
 	s.writeProjectTrust(w, r, p)
 }
 
-func (s *Handler) HandleUpdateProjectTrust(w http.ResponseWriter, r *http.Request) {
+func (s *Trust) HandleUpdateProjectTrust(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	var raw map[string]any
 	var req wire.UpdateProjectTrustRequest
@@ -64,7 +64,7 @@ func (s *Handler) HandleUpdateProjectTrust(w http.ResponseWriter, r *http.Reques
 	httpio.WriteJSON(w, http.StatusOK, settings.ProjectTrustToDTO(s.Settings.TrustSurfaces, *p, scan))
 }
 
-func (s *Handler) trustProject(w http.ResponseWriter, r *http.Request) (*project.Project, bool) {
+func (s *Trust) trustProject(w http.ResponseWriter, r *http.Request) (*project.Project, bool) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
 	p, err := s.Registry.Get(r.Context(), id)
 	if err != nil {
@@ -82,7 +82,7 @@ func (s *Handler) trustProject(w http.ResponseWriter, r *http.Request) (*project
 // Trust status reuses recent inventory; review and save scan fresh.
 const trustStatusMaxAge = 5 * time.Second
 
-func (s *Handler) writeProjectTrust(w http.ResponseWriter, r *http.Request, p *project.Project) {
+func (s *Trust) writeProjectTrust(w http.ResponseWriter, r *http.Request, p *project.Project) {
 	scan, err := projectcontrib.ProcessInventory().ScanRecent(r.Context(), project.RootPaths(p), trustStatusMaxAge)
 	if err != nil {
 		s.WriteProjectInventoryError(w, r, p.ID, err)
@@ -91,11 +91,11 @@ func (s *Handler) writeProjectTrust(w http.ResponseWriter, r *http.Request, p *p
 	httpio.WriteJSON(w, http.StatusOK, settings.ProjectTrustToDTO(s.Settings.TrustSurfaces, *p, scan))
 }
 
-func (s *Handler) HandleGetTrustSettings(w http.ResponseWriter, r *http.Request) {
+func (s *Trust) HandleGetTrustSettings(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, settings.TrustSettingsToDTO(s.Settings.TrustSurfaces))
 }
 
-func (s *Handler) HandleUpdateTrustSettings(w http.ResponseWriter, r *http.Request) {
+func (s *Trust) HandleUpdateTrustSettings(w http.ResponseWriter, r *http.Request) {
 	var raw map[string]any
 	var req wire.UpdateTrustSettingsRequest
 	if err := httpio.DecodeJSONWithRaw(w, r, &req, &raw); err != nil {
@@ -118,7 +118,7 @@ func (s *Handler) HandleUpdateTrustSettings(w http.ResponseWriter, r *http.Reque
 }
 
 // Opening Trust acknowledges the shared comparison without replacing it.
-func (s *Handler) HandleOpenProjectTrustReview(w http.ResponseWriter, r *http.Request) {
+func (s *Trust) HandleOpenProjectTrustReview(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.trustProject(w, r)
 	if !ok {
 		return
@@ -152,7 +152,7 @@ func (s *Handler) HandleOpenProjectTrustReview(w http.ResponseWriter, r *http.Re
 	httpio.WriteJSON(w, http.StatusOK, settings.ProjectTrustToDTO(s.Settings.TrustSurfaces, *updated, scan))
 }
 
-func (s *Handler) WriteProjectInventoryError(w http.ResponseWriter, r *http.Request, projectID string, err error) {
+func (s *Trust) WriteProjectInventoryError(w http.ResponseWriter, r *http.Request, projectID string, err error) {
 	if r.Context().Err() != nil {
 		s.responses.InternalError(w, r, r.Context().Err())
 		return
@@ -164,7 +164,7 @@ func (s *Handler) WriteProjectInventoryError(w http.ResponseWriter, r *http.Requ
 }
 
 // validTrustSwitches rejects trust surface ids a person cannot switch.
-func (s *Handler) validTrustSwitches(w http.ResponseWriter, enabled map[string]bool) bool {
+func (s *Trust) validTrustSwitches(w http.ResponseWriter, enabled map[string]bool) bool {
 	if err := settings.ValidateTrustSwitchIds(enabled); err != nil {
 		s.responses.FailDetails(w, wire.ApiErrorCodeInvalidRequest,
 			map[string]any{"field": "enabled", "reason": "names a trust surface that cannot be switched"},

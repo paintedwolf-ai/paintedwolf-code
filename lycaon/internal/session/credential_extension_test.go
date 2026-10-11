@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/secretmint"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -20,7 +21,7 @@ func TestCredentialRecognitionReloadFeedsOAR(t *testing.T) {
 	testutil.FailErr(t, "compile extension", err)
 	active := base
 	calls := 0
-	mgr.SetCredentialSlotProvider(func(context.Context, *api.Session) *secretmint.Inspector {
+	mgr.ToolPolicy.SetCredentialSlotProvider(func(context.Context, *api.Session) *secretmint.Inspector {
 		calls++
 		return active
 	})
@@ -34,7 +35,7 @@ func TestCredentialRecognitionReloadFeedsOAR(t *testing.T) {
 		{"removed", base, false},
 	} {
 		active = step.ins
-		output, facts := mgr.evaluateCredentialCandidates(t.Context(), &api.Session{ID: step.name}, "external_tool", map[string]any{"ACCESS_VALUE": "password"}, "completed")
+		output, facts := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: step.name}, "external_tool", map[string]any{"ACCESS_VALUE": "password"}, "completed", 0, guidance.ToolResultFacts{}.WithOutcome(api.ToolResultOutcomeCompleted))
 		if facts.HasCode("WEAK_CREDENTIAL_LITERAL") != step.want || !facts.Succeeded() {
 			t.Fatalf("%s: unexpected OAR feedback: %#v", step.name, facts)
 		}

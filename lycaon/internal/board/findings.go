@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/findings"
@@ -17,13 +18,13 @@ func readFindings(ctx context.Context, args map[string]any, tctx tools.ToolConte
 		return "", fmt.Errorf("findings unavailable")
 	}
 	if _, id := args["finding_id"]; id && args["findings_after"] != nil {
-		return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "finding_id", "reason": "choose_one_findings_view"}}
+		return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "finding_id", "reason": "choose_one_findings_view"}}
 	}
 	if args["detail_level"] != nil {
-		return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "detail_level", "reason": "choose_board_or_findings_view"}}
+		return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "detail_level", "reason": "choose_board_or_findings_view"}}
 	}
 	store := deps.Findings()
-	root := deps.RootSession(ctx, tctx.SessionID)
+	root := deps.RootSession(ctx, tctx.Identity.SessionID)
 	if root == "" {
 		return "", fmt.Errorf("findings session required")
 	}
@@ -34,7 +35,7 @@ func readFindings(ctx context.Context, args map[string]any, tctx tools.ToolConte
 		}
 		f, err := store.Get(ctx, root, id)
 		if errors.Is(err, findings.ErrNotFound) {
-			return "", &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "finding_id", "reason": "finding_not_in_this_session"}}
+			return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "finding_id", "reason": "finding_not_in_this_session"}}
 		}
 		if err != nil {
 			return "", err
@@ -81,5 +82,5 @@ func findingIndex(raw any) (int64, error) {
 			return v, nil
 		}
 	}
-	return 0, &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "finding_id/findings_after", "reason": "nonnegative_integer_required"}}
+	return 0, &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "finding_id/findings_after", "reason": "nonnegative_integer_required"}}
 }

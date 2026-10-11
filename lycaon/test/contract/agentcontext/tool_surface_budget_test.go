@@ -1,9 +1,13 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"cmp"
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"slices"
 	"strings"
 	"testing"
@@ -81,12 +85,12 @@ func measureToolSurfaces(t *testing.T) toolSurfaceMeasurements {
 	profiles, err := sandbox.LoadToolProfiles()
 	contractcheck.FailErr(t, "sandbox.LoadToolProfiles", err)
 	boundary := sandbox.NewBoundary(sandboxCfg, profiles)
-	executor := tools.NewDefaultToolExecutor(tools.NewProfilePolicyEngine(boundary), reg, tools.DefaultToolProfileID)
+	executor := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), reg, toolprofiles.DefaultToolProfileID)
 
 	ctx := context.Background()
 	out := toolSurfaceMeasurements{Workers: map[string]toolSchemas{}}
 	for _, prof := range profiles {
-		metas, err := executor.List(ctx, platform.ToolFilter{ProfileID: prof.ID})
+		metas, err := executor.Metadata.List(ctx, platform.ToolFilter{ProfileID: prof.ID})
 		contractcheck.FailErr(t, "executor.List "+prof.ID, err)
 		if prof.ID == "coordinator" {
 			out.Coordinator = measureCoordinatorSurfaces(t, metas)
@@ -167,7 +171,7 @@ func marshalToolSurface(t *testing.T, label string, metas []tools.ToolMeta, coor
 }
 
 func TestCoordinatorInvestigateWireSurfaceStaysCompact(t *testing.T) {
-	size := measureToolSurfaces(t).Coordinator[tools.SurfaceImplementInvestigate].Upfront
+	size := measureToolSurfaces(t).Coordinator[toolcontract.SurfaceImplementInvestigate].Upfront
 	// Deferred families do not inflate the initial turn.
 	if size == 0 || size > 32_000 {
 		t.Fatalf("implement_investigate wire schema bytes = %d want 1..32000", size)

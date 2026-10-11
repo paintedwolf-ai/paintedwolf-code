@@ -42,10 +42,10 @@ func TestTurnDeliversEveryQueuedKickAndDropsAnsweredBudgetRequests(t *testing.T)
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	st := store.NewMemory()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
-	mgr := session.NewManager(st, rec, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(st, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
-	testutil.FailErr(t, "install anchor registry", mgr.InstallAnchorRegistry())
+	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	request := &api.WorkerBudgetRequest{Rounds: 4, RequestedMax: 24, RemainingWork: []string{"trace the alternate callers"}, ToolLoopsUsed: 15, RequestedAt: time.Now().UTC()}
 	mgr.SetWorkerQueue(budgetJobs{
@@ -56,12 +56,12 @@ func TestTurnDeliversEveryQueuedKickAndDropsAnsweredBudgetRequests(t *testing.T)
 	ctx := context.Background()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	mgr.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
+	mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
 	for _, job := range []string{"job-answered", "job-open"} {
 		facts := kick.WorkerBudgetFacts{JobID: job, Used: 15, Max: 20, HostMax: 120, Request: request}
-		mgr.Emit(ctx, sess.ID, anchor.WorkerBudgetRequested, anchor.Envelope{Subject: job, WorkerBudget: &facts})
+		mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.WorkerBudgetRequested, anchor.Envelope{Subject: job, WorkerBudget: &facts})
 	}
-	if _, err := mgr.Prompt(ctx, sess.ID, "continue"); err != nil {
+	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {
 		testutil.FailErr(t, "prompt", err)
 	}
 	var delivered []string
@@ -78,7 +78,7 @@ func TestTurnDeliversEveryQueuedKickAndDropsAnsweredBudgetRequests(t *testing.T)
 	if strings.Join(delivered, ",") != "compose,job-open" {
 		t.Fatalf("delivered kicks = %v, want the older compose kick and job-open's open request", delivered)
 	}
-	if id, ok := mgr.PendingKickIDForTest(sess.ID); ok {
+	if id, ok := mgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); ok {
 		t.Fatalf("kick %q still queued after the turn", id)
 	}
 }

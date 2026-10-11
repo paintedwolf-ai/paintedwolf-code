@@ -2,6 +2,7 @@ package orchestration
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -10,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func loadAgentRegistryFromConfig(t *testing.T) *MemoryAgentRegistry {
@@ -83,7 +83,7 @@ func TestTier1AgentsResolveToolProfiles(t *testing.T) {
 
 func TestMisconfiguredSurfaceBlocked(t *testing.T) {
 	b := loadBoundary(t)
-	policy := tools.NewProfilePolicyEngine(b)
+	policy := toolprofiles.NewProfilePolicyEngine(b)
 	ctx := context.Background()
 
 	block := func(profileID, tool string) bool {

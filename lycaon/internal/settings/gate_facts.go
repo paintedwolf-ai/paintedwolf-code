@@ -70,11 +70,11 @@ func (g *RuleApprovalGate) factsForAction(
 		Ran: gate.ProducerContainment | gate.ProducerLease | gate.ProducerRule |
 			gate.ProducerConsent | gate.ProducerFilePath,
 		Containment:   containmentFor(action),
-		ProcessAccess: action.ProcessAccess,
+		ProcessAccess: action.Execution.ProcessAccess,
 		Recoverable:   ClassifyTier(action) != TierIrreversible,
 	}
 	facts.ExecutionCapabilityLeased = g.executionCapabilityCovers(action)
-	facts.AgentPolicyPaths = hitl.AgentPolicyPaths(action.AgentPolicy)
+	facts.AgentPolicyPaths = hitl.AgentPolicyPaths(action.Mutations.AgentPolicy)
 	// Preserve the distinction between absent and empty detection results.
 	var detections DetectionSource
 	if read := g.sources.Detections; read != nil {
@@ -87,14 +87,14 @@ func (g *RuleApprovalGate) factsForAction(
 			citation = &m
 		}
 	}
-	if action.PackageExecution != nil {
+	if action.Execution.PackageExecution != nil {
 		facts.Ran |= gate.ProducerPackageExecution
 		facts.PackageExecution = packageExecutionFact(action)
 	}
 
 	// Action, host-resource, and granted-path leases cover separate authority.
 	actionLeased := g.actionLeaseCovers(cfg, action)
-	hostCovered := len(action.HostResources) == 0 || hostResourceGrantCovers(g, cfg.Grants, action)
+	hostCovered := len(action.Resources.HostResources) == 0 || hostResourceGrantCovers(g, cfg.Grants, action)
 	facts.Leased = actionLeased && hostCovered
 	facts.LeasedExact = g.actionExactLeaseCovers(cfg, action)
 	facts.LeasedPackage = g.actionPackageLeaseCovers(cfg, action)
@@ -109,7 +109,7 @@ func (g *RuleApprovalGate) factsForAction(
 		}
 	}
 	facts.File = g.declaredFileTarget(cfg, action)
-	if tool := strings.TrimSpace(action.Tool); ingestion.IsMCPToolName(tool) {
+	if tool := strings.TrimSpace(action.Invocation.Tool); ingestion.IsMCPToolName(tool) {
 		facts.MCP = &gate.MCPCall{Tool: tool}
 		if g.sources.Pins.ToolDefinitionChanged(tool) {
 			facts.Consent = &gate.Consent{Tool: tool, DefinitionChanged: true}
@@ -119,10 +119,10 @@ func (g *RuleApprovalGate) factsForAction(
 }
 
 func packageExecutionFact(action hitl.ProposedAction) *gate.PackageExecution {
-	if action.PackageExecution == nil {
+	if action.Execution.PackageExecution == nil {
 		return nil
 	}
-	source := action.PackageExecution
+	source := action.Execution.PackageExecution
 	out := &gate.PackageExecution{
 		Manager: source.Manager, Operation: string(source.Operation),
 	}
@@ -153,13 +153,13 @@ func effectiveAskRulesForLayer(
 		primary = &fact
 	}
 	if !hostCovered {
-		if rule, ok := matchHostResourceRules(rules, action.HostResources, action.HostResourceFamilies); ok &&
+		if rule, ok := matchHostResourceRules(rules, action.Resources.HostResources, action.Resources.HostResourceFamilies); ok &&
 			rule.Effect == ApprovalEffectAsk && !containsApprovalRule(matches, rule) {
 			matches = append(matches, rule)
 			if primary == nil {
 				fact := gate.UserRule{
 					Category: string(rule.Category), Pattern: rule.Pattern,
-					Subject: strings.Join(action.HostResources, ", "),
+					Subject: strings.Join(action.Resources.HostResources, ", "),
 				}
 				primary = &fact
 			}
@@ -243,10 +243,10 @@ func fileTargetSeverityRank(t *gate.FileTarget) int {
 // where confinement answers for the process; its prepared stream writes reach
 // review as writes, like a native write's.
 func declaredFileWrites(action hitl.ProposedAction) (write, declared bool) {
-	if IsCommandToolName(action.Tool) {
-		return true, len(action.FileChanges) > 0
+	if IsCommandToolName(action.Invocation.Tool) {
+		return true, len(action.Mutations.FileChanges) > 0
 	}
-	return IsPathMutatingTool(action.Tool), true
+	return IsPathMutatingTool(action.Invocation.Tool), true
 }
 
 // declaredFileTargets returns every declared path crossing.
@@ -257,7 +257,7 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 	}
 	var targets []*gate.FileTarget
 	roots := workspaceRoots(action)
-	for _, raw := range action.Files {
+	for _, raw := range action.Invocation.Files {
 		path := strings.TrimSpace(raw)
 		// Worker-branch paths are an OAR reject.
 		if path == "" || enginepaths.IsWorkerBranchPath(path) {
@@ -273,9 +273,9 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 			OutsideRoots: PathEscapesRoots(roots, path),
 		}
 		// Scratch and cache authority comes from the subprocess filesystem boundary.
-		if len(action.Contained.WriteRoots) > 0 {
-			target.WithinConfinement = confine.PathWithinWriteRoots(path, action.Contained.WriteRoots)
-		} else if root, err := confine.FilesystemRootForPath(action.ProjectID, roots, nil, action.SessionScratchRoot, path); err == nil {
+		if len(action.Execution.Contained.WriteRoots) > 0 {
+			target.WithinConfinement = confine.PathWithinWriteRoots(path, action.Execution.Contained.WriteRoots)
+		} else if root, err := confine.FilesystemRootForPath(action.Scope.ProjectID, roots, nil, action.Scope.SessionScratchRoot, path); err == nil {
 			target.WithinConfinement = root != ""
 		}
 		// ClassifyResolved covers sensitive descendants and path aliases.
@@ -294,8 +294,6 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 		if subject.Kind == confine.WriteSubjectKeyMaterial ||
 			(subject.Kind != confine.WriteSubjectOrdinary && mode == gate.ModeWrite) {
 			target.ProtectedSubject = true
-		} else if mode == gate.ModeRead && !target.OutsideRoots {
-			target.ProtectedSubject = false
 		}
 		if target.OutsideRoots || target.ProtectedSubject {
 			targets = append(targets, target)
@@ -307,24 +305,24 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 // containmentFor subtracts authorized network capabilities from boundary facts.
 func containmentFor(action hitl.ProposedAction) gate.Containment {
 	c := gate.Containment{
-		ProcessControl: action.Contained.ProcessControl, HostExecution: action.Contained.HostExecution,
-		SpawnsProcess:     isProcessSpawningTool(action.Tool),
-		FSJailed:          action.Contained.FSJailed,
-		Egress:            action.Contained.Egress,
-		DirectIP:          action.Contained.DirectIP || action.Contained.Egress == hitl.ContainedEgressDirectIP,
-		SocketCount:       action.Contained.SocketCount,
-		SocketPathsDigest: action.Contained.SocketPathsDigest,
+		ProcessControl: action.Execution.Contained.ProcessControl, HostExecution: action.Execution.Contained.HostExecution,
+		SpawnsProcess:     isProcessSpawningTool(action.Invocation.Tool),
+		FSJailed:          action.Execution.Contained.FSJailed,
+		Egress:            action.Execution.Contained.Egress,
+		DirectIP:          action.Execution.Contained.DirectIP || action.Execution.Contained.Egress == hitl.ContainedEgressDirectIP,
+		SocketCount:       action.Execution.Contained.SocketCount,
+		SocketPathsDigest: action.Execution.Contained.SocketPathsDigest,
 	}
-	if action.AuthorizedDirectIP {
+	if action.Egress.AuthorizedDirectIP {
 		c.DirectIP = false
 	}
-	if c.SocketCount == len(action.SocketGrants) && c.SocketPathsDigest == confine.SocketPathsDigest(action.SocketGrants) {
-		authorized := make(map[string]bool, len(action.AuthorizedSocketDigests))
-		for _, digest := range action.AuthorizedSocketDigests {
+	if c.SocketCount == len(action.Sockets.SocketGrants) && c.SocketPathsDigest == confine.SocketPathsDigest(action.Sockets.SocketGrants) {
+		authorized := make(map[string]bool, len(action.Sockets.AuthorizedSocketDigests))
+		for _, digest := range action.Sockets.AuthorizedSocketDigests {
 			authorized[digest] = true
 		}
 		var uncovered []confine.SocketGrant
-		for _, grant := range action.SocketGrants {
+		for _, grant := range action.Sockets.SocketGrants {
 			if !authorized[confine.SocketPathsDigest([]confine.SocketGrant{grant})] {
 				uncovered = append(uncovered, grant)
 			}
@@ -350,36 +348,36 @@ func detectionFact(m hitl.DetectionMatch) *gate.Match {
 
 // askPolicyRuleFor returns the primary ask rule for an action.
 func askPolicyRuleFor(rules []ApprovalRule, action hitl.ProposedAction, actionLeased, hostCovered bool) (ApprovalRule, string, bool) {
-	units := commandUnitsFromArgs(action.Args)
-	if !actionLeased && IsCommandToolName(action.Tool) && len(units) > 0 {
+	units := commandUnitsFromArgs(action.Invocation.Args)
+	if !actionLeased && IsCommandToolName(action.Invocation.Tool) && len(units) > 0 {
 		if rule, matched, ok := matchCommandRules(rules, units); ok && rule.Effect == ApprovalEffectAsk {
 			return rule, matched, true
 		}
 	}
 	if !actionLeased {
 		if _, rule, ok := matchGeneralRules(rules, action); ok && rule.Effect == ApprovalEffectAsk {
-			return rule, action.Tool, true
+			return rule, action.Invocation.Tool, true
 		}
 	}
 	if hostCovered {
 		return ApprovalRule{}, "", false
 	}
 	// Tool and command rules remain the card's primary rule.
-	if rule, ok := matchHostResourceRules(rules, action.HostResources, action.HostResourceFamilies); ok &&
+	if rule, ok := matchHostResourceRules(rules, action.Resources.HostResources, action.Resources.HostResourceFamilies); ok &&
 		rule.Effect == ApprovalEffectAsk {
-		return rule, strings.Join(action.HostResources, ", "), true
+		return rule, strings.Join(action.Resources.HostResources, ", "), true
 	}
 	return ApprovalRule{}, "", false
 }
 
 func effectiveDenyRulesForLayer(rules []ApprovalRule, action hitl.ProposedAction) []ApprovalRule {
 	var matches []ApprovalRule
-	units := commandUnitsFromArgs(action.Args)
-	if rule, ok := matchHostResourceRules(rules, action.HostResources, action.HostResourceFamilies); ok &&
+	units := commandUnitsFromArgs(action.Invocation.Args)
+	if rule, ok := matchHostResourceRules(rules, action.Resources.HostResources, action.Resources.HostResourceFamilies); ok &&
 		rule.Effect == ApprovalEffectDeny {
 		matches = append(matches, rule)
 	}
-	if IsCommandToolName(action.Tool) && len(units) > 0 {
+	if IsCommandToolName(action.Invocation.Tool) && len(units) > 0 {
 		if rule, _, ok := matchCommandRules(rules, units); ok && rule.Effect == ApprovalEffectDeny {
 			return append(matches, rule)
 		}
@@ -398,7 +396,7 @@ func (g *RuleApprovalGate) actionLeaseCovers(cfg ApprovalConfig, action hitl.Pro
 	if grantedPathGrantCovers(g, cfg.Grants, action) {
 		return true
 	}
-	witness := hitl.BoundaryWitness(action.Contained)
+	witness := hitl.BoundaryWitness(action.Execution.Contained)
 	if g.grants != nil {
 		if _, ok := g.grants.matching(action, witness); ok {
 			return true
@@ -412,7 +410,7 @@ func (g *RuleApprovalGate) actionLeaseCovers(cfg ApprovalConfig, action hitl.Pro
 
 // actionExactLeaseCovers reports exact-action authority.
 func (g *RuleApprovalGate) actionExactLeaseCovers(cfg ApprovalConfig, action hitl.ProposedAction) bool {
-	witness := hitl.BoundaryWitness(action.Contained)
+	witness := hitl.BoundaryWitness(action.Execution.Contained)
 	if g.grants != nil {
 		if grant, ok := g.grants.matching(action, witness); ok && len(grant.ExactActionSet) > 0 {
 			return true
@@ -428,15 +426,15 @@ func (g *RuleApprovalGate) actionExactLeaseCovers(cfg ApprovalConfig, action hit
 // The lease binds coordinates, scope, and expiry only; the registry-only
 // execution boundary applies to every run, so the witness is not part of it.
 func (g *RuleApprovalGate) actionPackageLeaseCovers(cfg ApprovalConfig, action hitl.ProposedAction) bool {
-	if action.PackageExecution == nil || len(action.PackageExecution.Packages) == 0 {
+	if action.Execution.PackageExecution == nil || len(action.Execution.PackageExecution.Packages) == 0 {
 		return false
 	}
-	pattern := hitl.PackageCoordinatePattern(action.PackageExecution)
+	pattern := hitl.PackageCoordinatePattern(action.Execution.PackageExecution)
 	if pattern == "" {
 		return false
 	}
 	if g.grants != nil {
-		for _, grant := range g.grants.live(action.ChatSession()) {
+		for _, grant := range g.grants.live(action.Scope.ChatSession()) {
 			if grant.Predicate.Category == hitl.ApprovalGrantCategoryPackageCoordinate &&
 				grant.Predicate.Pattern == pattern &&
 				GrantScopeApplies(grant, action) {

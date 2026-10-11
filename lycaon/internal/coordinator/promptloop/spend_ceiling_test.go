@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -21,8 +21,8 @@ func TestPromptLoopSpendCeilingMapsToCloseout(t *testing.T) {
 	if promptloop.TurnCloseoutSpendCeiling != "session_spend_ceiling" {
 		t.Fatalf("closeout reason = %q", promptloop.TurnCloseoutSpendCeiling)
 	}
-	err := &session.SessionSpendCeilingReached{CeilingUSD: 1, SpentUSD: 1}
-	if !errors.Is(err, session.ErrSessionSpendCeiling) {
+	err := &spendguard.CeilingReached{CeilingUSD: 1, SpentUSD: 1}
+	if !errors.Is(err, spendguard.ErrCeiling) {
 		t.Fatal("typed ceiling error must unwrap to ErrSessionSpendCeiling")
 	}
 	_ = context.Background()

@@ -37,6 +37,12 @@ Scope is rechecked where the effect occurs. A model-visible schema, prompt instr
 
 ---
 
+## Prompt tool policy
+
+One prompt listing captures workflow policy facts when its first eligible tool reaches rule evaluation. The active run and scaffold variables come from one stored revision; that run's manifest is resolved once. Each tool still runs its own pre-invoke guard and rule evaluation with its own arguments and detached mutable facts. A later listing or invocation captures again unless its context already binds a coordinator turn frame, whose authority remains in effect. The listing never stores its snapshot in the session or caller context.
+
+An absent workflow and a failed state read are distinct. A failed capture cannot grant ordinary tool access. A missing blueprint retains its known path and empty content so normal rules can admit repair; other blueprint read failures propagate. The existing invalid-overlay repair exception remains limited to the declared overlay files.
+
 ## Tool lifecycle
 
 Dispatch selects one complete definition (metadata, schema, handler, contract, presentation), freezes it with the structured arguments, and opens a receipt before generic pre-invoke checks. An admitted call crosses exactly one [subsystem-owner boundary](architecture.md#subsystem-owners), and the runtime settles the receipt exactly once. Unknown or off-surface names select no definition and create no receipt; once a definition is selected, every path settles it, including a pre-invoke refusal with `invoked: false`.
@@ -169,6 +175,8 @@ A reject recommends only actions the receiving profile can perform: a worker wit
 ---
 
 ## Transcript presentation
+
+On Linux, each command runs beneath a dedicated child subreaper. A completed or cancelled command settles its original leader status and tears down every descendant, including double-forked processes that start another session. Background execution retains the tree while its leader runs; disposal or engine exit tears it down. Descendants are attributed through the supervisor's own parent-child tree, never by comparing launch times between concurrent commands. Stable process descriptors prevent a recycled PID from naming another process. Linux command launches require kernel support for child subreapers and pidfds.
 
 Tool execution and transcript presentation are separate concerns. `tool-presentation.yaml` declares titles, activity headlines and salience, long-running behavior, and which result fields form concise context. A long-running call may appear on the live assistant row while unsettled; ordinary calls appear after settlement. Den reads typed invocation and process fields rather than parsing tool output for “running” or “failed.”
 
@@ -389,6 +397,8 @@ Declaring a capability is not receiving it. Unsupported, unavailable, or denied 
 ---
 
 ## Interactive exec (PTY)
+
+The host composes command launching, terminal interaction, captured output, and process lifetime as separate services over one synchronized process table. Terminal operations use the terminal service; output screening and publication use the output service; awaiting, stopping, index-watch transfer, and session teardown use the lifecycle service. Shared admission and process state keep launch, shutdown, and completion atomic across these services.
 
 Terminal execution has two intentional lifetimes:
 

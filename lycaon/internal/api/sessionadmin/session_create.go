@@ -22,7 +22,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleCreateSession(w http.ResponseWriter, r *http.Request) {
+func (s *Lifecycle) HandleCreateSession(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
 	perf := observability.StartPerformanceOperation("session.create.accept", nil)
 	outcome := "error"
@@ -86,12 +86,12 @@ func (s *Handler) HandleCreateSession(w http.ResponseWriter, r *http.Request) {
 	s.PublishSessionCreated(r.Context(), sess)
 	outcome = "accepted"
 	httpio.WriteJSON(w, http.StatusAccepted, sess)
-	s.Sources.ScheduleSourceInventory(r.Context(), sess.ProjectID)
+	s.sourceWatch.ScheduleSourceInventory(r.Context(), sess.ProjectID)
 	s.prepareCreatedSession(r.Context(), req, sess)
 	perf.Mark("publish")
 }
 
-func (s *Handler) createPreparingSession(ctx context.Context, req wire.CreateSessionRequest) (*wire.Session, error) {
+func (s *Lifecycle) createPreparingSession(ctx context.Context, req wire.CreateSessionRequest) (*wire.Session, error) {
 	projectID := strings.TrimSpace(req.ProjectID)
 	p, err := s.Projects.Get(ctx, projectID)
 	if err != nil {
@@ -111,8 +111,8 @@ func (s *Handler) createPreparingSession(ctx context.Context, req wire.CreateSes
 	if err != nil {
 		return nil, err
 	}
-	if s.Sources.SourceLedger != nil {
-		if _, checkpointErr := s.Sources.SourceLedger.CreateStructuralCheckpoint(ctx, sourceledger.StructuralCheckpointInput{
+	if s.sourceWorkspace.SourceLedger != nil {
+		if _, checkpointErr := s.sourceWorkspace.SourceLedger.Checkpoints.CreateStructuralCheckpoint(ctx, sourceledger.StructuralCheckpointInput{
 			ProjectID: projectID, Kind: sourceledger.CheckpointSession,
 			Label: "Task start", SessionID: sess.ID,
 		}); checkpointErr != nil {
@@ -123,7 +123,7 @@ func (s *Handler) createPreparingSession(ctx context.Context, req wire.CreateSes
 	return sess, nil
 }
 
-func (s *Handler) prepareCreatedSession(parent context.Context, req wire.CreateSessionRequest, sess *wire.Session) {
+func (s *Lifecycle) prepareCreatedSession(parent context.Context, req wire.CreateSessionRequest, sess *wire.Session) {
 	s.background.Go(parent, func(ctx context.Context) {
 		perf := observability.StartPerformanceOperation("session.create.prepare", map[string]string{
 			"project_id": sess.ProjectID, "session_id": sess.ID,
@@ -176,7 +176,7 @@ func (s *Handler) prepareCreatedSession(parent context.Context, req wire.CreateS
 	})
 }
 
-func (s *Handler) publishSessionPrepared(ctx context.Context, sess *wire.Session, status wire.SessionStatus, prepareErr error) {
+func (s *Lifecycle) publishSessionPrepared(ctx context.Context, sess *wire.Session, status wire.SessionStatus, prepareErr error) {
 	if s.Events == nil || sess == nil {
 		return
 	}
@@ -196,7 +196,7 @@ func (s *Handler) publishSessionPrepared(ctx context.Context, sess *wire.Session
 
 // materializeSession prepares a session synchronously for blueprint launch,
 // which attaches the blueprint's own workflow rather than the ambient one.
-func (s *Handler) MaterializeSession(
+func (s *Lifecycle) MaterializeSession(
 	ctx context.Context,
 	req wire.CreateSessionRequest,
 ) (_ *wire.Session, retErr error) {
@@ -246,14 +246,14 @@ func (s *Handler) MaterializeSession(
 	return sess, nil
 }
 
-func (s *Handler) DiscardMaterializedSession(ctx context.Context, sessionID string) {
+func (s *Lifecycle) DiscardMaterializedSession(ctx context.Context, sessionID string) {
 	cleanupCtx := context.WithoutCancel(ctx)
 	if err := s.Store.Delete(cleanupCtx, sessionID); err != nil {
 		slog.WarnContext(cleanupCtx, "discard incomplete session", "session_id", sessionID, "err", err)
 	}
 }
 
-func (s *Handler) prepareSessionWorkspace(
+func (s *Lifecycle) prepareSessionWorkspace(
 	ctx context.Context,
 	p *project.Project,
 	rootID string,
@@ -270,7 +270,7 @@ func (s *Handler) prepareSessionWorkspace(
 	if err := overlay.CheckCompatibility(); err != nil {
 		return err
 	}
-	if err := s.Sessions.WarmPostureOverlayForProject(p, workspacePath); err != nil {
+	if err := s.Sessions.Profiles.WarmPostureOverlayForProject(p, workspacePath); err != nil {
 		return err
 	}
 	if s.ProjectRules == nil || !requestscope.ProjectSurfaceApplies(s.Settings, p, projectcontrib.SurfaceProjectSettings) {
@@ -279,7 +279,7 @@ func (s *Handler) prepareSessionWorkspace(
 	return s.ProjectRules.WarmOverlays(overlay.Paths)
 }
 
-func (s *Handler) PublishSessionCreated(ctx context.Context, sess *wire.Session) {
+func (s *Lifecycle) PublishSessionCreated(ctx context.Context, sess *wire.Session) {
 	if s.Events == nil || sess == nil {
 		return
 	}
@@ -300,7 +300,7 @@ func sessionMutationEventsOutboxed(store session.Store) bool {
 	return store != nil && store.MutationEventsOutboxed()
 }
 
-func (s *Handler) WriteSessionCreationError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Lifecycle) WriteSessionCreationError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, project.ErrNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeProjectNotFound, "project not found")

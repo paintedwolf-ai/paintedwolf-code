@@ -36,12 +36,11 @@ func TestWalkSummaryPreservesTurnsAndGroupedSteps(t *testing.T) {
 		{1, "f", "", "mixed"}, {2, "g", "", "mixed"},
 		{2, "h", "", ""},
 	} {
-		mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", SessionID: "s1", Turn: entry.turn,
-			Path: entry.path, OperationID: fmt.Sprintf("op-%d", i), CommandWindowID: entry.command, GitTransitionID: entry.git,
-			Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, Before: []byte(fmt.Sprint(i)), After: []byte(fmt.Sprint(i + 1)),
-		})
+		mustRecord(t, store, ctx, RecordInput{
+			RecordLocation: RecordLocation{RootID: "r1", Path: entry.path}, ProjectID: "p1", SessionID: "s1", Turn: entry.turn, OperationID: fmt.Sprintf("op-%d", i), CommandWindowID: entry.command, GitTransitionID: entry.git,
+			Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, Before: []byte(fmt.Sprint(i)), After: []byte(fmt.Sprint(i + 1))})
 	}
-	summaries, err := store.WalkSummary(ctx, "p1", "s1", []string{"first", "second", "empty", "internal", "continuation"})
+	summaries, err := store.Walk.WalkSummary(ctx, "p1", "s1", []string{"first", "second", "empty", "internal", "continuation"})
 	testutil.FailErr(t, "read turn counts", err)
 	// The turn each message opened travels with its counts, so a card can address
 	// the same turn the turn baseline names.
@@ -53,7 +52,7 @@ func TestWalkSummaryPreservesTurnsAndGroupedSteps(t *testing.T) {
 	if fmt.Sprint(summaries) != fmt.Sprint(want) {
 		t.Fatalf("summaries = %+v, want %+v", summaries, want)
 	}
-	walk, err := store.QueryWalk(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "s1"}, 500, 0, CommitLens{})
+	walk, err := store.Walk.QueryWalk(ctx, "p1", Baseline{Kind: BaselineSession, SessionID: "s1"}, 500, 0, CommitLens{})
 	testutil.FailErr(t, "read full walk", err)
 	effects := 0
 	for _, file := range walk.Files {
@@ -62,10 +61,10 @@ func TestWalkSummaryPreservesTurnsAndGroupedSteps(t *testing.T) {
 	if effects != 9 || len(walk.Commands) != 1 || len(walk.GitChanges) != 2 {
 		t.Fatalf("full Walk lost history: effects=%d commands=%d git=%d", effects, len(walk.Commands), len(walk.GitChanges))
 	}
-	if _, err := store.WalkSummary(ctx, "p1", "s1", make([]string, 101)); err == nil {
+	if _, err := store.Walk.WalkSummary(ctx, "p1", "s1", make([]string, 101)); err == nil {
 		t.Fatal("unbounded preview request accepted")
 	}
-	foreign, err := store.WalkSummary(ctx, "p2", "s1", []string{"first"})
+	foreign, err := store.Walk.WalkSummary(ctx, "p2", "s1", []string{"first"})
 	testutil.FailErr(t, "read other project", err)
 	if len(foreign) != 0 {
 		t.Fatalf("cross-project preview: %+v", foreign)

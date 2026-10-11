@@ -7,6 +7,7 @@ requires:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.receiving_tool_summarize
   - paintedwolf.path
   - paintedwolf.path_escape
 when: paintedwolf.rejection_code == "SURVEY_PATH_ESCAPE"
@@ -18,7 +19,7 @@ copy:
   why: Structured rejects keep sandbox enforcement consistent across read-only survey tools.
   fix: If you meant a project file, use a path inside an attached folder (list_dir from "." / "@label/sub/path").
     If the user named this exact path, say it is outside the attached folders and ask them to attach that folder;
-    do not respell the path to look reachable.
+    do not respell the path to look reachable. {% if paintedwolf.receiving_tool_summarize %}For nonprotected text you already have, pass `content` and omit `path` and `paths` on this tool.{% endif %}
   instead: Preserve the path boundary; do not respell the path or request pasted protected content
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:survey

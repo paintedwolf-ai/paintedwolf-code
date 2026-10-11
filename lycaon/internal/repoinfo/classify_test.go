@@ -47,7 +47,7 @@ func indexOf(t *testing.T, c *sourcecatalog.Catalog, root string) *sourcecatalog
 	t.Helper()
 	until := time.Now().Add(30 * time.Second)
 	for time.Now().Before(until) {
-		reader, status, err := c.OpenIndex(context.Background(), "p", sourcecatalog.Root{ID: "r", Path: root}, time.Second)
+		reader, status, err := c.Trees.OpenIndex(context.Background(), "p", sourcecatalog.Root{ID: "r", Path: root}, time.Second)
 		testutil.FailErr(t, "open index", err)
 		if reader != nil {
 			if status.Complete && !status.Refreshing {
@@ -67,8 +67,8 @@ func TestAnalysisReadsOnlyFilesItCannotNameByExtension(t *testing.T) {
 	// Dominance is by bytes; the Go file outweighs the shell script.
 	goSource := "package main\n\nfunc main() {\n\tprintln(\"hello from a source file large enough to dominate\")\n}\n"
 	testutil.FailErr(t, "write go", os.WriteFile(filepath.Join(root, "main.go"), []byte(goSource), 0o644))
-	blobs := filepath.Join(root, "cache")
-	testutil.FailErr(t, "mkdir cache", os.Mkdir(blobs, 0o755))
+	blobs := filepath.Join(root, "encoded")
+	testutil.FailErr(t, "mkdir encoded fixtures", os.Mkdir(blobs, 0o755))
 	for i := range 20 {
 		name := filepath.Join(blobs, fmt.Sprintf("%02x-d", i))
 		testutil.FailErr(t, "write blob", os.WriteFile(name, []byte{0, 1, 2, 3, byte(i)}, 0o644))
@@ -107,8 +107,8 @@ func TestAnalysisReadsOnlyFilesItCannotNameByExtension(t *testing.T) {
 // at the same path is measured fresh.
 func TestAnalysisRereadsOnlyTheChangedFile(t *testing.T) {
 	root := t.TempDir()
-	blobs := filepath.Join(root, "cache")
-	testutil.FailErr(t, "mkdir cache", os.Mkdir(blobs, 0o755))
+	blobs := filepath.Join(root, "encoded")
+	testutil.FailErr(t, "mkdir encoded fixtures", os.Mkdir(blobs, 0o755))
 	for i := range 5 {
 		name := filepath.Join(blobs, fmt.Sprintf("%02x-d", i))
 		testutil.FailErr(t, "write blob", os.WriteFile(name, []byte{0, 1, byte(i)}, 0o644))
@@ -136,7 +136,7 @@ func TestAnalysisRereadsOnlyTheChangedFile(t *testing.T) {
 		t.Fatalf("second analysis opened %d files in total, want 6 (one rewrite)", got)
 	}
 	memo.mu.Lock()
-	_, stale := memo.byRoot[root]["cache/04-d"]
+	_, stale := memo.byRoot[root]["encoded/04-d"]
 	memo.mu.Unlock()
 	if stale {
 		t.Fatal("a deleted file stayed in the memo")

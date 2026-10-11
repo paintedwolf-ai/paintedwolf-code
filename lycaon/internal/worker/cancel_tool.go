@@ -27,7 +27,7 @@ func RegisterWorkerCancelTool(reg *tools.DefaultRegistry, deps CancelToolDeps) e
 		}
 		captureWorkerSubject(tctx, deps.Cancel.Queue, jobID)
 		reason, _ := args["reason"].(string)
-		out, err := deps.Cancel.CancelForSession(ctx, tctx.SessionID, jobID, reason)
+		out, err := deps.Cancel.CancelForSession(ctx, tctx.Identity.SessionID, jobID, reason)
 		if err != nil {
 			return "", err
 		}

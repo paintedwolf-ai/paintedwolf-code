@@ -20,7 +20,7 @@ import (
 )
 
 func configurePTYCaptureProjection(reg *Registry) {
-	reg.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+	reg.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
 }
 
 func TestPTYScreenAltScreenSnapshot(t *testing.T) {
@@ -41,19 +41,19 @@ func TestPTYScreenAltScreenSnapshot(t *testing.T) {
 	if err := os.WriteFile(scriptPath, []byte(body), 0o755); err != nil {
 		testutil.FailErr(t, "write alt.sh", err)
 	}
-	handle, err := reg.StartPTY(context.Background(), "s1", "", "p1", hostcmd.Request{Launch: lycexec.HostLaunch("bgprocess pty test"),
+	handle, err := reg.Terminal.StartPTY(context.Background(), "s1", "", "p1", hostcmd.Request{Launch: lycexec.HostLaunch("bgprocess pty test"),
 		ProjectDir: dir,
 		Stages:     []lycexec.Stage{{Name: scriptPath}},
 	}, runner, lycexec.WinSize{Cols: lycexec.DefaultPTYCols, Rows: lycexec.DefaultPTYRows}, confine.SpawnFacts{})
 	testutil.FailErr(t, "StartPTY", err)
-	defer func() { _, _ = reg.ClosePTY("s1", handle) }()
+	defer func() { _, _ = reg.Terminal.ClosePTY("s1", handle) }()
 
 	// Wait for paint via idle read, but do not rely on that for the grid —
 	// SnapshotPTY must work even after ReadPTY advances its cursor.
-	_, err = reg.ReadPTY("s1", handle, PTYReadOpts{Idle: 150 * time.Millisecond, Timeout: 2 * time.Second})
+	_, err = reg.Terminal.ReadPTY("s1", handle, PTYReadOpts{Idle: 150 * time.Millisecond, Timeout: 2 * time.Second})
 	testutil.FailErr(t, "ReadPTY settle", err)
 
-	res1, err := reg.SnapshotPTY(context.Background(), "s1", handle, PTYReadOpts{Idle: 150 * time.Millisecond, Timeout: 2 * time.Second})
+	res1, err := reg.Terminal.SnapshotPTY(context.Background(), "s1", handle, PTYReadOpts{Idle: 150 * time.Millisecond, Timeout: 2 * time.Second})
 	testutil.FailErr(t, "SnapshotPTY 1", err)
 	snap1 := res1.Screen
 	if snap1.Cols != int(lycexec.DefaultPTYCols) || snap1.Rows != int(lycexec.DefaultPTYRows) {
@@ -77,7 +77,7 @@ func TestPTYScreenAltScreenSnapshot(t *testing.T) {
 		}
 	}
 
-	res2, err := reg.SnapshotPTY(context.Background(), "s1", handle, PTYReadOpts{Idle: 50 * time.Millisecond, Timeout: 2 * time.Second})
+	res2, err := reg.Terminal.SnapshotPTY(context.Background(), "s1", handle, PTYReadOpts{Idle: 50 * time.Millisecond, Timeout: 2 * time.Second})
 	testutil.FailErr(t, "SnapshotPTY 2", err)
 	b1, err := json.Marshal(res1.Screen)
 	testutil.FailErr(t, "marshal snap1", err)
@@ -89,8 +89,8 @@ func TestPTYScreenAltScreenSnapshot(t *testing.T) {
 
 	// Snapshot must not disturb subsequent incremental reads — send Enter and
 	// expect the read path still returns something without hanging.
-	testutil.FailErr(t, "WritePTY", reg.WritePTY("s1", handle, []byte("\r")))
-	readAfter, err := reg.ReadPTY("s1", handle, PTYReadOpts{Idle: 150 * time.Millisecond, Timeout: 2 * time.Second})
+	testutil.FailErr(t, "WritePTY", reg.Terminal.WritePTY("s1", handle, []byte("\r")))
+	readAfter, err := reg.Terminal.ReadPTY("s1", handle, PTYReadOpts{Idle: 150 * time.Millisecond, Timeout: 2 * time.Second})
 	testutil.FailErr(t, "ReadPTY after snapshot", err)
 	_ = readAfter
 }

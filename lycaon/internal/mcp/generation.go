@@ -69,27 +69,27 @@ func (g *ResourceGeneration) Tool(providerID, name string) (GenerationTool, bool
 }
 
 // CurrentGeneration gives unchanged scoped state a stable revision.
-func (r *RegistryImpl) CurrentGeneration(ctx context.Context, scope CallScope) *ResourceGeneration {
+func (r *ProviderCatalog) CurrentGeneration(ctx context.Context, scope CallScope) *ResourceGeneration {
 	if r == nil {
 		return finishGeneration(&ResourceGeneration{})
 	}
 	view := r.projectView(ctx, scope.ProjectDir)
 
 	r.mu.RLock()
-	syncErrors := make(map[string]string, len(r.syncErrors))
-	for id, msg := range r.syncErrors {
+	syncErrors := make(map[string]string, len(r.Tools.syncErrors))
+	for id, msg := range r.Tools.syncErrors {
 		syncErrors[id] = msg
 	}
-	syncOK := make(map[string]bool, len(r.syncOK))
-	for id, ok := range r.syncOK {
+	syncOK := make(map[string]bool, len(r.Tools.syncOK))
+	for id, ok := range r.Tools.syncOK {
 		syncOK[id] = ok
 	}
-	authRequired := make(map[string]bool, len(r.authRequired))
-	for id, needed := range r.authRequired {
+	authRequired := make(map[string]bool, len(r.Credentials.authRequired))
+	for id, needed := range r.Credentials.authRequired {
 		authRequired[id] = needed
 	}
-	toolDefs := make(map[string][]sanitizedToolDefinition, len(r.toolDefs))
-	for id, defs := range r.toolDefs {
+	toolDefs := make(map[string][]sanitizedToolDefinition, len(r.Tools.toolDefs))
+	for id, defs := range r.Tools.toolDefs {
 		toolDefs[id] = defs
 	}
 	r.mu.RUnlock()
@@ -107,7 +107,7 @@ func (r *RegistryImpl) CurrentGeneration(ctx context.Context, scope CallScope) *
 				lastError:  syncErrors[s.ID],
 				synced:     syncOK[s.ID],
 				authNeeded: authRequired[s.ID],
-				signedIn:   r.oauthStore.SignedIn(s.ID),
+				signedIn:   r.Credentials.oauthStore.SignedIn(s.ID),
 				toolCount:  len(defs),
 			}),
 			Tools: make([]GenerationTool, 0, len(defs)),

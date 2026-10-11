@@ -20,7 +20,7 @@ type Deps struct {
 	Power    *hostpower.Controller
 	Events   events.ReplayHub
 	Projects project.Registry
-	Sessions *session.Manager
+	Sessions *session.Host
 	Service  *settings.Service
 	Sources  *sourceapi.Handler
 }
@@ -46,7 +46,7 @@ func New(responses *httpio.Responder, deps Deps) Handler {
 		httpio.Required{Name: "Service.SecurityScanners", Present: deps.Service != nil && deps.Service.SecurityScanners != nil},
 		httpio.Required{Name: "Service.Verify", Present: deps.Service != nil && deps.Service.Verify != nil},
 		httpio.Required{Name: "Sessions", Present: deps.Sessions != nil},
-		httpio.Required{Name: "Sources.FileBriefings", Present: deps.Sources != nil && deps.Sources.FileBriefings != nil},
+		httpio.Required{Name: "Sources.FileBriefings", Present: deps.Sources != nil && deps.Sources.Briefings.FileBriefings != nil},
 	)
 	deps.Pricing.SetOnRefreshSettled(func() {
 		projectview.PublishSettings(deps.Events, deps.Projects, context.Background(), wire.SettingsAreaPricing, "global", "", "refreshed")

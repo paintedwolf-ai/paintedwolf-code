@@ -205,11 +205,12 @@ type egressBrokerT struct {
 	loopback map[string]func(uint16) bool
 	// lineages retains an action's identity past its lease so a process it left
 	// running can still be placed against its project.
-	lineages     map[string]EgressCommand
-	lineageSeq   map[string]uint64
-	lineageAge   []string
-	lineageOrder uint64
-	resolver     EgressResolver
+	lineages      map[string]EgressCommand
+	lineageSeq    map[string]uint64
+	lineageAge    []string
+	lineageOrder  uint64
+	resolver      EgressResolver
+	resolverOwner *egressResolverRegistration
 }
 
 // retainedLineages bounds how many ended actions stay placeable.
@@ -222,42 +223,6 @@ var egressBroker = &egressBrokerT{
 	loopback:   map[string]func(uint16) bool{},
 	lineages:   map[string]EgressCommand{},
 	lineageSeq: map[string]uint64{},
-}
-
-var (
-	ruleEvalMu sync.RWMutex
-	ruleEval   func(ctx context.Context, cmd EgressCommand, host string) EgressRuleResult
-)
-
-// EgressRuleEffect is the authored policy result for one host. Reusable authority
-// is evaluated separately by the approval gate.
-type EgressRuleEffect string
-
-const (
-	EgressRuleDeny EgressRuleEffect = "deny"
-	EgressRuleAsk  EgressRuleEffect = "ask"
-)
-
-// EgressRuleResult retains the authored pattern for citations.
-type EgressRuleResult struct {
-	Effect  EgressRuleEffect
-	Pattern string
-	UnitID  string
-	PackID  string
-	Scope   string
-}
-
-// SetEgressRuleEvaluator installs the host deny/ask policy check the proxy consults.
-func SetEgressRuleEvaluator(fn func(ctx context.Context, cmd EgressCommand, host string) EgressRuleResult) {
-	ruleEvalMu.Lock()
-	ruleEval = fn
-	ruleEvalMu.Unlock()
-}
-
-func currentRuleEval() func(context.Context, EgressCommand, string) EgressRuleResult {
-	ruleEvalMu.RLock()
-	defer ruleEvalMu.RUnlock()
-	return ruleEval
 }
 
 var (
@@ -300,13 +265,6 @@ func EffectivePosture(cmd EgressCommand) EgressPosture {
 		return fn(cmd)
 	}
 	return currentPosture()
-}
-
-// SetEgressResolver installs the approval hook for unmatched hosts.
-func SetEgressResolver(fn EgressResolver) {
-	egressBroker.mu.Lock()
-	egressBroker.resolver = fn
-	egressBroker.mu.Unlock()
 }
 
 var (

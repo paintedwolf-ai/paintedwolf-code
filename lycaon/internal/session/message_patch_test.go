@@ -4,16 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -40,8 +40,8 @@ func TestUpdateMessageDoesNotConfirmCommittedCommandThroughReadProjection(t *tes
 		ID: "assistant-1", Role: wire.MessageRoleAssistant, Content: "draft", CreatedAt: time.Now().UTC(),
 	}))
 	wrapped := &failSecondMessageReadStore{Store: base}
-	mgr := NewManager(wrapped, nil, nil, settings.DefaultSessionLimits())
-	err = mgr.updateMessage(ctx, sess.ID, "assistant-1", wire.Message{
+	mgr := NewHost(wrapped, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	err = mgr.Runner.Transcript.Update(ctx, sess.ID, "assistant-1", wire.Message{
 		ID: "assistant-1", Role: wire.MessageRoleAssistant, Content: "settled",
 	})
 	testutil.FailErr(t, "update committed message", err)
@@ -61,7 +61,7 @@ func TestUpdateMessagePatchPublishesStoredRow(t *testing.T) {
 	store := store.NewSQL(sqlDB)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()
@@ -103,7 +103,7 @@ func TestUpdateMessagePatchPublishesStoredRow(t *testing.T) {
 	testutil.FailErr(t, "subscribe failed", err)
 	defer unsub()
 
-	if err := mgr.updateMessage(ctx, sess.ID, msgID, wire.Message{
+	if err := mgr.Runner.Transcript.Update(ctx, sess.ID, msgID, wire.Message{
 		ID:      msgID,
 		Role:    wire.MessageRoleAssistant,
 		Content: "",
@@ -158,7 +158,7 @@ func TestUpdateMessagePatchPersistsCoordinatorGrounding(t *testing.T) {
 	store := store.NewSQL(sqlDB)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
-	mgr := NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()
@@ -186,7 +186,7 @@ func TestUpdateMessagePatchPersistsCoordinatorGrounding(t *testing.T) {
 		testutil.FailErr(t, "append message failed", err)
 	}
 
-	if err := mgr.updateMessage(ctx, sess.ID, msgID, wire.Message{
+	if err := mgr.Runner.Transcript.Update(ctx, sess.ID, msgID, wire.Message{
 		ID:         msgID,
 		Role:       wire.MessageRoleAssistant,
 		Content:    "The fix landed in engine.py.",
@@ -210,7 +210,7 @@ func TestUpdateMessagePatchPersistsRunCompletionReportScope(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "message-report.db")
 
 	messageStore := store.NewSQL(sqlDB)
-	mgr := NewManager(messageStore, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(messageStore, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	ctx := t.Context()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	sess, err := messageStore.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
@@ -237,7 +237,7 @@ func TestUpdateMessagePatchPersistsRunCompletionReportScope(t *testing.T) {
 		Scope: wire.CompletionReportScopeRun, SurfaceID: "implement_synthesis", Phase: "report",
 	}
 	grounding := &wire.CitationGrounding{Traced: true}
-	testutil.FailErr(t, "commit report patch", mgr.updateMessage(ctx, sess.ID, msgID, wire.Message{
+	testutil.FailErr(t, "commit report patch", mgr.Runner.Transcript.Update(ctx, sess.ID, msgID, wire.Message{
 		ID: msgID, Role: wire.MessageRoleAssistant, Kind: wire.MessageKindCompletionReport,
 		Content: "Grounded security report.", Visibility: wire.MessageVisibilityTranscript,
 		WorkflowRunID: runID, CompletionReport: meta, Grounding: grounding,

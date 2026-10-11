@@ -49,19 +49,19 @@ func (st *promptLoopTurnState) usesCoordinatorDraftSlot(assistantMessageID strin
 	return strings.TrimSpace(assistantMessageID) == st.draftSlotID
 }
 
-func (l turnNudges) draftVersionCount(ctx context.Context, sessionID, slotID string) (int, error) {
-	if l.PromptLoop == nil || l.Deps.CountDraftVersions == nil {
+func (l *turnNudges) draftVersionCount(ctx context.Context, sessionID, slotID string) (int, error) {
+	if l == nil || l.Projection.Deps.CountDraftVersions == nil {
 		return 0, nil
 	}
-	sidecar, err := l.Deps.CountDraftVersions(ctx, sessionID, slotID)
+	sidecar, err := l.Projection.Deps.CountDraftVersions(ctx, sessionID, slotID)
 	if err != nil {
 		return 0, err
 	}
 	return sidecar + 1, nil
 }
 
-func (l turnNudges) stampDraftVersionCount(ctx context.Context, sessionID string, msg *api.Message) error {
-	if l.PromptLoop == nil || msg == nil || msg.ID == "" {
+func (l *turnNudges) stampDraftVersionCount(ctx context.Context, sessionID string, msg *api.Message) error {
+	if l == nil || msg == nil || msg.ID == "" {
 		return nil
 	}
 	count, err := l.draftVersionCount(ctx, sessionID, msg.ID)
@@ -72,7 +72,7 @@ func (l turnNudges) stampDraftVersionCount(ctx context.Context, sessionID string
 	return nil
 }
 
-func (l turnNudges) maybeWithdrawCoordinatorDraft(
+func (l *turnNudges) maybeWithdrawCoordinatorDraft(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -85,17 +85,17 @@ func (l turnNudges) maybeWithdrawCoordinatorDraft(
 	return l.withdrawCoordinatorDraft(ctx, sess, sessionID, st, content)
 }
 
-func (l turnNudges) withdrawCoordinatorDraft(
+func (l *turnNudges) withdrawCoordinatorDraft(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
 	st *promptLoopTurnState,
 	content string,
 ) error {
-	if l.PromptLoop == nil || st == nil || st.draftSlotID == "" || !st.draftSlotAppended {
+	if l == nil || st == nil || st.draftSlotID == "" || !st.draftSlotAppended {
 		return nil
 	}
-	if l.Deps.UpdateMessage == nil {
+	if l.Projection.Deps.UpdateMessage == nil {
 		return fmt.Errorf("update message not configured")
 	}
 	patch := newProvisionalAssistantMessage(api.Message{
@@ -108,7 +108,7 @@ func (l turnNudges) withdrawCoordinatorDraft(
 	if err := l.stampDraftVersionCount(ctx, sessionID, &patch); err != nil {
 		return err
 	}
-	if err := l.Deps.UpdateMessage(ctx, sessionID, st.draftSlotID, patch); err != nil {
+	if err := l.Projection.Deps.UpdateMessage(ctx, sessionID, st.draftSlotID, patch); err != nil {
 		return err
 	}
 	return l.closeCoordinatorDraftSlot(ctx, sessionID, st, st.draftSlotID)

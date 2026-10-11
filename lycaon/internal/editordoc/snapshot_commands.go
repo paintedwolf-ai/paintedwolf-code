@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
 
@@ -107,7 +108,7 @@ func (s *Service) ReplaceSnapshot(ctx context.Context, id, projectID string, in 
 	if in.EOL != "lf" && in.EOL != "crlf" {
 		return nil, ErrInvalidEOL
 	}
-	limits := textfile.LimitsForRaw(project.SourceWriteMaxBytes)
+	limits := textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes)
 	if int64(len(in.Content)) > limits.MaxTextBytes {
 		return nil, textfile.ErrTextTooLarge
 	}

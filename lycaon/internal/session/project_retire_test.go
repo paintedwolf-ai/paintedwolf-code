@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/attention"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/session/chats"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -33,7 +34,7 @@ func TestRetireForProjectDeleteRemovesSessionsAndAttention(t *testing.T) {
 	hub := events.NewMemoryHub()
 	src := &attention.Source{Sessions: mem}
 	pub := &events.Publisher{Hub: hub, Attention: src}
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetEventPublisher(pub)
 
 	view, err := src.BuildView(ctx)
@@ -42,7 +43,7 @@ func TestRetireForProjectDeleteRemovesSessionsAndAttention(t *testing.T) {
 		t.Fatal("errored session must appear on attention before project delete")
 	}
 
-	testutil.FailErr(t, "retire", mgr.RetireForProjectDelete(ctx, p.ID))
+	testutil.FailErr(t, "retire", mgr.Chats.RetireForProjectDelete(ctx, p.ID))
 
 	if _, err := mem.Get(ctx, doomed.ID); !errors.Is(err, store.ErrSessionNotFound) {
 		t.Fatalf("doomed session still present: %v", err)
@@ -76,11 +77,11 @@ func TestRetireForProjectDeleteIgnoresWorktreeBinding(t *testing.T) {
 		BaseBranch:   "main",
 	}))
 
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
-	if err := mgr.DeleteSession(ctx, sess.ID); !errors.Is(err, ErrSessionWorktreeBound) {
-		t.Fatalf("DeleteSession = %v, want ErrSessionWorktreeBound", err)
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	if err := mgr.Chats.Delete(ctx, sess.ID); !errors.Is(err, chats.ErrSessionWorktreeBound) {
+		t.Fatalf("DeleteSession = %v, want chats.ErrSessionWorktreeBound", err)
 	}
-	testutil.FailErr(t, "retire", mgr.RetireForProjectDelete(ctx, "p1"))
+	testutil.FailErr(t, "retire", mgr.Chats.RetireForProjectDelete(ctx, "p1"))
 	if _, err := mem.Get(ctx, sess.ID); !errors.Is(err, store.ErrSessionNotFound) {
 		t.Fatalf("worktree-bound session survived project retire: %v", err)
 	}

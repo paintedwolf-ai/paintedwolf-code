@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/recall"
@@ -23,7 +24,7 @@ const (
 func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext, svc *recall.Service) (string, error) {
 	query, _ := args["query"].(string)
 	if strings.TrimSpace(query) == "" {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code:      recallQueryInvalid,
 			Retryable: true,
 			Data:      map[string]any{"reason": "empty query", "recall_allowed_fields": search.DSLFieldAllowlist()},
@@ -31,7 +32,7 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 	}
 	widen, err := recall.ParseWiden(stringArgOrEmpty(args, "widen"))
 	if err != nil {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code:      recallScopeNotPermitted,
 			Retryable: true,
 			Data:      map[string]any{"reason": "unknown widen value", "recall_widen_invalid": true},
@@ -43,9 +44,9 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 		Widen: widen,
 		Limit: intArgOrZero(args, "limit"),
 		Caller: recall.Caller{
-			SessionID:       tctx.SessionID,
-			ParentSessionID: tctx.ParentSessionID,
-			ProjectID:       tctx.ProjectID,
+			SessionID:       tctx.Identity.SessionID,
+			ParentSessionID: tctx.Identity.ParentSessionID,
+			ProjectID:       tctx.Identity.ProjectID,
 		},
 	})
 	if err != nil {
@@ -67,7 +68,7 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 func recallReject(err error) error {
 	var denied *recall.ErrScopeDenied
 	if asScopeDenied(err, &denied) {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code:      recallScopeNotPermitted,
 			Retryable: true,
 			Data:      map[string]any{"role": string(denied.Role), "widen": string(denied.Widen)},
@@ -75,7 +76,7 @@ func recallReject(err error) error {
 	}
 	var liveCode *recall.ErrLiveCodeRequested
 	if asLiveCode(err, &liveCode) {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code:      recallLiveCodeNotInScope,
 			Retryable: true,
 			Data:      map[string]any{"kind": liveCode.Kind},
@@ -83,7 +84,7 @@ func recallReject(err error) error {
 	}
 	var parseErr *search.ParseError
 	if asParseError(err, &parseErr) {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code:      recallQueryInvalid,
 			Retryable: true,
 			Data: map[string]any{
@@ -94,7 +95,7 @@ func recallReject(err error) error {
 			},
 		}
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code:      recallUnavailable,
 		Retryable: false,
 		Data:      map[string]any{"reason": err.Error()},

@@ -52,8 +52,8 @@ func TestFreeChatImplementerTask(t *testing.T) {
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
 	h.SeedProgress(t, ctx, sess.ID)
 	prompt := "Add a // TODO: review here comment at the top of main.go"
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, prompt); err != nil {
-		testutil.FailErr(t, "h.SessionMgr.Prompt failed", err)
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, prompt); err != nil {
+		testutil.FailErr(t, "h.Sessions.Manager.Submissions.Prompt failed", err)
 	}
 	if err := DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID); err != nil {
 		testutil.FailErr(t, "DrainPendingWorkerJobs", err)
@@ -78,8 +78,8 @@ func TestFreeChatImplementerTask(t *testing.T) {
 	if !foundTask {
 		t.Fatal("coordinator completion request must expose task tool")
 	}
-	run, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
-	testutil.FailErr(t, "h.WorkflowMgr.GetActive failed", err)
+	run, err := h.Workflows.Manager.Store.Runs.ActiveBySession(ctx, sess.ID)
+	testutil.FailErr(t, "h.Workflows.Manager.GetActive failed", err)
 	if run == nil || run.WorkflowID != "implement" {
 		t.Fatalf("expected ambient implement run, got %+v", run)
 	}
@@ -91,14 +91,14 @@ func TestFreeChatImplementerChildIncludesCommandInSchema(t *testing.T) {
 	dir := t.TempDir()
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
-	child, err := h.SessionMgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
+	child, err := h.Sessions.Manager.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType: "implementer",
 		Prompt:    "Add a test for main.go",
 	})
 	testutil.FailErr(t, "SpawnChild", err)
 	prof, err := h.AgentRegistry.Get("implementer")
 	testutil.FailErr(t, "agents.Get", err)
-	policy := h.SessionMgr.PromptToolPolicy()
+	policy := h.Sessions.Manager.Coordinator.Guards.Policy()
 	hasCommand := false
 	for _, meta := range policy.ListForPrompt(ctx, child, prof.ToolProfile) {
 		if meta.Name == "command" {

@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/capabilitygrants"
+
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,7 +10,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/tools"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -20,9 +21,18 @@ import (
 // device-scoped — so no answer to "connect to this daemon" outlives review.
 func assertNoStandingSocketGrant(t *testing.T) {
 	t.Helper()
-	action := hitl.ProposedAction{Tool: "command", SessionID: "sess", ProjectID: "proj", ProjectDir: "/tmp/proj"}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: "sess",
+ProjectID: "proj",
+ProjectDir: "/tmp/proj",
+},
+}
 	grant := confine.SocketGrant{ApprovedPath: "/tmp/svc.sock", ResolvedPath: "/private/tmp/svc.sock"}
-	offers := tools.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
+	offers := capabilitygrants.SocketExecutionGrantOffers(action, []confine.SocketGrant{grant})
 	if len(offers) == 0 {
 		t.Fatal("socket execution card offered no ladder")
 	}

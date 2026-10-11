@@ -210,11 +210,15 @@ func TestToolApprovalCoalesceConcurrentBegin(t *testing.T) {
 func TestGrantKeyParity(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-		Tool:       "command",
-		ProjectDir: "/proj",
-		Args:       map[string]any{"command": "aws s3 rm --recursive s3://x", "z": 1, "a": "first"},
-		SessionID:  "s1",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "aws s3 rm --recursive s3://x", "z": 1, "a": "first"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/proj",
+SessionID: "s1",
+},
+}
 	k1 := hitl.GrantKey(action)
 	k2 := hitl.GrantKey(action)
 	if k1 == "" || k1 != k2 {
@@ -222,21 +226,25 @@ func TestGrantKeyParity(t *testing.T) {
 	}
 	// Map key order leaves the fingerprint unchanged (json.Marshal sorts keys).
 	reordered := hitl.ProposedAction{
-		Tool:       "command",
-		ProjectDir: "/proj",
-		Args:       map[string]any{"a": "first", "command": "aws s3 rm --recursive s3://x", "z": 1},
-		SessionID:  "s1",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"a": "first", "command": "aws s3 rm --recursive s3://x", "z": 1},
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/proj",
+SessionID: "s1",
+},
+}
 	if hitl.GrantKey(reordered) != k1 {
 		t.Fatalf("reordered args must share GrantKey: %q vs %q", hitl.GrantKey(reordered), k1)
 	}
 	changed := action
-	changed.Args = map[string]any{"command": "echo different"}
+	changed.Invocation.Args = map[string]any{"command": "echo different"}
 	if hitl.GrantKey(changed) == k1 {
 		t.Fatal("different args must produce a different GrantKey")
 	}
 	changedBoundary := action
-	changedBoundary.Contained = hitl.Contained{
+	changedBoundary.Execution.Contained = hitl.Contained{
 		FSJailed: true,
 		Egress:   hitl.ContainedEgressProxy,
 		Roots:    []string{"/proj"},

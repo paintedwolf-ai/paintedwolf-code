@@ -8,8 +8,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
 func TestSecuritySurveyPlanRequiresThreatModel(t *testing.T) {
@@ -51,7 +51,7 @@ func TestSecuritySurveyPlanRequiresThreatModel(t *testing.T) {
 	if len(challenge.ReviewLoop.IfSpawnable) != 1 || challenge.ReviewLoop.IfSpawnable[0] != "web-researcher" {
 		t.Fatalf("challenge if_spawnable = %v want [web-researcher]", challenge.ReviewLoop.IfSpawnable)
 	}
-	excluded := workflow.ReviewLoopFanoutExcludedAgents(m)
+	excluded := runstate.ReviewLoopFanoutExcludedAgents(m)
 	if len(excluded) != 2 || excluded[0] != "skeptic" || excluded[1] != "web-researcher" {
 		t.Fatalf("fanout excluded reviewers = %v want [skeptic web-researcher]", excluded)
 	}

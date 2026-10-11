@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	lyexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/session/chats"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -18,15 +19,15 @@ import (
 
 func TestDeleteSessionSharesTurnLifecycleGate(t *testing.T) {
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild, ProjectID: "p1"}, "p1")
 	testutil.FailErr(t, "create session", err)
-	turnLock := mgr.promptState.Prompt.Acquire(sess.ID)
+	turnLock := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
 	turnLock.Lock()
-	err = mgr.DeleteSession(t.Context(), sess.ID)
+	err = mgr.Chats.Delete(t.Context(), sess.ID)
 	turnLock.Unlock()
-	if !errors.Is(err, ErrSessionBusy) {
-		t.Fatalf("DeleteSession = %v, want ErrSessionBusy", err)
+	if !errors.Is(err, chats.ErrSessionBusy) {
+		t.Fatalf("DeleteSession = %v, want chats.ErrSessionBusy", err)
 	}
 	_, err = mem.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "session retained after busy delete", err)
@@ -37,7 +38,7 @@ func TestDeleteSessionDisposesBackgroundRuntimeBeforeRow(t *testing.T) {
 		t.Skip("sleep fixture is unix-oriented")
 	}
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
 	mgr.SetBackgroundRegistry(reg)
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild, ProjectID: "p1"}, "p1")
@@ -54,15 +55,15 @@ func TestDeleteSessionDisposesBackgroundRuntimeBeforeRow(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "start session background process", err)
-	testutil.FailErr(t, "delete session", mgr.DeleteSession(t.Context(), sess.ID))
-	if got := reg.List(context.Background(), sess.ID); len(got) != 0 {
+	testutil.FailErr(t, "delete session", mgr.Chats.Delete(t.Context(), sess.ID))
+	if got := reg.Output.List(context.Background(), sess.ID); len(got) != 0 {
 		t.Fatalf("background handles retained after delete: %#v", got)
 	}
 }
 
 func TestDeleteSession_refusesWhileBound(t *testing.T) {
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	ctx := context.Background()
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
@@ -79,16 +80,16 @@ func TestDeleteSession_refusesWhileBound(t *testing.T) {
 		BaseBranch:   "main",
 	}))
 
-	err = mgr.DeleteSession(ctx, sess.ID)
-	if !errors.Is(err, ErrSessionWorktreeBound) {
-		t.Fatalf("DeleteSession = %v want ErrSessionWorktreeBound", err)
+	err = mgr.Chats.Delete(ctx, sess.ID)
+	if !errors.Is(err, chats.ErrSessionWorktreeBound) {
+		t.Fatalf("DeleteSession = %v want chats.ErrSessionWorktreeBound", err)
 	}
 	if _, getErr := mem.Get(ctx, sess.ID); getErr != nil {
 		t.Fatalf("session must still exist: %v", getErr)
 	}
 
 	testutil.FailErr(t, "unbind", mem.DeleteWorktreeBinding(ctx, sess.ID))
-	testutil.FailErr(t, "delete after unbind", mgr.DeleteSession(ctx, sess.ID))
+	testutil.FailErr(t, "delete after unbind", mgr.Chats.Delete(ctx, sess.ID))
 	if _, getErr := mem.Get(ctx, sess.ID); !errors.Is(getErr, store.ErrSessionNotFound) {
 		t.Fatalf("session should be gone: %v", getErr)
 	}
@@ -96,7 +97,7 @@ func TestDeleteSession_refusesWhileBound(t *testing.T) {
 
 func TestBoundSession_archivePinRenameUnaffected(t *testing.T) {
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	ctx := context.Background()
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
@@ -113,17 +114,17 @@ func TestBoundSession_archivePinRenameUnaffected(t *testing.T) {
 		BaseBranch:   "main",
 	}))
 
-	archived, err := mgr.SetArchived(ctx, sess.ID, true)
+	archived, err := mgr.Chats.SetArchived(ctx, sess.ID, true)
 	testutil.FailErr(t, "archive", err)
 	if archived.ArchivedAt == nil {
 		t.Fatal("expected archived_at")
 	}
-	unarchived, err := mgr.SetArchived(ctx, sess.ID, false)
+	unarchived, err := mgr.Chats.SetArchived(ctx, sess.ID, false)
 	testutil.FailErr(t, "unarchive", err)
 	if unarchived.ArchivedAt != nil {
 		t.Fatal("expected cleared archived_at")
 	}
-	pinned, err := mgr.SetPinned(ctx, sess.ID, true)
+	pinned, err := mgr.Chats.SetPinned(ctx, sess.ID, true)
 	testutil.FailErr(t, "pin", err)
 	if pinned.PinRank == nil {
 		t.Fatal("expected pin_rank")

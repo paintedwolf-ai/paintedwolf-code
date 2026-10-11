@@ -2,6 +2,7 @@ package page
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/tools"
@@ -21,7 +22,7 @@ func TestURLModeRequiresTheLoopbackConnectGrant(t *testing.T) {
 		"http://[::1]:3000/",
 	} {
 		err := requireLoopbackAuthority(target, ungranted)
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code != "SANDBOX_TRY_LOOPBACK_CONNECT" {
 			t.Fatalf("ungranted %s: err=%v, want SANDBOX_TRY_LOOPBACK_CONNECT", target, err)
 		}
@@ -34,14 +35,19 @@ func TestURLModeRequiresTheLoopbackConnectGrant(t *testing.T) {
 // The grant is the reviewed one, ports included.
 func TestLoopbackGrantCoversItsReviewedPortsOnly(t *testing.T) {
 	t.Parallel()
-	narrowed := tools.ToolContext{LoopbackConnectGranted: true, LoopbackConnectPorts: []uint16{3000}}
+	narrowed := tools.ToolContext{
+		Local: tools.InvocationLocal{LoopbackConnectGranted: true,
+			LoopbackConnectPorts: []uint16{3000}},
+	}
 	if err := requireLoopbackAuthority("http://127.0.0.1:3000/", narrowed); err != nil {
 		t.Fatalf("reviewed port refused: %v", err)
 	}
 	if err := requireLoopbackAuthority("http://127.0.0.1:11434/api/tags", narrowed); err == nil {
 		t.Fatal("a port outside the reviewed grant was allowed")
 	}
-	unnarrowed := tools.ToolContext{LoopbackConnectGranted: true}
+	unnarrowed := tools.ToolContext{
+		Local: tools.InvocationLocal{LoopbackConnectGranted: true},
+	}
 	if err := requireLoopbackAuthority("http://127.0.0.1:11434/api/tags", unnarrowed); err != nil {
 		t.Fatalf("unnarrowed grant refused a local port: %v", err)
 	}

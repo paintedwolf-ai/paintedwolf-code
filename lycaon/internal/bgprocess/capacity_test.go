@@ -6,7 +6,7 @@ import (
 )
 
 func TestBackgroundCapacitySnapshotTracksOnlyAdmittedLane(t *testing.T) {
-	r := &Registry{cfg: Config{MaxBackground: 7}, sessions: map[string]map[string]*Process{
+	r := &processTable{maxBackground: 7, sessions: map[string]map[string]*Process{
 		"session": {
 			"terminal": {Handle: "terminal", kind: processKindPTY, mode: JobModeBackground, running: true},
 			"command":  {Handle: "command", mode: JobModeBackground, running: true},
@@ -29,7 +29,7 @@ func TestBackgroundCapacitySnapshotTracksOnlyAdmittedLane(t *testing.T) {
 }
 
 func TestAwaitedCapacitySnapshotTracksConfiguredLane(t *testing.T) {
-	r := &Registry{cfg: Config{MaxAwaited: 2}, sessions: map[string]map[string]*Process{
+	r := &processTable{maxAwaited: 2, sessions: map[string]map[string]*Process{
 		"session": {
 			"a":      {Handle: "a", mode: JobModeAwaited, running: true},
 			"b":      {Handle: "b", mode: JobModeAwaited, running: true},

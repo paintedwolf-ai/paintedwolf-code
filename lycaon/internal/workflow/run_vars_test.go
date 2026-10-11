@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,12 +24,12 @@ func TestStampRunVarsAbsorbsRevisionBumpAfterCallerLoad(t *testing.T) {
 	stale := *run
 
 	// Somebody else writes first, so `stale` is now behind by one revision.
-	if _, err := mgr.StampRunVars(ctx, run.ID, func(_ context.Context, _ *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
-		return SetHostVar(vars, "probe.first", "yes"), true, nil
+	if _, err := mgr.Phases.Vars.Stamp(ctx, run.ID, func(_ context.Context, _ *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+		return runstate.SetHostVar(vars, "probe.first", "yes"), true, nil
 	}); err != nil {
 		testutil.FailErr(t, "first stamp", err)
 	}
-	after, err := mgr.Get(ctx, run.ID)
+	after, err := mgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get", err)
 	if after.Revision <= stale.Revision {
 		t.Fatalf("first stamp did not bump revision: %d then %d", stale.Revision, after.Revision)
@@ -36,9 +37,9 @@ func TestStampRunVarsAbsorbsRevisionBumpAfterCallerLoad(t *testing.T) {
 
 	// The stamp derives from the run it is handed, never from the stale one.
 	seen := int64(0)
-	stamped, err := mgr.StampRunVars(ctx, run.ID, func(_ context.Context, run *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+	stamped, err := mgr.Phases.Vars.Stamp(ctx, run.ID, func(_ context.Context, run *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
 		seen = run.Revision
-		return SetHostVar(vars, "probe.second", "yes"), true, nil
+		return runstate.SetHostVar(vars, "probe.second", "yes"), true, nil
 	})
 	testutil.FailErr(t, "second stamp", err)
 	if seen != after.Revision {
@@ -48,7 +49,7 @@ func TestStampRunVarsAbsorbsRevisionBumpAfterCallerLoad(t *testing.T) {
 		t.Fatal("stamp returned no run")
 	}
 
-	vars, err := mgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := mgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	if !conditions.DotPathTruthy(vars, "probe.first") || !conditions.DotPathTruthy(vars, "probe.second") {
 		t.Fatalf("both stamps must survive, got %#v", vars["probe"])
@@ -71,8 +72,8 @@ func TestStampRunVarsConcurrentWritersAllLand(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			key := "probe.w" + string(rune('a'+i))
-			_, errs[i] = mgr.StampRunVars(ctx, run.ID, func(_ context.Context, _ *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
-				return SetHostVar(vars, key, "yes"), true, nil
+			_, errs[i] = mgr.Phases.Vars.Stamp(ctx, run.ID, func(_ context.Context, _ *api.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
+				return runstate.SetHostVar(vars, key, "yes"), true, nil
 			})
 		}(i)
 	}
@@ -81,11 +82,11 @@ func TestStampRunVarsConcurrentWritersAllLand(t *testing.T) {
 		if err != nil {
 			t.Fatalf("writer %d failed: %v", i, err)
 		}
-		if errors.Is(err, ErrRunRevisionConflict) {
+		if errors.Is(err, runstate.ErrRevisionConflict) {
 			t.Fatalf("writer %d surfaced a revision conflict", i)
 		}
 	}
-	vars, err := mgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := mgr.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
 	for i := 0; i < writers; i++ {
 		key := "probe.w" + string(rune('a'+i))
@@ -102,17 +103,17 @@ func TestStampRunVarsDeclinedMutationDoesNotWrite(t *testing.T) {
 	ctx := context.Background()
 	run, err := startRun(ctx, mgr, "sess-1", "plan", "1.0.0")
 	testutil.FailErr(t, "startRun", err)
-	before, err := mgr.Get(ctx, run.ID)
+	before, err := mgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get", err)
 
-	stamped, err := mgr.StampRunVars(ctx, run.ID, func(context.Context, *api.WorkflowRun, map[string]any) (map[string]any, bool, error) {
+	stamped, err := mgr.Phases.Vars.Stamp(ctx, run.ID, func(context.Context, *api.WorkflowRun, map[string]any) (map[string]any, bool, error) {
 		return nil, false, nil
 	})
 	testutil.FailErr(t, "declined stamp", err)
 	if stamped == nil {
 		t.Fatal("declined stamp must still return the loaded run")
 	}
-	after, err := mgr.Get(ctx, run.ID)
+	after, err := mgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get after", err)
 	if after.Revision != before.Revision {
 		t.Fatalf("declined stamp wrote: revision %d then %d", before.Revision, after.Revision)
@@ -129,7 +130,7 @@ func TestStampRunVarsMutationErrorIsNotRetried(t *testing.T) {
 
 	sentinel := errors.New("mutation refused")
 	attempts := 0
-	if _, err := mgr.StampRunVars(ctx, run.ID, func(context.Context, *api.WorkflowRun, map[string]any) (map[string]any, bool, error) {
+	if _, err := mgr.Phases.Vars.Stamp(ctx, run.ID, func(context.Context, *api.WorkflowRun, map[string]any) (map[string]any, bool, error) {
 		attempts++
 		return nil, false, sentinel
 	}); !errors.Is(err, sentinel) {
@@ -144,7 +145,7 @@ func TestStampRunVarsMutationErrorIsNotRetried(t *testing.T) {
 // was canceled underneath them stay quiet.
 func TestStampRunVarsUnknownRunIsAbsence(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
-	stamped, err := mgr.StampRunVars(context.Background(), "no-such-run", func(context.Context, *api.WorkflowRun, map[string]any) (map[string]any, bool, error) {
+	stamped, err := mgr.Phases.Vars.Stamp(context.Background(), "no-such-run", func(context.Context, *api.WorkflowRun, map[string]any) (map[string]any, bool, error) {
 		t.Fatal("mutation must not run for an unknown run")
 		return nil, false, nil
 	})

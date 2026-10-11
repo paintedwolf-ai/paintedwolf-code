@@ -17,7 +17,7 @@ func (p *GuardPipeline) deliverAdvisories(ctx context.Context, anchor string, gc
 	if p.advisorySink == nil {
 		return nil // Standalone evaluators return the decision to their caller.
 	}
-	if err := p.advisorySink(ctx, gc.SessionID, anchor, result.Decision); err != nil {
+	if err := p.advisorySink(ctx, gc.Session.SessionID, anchor, result.Decision); err != nil {
 		return fmt.Errorf("deliver policy advisories at %s: %w", anchor, err)
 	}
 	return nil

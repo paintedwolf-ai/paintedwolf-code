@@ -23,7 +23,7 @@ func TestDelegateImplementerPromptContainsPersona(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
 	cancel := h.StartBackgroundWorkers(t, context.Background())
 	t.Cleanup(cancel)
-	delMgr := h.DelegationMgr
+	delMgr := h.Delegations.Manager
 	ctx := context.Background()
 	testdbseed.InsertProjectRoot(t, h.DB, testdbseed.DefaultProjectID, t.TempDir())
 
@@ -71,7 +71,7 @@ func TestDelegatePlanReviewerDistinctFromImplementer(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
 	cancel := h.StartBackgroundWorkers(t, context.Background())
 	t.Cleanup(cancel)
-	delMgr := h.DelegationMgr
+	delMgr := h.Delegations.Manager
 	ctx := context.Background()
 	testdbseed.InsertProjectRoot(t, h.DB, testdbseed.DefaultProjectID, t.TempDir())
 

@@ -97,25 +97,25 @@ schema:
     findings:
       type: array
       maxItems: 12
-      description: Strongest path/line/excerpt triples — not an inventory.
+      description: Strongest source citations or observed non-source handles — not an inventory.
       items:
         type: object
         properties:
           path:
             type: string
-            description: Repo-relative path you read, grepped, or saw in scanner locations.
+            description: Repo-relative source path observed by the cited read or grep. Omit for scanner-only and web findings.
           line:
             type: integer
             description: 1-based line when citing file content.
           evidence:
             type: string
-            description: Handle of the tool result that holds excerpt, such as scan#2.
+            description: Exact observation supporting this finding. Source text uses its read or grep handle; scanner-only findings use scan#N without path, line or excerpt.
           excerpt:
             type: string
-            description: Verbatim text at path/line, or from the evidence result.
+            description: Verbatim observed source text at path/line. Omit for scanner-only and web findings.
           note:
             type: string
-            description: Optional narrative (not a substitute for excerpt).
+            description: Conclusion supported by the cited observation. Source claims still require a source excerpt.
           claim:
             type: string
             enum: [vulnerability, hardening, accepted_residual, model]

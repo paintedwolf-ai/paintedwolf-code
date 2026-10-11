@@ -42,7 +42,7 @@ func newDraftFixture(t *testing.T, primary, branch map[string][]byte) draftFixtu
 	testdbseed.InsertProjectRootWithID(t, sqlDB, f.projectID, f.rootID, f.primary)
 	ledger := sourceledger.New(sqlDB, t.TempDir())
 	f.projects = project.NewSQLRegistry(sqlDB)
-	f.documents = editordoc.New(editordoc.NewStore(sqlDB), ledger, f.projects)
+	f.documents = editordoc.New(editordoc.NewStore(sqlDB), ledger, ledger.History, f.projects)
 	for path, content := range primary {
 		writeFixtureFile(t, f.primary, path, string(content))
 		writeFixtureFile(t, f.branch, path, string(content))

@@ -23,7 +23,7 @@ type timeoutClaim struct {
 }
 
 var timeoutClaims = []timeoutClaim{
-	{"gitRemoteHash", "internal/project", "registry.go", "", "gitRemoteHash"},
+	{"gitRemoteHash", "internal/project", "roots.go", "", "gitRemoteHash"},
 	{"(*SQLQueue).Get", "internal/worker", "sql_queue_query.go", "SQLQueue", "Get"},
 	{"fetchDiscoveredModels", "internal/llm", "registry_discovery.go", "", "fetchDiscoveredModels"},
 }

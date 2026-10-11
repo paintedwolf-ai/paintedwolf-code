@@ -136,7 +136,7 @@ func testWorkflowCommandIdempotency(t *testing.T, h *wiring.Harness, base, proje
 				"/v1/sessions/"+sess.ID+"/workflow-runs",
 				workflowStartJSON(t, base, sess.ID, map[string]any{"workflow_id": "plan", "workflow_version": "1.0.0"}), http.StatusCreated)
 			if tc.seedPlan {
-				seedPlanStub(t, h.BlueprintMgr, run.ProjectID, run.BlueprintPath)
+				seedPlanStub(t, h.Workflows.Blueprints, run.ProjectID, run.BlueprintPath)
 			}
 
 			path := "/v1/workflow-runs/" + run.ID + "/" + tc.command

@@ -14,69 +14,69 @@ import (
 // changeTreeFilter runs under the view lock. Published rows from the previous
 // query are retired before the accepted intent gets its new revision.
 func (view *sourceView) changeTreeFilter(query string) *sourcetree.Filtered {
-	previous := view.filtered
-	view.filtered = nil
-	view.treeIntent.Filter = strings.TrimSpace(query)
-	view.filterGeneration = uuid.NewString()
+	previous := view.filtering.filtered
+	view.filtering.filtered = nil
+	view.navigation.treeIntent.Filter = strings.TrimSpace(query)
+	view.filtering.filterGeneration = uuid.NewString()
 	view.projectionRevision = uuid.NewString()
-	view.filterDirty = true
+	view.filtering.filterDirty = true
 	view.state = "preparing"
 	view.failure = nil
-	if view.treeIntent.Filter == "" && !view.reviewPreparing {
+	if view.navigation.treeIntent.Filter == "" && !view.reviewing.reviewPreparing {
 		view.state = "ready"
 	}
-	if view.filterCancel != nil {
-		view.filterCancel()
+	if view.filtering.filterCancel != nil {
+		view.filtering.filterCancel()
 	}
 	return previous
 }
 
-func (s *Handler) treeViewChanged(view *sourceView) {
+func (s *Trees) treeViewChanged(view *sourceView) {
 	s.refreshTreeFilter(view)
 	view.notifier.Notify(false)
 }
 
-func (s *Handler) refreshTreeFilter(view *sourceView) {
+func (s *Trees) refreshTreeFilter(view *sourceView) {
 	view.mu.Lock()
-	if view.ctx.Err() != nil || view.treeIntent.Filter == "" || !view.treePrepared || view.reviewPreparing {
+	if view.ctx.Err() != nil || view.navigation.treeIntent.Filter == "" || !view.navigation.treePrepared || view.reviewing.reviewPreparing {
 		view.mu.Unlock()
 		return
 	}
-	view.filterDirty = true
-	if view.filterRunning {
+	view.filtering.filterDirty = true
+	if view.filtering.filterRunning {
 		view.mu.Unlock()
 		return
 	}
-	view.filterRunning = true
+	view.filtering.filterRunning = true
 	view.mu.Unlock()
-	_, release, err := s.sourceViewRegistry().registry.Acquire(view.scope, view.id)
+	_, release, err := s.Views.sourceViewRegistry().registry.Acquire(view.scope, view.id)
 	if err != nil {
 		view.mu.Lock()
-		view.filterRunning = false
+		view.filtering.filterRunning = false
 		view.mu.Unlock()
 		return
 	}
 	s.background.Go(view.ctx, func(ctx context.Context) { defer release(); s.prepareTreeFilter(ctx, view) })
 }
 
-func (s *Handler) prepareTreeFilter(lifetime context.Context, view *sourceView) {
+func (s *Trees) prepareTreeFilter(lifetime context.Context, view *sourceView) {
 	for {
 		view.mu.Lock()
-		if view.ctx.Err() != nil || view.treeIntent.Filter == "" || view.reviewPreparing || !view.filterDirty {
-			view.filterRunning = false
-			view.filterCancel = nil
+		if view.ctx.Err() != nil || view.navigation.treeIntent.Filter == "" || view.reviewing.reviewPreparing || !view.filtering.filterDirty {
+			view.filtering.filterRunning = false
+			view.filtering.filterCancel = nil
 			view.mu.Unlock()
 			return
 		}
-		query, generation := view.treeIntent.Filter, view.filterGeneration
+		query, generation := view.navigation.treeIntent.Filter, view.filtering.filterGeneration
 		ctx, cancel := context.WithCancel(lifetime)
-		view.filterCancel = cancel
-		view.filterDirty = false
+		view.filtering.filterCancel = cancel
+		view.filtering.filterDirty = false
 		view.mu.Unlock()
-		filtered, err := view.tree.Filter(ctx, query)
+		filtered, err := view.navigation.tree.Filter(ctx, query)
 		cancel()
 		view.mu.Lock()
-		if generation != view.filterGeneration || view.ctx.Err() != nil {
+		if generation != view.filtering.filterGeneration || view.ctx.Err() != nil {
 			view.mu.Unlock()
 			if filtered != nil {
 				filtered.Close()
@@ -84,7 +84,7 @@ func (s *Handler) prepareTreeFilter(lifetime context.Context, view *sourceView) 
 			continue
 		}
 		if errors.Is(err, pagedview.ErrRevision) || errors.Is(err, pagedview.ErrPreparing) {
-			view.filterDirty = true
+			view.filtering.filterDirty = true
 			view.mu.Unlock()
 			timer := time.NewTimer(100 * time.Millisecond)
 			select {
@@ -94,9 +94,9 @@ func (s *Handler) prepareTreeFilter(lifetime context.Context, view *sourceView) 
 			timer.Stop()
 			continue
 		}
-		old := view.filtered
+		old := view.filtering.filtered
 		if err == nil {
-			view.filtered = filtered
+			view.filtering.filtered = filtered
 			view.state = "ready"
 			view.failure = nil
 		} else {

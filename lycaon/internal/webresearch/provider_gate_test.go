@@ -59,7 +59,7 @@ func TestProviderGateMinInterval(t *testing.T) {
 
 func TestProviderGateDailyCapPersisted(t *testing.T) {
 	path := t.TempDir() + "/web-index.db"
-	store, err := webindex.Open(path)
+	store, err := webindex.Open(t.Context(), path)
 	testutil.FailErr(t, "Open index", err)
 	defer func() { _ = store.Close() }()
 
@@ -77,7 +77,7 @@ func TestProviderGateDailyCapPersisted(t *testing.T) {
 		t.Fatal("expected daily cap skip")
 	}
 
-	store2, err := webindex.Open(path)
+	store2, err := webindex.Open(t.Context(), path)
 	testutil.FailErr(t, "reopen index", err)
 	defer func() { _ = store2.Close() }()
 	count, err := store2.ProviderQuotaCount(ctx, "mwmbl", day)

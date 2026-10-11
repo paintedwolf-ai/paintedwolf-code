@@ -133,11 +133,12 @@ const (
 	ScannersList             = ScannersDir + "/scanners.yaml"
 
 	// Runtime, non-scanner.
-	ModelRoleExclusions Rel = "runtime/model-role-exclusions.yaml"
-	SearchGrammar       Rel = "runtime/search/grammar.json"
-	StorageDensity      Rel = "runtime/storage/density.yaml"
-	StorageDebug        Rel = "runtime/storage/debug.yaml"
-	StorageWorkerBranch Rel = "runtime/storage/worker-branches.yaml"
+	ModelRoleExclusions  Rel = "runtime/model-role-exclusions.yaml"
+	SearchGrammar        Rel = "runtime/search/grammar.json"
+	StorageDensity       Rel = "runtime/storage/density.yaml"
+	StorageDebug         Rel = "runtime/storage/debug.yaml"
+	StorageSourceCatalog Rel = "runtime/storage/source-catalog.yaml"
+	StorageWorkerBranch  Rel = "runtime/storage/worker-branches.yaml"
 
 	// Runtime fixture.
 	FixturesDir Rel = "fixtures"

@@ -237,9 +237,13 @@ func TestWaitForScanIDFollowsSnapshotReplacement(t *testing.T) {
 
 func scanToolContext(sessionID, dir string, agents ...string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	tctx := tools.ToolContext{SessionID: sessionID, Roots: roots, ActiveRootID: "r1"}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sessionID},
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: "r1"},
+	}
 	if len(agents) > 0 {
-		tctx.Agent = agents[0]
+		tctx.Identity.Agent = agents[0]
 	}
 	return tctx
 }

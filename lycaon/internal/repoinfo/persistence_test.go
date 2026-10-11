@@ -14,12 +14,12 @@ func TestPersistedOrientationIsStaleAndReusesClassifications(t *testing.T) {
 	resolve := func(context.Context, string) (CatalogRoot, bool, error) {
 		return CatalogRoot{ProjectID: "p", RootID: "r"}, true, nil
 	}
-	p := NewProvider(sourcecatalog.New(), resolve, cache).(*fileProvider)
+	p := NewProvider(sourcecatalog.New().Trees, resolve, cache).(*fileProvider)
 	stamp := time.Now().UTC()
 	p.memo.replace(root, map[string]classifiedFile{"file": {size: 4, modified: stamp, lang: "Go"}})
 	p.persistOrientation(root, &Brief{FileCount: 1, GeneratedAt: stamp})
 	testutil.FailErr(t, "close first", p.Close())
-	second := NewProvider(sourcecatalog.New(), resolve, cache).(*fileProvider)
+	second := NewProvider(sourcecatalog.New().Trees, resolve, cache).(*fileProvider)
 	defer func() { _ = second.Close() }()
 	brief := second.cachedBrief(root)
 	if brief == nil || brief.FileCount != 1 || Current(brief) {

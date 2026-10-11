@@ -21,7 +21,7 @@ func TestSourceAnalysisFailuresRemainDistinctFromServerFailures(t *testing.T) {
 		{repomap.ErrDefinitionUnavailable, wire.ApiErrorCodeSourceAnalysisUnavailable},
 	} {
 		response := httptest.NewRecorder()
-		server.writeSourceAnalysisError(response, httptest.NewRequest(http.MethodGet, "/v1/projects", nil), item.err)
+		server.Analysis.writeSourceAnalysisError(response, httptest.NewRequest(http.MethodGet, "/v1/projects", nil), item.err)
 		if response.Code != http.StatusServiceUnavailable || response.Header().Get("Retry-After") != "30" {
 			t.Fatalf("analysis failure: status=%d headers=%v", response.Code, response.Header())
 		}

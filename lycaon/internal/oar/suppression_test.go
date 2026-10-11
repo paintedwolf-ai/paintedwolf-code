@@ -136,8 +136,8 @@ func TestSuppressedRuleContributesNothingButIsTraced(t *testing.T) {
 	p.EnableAnchor(AnchorToolHandler)
 
 	gc := NewGuardContext()
-	gc.SessionID = "s1"
-	gc.Tool = "grep"
+	gc.Session.SessionID = "s1"
+	gc.Invocation.Tool = "grep"
 	res, err := p.EvaluateBlock(context.Background(), AnchorToolHandler, gc)
 	testutil.FailErr(t, "EvaluateBlock", err)
 

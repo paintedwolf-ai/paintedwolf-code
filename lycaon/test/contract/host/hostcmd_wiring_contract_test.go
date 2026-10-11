@@ -17,7 +17,7 @@ func TestHostCommandToolsShareRunner(t *testing.T) {
 		markers []string
 	}{
 		{
-			path: filepath.Join(root, "lycaon", "internal", "tools", "native", "tools.go"),
+			path: filepath.Join(root, "lycaon", "internal", "tools", "native", "command", "command_tool.go"),
 			markers: []string{
 				"CommandTool",
 			},
@@ -25,7 +25,7 @@ func TestHostCommandToolsShareRunner(t *testing.T) {
 		{
 			// Both command and verify foreground dispatch through the same helper, which builds a
 			// hostcmd.Request and hands it to the bgprocess await/handle model.
-			path: filepath.Join(root, "lycaon", "internal", "tools", "native", "command_exec.go"),
+			path: filepath.Join(root, "lycaon", "internal", "tools", "native", "command", "command_exec.go"),
 			markers: []string{
 				"hostcmd.Request",
 				"registry.StartPipeline",

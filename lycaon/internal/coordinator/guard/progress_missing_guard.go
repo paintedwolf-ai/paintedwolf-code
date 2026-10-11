@@ -20,12 +20,12 @@ func ObserveProgressMissingBeforeDispatch(
 	if gc == nil || sess == nil || sess.IsWorkerChild() {
 		return
 	}
-	gc.ReviewLoopActive = reviewLoopActive
-	gc.Tool = strings.TrimSpace(tool)
+	gc.Workflow.ReviewLoopActive = reviewLoopActive
+	gc.Invocation.Tool = strings.TrimSpace(tool)
 	gc.DeriveToolClassFacts()
-	gc.ProgressGatedTool = progress.IsProgressGatedTool(tool)
-	gc.ProgressMissing = progress.ProgressMissing(progressContent)
-	if gc.ProgressGatedTool && gc.ProgressMissing && !reviewLoopActive {
+	gc.Progress.ProgressGatedTool = progress.IsProgressGatedTool(tool)
+	gc.Progress.ProgressMissing = progress.ProgressMissing(progressContent)
+	if gc.Progress.ProgressGatedTool && gc.Progress.ProgressMissing && !reviewLoopActive {
 		gc.PutRejectData(ProgressMissingCode, map[string]any{"tool": strings.TrimSpace(tool)})
 	}
 }

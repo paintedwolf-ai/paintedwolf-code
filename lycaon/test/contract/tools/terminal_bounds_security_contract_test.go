@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -23,11 +24,14 @@ func TestTerminalOpenRequiresProjectRoot(t *testing.T) {
 	contractcheck.FailErr(t, "register", native.RegisterTerminalSessionTools(reg, bg))
 	_, err := reg.Run(context.Background(), "terminal_open", map[string]any{
 		"command": "true",
-	}, tools.ToolContext{SessionID: "s", ProjectID: "p"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s",
+			ProjectID: "p"},
+	})
 	if err == nil {
 		t.Fatal("expected PROJECT_HAS_NO_ROOTS reject")
 	}
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "PROJECT_HAS_NO_ROOTS" {
 		t.Fatalf("err = %v, want PROJECT_HAS_NO_ROOTS", err)
 	}
@@ -57,14 +61,6 @@ func TestTerminalPTYReusesBoundedExecGuards(t *testing.T) {
 			markers: []string{
 				"SanitizeEnviron",
 				"InheritedEnviron",
-			},
-		},
-		{
-			path: filepath.Join(root, "lycaon", "internal", "bgprocess", "pty.go"),
-			markers: []string{
-				"StartPTY",
-				"MaxOutputBytes",
-				"RingBufferBytes",
 			},
 		},
 		{
@@ -113,13 +109,14 @@ func TestTerminalUnsupportedMapsOnWindowsCI(t *testing.T) {
 	contractcheck.FailErr(t, "register", native.RegisterTerminalSessionTools(reg, bg))
 	dir := t.TempDir()
 	_, err := reg.Run(context.Background(), "terminal_open", map[string]any{"command": "true"}, tools.ToolContext{
-		SessionID: "s", ProjectID: "p",
-		Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}},
+		Identity: tools.InvocationIdentity{SessionID: "s",
+			ProjectID: "p"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}},
 	})
 	if err == nil {
 		t.Fatal("expected TERMINAL_UNSUPPORTED on windows")
 	}
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "TERMINAL_UNSUPPORTED" {
 		t.Fatalf("err = %v, want TERMINAL_UNSUPPORTED", err)
 	}

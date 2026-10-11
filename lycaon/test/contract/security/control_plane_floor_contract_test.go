@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -27,10 +28,10 @@ func TestControlPlaneFloorGateAndResolverAgree(t *testing.T) {
 		testutil.FailErr(t, "create session scratch", os.MkdirAll(dir, 0o700))
 	}
 	tctx := tools.ToolContext{
-		Roots:             []projectroot.RootRef{{ID: "primary", Path: proj, IsPrimary: true}},
-		ActiveRootID:      "primary",
-		SessionID:         "chat-floor",
-		SessionScratchDir: scratch,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: proj, IsPrimary: true}},
+			ActiveRootID: "primary"},
+		Identity: tools.InvocationIdentity{SessionID: "chat-floor"},
+		Host:     tools.InvocationHost{SessionScratchDir: scratch},
 	}
 
 	cases := []struct {
@@ -55,9 +56,15 @@ func TestControlPlaneFloorGateAndResolverAgree(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			res, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
-				Tool: tc.tool, Files: []string{tc.path}, ProjectDir: proj,
-				SessionScratchRoot: scratch,
-			})
+Invocation: hitl.ActionInvocation{
+Tool: tc.tool,
+Files: []string{tc.path},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+SessionScratchRoot: scratch,
+},
+})
 			testutil.FailErr(t, "gate.Evaluate", err)
 
 			var resolveErr error
@@ -66,7 +73,7 @@ func TestControlPlaneFloorGateAndResolverAgree(t *testing.T) {
 			} else {
 				_, resolveErr = projectpaths.ResolveRead(context.Background(), nil, tctx, tc.path)
 			}
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			resolverCode := ""
 			if asToolReject(resolveErr, &reject) {
 				resolverCode = reject.Code

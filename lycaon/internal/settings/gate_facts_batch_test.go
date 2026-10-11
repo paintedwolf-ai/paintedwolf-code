@@ -38,11 +38,15 @@ func TestDeclaredFileTargetDisclosesBatchWorstCase(t *testing.T) {
 	outsideRootsFile := filepath.Join(t.TempDir(), "unrelated", "notes.txt")
 
 	action := hitl.ProposedAction{
-		Tool:       "copy",
-		ProjectDir: projectDir,
-		SessionID:  "sess-batch-worst-case",
-		Files:      []string{outsideRootsFile, protectedFile},
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "copy",
+Files: []string{outsideRootsFile, protectedFile},
+},
+Scope: hitl.ActionScope{
+ProjectDir: projectDir,
+SessionID: "sess-batch-worst-case",
+},
+}
 	res, err := g.Evaluate(context.Background(), action)
 	testutil.FailErr(t, "Evaluate", err)
 	if res == nil || res.Decision == nil {

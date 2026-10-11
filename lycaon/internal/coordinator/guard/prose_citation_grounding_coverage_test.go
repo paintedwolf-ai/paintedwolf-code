@@ -1,6 +1,8 @@
 package guard_test
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,12 +19,12 @@ import (
 func proseGroundingSurfaceUniverse(t *testing.T) []string {
 	t.Helper()
 	known := map[string]struct{}{
-		spawn.SurfaceImplementSynthesis:        {},
-		spawn.SurfaceImplementRouting:          {},
-		surface.SurfaceImplementDispatch:       {},
-		surface.SurfaceImplementOverlayPromote: {},
-		surface.SurfaceImplementPark:           {},
-		tools.SurfaceImplementInvestigate:      {},
+		spawn.SurfaceImplementSynthesis:          {},
+		spawn.SurfaceImplementRouting:            {},
+		surface.SurfaceImplementDispatch:         {},
+		surface.SurfaceImplementOverlayPromote:   {},
+		surface.SurfaceImplementPark:             {},
+		toolcontract.SurfaceImplementInvestigate: {},
 	}
 
 	data, err := os.ReadFile(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "host", "coordinator-surfaces.yaml"))
@@ -60,7 +61,7 @@ func TestProjectCoordinatorCloseoutProse(t *testing.T) {
 
 	t.Run("prose-closeout surface projects synthesis", func(t *testing.T) {
 		t.Parallel()
-		prose, ok := guard.ProjectCoordinatorCloseoutProse(tools.SurfaceImplementInvestigate, envelope)
+		prose, ok := guard.ProjectCoordinatorCloseoutProse(toolcontract.SurfaceImplementInvestigate, envelope)
 		if !ok {
 			t.Fatal("expected projection on a prose-closeout surface")
 		}
@@ -86,7 +87,7 @@ func TestProjectCoordinatorCloseoutProse(t *testing.T) {
 
 	t.Run("non-envelope prose is not projected", func(t *testing.T) {
 		t.Parallel()
-		if _, ok := guard.ProjectCoordinatorCloseoutProse(tools.SurfaceImplementInvestigate, "Plain prose, no envelope."); ok {
+		if _, ok := guard.ProjectCoordinatorCloseoutProse(toolcontract.SurfaceImplementInvestigate, "Plain prose, no envelope."); ok {
 			t.Fatal("non-envelope content must not be projected")
 		}
 	})
@@ -95,7 +96,7 @@ func TestProjectCoordinatorCloseoutProse(t *testing.T) {
 		t.Parallel()
 		leading := "## Code-quality survey\n\nDuplicate constants across models."
 		content := leading + "\n\n" + envelope
-		if _, ok := guard.ProjectCoordinatorCloseoutProse(tools.SurfaceImplementInvestigate, content); ok {
+		if _, ok := guard.ProjectCoordinatorCloseoutProse(toolcontract.SurfaceImplementInvestigate, content); ok {
 			t.Fatal("hybrid closeout must not project")
 		}
 	})

@@ -3,9 +3,13 @@ package session_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workerworkspace"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -15,7 +19,7 @@ import (
 )
 
 func TestBeforeWorkerWriteRejectsReadScopedMutation(t *testing.T) {
-	mgr := session.NewManager(nil, nil, nil, settings.SessionLimits{})
+	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := worker.NewInMemoryQueue(8)
 	mgr.SetWorkerQueue(q)
 	dir := t.TempDir()
@@ -31,25 +35,22 @@ func TestBeforeWorkerWriteRejectsReadScopedMutation(t *testing.T) {
 		Status:    api.WorkerStatusRunning,
 	})
 	testutil.FailErr(t, "enqueue read worker", err)
-	tctx := tools.ToolContext{
-		WorkerJobID:   "job-read",
-		TurnSurfaceID: "implement_dispatch",
-	}
-	err = mgr.BeforeWorkerWrite(context.Background(), tctx, "src/foo.go")
+	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "job-read"}, Turn: tools.InvocationTurn{TurnSurfaceID: "implement_dispatch"}}
+	err = mgr.Workers.Workspaces.BeforeWorkerWrite(context.Background(), tctx, "src/foo.go")
 	if err == nil {
 		t.Fatal("expected read-scoped mutation reject")
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {
 		t.Fatalf("expected ToolReject: %T %v", err, err)
 	}
-	if reject.Code != session.TaskScopeReadMutationDeniedCode {
-		t.Fatalf("code = %q want %q", reject.Code, session.TaskScopeReadMutationDeniedCode)
+	if reject.Code != workerworkspace.TaskScopeReadMutationDeniedCode {
+		t.Fatalf("code = %q want %q", reject.Code, workerworkspace.TaskScopeReadMutationDeniedCode)
 	}
 }
 
 func TestBeforeWorkerWriteAllowsPathOutsideSuggestion(t *testing.T) {
-	mgr := session.NewManager(nil, nil, nil, settings.SessionLimits{})
+	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := worker.NewInMemoryQueue(8)
 	mgr.SetWorkerQueue(q)
 	writeScope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"src/allowed/**"}}
@@ -59,35 +60,35 @@ func TestBeforeWorkerWriteAllowsPathOutsideSuggestion(t *testing.T) {
 		Scope: &writeScope, Status: api.WorkerStatusRunning,
 	})
 	testutil.FailErr(t, "enqueue write worker", err)
-	err = mgr.BeforeWorkerWrite(context.Background(), tools.ToolContext{WorkerJobID: "job-write"}, "src/outside.go")
+	err = mgr.Workers.Workspaces.BeforeWorkerWrite(context.Background(), tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "job-write"}}, "src/outside.go")
 	testutil.FailErr(t, "write outside suggested path", err)
 }
 
 func TestEnsureWorkerBranchLeavesReadScopedWorkerAttached(t *testing.T) {
 	mgr, ctx := readScopedWorkerManager(t, "job-read-branch", api.TaskScopeModeRead)
-	tctx, err := mgr.EnsureWorkerBranch(ctx, tools.ToolContext{WorkerJobID: "job-read-branch"})
+	tctx, err := mgr.Workers.Workspaces.EnsureBranch(ctx, tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "job-read-branch"}})
 	testutil.FailErr(t, "ensure read worker branch", err)
-	if tctx.WorkerBranchRoot != "" {
-		t.Fatalf("WorkerBranchRoot = %q, want source-attached", tctx.WorkerBranchRoot)
+	if tctx.Source.WorkerBranchRoot != "" {
+		t.Fatalf("WorkerBranchRoot = %q, want source-attached", tctx.Source.WorkerBranchRoot)
 	}
-	if tctx.BranchWorkspace != nil {
+	if tctx.Source.BranchWorkspace != nil {
 		t.Fatal("read worker must not carry a branch workspace")
 	}
-	if tctx.SourceWorkspaceKind != api.SourceWorkspaceKindProject {
-		t.Fatalf("workspace kind = %q, want project: a read worker reads the project tree and its open documents", tctx.SourceWorkspaceKind)
+	if tctx.Source.SourceWorkspaceKind != api.SourceWorkspaceKindProject {
+		t.Fatalf("workspace kind = %q, want project: a read worker reads the project tree and its open documents", tctx.Source.SourceWorkspaceKind)
 	}
 }
 
 func TestEnsureWorkerBranchFailsWriteScopeWithoutWorkspace(t *testing.T) {
 	mgr, ctx := readScopedWorkerManager(t, "job-write-branch", api.TaskScopeModeWrite)
-	if _, err := mgr.EnsureWorkerBranch(ctx, tools.ToolContext{WorkerJobID: "job-write-branch"}); err == nil {
+	if _, err := mgr.Workers.Workspaces.EnsureBranch(ctx, tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "job-write-branch"}}); err == nil {
 		t.Fatal("expected claim failure for a write worker with no workspace manager")
 	}
 }
 
 func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 	ctx := context.Background()
-	mgr := session.NewManager(nil, nil, nil, settings.SessionLimits{})
+	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	queue := worker.NewInMemoryQueue(8)
 	mgr.SetWorkerQueue(queue)
 	scope := api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"docs/README.md"}}
@@ -101,7 +102,7 @@ func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 	})
 	testutil.FailErr(t, "enqueue discovery worker", err)
 
-	tctx, err := mgr.EnrichWorkerToolContext(ctx, &child, tools.ToolContext{WorkerJobID: "job-read-discovery"})
+	tctx, err := mgr.Workers.Workspaces.Enrich(ctx, &child, tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: "job-read-discovery"}})
 	testutil.FailErr(t, "enrich worker context", err)
 	registry := tools.NewDefaultRegistry()
 	for _, name := range []string{"list_dir", "read"} {
@@ -110,7 +111,7 @@ func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 		})
 		testutil.FailErr(t, "register "+name, err)
 	}
-	executor := tools.NewDefaultToolExecutor(nil, registry, "implement")
+	executor := toolexecution.NewExecutor(nil, registry, "implement")
 	for _, call := range []struct {
 		name string
 		args map[string]any
@@ -126,9 +127,9 @@ func TestWorkerReadToolsIgnoreSuggestedPaths(t *testing.T) {
 	}
 }
 
-func readScopedWorkerManager(t *testing.T, jobID string, mode api.TaskScopeMode) (*session.Manager, context.Context) {
+func readScopedWorkerManager(t *testing.T, jobID string, mode api.TaskScopeMode) (*session.Host, context.Context) {
 	t.Helper()
-	mgr := session.NewManager(nil, nil, nil, settings.SessionLimits{})
+	mgr := session.NewHost(sessionstore.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.SessionLimits{}, Cost: nil}, nil)
 	q := worker.NewInMemoryQueue(8)
 	mgr.SetWorkerQueue(q)
 	scope := api.TaskScope{Mode: mode, Paths: []string{"."}}

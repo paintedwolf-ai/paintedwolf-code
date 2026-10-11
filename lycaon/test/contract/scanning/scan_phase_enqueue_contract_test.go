@@ -15,7 +15,7 @@ func TestPhaseEnterSecurityRequestsBundledEngines(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	lycaonRoot := filepath.Join(root, "lycaon")
-	reg, err := registry.New(registry.Options{ModuleRoot: lycaonRoot})
+	reg, err := registry.New(t.Context(), registry.Options{ModuleRoot: lycaonRoot})
 	contractcheck.FailErr(t, "registry.New failed", err)
 
 	projectDir := filepath.Join(root, "lycaon", "test", "testdata", "scan")

@@ -29,7 +29,7 @@ func TestManualCompactionDoesNotHoldSessionStopAdmission(t *testing.T) {
 	cfg.TargetTokens = 100
 	mgr, st := newCompactionManager(t, cfg)
 	started := make(chan struct{})
-	mgr.SetCompactor(compaction.NewSimpleCompactor(cfg, cancelableCompactionSummary{started: started}))
+	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, cancelableCompactionSummary{started: started}))
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append history", st.AppendMessages(t.Context(), sess.ID,
@@ -38,22 +38,22 @@ func TestManualCompactionDoesNotHoldSessionStopAdmission(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	done := make(chan error, 1)
-	go func() { _, err := mgr.ForceCompact(ctx, sess.ID); done <- err }()
+	go func() { _, err := mgr.Runner.History.ForceCompact(ctx, sess.ID); done <- err }()
 	select {
 	case <-started:
 	case <-time.After(5 * time.Second):
 		t.Fatal("summarizer did not start")
 	}
 	stopEntered := make(chan *lifecycle.Flight, 1)
-	go func() { flight, _ := mgr.stopState.Begin(sess.ID); stopEntered <- flight }()
+	go func() { flight, _ := mgr.Chats.Gate.Begin(sess.ID); stopEntered <- flight }()
 	select {
 	case flight := <-stopEntered:
-		mgr.compactionRunner.CancelSession(sess.ID)
-		mgr.stopState.Finish(sess.ID, flight, nil)
+		mgr.Runner.History.Runner.CancelSession(sess.ID)
+		mgr.Chats.Gate.Finish(sess.ID, flight, nil)
 	case <-time.After(5 * time.Second):
 		cancel()
 		flight := <-stopEntered
-		mgr.stopState.Finish(sess.ID, flight, nil)
+		mgr.Chats.Gate.Finish(sess.ID, flight, nil)
 		t.Fatal("manual compaction blocked stop admission")
 	}
 	if err := <-done; !errors.Is(err, context.Canceled) {

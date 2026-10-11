@@ -1,10 +1,10 @@
 package promptloop
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/isolation"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -16,7 +16,7 @@ func TestBatchHasUnsettledOwnerFromCodes(t *testing.T) {
 			ToolResult: &api.ToolResult{
 				AssistantMessageID: "a1",
 				Outcome:            api.ToolResultOutcomeError,
-				Codes:              []string{tools.ToolOwnerFailedCode},
+				Codes:              []string{toolrejection.ToolOwnerFailedCode},
 			},
 		},
 	}
@@ -35,7 +35,7 @@ func TestBatchHasUnsettledOwnerFromInvocation(t *testing.T) {
 			AssistantMessageID: "a1",
 			Outcome:            api.ToolResultOutcomeError,
 			Invocation: &api.InvocationReceipt{
-				Failure: &api.InvocationFailure{Code: tools.ToolOwnerFailedCode, Class: "owner_error"},
+				Failure: &api.InvocationFailure{Code: toolrejection.ToolOwnerFailedCode, Class: "owner_error"},
 			},
 		},
 	}}
@@ -50,7 +50,7 @@ func TestBatchHasUnsettledOwnerIgnoresCompletedUnverifiable(t *testing.T) {
 		ToolResult: &api.ToolResult{
 			AssistantMessageID: "a1",
 			Outcome:            api.ToolResultOutcomeCompleted,
-			Codes:              []string{tools.VerifyUnverifiableCode, isolation.CodeBoundaryRefused},
+			Codes:              []string{toolrejection.VerifyUnverifiableCode, isolation.CodeBoundaryRefused},
 		},
 	}}
 	if batchHasUnsettledOwner(history, "a1") {
@@ -64,7 +64,7 @@ func TestBatchHasUnsettledOwnerIgnoresCompletedOwnerCode(t *testing.T) {
 		ToolResult: &api.ToolResult{
 			AssistantMessageID: "a1",
 			Outcome:            api.ToolResultOutcomeCompleted,
-			Codes:              []string{tools.ToolOwnerFailedCode},
+			Codes:              []string{toolrejection.ToolOwnerFailedCode},
 		},
 	}}
 	if batchHasUnsettledOwner(history, "a1") {

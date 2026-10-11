@@ -96,3 +96,20 @@ func TestSeatbeltAppliesPackageExecutionProfileWithManyRegisteredRoots(t *testin
 		t.Fatalf("nested instruction file %s was writable under the agent-policy floor", policy)
 	}
 }
+
+func TestAgentPolicySourceReleasePreservesCurrentFloor(t *testing.T) {
+	roots := registeredLongRoots(t, 2)
+	releaseOld := confine.SetAgentPolicyRootsSource(func() []string { return roots[:1] })
+	releaseCurrent := confine.SetAgentPolicyRootsSource(func() []string { return roots[1:] })
+	t.Cleanup(releaseCurrent)
+	releaseOld()
+	releaseOld()
+	c := confine.Confinement{Roots: []string{t.TempDir()}, Network: confine.NetworkDeny}
+	_, err := confine.BuildProfile(c)
+	testutil.FailErr(t, "build current floor", err)
+	path := filepath.Join(roots[1], "AGENTS.md")
+	if got := confine.BoundaryOf(&c).Filesystem.Verdict(confine.AccessWrite, path); got.Allowed || got.Layer != confine.FloorAgentPolicy {
+		t.Fatalf("replacement policy floor = %+v", got)
+	}
+	releaseCurrent()
+}

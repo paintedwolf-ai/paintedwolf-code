@@ -142,8 +142,22 @@ func TestContainedTaskOverlayStaysOutOfRoots(t *testing.T) {
 	if !plain.FSJailed {
 		t.Skip("confinement unavailable on this platform")
 	}
-	if hitl.GrantKey(hitl.ProposedAction{Tool: "command", Contained: got}) !=
-		hitl.GrantKey(hitl.ProposedAction{Tool: "command", Contained: plain}) {
+	if hitl.GrantKey(hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Execution: hitl.ActionExecution{
+Contained: got,
+},
+}) !=
+		hitl.GrantKey(hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Execution: hitl.ActionExecution{
+Contained: plain,
+},
+}) {
 		t.Fatal("GrantKey moved after a write-root overlay")
 	}
 }

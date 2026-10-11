@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/syntaxhealth"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -24,7 +24,7 @@ func TestMutationHealthFlagsRegression(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "a.go", "start_line": 4, "end_line": 4, "new_content": "\treturn (1",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
 		t.Fatalf("err = %v want MUTATION_BROKE_PARSE", err)
 	}
@@ -44,7 +44,7 @@ func TestMutationHealthRejectsNonImprovingBrokenEdit(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "a.go", "start_line": 4, "end_line": 4, "new_content": "\treturn 2",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_REPAIR_NOT_IMPROVED" {
 		t.Fatalf("err = %v want MUTATION_REPAIR_NOT_IMPROVED", err)
 	}
@@ -67,7 +67,7 @@ func TestMutationHealthRejectsBrokenNewFile(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "new.py", "content": "def broken(:\n    pass\n",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
 		t.Fatalf("err = %v want MUTATION_BROKE_PARSE", err)
 	}
@@ -84,7 +84,7 @@ func TestMutationHealthPythonRejectIncludesIndentContext(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "pipeline.py", "start_line": 6, "end_line": 7, "new_content": "    cleanup()",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
 		t.Fatalf("err = %v want MUTATION_BROKE_PARSE", err)
 	}
@@ -148,7 +148,7 @@ func TestWriteGoWithoutFinalNewlinePreservesSourceAndParseGuard(t *testing.T) {
 				t.Fatal("write changed the source bytes")
 			}
 			_, err = tool.Run(t.Context(), map[string]any{"path": fixture, "content": "package p\ntype Broken struct {"}, nativefixture.Context(root))
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
 				t.Fatalf("invalid source rejection = %v", err)
 			}

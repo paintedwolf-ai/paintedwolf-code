@@ -25,7 +25,7 @@ func TestContentApplyPartialReturnsOneHostComposedResult(t *testing.T) {
 	}))
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, projectDir)
 	testutil.FailErr(t, "create test session", err)
-	gate := &toolhost.ContentApplyService{Mgr: h.CheckpointMgr, Review: review}
+	gate := &toolhost.ContentApplyService{Mgr: h.Sessions.Checkpoints, Review: review}
 	before := "one\nkeep a\nkeep b\nthree\n"
 	type gateResult struct {
 		content string
@@ -34,15 +34,17 @@ func TestContentApplyPartialReturnsOneHostComposedResult(t *testing.T) {
 	done := make(chan gateResult, 1)
 	go func() {
 		content, gateErr := gate.GateApply(ctx, "edit", "notes.txt", &before, "ONE\nkeep a\nkeep b\nTHREE\n", tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
-			ActiveRootID: "r1", SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: projectDir, IsPrimary: true}},
+				ActiveRootID: "r1"},
+			Identity: tools.InvocationIdentity{SessionID: sess.ID,
+				ProjectID: testdbseed.DefaultProjectID},
 		})
 		done <- gateResult{content: content, err: gateErr}
 	}()
 
 	var checkpointID, selectedHunk string
 	testutil.WaitFor(t, 3*time.Second, func() bool {
-		pending, listErr := h.CheckpointMgr.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
+		pending, listErr := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
 		if listErr != nil || len(pending) != 1 || pending[0].ContentApply == nil || len(pending[0].ContentApply.Hunks) != 2 {
 			return false
 		}
@@ -50,7 +52,7 @@ func TestContentApplyPartialReturnsOneHostComposedResult(t *testing.T) {
 		selectedHunk = pending[0].ContentApply.Hunks[1].ID
 		return true
 	})
-	_, err = h.CheckpointMgr.ResolveCheckpoint(ctx, sess.ID, checkpointID, wire.CheckpointKindContentApply, nil, &hitl.ContentApplyResolve{
+	_, err = h.Sessions.Checkpoints.ResolveCheckpoint(ctx, sess.ID, checkpointID, wire.CheckpointKindContentApply, nil, &hitl.ContentApplyResolve{
 		Decision: wire.ContentApplyApprovePartial, ApprovedHunks: []string{selectedHunk},
 	})
 	testutil.FailErr(t, "approve selected host hunk", err)

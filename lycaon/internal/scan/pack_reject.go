@@ -2,9 +2,9 @@ package scan
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // PackReject is a structured scan_pack failure surfaced via guidance hint codes.
@@ -29,5 +29,5 @@ func FormatPackReject(err error, formatter *guidance.StaticRejectFormatter) erro
 	if !errors.As(err, &packErr) || packErr == nil || packErr.Code == "" {
 		return err
 	}
-	return tools.FormatDecisionReject(packErr.Code, packErr.Data, formatter)
+	return toolrejection.FormatDecisionReject(packErr.Code, packErr.Data, formatter)
 }

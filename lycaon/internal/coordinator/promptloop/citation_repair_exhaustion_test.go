@@ -25,29 +25,34 @@ func TestCitationRepairExhaustionKeepsPinnedReport(t *testing.T) {
 	ledger := evidence.AssembleLedger([]evidence.Record{{Handle: "read#1", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "notes.txt", Body: []string{"Release marker: amber"}}})
 	var committed api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		HintConfig: hints, RejectFmt: guidance.NewStaticRejectFormatter(hints),
-		MaxCloseoutCitationGroundingRetries: 1,
-		EvidenceLedger:                      closeoutLedgerReader{ledger: ledger},
-		CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
-			return guidance.RetainedCloseout{Active: true, Attempt: 1, Drafted: pinned}
+		Closeout: CloseoutDeps{
+			HintConfig:                          hints,
+			RejectFmt:                           guidance.NewStaticRejectFormatter(hints),
+			MaxCloseoutCitationGroundingRetries: 1,
+			EvidenceLedger:                      closeoutLedgerReader{ledger: ledger},
+			CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
+				return guidance.RetainedCloseout{Active: true, Attempt: 1, Drafted: pinned}
+			},
+			EvaluateCloseoutBlock: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
+				return &oar.Decision{Code: guidance.InvestHandleNotObservedCode, Data: gc.RejectData[guidance.InvestHandleNotObservedCode]}, nil
+			},
+			AssembleLedgerCloseout: func(_ context.Context, _, surface string, codes []string, raw string, retries int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+				draft, ok := guidance.ParseCoordinatorCompletionReport(raw)
+				if !ok {
+					t.Fatalf("exhaustion lost the report envelope: %q", raw)
+				}
+				return guidance.AssembleRetainedCloseout(evidence.CitationRoots{}, surface, guidance.CloseoutEvidence{Ledger: ledger}, draft, codes[0], retries)
+			},
 		},
-		EvaluateCloseoutBlock: func(_ context.Context, _ *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
-			return &oar.Decision{Code: guidance.InvestHandleNotObservedCode, Data: gc.RejectData[guidance.InvestHandleNotObservedCode]}, nil
-		},
-		AppendMessages:     func(context.Context, string, ...api.Message) error { return nil },
-		AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			if msg.Grounding != nil {
-				committed = msg
-			}
-			return nil
-		},
-		AssembleLedgerCloseout: func(_ context.Context, _, surface string, codes []string, raw string, retries int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-			draft, ok := guidance.ParseCoordinatorCompletionReport(raw)
-			if !ok {
-				t.Fatalf("exhaustion lost the report envelope: %q", raw)
-			}
-			return guidance.AssembleRetainedCloseout(evidence.CitationRoots{}, surface, guidance.CloseoutEvidence{Ledger: ledger}, draft, codes[0], retries)
+		Projection: ProjectionDeps{
+			AppendMessages:     func(context.Context, string, ...api.Message) error { return nil },
+			AppendDraftVersion: func(context.Context, string, string, string, string) (int, error) { return 1, nil },
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				if msg.Grounding != nil {
+					committed = msg
+				}
+				return nil
+			},
 		},
 	})
 	assistant := api.Message{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "Replacement narrative."}
@@ -56,7 +61,7 @@ func TestCitationRepairExhaustionKeepsPinnedReport(t *testing.T) {
 		turnTools: []string{"read"}, history: []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "Inspect the marker"}, assistant},
 	}
 	repair := guidance.CoordinatorCompletionReport{Synthesis: assistant.Content, Headline: "Replacement", CitedEvidence: original.CitedEvidence}
-	out, err := loop.applyAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "", "implement_investigate", state, assistant, guidance.CloseoutRead{Report: repair})
+	out, err := loop.Closeout.applyAcceptedCloseoutReport(t.Context(), &api.Session{ID: "s1", WorkspacePath: t.TempDir()}, "s1", "", "implement_investigate", state, assistant, guidance.CloseoutRead{Report: repair})
 	testutil.FailErr(t, "finish exhausted citation repair", err)
 	if !out.breakLoop || !state.proseFinishDelivered || committed.Content != original.Synthesis {
 		t.Fatalf("exhaustion did not preserve the report body: outcome=%+v content=%q", out, committed.Content)

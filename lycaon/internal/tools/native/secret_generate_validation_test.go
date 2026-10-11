@@ -2,6 +2,7 @@ package native
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/tools"
@@ -18,7 +19,7 @@ func TestSecretGenerationRejectsLossyArgumentsBeforeStoreAccess(t *testing.T) {
 	} {
 		args := map[string]any{"name": "fixture", bad.field: bad.value}
 		_, err := generateSecret(t.Context(), nil, args, tools.ToolContext{})
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code != "SECRET_GENERATE_INVALID" || reject.Data["field"] != bad.field {
 			t.Fatalf("lossy input reached generation: field=%s err=%v", bad.field, err)
 		}

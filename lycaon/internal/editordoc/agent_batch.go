@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -225,7 +226,7 @@ func (s *Service) publishAgentAcceptance(ctx context.Context, item *agentAccepta
 		return result
 	}
 	result.Document, result.HeldVersionID = s.withParticipants(current), current.HeldAgentVersionID
-	if !errors.Is(err, project.ErrSourceWriteConflict) || result.HeldVersionID == "" {
+	if !errors.Is(err, projectsource.ErrSourceWriteConflict) || result.HeldVersionID == "" {
 		result.PublicationError = err
 	}
 	return result

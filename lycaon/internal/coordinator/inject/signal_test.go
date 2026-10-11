@@ -1,12 +1,12 @@
 package inject_test
 
 import (
-	anchortestsetup "github.com/lycaon/lycaon/internal/testsetup/anchor"
 	"os"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	anchortestsetup "github.com/lycaon/lycaon/internal/testsetup/anchor"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

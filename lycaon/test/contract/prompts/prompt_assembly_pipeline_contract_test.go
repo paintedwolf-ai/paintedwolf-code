@@ -50,7 +50,7 @@ func TestAssemblePromptHistoryDoesNotRewriteToolBodies(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	// The session entry point and the promptassembly pipeline it delegates to.
-	paths := []string{filepath.Join(root, "lycaon", "internal", "session", "prompt_assembly.go")}
+	paths := []string{filepath.Join(root, "lycaon", "internal", "session", "history", "prompt_assembly.go")}
 	pipeline, err := filepath.Glob(filepath.Join(root, "lycaon", "internal", "session", "promptassembly", "*.go"))
 	if err != nil || len(pipeline) == 0 {
 		t.Fatalf("glob promptassembly sources: %v", err)
@@ -84,8 +84,8 @@ func TestAssemblePromptHistoryEntryPoints(t *testing.T) {
 		path string
 		want string
 	}{
-		{filepath.Join(root, "lycaon", "internal", "session", "compaction.go"), "assemblePromptHistory"},
-		{filepath.Join(root, "lycaon", "internal", "session", "prompt_assembly.go"), "promptassembly.Assemble("},
+		{filepath.Join(root, "lycaon", "internal", "session", "history", "compaction.go"), "m.Assemble(ctx, sess, history, surfaceID)"},
+		{filepath.Join(root, "lycaon", "internal", "session", "history", "prompt_assembly.go"), "promptassembly.Assemble("},
 		{filepath.Join(root, "lycaon", "internal", "session", "promptassembly", "assembly.go"), "FilterPromptHistory"},
 		{filepath.Join(root, "lycaon", "internal", "session", "promptassembly", "assembly.go"), "restoreSealedToolBodies"},
 		{filepath.Join(root, "lycaon", "internal", "session", "promptassembly", "assembly.go"), "sealToolRoleBodies"},

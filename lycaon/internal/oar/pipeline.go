@@ -3,6 +3,7 @@ package oar
 import (
 	"context"
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
@@ -135,9 +136,9 @@ func (p *GuardPipeline) Evaluate(ctx context.Context, stage Stage, gc *GuardCont
 	if gc == nil {
 		gc = NewGuardContext()
 	}
-	unlock := p.counters.beginOccurrence(gc.SessionID)
+	unlock := p.counters.beginOccurrence(gc.Session.SessionID)
 	defer unlock()
-	rules := p.effectiveRules(ctx, gc.SessionID)
+	rules := p.effectiveRules(ctx, gc.Session.SessionID)
 	if rules == nil {
 		return res, nil
 	}
@@ -216,7 +217,7 @@ func (p *GuardPipeline) evaluateMatched(ctx context.Context, holder *evalHolder,
 		}
 		restoreRuleDetector()
 		event := OnFireEvent{
-			SessionID: gc.SessionID,
+			SessionID: gc.Session.SessionID,
 			Rule:      r.Qualified(),
 			Anchor:    r.Anchor,
 			Effect:    r.Effect,
@@ -329,7 +330,7 @@ func (p *GuardPipeline) selectRules(rules *RuleSet, stage Stage, anchor string, 
 // evalRule reports the trace outcome. Fired is TraceFired or TraceMonitoredFired.
 func (p *GuardPipeline) evalRule(ctx context.Context, holder *evalHolder, r *Rule, gc *GuardContext) (outcome TraceOutcome, err error) {
 	// Flow precedes the potentially raising condition ([OAR-EVAL-2]).
-	if len(r.Flow) > 0 && !FlowMatches(gc.RecentToolNames, r.Flow) {
+	if len(r.Flow) > 0 && !FlowMatches(gc.Session.RecentToolNames, r.Flow) {
 		return notFiredOutcome(r), nil
 	}
 	if err := p.maybeApplyMCPSchema(ctx, r.Anchor, []*Rule{r}, gc); err != nil {
@@ -356,8 +357,8 @@ func (p *GuardPipeline) evalRule(ctx context.Context, holder *evalHolder, r *Rul
 	if err != nil {
 		return TraceErrored, err
 	}
-	gc.FireCount = holder.getCounter(gc.SessionID, key, CounterFire)
-	gc.BreakerCount = holder.getCounter(gc.SessionID, key, CounterBreaker)
+	gc.Counters.FireCount = holder.getCounter(gc.Session.SessionID, key, CounterFire)
+	gc.Counters.BreakerCount = holder.getCounter(gc.Session.SessionID, key, CounterBreaker)
 	if r.Kind == KindDetector {
 		ref := ""
 		if r.Detector != nil {
@@ -447,7 +448,7 @@ func (p *GuardPipeline) SetFactProvider(name string, provider FactProvider) {
 
 func (p *GuardPipeline) registerFactProviders(gc *GuardContext) {
 	for name, provider := range p.factProviders {
-		if _, supplied := gc.providers[name]; !supplied {
+		if _, supplied := gc.lazy.providers[name]; !supplied {
 			gc.RegisterProvider(name, provider)
 		}
 	}

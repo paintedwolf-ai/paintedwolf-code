@@ -1,6 +1,10 @@
 package promptloop_test
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+
 	"context"
 	"errors"
 	"path/filepath"
@@ -74,7 +78,7 @@ func investigateCoordinatorContext() staticCoordinatorContext {
 	return staticCoordinatorContext{run: api.CoordinatorRunContext{
 		WorkflowID: "implement", CurrentPhase: "work",
 		WorkflowInvestigateEligible: &eligible,
-		PhaseCoordinatorSurface:     tools.SurfaceImplementInvestigate,
+		PhaseCoordinatorSurface:     toolcontract.SurfaceImplementInvestigate,
 	}}
 }
 
@@ -232,7 +236,7 @@ func (s *observedMessageStreams) Project(ctx context.Context, sessionID string, 
 	return s.project(ctx, sessionID, message)
 }
 
-func phaseTestBlockPlane(t *testing.T) *tools.BlockPlane {
+func phaseTestBlockPlane(t *testing.T) *toolfeedback.BlockPlane {
 	t.Helper()
 	root := testutil.CheckoutRoot(t)
 	testutil.FailErr(t, "install anchors", anchorcatalog.InstallFile(filepath.Join(root, "lycaon/config/packs/painted-wolf/platform/host/anchors/catalog.yaml")))
@@ -242,5 +246,5 @@ func phaseTestBlockPlane(t *testing.T) *tools.BlockPlane {
 	testutil.FailErr(t, "load policy", err)
 	pipeline := oar.NewGuardPipeline(rules, loader, oar.NewCounterStore())
 	pipeline.EnableAnchor(oar.AnchorToolRejected)
-	return &tools.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)}
+	return &toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)}
 }

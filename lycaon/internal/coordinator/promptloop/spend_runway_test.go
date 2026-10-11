@@ -62,21 +62,25 @@ func (softStopToolPolicy) EvaluateInvoke(context.Context, *api.Session, string, 
 func TestMaybeSpendRunwayNudge(t *testing.T) {
 	var calls int
 	var gotCeiling float64
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		SpendRunwayNudge: func(_ context.Context, _ *api.Session, ceilingUSD float64) HostNudge {
-			calls++
-			gotCeiling = ceilingUSD
-			return HostNudge{Content: "spend runway heads-up"}
+	loop := NewPromptLoop(PromptLoopDeps{
+		Nudges: NudgesDeps{
+			SpendRunwayNudge: func(_ context.Context, _ *api.Session, ceilingUSD float64) HostNudge {
+				calls++
+				gotCeiling = ceilingUSD
+				return HostNudge{Content: "spend runway heads-up"}
+			},
 		},
-		AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error {
-			return nil
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error {
+				return nil
+			},
 		},
-	}}
+	})
 	sess := &api.Session{ID: "s1"}
 	st := &promptLoopTurnState{}
 	history := []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "hi"}}
 
-	got, err := turnNudges{loop}.maybeSpendRunwayNudge(context.Background(), sess, "s1", history, SpendRunway{Low: true, CeilingUSD: 5}, st)
+	got, err := loop.Nudges.maybeSpendRunwayNudge(context.Background(), sess, "s1", history, SpendRunway{Low: true, CeilingUSD: 5}, st)
 	testutil.FailErr(t, "turnNudges{loop}.maybeSpendRunwayNudge failed", err)
 	if calls != 1 || gotCeiling != 5 {
 		t.Fatalf("calls=%d ceiling=%v", calls, gotCeiling)
@@ -85,7 +89,7 @@ func TestMaybeSpendRunwayNudge(t *testing.T) {
 		t.Fatalf("history len = %d want 2", len(got))
 	}
 
-	got2, err := turnNudges{loop}.maybeSpendRunwayNudge(context.Background(), sess, "s1", got, SpendRunway{Low: false, CeilingUSD: 5}, st)
+	got2, err := loop.Nudges.maybeSpendRunwayNudge(context.Background(), sess, "s1", got, SpendRunway{Low: false, CeilingUSD: 5}, st)
 	testutil.FailErr(t, "turnNudges{loop}.maybeSpendRunwayNudge failed", err)
 	if calls != 1 {
 		t.Fatalf("Low=false called nudge: %d", calls)
@@ -97,14 +101,16 @@ func TestMaybeSpendRunwayNudge(t *testing.T) {
 
 func TestApplySpendCeilingGrantsOneCoordinatorWindDown(t *testing.T) {
 	ceilingErr := errors.New("ceiling reached")
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		CheckSpendCeiling: func(context.Context, string, *api.Session) (SpendCeilingCheck, error) {
-			return SpendCeilingCheck{SoftStop: true}, ceilingErr
+	loop := NewPromptLoop(PromptLoopDeps{
+		Nudges: NudgesDeps{
+			CheckSpendCeiling: func(context.Context, string, *api.Session) (SpendCeilingCheck, error) {
+				return SpendCeilingCheck{SoftStop: true}, ceilingErr
+			},
+			IsSpendCeiling: func(err error) bool { return errors.Is(err, ceilingErr) },
 		},
-		IsSpendCeiling: func(err error) bool { return errors.Is(err, ceilingErr) },
-	}}
+	})
 	st := &promptLoopTurnState{lastAssistantID: "a1"}
-	decision, err := turnNudges{loop}.applySpendCeiling(
+	decision, err := loop.Nudges.applySpendCeiling(
 		context.Background(), &api.Session{ID: "s1"}, "s1", "implement", "prompt", 10,
 		PromptRunInput{}, st,
 	)
@@ -118,17 +124,21 @@ func TestApplySpendCeilingGrantsOneCoordinatorWindDown(t *testing.T) {
 
 func TestMaybeSpendSoftStopNudge(t *testing.T) {
 	var appended []api.Message
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		SpendSoftStopNudge: func(context.Context, *api.Session) HostNudge {
-			return HostNudge{Content: "bounded landing"}
+	loop := NewPromptLoop(PromptLoopDeps{
+		Nudges: NudgesDeps{
+			SpendSoftStopNudge: func(context.Context, *api.Session) HostNudge {
+				return HostNudge{Content: "bounded landing"}
+			},
 		},
-		AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-			appended = append(appended, msgs...)
-			return nil
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				appended = append(appended, msgs...)
+				return nil
+			},
 		},
-	}}
+	})
 	history := []api.Message{{ID: "u1", Role: api.MessageRoleUser, Content: "hi"}}
-	got, err := turnNudges{loop}.maybeSpendSoftStopNudge(
+	got, err := loop.Nudges.maybeSpendSoftStopNudge(
 		context.Background(), &api.Session{ID: "s1"}, "s1", history, true, &promptLoopTurnState{},
 	)
 	if err != nil {
@@ -160,26 +170,26 @@ func TestPromptLoopSoftStopAllowsOneToolRoundThenClosesOut(t *testing.T) {
 	}}
 	messages := store.NewMemory()
 	deps := StoreDeps(messages)
-	deps.LLM = client
-	deps.Policy = softStopToolPolicy{}
-	deps.Tools = tools.NewStubRegistry()
+	deps.Model.LLM = client
+	deps.Context.Policy = softStopToolPolicy{}
+	deps.Context.Tools = tools.NewStubRegistry()
 	var checks int
-	deps.CheckSpendCeiling = func(context.Context, string, *api.Session) (SpendCeilingCheck, error) {
+	deps.Nudges.CheckSpendCeiling = func(context.Context, string, *api.Session) (SpendCeilingCheck, error) {
 		checks++
 		if checks == 1 {
 			return SpendCeilingCheck{}, nil
 		}
 		return SpendCeilingCheck{SoftStop: true}, ceilingErr
 	}
-	deps.IsSpendCeiling = func(err error) bool { return errors.Is(err, ceilingErr) }
-	deps.SpendSoftStopNudge = func(context.Context, *api.Session) HostNudge {
+	deps.Nudges.IsSpendCeiling = func(err error) bool { return errors.Is(err, ceilingErr) }
+	deps.Nudges.SpendSoftStopNudge = func(context.Context, *api.Session) HostNudge {
 		return HostNudge{Content: "Use one bounded wind-down round."}
 	}
-	deps.TurnCloseoutNudge = func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
+	deps.Closeout.TurnCloseoutNudge = func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
 		return HostNudge{Content: "Give the final prose closeout."}
 	}
 	var admitted int
-	deps.AdmitModelResponse = func(_ context.Context, _ string, attemptID string) error {
+	deps.Projection.AdmitModelResponse = func(_ context.Context, _ string, attemptID string) error {
 		if attemptID != "attempt" {
 			t.Fatalf("admitted attempt = %q", attemptID)
 		}
@@ -197,7 +207,9 @@ func TestPromptLoopSoftStopAllowsOneToolRoundThenClosesOut(t *testing.T) {
 		Session:   sess,
 		History:   []api.Message{{Role: api.MessageRoleUser, Content: "finish it"}},
 		ProfileID: "implement",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "run prompt loop", err)
 	if admitted != 3 || result.Closeout == nil || result.Closeout.ID != result.LastAssistantID || result.Closeout.Content != result.LastAssistantContent {

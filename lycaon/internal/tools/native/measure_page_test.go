@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -36,11 +37,13 @@ func TestMeasurePageToolRejectsMissingTarget(t *testing.T) {
 	}
 	_, err := reg.Run(context.Background(), page.MeasureToolName, map[string]any{
 		"selectors": []any{"#box-a"},
-	}, tools.ToolContext{Out: &tools.ToolInvocationOut{}})
+	}, tools.ToolContext{
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+	})
 	if err == nil {
 		t.Fatal("expected reject")
 	}
-	rej := &tools.ToolReject{}
+	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)
 	if !ok || rej.Code != "CAPTURE_TARGET_INVALID" {
 		t.Fatalf("got %#v want CAPTURE_TARGET_INVALID", err)
@@ -57,10 +60,10 @@ func TestMeasurePageToolRejectsEmptySelectors(t *testing.T) {
 	_, err := reg.Run(context.Background(), page.MeasureToolName, map[string]any{
 		"project_dir": ".",
 	}, tools.ToolContext{
-		Out:   &tools.ToolInvocationOut{},
-		Roots: []projectroot.RootRef{{ID: "main", Path: captureFixtureRoot(t, "geometry"), IsPrimary: true}},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+		Source:  tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: captureFixtureRoot(t, "geometry"), IsPrimary: true}}},
 	})
-	rej := &tools.ToolReject{}
+	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)
 	if !ok || rej.Code != "MEASURE_SELECTORS_REQUIRED" {
 		t.Fatalf("got %#v want MEASURE_SELECTORS_REQUIRED", err)
@@ -74,8 +77,11 @@ func TestMeasurePageToolRejectsLiveIDWithNavigationTarget(t *testing.T) {
 	testutil.FailErr(t, "RegisterMeasurePageTool", RegisterMeasurePageTool(reg, browser.NewPool(""), pages, nil))
 	_, err := reg.Run(context.Background(), page.MeasureToolName, map[string]any{
 		"id": "page-1", "url": "http://127.0.0.1:3000", "selectors": []any{"#target"},
-	}, tools.ToolContext{SessionID: "s", Out: &tools.ToolInvocationOut{}})
-	rej := &tools.ToolReject{}
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s"},
+		Effects:  tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+	})
+	rej := &toolrejection.ToolReject{}
 	if !errors.As(err, &rej) || rej.Code != "CAPTURE_TARGET_INVALID" {
 		t.Fatalf("got %#v want CAPTURE_TARGET_INVALID", err)
 	}

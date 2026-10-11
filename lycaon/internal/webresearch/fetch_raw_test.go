@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -23,7 +25,7 @@ func rawTestBoundary(t *testing.T) *sandbox.Boundary {
 		ProjectRootRequired: true,
 		RejectSymlinkEscape: true,
 	}, []sandbox.ToolProfile{{
-		ID:    tools.DefaultToolProfileID,
+		ID:    toolprofiles.DefaultToolProfileID,
 		Tools: map[string]bool{"fetch_url": true, "write": true},
 	}})
 }
@@ -85,7 +87,7 @@ func TestFetchURLRawBinaryRequiresDest(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected dest required")
 	}
-	reject := &tools.ToolReject{}
+	reject := &toolrejection.ToolReject{}
 	ok := errors.As(err, &reject)
 	if !ok || reject.Code != "FETCH_URL_DEST_REQUIRED" {
 		t.Fatalf("got %v", err)
@@ -109,8 +111,8 @@ func TestFetchURLRawBinaryWritesDest(t *testing.T) {
 		Dest:     "assets/logo.png",
 		Boundary: rawTestBoundary(t),
 		Tctx: tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}},
-			ActiveRootID: "primary",
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}},
+				ActiveRootID: "primary"},
 		},
 	})
 	testutil.FailErr(t, "raw write", err)
@@ -145,8 +147,8 @@ func TestFetchURLRawOversizeDoesNotWritePartialDest(t *testing.T) {
 		Dest:     "assets/large.png",
 		Boundary: rawTestBoundary(t),
 		Tctx: tools.ToolContext{
-			Roots:        []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}},
-			ActiveRootID: "primary",
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}},
+				ActiveRootID: "primary"},
 		},
 	})
 	var tooLarge FetchBodyTooLargeError
@@ -160,7 +162,7 @@ func TestFetchURLRawOversizeDoesNotWritePartialDest(t *testing.T) {
 
 func TestMapFetchToolErrOversizeIsStructured(t *testing.T) {
 	err := mapFetchToolErr(FetchBodyTooLargeError{Limit: fetchBodyByteLimit, Actual: fetchBodyByteLimit + 1})
-	reject := &tools.ToolReject{}
+	reject := &toolrejection.ToolReject{}
 	if !errors.As(err, &reject) || reject.Code != "FETCH_URL_BODY_TOO_LARGE" {
 		t.Fatalf("error = %v want FETCH_URL_BODY_TOO_LARGE", err)
 	}
@@ -172,7 +174,7 @@ func TestFetchURLTextModeRejectsDest(t *testing.T) {
 		Mode: "text",
 		Dest: "assets/x.css",
 	})
-	reject := &tools.ToolReject{}
+	reject := &toolrejection.ToolReject{}
 	ok := errors.As(err, &reject)
 	if !ok || reject.Code != "FETCH_URL_DEST_INVALID" {
 		t.Fatalf("got %v", err)
@@ -181,7 +183,7 @@ func TestFetchURLTextModeRejectsDest(t *testing.T) {
 
 func TestFetchURLModeInvalid(t *testing.T) {
 	_, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{URL: "https://example.com", Mode: "html"})
-	reject := &tools.ToolReject{}
+	reject := &toolrejection.ToolReject{}
 	ok := errors.As(err, &reject)
 	if !ok || reject.Code != "FETCH_URL_MODE_INVALID" {
 		t.Fatalf("got %v", err)
@@ -193,7 +195,7 @@ func TestFetchURLRawUnsupportedType(t *testing.T) {
 	allowLoopbackFetch(t)
 	srv := testHTTPServer(t, "application/zip", "PK\x03\x04")
 	_, _, err := fetchURLTool(context.Background(), fetchURLToolArgs{URL: srv + "/a.zip", Mode: "raw"})
-	reject := &tools.ToolReject{}
+	reject := &toolrejection.ToolReject{}
 	ok := errors.As(err, &reject)
 	if !ok || reject.Code != "FETCH_URL_TYPE_UNSUPPORTED" {
 		t.Fatalf("got %v", err)
@@ -213,7 +215,7 @@ func TestFetchURLBlocksLoopbackMapsToRejectViaTool(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected SSRF block")
 	}
-	reject := &tools.ToolReject{}
+	reject := &toolrejection.ToolReject{}
 	ok := errors.As(err, &reject)
 	if !ok || reject.Code != "FETCH_URL_BLOCKED" {
 		t.Fatalf("want FETCH_URL_BLOCKED, got %T %v", err, err)

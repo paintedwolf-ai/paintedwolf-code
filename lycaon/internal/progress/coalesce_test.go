@@ -60,3 +60,52 @@ func TestCoalescerFlushNowNoWindowIsNoop(t *testing.T) {
 		t.Fatal("flush emitted with no open window")
 	}
 }
+
+func TestCoalescerCloseFlushesPendingAndDrainsActiveEmission(t *testing.T) {
+	entered, finish, flushed := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	var mu sync.Mutex
+	var got []progress.FlushPayload
+	c := progress.NewCoalescer(time.Hour, func(p progress.FlushPayload) {
+		if p.SessionID == "active" {
+			close(entered)
+			<-finish
+		}
+		mu.Lock()
+		got = append(got, p)
+		mu.Unlock()
+		if p.SessionID == "pending" {
+			close(flushed)
+		}
+	})
+	c.Record("active", "a", "b")
+	activeDone := make(chan struct{})
+	go func() { c.FlushNow("active"); close(activeDone) }()
+	<-entered
+	c.Record("pending", "old", "new")
+	closed := make(chan struct{})
+	go func() { c.Close(); close(closed) }()
+	<-flushed
+	select {
+	case <-closed:
+		t.Fatal("Close returned while an emission was still running")
+	default:
+	}
+	c.Record("late", "", "ignored")
+	c.FlushNow("late")
+	close(finish)
+	<-activeDone
+	<-closed
+	c.Close()
+	c.Record("after", "", "ignored")
+	c.FlushNow("after")
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 2 {
+		t.Fatalf("emissions = %+v", got)
+	}
+	for _, p := range got {
+		if p.SessionID == "pending" && (p.Baseline != "old" || p.Latest != "new" || p.Seq != 1) {
+			t.Fatalf("pending delivery = %+v", p)
+		}
+	}
+}

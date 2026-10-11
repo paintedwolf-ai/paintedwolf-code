@@ -130,7 +130,7 @@ func TestMultiRootDisclosureSingleRootToolSchemasQuiet(t *testing.T) {
 func TestMultiRootDisclosureCommandCwdIsTheOnlyRootSelector(t *testing.T) {
 	exec := toolfixture.ContractToolExecutor(t)
 	for _, rootCount := range []int{0, 1, 2, 3} {
-		metas := tools.ListToolsForProfile(context.Background(), exec, platform.ToolFilter{
+		metas := tools.ListToolsForProfile(context.Background(), exec.Metadata, platform.ToolFilter{
 			ProfileID:        "implement",
 			ProjectRootCount: rootCount,
 		})

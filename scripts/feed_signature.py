@@ -2,9 +2,9 @@
 """Check a signed feed pointer's bindings before it is published.
 
 `tauri signer sign` writes a base64 minisign document whose trusted comment is
-`timestamp:<unix>\tfile:<name>\tversion:<version>`. Cryptographic verification happens
-on clients; this check establishes that the pointer was signed under the right name and
-version and by the registered feed key, including isolated rehearsals.
+`timestamp:<unix>\tfile:<name>\tversion:<version>`. The metadata helper checks the
+name, version, and registered key ID. Publication also supplies the pointer for
+cryptographic verification of its bytes and trusted comment.
 """
 from __future__ import annotations
 
@@ -59,6 +59,7 @@ def check(document: str, *, file: str, version: str, number: int, registry: dict
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--signature", type=Path, required=True)
+    parser.add_argument("--pointer", type=Path)
     parser.add_argument("--file", required=True)
     parser.add_argument("--version", required=True)
     parser.add_argument("--generation", type=int, required=True)
@@ -66,10 +67,14 @@ def main() -> int:
     parser.add_argument("--storage-prefix", default="")
     args = parser.parse_args()
     try:
-        from feed_signing import signing_registry
+        from feed_signing import signing_registry, verify
         registry = signing_registry(args.registry, args.storage_prefix)
         timestamp = check(args.signature.read_text(encoding="utf-8"), file=args.file, version=args.version,
                           number=args.generation, registry=registry)
+        if args.pointer is not None:
+            from update_keys import generation
+            verify(args.pointer, args.signature.read_text(encoding="utf-8"),
+                   generation(registry, args.generation)["feed_public_key"])
     except (OSError, ValueError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

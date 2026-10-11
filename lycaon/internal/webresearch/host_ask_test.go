@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -16,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestEgressGateRetainsAttribution(t *testing.T) {
@@ -227,7 +227,7 @@ func TestEgressGateDenialRecordsAndRejects(t *testing.T) {
 
 func TestMapFetchToolErrHostDenied(t *testing.T) {
 	err := mapFetchToolErr(&egressgate.HostDeniedError{Host: "docs.example.test"})
-	rej := &tools.ToolReject{}
+	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)
 	if !ok || rej.Code != "WEB_SEARCH_HOST_DENIED" {
 		t.Fatalf("want WEB_SEARCH_HOST_DENIED, got %T %v", err, err)

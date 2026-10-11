@@ -51,7 +51,7 @@ func (g *RuleApprovalGate) Evaluate(ctx context.Context, action hitl.ProposedAct
 	// Deny rules remain active when prompts are disabled.
 	if rule, ok := denyRuleForLayers(layers, action); ok {
 		return deniedByRules(
-			matchingDenyRules(layers, action), rule, action, CommandTextFromActionArgs(action.Args),
+			matchingDenyRules(layers, action), rule, action, CommandTextFromActionArgs(action.Invocation.Args),
 		), nil
 	}
 
@@ -72,9 +72,9 @@ func (g *RuleApprovalGate) Evaluate(ctx context.Context, action hitl.ProposedAct
 	}
 	res.Decision = decision
 	res.FileAccess = g.currentActionFileAccess(action)
-	res.MatchedRules = approvalRuleMatches(matchedRules, action, CommandTextFromActionArgs(action.Args))
+	res.MatchedRules = approvalRuleMatches(matchedRules, action, CommandTextFromActionArgs(action.Invocation.Args))
 	res.HostResourceApproval = hostResourceAskPending(g, cfg, layers, action)
-	if !facts.Leased && g.grants != nil && g.grants.hasExactActionSet(action.ChatSession()) {
+	if !facts.Leased && g.grants != nil && g.grants.hasExactActionSet(action.Scope.ChatSession()) {
 		res.GrantDelta = "This action was not in the approved action set."
 	}
 	return res, nil
@@ -98,7 +98,7 @@ func approvalRuleMatches(rules []ApprovalRule, action hitl.ProposedAction, comma
 			Category: string(rule.Category), Pattern: rule.Pattern, Effect: string(rule.Effect),
 			UnitID: rule.Source.UnitID, PackID: rule.Source.PackID, Scope: string(rule.Source.Scope),
 		}
-		if rule.Category == ApprovalCategoryCommand && command != "" && IsCommandToolName(action.Tool) {
+		if rule.Category == ApprovalCategoryCommand && command != "" && IsCommandToolName(action.Invocation.Tool) {
 			match.Command = command
 		}
 		out = append(out, match)
@@ -108,8 +108,8 @@ func approvalRuleMatches(rules []ApprovalRule, action hitl.ProposedAction, comma
 
 // hostResourceAskPending reports an uncovered host-resource ask.
 func hostResourceAskPending(g *RuleApprovalGate, cfg ApprovalConfig, layers ApprovalRuleLayers, action hitl.ProposedAction) bool {
-	device, deviceOK := matchHostResourceRules(layers.Device, action.HostResources, action.HostResourceFamilies)
-	project, projectOK := matchHostResourceRules(layers.Project, action.HostResources, action.HostResourceFamilies)
+	device, deviceOK := matchHostResourceRules(layers.Device, action.Resources.HostResources, action.Resources.HostResourceFamilies)
+	project, projectOK := matchHostResourceRules(layers.Project, action.Resources.HostResources, action.Resources.HostResourceFamilies)
 	if (!deviceOK || device.Effect != ApprovalEffectAsk) && (!projectOK || project.Effect != ApprovalEffectAsk) {
 		return false
 	}
@@ -299,7 +299,7 @@ func generalRulePrecedenceLess(a, b ApprovalRule, action hitl.ProposedAction) bo
 }
 
 func toolMatchRank(r ApprovalRule, action hitl.ProposedAction) int {
-	pattern, tool := strings.TrimSpace(r.Pattern), strings.TrimSpace(action.Tool)
+	pattern, tool := strings.TrimSpace(r.Pattern), strings.TrimSpace(action.Invocation.Tool)
 	switch {
 	case pattern == tool:
 		return 2
@@ -352,24 +352,24 @@ func matchHostResourceRules(rules []ApprovalRule, ids, families []string) (Appro
 func ruleMatches(r ApprovalRule, action hitl.ProposedAction) bool {
 	switch r.Category {
 	case ApprovalCategoryTool:
-		return matchToolPattern(r.Pattern, action.Tool)
+		return matchToolPattern(r.Pattern, action.Invocation.Tool)
 	case ApprovalCategoryMCP:
-		if !ingestion.IsMCPToolName(strings.TrimSpace(action.Tool)) {
+		if !ingestion.IsMCPToolName(strings.TrimSpace(action.Invocation.Tool)) {
 			return false
 		}
-		if action.ApprovalCategory == string(ApprovalCategoryMCP) && strings.TrimSpace(action.ApprovalSubject) != "" {
-			return matchGlob(r.Pattern, strings.TrimSpace(action.ApprovalSubject))
+		if action.Resources.ApprovalCategory == string(ApprovalCategoryMCP) && strings.TrimSpace(action.Resources.ApprovalSubject) != "" {
+			return matchGlob(r.Pattern, strings.TrimSpace(action.Resources.ApprovalSubject))
 		}
 		return false
 	case ApprovalCategoryPath:
-		for _, f := range action.Files {
+		for _, f := range action.Invocation.Files {
 			if matchGlob(r.Pattern, f) || matchGlob(r.Pattern, filepath.Base(f)) {
 				return true
 			}
 		}
 		return false
 	case ApprovalCategoryHostResource:
-		for _, id := range append(append([]string(nil), action.HostResources...), action.HostResourceFamilies...) {
+		for _, id := range append(append([]string(nil), action.Resources.HostResources...), action.Resources.HostResourceFamilies...) {
 			if matchGlob(r.Pattern, id) {
 				return true
 			}
@@ -428,16 +428,16 @@ func IsPathMutatingTool(tool string) bool {
 // controlPlaneDenyResult blocks a declared path inside the host's own state
 // tree. Command tools declare no paths here; confinement answers for them.
 func controlPlaneDenyResult(action hitl.ProposedAction) *hitl.ApprovalResult {
-	if IsCommandToolName(action.Tool) {
+	if IsCommandToolName(action.Invocation.Tool) {
 		return nil
 	}
-	write := IsPathMutatingTool(action.Tool)
-	for _, f := range action.Files {
+	write := IsPathMutatingTool(action.Invocation.Tool)
+	for _, f := range action.Invocation.Files {
 		path := strings.TrimSpace(f)
 		if !filepath.IsAbs(path) {
 			continue
 		}
-		if confine.ControlPlanePathDenied(path, write, action.SessionScratchRoot) {
+		if confine.ControlPlanePathDenied(path, write, action.Scope.SessionScratchRoot) {
 			return &hitl.ApprovalResult{
 				Denied:      true,
 				DenyCode:    isolation.CodeControlPlaneDenied,

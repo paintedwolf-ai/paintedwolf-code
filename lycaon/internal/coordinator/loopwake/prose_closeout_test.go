@@ -2,11 +2,10 @@ package loopwake_test
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func TestHostWakeProseLifecycle(t *testing.T) {

@@ -2,6 +2,7 @@ package integration
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/scan"
 	scantoolapi "github.com/lycaon/lycaon/internal/scan/toolapi"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestFormatPackReject(t *testing.T) {
@@ -56,7 +56,7 @@ func TestScanRefusalsRetainCodeAndDetailsWithoutFormatter(t *testing.T) {
 		scan.FormatDrilldownReject(&scan.DrilldownReject{Code: "SCAN_NOT_FOUND", Data: map[string]any{"count": 7}}, nil),
 		scantoolapi.FormatCompareReject(&scan.CompareReject{Code: "SCAN_COMPARE_TOO_LARGE", Data: map[string]any{"count": 7}}, nil),
 	} {
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code == "" || reject.Data["count"] != 7 {
 			t.Fatalf("lost structured scan refusal: %#v / %v", reject, err)
 		}

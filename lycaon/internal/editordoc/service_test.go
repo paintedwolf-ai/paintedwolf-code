@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -42,8 +43,8 @@ func (f fixedRoots) Get(context.Context, string) (*project.Project, error) { ret
 
 func TestSourceLifecycleReservationKeepsUnrelatedEditorSavesAvailable(t *testing.T) {
 	f := newAgentFixture(t, map[string]string{"a.txt": "before", "b.txt": "before"})
-	mutations := project.NewSourceMutationService(f.store.db, f.recorder.Store)
-	f.service.SetSourceMutations(mutations)
+	mutations := projectsource.NewSourceMutationService(f.store.db, f.recorder.Store)
+	f.service.SetSourcePaths(mutations.Paths)
 	documents := make(map[string]*Document)
 	for _, name := range []string{"a.txt", "b.txt"} {
 		d, err := f.service.Open(t.Context(), f.project, name, f.rootID, "", "window", nil)
@@ -52,13 +53,13 @@ func TestSourceLifecycleReservationKeepsUnrelatedEditorSavesAvailable(t *testing
 		testutil.FailErr(t, "edit draft", err)
 		documents[name] = d
 	}
-	release, err := mutations.ReserveSourcePath(f.root, "a.txt")
+	release, err := mutations.Paths.ReserveSourcePath(f.root, "a.txt")
 	testutil.FailErr(t, "reserve lifecycle source", err)
 	defer release()
 	a, b := documents["a.txt"], documents["b.txt"]
 	id := uuid.NewString()
 	_, err = f.service.Save(t.Context(), f.project, a.ID, "window", id, "", 0, a.Revision)
-	if !errors.Is(err, project.ErrSourceBusy) {
+	if !errors.Is(err, projectsource.ErrSourceBusy) {
 		t.Fatalf("related save error=%v", err)
 	}
 	if f.disk(t, "a.txt") != "before" {
@@ -85,7 +86,7 @@ func TestSaveRetryDoesNotAdvanceDocumentAfterLedgerFailure(t *testing.T) {
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(root, "a.txt"), []byte("base\n"), 0o644))
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
 	recorder := &captureRecorder{Store: sourceledger.New(sqlDB, ""), err: errors.New("ledger unavailable")}
-	service := New(NewStore(sqlDB), recorder, fixedRoots{p: p})
+	service := New(NewStore(sqlDB), recorder, recorder.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	document, err := service.Open(t.Context(), p, "a.txt", rootID, "", "window", nil)
 	testutil.FailErr(t, "open", err)
@@ -122,7 +123,8 @@ func TestSaveConflictIsTerminalAndDropsJournalPayload(t *testing.T) {
 	testutil.FailErr(t, "write base", os.WriteFile(path, []byte("base\n"), 0o644))
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
 	store := NewStore(sqlDB)
-	service := New(store, sourceledger.New(sqlDB, ""), fixedRoots{p: p})
+	sourceHistory1 := sourceledger.New(sqlDB, "")
+	service := New(store, sourceHistory1, sourceHistory1.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	document, err := service.Open(t.Context(), p, "a.txt", rootID, "", "window", nil)
 	testutil.FailErr(t, "open document", err)
@@ -131,7 +133,7 @@ func TestSaveConflictIsTerminalAndDropsJournalPayload(t *testing.T) {
 	testutil.FailErr(t, "write external change", os.WriteFile(path, []byte("external\n"), 0o644))
 	operationID := uuid.NewString()
 	_, err = service.Save(t.Context(), p, document.ID, "window", operationID, "", 0, document.Revision)
-	if !errors.Is(err, project.ErrSourceWriteConflict) {
+	if !errors.Is(err, projectsource.ErrSourceWriteConflict) {
 		t.Fatalf("save error = %v", err)
 	}
 	mutation, err := store.Mutation(t.Context(), operationID)
@@ -154,7 +156,8 @@ func TestObserveDiskMergesOutsideChangesWithTyping(t *testing.T) {
 	path := filepath.Join(root, "a.txt")
 	testutil.FailErr(t, "write base", os.WriteFile(path, []byte("one\ntwo\n"), 0o644))
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	service := New(NewStore(sqlDB), sourceledger.New(sqlDB, ""), fixedRoots{p: p})
+	sourceHistory2 := sourceledger.New(sqlDB, "")
+	service := New(NewStore(sqlDB), sourceHistory2, sourceHistory2.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	document, err := service.Open(t.Context(), p, "a.txt", rootID, "", "window", nil)
 	testutil.FailErr(t, "open document", err)
@@ -190,7 +193,8 @@ func TestObserveAndReloadPreserveExplicitUTF16Decoding(t *testing.T) {
 	path := filepath.Join(root, "a.txt")
 	testutil.FailErr(t, "write base", os.WriteFile(path, testutil.EncodeTextFixture(t, "one\ntwo\n", textfile.UTF16LE), 0o644))
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	service := New(NewStore(sqlDB), sourceledger.New(sqlDB, ""), fixedRoots{p: p})
+	sourceHistory3 := sourceledger.New(sqlDB, "")
+	service := New(NewStore(sqlDB), sourceHistory3, sourceHistory3.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	document, err := service.Open(t.Context(), p, "a.txt", rootID, textfile.UTF16LE, "window", nil)
 	testutil.FailErr(t, "open document", err)
@@ -220,7 +224,8 @@ func TestRecoverRetargetMovesOnlyTheRenamedDocumentSubtree(t *testing.T) {
 		testutil.FailErr(t, "write", os.WriteFile(filepath.Join(root, path), []byte(path), 0o644))
 	}
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	service := New(NewStore(sqlDB), sourceledger.New(sqlDB, ""), fixedRoots{p: p})
+	sourceHistory4 := sourceledger.New(sqlDB, "")
+	service := New(NewStore(sqlDB), sourceHistory4, sourceHistory4.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	ids := map[string]string{}
 	for _, path := range []string{"dir/a.txt", "dir/nested/b.txt", "directory/c.txt"} {
@@ -229,18 +234,19 @@ func TestRecoverRetargetMovesOnlyTheRenamedDocumentSubtree(t *testing.T) {
 		ids[path] = document.ID
 	}
 	operationID := uuid.NewString()
-	intentID, err := service.PrepareRetarget(t.Context(), p, project.SourceRenamePlan{
+	intentID, err := service.PrepareRetarget(t.Context(), p, projectsource.SourceRenamePlan{
 		OperationID: operationID, RootID: rootID, From: "dir", To: "moved",
 	})
 	testutil.FailErr(t, "prepare retarget", err)
-	mutations := project.NewSourceMutationService(sqlDB, nil)
-	_, err = mutations.Rename(t.Context(), operationID, p, project.SourceRenameRequest{RootID: rootID, From: "dir", To: "moved"})
+	mutations := projectsource.NewSourceMutationService(sqlDB, nil)
+	_, err = mutations.Rename(t.Context(), operationID, p, projectsource.SourceRenameRequest{RootID: rootID, From: "dir", To: "moved"})
 	testutil.FailErr(t, "rename directory", err)
 	if intentID == "" {
 		t.Fatal("retarget intent id is empty")
 	}
 	var changed []string
-	recovered := New(NewStore(sqlDB), sourceledger.New(sqlDB, ""), fixedRoots{p: p})
+	sourceHistory5 := sourceledger.New(sqlDB, "")
+	recovered := New(NewStore(sqlDB), sourceHistory5, sourceHistory5.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, recovered)
 	recovered.SetOnChange(func(_ context.Context, change Change) {
 		changed = append(changed, change.Document.Path)
@@ -271,7 +277,7 @@ func TestDocumentFollowsItsRootWhenTheFolderMoves(t *testing.T) {
 	savedProject := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: folder, IsPrimary: true}}}
 	roots := &movableRoots{p: draftProject}
 	recorder := &captureRecorder{Store: sourceledger.New(sqlDB, "")}
-	service := New(NewStore(sqlDB), recorder, roots)
+	service := New(NewStore(sqlDB), recorder, recorder.History, roots)
 	closeServiceAtCleanup(t, service)
 
 	document, err := service.Open(t.Context(), draftProject, "a.txt", rootID, "", "window-1", nil)
@@ -323,7 +329,8 @@ func TestDiscardIsOneHostRevision(t *testing.T) {
 	testdbseed.InsertProjectRootWithID(t, sqlDB, projectID, rootID, root)
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(root, "a.txt"), []byte("base\n"), 0o644))
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	service := New(NewStore(sqlDB), sourceledger.New(sqlDB, ""), fixedRoots{p: p})
+	sourceHistory6 := sourceledger.New(sqlDB, "")
+	service := New(NewStore(sqlDB), sourceHistory6, sourceHistory6.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	doc, err := service.Open(t.Context(), p, "a.txt", rootID, "", "window", nil)
 	testutil.FailErr(t, "open", err)
@@ -354,7 +361,7 @@ func TestRecoverCompletesSaveAcrossFilesystemCommitBoundary(t *testing.T) {
 			p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
 			recorder := &captureRecorder{Store: sourceledger.New(sqlDB, "")}
 			store := NewStore(sqlDB)
-			service := New(store, recorder, fixedRoots{p: p})
+			service := New(store, recorder, recorder.History, fixedRoots{p: p})
 			closeServiceAtCleanup(t, service)
 			document, err := service.Open(t.Context(), p, "a.txt", rootID, "", "window", nil)
 			testutil.FailErr(t, "open", err)
@@ -401,7 +408,8 @@ func TestLifecycleDependentsIncludeOpenAndUnsavedDocuments(t *testing.T) {
 	testdbseed.InsertProjectRootWithID(t, sqlDB, projectID, rootID, root)
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(root, "a.txt"), []byte("base\n"), 0o644))
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
-	service := New(NewStore(sqlDB), sourceledger.New(sqlDB, ""), fixedRoots{p: p})
+	sourceHistory7 := sourceledger.New(sqlDB, "")
+	service := New(NewStore(sqlDB), sourceHistory7, sourceHistory7.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 
 	document, err := service.Open(t.Context(), p, "a.txt", rootID, "", "window", nil)
@@ -463,7 +471,7 @@ func TestSaveFeedFailureRollsBackDocumentAndMutation(t *testing.T) {
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(root, "a.txt"), []byte("base\n"), 0o644))
 	p := &project.Project{ID: projectID, Roots: []project.Root{{ID: rootID, ProjectID: projectID, Path: root, IsPrimary: true}}}
 	recorder := &captureRecorder{Store: sourceledger.New(sqlDB, "")}
-	service := New(NewStore(sqlDB), recorder, fixedRoots{p: p})
+	service := New(NewStore(sqlDB), recorder, recorder.History, fixedRoots{p: p})
 	closeServiceAtCleanup(t, service)
 	document, err := service.Open(t.Context(), p, "a.txt", rootID, "", "window", nil)
 	testutil.FailErr(t, "open", err)
@@ -493,7 +501,7 @@ func TestNewRequiresLedger(t *testing.T) {
 			t.Fatal("missing ledger accepted")
 		}
 	}()
-	New(NewStore(testdbfixture.Open(t, "store.db")), nil, fixedRoots{})
+	New(NewStore(testdbfixture.Open(t, "store.db")), nil, nil, fixedRoots{})
 }
 
 func closeServiceAtCleanup(t *testing.T, service *Service) {

@@ -17,8 +17,14 @@ func TestNativeScratchAccessDoesNotAskForAnOutsideFolderGrant(t *testing.T) {
 	project, scratch := t.TempDir(), t.TempDir()
 	for _, tool := range []string{"read", "write"} {
 		result, err := g.Evaluate(t.Context(), hitl.ProposedAction{
-			Tool: tool, ProjectDir: project, Files: []string{filepath.Join(scratch, "notes.txt")},
-		})
+Invocation: hitl.ActionInvocation{
+Tool: tool,
+Files: []string{filepath.Join(scratch, "notes.txt")},
+},
+Scope: hitl.ActionScope{
+ProjectDir: project,
+},
+})
 		testutil.FailErr(t, "evaluate scratch "+tool, err)
 		if result.Required() {
 			t.Fatalf("%s asked for scratch authority: %+v", tool, result)

@@ -2,6 +2,8 @@ package projectpaths_test
 
 import (
 	"context"
+	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -21,9 +24,9 @@ func readSessionContext(t *testing.T) (tools.ToolContext, string) {
 	testutil.FailErr(t, "write a.go", os.WriteFile(filepath.Join(ws, "a.go"), []byte("package a\n"), 0o600))
 	testutil.FailErr(t, "write pkg/b.go", os.WriteFile(filepath.Join(ws, "pkg", "b.go"), []byte("package pkg\n"), 0o600))
 	return tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "ws", Path: ws, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        tools.DefaultToolProfileID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "ws", Path: ws, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
 	}, ws
 }
 
@@ -66,14 +69,22 @@ func TestReadSessionResolvesLikeResolveRead(t *testing.T) {
 
 // A root the host refuses is refused for every path, as ResolveRead does.
 func TestReadSessionRefusesAnUnsafeRoot(t *testing.T) {
-	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "root", Label: "root", Path: string(filepath.Separator), IsPrimary: true}},
-		ActiveRootID: "root",
+	for _, root := range refusedProjectRoots(t) {
+		t.Run(root.name, func(t *testing.T) {
+			tctx := tools.ToolContext{
+				Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Label: "root", Path: root.path, IsPrimary: true}},
+					ActiveRootID: "root"},
+			}
+			session := projectpaths.NewReadSession(nil, tctx)
+			defer session.Close()
+			_, err := session.Resolve(context.Background(), "tmp")
+			requireReject(t, err, "SANDBOX_CAPABILITY_REQUEST_INVALID")
+			var reject *toolrejection.ToolReject
+			if !errors.As(err, &reject) || reject.Data["reason"] != root.code || reject.Data["path"] != filepath.ToSlash(root.path) {
+				t.Fatalf("error = %v, want reason %s for %s", err, root.code, root.path)
+			}
+		})
 	}
-	session := projectpaths.NewReadSession(nil, tctx)
-	defer session.Close()
-	_, err := session.Resolve(context.Background(), "tmp")
-	requireReject(t, err, "SANDBOX_CAPABILITY_REQUEST_INVALID")
 }
 
 // A link leaving the root resolves lexically but never opens.
@@ -95,7 +106,7 @@ func TestReadSessionRefusesLinksLeavingTheRoot(t *testing.T) {
 func TestReadSessionEnforcesReadGlobs(t *testing.T) {
 	tctx, _ := readSessionContext(t)
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
-		ID: tools.DefaultToolProfileID, Tools: map[string]bool{"read": true}, ReadGlobs: []string{"pkg/**"},
+		ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"read": true}, ReadGlobs: []string{"pkg/**"},
 	}})
 	session := projectpaths.NewReadSession(boundary, tctx)
 	defer session.Close()

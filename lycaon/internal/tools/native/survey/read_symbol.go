@@ -3,11 +3,11 @@ package survey
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/structrewrite"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
@@ -56,7 +56,7 @@ func readSymbolArgsConflict(args map[string]any) bool {
 
 func (t *ReadTool) runSymbol(ctx context.Context, path, text string, args map[string]any, source *surveyreceipt.SourceContext, capture *readCapture) (string, error) {
 	if readSymbolArgsConflict(args) {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "READ_ARGS_CONFLICT",
 			Data: map[string]any{
 				"detail": "use symbol alone — not with offset, limit, ranges, or mode",

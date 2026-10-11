@@ -2,10 +2,9 @@ package native
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestExtractionFailureKeepsCompletePathsOutsideBoundedCopy(t *testing.T) {
@@ -13,9 +12,9 @@ func TestExtractionFailureKeepsCompletePathsOutsideBoundedCopy(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		budget.out = append(budget.out, extractEntryResult{Path: strings.Repeat("p", 80) + string(rune('a'+i))})
 	}
-	cause := &tools.ToolReject{Code: "EXTRACT_ENTRY_LIMIT", Data: map[string]any{"max_entries": 500}}
+	cause := &toolrejection.ToolReject{Code: "EXTRACT_ENTRY_LIMIT", Data: map[string]any{"max_entries": 500}}
 	err := extractionFailure(cause, "archive.zip", "output", budget)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || !errors.Is(err, cause) {
 		t.Fatalf("lost extraction failure: %v", err)
 	}

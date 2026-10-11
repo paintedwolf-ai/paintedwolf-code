@@ -3,11 +3,11 @@ package jq
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
@@ -23,9 +23,9 @@ func mustEdit(t *testing.T, path, text, query string) string {
 	return res.Text
 }
 
-func wantReject(t *testing.T, err error, code string) *tools.ToolReject {
+func wantReject(t *testing.T, err error, code string) *toolrejection.ToolReject {
 	t.Helper()
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != code {
 		t.Fatalf("err = %v, want %s", err, code)
 	}

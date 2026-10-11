@@ -52,7 +52,7 @@ func TestTreeReconcilesChangesArrivingDuringDiscovery(t *testing.T) {
 		once.Do(func() { close(entered); <-resume })
 		return true
 	}}
-	_, _, err := c.OpenSummary(t.Context(), "project", root, scope, 0)
+	_, _, err := c.Trees.OpenSummary(t.Context(), "project", root, scope, 0)
 	testutil.FailErr(t, "start discovery", err)
 	select {
 	case <-entered:
@@ -74,11 +74,11 @@ func TestTreeColdReadDoesNotWaitForIndexer(t *testing.T) {
 	c := treeTestCatalog(t)
 	root := Root{ID: "root", Path: t.TempDir()}
 	writeTreeTestFile(t, root.Path, "a.go", "package source")
-	c.broker = backgroundwork.New(map[backgroundwork.Resource]backgroundwork.Limits{backgroundwork.ResourceMetadata: {Total: 1, PerLane: 1}})
-	release, err := c.broker.Acquire(t.Context(), backgroundwork.Request{Key: "hold", Lane: root.Path, Resources: []backgroundwork.Resource{backgroundwork.ResourceMetadata}})
+	c.Trees.broker = backgroundwork.New(map[backgroundwork.Resource]backgroundwork.Limits{backgroundwork.ResourceMetadata: {Total: 1, PerLane: 1}})
+	release, err := c.Trees.broker.Acquire(t.Context(), backgroundwork.Request{Key: "hold", Lane: root.Path, Resources: []backgroundwork.Resource{backgroundwork.ResourceMetadata}})
 	testutil.FailErr(t, "hold indexing lane", err)
 	defer release()
-	r, status, err := c.OpenSummary(t.Context(), "project", root, TreeScope{Key: "all"}, 0)
+	r, status, err := c.Trees.OpenSummary(t.Context(), "project", root, TreeScope{Key: "all"}, 0)
 	testutil.FailErr(t, "cold nonblocking read", err)
 	if r != nil || status.State != StateWarming || !status.Refreshing {
 		t.Fatalf("cold status=%+v reader=%v", status, r)
@@ -94,12 +94,12 @@ func TestTreeRestartServesPersistedGenerationDuringReconciliation(t *testing.T) 
 	// The first engine exits before the second opens its file.
 	testutil.FailErr(t, "stop first engine", c.Drain(t.Context()))
 	restarted := treeTestCatalog(t)
-	restarted.treeDir = c.treeDir
-	restarted.broker = backgroundwork.New(map[backgroundwork.Resource]backgroundwork.Limits{backgroundwork.ResourceMetadata: {Total: 1, PerLane: 1}})
-	release, err := restarted.broker.Acquire(t.Context(), backgroundwork.Request{Key: "hold", Lane: root.Path, Resources: []backgroundwork.Resource{backgroundwork.ResourceMetadata}})
+	restarted.Trees.treeDir = c.Trees.treeDir
+	restarted.Trees.broker = backgroundwork.New(map[backgroundwork.Resource]backgroundwork.Limits{backgroundwork.ResourceMetadata: {Total: 1, PerLane: 1}})
+	release, err := restarted.Trees.broker.Acquire(t.Context(), backgroundwork.Request{Key: "hold", Lane: root.Path, Resources: []backgroundwork.Resource{backgroundwork.ResourceMetadata}})
 	testutil.FailErr(t, "hold startup reconciliation", err)
 	defer release()
-	r, status, err := restarted.OpenSummary(t.Context(), "project", root, TreeScope{Key: "all"}, 0)
+	r, status, err := restarted.Trees.OpenSummary(t.Context(), "project", root, TreeScope{Key: "all"}, 0)
 	testutil.FailErr(t, "reopen persisted view", err)
 	if r == nil {
 		t.Fatalf("persisted view unavailable: %+v", status)
@@ -147,18 +147,18 @@ func TestSuspendProjectStoresRetiresInMemoryProjection(t *testing.T) {
 	r := readySummary(t, c, root, TreeScope{Key: "all"})
 	_ = r.Close()
 
-	c.mu.Lock()
-	storeCount := len(c.trees)
-	c.mu.Unlock()
+	c.Trees.mu.Lock()
+	storeCount := len(c.Trees.trees)
+	c.Trees.mu.Unlock()
 	if storeCount == 0 {
 		t.Fatal("expected cached tree store")
 	}
 
-	c.SuspendProjectStores("project")
+	c.Trees.SuspendProjectStores("project")
 
-	c.mu.Lock()
-	afterCount := len(c.trees)
-	c.mu.Unlock()
+	c.Trees.mu.Lock()
+	afterCount := len(c.Trees.trees)
+	c.Trees.mu.Unlock()
 	if afterCount != 0 {
 		t.Fatalf("expected 0 stores after suspend, got %d", afterCount)
 	}

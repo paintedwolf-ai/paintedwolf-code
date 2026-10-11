@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/logoutline"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -98,7 +98,7 @@ func TestReadToolRejectsBinary(t *testing.T) {
 	}
 	tool := &ReadTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{"path": "bin.dat"}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "READ_BINARY_DENIED" {
 		t.Fatalf("err = %v want READ_BINARY_DENIED", err)
 	}
@@ -175,7 +175,7 @@ func TestReadToolRejectsDirectory(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected read to reject directory path")
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "READ_IS_DIRECTORY" {
 		t.Fatalf("err = %q want READ_IS_DIRECTORY", err)
 	}
@@ -196,7 +196,7 @@ func TestReadToolRejectsOversizeFile(t *testing.T) {
 	}
 	tool := &ReadTool{Boundary: nativefixture.Boundary(t)}
 	_, err = tool.Run(context.Background(), map[string]any{"path": "huge.log"}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) {
 		t.Fatalf("err = %v want ToolReject", err)
 	}
@@ -214,7 +214,7 @@ func TestReadToolFuzzyMiss(t *testing.T) {
 	}
 	tool := &ReadTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{"path": "hello.txt"}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "READ_PATH_NOT_FOUND" {
 		t.Fatalf("err = %v want READ_PATH_NOT_FOUND", err)
 	}
@@ -246,7 +246,7 @@ func TestReadToolOffsetBeyondEOF(t *testing.T) {
 		"path":   "short.txt",
 		"offset": float64(100),
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "READ_OFFSET_BEYOND_EOF" {
 		t.Fatalf("err = %v want READ_OFFSET_BEYOND_EOF", err)
 	}
@@ -451,7 +451,7 @@ func TestReadToolSymbolRejectsOffsetConflict(t *testing.T) {
 		"symbol": "main",
 		"offset": 1,
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "READ_ARGS_CONFLICT" {
 		t.Fatalf("err = %v want READ_ARGS_CONFLICT", err)
 	}

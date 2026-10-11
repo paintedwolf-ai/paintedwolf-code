@@ -35,7 +35,7 @@ func TestInvariantWriteRootSSOTSharedByGateAndConfine(t *testing.T) {
 // Contained is stamped from DefaultConfinement onto ProposedAction.
 func TestInvariantProductionGateWiresContainment(t *testing.T) {
 	t.Parallel()
-	policyPath := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "tools", "approval_policy.go")
+	policyPath := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "toolexecution", "approval_policy.go")
 	policyRaw, err := os.ReadFile(policyPath)
 	contractcheck.FailErr(t, "read approval_policy.go", err)
 	policySrc := string(policyRaw)
@@ -61,8 +61,9 @@ func TestInvariantProductionGateWiresContainment(t *testing.T) {
 	if !strings.Contains(runtimeSrc, "settings.NewGateBuilder(") {
 		t.Fatal("toolhost/runtime.go must construct the approval gate through NewGateBuilder")
 	}
-	if !strings.Contains(runtimeSrc, "func (r *Runtime) SealApprovalGate()") {
-		t.Fatal("toolhost/runtime.go must expose SealApprovalGate so boot can install the built gate")
+	authority := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/toolhost/authority_services.go")
+	if !strings.Contains(authority, "func (r *AuthorityServices) SealApprovalGate()") {
+		t.Fatal("toolhost authority service must expose SealApprovalGate so boot can install the built gate")
 	}
 }
 

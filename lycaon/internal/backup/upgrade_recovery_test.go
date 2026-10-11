@@ -87,7 +87,7 @@ func TestRestoreSuspendsImportedRetentionAndRefreshesIntegrityMetadata(t *testin
 	restored := t.TempDir()
 	_, err = Stage(t.Context(), StageOpts{ConfigDir: restored, ArchivePath: archive, SchemaVersion: db.SchemaVersion})
 	testutil.FailErr(t, "stage with suspension", err)
-	testutil.FailErr(t, "apply verifies refreshed policy hash", ApplyPending(restored))
+	testutil.FailErr(t, "apply verifies refreshed policy hash", ApplyPending(t.Context(), restored))
 	restoredRaw, err := os.ReadFile(filepath.Join(restored, historyretention.PolicyFilename))
 	testutil.FailErr(t, "read imported policy", err)
 	var imported wire.HistoryRetentionPolicy

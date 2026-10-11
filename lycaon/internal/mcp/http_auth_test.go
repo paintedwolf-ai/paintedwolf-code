@@ -125,14 +125,14 @@ func TestWireRedactsStaticSecrets(t *testing.T) {
 	overlay := fmt.Sprintf("providers:\n  - id: remote\n    enabled: true\n    token: %s\n    headers:\n      X-Token: %s\n", secretBearer, secretHeader)
 	testutil.FailErr(t, "write user mcp", os.WriteFile(storePath, []byte(overlay), 0o600))
 
-	reg, err := mcp.NewRegistryImpl(mcp.RegistryOptions{
+	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		GlobalOverridePath: storePath,
 		Connector:          &mcp.MockConnector{},
 		OAuthStore:         mcp.NewOAuthTokenStoreAt(oauthPath),
 	})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	testutil.FailErr(t, "load", reg.Load(t.Context()))
-	row, ok := reg.GetProvider(t.Context(), mcp.CallScope{}, "remote")
+	testutil.FailErr(t, "NewRuntime", err)
+	testutil.FailErr(t, "load", reg.Catalog.Load(t.Context()))
+	row, ok := reg.Catalog.GetProvider(t.Context(), mcp.CallScope{}, "remote")
 	if !ok {
 		t.Fatal("missing remote")
 	}

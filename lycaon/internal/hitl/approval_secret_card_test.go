@@ -14,9 +14,19 @@ import (
 func secretCard(t *testing.T, screen *hitl.SecretScreen, offers ...hitl.ApprovalGrantOffer) *hitl.ApprovalPlan {
 	t.Helper()
 	action := hitl.ProposedAction{
-		Tool: "command", Command: "curl https://api.example.com",
-		SessionID: "chat-1", RootSessionID: "chat-1", ProjectID: "proj", ProjectDir: "/tmp/proj",
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Presentation: hitl.ActionPresentation{
+Command: "curl https://api.example.com",
+},
+Scope: hitl.ActionScope{
+SessionID: "chat-1",
+RootSessionID: "chat-1",
+ProjectID: "proj",
+ProjectDir: "/tmp/proj",
+},
+}
 	decision := &gate.Decision{
 		Primary: api.GateSecretOutbound, Posture: gate.PostureBalanced,
 		Cited: []gate.Fact{{

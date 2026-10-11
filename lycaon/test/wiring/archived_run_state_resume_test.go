@@ -11,8 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	_ "modernc.org/sqlite"
 )
 
@@ -74,7 +74,7 @@ func testArchivedRunStateResumeForRelease(t *testing.T, releaseVersion string) {
 	// Initialize SQLStore on top of the upgraded database and resume the
 	// preserved runs. Note that workflow_runs records the *workflow* version,
 	// which is independent of the application release version.
-	sqlStore := workflow.NewSQLStore(database)
+	sqlStore := workflowpersistence.New(database)
 
 	rows, err := database.QueryContext(ctx, "SELECT id, workflow_id, workflow_version, current_phase, status FROM workflow_runs")
 	testutil.FailErr(t, "query existing workflow runs", err)
@@ -108,7 +108,7 @@ func testArchivedRunStateResumeForRelease(t *testing.T, releaseVersion string) {
 		}
 
 		// Read run state through RunStore.
-		run, err := sqlStore.Get(ctx, s.id)
+		run, err := sqlStore.Runs.Get(ctx, s.id)
 		testutil.FailErr(t, "sqlStore.Get("+s.id+")", err)
 		if run.WorkflowID != s.wfID {
 			t.Errorf("run %s workflowID = %s, want %s", s.id, run.WorkflowID, s.wfID)

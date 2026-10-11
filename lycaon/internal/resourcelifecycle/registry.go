@@ -176,12 +176,27 @@ func (r *Registry) release(ctx context.Context, scope Scope, terminal bool) erro
 	})
 	var errs []error
 	failedTracked := make([]entry, 0)
-	for _, candidate := range entries {
-		if err := candidate.cleanup(ctx, scope); err != nil {
-			errs = append(errs, fmt.Errorf("%s: %w", candidate.name, err))
-			if candidate.tracked {
-				failedTracked = append(failedTracked, candidate)
+	for index, candidate := range entries {
+		err := ctx.Err()
+		if err == nil {
+			err = candidate.cleanup(ctx, scope)
+		}
+		if err == nil {
+			continue
+		}
+		errs = append(errs, fmt.Errorf("%s: %w", candidate.name, err))
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			// Later resources may support work this cleanup has not drained.
+			// Keep them alive until an uncanceled retry completes the order.
+			for _, remaining := range entries[index:] {
+				if remaining.tracked {
+					failedTracked = append(failedTracked, remaining)
+				}
 			}
+			break
+		}
+		if candidate.tracked {
+			failedTracked = append(failedTracked, candidate)
 		}
 	}
 	if len(errs) == 0 && terminal {

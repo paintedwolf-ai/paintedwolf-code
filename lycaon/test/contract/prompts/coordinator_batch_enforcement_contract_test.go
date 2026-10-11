@@ -98,9 +98,9 @@ func TestCoordinatorBatchEnforcement_queueDeferredDoesNotRenderAtQueue(t *testin
 func TestCoordinatorBatchEnforcement_loopwakeStampsBatchSeqOnKickQueue(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "internal", "coordinator", "loopwake", "engine.go")
+	path := filepath.Join(root, "lycaon", "internal", "coordinator", "loopwake", "nudges.go")
 	body, err := os.ReadFile(path)
-	testutil.FailErr(t, "read loopwake engine.go", err)
+	testutil.FailErr(t, "read loopwake nudges.go", err)
 	src := string(body)
 	if !strings.Contains(src, "emitEnv.BatchSeq") || !strings.Contains(src, "BatchSeqSet") {
 		t.Fatal("loopwake must stamp live batch_seq on Envelope when queueing inform Emits")

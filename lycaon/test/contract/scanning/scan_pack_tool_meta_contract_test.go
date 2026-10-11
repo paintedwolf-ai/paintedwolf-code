@@ -22,7 +22,7 @@ import (
 
 func TestScanPackToolMetaMatchesBundledRegistry(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
-	reg, err := scanregistry.New(scanregistry.Options{
+	reg, err := scanregistry.New(t.Context(), scanregistry.Options{
 		ModuleRoot: filepath.Join(root, "lycaon"),
 	})
 	contractcheck.FailErr(t, "scan registry", err)

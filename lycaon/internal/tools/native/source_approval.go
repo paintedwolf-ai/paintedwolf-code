@@ -59,7 +59,7 @@ func agentMutationPreview(tc tools.ToolContext, m agentMutation, target, from fs
 		BeforeSHA256: m.BeforeSHA256, AfterSHA256: m.AfterSHA256,
 		BeforeBytes: max(m.BeforeSize, int64(len(m.Before))), AfterBytes: max(m.AfterSize, int64(len(m.After))),
 	}
-	for _, root := range tc.Roots {
+	for _, root := range tc.Source.Roots {
 		if root.Path == target.Root {
 			p.RootID, p.Path = root.ID, target.Rel
 		}
@@ -75,7 +75,7 @@ func agentMutationPreview(tc tools.ToolContext, m agentMutation, target, from fs
 	p.Before, beforeNote = approvalText(m.Before, p.BeforeBytes)
 	p.After, afterNote = approvalText(m.After, p.AfterBytes)
 	// The review carries the reference the call named, never the value it resolves.
-	p.Before, p.After = tc.Secrets.ReferenceEchoes(p.Before), tc.Secrets.ReferenceEchoes(p.After)
+	p.Before, p.After = tc.Effects.Secrets.ReferenceEchoes(p.Before), tc.Effects.Secrets.ReferenceEchoes(p.After)
 	if beforeNote != "" {
 		p.PreviewNote = beforeNote
 	}

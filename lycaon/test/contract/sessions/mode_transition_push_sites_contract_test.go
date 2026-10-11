@@ -14,7 +14,7 @@ import (
 
 // modeTransitionPushSiteRegistry lists production paths that must push ModeTransitionCause.
 var modeTransitionPushSiteRegistry = []string{
-	"lycaon/internal/app/build_delegation.go",
+	"lycaon/internal/app/delegations/hooks.go",
 }
 
 func TestModeTransitionPushSiteRegistry(t *testing.T) {
@@ -26,13 +26,24 @@ func TestModeTransitionPushSiteRegistry(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", rel, err)
 		}
-		if !strings.Contains(string(data), "PushExecutionModeTransitionCause") {
-			t.Fatalf("%s must call PushExecutionModeTransitionCause", rel)
+		if !strings.Contains(string(data), "PushModeTransitionCause") {
+			t.Fatalf("%s must call PushModeTransitionCause", rel)
+		}
+	}
+	for path, needles := range map[string][]string{
+		"lycaon/internal/app/delegations/build.go":   {"r.configureDelegationWorkflow"},
+		"lycaon/internal/app/delegations/context.go": {"Phases.PhaseEnterHook = r.OnWorkflowPhaseEnter", "Phases.PhaseReenterHook = r.OnWorkflowPhaseReenter"},
+	} {
+		source := contractcheck.ReadRepoFile(t, root, filepath.FromSlash(path))
+		for _, needle := range needles {
+			if !strings.Contains(source, needle) {
+				t.Fatalf("%s must bind mode-transition hook through %q", path, needle)
+			}
 		}
 	}
 	wireText := contractcheck.ServeWireSource(t)
-	if !strings.Contains(wireText, "PushExecutionModeTransitionCause") {
-		t.Fatal("serve build graph must call PushExecutionModeTransitionCause")
+	if !strings.Contains(wireText, "b.delegations.BuildWorkers") {
+		t.Fatal("serve build graph must construct the delegation runtime carrying mode-transition hooks")
 	}
 }
 

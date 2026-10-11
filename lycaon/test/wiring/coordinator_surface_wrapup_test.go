@@ -1,12 +1,13 @@
 package wiring
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -48,7 +49,7 @@ func TestSelectSurface_inlineEditNoVerifierRoutesInvestigate(t *testing.T) {
 		routingTurnHistory(history, surface.HostLoopWakeSentinel),
 		state,
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("surface = %q want investigate when verify not passed", profile.SurfaceID)
 	}
 }
@@ -66,7 +67,7 @@ func TestSelectSurface_openRepairRoutesInvestigateDespiteSynthesizePhase(t *test
 		routingTurnHistory(history, surface.HostLoopWakeSentinel),
 		state,
 	)
-	if profile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if profile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("surface = %q want investigate on open repair", profile.SurfaceID)
 	}
 }

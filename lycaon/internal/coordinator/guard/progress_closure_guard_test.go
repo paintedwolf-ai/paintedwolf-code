@@ -13,7 +13,7 @@ func TestObserveProgressItemNotClosedBeforeDispatch_blocksWhenArmed(t *testing.T
 	gc := oar.NewGuardContext()
 	ObserveProgressItemNotClosedBeforeDispatch(sess, content, "task", ProgressClosureBaseline{Closed: 0, Content: content}, true, gc)
 	if !hasRejectCode(gc, ProgressItemNotClosedCode) {
-		t.Fatalf("want %s in %v", ProgressItemNotClosedCode, gc.ArgValidationErrors)
+		t.Fatalf("want %s in %v", ProgressItemNotClosedCode, gc.Invocation.ArgValidationErrors)
 	}
 }
 
@@ -58,7 +58,7 @@ func TestObserveProgressItemNotClosedBeforeDispatch_allowsAfterRevision(t *testi
 	if hasRejectCode(gc, ProgressItemNotClosedCode) {
 		t.Fatal("checklist revision since arm must not observe reject")
 	}
-	if !gc.ProgressReconciledSinceArm {
+	if !gc.Progress.ProgressReconciledSinceArm {
 		t.Fatal("expected progress_reconciled_since_arm fact")
 	}
 }

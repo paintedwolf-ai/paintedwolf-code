@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/scan"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -18,7 +18,7 @@ import (
 type CompositeWorkerContext struct {
 	Delegation *WorkerContextLoader
 	Tools      LegToolLister
-	AgentsFor  func(*api.Session) session.AgentProfileResolver
+	AgentsFor  func(*api.Session) profiles.AgentProfileResolver
 	MatcherFor func(*api.Session) PlaybookMatcherInterface
 }
 
@@ -47,7 +47,7 @@ func buildTaskSpawnWorkerContext(c *CompositeWorkerContext, sess *api.Session) (
 		AgentType:       agentType,
 		TopologyPattern: "pipeline",
 	}
-	var agents session.AgentProfileResolver
+	var agents profiles.AgentProfileResolver
 	var lister LegToolLister
 	var matcher PlaybookMatcherInterface
 	if c != nil {

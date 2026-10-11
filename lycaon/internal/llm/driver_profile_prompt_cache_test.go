@@ -125,7 +125,7 @@ func TestNewProviderForEntryAttachesItsPromptCachePolicy(t *testing.T) {
 			if kind == "bedrock" {
 				entry.BaseURL = "us-east-1"
 			}
-			reg, err := NewRegistry(
+			reg, err := NewRegistry(t.Context(),
 				mustTestProviderCatalog(t, entry),
 				providercredentials.NewAt(t.TempDir()+"/credential-vault.age"),
 			)

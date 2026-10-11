@@ -2,6 +2,7 @@ package httpaction
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"sort"
 	"strings"
 
@@ -14,7 +15,7 @@ import (
 // the jar's purpose and needs no review.
 func releaseForeignTokens(
 	ctx context.Context, deps Deps, spec requestSpec, tc tools.ToolContext, jarName string, placements []tokenPlacement,
-) (secretmatch.Resolution, *tools.ToolReject) {
+) (secretmatch.Resolution, *toolrejection.ToolReject) {
 	var foreign []tokenPlacement
 	for _, placement := range placements {
 		if placement.foreign {
@@ -52,12 +53,12 @@ func releaseForeignTokens(
 		return secretmatch.Resolution{}, screenFaultReject(stage)
 	}
 	if resolution.Decision.Blocks() {
-		tc.Secrets.Withhold(ctx)
-		reject := &tools.ToolReject{Code: tools.OutboundSecretDeniedCode, Data: map[string]any{
+		tc.Effects.Secrets.Withhold(ctx)
+		reject := &toolrejection.ToolReject{Code: toolrejection.OutboundSecretDeniedCode, Data: map[string]any{
 			"surface": "http_request", "rule_id": secretmatch.ManagedRuleID, "host": destinationLabel,
 			"shape": secretmatch.GenericShape(foreign[0].token.Value), "tokens": names, "issuers": issuers,
 		}}
-		tools.AttachUserGuidance(reject, resolution.Guidance)
+		toolrejection.AttachUserGuidance(reject, resolution.Guidance)
 		return secretmatch.Resolution{}, reject
 	}
 	return resolution, nil

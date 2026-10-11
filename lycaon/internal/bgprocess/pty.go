@@ -59,7 +59,7 @@ type PTYCloseResult struct {
 }
 
 // StartPTY registers a terminal and its spawn facts.
-func (r *Registry) StartPTY(
+func (r *Terminal) StartPTY(
 	ctx context.Context,
 	sessionID, rootSessionID, projectID string,
 	req hostcmd.Request,
@@ -70,7 +70,7 @@ func (r *Registry) StartPTY(
 	return r.startPTY(ctx, sessionID, rootSessionID, projectID, req, runner, winsize, facts, false)
 }
 
-func (r *Registry) startPTY(
+func (r *Terminal) startPTY(
 	ctx context.Context,
 	sessionID, rootSessionID, projectID string,
 	req hostcmd.Request,
@@ -124,7 +124,7 @@ func (r *Registry) startPTY(
 		SessionID:     sessionID,
 		ProjectID:     trim(projectID),
 		RootSessionID: trim(rootSessionID),
-		buffer:        NewRingBuffer(r.cfg.RingBufferBytes),
+		buffer:        NewRingBuffer(r.ringBufferBytes),
 		running:       true,
 		done:          make(chan struct{}),
 		cancel:        cancel,
@@ -142,33 +142,33 @@ func (r *Registry) startPTY(
 	}
 	proc.Stages = hostcmd.StagePlaceholders(req.Stages)
 
-	r.mu.Lock()
-	if r.closed {
-		r.mu.Unlock()
+	r.jobs.mu.Lock()
+	if r.jobs.closed {
+		r.jobs.mu.Unlock()
 		cancel()
 		proc.screen.Close()
 		return "", ErrRegistryClosed
 	}
-	r.pruneCompletedLocked(sessionID)
-	if silent && r.countRunningAwaitedLocked(sessionID) >= r.cfg.MaxAwaited {
-		err := r.awaitedCapacityErrorLocked(sessionID)
-		r.mu.Unlock()
+	r.jobs.pruneCompletedLocked(sessionID)
+	if silent && r.jobs.countRunningAwaitedLocked(sessionID) >= r.jobs.maxAwaited {
+		err := r.jobs.awaitedCapacityErrorLocked(sessionID)
+		r.jobs.mu.Unlock()
 		cancel()
 		proc.screen.Close()
 		return "", err
 	}
-	if !silent && r.countRunningBackgroundLocked(sessionID) >= r.cfg.MaxBackground {
-		err := r.backgroundCapacityErrorLocked(sessionID)
-		r.mu.Unlock()
+	if !silent && r.jobs.countRunningBackgroundLocked(sessionID) >= r.jobs.maxBackground {
+		err := r.jobs.backgroundCapacityErrorLocked(sessionID)
+		r.jobs.mu.Unlock()
 		cancel()
 		proc.screen.Close()
 		return "", err
 	}
-	if r.sessions[sessionID] == nil {
-		r.sessions[sessionID] = make(map[string]*Process)
+	if r.jobs.sessions[sessionID] == nil {
+		r.jobs.sessions[sessionID] = make(map[string]*Process)
 	}
-	r.sessions[sessionID][handle] = proc
-	r.mu.Unlock()
+	r.jobs.sessions[sessionID][handle] = proc
+	r.jobs.mu.Unlock()
 
 	stage := req.Stages[0]
 	inlineEnv := req.InlineEnv
@@ -189,17 +189,17 @@ func (r *Registry) startPTY(
 		PathExtra:      req.PathExtra,
 		Launch:         req.Launch,
 		WinSize:        size,
-		MaxOutputBytes: r.cfg.RingBufferBytes,
+		MaxOutputBytes: r.ringBufferBytes,
 	})
 	if err != nil {
 		cancel()
-		r.remove(sessionID, handle)
+		r.jobs.remove(sessionID, handle)
 		return "", err
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	proc.pty = session
 	stopped := proc.stopped
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	if stopped {
 		_ = session.Close()
 	}
@@ -218,13 +218,13 @@ func (r *Registry) startPTY(
 }
 
 // PTYReport returns the terminal's spawn report.
-func (r *Registry) PTYReport(sessionID, handle string) (confine.Report, error) {
-	proc, err := r.lookup(sessionID, handle)
+func (r *Terminal) PTYReport(sessionID, handle string) (confine.Report, error) {
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return confine.Report{}, err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
 	if proc.kind != processKindPTY {
 		return confine.Report{}, fmt.Errorf("%w: handle %s", ErrNotPTY, handle)
 	}
@@ -232,13 +232,13 @@ func (r *Registry) PTYReport(sessionID, handle string) (confine.Report, error) {
 }
 
 // LookupPTY accepts registered terminal handles, including exited processes.
-func (r *Registry) LookupPTY(sessionID, handle string) error {
-	proc, err := r.lookup(sessionID, handle)
+func (r *Terminal) LookupPTY(sessionID, handle string) error {
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
 	if proc.kind != processKindPTY || proc.pty == nil {
 		return fmt.Errorf("%w: handle %s", ErrNotPTY, handle)
 	}

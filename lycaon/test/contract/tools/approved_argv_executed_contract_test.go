@@ -2,6 +2,8 @@ package contract
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -18,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -34,12 +37,12 @@ func TestApprovedCommandPlanIsTheExecutedPlan(t *testing.T) {
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, profiles)
 	registry := tools.NewDefaultRegistry()
 	background := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
-	command := &native.CommandTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: background}
+	command := &command.CommandTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: background}
 	verify := &native.VerifyTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: background}
 	contractcheck.FailErr(t, "register command", registry.Register("command", command.Run))
 	contractcheck.FailErr(t, "register verify", registry.Register("verify", verify.Run))
 	gate := &recordingGate{}
-	executor := tools.NewDefaultToolExecutor(tools.NewApprovalPolicyEngine(tools.NewProfilePolicyEngine(boundary), gate), registry, "implement")
+	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate), registry, "implement")
 
 	for _, tool := range []string{"command", "verify"} {
 		for _, tc := range commandPlanCorpus() {
@@ -52,10 +55,14 @@ func TestApprovedCommandPlanIsTheExecutedPlan(t *testing.T) {
 				contractcheck.FailErr(t, "resolve scratch", err)
 				before := snapshotTree(t, root)
 				ctx := tools.ToolContext{
-					Roots:        []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
-					ActiveRootID: "root", ProjectID: "project", SourceWorkspaceKind: api.SourceWorkspaceKindProject,
-					SessionID: "chat", ToolCallID: "call-" + tool, Agent: "implement",
-					SessionScratchDir: scratchDir,
+					Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
+						ActiveRootID:        "root",
+						SourceWorkspaceKind: api.SourceWorkspaceKindProject},
+					Identity: tools.InvocationIdentity{ProjectID: "project",
+						SessionID:  "chat",
+						ToolCallID: "call-" + tool,
+						Agent:      "implement"},
+					Host: tools.InvocationHost{SessionScratchDir: scratchDir},
 				}
 				gate.reset()
 				args := cloneArgs(tc.args).(map[string]any)
@@ -73,7 +80,7 @@ func TestApprovedCommandPlanIsTheExecutedPlan(t *testing.T) {
 
 				want := tc.tail
 				if want == "" {
-					want = reportedArgv(t, approved.Args)
+					want = reportedArgv(t, approved.Invocation.Args)
 				}
 				want = nonEmptyLines(want)
 				got := nonEmptyLines(observedOutput(t, root, out, tc.output))
@@ -81,19 +88,19 @@ func TestApprovedCommandPlanIsTheExecutedPlan(t *testing.T) {
 					t.Fatalf("the process received a different argv than the approval reviewed.\n"+
 						"approved: %v\nexecuted output: %q\napproved argv implies: %q\n"+
 						"Rewrite arguments (glob expansion, scratch addresses, redirection binding) once, before review, and execute exactly those.",
-						approved.Args, got, want)
+						approved.Invocation.Args, got, want)
 				}
 
-				approvedFiles := approvedStreamFiles(t, root, approved.Files, approved.ResolvedFiles)
+				approvedFiles := approvedStreamFiles(t, root, approved.Invocation.Files, approved.Invocation.ResolvedFiles)
 				for _, written := range changedFiles(t, root, before) {
 					if !approvedFiles[written] {
 						t.Errorf("the process wrote %s, which the approval never named (files %q, resolved %q)",
-							relTo(root, written), approved.Files, approved.ResolvedFiles)
+							relTo(root, written), approved.Invocation.Files, approved.Invocation.ResolvedFiles)
 					}
 				}
 				for _, read := range tc.reads {
 					if !approvedFiles[filepath.Join(root, filepath.FromSlash(read))] {
-						t.Errorf("the process read %s through a stream the approval never named (files %q)", read, approved.Files)
+						t.Errorf("the process read %s through a stream the approval never named (files %q)", read, approved.Invocation.Files)
 					}
 				}
 			})

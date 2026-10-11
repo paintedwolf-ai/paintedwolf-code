@@ -12,16 +12,20 @@ func TestBlockedLoopParksLiveCommandInsteadOfForcingCloseout(t *testing.T) {
 	parked := 0
 	closeoutCalls := 0
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		ParkBlockedLiveCommands: func(_ context.Context, sessionID string) bool {
-			if sessionID != "session-1" {
-				t.Fatalf("park session = %q", sessionID)
-			}
-			parked++
-			return true
+		Control: ControlDeps{
+			ParkBlockedLiveCommands: func(_ context.Context, sessionID string) bool {
+				if sessionID != "session-1" {
+					t.Fatalf("park session = %q", sessionID)
+				}
+				parked++
+				return true
+			},
 		},
-		TurnCloseoutNudge: func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
-			closeoutCalls++
-			return HostNudge{Content: "must not run"}
+		Closeout: CloseoutDeps{
+			TurnCloseoutNudge: func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
+				closeoutCalls++
+				return HostNudge{Content: "must not run"}
+			},
 		},
 	})
 	st := &promptLoopTurnState{

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -20,7 +21,7 @@ const CaptureToolName = "capture_page"
 
 // captureScope identifies the task tree used for secret matching.
 func captureScope(tctx tools.ToolContext) captureprojection.Scope {
-	return captureprojection.ScopeFor(tctx.ProjectID, tctx.ParentSessionID, tctx.SessionID)
+	return captureprojection.ScopeFor(tctx.Identity.ProjectID, tctx.Identity.ParentSessionID, tctx.Identity.SessionID)
 }
 
 type capturePageArgs struct {
@@ -82,7 +83,7 @@ func CaptureHandler(pool *browser.Pool, bg *bgprocess.Registry, live LivePreview
 		if err != nil {
 			return "", err
 		}
-		if err := requireCaptureProcess(bg, tctx.SessionID, in.URL, in.ProcessHandle); err != nil {
+		if err := requireCaptureProcess(bg, tctx.Identity.SessionID, in.URL, in.ProcessHandle); err != nil {
 			return "", err
 		}
 		if err := requireLoopbackAuthority(in.URL, tctx); err != nil {
@@ -114,30 +115,30 @@ func CaptureHandler(pool *browser.Pool, bg *bgprocess.Registry, live LivePreview
 			req.Record = *in.Record
 		}
 		if live != nil {
-			driveID := "drive:" + tctx.ToolCallID
-			if strings.TrimSpace(tctx.ToolCallID) == "" {
+			driveID := "drive:" + tctx.Identity.ToolCallID
+			if strings.TrimSpace(tctx.Identity.ToolCallID) == "" {
 				driveID = "drive:oneshot"
 			}
 			req.Preview = &browser.CapturePreview{
 				Attach: func(held *browser.HeldPage) {
 					live.Attach(ctx, preview.AttachOpts{
-						ProjectID:          tctx.ProjectID,
-						SessionID:          tctx.SessionID,
-						ParentSessionID:    tctx.ParentSessionID,
+						ProjectID:          tctx.Identity.ProjectID,
+						SessionID:          tctx.Identity.SessionID,
+						ParentSessionID:    tctx.Identity.ParentSessionID,
 						PageID:             driveID,
 						AssistantMessageID: tctx.Invocation.MessageID,
-						ToolCallID:         tctx.ToolCallID,
+						ToolCallID:         tctx.Identity.ToolCallID,
 						Held:               held,
 					})
 				},
 				Action: func(act browser.CaptureAction, result json.RawMessage) {
-					live.PublishAction(ctx, tctx.SessionID, driveID, act, result)
+					live.PublishAction(ctx, tctx.Identity.SessionID, driveID, act, result)
 				},
 				Driving: func(driving bool) {
-					live.PublishDriving(ctx, tctx.SessionID, driveID, driving)
+					live.PublishDriving(ctx, tctx.Identity.SessionID, driveID, driving)
 				},
 				Detach: func() {
-					live.Detach(ctx, tctx.SessionID, driveID)
+					live.Detach(ctx, tctx.Identity.SessionID, driveID)
 				},
 			}
 		}
@@ -206,7 +207,7 @@ func parseCapturePageArgs(args map[string]any) (capturePageArgs, error) {
 		return capturePageArgs{}, mapBrowserReject(err)
 	}
 	if in.Record != nil && mode != browser.CaptureModeTimeline {
-		return capturePageArgs{}, &tools.ToolReject{Code: "CAPTURE_RECORD_INVALID", Data: map[string]any{"reason": "record_without_timeline", "capture": in.Capture}}
+		return capturePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_RECORD_INVALID", Data: map[string]any{"reason": "record_without_timeline", "capture": in.Capture}}
 	}
 	if in.Record != nil {
 		if err := browser.ValidateRecordOpts(*in.Record); err != nil {
@@ -214,16 +215,16 @@ func parseCapturePageArgs(args map[string]any) (capturePageArgs, error) {
 		}
 	}
 	if in.URL == "" && in.ProjectDir == "" {
-		return capturePageArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "missing_target"}}
+		return capturePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "missing_target"}}
 	}
 	if in.URL != "" && in.ProjectDir != "" {
-		return capturePageArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "url_and_project_dir"}}
+		return capturePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "url_and_project_dir"}}
 	}
 	if in.Path != "" && in.ProjectDir == "" {
-		return capturePageArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "path_without_project_dir"}}
+		return capturePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "path_without_project_dir"}}
 	}
 	if in.ProcessHandle != "" && in.ProjectDir != "" {
-		return capturePageArgs{}, &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "process_handle_with_project_dir"}}
+		return capturePageArgs{}, &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "process_handle_with_project_dir"}}
 	}
 	if in.Path != "" {
 		if _, err := browser.JoinStaticEntry(in.Path); err != nil {
@@ -241,10 +242,10 @@ func requireCaptureProcess(bg *bgprocess.Registry, sessionID, urlStr, handle str
 		return nil
 	}
 	if strings.TrimSpace(urlStr) == "" {
-		return &tools.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "process_handle_without_url"}}
+		return &toolrejection.ToolReject{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "process_handle_without_url"}}
 	}
 	if bg == nil {
-		return &tools.ToolReject{Code: "CAPTURE_PROCESS_NOT_RUNNING", Data: map[string]any{"reason": "registry_unavailable", "handle": handle}}
+		return &toolrejection.ToolReject{Code: "CAPTURE_PROCESS_NOT_RUNNING", Data: map[string]any{"reason": "registry_unavailable", "handle": handle}}
 	}
 	if err := bg.RequireRunning(sessionID, handle); err != nil {
 		code := "CAPTURE_PROCESS_NOT_RUNNING"
@@ -252,7 +253,7 @@ func requireCaptureProcess(bg *bgprocess.Registry, sessionID, urlStr, handle str
 		if errors.Is(err, bgprocess.ErrProcessNotFound) {
 			reason = "not_found"
 		}
-		return &tools.ToolReject{Code: code, Data: map[string]any{"handle": handle, "reason": reason}}
+		return &toolrejection.ToolReject{Code: code, Data: map[string]any{"handle": handle, "reason": reason}}
 	}
 	return nil
 }

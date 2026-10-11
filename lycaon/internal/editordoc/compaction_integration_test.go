@@ -31,7 +31,7 @@ func TestLongEditingSessionCompactsWithoutReplacingHistoryIdentity(t *testing.T)
 		t.Fatalf("checkpoint still holds old text: %d bytes", len(head.Checkpoint))
 	}
 	testutil.FailErr(t, "restart", f.service.Close(t.Context()))
-	f.service = New(f.store, f.service.ledger, fixedRoots{p: f.project})
+	f.service = New(f.store, f.service.ledger, f.service.history, fixedRoots{p: f.project})
 	closeServiceAtCleanup(t, f.service)
 	undone, err := f.service.Revert(t.Context(), f.project.ID, d.ID, RevertChange{ClientID: "window", OperationID: uuid.NewString(), ChangeOperationID: latest, Epoch: epoch})
 	testutil.FailErr(t, "undo after compaction and restart", err)
@@ -61,7 +61,7 @@ func TestFilesystemBranchCompactsWithoutSavingTheDraft(t *testing.T) {
 		t.Fatalf("saved branch retained %d bytes", len(head.PublishedCheckpoint))
 	}
 	testutil.FailErr(t, "restart", f.service.Close(t.Context()))
-	f.service = New(f.store, f.service.ledger, fixedRoots{p: f.project})
+	f.service = New(f.store, f.service.ledger, f.service.history, fixedRoots{p: f.project})
 	closeServiceAtCleanup(t, f.service)
 	f.write(t, "a.txt", "final\n")
 	d, err = f.service.ObserveDisk(t.Context(), f.project, d.ID, "window")

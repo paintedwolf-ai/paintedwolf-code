@@ -101,6 +101,8 @@ def main(argv: list[str]) -> int:
     packages_finished: set[str] = set()
     timings: dict[tuple[str, str], float] = {}
     cached: set[str] = set()
+    test_results = {action: 0 for action in ("pass", "fail", "skip")}
+    packages_with_tests: set[str] = set()
 
     for line in sys.stdin:
         line = line.strip()
@@ -127,6 +129,10 @@ def main(argv: list[str]) -> int:
             if not test and action in {"pass", "fail", "skip"}:
                 packages_finished.add(pkg)
         key = (pkg, test)
+        if pkg and test:
+            packages_with_tests.add(pkg)
+            if action in {"pass", "fail", "skip"}:
+                test_results[action] += 1
         elapsed = seconds(ev.get("Elapsed"))
         if action in {"pass", "fail"} and pkg and elapsed is not None:
             timings[key] = max(timings.get(key, 0), elapsed)
@@ -168,6 +174,12 @@ def main(argv: list[str]) -> int:
     all_failed_pkgs = set(by_pkg) | failed_pkgs | build_failed_pkgs
     has_failures = bool(all_failed_pkgs or build_errors)
 
+    def write_coverage():
+        out.write(f"    test and subtest results: {test_results['pass']} passed, "
+                  f"{test_results['fail']} failed, {test_results['skip']} skipped\n")
+        empty = len(packages_finished - packages_with_tests)
+        out.write(f"    {empty} package{'s' if empty != 1 else ''} with no captured test results\n")
+
     def write_timings():
         write_slowest(out, "packages", ((pkg, elapsed) for (pkg, test), elapsed in timings.items()
                                        if not test and pkg not in cached))
@@ -177,6 +189,7 @@ def main(argv: list[str]) -> int:
         n = len(packages_seen)
         label = f"{n} package{'s' if n != 1 else ''}" if n else "no packages"
         out.write(f"\n  ✓ {args.name} — {label}, no failures\n")
+        write_coverage()
         write_timings()
         if last_run_dir:
             failed_path = os.path.join(last_run_dir, "failed-go-pkgs.txt")
@@ -185,6 +198,7 @@ def main(argv: list[str]) -> int:
         return 0
 
     out.write(f"\n  ✗ {args.name}\n")
+    write_coverage()
 
     if build_errors:
         out.write("    build/setup errors:\n")

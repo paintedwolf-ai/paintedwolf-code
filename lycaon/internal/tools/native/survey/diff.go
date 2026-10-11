@@ -3,6 +3,7 @@ package survey
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -115,13 +116,13 @@ func (t *DiffTool) loadDiffFile(ctx context.Context, tctx tools.ToolContext, rel
 		return "", "", fmt.Errorf("diff %s: %w", relPath, err)
 	}
 	if info.IsDir() {
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "READ_IS_DIRECTORY",
 			Data: map[string]any{"path": relSlash},
 		}
 	}
 	if info.Size() > hostDiffMaxPathBytes {
-		return "", "", &tools.ToolReject{
+		return "", "", &toolrejection.ToolReject{
 			Code: "DIFF_FILE_TOO_LARGE",
 			Data: map[string]any{
 				"path":           relSlash,

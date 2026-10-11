@@ -9,17 +9,18 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeradmission"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -27,7 +28,7 @@ import (
 )
 
 func TestParentSessionWorkerCycleIdleWithoutQueue(t *testing.T) {
-	idle, err := session.ParentSessionWorkerCycleIdle(t.Context(), nil, testdbseed.DefaultProjectID, "parent-without-workers", "")
+	idle, err := workeroutcomes.ParentSessionWorkerCycleIdle(t.Context(), nil, testdbseed.DefaultProjectID, "parent-without-workers", "")
 	testutil.FailErr(t, "worker cycle without configured queue", err)
 	if !idle {
 		t.Fatal("a session without a worker queue must remain idle")
@@ -40,8 +41,8 @@ func TestParentSessionWorkerCycleIdle(t *testing.T) {
 	dir := t.TempDir()
 	parent := "parent-1"
 
-	idle, err := session.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, parent, "")
-	testutil.FailErr(t, "ParentSessionWorkerCycleIdle", err)
+	idle, err := workeroutcomes.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, parent, "")
+	testutil.FailErr(t, "workeroutcomes.ParentSessionWorkerCycleIdle", err)
 	if !idle {
 		t.Fatal("expected idle with no jobs")
 	}
@@ -56,14 +57,14 @@ func TestParentSessionWorkerCycleIdle(t *testing.T) {
 	})
 	testutil.FailErr(t, "Enqueue", err)
 
-	idle, err = session.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, parent, "")
-	testutil.FailErr(t, "ParentSessionWorkerCycleIdle with pending", err)
+	idle, err = workeroutcomes.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, parent, "")
+	testutil.FailErr(t, "workeroutcomes.ParentSessionWorkerCycleIdle with pending", err)
 	if idle {
 		t.Fatal("expected not idle with pending job")
 	}
 
-	idle, err = session.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, parent, jobID)
-	testutil.FailErr(t, "ParentSessionWorkerCycleIdle excluding completing job", err)
+	idle, err = workeroutcomes.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, parent, jobID)
+	testutil.FailErr(t, "workeroutcomes.ParentSessionWorkerCycleIdle excluding completing job", err)
 	if !idle {
 		t.Fatal("expected idle when excluding the completing job still marked pending")
 	}
@@ -85,13 +86,13 @@ func TestParentSessionWorkerCycleWaitsForTerminalOutcomeDelivery(t *testing.T) {
 	if !completed {
 		t.Fatal("completion lost its claim")
 	}
-	idle, err := session.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, parent, "")
+	idle, err := workeroutcomes.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, parent, "")
 	testutil.FailErr(t, "idle before delivery", err)
 	if idle {
 		t.Fatal("terminal result became idle before its parent projection was delivered")
 	}
 	testutil.FailErr(t, "mark delivered", q.MarkOutcomeDelivered(ctx, jobID))
-	idle, err = session.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, parent, "")
+	idle, err = workeroutcomes.ParentSessionWorkerCycleIdle(ctx, q, testdbseed.DefaultProjectID, parent, "")
 	testutil.FailErr(t, "idle after delivery", err)
 	if !idle {
 		t.Fatal("delivered terminal result still held the worker cycle")
@@ -110,7 +111,7 @@ func TestObserveCoordinatorTaskInFlightParallelCap(t *testing.T) {
 		AgentType:     "coordinator",
 	}
 
-	deps := session.WorkerCycleGuardDeps{Workers: q}
+	deps := workeradmission.WorkerCycleGuardDeps{Workers: q}
 	readScoutArgs := map[string]any{
 		"agent_type": "path-explorer",
 		"brief":      testTaskBrief("read scout"),
@@ -131,15 +132,15 @@ func TestObserveCoordinatorTaskInFlightParallelCap(t *testing.T) {
 		testutil.FailErr(t, "Enqueue job", err)
 
 		gc := oar.NewGuardContext()
-		testutil.FailErr(t, "Observe after enqueue", session.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", readScoutArgs, gc))
-		blocked := evaluateHasCode(t, gc, session.CoordinatorWorkerInFlightCode)
+		testutil.FailErr(t, "Observe after enqueue", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", readScoutArgs, gc))
+		blocked := evaluateHasCode(t, gc, workeradmission.CoordinatorWorkerInFlightCode)
 		if i < cap-1 {
-			if blocked || gc.WorkerSpawnBlocked {
+			if blocked || gc.Workers.WorkerSpawnBlocked {
 				t.Fatalf("expected allow with %d in-flight jobs", i+1)
 			}
 			continue
 		}
-		if !blocked || !gc.WorkerSpawnBlocked {
+		if !blocked || !gc.Workers.WorkerSpawnBlocked {
 			t.Fatalf("expected reject at cap with %d in-flight jobs", cap)
 		}
 	}
@@ -159,16 +160,16 @@ func TestObserveCoordinatorTaskInFlight(t *testing.T) {
 	cfg, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfig", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	deps := session.WorkerCycleGuardDeps{
+	deps := workeradmission.WorkerCycleGuardDeps{
 		Workers: q,
 	}
 
 	gc := oar.NewGuardContext()
-	testutil.FailErr(t, "Observe empty", session.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", map[string]any{
+	testutil.FailErr(t, "Observe empty", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", map[string]any{
 		"agent_type": "path-explorer",
 		"brief":      testTaskBrief("scout"),
 	}, gc))
-	if evaluateHasCode(t, gc, session.CoordinatorWorkerInFlightCode) {
+	if evaluateHasCode(t, gc, workeradmission.CoordinatorWorkerInFlightCode) {
 		t.Fatal("expected allow with no in-flight jobs")
 	}
 
@@ -184,7 +185,7 @@ func TestObserveCoordinatorTaskInFlight(t *testing.T) {
 	}
 
 	gc = oar.NewGuardContext()
-	testutil.FailErr(t, "Observe at cap", session.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", map[string]any{
+	testutil.FailErr(t, "Observe at cap", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", map[string]any{
 		"agent_type": "implementer",
 		"brief":      testTaskBrief("write leg at cap"),
 		"scope": map[string]any{
@@ -192,10 +193,10 @@ func TestObserveCoordinatorTaskInFlight(t *testing.T) {
 			"paths": []any{"internal/auth/**"},
 		},
 	}, gc))
-	if !evaluateHasCode(t, gc, session.CoordinatorWorkerInFlightCode) {
+	if !evaluateHasCode(t, gc, workeradmission.CoordinatorWorkerInFlightCode) {
 		t.Fatal("expected COORDINATOR_WORKER_IN_FLIGHT")
 	}
-	formatted, err := guidance.NewStaticRejectFormatter(cfg).Format(session.CoordinatorWorkerInFlightCode, gc.RejectData[session.CoordinatorWorkerInFlightCode])
+	formatted, err := guidance.NewStaticRejectFormatter(cfg).Format(workeradmission.CoordinatorWorkerInFlightCode, gc.RejectData[workeradmission.CoordinatorWorkerInFlightCode])
 	testutil.FailErr(t, "Format", err)
 	if !strings.Contains(formatted, "Rejected:") {
 		t.Fatalf("expected formatted reject block: %v", formatted)
@@ -213,7 +214,7 @@ func TestObserveCoordinatorTaskInFlightAllowsUnderCap(t *testing.T) {
 		Posture:       api.SessionPostureBuild,
 		AgentType:     "coordinator",
 	}
-	deps := session.WorkerCycleGuardDeps{Workers: q}
+	deps := workeradmission.WorkerCycleGuardDeps{Workers: q}
 
 	_, err := q.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: sess.ID,
@@ -225,10 +226,10 @@ func TestObserveCoordinatorTaskInFlightAllowsUnderCap(t *testing.T) {
 	testutil.FailErr(t, "Enqueue", err)
 
 	gc := oar.NewGuardContext()
-	testutil.FailErr(t, "Observe under cap", session.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", map[string]any{
+	testutil.FailErr(t, "Observe under cap", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", map[string]any{
 		"agent_type": "path-explorer",
 	}, gc))
-	if evaluateHasCode(t, gc, session.CoordinatorWorkerInFlightCode) {
+	if evaluateHasCode(t, gc, workeradmission.CoordinatorWorkerInFlightCode) {
 		t.Fatal("expected allow with one in-flight job under cap")
 	}
 }
@@ -238,10 +239,10 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTask(t *testing.T) {
 	q := worker.NewInMemoryQueue(8)
 	dir := t.TempDir()
 	parent := "parent-1"
-	mgr := session.NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetWorkerQueue(q)
 
-	if !mgr.ShouldNudgeCoordinatorLoopAfterWorkerTask(ctx, parent, testdbseed.DefaultProjectID, "") {
+	if !mgr.Workers.State.ShouldNudge(ctx, parent, testdbseed.DefaultProjectID, "") {
 		t.Fatal("expected true when worker cycle is idle")
 	}
 
@@ -254,10 +255,10 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTask(t *testing.T) {
 	})
 	testutil.FailErr(t, "Enqueue", err)
 
-	if mgr.ShouldNudgeCoordinatorLoopAfterWorkerTask(ctx, parent, testdbseed.DefaultProjectID, "") {
+	if mgr.Workers.State.ShouldNudge(ctx, parent, testdbseed.DefaultProjectID, "") {
 		t.Fatal("expected false while jobs pending without completing job id")
 	}
-	if !mgr.ShouldNudgeCoordinatorLoopAfterWorkerTask(ctx, parent, testdbseed.DefaultProjectID, jobID) {
+	if !mgr.Workers.State.ShouldNudge(ctx, parent, testdbseed.DefaultProjectID, jobID) {
 		t.Fatal("expected true when excluding completing job before queue.Complete")
 	}
 }
@@ -267,7 +268,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskWriteDefersUntilIdle(t *testin
 	q := worker.NewInMemoryQueue(8)
 	dir := t.TempDir()
 	parent := "parent-1"
-	mgr := session.NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetWorkerQueue(q)
 
 	writeA, err := q.Enqueue(ctx, api.WorkerTask{
@@ -289,7 +290,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskWriteDefersUntilIdle(t *testin
 	})
 	testutil.FailErr(t, "Enqueue write B", err)
 
-	if mgr.ShouldNudgeCoordinatorLoopAfterWorkerTask(ctx, parent, testdbseed.DefaultProjectID, writeA) {
+	if mgr.Workers.State.ShouldNudge(ctx, parent, testdbseed.DefaultProjectID, writeA) {
 		t.Fatal("expected false for write worker wake while sibling write still pending")
 	}
 }
@@ -299,7 +300,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskPerJobWakeWhileSiblingsInFligh
 	q := worker.NewInMemoryQueue(8)
 	dir := t.TempDir()
 	parent := "parent-1"
-	mgr := session.NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
+	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	mgr.SetWorkerQueue(q)
 
 	jobA, err := q.Enqueue(ctx, api.WorkerTask{
@@ -319,7 +320,7 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskPerJobWakeWhileSiblingsInFligh
 	})
 	testutil.FailErr(t, "Enqueue B", err)
 
-	if !mgr.ShouldNudgeCoordinatorLoopAfterWorkerTask(ctx, parent, testdbseed.DefaultProjectID, jobA) {
+	if !mgr.Workers.State.ShouldNudge(ctx, parent, testdbseed.DefaultProjectID, jobA) {
 		t.Fatal("expected true for per-job wake while sibling job still pending")
 	}
 }
@@ -396,9 +397,9 @@ func TestBuildImplementSessionStateLedgerOverridesStaleEnvelope(t *testing.T) {
 		testutil.FailErr(t, "AppendMessages", err)
 	}
 
-	mgr := session.NewManager(store, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetWorkerQueue(q)
-	state := mgr.BuildImplementSessionState(ctx, parent)
+	state := mgr.Workers.State.ForSession(ctx, parent)
 	if len(state.PendingOverlayIDs) != 0 {
 		t.Fatalf("pending = %v want empty when ledger has no pending merges", state.PendingOverlayIDs)
 	}

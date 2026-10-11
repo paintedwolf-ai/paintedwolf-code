@@ -105,8 +105,13 @@ func TestOARHintCoverageUsesCatalogAnchors(t *testing.T) {
 }
 
 func TestOARNoVerdictFacts(t *testing.T) {
+	for _, fact := range oar.FactCatalogue() {
+		if verdictFactName.MatchString(fact.Name) {
+			t.Fatalf("catalogue declares verdict-shaped fact %q", fact.Name)
+		}
+	}
 	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "oar")
-	for _, name := range []string{"context.go", "env.go", "facts.go"} {
+	for _, name := range []string{"context.go", "env.go", "facts.go", "fact_projection.go"} {
 		body, err := os.ReadFile(filepath.Join(root, name))
 		contractcheck.FailErr(t, "read "+name, err)
 		for _, line := range strings.Split(string(body), "\n") {

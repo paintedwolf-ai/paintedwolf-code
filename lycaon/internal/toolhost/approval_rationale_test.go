@@ -1,6 +1,8 @@
 package toolhost_test
 
 import (
+	"github.com/lycaon/lycaon/internal/toolapproval"
+
 	"context"
 	"sync"
 	"testing"
@@ -133,7 +135,7 @@ func (s *scriptedSummarizer) systemPrompts() []string {
 	return append([]string(nil), s.systems...)
 }
 
-func rationaleAttacher(t *testing.T, sum compaction.Summarizer, caps *patchCapture) tools.AIRationaleAttacher {
+func rationaleAttacher(t *testing.T, sum compaction.Summarizer, caps *patchCapture) toolapproval.AIRationaleAttacher {
 	t.Helper()
 	return toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
 		Messages: memMessages{msgs: []api.Message{
@@ -175,11 +177,14 @@ func TestApprovalRationale_clipsToOneSentence(t *testing.T) {
 	sum := &scriptedSummarizer{outs: []string{
 		"Pushes the branch the user asked to ship. This advances the goal by publishing the reviewed work to the remote.",
 	}}
-	rationaleAttacher(t, sum, caps).AttachAsync(context.Background(), tools.AIRationaleAttachRequest{
+	rationaleAttacher(t, sum, caps).AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
 		CheckpointID: "chk-clip",
-		ToolContext:  tools.ToolContext{SessionID: "s1", ToolCallID: "tc1"},
-		Tool:         "command",
-		Args:         map[string]any{"command": "git push"},
+		ToolContext: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1"},
+		},
+		Tool: "command",
+		Args: map[string]any{"command": "git push"},
 	})
 	if got := awaitPatch(t, caps); got != "Pushes the branch the user asked to ship." {
 		t.Fatalf("got %q", got)
@@ -205,11 +210,14 @@ func TestApprovalRationale_attemptsOneShot(t *testing.T) {
 		Summarizer:  sum,
 		Checkpoints: caps,
 	})
-	attacher.AttachAsync(context.Background(), tools.AIRationaleAttachRequest{
+	attacher.AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
 		CheckpointID: "chk-1",
-		ToolContext:  tools.ToolContext{SessionID: "s1", ToolCallID: "tc1"},
-		Tool:         "command",
-		Args:         map[string]any{"command": "git push"},
+		ToolContext: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1"},
+		},
+		Tool: "command",
+		Args: map[string]any{"command": "git push"},
 	})
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -241,11 +249,14 @@ func TestApprovalRationale_clearsPendingOnEmpty(t *testing.T) {
 		Summarizer:  sum,
 		Checkpoints: caps,
 	})
-	attacher.AttachAsync(context.Background(), tools.AIRationaleAttachRequest{
+	attacher.AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
 		CheckpointID: "chk-1",
-		ToolContext:  tools.ToolContext{SessionID: "s1", ToolCallID: "tc1"},
-		Tool:         "command",
-		Args:         map[string]any{"command": "git push"},
+		ToolContext: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1"},
+		},
+		Tool: "command",
+		Args: map[string]any{"command": "git push"},
 	})
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -281,10 +292,13 @@ func TestApprovalRationale_disabledDoesNothing(t *testing.T) {
 	if attacher.Enabled() {
 		t.Fatal("Enabled() must reflect the disabled toggle")
 	}
-	attacher.AttachAsync(context.Background(), tools.AIRationaleAttachRequest{
+	attacher.AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
 		CheckpointID: "chk-1",
-		ToolContext:  tools.ToolContext{SessionID: "s1", ToolCallID: "tc1"},
-		Tool:         "command",
+		ToolContext: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1"},
+		},
+		Tool: "command",
 	})
 	caps.mu.Lock()
 	defer caps.mu.Unlock()
@@ -313,11 +327,14 @@ func TestApprovalRationale_mockStub(t *testing.T) {
 		Summarizer:  sum,
 		Checkpoints: caps,
 	})
-	attacher.AttachAsync(context.Background(), tools.AIRationaleAttachRequest{
+	attacher.AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
 		CheckpointID: "chk-2",
-		ToolContext:  tools.ToolContext{SessionID: "s1", ToolCallID: "tc1"},
-		Tool:         "command",
-		Args:         map[string]any{"command": "git push"},
+		ToolContext: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "s1",
+				ToolCallID: "tc1"},
+		},
+		Tool: "command",
+		Args: map[string]any{"command": "git push"},
 	})
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {

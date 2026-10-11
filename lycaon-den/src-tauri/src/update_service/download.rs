@@ -209,7 +209,7 @@ async fn transfer(
     if url.origin().ascii_serialization() != DOWNLOAD_ORIGIN {
         return Err(Failure::InvalidRelease.into());
     }
-    let client = reqwest::Client::builder()
+    let client = crate::http_transport::client_builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .timeout(DOWNLOAD_REQUEST_TIMEOUT)

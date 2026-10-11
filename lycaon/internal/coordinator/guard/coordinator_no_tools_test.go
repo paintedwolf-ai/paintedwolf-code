@@ -1,6 +1,8 @@
 package guard_test
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
 	"strings"
 	"testing"
@@ -11,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -59,7 +60,7 @@ func TestCoordinatorEvidenceOptional(t *testing.T) {
 func TestPrepareCoordinatorCloseoutReadsEveryForm(t *testing.T) {
 	t.Parallel()
 
-	prepared, read, ok := guard.PrepareCoordinatorCloseoutContent(tools.SurfaceImplementInvestigate, "Plain answer.", "")
+	prepared, read, ok := guard.PrepareCoordinatorCloseoutContent(toolcontract.SurfaceImplementInvestigate, "Plain answer.", "")
 	report, parsed := guidance.ParseCoordinatorCompletionReport(prepared)
 	if !ok || !parsed || report.Synthesis != "Plain answer." || len(read.Unread) != 0 {
 		t.Fatalf("prose: prepared=%q read=%+v", prepared, read)
@@ -68,7 +69,7 @@ func TestPrepareCoordinatorCloseoutReadsEveryForm(t *testing.T) {
 		t.Fatalf("expected empty citations, got evidence=%v urls=%v", report.CitedEvidence, report.CitedURLs)
 	}
 	malformed := `{"synthesis":"## Report\n\nDone."}, "cited_evidence":[],"cited_urls":[],"artifact_ids":[]}`
-	prepared, _, ok = guard.PrepareCoordinatorCloseoutContent(tools.SurfaceImplementInvestigate, malformed, "")
+	prepared, _, ok = guard.PrepareCoordinatorCloseoutContent(toolcontract.SurfaceImplementInvestigate, malformed, "")
 	report, parsed = guidance.ParseCoordinatorCompletionReport(prepared)
 	if !ok || !parsed || report.Synthesis != "## Report\n\nDone." {
 		t.Fatalf("salvaged envelope synthesis=%q parsed=%v", report.Synthesis, parsed)
@@ -82,7 +83,7 @@ func TestPrepareCoordinatorCloseoutProseTrailer(t *testing.T) {
 	t.Parallel()
 
 	content := "## Report\n\nFixed the bug in `a.go`.\n\n```json\n{\"cited_evidence\":[{\"path\":\"a.go\",\"line\":3,\"excerpt\":\"x\"}],\"cited_urls\":[],\"artifact_ids\":[]}\n```"
-	prepared, read, ok := guard.PrepareCoordinatorCloseoutContent(tools.SurfaceImplementInvestigate, content, "")
+	prepared, read, ok := guard.PrepareCoordinatorCloseoutContent(toolcontract.SurfaceImplementInvestigate, content, "")
 	report, parsed := guidance.ParseCoordinatorCompletionReport(prepared)
 	if !ok || !parsed || len(read.Unread) != 0 {
 		t.Fatalf("assembled envelope not parseable: %q", prepared)
@@ -95,7 +96,7 @@ func TestPrepareCoordinatorCloseoutProseTrailer(t *testing.T) {
 	}
 
 	misplaced := "## Report\n\nBody.\n\n```json\n{\"findings\":[{\"id\":\"c1\",\"title\":\"A\",\"disposition\":\"act\",\"ask\":{\"do\":\"x\",\"effort\":\"small\"}}],\"set_asides\":[{\"scanner\":\"s\",\"paths\":[\"t/**\"],\"reason\":\"fixtures\"}]}\n```"
-	prepared, read, ok = guard.PrepareCoordinatorCloseoutContent(tools.SurfaceImplementInvestigate, misplaced, "")
+	prepared, read, ok = guard.PrepareCoordinatorCloseoutContent(toolcontract.SurfaceImplementInvestigate, misplaced, "")
 	report, parsed = guidance.ParseCoordinatorCompletionReport(prepared)
 	if !ok || !parsed || len(report.Findings) != 1 || len(report.SetAsides) != 1 || report.Synthesis != "## Report\n\nBody." {
 		t.Fatalf("readable members lost: %q", prepared)
@@ -105,7 +106,7 @@ func TestPrepareCoordinatorCloseoutProseTrailer(t *testing.T) {
 	}
 
 	sample := "## Report\n\nConfig sample:\n\n```json\n{\"port\": 8080}\n```"
-	prepared, read, ok = guard.PrepareCoordinatorCloseoutContent(tools.SurfaceImplementInvestigate, sample, "")
+	prepared, read, ok = guard.PrepareCoordinatorCloseoutContent(toolcontract.SurfaceImplementInvestigate, sample, "")
 	if report, parsed := guidance.ParseCoordinatorCompletionReport(prepared); !ok || !parsed || !strings.Contains(report.Synthesis, "8080") || len(read.Unread) != 0 {
 		t.Fatalf("sample lost from prose: %q", prepared)
 	}
@@ -119,7 +120,7 @@ func TestPrepareCoordinatorCloseoutContent(t *testing.T) {
 
 	t.Run("markdown coerced on investigate surface", func(t *testing.T) {
 		t.Parallel()
-		prepared, _, ok := guard.PrepareCoordinatorCloseoutContent(tools.SurfaceImplementInvestigate, markdown, "")
+		prepared, _, ok := guard.PrepareCoordinatorCloseoutContent(toolcontract.SurfaceImplementInvestigate, markdown, "")
 		if !ok {
 			t.Fatal("expected markdown coercion")
 		}
@@ -134,7 +135,7 @@ func TestPrepareCoordinatorCloseoutContent(t *testing.T) {
 			&api.Session{Posture: api.SessionPostureBuild}, hostLoopHistory(
 				nil),
 			prepared, nil,
-			tools.SurfaceImplementInvestigate, true, surface.ImplementSessionState{}, rejectFmt, guard.BatchTurnGuard{})
+			toolcontract.SurfaceImplementInvestigate, true, surface.ImplementSessionState{}, rejectFmt, guard.BatchTurnGuard{})
 
 		if blocked {
 			t.Fatalf("coerced envelope should pass closeout guard, reject=%q", reject)
@@ -213,7 +214,7 @@ func TestEvaluateCoordinatorCloseoutGrounding_coercedProseReturnsCitationsRequir
 		{Role: api.MessageRoleTool, Content: readJSON, ToolResult: &api.ToolResult{Content: readJSON, Outcome: api.ToolResultOutcomeCompleted}},
 	}
 	ledger := investigateLedgerReader{root: root, sessionID: sess.ID, msgs: history[1:]}
-	prepared, _, ok := guard.PrepareCoordinatorCloseoutContent(tools.SurfaceImplementInvestigate, "## Found foo\n\nUpdated internal/foo.go.", "")
+	prepared, _, ok := guard.PrepareCoordinatorCloseoutContent(toolcontract.SurfaceImplementInvestigate, "## Found foo\n\nUpdated internal/foo.go.", "")
 	if !ok {
 		t.Fatal("expected markdown coercion")
 	}
@@ -222,7 +223,7 @@ func TestEvaluateCoordinatorCloseoutGrounding_coercedProseReturnsCitationsRequir
 		t.Fatalf("prepared content not parseable: %q", prepared)
 	}
 	verdict, err := guard.EvaluateCoordinatorCloseoutGrounding(
-		context.Background(), ledger, sess, history, tools.SurfaceImplementInvestigate, report, []string{"read"}, evidence.CitationRoots{ProjectDir: root},
+		context.Background(), ledger, sess, history, toolcontract.SurfaceImplementInvestigate, report, []string{"read"}, evidence.CitationRoots{ProjectDir: root},
 	)
 	testutil.FailErr(t, "guard.EvaluateCoordinatorCloseoutGrounding failed", err)
 	if verdict.Code != guidance.InvestCitationsRequiredCode {
@@ -249,7 +250,7 @@ func TestEvaluateCoordinatorCloseoutGrounding_skipsWhenNoToolsRunOnFirstTurn(t *
 		}},
 	}
 	verdict, err := guard.EvaluateCoordinatorCloseoutGrounding(
-		context.Background(), nil, sess, history, tools.SurfaceImplementInvestigate, report, nil, evidence.CitationRoots{ProjectDir: root},
+		context.Background(), nil, sess, history, toolcontract.SurfaceImplementInvestigate, report, nil, evidence.CitationRoots{ProjectDir: root},
 	)
 	testutil.FailErr(t, "guard.EvaluateCoordinatorCloseoutGrounding failed", err)
 	if strings.TrimSpace(verdict.Code) != "" {
@@ -284,7 +285,7 @@ func TestEvaluateCoordinatorCloseoutGrounding_requiresGroundingOnLaterNoToolTurn
 		}},
 	}
 	verdict, err := guard.EvaluateCoordinatorCloseoutGrounding(
-		context.Background(), ledger, sess, history, tools.SurfaceImplementInvestigate, report, nil, evidence.CitationRoots{ProjectDir: root},
+		context.Background(), ledger, sess, history, toolcontract.SurfaceImplementInvestigate, report, nil, evidence.CitationRoots{ProjectDir: root},
 	)
 	testutil.FailErr(t, "guard.EvaluateCoordinatorCloseoutGrounding failed", err)
 	if strings.TrimSpace(verdict.Code) == "" {

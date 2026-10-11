@@ -35,7 +35,7 @@ func (t *commitTrees) oid(rootID, head, path string) (string, bool) {
 
 // resolveCommitTrees reads one tree per folder the batch names. A folder Git
 // cannot answer for is left out, so its files fall back to a single read.
-func (s *Handler) resolveCommitTrees(ctx context.Context, p *project.Project, sources []wire.SourceComparisonSelector) *commitTrees {
+func (s *Comparisons) resolveCommitTrees(ctx context.Context, p *project.Project, sources []wire.SourceComparisonSelector) *commitTrees {
 	paths := map[string][]string{}
 	for _, source := range sources {
 		if source.Commit == nil || source.Commit.RootID == "" || source.Commit.Path == "" {

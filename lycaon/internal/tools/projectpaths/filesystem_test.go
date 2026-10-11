@@ -24,8 +24,12 @@ func TestNativeScratchUsesProcessFilesystemRoots(t *testing.T) {
 		t.Fatal("OS temporary directory missing from process boundary")
 	}
 	recorder := &mutationRecorder{}
-	tc := tools.ToolContext{ProjectID: "project", MutationRecorder: recorder,
-		Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}}, ActiveRootID: "root"}
+	tc := tools.ToolContext{
+		Identity: tools.InvocationIdentity{ProjectID: "project"},
+		Source: tools.InvocationSource{MutationRecorder: recorder,
+			Roots:        []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+			ActiveRootID: "root"},
+	}
 	read, err := projectpaths.ResolveRead(t.Context(), nil, tc, path)
 	testutil.FailErr(t, "resolve native scratch read", err)
 	write, err := projectpaths.ResolveWrite(t.Context(), nil, tc, path)
@@ -36,7 +40,7 @@ func TestNativeScratchUsesProcessFilesystemRoots(t *testing.T) {
 	if _, err := projectpaths.ResolveWrite(t.Context(), nil, tc, filepath.Join(scratch, ".git", "config")); err == nil {
 		t.Fatal("scratch authority bypassed protected metadata")
 	}
-	tc.WorkerBranchRoot = project
+	tc.Source.WorkerBranchRoot = project
 	if _, err := projectpaths.ResolveRead(t.Context(), nil, tc, path); err == nil {
 		t.Fatal("scratch authority escaped worker isolation")
 	}
@@ -47,7 +51,10 @@ func TestNativeWriteCreatesAnAbsentCacheRootThroughTheDescriptorDoor(t *testing.
 	cache := filepath.Join(t.TempDir(), "new-cache")
 	t.Setenv("XDG_CACHE_HOME", cache)
 	path := filepath.Join(cache, "package", "manifest.txt")
-	tc := tools.ToolContext{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}}, ActiveRootID: "root"}
+	tc := tools.ToolContext{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: project, IsPrimary: true}},
+			ActiveRootID: "root"},
+	}
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, nil)
 	resolved, err := projectpaths.ResolveWrite(t.Context(), boundary, tc, path)
 	testutil.FailErr(t, "resolve absent cache file", err)

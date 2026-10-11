@@ -10,7 +10,7 @@ import (
 
 // Surviving character identities determine the alignment of collaborative
 // versions. A textual diff may align an unrelated repeated character instead.
-func (s *Store) recordedTextEdits(ctx context.Context, beforeID, afterID, beforeText, afterText string) ([]documentcore.Edit, error) {
+func (s *Comparisons) recordedTextEdits(ctx context.Context, beforeID, afterID, beforeText, afterText string) ([]documentcore.Edit, error) {
 	before, err := s.versionTextState(ctx, beforeID)
 	if err != nil {
 		return nil, err

@@ -14,11 +14,11 @@ func (g *RuleApprovalGate) executionCapabilityCovers(action hitl.ProposedAction)
 	if capability == "" || g.grants == nil {
 		return false
 	}
-	for _, grant := range g.grants.live(action.ChatSession()) {
+	for _, grant := range g.grants.live(action.Scope.ChatSession()) {
 		if grant.Predicate.Category != hitl.ApprovalGrantCategoryExecutionCapability || grant.Predicate.Pattern != capability {
 			continue
 		}
-		if grant.Scope != hitl.ApprovalGrantScopeChat || grant.ProjectID != action.ProjectID || grant.ChatSessionID != action.ChatSession() {
+		if grant.Scope != hitl.ApprovalGrantScopeChat || grant.ProjectID != action.Scope.ProjectID || grant.ChatSessionID != action.Scope.ChatSession() {
 			continue
 		}
 		if grant.ExpiresAt != nil && !grant.ExpiresAt.After(time.Now()) {

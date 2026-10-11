@@ -11,16 +11,16 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) newComparisonView(scope pagedview.Scope, p *project.Project, request wire.SourceComparisonViewCreate) *sourceView {
+func (s *ComparisonViews) newComparisonView(scope pagedview.Scope, p *project.Project, request wire.SourceComparisonViewCreate) *sourceView {
 	ctx, cancel := context.WithCancel(s.background.Context())
 	view := &sourceView{scope: scope, clientID: request.ClientID, sessionID: request.SessionID, workspaceID: p.WorkspaceID(),
-		ctx: ctx, cancel: cancel, state: "preparing", commands: pagedview.NewCommands[string](&s.sourceViews.receipts),
-		comparisonBudget: s.sourceReaders.Budget(), comparisonIntent: request.Intent, comparisonSource: request.Source, projectionRevision: uuid.NewString(), expires: time.Now().Add(sourceViewLifetime)}
-	view.notifier = pagedview.NewNotifier(250*time.Millisecond, func() { s.publishSourceView(view) })
+		ctx: ctx, cancel: cancel, state: "preparing", commands: pagedview.NewCommands[string](&s.sourceViews.receipts), projectionRevision: uuid.NewString(), expires: time.Now().Add(sourceViewLifetime), comparisonData: sourceViewComparisonData{
+			comparisonBudget: s.sourceReaders.Budget(), comparisonIntent: request.Intent, comparisonSource: request.Source}}
+	view.notifier = pagedview.NewNotifier(250*time.Millisecond, func() { s.Views.publishSourceView(view) })
 	return view
 }
 
-func (s *Handler) prepareComparisonView(view *sourceView, p *project.Project, release func()) {
+func (s *ComparisonViews) prepareComparisonView(view *sourceView, p *project.Project, release func()) {
 	s.background.Go(view.ctx, func(ctx context.Context) {
 		defer release()
 		ctx, cancel := context.WithCancel(ctx)
@@ -38,22 +38,22 @@ func (s *Handler) prepareComparisonView(view *sourceView, p *project.Project, re
 	})
 }
 
-func (s *Handler) prepareComparisonContent(ctx context.Context, view *sourceView, p *project.Project) error {
-	if view.comparisonSource.Current != nil {
+func (s *ComparisonViews) prepareComparisonContent(ctx context.Context, view *sourceView, p *project.Project) error {
+	if view.comparisonData.comparisonSource.Current != nil {
 		return s.prepareCurrentSource(view, p)
 	}
-	if source := view.comparisonSource.Retained; source != nil {
+	if source := view.comparisonData.comparisonSource.Retained; source != nil {
 		held, release, err := s.acquireRetainedSource(view, source)
 		if err != nil {
 			return err
 		}
 		defer release()
-		scoped, err := s.sourceViewProject(ctx, p, held)
+		scoped, err := s.Views.sourceViewProject(ctx, p, held)
 		if err != nil {
 			return err
 		}
 		held.mu.Lock()
-		current := held.current
+		current := held.comparisonData.current
 		if current != nil && source.Comparison == "before" {
 			current.retain()
 		}
@@ -80,10 +80,10 @@ func (s *Handler) prepareComparisonContent(ctx context.Context, view *sourceView
 	}
 	var comparison wire.SourceComparison
 	var err error
-	if view.comparisonSource.Retained != nil {
+	if view.comparisonData.comparisonSource.Retained != nil {
 		comparison, err = s.loadRetainedViewComparison(ctx, p, view)
 	} else {
-		comparison, err = s.loadComparisonSource(ctx, p, view.sessionID, view.comparisonSource, nil)
+		comparison, err = s.Comparisons.loadComparisonSource(ctx, p, view.sessionID, view.comparisonData.comparisonSource, nil)
 	}
 	if err != nil {
 		return err
@@ -91,8 +91,8 @@ func (s *Handler) prepareComparisonContent(ctx context.Context, view *sourceView
 	return s.installComparison(view, comparison)
 }
 
-func (s *Handler) acquireRetainedSource(view *sourceView, source *wire.RetainedComparisonSource) (*sourceView, func(), error) {
-	held, release, err := s.sourceViewRegistry().registry.Acquire(view.scope, source.ViewID)
+func (s *ComparisonViews) acquireRetainedSource(view *sourceView, source *wire.RetainedComparisonSource) (*sourceView, func(), error) {
+	held, release, err := s.Views.sourceViewRegistry().registry.Acquire(view.scope, source.ViewID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -114,7 +114,7 @@ func (view *sourceView) failLocked(err error) {
 	view.failure = sourcePreparationFailure(err, "The source presentation could not be prepared.")
 }
 
-func (s *Handler) installComparison(view *sourceView, comparison wire.SourceComparison) error {
+func (s *ComparisonViews) installComparison(view *sourceView, comparison wire.SourceComparison) error {
 	details := &wire.SourceComparisonDetails{InRange: comparison.InRange, EffectID: comparison.EffectID, FileID: comparison.FileID,
 		Op: comparison.Op, LocationChanged: comparison.LocationChanged, UserEditsUnmarked: comparison.UserEditsUnmarked, PresentationAfterOrdinal: comparison.PresentationAfterOrdinal}
 	var document *sourcecomparison.Document
@@ -127,7 +127,7 @@ func (s *Handler) installComparison(view *sourceView, comparison wire.SourceComp
 		if err != nil {
 			return err
 		}
-		projection, err = view.comparisonProjection(view.ctx, document, view.comparisonIntent, comparison.Before.SecretScreen, comparison.After.SecretScreen)
+		projection, err = view.comparisonProjection(view.ctx, document, view.comparisonData.comparisonIntent, comparison.Before.SecretScreen, comparison.After.SecretScreen)
 		if err != nil {
 			release()
 			return err
@@ -141,10 +141,10 @@ func (s *Handler) installComparison(view *sourceView, comparison wire.SourceComp
 		details.Before, details.After = readerEndpoint(*comparison.Before), readerEndpoint(*comparison.After)
 	}
 	view.mu.Lock()
-	view.comparison, view.comparisonRelease, view.projection, view.details = document, release, projection, details
-	view.comparisonBefore, view.comparisonAfter = before, after
-	if view.comparisonSource.Text != nil {
-		reference := *view.comparisonSource.Text
+	view.comparisonData.comparison, view.comparisonData.comparisonRelease, view.comparisonData.projection, view.comparisonData.details = document, release, projection, details
+	view.comparisonData.comparisonBefore, view.comparisonData.comparisonAfter = before, after
+	if view.comparisonData.comparisonSource.Text != nil {
+		reference := *view.comparisonData.comparisonSource.Text
 		bytes := int64(0)
 		for _, content := range []*string{reference.Before, reference.After} {
 			if content != nil {
@@ -155,38 +155,38 @@ func (s *Handler) installComparison(view *sourceView, comparison wire.SourceComp
 			_ = view.trimDescriptor(bytes)
 		}
 		reference.Before, reference.After = nil, nil
-		view.comparisonSource.Text = &reference
+		view.comparisonData.comparisonSource.Text = &reference
 	}
 	view.state, view.projectionRevision = "ready", uuid.NewString()
 	view.mu.Unlock()
 	return nil
 }
 
-func (s *Handler) loadRetainedViewComparison(ctx context.Context, p *project.Project, view *sourceView) (wire.SourceComparison, error) {
-	source := view.comparisonSource.Retained
+func (s *ComparisonViews) loadRetainedViewComparison(ctx context.Context, p *project.Project, view *sourceView) (wire.SourceComparison, error) {
+	source := view.comparisonData.comparisonSource.Retained
 	held, release, err := s.acquireRetainedSource(view, source)
 	if err != nil {
 		return wire.SourceComparison{}, err
 	}
 	defer release()
-	if _, err := s.sourceViewProject(ctx, p, held); err != nil {
+	if _, err := s.Views.sourceViewProject(ctx, p, held); err != nil {
 		return wire.SourceComparison{}, err
 	}
 	held.mu.Lock()
-	document := held.comparison
+	document := held.comparisonData.comparison
 	if held.state != "ready" || document == nil {
 		held.mu.Unlock()
 		return wire.SourceComparison{}, &comparisonFailure{wire.ApiErrorCodeSourceViewPreparing, "The source comparison is not ready."}
 	}
-	before, after := held.comparisonBefore, held.comparisonAfter
+	before, after := held.comparisonData.comparisonBefore, held.comparisonData.comparisonAfter
 	attribution := document.Attribution
-	chat := held.chatSource
-	if held.comparisonSource.Chat != nil {
-		chat = held.comparisonSource.Chat
+	chat := held.comparisonData.chatSource
+	if held.comparisonData.comparisonSource.Chat != nil {
+		chat = held.comparisonData.comparisonSource.Chat
 	}
 	held.mu.Unlock()
 	if source.Comparison == "current" {
-		before, err = s.readerCurrentSide(ctx, p, source.RootID, source.Path)
+		before, err = s.Comparisons.readerCurrentSide(ctx, p, source.RootID, source.Path)
 		if err != nil {
 			return wire.SourceComparison{}, err
 		}
@@ -195,7 +195,7 @@ func (s *Handler) loadRetainedViewComparison(ctx context.Context, p *project.Pro
 		return wire.SourceComparison{}, &comparisonFailure{wire.ApiErrorCodeInvalidRequest, "Unknown comparison mode."}
 	}
 	view.mu.Lock()
-	view.chatSource = chat
+	view.comparisonData.chatSource = chat
 	view.mu.Unlock()
 	return wire.SourceComparison{InRange: true, Before: &before, After: &after, Attribution: attribution}, nil
 }

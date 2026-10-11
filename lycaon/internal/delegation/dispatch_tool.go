@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/tools"
@@ -17,9 +18,9 @@ func RegisterDispatchTool(reg *tools.DefaultRegistry, mgr *Manager) error {
 		return fmt.Errorf("registry and manager required")
 	}
 	return reg.Register("delegate_dispatch", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		delegationID, ok := mgr.Store.DelegationBySessionID(tctx.SessionID)
+		delegationID, ok := mgr.Store.DelegationBySessionID(tctx.Identity.SessionID)
 		if !ok {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "COORDINATOR_DELEGATE_DISPATCH_USE_TASK",
 			}
 		}
@@ -28,7 +29,7 @@ func RegisterDispatchTool(reg *tools.DefaultRegistry, mgr *Manager) error {
 		if legID == "" {
 			legs, err := mgr.Store.ListLegs(ctx, delegationID)
 			if err != nil || len(legs) == 0 {
-				return "", &tools.ToolReject{
+				return "", &toolrejection.ToolReject{
 					Code: "DELEGATE_DISPATCH_LEG_REQUIRED",
 					Data: map[string]any{"delegation_id": delegationID},
 				}
@@ -40,15 +41,15 @@ func RegisterDispatchTool(reg *tools.DefaultRegistry, mgr *Manager) error {
 				}
 			}
 			if legID == "" {
-				return "", &tools.ToolReject{
+				return "", &toolrejection.ToolReject{
 					Code: "DELEGATE_DISPATCH_LEG_NOT_PENDING",
 					Data: map[string]any{"delegation_id": delegationID},
 				}
 			}
 		}
-		leg, err := mgr.DispatchLeg(ctx, delegationID, legID, tctx.ToolCallID)
+		leg, err := mgr.DispatchLeg(ctx, delegationID, legID, tctx.Identity.ToolCallID)
 		if errors.Is(err, ErrLegNotPending) {
-			return "", &tools.ToolReject{
+			return "", &toolrejection.ToolReject{
 				Code: "DELEGATE_DISPATCH_LEG_NOT_PENDING",
 				Data: map[string]any{"delegation_id": delegationID, "leg_id": legID},
 			}
@@ -56,9 +57,9 @@ func RegisterDispatchTool(reg *tools.DefaultRegistry, mgr *Manager) error {
 		if err != nil {
 			return "", err
 		}
-		if tctx.Out != nil {
-			tctx.Out.OwnerRef = leg.WorkerID
-			tctx.Out.Dispatch = &api.WorkerDispatch{
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.OwnerRef = leg.WorkerID
+			tctx.Effects.Out.Dispatch = &api.WorkerDispatch{
 				WorkerID: leg.WorkerID, AgentType: leg.AgentType, DelegationID: delegationID,
 				LegID: leg.ID,
 			}

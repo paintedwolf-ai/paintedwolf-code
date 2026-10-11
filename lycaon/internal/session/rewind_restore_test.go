@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
+	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -22,14 +23,14 @@ func TestRewindRefusesWhenNoCheckpointRootIsConfigured(t *testing.T) {
 		Origin: api.MessageOriginUser, Authority: api.ContentAuthorityUser,
 		TrustTier: api.ContentTrustTierTrusted,
 	}
-	testutil.FailErr(t, "append", mgr.store.AppendMessages(ctx, sessionID, anchor))
+	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(ctx, sessionID, anchor))
 
-	if _, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID); !errors.Is(err, errCheckpointRootUnset) {
-		t.Fatalf("RewindToPrompt err = %v, want errCheckpointRootUnset", err)
+	if _, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID); !errors.Is(err, checkpointcontrol.ErrCheckpointRootUnset) {
+		t.Fatalf("RewindToPrompt err = %v, want checkpointcontrol.ErrCheckpointRootUnset", err)
 	}
-	msgs, err := mgr.GetMessages(ctx, sessionID)
+	msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "get messages", err)
-	if _, ok := findMessage(msgs, anchor.ID); !ok {
+	if _, ok := rewindFixtureHasMessage(msgs, anchor.ID); !ok {
 		t.Fatal("a refused rewind must leave the transcript intact")
 	}
 }
@@ -69,8 +70,8 @@ func TestRewindRestoredPromptIsUserInstructionOnly(t *testing.T) {
 		},
 		ArtifactIDs: []string{"art-1"},
 	}
-	testutil.FailErr(t, "append", mgr.store.AppendMessages(ctx, sessionID, anchor))
-	_, err := sessioncheckpoint.New(mgr.dataDir, dir, mgr.store).Open(t.Context(), sessionID, anchor.ID)
+	testutil.FailErr(t, "append", mgr.Coordinator.Context.Sessions.(Store).AppendMessages(ctx, sessionID, anchor))
+	_, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store)).Open(t.Context(), sessionID, anchor.ID)
 	testutil.FailErr(t, "open checkpoint", err)
 
 	result, err := rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor.ID)

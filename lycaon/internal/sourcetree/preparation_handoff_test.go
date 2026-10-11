@@ -13,7 +13,7 @@ import (
 func TestCaptureKeepsCompleteCoordinatesWhileNewMembershipIsUnresolved(t *testing.T) {
 	view, root := viewFixture(t)
 	testutil.FailErr(t, "write known file", os.WriteFile(filepath.Join(root.Path, "known.txt"), []byte("known"), 0600))
-	_, err := view.catalog.ObserveDirectory(t.Context(), "project", root, ".", sourcecatalog.DirectoryRead{})
+	_, err := view.catalog.Directories.ObserveDirectory(t.Context(), "project", root, ".", sourcecatalog.DirectoryRead{})
 	testutil.FailErr(t, "publish complete initial structure", err)
 	view.mu.Lock()
 	view.rules.Set(Address{Root: root.ID, Path: "."}, Disclosure{Open: true, Recursive: true})
@@ -21,7 +21,7 @@ func TestCaptureKeepsCompleteCoordinatesWhileNewMembershipIsUnresolved(t *testin
 	testutil.FailErr(t, "create new directory", os.Mkdir(filepath.Join(root.Path, "new"), 0700))
 	testutil.FailErr(t, "write new descendant", os.WriteFile(filepath.Join(root.Path, "new", "child.txt"), []byte("new"), 0600))
 	repochange.Advance(root.Path)
-	_, err = view.catalog.ObserveDirectory(t.Context(), "project", root, ".", sourcecatalog.DirectoryRead{})
+	_, err = view.catalog.Directories.ObserveDirectory(t.Context(), "project", root, ".", sourcecatalog.DirectoryRead{})
 	testutil.FailErr(t, "publish foreground membership with unknown child", err)
 	presentation, err := view.Capture(t.Context())
 	testutil.FailErr(t, "capture completed predecessor immediately", err)
@@ -30,7 +30,7 @@ func TestCaptureKeepsCompleteCoordinatesWhileNewMembershipIsUnresolved(t *testin
 	if !extent.Complete || extent.Rows != 2 {
 		t.Fatalf("retained coordinates=%+v", extent)
 	}
-	testutil.FailErr(t, "finish queued recursive update", view.catalog.AwaitNavigation(t.Context(), "project", root))
+	testutil.FailErr(t, "finish queued recursive update", view.catalog.Directories.AwaitNavigation(t.Context(), "project", root))
 	refreshed, err := view.Capture(t.Context())
 	testutil.FailErr(t, "capture newly complete head", err)
 	defer refreshed.Close()
@@ -47,11 +47,11 @@ func TestCaptureKeepsCompleteCoordinatesWhileNewMembershipIsUnresolved(t *testin
 
 func TestExplicitNewDirectoryUsesCurrentIncompleteMembership(t *testing.T) {
 	view, root := viewFixture(t)
-	_, err := view.catalog.ObserveDirectory(t.Context(), "project", root, ".", sourcecatalog.DirectoryRead{})
+	_, err := view.catalog.Directories.ObserveDirectory(t.Context(), "project", root, ".", sourcecatalog.DirectoryRead{})
 	testutil.FailErr(t, "publish complete initial structure", err)
 	testutil.FailErr(t, "create new directory", os.Mkdir(filepath.Join(root.Path, "new"), 0700))
 	repochange.Advance(root.Path)
-	_, err = view.catalog.ObserveDirectory(t.Context(), "project", root, ".", sourcecatalog.DirectoryRead{})
+	_, err = view.catalog.Directories.ObserveDirectory(t.Context(), "project", root, ".", sourcecatalog.DirectoryRead{})
 	testutil.FailErr(t, "publish new incomplete membership", err)
 	view.mu.Lock()
 	view.rules.Set(Address{Root: root.ID, Path: "new"}, Disclosure{Open: true})

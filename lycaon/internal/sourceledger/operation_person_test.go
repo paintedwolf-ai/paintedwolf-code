@@ -14,14 +14,14 @@ func TestUserOperationsNameTheActingPersonAndOthersNameNone(t *testing.T) {
 	testutil.FailErr(t, "read host owner", err)
 
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "person.txt", OperationID: "by-person",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, After: []byte("typed\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "person.txt"},
+		ProjectID:      "p1", OperationID: "by-person",
+		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser, After: []byte("typed\n")})
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "agent.txt", OperationID: "by-agent",
+		RecordLocation: RecordLocation{RootID: "r1", Path: "agent.txt"},
+		ProjectID:      "p1", OperationID: "by-agent",
 		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, After: []byte("generated\n"),
-		SessionID: "", ToolCallID: "call-1", ToolName: "write",
-	})
+		SessionID: "", ToolCallID: "call-1", ToolName: "write"})
 	for key, want := range map[string]string{"by-person": owner.ID, "by-agent": ""} {
 		var person sql.NullString
 		testutil.FailErr(t, "read operation "+key, store.sqlDB.QueryRowContext(ctx,

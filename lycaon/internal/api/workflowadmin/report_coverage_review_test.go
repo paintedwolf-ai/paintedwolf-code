@@ -8,8 +8,8 @@ import (
 	"github.com/lycaon/lycaon/internal/report"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -31,7 +31,7 @@ func coverageManifest() workflowdef.Manifest {
 
 func TestReportCoverageReviewRecordsPendingScansAsAGap(t *testing.T) {
 	var input report.ReportInput
-	err := appendCoverageReview(context.Background(), &input, coverageFactsStub{err: workflow.ErrCoverageScansPending}, &wire.WorkflowRun{ID: "run"}, coverageManifest(), nil)
+	err := appendCoverageReview(context.Background(), &input, coverageFactsStub{err: runstate.ErrCoverageScansPending}, &wire.WorkflowRun{ID: "run"}, coverageManifest(), nil)
 	testutil.FailErr(t, "appendCoverageReview with pending scans", err)
 	if input.CoverageFacts != nil || input.CoverageReview != nil {
 		t.Fatalf("pending scans produced coverage facts: %+v", input)
@@ -59,7 +59,7 @@ func TestReportCoverageReviewKeepsHostFaults(t *testing.T) {
 func TestReportCoverageReviewSkipsWorkflowsWithoutCoverage(t *testing.T) {
 	var input report.ReportInput
 	manifest := workflowdef.Manifest{PhaseDefs: []workflowdef.PhaseDef{{ID: "plan"}}}
-	err := appendCoverageReview(context.Background(), &input, coverageFactsStub{err: workflow.ErrCoverageScansPending}, &wire.WorkflowRun{ID: "run"}, manifest, nil)
+	err := appendCoverageReview(context.Background(), &input, coverageFactsStub{err: runstate.ErrCoverageScansPending}, &wire.WorkflowRun{ID: "run"}, manifest, nil)
 	testutil.FailErr(t, "appendCoverageReview without coverage", err)
 	if len(input.Gaps) != 0 || input.CoverageFacts != nil {
 		t.Fatalf("workflow without coverage acquired coverage state: %+v", input)

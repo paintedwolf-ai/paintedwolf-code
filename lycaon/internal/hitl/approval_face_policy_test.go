@@ -39,11 +39,22 @@ func facePolicyPlan(t *testing.T, face hitl.FaceContext, options []hitl.Approval
 
 func facePolicyPlanFor(t *testing.T, kind hitl.ApprovalSubjectKind, face hitl.FaceContext, options []hitl.ApprovalOption) *hitl.ApprovalPlan {
 	t.Helper()
-	action := hitl.ProposedAction{Tool: "command", SessionID: "chat-1", RootSessionID: "chat-1", Command: "curl https://example.com"}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+},
+Scope: hitl.ActionScope{
+SessionID: "chat-1",
+RootSessionID: "chat-1",
+},
+Presentation: hitl.ActionPresentation{
+Command: "curl https://example.com",
+},
+}
 	plan, err := hitl.NewApprovalPlan(
 		action, hitl.ApprovalStagePreSpawn,
 		hitl.ApprovalSubject{Kind: kind, Title: "Approve command",
-			Targets: []hitl.ApprovalTarget{{Kind: "action", Label: action.Command}}},
+			Targets: []hitl.ApprovalTarget{{Kind: "action", Label: action.Presentation.Command}}},
 		hitl.ApprovalPresentation{Action: "Run command", Impact: "Reach the network.", Gate: api.GateUserRule,
 			Cited: []hitl.PresentedFact{{Gate: api.GateUserRule, Key: "k", Value: "v", Source: "t"}}},
 		[]api.ApprovalGate{api.GateUserRule}, options, face)
@@ -86,7 +97,15 @@ func TestSecretFaceUsesTaskReleaseFromFirstReview(t *testing.T) {
 		},
 	}
 	build := func(face hitl.FaceContext) *hitl.ApprovalPlan {
-		action := hitl.ProposedAction{Tool: "model_request", SessionID: "chat-1", RootSessionID: "chat-1"}
+		action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "model_request",
+},
+Scope: hitl.ActionScope{
+SessionID: "chat-1",
+RootSessionID: "chat-1",
+},
+}
 		plan, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSend,
 			hitl.ApprovalSubject{Kind: hitl.ApprovalSubjectSecret, Title: "Credential detected",
 				Targets: []hitl.ApprovalTarget{{Kind: "secret", Label: "AWS access key ID", Details: map[string]any{"generic_shape": "a1 (2 characters)"}}}},

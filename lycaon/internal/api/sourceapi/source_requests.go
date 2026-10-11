@@ -18,7 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/fileops"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -34,11 +34,11 @@ func publishSourceRequest(hub events.ReplayHub, request fileops.Request) {
 
 type sourceRequestProjectKey struct{}
 
-func (s *Handler) SourceRequestHandler(operation Operation, next http.HandlerFunc) http.HandlerFunc {
+func (s *Mutations) SourceRequestHandler(operation Operation, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) { s.startSourceRequest(w, r, operation, next, false) }
 }
 
-func (s *Handler) startSourceRequest(w http.ResponseWriter, r *http.Request, operation Operation, next http.HandlerFunc, retry bool) {
+func (s *Mutations) startSourceRequest(w http.ResponseWriter, r *http.Request, operation Operation, next http.HandlerFunc, retry bool) {
 	p, release, ok := s.beginProjectSourceMutation(w, r)
 	if !ok {
 		return
@@ -49,7 +49,7 @@ func (s *Handler) startSourceRequest(w http.ResponseWriter, r *http.Request, ope
 		return
 	}
 	digest := sha256.Sum256(append([]byte(r.Method+"\x00"+r.URL.Path+"?"+r.URL.Query().Encode()+"\x00"), body...))
-	sessionID, turn := s.UserSourceChatAffiliation(r)
+	sessionID, turn := s.Workspace.UserSourceChatAffiliation(r)
 	request := fileops.Request{SessionID: sessionID, Turn: turn, ID: id, ProjectID: chi.URLParam(r, "id"), PersonID: requestscope.Caller(r).ID,
 		Operation: operation.ID, Method: r.Method, URI: r.URL.RequestURI(), Body: body, InputDigest: hex.EncodeToString(digest[:]), RootScope: sourceTreeCursorScope(p, "", "")}
 	run, created, err := s.FileOperations.Admit(r.Context(), request, retry)
@@ -64,10 +64,10 @@ func (s *Handler) startSourceRequest(w http.ResponseWriter, r *http.Request, ope
 		s.background.Go(r.Context(), func(ctx context.Context) {
 			defer release()
 			run.Execute(ctx, func(ctx context.Context) fileops.Outcome {
-				ctx = project.WithSourceProgress(ctx, func(progress project.SourceProgress) {
+				ctx = projectsource.WithSourceProgress(ctx, func(progress projectsource.SourceProgress) {
 					run.Report(ctx, progress.Phase, progress.Entries, progress.Bytes)
 				})
-				ctx = project.WithSourceEffect(ctx, func() error { return run.BeginEffect(ctx) })
+				ctx = projectsource.WithSourceEffect(ctx, func() error { return run.BeginEffect(ctx) })
 				ctx = context.WithValue(ctx, sourceRequestProjectKey{}, p)
 				affiliation := run.Snapshot()
 				ctx = context.WithValue(ctx, sourceRequestAffiliationKey{}, sourceRequestAffiliation{sessionID: affiliation.SessionID, turn: affiliation.Turn})
@@ -99,7 +99,7 @@ func (s *Handler) startSourceRequest(w http.ResponseWriter, r *http.Request, ope
 
 // sourceRequestBody is the request body a journaled operation carries, for
 // strict decoding before admission; a bodyless delete carries none.
-func (s *Handler) sourceRequestBody(operationID string) (any, bool) {
+func (s *Mutations) sourceRequestBody(operationID string) (any, bool) {
 	switch operationID {
 	case s.operations.CreateProjectSourceEntry.ID:
 		return new(wire.CreateProjectSourceEntryRequest), true
@@ -117,7 +117,7 @@ func (s *Handler) sourceRequestBody(operationID string) (any, bool) {
 // admitSourceRequestBody reads and validates the request a file operation
 // journals: its body strictly against the operation's schema, and its
 // operation_id, from the body or, for a bodyless delete, the query.
-func (s *Handler) admitSourceRequestBody(w http.ResponseWriter, r *http.Request, operation Operation) ([]byte, string, bool) {
+func (s *Mutations) admitSourceRequestBody(w http.ResponseWriter, r *http.Request, operation Operation) ([]byte, string, bool) {
 	dst, carriesBody := s.sourceRequestBody(operation.ID)
 	if !carriesBody {
 		id, err := uuid.Parse(strings.TrimSpace(r.URL.Query().Get("operation_id")))
@@ -184,7 +184,7 @@ func (w *sourceResponse) Write(body []byte) (int, error) {
 	return w.body.Write(body)
 }
 
-func (s *Handler) sourceRequestOperation(id string) (Operation, http.HandlerFunc, bool) {
+func (s *Mutations) sourceRequestOperation(id string) (Operation, http.HandlerFunc, bool) {
 	switch id {
 	case s.operations.DeleteProjectSource.ID:
 		return s.operations.DeleteProjectSource, s.HandleDeleteProjectSource, true
@@ -203,7 +203,7 @@ func (s *Handler) sourceRequestOperation(id string) (Operation, http.HandlerFunc
 	}
 }
 
-func (s *Handler) writeSourceRequestError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Mutations) writeSourceRequestError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, fileops.ErrConflict):
 		s.responses.Fail(w, wire.ApiErrorCodeIdempotencyConflict, "operation_id was already used for a different file request")
@@ -218,9 +218,9 @@ func (s *Handler) writeSourceRequestError(w http.ResponseWriter, r *http.Request
 }
 
 // RecoverFileOperations runs after filesystem and editor-document reconciliation.
-func (s *Handler) RecoverFileOperations(ctx context.Context) error {
+func (s *Mutations) RecoverFileOperations(ctx context.Context) error {
 	return s.FileOperations.Recover(ctx, func(ctx context.Context, job fileops.Request) (fileops.Outcome, bool, error) {
-		raw, committed, err := s.SourceMutations.CommittedSourceResult(ctx, job.ID)
+		raw, committed, err := s.SourceMutations.Journal.CommittedSourceResult(ctx, job.ID)
 		if err != nil || !committed {
 			return fileops.Outcome{}, false, err
 		}
@@ -237,13 +237,13 @@ func (s *Handler) RecoverFileOperations(ctx context.Context) error {
 			result = wire.ProjectSourceEntryCreatedResponse{Path: value.Path}
 			status = http.StatusCreated
 		case s.operations.CopyProjectSource.ID, s.operations.RenameProjectSource.ID:
-			var value project.SourceLifecycleResult
+			var value projectsource.SourceLifecycleResult
 			if err := json.Unmarshal(raw, &value); err != nil {
 				return fileops.Outcome{}, false, err
 			}
 			result = wire.ProjectSourceLifecycleResponse{RootID: value.RootID, Path: value.Path}
 		case s.operations.UndoProjectSourceHistory.ID, s.operations.RedoProjectSourceHistory.ID:
-			var value project.SourceHistoryMutationResult
+			var value projectsource.SourceHistoryMutationResult
 			if err := json.Unmarshal(raw, &value); err != nil {
 				return fileops.Outcome{}, false, err
 			}

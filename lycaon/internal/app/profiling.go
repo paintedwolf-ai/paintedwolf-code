@@ -42,7 +42,7 @@ func (a *ServeApp) startProfileServer(ctx context.Context) error {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 	a.resources.setProfileServer(server, listener)
-	wg := &a.profileWG
+	wg := &a.runners.profileWG
 	wg.Add(1)
 	go func() {
 		defer wg.Done()

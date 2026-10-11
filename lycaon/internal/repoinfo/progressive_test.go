@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -158,7 +159,9 @@ func TestProgressiveBriefServesMaterializedResultDuringRefresh(t *testing.T) {
 		t.Fatalf("first file count = %d, want 1", first.FileCount)
 	}
 
-	// A catalog refresh retains the materialized summary.
+	// A catalog refresh retains the materialized summary after its refractory.
+	first.GeneratedAt = time.Now().Add(-briefRevalidateAfter)
+	p.store(dir, first)
 	p.ensureAnalyze(dir)
 	for {
 		select {
@@ -344,7 +347,7 @@ func TestBriefPacingIgnoresChurnAndCatchesPartialCoverage(t *testing.T) {
 		{
 			name:  "refresh settled without another generation",
 			brief: &Brief{Materialized: true, Generation: 7, Partial: true, Refreshing: true, GeneratedAt: now},
-			files: indexGeneration{generation: 7, complete: true}, at: now, want: true,
+			files: indexGeneration{generation: 7, complete: true}, at: now, want: false,
 		},
 		{
 			// Ongoing discovery defers remeasurement regardless of generation age.
@@ -362,9 +365,9 @@ func TestBriefPacingIgnoresChurnAndCatchesPartialCoverage(t *testing.T) {
 			at:    now.Add(briefRevalidateAfter), want: true,
 		},
 		{
-			// Completed discovery bypasses the revalidation delay.
+			// Completed discovery retains the measurement refractory.
 			name: "partial brief, index now covers the tree", brief: fresh(7, true),
-			files: indexGeneration{generation: 8, complete: true}, at: now, want: true,
+			files: indexGeneration{generation: 8, complete: true}, at: now, want: false,
 		},
 		{
 			// Background refinement owns pending discovery.
@@ -377,5 +380,60 @@ func TestBriefPacingIgnoresChurnAndCatchesPartialCoverage(t *testing.T) {
 				t.Fatalf("briefStale = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+func TestBriefPacingScalesWithMeasurementCost(t *testing.T) {
+	now := time.Now()
+	brief := &Brief{Materialized: true, Generation: 1, Refreshing: true, GeneratedAt: now, measurementDuration: 12 * time.Second}
+	files := indexGeneration{generation: 2, complete: true}
+	if briefStale(brief, files, now.Add(time.Minute)) {
+		t.Fatal("expensive brief bypassed its cost refractory")
+	}
+	if !briefStale(brief, files, now.Add(2*time.Minute)) {
+		t.Fatal("completed newer index did not remeasure after refractory")
+	}
+}
+
+type refinementCatalog struct {
+	repositoryIndex
+	status sourcecatalog.TreeStatus
+}
+
+func (c refinementCatalog) IndexStatus(context.Context, string, sourcecatalog.Root) (sourcecatalog.TreeStatus, error) {
+	return c.status, nil
+}
+
+func TestRefinementConvergesWithoutRemeasuringSameGeneration(t *testing.T) {
+	p := newProviderWithAnalyze(nil)
+	defer func() { _ = p.Close() }()
+	p.resolveCatalogRoot = func(context.Context, string) (CatalogRoot, bool, error) {
+		return CatalogRoot{ProjectID: "p", RootID: "r"}, true, nil
+	}
+	p.catalog = refinementCatalog{status: sourcecatalog.TreeStatus{Revision: 7, Complete: true}}
+	brief := &Brief{Materialized: true, Generation: 7, Refreshing: true, Partial: true, GeneratedAt: time.Now()}
+	p.store("root", brief)
+	_, refine := p.awaitRefinement("root", brief, briefDiscoveryPoll, time.Now().Add(time.Minute))
+	if refine {
+		t.Fatal("unchanged completed generation requested a full measurement")
+	}
+	settled := p.load("root")
+	if settled.Refreshing || settled.Partial {
+		t.Fatal("settled coverage was not projected onto the measured brief")
+	}
+}
+
+func TestWarmCannotBypassMeasurementRefractory(t *testing.T) {
+	var calls atomic.Int32
+	p := newProviderWithAnalyze(func(context.Context, string) (*Brief, error) {
+		calls.Add(1)
+		return &Brief{}, nil
+	})
+	root := t.TempDir()
+	p.store(root, &Brief{Materialized: true, Partial: true, GeneratedAt: time.Now(), measurementDuration: time.Minute})
+	p.Warm(root)
+	testutil.FailErr(t, "close paced provider", p.Close())
+	if calls.Load() != 0 {
+		t.Fatal("warm bypassed measurement pacing")
 	}
 }

@@ -74,9 +74,11 @@ func newSourceHandlerFixture(t *testing.T, opts ...func(*Deps)) *Handler {
 	handler := New(&httpio.Responder{Logger: slog.Default()}, group, Operations{}, deps)
 	t.Cleanup(func() {
 		group.Stop()
+		handler.Watch.Stop(t.Context())
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		group.Wait(ctx)
+		testutil.FailErr(t, "drain source watches", handler.Watch.Wait(ctx))
 		testutil.FailErr(t, "drain source background", ctx.Err())
 	})
 	return &handler

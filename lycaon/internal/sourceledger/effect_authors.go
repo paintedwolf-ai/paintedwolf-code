@@ -15,7 +15,7 @@ type Contributor struct {
 	Turn                                                         int
 }
 
-func (s *Store) hydrateEffectAuthors(ctx context.Context, projectID string, effects []Effect) error {
+func (s *Walk) hydrateEffectAuthors(ctx context.Context, projectID string, effects []Effect) error {
 	if len(effects) == 0 {
 		return nil
 	}
@@ -65,7 +65,7 @@ func (e Effect) onlyUserContributions() bool {
 	return true
 }
 
-func (s *Store) hydrateVersionAuthors(ctx context.Context, projectID string, versions []Version) error {
+func (s *Walk) hydrateVersionAuthors(ctx context.Context, projectID string, versions []Version) error {
 	effects := make([]Effect, len(versions))
 	for i := range versions {
 		effects[i].ID = versions[i].EffectID

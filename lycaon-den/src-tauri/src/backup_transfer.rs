@@ -176,8 +176,7 @@ async fn transfer(
 }
 
 fn transfer_client() -> Result<reqwest::Client, String> {
-    let _ = rustls::crypto::ring::default_provider().install_default();
-    reqwest::Client::builder()
+    crate::http_transport::client_builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
         .connect_timeout(Duration::from_secs(10))

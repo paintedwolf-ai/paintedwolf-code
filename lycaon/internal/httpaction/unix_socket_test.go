@@ -1,6 +1,7 @@
 package httpaction
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net"
 	"net/http"
 	"os"
@@ -36,9 +37,9 @@ func reviewedSocket(t *testing.T, root, path string) tools.ToolContext {
 	grant, err := confine.ResolveSocketRequest(path)
 	testutil.FailErr(t, "resolve socket", err)
 	tctx := sessionContext(root, "call-sock")
-	tctx.SocketGrants = []confine.SocketGrant{grant}
-	tctx.DurableSocketGrants = []confine.SocketGrant{grant}
-	tctx.Out = &tools.ToolInvocationOut{}
+	tctx.Socket.SocketGrants = []confine.SocketGrant{grant}
+	tctx.Socket.DurableSocketGrants = []confine.SocketGrant{grant}
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
 	return tctx
 }
 
@@ -48,7 +49,7 @@ func TestHTTPRequestUnixSocketRequiresReviewedAuthority(t *testing.T) {
 	_, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
 		"url": "http://localhost/info", "unix_socket": path,
 	}, sessionContext(t.TempDir(), "call-sock"))
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != isolation.CodeSocketPathChanged {
 		t.Fatalf("err = %v, want %s", err, isolation.CodeSocketPathChanged)
 	}
@@ -71,12 +72,12 @@ func TestHTTPRequestUnixSocketIsTheRecordedDestination(t *testing.T) {
 	if got.Status != http.StatusOK || got.Body != "daemon" || seen != "docker.invalid/v1.41/info" {
 		t.Fatalf("got = %+v seen %q", got, seen)
 	}
-	want := tctx.SocketGrants[0].ResolvedPath
+	want := tctx.Socket.SocketGrants[0].ResolvedPath
 	if got.UnixSocket != want {
 		t.Fatalf("unix_socket = %q, want the reviewed socket %q", got.UnixSocket, want)
 	}
-	if tctx.Out.RetrievedFrom != "unix:"+want || strings.Contains(tctx.Out.RetrievedFrom, "docker.invalid") {
-		t.Fatalf("retrieved from = %q, want the socket rather than the URL host", tctx.Out.RetrievedFrom)
+	if tctx.Effects.Out.RetrievedFrom != "unix:"+want || strings.Contains(tctx.Effects.Out.RetrievedFrom, "docker.invalid") {
+		t.Fatalf("retrieved from = %q, want the socket rather than the URL host", tctx.Effects.Out.RetrievedFrom)
 	}
 }
 
@@ -87,7 +88,7 @@ func TestHTTPRequestUnixSocketRefusesRedirectToAnotherOrigin(t *testing.T) {
 	_, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
 		"url": "http://localhost/start", "unix_socket": path, "redirects": "safe",
 	}, reviewedSocket(t, t.TempDir(), path))
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "HTTP_REQUEST_FAILED" || !strings.Contains(reject.Data["reason"].(string), "unix socket") {
 		t.Fatalf("err = %v, want a refused cross-origin redirect", err)
 	}

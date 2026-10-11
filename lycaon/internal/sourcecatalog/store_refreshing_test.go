@@ -149,11 +149,11 @@ func TestWriteDuringSettledPassTailRequestsNewerGeneration(t *testing.T) {
 // tail, leaves the published generation current: no second pass follows.
 func TestUnrepresentedChangeDuringSettledPassTailKeepsGeneration(t *testing.T) {
 	s := newTailStore(t)
-	c := &Catalog{trees: map[string]projectionStore{"tail": s}}
+	c := &Catalog{Trees: &TreeStores{trees: map[string]projectionStore{"tail": s}}}
 	startTailPass(t, s)
 
 	repochange.Advance(s.root.Path)
-	c.observeTreeEpoch(s.root.Path)
+	c.Trees.observeTreeEpoch(s.root.Path)
 	status, err := openStore(t.Context(), s, 0, nil)
 	if err != nil || status.Refreshing {
 		t.Fatalf("status after unrepresented change = %+v, %v; want the settled generation current", status, err)

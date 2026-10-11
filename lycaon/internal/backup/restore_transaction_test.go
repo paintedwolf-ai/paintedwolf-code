@@ -72,7 +72,7 @@ func TestFailedApplyReachesRecoveryAndReleasesTheNextTransaction(t *testing.T) {
 	testutil.FailErr(t, "seed blocked delete child",
 		os.WriteFile(filepath.Join(onboarding, "child"), []byte("x"), 0o600))
 
-	applyErr := backup.ApplyPending(configDir)
+	applyErr := backup.ApplyPending(t.Context(), configDir)
 	if applyErr == nil {
 		t.Fatal("apply of a blocked fresh start must fail")
 	}

@@ -7,58 +7,58 @@ import (
 
 // RecordSourceLocation records a location explicitly represented by a tool result.
 func (c ToolContext) RecordSourceLocation(target api.NavigationTarget) {
-	if c.Out == nil || target.ProjectID != c.ProjectID {
+	if c.Effects.Out == nil || target.ProjectID != c.Identity.ProjectID {
 		return
 	}
 	if !sourceref.Valid(target) {
 		return
 	}
 	key := sourceref.Key(target)
-	if c.Out.sourceLocations == nil {
-		c.Out.sourceLocations = make(map[string]struct{})
+	if c.Effects.Out.sourceLocations == nil {
+		c.Effects.Out.sourceLocations = make(map[string]struct{})
 	}
-	if _, exists := c.Out.sourceLocations[key]; exists {
+	if _, exists := c.Effects.Out.sourceLocations[key]; exists {
 		return
 	}
-	if c.Out.SourceContext == nil {
-		c.Out.SourceContext = &api.SourceContext{Locations: []api.NavigationTarget{}}
+	if c.Effects.Out.SourceContext == nil {
+		c.Effects.Out.SourceContext = &api.SourceContext{Locations: []api.NavigationTarget{}}
 	}
-	if len(c.Out.SourceContext.Locations) >= api.MaxSourceContextLocations {
-		c.Out.SourceContext.Truncated = true
+	if len(c.Effects.Out.SourceContext.Locations) >= api.MaxSourceContextLocations {
+		c.Effects.Out.SourceContext.Truncated = true
 		return
 	}
-	c.Out.sourceLocations[key] = struct{}{}
-	c.Out.SourceContext.Locations = append(c.Out.SourceContext.Locations, target)
+	c.Effects.Out.sourceLocations[key] = struct{}{}
+	c.Effects.Out.SourceContext.Locations = append(c.Effects.Out.SourceContext.Locations, target)
 }
 
 // RecordSourcePath resolves a structured producer path in its workspace.
 func (c ToolContext) RecordSourcePath(value string, kind api.NavigationEntryKind) {
-	if c.Out == nil || c.ProjectID == "" {
+	if c.Effects.Out == nil || c.Identity.ProjectID == "" {
 		return
 	}
 	root, path, ok := c.SourceLocation(value)
 	if !ok {
 		return
 	}
-	target := api.NavigationTarget{ProjectID: c.ProjectID, RootID: root.ID, Path: path, EntryKind: kind}
-	if c.WorkerBranchRoot != "" {
-		target.WorkerID = c.WorkerJobID
+	target := api.NavigationTarget{ProjectID: c.Identity.ProjectID, RootID: root.ID, Path: path, EntryKind: kind}
+	if c.Source.WorkerBranchRoot != "" {
+		target.WorkerID = c.Identity.WorkerJobID
 	}
 	c.RecordSourceLocation(target)
 }
 
 // RecordSourceContext merges a recalled source context into the tool result.
 func (c ToolContext) RecordSourceContext(context *api.SourceContext) {
-	if context == nil || c.Out == nil {
+	if context == nil || c.Effects.Out == nil {
 		return
 	}
 	for _, target := range context.Locations {
 		c.RecordSourceLocation(target)
 	}
 	if context.Truncated {
-		if c.Out.SourceContext == nil {
-			c.Out.SourceContext = &api.SourceContext{Locations: []api.NavigationTarget{}}
+		if c.Effects.Out.SourceContext == nil {
+			c.Effects.Out.SourceContext = &api.SourceContext{Locations: []api.NavigationTarget{}}
 		}
-		c.Out.SourceContext.Truncated = true
+		c.Effects.Out.SourceContext.Truncated = true
 	}
 }

@@ -18,7 +18,7 @@ func ObserveDoomLoopCodeRepeat(gc *oar.GuardContext, total int, tool, code, code
 	if gc == nil || total <= 0 || code == "" {
 		return
 	}
-	gc.Tool = tool
+	gc.Invocation.Tool = tool
 	gc.DeriveToolClassFacts()
 	gc.SetCodeRejectResponses(int64(total))
 	data := map[string]any{
@@ -37,16 +37,16 @@ func ObserveDoomLoopRepeat(gc *oar.GuardContext, count int, tool, repeatedCode s
 	if gc == nil {
 		return
 	}
-	gc.Tool = tool
+	gc.Invocation.Tool = tool
 	gc.DeriveToolClassFacts()
 	gc.SetRepeatCount(int64(count))
 	if repeatedCode != "" {
-		gc.SameCodeRejectRun = int64(DoomLoopMaxSameCodeRejects)
+		gc.Counters.SameCodeRejectRun = int64(DoomLoopMaxSameCodeRejects)
 	}
 	data := map[string]any{
 		"count":                count,
 		"tool":                 tool,
-		"deferred_unactivated": gc.DeferredUnactivated,
+		"deferred_unactivated": gc.Counters.DeferredUnactivated,
 	}
 	if repeatedCode != "" {
 		data["code"] = repeatedCode
@@ -62,7 +62,7 @@ func ObserveFruitlessSearch(gc *oar.GuardContext, run int, tool, pattern string)
 	if gc == nil || run <= 0 {
 		return
 	}
-	gc.Tool = tool
+	gc.Invocation.Tool = tool
 	gc.DeriveToolClassFacts()
 	gc.SetFruitlessSearchRun(int64(run))
 	gc.PutRejectData(doomLoopFruitlessSearchCode, map[string]any{
@@ -77,14 +77,14 @@ func ObserveDoomLoopWarn(gc *oar.GuardContext, count, maxAttempts int, tool stri
 	if gc == nil {
 		return
 	}
-	gc.Tool = tool
+	gc.Invocation.Tool = tool
 	gc.DeriveToolClassFacts()
 	gc.SetRepeatCount(int64(count))
 	data := map[string]any{
 		"tool":                 tool,
 		"count":                count,
 		"max":                  maxAttempts,
-		"deferred_unactivated": gc.DeferredUnactivated,
+		"deferred_unactivated": gc.Counters.DeferredUnactivated,
 	}
 	putCommandOutputRepeatData(data, tool, args)
 	gc.PutRejectData(doomLoopRepeatWarnCode, data)

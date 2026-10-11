@@ -72,9 +72,11 @@ components:
           $ref: worker.yaml#/components/schemas/CoverageReview
         declared_leg_status:
           type: string
+          enum: [complete, partial, blocked]
           description: "Leg status the worker declared; leg_status is the host-graded status."
         leg_status:
           type: string
+          enum: [complete, partial, blocked]
           description: "Host-graded leg status."
         files_modified:
           type: array

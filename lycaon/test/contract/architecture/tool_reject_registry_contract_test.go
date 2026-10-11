@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -77,7 +77,7 @@ func TestToolRejectCodesFormatAsStructuredRejectedBlocks(t *testing.T) {
 			// Covered by TestToolRejectCodesRegisteredInHintRegistry.
 			continue
 		}
-		formatted := tools.FormatDecisionReject(s.Code, map[string]any{
+		formatted := toolrejection.FormatDecisionReject(s.Code, map[string]any{
 			"tool": "summarize", "path": "README.md", "profile": "coordinator",
 			"bytes": 10, "cap": 400000, "floor": 200, "detail": "test",
 			"need_one_of": []string{"path", "paths", "pattern", "content"},
@@ -124,7 +124,7 @@ func TestToolRejectCodesFormatAsStructuredRejectedBlocks(t *testing.T) {
 // Missing policy copy does not change refusal metadata.
 func TestUnregisteredRejectCodeStillWiresAsRejected(t *testing.T) {
 	t.Parallel()
-	fallback := tools.FormatDecisionReject("NOT_IN_REGISTRY_INVARIANT_TEST", nil, guidance.NewStaticRejectFormatter(&guidance.HintConfig{HintCodes: map[string]guidance.HintEntry{}}))
+	fallback := toolrejection.FormatDecisionReject("NOT_IN_REGISTRY_INVARIANT_TEST", nil, guidance.NewStaticRejectFormatter(&guidance.HintConfig{HintCodes: map[string]guidance.HintEntry{}}))
 	refusal, ok := guidance.RefusalFromError(fallback)
 	if !ok {
 		t.Fatalf("missing-hint fallback must still be a refusal, got %T", fallback)

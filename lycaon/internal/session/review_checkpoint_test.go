@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools"
 	"testing"
 	"time"
 
@@ -31,9 +32,9 @@ func (r *reviewCheckpointRecorder) CreateStructuralCheckpoint(
 func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 	ctx := t.Context()
 	sessions := store.NewMemory()
-	mgr := NewManager(sessions, nil, nil, settings.DefaultSessionLimits())
+	mgr := NewHost(sessions, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	recorder := &reviewCheckpointRecorder{}
-	mgr.SetSourceLedger(recorder)
+	mgr.SetSourceLedger(recorder, tools.SourceHistory{}, nil, nil, recorder, nil)
 	sess, err := sessions.Create(ctx, api.CreateSessionRequest{
 		Posture: api.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
@@ -47,15 +48,15 @@ func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 		}
 	}
 	first := message("user-1", api.MessageOriginUser, api.MessageVisibilityTranscript, "")
-	mgr.createUserTurnReviewCheckpoint(ctx, sess.ID, first)
+	mgr.Runner.Instructions.ReviewCheckpoint(ctx, sess.ID, first)
 	testutil.FailErr(t, "append first user turn", sessions.AppendMessages(ctx, sess.ID, first))
 
 	hostKick := message("host-kick", api.MessageOriginHost, api.MessageVisibilityInternal, api.MessageKindHostKick)
-	mgr.createUserTurnReviewCheckpoint(ctx, sess.ID, hostKick)
+	mgr.Runner.Instructions.ReviewCheckpoint(ctx, sess.ID, hostKick)
 	testutil.FailErr(t, "append host kick", sessions.AppendMessages(ctx, sess.ID, hostKick))
 
 	second := message("user-2", api.MessageOriginUser, api.MessageVisibilityTranscript, "")
-	mgr.createUserTurnReviewCheckpoint(ctx, sess.ID, second)
+	mgr.Runner.Instructions.ReviewCheckpoint(ctx, sess.ID, second)
 	if len(recorder.inputs) != 2 {
 		t.Fatalf("review checkpoints = %d, want one for each of two user turns", len(recorder.inputs))
 	}
@@ -63,4 +64,8 @@ func TestReviewCheckpointOnlyOpensForRealUserIntent(t *testing.T) {
 		t.Fatalf("review checkpoint turns = %d, %d, want 1, 2",
 			recorder.inputs[0].Turn, recorder.inputs[1].Turn)
 	}
+}
+
+func (r *reviewCheckpointRecorder) TurnCheckpoint(context.Context, string, string, int) (sourceledger.Checkpoint, bool, error) {
+	return sourceledger.Checkpoint{}, false, nil
 }

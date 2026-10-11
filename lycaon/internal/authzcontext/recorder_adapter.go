@@ -55,12 +55,16 @@ func (a LedgerRecorder) AppendToolDenied(ctx context.Context, rec authzledger.To
 	tier := rec.Tier
 	if tier == "" {
 		tier = settings.TierLabel(settings.ClassifyTier(hitl.ProposedAction{
-			Tool:       rec.Tool,
-			Args:       rec.Args,
-			Files:      rec.Files,
-			ProjectDir: rec.ProjectDir,
-			SessionID:  rec.SessionID,
-		}))
+Invocation: hitl.ActionInvocation{
+Tool: rec.Tool,
+Args: rec.Args,
+Files: rec.Files,
+},
+Scope: hitl.ActionScope{
+ProjectDir: rec.ProjectDir,
+SessionID: rec.SessionID,
+},
+}))
 	}
 	a.Ledger.AppendRecord(ctx, RecordInput{
 		SessionID:  rec.SessionID,
@@ -319,12 +323,16 @@ func approvalRecordFromWire(rec authzledger.ApprovalDecisionRecord) RecordInput 
 	tier := rec.Tier
 	if tier == "" {
 		tier = settings.TierLabel(settings.ClassifyTier(hitl.ProposedAction{
-			Tool:       rec.Tool,
-			Args:       rec.Args,
-			Files:      rec.Files,
-			ProjectDir: rec.ProjectDir,
-			SessionID:  rec.SessionID,
-		}))
+Invocation: hitl.ActionInvocation{
+Tool: rec.Tool,
+Args: rec.Args,
+Files: rec.Files,
+},
+Scope: hitl.ActionScope{
+ProjectDir: rec.ProjectDir,
+SessionID: rec.SessionID,
+},
+}))
 	}
 	out := RecordInput{
 		SessionID:        rec.SessionID,

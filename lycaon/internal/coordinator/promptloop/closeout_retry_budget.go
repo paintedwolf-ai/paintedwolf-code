@@ -27,7 +27,7 @@ type closeoutRetryBudget struct {
 	runReport bool
 }
 
-func (l turnCloseout) closeoutRetryBudget(ctx context.Context, sessionID string, st *promptLoopTurnState, code, draftedContent string) closeoutRetryBudget {
+func (l *turnCloseout) closeoutRetryBudget(ctx context.Context, sessionID string, st *promptLoopTurnState, code, draftedContent string) closeoutRetryBudget {
 	binding := completionReportBinding(st)
 	if guidance.ReportDocumentObservation(code) != "" {
 		st.closeoutRetry.documentAttempt++

@@ -19,12 +19,12 @@ func TestMCPAuthFailureEvictsSessionForFreshReconnect(t *testing.T) {
 		ConnectCount: map[string]int{},
 	}
 	reg := newTestRegistry(t, conn, "svca")
-	if err := reg.SetProviderEnabled(context.Background(), mcp.CallScope{}, "svca", true, ""); err != nil {
+	if err := reg.Administration.SetProviderEnabled(context.Background(), mcp.CallScope{}, "svca", true, ""); err != nil {
 		testutil.FailErr(t, "enable", err)
 	}
 
 	// Warm the pool with a healthy session.
-	if _, err := reg.CallTool(context.Background(), mcp.CallScope{}, "svca", "query", nil); err != nil {
+	if _, err := reg.Calls.CallTool(context.Background(), mcp.CallScope{}, "svca", "query", nil); err != nil {
 		testutil.FailErr(t, "warm call", err)
 	}
 	if got := conn.ConnectCount["svca"]; got != 1 {
@@ -34,13 +34,13 @@ func TestMCPAuthFailureEvictsSessionForFreshReconnect(t *testing.T) {
 	// Simulate the provider's OAuth bearer expiring mid-session: the transport
 	// observes a 401 the way a real remote HTTP MCP server would return one.
 	conn.HTTPStatusOnce = map[string]int{"svca": http.StatusUnauthorized}
-	if _, err := reg.CallTool(context.Background(), mcp.CallScope{}, "svca", "query", nil); err == nil {
+	if _, err := reg.Calls.CallTool(context.Background(), mcp.CallScope{}, "svca", "query", nil); err == nil {
 		t.Fatal("expected the 401 round trip itself to fail")
 	}
 
 	// The stale session must not be served again: the very next call has to
 	// reconnect rather than repeat the same stale-bearer failure forever.
-	if _, err := reg.CallTool(context.Background(), mcp.CallScope{}, "svca", "query", nil); err != nil {
+	if _, err := reg.Calls.CallTool(context.Background(), mcp.CallScope{}, "svca", "query", nil); err != nil {
 		testutil.FailErr(t, "call after eviction", err)
 	}
 	if got := conn.ConnectCount["svca"]; got != 2 {

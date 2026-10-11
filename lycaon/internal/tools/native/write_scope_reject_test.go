@@ -2,6 +2,9 @@ package native_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,7 +31,7 @@ func TestWriteToolPlanWriterScopeAllowedAndDenied(t *testing.T) {
 	boundary := testBoundary(t)
 	writeTool := &native.WriteTool{Boundary: boundary}
 	editTool := &native.EditTool{Boundary: boundary}
-	policy := tools.NewProfilePolicyEngine(boundary)
+	policy := toolprofiles.NewProfilePolicyEngine(boundary)
 	reg := tools.NewDefaultRegistry()
 	_ = reg.Register("write", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		return writeTool.Run(ctx, args, tctx)
@@ -36,7 +39,7 @@ func TestWriteToolPlanWriterScopeAllowedAndDenied(t *testing.T) {
 	_ = reg.Register("edit", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		return editTool.Run(ctx, args, tctx)
 	})
-	exec := tools.NewDefaultToolExecutor(policy, reg, tools.DefaultToolProfileID)
+	exec := toolexecution.NewExecutor(policy, reg, toolprofiles.DefaultToolProfileID)
 
 	tmpDir := t.TempDir()
 	blueprintsDir := filepath.Join(tmpDir, filepath.FromSlash(settingsoverlay.Rel("blueprints")))
@@ -44,9 +47,9 @@ func TestWriteToolPlanWriterScopeAllowedAndDenied(t *testing.T) {
 		testutil.FailErr(t, "mkdir blueprints", err)
 	}
 	tctx := tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "plan_write_only",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmpDir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "plan_write_only"},
 	}
 
 	_, err := exec.Invoke(context.Background(), "write", map[string]any{
@@ -77,7 +80,7 @@ func TestWriteToolPlanWriterScopeAllowedAndDenied(t *testing.T) {
 	if !strings.Contains(err.Error(), "WRITE_SCOPE_DENIED") {
 		t.Fatalf("edit err = %v want WRITE_SCOPE_DENIED", err)
 	}
-	tr := tools.AsToolReject(err)
+	tr := toolrejection.AsToolReject(err)
 	if tr == nil {
 		t.Fatalf("edit reject should be ToolReject: %v", err)
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -41,7 +42,7 @@ func resolveExactNavigation(p *Project, ref api.NavigationReference) api.Navigat
 	target, err := navigationTarget(p, ref.RootID, ref.Path)
 	if err != nil {
 		ref.Status = api.NavigationUnavailable
-		if errors.Is(err, ErrSourceNotFound) {
+		if errors.Is(err, projectsource.ErrSourceNotFound) {
 			ref.Status = api.NavigationMissing
 		}
 		return ref
@@ -51,7 +52,7 @@ func resolveExactNavigation(p *Project, ref api.NavigationReference) api.Navigat
 	return ref
 }
 func navigationTarget(p *Project, rootID, rel string) (api.NavigationTarget, error) {
-	resolved, err := ResolveProjectPath(p, rootID, rel)
+	resolved, err := projectsource.ResolveProjectPath(p, rootID, rel)
 	if err != nil {
 		return api.NavigationTarget{}, err
 	}

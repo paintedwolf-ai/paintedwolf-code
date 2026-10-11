@@ -17,17 +17,17 @@ func TestInventoryOmissionDoesNotEstablishTrackedFileDeletion(t *testing.T) {
 		t.Run(rel, func(t *testing.T) {
 			store, ctx, root := openLedgerOnDisk(t)
 			// This immutable publication cannot name the explicitly tracked file.
-			snapshot, err := store.snapshots.Ensure(ctx, sourcesnapshot.Request{Roots: snapshotRoots(onDiskRoots(root))})
+			snapshot, err := store.Snapshots.Ensure(ctx, sourcesnapshot.Request{Roots: snapshotRoots(onDiskRoots(root))})
 			testutil.FailErr(t, "capture omitted-file manifest", err)
 			trackRootFile(t, store, ctx, root, rel, "before\n")
-			testutil.FailErr(t, "seed tracking boundary", store.seedTrackingBoundary(ctx, "p1"))
+			testutil.FailErr(t, "seed tracking boundary", store.Inventory.seedTrackingBoundary(ctx, "p1"))
 			head, err := store.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{ProjectID: "p1", BranchID: sourcebranch.Trunk.String(), RootID: "r1", Path: rel})
 			testutil.FailErr(t, "read tracked head", err)
 			for _, changed := range []bool{false, true} {
 				if changed {
 					writeRootFile(t, root, rel, "after\n")
 				}
-				out, err := store.reconcileSnapshot(ctx, "p1", snapshot, onDiskRoots(root), nil, nil)
+				out, err := store.Inventory.reconcileSnapshot(ctx, "p1", snapshot, onDiskRoots(root), nil, nil)
 				testutil.FailErr(t, "reconcile omitted file", err)
 				want := 0
 				if changed {
@@ -43,7 +43,7 @@ func TestInventoryOmissionDoesNotEstablishTrackedFileDeletion(t *testing.T) {
 				}
 			}
 			testutil.FailErr(t, "delete tracked file", os.Remove(filepath.Join(root, filepath.FromSlash(rel))))
-			out, err := store.reconcileSnapshot(ctx, "p1", snapshot, onDiskRoots(root), nil, nil)
+			out, err := store.Inventory.reconcileSnapshot(ctx, "p1", snapshot, onDiskRoots(root), nil, nil)
 			testutil.FailErr(t, "reconcile true deletion", err)
 			deleted, err := store.queries.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{ProjectID: "p1", BranchID: sourcebranch.Trunk.String(), FileID: head.FileID})
 			testutil.FailErr(t, "read deleted identity", err)
@@ -59,14 +59,14 @@ func TestInventoryOmissionDoesNotEstablishTrackedFileDeletion(t *testing.T) {
 func TestStaleInventoryManifestDoesNotRevertNewerHead(t *testing.T) {
 	store, ctx, root := openLedgerOnDisk(t)
 	writeRootFile(t, root, "a.txt", "original\n")
-	snapshot, err := store.snapshots.Ensure(ctx, sourcesnapshot.Request{Roots: snapshotRoots(onDiskRoots(root))})
+	snapshot, err := store.Snapshots.Ensure(ctx, sourcesnapshot.Request{Roots: snapshotRoots(onDiskRoots(root))})
 	testutil.FailErr(t, "capture manifest before the write", err)
 	trackRootFile(t, store, ctx, root, "a.txt", "edited\n")
-	testutil.FailErr(t, "seed tracking boundary", store.seedTrackingBoundary(ctx, "p1"))
+	testutil.FailErr(t, "seed tracking boundary", store.Inventory.seedTrackingBoundary(ctx, "p1"))
 	head, err := store.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{ProjectID: "p1", BranchID: sourcebranch.Trunk.String(), RootID: "r1", Path: "a.txt"})
 	testutil.FailErr(t, "read recorded head", err)
 
-	out, err := store.reconcileSnapshot(ctx, "p1", snapshot, onDiskRoots(root), nil, nil)
+	out, err := store.Inventory.reconcileSnapshot(ctx, "p1", snapshot, onDiskRoots(root), nil, nil)
 	testutil.FailErr(t, "reconcile stale manifest", err)
 	current, err := store.queries.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{ProjectID: "p1", BranchID: sourcebranch.Trunk.String(), FileID: head.FileID})
 	testutil.FailErr(t, "read head after stale reconcile", err)
@@ -75,7 +75,7 @@ func TestStaleInventoryManifestDoesNotRevertNewerHead(t *testing.T) {
 	}
 
 	writeRootFile(t, root, "a.txt", "outside\n")
-	out, err = store.reconcileSnapshot(ctx, "p1", snapshot, onDiskRoots(root), nil, nil)
+	out, err = store.Inventory.reconcileSnapshot(ctx, "p1", snapshot, onDiskRoots(root), nil, nil)
 	testutil.FailErr(t, "reconcile outside edit", err)
 	current, err = store.queries.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{ProjectID: "p1", BranchID: sourcebranch.Trunk.String(), FileID: head.FileID})
 	testutil.FailErr(t, "read head after outside edit", err)

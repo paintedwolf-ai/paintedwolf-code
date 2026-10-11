@@ -1,6 +1,0 @@
-{
-  "category": "go_receiver_lines",
-  "artifact": "lycaon/internal/coordinator/loopwake/loopwake.LoopEngine",
-  "cap": 1835,
-  "reason": "Past the limit before #356, which stops its wait timers at host shutdown without adding methods; the split is tracked in #364."
-}

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
+## [1.0.2]
+
+### Changed
+
+- Moving large folders updates their directory identity without rewriting every
+  descendant's history. File operation completion reaches Files immediately.
+- New Move to Trash operations use native Trash recovery without first copying
+  or hashing the tree. Undo requires the item to remain in Trash; existing
+  retained recovery history keeps its previous guarantees.
+- Undoing a new create or duplicate preserves the actual output, including later
+  edits, through native Trash. Copies retain no redundant full-tree backup.
+- Source history upgrades transactionally to directory identities, preserving
+  saved pins and retained content while removing redundant checkpoint copies.
+
+- The previous “check for updates” preference now enables automatic checks and
+  silent downloads, with installation on quit. Turning automatic updates off
+  keeps manual update actions available.
+- Workflow runs pin sealed definitions and guidance. Project guidance overlays
+  do not change a sealed run; retained shipped workflow versions remain available.
+
 ## [1.0.1]
 
 ### Fixed

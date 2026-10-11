@@ -152,7 +152,7 @@ func TestSummarize_PatternBloomFilterPruning(t *testing.T) {
 	opener := func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
 		return os.Open(filepath.Join(dir, filepath.FromSlash(entry.Path)))
 	}
-	_, err = catalog.LiteralCandidates(context.Background(), snapshot, sourcecatalog.LiteralQuery{
+	_, err = catalog.Literals.LiteralCandidates(context.Background(), snapshot, sourcecatalog.LiteralQuery{
 		RootID: "r1", Base: ".", Require: litprefilter.AnyOf("UniqueBloomTargetToken"), Open: opener,
 	})
 	testutil.FailErr(t, "populate blooms", err)

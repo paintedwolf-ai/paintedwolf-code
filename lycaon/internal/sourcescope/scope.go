@@ -23,14 +23,15 @@ const (
 
 // Scope applies one plane's admission policy and is safe for concurrent use.
 type Scope struct {
-	root      string
-	plane     Plane
-	floor     []gitignore.Pattern
-	include   []gitignore.Pattern
-	exclude   []gitignore.Pattern
-	deferred  []gitignore.Pattern
-	collapsed []gitignore.Pattern
-	identity  string
+	root       string
+	plane      Plane
+	floor      []gitignore.Pattern
+	include    []gitignore.Pattern
+	exclude    []gitignore.Pattern
+	deferred   []gitignore.Pattern
+	collapsed  []gitignore.Pattern
+	boundaries []string
+	identity   string
 
 	mu   sync.Mutex
 	own  *scopedstore.LRU[[]gitignore.Pattern]
@@ -65,6 +66,7 @@ func New(root string, opts Options) *Scope {
 	s.floor = patternsAtAnyDepth(opts.Floor)
 	s.deferred = patternsAtAnyDepth(opts.Plane.DeferredDirectories)
 	s.collapsed = patternsAtAnyDepth(opts.Plane.CollapsedDirectories)
+	s.boundaries = append([]string(nil), opts.Plane.BoundaryDirectories...)
 	for _, p := range opts.Declared.Include {
 		s.include = append(s.include, gitignore.ParsePattern(p, nil))
 	}

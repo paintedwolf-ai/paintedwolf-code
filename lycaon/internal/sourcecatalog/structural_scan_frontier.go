@@ -22,7 +22,7 @@ type structuralScanFrontier struct {
 func newStructuralScanFrontier(ctx context.Context, root string, options structuralScanOptions) *structuralScanFrontier {
 	var policy walkPolicy
 	if options.store != nil {
-		policy = options.store.catalog.policyFor(ctx, root)
+		policy = options.store.stores.policyFor(ctx, root)
 	} else {
 		policy = defaultCatalogPolicy(root)
 	}

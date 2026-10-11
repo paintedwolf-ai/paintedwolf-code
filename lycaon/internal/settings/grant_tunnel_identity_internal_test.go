@@ -12,33 +12,45 @@ import (
 // tunnelEgressAction names the opaque destination's host, port, and transport.
 func tunnelEgressAction(host string, port uint16, transport egressproxy.Transport) hitl.ProposedAction {
 	return hitl.ProposedAction{
-		Tool: "network",
-		Args: map[string]any{
+Invocation: hitl.ActionInvocation{
+Tool: "network",
+Args: map[string]any{
 			"host": host, "transport": string(transport), "port": port,
 		},
-		SessionID:  "sess-tunnel",
-		ProjectID:  "proj-tunnel",
-		ProjectDir: "/tmp/proj",
-		Contained: hitl.Contained{
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-tunnel",
+ProjectID: "proj-tunnel",
+ProjectDir: "/tmp/proj",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{
 			FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/proj"},
 		},
-	}
+},
+}
 }
 
 // requestEgressAction is the ask for a readable request, which names no port.
 func requestEgressAction(host string) hitl.ProposedAction {
 	return hitl.ProposedAction{
-		Tool: "network",
-		Args: map[string]any{
+Invocation: hitl.ActionInvocation{
+Tool: "network",
+Args: map[string]any{
 			"host": host, "transport": string(egressproxy.TransportHTTPRequest),
 		},
-		SessionID:  "sess-tunnel",
-		ProjectID:  "proj-tunnel",
-		ProjectDir: "/tmp/proj",
-		Contained: hitl.Contained{
+},
+Scope: hitl.ActionScope{
+SessionID: "sess-tunnel",
+ProjectID: "proj-tunnel",
+ProjectDir: "/tmp/proj",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{
 			FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{"/tmp/proj"},
 		},
-	}
+},
+}
 }
 
 // Tunnel site leases retain the reviewed port.
@@ -70,7 +82,7 @@ func TestTunnelFamilyLeaseCoversSiblingsOnThePortOnly(t *testing.T) {
 		tunnelEgressAction("uploads.example.com", 443, egressproxy.TransportSocksTCP),
 	} {
 		if !grantMatchesAction(grant, covered) {
-			t.Fatalf("family lease did not cover %v", covered.Args)
+			t.Fatalf("family lease did not cover %v", covered.Invocation.Args)
 		}
 	}
 	for _, other := range []hitl.ProposedAction{
@@ -79,7 +91,7 @@ func TestTunnelFamilyLeaseCoversSiblingsOnThePortOnly(t *testing.T) {
 		requestEgressAction("docs.example.com"),
 	} {
 		if grantMatchesAction(grant, other) {
-			t.Fatalf("family lease on :443 covered %v", other.Args)
+			t.Fatalf("family lease on :443 covered %v", other.Invocation.Args)
 		}
 	}
 }
@@ -90,8 +102,8 @@ func TestTunnelReuseCarriesPortAndTransport(t *testing.T) {
 	grant := hitl.ApprovalGrant{
 		Scope:          hitl.ApprovalGrantScopeChat,
 		Predicate:      hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategoryActionSet},
-		ProjectID:      approved.ProjectID,
-		ChatSessionID:  approved.ChatSession(),
+		ProjectID:      approved.Scope.ProjectID,
+		ChatSessionID:  approved.Scope.ChatSession(),
 		ExactActionSet: []string{hitl.GrantKey(approved)},
 	}
 	if !grantMatchesAction(grant, approved) {
@@ -103,7 +115,7 @@ func TestTunnelReuseCarriesPortAndTransport(t *testing.T) {
 		tunnelEgressAction("exfil.example.com", 22, egressproxy.TransportSocksTCP),
 	} {
 		if grantMatchesAction(grant, other) {
-			t.Fatalf("tunnel lease covered %v", other.Args)
+			t.Fatalf("tunnel lease covered %v", other.Invocation.Args)
 		}
 	}
 }
@@ -123,7 +135,7 @@ func TestHostLeaseDoesNotCoverAnOpaqueTunnel(t *testing.T) {
 		tunnelEgressAction("exfil.example.com", 443, egressproxy.TransportHTTPConnect),
 	} {
 		if grantMatchesAction(grant, tunnel) {
-			t.Fatalf("host lease covered opaque tunnel %v", tunnel.Args)
+			t.Fatalf("host lease covered opaque tunnel %v", tunnel.Invocation.Args)
 		}
 	}
 }
@@ -173,11 +185,11 @@ func TestHostIPv6LeasePreservesAddressAndPort(t *testing.T) {
 		}
 		grant := hitl.ApprovalGrant{
 			Scope:     hitl.ApprovalGrantScopeProject,
-			ProjectID: tc.action.ProjectID,
+			ProjectID: tc.action.Scope.ProjectID,
 			Predicate: hitl.ApprovalGrantPredicate{Category: string(predicate.Category), Pattern: predicate.Pattern},
 		}
 		if !grantMatchesAction(grant, tc.action) {
-			t.Fatalf("IPv6 grant did not cover its source action: %v", tc.action.Args)
+			t.Fatalf("IPv6 grant did not cover its source action: %v", tc.action.Invocation.Args)
 		}
 		for _, other := range []hitl.ProposedAction{
 			tc.otherClass,
@@ -186,7 +198,7 @@ func TestHostIPv6LeasePreservesAddressAndPort(t *testing.T) {
 			tunnelEgressAction("2001:db8::443", 22, egressproxy.TransportHTTPConnect),
 		} {
 			if grantMatchesAction(grant, other) {
-				t.Fatalf("IPv6 grant %q covered %v", predicate.Pattern, other.Args)
+				t.Fatalf("IPv6 grant %q covered %v", predicate.Pattern, other.Invocation.Args)
 			}
 		}
 	}

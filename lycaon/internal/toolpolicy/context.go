@@ -2,125 +2,110 @@ package toolpolicy
 
 import (
 	"context"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// BuildEvalContext assembles rule evaluation context for a tool invoke.
-func BuildEvalContext(ctx context.Context, deps EngineDeps, sess *api.Session, toolName string, args map[string]any) rules.EvalContext {
+// policyFacts lives for one listing or invocation, never across requests.
+type policyFacts struct {
+	workflow         WorkflowSnapshot
+	postureRules     []string
+	projectRootCount int
+	overlayRootPaths []string
+	planProgress     guidance.PlanProgress
+}
+
+// BuildEvalContext assembles fresh rule facts for one tool invocation.
+func BuildEvalContext(ctx context.Context, deps EngineDeps, sess *api.Session, toolName string, args map[string]any) (rules.EvalContext, error) {
+	facts, err := capturePolicyFacts(ctx, deps, sess)
+	if err != nil {
+		return rules.EvalContext{}, err
+	}
+	return facts.forTool(sess, toolName, args), nil
+}
+
+func capturePolicyFacts(ctx context.Context, deps EngineDeps, sess *api.Session) (policyFacts, error) {
+	var facts policyFacts
 	if frame, ok := coordinatorTurnFrameFromContext(ctx); ok {
-		return buildEvalContextFromCoordinatorFrame(ctx, deps, sess, toolName, args, frame)
-	}
-	return buildEvalContextFromLiveState(ctx, deps, sess, toolName, args)
-}
-
-func buildEvalContextFromLiveState(ctx context.Context, deps EngineDeps, sess *api.Session, toolName string, args map[string]any) rules.EvalContext {
-	phase := ""
-	allowed := []string(nil)
-	manifestRules := []string(nil)
-	if deps.Workflows != nil && sess != nil {
-		w := deps.Workflows
-		phase = w.CurrentPhase(ctx, sess.ID)
-		allowed = w.AllowedAgents(ctx, sess.ID)
-		if manifest, ok := w.ActiveManifest(ctx, sess.ID); ok {
-			manifestRules = manifest.Rules
+		facts = policyFactsFromFrame(frame)
+	} else {
+		if deps.Workflows != nil && sess != nil {
+			state, err := deps.Workflows(ctx, sess.ID)
+			if err != nil {
+				return facts, err
+			}
+			facts.workflow = state
+		}
+		facts.postureRules = postureRulesForSession(ctx, deps, sess)
+		if deps.ProjectRootCount != nil && sess != nil {
+			facts.projectRootCount = deps.ProjectRootCount(ctx, sess)
+		}
+		if deps.OverlayRootPaths != nil && sess != nil {
+			facts.overlayRootPaths = deps.OverlayRootPaths(ctx, sess)
 		}
 	}
-	postureRules := postureRulesForSession(ctx, deps, sess)
-	eval := rules.NewEvalContext(sess, toolName, args, phase, "", "")
 	if agents, ok := TaskSpawnAllowlistFromContext(ctx); ok {
-		// Turn roster attached: non-nil even when empty, so an all-filtered roster
-		// reads as "no agents dispatchable" rather than falling open.
-		eval.AllowedAgents = agents
-	} else if len(allowed) > 0 {
-		// Declared workflow allowlist; an absent declaration stays nil (unrestricted).
-		eval.AllowedAgents = allowed
+		facts.workflow.AllowedAgents = agents
 	}
-	eval.PostureRules = postureRules
-	eval.ManifestRules = manifestRules
-	if deps.Workflows != nil && sess != nil {
-		w := deps.Workflows
-		eval.ReviewLoopActive = w.ActivePhaseHasReviewLoop(ctx, sess.ID)
-		if run, err := w.GetActive(ctx, sess.ID); err == nil && run != nil {
-			eval.WorkflowID = run.WorkflowID
-			eval.WorkflowRunID = run.ID
-			eval.RunStatus = run.Status
-		}
-		if blueprintPath, content, okPlan := w.ActivePlan(ctx, sess.ID); okPlan {
-			eval.BlueprintPath = blueprintPath
-			eval.PlanContent = content
-		}
-		if vars, err := w.ScaffoldVarsForSession(ctx, sess.ID); err == nil {
-			eval.Vars = vars
+	facts.workflow.AllowedAgents = slices.Clone(facts.workflow.AllowedAgents)
+	facts.workflow.ManifestRules = slices.Clone(facts.workflow.ManifestRules)
+	facts.postureRules = slices.Clone(facts.postureRules)
+	facts.overlayRootPaths = slices.Clone(facts.overlayRootPaths)
+	facts.workflow.Vars = jsonvalue.CloneMap(facts.workflow.Vars)
+	if strings.TrimSpace(facts.workflow.PlanContent) != "" {
+		flags := guidance.PlanEvalFlagsFromVars(facts.workflow.Vars)
+		snap := guidance.DispatchFromVars(facts.workflow.Vars)
+		facts.planProgress = guidance.ComputePlanProgress(facts.workflow.PlanContent, flags, snap)
+		if sess != nil && strings.TrimSpace(facts.workflow.BlueprintPath) != "" {
+			facts.planProgress.PlanPath = conditions.PlanPathForProject(sess.WorkspacePath, facts.workflow.BlueprintPath)
 		}
 	}
-	if strings.TrimSpace(eval.PlanContent) != "" {
-		flags := guidance.PlanEvalFlagsFromVars(eval.Vars)
-		snap := guidance.DispatchFromVars(eval.Vars)
-		eval.PlanProgress = guidance.ComputePlanProgress(eval.PlanContent, flags, snap)
-		if sess != nil && strings.TrimSpace(eval.BlueprintPath) != "" {
-			eval.PlanProgress.PlanPath = conditions.PlanPathForProject(
-				sess.WorkspacePath,
-				eval.BlueprintPath,
-			)
-		}
-	}
-	if deps.ProjectRootCount != nil && sess != nil {
-		eval.ProjectRootCount = deps.ProjectRootCount(ctx, sess)
-	}
-	if deps.OverlayRootPaths != nil && sess != nil {
-		eval.OverlayRootPaths = deps.OverlayRootPaths(ctx, sess)
-	}
-	return eval
+	return facts, nil
 }
 
-func buildEvalContextFromCoordinatorFrame(
-	ctx context.Context,
-	deps EngineDeps,
-	sess *api.Session,
-	toolName string,
-	args map[string]any,
-	frame *inject.CoordinatorTurnFrame,
-) rules.EvalContext {
-	allowed := append([]string(nil), frame.RunContext.AllowedAgents...)
+func policyFactsFromFrame(frame *inject.CoordinatorTurnFrame) policyFacts {
+	state := WorkflowSnapshot{
+		Phase: frame.RunContext.CurrentPhase, AllowedAgents: frame.RunContext.AllowedAgents,
+		ManifestRules: frame.ManifestRules, Vars: frame.ScaffoldVars,
+		RunID: frame.RunContext.RunID, WorkflowID: frame.RunContext.WorkflowID,
+		RunStatus:        api.WorkflowRunStatus(frame.RunContext.RunStatus),
+		ReviewLoopActive: frame.Runtime.PhaseExit != nil && frame.Runtime.PhaseExit.ReviewLoopKey != "",
+	}
 	if frame.Roster != nil {
-		allowed = append([]string(nil), frame.Roster.Effective...)
+		state.AllowedAgents = frame.Roster.Effective
 	}
-	eval := rules.NewEvalContext(sess, toolName, args, frame.RunContext.CurrentPhase, "", "")
-	if agents, ok := TaskSpawnAllowlistFromContext(ctx); ok {
-		eval.AllowedAgents = agents
-	} else if len(allowed) > 0 {
-		eval.AllowedAgents = allowed
-	}
-	eval.PostureRules = append([]string(nil), frame.PostureRules...)
-	eval.ManifestRules = append([]string(nil), frame.ManifestRules...)
-	eval.ReviewLoopActive = frame.Runtime.PhaseExit != nil && frame.Runtime.PhaseExit.ReviewLoopKey != ""
-	eval.WorkflowID = frame.RunContext.WorkflowID
-	eval.WorkflowRunID = frame.RunContext.RunID
-	eval.RunStatus = api.WorkflowRunStatus(frame.RunContext.RunStatus)
-	eval.Vars = cloneVars(frame.ScaffoldVars)
 	if frame.Runtime.Blueprint != nil {
-		eval.BlueprintPath = frame.Runtime.Blueprint.Path
-		eval.PlanContent = frame.Runtime.BlueprintBody
+		state.BlueprintPath = frame.Runtime.Blueprint.Path
+		state.PlanContent = frame.Runtime.BlueprintBody
 	}
-	if strings.TrimSpace(eval.PlanContent) != "" {
-		flags := guidance.PlanEvalFlagsFromVars(eval.Vars)
-		snap := guidance.DispatchFromVars(eval.Vars)
-		eval.PlanProgress = guidance.ComputePlanProgress(eval.PlanContent, flags, snap)
-		if sess != nil && strings.TrimSpace(eval.BlueprintPath) != "" {
-			eval.PlanProgress.PlanPath = conditions.PlanPathForProject(
-				sess.WorkspacePath,
-				eval.BlueprintPath,
-			)
-		}
+	return policyFacts{
+		workflow: state, postureRules: frame.PostureRules,
+		projectRootCount: frame.ProjectRootCount, overlayRootPaths: frame.OverlayRootPaths,
 	}
-	eval.ProjectRootCount = frame.ProjectRootCount
-	eval.OverlayRootPaths = append([]string(nil), frame.OverlayRootPaths...)
+}
+
+func (f policyFacts) forTool(sess *api.Session, tool string, args map[string]any) rules.EvalContext {
+	state := f.workflow
+	eval := rules.NewEvalContext(sess, tool, args, state.Phase, state.BlueprintPath, state.PlanContent)
+	eval.AllowedAgents = slices.Clone(state.AllowedAgents)
+	eval.ManifestRules = slices.Clone(state.ManifestRules)
+	eval.PostureRules = slices.Clone(f.postureRules)
+	eval.ReviewLoopActive = state.ReviewLoopActive
+	eval.WorkflowRunID = state.RunID
+	eval.WorkflowID = state.WorkflowID
+	eval.RunStatus = state.RunStatus
+	eval.Vars = jsonvalue.CloneMap(state.Vars)
+	eval.ProjectRootCount = f.projectRootCount
+	eval.OverlayRootPaths = slices.Clone(f.overlayRootPaths)
+	eval.PlanProgress = f.planProgress
+	eval.PlanProgress.SkippedPhases = slices.Clone(f.planProgress.SkippedPhases)
 	return eval
 }
 
@@ -137,15 +122,4 @@ func postureRulesForSession(ctx context.Context, deps EngineDeps, sess *api.Sess
 		return nil
 	}
 	return append([]string(nil), paths...)
-}
-
-func cloneVars(vars map[string]any) map[string]any {
-	if len(vars) == 0 {
-		return nil
-	}
-	out := make(map[string]any, len(vars))
-	for key, value := range vars {
-		out[key] = value
-	}
-	return out
 }

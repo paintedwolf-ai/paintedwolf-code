@@ -106,8 +106,8 @@ func TestAdvisoriesEmptyWhenTransformWins(t *testing.T) {
 	transform := advisoryRule("C_TRANSFORM", EffectTransform, AnchorContentOutput)
 	transform.Transform = &TransformSpec{Action: "annotate", Target: "content", Replacement: "reviewed", HasReplacement: true}
 	gc := NewGuardContext()
-	gc.Content = "hello"
-	gc.ContentSet = true
+	gc.Content.Content = "hello"
+	gc.Content.ContentSet = true
 	res := evaluateAdvisories(t, []*Rule{
 		advisoryRule("A_WARN", EffectWarn, AnchorContentOutput),
 		advisoryRule("B_NUDGE", EffectNudge, AnchorContentOutput),

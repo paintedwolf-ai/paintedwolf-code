@@ -14,7 +14,7 @@ import (
 const activeWorkflowRunByProjectAndBlueprintPath = `-- name: ActiveWorkflowRunByProjectAndBlueprintPath :one
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE project_id = ? AND blueprint_path = ?
   AND status IN ('running','paused','paused_on_child')
@@ -53,6 +53,7 @@ func (q *Queries) ActiveWorkflowRunByProjectAndBlueprintPath(ctx context.Context
 		&i.UpdatedAt,
 		&i.PausedAt,
 		&i.CompletedAt,
+		&i.ReviewRevision,
 	)
 	return i, err
 }
@@ -60,7 +61,7 @@ func (q *Queries) ActiveWorkflowRunByProjectAndBlueprintPath(ctx context.Context
 const activeWorkflowRunBySession = `-- name: ActiveWorkflowRunBySession :one
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE session_id = ? AND status IN ('running','paused','paused_on_child')
 ORDER BY CASE WHEN parent_run_id IS NOT NULL AND TRIM(parent_run_id) != '' THEN 0 ELSE 1 END,
@@ -93,6 +94,7 @@ func (q *Queries) ActiveWorkflowRunBySession(ctx context.Context, sessionID stri
 		&i.UpdatedAt,
 		&i.PausedAt,
 		&i.CompletedAt,
+		&i.ReviewRevision,
 	)
 	return i, err
 }
@@ -366,7 +368,7 @@ func (q *Queries) GetWorkflowCommandByRevision(ctx context.Context, arg GetWorkf
 const getWorkflowRun = `-- name: GetWorkflowRun :one
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE id = ?
 `
@@ -396,6 +398,7 @@ func (q *Queries) GetWorkflowRun(ctx context.Context, id string) (WorkflowRuns, 
 		&i.UpdatedAt,
 		&i.PausedAt,
 		&i.CompletedAt,
+		&i.ReviewRevision,
 	)
 	return i, err
 }
@@ -427,7 +430,7 @@ func (q *Queries) GetWorkflowStartOperation(ctx context.Context, id string) (Get
 
 const getWorkflowVerdictOperation = `-- name: GetWorkflowVerdictOperation :one
 SELECT tool_call_id, run_id, source_revision, phase, input_digest, evidence_record_id,
-       evidence_json, status, response_json, error, created_at, updated_at
+       evidence_json, status, response_json, error, created_at, updated_at, evidence_published
 FROM workflow_verdict_operations
 WHERE tool_call_id = ?
 `
@@ -448,6 +451,7 @@ func (q *Queries) GetWorkflowVerdictOperation(ctx context.Context, toolCallID st
 		&i.Error,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.EvidencePublished,
 	)
 	return i, err
 }
@@ -629,7 +633,7 @@ func (q *Queries) InsertWorkflowTeardownOperation(ctx context.Context, arg Inser
 const latestChildWorkflowRun = `-- name: LatestChildWorkflowRun :one
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE parent_run_id = ?
 ORDER BY created_at DESC, rowid DESC
@@ -661,6 +665,7 @@ func (q *Queries) LatestChildWorkflowRun(ctx context.Context, parentRunID sql.Nu
 		&i.UpdatedAt,
 		&i.PausedAt,
 		&i.CompletedAt,
+		&i.ReviewRevision,
 	)
 	return i, err
 }
@@ -668,7 +673,7 @@ func (q *Queries) LatestChildWorkflowRun(ctx context.Context, parentRunID sql.Nu
 const listPausedOnChildWorkflowRuns = `-- name: ListPausedOnChildWorkflowRuns :many
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE status = 'paused_on_child'
 ORDER BY created_at, id
@@ -705,6 +710,7 @@ func (q *Queries) ListPausedOnChildWorkflowRuns(ctx context.Context) ([]Workflow
 			&i.UpdatedAt,
 			&i.PausedAt,
 			&i.CompletedAt,
+			&i.ReviewRevision,
 		); err != nil {
 			return nil, err
 		}
@@ -764,9 +770,9 @@ func (q *Queries) ListPendingWorkflowTeardownOperations(ctx context.Context) ([]
 
 const listPendingWorkflowVerdictOperations = `-- name: ListPendingWorkflowVerdictOperations :many
 SELECT tool_call_id, run_id, source_revision, phase, input_digest, evidence_record_id,
-       evidence_json, status, response_json, error, created_at, updated_at
+       evidence_json, status, response_json, error, created_at, updated_at, evidence_published
 FROM workflow_verdict_operations
-WHERE status IN ('prepared', 'evidence_applied')
+WHERE status IN ('prepared', 'evidence_applied') OR (status = 'committed' AND evidence_published = 0)
 ORDER BY created_at, tool_call_id
 `
 
@@ -792,6 +798,7 @@ func (q *Queries) ListPendingWorkflowVerdictOperations(ctx context.Context) ([]W
 			&i.Error,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.EvidencePublished,
 		); err != nil {
 			return nil, err
 		}
@@ -809,7 +816,7 @@ func (q *Queries) ListPendingWorkflowVerdictOperations(ctx context.Context) ([]W
 const listRunningWorkflowRuns = `-- name: ListRunningWorkflowRuns :many
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE status = 'running'
 ORDER BY created_at, id
@@ -846,6 +853,7 @@ func (q *Queries) ListRunningWorkflowRuns(ctx context.Context) ([]WorkflowRuns, 
 			&i.UpdatedAt,
 			&i.PausedAt,
 			&i.CompletedAt,
+			&i.ReviewRevision,
 		); err != nil {
 			return nil, err
 		}
@@ -864,7 +872,7 @@ const listWorkflowRunsBySession = `-- name: ListWorkflowRunsBySession :many
 
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE session_id = ?
 ORDER BY created_at DESC, id DESC
@@ -908,6 +916,7 @@ func (q *Queries) ListWorkflowRunsBySession(ctx context.Context, arg ListWorkflo
 			&i.UpdatedAt,
 			&i.PausedAt,
 			&i.CompletedAt,
+			&i.ReviewRevision,
 		); err != nil {
 			return nil, err
 		}
@@ -925,7 +934,7 @@ func (q *Queries) ListWorkflowRunsBySession(ctx context.Context, arg ListWorkflo
 const listWorkflowRunsBySessionWithStatus = `-- name: ListWorkflowRunsBySessionWithStatus :many
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 WHERE session_id = ? AND status IN (/*SLICE:statuses*/?)
 ORDER BY created_at DESC, id DESC
@@ -981,6 +990,7 @@ func (q *Queries) ListWorkflowRunsBySessionWithStatus(ctx context.Context, arg L
 			&i.UpdatedAt,
 			&i.PausedAt,
 			&i.CompletedAt,
+			&i.ReviewRevision,
 		); err != nil {
 			return nil, err
 		}
@@ -1044,19 +1054,19 @@ func (q *Queries) ListWorkflowVerdictReceipts(ctx context.Context, runID string)
 	return items, nil
 }
 
-const markWorkflowVerdictEvidenceApplied = `-- name: MarkWorkflowVerdictEvidenceApplied :exec
+const markWorkflowVerdictEvidencePublished = `-- name: MarkWorkflowVerdictEvidencePublished :exec
 UPDATE workflow_verdict_operations
-SET status = 'evidence_applied', updated_at = ?
-WHERE tool_call_id = ? AND status = 'prepared'
+SET evidence_published = 1, updated_at = ?
+WHERE tool_call_id = ? AND status = 'committed'
 `
 
-type MarkWorkflowVerdictEvidenceAppliedParams struct {
+type MarkWorkflowVerdictEvidencePublishedParams struct {
 	UpdatedAt  string `json:"updated_at"`
 	ToolCallID string `json:"tool_call_id"`
 }
 
-func (q *Queries) MarkWorkflowVerdictEvidenceApplied(ctx context.Context, arg MarkWorkflowVerdictEvidenceAppliedParams) error {
-	_, err := q.db.ExecContext(ctx, markWorkflowVerdictEvidenceApplied, arg.UpdatedAt, arg.ToolCallID)
+func (q *Queries) MarkWorkflowVerdictEvidencePublished(ctx context.Context, arg MarkWorkflowVerdictEvidencePublishedParams) error {
+	_, err := q.db.ExecContext(ctx, markWorkflowVerdictEvidencePublished, arg.UpdatedAt, arg.ToolCallID)
 	return err
 }
 
@@ -1070,7 +1080,7 @@ WITH page AS (
 )
 SELECT id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
        blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
-       created_at, updated_at, paused_at, completed_at
+       created_at, updated_at, paused_at, completed_at, review_revision
 FROM workflow_runs
 JOIN workflow_run_page_ordinals AS page_ordinal ON page_ordinal.run_id = workflow_runs.id
 CROSS JOIN page
@@ -1129,6 +1139,7 @@ func (q *Queries) PageWorkflowRunsBySession(ctx context.Context, arg PageWorkflo
 			&i.UpdatedAt,
 			&i.PausedAt,
 			&i.CompletedAt,
+			&i.ReviewRevision,
 		); err != nil {
 			return nil, err
 		}
@@ -1215,7 +1226,9 @@ const relocateWorkflowRunBlueprintPaths = `-- name: RelocateWorkflowRunBlueprint
 UPDATE workflow_runs
 SET blueprint_path = ?1, updated_at = ?2, revision = revision + 1
 WHERE project_id = ?3 AND blueprint_path = ?4
-RETURNING session_id
+RETURNING id, session_id, project_id, workflow_id, workflow_version, attach_policy, status, parent_run_id, revision, current_phase, project_dir, vars_json,
+       blueprint_path, pause_reason, failure_json, start_message_id, end_message_id,
+       created_at, updated_at, paused_at, completed_at, review_revision
 `
 
 type RelocateWorkflowRunBlueprintPathsParams struct {
@@ -1225,7 +1238,7 @@ type RelocateWorkflowRunBlueprintPathsParams struct {
 	FromPath  sql.NullString `json:"from_path"`
 }
 
-func (q *Queries) RelocateWorkflowRunBlueprintPaths(ctx context.Context, arg RelocateWorkflowRunBlueprintPathsParams) ([]string, error) {
+func (q *Queries) RelocateWorkflowRunBlueprintPaths(ctx context.Context, arg RelocateWorkflowRunBlueprintPathsParams) ([]WorkflowRuns, error) {
 	rows, err := q.db.QueryContext(ctx, relocateWorkflowRunBlueprintPaths,
 		arg.ToPath,
 		arg.UpdatedAt,
@@ -1236,13 +1249,36 @@ func (q *Queries) RelocateWorkflowRunBlueprintPaths(ctx context.Context, arg Rel
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []WorkflowRuns
 	for rows.Next() {
-		var session_id string
-		if err := rows.Scan(&session_id); err != nil {
+		var i WorkflowRuns
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.ProjectID,
+			&i.WorkflowID,
+			&i.WorkflowVersion,
+			&i.AttachPolicy,
+			&i.Status,
+			&i.ParentRunID,
+			&i.Revision,
+			&i.CurrentPhase,
+			&i.ProjectDir,
+			&i.VarsJson,
+			&i.BlueprintPath,
+			&i.PauseReason,
+			&i.FailureJson,
+			&i.StartMessageID,
+			&i.EndMessageID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.PausedAt,
+			&i.CompletedAt,
+			&i.ReviewRevision,
+		); err != nil {
 			return nil, err
 		}
-		items = append(items, session_id)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

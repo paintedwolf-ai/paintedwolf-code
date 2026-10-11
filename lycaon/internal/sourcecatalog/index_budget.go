@@ -6,6 +6,7 @@ import (
 	"errors"
 	"path"
 
+	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
@@ -127,4 +128,87 @@ func indexAncestors(rel string) []string {
 		chain[i], chain[j] = chain[j], chain[i]
 	}
 	return chain
+}
+
+// IndexCoverage describes failed or budget-limited discovery within the eager plane.
+type IndexCoverage struct {
+	DiscoveryComplete  bool
+	Refreshing         bool
+	BoundedDirectories int
+	FailedDirectories  int
+	Error              string
+}
+
+func CoverageFromStatus(status TreeStatus) IndexCoverage {
+	return IndexCoverage{DiscoveryComplete: status.Complete, Refreshing: status.Refreshing, Error: status.Error}
+}
+
+// Pending excludes failed builds, which need an explicit retry rather than polling.
+func (c IndexCoverage) Pending() bool {
+	return c.Error == "" && (!c.DiscoveryComplete || c.Refreshing)
+}
+
+func (c IndexCoverage) Exhaustive() bool {
+	return c.DiscoveryComplete && !c.Refreshing && c.Error == "" && c.BoundedDirectories == 0 && c.FailedDirectories == 0
+}
+
+func (r *IndexReader) Coverage(ctx context.Context) (IndexCoverage, error) {
+	coverage := CoverageFromStatus(r.Status)
+	err := r.tx.QueryRowContext(ctx, `SELECT
+		(SELECT count(*) FROM nodes WHERE refused<>'' AND refused<>?),
+		(SELECT count(*) FROM faults)`, string(sandbox.BoundaryLazy)).Scan(&coverage.BoundedDirectories, &coverage.FailedDirectories)
+	r.RowsRead++
+	return coverage, err
+}
+
+const metadataWorkBatch = 128
+
+type metadataWorkKey struct{}
+
+type metadataWork struct {
+	broker    *backgroundwork.Broker
+	request   backgroundwork.Request
+	release   func()
+	remaining int
+}
+
+// admitMetadata makes long discoveries yield their lane between bounded batches.
+func admitMetadata(ctx context.Context, broker *backgroundwork.Broker, request backgroundwork.Request) (context.Context, func(), error) {
+	w := &metadataWork{broker: broker, request: request}
+	if err := w.next(ctx); err != nil {
+		return ctx, nil, err
+	}
+	return context.WithValue(ctx, metadataWorkKey{}, w), func() {
+		if w.release != nil {
+			w.release()
+		}
+	}, nil
+}
+
+func (w *metadataWork) next(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if w.remaining > 0 {
+		w.remaining--
+		return nil
+	}
+	if w.release != nil {
+		w.release()
+		w.release = nil
+	}
+	release, err := w.broker.Acquire(ctx, w.request)
+	if err != nil {
+		return err
+	}
+	w.release = release
+	w.remaining = metadataWorkBatch - 1
+	return nil
+}
+
+func nextMetadataEntry(ctx context.Context) error {
+	if w, ok := ctx.Value(metadataWorkKey{}).(*metadataWork); ok {
+		return w.next(ctx)
+	}
+	return ctx.Err()
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
@@ -183,11 +183,11 @@ func TestFindToolMultiRootCountsMatchesAfterPageFills(t *testing.T) {
 		testutil.FailErr(t, "write secondary", os.WriteFile(filepath.Join(secondary, name), []byte("x"), 0o644))
 	}
 	tctx := nativefixture.Context(primary)
-	tctx.Roots = []projectroot.RootRef{
+	tctx.Source.Roots = []projectroot.RootRef{
 		{ID: "p", Label: "primary", Path: primary, IsPrimary: true},
 		{ID: "s", Label: "secondary", Path: secondary},
 	}
-	tctx.ActiveRootID = "p"
+	tctx.Source.ActiveRootID = "p"
 	tool := &FindTool{Boundary: nativefixture.Boundary(t)}
 	out, err := tool.Run(context.Background(), map[string]any{"max_results": 500, "type": "file"}, tctx)
 	testutil.FailErr(t, "find multi-root", err)
@@ -228,7 +228,7 @@ func TestFindToolPathNotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	tool := &FindTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{"path": "missing/dir"}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "FIND_PATH_NOT_FOUND" {
 		t.Fatalf("err = %v want FIND_PATH_NOT_FOUND", err)
 	}
@@ -238,7 +238,7 @@ func TestFindToolPathEscape(t *testing.T) {
 	tmpDir := t.TempDir()
 	tool := &FindTool{Boundary: nativefixture.Boundary(t)}
 	_, err := tool.Run(context.Background(), map[string]any{"path": "../outside"}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
 		t.Fatalf("err = %v want SURVEY_PATH_ESCAPE", err)
 	}

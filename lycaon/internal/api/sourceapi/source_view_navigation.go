@@ -11,7 +11,7 @@ import (
 
 // A displayed basis supersedes later disclosure intent once. Consecutive
 // commands from that same presentation compose on the accepted result.
-func (s *Handler) applySourceTreeUpdate(r *http.Request, view *sourceView, request wire.SourceTreeViewUpdate) (*sourcetree.Filtered, error) {
+func (s *Trees) applySourceTreeUpdate(r *http.Request, view *sourceView, request wire.SourceTreeViewUpdate) (*sourcetree.Filtered, error) {
 	var basis *sourcetree.RulesBasis
 	if request.BasePresentationID != "" {
 		if _, err := uuid.Parse(request.BasePresentationID); err != nil {
@@ -20,7 +20,7 @@ func (s *Handler) applySourceTreeUpdate(r *http.Request, view *sourceView, reque
 		if request.Command.Filter != nil || request.Command.Review != nil {
 			return nil, rejectedSourceIntent("A presentation basis requires a navigation command.")
 		}
-		presentation, release, err := s.acquireBasisPresentation(view, request.BasePresentationID)
+		presentation, release, err := s.Presentation.acquireBasisPresentation(view, request.BasePresentationID)
 		if err != nil {
 			return nil, err
 		}
@@ -29,7 +29,7 @@ func (s *Handler) applySourceTreeUpdate(r *http.Request, view *sourceView, reque
 			return nil, pagedview.ErrRevision
 		}
 		if request.Command.Toggle != nil || ManualSourceTreeDisclosure(request.Command.Disclose) {
-			basis = &sourcetree.RulesBasis{Replace: view.treeNavigationBasis != request.BasePresentationID}
+			basis = &sourcetree.RulesBasis{Replace: view.navigation.treeNavigationBasis != request.BasePresentationID}
 			for _, entry := range treeDisclosures(presentation.summary.Tree.Intent.Disclosures) {
 				basis.Rules.Set(entry.Address, entry.Disclosure)
 			}
@@ -40,9 +40,9 @@ func (s *Handler) applySourceTreeUpdate(r *http.Request, view *sourceView, reque
 		return previous, err
 	}
 	if basis != nil {
-		view.treeNavigationBasis = request.BasePresentationID
+		view.navigation.treeNavigationBasis = request.BasePresentationID
 	} else {
-		view.treeNavigationBasis = ""
+		view.navigation.treeNavigationBasis = ""
 	}
 	return previous, nil
 }

@@ -10,7 +10,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/repochange"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -62,22 +61,6 @@ func (c *Service) configured() bool {
 
 func (c *Service) securityOn() bool {
 	return c != nil && (c.Settings == nil || c.Settings.Effective().Enabled)
-}
-
-func (c *Service) ObserveRepochange() func() {
-	if c == nil {
-		return func() {}
-	}
-	return repochange.RegisterObserver(c.onRepochange)
-}
-
-func (c *Service) onRepochange(ctx context.Context, event repochange.Event) {
-	if event.Kind != repochange.WorktreeChanged || len(event.Paths) == 0 {
-		return
-	}
-	if err := c.NoteWrites(ctx, event.ProjectDir, event.Paths); err != nil {
-		slog.WarnContext(ctx, "scan cadence note writes", "path", event.ProjectDir, "error", err)
-	}
 }
 
 // BaselineRoot records a baseline for automatic scans of subsequent changes.

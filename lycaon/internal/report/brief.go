@@ -7,7 +7,6 @@ import (
 
 	"github.com/johnfercher/maroto/v2/pkg/consts/fontstyle"
 	"github.com/johnfercher/maroto/v2/pkg/props"
-
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 )
 

@@ -119,7 +119,7 @@ func TestBatchStopFencesEveryWorkerBeforeJoining(t *testing.T) {
 	for _, scope := range []string{"session", "workflow"} {
 		t.Run(scope, func(t *testing.T) {
 			q := NewInMemoryQueue(2)
-			q.SetWorkflowRunChecker(allowAllWorkflowRuns{})
+			q.SetWorkflowDomains(&WorkflowDomains{Runs: allowAllWorkflowRuns{}, Tasks: allowAllWorkflowRuns{}})
 			for range 2 {
 				_, err := q.Enqueue(t.Context(), api.WorkerTask{
 					ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID,

@@ -2,7 +2,6 @@ package browser
 
 import (
 	"context"
-	"errors"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -11,12 +10,18 @@ import (
 )
 
 func TestLaunchHeadlessRefusesUnsafeProjectRootBeforeProvisioning(t *testing.T) {
-	_, _, err := LaunchHeadless(context.Background(), LaunchOptions{
-		Roots: []string{string(filepath.Separator)},
-	})
-	if !errors.Is(err, confine.ErrWriteRootRefused) {
-		t.Fatalf("LaunchHeadless error = %v, want ErrWriteRootRefused", err)
+	for _, root := range protectedBrowserRoots(t) {
+		t.Run(filepath.Base(root), func(t *testing.T) {
+			assertLaunchWriteRootRefused(t, LaunchOptions{
+				Roots: []string{root}, CacheDir: t.TempDir(),
+			}, root, confine.WriteRootCodeSecretStore)
+		})
 	}
+	t.Run("relative", func(t *testing.T) {
+		assertLaunchWriteRootRefused(t, LaunchOptions{
+			Roots: []string{"relative-project"}, CacheDir: t.TempDir(),
+		}, "relative-project", confine.WriteRootCodeNotAbsolute)
+	})
 }
 
 func TestHeadlessLauncherPinsSubprocessPath(t *testing.T) {

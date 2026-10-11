@@ -8,6 +8,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"slices"
@@ -18,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -28,7 +29,7 @@ func extractTestBoundary(t *testing.T) *sandbox.Boundary {
 		ProjectRootRequired: true,
 		RejectSymlinkEscape: true,
 	}, []sandbox.ToolProfile{{
-		ID: tools.DefaultToolProfileID,
+		ID: toolprofiles.DefaultToolProfileID,
 		Tools: map[string]bool{
 			"read": true, "write": true, "extract_archive": true,
 		},
@@ -85,7 +86,7 @@ func TestExtractArchiveToolRejectsZipSlip(t *testing.T) {
 		"path": "evil.zip",
 		"dest": "out",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EXTRACT_ZIP_SLIP" {
 		t.Fatalf("err = %v want EXTRACT_ZIP_SLIP", err)
 	}
@@ -123,7 +124,7 @@ func TestExtractArchiveToolRoutesGovernedEntries(t *testing.T) {
 			if tc.code == "" {
 				assertReviewDeclined(t, err, tc.entry)
 			} else {
-				var reject *tools.ToolReject
+				var reject *toolrejection.ToolReject
 				if !errors.As(err, &reject) || reject.Code != tc.code {
 					t.Fatalf("err = %v, want %s", err, tc.code)
 				}
@@ -165,7 +166,7 @@ func TestExtractArchiveToolRejectsUnsupportedFormat(t *testing.T) {
 		"path": "data.tar",
 		"dest": "out",
 	}, nativefixture.Context(tmpDir))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EXTRACT_FORMAT_UNSUPPORTED" {
 		t.Fatalf("err = %v", err)
 	}
@@ -223,7 +224,7 @@ func TestExtractArchiveToolRejectsAliasedSinkEntries(t *testing.T) {
 			if err == nil {
 				t.Fatalf("entry %q extracted without a reject", tc.entry)
 			}
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) {
 				t.Fatalf("entry %q: err = %v, want a structured ToolReject", tc.entry, err)
 			}
@@ -259,7 +260,7 @@ func TestExtractEntryLimitPrecedesCommit(t *testing.T) {
 			sink := extractSink{ctx: t.Context(), tctx: tctx, dest: resolvedMutationTarget(dest)}
 			budget := &extractBudget{entries: hostExtractMaxEntries - 1}
 			err = tc.extract(sink, archive.EffectLocation(), budget, protectedEntryGuard)
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != "EXTRACT_ENTRY_LIMIT" {
 				t.Fatalf("over-limit extraction: %v", err)
 			}
@@ -288,7 +289,7 @@ func TestExtractSizeLimitPrecedesCommit(t *testing.T) {
 	testutil.FailErr(t, "seed existing file", os.WriteFile(existing, []byte("keep"), 0o644))
 	budget := &extractBudget{bytes: hostExtractMaxUncompressedBytes - 1}
 	_, err = writeExtractFile(sink, sink.target("existing.txt"), strings.NewReader("xx"), budget)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EXTRACT_SIZE_EXCEEDED" {
 		t.Fatalf("oversized entry: %v", err)
 	}

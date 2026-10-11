@@ -93,7 +93,7 @@ func TestToolCommandEquivalenceRedirectCodesRegistered(t *testing.T) {
 func TestToolCommandEquivalenceGeneratedMatcherPresent(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	genPath := filepath.Join(root, "lycaon", "internal", "tools", "command_equivalence_gen.go")
+	genPath := filepath.Join(root, "lycaon", "internal", "toolcommand", "command_equivalence_gen.go")
 	data, err := os.ReadFile(genPath)
 	contractcheck.FailErr(t, "read command_equivalence_gen.go", err)
 	text := string(data)
@@ -152,7 +152,9 @@ func TestExactReplacementLeavesRedirectedCommandsToCommand(t *testing.T) {
 	exec := securityNativeExecutor(t)
 	for _, command := range []string{"cp source.txt destination.txt 2> copy.log", "ls > listing.txt"} {
 		_, err := exec.Invoke(context.Background(), "command", map[string]any{"command": command}, tools.ToolContext{
-			Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}}, ActiveRootID: "r1", Agent: "implement",
+			Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
+				ActiveRootID: "r1"},
+			Identity: tools.InvocationIdentity{Agent: "implement"},
 		})
 		if refusal, ok := guidance.RefusalFromError(err); ok && strings.HasPrefix(refusal.Code(), "USE_") {
 			t.Fatalf("command %q redirected to %s despite its redirection", command, refusal.Code())
@@ -165,7 +167,9 @@ func assertExactCommandReplacement(t *testing.T, command, code, tool string) {
 	exec := securityNativeExecutor(t)
 	root := t.TempDir()
 	_, err := exec.Invoke(context.Background(), "command", map[string]any{"command": command}, tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}}, ActiveRootID: "r1", Agent: "implement",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	refusal, ok := guidance.RefusalFromError(err)
 	if err == nil || !ok {

@@ -14,8 +14,8 @@ import (
 func TestStressStructuralDirectoryMetadataBeyondResidentThreshold(t *testing.T) {
 	const directories = (128<<20)/256 + 1
 	store := checkpointTestStore(t)
-	store.catalog.trees = map[string]projectionStore{"large-directories": store}
-	t.Cleanup(func() { testutil.FailErr(t, "drain large directory fixture", store.catalog.Drain(t.Context())) })
+	store.stores.trees = map[string]projectionStore{"large-directories": store}
+	t.Cleanup(func() { testutil.FailErr(t, "drain large directory fixture", store.stores.Drain(t.Context())) })
 	builder, err := newStructuralBuilder(store, nil)
 	testutil.FailErr(t, "create large directory builder", err)
 	defer builder.close()

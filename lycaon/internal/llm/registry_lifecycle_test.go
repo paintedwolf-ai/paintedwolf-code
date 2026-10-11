@@ -40,7 +40,7 @@ func TestRegistryReadsDoNotWaitForRebuildDiscovery(t *testing.T) {
 
 	yaml := "providers:\n  - id: ollama\n    kind: ollama\n    base_url: " + server.URL + "/v1\n    api_key_env: \"\"\n    models: []\n" + MinimalShipHTTPRetryYAML
 	catalog := mustCatalogCloneShipToLocal(t, yaml)
-	registry, err := NewRegistry(catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
 	testutil.FailErr(t, "NewRegistry", err)
 
 	reloadDone := make(chan error, 1)
@@ -78,7 +78,7 @@ func TestRefreshModelsRechecksAmbientProvider(t *testing.T) {
 	t.Cleanup(server.Close)
 	yaml := "providers:\n  - id: ambient\n    kind: openai-compatible\n    base_url: " + server.URL + "/v1\n    api_key_env: \"\"\n    ambient_auth: test-chain\n    models:\n      - id: model\n" + MinimalShipHTTPRetryYAML
 	catalog := mustCatalogCloneShipToLocal(t, yaml)
-	registry, err := NewRegistry(catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
 	testutil.FailErr(t, "NewRegistry", err)
 
 	current := registry.snapshot.Load()
@@ -114,7 +114,7 @@ func TestEnsureConfiguredRecoversWhenAmbientCredentialsAppear(t *testing.T) {
       - id: google/test-model
 ` + MinimalShipHTTPRetryYAML
 	catalog := mustCatalogCloneShipToLocal(t, yaml)
-	registry, err := NewRegistry(catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
 	testutil.FailErr(t, "NewRegistry", err)
 	if registry.IsConfigured("vertex") {
 		t.Fatal("vertex unexpectedly configured before credentials exist")
@@ -145,7 +145,7 @@ func TestEffectiveModelsDoesNotRepeatCachedDiscoveryFailure(t *testing.T) {
 	catalog := mustCatalogCloneShipToLocal(t, yaml)
 	credentials := providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age"))
 	testutil.FailErr(t, "store credential", credentials.Set("hosted", "secret"))
-	registry, err := NewRegistry(catalog, credentials)
+	registry, err := NewRegistry(t.Context(), catalog, credentials)
 	testutil.FailErr(t, "NewRegistry", err)
 
 	_ = registry.EffectiveModels(t.Context(), "hosted")

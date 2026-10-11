@@ -2,6 +2,7 @@ package cadence
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,8 +10,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/repochange"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -196,4 +199,60 @@ func TestCadenceContinuousWritesCappedAtMaxDefer(t *testing.T) {
 			t.Fatalf("scanner %q cap not cleared: %v", row.ScannerID, row.MaxDueAt)
 		}
 	}
+}
+
+type drainingRepochangeScope struct {
+	entered  chan struct{}
+	canceled chan struct{}
+	allow    chan struct{}
+}
+
+func (s *drainingRepochangeScope) Capture(ctx context.Context, root string) *sourcescope.Scope {
+	close(s.entered)
+	<-ctx.Done()
+	close(s.canceled)
+	<-s.allow
+	return sourcescope.New(root, sourcescope.Options{})
+}
+
+func TestCadenceRepochangeReleaseCancelsAndDrainsCopiedWork(t *testing.T) {
+	cadence, _ := newTestCadence(t, newTestClock())
+	scope := &drainingRepochangeScope{entered: make(chan struct{}), canceled: make(chan struct{}), allow: make(chan struct{})}
+	cadence.Scopes = scope
+	release := cadence.ObserveRepochange()
+	var allow sync.Once
+	t.Cleanup(func() {
+		allow.Do(func() { close(scope.allow) })
+		testutil.FailErr(t, "release cadence observer", release(context.Background()))
+	})
+	event := repochange.Event{ProjectDir: t.TempDir(), Kind: repochange.WorktreeChanged, Paths: []string{"changed.go"}}
+	done := make(chan struct{})
+	go func() { defer close(done); repochange.Notify(t.Context(), event) }()
+	select {
+	case <-scope.entered:
+	case <-t.Context().Done():
+		t.Fatal("notification did not enter capture")
+	}
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := release(canceled); !errors.Is(err, context.Canceled) {
+		t.Fatalf("active observer drain = %v, want cancellation", err)
+	}
+	select {
+	case <-scope.canceled:
+	case <-t.Context().Done():
+		t.Fatal("release did not cancel capture")
+	}
+	// A callback copied after sealing must not start another scope capture.
+	repochange.Notify(t.Context(), event)
+	allow.Do(func() { close(scope.allow) })
+	select {
+	case <-done:
+	case <-t.Context().Done():
+		t.Fatal("notification did not finish")
+	}
+	testutil.FailErr(t, "retry observer drain", release(t.Context()))
+	testutil.FailErr(t, "repeat observer drain", release(t.Context()))
+	repochange.Notify(t.Context(), event)
+	testutil.FailErr(t, "nil cadence observer", (*Service)(nil).ObserveRepochange()(t.Context()))
 }

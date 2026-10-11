@@ -2,16 +2,17 @@ package worker
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/session"
+	"path/filepath"
+	"testing"
+	"time"
+
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"path/filepath"
-	"testing"
-	"time"
 )
 
 func TestPendingDecisionControlsDurableWorkerCompletion(t *testing.T) {
@@ -32,7 +33,7 @@ func TestPendingDecisionControlsDurableWorkerCompletion(t *testing.T) {
 			branch := filepath.Join(testbaseline.DataDir(t, database), "worker-branches", jobID)
 			_, err = database.ExecContext(t.Context(), `UPDATE worker_jobs SET child_session_id = ?, workspace_relpath = ? WHERE id = ?`, "child", "worker-branches/"+jobID, jobID)
 			testutil.FailErr(t, "bind child", err)
-			decisions := session.NewSQLDecisionStore(database)
+			decisions := sessiondecisions.NewSQL(database)
 			testutil.FailErr(t, "request decision", decisions.Put(t.Context(), api.WorkerDecisionRequest{
 				ChildSessionID: "child", WorkerID: jobID, Question: "Choose the contract", Options: []string{"A", "B"},
 			}))
@@ -70,7 +71,7 @@ func TestDecisionResolutionDistinguishesJobStateFromChangedQuestion(t *testing.T
 	testdbseed.InsertSession(t, database, "child", testdbseed.DefaultProjectID)
 	_, err := database.ExecContext(t.Context(), `INSERT INTO worker_jobs(id, project_id, parent_session_id, child_session_id, agent_type, status, prompt, brief, created_at) VALUES ('job', ?, 'parent', 'child', 'implementer', 'complete', 'work', 'work', ?)`, testdbseed.DefaultProjectID, time.Now().UTC().Format(time.RFC3339Nano))
 	testutil.FailErr(t, "insert terminal job", err)
-	decisions := session.NewSQLDecisionStore(database)
+	decisions := sessiondecisions.NewSQL(database)
 	testutil.FailErr(t, "store decision", decisions.Put(t.Context(), api.WorkerDecisionRequest{ChildSessionID: "child", WorkerID: "job", Question: "Choose", Options: []string{"A", "B"}}))
 	decision, _, err := decisions.Get(t.Context(), "child")
 	testutil.FailErr(t, "read decision", err)

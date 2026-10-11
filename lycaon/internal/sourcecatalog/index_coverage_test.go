@@ -40,7 +40,7 @@ func TestRootFileCountDoesNotMeasureABudgetLimitedTree(t *testing.T) {
 		writeIndexFile(t, root.Path, "wide/"+name, "source")
 	}
 	waitIndex(t, catalog, root)
-	count, err := catalog.RootFileCount(t.Context(), "p", root, FileScope{Audience: HumanAudience, IncludeHidden: true}, 0)
+	count, err := catalog.Trees.RootFileCount(t.Context(), "p", root, FileScope{Audience: HumanAudience, IncludeHidden: true}, 0)
 	testutil.FailErr(t, "count bounded root", err)
 	if count.Count != 1 || count.Measured {
 		t.Fatalf("bounded count = %+v", count)
@@ -51,7 +51,7 @@ func TestReadableRefreshFailureSurvivesAnotherAttempt(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "good.txt", "readable")
 	first := waitIndex(t, catalog, root)
-	release, err := catalog.broker.Acquire(t.Context(), backgroundwork.Request{Lane: root.Path, Resources: []backgroundwork.Resource{backgroundwork.ResourceMetadata}})
+	release, err := catalog.Trees.broker.Acquire(t.Context(), backgroundwork.Request{Lane: root.Path, Resources: []backgroundwork.Resource{backgroundwork.ResourceMetadata}})
 	testutil.FailErr(t, "hold retry", err)
 	defer release()
 	store := first.store
@@ -59,7 +59,7 @@ func TestReadableRefreshFailureSurvivesAnotherAttempt(t *testing.T) {
 	store.status.Error = "failed refresh"
 	store.full = true
 	store.mu.Unlock()
-	reader, _, err := catalog.OpenIndex(t.Context(), "p", root, 0)
+	reader, _, err := catalog.Trees.OpenIndex(t.Context(), "p", root, 0)
 	testutil.FailErr(t, "read during retry", err)
 	if reader == nil {
 		t.Fatal("lost readable generation")

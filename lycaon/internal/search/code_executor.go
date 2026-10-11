@@ -100,36 +100,47 @@ func (e *CodeExecutor) Run(ctx context.Context, leg PlanLeg) (ExecutorReport, er
 		terms:        queryTextTerms(leg.Code.Query),
 		maxBytes:     codeExecutorMaxFileBytes,
 	}
+	if leg.Code.Candidates {
+		return e.discoverCandidates(ctx, leg.Code, paths, spec)
+	}
 	legCtx, cancel := context.WithTimeout(ctx, e.legWallBudget(leg.Code))
 	defer cancel()
 
 	report := ExecutorReport{}
 	stats := &report.Code
+roots:
 	for _, root := range leg.Code.PathRoots {
 		if spec.lineCap <= 0 && spec.fileCap <= 0 {
 			report.Limited = true
 			break
 		}
-		started := time.Now()
-		gen, err := resolveCodeGeneration(legCtx, e.catalog, root, e.generationWaitBudget())
-		stats.GenerationWait += time.Since(started)
-		if errors.Is(err, errCodeCatalogWarming) {
-			stats.WarmingRoots++
-			continue
+		for _, selection := range codeIndexSelections(legCtx, e.catalog, root, leg.Code.Query, leg.Code.Flags, leg.Code.IncludeDependencies) {
+			if spec.lineCap <= 0 && spec.fileCap <= 0 {
+				report.Limited = true
+				break roots
+			}
+			started := time.Now()
+			gen, err := resolveRequestedCodeGeneration(legCtx, e.catalog, root, e.generationWaitBudget(), selection.include, selection.paths...)
+			stats.GenerationWait += time.Since(started)
+			if errors.Is(err, errCodeCatalogWarming) {
+				stats.WarmingRoots++
+				continue
+			}
+			if err == nil {
+				err = e.scanGeneration(legCtx, gen, paths.withDependencies(legCtx, e.catalog, root.Path, leg.Code.IncludeDependencies), &spec, &report)
+			}
+			if ctx.Err() != nil {
+				return report, ctx.Err()
+			}
+			if legCtx.Err() != nil {
+				report.TimedOut = true
+				break roots
+			}
+			if err != nil {
+				report.Issues = append(report.Issues, Issue{Executor: ExecutorCode, Reason: IssueExecutorError, Message: err.Error()})
+			}
 		}
-		if err == nil {
-			err = e.scanGeneration(legCtx, gen, paths, &spec, &report)
-		}
-		if ctx.Err() != nil {
-			return report, ctx.Err()
-		}
-		if legCtx.Err() != nil {
-			report.TimedOut = true
-			break
-		}
-		if err != nil {
-			report.Issues = append(report.Issues, Issue{Executor: ExecutorCode, Reason: IssueExecutorError, Message: err.Error()})
-		}
+
 	}
 	e.rerankHits(ctx, spec.terms, report.Hits)
 	return report, nil

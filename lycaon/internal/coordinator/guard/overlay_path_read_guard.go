@@ -24,11 +24,11 @@ func ObserveCoordinatorWorkerBranchPath(
 		return
 	}
 	toolName = strings.TrimSpace(strings.ToLower(toolName))
-	gc.Tool = toolName
+	gc.Invocation.Tool = toolName
 	gc.DeriveToolClassFacts()
 	path := coordinatorWorkerBranchPath(args)
-	gc.PathIsWorkerBranch = path != ""
-	if gc.PathIsWorkerBranch {
+	gc.Workers.PathIsWorkerBranch = path != ""
+	if gc.Workers.PathIsWorkerBranch {
 		gc.PutRejectData(CoordinatorOverlayPathReadForbiddenCode, map[string]any{
 			"tool": toolName,
 			"path": enginepaths.WorkerBranchDisplayRel(path),

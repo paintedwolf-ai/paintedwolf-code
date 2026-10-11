@@ -2,9 +2,12 @@
 package httpaction
 
 import (
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
+
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"net/netip"
 	"net/url"
@@ -100,7 +103,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		if err != nil {
 			return "", invalid(err)
 		}
-		capability, reject := tools.ParseCapabilityRequest(args)
+		capability, reject := capabilityrequest.ParseCapabilityRequest(args)
 		if reject != nil {
 			return "", reject
 		}
@@ -127,8 +130,8 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 			spec.socket = grant.ResolvedPath
 		}
 		ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
-			SessionID: tctx.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.ProjectID,
-			ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.ToolCallID,
+			SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
+			ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID,
 		})
 		screened, err := screenRequest(ctx, deps, spec, args, tctx)
 		if err != nil {
@@ -155,10 +158,10 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 			return "", reject
 		}
 		ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
-			SessionID: tctx.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.ProjectID,
-			ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.ToolCallID, Image: "http_request", ToolName: "http_request",
+			SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
+			ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID, Image: "http_request", ToolName: "http_request",
 		})
-		defer confine.ForgetEgressAction(tctx.SessionID, tctx.ToolCallID)
+		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
 		resp, landed, bufferedBody, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]))
 		if err != nil {
 			return "", sendReject(ctx, deps, jarReq, jar, tokenJarReq, tokenJar, err)
@@ -172,7 +175,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 			return "", tokenReject
 		}
 		// The response is scrubbed before it is placed, landed, or spilled.
-		resp, bodyRedacted := scrubResponse(resp, tokenJar, tctx.Secrets)
+		resp, bodyRedacted := scrubResponse(resp, tokenJar, tctx.Effects.Secrets)
 		if bufferedBody != nil {
 			receipt, err := inboundwrite.Write(ctx, deps.Boundary, tctx, spec.disposition.path, resp.Body, "HTTP_REQUEST_RESPONSE_PATH_DENIED")
 			if err != nil {
@@ -180,7 +183,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 			}
 			landed = &receipt
 		}
-		finalURL, redirects := observedURLs(tctx.Secrets, resp.FinalURL, resp.Redirects)
+		finalURL, redirects := observedURLs(tctx.Effects.Secrets, resp.FinalURL, resp.Redirects)
 		out := result{
 			Status: resp.Status, FinalURL: finalURL, Headers: resp.Headers, Redirects: redirects,
 			SentHeaders: sentHeaders(spec, statedHeaders(tctx, args, screened)),
@@ -198,8 +201,8 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		}
 		out.Cookies = saveCookieJar(ctx, deps, jarReq, jar)
 		reportWebPage(tctx, spec, resp, placement, finalURL)
-		if tctx.Out != nil {
-			tctx.Out.RetrievedFrom = retrievedFrom(spec, resp.FinalURL)
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.RetrievedFrom = retrievedFrom(spec, resp.FinalURL)
 		}
 		encoded, err := surveyjson.MarshalIndent(out, "", "  ")
 		return string(encoded), err
@@ -314,7 +317,7 @@ func send(
 		req.StreamBody = func(body io.Reader) error {
 			// A body that could echo a held token or a resolved value is
 			// buffered so it can be scrubbed before it lands.
-			if tokenJar != nil || len(spec.captureTokens) > 0 || tctx.Secrets.Resolved() {
+			if tokenJar != nil || len(spec.captureTokens) > 0 || tctx.Effects.Secrets.Resolved() {
 				data, err := io.ReadAll(io.LimitReader(body, maxResponseFile+1))
 				if err != nil {
 					return err
@@ -333,8 +336,8 @@ func send(
 			return nil
 		}
 	}
-	if err := tctx.Secrets.HandOff(ctx, spec.outgoing); err != nil {
-		return outboundhttp.Response{}, nil, nil, tools.HeldHandOffReject("http_request", err)
+	if err := tctx.Effects.Secrets.HandOff(ctx, spec.outgoing); err != nil {
+		return outboundhttp.Response{}, nil, nil, toolrejection.HeldHandOffReject("http_request", err)
 	}
 	resp, err := outboundhttp.Do(ctx, req)
 	return resp, landed, bufferedResponsePathBytes, err
@@ -344,10 +347,10 @@ func send(
 func sendReject(
 	ctx context.Context, deps Deps, jarReq secretcap.CookieJarRequest, jar *secretcap.CookieJar,
 	tokenJarReq secretcap.TokenJarRequest, tokenJar *secretcap.TokenJar, err error,
-) *tools.ToolReject {
+) *toolrejection.ToolReject {
 	cookies := saveCookieJar(ctx, deps, jarReq, jar)
 	tokens := heldTokens(tokenJar)
-	attach := func(reject *tools.ToolReject) *tools.ToolReject {
+	attach := func(reject *toolrejection.ToolReject) *toolrejection.ToolReject {
 		var exchange *outboundhttp.ExchangeError
 		if errors.As(err, &exchange) {
 			if reject.Data == nil {
@@ -388,13 +391,13 @@ func sendReject(
 		return reject
 	}
 	if host, denied := egressgate.Denied(ctx); denied {
-		return attach(&tools.ToolReject{Code: "HTTP_REQUEST_HOST_DENIED", Data: map[string]any{"host": host}})
+		return attach(&toolrejection.ToolReject{Code: "HTTP_REQUEST_HOST_DENIED", Data: map[string]any{"host": host}})
 	}
 	var denied *egress.DestinationDeniedError
 	if errors.As(err, &denied) {
-		return attach(&tools.ToolReject{Code: "HTTP_REQUEST_HOST_DENIED", Data: map[string]any{"reason": denied.Error()}})
+		return attach(&toolrejection.ToolReject{Code: "HTTP_REQUEST_HOST_DENIED", Data: map[string]any{"reason": denied.Error()}})
 	}
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if errors.As(err, &reject) {
 		return attach(reject)
 	}
@@ -411,7 +414,7 @@ func sendReject(
 	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded) {
 		data["deadline"] = "timeout_ms"
 	}
-	return attach(&tools.ToolReject{
+	return attach(&toolrejection.ToolReject{
 		Code: "HTTP_REQUEST_FAILED", FailureClass: api.FailureClassOwnerError,
 		Retryable: retryable, Data: data,
 	})
@@ -453,25 +456,25 @@ func (spec requestSpec) dialsLoopback() bool {
 	return ok
 }
 
-func checkLoopbackAuthority(spec requestSpec, allowAddress func(netip.Addr, uint16) bool) *tools.ToolReject {
+func checkLoopbackAuthority(spec requestSpec, allowAddress func(netip.Addr, uint16) bool) *toolrejection.ToolReject {
 	addr, port, ok := spec.firstHop()
 	if !ok || (allowAddress != nil && allowAddress(addr, port)) {
 		return nil
 	}
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: isolation.CodeTryLoopbackConnect,
 		Data: map[string]any{"port": port, "url": spec.target.String()},
 	}
 }
 
-func loopbackPolicy(request *tools.CapabilityRequest, tctx tools.ToolContext) (func(netip.Addr, uint16) bool, *tools.ToolReject) {
+func loopbackPolicy(request *capabilityrequest.CapabilityRequest, tctx tools.ToolContext) (func(netip.Addr, uint16) bool, *toolrejection.ToolReject) {
 	ports := make(map[uint16]bool)
 	allLoopback := false
-	if tctx.LoopbackConnectGranted {
-		if len(tctx.LoopbackConnectPorts) == 0 {
+	if tctx.Local.LoopbackConnectGranted {
+		if len(tctx.Local.LoopbackConnectPorts) == 0 {
 			allLoopback = true
 		} else {
-			for _, p := range tctx.LoopbackConnectPorts {
+			for _, p := range tctx.Local.LoopbackConnectPorts {
 				ports[p] = true
 			}
 		}
@@ -497,7 +500,6 @@ func loopbackPolicy(request *tools.CapabilityRequest, tctx tools.ToolContext) (f
 	}, nil
 }
 
-func invalid(err error) *tools.ToolReject {
-	return &tools.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"reason": err.Error(), "tool": "http_request"}}
+func invalid(err error) *toolrejection.ToolReject {
+	return &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"reason": err.Error(), "tool": "http_request"}}
 }
-

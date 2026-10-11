@@ -43,8 +43,8 @@ type ProjectionRows struct {
 	once    sync.Once
 }
 
-func (c *Catalog) NewProjectionRows(ctx context.Context, projectID string, root Root) (*ProjectionRows, error) {
-	store, err := c.indexStore(ctx, projectID, root)
+func (c *Directories) NewProjectionRows(ctx context.Context, projectID string, root Root) (*ProjectionRows, error) {
+	store, err := c.trees.indexStore(ctx, projectID, root)
 	if err != nil {
 		return nil, err
 	}
@@ -52,11 +52,11 @@ func (c *Catalog) NewProjectionRows(ctx context.Context, projectID string, root 
 }
 
 func newProjectionRows(ctx context.Context, store *indexStore) (*ProjectionRows, error) {
-	db, release, err := store.catalog.acquirePresentation(ctx)
+	db, release, err := store.stores.Directories.acquirePresentation(ctx)
 	if err != nil {
 		return nil, err
 	}
-	unwrite, err := store.write(ctx)
+	unwrite, err := store.writer.Write(ctx, store.writable)
 	if err != nil {
 		release()
 		return nil, err
@@ -82,7 +82,7 @@ func (p *ProjectionRows) Write(ctx context.Context, rows []ProjectionRecord, end
 	if len(rows) > pagedview.MaxRows || len(ends) > pagedview.MaxRows {
 		return pagedview.ErrRange
 	}
-	unwrite, err := p.store.write(ctx)
+	unwrite, err := p.store.writer.Write(ctx, p.store.writable)
 	if err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func (p *ProjectionRows) Count(ctx context.Context) (int64, error) {
 
 func (p *ProjectionRows) Release(ctx context.Context) error {
 	for {
-		unwrite, err := p.store.write(ctx)
+		unwrite, err := p.store.writer.Write(ctx, p.store.writable)
 		if err != nil {
 			return err
 		}
@@ -179,7 +179,7 @@ func (p *ProjectionRows) Release(ctx context.Context) error {
 			break
 		}
 	}
-	unwrite, err := p.store.write(ctx)
+	unwrite, err := p.store.writer.Write(ctx, p.store.writable)
 	if err != nil {
 		return err
 	}

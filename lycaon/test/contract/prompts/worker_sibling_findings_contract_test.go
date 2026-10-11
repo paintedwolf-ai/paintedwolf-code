@@ -9,8 +9,8 @@ import (
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -34,7 +34,7 @@ func TestRootSessionKeyedFindingsAppendRecentParityContract(t *testing.T) {
 
 	findingsStore := findings.NewMemoryStore()
 	scopeKey := func(c context.Context, sessionID string) string {
-		return session.RootSessionID(c, store, sessionID)
+		return sessiontree.RootID(c, store, sessionID)
 	}
 	reg := tools.NewDefaultRegistry()
 	contractcheck.FailErr(t, "register record_finding", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findingsStore, scopeKey))
@@ -62,7 +62,12 @@ func TestRootSessionKeyedFindingsAppendRecentParityContract(t *testing.T) {
 
 func toolContext(dir, sessionID, workerJobID string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	return tools.ToolContext{Roots: roots, ActiveRootID: "r1", SessionID: sessionID, WorkerJobID: workerJobID}
+	return tools.ToolContext{
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: sessionID,
+			WorkerJobID: workerJobID},
+	}
 }
 
 func TestWorkerChildDelegationProjectDirInvariantContract(t *testing.T) {

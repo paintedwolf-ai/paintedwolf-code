@@ -14,13 +14,17 @@ import (
 func TestBeginActivityPublishesMatchingLifecycleEdges(t *testing.T) {
 	projectID := eventFixtureProject(t)
 	hub := events.NewMemoryHub()
-	loop := &PromptLoop{Deps: PromptLoopDeps{Events: &events.Publisher{Hub: hub}}}
+	loop := NewPromptLoop(PromptLoopDeps{
+		Projection: ProjectionDeps{
+			Events: &events.Publisher{Hub: hub},
+		},
+	})
 	ctx := t.Context()
 	stream, unsubscribe, err := hub.Subscribe(ctx, events.Subscription{Project: projectID, Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe", err)
 	defer unsubscribe()
 
-	finish := loop.beginActivity(ctx, &api.Session{ProjectID: projectID}, "session-1", api.ActivityKindRunningTool, "verify", "call-1")
+	finish := loop.Projection.beginActivity(ctx, &api.Session{ProjectID: projectID}, "session-1", api.ActivityKindRunningTool, "verify", "call-1")
 	finish.finish()
 
 	first := activityEventFromStream(t, stream)

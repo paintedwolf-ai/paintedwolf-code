@@ -194,9 +194,9 @@ func removeAgentPath(ctx context.Context, tctx tools.ToolContext, target mutatio
 // history whatever its size; elsewhere it is removed as `rm` would.
 func discardAgentEntry(ctx context.Context, tctx tools.ToolContext, target mutationTarget, mutation agentMutation) error {
 	if removal, ok := recoverableRemoval(tctx, mutation); ok {
-		operationID, err := tctx.SourceMutations.RemoveEntry(ctx, removal)
-		if tctx.Out != nil && operationID != "" {
-			tctx.Out.OwnerRef = operationID
+		operationID, err := tctx.Source.SourceMutations.RemoveEntry(ctx, removal)
+		if tctx.Effects.Out != nil && operationID != "" {
+			tctx.Effects.Out.OwnerRef = operationID
 		}
 		if err == nil {
 			recordAgentMutationPaths(tctx, mutation)
@@ -308,7 +308,7 @@ func captureRemovedEntry(loc fseffect.Location) (agentFileEvidence, error) {
 // root on a project or worktree branch. A worker overlay is already a private
 // copy its promotion records, and a path outside every root has no history.
 func recoverableRemoval(tctx tools.ToolContext, m agentMutation) (sourceeffect.Removal, bool) {
-	if tctx.SourceMutations == nil {
+	if tctx.Source.SourceMutations == nil {
 		return sourceeffect.Removal{}, false
 	}
 	in, change, ok := agentCommitInputs(tctx, m)
@@ -356,18 +356,18 @@ func applyAgentMetadataChange(ctx context.Context, tctx tools.ToolContext, targe
 }
 
 func prepareAgentMutation(ctx context.Context, tctx tools.ToolContext, mutation agentMutation, target, from fseffect.Location, metadata bool) (sourceeffect.Pending, error) {
-	if tctx.SourceMutations == nil {
+	if tctx.Source.SourceMutations == nil {
 		return nil, nil
 	}
 	in, change, ok := agentCommitInputs(tctx, mutation)
 	if !ok {
 		return nil, nil
 	}
-	journal, err := tctx.SourceMutations.PrepareEffect(ctx, sourceeffect.Plan{
+	journal, err := tctx.Source.SourceMutations.PrepareEffect(ctx, sourceeffect.Plan{
 		Record: in, Change: change, Target: target, From: from, MetadataOnly: metadata,
 	})
-	if err == nil && tctx.Out != nil {
-		tctx.Out.OwnerRef = journal.ID()
+	if err == nil && tctx.Effects.Out != nil {
+		tctx.Effects.Out.OwnerRef = journal.ID()
 	}
 	return journal, err
 }
@@ -454,16 +454,16 @@ func commitAgentMutation(ctx context.Context, tctx tools.ToolContext, m agentMut
 	if !ok {
 		return nil
 	}
-	if database := agentLedgerDB(tctx.SourceLedger); database != nil {
-		return commitAgentMutationTx(ctx, database, tctx.SourceLedger, in, change)
+	if database := agentLedgerDB(tctx.Source.SourceLedger); database != nil {
+		return commitAgentMutationTx(ctx, database, tctx.Source.SourceLedger, in, change)
 	}
-	return commitAgentMutationWithoutStore(ctx, tctx.SourceLedger, in, change)
+	return commitAgentMutationWithoutStore(ctx, tctx.Source.SourceLedger, in, change)
 }
 
 // Paths outside attached roots produce no durable mutation.
 func agentCommitInputs(tctx tools.ToolContext, m agentMutation) (sourceledger.RecordInput, sourcefeed.Change, bool) {
 	root, path, located := tctx.SourceLocation(m.AbsPath)
-	if tctx.ProjectID == "" || !located {
+	if tctx.Identity.ProjectID == "" || !located {
 		return sourceledger.RecordInput{}, sourcefeed.Change{}, false
 	}
 	fromPath := ""
@@ -478,16 +478,15 @@ func agentCommitInputs(tctx tools.ToolContext, m agentMutation) (sourceledger.Re
 		return sourceledger.RecordInput{}, sourcefeed.Change{}, false
 	}
 	in := sourceledger.RecordInput{
-		ProjectID: tctx.ProjectID,
-		BranchID:  branch,
-		RootID:    root.ID, Path: path, FromPath: fromPath,
-		Op: m.Op, Origin: api.SourceChangeOriginAgent,
-		SessionID: tctx.SessionID, JobID: tctx.WorkerJobID, ToolCallID: tctx.ToolCallID,
+		RecordLocation: sourceledger.RecordLocation{RootID: root.ID, Path: path, FromPath: fromPath, EntryKind: sourceledger.EntryKindFile},
+		ProjectID:      tctx.Identity.ProjectID,
+		BranchID:       branch,
+		Op:             m.Op, Origin: api.SourceChangeOriginAgent,
+		SessionID: tctx.Identity.SessionID, JobID: tctx.Identity.WorkerJobID, ToolCallID: tctx.Identity.ToolCallID,
 		ToolName:     tctx.Invocation.ToolName,
-		Turn:         tctx.UserTurn,
+		Turn:         tctx.Identity.UserTurn,
 		BeforeSHA256: m.BeforeSHA256, AfterSHA256: m.AfterSHA256, Before: m.Before, After: m.After,
-		BeforeSize: max(m.BeforeSize, int64(len(m.Before))), AfterSize: max(m.AfterSize, int64(len(m.After))), EntryKind: sourceledger.EntryKindFile,
-	}
+		BeforeSize: max(m.BeforeSize, int64(len(m.Before))), AfterSize: max(m.AfterSize, int64(len(m.After)))}
 	var isDir *bool
 	if m.IsDir {
 		value := true
@@ -495,18 +494,18 @@ func agentCommitInputs(tctx tools.ToolContext, m agentMutation) (sourceledger.Re
 		in.EntryKind = sourceledger.EntryKindDirectory
 	}
 	change := sourcefeed.Change{
-		ProjectID:     tctx.ProjectID,
-		WorkspaceID:   sourceworkspace.ID(tctx.ProjectID, tctx.Roots),
-		WorkspaceKind: tctx.SourceWorkspaceKind,
+		ProjectID:     tctx.Identity.ProjectID,
+		WorkspaceID:   sourceworkspace.ID(tctx.Identity.ProjectID, tctx.Source.Roots),
+		WorkspaceKind: tctx.Source.SourceWorkspaceKind,
 		RootID:        root.ID,
 		Path:          path,
 		FromPath:      fromPath,
 		Op:            m.Op,
 		Origin:        api.SourceChangeOriginAgent,
-		SessionID:     tctx.SessionID,
-		JobID:         tctx.WorkerJobID,
-		ToolCallID:    tctx.ToolCallID,
-		Turn:          tctx.UserTurn,
+		SessionID:     tctx.Identity.SessionID,
+		JobID:         tctx.Identity.WorkerJobID,
+		ToolCallID:    tctx.Identity.ToolCallID,
+		Turn:          tctx.Identity.UserTurn,
 		AfterSHA256:   m.AfterSHA256,
 		IsDir:         isDir,
 		AbsPath:       m.AbsPath,

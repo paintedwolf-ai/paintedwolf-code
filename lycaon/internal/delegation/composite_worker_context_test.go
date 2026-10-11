@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -22,7 +22,7 @@ func TestCompositeWorkerContextFallsBackWithoutDelegation(t *testing.T) {
 	}
 	c := &delegation.CompositeWorkerContext{
 		Delegation: &delegation.WorkerContextLoader{Store: delegation.NewMemoryStore()},
-		AgentsFor:  func(*api.Session) session.AgentProfileResolver { return agents },
+		AgentsFor:  func(*api.Session) profiles.AgentProfileResolver { return agents },
 	}
 	sess := &api.Session{
 		ID:              "child-1",
@@ -112,7 +112,7 @@ func TestCompositeWorkerContextLegToolsFromLister(t *testing.T) {
 	c := &delegation.CompositeWorkerContext{
 		Delegation: &delegation.WorkerContextLoader{Store: delegation.NewMemoryStore()},
 		Tools:      lister,
-		AgentsFor:  func(*api.Session) session.AgentProfileResolver { return agents },
+		AgentsFor:  func(*api.Session) profiles.AgentProfileResolver { return agents },
 	}
 	sess := &api.Session{
 		ID:              "child-impl",
@@ -138,7 +138,7 @@ func TestCompositeWorkerContextImplementerTaskSpawnChecklist(t *testing.T) {
 	testutil.FailErr(t, "prompts.LoadPlaybookMatcherEffective failed", err)
 	c := &delegation.CompositeWorkerContext{
 		Delegation: &delegation.WorkerContextLoader{Store: delegation.NewMemoryStore()},
-		AgentsFor:  func(*api.Session) session.AgentProfileResolver { return agents },
+		AgentsFor:  func(*api.Session) profiles.AgentProfileResolver { return agents },
 		MatcherFor: func(*api.Session) delegation.PlaybookMatcherInterface { return matcher },
 	}
 	sess := &api.Session{
@@ -179,7 +179,7 @@ func TestCompositeWorkerContextUsesScopedAgentAndPlaybookResolvers(t *testing.T)
 	}
 	c := &delegation.CompositeWorkerContext{
 		Delegation: &delegation.WorkerContextLoader{Store: delegation.NewMemoryStore()},
-		AgentsFor:  func(*api.Session) session.AgentProfileResolver { return scopedAgents },
+		AgentsFor:  func(*api.Session) profiles.AgentProfileResolver { return scopedAgents },
 		MatcherFor: func(*api.Session) delegation.PlaybookMatcherInterface { return scopedPlaybookMatcher{} },
 	}
 	sess := &api.Session{ID: "child-scoped", ParentSessionID: "parent", AgentType: "team-reviewer"}

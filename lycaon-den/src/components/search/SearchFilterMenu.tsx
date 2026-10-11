@@ -21,6 +21,8 @@ type Props = {
   facets: SearchFacet[];
   query: string;
   onQueryChange: (query: string) => void;
+  includeDependencies?: boolean;
+  onIncludeDependenciesChange?: (value: boolean) => void;
   include: string;
   exclude: string;
   onIncludeChange: (value: string) => void;
@@ -72,11 +74,12 @@ export function SearchFilterMenu(props: Props) {
     );
   };
   const hasFilters = () =>
-    hasSearchRefinements(props.query, props.include, props.exclude);
+    !!props.includeDependencies || hasSearchRefinements(props.query, props.include, props.exclude);
   const clearFilters = () => {
     props.onQueryChange(clearSearchRefinements(props.query));
     props.onIncludeChange("");
     props.onExcludeChange("");
+    props.onIncludeDependenciesChange?.(false);
   };
 
   return (
@@ -178,6 +181,9 @@ export function SearchFilterMenu(props: Props) {
         <h3 class="den-search-filter-menu__heading" {...chromeProps()}>
           File patterns
         </h3>
+        <Show when={props.onIncludeDependenciesChange}>
+          <DenCheckbox checked={!!props.includeDependencies} data-testid="search-include-dependencies" onChange={() => props.onIncludeDependenciesChange?.(!props.includeDependencies)}>Include dependencies, build folders, and nested checkouts</DenCheckbox>
+        </Show>
         <div class="den-search-filter-menu__fields">
           <label class="den-search-filter-menu__field">
             <span>Include</span>

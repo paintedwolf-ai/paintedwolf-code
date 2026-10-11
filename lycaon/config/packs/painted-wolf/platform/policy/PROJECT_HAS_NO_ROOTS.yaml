@@ -7,6 +7,7 @@ requires:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.receiving_tool_summarize
 when: paintedwolf.rejection_code == "PROJECT_HAS_NO_ROOTS"
 effect: block
 copy:
@@ -14,7 +15,7 @@ copy:
   cause: The project was created chat-first or the last folder was removed.
   why: Tools must not invent a workspace path when no folder is bound.
   fix: Ask the user to attach a folder (Folders button). File tools become available on the next turn after
-    attach.
+    attach. {% if paintedwolf.receiving_tool_summarize %}For nonprotected text you already have, pass `content` and omit `path` and `paths` on this tool.{% endif %}
   instead: Chat, web research, and plan-read tools remain available until a folder is attached
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: rule:no_folder

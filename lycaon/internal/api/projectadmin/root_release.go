@@ -17,7 +17,7 @@ import (
 // no project attaches any more. Call it after the registry write, so the
 // attachment picture excludes what was just removed. Source snapshots and scan
 // demand for a root another project still holds are left alone.
-func (s *Handler) releaseUnattachedSourceRoots(ctx context.Context, candidates []string) {
+func (s *Roots) releaseUnattachedSourceRoots(ctx context.Context, candidates []string) {
 	if len(candidates) == 0 {
 		return
 	}
@@ -45,26 +45,26 @@ func (s *Handler) releaseUnattachedSourceRoots(ctx context.Context, candidates [
 		return
 	}
 	for _, root := range roots {
-		if err := sourcecatalog.Process().ReleaseTreeRoot(ctx, root.Path); err != nil {
+		if err := sourcecatalog.Process().Trees.ReleaseTreeRoot(ctx, root.Path); err != nil {
 			slog.WarnContext(ctx, "release source catalog for unattached root", "path", root.Path, "err", err)
 		}
 	}
-	if s.Sources.SourceLedger == nil || s.Sources.SourceLedger.SnapshotStore() == nil {
+	if s.sourceWorkspace.SourceLedger == nil || s.sourceWorkspace.SourceLedger.Snapshots == nil {
 		return
 	}
-	if err := s.Sources.SourceLedger.SnapshotStore().ReleaseRoots(ctx, roots); err != nil {
+	if err := s.sourceWorkspace.SourceLedger.Snapshots.ReleaseRoots(ctx, roots); err != nil {
 		slog.WarnContext(ctx, "release source snapshots for unattached roots", "err", err)
 	}
 }
 
-func (s *Handler) rootStillAttached(ctx context.Context, root string) (bool, error) {
+func (s *Roots) rootStillAttached(ctx context.Context, root string) (bool, error) {
 	held, err := s.attachedRootPaths(ctx)
 	_, attached := held[root]
 	return attached, err
 }
 
 // attachedRootPaths is every canonical root some project still holds.
-func (s *Handler) attachedRootPaths(ctx context.Context) (map[string]struct{}, error) {
+func (s *Roots) attachedRootPaths(ctx context.Context) (map[string]struct{}, error) {
 	projects, err := s.Registry.List(ctx)
 	if err != nil {
 		return nil, err
@@ -91,7 +91,7 @@ func rootPathsOf(p *project.Project) []string {
 	return out
 }
 
-func (s *Handler) removeRootCheckpoints(ctx context.Context, projectID, root string) error {
+func (s *Roots) removeRootCheckpoints(ctx context.Context, projectID, root string) error {
 	if err := s.Store.DropRootCheckpoints(ctx, projectID, enginepaths.ProjectKey(root)); err != nil {
 		return err
 	}

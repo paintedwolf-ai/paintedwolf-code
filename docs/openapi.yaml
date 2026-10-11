@@ -2992,6 +2992,12 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '413':
           $ref: '#/components/responses/ContentTooLarge'
         '415':
@@ -3215,6 +3221,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '413':
           $ref: '#/components/responses/ContentTooLarge'
         '415':
@@ -3284,6 +3296,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '413':
           description: Content exceeds the editor cap (source_content_too_large)
           content:
@@ -3309,11 +3327,14 @@ paths:
       x-person-action: record
       summary: Move a project file or folder to Trash
       description: |
-        Moves one file or folder into the macOS Trash under the same path jail
+        Moves one file or folder into the host operating system Trash under the same path jail
         as the source read. The entry is never permanently deleted — if the
         Trash move fails the path is left untouched and the call returns 500
         source_trash_failed. Non-empty folders require recursive=true; without
-        it the call returns 409 source_not_empty. Engine and VCS metadata
+        it the call returns 409 source_not_empty. New operations can be undone while
+        the recorded native Trash item remains available; emptying Trash makes
+        restoration unavailable. Existing retained history keeps its recovery data.
+        Engine and VCS metadata
         paths (.git, the project overlay directory) and the root itself are refused.
       parameters:
         - $ref: '#/components/parameters/ProjectId'
@@ -3376,6 +3397,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: Directory is not empty and recursive was not set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:
@@ -4819,6 +4846,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '413':
           $ref: '#/components/responses/ContentTooLarge'
         '415':
@@ -4971,6 +5004,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '413':
           $ref: '#/components/responses/ContentTooLarge'
         '415':
@@ -5021,6 +5060,12 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: History moved or the filesystem no longer matches the recorded operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:
@@ -5096,6 +5141,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '413':
           $ref: '#/components/responses/ContentTooLarge'
         '415':
@@ -5163,6 +5214,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: Destination path already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:
@@ -5899,6 +5956,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '413':
           $ref: '#/components/responses/ContentTooLarge'
         '415':
@@ -5968,6 +6031,12 @@ paths:
                 $ref: '#/components/schemas/Error'
         '409':
           description: The working file changed since it was loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '410':
+          description: The exact native Trash item is no longer available for restoration
           content:
             application/json:
               schema:
@@ -18535,6 +18604,9 @@ components:
           maximum: 500
         budget:
           $ref: '#/components/schemas/SearchBudget'
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
         regex:
           type: boolean
           description: When true, treat the code pattern as a Go regexp
@@ -18727,7 +18799,7 @@ components:
     SearchIssueReason:
       type: string
       description: |
-        Why a generation is not exhaustive. `time_budget`: the code leg's
+        Why a generation is not exhaustive. `time_budget`: a source leg's
         wall-clock budget ended with files unscanned. `catalog_warming`: `count`
         project roots had no source generation at all in time; their files
         are absent and the build they started continues, so the same query
@@ -18741,8 +18813,10 @@ components:
         `catalog_failed`: count directories could not be discovered.
         `catalog_refresh_failed`: count readable roots failed to refresh.
         `catalog_refreshing`: count roots serve an older generation while updating.
-        `symbol_budget`: declaration discovery in `count` projects stopped at
-        its line cap, clock, or file budget, so more declarations may match.
+        `symbol_pending`: bounded declaration work remains in a disposable
+        continuation; retrying the same query advances it.
+        `symbol_budget`: a terminal declaration resource bound stopped discovery,
+        so more declarations may match; retrying alone does not resolve it.
       enum:
         - result_limit
         - executor_error
@@ -18755,6 +18829,7 @@ components:
         - catalog_refresh_failed
         - catalog_refreshing
         - index_warming
+        - symbol_pending
         - symbol_budget
     SearchIssue:
       x-go-generate: true
@@ -18827,6 +18902,9 @@ components:
           format: uuid
         format:
           $ref: '#/components/schemas/SearchExportFormat'
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
         regex:
           type: boolean
         case_sensitive:
@@ -25582,6 +25660,7 @@ components:
         - source_path_protected
         - source_move_incomplete
         - source_path_busy
+        - source_trash_recovery_unavailable
         - source_recovery_failed
         - source_not_found
         - source_binary_denied
@@ -28072,9 +28151,17 @@ components:
           $ref: '#/components/schemas/CoverageReview'
         declared_leg_status:
           type: string
+          enum:
+            - complete
+            - partial
+            - blocked
           description: Leg status the worker declared; leg_status is the host-graded status.
         leg_status:
           type: string
+          enum:
+            - complete
+            - partial
+            - blocked
           description: Host-graded leg status.
         files_modified:
           type: array
@@ -28551,6 +28638,9 @@ components:
         group:
           type: string
           description: Optional ladder heading when a card carries a second subject (absorbed predicate or host resources). Absent means the primary ladder.
+        directory_scope:
+          type: string
+          description: Host-minted directory candidate covered by this option; absent for unscoped options.
         title:
           type: string
         coverage:
@@ -28627,6 +28717,11 @@ components:
         - recommended_option_id
       additionalProperties: false
       properties:
+        directory_scopes:
+          type: array
+          description: Host-approved directory candidates, from the containing folder outward; the first is the default.
+          items:
+            type: string
         id:
           type: string
           pattern: ^[A-Za-z0-9_.:-]+$
@@ -30590,6 +30685,10 @@ components:
         recursive:
           type: boolean
           description: One root registration observes every descendant.
+        policy_unwatched:
+          type: integer
+          minimum: 0
+          description: Lazy boundary roots intentionally refreshed on demand, distinct from failed watcher registrations.
         unwatched_directories:
           type: integer
           minimum: 0
@@ -32676,6 +32775,9 @@ components:
         sends the word under the caret; the host narrows whole-word search
         hits to AST-confirmed declarations. Empty symbol is a client no-op.
       properties:
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this request. Omitted means false.
         root_id:
           type: string
           format: uuid
@@ -35362,6 +35464,9 @@ components:
         origin_project_id:
           type: string
           format: uuid
+        include_dependencies:
+          type: boolean
+          description: Walk dependency, build and nested checkout directories on demand for this preview. Omitted means false.
         regex:
           type: boolean
         case_sensitive:

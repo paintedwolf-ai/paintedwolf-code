@@ -4,15 +4,16 @@ package session_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"strings"
 	"testing"
 
 	coordinatorsurface "github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,11 +24,11 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 		ID: "spec-tools", Version: "1.0.0", InitialPosture: "spec",
 		PhaseDefs: []workflowdef.PhaseDef{{ID: "work", CompleteWhen: workflowdef.CompleteWhenGatesSatisfied, Gates: []string{"research_satisfied"}}},
 	})
-	specFix.Workflow.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"spec-tools@1.0.0": specManifest})
-	_, err := specFix.Workflow.StartHuman(t.Context(), specFix.Sess.ID, api.StartWorkflowRunRequest{WorkflowID: specManifest.ID, WorkflowVersion: specManifest.Version})
+	specFix.Workflow.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"spec-tools@1.0.0": specManifest})
+	_, err := specFix.Workflow.Starts.StartHuman(t.Context(), specFix.Sess.ID, api.StartWorkflowRunRequest{WorkflowID: specManifest.ID, WorkflowVersion: specManifest.Version})
 	testutil.FailErr(t, "start spec workflow", err)
 	specFix.Mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	if _, err := specFix.Mgr.Prompt(context.Background(), specFix.Sess.ID, "hello"); err != nil {
+	if _, err := specFix.Mgr.Submissions.Prompt(context.Background(), specFix.Sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "specFix.Mgr.Prompt failed", err)
 	}
 	specSession, err := specFix.Store.Get(t.Context(), specFix.Sess.ID)
@@ -44,7 +45,7 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 	buildRec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	buildFix := setupContextualToolsFixtureWithLLM(t, api.SessionPostureSpec, buildRec)
 	buildFix.Mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	if _, err := buildFix.Mgr.Prompt(context.Background(), buildFix.Sess.ID, "hello"); err != nil {
+	if _, err := buildFix.Mgr.Submissions.Prompt(context.Background(), buildFix.Sess.ID, "hello"); err != nil {
 		testutil.FailErr(t, "buildFix.Mgr.Prompt failed", err)
 	}
 	buildSession, err := buildFix.Store.Get(t.Context(), buildFix.Sess.ID)
@@ -52,9 +53,9 @@ func TestMockLLMReceivesWorkflowFilteredTools(t *testing.T) {
 	if buildSession.Posture != api.SessionPostureBuild {
 		t.Fatalf("default workflow posture = %s, want build", buildSession.Posture)
 	}
-	run, err := buildFix.Workflow.GetActive(t.Context(), buildFix.Sess.ID)
+	run, err := buildFix.Workflow.Store.Runs.ActiveBySession(t.Context(), buildFix.Sess.ID)
 	testutil.FailErr(t, "read attached workflow", err)
-	if run == nil || !buildFix.Workflow.IsAmbientRun(run) {
+	if run == nil || !runstate.IsAmbientRun(run) {
 		t.Fatalf("prompt did not attach its default workflow: %+v", run)
 	}
 	// The investigate surface keeps task loadable: offered, or behind the capability map.
@@ -88,9 +89,9 @@ func TestMockLLMInvestigateCoordinatorReceivesEndToEndHostContract(t *testing.T)
 		WorkflowInvestigateEligible:  &investigateEligible,
 	}})
 	recordRequestedLoad(t, fix.Store, fix.Sess.ID, "command")
-	fix.Mgr.SetTurnLoads(turnload.NewLedger())
+	fix.Mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	fix.Mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	if _, err := fix.Mgr.Prompt(context.Background(), fix.Sess.ID, "run a bounded local-service workflow"); err != nil {
+	if _, err := fix.Mgr.Submissions.Prompt(context.Background(), fix.Sess.ID, "run a bounded local-service workflow"); err != nil {
 		testutil.FailErr(t, "fix.Mgr.Prompt failed", err)
 	}
 

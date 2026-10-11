@@ -63,7 +63,7 @@ func TestCoordinatorProfileReadWriteAllowlists(t *testing.T) {
 
 func TestCoordinatorProfileToolsIncludeSurveyRead(t *testing.T) {
 	exec := toolfixture.ContractToolExecutor(t)
-	names := toolfixture.SortedToolNames(context.Background(), exec, "coordinator")
+	names := toolfixture.SortedToolNames(context.Background(), exec.Metadata, "coordinator")
 	// Profile grant; the turn surface gates invoke.
 	for _, want := range []string{"find", "grep", "read", "command"} {
 		if !slices.Contains(names, want) {
@@ -89,9 +89,9 @@ func TestCoordinatorReadProductPathAllowed(t *testing.T) {
 	out, err := read.Run(context.Background(), map[string]any{
 		"path": "src/main.go",
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "coordinator",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "coordinator"},
 	})
 	if err != nil {
 		t.Fatalf("coordinator read product path: %v", err)
@@ -121,9 +121,9 @@ func TestCoordinatorReadPlanPathAllowed(t *testing.T) {
 	out, err := read.Run(context.Background(), map[string]any{
 		"path": settingsoverlay.Rel("blueprints/game.md"),
 	}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-		ActiveRootID: "r1",
-		Agent:        "coordinator",
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "coordinator"},
 	})
 	if err != nil {
 		t.Fatalf("coordinator read plan path: %v", err)

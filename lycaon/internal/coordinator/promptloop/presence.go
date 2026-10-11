@@ -43,7 +43,7 @@ func (p callPresence) Released(targets []agentpresence.Target) {
 }
 
 // recordReturnedText reports the text a successful call returned to the model.
-func (l *PromptLoop) recordReturnedText(ctx context.Context, sessionID string, tc api.ToolCall, run toolInvocation) {
+func (l *toolInvocations) recordReturnedText(ctx context.Context, sessionID string, tc api.ToolCall, run toolInvocation) {
 	if l.Deps.AgentPresence == nil || !run.succeeded() || len(run.captures.sourceReads) == 0 {
 		return
 	}

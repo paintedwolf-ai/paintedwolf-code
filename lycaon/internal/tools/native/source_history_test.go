@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -116,8 +116,8 @@ func TestSourceHistoryMineQualifiesNonPrimaryRoots(t *testing.T) {
 		},
 	}
 	tctx := provenanceCtx(dir, ledger)
-	tctx.Roots = append(tctx.Roots, tctx.Roots[0])
-	tctx.Roots[1].ID, tctx.Roots[1].Label, tctx.Roots[1].IsPrimary = "r2", "docs", false
+	tctx.Source.Roots = append(tctx.Source.Roots, tctx.Source.Roots[0])
+	tctx.Source.Roots[1].ID, tctx.Source.Roots[1].Label, tctx.Source.Roots[1].IsPrimary = "r2", "docs", false
 	tool := &surveytools.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}
 	out, err := tool.Run(context.Background(), map[string]any{"mode": "mine"}, tctx)
 	testutil.FailErr(t, "source_history mine", err)
@@ -134,13 +134,13 @@ func TestSourceHistoryRejectsUnknownModeAndMissingLedger(t *testing.T) {
 	tool := &surveytools.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}
 
 	_, err := tool.Run(context.Background(), map[string]any{"path": "main.go", "mode": "blame"}, provenanceCtx(dir, &fakeSourceLedger{}))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SOURCE_HISTORY_MODE_INVALID" {
 		t.Fatalf("unknown mode = %v, want SOURCE_HISTORY_MODE_INVALID", err)
 	}
 
 	noLedger := nativefixture.Context(dir)
-	noLedger.ProjectID = "p1"
+	noLedger.Identity.ProjectID = "p1"
 	_, err = tool.Run(context.Background(), map[string]any{"path": "main.go"}, noLedger)
 	if !errors.As(err, &reject) || reject.Code != "SOURCE_HISTORY_UNAVAILABLE" {
 		t.Fatalf("missing ledger = %v, want SOURCE_HISTORY_UNAVAILABLE", err)
@@ -165,7 +165,7 @@ func TestSourceHistoryVersionReadsExactBytes(t *testing.T) {
 		},
 	}
 	tctx := provenanceCtx(dir, ledger)
-	tctx.ProjectID = "p1"
+	tctx.Identity.ProjectID = "p1"
 	tool := &surveytools.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}
 
 	out, err := tool.Run(context.Background(), map[string]any{
@@ -217,7 +217,7 @@ func TestSourceHistoryVersionHandlesAbsentState(t *testing.T) {
 		},
 	}
 	tctx := provenanceCtx(dir, ledger)
-	tctx.ProjectID = "p1"
+	tctx.Identity.ProjectID = "p1"
 	tool := &surveytools.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}
 
 	out, err := tool.Run(context.Background(), map[string]any{
@@ -253,14 +253,14 @@ func TestSourceHistoryVersionRejections(t *testing.T) {
 		},
 	}
 	tctx := provenanceCtx(dir, ledger)
-	tctx.ProjectID = "p1"
+	tctx.Identity.ProjectID = "p1"
 	tool := &surveytools.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}
 
 	// 1. Missing version_id
 	_, err := tool.Run(context.Background(), map[string]any{
 		"path": "main.go", "mode": "version",
 	}, tctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "SOURCE_VERSION_REQUIRED" {
 		t.Fatalf("missing version_id err = %v, want SOURCE_VERSION_REQUIRED", err)
 	}
@@ -317,7 +317,7 @@ func TestSourceHistoryDiff(t *testing.T) {
 		},
 	}
 	tctx := provenanceCtx(dir, ledger)
-	tctx.ProjectID = "p1"
+	tctx.Identity.ProjectID = "p1"
 	tool := &surveytools.SourceHistoryTool{Boundary: nativefixture.Boundary(t)}
 
 	// 1. Diff against parent (omitting base_version_id)

@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -23,11 +24,11 @@ func loadAgentSourceText(ctx context.Context, tool string, tctx tools.ToolContex
 	}
 	documents, ok := sourceview.DocumentsFor(tctx, resolved)
 	if !ok {
-		return sourceview.Text{}, &tools.ToolReject{Code: "EDITOR_DOCUMENT_CHANGING", Data: map[string]any{"path": resolved.DisplayPath}}
+		return sourceview.Text{}, &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_CHANGING", Data: map[string]any{"path": resolved.DisplayPath}}
 	}
-	base, err := documents.AgentReadBase(ctx, tctx.ProjectID, tctx.SessionID, st.Editor.ID, tctx.EditorReadBases)
+	base, err := documents.AgentReadBase(ctx, tctx.Identity.ProjectID, tctx.Identity.SessionID, st.Editor.ID, tctx.Source.EditorReadBases)
 	if errors.Is(err, tools.ErrEditorReadRequired) {
-		return sourceview.Text{}, &tools.ToolReject{Code: "EDITOR_DOCUMENT_READ_REQUIRED", Data: map[string]any{"path": resolved.DisplayPath}}
+		return sourceview.Text{}, &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_READ_REQUIRED", Data: map[string]any{"path": resolved.DisplayPath}}
 	}
 	if err != nil && base.ID == "" {
 		return sourceview.Text{}, err
@@ -99,8 +100,8 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 		if documents, ok := sourceview.DocumentsFor(tctx, resolved); ok {
 			if branch, berr := tctx.SourceBranch(resolved.Root.ID); berr == nil {
 				// The written text is the agent's own; this response can edit from it.
-				if doc, ok, err := documents.OpenDocument(ctx, tctx.ProjectID, branch, resolved.Root.ID, resolved.ScopeRel); err == nil && ok {
-					documents.AdvanceAgentRead(tctx.ProjectID, tctx.SessionID, tctx.EditorReadBases,
+				if doc, ok, err := documents.OpenDocument(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, resolved.ScopeRel); err == nil && ok {
+					documents.AdvanceAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Source.EditorReadBases,
 						tools.EditorDocumentEdit{DocumentID: doc.ID, Content: newContent}, doc)
 				}
 			}
@@ -109,12 +110,12 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 	}
 	documents, ok := sourceview.DocumentsFor(tctx, resolved)
 	if !ok {
-		return landing{}, &tools.ToolReject{Code: "EDITOR_DOCUMENT_CHANGING", Data: map[string]any{"path": resolved.DisplayPath}}
+		return landing{}, &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_CHANGING", Data: map[string]any{"path": resolved.DisplayPath}}
 	}
 
 	edit := tools.EditorDocumentEdit{DocumentID: st.Editor.ID, ExpectedRevision: st.Editor.Revision, Content: newContent,
-		OperationID: uuid.NewString(), SessionID: tctx.SessionID, Turn: tctx.UserTurn, ToolCallID: tctx.ToolCallID, ToolName: tool}
-	previews, err := documents.PreviewAgentEdits(ctx, tctx.ProjectID, []tools.EditorDocumentEdit{edit})
+		OperationID: uuid.NewString(), SessionID: tctx.Identity.SessionID, Turn: tctx.Identity.UserTurn, ToolCallID: tctx.Identity.ToolCallID, ToolName: tool}
+	previews, err := documents.PreviewAgentEdits(ctx, tctx.Identity.ProjectID, []tools.EditorDocumentEdit{edit})
 	if err != nil {
 		return landing{}, err
 	}
@@ -124,11 +125,11 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 		return landing{}, err
 	}
 	edit.ReviewedRevision = preview.Before.Revision
-	applied, err := documents.ApplyAgentEdit(ctx, tctx.ProjectID, edit)
+	applied, err := documents.ApplyAgentEdit(ctx, tctx.Identity.ProjectID, edit)
 	if err != nil {
 		return landing{}, err
 	}
-	documents.AdvanceAgentRead(tctx.ProjectID, tctx.SessionID, tctx.EditorReadBases, edit, applied.Document)
+	documents.AdvanceAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, tctx.Source.EditorReadBases, edit, applied.Document)
 	tctx.RecordModelAuthoredCredentials(ctx, resolved.Abs, []byte(newContent))
 	reportLanded(tctx, applied.Document)
 	reportLandedEditorConfig(ctx, tctx, resolved, st, newContent)
@@ -150,7 +151,7 @@ func retryEditorDocument(ctx context.Context, path string, body func() (string, 
 			return "", ctxErr
 		}
 	}
-	return "", &tools.ToolReject{
+	return "", &toolrejection.ToolReject{
 		Code: "EDITOR_DOCUMENT_CHANGING",
 		Data: map[string]any{"path": path, "attempts": editorDocumentRetries},
 	}
@@ -160,7 +161,7 @@ func editorFileChange(tctx tools.ToolContext, resolved projectpaths.Resolved, pr
 	return tools.FileChange{Path: resolved.Abs, Preview: api.ApprovalFileChange{
 		Path: resolved.DisplayPath, RootID: resolved.Root.ID, Operation: "write",
 		// The review carries the reference the call named, never the value it resolves.
-		Before: tctx.Secrets.ReferenceEchoes(preview.Before.Text), After: tctx.Secrets.ReferenceEchoes(preview.After),
+		Before: tctx.Effects.Secrets.ReferenceEchoes(preview.Before.Text), After: tctx.Effects.Secrets.ReferenceEchoes(preview.After),
 		BeforeSHA256: preview.Before.SHA256, AfterSHA256: preview.AfterSHA256,
 		BeforeBytes: preview.BeforeBytes, AfterBytes: preview.AfterBytes,
 	}}

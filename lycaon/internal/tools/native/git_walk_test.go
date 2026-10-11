@@ -58,10 +58,14 @@ func newNativeWalkFixture(t *testing.T) nativeWalkFixture {
 	testutil.FailErr(t, "seed source root", err)
 	manager := git.NewManager()
 	ledger := sourceledger.New(sqlDB, t.TempDir())
-	ledger.SetGitReader(walkGitReader{manager})
+	ledger.Git.SetGitReader(walkGitReader{manager})
 	tc := nativefixture.Context(dir)
-	tc.ProjectID, tc.SessionID, tc.ActiveRootID, tc.UserTurn = "p1", "s1", "r1", 1
-	tc.SourceLedger = ledger
+	tc.Identity.ProjectID, tc.Identity.SessionID, tc.Source.ActiveRootID, tc.Identity.UserTurn = "p1", "s1", "r1", 1
+	tc.Source.SourceLedger = ledger
+	tc.Source.History = tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}
+	tc.Source.Commands = ledger.Commands
+	tc.Source.Observations = ledger.Inventory
+	tc.Source.GitMutations = ledger.Git
 	return nativeWalkFixture{dir: dir, manager: manager, ledger: ledger, tc: tc}
 }
 
@@ -72,7 +76,7 @@ func TestNativeCommitAndAmendProduceStandaloneWalkSteps(t *testing.T) {
 	tool := &GitCommitTool{Git: manager, Boundary: nativefixture.Boundary(t)}
 	for i, name := range []string{"first.txt", "second.txt"} {
 		testutil.FailErr(t, "write existing work", os.WriteFile(filepath.Join(dir, name), []byte(name), 0o644))
-		tc.ToolCallID = name
+		tc.Identity.ToolCallID = name
 		out, err := tool.Run(t.Context(), map[string]any{"message": name, "paths": []any{name}, "amend": i == 1}, tc)
 		testutil.FailErr(t, "commit existing work", err)
 		var receipt struct {
@@ -83,7 +87,7 @@ func TestNativeCommitAndAmendProduceStandaloneWalkSteps(t *testing.T) {
 		if !receipt.Available || receipt.Hash == "" {
 			t.Fatalf("missing commit receipt: %s", out)
 		}
-		page, err := ledger.QueryWalk(t.Context(), "p1", sourceledger.Baseline{Kind: sourceledger.BaselineTurn, SessionID: "s1", Turn: 1}, 10, 0, sourceledger.CommitLens{})
+		page, err := ledger.Walk.QueryWalk(t.Context(), "p1", sourceledger.Baseline{Kind: sourceledger.BaselineTurn, SessionID: "s1", Turn: 1}, 10, 0, sourceledger.CommitLens{})
 		testutil.FailErr(t, "read native commit walk", err)
 		kind := "commit"
 		if i == 1 {
@@ -94,7 +98,7 @@ func TestNativeCommitAndAmendProduceStandaloneWalkSteps(t *testing.T) {
 		}
 	}
 	_, _ = tool.Run(t.Context(), map[string]any{"message": "Nothing changed", "paths": []any{"first.txt"}}, tc)
-	page, err := ledger.QueryWalk(t.Context(), "p1", sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"}, 10, 0, sourceledger.CommitLens{})
+	page, err := ledger.Walk.QueryWalk(t.Context(), "p1", sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"}, 10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "read after failed commit", err)
 	if len(page.GitChanges) != 2 {
 		t.Fatalf("failed commit manufactured movement: %+v", page.GitChanges)
@@ -115,12 +119,12 @@ func TestNativeCheckoutRecordsReviewedPathsWithItsGitMovement(t *testing.T) {
 		Content: []byte("feature"), SHA256: sourceblob.ContentSHA([]byte("feature")), Size: 7,
 	})
 	testutil.FailErr(t, "track current file", err)
-	f.tc.ToolCallID, f.tc.Invocation.ToolName = "checkout-call", "git_checkout"
-	f.tc.FileChangeReview = func(context.Context, []tools.FileChange) error { return nil }
+	f.tc.Identity.ToolCallID, f.tc.Invocation.ToolName = "checkout-call", "git_checkout"
+	f.tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { return nil }
 	tool := GitOperationTool{Git: f.manager, Boundary: nativefixture.Boundary(t), Kind: "checkout"}
 	_, err = tool.Run(t.Context(), map[string]any{"branch": "main"}, f.tc)
 	testutil.FailErr(t, "checkout main", err)
-	page, err := f.ledger.QueryWalk(t.Context(), "p1", sourceledger.Baseline{Kind: sourceledger.BaselineTurn, SessionID: "s1", Turn: 1}, 10, 0, sourceledger.CommitLens{})
+	page, err := f.ledger.Walk.QueryWalk(t.Context(), "p1", sourceledger.Baseline{Kind: sourceledger.BaselineTurn, SessionID: "s1", Turn: 1}, 10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "read checkout walk", err)
 	if len(page.Files) != 1 || len(page.GitChanges) != 1 || page.GitChanges[0].Kind != "checkout" {
 		t.Fatalf("missing checkout history: %+v", page)
@@ -129,9 +133,9 @@ func TestNativeCheckoutRecordsReviewedPathsWithItsGitMovement(t *testing.T) {
 	if effect.ToolCallID != "checkout-call" || effect.GitTransitionID != page.GitChanges[0].ID {
 		t.Fatalf("unattributed checkout file: %+v", effect)
 	}
-	_, err = f.ledger.ObservePaths(t.Context(), "p1", []sourceledger.RootSpec{{ID: "r1", Path: f.dir}}, []sourceledger.PathRef{{RootID: "r1", Path: "file.txt"}})
+	_, err = f.ledger.Inventory.ObservePaths(t.Context(), "p1", []sourceledger.RootSpec{{ID: "r1", Path: f.dir}}, []sourceledger.PathRef{{RootID: "r1", Path: "file.txt"}})
 	testutil.FailErr(t, "observe checkout again", err)
-	page, err = f.ledger.QueryWalk(t.Context(), "p1", sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"}, 10, 0, sourceledger.CommitLens{})
+	page, err = f.ledger.Walk.QueryWalk(t.Context(), "p1", sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"}, 10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "read stable checkout history", err)
 	if len(page.Files[0].Effects) != 1 || len(page.GitChanges) != 1 {
 		t.Fatalf("duplicated checkout: %+v", page)

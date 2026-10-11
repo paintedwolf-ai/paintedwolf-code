@@ -19,12 +19,12 @@ func TestGetSessionPendingWorkflowStartOpenAPI(t *testing.T) {
 	sess := createSessionHTTP(t, srv, dir)
 
 	exitAmbientRunHTTP(t, srv, sess.ID)
-	active, err := h.WorkflowMgr.GetActive(t.Context(), sess.ID)
+	active, err := h.Workflows.Manager.Store.Runs.ActiveBySession(t.Context(), sess.ID)
 	if err != nil || active != nil {
 		t.Fatalf("ambient exit left active workflow: %+v; error=%v", active, err)
 	}
 
-	if err := h.WorkflowMgr.NoteWorkflowStartProposal(context.Background(), sess.ID, "plan", "1.0.0"); err != nil {
+	if err := h.Workflows.Manager.Blueprints.Scaffold.NoteWorkflowStartProposal(context.Background(), sess.ID, "plan", "1.0.0"); err != nil {
 		t.Fatalf("NoteWorkflowStartProposal: %v", err)
 	}
 
@@ -51,7 +51,7 @@ func TestGetSessionPendingWorkflowStartOpenAPI(t *testing.T) {
 func TestGetActiveWorkflowRunHumanApprovalAwaitingOpenAPI(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
-	blueprintMgr := h.BlueprintMgr
+	blueprintMgr := h.Workflows.Blueprints
 	sess := createSessionHTTP(t, srv, t.TempDir())
 
 	startBody := planStartBody

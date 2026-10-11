@@ -25,23 +25,23 @@ func handoffSessionID(args map[string]any, tctx tools.ToolContext) string {
 	if s, _ := args["session_id"].(string); strings.TrimSpace(s) != "" {
 		return strings.TrimSpace(s)
 	}
-	if s := strings.TrimSpace(tctx.HandoffSessionID); s != "" {
+	if s := strings.TrimSpace(tctx.Identity.HandoffSessionID); s != "" {
 		return s
 	}
-	if s := strings.TrimSpace(tctx.ParentSessionID); s != "" {
+	if s := strings.TrimSpace(tctx.Identity.ParentSessionID); s != "" {
 		return s
 	}
-	return strings.TrimSpace(tctx.SessionID)
+	return strings.TrimSpace(tctx.Identity.SessionID)
 }
 
 func handoffAgentID(args map[string]any, tctx tools.ToolContext) string {
 	if s, _ := args["agent"].(string); strings.TrimSpace(s) != "" {
 		return strings.TrimSpace(s)
 	}
-	if s := strings.TrimSpace(tctx.HandoffAgentID); s != "" {
+	if s := strings.TrimSpace(tctx.Identity.HandoffAgentID); s != "" {
 		return s
 	}
-	return strings.TrimSpace(tctx.Agent)
+	return strings.TrimSpace(tctx.Identity.Agent)
 }
 
 func parsePathList(raw any) ([]string, error) {

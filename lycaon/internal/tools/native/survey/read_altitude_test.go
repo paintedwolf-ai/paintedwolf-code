@@ -35,7 +35,7 @@ func readOutJSON(t *testing.T, out string) string {
 
 func testCtxSession(dir, sessionID string) tools.ToolContext {
 	ctx := nativefixture.Context(dir)
-	ctx.SessionID = sessionID
+	ctx.Identity.SessionID = sessionID
 	return ctx
 }
 

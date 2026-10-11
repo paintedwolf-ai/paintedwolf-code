@@ -12,15 +12,15 @@ func applyToolApprovalRequest(row *StoredCheckpoint, req CheckpointRequest) erro
 	if req.ProposedAction == nil {
 		return fmt.Errorf("proposed_action required for tool_approval")
 	}
-	row.ToolName = observability.RedactCaptureText(req.ProposedAction.Tool)
-	if scrubbed, ok := observability.RedactCaptureValue(req.ProposedAction.Args).(map[string]any); ok {
+	row.ToolName = observability.RedactCaptureText(req.ProposedAction.Invocation.Tool)
+	if scrubbed, ok := observability.RedactCaptureValue(req.ProposedAction.Invocation.Args).(map[string]any); ok {
 		row.Args = scrubbed
 	}
-	row.Files = append([]string(nil), req.ProposedAction.Files...)
+	row.Files = append([]string(nil), req.ProposedAction.Invocation.Files...)
 	for i := range row.Files {
 		row.Files[i] = observability.RedactCaptureText(row.Files[i])
 	}
-	row.ProjectDir = observability.RedactCaptureText(req.ProposedAction.ProjectDir)
+	row.ProjectDir = observability.RedactCaptureText(req.ProposedAction.Scope.ProjectDir)
 	row.Description = observability.RedactCaptureText(row.Description)
 	if req.ToolCallID != "" {
 		row.Payload["tool_call_id"] = req.ToolCallID

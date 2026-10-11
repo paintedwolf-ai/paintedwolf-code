@@ -12,7 +12,7 @@ import (
 
 // directIPGrantsForList returns the direct-IP lease rows for the Settings list, for one
 // chat or for every live session tree when chat is empty.
-func (s *Handler) directIPGrantsForList(chat string) []hitl.ApprovalGrant {
+func (s *Inventory) directIPGrantsForList(chat string) []hitl.ApprovalGrant {
 	if s == nil || s.DirectIP == nil {
 		return nil
 	}
@@ -59,7 +59,7 @@ func chatDirectIPGrantsToDomain(rootSessionID string, grants []approvalstate.Dir
 
 // revokeDirectIPGrant removes a direct-IP lease and records the capability row.
 // Reports whether the id belonged to this runtime.
-func (s *Handler) revokeDirectIPGrant(ctx context.Context, id string) bool {
+func (s *Inventory) revokeDirectIPGrant(ctx context.Context, id string) bool {
 	if s == nil || s.DirectIP == nil {
 		return false
 	}
@@ -84,7 +84,7 @@ func (s *Handler) revokeDirectIPGrant(ctx context.Context, id string) bool {
 	return true
 }
 
-func (s *Handler) localListenGrantsForList(chat string) []hitl.ApprovalGrant {
+func (s *Inventory) localListenGrantsForList(chat string) []hitl.ApprovalGrant {
 	if s == nil || s.Listen == nil {
 		return nil
 	}
@@ -129,7 +129,7 @@ func chatListenGrantsToDomain(rootSessionID string, grants []approvalstate.PortL
 		hitl.ApprovalGrantCategoryLocalListen, "binding", grants)
 }
 
-func (s *Handler) loopbackGrantsForList(chat string) []hitl.ApprovalGrant {
+func (s *Inventory) loopbackGrantsForList(chat string) []hitl.ApprovalGrant {
 	if s == nil || s.Loopback == nil {
 		return nil
 	}
@@ -148,7 +148,7 @@ func chatLoopbackGrantsToDomain(rootSessionID string, grants []approvalstate.Por
 		hitl.ApprovalGrantCategoryLoopbackConnect, "connecting to", grants)
 }
 
-func (s *Handler) writeRootGrantsForList(chat string) []hitl.ApprovalGrant {
+func (s *Inventory) writeRootGrantsForList(chat string) []hitl.ApprovalGrant {
 	if s == nil || s.WriteRoots == nil {
 		return nil
 	}

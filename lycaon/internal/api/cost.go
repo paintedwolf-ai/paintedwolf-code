@@ -12,7 +12,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) handleCostSummary(w http.ResponseWriter, r *http.Request) {
+func (s *Activity) handleCostSummary(w http.ResponseWriter, r *http.Request) {
 	scope, sessionID, projectID, ok := s.parseCostSummaryQuery(w, r)
 	if !ok {
 		return
@@ -30,8 +30,8 @@ func (s *Server) handleCostSummary(w http.ResponseWriter, r *http.Request) {
 
 var projectCostReportLimit = httpio.MustPageLimit(40, 1, 200)
 
-func (s *Server) handleProjectCostReport(w http.ResponseWriter, r *http.Request) {
-	p, ok := requestscope.ProjectByURLID(s.projectRegistry, &s.responses, w, r)
+func (s *Activity) handleProjectCostReport(w http.ResponseWriter, r *http.Request) {
+	p, ok := requestscope.ProjectByURLID(s.projectRegistry, s.responses, w, r)
 	if !ok {
 		return
 	}
@@ -59,7 +59,7 @@ func (s *Server) handleProjectCostReport(w http.ResponseWriter, r *http.Request)
 }
 
 // parseCostSummaryQuery selects one cost scope.
-func (s *Server) parseCostSummaryQuery(w http.ResponseWriter, r *http.Request) (scope wire.CostScope, sessionID, projectID string, ok bool) {
+func (s *Activity) parseCostSummaryQuery(w http.ResponseWriter, r *http.Request) (scope wire.CostScope, sessionID, projectID string, ok bool) {
 	sessionID = strings.TrimSpace(r.URL.Query().Get("session_id"))
 	projectID = strings.TrimSpace(r.URL.Query().Get("project_id"))
 
@@ -68,12 +68,12 @@ func (s *Server) parseCostSummaryQuery(w http.ResponseWriter, r *http.Request) (
 		s.responses.InvalidQueryParam(w, "project_id", "must not be combined with session_id")
 		return "", "", "", false
 	case sessionID != "":
-		if !requestscope.SessionExists(s.sessionStore, &s.responses, w, r, sessionID) {
+		if !requestscope.SessionExists(s.sessionStore, s.responses, w, r, sessionID) {
 			return "", "", "", false
 		}
 		return wire.CostScopeSession, sessionID, "", true
 	case projectID != "":
-		resolvedID, _, ok := requestscope.ProjectIDQuery(s.projectRegistry, &s.responses, w, r)
+		resolvedID, _, ok := requestscope.ProjectIDQuery(s.projectRegistry, s.responses, w, r)
 		if !ok {
 			return "", "", "", false
 		}

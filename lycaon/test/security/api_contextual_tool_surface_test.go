@@ -27,14 +27,14 @@ func TestSpecCoordinatorPromptOmitsDelegateDispatch(t *testing.T) {
 func TestInvokeStillDeniesWhenToolNotListed(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
 	srv := h.Server
-	mgr := h.SessionMgr
+	mgr := h.Sessions.Manager
 	store := h.Store
 	projectDir := t.TempDir()
 	sess := createSessionWithPostureHTTP(t, srv, projectDir, wire.SessionPostureSpec)
 	ctx := context.Background()
 	sessionRec, err := store.Get(ctx, sess.ID)
 	testutil.FailErr(t, "store.Get failed", err)
-	if err := mgr.PromptToolPolicy().EvaluateInvoke(ctx, sessionRec, "delegate_dispatch", nil); err == nil {
+	if err := mgr.Coordinator.Guards.Policy().EvaluateInvoke(ctx, sessionRec, "delegate_dispatch", nil); err == nil {
 		t.Fatal("invoke-time rules must still deny delegate_dispatch in spec posture")
 	}
 }

@@ -26,7 +26,7 @@ func TestChatComparisonKeepsOtherChatsAndHumanEditsDistinct(t *testing.T) {
 	second, err := f.service.ApplyAgentEdit(t.Context(), input)
 	testutil.FailErr(t, "publish second chat with human typing", err)
 	for _, sessionID := range []string{"chat-1", "chat-2"} {
-		comparison, err := ledger.CompareScope(t.Context(), f.project.ID, sourcebranch.Trunk,
+		comparison, err := ledger.Comparisons.CompareScope(t.Context(), f.project.ID, sourcebranch.Trunk,
 			sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: sessionID}, document.FileID,
 			sourceledger.ScopeComparisonOptions{UnmarkUserEdits: true})
 		testutil.FailErr(t, "compare chat", err)
@@ -73,14 +73,14 @@ func TestSavedLineKeepsAllContributingChats(t *testing.T) {
 	input.SessionID, input.ToolCallID = "chat-2", "call-2"
 	_, err = f.service.ApplyAgentEdit(t.Context(), input)
 	testutil.FailErr(t, "publish mixed authors", err)
-	attribution, err := ledger.QueryAttribution(t.Context(), f.project.ID, sourcebranch.Trunk, f.rootID, "a.txt")
+	attribution, err := ledger.History.QueryAttribution(t.Context(), f.project.ID, sourcebranch.Trunk, f.rootID, "a.txt")
 	testutil.FailErr(t, "query saved authors", err)
-	versions, err := ledger.QueryFileVersions(t.Context(), f.project.ID, document.FileID, 10, 0)
+	versions, err := ledger.History.QueryFileVersions(t.Context(), f.project.ID, document.FileID, 10, 0)
 	testutil.FailErr(t, "query mixed publication history", err)
 	if len(versions.Versions) == 0 || len(versions.Versions[0].Contributors) != 2 {
 		t.Fatalf("publication history lost the human and second chat: %+v", versions.Versions)
 	}
-	effects, err := ledger.QueryFileEffects(t.Context(), f.project.ID, document.FileID, 0, 0, 10)
+	effects, err := ledger.History.QueryFileEffects(t.Context(), f.project.ID, document.FileID, 0, 0, 10)
 	testutil.FailErr(t, "query tool provenance", err)
 	if len(effects.Effects) == 0 || effects.Effects[0].ActorClassFor("chat-2") != sourceledger.ActorMixed || effects.Effects[0].AuthoredTurn() != 0 {
 		t.Fatalf("agent tools classified the publisher instead of contributors: %+v", effects)
@@ -104,7 +104,7 @@ func TestSavedLineListsEachAuthorOnce(t *testing.T) {
 	document := f.open(t, "a.txt")
 	_, err := f.service.ApplyAgentEdit(t.Context(), agentEdit(document, "intro\nEdited by the agent.\n"))
 	testutil.FailErr(t, "publish interleaved edit", err)
-	attribution, err := ledger.QueryAttribution(t.Context(), f.project.ID, sourcebranch.Trunk, f.rootID, "a.txt")
+	attribution, err := ledger.History.QueryAttribution(t.Context(), f.project.ID, sourcebranch.Trunk, f.rootID, "a.txt")
 	testutil.FailErr(t, "query saved authors", err)
 	agentIntervals := 0
 	for _, interval := range attribution.Intervals {
@@ -122,15 +122,15 @@ func TestSavedLineListsEachAuthorOnce(t *testing.T) {
 
 func TestOpeningSharedDocumentInheritsRecordedAuthorship(t *testing.T) {
 	f, ledger := newLedgerAgentFixture(t, map[string]string{"a.txt": "prior agent\n"})
-	err := ledger.Record(t.Context(), sourceledger.RecordInput{ProjectID: f.project.ID, RootID: f.rootID,
-		Path: "a.txt", OperationID: uuid.NewString(), Op: api.SourceChangeOpCreate,
+	err := ledger.Record(t.Context(), sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: f.rootID, Path: "a.txt"}, ProjectID: f.project.ID, OperationID: uuid.NewString(), Op: api.SourceChangeOpCreate,
 		Origin: api.SourceChangeOriginAgent, SessionID: "prior-chat", Turn: 1,
 		After: []byte("prior agent\n")})
 	testutil.FailErr(t, "record pre-document agent write", err)
 	document := f.open(t, "a.txt")
 	_, err = f.service.ApplyAgentEdit(t.Context(), agentEdit(document, "prior agent\nnew agent\n"))
 	testutil.FailErr(t, "publish shared document", err)
-	attribution, err := ledger.QueryAttribution(t.Context(), f.project.ID, sourcebranch.Trunk, f.rootID, "a.txt")
+	attribution, err := ledger.History.QueryAttribution(t.Context(), f.project.ID, sourcebranch.Trunk, f.rootID, "a.txt")
 	testutil.FailErr(t, "read inherited authorship", err)
 	for _, interval := range attribution.Intervals {
 		if interval.StartLine == 1 && interval.SessionID == "prior-chat" {
@@ -142,8 +142,8 @@ func TestOpeningSharedDocumentInheritsRecordedAuthorship(t *testing.T) {
 
 func TestComparisonAcrossSnapshotHistoryKeepsMixedPublicationAuthors(t *testing.T) {
 	f, ledger := newLedgerAgentFixture(t, map[string]string{"a.txt": "base\n"})
-	err := ledger.Record(t.Context(), sourceledger.RecordInput{ProjectID: f.project.ID, RootID: f.rootID,
-		Path: "a.txt", OperationID: uuid.NewString(), Op: api.SourceChangeOpCreate,
+	err := ledger.Record(t.Context(), sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: f.rootID, Path: "a.txt"}, ProjectID: f.project.ID, OperationID: uuid.NewString(), Op: api.SourceChangeOpCreate,
 		Origin: api.SourceChangeOriginUser, After: []byte("base\n")})
 	testutil.FailErr(t, "record initial snapshot", err)
 	document := f.open(t, "a.txt")
@@ -153,7 +153,7 @@ func TestComparisonAcrossSnapshotHistoryKeepsMixedPublicationAuthors(t *testing.
 	testutil.FailErr(t, "type human text", err)
 	_, err = f.service.ApplyAgentEdit(t.Context(), agentEdit(typed, "base typed agent\n"))
 	testutil.FailErr(t, "publish mixed authors", err)
-	comparison, err := ledger.CompareScope(t.Context(), f.project.ID, sourcebranch.Trunk,
+	comparison, err := ledger.Comparisons.CompareScope(t.Context(), f.project.ID, sourcebranch.Trunk,
 		sourceledger.Baseline{}, document.FileID, sourceledger.ScopeComparisonOptions{UnmarkUserEdits: true})
 	testutil.FailErr(t, "compare across initial snapshot", err)
 	if comparison.Attribution == nil || comparison.Before.State != "absent" {

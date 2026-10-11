@@ -28,7 +28,7 @@ func TestResetStoreCoupledPreservesAppPreferencesDeviceConfigurationAndDebugCapt
 		testutil.FailErr(t, "write "+rel, os.WriteFile(path, []byte("state"), 0o600))
 	}
 
-	testutil.FailErr(t, "reset", ResetStoreCoupled(dbPath))
+	testutil.FailErr(t, "reset", ResetStoreCoupled(t.Context(), dbPath))
 	for _, rel := range removed {
 		if _, err := os.Stat(filepath.Join(root, rel)); !os.IsNotExist(err) {
 			t.Fatalf("store-coupled path %s survived: %v", rel, err)

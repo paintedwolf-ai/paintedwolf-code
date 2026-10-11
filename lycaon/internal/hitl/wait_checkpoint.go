@@ -19,7 +19,9 @@ type checkpointWaitObserver interface {
 // WaitForCheckpoint polls until the checkpoint leaves pending, on WaitContext.
 // A poller that observes waits sees the whole blocked interval.
 func WaitForCheckpoint(ctx context.Context, poller checkpointPoller, checkpointID string) (*CheckpointResponse, error) {
-	if observer, ok := poller.(checkpointWaitObserver); ok {
+	if checkpoints, ok := poller.(*Checkpoints); ok {
+		defer checkpoints.Sessions.ObserveCheckpointWait(ctx, checkpointID)()
+	} else if observer, ok := poller.(checkpointWaitObserver); ok {
 		defer observer.ObserveCheckpointWait(ctx, checkpointID)()
 	}
 	ctx = WaitContext(ctx)

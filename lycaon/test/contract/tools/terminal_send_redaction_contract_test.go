@@ -43,7 +43,7 @@ func TestTerminalSendRedactionWiredOnObserverPaths(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	paths := []string{
-		filepath.Join(root, "lycaon", "internal", "session", "manager_crud.go"),
+		filepath.Join(root, "lycaon", "internal", "session", "transcript", "pages.go"),
 		filepath.Join(root, "lycaon", "internal", "events", "publish_message.go"),
 		filepath.Join(root, "lycaon", "internal", "observability", "llm_capture.go"),
 	}

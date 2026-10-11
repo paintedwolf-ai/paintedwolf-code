@@ -1,6 +1,7 @@
 package evidence
 
 import (
+	"net/url"
 	"path/filepath"
 	"strings"
 )
@@ -26,6 +27,9 @@ func looksLikeShellPathToken(token string) bool {
 		return false
 	}
 	if strings.HasPrefix(token, "-") {
+		return false
+	}
+	if parsed, err := url.Parse(token); err == nil && parsed.Scheme != "" && !filepath.IsAbs(token) {
 		return false
 	}
 	if strings.Contains(token, "/") {

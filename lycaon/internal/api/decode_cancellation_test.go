@@ -31,11 +31,11 @@ func TestCanceledTrustReadIsNotInventoryFailure(t *testing.T) {
 	cancel()
 	request := httptest.NewRequest(http.MethodGet, "/v1/projects/project/trust", nil).WithContext(ctx)
 	response := httptest.NewRecorder()
-	srv.Project.WriteProjectInventoryError(response, request, "project", context.Canceled)
+	srv.Admin.Project.Trust.WriteProjectInventoryError(response, request, "project", context.Canceled)
 	if response.Code != httpio.StatusClientClosedRequest || response.Body.Len() != 0 {
 		t.Fatalf("canceled trust read became a notice: %d %s", response.Code, response.Body.String())
 	}
 	response = httptest.NewRecorder()
-	srv.Project.WriteProjectInventoryError(response, request.WithContext(t.Context()), "project", io.ErrUnexpectedEOF)
+	srv.Admin.Project.Trust.WriteProjectInventoryError(response, request.WithContext(t.Context()), "project", io.ErrUnexpectedEOF)
 	assertErrorResponse(t, response, http.StatusServiceUnavailable, "project_inventory_unavailable")
 }

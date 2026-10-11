@@ -2,7 +2,7 @@ package mcp
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/sony/gobreaker"
 	"testing"
 )
@@ -12,7 +12,7 @@ func TestBreakerRecoveryKeepsOpenAndProbeStatesDistinct(t *testing.T) {
 		cause error
 		probe bool
 	}{{gobreaker.ErrOpenState, false}, {gobreaker.ErrTooManyRequests, true}} {
-		var reject *tools.ToolReject
+		var reject *toolrejection.ToolReject
 		if !errors.As(breakerReject("provider", "tool", tc.cause), &reject) || reject.Code != MCPTransportUnavailableCode || reject.Data["mcp_probe_in_flight"] != tc.probe {
 			t.Fatalf("wrong breaker state: %+v", reject)
 		}

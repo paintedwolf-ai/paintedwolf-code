@@ -38,3 +38,5 @@ func OpenReadRoot(string) (*ReadRoot, error)    { return nil, ErrUnsupported }
 func (*ReadRoot) Path() string                  { return "" }
 func (*ReadRoot) Open(string) (*os.File, error) { return nil, ErrUnsupported }
 func (*ReadRoot) Close() error                  { return nil }
+
+func RelocateGuarded(Location, Location, string) error { return ErrUnsupported }

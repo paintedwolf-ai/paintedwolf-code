@@ -47,7 +47,7 @@ func packSummaryWire(p extpacks.PackSummary) wire.ExtensionPackSummary {
 	}
 }
 
-func (s *Handler) annotatePackProvenance(ctx context.Context, view *wire.ExtensionsCatalogView) {
+func (s *Catalog) annotatePackProvenance(ctx context.Context, view *wire.ExtensionsCatalogView) {
 	from := map[string]string{}
 	for _, pack := range view.Desired.Packs {
 		if pack.InstalledFrom != "" {
@@ -61,7 +61,7 @@ func (s *Handler) annotatePackProvenance(ctx context.Context, view *wire.Extensi
 	}
 }
 
-func (s *Handler) suggestionReferenceCounts(ctx context.Context) map[string]int {
+func (s *Catalog) suggestionReferenceCounts(ctx context.Context) map[string]int {
 	out := map[string]int{}
 	projects, err := s.Projects.List(ctx)
 	if err != nil {
@@ -113,8 +113,8 @@ func metaPackSummaryWire(m extpacks.MetaPackSummary) wire.ExtensionMetaPackSumma
 }
 
 // buildExtensionsCatalogView serves cached reads.
-func (s *Handler) buildExtensionsCatalogView(r *http.Request) (wire.ExtensionsCatalogView, error) {
-	projectDir, err := s.optionalExtensionsProjectDir(r)
+func (s *Catalog) buildExtensionsCatalogView(r *http.Request) (wire.ExtensionsCatalogView, error) {
+	projectDir, err := s.Mutations.optionalExtensionsProjectDir(r)
 	if err != nil {
 		return wire.ExtensionsCatalogView{}, err
 	}
@@ -125,12 +125,12 @@ func (s *Handler) buildExtensionsCatalogView(r *http.Request) (wire.ExtensionsCa
 }
 
 // buildExtensionsCatalogViewFresh refreshes mutation responses.
-func (s *Handler) buildExtensionsCatalogViewFresh(r *http.Request) (wire.ExtensionsCatalogView, error) {
-	projectDir, err := s.optionalExtensionsProjectDir(r)
+func (s *Catalog) buildExtensionsCatalogViewFresh(r *http.Request) (wire.ExtensionsCatalogView, error) {
+	projectDir, err := s.Mutations.optionalExtensionsProjectDir(r)
 	if err != nil {
 		return wire.ExtensionsCatalogView{}, err
 	}
-	eff, _, err := s.resolveExtensionsCatalog(r)
+	eff, _, err := s.Mutations.resolveExtensionsCatalog(r)
 	if err != nil {
 		return wire.ExtensionsCatalogView{}, err
 	}
@@ -138,7 +138,7 @@ func (s *Handler) buildExtensionsCatalogViewFresh(r *http.Request) (wire.Extensi
 	if err != nil {
 		return wire.ExtensionsCatalogView{}, err
 	}
-	revision, err := s.currentExtensionRevision(projectDir)
+	revision, err := s.Mutations.currentExtensionRevision(projectDir)
 	if err != nil {
 		return wire.ExtensionsCatalogView{}, err
 	}
@@ -180,7 +180,7 @@ func (s *Handler) buildExtensionsCatalogViewFresh(r *http.Request) (wire.Extensi
 }
 
 // mergedDesiredWire loads one scope's merged intent and the file it came from.
-func (s *Handler) mergedDesiredWire(projectDir string) (wire.ExtensionDesiredState, string, error) {
+func (s *Catalog) mergedDesiredWire(projectDir string) (wire.ExtensionDesiredState, string, error) {
 	d, _, err := extpacks.LoadMergedDesired([]string{projectDir})
 	if err != nil {
 		return wire.ExtensionDesiredState{}, "", err
@@ -215,7 +215,7 @@ func extensionDiagnosticWire(d extpacks.Diagnostic) wire.ExtensionDiagnostic {
 	}
 }
 
-func (s *Handler) HandleGetExtensionsCatalog(w http.ResponseWriter, r *http.Request) {
+func (s *Catalog) HandleGetExtensionsCatalog(w http.ResponseWriter, r *http.Request) {
 	out, err := s.buildExtensionsCatalogView(r)
 	if err != nil {
 		requestscope.ScopeError(s.responses, w, r, err)
@@ -224,7 +224,7 @@ func (s *Handler) HandleGetExtensionsCatalog(w http.ResponseWriter, r *http.Requ
 	httpio.WriteJSON(w, http.StatusOK, out)
 }
 
-func (s *Handler) HandleApplyExtensionMetaPack(w http.ResponseWriter, r *http.Request) {
+func (s *Catalog) HandleApplyExtensionMetaPack(w http.ResponseWriter, r *http.Request) {
 	metaPackID := httpio.EncodedPathID(r, "meta_pack_id")
 	if metaPackID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "meta_pack_id required")
@@ -239,10 +239,10 @@ func (s *Handler) HandleApplyExtensionMetaPack(w http.ResponseWriter, r *http.Re
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	if !s.requireExtensionMetaPack(w, r, metaPackID) {
+	if !s.Mutations.requireExtensionMetaPack(w, r, metaPackID) {
 		return
 	}
-	if _, err := s.submitExtensionIntent(r, wire.ExtensionsScopeDevice, "", req.ExpectedRevision,
+	if _, err := s.Mutations.submitExtensionIntent(r, wire.ExtensionsScopeDevice, "", req.ExpectedRevision,
 		extensionstate.ApplyMetaOp{MetaPackID: metaPackID, Enable: true}); err != nil {
 		s.writeMetaPackMutationError(w, r, err)
 		return
@@ -255,7 +255,7 @@ func (s *Handler) HandleApplyExtensionMetaPack(w http.ResponseWriter, r *http.Re
 	httpio.WriteJSON(w, http.StatusOK, wire.ExtensionMutationResponse{View: view})
 }
 
-func (s *Handler) HandleUpdateExtensionMetaPack(w http.ResponseWriter, r *http.Request) {
+func (s *Catalog) HandleUpdateExtensionMetaPack(w http.ResponseWriter, r *http.Request) {
 	metaPackID := httpio.EncodedPathID(r, "meta_pack_id")
 	if metaPackID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "meta_pack_id required")
@@ -274,10 +274,10 @@ func (s *Handler) HandleUpdateExtensionMetaPack(w http.ResponseWriter, r *http.R
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "enabled required")
 		return
 	}
-	if !s.requireExtensionMetaPack(w, r, metaPackID) {
+	if !s.Mutations.requireExtensionMetaPack(w, r, metaPackID) {
 		return
 	}
-	if _, err := s.submitExtensionIntent(r, wire.ExtensionsScopeDevice, "", req.ExpectedRevision,
+	if _, err := s.Mutations.submitExtensionIntent(r, wire.ExtensionsScopeDevice, "", req.ExpectedRevision,
 		extensionstate.ApplyMetaOp{MetaPackID: metaPackID, Enable: *req.Enabled}); err != nil {
 		s.writeMetaPackMutationError(w, r, err)
 		return
@@ -290,13 +290,13 @@ func (s *Handler) HandleUpdateExtensionMetaPack(w http.ResponseWriter, r *http.R
 	httpio.WriteJSON(w, http.StatusOK, wire.ExtensionMutationResponse{View: view})
 }
 
-func (s *Handler) HandleInstallExtensionMetaPack(w http.ResponseWriter, r *http.Request) {
+func (s *Catalog) HandleInstallExtensionMetaPack(w http.ResponseWriter, r *http.Request) {
 	var req wire.ExtensionMetaPackInstallRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	if _, err := s.submitExtensionIntent(r, wire.ExtensionsScopeDevice, "", req.ExpectedRevision,
+	if _, err := s.Mutations.submitExtensionIntent(r, wire.ExtensionsScopeDevice, "", req.ExpectedRevision,
 		extensionstate.InstallMetaOp{Source: req.Source, Version: req.Version, Ref: req.Ref}); err != nil {
 		s.writeMetaPackMutationError(w, r, err)
 		return
@@ -309,7 +309,7 @@ func (s *Handler) HandleInstallExtensionMetaPack(w http.ResponseWriter, r *http.
 	httpio.WriteJSON(w, http.StatusCreated, wire.ExtensionMutationResponse{View: view})
 }
 
-func (s *Handler) HandleDeleteExtensionMetaPack(w http.ResponseWriter, r *http.Request) {
+func (s *Catalog) HandleDeleteExtensionMetaPack(w http.ResponseWriter, r *http.Request) {
 	metaPackID := httpio.EncodedPathID(r, "meta_pack_id")
 	if metaPackID == "" {
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "meta_pack_id required")
@@ -324,10 +324,10 @@ func (s *Handler) HandleDeleteExtensionMetaPack(w http.ResponseWriter, r *http.R
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "expected_revision required")
 		return
 	}
-	if !s.requireExtensionMetaPack(w, r, metaPackID) {
+	if !s.Mutations.requireExtensionMetaPack(w, r, metaPackID) {
 		return
 	}
-	if _, err := s.submitExtensionIntent(r, wire.ExtensionsScopeDevice, "", expectedRevision,
+	if _, err := s.Mutations.submitExtensionIntent(r, wire.ExtensionsScopeDevice, "", expectedRevision,
 		extensionstate.RemoveMetaOp{MetaPackID: metaPackID}); err != nil {
 		s.writeMetaPackMutationError(w, r, err)
 		return
@@ -335,10 +335,10 @@ func (s *Handler) HandleDeleteExtensionMetaPack(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Handler) writeMetaPackMutationError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Catalog) writeMetaPackMutationError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, extpacks.ErrMetaPackNotFound) {
 		s.responses.Fail(w, wire.ApiErrorCodeExtensionMetaPackNotFound, "meta-pack not found")
 		return
 	}
-	s.writeExtensionMutationError(w, r, err)
+	s.Mutations.writeExtensionMutationError(w, r, err)
 }

@@ -118,8 +118,8 @@ func TestListenPlanKeepsChatAuthorityOnChildSession(t *testing.T) {
 	broker := &ListenCheckpointBroker{}
 	card, err := broker.buildListenCard(tools.LocalListenAsk{ProjectDir: "/tmp/proj", Ports: []uint16{3000}}, "child", "root", []uint16{3000})
 	testutil.FailErr(t, "build listen card", err)
-	if card.Action.RootSessionID != "root" || card.Action.ChatSession() != "root" || card.Action.SessionID != "child" {
-		t.Fatalf("action sessions = root %q chat %q child %q", card.Action.RootSessionID, card.Action.ChatSession(), card.Action.SessionID)
+	if card.Action.Scope.RootSessionID != "root" || card.Action.ChatSession() != "root" || card.Action.Scope.SessionID != "child" {
+		t.Fatalf("action sessions = root %q chat %q child %q", card.Action.Scope.RootSessionID, card.Action.ChatSession(), card.Action.Scope.SessionID)
 	}
 	for _, option := range card.Plan.Options {
 		for _, delta := range option.Authority {

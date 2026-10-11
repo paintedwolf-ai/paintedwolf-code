@@ -12,7 +12,7 @@ func TestObserveProgressMissingBeforeDispatch_blocksTaskWithoutPlan(t *testing.T
 	gc := oar.NewGuardContext()
 	ObserveProgressMissingBeforeDispatch(sess, "", "task", false, gc)
 	if !hasRejectCode(gc, ProgressMissingCode) {
-		t.Fatalf("want %s in %v", ProgressMissingCode, gc.ArgValidationErrors)
+		t.Fatalf("want %s in %v", ProgressMissingCode, gc.Invocation.ArgValidationErrors)
 	}
 }
 
@@ -22,7 +22,7 @@ func TestObserveProgressMissingBeforeDispatch_blocksWriteWithoutChecklist(t *tes
 		gc := oar.NewGuardContext()
 		ObserveProgressMissingBeforeDispatch(sess, "", tool, false, gc)
 		if !hasRejectCode(gc, ProgressMissingCode) {
-			t.Fatalf("%s: want %s in %v", tool, ProgressMissingCode, gc.ArgValidationErrors)
+			t.Fatalf("%s: want %s in %v", tool, ProgressMissingCode, gc.Invocation.ArgValidationErrors)
 		}
 	}
 }

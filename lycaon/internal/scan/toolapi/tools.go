@@ -68,7 +68,7 @@ func RegisterScanTools(reg *tools.DefaultRegistry, coord scanbase.ScanCoordinato
 			if accounting == nil {
 				return "", fmt.Errorf("workflow inventory accounting unavailable")
 			}
-			return accounting.QueryWorkflowInventory(ctx, tctx.SessionID, args)
+			return accounting.QueryWorkflowInventory(ctx, tctx.Identity.SessionID, args)
 		}
 		return runScanQuery(ctx, args, tctx, coord, rejectFmt)
 	}); err != nil {

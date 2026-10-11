@@ -86,7 +86,7 @@ func preparedApprovalKey(action *ProposedAction, plan *ApprovalPlan) string {
 		Action, Session, Call string
 		Subject               ApprovalSubject
 		Reasons               []api.ApprovalGate
-	}{key, action.SessionID, action.ActionID, plan.Subject, plan.Reasons})
+	}{key, action.Scope.SessionID, action.Invocation.ActionID, plan.Subject, plan.Reasons})
 	if err != nil {
 		return ""
 	}

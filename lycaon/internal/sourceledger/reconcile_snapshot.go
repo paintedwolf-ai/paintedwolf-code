@@ -49,7 +49,7 @@ var errVersionMovedOn = errors.New("source file moved on since the generation id
 
 // Reconcile tracked heads by manifest lookup. An open command window also
 // admits untracked changes against its starting inventory.
-func (s *Store) reconcileSnapshot(
+func (s *Inventory) reconcileSnapshot(
 	ctx context.Context,
 	projectID string,
 	snapshot sourcesnapshot.Snapshot,
@@ -146,7 +146,7 @@ func (s *Store) reconcileSnapshot(
 }
 
 // Compare raw digests, then retained object IDs, then file bytes.
-func (s *Store) headHoldsEntry(ctx context.Context, head db.SourceBranchHeads, entry sourcesnapshot.Entry) (bool, error) {
+func (s *Inventory) headHoldsEntry(ctx context.Context, head db.SourceBranchHeads, entry sourcesnapshot.Entry) (bool, error) {
 	if head.State != "content" || head.ContentSha256 == "" {
 		return false, nil
 	}
@@ -174,7 +174,7 @@ func (s *Store) headHoldsEntry(ctx context.Context, head db.SourceBranchHeads, e
 
 // observedVersion is what a pass learned about one admitted file: its
 // digest and, when small enough and still held somewhere, its bytes.
-func (s *Store) observedVersion(ctx context.Context, rootID string, entry sourcesnapshot.Entry) (*observedFile, error) {
+func (s *Inventory) observedVersion(ctx context.Context, rootID string, entry sourcesnapshot.Entry) (*observedFile, error) {
 	sha, raw, err := s.versionFacts(ctx, entry)
 	if err != nil {
 		return nil, err
@@ -186,7 +186,7 @@ func (s *Store) observedVersion(ctx context.Context, rootID string, entry source
 }
 
 // Resolve the digest and bounded content from available snapshot bytes.
-func (s *Store) versionFacts(ctx context.Context, entry sourcesnapshot.Entry) (string, []byte, error) {
+func (s *Inventory) versionFacts(ctx context.Context, entry sourcesnapshot.Entry) (string, []byte, error) {
 	sha := entry.SHA256
 	var raw []byte
 	if entry.Size <= MaxRevisionContentBytes {
@@ -214,7 +214,7 @@ func (s *Store) versionFacts(ctx context.Context, entry sourcesnapshot.Entry) (s
 }
 
 // Admit untracked changes against the window's start, reading only changed manifest buckets.
-func (s *Store) windowAdmissions(
+func (s *Inventory) windowAdmissions(
 	ctx context.Context,
 	projectID, batchID string,
 	window *openCommandWindow,
@@ -231,9 +231,8 @@ func (s *Store) windowAdmissions(
 	now := time.Now().UTC()
 	admit := func(rootID, path string, op api.SourceChangeOp, before, after *sourcesnapshot.Entry) error {
 		in := observationCause{batchID: batchID, gitTransitionID: transitionByRoot[rootID], window: window}.apply(RecordInput{
-			ProjectID: projectID, BranchID: branchForObservedRoot(window.roots, rootID),
-			RootID: rootID, Path: path, Op: op, EntryKind: EntryKindFile, TS: now,
-		})
+			RecordLocation: RecordLocation{RootID: rootID, Path: path, EntryKind: EntryKindFile},
+			ProjectID:      projectID, BranchID: branchForObservedRoot(window.roots, rootID), Op: op, TS: now})
 		if before != nil {
 			sha, raw, err := s.versionFacts(ctx, *before)
 			if err != nil {
@@ -272,7 +271,7 @@ func (s *Store) windowAdmissions(
 }
 
 // seedTrackingBoundary records when sparse tracking begins.
-func (s *Store) seedTrackingBoundary(ctx context.Context, projectID string) error {
+func (s *Inventory) seedTrackingBoundary(ctx context.Context, projectID string) error {
 	s.recordMu.Lock()
 	defer s.recordMu.Unlock()
 	if initialized, err := s.hasTrackingCheckpoint(ctx, projectID); err != nil || initialized {

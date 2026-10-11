@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -68,9 +68,9 @@ func TestPlanFlowPrimitivesWorkflow(t *testing.T) {
 
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureSpec}, dir)
 	testutil.FailErr(t, "create session", err)
-	h.SessionMgr.Catalog().InvalidateEffectiveCatalog(sess.ProjectID)
+	h.Sessions.Manager.Catalog.InvalidateEffectiveCatalog(sess.ProjectID)
 
-	run, err := h.WorkflowMgr.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
+	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID: "plan-flow-primitives", WorkflowVersion: "1.0.0", Request: "Plan the fixture change",
 	})
 	testutil.FailErr(t, "StartHuman", err)
@@ -79,34 +79,34 @@ func TestPlanFlowPrimitivesWorkflow(t *testing.T) {
 	}
 	writePlanFlowBlueprint(t, dir, run.BlueprintPath)
 
-	run, err = h.WorkflowMgr.ResolveUserFeedback(ctx, sess.ID, run.ID, "intake", "small")
+	run, err = h.Workflows.Manager.Feedback.ResolveUserFeedback(ctx, sess.ID, run.ID, "intake", "small")
 	testutil.FailErr(t, "ResolveUserFeedback intake", err)
-	run, err = h.WorkflowMgr.Get(ctx, run.ID)
+	run, err = h.Workflows.Manager.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get after intake", err)
 	if run.CurrentPhase != "review" {
 		t.Fatalf("phase = %q want review after intake", run.CurrentPhase)
 	}
 
-	vars, err := h.WorkflowMgr.Store.GetScaffoldVars(ctx, run.ID)
+	vars, err := h.Workflows.Manager.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)
-	if got, _ := workflow.DotPathString(vars, "intake.change_size"); got != "small" {
+	if got, _ := runstate.DotPathString(vars, "intake.change_size"); got != "small" {
 		t.Fatalf("intake.change_size = %q want small", got)
 	}
-	if got, _ := workflow.DotPathString(vars, "params.review_depth"); got != "light" {
+	if got, _ := runstate.DotPathString(vars, "params.review_depth"); got != "light" {
 		t.Fatalf("params.review_depth = %q want light", got)
 	}
 
-	vars = workflow.SetGateSatisfied(vars, "evidence_passed:peer_review", true)
-	if err := h.WorkflowMgr.Store.UpdateVars(ctx, run, dir, vars); err != nil {
+	vars = runstate.SetGateSatisfied(vars, "evidence_passed:peer_review", true)
+	if err := h.Workflows.Manager.Store.State.UpdateVars(ctx, run, dir, vars); err != nil {
 		testutil.FailErr(t, "UpsertScaffoldVars review evidence", err)
 	}
-	run, err = h.WorkflowMgr.TryAutoAdvance(ctx, run.ID)
+	run, err = h.Workflows.Manager.Phases.TryAutoAdvance(ctx, run.ID)
 	testutil.FailErr(t, "TryAutoAdvance after review", err)
 	if run.CurrentPhase != "approve" {
 		t.Fatalf("phase = %q want approve", run.CurrentPhase)
 	}
 
-	run, err = h.WorkflowMgr.SyncHumanApproval(ctx, run.ID, dir)
+	run, err = h.Workflows.Manager.Approvals.SyncHumanApproval(ctx, run.ID, dir)
 	testutil.FailErr(t, "SyncHumanApproval", err)
 	if run.CurrentPhase != "done" {
 		t.Fatalf("phase = %q want done", run.CurrentPhase)
@@ -115,7 +115,7 @@ func TestPlanFlowPrimitivesWorkflow(t *testing.T) {
 	if run.Status != api.WorkflowRunStatusComplete {
 		t.Fatalf("run status = %q want complete", run.Status)
 	}
-	blueprint, err := h.BlueprintMgr.Get(ctx, run.ProjectID, run.BlueprintPath)
+	blueprint, err := h.Workflows.Blueprints.Get(ctx, run.ProjectID, run.BlueprintPath)
 	testutil.FailErr(t, "get completed workflow blueprint", err)
 	if !strings.HasSuffix(blueprint.Path, "spec.md") {
 		t.Fatalf("blueprint path = %q want …/spec.md", blueprint.Path)

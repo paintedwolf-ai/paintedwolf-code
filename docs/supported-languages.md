@@ -326,6 +326,6 @@ file; their registry traffic is still baseline.
 
 ## Related
 
-- [Scan supply chain](scan-supply-chain.md) — bundled scanners and the OpenGrep pin; [release operations](operations/release.md#engine-selection) qualifies the maintained engine build
+- [Scan supply chain](scan-supply-chain.md) — bundled scanners and the OpenGrep pin; [engine selection](../scripts/select-opengrep-release.sh) pins the maintained engine build
 - [Dev tasks](dev-tasks.md) — `./task test:lycaon-rules` for rule regressions
 - [Licensing](licensing.md) — rule provenance

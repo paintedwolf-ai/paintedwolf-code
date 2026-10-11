@@ -47,52 +47,52 @@ func (s *GateSource) MatchAction(action hitl.ProposedAction, posture gate.Postur
 		Local:         hit.Local,
 		Unrecoverable: hit.Unrecoverable,
 		Tagged:        hit.Tagged,
-		CorrelationID: correlationID(SourceToolExec, hit, action.ChatSession(), action.ProjectDir, action.Tool),
+		CorrelationID: correlationID(SourceToolExec, hit, action.Scope.ChatSession(), action.Scope.ProjectDir, action.Invocation.Tool),
 	}, true
 }
 
 // observationFor builds the synthetic event matched by detection rules.
 func (s *GateSource) observationFor(action hitl.ProposedAction) ActionObservation {
-	rawCommand := CommandTextForTool(action.Tool, action.Args)
-	semantics := s.semantics.Resolve(action.Tool, action.ApprovalCategory, action.ApprovalSubject, action.Args)
-	sockets := make([]SocketObservation, 0, len(action.SocketGrants))
-	for i, grant := range action.SocketGrants {
+	rawCommand := CommandTextForTool(action.Invocation.Tool, action.Invocation.Args)
+	semantics := s.semantics.Resolve(action.Invocation.Tool, action.Resources.ApprovalCategory, action.Resources.ApprovalSubject, action.Invocation.Args)
+	sockets := make([]SocketObservation, 0, len(action.Sockets.SocketGrants))
+	for i, grant := range action.Sockets.SocketGrants {
 		observation := SocketObservation{
 			ApprovedPath:       grant.ApprovedPath,
 			ResolvedPath:       grant.ResolvedPath,
 			EffectiveAuthority: "outside_sandbox_daemon",
 		}
-		if i < len(action.SocketScopes) {
-			observation.Scope = action.SocketScopes[i]
+		if i < len(action.Sockets.SocketScopes) {
+			observation.Scope = action.Sockets.SocketScopes[i]
 		}
-		if i < len(action.SocketGrantStates) {
-			observation.GrantState = action.SocketGrantStates[i]
+		if i < len(action.Sockets.SocketGrantStates) {
+			observation.GrantState = action.Sockets.SocketGrantStates[i]
 		}
 		sockets = append(sockets, observation)
 	}
 	// Structured argv preserves the executor's process boundaries.
-	plan, _ := commandsurface.PlanGroups(action.Args)
-	roots := effectReachRoots(action.Contained)
+	plan, _ := commandsurface.PlanGroups(action.Invocation.Args)
+	roots := effectReachRoots(action.Execution.Contained)
 	processes := commandProcesses(rawCommand, plan)
 	processReach := make([]string, 0, len(processes))
 	for _, process := range processes {
 		processReach = append(processReach, resolveCommandEffectReach(
-			action.Tool, process.commandLine, action.Args, action.ProjectDir, roots,
+			action.Invocation.Tool, process.commandLine, action.Invocation.Args, action.Scope.ProjectDir, roots,
 		))
 	}
 	evObs := ActionObservation{
-		Tool:                 action.Tool,
+		Tool:                 action.Invocation.Tool,
 		CommandLine:          rawCommand,
 		Plan:                 plan,
-		ProjectDir:           action.ProjectDir,
-		SessionID:            action.ChatSession(),
-		ActionID:             action.ActionID,
-		Boundary:             action.Contained,
+		ProjectDir:           action.Scope.ProjectDir,
+		SessionID:            action.Scope.ChatSession(),
+		ActionID:             action.Invocation.ActionID,
+		Boundary:             action.Execution.Contained,
 		Sockets:              sockets,
-		Visibility:           action.Visibility,
-		DeclaredDestinations: action.DeclaredDestinations,
+		Visibility:           action.Egress.Visibility,
+		DeclaredDestinations: action.Egress.DeclaredDestinations,
 		// Structured calls project operations into the shared API-action field.
-		APIActions:            append(semantics.APIActions, APIActionsFromStructuredArgs(action.Args)...),
+		APIActions:            append(semantics.APIActions, APIActionsFromStructuredArgs(action.Invocation.Args)...),
 		ActionEffects:         semantics.ActionEffects,
 		TargetScopes:          semantics.TargetScopes,
 		PrincipalScopes:       semantics.PrincipalScopes,
@@ -101,9 +101,9 @@ func (s *GateSource) observationFor(action hitl.ProposedAction) ActionObservatio
 		AmountPresent:         semantics.AmountPresent,
 		TargetPresent:         semantics.TargetPresent,
 		// Structured tools expose arguments directly to rules.
-		ToolArgs:           projectToolArgs(action.Args),
-		TargetFiles:        action.Files,
-		EffectReach:        ResolveEffectReach(action.Tool, action.Args, action.ProjectDir, roots),
+		ToolArgs:           projectToolArgs(action.Invocation.Args),
+		TargetFiles:        action.Invocation.Files,
+		EffectReach:        ResolveEffectReach(action.Invocation.Tool, action.Invocation.Args, action.Scope.ProjectDir, roots),
 		ProcessEffectReach: processReach,
 	}
 	return evObs

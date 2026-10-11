@@ -23,22 +23,38 @@ Headline: `db` is true bottom → `search` may use `db` → `session` stays thin
 
 [`internal/app`](../lycaon/internal/app/doc.go) is the serve composition root: `Build` wires hub↔hub in topical `build_*.go` files. Domain packages must not reach into `internal/api` or peer hubs to “just get a type.”
 
+Project registration, root membership, trust, and promotion live in
+[`internal/project`](../lycaon/internal/project). Filesystem observation,
+navigation, source search, and durable file operations live in
+[`internal/projectsource`](../lycaon/internal/projectsource), consuming only
+project identity, physical root facts, and workspace identity. Source mutation
+admission coordinates journal rows, path reservations, filesystem effects,
+recovery content, history, and atomic settlement through explicit domains.
+The recorder, head reader, and recovery archive are separate ledger ports;
+attribution, source events, and journal completion still share one transaction.
+Prepared plans contain attribution, content and revision state, filesystem
+publication intent, and recovery manifests. Their JSON keys remain flat in the
+durable journal and lifecycle history. Native effect admission grants one
+filesystem application; an already admitted ID is refused before apply, while
+host mutation requests may replay their committed response.
+
 ### HTTP route families
 
-[`build_server.go`](../lycaon/internal/app/build_server.go) fills one [`api.Dependencies`](../lycaon/internal/api/server.go) and calls `api.NewServer`. `NewServer` gives each route family a `Deps` struct holding only the fields it uses, then drops `Dependencies`. A family never receives the whole `Server`, and nothing copies dependencies in later through setters. When one family calls another, it holds a pointer to that family's handler inside the `Server`.
+[`build_server.go`](../lycaon/internal/app/build_server.go) fills one [`api.Dependencies`](../lycaon/internal/api/server_dependencies.go) and calls `api.NewServer`. `NewServer` gives each route family a `Deps` struct holding only the fields it uses, then drops `Dependencies`. Runtime handlers retain their named services and domain peers, rather than the construction bundle. A family never receives the whole `Server`, and nothing copies dependencies in later through setters. When one family calls another, it holds a pointer to that family's handler inside the `Server`.
 
 | Package | Serves |
 |---------|--------|
-| [`internal/api`](../lycaon/internal/api) | Router, middleware, auth, SSE, health, recovery, search, and the route table built from generated operations |
+| [`internal/api`](../lycaon/internal/api) | Router, middleware, auth, health, shutdown, and the generated operation route table; explicit activity, conversation, artifact, worker, storage, local-data, and harness domains |
 | [`api/sessionadmin`](../lycaon/internal/api/sessionadmin) · [`promptadmin`](../lycaon/internal/api/promptadmin) | Session lifecycle, navigation, export, rewind · prompts, queue, attachments, compaction |
-| [`api/projectadmin`](../lycaon/internal/api/projectadmin) · [`sourceapi`](../lycaon/internal/api/sourceapi) · [`gitadmin`](../lycaon/internal/api/gitadmin) | Projects, roots, trust, removal, promotion · source views, editor documents, comparisons, history, briefings · git status, mutations, worktrees |
+| [`api/projectadmin`](../lycaon/internal/api/projectadmin) · [`sourceapi`](../lycaon/internal/api/sourceapi) · [`gitadmin`](../lycaon/internal/api/gitadmin) | Projects, roots, trust, removal, promotion · source workspace, analysis, watch, mutation, review, history, comparison, view, tree, and presentation domains · git status, mutations, worktrees |
+| [`api/searchadmin`](../lycaon/internal/api/searchadmin) · [`editoradmin`](../lycaon/internal/api/editoradmin) · [`briefingadmin`](../lycaon/internal/api/briefingadmin) | Federated query/export/replacement · editor collaboration and secret screening · file briefings |
 | [`api/workflowadmin`](../lycaon/internal/api/workflowadmin) · [`scanadmin`](../lycaon/internal/api/scanadmin) | Workflows, blueprints, run reports · scans, scanners, detection packs |
 | [`api/settingsadmin`](../lycaon/internal/api/settingsadmin) · [`capabilityadmin`](../lycaon/internal/api/capabilityadmin) · [`extensionadmin`](../lycaon/internal/api/extensionadmin) | Settings, pricing, power · approvals, checkpoints, grants · extensions and contributions |
 | [`api/modeladmin`](../lycaon/internal/api/modeladmin) · [`mcpadmin`](../lycaon/internal/api/mcpadmin) · [`researchadmin`](../lycaon/internal/api/researchadmin) · [`historyadmin`](../lycaon/internal/api/historyadmin) | Providers and model policy · MCP providers · web research · history retention |
 | [`api/httpio`](../lycaon/internal/api/httpio) · [`requestscope`](../lycaon/internal/api/requestscope) · [`taskgroup`](../lycaon/internal/api/taskgroup) | Shared request and response contracts · the caller, project, session, and settings a request addresses · background work that drains on shutdown |
 | [`api/sessionview`](../lycaon/internal/api/sessionview) · [`projectview`](../lycaon/internal/api/projectview) · [`secretview`](../lycaon/internal/api/secretview) | Session projections · project and settings change events · managed-secret wire metadata and screens |
 
-Route families import the shared helper packages, never `internal/api`.
+Route families import the shared helper packages, never `internal/api`. Route tests live with their HTTP contract domains (`hostcontracts`, `sourcecontracts`, `sessioncontracts`, and `searchcontracts`) and use feature fixtures from `contractfixture`; transport and private algorithm tests stay with their implementations.
 
 ## Leaf-mint policy
 
@@ -144,6 +160,12 @@ Every subprocess crosses [`internal/exec`](../lycaon/internal/exec) with a manda
 
 ### Native tool-family subpackages
 
+Tool invocation contracts and the one-call execution permit remain in `internal/tools`. The permit is private and can be consumed only by the launch boundary. `ToolContext` carries explicit identity, source, turn, file, host realization, socket, direct network, process, local network, and result domains; copying an invocation preserves its private once-use review state. `internal/toolexecution.Executor` composes definition metadata, approval coordination, confinement, process/network capabilities, endpoint discovery, secret release, and structured rejection domains. Each domain retains its own state; process review is independent of network grant realization, and consumers configure the owner directly. `internal/toolhost.Runtime` composes skill, survey, command, mutation, web, and authority services without copying their state into a second runtime facade.
+
+`internal/mcp.Runtime` composes provider catalog resolution, overlay administration, credentials, session connections, tool discovery, and screened invocation. Its services own their state and share the publication coordination lock. Catalog observations see coherent discovery and credential status; consumers bind the catalog, pin, connection, or invocation service directly.
+
+The pure command grammar lives in `toolcommand`, profile policy in `toolprofiles`, approval presentation contracts in `toolapproval`, and capability request/grant vocabulary in `capabilityrequest` and `capabilitygrants`. `toolrejection` owns rejection codes and observations; `toolfeedback` projects those observations into OAR and renders the result. These internal boundaries change no persisted shape, wire field, public rejection-code meaning, or published OAR fact.
+
 The `internal/tools/native` hub holds the mutating tools and their write pipeline. **Self-contained tool families** live in subpackages that never import `native`. Two places register them:
 
 - `native` registers the families behind its `Register*` functions (page, terminal, reporting, worker control), so `app` keeps one import for them.
@@ -185,11 +207,11 @@ Everything else stays in `native`: the write tools, `command` and `verify`, the 
 
 The invariant is the **direction**, not a fixed roster of consumers: a package that assembles *into* a view may not import the view, and a package that consumes a built view may. Every forbidden edge above is enforced in [`TestImportGraphLayering`](../lycaon/test/contract/host/import_graph_layering_contract_test.go), including all ten loader hubs.
 
-## WorkflowSessionView (session ↔ workflow)
+## Workflow resource ports (session ↔ workflow)
 
-[`WorkflowSessionView`](../lycaon/internal/session/workflow_view.go) is the sole workflow dependency type on `session.Manager`; the production implementer is [`workflow.RunManager`](../lycaon/internal/workflow/boundary.go) (checked by the compiler at the implementation).
+[`session.WorkflowDomains`](../lycaon/internal/session/workflow_view.go) binds the named workflow resources consumed by session execution. Each port describes one domain: run queries, phase policy, ambient admission, blueprints, batch facts, slash commands, requests, feedback, transcript publication, asks, fanout, phase progression, reports, recovery, or cleanup. The app binds each port directly to its actual workflow service or persistence owner.
 
-**It is frozen.** A new session↔workflow capability becomes a new small port wired beside it, never another method on the view.
+Coordinator wake decisions and tool policy use their own narrow resource sets in [`loopwake.WorkflowDomains`](../lycaon/internal/coordinator/loopwake/contracts.go) and [`toolpolicy.WorkflowDomains`](../lycaon/internal/toolpolicy/workflow_view.go). Workflow services never receive the session orchestration manager or a whole workflow dependency bundle. Shared persisted posture and workflow facts live in `session/posture` and `session/workflowfacts`; consumers import the canonical definitions directly.
 
 ### Supporting dependency rules
 
@@ -239,9 +261,31 @@ Move a symbol only when it is free of `Manager` internals and creates no back-im
 | [`llm/failure`](../lycaon/internal/llm/failure) · [`transcript`](../lycaon/internal/llm/transcript) | Typed provider failures · message authority and host feedback projected into provider content |
 | [`llm/compaction`](../lycaon/internal/llm/compaction) | Context fitting, token measurement, and summaries through an explicit summarizer contract |
 
-## Workflow definitions
+## Workflow packages
 
-[`workflow/definition`](../lycaon/internal/workflow/definition) parses, resolves, validates, and snapshots workflow manifests and their catalog, including the manifest vocabulary, phase configuration, presets, and the review-loop, brief, and claim schemas. It imports no other workflow package. [`internal/workflow`](../lycaon/internal/workflow) runs workflows over those definitions: the run manager, gates, workflow tools, blueprints, composition, and persistence. [`workflow/verdictcall`](../lycaon/internal/workflow/verdictcall) composes the `submit_verdict` call a review phase accepts from a definition and the tool's catalog fragments; it imports `workflow/definition` but not `internal/workflow`.
+[`workflow/definition`](../lycaon/internal/workflow/definition) parses, validates, and snapshots manifest vocabulary, phase configuration, presets, review loops, briefs, and claim schemas. It imports no other workflow package. [`workflow/verdictcall`](../lycaon/internal/workflow/verdictcall) composes the review phase's `submit_verdict` schema from definitions and catalog fragments.
+
+[`workflow.RunManager`](../lycaon/internal/workflow/manager.go) constructs the service graph and binds shared configuration and disposal. Behavior belongs to the named services and callers select the resource they consume; no service retains the manager or a complete dependency bundle.
+
+| Package | Responsibility |
+|---------|----------------|
+| [`workflow/catalog`](../lycaon/internal/workflow/catalog) | Effective manifest resolution across bundled, project, and session catalogs |
+| [`workflow/composition`](../lycaon/internal/workflow/composition) · [`drafts`](../lycaon/internal/workflow/drafts) | Composition, publication, and session-authored manifest persistence |
+| [`workflow/runstate`](../lycaon/internal/workflow/runstate) | Run facts, commands, mutation records, and serialized scaffold-variable updates |
+| [`workflow/persistence`](../lycaon/internal/workflow/persistence) | SQL run queries, state, starts, commands, blueprint approvals, teardown intents, and verdict receipts over one transaction resource |
+| [`workflow/lifecycle`](../lycaon/internal/workflow/lifecycle) | Reviewed admission, pause/resume/cancel, committed teardown recovery, and boot reconciliation |
+| [`workflow/phases`](../lycaon/internal/workflow/phases) · [`gates`](../lycaon/internal/workflow/gates) | Phase progression, transition authority, entry effects, and fail-closed gate evaluation |
+| [`workflow/inputs`](../lycaon/internal/workflow/inputs) | Requests, feedback, asks, slash commands, announcement cards, and scaffold input |
+| [`workflow/runtime`](../lycaon/internal/workflow/runtime) · [`presentation`](../lycaon/internal/workflow/presentation) | Session policy, coordinator snapshots, and run/phase/ask/report projections |
+| [`workflow/review`](../lycaon/internal/workflow/review) | Coverage admission, reviewer questions, evidence assembly, verdict records, and recovery |
+| [`workflow/blueprints`](../lycaon/internal/workflow/blueprints) | Blueprint launch, binding, retargeting, and transcript state |
+| [`workflow/review`](../lycaon/internal/workflow/review) | Coverage admission, reviewer questions, evidence assembly, verdict records, and recovery |
+| [`workflow/blueprints`](../lycaon/internal/workflow/blueprints) | Blueprint launch, binding, retargeting, and transcript state |
+| [`workflow/publication`](../lycaon/internal/workflow/publication) | Committed run events and workflow-bound transcript messages |
+| [`workflow/statetools`](../lycaon/internal/workflow/statetools) · [`toolguard`](../lycaon/internal/workflow/toolguard) | State tool handlers and their session/run authorization boundary |
+| [`workflow/validation`](../lycaon/internal/workflow/validation) · [`intake`](../lycaon/internal/workflow/intake) · [`blueprintfiles`](../lycaon/internal/workflow/blueprintfiles) | Evidence validation, intake grammars, and confined blueprint file access |
+
+The root workflow package owns cross-domain fanout, children, reports, approvals, ambient runs, and obligations as concrete services. Phase entry consumes narrow peer contracts for these effects. Persistence domains share the actual transaction resource, preserving revision checks, authorization records, session mutations, and outbox publication within their existing commit boundaries.
 
 ## Scan packages
 
@@ -275,3 +319,5 @@ Scan integration tests live in [`scan/integration`](../lycaon/internal/scan/inte
 The rest are the extension-catalog edges described above — `extpacks` may not import `contribution`, `catalogview`, or `extensionstate`; `contribution` stays pure but for `filekind` and `theme`; `catalogview` may not import `extensionstate` or `usernotice` — plus a generated rule per loader hub forbidding the reverse edge into `catalogview`. A new rule is added to `layeringRules()` (or the hub loop beside it), not to this table.
 
 Tool-contract leaf guards: [`TestPromptsUseCompiledToolContracts`](../lycaon/test/contract/tools/toolcontract_leaf_contract_test.go) and [`TestToolsHubUsesCompiledToolContracts`](../lycaon/test/contract/tools/toolcontract_leaf_contract_test.go) keep prompt projection and registration on the compiled generation.
+
+Coordinator wake resources in `coordinator/loopwake` are composed by `LoopEngine`. `Waits` owns sleep state and timer cleanup; `WaitSubscriptions` owns durable condition admission and settlement; `WaitDeliveries` owns resumed-turn delivery. `Nudges` owns pending queues and deduplication, `HostTurns` owns asynchronous turns and the prompt lane, and `Admission` owns execution tokens and loop budgets. Worker-cycle decisions, host wake policy, prompt observations, and session facts have separate narrow peers. Session cleanup drains turns before releasing the domains that hold session state.

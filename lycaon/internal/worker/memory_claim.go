@@ -144,7 +144,7 @@ func (q *InMemoryQueue) RecoverExpiredClaims(ctx context.Context) ([]api.WorkerT
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	canceled, cancelErr := q.recoverCancellations(ctx)
+	canceled, cancelErr := recoverCancellations(ctx, q)
 	canceled = append(prerequisites, canceled...)
 	cancelErr = errors.Join(prerequisiteErr, cancelErr)
 	q.mu.Lock()
@@ -160,7 +160,7 @@ func (q *InMemoryQueue) RecoverExpiredClaims(ctx context.Context) ([]api.WorkerT
 	return append(canceled, recovered...), errors.Join(cancelErr, err)
 }
 
-func (q *InMemoryQueue) recoverCancellations(ctx context.Context) ([]api.WorkerTask, error) {
+func recoverCancellations(ctx context.Context, q *InMemoryQueue) ([]api.WorkerTask, error) {
 	q.mu.Lock()
 	now := time.Now()
 	var ids []string

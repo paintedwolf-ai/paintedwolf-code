@@ -164,7 +164,8 @@ def prepare(rows: dict, plan: dict, distribution: dict, directory: Path) -> None
 
 def validate_prepared(rows: dict, plan: dict, directory: Path, registry: dict) -> dict:
     from feed_signature import check
-    from update_keys import validate_publication
+    from feed_signing import verify
+    from update_keys import generation, validate_publication
     index = json.loads((directory / "prepared.json").read_text())
     if set(index) != {"format_version", "plan", "distribution", "feeds"} or index["format_version"] != 1 or index["plan"] != plan:
         raise ValueError("prepared halt does not match the reviewed plan")
@@ -188,6 +189,7 @@ def validate_prepared(rows: dict, plan: dict, directory: Path, registry: dict) -
         if manifest["version"] != (row["last_good"] or row["bad"]) or bool(manifest.get("withdrawn")) != (row["last_good"] is None):
             raise ValueError("prepared pointer does not implement the reviewed withdrawal")
         check(signature.read_text(), file=name, version=manifest["version"], number=number, registry=registry)
+        verify(pointer, signature.read_text(), generation(registry, number)["feed_public_key"])
         current = read_storage_bytes(feed_key(channel, number))
         current_signature = read_storage_bytes(feed_key(channel, number) + ".sig")
         current_hash = hashlib.sha256(current).hexdigest() if current is not None else None

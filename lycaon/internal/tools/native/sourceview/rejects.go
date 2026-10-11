@@ -3,6 +3,7 @@ package sourceview
 import (
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +21,7 @@ func PathNotFound(tool, relPath, fullPath string) error {
 	base := filepath.Base(fullPath)
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return &tools.ToolReject{
+		return &toolrejection.ToolReject{
 			Code: "READ_PATH_NOT_FOUND",
 			Data: map[string]any{"path": relPath, "tool": tool},
 		}
@@ -44,7 +45,7 @@ func PathNotFound(tool, relPath, fullPath string) error {
 	if len(suggestions) > 0 {
 		data["suggestions"] = suggestions
 	}
-	return &tools.ToolReject{Code: "READ_PATH_NOT_FOUND", Data: data}
+	return &toolrejection.ToolReject{Code: "READ_PATH_NOT_FOUND", Data: data}
 }
 
 func PatternInvalid(path string, err error) error {
@@ -54,7 +55,7 @@ func LanguageUnknown(path, lang string) error {
 	return safecmd.Reject("STRUCTURAL_LANG_UNKNOWN", map[string]any{"path": path, "detail": fmt.Sprintf("unknown grammar %q", lang), "structural_languages": filekind.SupportedLanguages()})
 }
 
-func ParseReject(path, phase string, err error) *tools.ToolReject {
+func ParseReject(path, phase string, err error) *toolrejection.ToolReject {
 	var failure *tsparse.Failure
 	if !errors.As(err, &failure) {
 		return nil
@@ -69,11 +70,11 @@ func ParseReject(path, phase string, err error) *tools.ToolReject {
 	if failure.Incomplete() {
 		code = "SOURCE_PARSE_INCOMPLETE"
 	}
-	return &tools.ToolReject{Code: code, Data: data}
+	return &toolrejection.ToolReject{Code: code, Data: data}
 }
 
 func ReportParseFailures(tctx tools.ToolContext, failures []tsparse.FileFailure, total int) {
-	if tctx.Out == nil || len(failures) == 0 {
+	if tctx.Effects.Out == nil || len(failures) == 0 {
 		return
 	}
 	first := failures[0]
@@ -84,5 +85,5 @@ func ReportParseFailures(tctx tools.ToolContext, failures []tsparse.FileFailure,
 		paths[i] = failure.Path
 	}
 	data["parse_paths"] = paths
-	tctx.Out.Facts = tctx.Out.Facts.WithFeedback(tools.SourceAnalysisUnavailableCode, data, &api.FeedbackSubject{Kind: "path", ID: first.Path})
+	tctx.Effects.Out.Facts = tctx.Effects.Out.Facts.WithFeedback(toolrejection.SourceAnalysisUnavailableCode, data, &api.FeedbackSubject{Kind: "path", ID: first.Path})
 }

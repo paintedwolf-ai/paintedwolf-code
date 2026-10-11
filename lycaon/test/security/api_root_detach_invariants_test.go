@@ -32,7 +32,7 @@ func TestI13ForcedDetachLeavesNoRootDependents(t *testing.T) {
 	sess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 
-	_, err := h.WorkerQueue.Enqueue(ctx, wire.WorkerTask{
+	_, err := h.Delegations.Queue.Enqueue(ctx, wire.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",
 		ID:              "job-detach-i13",
@@ -53,14 +53,14 @@ func TestI13ForcedDetachLeavesNoRootDependents(t *testing.T) {
 		t.Fatalf("force detach status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	got, ok := h.WorkerQueue.Get("job-detach-i13")
+	got, ok := h.Delegations.Queue.Get("job-detach-i13")
 	if !ok {
 		t.Fatal("worker job missing")
 	}
 	if got.Status != wire.WorkerStatusCanceled {
 		t.Fatalf("worker status = %q want canceled", got.Status)
 	}
-	inFlight, err := h.WorkerQueue.List(ctx, project.ID, wire.WorkerStatusPending, wire.WorkerStatusRunning, wire.WorkerStatusHeld)
+	inFlight, err := h.Delegations.Queue.List(ctx, project.ID, wire.WorkerStatusPending, wire.WorkerStatusRunning, wire.WorkerStatusHeld)
 	testutil.FailErr(t, "list in-flight workers", err)
 	if len(inFlight) != 0 {
 		t.Fatalf("in-flight workers after force detach = %+v want none", inFlight)
@@ -86,7 +86,7 @@ func TestGuardedDetachReturnsRootBusy(t *testing.T) {
 	sess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 
-	_, err := h.WorkerQueue.Enqueue(ctx, wire.WorkerTask{
+	_, err := h.Delegations.Queue.Enqueue(ctx, wire.WorkerTask{
 		Prompt:          "fixture",
 		Brief:           "fixture",
 		ID:              "job-busy",
@@ -114,7 +114,7 @@ func TestGuardedDetachReturnsRootBusy(t *testing.T) {
 	if body.Code != "root_busy" {
 		t.Fatalf("code = %q want root_busy", body.Code)
 	}
-	got, ok := h.WorkerQueue.Get("job-busy")
+	got, ok := h.Delegations.Queue.Get("job-busy")
 	if !ok || got.Status != wire.WorkerStatusRunning {
 		t.Fatal("guarded detach must not cancel running worker")
 	}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -88,7 +89,7 @@ func (s *Service) Resolve(ctx context.Context, p *project.Project, id string, in
 		return nil, err
 	}
 	if read.SHA256 != in.DiskSHA256 {
-		return nil, project.ErrSourceWriteConflict
+		return nil, projectsource.ErrSourceWriteConflict
 	}
 	if err := s.reconcileObservedDocument(ctx, d, read, false, in.ClientID, ""); err != nil {
 		return nil, err

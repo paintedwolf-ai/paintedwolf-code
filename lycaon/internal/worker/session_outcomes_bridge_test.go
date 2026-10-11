@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -21,7 +21,7 @@ type proofCountSessions struct {
 	proofErr      error
 }
 
-func (s *proofCountSessions) RecordWorkerTerminalProofAfterQueueComplete(context.Context, string, string, string) error {
+func (s *proofCountSessions) RecordTerminalProof(context.Context, string, string, string) error {
 	s.proofCalls.Add(1)
 	return s.proofErr
 }
@@ -39,45 +39,45 @@ func (*outcomeCountRecorder) OnWorkerFailed(context.Context, string, error) erro
 
 type noTaskSessions struct{ *proofCountSessions }
 
-func (*noTaskSessions) WorkerTaskByID(string) (session.WorkerSummaryInput, bool) {
-	return session.WorkerSummaryInput{}, false
+func (*noTaskSessions) TaskByID(string) (workeroutcomes.SummaryInput, bool) {
+	return workeroutcomes.SummaryInput{}, false
 }
 
-func (s *proofCountSessions) WorkerTaskByID(string) (session.WorkerSummaryInput, bool) {
-	return session.WorkerSummaryInput{
+func (s *proofCountSessions) TaskByID(string) (workeroutcomes.SummaryInput, bool) {
+	return workeroutcomes.SummaryInput{
 		ParentSessionID: "parent-1",
 		LegID:           "",
 		DelegationID:    "",
 	}, true
 }
 
-func (*proofCountSessions) ProjectWorkerResult(_ context.Context, _ session.WorkerSummaryInput, result api.WorkerResult) (string, error) {
+func (*proofCountSessions) ProjectResult(_ context.Context, _ workeroutcomes.SummaryInput, result api.WorkerResult) (string, error) {
 	return result.Status, nil
 }
 
-func (*proofCountSessions) ProjectWorkerFailure(context.Context, session.WorkerSummaryInput, error) error {
+func (*proofCountSessions) ProjectFailure(context.Context, workeroutcomes.SummaryInput, error) error {
 	return nil
 }
 
-func (s *proofCountSessions) NotifyWorkerCycleTerminal(context.Context, string, string) {
+func (s *proofCountSessions) Terminal(context.Context, string, string) {
 	s.terminalCalls.Add(1)
 }
 
-func (s *proofCountSessions) NudgeLegFinishedLoopWake(context.Context, string, time.Time, string) {}
+func (s *proofCountSessions) NudgeLegFinished(context.Context, string, time.Time, string) {}
 
-func (s *proofCountSessions) ShouldNudgeCoordinatorLoopAfterWorkerTask(context.Context, string, string, string) bool {
+func (s *proofCountSessions) ShouldNudge(context.Context, string, string, string) bool {
 	return s.shouldNudge
 }
 
-func (s *proofCountSessions) NudgeCoordinatorLoopAfterWorkerJobTerminal(context.Context, string, string, anchor.Envelope) {
+func (s *proofCountSessions) AfterTerminal(context.Context, string, string, anchor.Envelope) {
 	s.nudgeCalls.Add(1)
 }
 
-func (s *proofCountSessions) CoordinatorEnvelopeForWorkerCycleTerminal(context.Context, string, string) anchor.Envelope {
+func (s *proofCountSessions) EnvelopeForTerminal(context.Context, string, string) anchor.Envelope {
 	return anchor.Envelope{}
 }
 
-func (s *proofCountSessions) ArmProgressClosure(_ context.Context, _ string, jobID string) {
+func (s *proofCountSessions) Arm(_ context.Context, _ string, jobID string) {
 	s.armedJobs = append(s.armedJobs, jobID)
 }
 
@@ -96,7 +96,7 @@ func TestOnlyCompletedWorkArmsTheProgressLatch(t *testing.T) {
 	} {
 		t.Run(tc.status, func(t *testing.T) {
 			sessions := &proofCountSessions{shouldNudge: true}
-			bridge := &SessionOutcomeBridge{Sessions: sessions}
+			bridge := &SessionOutcomeBridge{Workers: sessions, Loop: sessions, Results: sessions, State: sessions, Closure: sessions}
 			if err := bridge.OnWorkerComplete(t.Context(), "job-1", api.WorkerResult{Status: tc.status}); err != nil {
 				t.Fatalf("OnWorkerComplete: %v", err)
 			}
@@ -106,7 +106,7 @@ func TestOnlyCompletedWorkArmsTheProgressLatch(t *testing.T) {
 		})
 	}
 	sessions := &proofCountSessions{shouldNudge: true}
-	bridge := &SessionOutcomeBridge{Sessions: sessions}
+	bridge := &SessionOutcomeBridge{Workers: sessions, Loop: sessions, Results: sessions, State: sessions, Closure: sessions}
 	if err := bridge.OnWorkerFailed(t.Context(), "job-1", errors.New("provider failed")); err != nil {
 		t.Fatalf("OnWorkerFailed: %v", err)
 	}
@@ -117,7 +117,7 @@ func TestOnlyCompletedWorkArmsTheProgressLatch(t *testing.T) {
 
 func TestOnWorkerCompleteRecordsTerminalProofOnce(t *testing.T) {
 	sessions := &proofCountSessions{shouldNudge: true}
-	bridge := &SessionOutcomeBridge{Sessions: sessions}
+	bridge := &SessionOutcomeBridge{Workers: sessions, Loop: sessions, Results: sessions, State: sessions, Closure: sessions}
 	ctx := context.Background()
 	result := api.WorkerResult{Status: "complete"}
 	if err := bridge.OnWorkerComplete(ctx, "job-1", result); err != nil {
@@ -135,7 +135,7 @@ func TestOnWorkerCompleteDefersWakeWhenProofFails(t *testing.T) {
 	proofErr := errors.New("workflow run revision conflict")
 	sessions := &proofCountSessions{shouldNudge: true, proofErr: proofErr}
 	inner := &outcomeCountRecorder{}
-	bridge := &SessionOutcomeBridge{Sessions: sessions, Inner: inner}
+	bridge := &SessionOutcomeBridge{Workers: sessions, Loop: sessions, Results: sessions, State: sessions, Closure: sessions, Inner: inner}
 	err := bridge.OnWorkerComplete(t.Context(), "job-1", api.WorkerResult{Status: "complete"})
 	if err == nil {
 		t.Fatal("terminal proof failure must still surface as an error")
@@ -154,8 +154,9 @@ func TestOnWorkerCompleteDefersWakeWhenProofFails(t *testing.T) {
 func TestOnWorkerCompleteStillSettlesInnerRecorderWithoutSessionTask(t *testing.T) {
 	inner := &outcomeCountRecorder{}
 	bridge := &SessionOutcomeBridge{
-		Sessions: &noTaskSessions{proofCountSessions: &proofCountSessions{}},
-		Inner:    inner,
+		Workers: &noTaskSessions{proofCountSessions: &proofCountSessions{}}, Loop: &noTaskSessions{proofCountSessions: &proofCountSessions{}},
+		Results: &noTaskSessions{proofCountSessions: &proofCountSessions{}},
+		Inner:   inner,
 	}
 	if err := bridge.OnWorkerComplete(t.Context(), "job-1", api.WorkerResult{Status: "complete"}); err != nil {
 		t.Fatalf("OnWorkerComplete: %v", err)
@@ -167,7 +168,7 @@ func TestOnWorkerCompleteStillSettlesInnerRecorderWithoutSessionTask(t *testing.
 
 func TestOnWorkerCompletePartialWakesCoordinator(t *testing.T) {
 	sessions := &proofCountSessions{shouldNudge: true}
-	bridge := &SessionOutcomeBridge{Sessions: sessions}
+	bridge := &SessionOutcomeBridge{Workers: sessions, Loop: sessions, Results: sessions, State: sessions, Closure: sessions}
 	ctx := context.Background()
 	result := api.WorkerResult{Status: "partial"}
 	if err := bridge.OnWorkerComplete(ctx, "job-partial", result); err != nil {
@@ -180,7 +181,7 @@ func TestOnWorkerCompletePartialWakesCoordinator(t *testing.T) {
 
 func TestOnWorkerCompleteCanceledSkipsCoordinatorWake(t *testing.T) {
 	sessions := &proofCountSessions{shouldNudge: true}
-	bridge := &SessionOutcomeBridge{Sessions: sessions}
+	bridge := &SessionOutcomeBridge{Workers: sessions, Loop: sessions, Results: sessions, State: sessions, Closure: sessions}
 	ctx := context.Background()
 	result := api.WorkerResult{Status: "canceled"}
 	if err := bridge.OnWorkerComplete(ctx, "job-canceled", result); err != nil {
@@ -193,7 +194,7 @@ func TestOnWorkerCompleteCanceledSkipsCoordinatorWake(t *testing.T) {
 
 func TestOnWorkerCompleteSkipsNudgeWhenShouldNudgeFalse(t *testing.T) {
 	sessions := &proofCountSessions{shouldNudge: false}
-	bridge := &SessionOutcomeBridge{Sessions: sessions}
+	bridge := &SessionOutcomeBridge{Workers: sessions, Loop: sessions, Results: sessions, State: sessions, Closure: sessions}
 	ctx := context.Background()
 	result := api.WorkerResult{Status: "complete"}
 	if err := bridge.OnWorkerComplete(ctx, "job-1", result); err != nil {
@@ -209,7 +210,7 @@ func TestOnWorkerCompleteSkipsNudgeWhenShouldNudgeFalse(t *testing.T) {
 
 func TestOnWorkerFailedWakesCoordinator(t *testing.T) {
 	sessions := &proofCountSessions{shouldNudge: true}
-	bridge := &SessionOutcomeBridge{Sessions: sessions}
+	bridge := &SessionOutcomeBridge{Workers: sessions, Loop: sessions, Results: sessions, State: sessions, Closure: sessions}
 	ctx := context.Background()
 	if err := bridge.OnWorkerFailed(ctx, "job-dead", errors.New("provider openai-1: openai error 400")); err != nil {
 		t.Fatalf("OnWorkerFailed: %v", err)
@@ -221,7 +222,7 @@ func TestOnWorkerFailedWakesCoordinator(t *testing.T) {
 
 func TestOnWorkerFailedCancelSkipsCoordinatorWake(t *testing.T) {
 	sessions := &proofCountSessions{shouldNudge: true}
-	bridge := &SessionOutcomeBridge{Sessions: sessions}
+	bridge := &SessionOutcomeBridge{Workers: sessions, Loop: sessions, Results: sessions, State: sessions, Closure: sessions}
 	ctx := context.Background()
 	if err := bridge.OnWorkerFailed(ctx, "job-cancel", context.Canceled); err != nil {
 		t.Fatalf("OnWorkerFailed: %v", err)
@@ -233,7 +234,7 @@ func TestOnWorkerFailedCancelSkipsCoordinatorWake(t *testing.T) {
 
 func TestOnWorkerFailedSkipsNudgeWhenShouldNudgeFalse(t *testing.T) {
 	sessions := &proofCountSessions{shouldNudge: false}
-	bridge := &SessionOutcomeBridge{Sessions: sessions}
+	bridge := &SessionOutcomeBridge{Workers: sessions, Loop: sessions, Results: sessions, State: sessions, Closure: sessions}
 	ctx := context.Background()
 	if err := bridge.OnWorkerFailed(ctx, "job-dead", errors.New("host death")); err != nil {
 		t.Fatalf("OnWorkerFailed: %v", err)
@@ -245,10 +246,11 @@ func TestOnWorkerFailedSkipsNudgeWhenShouldNudgeFalse(t *testing.T) {
 
 func TestOnWorkerCompleteRecordsProofForDelegationLeg(t *testing.T) {
 	sessions := &proofCountSessions{shouldNudge: true}
-	bridge := &SessionOutcomeBridge{Sessions: &legSessions{
+	leg := &legSessions{
 		proofCountSessions: sessions,
 		legID:              "leg-1",
-	}}
+	}
+	bridge := &SessionOutcomeBridge{Workers: leg, Loop: leg, Results: leg, State: leg, Closure: leg}
 	ctx := context.Background()
 	result := api.WorkerResult{Status: "complete"}
 	if err := bridge.OnWorkerComplete(ctx, "job-2", result); err != nil {
@@ -264,8 +266,8 @@ type legSessions struct {
 	legID string
 }
 
-func (s *legSessions) WorkerTaskByID(string) (session.WorkerSummaryInput, bool) {
-	return session.WorkerSummaryInput{
+func (s *legSessions) TaskByID(string) (workeroutcomes.SummaryInput, bool) {
+	return workeroutcomes.SummaryInput{
 		ParentSessionID: "parent-1",
 		LegID:           s.legID,
 		DelegationID:    "dep-1",

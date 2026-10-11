@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"time"
@@ -66,7 +68,7 @@ func (t *RepoTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	}
 	bundleID := strings.TrimSpace(argString(args, "bundle"))
 	if bundleID == "" {
-		return "", &tools.ToolReject{Code: "SURVEY_BUNDLE_REQUIRED", Data: map[string]any{}}
+		return "", &toolrejection.ToolReject{Code: "SURVEY_BUNDLE_REQUIRED", Data: map[string]any{}}
 	}
 	relPath := strings.TrimSpace(argString(args, "path"))
 	if relPath == "" {
@@ -85,16 +87,16 @@ func (t *RepoTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		}
 	}
 	if _, ok := cat.Bundles[bundleID]; !ok {
-		return "", &tools.ToolReject{
+		return "", &toolrejection.ToolReject{
 			Code: "SURVEY_BUNDLE_UNKNOWN",
 			Data: map[string]any{"bundle": bundleID, "available": cat.BundleIDs()},
 		}
 	}
 	runner := NewRunner(cat, t.Caps)
 	started := time.Now()
-	profileID := strings.TrimSpace(tctx.Agent)
+	profileID := strings.TrimSpace(tctx.Identity.Agent)
 	if profileID == "" {
-		profileID = tools.DefaultToolProfileID
+		profileID = toolprofiles.DefaultToolProfileID
 	}
 	readFilter, err := t.Boundary.CompileReadFilter(ctx, resolved.Root.Path, profileID)
 	if err != nil {
@@ -105,7 +107,7 @@ func (t *RepoTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	})
 	if err != nil {
 		if errors.Is(err, ErrSurveyPathEscape) {
-			return "", &tools.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": relPath}}
+			return "", &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": relPath}}
 		}
 		return "", err
 	}

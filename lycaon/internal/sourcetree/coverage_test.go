@@ -15,7 +15,7 @@ func TestExtentCoverageFollowsMixedDisclosures(t *testing.T) {
 	testutil.FailErr(t, "create pending subtree", os.MkdirAll(filepath.Join(root.Path, "a", "nested"), 0700))
 	testutil.FailErr(t, "create another subtree", os.Mkdir(filepath.Join(root.Path, "b"), 0700))
 	observe := func(dir string) {
-		_, err := view.catalog.ObserveDirectory(t.Context(), "project", root, dir, sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+		_, err := view.catalog.Directories.ObserveDirectory(t.Context(), "project", root, dir, sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 		testutil.FailErr(t, "observe selected directory", err)
 	}
 	check := func(complete bool) {

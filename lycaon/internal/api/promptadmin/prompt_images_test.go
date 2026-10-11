@@ -22,8 +22,8 @@ func TestIngestPromptImagesReturnsFailingArtifactID(t *testing.T) {
 		operationID = "operation-1"
 		group       = "attached"
 	)
-	srv := &Handler{Caps: promptattach.Active(), Deps: Deps{VisualStore: failingVisualStore{}}}
-	ids, err := srv.ingestPromptImages(t.Context(), "session-1", operationID, group, []promptattach.InlineImage{{
+	srv := &Handler{Submission: &Submission{Caps: promptattach.Active(), VisualStore: failingVisualStore{}}}
+	ids, err := srv.Submission.ingestPromptImages(t.Context(), "session-1", operationID, group, []promptattach.InlineImage{{
 		Mime:  "image/png",
 		Bytes: visual.TestPNG1x1Bytes(),
 	}})

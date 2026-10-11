@@ -2,7 +2,6 @@ package observability
 
 import (
 	"strconv"
-	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -11,23 +10,14 @@ import (
 // CaptureRedactor applies the runtime secret catalog to captured text.
 type CaptureRedactor func(string) string
 
-var captureRedactor atomic.Pointer[CaptureRedactor]
-
-// SetCaptureRedactor sets runtime catalog redaction.
-func SetCaptureRedactor(fn CaptureRedactor) {
-	if fn == nil {
-		captureRedactor.Store(nil)
-		return
-	}
-	captureRedactor.Store(&fn)
-}
-
 // RedactCaptureText strips secrets from captured text.
 func RedactCaptureText(s string) string {
+	captureRedactorMu.Lock()
 	var fn CaptureRedactor
-	if loaded := captureRedactor.Load(); loaded != nil {
-		fn = *loaded
+	if activeCaptureRedactor != nil {
+		fn = activeCaptureRedactor.fn
 	}
+	captureRedactorMu.Unlock()
 	return redactCaptureText(s, fn)
 }
 

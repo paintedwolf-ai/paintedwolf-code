@@ -20,7 +20,11 @@ import (
 
 func implementToolContext(root string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}}
-	return tools.ToolContext{Roots: roots, ActiveRootID: "r1", Agent: "implement"}
+	return tools.ToolContext{
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: "implement"},
+	}
 }
 
 func TestPathEscapeBlockedSecurity(t *testing.T) {

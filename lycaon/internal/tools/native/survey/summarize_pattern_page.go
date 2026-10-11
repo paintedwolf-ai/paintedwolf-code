@@ -20,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
-	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
@@ -40,13 +39,14 @@ type patternScope struct {
 
 // patternScopes pins generations before any source work, so continuations bind
 // both permission scope and every requested root, including not-yet-read roots.
-func (g *summarizeGatherer) patternScopes(ctx context.Context, roots []string) ([]patternScope, error) {
+
+func (g *summaryPatterns) patternScopes(ctx context.Context, roots []string) ([]patternScope, error) {
 	var out []patternScope
 	ordered := append([]string(nil), roots...)
 	sort.Strings(ordered)
 	digest := sha256.New()
 	for _, target := range ordered {
-		resolved, err := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, target)
+		resolved, err := g.access.reads.Resolve(ctx, target)
 		if err != nil {
 			return nil, err
 		}
@@ -64,7 +64,7 @@ func (g *summarizeGatherer) patternScopes(ctx context.Context, roots []string) (
 		if err != nil {
 			return nil, err
 		}
-		scope, err := g.boundary.CompileReadScope(ctx, resolved.Root.Path, g.tctx.ProfileID())
+		scope, err := g.access.boundary.CompileReadScope(ctx, resolved.Root.Path, g.access.profileID)
 		if err != nil {
 			return nil, err
 		}
@@ -74,9 +74,9 @@ func (g *summarizeGatherer) patternScopes(ctx context.Context, roots []string) (
 			fmt.Fprintf(digest, "%d:%d;", info.Size(), info.ModTime().UnixNano())
 		} else {
 			wait := time.Duration(0)
-			if !g.indexWaitUsed {
+			if !g.trees.indexWaitUsed {
 				wait = time.Duration(g.caps.Gather.IndexWaitMs) * time.Millisecond
-				g.indexWaitUsed = true
+				g.trees.indexWaitUsed = true
 			}
 			reader, status, err := g.patternDirectoryView(ctx, &view, scope, wait)
 			if err != nil {
@@ -86,21 +86,21 @@ func (g *summarizeGatherer) patternScopes(ctx context.Context, roots []string) (
 				return nil, fmt.Errorf("source catalog: %s", status.Error)
 			}
 			if reader == nil {
-				g.treeState = status.State
-			} else if g.treeState == "" {
-				g.treeState = sourcecatalog.StateReady
+				g.trees.treeState = status.State
+			} else if g.trees.treeState == "" {
+				g.trees.treeState = sourcecatalog.StateReady
 			}
-			g.treeRefreshing = g.treeRefreshing || status.Refreshing
+			g.trees.treeRefreshing = g.trees.treeRefreshing || status.Refreshing
 			view.reader = reader
 			fmt.Fprintf(digest, "%d;", status.Revision)
 		}
 		out = append(out, view)
 	}
-	g.catalogRevision = max(1, binary.BigEndian.Uint64(digest.Sum(nil)[:8])>>11)
+	g.trees.catalogRevision = max(1, binary.BigEndian.Uint64(digest.Sum(nil)[:8])>>11)
 	return out, nil
 }
 
-func (g *summarizeGatherer) probePatternPage(ctx context.Context, req summarize.Request, roots []string, pageSize int) (summarizePatternProbe, error) {
+func (g *summaryPatterns) probePatternPage(ctx context.Context, req summarize.Request, roots []string, pageSize int) (summarizePatternProbe, error) {
 	result := summarizePatternProbe{MatchCount: req.CursorMatchesObserved, MatchingFiles: req.CursorMatchingFilesObserved}
 	opts, err := parseGrepArgs(map[string]any{"pattern": req.Pattern, "structural": false})
 	if err != nil {
@@ -114,7 +114,7 @@ func (g *summarizeGatherer) probePatternPage(ctx context.Context, req summarize.
 	if err != nil {
 		return result, err
 	}
-	result.Revision = g.catalogRevision
+	result.Revision = g.trees.catalogRevision
 	position := patternPosition{}
 	if req.CursorPosition != "" {
 		if json.Unmarshal([]byte(req.CursorPosition), &position) != nil || position.Target < 0 || position.Target >= len(scopes) {
@@ -123,7 +123,7 @@ func (g *summarizeGatherer) probePatternPage(ctx context.Context, req summarize.
 		result.CursorFound = true
 	}
 	require := litprefilter.Extract(req.Pattern, false)
-	drafts := sourceview.DraftsFor(ctx, g.tctx)
+	drafts := g.access.drafts(ctx)
 	resume := func() { raw, _ := surveyjson.Marshal(position); result.NextPath = string(raw) }
 	for position.Target < len(scopes) {
 		scope := scopes[position.Target]
@@ -132,16 +132,16 @@ func (g *summarizeGatherer) probePatternPage(ctx context.Context, req summarize.
 			return result, pageErr
 		}
 		for _, candidate := range candidates {
-			if g.sourceBudgetExhausted() || len(result.Matches) >= pageSize {
+			if g.sources.sourceBudgetExhausted() || len(result.Matches) >= pageSize {
 				resume()
 				return result, nil
 			}
 			abs := filepath.Join(scope.catalogRoot, filepath.FromSlash(candidate.path))
-			display := projectpaths.QualifyAbs(g.tctx, scope.resolved.Root, abs)
+			display := g.access.qualify(scope.resolved.Root, abs)
 
-			if !require.Empty() && g.catalog != nil && candidate.entry.Size > 0 {
+			if !require.Empty() && g.access.catalog != nil && candidate.entry.Size > 0 {
 				if _, hasDraft := drafts.Lookup(abs); !hasDraft {
-					if g.catalog.CanPrune(scope.catalogRoot, require, candidate.entry) {
+					if g.access.literalsIndex.CanPrune(scope.catalogRoot, require, candidate.entry) {
 						position.After = candidate.path
 						continue
 					}
@@ -156,7 +156,7 @@ func (g *summarizeGatherer) probePatternPage(ctx context.Context, req summarize.
 			position.After = candidate.path
 			if readErr != nil {
 				if errors.Is(readErr, errUnsupportedSummaryText) {
-					g.noteNonTextPath(display)
+					g.sources.noteNonTextPath(display)
 				}
 				if errors.Is(readErr, errUnsupportedSummaryText) || os.IsNotExist(readErr) || os.IsPermission(readErr) {
 					result.SkippedPaths = append(result.SkippedPaths, display)
@@ -166,7 +166,7 @@ func (g *summarizeGatherer) probePatternPage(ctx context.Context, req summarize.
 			}
 			matches, total, scanErr := scanSummarizePatternContent(ctx, raw, display, re, 1)
 			if errors.Is(scanErr, errSummaryPatternNonText) {
-				g.noteNonTextPath(display)
+				g.sources.noteNonTextPath(display)
 				result.SkippedPaths = append(result.SkippedPaths, display)
 				continue
 			}
@@ -194,7 +194,7 @@ type summarizePatternCandidate struct {
 	entry sourcecatalog.Entry
 }
 
-func (g *summarizeGatherer) patternPageCandidates(ctx context.Context, scope patternScope, after string, limit int) ([]summarizePatternCandidate, bool, error) {
+func (g *summaryPatterns) patternPageCandidates(ctx context.Context, scope patternScope, after string, limit int) ([]summarizePatternCandidate, bool, error) {
 	if scope.file {
 		if after != "" {
 			return nil, false, nil
@@ -203,9 +203,9 @@ func (g *summarizeGatherer) patternPageCandidates(ctx context.Context, scope pat
 	}
 	if scope.reader == nil {
 		// Bounded live children supply useful material while the shared index warms.
-		node := g.warmingSubtree(ctx, scope.resolved)
-		if g.treeErr != nil {
-			return nil, false, g.treeErr
+		node := g.trees.warmingSubtree(ctx, scope.resolved)
+		if g.trees.treeErr != nil {
+			return nil, false, g.trees.treeErr
 		}
 		var paths []string
 		frontier := []*summarize.SubtreeNode{node}
@@ -217,8 +217,8 @@ func (g *summarizeGatherer) patternPageCandidates(ctx context.Context, scope pat
 			}
 			if current.LoadChildren != nil {
 				current.LoadChildren(ctx, current)
-				if g.treeErr != nil {
-					return nil, false, g.treeErr
+				if g.trees.treeErr != nil {
+					return nil, false, g.trees.treeErr
 				}
 			}
 			for _, child := range current.Children {
@@ -229,7 +229,7 @@ func (g *summarizeGatherer) patternPageCandidates(ctx context.Context, scope pat
 					frontier = append(frontier, child)
 					continue
 				}
-				resolved, err := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, child.Path)
+				resolved, err := g.access.reads.Resolve(ctx, child.Path)
 				if err != nil {
 					continue
 				}
@@ -261,21 +261,22 @@ func (g *summarizeGatherer) patternPageCandidates(ctx context.Context, scope pat
 }
 
 // Discovery, pattern matching and outlining share one source reservation and cache.
-func (g *summarizeGatherer) patternSource(ctx context.Context, abs string) ([]byte, error) {
-	raw, err := g.readFileCached(ctx, abs)
+
+func (g *summaryPatterns) patternSource(ctx context.Context, abs string) ([]byte, error) {
+	raw, err := g.sources.readFileCached(ctx, abs)
 	if !errors.Is(err, errFileNeedsStreaming) {
 		return raw, err
 	}
-	err = g.scanSummaryChunks(ctx, abs, g.caps.Gather.FileChunkBytes, func(_ int, part []byte) error { raw = append(raw, part...); return nil })
+	err = g.sources.scanSummaryChunks(ctx, abs, g.caps.Gather.FileChunkBytes, func(_ int, part []byte) error { raw = append(raw, part...); return nil })
 	if err == nil {
-		g.storeBytes(abs, raw)
+		g.sources.storeBytes(abs, raw)
 	}
 	return raw, err
 }
 
-func (g *summarizeGatherer) patternDirectoryView(ctx context.Context, view *patternScope, scope sandbox.CompiledReadScope, wait time.Duration) (*sourcecatalog.SummaryReader, sourcecatalog.TreeStatus, error) {
+func (g *summaryPatterns) patternDirectoryView(ctx context.Context, view *patternScope, scope sandbox.CompiledReadScope, wait time.Duration) (*sourcecatalog.SummaryReader, sourcecatalog.TreeStatus, error) {
 	root := view.resolved.Root
-	reader, status, err := g.openSummaryTree(ctx, sourcecatalog.Root{ID: root.ID, Path: root.Path}, sourcecatalog.TreeScope{Key: scope.Key, Filter: scope.Filter, PruneNestedVCS: g.caps.Gather.PruneNestedVCS}, wait)
+	reader, status, err := g.trees.openSummaryTree(ctx, sourcecatalog.Root{ID: root.ID, Path: root.Path}, sourcecatalog.TreeScope{Key: scope.Key, Filter: scope.Filter, PruneNestedVCS: g.caps.Gather.PruneNestedVCS}, wait)
 	if err != nil || reader == nil || view.base == "." || !g.caps.Gather.PruneNestedVCS {
 		return reader, status, err
 	}
@@ -292,15 +293,15 @@ func (g *summarizeGatherer) patternDirectoryView(ctx context.Context, view *patt
 	}
 	view.catalogRoot = view.resolved.Abs
 	view.base = "."
-	return g.openSummaryTree(ctx, sourcecatalog.Root{ID: root.ID + ":" + base, Path: view.resolved.Abs, Within: view.resolved.Root.Path}, sourcecatalog.TreeScope{Key: scope.Key, Filter: filter, PruneNestedVCS: true}, 0)
+	return g.trees.openSummaryTree(ctx, sourcecatalog.Root{ID: root.ID + ":" + base, Path: view.resolved.Abs, Within: view.resolved.Root.Path}, sourcecatalog.TreeScope{Key: scope.Key, Filter: filter, PruneNestedVCS: true}, 0)
 }
 
-func (g *summarizeGatherer) patternInspectionActions(ctx context.Context, req summarize.Request, actions []summarize.NextAction) []summarize.NextAction {
+func (g *summaryPatterns) patternInspectionActions(ctx context.Context, req summarize.Request, actions []summarize.NextAction) []summarize.NextAction {
 	if req.Pattern == "" {
 		return actions
 	}
-	paths := make([]string, 0, len(g.truncatedPaths))
-	for abs := range g.truncatedPaths {
+	paths := make([]string, 0, len(g.sources.truncatedPaths))
+	for abs := range g.sources.truncatedPaths {
 		paths = append(paths, abs)
 	}
 	sort.Strings(paths)
@@ -308,7 +309,7 @@ func (g *summarizeGatherer) patternInspectionActions(ctx context.Context, req su
 		if len(actions) >= g.caps.Pack.NextActionsMax {
 			break
 		}
-		resolved, err := projectpaths.ResolveRead(ctx, g.boundary, g.tctx, abs)
+		resolved, err := g.access.reads.Resolve(ctx, abs)
 		if err != nil {
 			continue
 		}

@@ -16,23 +16,23 @@ const ptyCloseTimeout = execution.TerminateGrace + DefaultPTYReadTimeout + 3*tim
 
 // ClosePTY kills a pty handle and removes the entry. It discards residual
 // output so terminal_read remains the only incremental-output channel.
-func (r *Registry) ClosePTY(sessionID, handle string) (PTYCloseResult, error) {
-	proc, err := r.lookup(sessionID, handle)
+func (r *Terminal) ClosePTY(sessionID, handle string) (PTYCloseResult, error) {
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return PTYCloseResult{}, err
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	kind := proc.kind
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	if kind != processKindPTY {
 		return PTYCloseResult{}, fmt.Errorf("%w: handle %s", ErrNotPTY, handle)
 	}
-	r.killProcess(proc)
+	r.Lifecycle.killProcess(proc)
 	select {
 	case <-proc.done:
 	case <-time.After(ptyCloseTimeout):
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	hasExit := proc.hasExit
 	exitCode := proc.exitCode
 	out := PTYCloseResult{
@@ -41,8 +41,8 @@ func (r *Registry) ClosePTY(sessionID, handle string) (PTYCloseResult, error) {
 		Network:  proc.facts.MediatedNetwork(),
 		Refusals: proc.facts.Refusals(),
 	}
-	r.mu.Unlock()
-	r.remove(trim(sessionID), trim(handle))
+	r.jobs.mu.Unlock()
+	r.jobs.remove(trim(sessionID), trim(handle))
 	if hasExit {
 		code := exitCode
 		out.ExitCode = &code
@@ -50,7 +50,7 @@ func (r *Registry) ClosePTY(sessionID, handle string) (PTYCloseResult, error) {
 	return out, nil
 }
 
-func (r *Registry) pumpPTY(ctx context.Context, proc *Process) {
+func (r *Terminal) pumpPTY(ctx context.Context, proc *Process) {
 	if proc == nil || proc.pty == nil {
 		return
 	}
@@ -64,7 +64,7 @@ func (r *Registry) pumpPTY(ctx context.Context, proc *Process) {
 			if proc.screen != nil {
 				proc.screen.Write(buf[:n])
 			}
-			r.publishStream(ctx, proc, "stdout", cursor)
+			r.Output.publishStream(ctx, proc, "stdout", cursor)
 		}
 		if err != nil {
 			return
@@ -72,7 +72,7 @@ func (r *Registry) pumpPTY(ctx context.Context, proc *Process) {
 	}
 }
 
-func (r *Registry) waitPTY(ctx context.Context, proc *Process) {
+func (r *Terminal) waitPTY(ctx context.Context, proc *Process) {
 	if proc == nil || proc.pty == nil {
 		return
 	}
@@ -94,7 +94,7 @@ func (r *Registry) waitPTY(ctx context.Context, proc *Process) {
 			exitCode = -1
 		}
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	alreadyClosed := false
 	select {
 	case <-proc.done:
@@ -113,27 +113,27 @@ func (r *Registry) waitPTY(ctx context.Context, proc *Process) {
 			proc.Stages[0].ExitCode = &code
 		}
 	}
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	if alreadyClosed {
 		return
 	}
-	r.mu.Lock()
-	r.pruneCompletedLocked(proc.SessionID)
-	r.mu.Unlock()
+	r.jobs.mu.Lock()
+	r.jobs.pruneCompletedLocked(proc.SessionID)
+	r.jobs.mu.Unlock()
 	if proc.screen != nil {
 		final := proc.screen.snapshot()
-		r.mu.Lock()
+		r.jobs.mu.Lock()
 		proc.finalScreen = &final
-		r.mu.Unlock()
+		r.jobs.mu.Unlock()
 	}
 	close(proc.done)
 	if proc.screen != nil {
 		proc.screen.Close()
 	}
 
-	if r.publish != nil && !proc.silent {
+	if r.Output.publish != nil && !proc.silent {
 		exit := exitCode
-		r.publish(ctx, proc.ProjectID, proc.SessionID, api.BackgroundProcessEvent{
+		r.Output.publish(ctx, proc.ProjectID, proc.SessionID, api.BackgroundProcessEvent{
 			ProcessID: proc.Handle,
 			SessionID: proc.SessionID,
 			Stream:    "exit",

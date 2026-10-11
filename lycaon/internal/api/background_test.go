@@ -15,7 +15,7 @@ import (
 
 func TestDetachedDrainOverlapsRepeatedAdmissions(t *testing.T) {
 	s := &Server{}
-	t.Cleanup(s.StopBackground)
+	t.Cleanup(func() { s.StopBackground(t.Context()) })
 	var completed atomic.Int64
 	var callers sync.WaitGroup
 	for range 8 {
@@ -35,7 +35,7 @@ func TestDetachedDrainOverlapsRepeatedAdmissions(t *testing.T) {
 
 func TestDetachedDrainIncludesNestedWorkAndHonorsCancellation(t *testing.T) {
 	s := &Server{}
-	t.Cleanup(s.StopBackground)
+	t.Cleanup(func() { s.StopBackground(t.Context()) })
 	childStarted := make(chan struct{})
 	release := make(chan struct{})
 	s.background.Go(t.Context(), func(ctx context.Context) {

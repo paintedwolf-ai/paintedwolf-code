@@ -8,7 +8,7 @@ import (
 
 func TestExecutionProtectionTracksBoundaryAndObservedExit(t *testing.T) {
 	r := NewRegistry(Config{}, Hooks{})
-	r.sessions["task"] = map[string]*Process{
+	r.jobs.sessions["task"] = map[string]*Process{
 		"host":     {Handle: "host", running: true, boundary: confine.Boundary{HostExecution: true, Network: confine.NetworkDirectIP}},
 		"signal":   {Handle: "signal", livenessUnknown: true, boundary: confine.Boundary{ProcessControl: true}},
 		"done":     {Handle: "done", hasExit: true, boundary: confine.Boundary{HostExecution: true}},

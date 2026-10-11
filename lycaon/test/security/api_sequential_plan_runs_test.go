@@ -17,7 +17,7 @@ func TestSequentialPlanRunsE2E(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithoutCoordinatorLoop(), wiring.WithRecordingLLM())
 	srv := h.Server
 	sessionStore := h.Store
-	blueprintMgr := h.BlueprintMgr
+	blueprintMgr := h.Workflows.Blueprints
 	sess := createSessionHTTP(t, srv, t.TempDir())
 	ctx := t.Context()
 

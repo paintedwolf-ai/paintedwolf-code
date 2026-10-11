@@ -19,7 +19,7 @@ type PTYCaptureResult struct {
 }
 
 // RunPTYCapture executes one command and discards its terminal handle.
-func (r *Registry) RunPTYCapture(
+func (r *Terminal) RunPTYCapture(
 	ctx context.Context,
 	sessionID, rootSessionID, projectID string,
 	req hostcmd.Request,
@@ -35,17 +35,17 @@ func (r *Registry) RunPTYCapture(
 	if err != nil {
 		return PTYCaptureResult{}, err
 	}
-	defer r.Discard(sessionID, handle)
-	finished, err := r.Await(ctx, sessionID, handle, timeout)
+	defer r.jobs.remove(trim(sessionID), trim(handle))
+	finished, err := r.Lifecycle.Await(ctx, sessionID, handle, timeout)
 	if err != nil {
-		if proc, lookupErr := r.lookup(sessionID, handle); lookupErr == nil {
-			r.killProcess(proc)
+		if proc, lookupErr := r.jobs.lookup(sessionID, handle); lookupErr == nil {
+			r.Lifecycle.killProcess(proc)
 		}
 		return PTYCaptureResult{}, err
 	}
 	var timedOutScreen *ScreenSnapshot
 	if !finished {
-		proc, lookupErr := r.lookup(sessionID, handle)
+		proc, lookupErr := r.jobs.lookup(sessionID, handle)
 		if lookupErr != nil {
 			return PTYCaptureResult{}, lookupErr
 		}
@@ -56,7 +56,7 @@ func (r *Registry) RunPTYCapture(
 			return PTYCaptureResult{}, snapshotErr
 		}
 		timedOutScreen = &preStop.Screen
-		r.killProcess(proc)
+		r.Lifecycle.killProcess(proc)
 		select {
 		case <-proc.done:
 		case <-time.After(2 * time.Second):

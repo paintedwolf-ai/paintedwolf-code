@@ -12,9 +12,9 @@ import (
 func TestToolpolicyEngineListInvokeParityEmptyArgs(t *testing.T) {
 	fix := setupContextualToolsFixture(t, api.SessionPostureBuild)
 	ctx := context.Background()
-	listed := fix.Mgr.PromptToolPolicy().ListForPrompt(ctx, fix.Sess, fix.ProfileID)
+	listed := fix.Mgr.Coordinator.Guards.Policy().ListForPrompt(ctx, fix.Sess, fix.ProfileID)
 	for _, meta := range listed {
-		if err := fix.Mgr.PromptToolPolicy().EvaluateInvoke(ctx, fix.Sess, meta.Name, nil); err != nil {
+		if err := fix.Mgr.Coordinator.Guards.Policy().EvaluateInvoke(ctx, fix.Sess, meta.Name, nil); err != nil {
 			t.Fatalf("listed tool %q failed empty-args invoke: %v", meta.Name, err)
 		}
 	}

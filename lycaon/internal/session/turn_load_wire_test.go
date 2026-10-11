@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -44,7 +45,7 @@ func TestTurnLoadWireProjectsATurnDecision(t *testing.T) {
 		Engine: "Bialy/mmbert-base#turn-load", Decisions: decisionsJSON(t, map[string]any{"turn": decision, "floor": []string{"read", "grep"}, "boundary": boundary}),
 		Standing: decisionsJSON(t, standing), ElapsedMs: 438,
 	}
-	got := TurnLoadWire(receipt)
+	got := transcript.TurnLoadWire(receipt)
 	if len(got.Floor) != 2 || got.Floor[0] != "grep" || got.Floor[1] != "read" {
 		t.Fatalf("floor = %v, want the surface's floor sorted", got.Floor)
 	}
@@ -87,7 +88,7 @@ func TestTurnLoadWireAbstainedTurnCarriesNoEngineOrGuides(t *testing.T) {
 		SessionID: "s1", Trigger: store.TurnLoadTriggerTurn, OpeningMessageID: "user-1", Abstained: true, Reason: "engine unavailable",
 		Decisions: decisionsJSON(t, map[string]any{"turn": decision}),
 	}
-	got := TurnLoadWire(receipt)
+	got := transcript.TurnLoadWire(receipt)
 	if !got.Abstained || got.Reason != "engine unavailable" || got.Engine != nil || got.Guides != nil || got.Kind != nil {
 		t.Fatalf("abstained projection = %+v", got)
 	}
@@ -99,7 +100,7 @@ func TestTurnLoadWireAbstainedTurnCarriesNoEngineOrGuides(t *testing.T) {
 func TestTurnLoadWireProjectsRequestAndLookupMatches(t *testing.T) {
 	engine := decide.Engine{Name: "Bialy", Model: "mmbert-base", Head: "turn-load"}
 	request := turnload.RequestOutcome{Need: "git tools to commit", Exact: []string{"git_stash"}, Ranked: map[string]float64{"git_commit": 3.2, "git_add": 2.9}, Engine: engine}
-	got := TurnLoadWire(store.TurnLoadReceipt{
+	got := transcript.TurnLoadWire(store.TurnLoadReceipt{
 		SessionID: "s1", Trigger: store.TurnLoadTriggerRequest, OpeningMessageID: "user-1", ToolCallID: "call-9",
 		Engine: "Bialy/mmbert-base#turn-load", Decisions: decisionsJSON(t, map[string]any{"request": request}), ElapsedMs: 310,
 	})
@@ -114,7 +115,7 @@ func TestTurnLoadWireProjectsRequestAndLookupMatches(t *testing.T) {
 	}
 
 	lookup := turnload.LookupOutcome{Need: "release notes", Abstained: true, Reason: "engine unavailable"}
-	got = TurnLoadWire(store.TurnLoadReceipt{
+	got = transcript.TurnLoadWire(store.TurnLoadReceipt{
 		SessionID: "s1", Trigger: store.TurnLoadTriggerLookup, ToolCallID: "call-10", Abstained: true, Reason: "engine unavailable",
 		Decisions: decisionsJSON(t, map[string]any{"lookup": lookup}),
 	})
@@ -122,7 +123,7 @@ func TestTurnLoadWireProjectsRequestAndLookupMatches(t *testing.T) {
 		t.Fatalf("lookup projection = %+v match=%+v", got, got.Match)
 	}
 
-	got = TurnLoadWire(store.TurnLoadReceipt{
+	got = transcript.TurnLoadWire(store.TurnLoadReceipt{
 		SessionID: "s1", Trigger: store.TurnLoadTriggerRequest, ToolCallID: "call-11", Abstained: true, Reason: "nothing to rank",
 		Decisions: decisionsJSON(t, map[string]any{"request": turnload.RequestOutcome{Need: "", Abstained: true, Reason: "nothing to rank"}}),
 	})

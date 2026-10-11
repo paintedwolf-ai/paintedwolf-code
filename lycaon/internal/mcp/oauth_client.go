@@ -198,14 +198,14 @@ func (c *OAuthClient) Start(ctx context.Context, entry MCPProviderEntry, project
 	// Bind the listener before dynamic client registration: the redirect URI is part of
 	// what gets registered, so the port has to exist first.
 	providerID := entry.ID
-	listener, redirect, err := c.bindCallback(providerID, projectID, state, onComplete) //nolint:contextcheck // loopback Complete uses Background until the browser hits the redirect
+	listener, redirect, err := c.bindCallback(ctx, providerID, projectID, state, onComplete)
 	if err != nil {
 		return OAuthStartResult{}, err
 	}
 
 	clientID, clientSecret, err := c.resolveClient(ctx, asm, redirect)
 	if err != nil {
-		listener.finish() //nolint:contextcheck // process-local listener teardown on start failure
+		listener.finish(ctx)
 		return OAuthStartResult{}, err
 	}
 
@@ -228,7 +228,7 @@ func (c *OAuthClient) Start(ctx context.Context, entry MCPProviderEntry, project
 	c.mu.Lock()
 	// Replacing a pending authorization retires the one it replaces, listener included.
 	if prev, ok := c.pending[providerID]; ok {
-		prev.listener.finish() //nolint:contextcheck // process-local listener teardown when replacing pending auth
+		prev.listener.finish(ctx)
 	}
 	c.pending[providerID] = pendingOAuth{
 		ProviderID:   providerID,
@@ -256,18 +256,18 @@ func (c *OAuthClient) Start(ctx context.Context, entry MCPProviderEntry, project
 
 // bindCallback starts the loopback listener for one authorization, or returns the
 // pinned test redirect when one is configured.
-func (c *OAuthClient) bindCallback(providerID, projectID, state string, onComplete func(error)) (*callbackListener, string, error) {
+func (c *OAuthClient) bindCallback(ctx context.Context, providerID, projectID, state string, onComplete func(error)) (*callbackListener, string, error) {
 	if c.redirectOverride != "" {
 		return nil, c.redirectOverride, nil
 	}
-	listener, err := startCallbackListener(func(res callbackResult) error {
+	listener, err := startCallbackListener(context.WithoutCancel(ctx), func(res callbackResult) error {
 		// State is checked here as well as in Complete: any local process can reach
 		// this loopback handler, and a redirect without the issued state must not
 		// redeem a code.
 		if res.State == "" || res.State != state {
 			return fmt.Errorf("oauth state mismatch")
 		}
-		err := c.Complete(context.Background(), providerID, projectID, OAuthCompleteRequest{
+		err := c.Complete(context.WithoutCancel(ctx), providerID, projectID, OAuthCompleteRequest{
 			Code:  res.Code,
 			State: res.State,
 		})
@@ -293,7 +293,7 @@ func (c *OAuthClient) Complete(ctx context.Context, providerID, projectID string
 	if ok && pending.expired(c.clock()) {
 		delete(c.pending, providerID)
 		c.mu.Unlock()
-		pending.listener.finish() //nolint:contextcheck // process-local listener teardown on expired pending
+		pending.listener.finish(ctx)
 		return fmt.Errorf("oauth authorization for %q expired; start sign-in again", providerID)
 	}
 	c.mu.Unlock()
@@ -336,10 +336,10 @@ func (c *OAuthClient) Complete(ctx context.Context, providerID, projectID string
 		TokenURL:     pending.TokenURL,
 		AuthURL:      pending.AuthURL,
 	}
-	return c.commitAuthorization(providerID, pending, rec) //nolint:contextcheck // process-local authorization retirement
+	return c.commitAuthorization(ctx, providerID, pending, rec)
 }
 
-func (c *OAuthClient) commitAuthorization(providerID string, pending pendingOAuth, rec OAuthTokenRecord) error {
+func (c *OAuthClient) commitAuthorization(ctx context.Context, providerID string, pending pendingOAuth, rec OAuthTokenRecord) error {
 	c.mu.Lock()
 	current, ok := c.pending[providerID]
 	if !ok || current.State != pending.State || current.expired(c.clock()) {
@@ -353,13 +353,13 @@ func (c *OAuthClient) commitAuthorization(providerID string, pending pendingOAut
 	}
 	c.mu.Unlock()
 	if err == nil {
-		pending.listener.finish()
+		pending.listener.finish(ctx)
 	}
 	return err
 }
 
 // Cancel retires only the named attempt, preserving tokens and newer sign-ins.
-func (c *OAuthClient) Cancel(providerID, projectID, state string) {
+func (c *OAuthClient) Cancel(ctx context.Context, providerID, projectID, state string) {
 	if c == nil || state == "" {
 		return
 	}
@@ -372,12 +372,12 @@ func (c *OAuthClient) Cancel(providerID, projectID, state string) {
 	}
 	c.mu.Unlock()
 	if ok {
-		pending.listener.finish()
+		pending.listener.finish(ctx)
 	}
 }
 
 // Revoke clears stored tokens and pending authorization for providerID.
-func (c *OAuthClient) Revoke(providerID string) error {
+func (c *OAuthClient) Revoke(ctx context.Context, providerID string) error {
 	if c == nil || c.store == nil {
 		return nil
 	}
@@ -386,13 +386,13 @@ func (c *OAuthClient) Revoke(providerID string) error {
 	delete(c.pending, providerID)
 	err := c.store.Delete(providerID)
 	c.mu.Unlock()
-	pending.listener.finish()
+	pending.listener.finish(ctx)
 	return err
 }
 
 // Close stops every listener still waiting for a browser. Called when the registry
 // shuts down so an abandoned sign-in does not hold a loopback port.
-func (c *OAuthClient) Close() {
+func (c *OAuthClient) Close(ctx context.Context) {
 	if c == nil {
 		return
 	}
@@ -404,7 +404,7 @@ func (c *OAuthClient) Close() {
 	}
 	c.mu.Unlock()
 	for _, p := range pendings {
-		p.listener.finish()
+		p.listener.finish(ctx)
 	}
 }
 

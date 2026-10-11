@@ -1,9 +1,10 @@
 package surface
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -97,7 +98,7 @@ func TestComputeSurfaceFacts_investigateDefaultEligibleAmbient(t *testing.T) {
 func TestSurfaceFactsAsMap_matchesRegistryKeys(t *testing.T) {
 	m := SurfaceFacts{
 		HasComposeDraft:                  true,
-		ManifestBoundSurface:             tools.SurfaceImplementInvestigate,
+		ManifestBoundSurface:             toolcontract.SurfaceImplementInvestigate,
 		OverlayPromotePending:            3,
 		ChildSubroutineBlocksInvestigate: false,
 		WorkflowDeclaredMode:             ExecutionModeFamilyInvestigate,

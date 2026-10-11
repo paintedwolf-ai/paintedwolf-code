@@ -3,6 +3,7 @@ package survey
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,10 +75,11 @@ func TestLayoutProbeFileAltitudeDoesNotBuildInventory(t *testing.T) {
 	testutil.FailErr(t, "write file", os.WriteFile(file, []byte("package main\n"), 0o644))
 	boundary := sandbox.NewBoundary(sandbox.Config{
 		ProjectRootRequired: true, RejectSymlinkEscape: true,
-	}, []sandbox.ToolProfile{{ID: tools.DefaultToolProfileID, Tools: map[string]bool{"read": true}}})
+	}, []sandbox.ToolProfile{{ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"read": true}}})
 	scope := Scope{Boundary: boundary, ToolCtx: tools.ToolContext{
-		Roots: []projectroot.RootRef{{ID: "r1", Path: root, IsPrimary: true}}, ActiveRootID: "r1",
-		Agent: tools.DefaultToolProfileID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
 	}}
 	records, total, coverage, err := runLayoutProbe(context.Background(), Probe{Label: "layout"}, "main.go", scope, 96)
 	testutil.FailErr(t, "file layout", err)

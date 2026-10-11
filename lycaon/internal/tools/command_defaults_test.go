@@ -1,6 +1,8 @@
-package tools
+package tools_test
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcommand"
+	"github.com/lycaon/lycaon/internal/tools"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -32,8 +34,8 @@ func TestCommandMatcherRejectsUnknownSemanticsEvenAtDeclaredDefaults(t *testing.
 			for key, value := range tc.extra {
 				args[key] = value
 			}
-			normalized := commandArgsWithoutDefaults(args, schema)
-			_, match := parseCommandEnvelope(normalized)
+			normalized := toolcommand.ArgsWithoutDefaults(args, schema)
+			_, match := toolcommand.ParseEnvelope(normalized)
 			if match != tc.match {
 				t.Fatalf("eligible = %v, want %v: %#v", match, tc.match, normalized)
 			}
@@ -63,12 +65,12 @@ func TestStockCommandDefaultsKeepGitRedirects(t *testing.T) {
 			}
 			t.Run(tool+"/"+field, func(t *testing.T) {
 				args := map[string]any{"command": "git commit --amend -m fix -- a.go", field: value}
-				testutil.FailErr(t, "validate declared default", ValidateToolArgs(meta.ArgsSchema, args))
-				envelope, ok := parseCommandEnvelope(commandArgsWithoutDefaults(args, meta.ArgsSchema))
+				testutil.FailErr(t, "validate declared default", tools.ValidateToolArgs(meta.ArgsSchema, args))
+				envelope, ok := toolcommand.ParseEnvelope(toolcommand.ArgsWithoutDefaults(args, meta.ArgsSchema))
 				if !ok {
 					t.Fatalf("%s default bypassed redirect", field)
 				}
-				calls, ok := exactCommandReplacement(t.Context(), envelope.command, t.TempDir(), "")
+				calls, ok := toolcommand.ExactCommandReplacement(t.Context(), envelope.Command, t.TempDir(), "")
 				if !ok || len(calls) != 1 || calls[0].Tool != "git_commit" || calls[0].Args["amend"] != true {
 					t.Fatalf("amend replacement = %#v, ok=%v", calls, ok)
 				}
@@ -81,7 +83,7 @@ func TestChangedSchemaDefaultDoesNotEraseActiveRunnerSemantics(t *testing.T) {
 	for name, active := range map[string]any{"background": true, "verification": true, "env": map[string]any{"TOKEN": "fixture"}} {
 		args := map[string]any{"command": "curl https://example.test", name: active}
 		schema := map[string]any{"properties": map[string]any{name: map[string]any{"default": active}}}
-		if _, ok := parseCommandEnvelope(commandArgsWithoutDefaults(args, schema)); ok {
+		if _, ok := toolcommand.ParseEnvelope(toolcommand.ArgsWithoutDefaults(args, schema)); ok {
 			t.Fatalf("new active default %s was silently removed", name)
 		}
 	}
@@ -96,13 +98,16 @@ func TestCommandReplacementChecksDeclaredWorkingDirectory(t *testing.T) {
 	testutil.FailErr(t, "create same-name directory", os.Mkdir(filepath.Join(sub, "root-file"), 0o755))
 	for _, cwd := range []string{"sub", sub} {
 		for _, program := range []string{"cat", "grep needle"} {
-			env := commandEnvelope{command: program + " cwd-file", cwd: cwd}
-			calls, ok := env.replacements(t.Context(), root, "")
-			if !ok || len(calls) != 1 || calls[0].Args["path"] != filepath.ToSlash(filepath.Join(cwd, "cwd-file")) {
-				t.Fatalf("cwd %q command %q: calls=%+v ok=%v", cwd, env.command, calls, ok)
+			env, parsed := toolcommand.ParseEnvelope(map[string]any{"command": program + " cwd-file", "cwd": cwd})
+			if !parsed {
+				t.Fatal("command with cwd did not parse")
 			}
-			env.command = program + " root-file"
-			if calls, ok := env.replacements(t.Context(), root, ""); ok {
+			calls, ok := env.Replacements(t.Context(), root, "")
+			if !ok || len(calls) != 1 || calls[0].Args["path"] != filepath.ToSlash(filepath.Join(cwd, "cwd-file")) {
+				t.Fatalf("cwd %q command %q: calls=%+v ok=%v", cwd, env.Command, calls, ok)
+			}
+			env.Command = program + " root-file"
+			if calls, ok := env.Replacements(t.Context(), root, ""); ok {
 				t.Fatalf("cwd directory classified using active-root file: %+v", calls)
 			}
 		}

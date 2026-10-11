@@ -2,6 +2,7 @@ package testfixture
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -18,7 +19,7 @@ func Boundary(t *testing.T) *sandbox.Boundary {
 		RejectSymlinkEscape: true,
 	}, []sandbox.ToolProfile{
 		{
-			ID:    tools.DefaultToolProfileID,
+			ID:    toolprofiles.DefaultToolProfileID,
 			Tools: map[string]bool{"read": true, "write": true, "edit": true, "replace_lines": true, "grep": true, "find": true, "stat": true, "wc": true, "list_dir": true, "chmod": true, "delete": true, "survey_repo": true},
 		},
 		{
@@ -32,19 +33,19 @@ func Context(dir string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
 	// Publish a below-threshold count for open-root tool tests.
 	return tools.ToolContext{
-		Roots:               roots,
-		ActiveRootID:        "r1",
-		SourceWorkspaceKind: api.SourceWorkspaceKindProject,
-		Agent:               tools.DefaultToolProfileID,
-		SessionID:           "test-session",
-		RepoFileCount:       100,
-		RepoFileCountKnown:  true,
+		Source: tools.InvocationSource{Roots: roots,
+			ActiveRootID:        "r1",
+			SourceWorkspaceKind: api.SourceWorkspaceKindProject,
+			RepoFileCount:       100,
+			RepoFileCountKnown:  true},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID,
+			SessionID: "test-session"},
 	}
 }
 
 func AgentContext(dir, agent string) tools.ToolContext {
 	ctx := Context(dir)
-	ctx.Agent = agent
+	ctx.Identity.Agent = agent
 	return ctx
 }
 

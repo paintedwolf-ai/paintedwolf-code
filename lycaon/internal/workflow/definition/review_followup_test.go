@@ -45,6 +45,8 @@ func TestCoverageReviewersRequireDeclaredCoverageAndReviewer(t *testing.T) {
 		valid bool
 	}{
 		{"declared", func(*reviewLoopYAML) {}, true},
+		{"explicit assignments", func(r *reviewLoopYAML) { r.AssignmentBinding = "explicit" }, true},
+		{"unknown binding", func(r *reviewLoopYAML) { r.AssignmentBinding = "inferred" }, false},
 		{"not required", func(r *reviewLoopYAML) { r.RequiredAgents = nil }, false},
 		{"no candidate", func(r *reviewLoopYAML) { r.ReconcilesPhase = "" }, false},
 		{"no coverage", func(r *reviewLoopYAML) { delete(r.VerdictSchema, "coverage") }, false},
@@ -84,6 +86,7 @@ phases:
       reconciles_phase: candidate
       required_agents: [auditor]
       coverage_reviewers: [auditor]
+      assignment_binding: explicit
       verdict_schema: {verdict: DONE, coverage: coverage_review}
 `)
 	manifest, err := ParseManifestYAML(raw)

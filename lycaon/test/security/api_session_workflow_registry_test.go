@@ -16,7 +16,7 @@ func TestSessionWorkflowRegistryE2E(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
 	sess := createSessionHTTP(t, srv, t.TempDir())
-	sessionStore := h.SessionWorkflowStore
+	sessionStore := h.Workflows.Drafts
 	sqlDB := h.DB
 
 	manifestYAML := `id: hotfix-session

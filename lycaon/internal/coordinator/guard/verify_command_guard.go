@@ -27,8 +27,8 @@ func ObserveVerifyCommandUndeclared(tool, declared string, args map[string]any, 
 	if gc == nil || tool != "verify" {
 		return
 	}
-	gc.Tool = "verify"
+	gc.Invocation.Tool = "verify"
 	gc.DeriveToolClassFacts()
-	gc.VerifyHasCommand = commandsurface.HasCommandInput(args)
-	gc.VerifyDeclared = strings.TrimSpace(declared) != ""
+	gc.Progress.VerifyHasCommand = commandsurface.HasCommandInput(args)
+	gc.Progress.VerifyDeclared = strings.TrimSpace(declared) != ""
 }

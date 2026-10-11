@@ -48,6 +48,8 @@ When an invocation declares several capabilities, the host prepares their missin
 
 A prepared file change contributes `presentation.file_changes` to the immutable approval plan. Each entry binds the path, operation, sizes, and content hashes to the reviewed action; the path and before/after text are the screened presentation copy every other card field receives ([Secrets](secrets.md#durable-and-display-redaction)), so a credential file under review is shown and retained with its values screened while the hashes still name the exact bytes. The card shows a **View diff** link opening that snapshot in Files, with the same approval controls as other asks.
 
+`summarize` remains available without attached folders for inline `content`. Path, pattern, and continuation inputs require a filesystem context. With attached folders, native survey tools use the same explicit external-path grants as other reads; a failed boundary resolution is a path rejection, not a missing-file report. Rootless inline summaries do not create filesystem authority.
+
 Native file mutations defer discretionary asks until the proposed bytes exist. Preparing an out-of-root target conveys no reusable write permission: the final effect must pass approval and revalidate its base. Review waits do not hold destination locks. Explicit content review covers its exact final bytes once, avoiding a second ask for the same change: the review and the gate key the same presentation text, with managed values echoed as their references, and a retry of the same proposal inside one invocation reuses the person's decision rather than asking again.
 
 Agent-policy changes (`agent_policy_change`: project instructions, skills, prompt overrides, and overlay settings) ask at Balanced and Strict and are silent at Light. The card faces a chat lease: at Balanced it covers the changed trust surfaces for the chat, at Strict the exact files, and no quiet or project lease is offered. Command requests name an exact agent-policy file and approve the command's process authority; arbitrary future command output is not presented as a known diff. Credential files (`.env`, keys, registry tokens) reach the gate as protected subjects on write, so they ask where `sensitive_location` does and are never refused. See [AGENTS.md governance](agents-md-standard.md#governance-write-paths).
@@ -192,7 +194,7 @@ Reaching a folder outside the attached folders always has a route to a card, at 
 | Crossing | Card subject |
 |---|---|
 | Native read of a folder outside the attached folders | That folder and everything under it |
-| Native read of a file outside the attached folders | The containing folder, or the exact file in the home directory or a sensitive location |
+| Native read of a file outside the attached folders | A selected host-approved ancestor directory, or the exact file in a sensitive location |
 | Command write refused outside its write roots | The enclosing repository work tree, otherwise the containing folder ([Security](security.md#credentials-the-agent-drives)) |
 | Native write outside the attached folders | The exact path |
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"image"
 	"image/color"
 	"image/png"
@@ -53,18 +54,18 @@ func TestViewImageTool(t *testing.T) {
 		testutil.FailErr(t, "write png", os.WriteFile(pngPath, createTestPNG(t, 20, 30), 0o644))
 
 		tctx := nativefixture.Context(tempDir)
-		tctx.Out = &tools.ToolInvocationOut{}
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 		out, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"path": "test.png"}, tctx)
 		testutil.FailErr(t, "run view_image", err)
 
-		if tctx.Out.Visual == nil {
+		if tctx.Effects.Out.Visual == nil {
 			t.Fatal("expected VisualCapture in invocation out")
 		}
-		if !tctx.Out.Visual.Perceive {
+		if !tctx.Effects.Out.Visual.Perceive {
 			t.Fatal("expected VisualCapture.Perceive to be true")
 		}
-		if tctx.Out.Visual.Mime != "image/png" {
-			t.Fatalf("mime = %q want image/png", tctx.Out.Visual.Mime)
+		if tctx.Effects.Out.Visual.Mime != "image/png" {
+			t.Fatalf("mime = %q want image/png", tctx.Effects.Out.Visual.Mime)
 		}
 		if !strings.Contains(out, `"width":20`) || !strings.Contains(out, `"height":30`) {
 			t.Fatalf("unexpected output: %s", out)
@@ -76,12 +77,12 @@ func TestViewImageTool(t *testing.T) {
 		testutil.FailErr(t, "write txt", os.WriteFile(txtPath, []byte("hello"), 0o644))
 
 		tctx := nativefixture.Context(tempDir)
-		tctx.Out = &tools.ToolInvocationOut{}
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 		_, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"path": "test.txt"}, tctx)
 		if err == nil {
 			t.Fatal("expected reject")
 		}
-		var rej *tools.ToolReject
+		var rej *toolrejection.ToolReject
 		if !errors.As(err, &rej) || rej.Code != "IMAGE_FORMAT_UNSUPPORTED" {
 			t.Fatalf("got %#v want IMAGE_FORMAT_UNSUPPORTED", err)
 		}
@@ -89,12 +90,12 @@ func TestViewImageTool(t *testing.T) {
 
 	t.Run("missing file rejects IMAGE_NOT_FOUND", func(t *testing.T) {
 		tctx := nativefixture.Context(tempDir)
-		tctx.Out = &tools.ToolInvocationOut{}
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 		_, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"path": "missing.png"}, tctx)
 		if err == nil {
 			t.Fatal("expected reject")
 		}
-		var rej *tools.ToolReject
+		var rej *toolrejection.ToolReject
 		if !errors.As(err, &rej) || rej.Code != "IMAGE_NOT_FOUND" {
 			t.Fatalf("got %#v want IMAGE_NOT_FOUND", err)
 		}
@@ -105,12 +106,12 @@ func TestViewImageTool(t *testing.T) {
 		testutil.FailErr(t, "mkdir", os.Mkdir(subDir, 0o755))
 
 		tctx := nativefixture.Context(tempDir)
-		tctx.Out = &tools.ToolInvocationOut{}
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 		_, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"path": "subdir.png"}, tctx)
 		if err == nil {
 			t.Fatal("expected reject")
 		}
-		var rej *tools.ToolReject
+		var rej *toolrejection.ToolReject
 		if !errors.As(err, &rej) || rej.Code != "IMAGE_IS_DIRECTORY" {
 			t.Fatalf("got %#v want IMAGE_IS_DIRECTORY", err)
 		}
@@ -121,12 +122,12 @@ func TestViewImageTool(t *testing.T) {
 		testutil.FailErr(t, "write bad png", os.WriteFile(badPath, []byte("not a png file"), 0o644))
 
 		tctx := nativefixture.Context(tempDir)
-		tctx.Out = &tools.ToolInvocationOut{}
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 		_, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"path": "bad.png"}, tctx)
 		if err == nil {
 			t.Fatal("expected reject")
 		}
-		var rej *tools.ToolReject
+		var rej *toolrejection.ToolReject
 		if !errors.As(err, &rej) || rej.Code != "IMAGE_CORRUPTED" {
 			t.Fatalf("got %#v want IMAGE_CORRUPTED", err)
 		}
@@ -134,8 +135,8 @@ func TestViewImageTool(t *testing.T) {
 
 	t.Run("inspect in-memory handle succeeds", func(t *testing.T) {
 		tctx := nativefixture.Context(tempDir)
-		tctx.Out = &tools.ToolInvocationOut{}
-		_, err := handleStore.Put(tctx.SessionID, &renderhandle.RenderHandle{
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
+		_, err := handleStore.Put(tctx.Identity.SessionID, &renderhandle.RenderHandle{
 			ID:      "dashboard-hero",
 			Markup:  `<svg></svg>`,
 			Mime:    "svg",
@@ -150,19 +151,19 @@ func TestViewImageTool(t *testing.T) {
 		if !strings.Contains(out, `"handle":"dashboard-hero"`) || !strings.Contains(out, `"width":64`) {
 			t.Fatalf("unexpected view_image handle output: %s", out)
 		}
-		if tctx.Out.Visual == nil || !tctx.Out.Visual.Perceive {
-			t.Fatalf("expected perceived visual capture, got %+v", tctx.Out.Visual)
+		if tctx.Effects.Out.Visual == nil || !tctx.Effects.Out.Visual.Perceive {
+			t.Fatalf("expected perceived visual capture, got %+v", tctx.Effects.Out.Visual)
 		}
 	})
 
 	t.Run("nonexistent handle rejects RENDER_HANDLE_NOT_FOUND", func(t *testing.T) {
 		tctx := nativefixture.Context(tempDir)
-		tctx.Out = &tools.ToolInvocationOut{}
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 		_, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"handle": "missing-handle"}, tctx)
 		if err == nil {
 			t.Fatal("expected reject")
 		}
-		var rej *tools.ToolReject
+		var rej *toolrejection.ToolReject
 		if !errors.As(err, &rej) || rej.Code != "RENDER_HANDLE_NOT_FOUND" {
 			t.Fatalf("got %#v want RENDER_HANDLE_NOT_FOUND", err)
 		}
@@ -174,7 +175,7 @@ func TestViewImageTool(t *testing.T) {
 		testutil.FailErr(t, "write svg", os.WriteFile(svgPath, []byte(`<svg width="100" height="100"><text>Database Engine</text></svg>`), 0o644))
 
 		tctx := nativefixture.Context(tempDir)
-		tctx.Out = &tools.ToolInvocationOut{}
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 		out, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"path": "diagram.svg"}, tctx)
 		testutil.FailErr(t, "run view_image", err)
 
@@ -204,12 +205,12 @@ func TestViewImageToolSecretScreening(t *testing.T) {
 	}))
 
 	tctx := nativefixture.Context(tempDir)
-	tctx.Out = &tools.ToolInvocationOut{}
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
 	_, err = screenReg.Run(context.Background(), page.ViewImageToolName, map[string]any{"path": "secret.svg"}, tctx)
 	if err == nil {
 		t.Fatal("expected secret withheld reject")
 	}
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "IMAGE_SECRET_WITHHELD" {
 		t.Fatalf("expected IMAGE_SECRET_WITHHELD, got: %#v", err)
 	}
@@ -226,7 +227,7 @@ func TestViewImageToolRejectsURLSource(t *testing.T) {
 	}))
 	tctx := nativefixture.Context(t.TempDir())
 	_, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"url": "https://example.com/mockup.png"}, tctx)
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("err = %#v, want TOOL_ARGS_INVALID", err)
 	}
@@ -259,7 +260,7 @@ func TestViewImageRasterWithoutOCRAsksWithCoverageReason(t *testing.T) {
 		}),
 	}))
 	tctx := nativefixture.Context(dir)
-	tctx.Out = &tools.ToolInvocationOut{}
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
 	out, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"path": "shot.png"}, tctx)
 	testutil.FailErr(t, "run view_image", err)
 	if len(alerts) != 1 || alerts[0].ScreeningGap != secretmatch.GapOCRUnavailable || alerts[0].SourcePath != "shot.png" {
@@ -268,8 +269,8 @@ func TestViewImageRasterWithoutOCRAsksWithCoverageReason(t *testing.T) {
 	if !strings.Contains(out, `"screening_gap":"ocr_unavailable"`) {
 		t.Fatalf("result does not report the coverage gap: %s", out)
 	}
-	if tctx.Out.Visual == nil || !tctx.Out.Visual.Perceive {
-		t.Fatalf("approved image not perceived: %+v", tctx.Out.Visual)
+	if tctx.Effects.Out.Visual == nil || !tctx.Effects.Out.Visual.Perceive {
+		t.Fatalf("approved image not perceived: %+v", tctx.Effects.Out.Visual)
 	}
 }
 
@@ -283,7 +284,7 @@ func TestViewImageRejectsOversizedRasterBeforeOCR(t *testing.T) {
 		Screen:   visualscreen.NewGate(visualscreen.NewScanner(ocr), nil, nil),
 	}))
 	_, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"path": "wide.png"}, nativefixture.Context(dir))
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "IMAGE_DIMENSIONS_EXCEEDED" {
 		t.Fatalf("err = %#v, want IMAGE_DIMENSIONS_EXCEEDED", err)
 	}
@@ -305,7 +306,7 @@ func TestViewImageRefusesOversizedFileBeforeReading(t *testing.T) {
 		Screen:   visualscreen.NewGate(visualscreen.NewScanner(ocr), nil, nil),
 	}))
 	_, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"path": "huge.png"}, nativefixture.Context(dir))
-	var rej *tools.ToolReject
+	var rej *toolrejection.ToolReject
 	if !errors.As(err, &rej) || rej.Code != "IMAGE_BYTES_EXCEEDED" {
 		t.Fatalf("err = %#v, want IMAGE_BYTES_EXCEEDED", err)
 	}
@@ -337,12 +338,12 @@ func TestViewImageHandleResolvesThroughRootSession(t *testing.T) {
 		},
 	}))
 	tctx := nativefixture.Context(t.TempDir())
-	tctx.SessionID = "worker-session"
-	tctx.Out = &tools.ToolInvocationOut{}
+	tctx.Identity.SessionID = "worker-session"
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
 	out, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"handle": art.ID}, tctx)
 	testutil.FailErr(t, "view artifact from worker", err)
-	if !strings.Contains(out, `"width":10`) || tctx.Out.Visual == nil {
-		t.Fatalf("out = %s visual = %+v", out, tctx.Out.Visual)
+	if !strings.Contains(out, `"width":10`) || tctx.Effects.Out.Visual == nil {
+		t.Fatalf("out = %s visual = %+v", out, tctx.Effects.Out.Visual)
 	}
 }
 
@@ -373,7 +374,7 @@ func TestViewImageHandleScreensUnperceivedArtifacts(t *testing.T) {
 	}))
 	for _, id := range []string{perceived, unperceived} {
 		tctx := nativefixture.Context(t.TempDir())
-		tctx.Out = &tools.ToolInvocationOut{}
+		tctx.Effects.Out = &tools.ToolInvocationOut{}
 		_, err := reg.Run(context.Background(), page.ViewImageToolName, map[string]any{"handle": id}, tctx)
 		testutil.FailErr(t, "view artifact", err)
 	}

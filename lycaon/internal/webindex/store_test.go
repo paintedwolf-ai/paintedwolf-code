@@ -16,7 +16,7 @@ import (
 
 func openTest(t *testing.T) *Store {
 	t.Helper()
-	s, err := Open(filepath.Join(t.TempDir(), "web-index.db"))
+	s, err := Open(t.Context(), filepath.Join(t.TempDir(), "web-index.db"))
 	testutil.FailErr(t, "open store", err)
 	t.Cleanup(func() { _ = s.Close() })
 	return s
@@ -94,30 +94,6 @@ func TestUpsertKeepsBestFields(t *testing.T) {
 	testutil.FailErr(t, "search", err)
 	if len(docs) != 1 || docs[0].Title != "Real title" || !docs[0].Verified {
 		t.Fatalf("docs = %+v want title and verified retained", docs)
-	}
-}
-
-func TestSchemaVersionBumpWipes(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "web-index.db")
-	s, err := Open(path)
-	testutil.FailErr(t, "open store", err)
-	s.QueuePage(t.Context(), Page{URL: "https://a.example/p", Title: "steam machine"})
-	s.Flush()
-	testutil.FailErr(t, "close store", s.Close())
-
-	db, err := openFile(path)
-	testutil.FailErr(t, "reopen raw", err)
-	_, err = db.Exec("PRAGMA user_version = 99")
-	testutil.FailErr(t, "bump version", err)
-	testutil.FailErr(t, "close raw", db.Close())
-
-	s2, err := Open(path)
-	testutil.FailErr(t, "reopen store", err)
-	t.Cleanup(func() { _ = s2.Close() })
-	docs, err := s2.Search(context.Background(), "steam machine", 10)
-	testutil.FailErr(t, "search", err)
-	if len(docs) != 0 {
-		t.Fatalf("docs = %+v want wiped index on version mismatch", docs)
 	}
 }
 

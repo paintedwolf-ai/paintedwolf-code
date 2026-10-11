@@ -2,12 +2,11 @@ package loopwake
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func TestPostTurnDrainRetiresWakesNudgedBeforeTurnStart(t *testing.T) {
@@ -27,15 +26,15 @@ func TestPostTurnDrainRetiresWakesNudgedBeforeTurnStart(t *testing.T) {
 	engine.SetDeps(deps)
 
 	// The losing wake was nudged before the winning turn started.
-	preTurnSeq := engine.nudgeSeq.Add(1)
-	engine.enqueuePending(id, pendingLoopWake{wake: anchor.LegFinished, seq: preTurnSeq})
-	engine.promptObservedSeq.Store(id, engine.nudgeSeq.Add(1))
+	preTurnSeq := engine.Nudges.nudgeSeq.Add(1)
+	engine.Nudges.enqueuePending(id, pendingLoopWake{wake: anchor.LegFinished, seq: preTurnSeq})
+	engine.Observations.promptObservedSeq.Store(id, engine.Nudges.nudgeSeq.Add(1))
 
-	engine.drainPending(context.Background(), id, true)
+	engine.Nudges.drainPending(context.Background(), id, true)
 	if prompts != 0 {
 		t.Fatalf("pre-turn wake ran %d prompt(s); the completed turn already consumed it", prompts)
 	}
-	if _, ok := engine.sessionPendingQueue(id).peek(); ok {
+	if _, ok := engine.Nudges.sessionPendingQueue(id).peek(); ok {
 		t.Fatal("consumed wake must leave the pending queue")
 	}
 }
@@ -50,24 +49,24 @@ func TestDrainRetiresWakesConsumedByTheTurnItJustRan(t *testing.T) {
 	}
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts++
-		engine.ObservePrompt(id)(inject.CoordinatorTurnFrame{})
+		engine.Observations.ObservePrompt(id)(inject.CoordinatorTurnFrame{})
 		return &promptresult.Result{}, nil
 	}
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return true }
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-drain", Status: api.WorkflowRunStatusRunning},
-	}
+	})
 	engine.SetDeps(deps)
 
 	// One prompt observes both queued wakes.
-	engine.enqueuePending(id, pendingLoopWake{wake: anchor.PhaseAdvanced, seq: engine.nudgeSeq.Add(1)})
-	engine.enqueuePending(id, pendingLoopWake{wake: anchor.WorkerTaskFinished, seq: engine.nudgeSeq.Add(1)})
+	engine.Nudges.enqueuePending(id, pendingLoopWake{wake: anchor.PhaseAdvanced, seq: engine.Nudges.nudgeSeq.Add(1)})
+	engine.Nudges.enqueuePending(id, pendingLoopWake{wake: anchor.WorkerTaskFinished, seq: engine.Nudges.nudgeSeq.Add(1)})
 
-	engine.drainPending(context.Background(), id, false)
+	engine.Nudges.drainPending(context.Background(), id, false)
 	if prompts != 1 {
 		t.Fatalf("drain ran %d prompt(s); the second wake was assembled into the first turn", prompts)
 	}
-	if _, ok := engine.sessionPendingQueue(id).peek(); ok {
+	if _, ok := engine.Nudges.sessionPendingQueue(id).peek(); ok {
 		t.Fatal("consumed wake must leave the pending queue")
 	}
 }
@@ -85,16 +84,16 @@ func TestPostTurnDrainKeepsWakesNudgedDuringTurn(t *testing.T) {
 		return &promptresult.Result{}, nil
 	}
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return true }
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-fresh", Status: api.WorkflowRunStatusRunning},
-	}
+	})
 	engine.SetDeps(deps)
 
-	engine.promptObservedSeq.Store(id, engine.nudgeSeq.Add(1))
+	engine.Observations.promptObservedSeq.Store(id, engine.Nudges.nudgeSeq.Add(1))
 	// Nudged after the turn started — its facts postdate prompt assembly.
-	engine.enqueuePending(id, pendingLoopWake{wake: anchor.LegFinished, seq: engine.nudgeSeq.Add(1)})
+	engine.Nudges.enqueuePending(id, pendingLoopWake{wake: anchor.LegFinished, seq: engine.Nudges.nudgeSeq.Add(1)})
 
-	engine.drainPending(context.Background(), id, true)
+	engine.Nudges.drainPending(context.Background(), id, true)
 	if prompts != 1 {
 		t.Fatalf("during-turn wake ran %d prompt(s), want 1", prompts)
 	}
@@ -108,9 +107,9 @@ func TestPostTurnDrainDropsDormantPhaseAdvanceAfterCloseout(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: id}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-settled", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts++
@@ -118,14 +117,14 @@ func TestPostTurnDrainDropsDormantPhaseAdvanceAfterCloseout(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.promptObservedSeq.Store(id, engine.nudgeSeq.Add(1))
-	engine.enqueuePending(id, pendingLoopWake{wake: anchor.PhaseAdvanced, seq: engine.nudgeSeq.Add(1)})
+	engine.Observations.promptObservedSeq.Store(id, engine.Nudges.nudgeSeq.Add(1))
+	engine.Nudges.enqueuePending(id, pendingLoopWake{wake: anchor.PhaseAdvanced, seq: engine.Nudges.nudgeSeq.Add(1)})
 
-	engine.drainPending(context.Background(), id, true)
+	engine.Nudges.drainPending(context.Background(), id, true)
 	if prompts != 0 {
 		t.Fatalf("dormant phase advance ran %d prompt(s) after closeout, want 0", prompts)
 	}
-	if _, ok := engine.sessionPendingQueue(id).peek(); ok {
+	if _, ok := engine.Nudges.sessionPendingQueue(id).peek(); ok {
 		t.Fatal("non-actionable phase advance must leave the pending queue")
 	}
 }
@@ -138,9 +137,9 @@ func TestPostTurnDrainKeepsActionablePhaseAdvance(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: id}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-actionable", Status: api.WorkflowRunStatusRunning, CurrentPhase: "review"},
-	}
+	})
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return true }
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts++
@@ -148,10 +147,10 @@ func TestPostTurnDrainKeepsActionablePhaseAdvance(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.promptObservedSeq.Store(id, engine.nudgeSeq.Add(1))
-	engine.enqueuePending(id, pendingLoopWake{wake: anchor.PhaseAdvanced, seq: engine.nudgeSeq.Add(1)})
+	engine.Observations.promptObservedSeq.Store(id, engine.Nudges.nudgeSeq.Add(1))
+	engine.Nudges.enqueuePending(id, pendingLoopWake{wake: anchor.PhaseAdvanced, seq: engine.Nudges.nudgeSeq.Add(1)})
 
-	engine.drainPending(context.Background(), id, true)
+	engine.Nudges.drainPending(context.Background(), id, true)
 	if prompts != 1 {
 		t.Fatalf("actionable phase advance ran %d prompt(s), want 1", prompts)
 	}
@@ -166,9 +165,9 @@ func TestActivePromptPhaseAdvanceDefersActionabilityUntilDrain(t *testing.T) {
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: id, Status: api.SessionStatusBusy}, nil
 	}
-	deps.WorkflowSource = StubLoopWF{
+	deps.WorkflowSource = workflowFixturePorts(StubLoopWF{
 		run: &api.WorkflowRun{ID: "run-busy", Status: api.WorkflowRunStatusRunning, CurrentPhase: "work"},
-	}
+	})
 	deps.HostWakeActionable = func(context.Context, HostWakeActionableInput) bool { return false }
 	deps.QueueInform = func(context.Context, string, anchor.ID, anchor.Envelope) { informs++ }
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
@@ -176,10 +175,10 @@ func TestActivePromptPhaseAdvanceDefersActionabilityUntilDrain(t *testing.T) {
 		return &promptresult.Result{}, nil
 	}
 	engine.SetDeps(deps)
-	finishExecution := engine.BeginPromptExecution(t.Context(), id)
+	finishExecution := engine.Admission.BeginPromptExecution(t.Context(), id)
 
-	engine.Nudge(context.Background(), id, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
-	if wake, ok := engine.PendingForTest(id); !ok || wake != anchor.PhaseAdvanced {
+	engine.Nudges.Nudge(context.Background(), id, anchor.PhaseAdvanced, anchor.PhaseAdvanced, "", anchor.Envelope{})
+	if wake, ok := engine.Nudges.Pending(id); !ok || wake != anchor.PhaseAdvanced {
 		t.Fatalf("pending wake = %q, %v want %q, true", wake, ok, anchor.PhaseAdvanced)
 	}
 	if informs != 1 {
@@ -187,11 +186,11 @@ func TestActivePromptPhaseAdvanceDefersActionabilityUntilDrain(t *testing.T) {
 	}
 
 	finishExecution()
-	engine.drainPending(context.Background(), id, false)
+	engine.Nudges.drainPending(context.Background(), id, false)
 	if prompts != 0 {
 		t.Fatalf("settled phase wake ran %d prompt(s) after drain, want 0", prompts)
 	}
-	if _, ok := engine.PendingForTest(id); ok {
+	if _, ok := engine.Nudges.Pending(id); ok {
 		t.Fatal("non-actionable drained wake must be retired")
 	}
 }

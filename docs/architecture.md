@@ -390,7 +390,7 @@ Each area has one home. The sidecar's import rules are in [Package layering](pac
 | Workflows | `lycaon/internal/workflow` runs; `workflow/definition` parses and validates manifests |
 | Models | `lycaon/internal/llm`, with one package per provider protocol ([LLM packages](package-layering.md#llm-packages)) |
 | Scanning | `lycaon/internal/scan` and its subpackages ([scan packages](package-layering.md#scan-packages)) |
-| Tools | `lycaon/internal/tools` (registry, executor, and rejects), `tools/native` and its families, and `internal/toolhost` (registration) |
+| Tools | `lycaon/internal/tools` (invocation contracts and registry), `internal/toolexecution` (execution domains), `internal/toolrejection` and `internal/toolfeedback` (refusals), `tools/native` and its families, and `internal/toolhost` (tool service composition) |
 | Wire DTOs | `lycaon/pkg/api` |
 | Contract tests | `lycaon/test/contract/<domain>/` ([Test strategy](test-strategy.md#contract-organization)) |
 | Den | `lycaon-den/src/`: shell, `files/`, `platform/`, `api/`, and feature components |

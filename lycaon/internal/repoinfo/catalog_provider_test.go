@@ -31,7 +31,7 @@ func TestBoundedBriefSettlesWithoutEstablishingAnEmptyRepository(t *testing.T) {
 	catalog := sourcecatalog.New()
 	catalog.SetScopes(boundedBriefScope{})
 	t.Cleanup(func() { testutil.FailErr(t, "drain catalog", catalog.Drain(context.Background())) })
-	provider := repoinfo.NewProvider(catalog, func(context.Context, string) (repoinfo.CatalogRoot, bool, error) {
+	provider := repoinfo.NewProvider(catalog.Trees, func(context.Context, string) (repoinfo.CatalogRoot, bool, error) {
 		return repoinfo.CatalogRoot{ProjectID: "p", RootID: "r"}, true, nil
 	}, "")
 	defer func() { _ = provider.Close() }()
@@ -61,7 +61,7 @@ func TestCatalogProviderProjectsSharedGeneration(t *testing.T) {
 	t.Cleanup(func() { testutil.FailErr(t, "drain catalog", catalog.Drain(context.Background())) })
 	_, err := catalog.Snapshot(context.Background(), "p1", []sourcecatalog.Root{{ID: "r1", Path: root}})
 	testutil.FailErr(t, "warm catalog", err)
-	provider := repoinfo.NewProvider(catalog, func(context.Context, string) (repoinfo.CatalogRoot, bool, error) {
+	provider := repoinfo.NewProvider(catalog.Trees, func(context.Context, string) (repoinfo.CatalogRoot, bool, error) {
 		return repoinfo.CatalogRoot{ProjectID: "p1", RootID: "r1"}, true, nil
 	}, "")
 	defer func() { _ = provider.Close() }()
@@ -79,7 +79,7 @@ func TestBriefRevokesEmptyClaimWhenItsIndexRefreshFails(t *testing.T) {
 	root := t.TempDir()
 	catalog := sourcecatalog.New()
 	t.Cleanup(func() { testutil.FailErr(t, "drain catalog", catalog.Drain(context.Background())) })
-	provider := repoinfo.NewProvider(catalog, func(context.Context, string) (repoinfo.CatalogRoot, bool, error) {
+	provider := repoinfo.NewProvider(catalog.Trees, func(context.Context, string) (repoinfo.CatalogRoot, bool, error) {
 		return repoinfo.CatalogRoot{ProjectID: "p", RootID: "r"}, true, nil
 	}, "")
 	defer func() { _ = provider.Close() }()
@@ -93,7 +93,7 @@ func TestBriefRevokesEmptyClaimWhenItsIndexRefreshFails(t *testing.T) {
 	testutil.FailErr(t, "remove fixture root", os.Remove(root))
 	catalog.InvalidateRoot(root)
 	testutil.WaitFor(t, 5*time.Second, func() bool {
-		status, statusErr := catalog.IndexStatus(ctx, "p", sourcecatalog.Root{ID: "r", Path: root})
+		status, statusErr := catalog.Trees.IndexStatus(ctx, "p", sourcecatalog.Root{ID: "r", Path: root})
 		return statusErr != nil || status.Error != ""
 	})
 	brief, err = provider.Brief(ctx, root)
@@ -112,7 +112,7 @@ func TestSharedProviderMeasuresEachRootIndependently(t *testing.T) {
 	}
 	catalog := sourcecatalog.New()
 	t.Cleanup(func() { testutil.FailErr(t, "drain catalog", catalog.Drain(context.Background())) })
-	provider := repoinfo.NewProvider(catalog, func(_ context.Context, path string) (repoinfo.CatalogRoot, bool, error) {
+	provider := repoinfo.NewProvider(catalog.Trees, func(_ context.Context, path string) (repoinfo.CatalogRoot, bool, error) {
 		return repoinfo.CatalogRoot{ProjectID: "project", RootID: "root"}, path == primary, nil
 	}, "")
 	t.Cleanup(func() { _ = provider.Close() })

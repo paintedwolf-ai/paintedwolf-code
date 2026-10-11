@@ -12,8 +12,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// Provenance is the ledger read surface tool handlers reach by
-// asserting tctx.SourceLedger.
+// Provenance reads retained source facts.
 type Provenance interface {
 	ResolveHead(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string) (sourceledger.BranchHead, error)
 	LatestFileEffect(ctx context.Context, projectID, fileID string) (sourceledger.Effect, bool, error)
@@ -31,7 +30,7 @@ const (
 // LedgerLocation resolves a path to its branch, root, and relative path.
 func LedgerLocation(tctx tools.ToolContext, absPath string) (branch sourcebranch.ID, rootID, rel string, ok bool) {
 	root, path, located := tctx.SourceLocation(absPath)
-	if tctx.ProjectID == "" || !located {
+	if tctx.Identity.ProjectID == "" || !located {
 		return sourcebranch.Trunk, "", "", false
 	}
 	branch, branchErr := tctx.SourceBranch(root.ID)
@@ -48,8 +47,8 @@ func ReadStamp(
 	absPath, servedSHA256 string,
 ) *surveyreceipt.SourceContext {
 	tctx.RecordSourcePath(absPath, api.NavigationEntryKindFile)
-	prov, ok := tctx.SourceLedger.(Provenance)
-	if !ok {
+	prov := tctx.Source.History.Files
+	if prov == nil {
 		return nil
 	}
 	branch, rootID, rel, ok := LedgerLocation(tctx, absPath)
@@ -57,11 +56,11 @@ func ReadStamp(
 		return nil
 	}
 	destination := url.URL{Scheme: "source", Host: rootID, Path: "/" + rel}
-	if tctx.WorkerBranchRoot != "" && tctx.WorkerJobID != "" {
-		destination.RawQuery = url.Values{"job_id": {tctx.WorkerJobID}}.Encode()
+	if tctx.Source.WorkerBranchRoot != "" && tctx.Identity.WorkerJobID != "" {
+		destination.RawQuery = url.Values{"job_id": {tctx.Identity.WorkerJobID}}.Encode()
 	}
 	stamp := &surveyreceipt.SourceContext{SHA256Short: ShortSHA(servedSHA256), Navigation: destination.String()}
-	head, err := prov.ResolveHead(ctx, tctx.ProjectID, branch, rootID, rel)
+	head, err := prov.ResolveHead(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
 	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
 		stamp.Note = "no recorded history for this path"
 		return stamp
@@ -76,8 +75,8 @@ func ReadStamp(
 	} else {
 		stamp.Note = "served bytes are newer than the last recorded state"
 	}
-	if latest, found, err := prov.LatestFileEffect(ctx, tctx.ProjectID, head.FileID); err == nil && found {
-		stamp.LastChange = ChangeOf(latest, tctx.SessionID)
+	if latest, found, err := prov.LatestFileEffect(ctx, tctx.Identity.ProjectID, head.FileID); err == nil && found {
+		stamp.LastChange = ChangeOf(latest, tctx.Identity.SessionID)
 	}
 	return stamp
 }
@@ -99,33 +98,33 @@ func ForeignChanges(
 	tctx tools.ToolContext,
 	absPath string,
 ) (changes []*surveyreceipt.SourceChange, total int, ok bool) {
-	prov, isProv := tctx.SourceLedger.(Provenance)
-	if !isProv || tctx.SessionID == "" {
+	prov := tctx.Source.History.Files
+	if prov == nil || tctx.Identity.SessionID == "" {
 		return nil, 0, false
 	}
 	branch, rootID, rel, located := LedgerLocation(tctx, absPath)
 	if !located {
 		return nil, 0, false
 	}
-	head, err := prov.ResolveHead(ctx, tctx.ProjectID, branch, rootID, rel)
+	head, err := prov.ResolveHead(ctx, tctx.Identity.ProjectID, branch, rootID, rel)
 	if err != nil {
 		return nil, 0, false
 	}
-	floor, found, err := prov.SessionActivityFloor(ctx, tctx.ProjectID, tctx.SessionID)
+	floor, found, err := prov.SessionActivityFloor(ctx, tctx.Identity.ProjectID, tctx.Identity.SessionID)
 	if err != nil || !found {
 		return nil, 0, false
 	}
-	page, err := prov.QueryFileEffects(ctx, tctx.ProjectID, head.FileID, floor, 0, 50)
+	page, err := prov.QueryFileEffects(ctx, tctx.Identity.ProjectID, head.FileID, floor, 0, 50)
 	if err != nil {
 		return nil, 0, false
 	}
 	for _, effect := range page.Effects {
-		if effect.BranchID != branch || effect.ActorClassFor(tctx.SessionID) == sourceledger.ActorYou {
+		if effect.BranchID != branch || effect.ActorClassFor(tctx.Identity.SessionID) == sourceledger.ActorYou {
 			continue
 		}
 		total++
 		if len(changes) < editForeignChangeRows {
-			changes = append(changes, ChangeOf(effect, tctx.SessionID))
+			changes = append(changes, ChangeOf(effect, tctx.Identity.SessionID))
 		}
 	}
 	return changes, total, len(changes) > 0

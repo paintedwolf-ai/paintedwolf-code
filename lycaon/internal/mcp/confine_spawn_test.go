@@ -17,11 +17,29 @@ import (
 )
 
 func TestPrepareStdioCommandRefusesUnsafeProjectRoot(t *testing.T) {
-	_, err := prepareStdioCommand(
-		context.Background(), "fixture", "/bin/echo", nil, stdioEnv{}, []string{string(filepath.Separator)},
-	)
-	if !errors.Is(err, confine.ErrWriteRootRefused) {
-		t.Fatalf("prepare error = %v, want ErrWriteRootRefused", err)
+	store := t.TempDir()
+	previous := confine.CredentialStorePaths()
+	confine.SetCredentialStorePathsSource(func() []string { return []string{store} })
+	t.Cleanup(func() { confine.SetCredentialStorePathsSource(func() []string { return previous }) })
+	alias := filepath.Join(t.TempDir(), "credential-alias")
+	testutil.FailErr(t, "create credential alias", os.Symlink(store, alias))
+	for _, root := range []struct{ name, path, code string }{
+		{"credential-store", store, confine.WriteRootCodeSecretStore},
+		{"credential-alias", alias, confine.WriteRootCodeSecretStore},
+		{"relative", "relative-project", confine.WriteRootCodeNotAbsolute},
+	} {
+		t.Run(root.name, func(t *testing.T) {
+			spawn, err := prepareStdioCommand(
+				context.Background(), "fixture", "/bin/echo", nil, stdioEnv{}, []string{root.path},
+			)
+			var refusal *confine.WriteRootRefusalError
+			if !errors.As(err, &refusal) || refusal.Code != root.code || refusal.Path != root.path {
+				t.Fatalf("prepare error = %v, want typed refusal %s for %s", err, root.code, root.path)
+			}
+			if spawn.cmd != nil || spawn.cleanup != nil || spawn.releaseEgress != nil {
+				t.Fatal("refused root prepared a command or acquired spawn resources")
+			}
+		})
 	}
 }
 

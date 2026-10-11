@@ -30,12 +30,12 @@ import (
 // roster and the workflow manifest registry are device-scoped and have no
 // session to resolve a turn view from.
 var extpacksActiveAllowlist = map[string]bool{
-	"lycaon/internal/app/load.go":                          true,
+	"lycaon/internal/app/configuration/catalog.go":         true,
 	"lycaon/internal/app/build_server.go":                  true,
-	"lycaon/internal/app/build_workflows.go":               true,
-	"lycaon/internal/app/build_infra.go":                   true,
+	"lycaon/internal/app/workflows/build.go":               true,
+	"lycaon/internal/app/execution/runtime.go":             true,
 	"lycaon/internal/session/catalog/effective_catalog.go": true,
-	"lycaon/internal/session/effective_skills.go":          true,
+	"lycaon/internal/session/profiles/effective_skills.go": true,
 	"lycaon/internal/session/catalog/catalog_view.go":      true,
 	"lycaon/internal/workflow/definition/manifest.go":      true,
 }
@@ -253,9 +253,9 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 				}(),
 				Desired: extpacks.EmptyDesired(),
 			})
-			m := session.NewManager(store.NewMemory(), nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+			m := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 			m.SetEffectiveCatalogDeps(root, boot, surfaces)
-			m.Catalog().SetCatalogViewCache(catalogview.NewCache(root, nil))
+			m.Catalog.SetCatalogViewCache(catalogview.NewCache(root, nil))
 
 			reg := project.NewMemoryRegistry()
 			m.SetProjectRegistry(reg)
@@ -274,8 +274,8 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 					contractcheck.FailErr(t, "SetTrustEnabled", err)
 				}
 			}
-			view := m.Catalog().ViewForProject(ctx, p.ID)
-			device := m.Catalog().DeviceView(ctx)
+			view := m.Catalog.ViewForProject(ctx, p.ID)
+			device := m.Catalog.DeviceView(ctx)
 			if view == nil || device == nil {
 				t.Fatal("nil view")
 			}

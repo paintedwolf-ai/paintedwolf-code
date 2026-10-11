@@ -6,14 +6,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestResearchSatisfiedWhenResearchPhaseSkipped(t *testing.T) {
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
-	vars := workflow.SetHostVar(nil, "phase_skipped.research", true)
+	vars := runstate.SetHostVar(nil, "phase_skipped.research", true)
 	ok, err := reg.Evaluate("research_satisfied", conditions.EvalContext{Vars: vars})
 	if err != nil || !ok {
 		t.Fatalf("research_satisfied aligned with skip = %v err=%v", ok, err)

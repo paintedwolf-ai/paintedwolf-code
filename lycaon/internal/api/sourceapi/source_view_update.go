@@ -10,14 +10,14 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleApplySourceViewIntent(w http.ResponseWriter, r *http.Request) {
+func (s *Trees) HandleApplySourceViewIntent(w http.ResponseWriter, r *http.Request) {
 	var request wire.SourceViewUpdate
 	if err := httpio.DecodeJSON(w, r, &request); err != nil {
 		s.responses.DecodeError(w, r, err)
 		return
 	}
 	if err := request.Validate(); err != nil {
-		s.writeSourceViewError(w, r, rejectedSourceIntent(err.Error()))
+		s.Views.writeSourceViewError(w, r, rejectedSourceIntent(err.Error()))
 		return
 	}
 	var id, expected string
@@ -27,21 +27,21 @@ func (s *Handler) HandleApplySourceViewIntent(w http.ResponseWriter, r *http.Req
 		id, expected = request.Comparison.OperationID, request.Comparison.ExpectedIntentRevision
 	}
 	if err := validateSourceCommandIdentity(id, expected); err != nil {
-		s.writeSourceViewError(w, r, err)
+		s.Views.writeSourceViewError(w, r, err)
 		return
 	}
-	view, r, release, ok := s.requestedSourceView(w, r)
+	view, r, release, ok := s.Views.requestedSourceView(w, r)
 	if !ok {
 		return
 	}
 	defer release()
-	if (request.Tree != nil) != (view.tree != nil) {
-		s.writeSourceViewError(w, r, rejectedSourceIntent("The command kind must match the source view."))
+	if (request.Tree != nil) != (view.navigation.tree != nil) {
+		s.Views.writeSourceViewError(w, r, rejectedSourceIntent("The command kind must match the source view."))
 		return
 	}
 	canonical, err := sourceViewCanonical(request)
 	if err != nil {
-		s.writeSourceViewError(w, r, err)
+		s.Views.writeSourceViewError(w, r, err)
 		return
 	}
 	var previous *sourcetree.Filtered
@@ -51,7 +51,7 @@ func (s *Handler) HandleApplySourceViewIntent(w http.ResponseWriter, r *http.Req
 		if view.ctx.Err() != nil {
 			return "", pagedview.ErrExpired
 		}
-		if view.tree != nil && !view.treeInitialized {
+		if view.navigation.tree != nil && !view.navigation.treeInitialized {
 			return "", &comparisonFailure{wire.ApiErrorCodeSourceViewPreparing, "The source tree is being prepared."}
 		}
 		var err error
@@ -68,20 +68,20 @@ func (s *Handler) HandleApplySourceViewIntent(w http.ResponseWriter, r *http.Req
 		previous.Close()
 	}
 	if changed {
-		if view.tree != nil {
-			s.retainSourceWork(view, view.tree.Prepare())
+		if view.navigation.tree != nil {
+			s.retainSourceWork(view, view.navigation.tree.Prepare())
 			s.refreshTreeReview(view)
 			s.refreshTreeFilter(view)
 		}
 		view.notifier.Notify(true)
 	}
 	if err != nil {
-		s.writeSourceViewError(w, r, err)
+		s.Views.writeSourceViewError(w, r, err)
 		return
 	}
 	state, err := view.snapshot(r.Context())
 	if err != nil {
-		s.writeSourceViewError(w, r, err)
+		s.Views.writeSourceViewError(w, r, err)
 		return
 	}
 	httpio.WriteJSON(w, http.StatusOK, state)
@@ -96,34 +96,34 @@ func (view *sourceView) applyComparisonIntent(r *http.Request, intent wire.Sourc
 	if view.state != "ready" {
 		return &comparisonFailure{wire.ApiErrorCodeSourceViewPreparing, "The source comparison is not ready."}
 	}
-	if view.comparison != nil {
-		projection, err := view.comparisonProjection(r.Context(), view.comparison, intent, view.comparisonBefore.SecretScreen, view.comparisonAfter.SecretScreen)
+	if view.comparisonData.comparison != nil {
+		projection, err := view.comparisonProjection(r.Context(), view.comparisonData.comparison, intent, view.comparisonData.comparisonBefore.SecretScreen, view.comparisonData.comparisonAfter.SecretScreen)
 		if err != nil {
 			return err
 		}
-		previous := view.projection
-		view.projection = projection
+		previous := view.comparisonData.projection
+		view.comparisonData.projection = projection
 		previous.release()
 	}
-	view.comparisonIntent = intent
+	view.comparisonData.comparisonIntent = intent
 	view.projectionRevision = uuid.NewString()
 	return nil
 }
 
-func (s *Handler) applySourceTreeCommand(r *http.Request, view *sourceView, basis *sourcetree.RulesBasis, command wire.SourceTreeCommand) (*sourcetree.Filtered, error) {
+func (s *Trees) applySourceTreeCommand(r *http.Request, view *sourceView, basis *sourcetree.RulesBasis, command wire.SourceTreeCommand) (*sourcetree.Filtered, error) {
 	if err := command.Validate(); err != nil {
 		return nil, rejectedSourceIntent(err.Error())
 	}
 	switch {
 	case command.Toggle != nil:
-		return nil, view.tree.Toggle(r.Context(), basis, treeAddress(command.Toggle.Address), command.Toggle.CollapseDescendants)
+		return nil, view.navigation.tree.Toggle(r.Context(), basis, treeAddress(command.Toggle.Address), command.Toggle.CollapseDescendants)
 	case command.Disclose != nil:
 		if len(command.Disclose.Disclosures) == 0 || len(command.Disclose.Disclosures) > 2048 {
 			return nil, pagedview.ErrRange
 		}
-		return nil, view.tree.Disclose(r.Context(), basis, treeDisclosures(command.Disclose.Disclosures)...)
+		return nil, view.navigation.tree.Disclose(r.Context(), basis, treeDisclosures(command.Disclose.Disclosures)...)
 	case command.Reveal != nil:
-		return nil, view.tree.Reveal(r.Context(), treeAddress(command.Reveal.Address))
+		return nil, view.navigation.tree.Reveal(r.Context(), treeAddress(command.Reveal.Address))
 	case command.Filter != nil:
 		if len(command.Filter.Query) > 4096 {
 			return nil, pagedview.ErrRange

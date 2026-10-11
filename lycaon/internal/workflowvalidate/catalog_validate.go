@@ -10,8 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/rules"
 	"github.com/lycaon/lycaon/internal/vocabulary"
-	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -75,7 +75,7 @@ func ValidateCatalog(ctx context.Context, opts CatalogValidateOptions) ([]api.Co
 				continue
 			}
 			// Validate reachability before orphan phases are pruned.
-			for _, d := range workflow.ValidatePhaseReachability(m) {
+			for _, d := range workflowvalidation.ValidatePhaseReachability(m) {
 				if d.Field == "" {
 					d.Field = p
 				} else {
@@ -160,21 +160,21 @@ func validateOne(
 		}
 		return path + ": " + field
 	}
-	for _, d := range workflow.ValidateComposeManifest(condReg, shippedObligationSpecs(), m) {
+	for _, d := range workflowvalidation.ValidateComposeManifest(condReg, shippedObligationSpecs(), m) {
 		d.Field = prefix(d.Field)
 		out = append(out, d)
 	}
-	for _, d := range workflow.ValidatePhaseReachability(m) {
+	for _, d := range workflowvalidation.ValidatePhaseReachability(m) {
 		d.Field = prefix(d.Field)
 		out = append(out, d)
 	}
 	moduleRoot := opts.ConfigRoot
-	for _, d := range workflow.ValidateAllowedAgents(agents, m.AllowedAgents) {
+	for _, d := range workflowvalidation.ValidateAllowedAgents(agents, m.AllowedAgents) {
 		d.Field = prefix(d.Field)
 		out = append(out, d)
 	}
 	projectDir := opts.ProjectDir
-	for _, d := range workflow.ValidateRulesPaths(moduleRoot, projectDir, m.Rules) {
+	for _, d := range workflowvalidation.ValidateRulesPaths(moduleRoot, projectDir, m.Rules) {
 		d.Field = prefix(d.Field)
 		out = append(out, d)
 	}

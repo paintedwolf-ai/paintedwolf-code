@@ -661,3 +661,16 @@ func TestCompileNegatedFreeTextUnderFlagsLeavesExclusionToTheRowPass(t *testing.
 		t.Fatal("row with lowercase beta must be dropped")
 	}
 }
+
+func TestCompileExplicitDependencyRequestCoversCodeFilesAndSymbols(t *testing.T) {
+	ctx := testCompileContext()
+	ctx.DependencyPathPatterns = []string{"node_modules", "dist"}
+	ctx.IncludeDependencies = true
+	plan, err := CompileQuery("SharedName", ctx)
+	if err != nil {
+		t.Fatalf("compile dependency search: %v", err)
+	}
+	if !plan.Code.IncludeDependencies || !plan.Symbol.IncludeDependencies || len(plan.Code.FileExcludeDirs) != 0 || len(plan.Code.LineExcludeDirs) != 0 || len(plan.Symbol.ExcludeDirs) != 0 || plan.Interpretation.DependencyTreesExcluded {
+		t.Fatalf("explicit dependency request retained exclusions: %+v", plan)
+	}
+}

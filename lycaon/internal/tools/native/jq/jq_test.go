@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,19 +26,19 @@ func testBoundary(t *testing.T) *sandbox.Boundary {
 		ProjectRootRequired: true,
 		RejectSymlinkEscape: true,
 	}, []sandbox.ToolProfile{{
-		ID:    tools.DefaultToolProfileID,
+		ID:    toolprofiles.DefaultToolProfileID,
 		Tools: map[string]bool{ToolName: true},
 	}})
 }
 
 func testCtx(dir string) tools.ToolContext {
 	return tools.ToolContext{
-		Roots:              []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID:       "r1",
-		Agent:              tools.DefaultToolProfileID,
-		SessionID:          "test-session",
-		RepoFileCount:      100,
-		RepoFileCountKnown: true,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID:       "r1",
+			RepoFileCount:      100,
+			RepoFileCountKnown: true},
+		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID,
+			SessionID: "test-session"},
 	}
 }
 
@@ -214,7 +216,7 @@ func TestJqInvalidJSONRejects(t *testing.T) {
 	writeJSONFile(t, dir, "bad.json", `{not json`)
 
 	_, err := runJq(t, dir, map[string]any{"path": "bad.json"})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "JQ_PARSE" {
 		t.Fatalf("err = %v want JQ_PARSE", err)
 	}
@@ -270,7 +272,7 @@ func TestJqPathDenied(t *testing.T) {
 		testutil.FailErr(t, "write", err)
 	}
 	_, err := runJq(t, dir, map[string]any{"path": ".git/config", "query": ".core"})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "JQ_PATH_DENIED" {
 		t.Fatalf("err = %v want JQ_PATH_DENIED", err)
 	}
@@ -281,7 +283,7 @@ func TestJqInvalidQueryRejects(t *testing.T) {
 	writeJSONFile(t, dir, "x.json", `1`)
 
 	_, err := runJq(t, dir, map[string]any{"path": "x.json", "query": ".["})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "JQ_QUERY_INVALID" {
 		t.Fatalf("err = %v want JQ_QUERY_INVALID", err)
 	}
@@ -290,7 +292,7 @@ func TestJqInvalidQueryRejects(t *testing.T) {
 func TestJqPathRequired(t *testing.T) {
 	dir := t.TempDir()
 	_, err := runJq(t, dir, map[string]any{"path": "", "query": "."})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "JQ_PATH_REQUIRED" {
 		t.Fatalf("err = %v want JQ_PATH_REQUIRED", err)
 	}
@@ -299,7 +301,7 @@ func TestJqPathRequired(t *testing.T) {
 func TestJqPathEscape(t *testing.T) {
 	dir := t.TempDir()
 	_, err := runJq(t, dir, map[string]any{"path": "../outside.json"})
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if err == nil || !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
 		t.Fatalf("err = %v want SURVEY_PATH_ESCAPE", err)
 	}

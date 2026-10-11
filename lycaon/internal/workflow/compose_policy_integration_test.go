@@ -15,7 +15,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -33,13 +36,13 @@ phases:
     activity_label: Test phase
     complete_when: plan_stub_valid
 `
-	_, err := c.Compose(context.Background(), ComposeRequest{
+	_, err := c.Compose(context.Background(), workflowcomposition.ComposeRequest{
 		SessionID:      "sess-vet",
 		ManifestYAML:   []byte(manifest),
 		SessionPosture: wire.SessionPostureVet,
 		CreatedBy:      "coordinator",
 	})
-	var vf *ComposeValidationFailed
+	var vf *workflowcomposition.ComposeValidationFailed
 	if !errors.As(err, &vf) {
 		t.Fatalf("err = %v", err)
 	}
@@ -68,13 +71,13 @@ phases:
     activity_label: Test phase
     complete_when: plan_stub_valid
 `
-	_, err := c.Compose(context.Background(), ComposeRequest{
+	_, err := c.Compose(context.Background(), workflowcomposition.ComposeRequest{
 		SessionID:      "sess-orch",
 		ManifestYAML:   []byte(manifest),
 		SessionPosture: wire.SessionPostureOrchestrate,
 		CreatedBy:      "coordinator",
 	})
-	var vf *ComposeValidationFailed
+	var vf *workflowcomposition.ComposeValidationFailed
 	if !errors.As(err, &vf) {
 		t.Fatalf("err = %v", err)
 	}
@@ -94,10 +97,10 @@ func TestComposeTemplateThenStartRun(t *testing.T) {
 	testutil.FailErr(t, "build conditions registry", err)
 	agents := orchestration.NewMemoryAgentRegistry()
 	_ = orchestration.LoadRequiredAgentRegistry(context.Background(), agents)
-	policy, err := LoadComposePolicy()
-	testutil.FailErr(t, "LoadComposePolicy failed", err)
-	templates, err := LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
-	testutil.FailErr(t, "LoadTemplatesFromDir failed", err)
+	policy, err := workflowcomposition.LoadComposePolicy()
+	testutil.FailErr(t, "workflowcomposition.LoadComposePolicy failed", err)
+	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
+	testutil.FailErr(t, "workflowcomposition.LoadTemplatesFromDir failed", err)
 
 	sqlDB := testdbfixture.Open(t, "template.db")
 
@@ -110,15 +113,15 @@ func TestComposeTemplateThenStartRun(t *testing.T) {
 		Posture: wire.SessionPostureSpec,
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "sessionStore.Create failed", err)
-	wfSessionStore := NewSessionWorkflowSQLStore(sqlDB)
-	composer := &Composer{
+	wfSessionStore := workflowdrafts.NewSQL(sqlDB)
+	composer := &workflowcomposition.Composer{
 		SessionStore: wfSessionStore,
 		Registry:     reg,
 		Agents:       agents,
 		Policy:       policy,
 		Templates:    templates,
 	}
-	result, err := composer.ComposeFromTemplate(context.Background(), ComposeFromTemplateRequest{
+	result, err := composer.ComposeFromTemplate(context.Background(), workflowcomposition.ComposeFromTemplateRequest{
 		SessionID:      sess.ID,
 		TemplateID:     "hotfix-template",
 		Params:         map[string]any{"workflow_id": "my-hotfix"},
@@ -132,8 +135,8 @@ func TestComposeTemplateThenStartRun(t *testing.T) {
 
 	manifestRegistry, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs failed", err)
-	mgr := NewManager(NewSQLStore(sqlDB), sessionStore, manifestRegistry, nil)
-	mgr.Resolver = ManifestResolver{SessionStore: wfSessionStore}
+	mgr := NewManager(workflowpersistence.New(sqlDB), sessionStore, manifestRegistry, nil)
+	mgr.Resolver.SessionStore = wfSessionStore
 	WireBlueprintDepsForTest(mgr, dir)
 	run, err := startRun(context.Background(), mgr, sess.ID, "my-hotfix", "1.0.0")
 	testutil.FailErr(t, "startRun failed", err)

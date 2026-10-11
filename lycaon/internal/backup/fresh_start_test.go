@@ -58,7 +58,7 @@ func TestFreshStartPreservesARecoveryCopyAndDeviceConfiguration(t *testing.T) {
 		}
 	}
 	testutil.FailErr(t, "close live store", store.Close())
-	testutil.FailErr(t, "apply fresh start", backup.ApplyPending(configDir))
+	testutil.FailErr(t, "apply fresh start", backup.ApplyPending(t.Context(), configDir))
 
 	fresh := testdbfixture.OpenPath(t, dbPath)
 	assertProjectCount(t, ctx, fresh, 0)
@@ -98,7 +98,7 @@ func TestFreshStartCanReplaceAnIncompatibleStore(t *testing.T) {
 	if string(recovered) != string(refused) {
 		t.Fatalf("recovery copy=%q want %q", recovered, refused)
 	}
-	testutil.FailErr(t, "apply fresh start", backup.ApplyPending(configDir))
+	testutil.FailErr(t, "apply fresh start", backup.ApplyPending(t.Context(), configDir))
 
 	fresh := testdbfixture.OpenPath(t, dbPath)
 	assertProjectCount(t, ctx, fresh, 0)

@@ -160,3 +160,27 @@ func TestSealRefusesAReleaseMissingRenderedGuidance(t *testing.T) {
 		t.Fatal("sealed a version whose rendered guidance the release lacks")
 	}
 }
+
+func TestRunSealsManifestOnlyReleaseWithoutFeedbackDirectory(t *testing.T) {
+	repo := t.TempDir()
+	pack := "lycaon/config/packs/painted-wolf/bugbash"
+	manifest, err := os.ReadFile("../../config/packs/painted-wolf/bugbash/archive/bugbash/1.0.0/workflow.yaml")
+	testutil.FailErr(t, "read released bugbash", err)
+	target := filepath.Join(repo, filepath.FromSlash(pack), "workflows", "bugbash", "workflow.yaml")
+	testutil.FailErr(t, "create released workflow directory", os.MkdirAll(filepath.Dir(target), 0755))
+	testutil.FailErr(t, "write released manifest", os.WriteFile(target, manifest, 0600))
+	gittest.InitCommit(t, repo, "manifest-only release")
+	gittest.Run(t, repo, "tag", "v1.0.1")
+	args := []string{"painted-wolf/bugbash", "bugbash", "v1.0.1"}
+	var stdout, stderr bytes.Buffer
+	if code := run(t.Context(), repo, args, &stdout, &stderr); code != 0 {
+		t.Fatalf("seal manifest-only release exit %d: %s", code, stderr.String())
+	}
+	if code := run(t.Context(), repo, append([]string{"--check"}, args...), &stdout, &stderr); code != 0 {
+		t.Fatalf("check manifest-only release exit %d: %s", code, stderr.String())
+	}
+	stderr.Reset()
+	if code := run(t.Context(), repo, []string{"--check", "painted-wolf/bugbash", "bugbash", "missing-tag"}, &stdout, &stderr); code != 1 {
+		t.Fatalf("unknown release tag exit %d: %s", code, stderr.String())
+	}
+}

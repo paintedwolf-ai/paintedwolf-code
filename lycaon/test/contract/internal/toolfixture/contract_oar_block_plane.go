@@ -1,6 +1,8 @@
 package toolfixture
 
 import (
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+
 	"path/filepath"
 	"sync"
 	"testing"
@@ -10,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolhost"
-	"github.com/lycaon/lycaon/internal/tools"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -29,8 +30,8 @@ func WireContractBlockPlane(t *testing.T, rt *toolhost.Runtime, rejectFmt *guida
 	}
 	p := contractStockOARPipeline(t)
 	renderer := oar.NewRenderer(rejectFmt, nil)
-	bp := &tools.BlockPlane{Pipeline: p, Renderer: renderer}
-	rt.Executor.SetBlockPlane(bp)
+	bp := &toolfeedback.BlockPlane{Pipeline: p, Renderer: renderer}
+	rt.Executor.Rejections.SetBlockPlane(bp)
 }
 
 func contractStockOARPipeline(t *testing.T) *oar.GuardPipeline {

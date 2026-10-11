@@ -76,7 +76,7 @@ phases:
         - kind: scan
           categories: [security]
           full: true
-          gate: complete
+          gate: results_available
     complete_when: gates_satisfied
     gates: ["obligation_settled:scan"]
     next: plan
@@ -143,6 +143,7 @@ phases:
       reconciles_phase: claims
       followup_attempts: 2
       required_agents: [skeptic]
+      assignment_binding: explicit
       coverage_reviewers: [skeptic]
       if_spawnable: [web-researcher]
       verdict_schema:

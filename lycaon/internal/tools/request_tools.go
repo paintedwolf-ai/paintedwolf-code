@@ -3,6 +3,8 @@ package tools
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 	"sort"
 	"strings"
@@ -63,23 +65,23 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 	need, _ := args["need"].(string)
 	need = strings.TrimSpace(need)
 	if need == "" {
-		return "", RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "need is required"})
+		return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "need is required"})
 	}
 	need, cursor, err := turnload.ParseDiscoveryNeed(need)
 	if err != nil {
-		return "", RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": err.Error()})
+		return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": err.Error()})
 	}
 	browsing := cursor != ""
 	started := time.Now()
-	profileID := strings.TrimSpace(tctx.Agent)
+	profileID := strings.TrimSpace(tctx.Identity.Agent)
 	if profileID == "" {
-		profileID = DefaultToolProfileID
+		profileID = toolprofiles.DefaultToolProfileID
 	}
-	plan := tctx.TurnToolPlan
-	constrained := strings.TrimSpace(tctx.TurnSurfaceID) != "" || plan.Compiled()
-	requestable := liveRequestableMetas(t.deps, t.reg, profileID, tctx.ToolAccess, plan, constrained)
+	plan := tctx.Turn.TurnToolPlan
+	constrained := strings.TrimSpace(tctx.Turn.TurnSurfaceID) != "" || plan.Compiled()
+	requestable := liveRequestableMetas(t.deps, t.reg, profileID, tctx.Turn.ToolAccess, plan, constrained)
 	cards := make([]turnload.ToolCard, 0, len(requestable))
-	active := t.deps.Activation.Active(tctx.SessionID)
+	active := t.deps.Activation.Active(tctx.Identity.SessionID)
 	for _, meta := range requestable {
 		if active[meta.Name] {
 			continue
@@ -106,7 +108,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 		for _, meta := range requestable {
 			available = append(available, meta.Name)
 		}
-		return "", formatRequestToolsReject(t.deps, profileID, need, available)
+		return "", FormatRequestToolsReject(t.deps, profileID, need, available)
 	}
 	if browsing || outcome.Failure != "" {
 		status := "ranking_unavailable"
@@ -129,7 +131,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 		return "", err
 	}
 	if !browsing && len(result.Loaded)+len(result.AlreadyLoaded) > 0 {
-		t.deps.Activation.Activate(tctx.SessionID, result.Loaded, need)
+		t.deps.Activation.Activate(tctx.Identity.SessionID, result.Loaded, need)
 		result.Note = "Loaded schemas are on the next model call; this turn continues automatically."
 	}
 	if t.deps.Record != nil {
@@ -160,7 +162,7 @@ func (t requestTools) activationResult(ctx context.Context, tctx ToolContext, pr
 		registered = append(registered, turnload.ToolCard{Name: meta.Name})
 	}
 	names = append(names, turnload.ExactNames(outcome.Need, registered)...)
-	active := t.deps.Activation.Active(tctx.SessionID)
+	active := t.deps.Activation.Active(tctx.Identity.SessionID)
 	result := turnload.RequestToolsResult{Need: outcome.Need}
 	seen := make(map[string]bool, len(names))
 	for _, name := range names {
@@ -180,9 +182,9 @@ func (t requestTools) activationResult(ctx context.Context, tctx ToolContext, pr
 			continue
 		case active[name]:
 			result.AlreadyLoaded = append(result.AlreadyLoaded, name)
-		case t.deps.Boundary.ToolDeferred(profileID, name, tctx.ToolAccess):
+		case t.deps.Boundary.ToolDeferred(profileID, name, tctx.Turn.ToolAccess):
 			result.Loaded = append(result.Loaded, name)
-		case t.deps.Boundary.AssertToolAllowed(ctx, profileID, name, tctx.ToolAccess) == nil:
+		case t.deps.Boundary.AssertToolAllowed(ctx, profileID, name, tctx.Turn.ToolAccess) == nil:
 			result.AlreadyLoaded = append(result.AlreadyLoaded, name)
 		}
 	}
@@ -196,13 +198,13 @@ func (t requestTools) activationResult(ctx context.Context, tctx ToolContext, pr
 	return result
 }
 
-func formatRequestToolsReject(deps RequestToolsDeps, profileID, need string, available []string) error {
+func FormatRequestToolsReject(deps RequestToolsDeps, profileID, need string, available []string) error {
 	sort.Strings(available)
 	var fmtr *guidance.StaticRejectFormatter
 	if deps.RejectFmt != nil {
 		fmtr = deps.RejectFmt()
 	}
-	return FormatDecisionReject("TOOL_REQUEST_UNMATCHED", map[string]any{
+	return toolrejection.FormatDecisionReject("TOOL_REQUEST_UNMATCHED", map[string]any{
 		"need":      need,
 		"available": available,
 		"profile":   profileID,

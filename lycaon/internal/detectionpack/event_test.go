@@ -265,11 +265,17 @@ detection:
 		ID: "native", Enabled: true, Rules: []Rule{boundaryRule, toolRule},
 	}}}))
 	action := hitl.ProposedAction{
-		Tool:         "write",
-		Contained:    hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy},
-		SocketGrants: []confine.SocketGrant{{ApprovedPath: "/tmp/db.sock", ResolvedPath: "/tmp/db.sock"}},
-		SocketScopes: []string{"durable"},
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy},
+},
+Sockets: hitl.ActionSockets{
+SocketGrants: []confine.SocketGrant{{ApprovedPath: "/tmp/db.sock", ResolvedPath: "/tmp/db.sock"}},
+SocketScopes: []string{"durable"},
+},
+}
 	match, ok := source.MatchAction(action, "strict")
 	if !ok || match.RuleID == "" {
 		t.Fatalf("non-command action was skipped: match=%+v ok=%v", match, ok)
@@ -463,9 +469,16 @@ detection:
 	}}}))
 	action := func(chat, command string) hitl.ProposedAction {
 		return hitl.ProposedAction{
-			Tool: "command", Args: map[string]any{"command": command}, ProjectDir: "/project",
-			SessionID: chat, RootSessionID: chat,
-		}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": command},
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/project",
+SessionID: chat,
+RootSessionID: chat,
+},
+}
 	}
 	firstAction := action("chat-1", "aws iam delete-user --user-name first")
 	first, ok := source.MatchAction(firstAction, "strict")

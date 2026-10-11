@@ -60,7 +60,7 @@ func TestFact11ProviderCanSetObservationsAndRunsOnce(t *testing.T) {
 		}()
 	}
 	workers.Wait()
-	if calls.Load() != 1 || gc.RepeatCount != 7 {
-		t.Fatalf("[OAR-FACT-11] calls=%d observation=%d", calls.Load(), gc.RepeatCount)
+	if calls.Load() != 1 || gc.Counters.RepeatCount != 7 {
+		t.Fatalf("[OAR-FACT-11] calls=%d observation=%d", calls.Load(), gc.Counters.RepeatCount)
 	}
 }

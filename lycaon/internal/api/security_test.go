@@ -77,7 +77,7 @@ func TestCORSExposesClientResponseMetadata(t *testing.T) {
 func TestCORSDevModeIgnoredWithoutDevFlag(t *testing.T) {
 	t.Setenv("LYCAON_DEV_CORS", "1")
 
-	srv := NewServer(requiredTestDeps(t, Dependencies{Store: store.NewMemory(), Projects: project.NewMemoryRegistry()}), slog.Default(), TestAPIToken)
+	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory(), Projects: project.NewMemoryRegistry()}}), slog.Default(), TestAPIToken)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodOptions, "/health", nil)
 	req.Header.Set("Origin", "http://evil.example")
@@ -94,7 +94,7 @@ func TestCORSDevModeAllowsAnyOrigin(t *testing.T) {
 	t.Setenv("LYCAON_DEV_CORS", "1")
 	t.Setenv("LYCAON_DEV", "1")
 
-	srv := NewServer(requiredTestDeps(t, Dependencies{Store: store.NewMemory(), Projects: project.NewMemoryRegistry()}), slog.Default(), TestAPIToken)
+	srv := NewServer(requiredTestDeps(t, Dependencies{Core: CoreDependencies{Store: store.NewMemory(), Projects: project.NewMemoryRegistry()}}), slog.Default(), TestAPIToken)
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodOptions, "/health", nil)
 	req.Header.Set("Origin", "http://evil.example")

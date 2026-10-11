@@ -32,7 +32,7 @@ func TestLoopContinuesAfterTaskEnqueue(t *testing.T) {
 	}
 	reg := tools.NewStubRegistry()
 	reg.Register("task", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
-		tctx.Out.Dispatch = &api.WorkerDispatch{WorkerID: "job-1"}
+		tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: "job-1"}
 		return `{"job_id":"job-1","status":"enqueued"}`, nil
 	})
 	client := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
@@ -44,11 +44,11 @@ func TestLoopContinuesAfterTaskEnqueue(t *testing.T) {
 		},
 	}})
 	deps := promptloop.StoreDeps(store)
-	deps.LoadedTools = workersLoaded
-	deps.LLM = client
-	deps.Tools = reg
-	deps.CoordinatorFrame = investigateCoordinatorContext()
-	deps.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
+	deps.Context.LoadedTools = workersLoaded
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
+	deps.Projection.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
 		_, err := store.UpdateMessage(ctx, sess.ID, messageID, msg)
 		return err
 	}
@@ -58,7 +58,9 @@ func TestLoopContinuesAfterTaskEnqueue(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	if result.LastAssistantContent != "continued" || result.TasksDispatchedCount != 1 {
@@ -87,8 +89,8 @@ func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 	var taskCalls int
 	reg.Register("task", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
 		taskCalls++
-		if tctx.Out != nil {
-			tctx.Out.Dispatch = &api.WorkerDispatch{WorkerID: fmt.Sprintf("job-%d", taskCalls)}
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: fmt.Sprintf("job-%d", taskCalls)}
 		}
 		return fmt.Sprintf(`{"job_id":"job-%d","status":"enqueued"}`, taskCalls), nil
 	})
@@ -104,15 +106,15 @@ func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 	}})
 	var toolMsgCount int
 	deps := promptloop.StoreDeps(store)
-	deps.LoadedTools = workersLoaded
-	deps.LLM = client
-	deps.Tools = reg
-	deps.CoordinatorFrame = investigateCoordinatorContext()
-	deps.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
+	deps.Context.LoadedTools = workersLoaded
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
+	deps.Projection.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
 		_, err := store.UpdateMessage(ctx, sess.ID, messageID, msg)
 		return err
 	}
-	deps.InFlightWorkerRosterNote = func(ctx context.Context, _ *api.Session) string {
+	deps.Tools.InFlightWorkerRosterNote = func(ctx context.Context, _ *api.Session) string {
 		guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 		note, err := guidance.RenderWorkerInFlightRoster(ctx, guidance.BuildWorkerRosterLines([]api.WorkerTask{
 			{ID: "job-1", AgentType: "repo-researcher", Status: api.WorkerStatusPending},
@@ -130,7 +132,9 @@ func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	if result.LastAssistantContent != "continued" {
@@ -175,7 +179,7 @@ func TestLoopBatchTaskAndReadSameTurn(t *testing.T) {
 
 	reg := tools.NewStubRegistry()
 	reg.Register("task", func(_ context.Context, _ map[string]any, tctx tools.ToolContext) (string, error) {
-		tctx.Out.Dispatch = &api.WorkerDispatch{WorkerID: "job-1"}
+		tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: "job-1"}
 		return `{"job_id":"job-1","status":"enqueued"}`, nil
 	})
 	reg.Register("read", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
@@ -191,11 +195,11 @@ func TestLoopBatchTaskAndReadSameTurn(t *testing.T) {
 		},
 	}})
 	deps := promptloop.StoreDeps(store)
-	deps.LoadedTools = workersLoaded
-	deps.LLM = client
-	deps.Tools = reg
-	deps.CoordinatorFrame = investigateCoordinatorContext()
-	deps.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
+	deps.Context.LoadedTools = workersLoaded
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.CoordinatorFrame = investigateCoordinatorContext()
+	deps.Projection.UpdateMessage = func(_ context.Context, _, messageID string, msg api.Message) error {
 		_, err := store.UpdateMessage(ctx, sess.ID, messageID, msg)
 		return err
 	}
@@ -206,7 +210,9 @@ func TestLoopBatchTaskAndReadSameTurn(t *testing.T) {
 		History:    userHistory("go"),
 		UserPrompt: "go",
 		ProfileID:  "coordinator",
-		ToolCtx:    tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	if result.LastAssistantContent != "continued" || result.TasksDispatchedCount != 1 {
@@ -246,15 +252,15 @@ func TestLoopReloadsHistoryAfterToolBatchCompaction(t *testing.T) {
 	})
 	compactCalls := 0
 	deps := promptloop.StoreDeps(store)
-	deps.LoadedTools = workersLoaded
-	deps.LLM = client
-	deps.Policy = &recordingToolPolicy{}
-	deps.Tools = reg
-	deps.CompactOversizedToolResults = func(context.Context, string, *api.Session) error {
+	deps.Context.LoadedTools = workersLoaded
+	deps.Model.LLM = client
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Context.Tools = reg
+	deps.Tools.CompactOversizedToolResults = func(context.Context, string, *api.Session) error {
 		compactCalls++
 		return nil
 	}
-	deps.ReloadHistory = func(ctx context.Context, sessionID string, sess *api.Session, surfaceID string) ([]api.Message, error) {
+	deps.Tools.ReloadHistory = func(ctx context.Context, sessionID string, sess *api.Session, surfaceID string) ([]api.Message, error) {
 		return store.GetMessages(ctx, sessionID)
 	}
 	loop := promptloop.NewPromptLoopForTest(deps)
@@ -263,7 +269,9 @@ func TestLoopReloadsHistoryAfterToolBatchCompaction(t *testing.T) {
 		Session:   sess,
 		History:   userHistory("go"),
 		ProfileID: "coordinator",
-		ToolCtx:   tools.ToolContext{SessionID: sess.ID},
+		ToolCtx: tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: sess.ID},
+		},
 	})
 	testutil.FailErr(t, "loop.Run failed", err)
 	if result.LastAssistantContent != "done" {

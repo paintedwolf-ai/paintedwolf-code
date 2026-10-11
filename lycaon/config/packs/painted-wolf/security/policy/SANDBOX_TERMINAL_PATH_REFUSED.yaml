@@ -1,0 +1,37 @@
+oar: '1.0'
+id: SANDBOX_TERMINAL_PATH_REFUSED
+kind: policy
+anchor: tool.post_invoke
+selector:
+  tool: [command, verify, command_output]
+requires:
+  profiles: [tool]
+  facts:
+    - paintedwolf.confine_applied
+    - paintedwolf.failed_stages
+    - paintedwolf.process_running
+    - paintedwolf.refused_terminal_read_paths
+    - paintedwolf.refused_terminal_write_paths
+when: >-
+  paintedwolf.confine_applied
+  && (size(paintedwolf.refused_terminal_read_paths) > 0 || size(paintedwolf.refused_terminal_write_paths) > 0)
+  && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
+effect: warn
+copy:
+  what: The sandbox refused terminal paths. Reads {{ paintedwolf.refused_terminal_read_paths }}; writes {{ paintedwolf.refused_terminal_write_paths }}.
+  cause: These paths belong to the host control plane; no approval opens them.
+  why: Capability requests cannot authorize access to the host's own authority.
+  fix: Use `@scratch` for working files. If host data is required, ask the user to copy it into an attached folder. Stop an unfinished job with `command_stop` if it cannot continue.
+  instead: Continue without these paths; do not request read_path, write_root, or host_execution to bypass this refusal
+x-paintedwolf-category: control-plane
+x-paintedwolf-emit: guard:sandbox
+x-paintedwolf-message: the sandbox refused a terminal control-plane path
+x-paintedwolf-scenarios:
+  - id: control_plane_read
+    vars:
+      tool: command
+      refused_terminal_read_paths: [/state/store.db]
+      refused_terminal_write_paths: []
+    expect_contains:
+      - 'Code: SANDBOX_TERMINAL_PATH_REFUSED'
+      - no approval

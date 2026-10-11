@@ -231,7 +231,7 @@ func TestStageAcceptsTheDurableSet(t *testing.T) {
 		SchemaVersion: db.SchemaVersion,
 	})
 	testutil.FailErr(t, "Stage durable set", err)
-	testutil.FailErr(t, "ApplyPending", ApplyPending(cfg))
+	testutil.FailErr(t, "ApplyPending", ApplyPending(t.Context(), cfg))
 	for _, rel := range []string{"store.db", "limits.yaml", "app-state-v1/nested/prefs.json"} {
 		if _, err := os.Stat(filepath.Join(cfg, filepath.FromSlash(rel))); err != nil {
 			t.Errorf("durable file %q not installed: %v", rel, err)
@@ -259,7 +259,7 @@ func TestApplyPendingRefusesAMarkerNamingAControlPlaneFile(t *testing.T) {
 	testutil.FailErr(t, "marshal marker", err)
 	testutil.FailErr(t, "write marker", os.WriteFile(PendingMarkerPath(cfg), raw, 0o600))
 
-	if err := ApplyPending(cfg); err == nil {
+	if err := ApplyPending(t.Context(), cfg); err == nil {
 		t.Fatal("ApplyPending accepted a marker naming mcp.yaml")
 	}
 	if _, err := os.Stat(filepath.Join(cfg, "mcp.yaml")); err == nil {
@@ -288,7 +288,7 @@ func TestApplyPendingRefusesProgressOutsidePendingOperations(t *testing.T) {
 	testutil.FailErr(t, "marshal marker", err)
 	testutil.FailErr(t, "write marker", os.WriteFile(PendingMarkerPath(cfg), raw, 0o600))
 
-	if err := ApplyPending(cfg); err == nil {
+	if err := ApplyPending(t.Context(), cfg); err == nil {
 		t.Fatal("ApplyPending accepted progress outside the pending operations")
 	}
 	if _, err := os.Stat(filepath.Join(cfg, "limits.yaml")); err == nil {
@@ -314,7 +314,7 @@ func TestApplyPendingRequiresAnOperation(t *testing.T) {
 	testutil.FailErr(t, "marshal marker", err)
 	testutil.FailErr(t, "write marker", os.WriteFile(PendingMarkerPath(cfg), raw, 0o600))
 
-	err = ApplyPending(cfg)
+	err = ApplyPending(t.Context(), cfg)
 	if err == nil || !strings.Contains(err.Error(), "unknown pending operation") {
 		t.Fatalf("ApplyPending error = %v, want missing operation rejection", err)
 	}
@@ -330,7 +330,7 @@ func TestApplyPendingRequiresConfiguredStoreFilename(t *testing.T) {
 	raw, err := json.Marshal(marker)
 	testutil.FailErr(t, "marshal missing-target marker", err)
 	testutil.FailErr(t, "write missing-target marker", os.WriteFile(PendingMarkerPath(cfg), raw, 0o600))
-	if err := ApplyPending(cfg); err == nil || !strings.Contains(err.Error(), "invalid configured store filename") {
+	if err := ApplyPending(t.Context(), cfg); err == nil || !strings.Contains(err.Error(), "invalid configured store filename") {
 		t.Fatalf("ApplyPending error = %v, want missing store target rejection", err)
 	}
 }
@@ -361,7 +361,7 @@ func TestApplyPendingRefusesStagingOutsideConfigRoot(t *testing.T) {
 	testutil.FailErr(t, "marshal marker", err)
 	testutil.FailErr(t, "write marker", os.WriteFile(PendingMarkerPath(cfg), raw, 0o600))
 
-	if err := ApplyPending(cfg); err == nil {
+	if err := ApplyPending(t.Context(), cfg); err == nil {
 		t.Fatal("ApplyPending accepted staging outside the config root")
 	}
 	_, err = os.Stat(externalFile)
@@ -383,7 +383,7 @@ func TestApplyPendingRefusesMismatchedTransactionDirectories(t *testing.T) {
 	testutil.FailErr(t, "marshal marker", err)
 	testutil.FailErr(t, "write marker", os.WriteFile(PendingMarkerPath(cfg), raw, 0o600))
 
-	if err := ApplyPending(cfg); err == nil {
+	if err := ApplyPending(t.Context(), cfg); err == nil {
 		t.Fatal("ApplyPending accepted mismatched transaction directories")
 	}
 }

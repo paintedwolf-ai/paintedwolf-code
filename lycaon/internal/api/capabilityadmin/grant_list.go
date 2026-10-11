@@ -14,7 +14,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleListApprovalGrants(w http.ResponseWriter, r *http.Request) {
+func (s *Inventory) HandleListApprovalGrants(w http.ResponseWriter, r *http.Request) {
 	chat := strings.TrimSpace(r.URL.Query().Get("session_id"))
 	domainGrants := s.approvalGrants(chat)
 	// Preserve first-class socket fields on durable rows.
@@ -24,7 +24,7 @@ func (s *Handler) HandleListApprovalGrants(w http.ResponseWriter, r *http.Reques
 	httpio.WriteJSON(w, http.StatusOK, wire.ApprovalGrantsResponse{Grants: grants, Quiets: quiets})
 }
 
-func (s *Handler) listAskQuiets(ctx context.Context, chat string) map[string]wire.AskQuiet {
+func (s *Inventory) listAskQuiets(ctx context.Context, chat string) map[string]wire.AskQuiet {
 	domain := s.Gate.ListAskQuiets(chat)
 	if len(domain) == 0 {
 		return nil
@@ -53,7 +53,7 @@ func (s *Handler) listAskQuiets(ctx context.Context, chat string) map[string]wir
 
 // fillGrantSessionTitles resolves chat titles for chat-scoped rows so the
 // Settings list can group them under their chat.
-func (s *Handler) fillGrantSessionTitles(ctx context.Context, grants []wire.ApprovalGrant) {
+func (s *Inventory) fillGrantSessionTitles(ctx context.Context, grants []wire.ApprovalGrant) {
 	titles := map[string]string{}
 	for i := range grants {
 		id := grants[i].ChatSessionID
@@ -111,7 +111,7 @@ func chatSocketGrantsToDomain(rootSessionID string, grants []approvalstate.Socke
 	return out
 }
 
-func (s *Handler) approvalGrants(chat string) []hitl.ApprovalGrant {
+func (s *Inventory) approvalGrants(chat string) []hitl.ApprovalGrant {
 	domainGrants := s.Gate.ListGrants(chat)
 	if s.Sockets != nil {
 		if chat != "" {

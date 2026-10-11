@@ -3,6 +3,7 @@ package workercontrol_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -33,8 +34,10 @@ func TestRequestDecisionRejectsAddressedSession(t *testing.T) {
 	_, err := reg.Run(context.Background(), workertools.RequestDecisionTool, map[string]any{
 		"question": "Refactor or work around?",
 		"options":  []any{"refactor", "work around"},
-	}, tools.ToolContext{SessionID: "s1"})
-	var reject *tools.ToolReject
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1"},
+	})
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "REQUEST_DECISION_ADDRESSED_SESSION" {
 		t.Fatalf("err = %v want REQUEST_DECISION_ADDRESSED_SESSION", err)
 	}
@@ -51,7 +54,11 @@ func TestRequestDecisionRecords(t *testing.T) {
 		"question":      "Refactor the shared type or work around it?",
 		"options":       []any{"refactor", "  ", "work around"},
 		"blocker_class": "sandbox",
-	}, tools.ToolContext{SessionID: "child-1", ParentSessionID: "parent-1", WorkerJobID: "job-1"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "child-1",
+			ParentSessionID: "parent-1",
+			WorkerJobID:     "job-1"},
+	})
 	testutil.FailErr(t, "run", err)
 	if !strings.Contains(out, "decision_requested") || !strings.Contains(out, `"blocker_class":"sandbox"`) {
 		t.Fatalf("out = %q", out)
@@ -71,7 +78,11 @@ func TestRequestDecisionDefaultsBlockerClass(t *testing.T) {
 	_, err := reg.Run(context.Background(), "request_decision", map[string]any{
 		"question": "q",
 		"options":  []any{"a", "b"},
-	}, tools.ToolContext{SessionID: "child-1", ParentSessionID: "parent-1", WorkerJobID: "job-1"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "child-1",
+			ParentSessionID: "parent-1",
+			WorkerJobID:     "job-1"},
+	})
 	testutil.FailErr(t, "run", err)
 	if rec.request.BlockerClass != api.WorkerBlockerDecision {
 		t.Fatalf("blockerClass = %q", rec.request.BlockerClass)
@@ -87,10 +98,25 @@ func TestRequestDecisionValidation(t *testing.T) {
 		tctx tools.ToolContext
 		want string
 	}{
-		{"missing question", map[string]any{"options": []any{"a", "b"}}, tools.ToolContext{SessionID: "c", ParentSessionID: "p", WorkerJobID: "j"}, "question"},
-		{"too few options", map[string]any{"question": "q", "options": []any{"a"}}, tools.ToolContext{SessionID: "c", ParentSessionID: "p", WorkerJobID: "j"}, "options"},
-		{"bad blocker", map[string]any{"question": "q", "options": []any{"a", "b"}, "blocker_class": "npm"}, tools.ToolContext{SessionID: "c", ParentSessionID: "p", WorkerJobID: "j"}, "blocker_class"},
-		{"missing worker job", map[string]any{"question": "q", "options": []any{"a", "b"}}, tools.ToolContext{SessionID: "c", ParentSessionID: "p"}, "worker job"},
+		{"missing question", map[string]any{"options": []any{"a", "b"}}, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "c",
+				ParentSessionID: "p",
+				WorkerJobID:     "j"},
+		}, "question"},
+		{"too few options", map[string]any{"question": "q", "options": []any{"a"}}, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "c",
+				ParentSessionID: "p",
+				WorkerJobID:     "j"},
+		}, "options"},
+		{"bad blocker", map[string]any{"question": "q", "options": []any{"a", "b"}, "blocker_class": "npm"}, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "c",
+				ParentSessionID: "p",
+				WorkerJobID:     "j"},
+		}, "blocker_class"},
+		{"missing worker job", map[string]any{"question": "q", "options": []any{"a", "b"}}, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "c",
+				ParentSessionID: "p"},
+		}, "worker job"},
 	}
 	for _, tc := range cases {
 		_, err := reg.Run(context.Background(), "request_decision", tc.args, tc.tctx)
@@ -117,8 +143,12 @@ func TestDecisionAttachmentsCannotDisappearDuringParsing(t *testing.T) {
 		for k, v := range attachment {
 			args[k] = v
 		}
-		_, err := reg.Run(t.Context(), workertools.RequestDecisionTool, args, tools.ToolContext{SessionID: "child", ParentSessionID: "parent", WorkerJobID: "job"})
-		var reject *tools.ToolReject
+		_, err := reg.Run(t.Context(), workertools.RequestDecisionTool, args, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "child",
+				ParentSessionID: "parent",
+				WorkerJobID:     "job"},
+		})
+		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || (reject.Code != "REQUEST_DECISION_ARTIFACT_SHAPE" && reject.Code != "REQUEST_DECISION_ARTIFACT_ARITY") || rec.calls != 0 {
 			t.Fatalf("malformed attachments were lost or recorded: args=%v err=%v calls=%d", attachment, err, rec.calls)
 		}

@@ -25,7 +25,7 @@ func cancellationFixture(t *testing.T) (*OAuthClient, *OAuthTokenStore, <-chan s
 	t.Cleanup(unblock)
 	store := NewOAuthTokenStoreAt(t.TempDir() + "/oauth.yaml")
 	client := NewOAuthClient(store, "", srv.Client())
-	t.Cleanup(client.Close)
+	t.Cleanup(func() { client.Close(t.Context()) })
 	client.pending["remote"] = pendingOAuth{
 		ProviderID: "remote", State: "first", ClientID: "fixture", Verifier: "verifier",
 		TokenURL: srv.URL, Resource: srv.URL + "/mcp", CreatedAt: time.Now(),
@@ -36,22 +36,22 @@ func cancellationFixture(t *testing.T) (*OAuthClient, *OAuthTokenStore, <-chan s
 func TestOAuthCancellationClosesOnlyNamedListener(t *testing.T) {
 	client, store, _, _ := cancellationFixture(t)
 	testutil.FailErr(t, "save existing credentials", store.Put("remote", OAuthTokenRecord{AccessToken: "existing"}))
-	listener, err := startCallbackListener(func(callbackResult) error { return nil })
+	listener, err := startCallbackListener(t.Context(), func(callbackResult) error { return nil })
 	testutil.FailErr(t, "start callback", err)
 	pending := client.pending["remote"]
 	pending.listener = listener
 	client.pending["remote"] = pending
 	client.pending["other"] = pendingOAuth{State: "other", CreatedAt: time.Now()}
 
-	client.Cancel("remote", "", "wrong")
-	client.Cancel("remote", "", "")
+	client.Cancel(t.Context(), "remote", "", "wrong")
+	client.Cancel(t.Context(), "remote", "", "")
 	select {
 	case <-listener.done:
 		t.Fatal("unrelated cancellation closed listener")
 	default:
 	}
-	client.Cancel("remote", "", "first")
-	client.Cancel("remote", "", "first")
+	client.Cancel(t.Context(), "remote", "", "first")
+	client.Cancel(t.Context(), "remote", "", "first")
 	select {
 	case <-listener.done:
 	default:
@@ -87,18 +87,18 @@ func TestOAuthLateExchangeCannotPublishAfterRetirement(t *testing.T) {
 			}
 			switch action {
 			case "cancel":
-				client.Cancel("remote", "", "first")
+				client.Cancel(t.Context(), "remote", "", "first")
 			case "replace":
 				client.mu.Lock()
 				pending := client.pending["remote"]
 				pending.State = "second"
 				client.pending["remote"] = pending
 				client.mu.Unlock()
-				client.Cancel("remote", "", "first")
+				client.Cancel(t.Context(), "remote", "", "first")
 			case "revoke":
-				testutil.FailErr(t, "revoke credentials", client.Revoke("remote"))
+				testutil.FailErr(t, "revoke credentials", client.Revoke(t.Context(), "remote"))
 			case "close":
-				client.Close()
+				client.Close(t.Context())
 			}
 			unblock()
 			if err := <-result; err == nil {
@@ -128,8 +128,8 @@ func TestOAuthLateExchangeCannotPublishAfterRetirement(t *testing.T) {
 func TestOAuthTokenPublicationIsSingleUse(t *testing.T) {
 	client, store, _, _ := cancellationFixture(t)
 	pending := client.pending["remote"]
-	testutil.FailErr(t, "publish first exchange", client.commitAuthorization("remote", pending, OAuthTokenRecord{AccessToken: "first-token"}))
-	if err := client.commitAuthorization("remote", pending, OAuthTokenRecord{AccessToken: "replayed-token"}); err == nil {
+	testutil.FailErr(t, "publish first exchange", client.commitAuthorization(t.Context(), "remote", pending, OAuthTokenRecord{AccessToken: "first-token"}))
+	if err := client.commitAuthorization(t.Context(), "remote", pending, OAuthTokenRecord{AccessToken: "replayed-token"}); err == nil {
 		t.Fatal("duplicate exchange published twice")
 	}
 	if token, ok := store.Get("remote"); !ok || token.AccessToken != "first-token" {

@@ -41,11 +41,11 @@ func TestLoopSummarizeParallelCappedInOneTurn(t *testing.T) {
 	})})
 	store := store.NewMemory()
 	deps := promptloop.StoreDeps(store)
-	deps.Limits = loopTestLimits(2)
-	deps.LLM = client
-	deps.Tools = reg
-	deps.Policy = &recordingToolPolicy{}
-	deps.CommitEvidenceToolResult = commitEvidenceFromStore(store)
+	deps.Context.Limits = loopTestLimits(2)
+	deps.Model.LLM = client
+	deps.Context.Tools = reg
+	deps.Context.Policy = &recordingToolPolicy{}
+	deps.Tools.CommitEvidenceToolResult = commitEvidenceFromStore(store)
 	loop := promptloop.NewPromptLoopForTest(deps)
 	ctx := t.Context()
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)

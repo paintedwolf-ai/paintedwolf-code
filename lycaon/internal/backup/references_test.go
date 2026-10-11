@@ -119,8 +119,8 @@ func TestBackupRequiresStoredSourceButAllowsMetadataOnly(t *testing.T) {
 	database := testdbfixture.OpenPath(t, filepath.Join(config, "store.db"))
 	rootID := testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	ledger := sourceledger.New(database, filepath.Join(config, "source-content"))
-	input := sourceledger.RecordInput{ProjectID: testdbseed.DefaultProjectID, RootID: rootID,
-		Path: "large.txt", Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
+	input := sourceledger.RecordInput{
+		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "large.txt"}, ProjectID: testdbseed.DefaultProjectID, Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
 		AfterSHA256: textfile.SHA256([]byte("metadata only")), AfterSize: 13}
 	testutil.FailErr(t, "record metadata-only revision", ledger.Record(t.Context(), input))
 	opts := backup.CreateOpts{ConfigDir: config, DBPath: filepath.Join(config, "store.db"), SQLDB: database, SchemaUserVersion: db.SchemaVersion}
@@ -189,7 +189,7 @@ func TestPopulatedBackupRestoresRetainedFiles(t *testing.T) {
 	testutil.FailErr(t, "close live store", database.Shutdown(t.Context()))
 	alias := filepath.Join(t.TempDir(), "config")
 	testutil.FailErr(t, "alias configuration directory", os.Symlink(config, alias))
-	testutil.FailErr(t, "apply populated archive through alias", backup.ApplyPending(alias))
+	testutil.FailErr(t, "apply populated archive through alias", backup.ApplyPending(t.Context(), alias))
 	for i := range 32 {
 		body, err := os.ReadFile(filepath.Join(filesDir, fmt.Sprintf("capture-%02d.txt", i)))
 		testutil.FailErr(t, "read restored evidence", err)

@@ -15,8 +15,8 @@ import (
 
 // InitProjectRemoval builds the removal owner around this handler's delete
 // path. It captures s, so call it once the handler is at its final address.
-func (s *Handler) InitProjectRemoval() {
-	s.Removal = &projectremoval.Owner{
+func (s *Removal) InitProjectRemoval() {
+	s.Owner = &projectremoval.Owner{
 		Projects: s.Registry, Store: projectremoval.NewStore(s.Database), Delete: s.deleteProject,
 		Extensions: s.Extensions.Owner,
 		SuggestionsApply: func(p project.Project) bool {
@@ -25,8 +25,8 @@ func (s *Handler) InitProjectRemoval() {
 	}
 }
 
-func (s *Handler) HandleAssessProjectRemoval(w http.ResponseWriter, r *http.Request) {
-	result, err := s.Removal.Assess(r.Context(), chi.URLParam(r, "id"))
+func (s *Removal) HandleAssessProjectRemoval(w http.ResponseWriter, r *http.Request) {
+	result, err := s.Owner.Assess(r.Context(), chi.URLParam(r, "id"))
 	if err != nil {
 		s.writeRemovalLookupError(w, r, err)
 		return
@@ -34,7 +34,7 @@ func (s *Handler) HandleAssessProjectRemoval(w http.ResponseWriter, r *http.Requ
 	httpio.WriteJSON(w, http.StatusOK, result)
 }
 
-func (s *Handler) HandleCreateProjectRemoval(w http.ResponseWriter, r *http.Request) {
+func (s *Removal) HandleCreateProjectRemoval(w http.ResponseWriter, r *http.Request) {
 	var req wire.ProjectRemovalRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -44,7 +44,7 @@ func (s *Handler) HandleCreateProjectRemoval(w http.ResponseWriter, r *http.Requ
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "The operation_id must be a UUID.")
 		return
 	}
-	result, err := s.Removal.Remove(r.Context(), chi.URLParam(r, "id"), req)
+	result, err := s.Owner.Remove(r.Context(), chi.URLParam(r, "id"), req)
 	if err != nil {
 		s.writeRemovalError(w, r, err)
 		return
@@ -55,11 +55,11 @@ func (s *Handler) HandleCreateProjectRemoval(w http.ResponseWriter, r *http.Requ
 // HandleGetProjectRemoval reads a removal after its project is gone, so the
 // project is checked only when no operation answers: an unknown project wins
 // over an unknown operation.
-func (s *Handler) HandleGetProjectRemoval(w http.ResponseWriter, r *http.Request) {
+func (s *Removal) HandleGetProjectRemoval(w http.ResponseWriter, r *http.Request) {
 	projectID := chi.URLParam(r, "id")
-	result, err := s.Removal.Result(r.Context(), projectID, chi.URLParam(r, "operation_id"))
+	result, err := s.Owner.Result(r.Context(), projectID, chi.URLParam(r, "operation_id"))
 	if errors.Is(err, projectremoval.ErrOperationNotFound) {
-		if _, ok := s.requireProject(w, r, projectID); !ok {
+		if _, ok := s.Projects.requireProject(w, r, projectID); !ok {
 			return
 		}
 	}
@@ -72,7 +72,7 @@ func (s *Handler) HandleGetProjectRemoval(w http.ResponseWriter, r *http.Request
 
 // writeRemovalLookupError answers a failed read of a project's removal
 // assessment or operation.
-func (s *Handler) writeRemovalLookupError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Removal) writeRemovalLookupError(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, projectremoval.ErrOperationNotFound) {
 		s.responses.Fail(w, wire.ApiErrorCodeProjectRemovalNotFound, "Project removal operation not found.")
 		return
@@ -80,7 +80,7 @@ func (s *Handler) writeRemovalLookupError(w http.ResponseWriter, r *http.Request
 	s.responses.ProjectLookupError(w, r, err)
 }
 
-func (s *Handler) writeRemovalError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Removal) writeRemovalError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, projectremoval.ErrAssessmentChanged):
 		s.responses.Fail(w, wire.ApiErrorCodeProjectRemovalAssessmentChanged, "Project removal evidence changed. Review it again.")

@@ -15,10 +15,10 @@ import (
 
 func reviewFixture(t *testing.T, view *View, root sourcecatalog.Root, rules *Rules, deleted []string) *Projection {
 	t.Helper()
-	navigation, err := view.catalog.OpenNavigation(t.Context(), "project", root)
+	navigation, err := view.catalog.Directories.OpenNavigation(t.Context(), "project", root)
 	testutil.FailErr(t, "pin review base", err)
 	t.Cleanup(func() { testutil.FailErr(t, "release review base", navigation.Close()) })
-	overlay, err := view.catalog.NewTreeOverlay(t.Context(), "project", root)
+	overlay, err := view.catalog.Directories.NewTreeOverlay(t.Context(), "project", root)
 	testutil.FailErr(t, "create sparse review storage", err)
 	t.Cleanup(func() {
 		defer overlay.Close()
@@ -41,7 +41,7 @@ func reviewFixture(t *testing.T, view *View, root sourcecatalog.Root, rules *Rul
 	revision, err := projection.revision(t.Context())
 	testutil.FailErr(t, "read review dependencies", err)
 	testutil.FailErr(t, "prepare sparse additions", prepareReview(t.Context(), reviewSource{root: root.ID, rules: rules, revision: revision, open: func(ctx context.Context) (*sourcecatalog.Navigation, error) {
-		return view.catalog.OpenNavigation(ctx, "project", root)
+		return view.catalog.Directories.OpenNavigation(ctx, "project", root)
 	}}, overlay))
 	projection.Review = NewReviewProjection(overlay)
 	return projection
@@ -53,7 +53,7 @@ func TestReviewProjectionMergesMissingPathsAndPreservesAncestors(t *testing.T) {
 	testutil.FailErr(t, "create physical file", os.WriteFile(filepath.Join(root.Path, "present", "keep.txt"), []byte("source"), 0600))
 	testutil.FailErr(t, "create root file", os.WriteFile(filepath.Join(root.Path, "z.txt"), []byte("source"), 0600))
 	for _, dir := range []string{".", "present"} {
-		_, err := view.catalog.ObserveDirectory(t.Context(), "project", root, dir, sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+		_, err := view.catalog.Directories.ObserveDirectory(t.Context(), "project", root, dir, sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 		testutil.FailErr(t, "observe physical directory", err)
 	}
 	rules := &Rules{}
@@ -89,7 +89,7 @@ func TestReviewProjectionReplacesEmptyMarkerAndHonorsVirtualCollapse(t *testing.
 	view, root := viewFixture(t)
 	testutil.FailErr(t, "create empty directory", os.Mkdir(filepath.Join(root.Path, "empty"), 0700))
 	for _, dir := range []string{".", "empty"} {
-		_, err := view.catalog.ObserveDirectory(t.Context(), "project", root, dir, sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+		_, err := view.catalog.Directories.ObserveDirectory(t.Context(), "project", root, dir, sourcecatalog.DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 		testutil.FailErr(t, "observe empty directory", err)
 	}
 	rules := &Rules{}

@@ -11,7 +11,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Server) handleGetHost(w http.ResponseWriter, r *http.Request) {
+func (s *Activity) handleGetHost(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, wire.HostInfo{
 		HostID:          s.hostIdentity.HostID,
 		HostPublicKey:   s.hostIdentity.EncodedPublicKey(),

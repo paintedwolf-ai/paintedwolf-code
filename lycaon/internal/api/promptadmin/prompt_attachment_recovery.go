@@ -14,7 +14,7 @@ type promptAttachmentRetentionSet struct {
 	blobIDs     []string
 }
 
-func (s *Handler) capturePromptAttachmentRetentions(ctx context.Context, operationID string) (promptAttachmentRetentionSet, error) {
+func (s *Attachments) capturePromptAttachmentRetentions(ctx context.Context, operationID string) (promptAttachmentRetentionSet, error) {
 	retentions := promptAttachmentRetentionSet{operationID: strings.TrimSpace(operationID)}
 	if retentions.operationID == "" {
 		return retentions, fmt.Errorf("prompt attachment operation id required")
@@ -43,7 +43,7 @@ func (s *Handler) capturePromptAttachmentRetentions(ctx context.Context, operati
 	return retentions, nil
 }
 
-func (s *Handler) reconcilePromptAttachmentRetentions(ctx context.Context, retentions promptAttachmentRetentionSet) error {
+func (s *Attachments) reconcilePromptAttachmentRetentions(ctx context.Context, retentions promptAttachmentRetentionSet) error {
 	if len(retentions.blobIDs) == 0 {
 		return nil
 	}

@@ -118,7 +118,7 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 	recording := llm.NewRecordingClient(mock)
 	h := BuildForTest(t, WithLLMClient(recording))
 	limits := &implementLifecycleLimits{}
-	h.SessionMgr.SetLimitsProvider(limits)
+	h.Sessions.Manager.Limits.SetProvider(limits)
 
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -131,14 +131,14 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "Create session", err)
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
-	run, err := h.WorkflowMgr.GetActive(ctx, sess.ID)
+	run, err := h.Workflows.Manager.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "GetActive after ambient attach", err)
 	if run.CurrentPhase != "boot" {
 		t.Fatalf("initial phase = %q want boot", run.CurrentPhase)
 	}
 	h.SeedProgress(t, ctx, sess.ID)
-	testutil.FailErr(t, "RecordBoardOrientReady", h.WorkflowMgr.RecordBoardOrientReady(ctx, sess.ID, "smoke-board"))
-	run, err = h.WorkflowMgr.GetActive(ctx, sess.ID)
+	testutil.FailErr(t, "RecordBoardOrientReady", h.Workflows.Manager.Fanout.RecordBoardOrientReady(ctx, sess.ID, "smoke-board"))
+	run, err = h.Workflows.Manager.Store.Runs.ActiveBySession(ctx, sess.ID)
 	testutil.FailErr(t, "GetActive after orient", err)
 	if run.CurrentPhase != "work" {
 		t.Fatalf("phase after board orient = %q want work", run.CurrentPhase)
@@ -155,16 +155,16 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 
 	// Dispatch and complete the first worker.
 	start := time.Now()
-	if _, err := h.SessionMgr.Prompt(ctx, sess.ID, "Build the stub and resolve any TODOs."); err != nil {
+	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Build the stub and resolve any TODOs."); err != nil {
 		testutil.FailErr(t, "user Prompt", err)
 	}
 	var pending []wire.WorkerTask
 	if !testutil.WaitForNoFatal(perStageBudget, func() bool {
 		var err error
-		pending, err = h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
+		pending, err = h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(pending) == 1
 	}) {
-		all, listErr := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID)
+		all, listErr := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)
 		messages, messageErr := h.Store.GetMessages(ctx, sess.ID)
 		t.Fatalf("first worker did not become pending: stage=%d tasks=%+v messages=%+v list_err=%v message_err=%v",
 			stage.Load(), all, messages, listErr, messageErr)
@@ -177,7 +177,7 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 
 	// Wait for repair dispatch.
 	if !testutil.WaitForNoFatal(perStageBudget, func() bool { return stage.Load() >= 2 }) {
-		tasks, listErr := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID)
+		tasks, listErr := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)
 		messages, messageErr := h.Store.GetMessages(ctx, sess.ID)
 		t.Fatalf("repair was not dispatched: stage=%d tasks=%+v messages=%+v list_err=%v message_err=%v",
 			stage.Load(), tasks, messages, listErr, messageErr)
@@ -188,10 +188,10 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 	// Complete repair and wait for closeout.
 	stage2Start := time.Now()
 	testutil.WaitFor(t, perStageBudget, func() bool {
-		tasks, err := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
+		tasks, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(tasks) >= 1
 	})
-	pending2, err := h.WorkerQueue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
+	pending2, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 	testutil.FailErr(t, "ListBySession follow-up pending", err)
 	if len(pending2) != 1 {
 		t.Fatalf("follow-up pending jobs = %d want 1", len(pending2))
@@ -221,7 +221,7 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 			workerTaskFinishedCount.Load(), legFinishedCount.Load())
 	}
 
-	h.SessionMgr.DrainLoopPendingForTest(ctx, sess.ID)
+	h.Sessions.Manager.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
 	AssertSessionNotStuck(t, h, ctx, sess.ID)
 }
 
@@ -232,7 +232,7 @@ func completeWorkerWrite(t *testing.T, h *Harness, sess *wire.Session, job wire.
 	ctx := context.Background()
 	child, err := h.Store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: job.Prompt})
 	testutil.FailErr(t, "CreateChild "+callID, err)
-	testutil.FailErr(t, "SetChildSessionID "+callID, h.WorkerQueue.SetChildSessionID(ctx, job.ID, child.ID))
+	testutil.FailErr(t, "SetChildSessionID "+callID, h.Delegations.Queue.SetChildSessionID(ctx, job.ID, child.ID))
 	testutil.FailErr(t, "AppendMessages child "+callID, h.Store.AppendMessages(ctx, child.ID,
 		wire.Message{
 			Role: wire.MessageRoleAssistant,
@@ -247,7 +247,7 @@ func completeWorkerWrite(t *testing.T, h *Harness, sess *wire.Session, job wire.
 	testutil.FailErr(t, "CommitEvidenceToolResult "+callID, err)
 	testutil.FailErr(t, "DrainPendingWorkerJobs "+callID, DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID))
 	testutil.FailErr(t, "PromotePendingWriteOverlays "+callID, PromotePendingWriteOverlays(ctx, h, sess.ProjectID, sess.ID))
-	h.SessionMgr.DrainLoopPendingForTest(ctx, sess.ID)
+	h.Sessions.Manager.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
 }
 
 func completedWriteToolResult(toolCallID, content string) wire.Message {

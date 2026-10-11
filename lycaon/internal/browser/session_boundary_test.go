@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/browserengine"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -24,8 +25,8 @@ func enforceConfinement(t *testing.T) {
 
 func TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt(t *testing.T) {
 	enforceConfinement(t)
-	// The filesystem root cannot become a write root.
-	conf, confined, err := browserBoundary([]string{string(filepath.Separator)})
+	roots := protectedBrowserRoots(t)
+	conf, confined, err := browserBoundary([]string{roots[0]})
 	if err == nil {
 		t.Fatal("browser launch fell through to an unconfined chrome while the host was enforcing confinement")
 	}
@@ -53,11 +54,53 @@ func TestBrowserBoundaryLaunchesWhenTheHostConfinesNothing(t *testing.T) {
 // The managed cache is a standing write root of every launch, so a refused one
 // fails the launch instead of quietly becoming "no confinement available".
 func TestLaunchHeadlessRefusesUnsafeCacheDir(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("LYCAON_BROWSER_BIN", "")
-	_, _, err := LaunchHeadless(context.Background(), LaunchOptions{CacheDir: home})
-	if !errors.Is(err, confine.ErrWriteRootRefused) {
-		t.Fatalf("err = %v, want the cache dir refused as a write root", err)
+	for _, root := range protectedBrowserRoots(t) {
+		t.Run(filepath.Base(root), func(t *testing.T) {
+			assertLaunchWriteRootRefused(t, LaunchOptions{CacheDir: root}, root, confine.WriteRootCodeSecretStore)
+		})
+	}
+	t.Run("relative", func(t *testing.T) {
+		assertLaunchWriteRootRefused(t, LaunchOptions{CacheDir: "relative-cache"}, "relative-cache", confine.WriteRootCodeNotAbsolute)
+	})
+}
+
+func protectedBrowserRoots(t *testing.T) []string {
+	t.Helper()
+	base := t.TempDir()
+	keys, credentials := filepath.Join(base, "keys"), filepath.Join(base, "credentials")
+	testutil.FailErr(t, "create key store", os.Mkdir(keys, 0o700))
+	testutil.FailErr(t, "create credential store", os.Mkdir(credentials, 0o700))
+	previousKeys, previousCredentials := confine.KeyMaterialWritePaths(), confine.CredentialStorePaths()
+	confine.SetKeyMaterialPathsSource(func() []string { return []string{keys} })
+	confine.SetCredentialStorePathsSource(func() []string { return []string{credentials} })
+	t.Cleanup(func() {
+		confine.SetKeyMaterialPathsSource(func() []string { return previousKeys })
+		confine.SetCredentialStorePathsSource(func() []string { return previousCredentials })
+	})
+	alias := filepath.Join(t.TempDir(), "credential-alias")
+	testutil.FailErr(t, "create credential alias", os.Symlink(credentials, alias))
+	return []string{keys, credentials, alias}
+}
+
+func assertLaunchWriteRootRefused(t *testing.T, opts LaunchOptions, root, code string) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	browser, cleanup, err := LaunchHeadless(ctx, opts)
+	if browser != nil || cleanup != nil {
+		t.Fatal("refused write root returned a browser or cleanup")
+	}
+	var refusal *confine.WriteRootRefusalError
+	if !errors.As(err, &refusal) || refusal.Code != code || refusal.Path != root {
+		t.Fatalf("LaunchHeadless error = %v, want typed refusal %s for %s", err, code, root)
+	}
+	if filepath.IsAbs(opts.CacheDir) {
+		entries, readErr := os.ReadDir(opts.CacheDir)
+		testutil.FailErr(t, "read cache after refusal", readErr)
+		if len(entries) != 0 {
+			t.Fatalf("refused launch provisioned cache or profile: %v", entries)
+		}
+	} else if _, statErr := os.Stat(opts.CacheDir); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("refused launch created relative cache: %v", statErr)
 	}
 }

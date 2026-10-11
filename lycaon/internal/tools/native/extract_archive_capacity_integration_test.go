@@ -6,13 +6,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -36,7 +36,7 @@ func TestExtractArchiveToolRejectsEntryLimit(t *testing.T) {
 				"path": "many" + tc.suffix,
 				"dest": "out",
 			}, nativefixture.Context(tmpDir))
-			var reject *tools.ToolReject
+			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != "EXTRACT_ENTRY_LIMIT" {
 				t.Fatalf("err = %v want EXTRACT_ENTRY_LIMIT", err)
 			}

@@ -20,7 +20,7 @@ import (
 // overlayFixture builds a registry over a distro catalog, a user overlay, and one
 // project overlay.
 type overlayFixture struct {
-	reg        *mcp.RegistryImpl
+	reg        *mcp.Runtime
 	projectDir string
 	calls      map[string]map[string]int
 	applies    *bool
@@ -66,16 +66,16 @@ func newOverlayFixture(t *testing.T, distro, user, project string, providerTools
 	applies := true
 	calls := map[string]map[string]int{}
 	connector := &overlayRecordingConnector{inner: &mcp.MockConnector{Tools: providerTools, Calls: calls}}
-	reg, err := mcp.NewRegistryImpl(mcp.RegistryOptions{
+	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
 		StatePath:          t.TempDir(),
 		GlobalOverridePath: globalPath,
 		Connector:          connector,
 	})
-	testutil.FailErr(t, "NewRegistryImpl", err)
-	reg.SetToolRegistry(tools.NewDefaultRegistry())
-	reg.SetProjectOverlayGate(func(context.Context, string) bool { return applies })
-	t.Cleanup(func() { _ = reg.Close() })
-	testutil.FailErr(t, "load", reg.Load(context.Background()))
+	testutil.FailErr(t, "NewRuntime", err)
+	reg.Tools.SetToolRegistry(tools.NewDefaultRegistry())
+	reg.Catalog.SetProjectOverlayGate(func(context.Context, string) bool { return applies })
+	t.Cleanup(func() { _ = reg.Close(t.Context()) })
+	testutil.FailErr(t, "load", reg.Catalog.Load(context.Background()))
 	return &overlayFixture{reg: reg, projectDir: projectDir, calls: calls, applies: &applies, connector: connector}
 }
 
@@ -96,10 +96,10 @@ func TestProjectDeclaredProviderNeverRegistersATool(t *testing.T) {
 		map[string][]*sdkmcp.Tool{"proj-svc": {{Name: "query", Description: "query"}}},
 	)
 
-	if containsTool(f.reg.RegisteredMCPTools(), "mcp_proj_svc_query") {
-		t.Fatalf("project-declared provider registered a host tool: %v", f.reg.RegisteredMCPTools())
+	if containsTool(f.reg.Catalog.RegisteredMCPTools(), "mcp_proj_svc_query") {
+		t.Fatalf("project-declared provider registered a host tool: %v", f.reg.Catalog.RegisteredMCPTools())
 	}
-	if _, err := f.reg.CallTool(context.Background(), f.scope(), "proj-svc", "query", nil); err == nil {
+	if _, err := f.reg.Calls.CallTool(context.Background(), f.scope(), "proj-svc", "query", nil); err == nil {
 		t.Fatal("calling a project-declared provider must fail closed")
 	}
 	if f.calls["proj-svc"]["query"] != 0 {
@@ -108,7 +108,7 @@ func TestProjectDeclaredProviderNeverRegistersATool(t *testing.T) {
 
 	// The project can inspect and adopt the provider at device scope.
 	var found bool
-	for _, row := range f.reg.ListProviders(context.Background(), f.scope()) {
+	for _, row := range f.reg.Catalog.ListProviders(context.Background(), f.scope()) {
 		if row.ID == "proj-svc" {
 			found = true
 			if row.ConnectionSource != string(mcp.CatalogLayerProject) {
@@ -121,7 +121,7 @@ func TestProjectDeclaredProviderNeverRegistersATool(t *testing.T) {
 	}
 
 	// Inspection does not grant agent access.
-	infos, err := f.reg.ListDiscoveredTools(context.Background(), f.scope(), "proj-svc")
+	infos, err := f.reg.Administration.ListDiscoveredTools(context.Background(), f.scope(), "proj-svc")
 	testutil.FailErr(t, "browse project-declared tools", err)
 	if len(infos) != 1 || infos[0].Name != "mcp_proj_svc_query" {
 		t.Fatalf("tool browser = %+v", infos)
@@ -141,7 +141,7 @@ func TestClosedGateProjectOverlayIsNotMerged(t *testing.T) {
 		nil,
 	)
 	*f.applies = false
-	for _, row := range f.reg.ListProviders(context.Background(), f.scope()) {
+	for _, row := range f.reg.Catalog.ListProviders(context.Background(), f.scope()) {
 		if row.ID == "proj-svc" {
 			t.Fatal("project overlay behind a closed gate was merged into the view")
 		}
@@ -164,16 +164,16 @@ func TestProjectOverlayDisableIsScopedToThatProject(t *testing.T) {
 		map[string][]*sdkmcp.Tool{"svc": {{Name: "query", Description: "query"}}},
 	)
 
-	if !containsTool(f.reg.RegisteredMCPTools(), "mcp_svc_query") {
-		t.Fatalf("device provider must still register: %v", f.reg.RegisteredMCPTools())
+	if !containsTool(f.reg.Catalog.RegisteredMCPTools(), "mcp_svc_query") {
+		t.Fatalf("device provider must still register: %v", f.reg.Catalog.RegisteredMCPTools())
 	}
-	_, err := f.reg.CallTool(context.Background(), f.scope(), "svc", "query", nil)
+	_, err := f.reg.Calls.CallTool(context.Background(), f.scope(), "svc", "query", nil)
 	if err == nil || !strings.Contains(err.Error(), "disabled for this project") {
 		t.Fatalf("call from the disabling project = %v, want refused", err)
 	}
 
 	other := mcp.ProjectScope("proj-2", t.TempDir(), []string{t.TempDir()})
-	if _, err := f.reg.CallTool(context.Background(), other, "svc", "query", nil); err != nil {
+	if _, err := f.reg.Calls.CallTool(context.Background(), other, "svc", "query", nil); err != nil {
 		testutil.FailErr(t, "call from another project", err)
 	}
 }
@@ -195,7 +195,7 @@ func TestProjectCannotEnableCredentialedProvider(t *testing.T) {
 		nil,
 	)
 
-	rows := f.reg.ListProviders(context.Background(), f.scope())
+	rows := f.reg.Catalog.ListProviders(context.Background(), f.scope())
 	var enabled, rejected bool
 	for _, row := range rows {
 		if row.ID != "corp" {
@@ -216,7 +216,7 @@ func TestProjectCannotEnableCredentialedProvider(t *testing.T) {
 	if !rejected {
 		t.Fatalf("expected a project_enable_forbidden row, got %+v", rows)
 	}
-	if f.reg.ProviderEnabled("corp") {
+	if f.reg.Catalog.ProviderEnabled("corp") {
 		t.Fatal("device catalog reports the provider enabled")
 	}
 }
@@ -236,12 +236,12 @@ func TestProjectMayEnableLoopbackProvider(t *testing.T) {
 `,
 		nil,
 	)
-	for _, row := range f.reg.ListProviders(context.Background(), f.scope()) {
+	for _, row := range f.reg.Catalog.ListProviders(context.Background(), f.scope()) {
 		if row.ID == "local" && !row.Enabled {
 			t.Fatalf("project enable of a bare loopback row was refused: %+v", row)
 		}
 	}
-	if _, err := f.reg.CallTool(context.Background(), f.scope(), "local", "query", nil); err != nil {
+	if _, err := f.reg.Calls.CallTool(context.Background(), f.scope(), "local", "query", nil); err != nil {
 		testutil.FailErr(t, "call project-enabled loopback provider", err)
 	}
 	if f.calls["local"]["query"] != 1 {
@@ -263,7 +263,7 @@ func TestProjectConnectionOverrideIsUsedForInvocation(t *testing.T) {
 `,
 		map[string][]*sdkmcp.Tool{"local": {{Name: "query"}}},
 	)
-	if _, err := f.reg.CallTool(context.Background(), f.scope(), "local", "query", nil); err != nil {
+	if _, err := f.reg.Calls.CallTool(context.Background(), f.scope(), "local", "query", nil); err != nil {
 		testutil.FailErr(t, "call project-overridden provider", err)
 	}
 	entry, ok := f.connector.last("local")
@@ -275,7 +275,7 @@ func TestProjectConnectionOverrideIsUsedForInvocation(t *testing.T) {
   - id: local
     url: http://127.0.0.1:9988/reloaded
 `), 0o600))
-	if _, err := f.reg.CallTool(context.Background(), f.scope(), "local", "query", nil); err != nil {
+	if _, err := f.reg.Calls.CallTool(context.Background(), f.scope(), "local", "query", nil); err != nil {
 		testutil.FailErr(t, "call reloaded project override", err)
 	}
 	entry, ok = f.connector.last("local")

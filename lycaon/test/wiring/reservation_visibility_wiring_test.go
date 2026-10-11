@@ -45,42 +45,42 @@ func TestHandoffReserveVisibleOnPackBoardAndPeerLegWiring(t *testing.T) {
 	}
 	testutil.FailErr(t, "defaults", worker.ApplyEnqueueDefaults(&taskA, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
 	testutil.FailErr(t, "defaults", worker.ApplyEnqueueDefaults(&taskB, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
-	_, err = h.WorkerQueue.Enqueue(ctx, taskA)
+	_, err = h.Delegations.Queue.Enqueue(ctx, taskA)
 	testutil.FailErr(t, "enqueue a", err)
-	_, err = h.WorkerQueue.Enqueue(ctx, taskB)
+	_, err = h.Delegations.Queue.Enqueue(ctx, taskB)
 	testutil.FailErr(t, "enqueue b", err)
 
 	childA, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "Timer leg"})
 	testutil.FailErr(t, "create child a", err)
 	childB, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "Parser leg"})
 	testutil.FailErr(t, "create child b", err)
-	testutil.FailErr(t, "link a", h.WorkerQueue.SetChildSessionID(ctx, taskA.ID, childA.ID))
-	testutil.FailErr(t, "link b", h.WorkerQueue.SetChildSessionID(ctx, taskB.ID, childB.ID))
+	testutil.FailErr(t, "link a", h.Delegations.Queue.SetChildSessionID(ctx, taskA.ID, childA.ID))
+	testutil.FailErr(t, "link b", h.Delegations.Queue.SetChildSessionID(ctx, taskB.ID, childB.ID))
 
 	_, err = h.ToolRegistry.Run(ctx, "handoff_reserve", map[string]any{
 		"paths": []string{"shellsim/builtins.py"},
 	}, tools.ToolContext{
-		Roots:            []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID:     "r1",
-		SessionID:        childA.ID,
-		ParentSessionID:  parent.ID,
-		HandoffSessionID: parent.ID,
-		HandoffAgentID:   taskA.ID,
-		WorkerJobID:      taskA.ID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: childA.ID,
+			ParentSessionID:  parent.ID,
+			HandoffSessionID: parent.ID,
+			HandoffAgentID:   taskA.ID,
+			WorkerJobID:      taskA.ID},
 	})
 	testutil.FailErr(t, "handoff_reserve", err)
 
 	out, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{}, tools.ToolContext{
-		Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
-		ActiveRootID: "r1",
-		SessionID:    parent.ID,
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: parent.ID},
 	})
 	testutil.FailErr(t, "pack_board", err)
 	if !strings.Contains(out, "shellsim/builtins.py") || !strings.Contains(out, "Reserved paths") {
 		t.Fatalf("pack_board missing reservation: %q", out)
 	}
 
-	peer := h.SessionMgr.PeerReservations(ctx, childB.ID)
+	peer := h.Sessions.Manager.Workers.Workspaces.PeerReservations(ctx, childB.ID)
 	if len(peer) != 1 || peer[0].Path != "shellsim/builtins.py" || peer[0].JobID != "job-a" {
 		t.Fatalf("peer reservations = %+v", peer)
 	}

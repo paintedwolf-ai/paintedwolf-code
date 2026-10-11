@@ -13,7 +13,8 @@ func TestWalkScopesCheckoutsBeforePagination(t *testing.T) {
 	store, ctx := openLedger(t)
 	checkout := sourcebranch.ForWorktree("checkout")
 	for _, branch := range []sourcebranch.ID{sourcebranch.Trunk, checkout} {
-		mustRecord(t, store, ctx, RecordInput{ProjectID: "p1", RootID: "r1", Path: "a.txt", BranchID: branch,
+		mustRecord(t, store, ctx, RecordInput{
+			RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"}, ProjectID: "p1", BranchID: branch,
 			Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent, SessionID: "chat", Turn: 1,
 			OperationID: "write-" + branch.String(), After: []byte("from " + branch.String())})
 	}
@@ -21,12 +22,12 @@ func TestWalkScopesCheckoutsBeforePagination(t *testing.T) {
 		"/base":     {Repo: gitstate.RepoPresent, HeadCommit: "before"},
 		"/checkout": {Repo: gitstate.RepoPresent, HeadCommit: "before"},
 	}}
-	store.SetGitReader(reader)
+	store.Git.SetGitReader(reader)
 	for _, root := range []RootSpec{{ID: "r1", Path: "/base"}, {ID: "r1", Path: "/checkout", BranchID: checkout}} {
-		_, err := store.ObserveGitState(ctx, "p1", []RootSpec{root})
+		_, err := store.Git.ObserveGitState(ctx, "p1", []RootSpec{root})
 		testutil.FailErr(t, "seed checkout", err)
 		reader.states[root.Path] = gitstate.State{Repo: gitstate.RepoPresent, HeadCommit: root.Path}
-		_, err = store.ObserveGitState(ctx, "p1", []RootSpec{root})
+		_, err = store.Git.ObserveGitState(ctx, "p1", []RootSpec{root})
 		testutil.FailErr(t, "move checkout head", err)
 	}
 	for _, kind := range []BaselineKind{BaselinePresentation, BaselineSession, BaselineTurn} {
@@ -37,7 +38,7 @@ func TestWalkScopesCheckoutsBeforePagination(t *testing.T) {
 			var movements []GitTransition
 			var before int64
 			for {
-				walk, err := store.QueryWalk(ctx, "p1", baseline, 1, before, CommitLens{})
+				walk, err := store.Walk.QueryWalk(ctx, "p1", baseline, 1, before, CommitLens{})
 				testutil.FailErr(t, "query checkout walk", err)
 				files = append(files, walk.Files...)
 				movements = append(movements, walk.GitChanges...)

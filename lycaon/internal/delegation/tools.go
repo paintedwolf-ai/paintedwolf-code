@@ -24,7 +24,7 @@ func RegisterDelegationTools(reg *tools.DefaultRegistry, mgr *Manager) error {
 		if strings.TrimSpace(tctx.ActiveRootPath()) == "" {
 			return "", fmt.Errorf("project_dir required")
 		}
-		if strings.TrimSpace(tctx.SessionID) == "" {
+		if strings.TrimSpace(tctx.Identity.SessionID) == "" {
 			return "", fmt.Errorf("session_id required")
 		}
 		task, _ := args["task"].(string)
@@ -32,7 +32,7 @@ func RegisterDelegationTools(reg *tools.DefaultRegistry, mgr *Manager) error {
 			return "", fmt.Errorf("task required")
 		}
 		req := api.CreateDelegationRequest{
-			ProjectID:       tctx.ProjectID,
+			ProjectID:       tctx.Identity.ProjectID,
 			Task:            strings.TrimSpace(task),
 			BlueprintPath:   stringArg(args["blueprint_path"]),
 			WorkflowID:      stringArg(args["workflow_id"]),
@@ -42,7 +42,7 @@ func RegisterDelegationTools(reg *tools.DefaultRegistry, mgr *Manager) error {
 		if s, ok := args["strategy"].(string); ok && strings.TrimSpace(s) != "" {
 			req.Strategy = api.HuntStrategy(strings.TrimSpace(s))
 		}
-		out, err := mgr.Init(ctx, tctx.SessionID, req)
+		out, err := mgr.Init(ctx, tctx.Identity.SessionID, req)
 		if err != nil {
 			return "", err
 		}
@@ -56,7 +56,7 @@ func RegisterDelegationTools(reg *tools.DefaultRegistry, mgr *Manager) error {
 		delegationID := stringArg(args["delegation_id"])
 		if delegationID == "" {
 			var ok bool
-			delegationID, ok = mgr.Store.DelegationBySessionID(tctx.SessionID)
+			delegationID, ok = mgr.Store.DelegationBySessionID(tctx.Identity.SessionID)
 			if !ok {
 				return "", fmt.Errorf("delegation not found for session")
 			}
@@ -65,7 +65,7 @@ func RegisterDelegationTools(reg *tools.DefaultRegistry, mgr *Manager) error {
 		if err != nil {
 			return "", err
 		}
-		if out != nil && out.CoordinatorSessionID == tctx.SessionID {
+		if out != nil && out.CoordinatorSessionID == tctx.Identity.SessionID {
 			tctx.SetDisplaySubject(out.Task)
 		}
 		legs, _ := mgr.Store.ListLegs(ctx, delegationID)
@@ -84,12 +84,12 @@ func RegisterDelegationTools(reg *tools.DefaultRegistry, mgr *Manager) error {
 		if mgr.Plans == nil {
 			return "", fmt.Errorf("plan reader not configured")
 		}
-		planDoc, err := mgr.Plans.Get(ctx, tctx.ProjectID, blueprintPath)
+		planDoc, err := mgr.Plans.Get(ctx, tctx.Identity.ProjectID, blueprintPath)
 		if err != nil {
 			return "", err
 		}
 		legs := LegsFromPlan(planDoc, blueprint.ExtractTasks(planDoc.Content))
-		delegationID, ok := mgr.Store.DelegationBySessionID(tctx.SessionID)
+		delegationID, ok := mgr.Store.DelegationBySessionID(tctx.Identity.SessionID)
 		if !ok {
 			raw, _ := json.Marshal(map[string]any{"legs": legs, "persisted": false})
 			return string(raw), nil

@@ -2,6 +2,7 @@ package tools_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/hitl"
@@ -10,10 +11,10 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-func neverAskExecutor(t *testing.T, gate *secretReleaseGateStub) *tools.DefaultToolExecutor {
+func neverAskExecutor(t *testing.T, gate *secretReleaseGateStub) *toolexecution.Executor {
 	t.Helper()
-	exec := tools.NewDefaultToolExecutor(nil, tools.NewDefaultRegistry(), "implement")
-	exec.SetCheckpointManager(&secretScreenHITL{status: hitl.DecisionStatusApproved}, gate)
+	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
+	exec.Approvals.SetCheckpointManager(t.Context(), &secretScreenHITL{status: hitl.DecisionStatusApproved}, gate)
 	return exec
 }
 
@@ -29,7 +30,7 @@ func neverAskAlert(surface secretmatch.ScreenSurface) secretmatch.Alert {
 
 func TestUnaskedScreenHonorsStandingRedaction(t *testing.T) {
 	exec := neverAskExecutor(t, &secretReleaseGateStub{standingRedact: true})
-	got, err := exec.ResolveSecretScreenUnasked(context.Background(), neverAskAlert(secretmatch.SurfaceHTTPRequest))
+	got, err := exec.Secrets.ResolveSecretScreenUnasked(context.Background(), neverAskAlert(secretmatch.SurfaceHTTPRequest))
 	testutil.FailErr(t, "resolve unasked secret screen", err)
 	if got.Decision != secretmatch.SendRedacted {
 		t.Fatalf("decision = %q, want %q", got.Decision, secretmatch.SendRedacted)
@@ -41,7 +42,7 @@ func TestUnaskedScreenHonorsStandingRedaction(t *testing.T) {
 
 func TestUnaskedScreenWithoutStandingRedactionSendsUnchanged(t *testing.T) {
 	exec := neverAskExecutor(t, &secretReleaseGateStub{})
-	got, err := exec.ResolveSecretScreenUnasked(context.Background(), neverAskAlert(secretmatch.SurfaceHTTPRequest))
+	got, err := exec.Secrets.ResolveSecretScreenUnasked(context.Background(), neverAskAlert(secretmatch.SurfaceHTTPRequest))
 	testutil.FailErr(t, "resolve unasked secret screen", err)
 	if got.Decision != secretmatch.SendUnchanged {
 		t.Fatalf("decision = %q, want %q", got.Decision, secretmatch.SendUnchanged)
@@ -50,7 +51,7 @@ func TestUnaskedScreenWithoutStandingRedactionSendsUnchanged(t *testing.T) {
 
 func TestUnaskedScreenHoldsWhenTheSurfaceCannotRewrite(t *testing.T) {
 	exec := neverAskExecutor(t, &secretReleaseGateStub{standingRedact: true})
-	got, err := exec.ResolveSecretScreenUnasked(context.Background(), neverAskAlert(secretmatch.SurfaceCommand))
+	got, err := exec.Secrets.ResolveSecretScreenUnasked(context.Background(), neverAskAlert(secretmatch.SurfaceCommand))
 	if err == nil {
 		t.Fatalf("resolution = %+v, want a held send", got)
 	}

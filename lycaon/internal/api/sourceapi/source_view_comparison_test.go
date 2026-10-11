@@ -15,7 +15,7 @@ func TestAcquireRetainedSourceInSameWorkspace(t *testing.T) {
 	workspaceID := "ws-shared-1"
 
 	held := &sourceView{scope: scope, workspaceID: workspaceID, sessionID: "chat-session-1", state: "ready"}
-	id, err := server.sourceViewRegistry().registry.Put(scope, held, 1, func(*sourceView) {})
+	id, err := server.Views.sourceViewRegistry().registry.Put(scope, held, 1, func(*sourceView) {})
 	testutil.FailErr(t, "put held view", err)
 	held.id = id
 
@@ -23,7 +23,7 @@ func TestAcquireRetainedSourceInSameWorkspace(t *testing.T) {
 	unscopedView := &sourceView{id: uuid.NewString(), scope: scope, workspaceID: workspaceID, sessionID: ""}
 	source := &wire.RetainedComparisonSource{ViewID: held.id, Comparison: "current"}
 
-	acquired, release, err := server.acquireRetainedSource(unscopedView, source)
+	acquired, release, err := server.ComparisonViews.acquireRetainedSource(unscopedView, source)
 	testutil.FailErr(t, "acquire retained source across session and unscoped view in same workspace", err)
 	if acquired.id != held.id {
 		t.Fatalf("acquired view id = %q, want %q", acquired.id, held.id)
@@ -32,7 +32,7 @@ func TestAcquireRetainedSourceInSameWorkspace(t *testing.T) {
 
 	// Peer chats in unbranched workspaces share retained sources.
 	peerChatView := &sourceView{id: uuid.NewString(), scope: scope, workspaceID: workspaceID, sessionID: "chat-session-2"}
-	acquiredPeer, releasePeer, err := server.acquireRetainedSource(peerChatView, source)
+	acquiredPeer, releasePeer, err := server.ComparisonViews.acquireRetainedSource(peerChatView, source)
 	testutil.FailErr(t, "acquire retained source across peer chats in same workspace", err)
 	if acquiredPeer.id != held.id {
 		t.Fatalf("acquired view id = %q, want %q", acquiredPeer.id, held.id)
@@ -40,7 +40,7 @@ func TestAcquireRetainedSourceInSameWorkspace(t *testing.T) {
 	releasePeer()
 
 	otherWorkspaceView := &sourceView{id: uuid.NewString(), scope: scope, workspaceID: "ws-different", sessionID: "chat-session-1"}
-	if _, _, err := server.acquireRetainedSource(otherWorkspaceView, source); err == nil {
+	if _, _, err := server.ComparisonViews.acquireRetainedSource(otherWorkspaceView, source); err == nil {
 		t.Fatal("expected error acquiring retained source from different workspace, got nil")
 	}
 }

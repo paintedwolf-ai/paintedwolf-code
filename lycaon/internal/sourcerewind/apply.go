@@ -158,8 +158,9 @@ func (s *Service) applyFile(ctx context.Context, o *Operation, index int, revers
 		return err
 	}
 	effect := sourceeffect.Plan{
-		Record: sourceledger.RecordInput{ProjectID: o.ProjectID, BranchID: f.BranchID, RootID: after.RootID, Path: after.Path,
-			FileID: f.FileID, DerivedFromVersionID: after.ID, EntryKind: sourceledger.EntryKindFile,
+		Record: sourceledger.RecordInput{
+			RecordLocation: sourceledger.RecordLocation{RootID: after.RootID, Path: after.Path, EntryKind: sourceledger.EntryKindFile}, ProjectID: o.ProjectID, BranchID: f.BranchID,
+			FileID: f.FileID, DerivedFromVersionID: after.ID,
 			Op: op, Origin: api.SourceChangeOriginUser, PersonID: o.PersonID, OperationID: operationID,
 			BatchID: o.AttemptID, Cause: cause, Before: before.Content, After: after.Content,
 			BeforeSHA256: before.SHA256, AfterSHA256: after.SHA256},

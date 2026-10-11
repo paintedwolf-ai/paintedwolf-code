@@ -21,7 +21,7 @@ func TestScannerConfigContract(t *testing.T) {
 	if err := scancatalog.ValidateScannerConfig(cfg); err != nil {
 		contractcheck.FailErr(t, "scancatalog.ValidateScannerConfig failed", err)
 	}
-	reg, err := registry.New(registry.Options{ModuleRoot: lycaonRoot})
+	reg, err := registry.New(t.Context(), registry.Options{ModuleRoot: lycaonRoot})
 	contractcheck.FailErr(t, "registry.New failed", err)
 	if len(reg.List()) < 3 {
 		t.Fatalf("expected >=3 enabled scanners, got %d", len(reg.List()))

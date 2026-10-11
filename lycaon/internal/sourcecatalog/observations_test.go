@@ -39,7 +39,7 @@ func TestDirectoryListingDuringSaveOmitsOnlyTheDoorsStaging(t *testing.T) {
 					staged = entry.Name()
 				}
 			}
-			if _, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive}); err != nil {
+			if _, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive}); err != nil {
 				return err
 			}
 			entries, _, err := navigationEntries(t, catalog, root, ".", "", 100)
@@ -72,12 +72,12 @@ func TestDirectoryObservationsArePagedAndKeepConsumerVisibility(t *testing.T) {
 	}
 	writeIndexFile(t, root.Path, ".paintedwolf/settings.yaml", "project settings")
 	writeIndexFile(t, root.Path, ".git/config", "metadata")
-	observed, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	observed, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe immediate directory", err)
 	if !observed.Complete {
 		t.Fatal("directory was not completed")
 	}
-	repeated, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	repeated, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "reuse immediate observation", err)
 	if repeated.Sequence != observed.Sequence {
 		t.Fatal("warm directory was enumerated again")
@@ -103,7 +103,7 @@ func TestDirectoryObservationsArePagedAndKeepConsumerVisibility(t *testing.T) {
 	if count != 602 || !slices.Contains(names, ".paintedwolf") || !slices.Contains(names, ".git") {
 		t.Fatalf("membership count %d", count)
 	}
-	_, err = catalog.ObserveDirectory(t.Context(), "p", root, ".paintedwolf", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".paintedwolf", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe overlay", err)
 	reader := waitIndex(t, catalog, root)
 	paths, err := reader.FilePathsPage(t.Context(), FileScope{Audience: HumanAudience, IncludeHidden: true}, "", TreeFilePageLimit)
@@ -131,7 +131,7 @@ func TestDirectoryObservationsRejectEscapesAndSymlinkExpansion(t *testing.T) {
 	outside := t.TempDir()
 	testutil.FailErr(t, "create link", os.Symlink(outside, filepath.Join(root.Path, "link")))
 	for _, dir := range []string{"../", outside, "link"} {
-		_, err := catalog.ObserveDirectory(context.Background(), "p", root, dir, DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+		_, err := catalog.Directories.ObserveDirectory(context.Background(), "p", root, dir, DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 		if err == nil {
 			t.Fatalf("accepted forbidden directory %q", dir)
 		}
@@ -142,23 +142,23 @@ func TestDirectoryRefreshRemovesVanishedSubtrees(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "gone/child.txt", "old")
 	for _, dir := range []string{".", "gone"} {
-		_, err := catalog.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+		_, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 		testutil.FailErr(t, "initial observation", err)
 	}
 	testutil.FailErr(t, "remove fixture subtree", os.RemoveAll(filepath.Join(root.Path, "gone")))
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get observation store", err)
 	store.mu.Lock()
 	store.invalidateObservationsLocked(nil)
 	store.mu.Unlock()
-	_, err = catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "refresh root", err)
 	entries, _, err := navigationEntries(t, catalog, root, ".", "", 100)
 	testutil.FailErr(t, "read refreshed membership", err)
 	if len(entries) != 0 {
 		t.Fatalf("retained vanished entries: %+v", entries)
 	}
-	navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open refreshed structure", err)
 	defer func() { _ = navigation.Close() }()
 	children, err := navigation.Children(t.Context(), "gone")
@@ -175,14 +175,14 @@ func TestDirectoryRefreshCannotResurrectDeletedOpenDirectory(t *testing.T) {
 	writeIndexFile(t, root.Path, "gone/child.txt", "old")
 	var stale DirectoryObservation
 	for _, dir := range []string{".", "gone"} {
-		observation, err := catalog.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+		observation, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 		testutil.FailErr(t, "initial discovery", err)
 		if dir == "gone" {
 			stale = observation
 		}
 	}
 	testutil.FailErr(t, "delete discovered directory", os.RemoveAll(filepath.Join(root.Path, "gone")))
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get shared store", err)
 	pin, err := store.retainGeneration(headGeneration, true)
 	testutil.FailErr(t, "pin stale generation", err)
@@ -192,7 +192,7 @@ func TestDirectoryRefreshCannotResurrectDeletedOpenDirectory(t *testing.T) {
 	store.mu.Unlock()
 	// Parent deletion fences listings opened after the watcher event.
 	stale.Invalidation = store.observationMark("gone")
-	_, err = catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "publish deletion", err)
 	builder, err := newStructuralBuilder(store, pin.value)
 	testutil.FailErr(t, "create stale builder", err)
@@ -204,7 +204,7 @@ func TestDirectoryRefreshCannotResurrectDeletedOpenDirectory(t *testing.T) {
 	if _, err := store.readObservation(t.Context(), "gone"); !errors.Is(err, pagedview.ErrMissing) {
 		t.Fatalf("late scan restored deleted directory observation: %v", err)
 	}
-	current, err := catalog.OpenNavigation(t.Context(), "p", root)
+	current, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open current generation", err)
 	defer func() { _ = current.Close() }()
 	if _, err := current.Entry(t.Context(), "gone"); err == nil {
@@ -217,7 +217,7 @@ func TestDirectorySymlinksRemainManuallyNavigableWithoutRecursiveWeight(t *testi
 	writeIndexFile(t, root.Path, "actual/child.txt", "data")
 	testutil.FailErr(t, "create internal directory link", os.Symlink("actual", filepath.Join(root.Path, "alias")))
 	for _, dir := range []string{".", "alias"} {
-		_, err := catalog.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+		_, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 		testutil.FailErr(t, "observe linked directory", err)
 	}
 	entries, _, err := navigationEntries(t, catalog, root, "alias", "", 10)
@@ -225,7 +225,7 @@ func TestDirectorySymlinksRemainManuallyNavigableWithoutRecursiveWeight(t *testi
 	if len(entries) != 1 || entries[0].Path != "alias/child.txt" {
 		t.Fatalf("linked membership: %+v", entries)
 	}
-	navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open navigation snapshot", err)
 	defer func() { _ = navigation.Close() }()
 	entry, err := navigation.Entry(t.Context(), "alias")
@@ -253,7 +253,7 @@ func TestIndexDiscoveryStopsAtRemainingConsumerBudget(t *testing.T) {
 	if observed.Complete || observed.Entries != 11 {
 		t.Fatalf("walk budget over-discovered: %+v", observed)
 	}
-	observed, err = catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	observed, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "continue human discovery independently", err)
 	if !observed.Complete || observed.Entries != 100 {
 		t.Fatalf("human discovery inherited index cap: %+v", observed)
@@ -268,7 +268,7 @@ func TestDirectoryAbsoluteInternalLinksPreserveNavigation(t *testing.T) {
 	writeIndexFile(t, root.Path, ".git/config", "repository metadata")
 	testutil.FailErr(t, "create metadata alias", os.Symlink(".git", filepath.Join(root.Path, "metadata")))
 	for _, dir := range []string{".", "alias", "alias/nested"} {
-		_, err := catalog.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+		_, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, dir, DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 		testutil.FailErr(t, "observe internal link", err)
 	}
 	entries, _, err := navigationEntries(t, catalog, root, "alias/nested", "", 10)
@@ -286,7 +286,7 @@ func TestDirectoryAbsoluteInternalLinksPreserveNavigation(t *testing.T) {
 			t.Fatal("dangling link was not omitted")
 		}
 	}
-	_, err = catalog.ObserveDirectory(t.Context(), "p", root, "metadata", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, "metadata", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe metadata alias", err)
 	entries, _, err = navigationEntries(t, catalog, root, "metadata", "", 10)
 	testutil.FailErr(t, "read metadata alias", err)
@@ -298,14 +298,14 @@ func TestDirectoryAbsoluteInternalLinksPreserveNavigation(t *testing.T) {
 func TestIndexCompletionCannotRetireAReplacementObservation(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "present.txt", "source")
-	observed, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	observed, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe directory", err)
 	walk := discoveryWalk(t, catalog, root)
 	writeIndexFile(t, root.Path, "replacement.txt", "new membership")
 	walk.store.mu.Lock()
 	walk.store.invalidateObservationsLocked(nil)
 	walk.store.mu.Unlock()
-	_, err = catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "replace observation", err)
 	testutil.FailErr(t, "finish stale admission", walk.completeDir(t.Context(), ".", observed.Sequence))
 	var count int
@@ -320,12 +320,12 @@ func TestRefreshingVisibleDirectoryPreservesRanks(t *testing.T) {
 	for _, name := range []string{"a.txt", "b.txt", "c.txt"} {
 		writeIndexFile(t, root.Path, "src/"+name, "content")
 	}
-	_, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	_, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe root", err)
-	observation, err := catalog.ObserveDirectory(t.Context(), "p", root, "src", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	observation, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, "src", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe visible directory", err)
 	extent := func() int64 {
-		navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+		navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 		testutil.FailErr(t, "open navigation", err)
 		defer func() { _ = navigation.Close() }()
 		children, err := navigation.Children(t.Context(), ".")
@@ -335,7 +335,7 @@ func TestRefreshingVisibleDirectoryPreservesRanks(t *testing.T) {
 		return count
 	}
 	before := extent()
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "open catalog store", err)
 	pin, err := store.retainGeneration(headGeneration, true)
 	testutil.FailErr(t, "pin observation generation", err)
@@ -364,7 +364,7 @@ func TestRefreshingVisibleDirectoryPreservesRanks(t *testing.T) {
 
 func navigationEntries(t *testing.T, catalog *Catalog, root Root, dir, after string, limit int) ([]Entry, DirectoryState, error) {
 	t.Helper()
-	nav, err := catalog.OpenNavigation(t.Context(), "p", root)
+	nav, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	if err != nil {
 		return nil, DirectoryState{}, err
 	}
@@ -390,12 +390,12 @@ func TestContentOnlyInvalidationKeepsDirectoryObservation(t *testing.T) {
 	t.Cleanup(repochange.ResetWatchersForTest)
 	repochange.MarkCoverageCompleteForTest(root.Path)
 	writeIndexFile(t, root.Path, "file.txt", "before")
-	observed, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	observed, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe root", err)
 	writeIndexFile(t, root.Path, "file.txt", "after")
 	repochange.Advance(root.Path)
 	catalog.InvalidateRootChange(root.Path, []string{"file.txt"}, repochange.StructuralPathSet{})
-	repeated, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	repeated, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "reuse after content edit", err)
 	if repeated.Sequence != observed.Sequence {
 		t.Fatalf("content-only invalidation rebuilt directory: before=%d after=%d", observed.Sequence, repeated.Sequence)
@@ -406,12 +406,12 @@ func TestStructuralInvalidationRefreshesDirectoryObservation(t *testing.T) {
 	catalog, root := indexFixture(t)
 	t.Cleanup(repochange.ResetWatchersForTest)
 	repochange.MarkCoverageCompleteForTest(root.Path)
-	observed, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	observed, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "observe empty root", err)
 	writeIndexFile(t, root.Path, "created.txt", "new")
 	repochange.Advance(root.Path)
 	catalog.InvalidateRootChange(root.Path, []string{"created.txt"}, repochange.StructuralPathSet{Paths: []string{"created.txt"}})
-	refreshed, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
+	refreshed, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{Priority: backgroundwork.PriorityInteractive})
 	testutil.FailErr(t, "refresh after create", err)
 	if refreshed.Sequence == observed.Sequence {
 		t.Fatal("structural invalidation reused stale directory observation")

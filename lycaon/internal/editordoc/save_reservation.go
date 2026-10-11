@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/documentcore"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
 
@@ -39,6 +39,6 @@ func (s *Service) settleRejectedReservation(ctx context.Context, d *Document, op
 func savePreflightRejected(err error) bool {
 	var rejected *documentcore.Rejected
 	return errors.As(err, &rejected) || errors.Is(err, ErrNotFound) || errors.Is(err, ErrRevisionConflict) || errors.Is(err, ErrRootDetached) ||
-		errors.Is(err, project.ErrSourceNotFound) || errors.Is(err, project.ErrSourcePathDenied) || errors.Is(err, project.ErrSourceWriteTooLarge) ||
+		errors.Is(err, projectsource.ErrSourceNotFound) || errors.Is(err, projectsource.ErrSourcePathDenied) || errors.Is(err, projectsource.ErrSourceWriteTooLarge) ||
 		errors.Is(err, textfile.ErrRawTooLarge) || errors.Is(err, textfile.ErrTextTooLarge) || errors.Is(err, textfile.ErrBinary) || errors.Is(err, textfile.ErrUnsupported)
 }

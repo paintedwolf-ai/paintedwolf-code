@@ -29,7 +29,7 @@ type ReadSession struct {
 
 // NewReadSession admits tctx's attached roots for the reads of one call.
 func NewReadSession(b *sandbox.Boundary, tctx tools.ToolContext) *ReadSession {
-	admitted := strings.TrimSpace(tctx.WorkerBranchRoot) == "" && len(tctx.Roots) > 0 &&
+	admitted := strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" && len(tctx.Source.Roots) > 0 &&
 		tools.ValidateAttachedRootsForAction(actionRootPaths(tctx)) == nil
 	return &ReadSession{boundary: b, tctx: tctx, admitted: admitted, roots: map[string]*fseffect.ReadRoot{}}
 }
@@ -72,11 +72,11 @@ func (s *ReadSession) resolveBeneathRoot(ctx context.Context, modelPath string) 
 // placeBeneathRoot resolves modelPath against the attached roots. A path the
 // roots cannot place is left to the general resolver, which reports why.
 func (s *ReadSession) placeBeneathRoot(modelPath string) (abs string, root, primary projectroot.RootRef, ok bool) {
-	abs, root, err := projectroot.ResolveAbs(s.tctx.Roots, s.tctx.ActiveRootID, modelPath)
+	abs, root, err := projectroot.ResolveAbs(s.tctx.Source.Roots, s.tctx.Source.ActiveRootID, modelPath)
 	if err != nil {
 		return "", projectroot.RootRef{}, projectroot.RootRef{}, false
 	}
-	primary, err = projectroot.PrimaryRoot(s.tctx.Roots)
+	primary, err = projectroot.PrimaryRoot(s.tctx.Source.Roots)
 	if err != nil {
 		return "", projectroot.RootRef{}, projectroot.RootRef{}, false
 	}
@@ -86,7 +86,7 @@ func (s *ReadSession) placeBeneathRoot(modelPath string) (abs string, root, prim
 // hostAddressed reports a path the host's own namespaces answer before any
 // attached root: agent spill output and the session scratch folder.
 func (s *ReadSession) hostAddressed(modelPath string) bool {
-	if host := strings.TrimSpace(s.tctx.HostDataDir); host != "" {
+	if host := strings.TrimSpace(s.tctx.Host.HostDataDir); host != "" {
 		if _, ok := tooloutput.AgentWireSpillScopeRel(host, modelPath); ok {
 			return true
 		}
@@ -94,7 +94,7 @@ func (s *ReadSession) hostAddressed(modelPath string) bool {
 	if _, ok := projectroot.ScratchAddress(modelPath); ok {
 		return true
 	}
-	scratch := filepath.Clean(strings.TrimSpace(s.tctx.SessionScratchDir))
+	scratch := filepath.Clean(strings.TrimSpace(s.tctx.Host.SessionScratchDir))
 	path := filepath.Clean(strings.TrimSpace(modelPath))
 	return scratch != "." && filepath.IsAbs(path) && (path == scratch || strings.HasPrefix(path, scratch+string(filepath.Separator)))
 }

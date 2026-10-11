@@ -2,7 +2,7 @@ package toolhost
 
 import (
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 )
 
 type catalogOutcomeRenderer struct {
@@ -13,7 +13,7 @@ func (r *catalogOutcomeRenderer) ApprovalOutcome(code string, ctx map[string]any
 	return r.cat.Message(code, ctx)
 }
 
-func newCatalogOutcomeRenderer(cat *approvaloutcome.Catalog) tools.ApprovalOutcomeRenderer {
+func newCatalogOutcomeRenderer(cat *approvaloutcome.Catalog) toolexecution.ApprovalOutcomeRenderer {
 	if cat == nil {
 		return nil
 	}

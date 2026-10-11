@@ -11,8 +11,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
@@ -21,17 +23,14 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceref"
 	"github.com/lycaon/lycaon/internal/tokenest"
-	"github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // modelTurn prepares and streams one model request: the offered tools, the request, and its usage.
-type modelTurn struct{ *PromptLoop }
 
-func (l modelTurn) runAssistantStreamTurn(
+func (l *modelTurn) runAssistantStreamTurn(
 	ctx context.Context,
 	sessionID string,
 	sess *api.Session,
@@ -42,8 +41,8 @@ func (l modelTurn) runAssistantStreamTurn(
 	iterIndex, maxIter int,
 	hostTurn bool,
 ) (api.Message, *modelcall.Completion, []string, error) {
-	if st != nil && st.attemptID != "" && l.Deps.AdmitModelResponse != nil {
-		if err := l.Deps.AdmitModelResponse(ctx, sessionID, st.attemptID); err != nil {
+	if st != nil && st.attemptID != "" && l.Projection.Deps.AdmitModelResponse != nil {
+		if err := l.Projection.Deps.AdmitModelResponse(ctx, sessionID, st.attemptID); err != nil {
 			return api.Message{}, nil, nil, err
 		}
 	}
@@ -59,14 +58,14 @@ func (l modelTurn) runAssistantStreamTurn(
 	if coordinatorDraftSlotEligible(sess, profileID) {
 		assistantMsg.DraftStatus = api.DraftStatusLive
 	}
-	if l.Deps.AppendMessages == nil {
+	if l.Projection.Deps.AppendMessages == nil {
 		return api.Message{}, nil, nil, fmt.Errorf("append messages not configured")
 	}
 	var clearActive sync.Once
 	clearStream := func() {
 		clearActive.Do(func() {
-			if l.Deps.Streams != nil {
-				l.Deps.Streams.Finish(ctx, sessionID)
+			if l.Projection.Deps.Streams != nil {
+				l.Projection.Deps.Streams.Finish(ctx, sessionID)
 			}
 		})
 	}
@@ -83,7 +82,7 @@ func (l modelTurn) runAssistantStreamTurn(
 			return cause
 		}
 		clearStream()
-		withdrawErr := turnNudges(l).withdrawCoordinatorDraft(
+		withdrawErr := l.Nudges.withdrawCoordinatorDraft(
 			context.WithoutCancel(ctx), sess, sessionID, st, "",
 		)
 		return errors.Join(cause, withdrawErr)
@@ -98,7 +97,7 @@ func (l modelTurn) runAssistantStreamTurn(
 			placeholder.appended = true
 			return nil
 		}
-		if err := l.Deps.AppendMessages(ctx, sessionID, assistantMsg); err != nil {
+		if err := l.Projection.Deps.AppendMessages(ctx, sessionID, assistantMsg); err != nil {
 			if errors.Is(err, store.ErrDuplicateMessageID) && st != nil && st.usesCoordinatorDraftSlot(assistantMsg.ID) {
 				placeholder.appended = true
 				st.draftSlotAppended = true
@@ -112,15 +111,15 @@ func (l modelTurn) runAssistantStreamTurn(
 		}
 		return nil
 	}
-	wireContent := closeoutWireContent(l.promptTurnSurface(sessionID))
+	wireContent := closeoutWireContent(l.Context.promptTurnSurface(sessionID))
 	completion, tokens, err := l.completeStream(ctx, sess, sessionID, history, profileID, userPrompt, iterIndex, maxIter, hostTurn, st, func(partial *modelcall.Completion) {
 		if partial == nil {
 			return
 		}
 		// [OAR-OPS-8] Content and tool-call deltas remain private until model.output resolves.
-		if l.Deps.Streams != nil {
+		if l.Projection.Deps.Streams != nil {
 			generating := tokenest.EstimateDefault(partial.Content) + tokenest.EstimateDefault(partial.Reasoning)
-			l.Deps.Streams.CacheLive(sessionID, assistantMsg.ID, "", nil, generating)
+			l.Projection.Deps.Streams.CacheLive(sessionID, assistantMsg.ID, "", nil, generating)
 		}
 		_ = persistPlaceholder()
 	})
@@ -131,7 +130,7 @@ func (l modelTurn) runAssistantStreamTurn(
 		return api.Message{}, nil, nil, err
 	}
 	clearStream()
-	promptAssistant, err := l.settleAssistantStreamTurn(
+	promptAssistant, err := l.Projection.settleAssistantStreamTurn(
 		ctx, sessionID, st, assistantMsg, completion, tokens, outputID, iterIndex, wireContent,
 	)
 	if err != nil {
@@ -144,7 +143,7 @@ func (l modelTurn) runAssistantStreamTurn(
 	return promptAssistant, completion, tokens, nil
 }
 
-func (l modelTurn) settleAssistantStreamTurn(
+func (l *turnProjection) settleAssistantStreamTurn(
 	ctx context.Context,
 	sessionID string,
 	st *promptLoopTurnState,
@@ -163,7 +162,7 @@ func (l modelTurn) settleAssistantStreamTurn(
 		assistantMsg.ToolCalls = []api.ToolCall{}
 	}
 	completion.ToolCalls = assistantMsg.ToolCalls
-	storedAssistant, transientAssistant := toolInvocations(l).storageSafeMessage(ctx, assistantMsg)
+	storedAssistant, transientAssistant := l.storageSafeMessage(ctx, assistantMsg)
 	wireAssistant := storedAssistant
 	wireAssistant.Content = wireContent(storedAssistant.Content)
 	canonicalOutputID := ""
@@ -218,7 +217,7 @@ func (l modelTurn) settleAssistantStreamTurn(
 	return promptAssistant, nil
 }
 
-func (l modelTurn) completeStream(
+func (l *modelTurn) completeStream(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -238,7 +237,7 @@ func (l modelTurn) completeStream(
 	isCoordinatorTurn := strings.TrimSpace(sess.ParentSessionID) == ""
 	finishPreparing := func() {}
 	if isCoordinatorTurn {
-		activity := l.beginActivity(ctx, sess, sessionID, api.ActivityKindPreparingContext, "", "")
+		activity := l.Projection.beginActivity(ctx, sess, sessionID, api.ActivityKindPreparingContext, "", "")
 		finishPreparing = activity.finish
 	}
 	defer finishPreparing()
@@ -274,11 +273,11 @@ func (l modelTurn) completeStream(
 	proseFinish := st.proseTurn(sess, iterIndex, maxIter)
 	ctx = llm.WithDispatchObserver(ctx, func() {
 		finishPreparing()
-		if l.Deps.Events == nil || !isCoordinatorTurn {
+		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
 			return
 		}
-		loop := coordinatorLLMLoopProgress(profileID, surfaceID, l.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish)
-		l.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
+		loop := coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish)
+		l.Projection.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
 			CallID:          llmCallID,
 			Provider:        callProvider,
 			Model:           callModel,
@@ -286,19 +285,19 @@ func (l modelTurn) completeStream(
 			CoordinatorLoop: loop,
 		})
 	})
-	if l.Deps.Events != nil && isCoordinatorTurn {
+	if l.Projection.Deps.Events != nil && isCoordinatorTurn {
 		// Publish one terminal event even after cancellation.
 		defer func() {
 			if err == nil {
 				return
 			}
-			l.Deps.Events.PublishLLM(context.WithoutCancel(ctx), sessionProjectKey(sess), sessionID, api.LLMCallEvent{
+			l.Projection.Deps.Events.PublishLLM(context.WithoutCancel(ctx), sessionProjectKey(sess), sessionID, api.LLMCallEvent{
 				CallID:   llmCallID,
 				Provider: callProvider,
 				Model:    callModel,
 				Status:   api.LLMCallStatusError,
 				CoordinatorLoop: coordinatorLLMLoopProgress(
-					profileID, surfaceID, l.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish,
+					profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish,
 				),
 			})
 		}()
@@ -306,10 +305,10 @@ func (l modelTurn) completeStream(
 
 	// Retry updates reuse the call id.
 	ctx = providerretry.WithRetryObserver(ctx, func(a providerretry.RetryAttempt) {
-		if l.Deps.Events == nil || !isCoordinatorTurn {
+		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
 			return
 		}
-		l.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
+		l.Projection.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
 			CallID:      llmCallID,
 			Provider:    callProvider,
 			Model:       callModel,
@@ -320,7 +319,7 @@ func (l modelTurn) completeStream(
 			RetryReason: api.LLMRetryReason(a.Reason),
 			SilenceMs:   a.Silence.Milliseconds(),
 			CoordinatorLoop: coordinatorLLMLoopProgress(
-				profileID, surfaceID, l.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish,
+				profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish,
 			),
 		})
 	})
@@ -352,7 +351,7 @@ func (l modelTurn) completeStream(
 		slog.WarnContext(ctx, "record llm call usage", "call_id", llmCallID, "error", err)
 	}
 	outputGateStarted := time.Now()
-	reject, blocked, transformed, changed := l.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oarModelOutputSegments(completion.Content), "", nil)
+	reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oarModelOutputSegments(completion.Content), "", nil)
 	slog.InfoContext(ctx, "model output gate", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(outputGateStarted).Milliseconds(), "blocked", blocked)
 	if blocked {
 		return nil, nil, reject
@@ -377,7 +376,7 @@ func (l modelTurn) completeStream(
 	}
 	if isCoordinatorTurn {
 		l.publishLLMCallOK(ctx, sess, sessionID, llmCallID, providerID, model, completion.Usage,
-			coordinatorLLMLoopProgress(profileID, surfaceID, l.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish))
+			coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish))
 	}
 	completion.ProviderID = providerID
 	completion.Model = model
@@ -391,7 +390,7 @@ type promptStreamCollection struct {
 	model      string
 }
 
-func (l modelTurn) collectPromptStream(
+func (l *modelTurn) collectPromptStream(
 	ctx context.Context,
 	sess *api.Session,
 	client modelcall.LLMClient,
@@ -404,8 +403,8 @@ func (l modelTurn) collectPromptStream(
 	var stall time.Duration
 	// The turn budget starts at send; pending approval time is excluded.
 	var budget *llm.CallBudget
-	if l.Deps.Limits != nil {
-		lim := l.Deps.Limits(ctx, sess)
+	if l.Context.Deps.Limits != nil {
+		lim := l.Context.Deps.Limits(ctx, sess)
 		budget = llm.NewCallBudget(lim.LLMTurnTimeout())
 		streamCtx = llm.WithCallBudget(ctx, budget)
 		stall = lim.LLMStreamStallTimeout()
@@ -466,7 +465,7 @@ type coordinatorTurnRequest struct {
 }
 
 // buildTurnRequest assembles and detaches one provider request.
-func (l modelTurn) buildTurnRequest(
+func (l *modelTurn) buildTurnRequest(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -477,7 +476,7 @@ func (l modelTurn) buildTurnRequest(
 	hostTurn bool,
 	st *promptLoopTurnState,
 ) (coordinatorTurnRequest, error) {
-	if l.Deps.BuildMessages == nil {
+	if l.Context.Deps.BuildMessages == nil {
 		return coordinatorTurnRequest{}, fmt.Errorf("build messages not configured")
 	}
 	frameValue := inject.CoordinatorTurnFrame{}
@@ -486,7 +485,7 @@ func (l modelTurn) buildTurnRequest(
 		frame = &st.coordinatorFrame
 		frameValue = st.coordinatorFrame
 	}
-	messages, err := l.Deps.BuildMessages(ctx, sess, history, frame)
+	messages, err := l.Context.Deps.BuildMessages(ctx, sess, history, frame)
 	if err != nil {
 		return coordinatorTurnRequest{}, err
 	}
@@ -496,7 +495,7 @@ func (l modelTurn) buildTurnRequest(
 	if st != nil && st.proseTurn(sess, iterIndex, maxIter) {
 		st.proseFinish = true
 	}
-	turnTools, toolPlan, surfaceID, err := l.coordinatorToolsForTurn(
+	turnTools, toolPlan, surfaceID, err := l.Context.coordinatorToolsForTurn(
 		ctx, sess, profileID, history, userPrompt, iterIndex, maxIter, frameValue, st,
 	)
 	if err != nil {
@@ -510,21 +509,21 @@ func (l modelTurn) buildTurnRequest(
 	// completion tool, or a report-document repair that asks for one fence.
 	toolUse := modelcall.ToolUseAllowed
 	callable := turnTools
-	if turnCloseout(l).repairsReportDocument(ctx, sessionID) || (st != nil && st.proseFinish && len(workerProseOfferedTools(sess)) == 0) {
+	if l.Closeout.repairsReportDocument(ctx, sessionID) || (st != nil && st.proseFinish && len(workerProseOfferedTools(sess)) == 0) {
 		toolUse = modelcall.ToolUseForbidden
 		callable = []tools.ToolMeta{}
 	}
-	messages, err = toolInvocations(l).appendToolProcedures(ctx, sess, profileID, messages, callable)
+	messages, err = l.Tools.appendToolProcedures(ctx, sess, profileID, messages, callable)
 	if err != nil {
 		return coordinatorTurnRequest{}, err
 	}
-	if reject, blocked, _, changed := l.evaluateContentAnchor(ctx, sess, oar.AnchorContentInput, oarContentSegments(messages), "", nil); blocked {
+	if reject, blocked, _, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentInput, oarContentSegments(messages), "", nil); blocked {
 		return coordinatorTurnRequest{}, reject
 	} else if changed {
 		return coordinatorTurnRequest{}, fmt.Errorf("[OAR-PROF-10] model.input transform cannot preserve message roles and provenance")
 	}
-	if l.Deps.TakePolicyFeedback != nil {
-		feedback, err := l.Deps.TakePolicyFeedback(ctx, sessionID)
+	if l.Inbox.Deps.TakePolicyFeedback != nil {
+		feedback, err := l.Inbox.Deps.TakePolicyFeedback(ctx, sessionID)
 		if err != nil {
 			return coordinatorTurnRequest{}, err
 		}
@@ -541,7 +540,7 @@ func (l modelTurn) buildTurnRequest(
 		Debug: modelcall.RequestDebug{
 			SessionID:        sessionID,
 			ProjectID:        sess.ProjectID,
-			ProjectDir:       l.primaryProjectRoot(ctx, sess),
+			ProjectDir:       l.Context.primaryProjectRoot(ctx, sess),
 			RootSessionID:    rootModelRequestSessionID(sess, sessionID),
 			AgentType:        sess.AgentType,
 			ParentSessionID:  sess.ParentSessionID,
@@ -584,14 +583,14 @@ func validateTurnToolFunctionRoots(metas []tools.ToolMeta) error {
 }
 
 // primaryProjectRoot keeps project leases stable across worker checkouts.
-func (l modelTurn) primaryProjectRoot(ctx context.Context, sess *api.Session) string {
-	if l.PromptLoop == nil || sess == nil {
+func (l *promptContext) primaryProjectRoot(ctx context.Context, sess *api.Session) string {
+	if l == nil || sess == nil {
 		return ""
 	}
 	return strings.TrimSpace(l.citationRoots(ctx, sess).ProjectDir)
 }
 
-func (l modelTurn) fitMessagesForCompaction(ctx context.Context, sess *api.Session, sessionID string, messages []api.Message, turnTools []tools.ToolMeta) []api.Message {
+func (l *modelTurn) fitMessagesForCompaction(ctx context.Context, sess *api.Session, sessionID string, messages []api.Message, turnTools []tools.ToolMeta) []api.Message {
 	if l.Deps.CompactionConfig == nil {
 		return messages
 	}

@@ -11,10 +11,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/filekind"
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/repomap"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/odvcencio/gotreesitter/grammars"
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 type definitionLanguageFixture struct {
@@ -24,7 +24,7 @@ type definitionLanguageFixture struct {
 
 func TestSourceDefinitionUsesSharedDeclarationModel(t *testing.T) {
 	t.Parallel()
-	body := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/project/source_symbols.go")
+	body := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/projectsource/source_symbols.go")
 	for _, shared := range []string{"fileoutline.AnalyzeText", "analysis.Definitions"} {
 		if !strings.Contains(body, shared) {
 			t.Fatalf("editor definition navigation missing shared analysis %q", shared)
@@ -62,7 +62,7 @@ func TestSourceDefinitionSupportedLanguageMatrix(t *testing.T) {
 			if !ok || len(spans) == 0 {
 				t.Fatalf("shared definition spans are empty for supported language %q", fixture.language)
 			}
-			symbols, err := project.SourceSymbolsForContent(t.Context(),
+			symbols, err := projectsource.SourceSymbolsForContent(t.Context(),
 				definitionFixtureFilename(t, fixture.language),
 				[]byte(fixture.source),
 			)

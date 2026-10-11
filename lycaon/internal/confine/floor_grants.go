@@ -49,19 +49,16 @@ func CoveringGrants(grants []string) []string {
 
 // repositoryTreeGrant returns the nearest work tree holding path that a
 // reviewed write root may name, or the containing directory. The search runs
-// on the resolved path and stops below the home directory and top-level
-// directories. Only a real .git directory or file marks a work tree, so a
+// on the resolved path through the filesystem root. Only a real .git directory or file marks a work tree, so a
 // symlinked marker cannot stand in for one. The control-plane and protected
 // floors stay in force inside the granted tree.
 func repositoryTreeGrant(path string) string {
 	containing := filepath.Dir(path)
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return containing
-	}
-	home = fspath.CanonicalPath(home)
-	for dir := fspath.CanonicalPath(containing); !topLevelDir(dir) && !PathEqual(dir, home); dir = filepath.Dir(dir) {
+	for dir := fspath.CanonicalPath(containing); ; dir = filepath.Dir(dir) {
 		if !workTreeMarker(filepath.Join(dir, ".git")) {
+			if filepath.Dir(dir) == dir {
+				break
+			}
 			continue
 		}
 		if refused, _ := GrantedWriteRootRefused(dir); refused {
@@ -75,12 +72,6 @@ func repositoryTreeGrant(path string) string {
 func workTreeMarker(path string) bool {
 	info, err := os.Lstat(path)
 	return err == nil && (info.IsDir() || info.Mode().IsRegular())
-}
-
-// topLevelDir reports the filesystem root and its direct children.
-func topLevelDir(path string) bool {
-	parent := filepath.Dir(path)
-	return parent == path || filepath.Dir(parent) == parent
 }
 
 func isDir(path string) bool {

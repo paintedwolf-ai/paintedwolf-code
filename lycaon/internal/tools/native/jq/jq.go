@@ -97,7 +97,7 @@ func (t *Tool) Run(ctx context.Context, args map[string]any, tctx tools.ToolCont
 	if tools.IsSensitivePath(displayPath) {
 		return "", safecmd.Reject("JQ_PATH_DENIED", map[string]any{"path": displayPath})
 	}
-	data, err := readInput(resolved, displayPath, tctx.MaxToolSpillBytes)
+	data, err := readInput(resolved, displayPath, tctx.Host.MaxToolSpillBytes)
 	if err != nil {
 		return "", err
 	}

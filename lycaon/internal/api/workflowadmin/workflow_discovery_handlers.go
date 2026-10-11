@@ -9,11 +9,12 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
+	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleListWorkflows(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleListWorkflows(w http.ResponseWriter, r *http.Request) {
 	// Workflow discovery accepts no project directory.
 	projectDir, ok := s.optionalProjectDirFromQuery(w, r)
 	if !ok {
@@ -35,9 +36,9 @@ func (s *Handler) HandleListWorkflows(w http.ResponseWriter, r *http.Request) {
 	}
 	catalog := s.Catalog
 	if projectID != "" {
-		catalog = workflow.ManifestResolver{
+		catalog = workflowcatalog.Resolver{
 			SessionStore: s.Catalog.SessionStore,
-			CatalogFor:   s.Sessions.Catalog().CatalogForProjectDir(projectID),
+			CatalogFor:   s.Sessions.Catalog.CatalogForProjectDir(projectID),
 			// Project workflows retain their trust gate.
 			ProjectTierApplies: s.Catalog.ProjectTierApplies,
 		}
@@ -66,7 +67,7 @@ func (s *Handler) HandleListWorkflows(w http.ResponseWriter, r *http.Request) {
 
 var workflowRunPageLimit = httpio.MustPageLimit(20, 1, 100)
 
-func (s *Handler) HandleListSessionWorkflowRuns(w http.ResponseWriter, r *http.Request) {
+func (s *RunControl) HandleListSessionWorkflowRuns(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
 	if !requestscope.SessionExists(s.Store, s.responses, w, r, sessionID) {
 		return
@@ -93,9 +94,9 @@ func (s *Handler) HandleListSessionWorkflowRuns(w http.ResponseWriter, r *http.R
 			}
 		}
 	}
-	page, err := s.Runs.ListPageBySession(r.Context(), sessionID, pq.Limit, statusFilter, pq.Cursor)
+	page, err := s.Runs.Runs.ListPageBySession(r.Context(), sessionID, pq.Limit, statusFilter, pq.Cursor)
 	if err != nil {
-		if errors.Is(err, workflow.ErrInvalidRunPageCursor) {
+		if errors.Is(err, workflowpersistence.ErrInvalidRunPageCursor) {
 			s.responses.PageCursorError(w, r, "cursor", err)
 			return
 		}
@@ -113,7 +114,7 @@ func (s *Handler) HandleListSessionWorkflowRuns(w http.ResponseWriter, r *http.R
 	httpio.WriteJSON(w, http.StatusOK, page)
 }
 
-func (s *Handler) optionalProjectDirFromQuery(w http.ResponseWriter, r *http.Request) (projectDir string, ok bool) {
+func (s *RunControl) optionalProjectDirFromQuery(w http.ResponseWriter, r *http.Request) (projectDir string, ok bool) {
 	projectID := strings.TrimSpace(r.URL.Query().Get("project_id"))
 	if projectID == "" {
 		return "", true

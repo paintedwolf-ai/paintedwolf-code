@@ -1,9 +1,10 @@
 package oar
 
 import (
-	"github.com/lycaon/lycaon/internal/oarcore"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
 // The three behaviours [OAR-FIRE-11] requires of a counter read, mirroring the
@@ -73,7 +74,7 @@ func TestCounterReadResolvesSiblingAndQualified(t *testing.T) {
 func TestCounterReadEvaluatesAnotherRulesCounter(t *testing.T) {
 	store := NewCounterStore()
 	gc := NewGuardContext()
-	gc.SessionID = "s1"
+	gc.Session.SessionID = "s1"
 	holder := newEvalHolder(gc, nil, store)
 
 	if got := holder.counterOf("TALLY", CounterFire); got != 0 {

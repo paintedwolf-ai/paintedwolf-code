@@ -16,12 +16,12 @@ import (
 // one host per test in a single process, so a host that stays reachable after
 // Close accumulates hundreds of graphs and exhausts the runner's memory.
 func TestClosedHostIsCollectable(t *testing.T) {
-	var closed weak.Pointer[session.Manager]
+	var closed weak.Pointer[session.Host]
 	t.Run("closed host", func(t *testing.T) {
 		h := BuildForTest(t)
 		_, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, h.ProjectDir(t, "project"))
 		testutil.FailErr(t, "create session", err)
-		closed = weak.Make(h.SessionMgr)
+		closed = weak.Make(h.Sessions.Manager)
 	})
 	t.Run("replacing host", func(t *testing.T) {
 		BuildForTest(t)

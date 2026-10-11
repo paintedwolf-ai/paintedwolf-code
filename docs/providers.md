@@ -94,7 +94,7 @@ The host resolves `models[].eligibility` for coordinator, worker pool, and lite 
 
 Chat support must be established for conversation roles. Coordinator and worker roles also use tools: explicit unsupported tool metadata is incompatible, while unknown tools on a chat-capable model remain selectable and labeled unverified. Model size and a blanket context-window threshold do not exclude models. Missing feed booleans remain unknown rather than becoming false.
 
-Listing, onboarding, and assignment never send completion requests. A separate, bounded provider regression suite exercises real tool calls, result replay, and host continuations through the application adapters; it neither changes model metadata nor adds exclusions. See the [release integration checklist](operations/release.md#provider-integration-checks).
+Listing, onboarding, and assignment never send completion requests. A separate, bounded provider regression suite exercises real tool calls, result replay, and host continuations through the application adapters; it neither changes model metadata nor adds exclusions. See [tool-use evaluation](dev-tasks.md#tool-use-evaluation-evaltool-usage).
 
 ## Callability
 

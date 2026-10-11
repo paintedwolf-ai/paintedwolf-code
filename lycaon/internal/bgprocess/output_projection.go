@@ -28,16 +28,16 @@ type safeProjection struct {
 // projectWindow screens retained bytes together and drops masked tails.
 //
 // Callers hold proc.publishMu.
-func (r *Registry) projectWindow(ctx context.Context, proc *Process) safeProjection {
+func (r *Output) projectWindow(ctx context.Context, proc *Process) safeProjection {
 	chunks, next, truncated := proc.buffer.ReadSince(0)
 	if len(chunks) == 0 {
 		return safeProjection{Next: next, Truncated: truncated, Screened: true, Empty: true}
 	}
 	head := chunks[0].Cursor
 	raw := joinOutputChunks(chunks)
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	projector := r.projector
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	out := safeProjection{Head: head, Next: next, Truncated: truncated}
 	if projector == nil {
 		return out
@@ -84,14 +84,14 @@ func recordWithheld(
 	return out
 }
 
-func (r *Registry) publishStream(ctx context.Context, proc *Process, stream string, cursor int64) {
+func (r *Output) publishStream(ctx context.Context, proc *Process, stream string, cursor int64) {
 	if r == nil || r.publish == nil || proc == nil {
 		return
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	silent := proc.silent
 	running := proc.running
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	if silent {
 		// Screen before eviction to retain masked ranges that cross writes.
 		if proc.buffer.Overflowing() {
@@ -149,16 +149,16 @@ const (
 
 // safeOutput screens the whole retained window; callers cut their own tail
 // from it so the tail and the body are one screening.
-func (r *Registry) safeOutput(ctx context.Context, proc *Process) (body string, evicted bool, screening tailScreening) {
+func (r *Output) safeOutput(ctx context.Context, proc *Process) (body string, evicted bool, screening tailScreening) {
 	proc.publishMu.Lock()
 	defer proc.publishMu.Unlock()
 	chunks, _, evicted := proc.buffer.ReadSince(0)
 	if len(chunks) == 0 {
 		return "", evicted, tailScreened
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	projector := r.projector
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	body = RenderChunks(trimWithheldChunks(chunks, proc.withheld))
 	if projector == nil {
 		return body, evicted, tailUnscreened
@@ -208,15 +208,15 @@ func processCaptureScope(proc *Process) captureprojection.Scope {
 }
 
 // ProjectScreen derives terminal text and raster data from one screened grid.
-func (r *Registry) ProjectScreen(
+func (r *Output) ProjectScreen(
 	ctx context.Context, scope captureprojection.Scope, screen ScreenSnapshot,
 ) (ScreenSnapshot, error) {
 	if r == nil {
 		return ScreenSnapshot{}, captureprojection.ErrUnavailable
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	projector := r.projector
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	if projector == nil {
 		return ScreenSnapshot{}, captureprojection.ErrUnavailable
 	}
@@ -230,15 +230,15 @@ func (r *Registry) ProjectScreen(
 
 // ProjectCapturedText screens capture metadata such as artifact captions with
 // the same scope as the captured bytes.
-func (r *Registry) ProjectCapturedText(
+func (r *Output) ProjectCapturedText(
 	ctx context.Context, projectID, rootSessionID, sessionID, label, value string,
 ) (string, error) {
 	if r == nil {
 		return "", captureprojection.ErrUnavailable
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	projector := r.projector
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	if projector == nil {
 		return "", captureprojection.ErrUnavailable
 	}

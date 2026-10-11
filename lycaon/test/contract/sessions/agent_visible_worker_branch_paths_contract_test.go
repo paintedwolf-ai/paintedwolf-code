@@ -7,7 +7,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/enginepaths"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -17,7 +16,7 @@ const leakedBranch = "/Users/me/.config/paintedwolf-dev/worker-branches/5d960b8f
 
 func TestAgentVisibleWorkerBranchPaths_completionXML(t *testing.T) {
 	t.Parallel()
-	out := session.FormatWorkerCompletionEnvelope(session.WorkerCompletionEnvelope{
+	out := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{
 		JobID:       "582d661b-6b3c-4018-a646-0e1468aeb7e6",
 		State:       "complete",
 		MergeStatus: "pending",
@@ -34,7 +33,7 @@ func TestAgentVisibleWorkerBranchPaths_completionXML(t *testing.T) {
 func TestAgentVisibleWorkerCompletionEnvelope_omitsHostLedger(t *testing.T) {
 	t.Parallel()
 	declaredCommand := "check"
-	out := session.FormatWorkerCompletionEnvelope(session.WorkerCompletionEnvelope{
+	out := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{
 		JobID:   "job-ledger",
 		State:   "complete",
 		Summary: "surveyed",

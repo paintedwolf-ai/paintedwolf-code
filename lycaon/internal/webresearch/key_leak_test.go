@@ -28,7 +28,7 @@ func TestWebResearchKeyLeakInvariant(t *testing.T) {
 	cat, err := LoadCatalog()
 	testutil.FailErr(t, "LoadCatalog", err)
 	reg := NewRegistry(cat)
-	testutil.FailErr(t, "RegisterCatalogProviders", RegisterCatalogProviders(reg))
+	testutil.FailErr(t, "RegisterCatalogProviders", RegisterCatalogProviders(t.Context(), reg))
 
 	cfgPath := filepath.Join(t.TempDir(), "config.yaml")
 	cfg := NewConfigStoreAt(cfgPath)

@@ -367,3 +367,21 @@ func TestRecordFromToolResult_HTTPAndBrowserURLs(t *testing.T) {
 	}
 }
 
+func TestCommandOutputURLsRemainOutcomeEvidenceNotPathsOrWebObservations(t *testing.T) {
+	root := t.TempDir()
+	body := `{"stages":[{"command":"gh issue create","exit_code":0}],"exit_code":0,"tail":"https://github.com/owner/repo/issues/64\nmailto:user@example.test\n","ok":true}`
+	msgs := []api.Message{
+		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{Name: "command", ID: "url-output", Args: map[string]any{"command": "gh issue create"}}}},
+		{Role: api.MessageRoleTool, Content: body, ToolResult: &api.ToolResult{Content: body, Outcome: api.ToolResultOutcomeCompleted}},
+	}
+	ev := ledgertest.BuildFromMessages(root, msgs)
+	if paths := evidence.ObservedPathsSorted(ev); len(paths) != 0 {
+		t.Fatalf("URL output became paths: %v", paths)
+	}
+	if urls := evidence.ObservedURLsFromEvidence(ev); len(urls) != 0 {
+		t.Fatalf("output became web observation: %v", urls)
+	}
+	if _, ok := evidence.ResolveHandle(ev, "command#1"); !ok {
+		t.Fatal("command outcome handle missing")
+	}
+}

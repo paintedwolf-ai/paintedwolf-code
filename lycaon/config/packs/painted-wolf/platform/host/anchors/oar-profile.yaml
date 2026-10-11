@@ -16,6 +16,16 @@
 oar_capability_version: "1.0"
 host: paintedwolf
 
+# Retired: paintedwolf.relocated_field and paintedwolf.nested_under used ambiguous single-field facts.
+# Successors: paintedwolf.misplaced_fields, paintedwolf.found_under, and paintedwolf.belongs_under.
+# Retired: paintedwolf.unparsed_json conflated encoded JSON with malformed JSON.
+# Successors: paintedwolf.json_encoded and paintedwolf.json_malformed.
+# Retired fact names must never be reused.
+# Retired: paintedwolf.high_risk_tool combined policy categories (OAR-FACT-7).
+# Successor: compose paintedwolf.tool_is_state, tool_is_delegation,
+# tool_is_handoff, and tool_is_task explicitly in when. References to the
+# retired name fail rule loading; its old meaning is never reused.
+
 anchors:
   # Core anchor id -> the local catalog anchor that implements it.
   core:
@@ -358,8 +368,6 @@ host_facts:
    type: string
  - name: paintedwolf.posture_unresolved
    type: bool
- - name: paintedwolf.high_risk_tool
-   type: bool
  - name: paintedwolf.tool_is_state
    type: bool
  - name: paintedwolf.tool_is_delegation
@@ -561,6 +569,18 @@ host_facts:
  - name: paintedwolf.refused_read_grants
    type: list<string>
    observation: The capability_request.read_path path whose approval would open each refused read path that a reviewed grant can open; empty when none.
+ - name: paintedwolf.receiving_tool_summarize
+   type: bool
+   observation: The receiving tool identity is summarize.
+ - name: paintedwolf.refused_terminal_read_paths
+   type: list<string>
+   observation: Kernel-observed read paths whose floor no approval opens.
+ - name: paintedwolf.refused_terminal_write_paths
+   type: list<string>
+   observation: Kernel-observed write paths whose floor no approval opens.
+ - name: paintedwolf.sandbox_refusal_witness
+   type: string
+   observation: The confinement reporting layer's declared witness (kernel, incomplete, or unavailable); empty without an observed invocation.
  - name: paintedwolf.refused_socket_paths
    type: list<string>
    observation: Unix socket paths the kernel refused the invocation's processes a connection to; empty when none.

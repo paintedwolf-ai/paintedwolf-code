@@ -44,10 +44,10 @@ func TestPipelineBlockShortCircuitAndOnFire(t *testing.T) {
 	p := NewGuardPipeline(rs, nil, store)
 
 	gc := NewGuardContext()
-	gc.SessionID = "s1"
-	gc.ClaimsCompletion = true
-	gc.HasMatchingLedgerJob = false
-	gc.BreakerCount = 0
+	gc.Session.SessionID = "s1"
+	gc.Grounding.ClaimsCompletion = true
+	gc.Grounding.HasMatchingLedgerJob = false
+	gc.Counters.BreakerCount = 0
 
 	res, err := p.Evaluate(context.Background(), StagePostTurn, gc)
 	testutil.FailErr(t, "eval nudge", err)
@@ -61,18 +61,18 @@ func TestPipelineBlockShortCircuitAndOnFire(t *testing.T) {
 	// Simulate escalated breaker via store + fact.
 	store.Increment("s1", "COORDINATOR_GROUNDING_ESCALATED", CounterBreaker, 3)
 	gc2 := NewGuardContext()
-	gc2.SessionID = "s1"
-	gc2.ClaimsCompletion = true
-	gc2.HasMatchingLedgerJob = false
-	gc2.BreakerCount = 3
+	gc2.Session.SessionID = "s1"
+	gc2.Grounding.ClaimsCompletion = true
+	gc2.Grounding.HasMatchingLedgerJob = false
+	gc2.Counters.BreakerCount = 3
 	res2, err := p.Evaluate(context.Background(), StagePostTurn, gc2)
 	testutil.FailErr(t, "eval block2", err)
 	if res2.Decision == nil || res2.Decision.Effect != EffectBlock {
 		// The nudge fires first while its own breaker_count is below 3; check the block rule alone.
 		p2 := NewGuardPipeline(NewRuleSet([]*Rule{block}), nil, store)
 		gc3 := NewGuardContext()
-		gc3.ClaimsCompletion = true
-		gc3.BreakerCount = 3
+		gc3.Grounding.ClaimsCompletion = true
+		gc3.Counters.BreakerCount = 3
 		res3, err := p2.Evaluate(context.Background(), StagePostTurn, gc3)
 		testutil.FailErr(t, "eval block only", err)
 		if res3.Decision == nil || res3.Decision.Code != "COORDINATOR_GROUNDING_ESCALATED" {
@@ -92,8 +92,8 @@ func TestPipelineMonitorSuppressesActions(t *testing.T) {
 	store := NewCounterStore()
 	p := NewGuardPipeline(NewRuleSet([]*Rule{r}), nil, store)
 	gc := NewGuardContext()
-	gc.SessionID = "s"
-	gc.Tool = "state_create"
+	gc.Session.SessionID = "s"
+	gc.Invocation.Tool = "state_create"
 	gc.DeriveToolClassFacts()
 	res, err := p.Evaluate(context.Background(), StagePreInvoke, gc)
 	testutil.FailErr(t, "eval", err)

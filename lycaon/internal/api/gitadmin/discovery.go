@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/session"
+	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -178,7 +178,7 @@ func canonicalGitPath(path string) string {
 }
 
 func (s *Handler) WriteGitReposLoadError(w http.ResponseWriter, r *http.Request, err error) {
-	if errors.Is(err, session.ErrSessionWorktreeStale) {
+	if errors.Is(err, sessionscope.ErrWorktreeStale) {
 		s.responses.Fail(w, wire.ApiErrorCodeWorktreeStale, "This chat's worktree is missing. Use Return to project folder in the Git tab to continue.")
 		return
 	}

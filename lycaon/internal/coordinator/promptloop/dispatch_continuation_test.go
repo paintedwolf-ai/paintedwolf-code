@@ -2,8 +2,6 @@ package promptloop_test
 
 import (
 	"context"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -13,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"testing"
 )
 
 func TestDispatchContinuesUntilExplicitWait(t *testing.T) {
@@ -41,15 +40,15 @@ func TestDispatchContinuesUntilExplicitWait(t *testing.T) {
 			}
 			accepted := map[string]int{}
 			testutil.FailErr(t, "register task", reg.Register("task", func(_ context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-				if wakes.IsSleeping(sess.ID) {
+				if wakes.Waits.IsSleeping(sess.ID) {
 					t.Error("dispatch parked the coordinator before independent work was started")
 				}
 				role := args["agent_type"].(string)
 				accepted[role]++
-				tctx.Out.Dispatch = &api.WorkerDispatch{WorkerID: role}
+				tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: role}
 				return "accepted", nil
 			}))
-			testutil.FailErr(t, "register wait", loopwake.RegisterWaitTool(reg, wakes, loopwake.WaitToolDeps{}))
+			testutil.FailErr(t, "register wait", loopwake.RegisterWaitTool(reg, wakes.Subscriptions, loopwake.WaitToolDeps{}))
 			calls := []api.ToolCall{
 				{ID: "comparison", Name: "task", Args: taskCallArgs("web-researcher", "Compare codebase sizes using current external sources")},
 				{ID: "composition", Name: "task", Args: taskCallArgs("repo-researcher", "Explain the local codebase composition and growth")},
@@ -65,20 +64,22 @@ func TestDispatchContinuesUntilExplicitWait(t *testing.T) {
 			responses = append(responses, &modelcall.Completion{ToolCalls: []api.ToolCall{{ID: "wait", Name: "wait", Args: map[string]any{"conditions": []any{map[string]any{"kind": "next_worker_done"}}}}}})
 			client := &sequentialLLMClient{completions: responses}
 			deps := promptloop.StoreDeps(storage)
-			deps.LoadedTools = workersLoaded
-			deps.Tools, deps.LLM = reg, client
-			deps.ImplementSessionState = func(context.Context, *api.Session) surface.ImplementSessionState {
+			deps.Context.LoadedTools = workersLoaded
+			deps.Context.Tools, deps.Model.LLM = reg, client
+			deps.Context.ImplementSessionState = func(context.Context, *api.Session) surface.ImplementSessionState {
 				return surface.ImplementSessionState{WorkersInFlight: len(accepted)}
 			}
 			result, err := promptloop.NewPromptLoopForTest(deps).Run(t.Context(), promptloop.PromptRunInput{
-				SessionID: sess.ID, Session: sess, ProfileID: "coordinator", ToolCtx: tools.ToolContext{SessionID: sess.ID},
+				SessionID: sess.ID, Session: sess, ProfileID: "coordinator", ToolCtx: tools.ToolContext{
+					Identity: tools.InvocationIdentity{SessionID: sess.ID},
+				},
 				History: userHistory("Compare this repo with similar tools and investigate why it contains so much code."),
 			})
 			testutil.FailErr(t, "coordinate research", err)
 			if result.TasksDispatchedCount != tc.workers || accepted["web-researcher"] != 1 || accepted["repo-researcher"] != tc.workers-1 || len(client.requests) != len(responses) {
 				t.Fatalf("dispatches=%d accepted=%v requests=%d want %d unfinished workers followed by wait", result.TasksDispatchedCount, accepted, len(client.requests), tc.workers)
 			}
-			if !wakes.IsSleeping(sess.ID) {
+			if !wakes.Waits.IsSleeping(sess.ID) {
 				t.Fatal("explicit wait did not suspend the coordinator")
 			}
 			for _, request := range client.requests[1:] {

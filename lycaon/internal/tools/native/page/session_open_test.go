@@ -3,6 +3,7 @@ package page
 import (
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,8 +12,8 @@ import (
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
 	"github.com/lycaon/lycaon/internal/browserengine/browsertest"
 	"github.com/lycaon/lycaon/internal/captureprojection"
-	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -35,9 +36,10 @@ func TestOpenHandlerIdempotentReopen(t *testing.T) {
 
 	handler := OpenHandler(pool, pages, nil, nil)
 	tctx := tools.ToolContext{
-		SessionID: "sess-idempotent", ProjectID: "proj-1",
-		Roots:        []projectroot.RootRef{{ID: "project", Path: workspace, IsPrimary: true}},
-		ActiveRootID: "project",
+		Identity: tools.InvocationIdentity{SessionID: "sess-idempotent",
+			ProjectID: "proj-1"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "project", Path: workspace, IsPrimary: true}},
+			ActiveRootID: "project"},
 	}
 
 	// The first open holds a new page.
@@ -66,7 +68,7 @@ func TestOpenHandlerIdempotentReopen(t *testing.T) {
 
 	// A distinct target on a registry capped at 1 is refused with PAGE_CAP_REACHED.
 	_, err = handler(t.Context(), map[string]any{"project_dir": "other"}, tctx)
-	var rejection *tools.ToolReject
+	var rejection *toolrejection.ToolReject
 	if !errors.As(err, &rejection) || rejection.Code != "PAGE_CAP_REACHED" {
 		t.Fatalf("expected PAGE_CAP_REACHED for distinct target, got: %v", err)
 	}

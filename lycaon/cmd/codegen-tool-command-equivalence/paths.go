@@ -33,7 +33,7 @@ func resolveModulePaths(rootFlag string) (modulePaths, error) {
 	out := modulePaths{
 		root:                 root,
 		equivalenceYAML:      equivalence,
-		generatedGo:          filepath.Join(root, "internal", "tools", "command_equivalence_gen.go"),
+		generatedGo:          filepath.Join(root, "internal", "toolcommand", "command_equivalence_gen.go"),
 		generatedReadHabitGo: filepath.Join(root, "internal", "confine", "read_habit_catalog_gen.go"),
 		toolSchemasDir:       filepath.Join(root, "config", "packs", "painted-wolf", "platform", "tools", "schemas"),
 	}

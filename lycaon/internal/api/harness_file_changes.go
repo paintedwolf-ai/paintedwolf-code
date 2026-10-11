@@ -11,21 +11,21 @@ func applyHarnessFileChanges(request *hitl.CheckpointRequest, changes []wire.App
 		return
 	}
 	action := request.ProposedAction
-	action.Command = ""
-	action.FileChanges = changes
+	action.Presentation.Command = ""
+	action.Mutations.FileChanges = changes
 	for _, change := range changes {
-		action.Files = append(action.Files, change.Path)
+		action.Invocation.Files = append(action.Invocation.Files, change.Path)
 		for _, path := range []string{change.Path, change.FromPath} {
 			if change.Target == "index" {
 				continue
 			}
-			if target, ok := hitl.AgentPolicyTargetFor(path, action.ProjectDir); ok {
-				action.AgentPolicy = append(action.AgentPolicy, target)
+			if target, ok := hitl.AgentPolicyTargetFor(path, action.Scope.ProjectDir); ok {
+				action.Mutations.AgentPolicy = append(action.Mutations.AgentPolicy, target)
 			}
 		}
 	}
 	_, request.Decision = gate.Evaluate(gate.Facts{
 		Stage: gate.StagePreSpawn, Ran: gate.ProducerApprovalRequest | gate.ProducerFilePath,
-		ApprovalRequest: &gate.ApprovalRequest{Count: 1}, AgentPolicyPaths: hitl.AgentPolicyPaths(action.AgentPolicy),
+		ApprovalRequest: &gate.ApprovalRequest{Count: 1}, AgentPolicyPaths: hitl.AgentPolicyPaths(action.Mutations.AgentPolicy),
 	}, gate.DefaultPosture)
 }

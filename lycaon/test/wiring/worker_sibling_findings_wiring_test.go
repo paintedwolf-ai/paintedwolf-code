@@ -55,17 +55,17 @@ func TestParallelWorkerRecordFindingSiblingInjectWiring(t *testing.T) {
 	}
 	testutil.FailErr(t, "defaults a", worker.ApplyEnqueueDefaults(&taskA, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
 	testutil.FailErr(t, "defaults b", worker.ApplyEnqueueDefaults(&taskB, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
-	_, err = h.WorkerQueue.Enqueue(ctx, taskA)
+	_, err = h.Delegations.Queue.Enqueue(ctx, taskA)
 	testutil.FailErr(t, "enqueue a", err)
-	_, err = h.WorkerQueue.Enqueue(ctx, taskB)
+	_, err = h.Delegations.Queue.Enqueue(ctx, taskB)
 	testutil.FailErr(t, "enqueue b", err)
 
 	childA, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "leg a"})
 	testutil.FailErr(t, "create child a", err)
 	childB, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "leg b"})
 	testutil.FailErr(t, "create child b", err)
-	testutil.FailErr(t, "link a", h.WorkerQueue.SetChildSessionID(ctx, taskA.ID, childA.ID))
-	testutil.FailErr(t, "link b", h.WorkerQueue.SetChildSessionID(ctx, taskB.ID, childB.ID))
+	testutil.FailErr(t, "link a", h.Delegations.Queue.SetChildSessionID(ctx, taskA.ID, childA.ID))
+	testutil.FailErr(t, "link b", h.Delegations.Queue.SetChildSessionID(ctx, taskB.ID, childB.ID))
 
 	configDir := filepath.Join(dir, "internal", "config")
 	testutil.FailErr(t, "create config dir", os.MkdirAll(configDir, 0o755))
@@ -86,7 +86,7 @@ func TestParallelWorkerRecordFindingSiblingInjectWiring(t *testing.T) {
 	}, tctx)
 	testutil.FailErr(t, "record_finding worker a", err)
 
-	notes, _, err := h.SessionMgr.RecentSiblingNotes(ctx, childB.ID, 0, 5)
+	notes, _, err := h.Sessions.Manager.Workers.Notes.RecentSiblingNotes(ctx, childB.ID, 0, 5)
 	testutil.FailErr(t, "read sibling notes", err)
 	if len(notes) != 1 || notes[0].Summary != summary {
 		t.Fatalf("sibling notes for B = %+v want summary %q", notes, summary)

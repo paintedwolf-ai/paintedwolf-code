@@ -47,36 +47,36 @@ func TestActorDisplayNamesForeignAgentsOnly(t *testing.T) {
 
 func TestTurnCheckpointAndActivityFloorReportAbsenceAsUnknown(t *testing.T) {
 	store, ctx := openLedger(t)
-	if _, found, err := store.TurnCheckpoint(ctx, "p1", "s1", 1); err != nil || found {
+	if _, found, err := store.Checkpoints.TurnCheckpoint(ctx, "p1", "s1", 1); err != nil || found {
 		t.Fatalf("missing checkpoint = (%v, %v), want absent without error", found, err)
 	}
-	if _, found, err := store.SessionActivityFloor(ctx, "p1", "s1"); err != nil || found {
+	if _, found, err := store.History.SessionActivityFloor(ctx, "p1", "s1"); err != nil || found {
 		t.Fatalf("missing floor = (%v, %v), want absent without error", found, err)
 	}
 
-	_, err := store.CreateStructuralCheckpoint(ctx, StructuralCheckpointInput{
+	_, err := store.Checkpoints.CreateStructuralCheckpoint(ctx, StructuralCheckpointInput{
 		ProjectID: "p1", Kind: CheckpointTurn, Label: "Turn start", SessionID: "s1", Turn: 1,
 	})
 	testutil.FailErr(t, "create turn 1 checkpoint", err)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "a.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "op-user-a", After: []byte("a\n"),
-	})
-	_, err = store.CreateStructuralCheckpoint(ctx, StructuralCheckpointInput{
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "op-user-a", After: []byte("a\n")})
+	_, err = store.Checkpoints.CreateStructuralCheckpoint(ctx, StructuralCheckpointInput{
 		ProjectID: "p1", Kind: CheckpointTurn, Label: "Turn start", SessionID: "s1", Turn: 2,
 	})
 	testutil.FailErr(t, "create turn 2 checkpoint", err)
 
-	first, found, err := store.TurnCheckpoint(ctx, "p1", "s1", 1)
+	first, found, err := store.Checkpoints.TurnCheckpoint(ctx, "p1", "s1", 1)
 	testutil.FailErr(t, "resolve turn 1 checkpoint", err)
-	second, foundSecond, err := store.TurnCheckpoint(ctx, "p1", "s1", 2)
+	second, foundSecond, err := store.Checkpoints.TurnCheckpoint(ctx, "p1", "s1", 2)
 	testutil.FailErr(t, "resolve turn 2 checkpoint", err)
 	if !found || !foundSecond || second.CreatedOrdinal <= first.CreatedOrdinal {
 		t.Fatalf("turn checkpoints = (%v %d, %v %d), want both found in ordinal order",
 			found, first.CreatedOrdinal, foundSecond, second.CreatedOrdinal)
 	}
-	floor, foundFloor, err := store.SessionActivityFloor(ctx, "p1", "s1")
+	floor, foundFloor, err := store.History.SessionActivityFloor(ctx, "p1", "s1")
 	testutil.FailErr(t, "resolve activity floor", err)
 	if !foundFloor || floor != first.CreatedOrdinal {
 		t.Fatalf("activity floor = (%v, %d), want turn 1 ordinal %d", foundFloor, floor, first.CreatedOrdinal)
@@ -88,27 +88,27 @@ func TestTurnCheckpointIsAnImmutableIdempotentBoundary(t *testing.T) {
 	input := StructuralCheckpointInput{
 		ProjectID: "p1", Kind: CheckpointTurn, Label: "Turn start", SessionID: "s1", Turn: 1,
 	}
-	first, err := store.CreateStructuralCheckpoint(ctx, input)
+	first, err := store.Checkpoints.CreateStructuralCheckpoint(ctx, input)
 	testutil.FailErr(t, "create turn checkpoint", err)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "a.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
-		SessionID: "s1", Turn: 1, OperationID: "op-agent-a", After: []byte("a\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginAgent,
+		SessionID: "s1", Turn: 1, OperationID: "op-agent-a", After: []byte("a\n")})
 
-	replayed, err := store.CreateStructuralCheckpoint(ctx, input)
+	replayed, err := store.Checkpoints.CreateStructuralCheckpoint(ctx, input)
 	testutil.FailErr(t, "replay turn checkpoint", err)
 	if replayed.ID != first.ID || replayed.CreatedOrdinal != first.CreatedOrdinal ||
 		!replayed.CreatedTS.Equal(first.CreatedTS) {
 		t.Fatalf("replayed checkpoint = %+v, want original boundary %+v", replayed, first)
 	}
 
-	resolved, found, err := store.TurnCheckpoint(ctx, "p1", "s1", 1)
+	resolved, found, err := store.Checkpoints.TurnCheckpoint(ctx, "p1", "s1", 1)
 	testutil.FailErr(t, "resolve immutable checkpoint", err)
 	if !found || resolved.ID != first.ID || resolved.CreatedOrdinal != first.CreatedOrdinal {
 		t.Fatalf("resolved checkpoint = (%v, %+v), want original boundary %+v", found, resolved, first)
 	}
-	effects, err := store.EffectsBetween(ctx, "p1", resolved.CreatedOrdinal, 0, 10)
+	effects, err := store.History.EffectsBetween(ctx, "p1", resolved.CreatedOrdinal, 0, 10)
 	testutil.FailErr(t, "list effects after immutable checkpoint", err)
 	if len(effects) != 1 || effects[0].Path != "a.txt" || effects[0].Turn != 1 {
 		t.Fatalf("effects after checkpoint = %+v, want the turn's recorded write", effects)
@@ -123,18 +123,18 @@ func TestEffectsBetweenBoundsAreExclusiveInclusive(t *testing.T) {
 		{"op-3", "b.txt", "three\n"},
 	} {
 		mustRecord(t, store, ctx, RecordInput{
-			ProjectID: "p1", RootID: "r1", Path: step.path,
-			Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser,
-			OperationID: step.op, After: []byte(step.content),
-		})
+			RecordLocation: RecordLocation{RootID: "r1", Path: step.path},
+			ProjectID:      "p1",
+			Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginUser,
+			OperationID: step.op, After: []byte(step.content)})
 	}
-	all, err := store.EffectsBetween(ctx, "p1", 0, 0, 10)
+	all, err := store.History.EffectsBetween(ctx, "p1", 0, 0, 10)
 	testutil.FailErr(t, "list all effects", err)
 	if len(all) != 3 {
 		t.Fatalf("effects = %d, want 3", len(all))
 	}
 	// all is newest first: all[2] is the oldest effect.
-	window, err := store.EffectsBetween(ctx, "p1", all[2].Ordinal, all[1].Ordinal, 10)
+	window, err := store.History.EffectsBetween(ctx, "p1", all[2].Ordinal, all[1].Ordinal, 10)
 	testutil.FailErr(t, "list window", err)
 	if len(window) != 1 || window[0].Ordinal != all[1].Ordinal {
 		t.Fatalf("window = %d effects, want exactly the middle effect", len(window))
@@ -145,24 +145,24 @@ func TestQueryFileEffectsPagesNewestFirst(t *testing.T) {
 	store, ctx := openLedger(t)
 	for _, op := range []string{"op-1", "op-2", "op-3"} {
 		mustRecord(t, store, ctx, RecordInput{
-			ProjectID: "p1", RootID: "r1", Path: "a.txt",
-			Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
-			SessionID: "s1", OperationID: op, After: []byte(op + "\n"),
-		})
+			RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+			ProjectID:      "p1",
+			Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent,
+			SessionID: "s1", OperationID: op, After: []byte(op + "\n")})
 	}
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "other.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "op-other", After: []byte("noise\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "other.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "op-other", After: []byte("noise\n")})
 	fileID, _ := mustResolve(t, store, ctx, "a.txt")
 
-	page, err := store.QueryFileEffects(ctx, "p1", fileID, 0, 0, 2)
+	page, err := store.History.QueryFileEffects(ctx, "p1", fileID, 0, 0, 2)
 	testutil.FailErr(t, "first page", err)
 	if len(page.Effects) != 2 || page.NextBeforeOrdinal == 0 {
 		t.Fatalf("first page = %d effects cursor %d, want 2 with cursor", len(page.Effects), page.NextBeforeOrdinal)
 	}
-	rest, err := store.QueryFileEffects(ctx, "p1", fileID, 0, page.NextBeforeOrdinal, 2)
+	rest, err := store.History.QueryFileEffects(ctx, "p1", fileID, 0, page.NextBeforeOrdinal, 2)
 	testutil.FailErr(t, "second page", err)
 	if len(rest.Effects) != 1 || rest.NextBeforeOrdinal != 0 {
 		t.Fatalf("second page = %d effects cursor %d, want final single effect", len(rest.Effects), rest.NextBeforeOrdinal)
@@ -171,12 +171,12 @@ func TestQueryFileEffectsPagesNewestFirst(t *testing.T) {
 		t.Fatal("file effects are not newest first across pages")
 	}
 
-	latest, found, err := store.LatestFileEffect(ctx, "p1", fileID)
+	latest, found, err := store.History.LatestFileEffect(ctx, "p1", fileID)
 	testutil.FailErr(t, "latest effect", err)
 	if !found || latest.Ordinal != page.Effects[0].Ordinal {
 		t.Fatalf("latest = (%v, %d), want newest ordinal %d", found, latest.Ordinal, page.Effects[0].Ordinal)
 	}
-	if _, found, err := store.LatestFileEffect(ctx, "p1", "no-such-file"); err != nil || found {
+	if _, found, err := store.History.LatestFileEffect(ctx, "p1", "no-such-file"); err != nil || found {
 		t.Fatalf("unknown file latest = (%v, %v), want absent without error", found, err)
 	}
 }
@@ -184,17 +184,17 @@ func TestQueryFileEffectsPagesNewestFirst(t *testing.T) {
 func TestQueryAttributionCarriesEveryOrigin(t *testing.T) {
 	store, ctx := openLedger(t)
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "a.txt",
-		Op: api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
-		OperationID: "op-user-create", After: []byte("alpha\nbeta\n"),
-	})
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpCreate, Origin: api.SourceChangeOriginUser,
+		OperationID: "op-user-create", After: []byte("alpha\nbeta\n")})
 	mustRecord(t, store, ctx, RecordInput{
-		ProjectID: "p1", RootID: "r1", Path: "a.txt",
-		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, SessionID: "s1",
+		RecordLocation: RecordLocation{RootID: "r1", Path: "a.txt"},
+		ProjectID:      "p1",
+		Op:             api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, SessionID: "s1",
 		OperationID: "op-agent-write",
-		Before:      []byte("alpha\nbeta\n"), After: []byte("alpha\ngamma\n"),
-	})
-	res, err := store.QueryAttribution(ctx, "p1", sourcebranch.Trunk, "r1", "a.txt")
+		Before:      []byte("alpha\nbeta\n"), After: []byte("alpha\ngamma\n")})
+	res, err := store.History.QueryAttribution(ctx, "p1", sourcebranch.Trunk, "r1", "a.txt")
 	testutil.FailErr(t, "query attribution", err)
 	origins := map[api.SourceChangeOrigin]bool{}
 	for _, iv := range res.Intervals {

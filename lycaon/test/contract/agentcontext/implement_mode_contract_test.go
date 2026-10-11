@@ -1,6 +1,8 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -166,7 +167,7 @@ func TestCoordinatorImplementTripartiteWithAmbientRun(t *testing.T) {
 	investigateProfile := surface.ResolveTurnProfile(surface.EnrichRunContextForWorkflow(api.CoordinatorRunContext{
 		WorkflowID: "implement", CurrentPhase: "boot",
 	}, configRoot), &api.Session{Posture: api.SessionPostureBuild}, coordinatorTurnHistory(nil, "Map this codebase"))
-	if investigateProfile.SurfaceID != tools.SurfaceImplementInvestigate {
+	if investigateProfile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		t.Fatalf("visible user boot surface = %q want investigate", investigateProfile.SurfaceID)
 	}
 }
@@ -186,7 +187,7 @@ func TestCoordinatorInvestigateSurfaceStateMatrix(t *testing.T) {
 		{
 			name:     "idle_visible_user",
 			prompt:   "fix src/auth.go",
-			wantSurf: tools.SurfaceImplementInvestigate,
+			wantSurf: toolcontract.SurfaceImplementInvestigate,
 		},
 		{
 			name:     "workers_in_flight",
@@ -218,7 +219,7 @@ func TestCoordinatorInvestigateSurfaceStateMatrix(t *testing.T) {
 			},
 			prompt:   "fix src/auth.go",
 			rowSess:  &api.Session{Posture: api.SessionPostureBuild},
-			wantSurf: tools.SurfaceImplementInvestigate,
+			wantSurf: toolcontract.SurfaceImplementInvestigate,
 		},
 	}
 	for _, tc := range cases {

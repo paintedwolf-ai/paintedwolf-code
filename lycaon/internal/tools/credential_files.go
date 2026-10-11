@@ -39,11 +39,11 @@ type AuthoredCredentialValues struct {
 // ObserveCredentialRead reports a credential-file read. displayPath names the
 // file as the read addressed it.
 func (tc ToolContext) ObserveCredentialRead(ctx context.Context, absPath, displayPath, content string) error {
-	if tc.CredentialFiles == nil {
+	if tc.Effects.CredentialFiles == nil {
 		return nil
 	}
 	read := CredentialFileRead{
-		ProjectID: tc.ProjectID, SessionID: tc.SessionID, RootSessionID: tc.ChatSessionID(),
+		ProjectID: tc.Identity.ProjectID, SessionID: tc.Identity.SessionID, RootSessionID: tc.ChatSessionID(),
 		Container: displayPath, Content: content,
 	}
 	classified := absPath
@@ -53,21 +53,21 @@ func (tc ToolContext) ObserveCredentialRead(ctx context.Context, absPath, displa
 	if !protectedpath.IsCredentialFile(classified) {
 		return nil
 	}
-	return tc.CredentialFiles.Delivered(ctx, read)
+	return tc.Effects.CredentialFiles.Delivered(ctx, read)
 }
 
 // RecordModelAuthoredCredentials records the bindings of a landed credential
 // file that appear literally in this call's arguments. A resolved reference
 // never qualifies: the arguments hold its token.
 func (tc ToolContext) RecordModelAuthoredCredentials(ctx context.Context, absPath string, content []byte) {
-	if tc.CredentialFiles == nil || tc.ProjectID == "" || len(content) == 0 {
+	if tc.Effects.CredentialFiles == nil || tc.Identity.ProjectID == "" || len(content) == 0 {
 		return
 	}
 	root, path, ok := tc.SourceLocation(absPath)
 	if !ok || !protectedpath.IsCredentialFile(path) {
 		return
 	}
-	emitted := argumentStrings(tc.CanonicalArgs)
+	emitted := argumentStrings(tc.Effects.CanonicalArgs)
 	if len(emitted) == 0 {
 		return
 	}
@@ -83,15 +83,15 @@ func (tc ToolContext) RecordModelAuthoredCredentials(ctx context.Context, absPat
 	if len(values) == 0 {
 		return
 	}
-	err := tc.CredentialFiles.Authored(context.WithoutCancel(ctx), AuthoredCredentialValues{
-		ProjectID: tc.ProjectID, RootSessionID: tc.ChatSessionID(),
-		SessionID: tc.SessionID, ToolCallID: tc.ToolCallID,
+	err := tc.Effects.CredentialFiles.Authored(context.WithoutCancel(ctx), AuthoredCredentialValues{
+		ProjectID: tc.Identity.ProjectID, RootSessionID: tc.ChatSessionID(),
+		SessionID: tc.Identity.SessionID, ToolCallID: tc.Identity.ToolCallID,
 		RootID: root.ID, Path: path, Values: values,
 	})
 	if err != nil {
 		// Unrecorded authorship leaves the values to the harvest, which asks.
 		slog.WarnContext(ctx, "credential authorship not recorded",
-			"component", "secret_harvest", "tool_call_id", tc.ToolCallID, "error", err)
+			"component", "secret_harvest", "tool_call_id", tc.Identity.ToolCallID, "error", err)
 	}
 }
 

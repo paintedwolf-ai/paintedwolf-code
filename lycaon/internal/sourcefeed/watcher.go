@@ -48,6 +48,7 @@ type ExternalObserver func(ctx context.Context, projectID string, batch External
 type projectWatch struct {
 	projectID string
 	roots     []RootSpec
+	lifetime  *WatchLifetime
 	external  ExternalObserver
 	changes   *changeConverger
 	unbind    func()
@@ -59,57 +60,6 @@ var (
 	watchRegMu sync.Mutex
 	watchers   = map[watchKey]*projectWatch{}
 )
-
-// EnsureProjectWatch preserves unchanged bindings and their pending changes.
-// A true result identifies a new binding that needs inventory catch-up.
-func EnsureProjectWatch(ctx context.Context, projectID, scopeID string, roots []RootSpec, external ExternalObserver) bool {
-	projectID = strings.TrimSpace(projectID)
-	cleaned := cleanWatchRoots(roots)
-	if projectID == "" || len(cleaned) == 0 {
-		return false
-	}
-	watchRegMu.Lock()
-	// A canceled caller, such as a host that is shutting down, binds nothing:
-	// its observer would outlive the host that releases the watches it bound.
-	// The check holds the registry lock, so it orders against StopProjectWatch.
-	if ctx.Err() != nil {
-		watchRegMu.Unlock()
-		return false
-	}
-	key := watchKey{projectID, scopeID}
-	previous := watchers[key]
-	if previous != nil && sameWatchRoots(previous.roots, cleaned) {
-		previous.external = external
-		watchRegMu.Unlock()
-		for _, root := range cleaned {
-			repochange.EnsureRoot(ctx, root.Path)
-		}
-		return false
-	}
-	if previous != nil {
-		previous.unbind()
-	}
-	w := &projectWatch{projectID: projectID, roots: cleaned, external: external}
-	w.changes = newChangeConverger(externalChangeQuietWindow, externalChangeMaxDelay, w.flushExternalChanges)
-	w.changes.holdWhile(w.gitBusy, externalChangeHoldCeiling)
-	w.unbind = repochange.RegisterObserver(w.observe)
-	watchers[key] = w
-	unusedRoots := unusedWatchRootsLocked(previous)
-	watchRegMu.Unlock()
-	if previous != nil {
-		previous.changes.close(ctx)
-	}
-	for _, root := range unusedRoots {
-		repochange.CloseRoot(root)
-	}
-	paths := make([]string, 0, len(cleaned))
-	for _, root := range cleaned {
-		repochange.EnsureRoot(ctx, root.Path)
-		paths = append(paths, root.Path)
-	}
-	slog.InfoContext(ctx, "project source watch bound", "project_id", projectID, "roots", paths)
-	return true
-}
 
 // WatchNeedsSeed reports incomplete or per-directory watcher coverage.
 func WatchNeedsSeed(rootPath string) bool {
@@ -241,6 +191,17 @@ func (w *projectWatch) flushExternalChanges(ctx context.Context, pending pending
 	if w == nil || (len(pending.changes) == 0 && !pending.resync && !pending.headMoved) {
 		return
 	}
+	watchRegMu.Lock()
+	lifetime, external := w.lifetime, w.external
+	watchRegMu.Unlock()
+	if lifetime != nil {
+		activeCtx, finish, err := lifetime.work.Begin(ctx)
+		if err != nil {
+			return
+		}
+		defer finish()
+		ctx = activeCtx
+	}
 	batch := ExternalBatch{Resync: pending.resync, HeadMoved: pending.headMoved}
 	// A window the watcher could not fully name publishes as one invalidation.
 	if !pending.resync {
@@ -250,11 +211,11 @@ func (w *projectWatch) flushExternalChanges(ctx context.Context, pending pending
 		return
 	}
 	// Head-only batches reconcile even when no working file changed.
-	watchRegMu.Lock()
-	external := w.external
-	watchRegMu.Unlock()
 	if external != nil {
 		external(ctx, w.projectID, batch)
+	}
+	if ctx.Err() != nil {
+		return
 	}
 	var err error
 	if len(batch.Changes) == 0 {

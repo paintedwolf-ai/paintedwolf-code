@@ -11,7 +11,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) HandleDetectFolder(w http.ResponseWriter, r *http.Request) {
+func (s *Suggestions) HandleDetectFolder(w http.ResponseWriter, r *http.Request) {
 	folder, err := project.ResolveExistingDir(r.URL.Query().Get("path"))
 	if err != nil {
 		s.responses.PathError(w, r, err)
@@ -27,7 +27,7 @@ func (s *Handler) HandleDetectFolder(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusOK, out)
 }
 
-func (s *Handler) folderExtensionSuggestions(
+func (s *Suggestions) folderExtensionSuggestions(
 	r *http.Request,
 	folder string,
 	known *project.Project,

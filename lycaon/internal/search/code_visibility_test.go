@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -33,5 +34,34 @@ func TestCodeSearchExplicitPathsAdmitHiddenFiles(t *testing.T) {
 				t.Fatalf("hits = %+v, want %s", hits, tc.want)
 			}
 		})
+	}
+}
+
+func TestSymbolDependencyAdmissionUsesTheDeclarationRoot(t *testing.T) {
+	root := t.TempDir()
+	other := t.TempDir()
+	for _, rel := range []string{".cache/generated/item.go", ".private/item.go", ".claude/worktrees/job/item.go"} {
+		testutil.FailErr(t, "create fixture parent", os.MkdirAll(filepath.Dir(filepath.Join(root, rel)), 0o755))
+		testutil.FailErr(t, "write fixture", os.WriteFile(filepath.Join(root, rel), []byte("package fixture\nfunc DependencyTarget() {}\n"), 0o600))
+	}
+	testutil.FailErr(t, "mark nested checkout", os.WriteFile(filepath.Join(root, ".claude/worktrees/job/.git"), []byte("gitdir: /fixture/gitdir\n"), 0o600))
+	catalog := sourcecatalog.New()
+	plan := compileSymbolPlan(t, "DependencyTarget", MatchFlags{}, BudgetComplete)
+	filter, err := CompileSymbolFilter(plan.Symbol)
+	testutil.FailErr(t, "compile declaration filter", err)
+	for _, tc := range []struct {
+		root, path    string
+		include, want bool
+	}{
+		{root, ".cache/generated/item.go", true, true},
+		{root, ".claude/worktrees/job/item.go", true, true},
+		{root, ".private/item.go", true, false},
+		{root, ".cache/generated/item.go", false, false},
+		{other, ".claude/worktrees/job/item.go", true, false},
+	} {
+		got := filter.ForRoot(t.Context(), catalog, tc.root, tc.include).Admits(tc.path, "DependencyTarget")
+		if got != tc.want {
+			t.Errorf("root=%s path=%s dependencies=%t: admitted=%t want=%t", tc.root, tc.path, tc.include, got, tc.want)
+		}
 	}
 }

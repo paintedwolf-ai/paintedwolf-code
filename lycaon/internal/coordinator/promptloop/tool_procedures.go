@@ -10,18 +10,18 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (l toolInvocations) appendToolProcedures(
+func (l *toolInvocations) appendToolProcedures(
 	ctx context.Context, sess *api.Session, profileID string,
 	messages []api.Message, offered []tools.ToolMeta,
 ) ([]api.Message, error) {
-	if l.Deps.ToolProcedures == nil || len(offered) == 0 {
+	if l.Context.Deps.ToolProcedures == nil || len(offered) == 0 {
 		return messages, nil
 	}
 	names := make([]string, 0, len(offered))
 	for _, meta := range offered {
 		names = append(names, meta.Name)
 	}
-	block, err := l.Deps.ToolProcedures(ctx, sess, profileID, names)
+	block, err := l.Context.Deps.ToolProcedures(ctx, sess, profileID, names)
 	if err != nil {
 		return nil, fmt.Errorf("render offered tool procedures: %w", err)
 	}

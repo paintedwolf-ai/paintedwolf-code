@@ -23,11 +23,11 @@ func TestTaskToolReplaysReceiptAfterWorkflowMovedOn(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	var enqueued api.WorkerTask
 	inner := worker.NewInMemoryQueue(2)
-	inner.SetWorkflowRunChecker(receiptWorkflowChecker{})
+	inner.SetWorkflowDomains(&worker.WorkflowDomains{Runs: receiptWorkflowChecker{}, Tasks: receiptWorkflowChecker{}})
 	queue := &captureQueue{WorkerQueue: inner, out: &enqueued}
 	bound := 0
 	deps := worker.TaskToolDeps{
-		Sessions: &fakeTaskSessions{}, Queue: queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
+		Queue: queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
 		BindWorkflowTask: func(_ context.Context, _ tools.ToolContext, id string, task *api.WorkerTask) error {
 			bound++
 			if bound > 1 {
@@ -35,6 +35,12 @@ func TestTaskToolReplaysReceiptAfterWorkflowMovedOn(t *testing.T) {
 			}
 			task.WorkflowRunID, task.WorkflowPhase, task.WorkflowWorkID = "run", "execute", id
 			return nil
+		},
+		ComposePrompt: func(_ context.Context, _ tools.ToolContext, _ string, _ api.WorkerTaskCharter, task *api.WorkerTask) (string, error) {
+			if bound != 1 || task.WorkflowRunID != "run" || task.WorkflowWorkID != "leg-1" {
+				t.Fatal("prompt composed before workflow binding")
+			}
+			return "Bound assignment", nil
 		},
 		TaskReceipt: func(_ context.Context, parent, call string) (*api.WorkerTask, error) {
 			if enqueued.SourceToolCallID == call && enqueued.ParentSessionID == parent {
@@ -46,7 +52,7 @@ func TestTaskToolReplaysReceiptAfterWorkflowMovedOn(t *testing.T) {
 	testutil.FailErr(t, "register", worker.RegisterTaskTool(reg, deps))
 	args := map[string]any{"agent_type": "repo-researcher", "brief": taskBrief("inspect"), "workflow_work_id": "leg-1", "scope": map[string]any{"mode": "read"}}
 	tctx := toolContext("parent-1", t.TempDir())
-	tctx.ToolCallID = "source-call"
+	tctx.Identity.ToolCallID = "source-call"
 	first, err := reg.Run(t.Context(), "task", args, tctx)
 	testutil.FailErr(t, "first dispatch", err)
 	replay, err := reg.Run(t.Context(), "task", args, tctx)

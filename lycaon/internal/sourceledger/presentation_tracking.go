@@ -18,7 +18,7 @@ var ErrPresentationMismatch = errors.New("presentation effect does not match dis
 var ErrPresentationNotFound = errors.New("file has no completed presentation")
 
 // CompletePresentation acknowledges all file changes through the displayed effect.
-func (s *Store) CompletePresentation(
+func (s *Checkpoints) CompletePresentation(
 	ctx context.Context,
 	projectID, fileID, effectID string,
 	ordinal int64,
@@ -78,7 +78,7 @@ func completePresentationQueries(
 
 // WithdrawPresentation restores the watermark before the latest look.
 // through guards against withdrawing a newer look.
-func (s *Store) WithdrawPresentation(
+func (s *Checkpoints) WithdrawPresentation(
 	ctx context.Context,
 	projectID, fileID string,
 	through int64,
