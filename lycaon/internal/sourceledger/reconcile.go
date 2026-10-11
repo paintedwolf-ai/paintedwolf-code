@@ -92,7 +92,7 @@ func (s *Store) recordObservation(ctx context.Context, projectID string, head db
 	if err != nil {
 		return false, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	landed, err := prepared.commit(ctx, tx)
 	if err != nil || !landed {
 		return landed, err
