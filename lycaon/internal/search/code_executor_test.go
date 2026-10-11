@@ -442,6 +442,7 @@ func TestCodeExecutorIndexNarrowsCandidatesBeforeOpening(t *testing.T) {
 	testutil.FailErr(t, "write hit", os.WriteFile(filepath.Join(root, "hit.txt"), []byte("unique_needle_token\n"), 0o644))
 	testutil.FailErr(t, "write miss", os.WriteFile(filepath.Join(root, "miss.txt"), []byte("nothing interesting\n"), 0o644))
 	catalog := sourcecatalog.Process()
+	testutil.FailErr(t, "await source index", catalogtest.AwaitIndex(t.Context(), catalog, "p1", sourcecatalog.Root{ID: "root", Path: root}))
 	snapshot, err := catalog.Snapshot(t.Context(), "p1", []sourcecatalog.Root{{ID: "root", Path: root}})
 	testutil.FailErr(t, "prepare metadata", err)
 	_, err = catalog.Literals.LiteralCandidates(t.Context(), snapshot, sourcecatalog.LiteralQuery{RootID: "root", IncludeKey: "test-warm", Require: litprefilter.AnyOf("unique_target"), Open: func(entry sourcecatalog.Entry) (io.ReadCloser, error) {
@@ -456,7 +457,7 @@ func TestCodeExecutorIndexNarrowsCandidatesBeforeOpening(t *testing.T) {
 	}})
 	testutil.FailErr(t, "run code leg", err)
 	if hits := report.Hits; len(hits) != 1 || hits[0].Path != "hit.txt" {
-		t.Fatalf("hits = %+v", hits)
+		t.Fatalf("hits = %+v; executor report = %+v", hits, report)
 	}
 	code := report.Code
 	if !code.IndexUsed || code.FilesListed != 2 || code.ContentCandidates != 1 || code.FilesOpened != 1 {
