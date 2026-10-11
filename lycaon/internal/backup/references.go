@@ -75,6 +75,9 @@ func validateArchiveReferences(ctx context.Context, snapshot db.DBTX, files map[
 	if err := validateWorkerManifests(ctx, snapshot, files); err != nil {
 		return err
 	}
+	if err := validateRewindJournals(ctx, snapshot, files); err != nil {
+		return err
+	}
 	return validateArtifactBodies(ctx, snapshot, files)
 }
 

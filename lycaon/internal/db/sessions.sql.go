@@ -446,7 +446,7 @@ func (q *Queries) GetPromptSubmission(ctx context.Context, id string) (GetPrompt
 }
 
 const getRewindOperation = `-- name: GetRewindOperation :one
-SELECT id, session_id, anchor_message_id, input_digest, project_dir, journal_path,
+SELECT id, session_id, anchor_message_id, input_digest, project_dir,
        status, error, COALESCE(response_json, '') AS response_json, checkpoint_anchor_ids_json
 FROM rewind_operations WHERE id = ?
 `
@@ -457,7 +457,6 @@ type GetRewindOperationRow struct {
 	AnchorMessageID         string `json:"anchor_message_id"`
 	InputDigest             string `json:"input_digest"`
 	ProjectDir              string `json:"project_dir"`
-	JournalPath             string `json:"journal_path"`
 	Status                  string `json:"status"`
 	Error                   string `json:"error"`
 	ResponseJson            string `json:"response_json"`
@@ -473,7 +472,6 @@ func (q *Queries) GetRewindOperation(ctx context.Context, id string) (GetRewindO
 		&i.AnchorMessageID,
 		&i.InputDigest,
 		&i.ProjectDir,
-		&i.JournalPath,
 		&i.Status,
 		&i.Error,
 		&i.ResponseJson,
@@ -1147,7 +1145,7 @@ func (q *Queries) ListBusySessionIDs(ctx context.Context, limit int64) ([]string
 }
 
 const listCommittedRewindOperationsForSweep = `-- name: ListCommittedRewindOperationsForSweep :many
-SELECT id, session_id, anchor_message_id, project_dir, journal_path, checkpoint_anchor_ids_json, created_at
+SELECT id, session_id, anchor_message_id, project_dir, checkpoint_anchor_ids_json, created_at
 FROM rewind_operations
 WHERE status = 'committed'
 ORDER BY created_at, id
@@ -1159,7 +1157,6 @@ type ListCommittedRewindOperationsForSweepRow struct {
 	SessionID               string `json:"session_id"`
 	AnchorMessageID         string `json:"anchor_message_id"`
 	ProjectDir              string `json:"project_dir"`
-	JournalPath             string `json:"journal_path"`
 	CheckpointAnchorIdsJson string `json:"checkpoint_anchor_ids_json"`
 	CreatedAt               string `json:"created_at"`
 }
@@ -1180,7 +1177,6 @@ func (q *Queries) ListCommittedRewindOperationsForSweep(ctx context.Context) ([]
 			&i.SessionID,
 			&i.AnchorMessageID,
 			&i.ProjectDir,
-			&i.JournalPath,
 			&i.CheckpointAnchorIdsJson,
 			&i.CreatedAt,
 		); err != nil {
@@ -1528,7 +1524,7 @@ func (q *Queries) ListQueuedUserPromptSubmissionsBySession(ctx context.Context, 
 }
 
 const listRewindOperationsForRecovery = `-- name: ListRewindOperationsForRecovery :many
-SELECT id, session_id, anchor_message_id, input_digest, project_dir, journal_path, status, error,
+SELECT id, session_id, anchor_message_id, input_digest, project_dir, status, error,
        COALESCE(response_json, '') AS response_json, checkpoint_anchor_ids_json
 FROM rewind_operations
 WHERE status IN ('prepared', 'applying', 'files_applied')
@@ -1541,7 +1537,6 @@ type ListRewindOperationsForRecoveryRow struct {
 	AnchorMessageID         string `json:"anchor_message_id"`
 	InputDigest             string `json:"input_digest"`
 	ProjectDir              string `json:"project_dir"`
-	JournalPath             string `json:"journal_path"`
 	Status                  string `json:"status"`
 	Error                   string `json:"error"`
 	ResponseJson            string `json:"response_json"`
@@ -1565,7 +1560,6 @@ func (q *Queries) ListRewindOperationsForRecovery(ctx context.Context) ([]ListRe
 			&i.AnchorMessageID,
 			&i.InputDigest,
 			&i.ProjectDir,
-			&i.JournalPath,
 			&i.Status,
 			&i.Error,
 			&i.ResponseJson,
@@ -1585,7 +1579,7 @@ func (q *Queries) ListRewindOperationsForRecovery(ctx context.Context) ([]ListRe
 }
 
 const listRewindOperationsForRecoverySession = `-- name: ListRewindOperationsForRecoverySession :many
-SELECT id, session_id, anchor_message_id, input_digest, project_dir, journal_path, status, error,
+SELECT id, session_id, anchor_message_id, input_digest, project_dir, status, error,
        COALESCE(response_json, '') AS response_json, checkpoint_anchor_ids_json
 FROM rewind_operations
 WHERE status IN ('prepared', 'applying', 'files_applied') AND session_id = ?
@@ -1598,7 +1592,6 @@ type ListRewindOperationsForRecoverySessionRow struct {
 	AnchorMessageID         string `json:"anchor_message_id"`
 	InputDigest             string `json:"input_digest"`
 	ProjectDir              string `json:"project_dir"`
-	JournalPath             string `json:"journal_path"`
 	Status                  string `json:"status"`
 	Error                   string `json:"error"`
 	ResponseJson            string `json:"response_json"`
@@ -1620,7 +1613,6 @@ func (q *Queries) ListRewindOperationsForRecoverySession(ctx context.Context, se
 			&i.AnchorMessageID,
 			&i.InputDigest,
 			&i.ProjectDir,
-			&i.JournalPath,
 			&i.Status,
 			&i.Error,
 			&i.ResponseJson,
@@ -3001,12 +2993,11 @@ func (q *Queries) PatchMessageNavigation(ctx context.Context, arg PatchMessageNa
 
 const prepareRewindOperation = `-- name: PrepareRewindOperation :execrows
 INSERT INTO rewind_operations(
-    id, session_id, anchor_message_id, input_digest, project_dir, journal_path, status, error,
+    id, session_id, anchor_message_id, input_digest, project_dir, status, error,
     checkpoint_anchor_ids_json, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, 'prepared', '', ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, 'prepared', '', ?, ?, ?)
 ON CONFLICT(id) DO UPDATE SET
     project_dir = excluded.project_dir,
-    journal_path = excluded.journal_path,
     status = 'prepared',
     error = '',
     response_json = NULL,
@@ -3025,7 +3016,6 @@ type PrepareRewindOperationParams struct {
 	AnchorMessageID         string `json:"anchor_message_id"`
 	InputDigest             string `json:"input_digest"`
 	ProjectDir              string `json:"project_dir"`
-	JournalPath             string `json:"journal_path"`
 	CheckpointAnchorIdsJson string `json:"checkpoint_anchor_ids_json"`
 	CreatedAt               string `json:"created_at"`
 	UpdatedAt               string `json:"updated_at"`
@@ -3038,7 +3028,6 @@ func (q *Queries) PrepareRewindOperation(ctx context.Context, arg PrepareRewindO
 		arg.AnchorMessageID,
 		arg.InputDigest,
 		arg.ProjectDir,
-		arg.JournalPath,
 		arg.CheckpointAnchorIdsJson,
 		arg.CreatedAt,
 		arg.UpdatedAt,
