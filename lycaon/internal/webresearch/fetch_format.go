@@ -2,9 +2,11 @@ package webresearch
 
 import (
 	"fmt"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/fileoutline"
+	"github.com/lycaon/lycaon/internal/tooloutput"
+	"net/url"
+	"path"
+	"strings"
 )
 
 const (
@@ -129,4 +131,77 @@ func writeFooter(b *strings.Builder, res FetchURLResult, totalLines int) {
 		fmt.Fprintf(b, " | %d lines, %d bytes", totalLines, len(res.Text))
 	}
 	b.WriteString("\n")
+}
+
+func fetchResultCacheEntry(res FetchURLResult, ext string) tooloutput.FetchCacheEntry {
+	return tooloutput.FetchCacheEntry{
+		URL:         res.URL,
+		Status:      res.Status,
+		ContentType: res.ContentType,
+		Title:       res.Title,
+		Body:        res.Text,
+		Ext:         ext,
+		Markdown:    res.Markdown,
+	}
+}
+
+func rawResultCacheEntry(res FetchRawResult, body string) tooloutput.FetchCacheEntry {
+	return tooloutput.FetchCacheEntry{
+		URL:         res.URL,
+		Status:      res.Status,
+		ContentType: res.ContentType,
+		Body:        body,
+		Ext:         fetchRawCacheExt(res),
+	}
+}
+
+func fetchResultFromCache(entry tooloutput.FetchCacheEntry) FetchURLResult {
+	return FetchURLResult{
+		URL:         entry.URL,
+		Status:      entry.Status,
+		ContentType: entry.ContentType,
+		Title:       entry.Title,
+		Text:        entry.Body,
+		Markdown:    entry.Markdown,
+	}
+}
+
+func fetchCacheExt(res FetchURLResult) string {
+	if res.Markdown {
+		return "md"
+	}
+	// The declared media type selects the outline grammar for extensionless URLs.
+	if jsonMediaType(res.ContentType) {
+		return "json"
+	}
+	if u, err := url.Parse(res.URL); err == nil {
+		if e := path.Ext(u.Path); len(e) > 1 {
+			return e[1:]
+		}
+	}
+	return "txt"
+}
+
+func fetchRawCacheExt(res FetchRawResult) string {
+	if u, err := url.Parse(res.URL); err == nil {
+		if e := path.Ext(u.Path); len(e) > 1 {
+			return e[1:]
+		}
+	}
+	ct := mediaTypeOnly(res.ContentType)
+	switch {
+	case strings.Contains(ct, "javascript"):
+		return "js"
+	case strings.Contains(ct, "json"):
+		return "json"
+	case strings.Contains(ct, "css"):
+		return "css"
+	case strings.Contains(ct, "svg"):
+		return "svg"
+	case strings.Contains(ct, "html"):
+		return "html"
+	case strings.Contains(ct, "xml"):
+		return "xml"
+	}
+	return "txt"
 }

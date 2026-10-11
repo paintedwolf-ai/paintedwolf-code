@@ -159,9 +159,10 @@ func TestCreateProjectAllowsUserSelectedPath(t *testing.T) {
 }
 
 func TestCreateProjectDeniesSSH(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip(err)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for _, path := range []string{filepath.Join(home, ".ssh"), filepath.Join(home, "Library", "Keychains")} {
+		testutil.FailErr(t, "create protected store fixture", os.MkdirAll(path, 0o700))
 	}
 	srv := wiring.BuildForTest(t).Server
 	// Use production-style deny rules for this case.
@@ -180,21 +181,17 @@ func TestCreateProjectDeniesSSH(t *testing.T) {
 		return w.Code, string(decodeAPIError(t, w).Code)
 	}
 
-	// Path existence is checked before the credential-store write boundary.
+	// Existing catalogued stores are refused without relying on machine contents.
 	cases := []struct {
 		name string
 		path string
 		why  string
 	}{
 		{"the store itself", filepath.Join(home, ".ssh"), "private keys"},
-		// A granted ancestor also grants access to its credential-store descendants.
-		{"a path containing a store", filepath.Join(home, "Library"), "contains Library/Keychains"},
+		{"credential store", filepath.Join(home, "Library", "Keychains"), "credential store"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := os.Stat(tc.path); err != nil {
-				t.Skipf("%s not present on this machine", tc.path)
-			}
 			status, code := attach(t, tc.path)
 			if status != http.StatusBadRequest || code != "write_root_under_secret_store" {
 				t.Fatalf("%s (%s): status = %d code = %q, want 400 write_root_under_secret_store",
@@ -202,6 +199,17 @@ func TestCreateProjectDeniesSSH(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("store ancestor still attaches", func(t *testing.T) {
+		status, code := attach(t, filepath.Join(home, "Library"))
+		if status != http.StatusCreated {
+			t.Fatalf("store ancestor: status = %d code = %q, want 201", status, code)
+		}
+		status, code = attach(t, filepath.Join(home, "Library", "Keychains"))
+		if status != http.StatusBadRequest || code != "write_root_under_secret_store" {
+			t.Fatalf("protected descendant after ancestor attach: status = %d code = %q", status, code)
+		}
+	})
 
 	// Positive control. A suite that passes because every attach is refused has
 	// proved nothing about the predicate.

@@ -1,7 +1,10 @@
 package native
 
 import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 
@@ -29,9 +32,9 @@ func assertResolvedProfileWriteScope(ctx context.Context, boundary *sandbox.Boun
 	}
 	profile := tctx.ProfileID()
 	projectDir, scopeRel := workerWriteScopeDir(tctx, resolved)
-	if profile == coordinatorProfileID && tctx.TurnSurfaceID == tools.SurfaceImplementInvestigate {
+	if profile == coordinatorProfileID && tctx.Turn.TurnSurfaceID == toolcontract.SurfaceImplementInvestigate {
 		if progress.IsShadowBoardPath(path) {
-			return &tools.ToolReject{
+			return &toolrejection.ToolReject{
 				Code: "COORDINATOR_PROGRESS_SHADOW_BOARD",
 				Data: map[string]any{
 					"path": path,
@@ -46,7 +49,7 @@ func assertResolvedProfileWriteScope(ctx context.Context, boundary *sandbox.Boun
 			ctx,
 			projectDir,
 			scopeRel,
-			tools.CoordinatorProductWriteScope,
+			toolcontract.CoordinatorProductWriteScope,
 		)
 	}
 	return boundary.AssertWriteScope(
@@ -59,7 +62,7 @@ func assertResolvedProfileWriteScope(ctx context.Context, boundary *sandbox.Boun
 
 // Worker write scopes are relative to the isolated branch root.
 func workerWriteScopeDir(tctx tools.ToolContext, resolved projectpaths.Resolved) (projectDir, scopeRel string) {
-	if branch := strings.TrimSpace(tctx.WorkerBranchRoot); branch != "" {
+	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
 		projectDir = branch
 		if canon, err := filepath.EvalSymlinks(branch); err == nil {
 			projectDir = canon

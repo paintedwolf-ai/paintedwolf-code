@@ -69,7 +69,7 @@ func (c observationCause) apply(in RecordInput) RecordInput {
 	return in
 }
 
-func (s *Store) hasTrackingCheckpoint(ctx context.Context, projectID string) (bool, error) {
+func (s *Inventory) hasTrackingCheckpoint(ctx context.Context, projectID string) (bool, error) {
 	_, err := s.queries.FindSourceCheckpointByKind(ctx, db.FindSourceCheckpointByKindParams{
 		ProjectID: projectID, Kind: CheckpointTracking,
 	})
@@ -80,7 +80,7 @@ func (s *Store) hasTrackingCheckpoint(ctx context.Context, projectID string) (bo
 }
 
 // recordObservation rechecks the observed head before committing its drift.
-func (s *Store) recordObservation(ctx context.Context, projectID string, head db.SourceBranchHeads, after *observedFile, transactionID string, cause observationCause) (bool, error) {
+func (s *Inventory) recordObservation(ctx context.Context, projectID string, head db.SourceBranchHeads, after *observedFile, transactionID string, cause observationCause) (bool, error) {
 	prepared, err := s.prepareObservation(ctx, projectID, head, after, transactionID, cause)
 	if err != nil {
 		return false, err
@@ -93,7 +93,11 @@ func (s *Store) recordObservation(ctx context.Context, projectID string, head db
 		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	landed, err := prepared.commit(ctx, tx)
+	scope, err := s.writer.mutationObservationScope(ctx, tx, projectID)
+	if err != nil {
+		return false, err
+	}
+	landed, err := prepared.commit(ctx, tx, scope)
 	if err != nil || !landed {
 		return landed, err
 	}
@@ -106,7 +110,7 @@ type preparedObservation struct {
 	recording PreparedRecording
 }
 
-func (s *Store) prepareObservation(ctx context.Context, projectID string, head db.SourceBranchHeads, after *observedFile, transactionID string, cause observationCause) (*preparedObservation, error) {
+func (s *Inventory) prepareObservation(ctx context.Context, projectID string, head db.SourceBranchHeads, after *observedFile, transactionID string, cause observationCause) (*preparedObservation, error) {
 	op := api.SourceChangeOpWrite
 	var afterBytes []byte
 	afterSHA := ""
@@ -121,19 +125,18 @@ func (s *Store) prepareObservation(ctx context.Context, projectID string, head d
 	}
 	var beforeBytes []byte
 	if head.ContentSha256 != "" {
-		if raw, ok, err := s.readVerifiedBlob(ctx, head.ContentSha256); err != nil {
+		if raw, ok, err := s.retention.readVerifiedBlob(ctx, head.ContentSha256); err != nil {
 			return nil, err
 		} else if ok {
 			beforeBytes = raw
 		}
 	}
 	in := cause.apply(RecordInput{
-		ProjectID: projectID, BranchID: sourcebranch.ID(head.BranchID),
-		RootID: head.RootID, Path: head.Path, FileID: head.FileID,
-		Op:           op,
-		BeforeSHA256: head.ContentSha256, AfterSHA256: afterSHA,
-		Before: beforeBytes, After: afterBytes,
-		BeforeSize: int64(len(beforeBytes)), AfterSize: func() int64 {
+		RecordLocation: RecordLocation{RootID: head.RootID, Path: head.Path},
+		ProjectID:      projectID, BranchID: sourcebranch.ID(head.BranchID), FileID: head.FileID,
+		Op: op, BeforeSHA256: head.ContentSha256, AfterSHA256: afterSHA,
+		Before: beforeBytes, After: afterBytes, BeforeSize: int64(len(beforeBytes)),
+		AfterSize: func() int64 {
 			if after == nil {
 				return 0
 			}
@@ -141,14 +144,17 @@ func (s *Store) prepareObservation(ctx context.Context, projectID string, head d
 		}(),
 		OperationID: transactionID,
 	})
-	recording, err := s.Prepare(ctx, []RecordInput{in})
+	recording, err := s.writer.prepare(ctx, []RecordInput{in})
 	if err != nil {
 		return nil, err
 	}
 	return &preparedObservation{projectID: projectID, head: head, recording: recording}, nil
 }
 
-func (p *preparedObservation) commit(ctx context.Context, tx *sql.Tx) (bool, error) {
+func (p *preparedObservation) commit(ctx context.Context, tx *sql.Tx, scope MutationObservationScope) (bool, error) {
+	if scope != nil && scope.Pending(sourcebranch.ID(p.head.BranchID), p.head.RootID, p.head.Path) {
+		return false, nil
+	}
 	current, err := db.New(tx).GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{ProjectID: p.projectID, BranchID: p.head.BranchID, FileID: p.head.FileID})
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
@@ -166,7 +172,7 @@ func (p *preparedObservation) commit(ctx context.Context, tx *sql.Tx) (bool, err
 
 // recordWindowAdmissions lands a window's admitted files as one operation per
 // git cause.
-func (s *Store) recordWindowAdmissions(ctx context.Context, inputs []RecordInput) (int, error) {
+func (s *Inventory) recordWindowAdmissions(ctx context.Context, inputs []RecordInput) (int, error) {
 	if len(inputs) == 0 {
 		return 0, nil
 	}
@@ -181,10 +187,38 @@ func (s *Store) recordWindowAdmissions(ctx context.Context, inputs []RecordInput
 	recorded := 0
 	for _, key := range order {
 		batch := byCause[key]
-		if err := s.RecordBatch(ctx, batch); err != nil {
+		landed, err := s.recordObservedBatch(ctx, batch)
+		if err != nil {
 			return recorded, err
 		}
-		recorded += len(batch)
+		recorded += landed
 	}
 	return recorded, nil
+}
+
+func (s *Inventory) recordObservedBatch(ctx context.Context, inputs []RecordInput) (int, error) {
+	if len(inputs) == 0 {
+		return 0, nil
+	}
+	prepared, err := s.writer.prepare(ctx, inputs)
+	if err != nil {
+		return 0, err
+	}
+	defer prepared.Close()
+	s.recordMu.Lock()
+	defer s.recordMu.Unlock()
+	tx, err := s.sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	scope, err := s.writer.mutationObservationScope(ctx, tx, inputs[0].ProjectID)
+	if err != nil {
+		return 0, err
+	}
+	recorded, err := prepared.commitObserved(ctx, tx, scope)
+	if err != nil || recorded == 0 {
+		return recorded, err
+	}
+	return recorded, tx.Commit()
 }

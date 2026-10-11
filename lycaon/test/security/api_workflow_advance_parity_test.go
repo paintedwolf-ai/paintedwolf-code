@@ -18,6 +18,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -109,7 +111,7 @@ func TestAdvanceToolAndHTTPParity(t *testing.T) {
 		if exitW.Code != http.StatusOK {
 			t.Fatalf("exit ambient status = %d body = %s", exitW.Code, exitW.Body.String())
 		}
-		active, err := parity.wfMgr.GetActive(t.Context(), parity.toolSession.ID)
+		active, err := parity.wfMgr.Store.Runs.ActiveBySession(t.Context(), parity.toolSession.ID)
 		if err != nil || active != nil {
 			t.Fatalf("ambient exit left active workflow: %+v; error=%v", active, err)
 		}
@@ -139,13 +141,13 @@ func TestAdvanceToolAndHTTPParity(t *testing.T) {
 		parity := newAdvanceParityRig(t)
 		httpRun := parity.startRunHTTP(t, "parity-coord", "1.0.0")
 		// A startup turn already in flight ignores the held lane and would take the kick.
-		parity.sessionMgr.WaitForCoordinatorAsyncTurns(t.Context())
+		parity.sessionMgr.Coordinator.WaitForTurns(t.Context())
 		// Holding the execution lane keeps the coordinator loop from consuming the
 		// kick before it is read.
-		finishExecution := parity.sessionMgr.BeginPromptExecutionForTest(t.Context(), parity.httpSession.ID)
+		finishExecution := parity.sessionMgr.Runner.Coordinator.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), parity.httpSession.ID)
 		defer finishExecution()
 		// Drain startup feedback to isolate the failed-advance event.
-		parity.sessionMgr.ClearPendingKickForTest(parity.httpSession.ID)
+		parity.sessionMgr.Runner.Coordinator.Kicks().ClearPending(parity.httpSession.ID)
 
 		status, _, errBody := parity.advanceHTTP(t, httpRun.ID)
 		if status != http.StatusConflict {
@@ -154,7 +156,7 @@ func TestAdvanceToolAndHTTPParity(t *testing.T) {
 		if errBody.Code != "phase_gate_unmet" {
 			t.Fatalf("code = %q", errBody.Code)
 		}
-		kickID, ok := parity.sessionMgr.PendingKickIDForTest(parity.httpSession.ID)
+		kickID, ok := parity.sessionMgr.Runner.Coordinator.Kicks().PeekPendingKickID(parity.httpSession.ID)
 		if !ok || kickID != anchor.InformRender(anchor.GateBlocked) {
 			t.Fatalf("pending kick = %q, %v want %q", kickID, ok, anchor.InformRender(anchor.GateBlocked))
 		}
@@ -174,7 +176,7 @@ type advanceParityRig struct {
 	srv          *api.Server
 	wfMgr        *workflow.RunManager
 	blueprintMgr *blueprint.Manager
-	sessionMgr   *session.Manager
+	sessionMgr   *session.Host
 	registry     *tools.DefaultRegistry
 	httpSession  wire.Session
 	toolSession  wire.Session
@@ -226,9 +228,9 @@ func newAdvanceParityRig(t *testing.T) *advanceParityRig {
 	toolSession := createSessionForProjectHTTP(t, h.Server, toolProj.ID, wire.SessionPostureBuild)
 	return &advanceParityRig{
 		srv:          h.Server,
-		wfMgr:        h.WorkflowMgr,
-		blueprintMgr: h.BlueprintMgr,
-		sessionMgr:   h.SessionMgr,
+		wfMgr:        h.Workflows.Manager,
+		blueprintMgr: h.Workflows.Blueprints,
+		sessionMgr:   h.Sessions.Manager,
 		registry:     h.ToolRegistry,
 		httpSession:  httpSession,
 		toolSession:  toolSession,
@@ -289,14 +291,14 @@ func (p *advanceParityRig) advanceHTTPBody(t *testing.T, runID string, body *str
 	return w.Code, nil, decodeAPIError(t, w)
 }
 
-func (p *advanceParityRig) advanceTool(t *testing.T, sessionID string) (advanceToolStatus, workflow.AdvanceToolResult, *wire.WorkflowRun) {
+func (p *advanceParityRig) advanceTool(t *testing.T, sessionID string) (advanceToolStatus, workflowphases.AdvanceToolResult, *wire.WorkflowRun) {
 	t.Helper()
 	out, err := p.registry.Run(context.Background(), "workflow_advance", map[string]any{}, securityToolContext(sessionID, p.toolProject, "coordinator"))
 	if err != nil {
 		// Gate failures use the structured result error.
 		t.Fatalf("tool advance returned bare error: %v", err)
 	}
-	var result workflow.AdvanceToolResult
+	var result workflowphases.AdvanceToolResult
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatalf("decode tool result: %v body = %s", err, out)
 	}
@@ -307,13 +309,13 @@ func (p *advanceParityRig) advanceTool(t *testing.T, sessionID string) (advanceT
 	return status, result, result.Run
 }
 
-func (p *advanceParityRig) advanceToolRaw(t *testing.T, sessionID string) (advanceToolStatus, workflow.AdvanceToolResult, error) {
+func (p *advanceParityRig) advanceToolRaw(t *testing.T, sessionID string) (advanceToolStatus, workflowphases.AdvanceToolResult, error) {
 	t.Helper()
 	out, err := p.registry.Run(context.Background(), "workflow_advance", map[string]any{}, securityToolContext(sessionID, p.toolProject, "coordinator"))
 	if err != nil {
-		return advanceToolStatusErr, workflow.AdvanceToolResult{}, err
+		return advanceToolStatusErr, workflowphases.AdvanceToolResult{}, err
 	}
-	var result workflow.AdvanceToolResult
+	var result workflowphases.AdvanceToolResult
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatalf("decode tool result: %v body = %s", err, out)
 	}
@@ -328,13 +330,13 @@ func (p *advanceParityRig) advanceToolRaw(t *testing.T, sessionID string) (advan
 func (p *advanceParityRig) seedReady(t *testing.T, runID string) {
 	t.Helper()
 	ctx := context.Background()
-	run, err := p.wfMgr.Get(ctx, runID)
+	run, err := p.wfMgr.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "get run", err)
-	vars, err := p.wfMgr.Store.GetScaffoldVars(ctx, runID)
+	vars, err := p.wfMgr.Store.Runs.GetScaffoldVars(ctx, runID)
 	testutil.FailErr(t, "get scaffold vars", err)
-	vars = workflow.SetHostVar(vars, "ready", true)
+	vars = runstate.SetHostVar(vars, "ready", true)
 	testutil.FailErr(t, "upsert scaffold state",
-		p.wfMgr.Store.UpdateVars(ctx, run, "", vars))
+		p.wfMgr.Store.State.UpdateVars(ctx, run, "", vars))
 }
 
 func stringSliceDetail(v any) []string {

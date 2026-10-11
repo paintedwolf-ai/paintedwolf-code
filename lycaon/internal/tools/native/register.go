@@ -2,8 +2,12 @@ package native
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/browser"
@@ -14,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/page"
 	reporttools "github.com/lycaon/lycaon/internal/tools/native/reporting"
 	"github.com/lycaon/lycaon/internal/tools/native/terminal"
@@ -71,6 +76,29 @@ func scopedWriter(boundary *sandbox.Boundary, toolName string) func(ctx context.
 		afterSuccessfulMutation(ctx, tctx, resolved.DisplayPath)
 		return nil
 	}
+}
+
+func init() {
+	command.SetOutputCommitter(commitCommandOutput)
+}
+
+func commitCommandOutput(ctx context.Context, tc tools.ToolContext, loc fseffect.Location, output io.Reader, appendMode bool) error {
+	req := agentStreamRequest{Target: mutationTarget{Abs: filepath.Join(loc.Root, loc.Rel), Location: loc}, Source: output}
+	if appendMode {
+		before, err := fseffect.OpenRead(loc)
+		if err == nil {
+			defer func() { _ = before.Close() }()
+			hash := sha256.New()
+			req.Source = io.MultiReader(io.TeeReader(before, hash), output)
+			req.BeforeCommit = func(fseffect.Target, fseffect.Result) error {
+				return verifyMutationSnapshot(loc, hex.EncodeToString(hash.Sum(nil)), false)
+			}
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	_, err := applyAgentStream(ctx, tc, req)
+	return err
 }
 
 // RegisterRenderViewTool registers render_view for authored mockup rasterization.

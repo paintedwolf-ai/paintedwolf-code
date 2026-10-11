@@ -131,7 +131,7 @@ Render tests exercise capability presence/absence, deferred-versus-loaded behavi
 
 Separate behavioral coaching from host guarantees. A prompt may ask for stronger validation or narrower execution than the host admits; describe that as an expectation, not a hard gate, an unavailable next action, or a guarantee about side effects.
 
-Project changing contracts from their owners. Review-loop instructions carry the complete manifest verdict schema through `ProjectPhaseExit`, `InjectView`, and the active-workflow DTO ([`phase_exit.go`](../lycaon/internal/workflow/phase_exit.go)); the current schema is included on every model request. Active workflow instructions, worker instructions, and the spawn roster are request-local context, so they remain present across tool iterations and history compaction. Workspace-change guidance resolves each session's active root through the same resolver tools use.
+Project changing contracts from their owners. Review-loop instructions carry the complete manifest verdict schema through `ProjectPhaseExit`, `InjectView`, and the active-workflow DTO ([`phase_exit.go`](../lycaon/internal/workflow/presentation/phase_exit.go)); the current schema is included on every model request. Active workflow instructions, worker instructions, and the spawn roster are request-local context, so they remain present across tool iterations and history compaction. Workspace-change guidance resolves each session's active root through the same resolver tools use.
 
 Use system-derived tests rather than prompt snapshots or required sentences:
 

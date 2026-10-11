@@ -1,10 +1,13 @@
 package search
 
 import (
+	"context"
 	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
 )
 
 // SymbolLegCap bounds declarations per project on a complete search.
@@ -80,14 +83,19 @@ func (st *compileState) buildSymbolLeg(name string) (*SymbolPlanLeg, error) {
 	if err != nil {
 		return nil, err
 	}
+	excludes := append([]string(nil), st.ctx.DependencyPathPatterns...)
+	if st.ctx.IncludeDependencies {
+		excludes = nil
+	}
 	return &SymbolPlanLeg{
-		Query:       st.ast,
-		Name:        name,
-		Roots:       orderCodeRoots(roots, st.ctx.OriginProjectID),
-		Cap:         st.ctx.Budget.symbolCap(),
-		ExcludeDirs: st.lineExcludeDirs(append([]string(nil), st.ctx.DependencyPathPatterns...)),
-		Flags:       st.ctx.Flags,
-		Budget:      st.ctx.Budget,
+		IncludeDependencies: st.ctx.IncludeDependencies,
+		Query:               st.ast,
+		Name:                name,
+		Roots:               orderCodeRoots(roots, st.ctx.OriginProjectID),
+		Cap:                 st.ctx.Budget.symbolCap(),
+		ExcludeDirs:         st.lineExcludeDirs(excludes),
+		Flags:               st.ctx.Flags,
+		Budget:              st.ctx.Budget,
 	}, nil
 }
 
@@ -132,6 +140,12 @@ func CompileSymbolFilter(leg *SymbolPlanLeg) (SymbolFilter, error) {
 		return SymbolFilter{}, err
 	}
 	return SymbolFilter{matcher: matcher, paths: paths}, nil
+}
+
+// ForRoot binds hidden dependency admission to the declaration's actual root.
+func (f SymbolFilter) ForRoot(ctx context.Context, catalog *sourcecatalog.Catalog, root string, includeDependencies bool) SymbolFilter {
+	f.paths = f.paths.withDependencies(ctx, catalog, root, includeDependencies)
+	return f
 }
 
 // Admits reports whether a declaration named name at path satisfies the query.

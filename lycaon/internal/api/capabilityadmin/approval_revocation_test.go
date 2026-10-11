@@ -58,7 +58,7 @@ func TestRevokeApprovalRemovesEveryProjection(t *testing.T) {
 			option := hitl.ApprovalOption{Authority: []hitl.ApprovalAuthorityDelta{
 				{Kind: hitl.AuthorityGenericGrant, Grant: &grant}, delta,
 			}}
-			_, err = s.InstallApprovalOption(t.Context(), "checkpoint-a", option)
+			_, err = s.Installation.InstallApprovalOption(t.Context(), "checkpoint-a", option)
 			testutil.FailErr(t, "install all projections", err)
 			if approvalRuntimeCount(s) != 1 {
 				t.Fatal("missing runtime authority before revoke")
@@ -69,7 +69,7 @@ func TestRevokeApprovalRemovesEveryProjection(t *testing.T) {
 			req := httptest.NewRequest(http.MethodPost, "/v1/approval-grants/revoke", strings.NewReader(`{"ids":["grant_shared"]}`))
 			req.Header.Set("Content-Type", "application/json")
 			response := httptest.NewRecorder()
-			s.HandleRevokeApprovalGrants(response, req)
+			s.Grants.HandleRevokeApprovalGrants(response, req)
 			var result wire.RevokeApprovalGrantsResponse
 			testutil.FailErr(t, "decode revoke", json.Unmarshal(response.Body.Bytes(), &result))
 			if response.Code != http.StatusOK || len(result.Results) != 1 || !result.Results[0].Revoked {
@@ -108,7 +108,7 @@ func TestRevokeForgetsTheDurableChatGrant(t *testing.T) {
 		strings.NewReader(`{"ids":["grant_recorded","quiet_recorded","grant_missing"]}`))
 	req.Header.Set("Content-Type", "application/json")
 	response := httptest.NewRecorder()
-	handler.HandleRevokeApprovalGrants(response, req)
+	handler.Grants.HandleRevokeApprovalGrants(response, req)
 	var result wire.RevokeApprovalGrantsResponse
 	testutil.FailErr(t, "decode revoke", json.Unmarshal(response.Body.Bytes(), &result))
 	if len(result.Results) != 3 || !result.Results[0].Revoked || !result.Results[1].Revoked || result.Results[2].Revoked {
@@ -130,8 +130,8 @@ func withHost(t *testing.T, deps Deps) Deps {
 }
 
 func approvalRuntimeCount(s *Handler) int {
-	return len(s.GrantedPaths.List("chat-a")) + len(s.ReadPaths.ListChatGrants("chat-a")) +
-		len(s.WriteRoots.ListChatGrants("chat-a")) + len(s.Listen.ListChatGrants("chat-a")) +
-		len(s.Loopback.ListChatGrants("chat-a")) + len(s.Sockets.ListChatGrants("chat-a")) +
-		len(s.DirectIP.ListChatGrants("chat-a"))
+	return len(s.Installation.GrantedPaths.List("chat-a")) + len(s.Installation.ReadPaths.ListChatGrants("chat-a")) +
+		len(s.Installation.WriteRoots.ListChatGrants("chat-a")) + len(s.Installation.Listen.ListChatGrants("chat-a")) +
+		len(s.Installation.Loopback.ListChatGrants("chat-a")) + len(s.Installation.Sockets.ListChatGrants("chat-a")) +
+		len(s.Installation.DirectIP.ListChatGrants("chat-a"))
 }

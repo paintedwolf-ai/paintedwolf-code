@@ -179,7 +179,7 @@ func TestRegistryTestConnectivityDiscoversModels(t *testing.T) {
 	if err := creds.Set("together", wantAuth); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
-	registry, err := NewRegistry(catalog, creds)
+	registry, err := NewRegistry(t.Context(), catalog, creds)
 	testutil.FailErr(t, "NewRegistry failed", err)
 	registry.discoveryClient = srv.Client()
 
@@ -207,7 +207,7 @@ func TestRegistryTestConnectivityFailsOnUnauthorized(t *testing.T) {
 	if err := creds.Set("together", "bad-key"); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
-	registry, err := NewRegistry(catalog, creds)
+	registry, err := NewRegistry(t.Context(), catalog, creds)
 	testutil.FailErr(t, "NewRegistry failed", err)
 	registry.discoveryClient = srv.Client()
 
@@ -246,7 +246,7 @@ func TestRegistryListDiscoversConfiguredTogetherProvider(t *testing.T) {
 	if err := creds.Set("together", wantAuth); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
-	registry, err := NewRegistry(catalog, creds)
+	registry, err := NewRegistry(t.Context(), catalog, creds)
 	testutil.FailErr(t, "NewRegistry failed", err)
 	registry.discoveryClient = srv.Client()
 

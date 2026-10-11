@@ -23,12 +23,12 @@ func (unavailableWorkerEvidence) ReadAll(context.Context, string, string, string
 
 func TestWorkerValidationEvidenceUnavailablePreservesDelivery(t *testing.T) {
 	mem := store.NewMemory()
-	mgr := NewManager(mem, nil, nil, settings.DefaultSessionLimits())
-	mgr.SetEvidenceStore(unavailableWorkerEvidence{})
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr.Verification.SetEvidenceStore(unavailableWorkerEvidence{})
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "")
 	testutil.FailErr(t, "create session", err)
 	task := &api.WorkerTask{ChildSessionID: sess.ID}
-	proof := mgr.workerValidationProof(t.Context(), task, nil, "")
+	proof := mgr.Workers.Summaries.Proof(t.Context(), task, nil, "")
 	if !proof.Verification.Valid() || proof.Verification.Method != verification.Blocked {
 		t.Fatalf("unavailable validation not recorded: %+v", proof)
 	}

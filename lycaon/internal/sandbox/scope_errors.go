@@ -1,6 +1,12 @@
 package sandbox
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+// ErrPathEscape identifies lexical or symbolic-link escape from a project boundary.
+var ErrPathEscape = errors.New("path escapes project boundary")
 
 // ScopeKind distinguishes read vs write path scope violations.
 type ScopeKind int

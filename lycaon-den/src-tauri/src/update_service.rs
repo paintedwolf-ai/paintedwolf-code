@@ -185,3 +185,6 @@ fn emit(app: &AppHandle, state: &mut NativeUpdateState) {
 pub(crate) fn initialize_helper(installation: &str) -> Result<(), String> {
     persistence::helper_installation(installation).map_err(|error| error.to_string())
 }
+
+#[cfg(test)]
+mod https_transport_tests;

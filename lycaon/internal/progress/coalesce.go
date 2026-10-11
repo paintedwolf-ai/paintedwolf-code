@@ -30,12 +30,15 @@ type FlushFunc func(payload FlushPayload)
 // row into chat. Each session keeps a window seeded with the pre-write content of its first write;
 // later writes only advance the latest content and reset the timer.
 type Coalescer struct {
-	mu      sync.Mutex
-	window  time.Duration
-	emit    FlushFunc
-	now     func() time.Time
-	pending map[string]*coalesceWindow
-	seq     map[string]int
+	mu        sync.Mutex
+	closeOnce sync.Once
+	closed    bool
+	emits     sync.WaitGroup
+	window    time.Duration
+	emit      FlushFunc
+	now       func() time.Time
+	pending   map[string]*coalesceWindow
+	seq       map[string]int
 }
 
 type coalesceWindow struct {
@@ -68,6 +71,9 @@ func (c *Coalescer) Record(sessionID, prevContent, nextContent string) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.closed {
+		return
+	}
 	w := c.pending[key]
 	if w == nil {
 		w = &coalesceWindow{baseline: prevContent}
@@ -109,9 +115,39 @@ func (c *Coalescer) flush(key string) {
 		ChangedAt: w.changedAt,
 	}
 	emit := c.emit
+	if emit != nil {
+		c.emits.Add(1)
+	}
 	c.mu.Unlock()
 
 	if emit != nil {
+		defer c.emits.Done()
 		emit(payload)
 	}
+}
+
+// Close seals new writes, delivers pending windows, and drains emit callbacks.
+func (c *Coalescer) Close() {
+	if c == nil {
+		return
+	}
+	c.closeOnce.Do(func() {
+		c.mu.Lock()
+		c.closed = true
+		keys := make([]string, 0, len(c.pending))
+		for key, window := range c.pending {
+			if window.timer != nil {
+				window.timer.Stop()
+			}
+			keys = append(keys, key)
+		}
+		c.mu.Unlock()
+		for _, key := range keys {
+			c.flush(key)
+		}
+		c.emits.Wait()
+		c.mu.Lock()
+		c.emit = nil
+		c.mu.Unlock()
+	})
 }

@@ -13,7 +13,7 @@ import (
 // AttachAmbientOnSessionCreate attaches the bundled ambient workflow to a
 // build-posture session. Fails closed: a build session without a leaf run has no
 // phase, no gates, and no agent roster.
-func (s *Handler) AttachAmbientOnSessionCreate(ctx context.Context, req wire.CreateSessionRequest, sessionID string) error {
+func (s *Lifecycle) AttachAmbientOnSessionCreate(ctx context.Context, req wire.CreateSessionRequest, sessionID string) error {
 	if req.Posture != wire.SessionPostureBuild {
 		return nil
 	}
@@ -22,7 +22,7 @@ func (s *Handler) AttachAmbientOnSessionCreate(ctx context.Context, req wire.Cre
 	if err != nil {
 		return fmt.Errorf("attach ambient workflow: resolve default: %w", err)
 	}
-	run, err := s.Workflows.StartAmbient(ctx, sessionID, ref.ID, ref.Version)
+	run, err := s.Workflows.Ambient.StartAmbient(ctx, sessionID, ref.ID, ref.Version)
 	if err != nil {
 		return fmt.Errorf("attach ambient workflow %s@%s: %w", ref.ID, ref.Version, err)
 	}

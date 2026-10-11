@@ -11,9 +11,9 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Handler) loadSourceGitReview(ctx context.Context, p *project.Project, id string, movement *bool, parent *int) (sourceGitReviewRequest, error) {
+func (s *Comparisons) loadSourceGitReview(ctx context.Context, p *project.Project, id string, movement *bool, parent *int) (sourceGitReviewRequest, error) {
 	var req sourceGitReviewRequest
-	changes, err := s.SourceLedger.GitTransitionsByIDs(ctx, []string{id})
+	changes, err := s.SourceLedger.Git.GitTransitionsByIDs(ctx, []string{id})
 	if err != nil {
 		return req, err
 	}
@@ -63,7 +63,7 @@ func selectSourceGitReview(req sourceGitReviewRequest, movement *bool, selectedP
 	return req, nil
 }
 
-func (s *Handler) loadGitChangeComparison(ctx context.Context, p *project.Project, source wire.GitChangeComparisonSource) (sourceledger.Comparison, error) {
+func (s *Comparisons) loadGitChangeComparison(ctx context.Context, p *project.Project, source wire.GitChangeComparisonSource) (sourceledger.Comparison, error) {
 	if err := gitReviewPathFailure(source.Path); err != nil {
 		return sourceledger.Comparison{}, err
 	}

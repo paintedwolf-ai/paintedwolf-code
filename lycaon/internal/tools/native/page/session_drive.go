@@ -24,19 +24,19 @@ func ActHandler(pages *pagesession.Registry, live LivePreview) tools.ToolHandler
 			return "", err
 		}
 		if live != nil {
-			live.Claim(ctx, tctx.SessionID, in.ID, tctx.Invocation.MessageID, tctx.ToolCallID)
+			live.Claim(ctx, tctx.Identity.SessionID, in.ID, tctx.Invocation.MessageID, tctx.Identity.ToolCallID)
 		}
-		entry, err := requirePage(pages, tctx.SessionID, in.ID)
+		entry, err := requirePage(pages, tctx.Identity.SessionID, in.ID)
 		if err != nil {
 			return "", err
 		}
 		if live != nil {
-			live.PublishDriving(ctx, tctx.SessionID, in.ID, true)
-			defer live.PublishDriving(ctx, tctx.SessionID, in.ID, false)
+			live.PublishDriving(ctx, tctx.Identity.SessionID, in.ID, true)
+			defer live.PublishDriving(ctx, tctx.Identity.SessionID, in.ID, false)
 		}
 		onAction := func(act browser.CaptureAction, raw json.RawMessage) {
 			if live != nil {
-				live.PublishAction(ctx, tctx.SessionID, in.ID, act, raw)
+				live.PublishAction(ctx, tctx.Identity.SessionID, in.ID, act, raw)
 			}
 		}
 		result := pageActResult{ID: in.ID}
@@ -61,7 +61,7 @@ func ActHandler(pages *pagesession.Registry, live LivePreview) tools.ToolHandler
 			}
 			result.ActionResults, result.PageEvidence, result.RoutesActive = report.Results, report.Evidence, report.RoutesActive
 		}
-		result.LivePages = pages.List(tctx.SessionID)
+		result.LivePages = pages.List(tctx.Identity.SessionID)
 		payload, _ := surveyjson.Marshal(result)
 		return string(payload), nil
 	}
@@ -75,9 +75,9 @@ func SnapshotHandler(pages *pagesession.Registry, live LivePreview) tools.ToolHa
 			return "", err
 		}
 		if live != nil {
-			live.Claim(ctx, tctx.SessionID, in.ID, tctx.Invocation.MessageID, tctx.ToolCallID)
+			live.Claim(ctx, tctx.Identity.SessionID, in.ID, tctx.Invocation.MessageID, tctx.Identity.ToolCallID)
 		}
-		entry, err := requirePage(pages, tctx.SessionID, in.ID)
+		entry, err := requirePage(pages, tctx.Identity.SessionID, in.ID)
 		if err != nil {
 			return "", err
 		}
@@ -87,7 +87,7 @@ func SnapshotHandler(pages *pagesession.Registry, live LivePreview) tools.ToolHa
 		}
 		attachPageVisual(tctx, out)
 		result := universalResult(in.ID, out, in.Caption)
-		result.LivePages = pages.List(tctx.SessionID)
+		result.LivePages = pages.List(tctx.Identity.SessionID)
 		payload, _ := surveyjson.Marshal(result)
 		return string(payload), nil
 	}
@@ -101,9 +101,9 @@ func CloseHandler(pages *pagesession.Registry, live LivePreview) tools.ToolHandl
 			return "", err
 		}
 		if live != nil {
-			live.Claim(ctx, tctx.SessionID, in.ID, tctx.Invocation.MessageID, tctx.ToolCallID)
+			live.Claim(ctx, tctx.Identity.SessionID, in.ID, tctx.Invocation.MessageID, tctx.Identity.ToolCallID)
 		}
-		entry, err := requirePage(pages, tctx.SessionID, in.ID)
+		entry, err := requirePage(pages, tctx.Identity.SessionID, in.ID)
 		if err != nil {
 			return "", err
 		}
@@ -116,11 +116,11 @@ func CloseHandler(pages *pagesession.Registry, live LivePreview) tools.ToolHandl
 			attachPageVisual(tctx, out)
 			result = universalResult(in.ID, out, in.Caption)
 		}
-		if err := pages.ClosePage(ctx, tctx.SessionID, in.ID); err != nil {
+		if err := pages.ClosePage(ctx, tctx.Identity.SessionID, in.ID); err != nil {
 			return "", mapPageLifecycleReject(err, in.ID)
 		}
 		result.Closed = true
-		result.LivePages = pages.List(tctx.SessionID)
+		result.LivePages = pages.List(tctx.Identity.SessionID)
 		payload, _ := surveyjson.Marshal(result)
 		return string(payload), nil
 	}

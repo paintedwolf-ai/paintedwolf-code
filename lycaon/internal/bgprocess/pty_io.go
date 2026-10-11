@@ -7,16 +7,16 @@ import (
 )
 
 // WritePTY writes bytes to the pty main of a live handle.
-func (r *Registry) WritePTY(sessionID, handle string, data []byte) error {
-	proc, err := r.lookup(sessionID, handle)
+func (r *Terminal) WritePTY(sessionID, handle string, data []byte) error {
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return err
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	running := proc.running
 	pty := proc.pty
 	kind := proc.kind
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	if kind != processKindPTY || pty == nil {
 		return fmt.Errorf("%w: handle %s", ErrNotPTY, handle)
 	}
@@ -29,14 +29,14 @@ func (r *Registry) WritePTY(sessionID, handle string, data []byte) error {
 
 // ReadPTY returns incremental main output since the handle's last read cursor,
 // waiting until idle quiescence, timeout, or process exit.
-func (r *Registry) ReadPTY(sessionID, handle string, opts PTYReadOpts) (PTYReadResult, error) {
-	proc, err := r.lookup(sessionID, handle)
+func (r *Terminal) ReadPTY(sessionID, handle string, opts PTYReadOpts) (PTYReadResult, error) {
+	proc, err := r.jobs.lookup(sessionID, handle)
 	if err != nil {
 		return PTYReadResult{}, err
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	kind := proc.kind
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	if kind != processKindPTY {
 		return PTYReadResult{}, fmt.Errorf("%w: handle %s", ErrNotPTY, handle)
 	}
@@ -51,16 +51,16 @@ func (r *Registry) ReadPTY(sessionID, handle string, opts PTYReadOpts) (PTYReadR
 	}
 	maxBytes := opts.MaxBytes
 	if maxBytes <= 0 {
-		maxBytes = r.cfg.RingBufferBytes
+		maxBytes = r.ringBufferBytes
 	}
 
 	deadline := time.Now().Add(timeout)
 	ticker := time.NewTicker(ptyReadPoll)
 	defer ticker.Stop()
 
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	startCursor := proc.readCursor
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 	var text strings.Builder
 	var truncated bool
 	var pageContinuation bool
@@ -70,8 +70,8 @@ func (r *Registry) ReadPTY(sessionID, handle string, opts PTYReadOpts) (PTYReadR
 	gotData := false
 
 	drain := func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
+		r.jobs.mu.Lock()
+		defer r.jobs.mu.Unlock()
 		remain := maxBytes - text.Len()
 		if remain <= 0 {
 			truncated = true
@@ -105,9 +105,9 @@ func (r *Registry) ReadPTY(sessionID, handle string, opts PTYReadOpts) (PTYReadR
 
 	for {
 		drain()
-		r.mu.Lock()
+		r.jobs.mu.Lock()
 		exited := proc.hasExit
-		r.mu.Unlock()
+		r.jobs.mu.Unlock()
 
 		if pageContinuation {
 			return r.ptyReadResult(proc, text.String(), truncated, pageContinuation, evictedBytes, startCursor, availableThrough), nil
@@ -135,9 +135,9 @@ func (r *Registry) ReadPTY(sessionID, handle string, opts PTYReadOpts) (PTYReadR
 	}
 }
 
-func (r *Registry) ptyReadResult(proc *Process, text string, truncated, pageContinuation bool, evictedBytes, startCursor, availableThrough int64) PTYReadResult {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (r *Terminal) ptyReadResult(proc *Process, text string, truncated, pageContinuation bool, evictedBytes, startCursor, availableThrough int64) PTYReadResult {
+	r.jobs.mu.Lock()
+	defer r.jobs.mu.Unlock()
 	if availableThrough == 0 {
 		availableThrough = proc.buffer.NextCursor()
 	}

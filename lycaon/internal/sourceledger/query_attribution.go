@@ -30,7 +30,7 @@ type AttributionResult struct {
 	Intervals  []AttributionInterval
 }
 
-func (s *Store) QueryAttribution(
+func (s *History) QueryAttribution(
 	ctx context.Context,
 	projectID string, branch sourcebranch.ID, rootID, path string,
 ) (AttributionResult, error) {
@@ -81,5 +81,5 @@ func (s *Store) QueryAttribution(
 			ToolCallID: operation.ToolCallID, TS: ts, EffectID: effect.ID,
 		})
 	}
-	return s.savedTextAttribution(ctx, projectID, head.VersionID, out)
+	return s.comparisons.savedTextAttribution(ctx, projectID, head.VersionID, out)
 }

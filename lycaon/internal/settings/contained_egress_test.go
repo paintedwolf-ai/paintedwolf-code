@@ -29,8 +29,17 @@ func TestContainedEgressAutoApprovesNetwork(t *testing.T) {
 			"scp a host:/tmp/",
 		} {
 			res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-				Tool: "command", Args: map[string]any{"command": cmd}, ProjectDir: proj, Contained: contained,
-			})
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": cmd},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+Execution: hitl.ActionExecution{
+Contained: contained,
+},
+})
 			testutil.FailErr(t, "evaluate Contained egress", err)
 			if !res.AutoApproved() || res.Required() {
 				t.Fatalf("Contained.Egress=%s %q must auto-approve: %+v", egress, cmd, res)
@@ -48,9 +57,17 @@ func TestStrictEgressAskComposesOnce(t *testing.T) {
 	contained := hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{proj}}
 
 	res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
-		Tool: "command", Args: map[string]any{"command": "curl -s https://new-host.example/"},
-		ProjectDir: proj, Contained: contained,
-	})
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "curl -s https://new-host.example/"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: proj,
+},
+Execution: hitl.ActionExecution{
+Contained: contained,
+},
+})
 	testutil.FailErr(t, "evaluate curl under Contained proxy", err)
 	if !res.AutoApproved() || res.Required() {
 		t.Fatalf("tool gate must not ask for Contained-proxy curl (proxy raises the Strict ask): %+v", res)

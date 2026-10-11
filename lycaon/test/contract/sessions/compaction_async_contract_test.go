@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -21,7 +22,7 @@ func TestCompactionSingleWriterContract(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	lycaonRoot := filepath.Join(root, "lycaon")
 	allowed := map[string]bool{
-		"internal/session/compaction.go": true,
+		"internal/session/history/compaction.go": true,
 	}
 	callers, err := scanCompactionViewWriterCallers(lycaonRoot)
 	contractcheck.FailErr(t, "scan writeCompactionView callers", err)
@@ -31,7 +32,7 @@ func TestCompactionSingleWriterContract(t *testing.T) {
 		}
 		t.Fatalf("writeCompactionView caller %s not allowed: %v", fn, sites)
 	}
-	if len(callers["internal/session/compaction.go"]) < 2 {
+	if len(callers["internal/session/history/compaction.go"]) < 2 {
 		t.Fatalf("expected runBackgroundCompaction and ForceCompact in compaction.go, got %v", callers)
 	}
 }
@@ -98,7 +99,8 @@ func TestCompactionSyncPathAvoidsSummarizerContract(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
 	for _, path := range []string{
-		"lycaon/internal/session/prompt_assembly.go",
+		"lycaon/internal/session/promptassembly/assembly.go",
+		"lycaon/internal/session/history/prompt_assembly.go",
 		"lycaon/internal/coordinator/promptloop/stream.go",
 	} {
 		data, err := os.ReadFile(filepath.Join(root, path))
@@ -110,7 +112,7 @@ func TestCompactionSyncPathAvoidsSummarizerContract(t *testing.T) {
 			}
 		}
 	}
-	forbidden, err := compactionSyncPathForbiddenCalls(filepath.Join(root, "lycaon/internal/session/compaction.go"))
+	forbidden, err := compactionSyncPathForbiddenCalls(filepath.Join(root, "lycaon/internal/session/history/compaction.go"))
 	contractcheck.FailErr(t, "scan compaction.go sync paths", err)
 	if len(forbidden) > 0 {
 		t.Fatalf("compaction.go sync paths must not call compaction LLM APIs: %v", forbidden)
@@ -123,13 +125,15 @@ func compactionSyncPathForbiddenCalls(path string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	syncFuncs := map[string]bool{"maybeCompact": true}
+	syncFuncs := map[string]bool{"Fit": true}
+	found := false
 	var hits []string
 	for _, decl := range f.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
 		if !ok || fn.Name == nil || !syncFuncs[fn.Name.Name] || fn.Body == nil {
 			continue
 		}
+		found = true
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
 			call, ok := n.(*ast.CallExpr)
 			if !ok {
@@ -146,13 +150,16 @@ func compactionSyncPathForbiddenCalls(path string) ([]string, error) {
 			return true
 		})
 	}
+	if !found {
+		return nil, fmt.Errorf("missing synchronous history.Fit owner in %s", path)
+	}
 	return hits, nil
 }
 
 func TestCompactionRunnerUsesWithoutCancelContract(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	data, err := os.ReadFile(filepath.Join(root, "lycaon/internal/session/compaction_runner.go"))
+	data, err := os.ReadFile(filepath.Join(root, "lycaon/internal/session/history/runner.go"))
 	contractcheck.FailErr(t, "read compaction_runner.go", err)
 	if !strings.Contains(string(data), "context.WithoutCancel") {
 		t.Fatal("compaction_runner.go must preserve WithoutCancel background context")
@@ -235,7 +242,7 @@ func TestCompactionTokenObservationWiredContract(t *testing.T) {
 		"RecordCompactionTokenObservation",
 		"--",
 		"lycaon/internal/coordinator/promptloop/stream.go",
-		"lycaon/internal/session/coordinator_wire.go",
+		"lycaon/internal/session/promptsource/model.go",
 	)
 	cmd.Dir = root
 	cmd.Env = lyexec.LocalGitEnv()
@@ -243,7 +250,7 @@ func TestCompactionTokenObservationWiredContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RecordCompactionTokenObservation must be wired through prompt loop:\n%s", string(out))
 	}
-	if !strings.Contains(string(out), "stream.go") || !strings.Contains(string(out), "coordinator_wire.go") {
+	if !strings.Contains(string(out), "stream.go") || !strings.Contains(string(out), "model.go") {
 		t.Fatalf("unexpected wiring sites:\n%s", string(out))
 	}
 }

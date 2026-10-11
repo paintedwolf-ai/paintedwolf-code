@@ -1,0 +1,93 @@
+id: bugbash
+version: 1.0.0
+name: Bugbash
+description: Hunt bugs in parallel, choose what to fix, then verify
+surface_profile: plan
+trigger: /bugbash
+request:
+  question: What should the bug hunt focus on?
+  default: Hunt broadly for correctness bugs, edge cases, unsafe assumptions, and concurrency failures, then prioritize the strongest findings.
+icon: bug
+initial_posture: orchestrate
+topology: bugbash
+agents:
+  - { id: coordinator, tools: all }
+  - { id: code-reviewer, tools: profile }
+  - { id: path-explorer, tools: profile }
+blueprint:
+  id: triage
+  file: bugbash-triage.md
+  frontmatter:
+    - scope
+    - breaking
+    - research_depth
+rules:
+  - config/packs/painted-wolf/platform/host/posture-rules/coordinator.yaml
+  - config/packs/painted-wolf/platform/host/posture-rules/orchestrate.yaml
+phases:
+  - id: hunt
+    activity_label: Hunting bugs
+    explain:
+      summary: Workers hunt for bugs in parallel
+      body: >-
+        Independent hunts look for correctness bugs, edge cases, and concurrency
+        failures at the same time, each from its own angle. You don't need to do
+        anything. When they finish, one worker triages what they found.
+    bind_parallel_group: [hunt_correctness, hunt_edges, hunt_races]
+    complete_when: parallel_stages_complete
+    controls:
+      closeout: gated
+    next: triage
+  - id: triage
+    activity_label: Triaging findings
+    explain:
+      summary: A worker triages the findings
+      body: >-
+        A worker weighs every finding from the hunts and keeps the ones backed by
+        evidence, so the fix plan starts from the strongest bugs. You don't need to
+        do anything. When it finishes, the fix plan is written for your
+        approval.
+    bind_topology_stage: triage
+    complete_when: topology_stage_complete
+    controls:
+      closeout: gated
+    next: expand
+  - id: expand
+    activity_label: Writing the fix plan
+    blueprint_write: true
+    complete_when: gates_satisfied
+    gates: [plan_stub_valid]
+    controls:
+      closeout: gated
+    next: approve
+  - id: approve
+    activity_label: Waiting for your approval
+    human_approval:
+      blueprint: bugbash-triage.md
+      readiness: plan_stub_valid
+    complete_when: gates_satisfied
+    gates: [human_approval]
+    next: fix
+  - id: fix
+    activity_label: Fixing bugs
+    invoke_workflow:
+      workflow_id: implement
+      version: "1.0.0"
+      blueprint: inherit
+    invoke_trigger: phase_enter
+    complete_when: gates_satisfied
+    gates: [child_run_complete]
+    next: closeout
+  - id: closeout
+    activity_label: Verifying the fix
+    complete_when: closeout_gates_passed
+    controls:
+      closeout: gated
+    next: done
+  - id: done
+    activity_label: Done
+    terminal: true
+    complete_when: orchestration_complete
+controls:
+  phase_advance: host
+  default_execution_mode: investigate

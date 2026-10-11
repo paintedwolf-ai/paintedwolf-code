@@ -3,9 +3,9 @@ package promptloop
 import (
 	"context"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/internal/guidance"
 )
 
 func oarContentSegments(messages []api.Message) []oar.ContentSegment {
@@ -113,15 +113,15 @@ func oarContentTrustTier(trustTier api.ContentTrustTier) string {
 	}
 }
 
-func (l modelTurn) overlayRootPaths(ctx context.Context, sess *api.Session) []string {
-	if l.PromptLoop == nil || l.Deps.OverlayRootPaths == nil || sess == nil {
+func (l *promptContext) overlayRootPaths(ctx context.Context, sess *api.Session) []string {
+	if l == nil || l.Deps.OverlayRootPaths == nil || sess == nil {
 		return nil
 	}
 	return l.Deps.OverlayRootPaths(ctx, sess)
 }
 
-func (l modelTurn) evaluateContentAnchor(ctx context.Context, sess *api.Session, anchor string, segments []oar.ContentSegment, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
-	if l.PromptLoop == nil || l.Deps.EvaluateContentAnchor == nil {
+func (l *turnCloseout) evaluateContentAnchor(ctx context.Context, sess *api.Session, anchor string, segments []oar.ContentSegment, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
+	if l == nil || l.Deps.EvaluateContentAnchor == nil {
 		return nil, false, "", false
 	}
 	return l.Deps.EvaluateContentAnchor(ctx, sess, anchor, segments, tool, args)

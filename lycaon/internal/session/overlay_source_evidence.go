@@ -23,10 +23,3 @@ func OverlaySourceProof(ctx context.Context, task *api.WorkerTask, childMessages
 }
 
 // WorkerVerificationRevision returns the current worker source identity.
-func (m *Manager) WorkerVerificationRevision(ctx context.Context, task *api.WorkerTask) workercompletion.SourceRevision {
-	if task == nil {
-		return workercompletion.SourceRevision{}
-	}
-	revision, root := m.verificationRevision(ctx, task.WorkspaceRoot)
-	return workercompletion.SourceRevision{Revision: revision, RootDigest: root}
-}

@@ -29,6 +29,8 @@ const (
 	BoundaryWalkBudget BoundaryReason = "walk_budget"
 	// BoundaryScope means the caller's SurveyScope declined the directory; Detail carries its reason.
 	BoundaryScope BoundaryReason = "scope"
+	// BoundaryLazy is readable through an explicit path, outside eager discovery.
+	BoundaryLazy BoundaryReason = "lazy"
 )
 
 // SurveyBoundary is one directory a traversal did not observe completely.

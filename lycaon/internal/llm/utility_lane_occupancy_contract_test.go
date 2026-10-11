@@ -17,14 +17,15 @@ import (
 // paths do not curate; occupancy is marked on the admitted turn.
 func TestUtilityLaneOccupancyKeepsCompileOnTheAdmittedTurn(t *testing.T) {
 	root := testutil.CheckoutRoot(t)
-	assertOccupancyFuncAvoids(t, root, filepath.Join("lycaon", "internal", "workflow"),
-		[]string{"StampFanoutExecuteOutput", "stampReviewLoopEvidence"},
+	assertOccupancyFuncAvoids(t, root, filepath.Join("lycaon", "internal", "workflow", "review"),
+		[]string{"StampFanoutExecuteOutput", "StampEvidence", "compileReviewLoopDigest"},
 		[]string{"MaybeCurateSynthesisEvidence", "Curate", "Complete"})
-	assertOccupancyFuncAvoids(t, root, filepath.Join("lycaon", "internal", "session"),
-		[]string{"CoordinatorEnvelopeForWorkerCycleTerminal"},
+	assertOccupancyFuncAvoids(t, root, filepath.Join("lycaon", "internal", "session", "workeroutcomes"),
+		[]string{"EnvelopeForTerminal"},
 		[]string{"MaybeCurateSynthesisEvidence", "appendSynthesisEnvelope", "Curate"})
-	assertOccupancyFuncCalls(t, root, filepath.Join("lycaon", "internal", "session"),
-		"runTurnLocked", []string{"WithSession", "WithLane"})
+	assertOccupancyFuncCalls(t, root, filepath.Join("lycaon", "internal", "session", "turnexecution"),
+		"Run", []string{"WithSession", "WithLane"})
+	assertAdmittedTurnOccupancyOrder(t, root)
 	assertOccupancyFuncCalls(t, root, filepath.Join("lycaon", "internal", "llm"),
 		"completeUtility", []string{"beginLaneCall", "endLaneCall"})
 	assertOccupancyFuncCalls(t, root, filepath.Join("lycaon", "internal", "llm"),
@@ -61,6 +62,7 @@ func assertOccupancyFuncAvoids(t *testing.T, root, relDir string, funcs, forbidd
 		if !want[fn.Name.Name] {
 			continue
 		}
+		delete(want, fn.Name.Name)
 		var hits []string
 		ast.Inspect(fn.Body, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
@@ -76,6 +78,9 @@ func assertOccupancyFuncAvoids(t *testing.T, root, relDir string, funcs, forbidd
 			rel, _ := filepath.Rel(root, item.path)
 			t.Fatalf("%s %s must not curate or Complete: %s", rel, fn.Name.Name, strings.Join(hits, ", "))
 		}
+	}
+	for name := range want {
+		t.Errorf("%s: function %s not found; curation ownership is unverified", relDir, name)
 	}
 }
 
@@ -183,4 +188,53 @@ func parseOccupancyTree(t *testing.T, fset *token.FileSet, dir string) []*ast.Fi
 	})
 	testutil.FailErr(t, "parse "+dir, err)
 	return files
+}
+
+// Admission and occupancy must precede prompt assembly on the same context.
+func assertAdmittedTurnOccupancyOrder(t *testing.T, root string) {
+	t.Helper()
+	dir := filepath.Join("lycaon", "internal", "session", "turnexecution")
+	for _, item := range parseOccupancyFuncs(t, root, dir) {
+		if item.fn.Name.Name != "Run" {
+			continue
+		}
+		positions := map[string]token.Pos{}
+		ast.Inspect(item.fn.Body, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			name := sel.Sel.Name
+			if name == "Begin" {
+				owner, ok := sel.X.(*ast.SelectorExpr)
+				if !ok || owner.Sel.Name != "Turns" {
+					return true
+				}
+			} else if name != "WithSession" && name != "WithLane" && name != "executePromptRun" {
+				return true
+			}
+			if len(call.Args) == 0 {
+				t.Fatalf("%s has no admitted context", name)
+			}
+			ctx, ok := call.Args[0].(*ast.Ident)
+			if !ok || ctx.Name != "ctx" {
+				t.Fatalf("%s does not receive the admitted turn context", name)
+			}
+			positions[name] = call.Pos()
+			return true
+		})
+		prior := token.NoPos
+		for _, name := range []string{"Begin", "WithSession", "WithLane", "executePromptRun"} {
+			if positions[name] == token.NoPos || positions[name] <= prior {
+				t.Fatalf("turn admission/session/lane/execution order broken at %s: %v", name, positions)
+			}
+			prior = positions[name]
+		}
+		return
+	}
+	t.Fatal("turnexecution.Service.Run not found")
 }

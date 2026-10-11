@@ -33,7 +33,7 @@ func redactRequestArguments(ctx context.Context, matcher *secretmatch.Matcher, a
 		if !secretmatch.HTTPArgumentConsumed(args, path) {
 			return value
 		}
-		value = tc.Secrets.RedactArgument(path, value)
+		value = tc.Effects.Secrets.RedactArgument(path, value)
 		return matcher.RedactLabeled(ctx, requestFieldLabel(args, path, label), value)
 	}).(map[string]any)
 }

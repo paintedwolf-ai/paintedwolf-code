@@ -33,7 +33,7 @@ raise "Forbid command" if:
 	p := NewGuardPipeline(NewRuleSet([]*Rule{rule}), l, NewCounterStore())
 
 	gc := NewGuardContext()
-	gc.Tool = "command"
+	gc.Invocation.Tool = "command"
 	res, err := p.Evaluate(context.Background(), StagePreInvoke, gc)
 	testutil.FailErr(t, "eval command", err)
 	if res.Decision == nil || res.Decision.Effect != EffectBlock {
@@ -41,7 +41,7 @@ raise "Forbid command" if:
 	}
 
 	gc2 := NewGuardContext()
-	gc2.Tool = "read"
+	gc2.Invocation.Tool = "read"
 	res, err = p.Evaluate(context.Background(), StagePreInvoke, gc2)
 	testutil.FailErr(t, "eval read", err)
 	if res.Decision != nil {
@@ -69,14 +69,14 @@ raise "Read then write" if:
 	p := NewGuardPipeline(NewRuleSet([]*Rule{rule}), l, NewCounterStore())
 
 	gc := NewGuardContext()
-	gc.RecentToolNames = []string{"read", "write"}
+	gc.Session.RecentToolNames = []string{"read", "write"}
 	res, err := p.Evaluate(context.Background(), StagePreInvoke, gc)
 	testutil.FailErr(t, "eval flow", err)
 	if res.Decision == nil {
 		t.Fatalf("expected fire, got %#v trace=%#v", res.Decision, res.Trace)
 	}
 
-	gc.RecentToolNames = []string{"read"}
+	gc.Session.RecentToolNames = []string{"read"}
 	res, err = p.Evaluate(context.Background(), StagePreInvoke, gc)
 	testutil.FailErr(t, "eval incomplete", err)
 	if res.Decision != nil {

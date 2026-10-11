@@ -12,8 +12,8 @@ import (
 
 func TestStructuralDrainClosesUnpinnedHeadWhileKeepingPinnedPredecessor(t *testing.T) {
 	store := checkpointTestStore(t)
-	store.catalog.trees = map[string]projectionStore{"lifecycle": store}
-	t.Cleanup(func() { testutil.FailErr(t, "drain lifecycle catalog", store.catalog.Drain(t.Context())) })
+	store.stores.trees = map[string]projectionStore{"lifecycle": store}
+	t.Cleanup(func() { testutil.FailErr(t, "drain lifecycle catalog", store.stores.Drain(t.Context())) })
 	first, firstSegment, firstPage := lifecycleGeneration(t, store, 1)
 	store.mu.Lock()
 	store.initializeStructureLocked()
@@ -26,7 +26,7 @@ func TestStructuralDrainClosesUnpinnedHeadWhileKeepingPinnedPredecessor(t *testi
 	store.mu.Lock()
 	store.installStructureLocked(second)
 	store.mu.Unlock()
-	testutil.FailErr(t, "drain with predecessor pinned", store.catalog.Drain(t.Context()))
+	testutil.FailErr(t, "drain with predecessor pinned", store.stores.Drain(t.Context()))
 	if _, err := secondSegment.bytes.Read(t.Context(), secondPage&structuralOffsetMask); !errors.Is(err, errStructuralSegmentsClosed) {
 		t.Fatalf("unpinned head segment survived drain: %v", err)
 	}
@@ -45,10 +45,10 @@ func TestStructuralDrainClosesUnpinnedHeadWhileKeepingPinnedPredecessor(t *testi
 
 func TestClearTreeStoresLeavesPinnedSpilledGenerationReadable(t *testing.T) {
 	catalog := New()
-	catalog.treeDir = t.TempDir()
+	catalog.Trees.treeDir = t.TempDir()
 	store := checkpointTestStore(t)
-	store.catalog = catalog
-	store.structureFile = filepath.Join(catalog.treeDir, "snapshot.structure")
+	store.stores = catalog.Trees
+	store.structureFile = filepath.Join(catalog.Trees.treeDir, "snapshot.structure")
 	generation := checkpointTestGenerationWithMemory(t, store, nil, 400, 16<<10)
 	spilled := false
 	for _, segment := range generation.segments {
@@ -64,7 +64,7 @@ func TestClearTreeStoresLeavesPinnedSpilledGenerationReadable(t *testing.T) {
 	store.initializeStructureLocked()
 	store.installStructureLocked(generation)
 	store.mu.Unlock()
-	catalog.trees = map[string]projectionStore{"spill": store}
+	catalog.Trees.trees = map[string]projectionStore{"spill": store}
 	pin, err := store.retainGeneration(generation.id, false)
 	testutil.FailErr(t, "pin spilled generation", err)
 	defer pin.Release()
@@ -72,9 +72,9 @@ func TestClearTreeStoresLeavesPinnedSpilledGenerationReadable(t *testing.T) {
 	testutil.FailErr(t, "read pinned directory metadata", err)
 
 	clearCalled := false
-	testutil.FailErr(t, "clear tree stores", catalog.ClearTreeStores(t.Context(), func() error {
+	testutil.FailErr(t, "clear tree stores", catalog.Trees.ClearTreeStores(t.Context(), func() error {
 		clearCalled = true
-		return os.RemoveAll(catalog.treeDir)
+		return os.RemoveAll(catalog.Trees.treeDir)
 	}))
 	if !clearCalled {
 		t.Fatal("clear callback was not called")

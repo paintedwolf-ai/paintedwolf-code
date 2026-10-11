@@ -7,9 +7,9 @@ import "github.com/lycaon/lycaon/internal/confine"
 // reaches the caller only as the child's own errno.
 func LocalNetworkGrantOf(tctx ToolContext) confine.LocalNetworkGrant {
 	return confine.LocalNetworkGrant{
-		Listen:        tctx.LocalListenGranted,
-		ListenPorts:   append([]uint16(nil), tctx.LocalListenPorts...),
-		Loopback:      tctx.LoopbackConnectGranted,
-		LoopbackPorts: append([]uint16(nil), tctx.LoopbackConnectPorts...),
+		Listen:        tctx.Local.LocalListenGranted,
+		ListenPorts:   append([]uint16(nil), tctx.Local.LocalListenPorts...),
+		Loopback:      tctx.Local.LoopbackConnectGranted,
+		LoopbackPorts: append([]uint16(nil), tctx.Local.LoopbackConnectPorts...),
 	}
 }

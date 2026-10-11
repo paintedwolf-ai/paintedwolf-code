@@ -1,6 +1,7 @@
 package httpaction
 
 import (
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/url"
 	"regexp"
 	"sort"
@@ -8,7 +9,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // CookieNotHeldCode rejects a reference to a cookie the jar does not carry to
@@ -35,7 +35,7 @@ func hasCookieReference(req outboundRequest) bool {
 
 // resolveCookieReferences substitutes each reference with the cookie the jar
 // would send to target. An unheld name is refused rather than sent literally.
-func resolveCookieReferences(req outboundRequest, jar *secretcap.CookieJar, target *url.URL) (outboundRequest, *tools.ToolReject) {
+func resolveCookieReferences(req outboundRequest, jar *secretcap.CookieJar, target *url.URL) (outboundRequest, *toolrejection.ToolReject) {
 	if !hasCookieReference(req) {
 		return req, nil
 	}
@@ -65,7 +65,7 @@ func resolveCookieReferences(req outboundRequest, jar *secretcap.CookieJar, targ
 		out.headers[i] = outboundhttp.Header{Name: header.Name, Value: substitute(header.Value)}
 	}
 	if len(missing) > 0 {
-		return outboundRequest{}, &tools.ToolReject{
+		return outboundRequest{}, &toolrejection.ToolReject{
 			Code: CookieNotHeldCode,
 			Data: map[string]any{
 				"jar":     jar.Name,

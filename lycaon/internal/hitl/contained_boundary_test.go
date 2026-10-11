@@ -9,71 +9,77 @@ import (
 
 func TestGrantKeyVariesWithSocketAndDirectBoundary(t *testing.T) {
 	base := hitl.ProposedAction{
-		Tool:       "command",
-		ProjectDir: "/proj",
-		Args:       map[string]any{"command": "true"},
-		Contained: hitl.Contained{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "true"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/proj",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{
 			FSJailed: true,
 			Egress:   hitl.ContainedEgressProxy,
 			Roots:    []string{"/proj"},
 		},
-	}
+},
+}
 	k0 := hitl.GrantKey(base)
 
 	withSockets := base
-	withSockets.Contained.SocketPathsDigest = "digest-a"
-	withSockets.Contained.SocketCount = 1
+	withSockets.Execution.Contained.SocketPathsDigest = "digest-a"
+	withSockets.Execution.Contained.SocketCount = 1
 	if hitl.GrantKey(withSockets) != k0 {
 		t.Fatal("socket overlay changed GrantKey")
 	}
 
 	otherSocket := withSockets
-	otherSocket.Contained.SocketPathsDigest = "digest-b"
+	otherSocket.Execution.Contained.SocketPathsDigest = "digest-b"
 	if hitl.GrantKey(otherSocket) != hitl.GrantKey(withSockets) {
 		t.Fatal("socket overlay changed GrantKey")
 	}
 
 	direct := base
-	direct.Contained.Egress = hitl.ContainedEgressDirectIP
-	direct.Contained.DirectIP = true
+	direct.Execution.Contained.Egress = hitl.ContainedEgressDirectIP
+	direct.Execution.Contained.DirectIP = true
 	if hitl.GrantKey(direct) == k0 {
 		t.Fatal("direct IP must change GrantKey")
 	}
 
 	// Order-stable roots: same set different order keeps key.
 	reordered := base
-	reordered.Contained.Roots = []string{"/b", "/a"}
+	reordered.Execution.Contained.Roots = []string{"/b", "/a"}
 	same := base
-	same.Contained.Roots = []string{"/a", "/b"}
+	same.Execution.Contained.Roots = []string{"/a", "/b"}
 	if hitl.GrantKey(reordered) != hitl.GrantKey(same) {
 		t.Fatal("root order must not change GrantKey")
 	}
 
 	withCapability := base
-	withCapability.HostResources = []string{"local-db"}
+	withCapability.Resources.HostResources = []string{"local-db"}
 	if hitl.GrantKey(withCapability) == k0 {
 		t.Fatal("resolved host-resource ids must change GrantKey")
 	}
 	reorderedHostResources := base
-	reorderedHostResources.HostResources = []string{"docker", "local-db", "docker"}
+	reorderedHostResources.Resources.HostResources = []string{"docker", "local-db", "docker"}
 	sameHostResources := base
-	sameHostResources.HostResources = []string{"local-db", "docker"}
+	sameHostResources.Resources.HostResources = []string{"local-db", "docker"}
 	if hitl.GrantKey(reorderedHostResources) != hitl.GrantKey(sameHostResources) {
 		t.Fatal("host-resource identity must be set-stable")
 	}
 
 	withFamily := withCapability
-	withFamily.HostResourceFamilies = []string{"data-tools"}
+	withFamily.Resources.HostResourceFamilies = []string{"data-tools"}
 	if hitl.GrantKey(withFamily) == hitl.GrantKey(withCapability) {
 		t.Fatal("host-resource family must change policy-relevant action identity")
 	}
 
 	withTypedPermit := base
-	withTypedPermit.Contained.BoundaryPermits = []hitl.BoundaryPermit{{
+	withTypedPermit.Execution.Contained.BoundaryPermits = []hitl.BoundaryPermit{{
 		Kind: "local_service.named_pipe", Digest: "pipe-a", Count: 1,
 	}}
 	otherTypedPermit := withTypedPermit
-	otherTypedPermit.Contained.BoundaryPermits = []hitl.BoundaryPermit{{
+	otherTypedPermit.Execution.Contained.BoundaryPermits = []hitl.BoundaryPermit{{
 		Kind: "local_service.unix_socket", Digest: "pipe-a", Count: 1,
 	}}
 	if hitl.GrantKey(withTypedPermit) != hitl.GrantKey(otherTypedPermit) {

@@ -40,7 +40,7 @@ The number of changed files does not limit an operation; review previews keep a 
 
 The response also carries the branch facts the manager already computes (`head_short`, `upstream`, `ahead`, `behind`) and, with `group_depth`, a rollup: `groups` counts files, staged, unstaged, and untracked entries under each prefix of that many leading path segments, largest first, bounded by the same page size. It answers "which areas changed, and how much" before any file is listed.
 
-The command habit guard redirects the printing variants of `git status` (`--short`, `--porcelain[=v1|v2]`, `-z`, `--branch`, `--untracked-files[=all|normal]`, and pathspecs) to `git_status`, because they print the same facts the tool returns. Variants that change which facts are listed (`-uno`, `--ignored`, `--verbose`, `--show-stash`) are not equivalent and remain a `command` ([`gitStatusReplacement`](../lycaon/internal/tools/command_exact_equivalence.go)).
+The command habit guard redirects the printing variants of `git status` (`--short`, `--porcelain[=v1|v2]`, `-z`, `--branch`, `--untracked-files[=all|normal]`, and pathspecs) to `git_status`, because they print the same facts the tool returns. Variants that change which facts are listed (`-uno`, `--ignored`, `--verbose`, `--show-stash`) are not equivalent and remain a `command` ([`gitStatusReplacement`](../lycaon/internal/toolcommand/command_git_worktree.go)).
 
 ## Diff survey, detail, and recovery
 
@@ -50,7 +50,7 @@ The producer returns the selected full hunks to the screening boundary before an
 
 The tracked half of a page is one `git diff` over the page's paths, split into per-file blocks at each `diff --git` header and matched to the `numstat` order ([`SplitDiffBlocks`](../lycaon/internal/git/tooljson.go)); a count mismatch between the two listings is a structured failure, not a guess. `base_ref` compares the worktree (or the index, with `staged`) against a commit, branch, or tag, validated as a ref and placed after `--end-of-options`. `untracked: true` appends untracked files under the same pathspecs as whole-file additions, each from `git diff --no-index` against `/dev/null`, with counts taken from the synthetic hunk.
 
-The habit guard maps `git diff` operands the way git does: an operand that exists under the project root is a pathspec, and one that does not is a ref. A `..` range, `--no-index`, and unknown flags are not equivalent and stay a `command` ([`gitDiffReplacement`](../lycaon/internal/tools/command_exact_equivalence.go)).
+The habit guard maps `git diff` operands the way git does: an operand that exists under the project root is a pathspec, and one that does not is a ref. A `..` range, `--no-index`, and unknown flags are not equivalent and stay a `command` ([`gitDiffReplacement`](../lycaon/internal/toolcommand/command_git_worktree.go)).
 
 ## Git review in the walk
 

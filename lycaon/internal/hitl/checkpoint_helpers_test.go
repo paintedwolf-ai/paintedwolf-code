@@ -9,7 +9,14 @@ import (
 )
 
 func TestDecisionSubjectToolApprovalCommand(t *testing.T) {
-	got := decisionSubject(storedApprovalCheckpoint(t, ProposedAction{Tool: "command", Command: "git push origin main"}))
+	got := decisionSubject(storedApprovalCheckpoint(t, ProposedAction{
+Invocation: ActionInvocation{
+Tool: "command",
+},
+Presentation: ActionPresentation{
+Command: "git push origin main",
+},
+}))
 	if got != "git push origin main" {
 		t.Fatalf("subject = %q", got)
 	}
@@ -26,7 +33,12 @@ func TestDecisionCausingCommandWriteRoot(t *testing.T) {
 		}},
 	}
 	plan, err := NewApprovalPlan(
-		ProposedAction{Tool: "write_root", Args: map[string]any{"proposed_write_root": "/Users/me/go"}},
+		ProposedAction{
+Invocation: ActionInvocation{
+Tool: "write_root",
+Args: map[string]any{"proposed_write_root": "/Users/me/go"},
+},
+},
 		ApprovalStagePreSpawn,
 		ApprovalSubject{
 			Kind: ApprovalSubjectWriteRootSet, Title: "Allow write access",
@@ -43,6 +55,24 @@ func TestDecisionCausingCommandWriteRoot(t *testing.T) {
 	testutil.FailErr(t, "create approval plan", err)
 	stored, err := storeApprovalPlan(plan)
 	testutil.FailErr(t, "store approval plan", err)
+	if _, exists := stored["directory_scopes"]; exists {
+		t.Fatal("historical plan acquired directory scope state")
+	}
+	for _, raw := range stored["options"].([]any) {
+		if _, exists := raw.(map[string]any)["directory_scope"]; exists {
+			t.Fatal("historical option acquired a directory scope")
+		}
+	}
+	retained, err := approvalPlanFromMap(stored)
+	testutil.FailErr(t, "read retained approval plan without directory scopes", err)
+	if retained.ID != plan.ID || len(retained.DirectoryScopes) != 0 {
+		t.Fatalf("retained identity or authority changed: %#v", retained)
+	}
+	retainedID, err := retained.canonicalID()
+	testutil.FailErr(t, "check retained approval identity", err)
+	if retainedID != plan.ID {
+		t.Fatalf("historical canonical identity = %q, want %q", retainedID, plan.ID)
+	}
 	row := StoredCheckpoint{
 		Kind:     api.CheckpointKindToolApproval,
 		ToolName: "write_root",
@@ -60,7 +90,14 @@ func TestDecisionCausingCommandWriteRoot(t *testing.T) {
 }
 
 func TestDecisionCausingCommandSuppressedWhenSubjectIsArgv(t *testing.T) {
-	got := decisionCausingCommand(storedApprovalCheckpoint(t, ProposedAction{Tool: "command", Command: "git status"}))
+	got := decisionCausingCommand(storedApprovalCheckpoint(t, ProposedAction{
+Invocation: ActionInvocation{
+Tool: "command",
+},
+Presentation: ActionPresentation{
+Command: "git status",
+},
+}))
 	if got != "" {
 		t.Fatalf("causing = %q want empty", got)
 	}
@@ -77,14 +114,26 @@ func TestDecisionSubjectContentApplyPath(t *testing.T) {
 }
 
 func TestDecisionSubjectWritePathArg(t *testing.T) {
-	got := decisionSubject(storedApprovalCheckpoint(t, ProposedAction{Tool: "write", Files: []string{"README.md"}}))
+	got := decisionSubject(storedApprovalCheckpoint(t, ProposedAction{
+Invocation: ActionInvocation{
+Tool: "write",
+Files: []string{"README.md"},
+},
+}))
 	if got != "README.md" {
 		t.Fatalf("subject = %q", got)
 	}
 }
 
 func TestApprovalPlanIdentityRejectsPersistedContentMutation(t *testing.T) {
-	row := storedApprovalCheckpoint(t, ProposedAction{Tool: "command", Command: "safe command"})
+	row := storedApprovalCheckpoint(t, ProposedAction{
+Invocation: ActionInvocation{
+Tool: "command",
+},
+Presentation: ActionPresentation{
+Command: "safe command",
+},
+})
 	raw := row.Payload["approval_plan"].(map[string]any)
 	subject := raw["subject"].(map[string]any)
 	targets := subject["targets"].([]any)

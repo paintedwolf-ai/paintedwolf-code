@@ -38,9 +38,9 @@ func TestFailedCompactionPersistsNothingAndRetriesFromCanonicalHistory(t *testin
 	cfg.KeepRecentMessages = 2
 
 	mem := store.NewMemory()
-	mgr := NewManager(mem, llm.NewMockProvider(testMockConfig(t)), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: llm.NewMockProvider(testMockConfig(t)), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
-	mgr.SetCompactor(compaction.NewSimpleCompactor(cfg, failedCompactionSummarizer{}))
+	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, failedCompactionSummarizer{}))
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
@@ -54,11 +54,11 @@ func TestFailedCompactionPersistsNothingAndRetriesFromCanonicalHistory(t *testin
 		seed = append(seed, api.Message{ID: fmt.Sprintf("seed-%d", i), Role: role, Content: block})
 	}
 	testutil.FailErr(t, "append canonical history", mem.AppendMessages(t.Context(), sess.ID, seed...))
-	mgr.RecordCompactionTokenObservation(sess.ID, 1000, 1000)
+	mgr.Runner.History.ObserveTokens(sess.ID, 1000, 1000)
 
-	_, err = mgr.Prompt(t.Context(), sess.ID, "first attempt")
+	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "first attempt")
 	testutil.FailErr(t, "first prompt", err)
-	mgr.waitForCompaction()
+	mgr.Runner.History.Wait()
 	got, err := mem.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get session after failure", err)
 	if got.CompactionGeneration != 0 {
@@ -69,10 +69,10 @@ func TestFailedCompactionPersistsNothingAndRetriesFromCanonicalHistory(t *testin
 	}
 
 	// Prompt fitting does not lower the durable retry threshold.
-	mgr.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "validated continuation"}))
-	_, err = mgr.Prompt(t.Context(), sess.ID, "retry")
+	mgr.Runner.History.SetCompactor(compaction.NewSimpleCompactor(cfg, compaction.MockSummarizer{Text: "validated continuation"}))
+	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "retry")
 	testutil.FailErr(t, "retry prompt", err)
-	mgr.waitForCompaction()
+	mgr.Runner.History.Wait()
 	got, err = mem.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get session after retry", err)
 	if got.CompactionGeneration == 0 {

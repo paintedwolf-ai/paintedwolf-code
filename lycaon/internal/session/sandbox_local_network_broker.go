@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
 	"strings"
 
@@ -118,17 +119,27 @@ func (b *LocalNetworkCheckpointBroker) buildCard(in tools.LocalNetworkAsk, invok
 	listenPorts := append([]uint16(nil), in.ListenPorts...)
 	connectPorts := append([]uint16(nil), in.ConnectPorts...)
 	action := hitl.ProposedAction{
-		Tool: "local_network", Args: map[string]any{
+Invocation: hitl.ActionInvocation{
+Tool: "local_network",
+Args: map[string]any{
 			"listen_ports":  listenPortInts(listenPorts),
 			"connect_ports": listenPortInts(connectPorts),
 		},
-		ProjectID: in.ProjectID, ProjectDir: in.ProjectDir, SessionID: invokingSessionID, RootSessionID: rootSessionID,
-		Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
+},
+Scope: hitl.ActionScope{
+ProjectID: in.ProjectID,
+ProjectDir: in.ProjectDir,
+SessionID: invokingSessionID,
+RootSessionID: rootSessionID,
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
 			ProjectID: in.ProjectID, Roots: projectRoots(in.ProjectDir),
 			LocalListen: true, LocalListenPorts: listenPorts,
 			LoopbackConnect: true, LoopbackConnectPorts: connectPorts,
 		}),
-	}
+},
+}
 	listenGrant := listenChatGrant(action)
 	connectGrant := loopbackChatGrant(action)
 	listenOptions := portAuthorityLadder(
@@ -149,7 +160,7 @@ func (b *LocalNetworkCheckpointBroker) buildCard(in tools.LocalNetworkAsk, invok
 		if b.Authority == nil {
 			return false
 		}
-		_, live := b.Authority.AskQuietLive(action.ChatSession(), key)
+		_, live := b.Authority.AskQuietLive(action.Scope.ChatSession(), key)
 		return live
 	})...)
 	title := "Allow local network use"
@@ -175,7 +186,7 @@ func (b *LocalNetworkCheckpointBroker) buildCard(in tools.LocalNetworkAsk, invok
 		ConsequenceCode: string(api.ConsequenceCodeLocalListen),
 	}, reasons, options, hitl.FaceContext{})
 	if err != nil {
-		return sandboxAskCard{}, tools.ApprovalPlanInvalid()
+		return sandboxAskCard{}, toolrejection.ApprovalPlanInvalid()
 	}
 	return composeSandboxSecretCard(sandboxAskCard{Action: action, Title: title, Plan: plan, Decision: decision}, in.SecretPermission)
 }

@@ -5,6 +5,7 @@ package cadence
 import (
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -336,7 +336,7 @@ func TestFullPassReceiptReadsMembersThatHaveNotStarted(t *testing.T) {
 	}
 
 	_, err = scantoolapi.SummarizeFullPass(t.Context(), cadence.Coordinator, "missing-pass", "summary", nil)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != scanbase.DrilldownRejectPassNotFound || reject.Data["pass_id"] != "missing-pass" {
 		t.Fatalf("unknown pass = %v, want %s", err, scanbase.DrilldownRejectPassNotFound)
 	}

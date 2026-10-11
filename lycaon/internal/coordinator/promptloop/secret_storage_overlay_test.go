@@ -80,14 +80,20 @@ func TestToolResultSpillUsesStorageProjection(t *testing.T) {
 	dataDir := t.TempDir()
 	rawContent := "token=" + storageBoundarySecret + "\n" + strings.Repeat("payload\n", 1024)
 	rawArgs := map[string]any{"path": ".env", "token": storageBoundarySecret}
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		DataDir:                 dataDir,
-		HintConfig:              loadCoordinatorTestHintConfig(t),
-		RedactMessageForStorage: testStorageRedactor,
-	}}
+	loop := NewPromptLoop(PromptLoopDeps{
+		Tools: ToolsDeps{
+			DataDir: dataDir,
+		},
+		Closeout: CloseoutDeps{
+			HintConfig: loadCoordinatorTestHintConfig(t),
+		},
+		Projection: ProjectionDeps{
+			RedactMessageForStorage: testStorageRedactor,
+		},
+	})
 
-	projection := toolInvocations{loop}.projectToolResultForStorage(context.Background(), rawContent, rawArgs)
-	preview := toolInvocations{loop}.truncateToolResultForSession(
+	projection := loop.Projection.projectToolResultForStorage(context.Background(), rawContent, rawArgs)
+	preview := loop.Tools.truncateToolResultForSession(
 		t.Context(),
 		"read",
 		projection,
@@ -186,26 +192,30 @@ func TestToolResultSecretIsRedactedBeforeEveryDurableConsumer(t *testing.T) {
 
 	var evidence, evidenceArg, compacted string
 	var appended []api.Message
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		RedactMessageForStorage: testStorageRedactor,
-		CommitEvidenceToolResult: func(ctx context.Context, sessionID string, _ *api.Session, toolName string, args map[string]any, content, _ string) (string, string, error) {
-			evidence = content
-			evidenceArg, _ = args["token"].(string)
-			return sqlStore.CommitEvidenceToolResult(ctx, sessionID, dir, toolName, args, content)
+	loop := NewPromptLoop(PromptLoopDeps{
+		Projection: ProjectionDeps{
+			RedactMessageForStorage: testStorageRedactor,
+			AppendMessages: func(ctx context.Context, sessionID string, msgs ...api.Message) error {
+				appended = append(appended, msgs...)
+				return sqlStore.AppendMessages(ctx, sessionID, msgs...)
+			},
+			UpdateMessage: func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
+				_, err := sqlStore.UpdateMessage(ctx, sessionID, messageID, msg)
+				return err
+			},
 		},
-		CompactToolWire: func(_ context.Context, _ *api.Session, _ string, content string, _ compaction.CompactToolWireOpts) (string, *api.CompactedChunkMeta) {
-			compacted = content
-			return content, nil
+		Tools: ToolsDeps{
+			CommitEvidenceToolResult: func(ctx context.Context, sessionID string, _ *api.Session, toolName string, args map[string]any, content, _ string) (string, string, error) {
+				evidence = content
+				evidenceArg, _ = args["token"].(string)
+				return sqlStore.CommitEvidenceToolResult(ctx, sessionID, dir, toolName, args, content)
+			},
+			CompactToolWire: func(_ context.Context, _ *api.Session, _ string, content string, _ compaction.CompactToolWireOpts) (string, *api.CompactedChunkMeta) {
+				compacted = content
+				return content, nil
+			},
 		},
-		AppendMessages: func(ctx context.Context, sessionID string, msgs ...api.Message) error {
-			appended = append(appended, msgs...)
-			return sqlStore.AppendMessages(ctx, sessionID, msgs...)
-		},
-		UpdateMessage: func(ctx context.Context, sessionID, messageID string, msg api.Message) error {
-			_, err := sqlStore.UpdateMessage(ctx, sessionID, messageID, msg)
-			return err
-		},
-	}}
+	})
 	raw := api.Message{
 		ID:      "tool-1",
 		Role:    api.MessageRoleTool,
@@ -223,7 +233,7 @@ func TestToolResultSecretIsRedactedBeforeEveryDurableConsumer(t *testing.T) {
 	}
 	last := time.Time{}
 	st := &promptLoopTurnState{}
-	history, err := toolBatch{loop}.persistClassifiedToolOutcome(
+	history, err := loop.Batch.persistClassifiedToolOutcome(
 		context.Background(), sess.ID, sess, nil, toolCallOutcome{
 			toolName:       "read",
 			toolArgs:       raw.ToolResult.ToolArgs,
@@ -326,16 +336,20 @@ func TestSecretStorageOverlayIsVisibleToExactlyOneModelRequest(t *testing.T) {
 	transient := api.Message{ID: "tool-1", Role: api.MessageRoleTool, Content: "token=" + storageBoundarySecret}
 	st := &promptLoopTurnState{history: []api.Message{transient}}
 	st.rememberSecretStorageOverlay(stored, transient)
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		LLM: client,
-		BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-			return history, nil
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			LLM: client,
 		},
-	}}
+		Context: ContextDeps{
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
+		},
+	})
 	sess := &api.Session{ID: "sess", ParentSessionID: "parent"}
-	_, _, err := modelTurn{loop}.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 0, 2, false, st, nil)
+	_, _, err := loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 0, 2, false, st, nil)
 	testutil.FailErr(t, "first model request", err)
-	_, _, err = modelTurn{loop}.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 1, 2, false, st, nil)
+	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 1, 2, false, st, nil)
 	testutil.FailErr(t, "second model request", err)
 	if len(client.requests) != 2 {
 		t.Fatalf("requests = %d want 2", len(client.requests))
@@ -375,21 +389,27 @@ func (c *assistantSecretOverlayLLM) Stream(_ context.Context, req modelcall.Comp
 func TestAssistantToolCallSecretIsStoredRedactedAndSentOnce(t *testing.T) {
 	client := &assistantSecretOverlayLLM{}
 	var updates []api.Message
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		LLM:                     client,
-		RedactMessageForStorage: testStorageRedactor,
-		BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
-			return history, nil
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			LLM: client,
 		},
-		AppendMessages: func(_ context.Context, _ string, _ ...api.Message) error { return nil },
-		UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
-			updates = append(updates, msg)
-			return nil
+		Projection: ProjectionDeps{
+			RedactMessageForStorage: testStorageRedactor,
+			AppendMessages:          func(_ context.Context, _ string, _ ...api.Message) error { return nil },
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				updates = append(updates, msg)
+				return nil
+			},
 		},
-	}}
+		Context: ContextDeps{
+			BuildMessages: func(_ context.Context, _ *api.Session, history []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+				return history, nil
+			},
+		},
+	})
 	st := &promptLoopTurnState{}
 	sess := &api.Session{ID: "sess", ParentSessionID: "parent"}
-	assistant, completion, _, err := modelTurn{loop}.runAssistantStreamTurn(
+	assistant, completion, _, err := loop.Model.runAssistantStreamTurn(
 		context.Background(), sess.ID, sess, nil, st, "worker", "", 0, 3, false,
 	)
 	testutil.FailErr(t, "assistant tool-call turn", err)
@@ -409,9 +429,9 @@ func TestAssistantToolCallSecretIsStoredRedactedAndSentOnce(t *testing.T) {
 		t.Fatalf("reloaded assistant overlay lost canonical metadata or raw args: %+v", st.history[0])
 	}
 
-	_, _, err = modelTurn{loop}.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 1, 3, false, st, nil)
+	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 1, 3, false, st, nil)
 	testutil.FailErr(t, "first follow-up request", err)
-	_, _, err = modelTurn{loop}.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 2, 3, false, st, nil)
+	_, _, err = loop.Model.completeStream(context.Background(), sess, sess.ID, st.history, "worker", "", 2, 3, false, st, nil)
 	testutil.FailErr(t, "second follow-up request", err)
 	if len(client.requests) != 3 {
 		t.Fatalf("requests = %d want 3", len(client.requests))

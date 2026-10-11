@@ -164,14 +164,14 @@ func (st *promptLoopTurnState) surveyStreakFires() bool {
 	return st.surveyStreakNudged != st.readOnlyBatches
 }
 
-func (l turnNudges) maybeSurveyStreakNudge(
+func (l *turnNudges) maybeSurveyStreakNudge(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
 	history []api.Message,
 	st *promptLoopTurnState,
 ) ([]api.Message, error) {
-	if l.PromptLoop == nil || l.Deps.SurveyStreakNudge == nil || sess == nil || !st.surveyStreakFires() {
+	if l == nil || l.Deps.SurveyStreakNudge == nil || sess == nil || !st.surveyStreakFires() {
 		return history, nil
 	}
 	nudge := l.Deps.SurveyStreakNudge(ctx, sess, st.readOnlyBatches, st.readOnlyStreakTools)

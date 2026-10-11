@@ -69,10 +69,17 @@ func TestRefusedSettlementEndsTurnAsHostFault(t *testing.T) {
 	var appended []api.Message
 	recorder := &refusingRecorder{}
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		Tools: reg, Invocations: recorder,
-		AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
-			appended = append(appended, msgs...)
-			return nil
+		Context: ContextDeps{
+			Tools: reg,
+		},
+		Tools: ToolsDeps{
+			Invocations: recorder,
+		},
+		Projection: ProjectionDeps{
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				appended = append(appended, msgs...)
+				return nil
+			},
 		},
 	})
 	calls := []api.ToolCall{
@@ -82,7 +89,7 @@ func TestRefusedSettlementEndsTurnAsHostFault(t *testing.T) {
 	sess := &api.Session{ID: "session"}
 	history := []api.Message{{ID: "assistant", Role: api.MessageRoleAssistant, ToolCalls: calls}}
 
-	history, _, _, _, _, stopped, err := toolBatch{loop}.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "implement", "assistant", "", nil)
+	history, _, _, _, _, stopped, err := loop.Batch.executeToolCallsInTurn(t.Context(), sess, sess.ID, calls, tools.ToolContext{}, history, "implement", "assistant", "", nil)
 
 	var fault *HostFaultError
 	if !errors.As(err, &fault) || fault.Tool != "write" || !fault.CallRan {

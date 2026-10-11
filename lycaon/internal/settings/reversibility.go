@@ -41,11 +41,11 @@ func ClassifyTier(action hitl.ProposedAction) ReversibilityTier {
 		return TierIrreversible
 	}
 
-	tool := strings.TrimSpace(action.Tool)
+	tool := strings.TrimSpace(action.Invocation.Tool)
 
 	// Commands require both confinement boundaries to be recoverable.
 	if IsCommandToolName(tool) {
-		if boundaryHolds(action.Contained) {
+		if boundaryHolds(action.Execution.Contained) {
 			return TierRecoverable
 		}
 		return TierIrreversible
@@ -87,13 +87,13 @@ func baseToolTier(tool string) (ReversibilityTier, bool) {
 
 // workspaceRoots combines confinement and project roots for escape checks.
 func workspaceRoots(action hitl.ProposedAction) []string {
-	roots := make([]string, 0, len(action.Contained.Roots)+1)
-	for _, raw := range action.Contained.Roots {
+	roots := make([]string, 0, len(action.Execution.Contained.Roots)+1)
+	for _, raw := range action.Execution.Contained.Roots {
 		if root := normalizeApprovalPath(strings.TrimSpace(raw)); root != "" {
 			roots = append(roots, root)
 		}
 	}
-	if root := normalizeApprovalPath(strings.TrimSpace(action.ProjectDir)); root != "" {
+	if root := normalizeApprovalPath(strings.TrimSpace(action.Scope.ProjectDir)); root != "" {
 		roots = append(roots, root)
 	}
 	return roots
@@ -102,7 +102,7 @@ func workspaceRoots(action hitl.ProposedAction) []string {
 // PathEscapesWorkspace reports whether any file path this action names falls outside the
 // roots it runs under.
 func PathEscapesWorkspace(action hitl.ProposedAction) bool {
-	files := action.Files
+	files := action.Invocation.Files
 	if len(files) == 0 {
 		return false
 	}

@@ -76,6 +76,14 @@ Worker self-cancellation is bound to the current claim, like completion and fail
 
 The wire fields are schema-defined (`docs/openapi/components/schemas/session/worker-reports.yaml`). The parent-visible body is marked as untrusted tool data when sent to the model. Host gates read the structured tag and proof, never the prose body.
 
+Workflow review jobs additionally reference a durable dispatch assignment. Its
+recorded subject determines completion requirements; current applicability is a
+separate verdict check. Independent reviews, question investigations, and scoped
+question reassessments have distinct purposes. A review result remains in the
+single terminal-result slot even when later input changes require a successor.
+Assignments reserve job identities before enqueue; an abandoned reservation is
+run-scoped context, never runnable work or an accepted result.
+
 ## Worker report vs host proof
 
 The worker supplies judgments that require reasoning: a concise summary and findings, which evidence supports each finding, unresolved questions and decision options, limitations and recommended next work, and its intended leg status.

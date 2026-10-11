@@ -45,7 +45,7 @@ func testCompletedOverlaySurvivesTreeEviction(t *testing.T, relocate bool) {
 	branches := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches")
 	mgr := workspace.NewManager(branches, t.TempDir())
 	q := NewSQLQueue(sqlDB, 4)
-	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).BaselineStore())
+	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
 	q.SetWorkerWorkspaceManager(mgr)
 
 	id, err := q.Enqueue(ctx, api.WorkerTask{
@@ -165,7 +165,7 @@ func relocateWorkerInstallation(t *testing.T, original db.Handle, jobID string) 
 	newRoot := t.TempDir()
 	_, err = backup.Stage(ctx, backup.StageOpts{ConfigDir: newRoot, ArchivePath: archive, SchemaVersion: db.SchemaVersion})
 	testutil.FailErr(t, "stage relocated worker archive", err)
-	testutil.FailErr(t, "apply relocated worker archive", backup.ApplyPending(newRoot))
+	testutil.FailErr(t, "apply relocated worker archive", backup.ApplyPending(t.Context(), newRoot))
 	restored := testdbfixture.OpenPath(t, filepath.Join(newRoot, "store.db"))
 	var baselineID, branchRel string
 	var overlayID sql.NullString
@@ -174,7 +174,7 @@ func relocateWorkerInstallation(t *testing.T, original db.Handle, jobID string) 
 		t.Fatal("worker persisted installation paths")
 	}
 	queue := NewSQLQueue(restored, 4)
-	queue.SetBaselineStore(sourceledger.New(restored, filepath.Join(newRoot, "source-content")).BaselineStore())
+	queue.SetBaselineStore(sourceledger.New(restored, filepath.Join(newRoot, "source-content")).Baselines)
 	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"), t.TempDir())
 	queue.SetWorkerWorkspaceManager(manager)
 	return queue, manager
@@ -188,7 +188,7 @@ func TestUnsealedWorkerEditsSurviveRelocatedArchive(t *testing.T) {
 	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", project)
 	dataDir := testbaseline.DataDir(t, database)
 	queue := NewSQLQueue(database, 1)
-	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).BaselineStore())
+	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
 	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(dataDir, "worker-branches"), t.TempDir()))
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
 	testutil.FailErr(t, "enqueue unsealed worker", err)

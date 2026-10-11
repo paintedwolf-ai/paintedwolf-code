@@ -52,8 +52,9 @@ type obligationParams struct {
 }
 
 const (
-	obligationGateComplete = "complete"
-	obligationGateNoNew    = "no_new"
+	obligationGateResultsAvailable = "results_available"
+	obligationGateComplete         = "complete"
+	obligationGateNoNew            = "no_new"
 )
 
 // NewWorkflowObligationSpec returns a validation-only obligation.
@@ -152,7 +153,7 @@ func (o *WorkflowObligation) Status(ctx context.Context, workflowRunID, phase st
 		return out, err
 	}
 	if parsed.Full {
-		out, err = o.fullStatus(ctx, workflowRunID)
+		out, err = o.fullStatus(ctx, workflowRunID, parsed.Gate)
 		if err != nil || out.Status != api.ObligationStatusComplete {
 			return out, err
 		}
@@ -163,7 +164,7 @@ func (o *WorkflowObligation) Status(ctx context.Context, workflowRunID, phase st
 	return out, nil
 }
 
-func (o *WorkflowObligation) fullStatus(ctx context.Context, workflowRunID string) (api.WorkflowRunObligation, error) {
+func (o *WorkflowObligation) fullStatus(ctx context.Context, workflowRunID, gate string) (api.WorkflowRunObligation, error) {
 	out := api.WorkflowRunObligation{Kind: WorkflowObligationKind}
 	scans, err := o.Ledger.ListByWorkflowRunID(ctx, strings.TrimSpace(workflowRunID))
 	if err != nil {
@@ -215,7 +216,7 @@ func (o *WorkflowObligation) fullStatus(ctx context.Context, workflowRunID strin
 		switch s.Status {
 		case api.CodeScanStatusComplete:
 			terminal++
-			if s.CoverageStatus != api.ScanCoverageComplete {
+			if gate != obligationGateResultsAvailable && s.CoverageStatus != api.ScanCoverageComplete {
 				failed = true
 				if errMsg == "" {
 					errMsg = fmt.Sprintf("scanner %s coverage is %s", s.ScannerID, s.CoverageStatus)
@@ -365,11 +366,11 @@ func parseObligationParams(params map[string]any) (obligationParams, error) {
 	}
 	if raw, ok := params["gate"]; ok {
 		gate, ok := raw.(string)
-		if !ok || (gate != obligationGateComplete && gate != obligationGateNoNew) {
-			return out, fmt.Errorf("gate must be %q or %q", obligationGateComplete, obligationGateNoNew)
+		if !ok || (gate != obligationGateComplete && gate != obligationGateNoNew && gate != obligationGateResultsAvailable) {
+			return out, fmt.Errorf("gate must be %q, %q, or %q", obligationGateComplete, obligationGateNoNew, obligationGateResultsAvailable)
 		}
-		if gate == obligationGateComplete && !out.Full {
-			return out, fmt.Errorf("gate %q needs full: true", obligationGateComplete)
+		if (gate == obligationGateComplete || gate == obligationGateResultsAvailable) && !out.Full {
+			return out, fmt.Errorf("gate %q needs full: true", gate)
 		}
 		out.Gate = gate
 	}

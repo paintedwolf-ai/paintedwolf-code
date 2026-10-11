@@ -2,6 +2,7 @@ package survey
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -38,7 +38,7 @@ func TestFindRejectsWhileTheCatalogHasNoGeneration(t *testing.T) {
 
 	tool := &FindTool{Boundary: nativefixture.Boundary(t), Catalog: sourcecatalog.New()}
 	_, err := tool.Run(context.Background(), map[string]any{"name_glob": "**/*.go"}, nativefixture.Context(root))
-	reject := tools.AsToolReject(err)
+	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "SURVEY_INVENTORY_WARMING" {
 		t.Fatalf("find error = %v, want SURVEY_INVENTORY_WARMING", err)
 	}

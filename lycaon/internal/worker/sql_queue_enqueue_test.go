@@ -2,12 +2,13 @@ package worker
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/session"
+	"testing"
+
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 func TestSQLQueueEnqueueReturnsJobID(t *testing.T) {
@@ -145,7 +146,7 @@ func TestSQLQueueDecisionSuspendsWithoutTerminalResult(t *testing.T) {
 	testdbseed.InsertSession(t, database, "child-1", testdbseed.DefaultProjectID)
 	_, err = database.ExecContext(t.Context(), `UPDATE worker_jobs SET child_session_id = ? WHERE id = ?`, "child-1", id)
 	testutil.FailErr(t, "bind child", err)
-	testutil.FailErr(t, "record decision", session.NewSQLDecisionStore(database).Put(t.Context(), api.WorkerDecisionRequest{ChildSessionID: "child-1", WorkerID: id, Question: "Choose", Options: []string{"A", "B"}}))
+	testutil.FailErr(t, "record decision", sessiondecisions.NewSQL(database).Put(t.Context(), api.WorkerDecisionRequest{ChildSessionID: "child-1", WorkerID: id, Question: "Choose", Options: []string{"A", "B"}}))
 	won, err := queue.Complete(t.Context(), claimed, api.WorkerResult{Status: "needs_decision", Summary: "choose"})
 	testutil.FailErr(t, "suspend worker", err)
 	if !won {

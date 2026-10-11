@@ -80,9 +80,10 @@ func perceiveToolVisual(src *api.VisualArtifact, vision, outsideWindow bool, ses
 		return detach(PerceptionOutsideWindow)
 	}
 	raw, mime := v.Bytes, v.Mime
-	if len(raw) == 0 && v.StoreRef && resolveVisualBytes != nil {
+	resolve := visualResolver()
+	if len(raw) == 0 && v.StoreRef && resolve != nil {
 		var ok bool
-		if raw, mime, ok = resolveVisualBytes(sessionID, v.ID); !ok {
+		if raw, mime, ok = resolve(sessionID, v.ID); !ok {
 			raw = nil
 		}
 	}

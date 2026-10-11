@@ -3,6 +3,7 @@ package native
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/browser"
@@ -17,12 +18,12 @@ func TestCapturePageToolRejectsMissingTarget(t *testing.T) {
 		testutil.FailErr(t, "RegisterCapturePageTool failed", err)
 	}
 	_, err := reg.Run(context.Background(), page.CaptureToolName, map[string]any{}, tools.ToolContext{
-		Out: &tools.ToolInvocationOut{},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
 	})
 	if err == nil {
 		t.Fatal("expected reject")
 	}
-	rej := &tools.ToolReject{}
+	rej := &toolrejection.ToolReject{}
 	ok := errors.As(err, &rej)
 	if !ok || rej.Code != "CAPTURE_TARGET_INVALID" {
 		t.Fatalf("got %#v want CAPTURE_TARGET_INVALID", err)

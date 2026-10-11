@@ -5,7 +5,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -44,8 +44,8 @@ func (s *Service) OpenText(ctx context.Context, projectID string, branch sourceb
 	if err != nil {
 		return nil, false, err
 	}
-	snapshot, err := s.ResolveSourceSnapshot(ctx, p, project.SourceReadRequest{Path: path, RootID: rootID}, AdmitEditable)
-	if errors.Is(err, project.ErrSourceNotFound) || errors.Is(err, project.ErrSourceBinary) || errors.Is(err, project.ErrSourceWriteTooLarge) {
+	snapshot, err := s.ResolveSourceSnapshot(ctx, p, projectsource.SourceReadRequest{Path: path, RootID: rootID}, AdmitEditable)
+	if errors.Is(err, projectsource.ErrSourceNotFound) || errors.Is(err, projectsource.ErrSourceBinary) || errors.Is(err, projectsource.ErrSourceWriteTooLarge) {
 		return nil, false, nil
 	}
 	if err != nil {
@@ -92,7 +92,7 @@ func (s *Service) ApplyAgentEdit(ctx context.Context, in AgentEdit) (*AgentEditR
 
 // prepareRetainedAgentEdit publishes accepted bytes before document commit.
 func (s *Service) prepareRetainedAgentEdit(ctx context.Context, d *Document, in AgentEdit) (sourceledger.PreparedHeldEdit, error) {
-	encoded, err := textfile.EncodeBounded(serializeEOL(d.Draft, d.EOL), d.Encoding, textfile.LimitsForRaw(project.SourceWriteMaxBytes))
+	encoded, err := textfile.EncodeBounded(serializeEOL(d.Draft, d.EOL), d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
 	if err != nil {
 		return nil, err
 	}

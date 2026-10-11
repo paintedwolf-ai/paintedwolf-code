@@ -2,12 +2,13 @@ package hitl
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
-	"time"
 )
 
 type recoveryApprovalInstaller struct {
@@ -36,9 +37,9 @@ func TestRecoverApprovalOperationsRollsBackPreparedAuthority(t *testing.T) {
 	option := CurrentActionOption()
 	testutil.FailErr(t, "prepare operation", store.prepareApprovalOperation(t.Context(), checkpoint.ID, checkpoint.SessionID, option))
 	installer := &recoveryApprovalInstaller{}
-	manager := NewManager(store, nil, &fakeAuthzRecorder{})
-	manager.SetApprovalAuthorityInstaller(installer)
-	testutil.FailErr(t, "recover operations", manager.RecoverApprovalOperations(t.Context()))
+	manager := NewCheckpoints(store, nil, &fakeAuthzRecorder{})
+	manager.Authority.SetApprovalAuthorityInstaller(installer)
+	testutil.FailErr(t, "recover operations", manager.Authority.RecoverApprovalOperations(t.Context()))
 	if len(installer.rolledBack) != 1 || installer.rolledBack[0] != checkpoint.ID {
 		t.Fatalf("rolled back = %v", installer.rolledBack)
 	}

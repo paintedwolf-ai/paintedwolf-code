@@ -9,7 +9,7 @@ import (
 )
 
 // CompareReviewed reads the immutable range covered by a particular look.
-func (s *Store) CompareReviewed(ctx context.Context, projectID, fileID string, through int64) (Comparison, error) {
+func (s *Comparisons) CompareReviewed(ctx context.Context, projectID, fileID string, through int64) (Comparison, error) {
 	s.recordMu.Lock()
 	defer s.recordMu.Unlock()
 	watermark, err := s.queries.GetSourcePresentationWatermark(ctx, db.GetSourcePresentationWatermarkParams{

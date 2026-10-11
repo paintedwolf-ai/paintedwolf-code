@@ -2,12 +2,12 @@ package survey
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -73,7 +73,7 @@ func TestGrepDeadlineNamesTheLargestSubtree(t *testing.T) {
 	for _, rel := range []string{"vendor/a.go", "vendor/b.go", "src/c.go", "top.go"} {
 		search.noteSubtree(rel)
 	}
-	reject := tools.AsToolReject(grepExecutionError(search, context.DeadlineExceeded))
+	reject := toolrejection.AsToolReject(grepExecutionError(search, context.DeadlineExceeded))
 	if reject == nil || reject.Data["largest_subtree"] != "vendor (2 files)" {
 		t.Fatalf("largest subtree = %v", reject.Data["largest_subtree"])
 	}

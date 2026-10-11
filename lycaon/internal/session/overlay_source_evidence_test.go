@@ -53,7 +53,7 @@ func currentVerifyPassedMessage(root string) api.Message {
 func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := session.NewManager(mem, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -87,7 +87,7 @@ func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 	})
 	testutil.FailErr(t, "enqueue unchecked", err)
 
-	state := mgr.BuildImplementSessionState(ctx, parent)
+	state := mgr.Workers.State.ForSession(ctx, parent)
 	if len(state.PendingOverlayIDs) != 2 {
 		t.Fatalf("PendingOverlayIDs = %v want both ledger-pending overlays", state.PendingOverlayIDs)
 	}
@@ -96,7 +96,7 @@ func TestBuildImplementSessionStateListsLedgerPendingOverlays(t *testing.T) {
 func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := session.NewManager(mem, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	q := worker.NewInMemoryQueue(4)
 	mgr.SetWorkerQueue(q)
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -120,7 +120,7 @@ func TestCompleteWriteWorkerThenHostCycleSelectsOverlayPromote(t *testing.T) {
 		t.Fatal("completion claim lost")
 	}
 
-	state := mgr.BuildImplementSessionState(ctx, parent)
+	state := mgr.Workers.State.ForSession(ctx, parent)
 	if len(state.PendingOverlayIDs) != 1 || state.PendingOverlayIDs[0] != jobID {
 		t.Fatalf("PendingOverlayIDs = %v want [%s] after Complete", state.PendingOverlayIDs, jobID)
 	}

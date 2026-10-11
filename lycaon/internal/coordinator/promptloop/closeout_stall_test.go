@@ -13,23 +13,25 @@ import (
 func TestCloseoutFuseTrippedGuards(t *testing.T) {
 	tripped := true
 	l := NewPromptLoopForTest(PromptLoopDeps{
-		NoteCoordinatorToolTurn: func(_ context.Context, _ string) bool { return tripped },
+		Closeout: CloseoutDeps{
+			NoteCoordinatorToolTurn: func(_ context.Context, _ string) bool { return tripped },
+		},
 	})
 	ctx := context.Background()
 
-	if !(turnCloseout{l}).closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement_investigate") {
+	if !l.Closeout.closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement_investigate") {
 		t.Fatal("coordinator closeout surface with a tripped dep should trip")
 	}
-	if (turnCloseout{l}).closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement") {
+	if l.Closeout.closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement") {
 		t.Fatal("non-closeout surface must never trip the fuse")
 	}
 	worker := &api.Session{ID: "w1", ParentSessionID: "s1"}
-	if (turnCloseout{l}).closeoutFuseTripped(ctx, worker, "w1", "implement_investigate") {
+	if l.Closeout.closeoutFuseTripped(ctx, worker, "w1", "implement_investigate") {
 		t.Fatal("worker child must never trip the coordinator fuse")
 	}
 
 	nofuse := NewPromptLoopForTest(PromptLoopDeps{})
-	if (turnCloseout{nofuse}).closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement_investigate") {
+	if nofuse.Closeout.closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement_investigate") {
 		t.Fatal("no fuse dep wired → must never trip")
 	}
 }
@@ -39,21 +41,23 @@ func TestEmitStalledCloseoutUsesRetainedDraftAndClears(t *testing.T) {
 	var gotForcedBy []string
 	var cleared bool
 	l := NewPromptLoopForTest(PromptLoopDeps{
-		CloseoutStallState: func(_ context.Context, _ string) guidance.RetainedCloseout {
-			return guidance.RetainedCloseout{Active: true, Attempt: 3, PrevKey: guidance.InvestCitationsRequiredCode, Drafted: "Root cause: missing backoff in the cache warmer.", ForcedBy: []string{guidance.InvestCitationsRequiredCode}}
-		},
-		ClearCloseoutStall: func(_ context.Context, _ string) { cleared = true },
-		AssembleLedgerCloseout: func(_ context.Context, _, _ string, forcedBy []string, drafted string, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-			gotDrafted = drafted
-			gotForcedBy = forcedBy
-			return guidance.CoordinatorCompletionReport{Synthesis: drafted},
-				&api.CitationGrounding{HostAssembled: true, Traced: false, RetryCount: retryCount}
+		Closeout: CloseoutDeps{
+			CloseoutStallState: func(_ context.Context, _ string) guidance.RetainedCloseout {
+				return guidance.RetainedCloseout{Active: true, Attempt: 3, PrevKey: guidance.InvestCitationsRequiredCode, Drafted: "Root cause: missing backoff in the cache warmer.", ForcedBy: []string{guidance.InvestCitationsRequiredCode}}
+			},
+			ClearCloseoutStall: func(_ context.Context, _ string) { cleared = true },
+			AssembleLedgerCloseout: func(_ context.Context, _, _ string, forcedBy []string, drafted string, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+				gotDrafted = drafted
+				gotForcedBy = forcedBy
+				return guidance.CoordinatorCompletionReport{Synthesis: drafted},
+					&api.CitationGrounding{HostAssembled: true, Traced: false, RetryCount: retryCount}
+			},
 		},
 	})
 	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true, closeoutRetry: closeoutRetryState{attempt: 3}}
 	history := []api.Message{{ID: "slot-1", Role: api.MessageRoleAssistant}}
 
-	out, err := turnCloseout{l}.emitStalledCloseout(context.Background(), &api.Session{ID: "s1"}, "s1", "", "implement_investigate", st, history)
+	out, err := l.Closeout.emitStalledCloseout(context.Background(), &api.Session{ID: "s1"}, "s1", "", "implement_investigate", st, history)
 	testutil.FailErr(t, "emitStalledCloseout", err)
 
 	if !out.committed {
@@ -76,16 +80,18 @@ func TestEmitStalledCloseoutUsesRetainedDraftAndClears(t *testing.T) {
 func TestCitationOnlyRetryStitchesPersistedCloseoutDraftBeforeGuard(t *testing.T) {
 	const pinned = "## Recon report\n\nThe backend manages session lifecycle."
 	loop := NewPromptLoopForTest(PromptLoopDeps{
-		CloseoutStallState: func(_ context.Context, sessionID string) guidance.RetainedCloseout {
-			if sessionID != "session-1" {
-				return guidance.RetainedCloseout{}
-			}
-			return guidance.RetainedCloseout{Active: true, Attempt: 1, PrevKey: guidance.SynthHandleNotInLegsCode, Drafted: pinned, ForcedBy: []string{guidance.SynthHandleNotInLegsCode}}
+		Closeout: CloseoutDeps{
+			CloseoutStallState: func(_ context.Context, sessionID string) guidance.RetainedCloseout {
+				if sessionID != "session-1" {
+					return guidance.RetainedCloseout{}
+				}
+				return guidance.RetainedCloseout{Active: true, Attempt: 1, PrevKey: guidance.SynthHandleNotInLegsCode, Drafted: pinned, ForcedBy: []string{guidance.SynthHandleNotInLegsCode}}
+			},
 		},
 	})
 	const trailer = "```json\n{\"cited_evidence\":[{\"evidence\":\"leg-1:list#1\"}],\"cited_urls\":[],\"artifact_ids\":[]}\n```"
 	history := []api.Message{{ID: "draft-1", Role: api.MessageRoleAssistant, Content: trailer}}
-	prepared, _ := toolInvocations{loop}.maybeCoerceCloseoutContent(
+	prepared, _ := loop.Tools.maybeCoerceCloseoutContent(
 		context.Background(), history, "session-1", "implement_synthesis", trailer, "draft-1",
 	)
 	report, ok := guidance.ParseCoordinatorCompletionReport(prepared)
@@ -99,11 +105,13 @@ func TestCitationOnlyRetryStitchesPersistedCloseoutDraftBeforeGuard(t *testing.T
 		t.Fatalf("history kept unstiched citation fence: %q", history[0].Content)
 	}
 	inactive := NewPromptLoopForTest(PromptLoopDeps{
-		CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
-			return guidance.RetainedCloseout{Drafted: pinned}
+		Closeout: CloseoutDeps{
+			CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
+				return guidance.RetainedCloseout{Drafted: pinned}
+			},
 		},
 	})
-	if got, _ := (toolInvocations{inactive}).maybeCoerceCloseoutContent(context.Background(), nil, "session-1", "implement_synthesis", trailer, ""); got != trailer {
+	if got, _ := inactive.Tools.maybeCoerceCloseoutContent(context.Background(), nil, "session-1", "implement_synthesis", trailer, ""); got != trailer {
 		t.Fatalf("inactive stall stitched stale draft: %q", got)
 	}
 }

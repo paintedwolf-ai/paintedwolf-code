@@ -47,10 +47,15 @@ func TestEncodeRepoResponseFitsSnapshotAsValidJSON(t *testing.T) {
 	if len(decoded.Snapshot) == 0 || len(decoded.Snapshot) >= originalCount {
 		t.Fatalf("snapshot size = %d want a non-empty fitted prefix", len(decoded.Snapshot))
 	}
-	capture := tools.ToolContext{ProjectID: "p", ActiveRootID: "r", Roots: []projectroot.RootRef{{ID: "r", Path: t.TempDir()}}, Out: &tools.ToolInvocationOut{}}
+	capture := tools.ToolContext{
+		Identity: tools.InvocationIdentity{ProjectID: "p"},
+		Source: tools.InvocationSource{ActiveRootID: "r",
+			Roots: []projectroot.RootRef{{ID: "r", Path: t.TempDir()}}},
+		Effects: tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+	}
 	recordRepoSources(capture, resp)
-	if capture.Out.SourceContext == nil || len(capture.Out.SourceContext.Locations) != len(decoded.Snapshot) {
-		t.Fatalf("fitted survey sources = %+v", capture.Out.SourceContext)
+	if capture.Effects.Out.SourceContext == nil || len(capture.Effects.Out.SourceContext.Locations) != len(decoded.Snapshot) {
+		t.Fatalf("fitted survey sources = %+v", capture.Effects.Out.SourceContext)
 	}
 
 }

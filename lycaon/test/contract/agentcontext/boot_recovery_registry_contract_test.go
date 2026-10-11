@@ -190,18 +190,18 @@ func TestTurnLaunchingRecoveryStaysInTheServePhase(t *testing.T) {
 
 func walkComposeRoot(t *testing.T, fset *token.FileSet, visit func(string, *ast.File)) {
 	t.Helper()
-	entries, err := os.ReadDir(recoveryComposeRoot)
-	testutil.FailErr(t, "read composition root", err)
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
+	err := filepath.WalkDir(recoveryComposeRoot, func(path string, entry os.DirEntry, err error) error {
+		if err != nil || entry.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return err
 		}
-		path := filepath.Join(recoveryComposeRoot, name)
 		file, err := parser.ParseFile(fset, path, nil, parser.ParseComments)
-		testutil.FailErr(t, "parse "+name, err)
+		if err != nil {
+			return err
+		}
 		visit(path, file)
-	}
+		return nil
+	})
+	testutil.FailErr(t, "walk app composition owners", err)
 }
 
 func recoveryCallName(call *ast.CallExpr) string {

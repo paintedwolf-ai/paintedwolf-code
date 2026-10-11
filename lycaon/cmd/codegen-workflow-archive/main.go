@@ -177,8 +177,17 @@ func (g gitRelease) show(rel string) ([]byte, error) {
 }
 
 func (g gitRelease) list(dir string) ([]string, error) {
-	out, err := g.run("ls-tree", "--name-only", g.tag+":"+dir)
-	return strings.Fields(string(out)), err
+	out, err := g.run("ls-tree", "--name-only", "-z", g.tag, "--", dir+"/")
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for _, rel := range strings.Split(string(out), "\x00") {
+		if rel != "" {
+			names = append(names, path.Base(rel))
+		}
+	}
+	return names, nil
 }
 
 func (g gitRelease) run(args ...string) ([]byte, error) {

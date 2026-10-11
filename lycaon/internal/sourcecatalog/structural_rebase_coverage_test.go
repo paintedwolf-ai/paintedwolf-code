@@ -12,7 +12,7 @@ import (
 func TestStructuralColdRebaseKeepsNewParentAndSeparatelyObservedChild(t *testing.T) {
 	catalog, root := indexFixture(t)
 	writeIndexFile(t, root.Path, "existing/old.txt", "old")
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get cold rebase store", err)
 	pin, err := store.retainGeneration(headGeneration, true)
 	testutil.FailErr(t, "pin empty cold basis", err)
@@ -24,9 +24,9 @@ func TestStructuralColdRebaseKeepsNewParentAndSeparatelyObservedChild(t *testing
 	observePublicationFixture(t, builder, store, ".", []string{"existing"}, true)
 	observePublicationFixture(t, builder, store, "existing", []string{"old.txt"}, false)
 	writeIndexFile(t, root.Path, "new/known.txt", "new")
-	_, err = catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
+	_, err = catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
 	testutil.FailErr(t, "publish newer root membership", err)
-	child, err := catalog.ObserveDirectory(t.Context(), "p", root, "new", DirectoryRead{})
+	child, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, "new", DirectoryRead{})
 	testutil.FailErr(t, "publish separate foreground child", err)
 	testutil.FailErr(t, "publish rebased cold inventory", store.publishStructure(t.Context(), builder, pin.Generation))
 	complete, err := store.subtreeComplete(t.Context(), ".")
@@ -39,7 +39,7 @@ func TestStructuralColdRebaseKeepsNewParentAndSeparatelyObservedChild(t *testing
 	if after != child {
 		t.Fatalf("foreground observation changed: got %+v, want %+v", after, child)
 	}
-	navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+	navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 	testutil.FailErr(t, "open merged navigation", err)
 	defer func() { _ = navigation.Close() }()
 	if extent := navigationExtent(t, navigation); extent != 4 {
@@ -54,7 +54,7 @@ func TestStructuralColdRebaseKeepsNewParentAndSeparatelyObservedChild(t *testing
 // Newly observed memberships close in the same publication, even after repeated races.
 func TestStructuralForegroundMembershipClosesCoverageAcrossManyRebases(t *testing.T) {
 	catalog, root := indexFixture(t)
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get advancing coverage store", err)
 	filesystem, err := os.OpenRoot(root.Path)
 	testutil.FailErr(t, "open coverage filesystem", err)
@@ -75,7 +75,7 @@ func TestStructuralForegroundMembershipClosesCoverageAcrossManyRebases(t *testin
 		introduced := fmt.Sprintf("dir-%02d", round)
 		writeIndexFile(t, root.Path, introduced+"/file.txt", "new")
 		store.fenceObservationSubtree(".")
-		selected, err := catalog.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
+		selected, err := catalog.Directories.ObserveDirectory(t.Context(), "p", root, ".", DirectoryRead{})
 		testutil.FailErr(t, "advance foreground membership", err)
 		builder.coverage = func(ctx context.Context, target *structuralBuilder) error {
 			return target.completeCoverage(ctx, filesystem, structuralScanOptions{store: store})
@@ -93,7 +93,7 @@ func TestStructuralForegroundMembershipClosesCoverageAcrossManyRebases(t *testin
 		if !complete {
 			t.Fatalf("round%d left newly visible directory unresolved", round)
 		}
-		navigation, err := catalog.OpenNavigation(t.Context(), "p", root)
+		navigation, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 		testutil.FailErr(t, "open advancing membership", err)
 		_, err = navigation.Entry(t.Context(), introduced+"/file.txt")
 		testutil.FailErr(t, "preserve newly visible directory", err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -35,7 +36,7 @@ func TestGitCheckoutReviewsInstructionFilesBeforeChangingBranch(t *testing.T) {
 	tc := nativefixture.Context(dir)
 	refused := errors.New("review declined")
 	reviewed := false
-	tc.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
+	tc.Files.FileChangeReview = func(_ context.Context, changes []tools.FileChange) error {
 		reviewed = true
 		if len(changes) != 2 || changes[0].Path != path || changes[0].Preview.Before != "second\n" || changes[0].Preview.After != "first\n" {
 			t.Fatalf("wrong instruction preview: %+v", changes)
@@ -49,7 +50,7 @@ func TestGitCheckoutReviewsInstructionFilesBeforeChangingBranch(t *testing.T) {
 	if branch := gittest.Run(t, dir, "branch", "--show-current"); branch != "feature\n" {
 		t.Fatalf("branch changed before approval: %q", branch)
 	}
-	tc.FileChangeReview = func(context.Context, []tools.FileChange) error { return nil }
+	tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { return nil }
 	_, err = tool.Run(t.Context(), map[string]any{"branch": "main"}, tc)
 	testutil.FailErr(t, "approved checkout", err)
 	if branch := gittest.Run(t, dir, "branch", "--show-current"); branch != "main\n" {
@@ -66,7 +67,7 @@ func (partialOperationGit) Operate(context.Context, string, git.OperationRequest
 func TestGitPartialOperationKeepsStateAndRaisesPolicyOccurrence(t *testing.T) {
 	tool := GitOperationTool{Git: partialOperationGit{}, Boundary: nativefixture.Boundary(t), Kind: "merge"}
 	out, err := tool.Run(t.Context(), map[string]any{}, nativefixture.Context(t.TempDir()))
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_OPERATION_FAILED" {
 		t.Fatalf("partial operation lost failure occurrence: %v", err)
 	}

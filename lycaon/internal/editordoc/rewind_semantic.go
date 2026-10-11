@@ -7,7 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
@@ -16,11 +16,8 @@ import (
 func (s *Service) ResolveSourceRewind(ctx context.Context, p *project.Project, sessionID string, anchors []string, plan *sourceledger.RewindPlan) error {
 	s.ops.RLock()
 	defer s.ops.RUnlock()
-	ledger, ok := s.ledger.(interface {
-		ResolveHeadByFile(context.Context, string, sourcebranch.ID, string) (sourceledger.BranchHead, error)
-		ReadRestorableVersion(context.Context, string, string) (sourceledger.RestorableVersion, error)
-	})
-	if !ok {
+	ledger := s.history
+	if ledger == nil {
 		return nil
 	}
 	docs, err := s.store.ListProject(ctx, p.ID, "")
@@ -143,7 +140,7 @@ func (s *Service) semanticRewindContent(ctx context.Context, d *Document, sessio
 			return nil, err
 		}
 	}
-	content, err := textfile.EncodeBounded(serializeEOL(snapshot.Text, d.EOL), d.Encoding, textfile.LimitsForRaw(project.SourceWriteMaxBytes))
+	content, err := textfile.EncodeBounded(serializeEOL(snapshot.Text, d.EOL), d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
 	if err != nil {
 		return nil, err
 	}

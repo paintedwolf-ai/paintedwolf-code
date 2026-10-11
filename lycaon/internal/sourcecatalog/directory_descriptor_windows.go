@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -183,4 +184,14 @@ func directoryKinds(file *os.File) (*directoryKindReader, error) {
 		return nil, err
 	}
 	return &directoryKindReader{file: duplicate}, nil
+}
+
+// Windows keeps no change time; the creation time tells a recreated directory
+// from the one whose listing was recorded.
+func directoryStampOf(info os.FileInfo) DirectoryStamp {
+	stamp := DirectoryStamp{Modified: info.ModTime().UnixNano()}
+	if attributes, ok := info.Sys().(*syscall.Win32FileAttributeData); ok {
+		stamp.Changed = attributes.CreationTime.Nanoseconds()
+	}
+	return stamp
 }

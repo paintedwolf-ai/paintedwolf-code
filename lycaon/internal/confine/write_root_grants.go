@@ -113,14 +113,6 @@ func AttachedWriteRootRefused(root string) (refused bool, code string) {
 	}
 	// Resolve aliases before comparing protected roots.
 	resolved := fspath.CanonicalPath(p)
-	// Unknown home identity keeps the broad root protected.
-	home, err := os.UserHomeDir()
-	if err != nil || strings.TrimSpace(home) == "" {
-		return true, WriteRootCodeHome
-	}
-	if resolved == fspath.CanonicalPath(home) {
-		return true, WriteRootCodeHome
-	}
 	if attachedWriteRootForbidden(resolved) {
 		return true, WriteRootCodeSecretStore
 	}
@@ -143,14 +135,11 @@ func GrantedWriteRootRefused(root string) (refused bool, code string) {
 	return false, ""
 }
 
-// writeRootStructuralRefusal rejects malformed roots and the filesystem root.
+// writeRootStructuralRefusal rejects malformed roots.
 func writeRootStructuralRefusal(root string) (cleaned, code string) {
 	p := filepath.Clean(strings.TrimSpace(root))
 	if p == "" || p == "." {
 		return "", WriteRootCodeNotAbsolute
-	}
-	if p == string(filepath.Separator) {
-		return "", WriteRootCodeFilesystemRoot
 	}
 	if !filepath.IsAbs(p) && !isWindowsAbsPath(p) {
 		return "", WriteRootCodeNotAbsolute

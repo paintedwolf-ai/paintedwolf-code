@@ -70,8 +70,8 @@ func TestWorkerBranchClaimPolicyConsumesActualRefusals(t *testing.T) {
 	for _, tool := range append(workerBranchCatalog(t), "future_branch_tool") {
 		for _, code := range []string{"WORKER_BRANCH_CLAIM_FAILED", "UNRELATED_REFUSAL"} {
 			gc := oar.NewGuardContext()
-			gc.SessionID = t.Name() + tool + code
-			gc.Tool = tool
+			gc.Session.SessionID = t.Name() + tool + code
+			gc.Invocation.Tool = tool
 			gc.ObservedRejectCode = code
 			result, err := pipeline.EvaluateBlock(t.Context(), oar.AnchorToolRejected, gc)
 			contractcheck.FailErr(t, "evaluate branch refusal", err)

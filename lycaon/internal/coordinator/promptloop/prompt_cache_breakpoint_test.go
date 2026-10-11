@@ -11,11 +11,13 @@ import (
 // Compaction fitting rebuilds every request; the assembly breakpoint must
 // survive it so providers receive an explicit marker.
 func TestFitMessagesForCompactionKeepsPromptCacheBreakpoint(t *testing.T) {
-	loop := &PromptLoop{Deps: PromptLoopDeps{
-		CompactionConfig: func(context.Context, *api.Session) compaction.CompactionConfig {
-			return compaction.CompactionConfig{Enabled: true, HardCeilingTokens: 1 << 20, KeepRecentMessages: 16}
+	loop := NewPromptLoop(PromptLoopDeps{
+		Model: ModelDeps{
+			CompactionConfig: func(context.Context, *api.Session) compaction.CompactionConfig {
+				return compaction.CompactionConfig{Enabled: true, HardCeilingTokens: 1 << 20, KeepRecentMessages: 16}
+			},
 		},
-	}}
+	})
 	msgs := []api.Message{
 		{Role: api.MessageRoleSystem, Content: "stable", ContextPinned: true},
 		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
@@ -24,7 +26,7 @@ func TestFitMessagesForCompactionKeepsPromptCacheBreakpoint(t *testing.T) {
 			ToolResult: &api.ToolResult{ToolCallID: "c1", Tool: "read", Content: "result"}},
 		{Role: api.MessageRoleSystem, Content: "volatile"},
 	}
-	out := modelTurn{loop}.fitMessagesForCompaction(context.Background(), &api.Session{ID: "s"}, "s", msgs, nil)
+	out := loop.Model.fitMessagesForCompaction(context.Background(), &api.Session{ID: "s"}, "s", msgs, nil)
 	var marked []int
 	for i, m := range out {
 		if m.PromptCacheBreakpoint != api.PromptCacheTierNone {

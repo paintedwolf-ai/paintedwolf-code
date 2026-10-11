@@ -54,7 +54,7 @@ func TestValidateRuleCopyUnknownName(t *testing.T) {
 func TestCopyDoesNotChangeDecisionCode(t *testing.T) {
 	r := &Rule{ID: "X", Effect: EffectBlock, Copy: Copy{What: "blocked {{ tool }}"}}
 	gc := NewGuardContext()
-	gc.Tool = "read"
+	gc.Invocation.Tool = "read"
 	a := decisionFromRule(r, gc, map[string]any{"tool": "read"})
 	r.Copy.What = "different {{ tool }}"
 	b := decisionFromRule(r, gc, map[string]any{"tool": "read"})

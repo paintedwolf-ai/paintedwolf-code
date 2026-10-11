@@ -12,9 +12,17 @@ import (
 func TestExactPathGrantCoversAllDeclaredTargets(t *testing.T) {
 	for _, path := range []string{"/project/file.txt", "/project/file*.txt", "/project/file?.txt", "/project/file[ab].txt"} {
 		t.Run(path, func(t *testing.T) {
-			action := hitl.ProposedAction{Tool: "write", ProjectID: "project", Files: []string{path}}
+			action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Files: []string{path},
+},
+Scope: hitl.ActionScope{
+ProjectID: "project",
+},
+}
 			predicate := GrantPredicateForAction(action)
-			grant := hitl.ApprovalGrant{ProjectID: action.ProjectID,
+			grant := hitl.ApprovalGrant{ProjectID: action.Scope.ProjectID,
 				Predicate: hitl.ApprovalGrantPredicate{Category: string(predicate.Category), Pattern: predicate.Pattern}}
 			for _, tc := range []struct {
 				name    string
@@ -29,7 +37,7 @@ func TestExactPathGrantCoversAllDeclaredTargets(t *testing.T) {
 				{"same basename elsewhere", []string{"/other/file.txt"}, false},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					action.Files = tc.files
+					action.Invocation.Files = tc.files
 					if covered := grantMatchesAction(grant, action); covered != tc.covered {
 						t.Fatalf("grant for %q with targets %v: covered=%t, want %t", path, tc.files, covered, tc.covered)
 					}
@@ -40,9 +48,16 @@ func TestExactPathGrantCoversAllDeclaredTargets(t *testing.T) {
 }
 
 func TestToolGrantsDoNotInterpretPatternSyntax(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "read", ProjectID: "project"}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "read",
+},
+Scope: hitl.ActionScope{
+ProjectID: "project",
+},
+}
 	for _, pattern := range []string{"*", "r*", "r?ad", "r[ea]ad", ""} {
-		grant := hitl.ApprovalGrant{ProjectID: action.ProjectID,
+		grant := hitl.ApprovalGrant{ProjectID: action.Scope.ProjectID,
 			Predicate: hitl.ApprovalGrantPredicate{Category: string(ApprovalCategoryTool), Pattern: pattern}}
 		if grantMatchesAction(grant, action) {
 			t.Fatalf("literal tool grant %q covered read", pattern)
@@ -66,7 +81,16 @@ func TestRelativePathGrantRetainsItsOriginatingRoot(t *testing.T) {
 		{"other root absolute target", "/project/primary", "/project/secondary/file.txt", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			action := hitl.ProposedAction{Tool: "write", ProjectID: grant.ProjectID, ProjectDir: tc.root, Files: []string{tc.path}}
+			action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Files: []string{tc.path},
+},
+Scope: hitl.ActionScope{
+ProjectID: grant.ProjectID,
+ProjectDir: tc.root,
+},
+}
 			if covered := grantMatchesAction(grant, action); covered != tc.covered {
 				t.Fatalf("covered=%t, want %t for %s in %s", covered, tc.covered, tc.path, tc.root)
 			}
@@ -98,12 +122,21 @@ func TestPathGrantsUsePhysicalInvocationTargets(t *testing.T) {
 		{"missing target", []string{"file[ab].txt", "other.txt"}, []string{target}, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			action := hitl.ProposedAction{Tool: "read", ProjectID: grant.ProjectID, ProjectDir: grant.ProjectDir,
-				Files: tc.declared, ResolvedFiles: tc.resolved}
+			action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "read",
+Files: tc.declared,
+ResolvedFiles: tc.resolved,
+},
+Scope: hitl.ActionScope{
+ProjectID: grant.ProjectID,
+ProjectDir: grant.ProjectDir,
+},
+}
 			if got := grantMatchesAction(grant, action); got != tc.covered {
 				t.Fatalf("physical target coverage=%t, want %t", got, tc.covered)
 			}
-			action.Tool = "write"
+			action.Invocation.Tool = "write"
 			predicate := GrantPredicateForAction(action)
 			want := ""
 			if tc.covered && len(tc.declared) == 1 {
@@ -126,10 +159,22 @@ func TestWorkerWriteGrantCoversReadAtTheSamePhysicalTarget(t *testing.T) {
 	}}))
 	branch, project := t.TempDir(), t.TempDir()
 	path := filepath.Join(branch, "literal[ab].txt")
-	action := hitl.ProposedAction{Tool: "write", ProjectID: "project", ProjectDir: project,
-		SessionID: "worker", RootSessionID: "chat", Files: []string{path}, ResolvedFiles: []string{path},
-		Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{branch}},
-	}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "write",
+Files: []string{path},
+ResolvedFiles: []string{path},
+},
+Scope: hitl.ActionScope{
+ProjectID: "project",
+ProjectDir: project,
+SessionID: "worker",
+RootSessionID: "chat",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{branch}},
+},
+}
 	first, err := approvals.Evaluate(t.Context(), action)
 	testutil.FailErr(t, "evaluate prepared write", err)
 	if !first.Required() {
@@ -146,15 +191,15 @@ func TestWorkerWriteGrantCoversReadAtTheSamePhysicalTarget(t *testing.T) {
 	if !installed {
 		t.Fatal("task path grant was not installed")
 	}
-	action.Tool = "read"
-	action.Files = []string{"literal[ab].txt"}
-	action.Args = map[string]any{"path": "literal[ab].txt"}
+	action.Invocation.Tool = "read"
+	action.Invocation.Files = []string{"literal[ab].txt"}
+	action.Invocation.Args = map[string]any{"path": "literal[ab].txt"}
 	repeat, err := approvals.Evaluate(t.Context(), action)
 	testutil.FailErr(t, "evaluate worker read", err)
 	if !repeat.AutoApproved() {
 		t.Fatalf("same physical target asked again: %+v", repeat)
 	}
-	action.ResolvedFiles = []string{filepath.Join(project, "literal[ab].txt")}
+	action.Invocation.ResolvedFiles = []string{filepath.Join(project, "literal[ab].txt")}
 	other, err := approvals.Evaluate(t.Context(), action)
 	testutil.FailErr(t, "evaluate other physical target", err)
 	if !other.Required() {

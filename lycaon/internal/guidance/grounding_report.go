@@ -2,6 +2,8 @@ package guidance
 
 import (
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/noticeerr"
+	wire "github.com/lycaon/lycaon/pkg/api"
 	"strings"
 )
 
@@ -66,3 +68,36 @@ func addOffender(out *[]string, seen map[string]struct{}, token string) {
 	seen[token] = struct{}{}
 	*out = append(*out, token)
 }
+
+// ErrGroundingEscalated is returned when circuit breaker blocks coordinator prompts.
+var ErrGroundingEscalated error = noticeerr.NewSentinel("grounding_escalated", wire.NoticeCodeGroundingEscalated)
+
+// GroundingFriction is what remains of a session tree's grounding-reject
+// budget after a reject: the tighter of its prompt and cycle ceilings.
+type GroundingFriction struct {
+	Remaining int
+}
+
+// Exhausted reports that the budget admits no further retry.
+func (f GroundingFriction) Exhausted() bool {
+	return f.Remaining <= 0
+}
+
+// Classification-free grounding contract.
+//
+// Grounding never asks "does this token look like a path/URL?" as a gate.
+// Verbatim-substring verification (opaque/command shapes) and observed-set
+// membership (file_region/url) are the only production verdict paths.
+const (
+	// GroundingVerdictPrimary documents verbatim-first grounding for command/opaque shapes.
+	GroundingVerdictPrimary = "verbatim_substring"
+
+	// LeakDetectionMode documents observed-set membership for prose leak detection.
+	LeakDetectionMode = "observed_set_membership"
+
+	// LeakSeverityReject is a structured-observed citation in prose outside the typed channel.
+	LeakSeverityReject = "reject"
+
+	// LeakSeverityAdvisory is a lower-trust observed citation in prose — surfaced, not partial.
+	LeakSeverityAdvisory = "advisory"
+)

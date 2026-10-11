@@ -140,7 +140,7 @@ func TestRegistryListDiscoversConfiguredOpenRouterProvider(t *testing.T) {
 	if err := creds.Set("openrouter", wantAuth); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
-	registry, err := NewRegistry(catalog, creds)
+	registry, err := NewRegistry(t.Context(), catalog, creds)
 	testutil.FailErr(t, "NewRegistry failed", err)
 	registry.discoveryClient = srv.Client()
 

@@ -34,7 +34,8 @@ func TestStressEditorSnapshotWorkingYear(t *testing.T) {
 		fmt.Fprintf(&source, "const v%x = %d;\n", random.Uint64(), random.Uint64())
 	}
 	p := &project.Project{ID: testdbseed.DefaultProjectID, Roots: []project.Root{{ID: rootID, ProjectID: testdbseed.DefaultProjectID, Path: root, IsPrimary: true}}}
-	service := editordoc.New(editordoc.NewStore(sqlDB), sourceledger.New(sqlDB, ""), storageStressRoots{p})
+	sourceHistory14 := sourceledger.New(sqlDB, "")
+	service := editordoc.New(editordoc.NewStore(sqlDB), sourceHistory14, sourceHistory14.History, storageStressRoots{p})
 	t.Cleanup(func() { _ = service.Close(context.Background()) })
 	type sourceSnapshot struct {
 		document *editordoc.Document

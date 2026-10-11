@@ -5,13 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"github.com/lycaon/lycaon/internal/documentcore"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -67,7 +68,7 @@ func (d *Document) DraftSHA256() (string, error) {
 	if !d.Dirty {
 		return d.BaseSHA256, nil
 	}
-	encoded, err := textfile.EncodeBounded(serializeEOL(d.Draft, d.EOL), d.Encoding, textfile.LimitsForRaw(project.SourceWriteMaxBytes))
+	encoded, err := textfile.EncodeBounded(serializeEOL(d.Draft, d.EOL), d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
 	if err != nil {
 		return "", err
 	}

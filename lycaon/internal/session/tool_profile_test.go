@@ -2,18 +2,20 @@ package session
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/session/profiles"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -21,13 +23,13 @@ import (
 func TestManifestCoordinatorProfileOverridesAgent(t *testing.T) {
 	agents := loadAgentsForTest(t)
 	sess := &api.Session{Posture: api.SessionPostureSpec, AgentType: orchestration.ProfileCoordinator}
-	got := ResolveToolProfile(sess, agents, "worker_readonly")
+	got := profiles.ResolveToolProfile(sess, agents, "worker_readonly")
 	if got != "worker_readonly" {
 		t.Fatalf("profile = %q want worker_readonly", got)
 	}
 }
 
-func loadAgentsForTest(t *testing.T) AgentProfileResolver {
+func loadAgentsForTest(t *testing.T) profiles.AgentProfileResolver {
 	t.Helper()
 	agents := orchestration.NewMemoryAgentRegistry()
 	testutil.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(t.Context(), agents))
@@ -42,39 +44,39 @@ func TestBuildSessionCreateDefaultsCoordinatorProfile(t *testing.T) {
 	if sess.AgentType != orchestration.ProfileCoordinator {
 		t.Fatalf("agent_type = %q want coordinator", sess.AgentType)
 	}
-	reg, err := LoadPostureRegistry()
-	testutil.FailErr(t, "LoadPostureRegistry failed", err)
-	mgr := NewManager(store, nil, nil, settings.DefaultSessionLimits())
-	mgr.SetPostureRegistry(reg)
-	mgr.SetAgentRegistry(loadAgentsForTest(t))
-	got, err := mgr.promptToolProfile(ctx, sess)
-	testutil.FailErr(t, "mgr.promptToolProfile failed", err)
+	reg, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
+	mgr := NewHost(store, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr.Profiles.SetPostureRegistry(reg)
+	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
+	got, err := mgr.Profiles.PromptToolProfile(ctx, sess)
+	testutil.FailErr(t, "mgr.Profiles.PromptToolProfile failed", err)
 	if got != "coordinator" {
 		t.Fatalf("profile = %q want coordinator", got)
 	}
 }
 
 func TestManagerPromptToolProfileUsesWorkflowManifest(t *testing.T) {
-	reg, err := LoadPostureRegistry()
-	testutil.FailErr(t, "LoadPostureRegistry failed", err)
-	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
-	mgr.SetPostureRegistry(reg)
-	mgr.SetAgentRegistry(loadAgentsForTest(t))
-	mgr.SetWorkflowSessionView(stubWorkflowManifest{
-		manifest: ActiveWorkflowManifest{CoordinatorProfile: "worker_readonly"},
+	reg, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr.Profiles.SetPostureRegistry(reg)
+	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
+	mgr.SetWorkflowDomains(workflowDomainFixture(stubWorkflowManifest{
+		manifest: workflowfacts.ActiveWorkflowManifest{CoordinatorProfile: "worker_readonly"},
 		ok:       true,
-	})
+	}))
 	sess := &api.Session{ID: "s1", Posture: api.SessionPostureSpec, AgentType: orchestration.ProfileCoordinator}
-	got, err := mgr.promptToolProfile(context.Background(), sess)
-	testutil.FailErr(t, "mgr.promptToolProfile failed", err)
+	got, err := mgr.Profiles.PromptToolProfile(context.Background(), sess)
+	testutil.FailErr(t, "mgr.Profiles.PromptToolProfile failed", err)
 	if got != "worker_readonly" {
 		t.Fatalf("profile = %q want worker_readonly", got)
 	}
 }
 
 func TestProjectPostureOverlayCannotSelectToolProfile(t *testing.T) {
-	reg, err := LoadPostureRegistry()
-	testutil.FailErr(t, "LoadPostureRegistry failed", err)
+	reg, err := profiles.LoadPostureRegistry()
+	testutil.FailErr(t, "profiles.LoadPostureRegistry failed", err)
 	dir := t.TempDir()
 	overlayDir := filepath.Join(dir, settingsoverlay.DirName())
 	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
@@ -88,20 +90,20 @@ postures:
 	if err := os.WriteFile(filepath.Join(overlayDir, "postures.yaml"), overlay, 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	mgr := NewManager(store.NewMemory(), nil, nil, settings.DefaultSessionLimits())
-	mgr.SetPostureRegistry(reg)
-	mgr.SetAgentRegistry(loadAgentsForTest(t))
+	mgr := NewHost(store.NewMemory(), Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	mgr.Profiles.SetPostureRegistry(reg)
+	mgr.Profiles.SetAgentRegistry(loadAgentsForTest(t))
 	projectID := RegisterProjectContextForTest(t, mgr, dir)
 	sess := &api.Session{ID: "s1", ProjectID: projectID, Posture: api.SessionPostureSpec, AgentType: orchestration.ProfileCoordinator, WorkspacePath: dir}
-	got, err := mgr.promptToolProfile(context.Background(), sess)
-	testutil.FailErr(t, "mgr.promptToolProfile failed", err)
+	got, err := mgr.Profiles.PromptToolProfile(context.Background(), sess)
+	testutil.FailErr(t, "mgr.Profiles.PromptToolProfile failed", err)
 	if got != orchestration.ProfileCoordinator {
 		t.Fatalf("overlay profile = %q want %q", got, orchestration.ProfileCoordinator)
 	}
 }
 
 type stubWorkflowManifest struct {
-	manifest ActiveWorkflowManifest
+	manifest workflowfacts.ActiveWorkflowManifest
 	ok       bool
 }
 
@@ -111,22 +113,22 @@ func (s stubWorkflowManifest) ActiveReviewVerdictPending(context.Context, string
 	return false
 }
 
-func (s stubWorkflowManifest) ActiveCloseoutGateState(context.Context, string) WorkflowCloseoutGateState {
-	return WorkflowCloseoutGateState{}
+func (s stubWorkflowManifest) ActiveCloseoutGateState(context.Context, string) workflowfacts.WorkflowCloseoutGateState {
+	return workflowfacts.WorkflowCloseoutGateState{}
 }
 
 func (s stubWorkflowManifest) ActivePhaseHasReviewLoop(context.Context, string) bool {
 	return false
 }
-func (s stubWorkflowManifest) ActivePhaseGuardState(context.Context, string) WorkflowPhaseGuardState {
-	return WorkflowPhaseGuardState{}
+func (s stubWorkflowManifest) ActivePhaseGuardState(context.Context, string) workflowfacts.WorkflowPhaseGuardState {
+	return workflowfacts.WorkflowPhaseGuardState{}
 }
 func (s stubWorkflowManifest) AllowedAgents(context.Context, string) []string { return nil }
-func (s stubWorkflowManifest) ResolvedRequest(context.Context, string) ResolvedWorkflowRequest {
-	return ResolvedWorkflowRequest{}
+func (s stubWorkflowManifest) ResolvedRequest(context.Context, string) workflowfacts.ResolvedWorkflowRequest {
+	return workflowfacts.ResolvedWorkflowRequest{}
 }
 
-func (s stubWorkflowManifest) ActiveManifest(context.Context, string) (ActiveWorkflowManifest, bool) {
+func (s stubWorkflowManifest) ActiveManifest(context.Context, string) (workflowfacts.ActiveWorkflowManifest, bool) {
 	return s.manifest, s.ok
 }
 func (s stubWorkflowManifest) ParallelTaskMaxWorkers(context.Context, string) int      { return 0 }
@@ -142,7 +144,7 @@ func (s stubWorkflowManifest) ActivePlan(context.Context, string) (string, strin
 func (s stubWorkflowManifest) ActivePhaseRequiresEvidence(context.Context, string, string) bool {
 	return false
 }
-func (s stubWorkflowManifest) GetActive(context.Context, string) (*api.WorkflowRun, error) {
+func (s stubWorkflowManifest) ActiveBySession(context.Context, string) (*api.WorkflowRun, error) {
 	return nil, nil
 }
 func (s stubWorkflowManifest) IsAmbientRun(*api.WorkflowRun) bool {
@@ -183,4 +185,8 @@ func (s stubWorkflowManifest) ForgetSession(string) {}
 
 func (s stubWorkflowManifest) RecordReviewToolResult(context.Context, string, api.Message) error {
 	return nil
+}
+
+func (s stubWorkflowManifest) PolicySnapshot(context.Context, string) (toolpolicy.WorkflowSnapshot, error) {
+	return toolpolicy.WorkflowSnapshot{ManifestRules: s.manifest.Rules}, nil
 }

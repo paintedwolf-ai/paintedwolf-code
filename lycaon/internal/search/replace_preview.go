@@ -38,6 +38,7 @@ func previewReplace(ctx context.Context, catalog *sourcecatalog.Catalog, req Rep
 	result := ReplacePreviewResult{State: ReplacePreviewReady, Files: []ReplaceFilePreview{}, Issues: []Issue{}}
 	report := ExecutorReport{}
 	totalHunk := 0
+roots:
 	for _, root := range req.Roots {
 		if strings.TrimSpace(root.Path) == "" {
 			continue
@@ -46,38 +47,45 @@ func previewReplace(ctx context.Context, catalog *sourcecatalog.Catalog, req Rep
 			result.Truncated = true
 			break
 		}
-		gen, genErr := resolveCodeGeneration(ctx, catalog, root, codeGenerationJoinGrace)
-		if errors.Is(genErr, errCodeCatalogWarming) {
-			report.Code.WarmingRoots++
-			continue
-		}
-		if genErr != nil {
-			if ctx.Err() != nil {
-				return ReplacePreviewResult{}, ctx.Err()
+		for _, selection := range codeIndexSelections(ctx, catalog, root, req.Query, req.Flags, req.IncludeDependencies) {
+			if len(result.Files) >= ReplaceMaxFiles || totalHunk >= ReplaceMaxHunks {
+				result.Truncated = true
+				break roots
 			}
-			report.Issues = append(report.Issues, Issue{Executor: ExecutorCode, Reason: IssueExecutorError, Message: genErr.Error()})
-			continue
+			gen, genErr := resolveRequestedCodeGeneration(ctx, catalog, root, codeGenerationJoinGrace, selection.include, selection.paths...)
+			if errors.Is(genErr, errCodeCatalogWarming) {
+				report.Code.WarmingRoots++
+				continue
+			}
+			if genErr != nil {
+				if ctx.Err() != nil {
+					return ReplacePreviewResult{}, ctx.Err()
+				}
+				report.Issues = append(report.Issues, Issue{Executor: ExecutorCode, Reason: IssueExecutorError, Message: genErr.Error()})
+				continue
+			}
+			coverage, coverageErr := gen.reader.Coverage(ctx)
+			if coverageErr != nil {
+				_ = gen.reader.Close()
+				return ReplacePreviewResult{}, coverageErr
+			}
+			report.Code.observeCoverage(coverage)
+			if coverage.Pending() {
+				_ = gen.reader.Close()
+				continue
+			}
+			part, previewErr := previewReplaceGeneration(ctx, gen, req, paths.withDependencies(ctx, catalog, root.Path, req.IncludeDependencies), excludes, matcher, prefilter, ReplaceMaxFiles-len(result.Files), ReplaceMaxHunks-totalHunk)
+			if previewErr != nil {
+				return ReplacePreviewResult{}, previewErr
+			}
+			result.Files = append(result.Files, part.files...)
+			for _, file := range part.files {
+				totalHunk += len(file.Hunks)
+			}
+			report.SkippedFiles += part.skipped
+			result.Truncated = result.Truncated || part.truncated
 		}
-		coverage, coverageErr := gen.reader.Coverage(ctx)
-		if coverageErr != nil {
-			_ = gen.reader.Close()
-			return ReplacePreviewResult{}, coverageErr
-		}
-		report.Code.observeCoverage(coverage)
-		if coverage.Pending() {
-			_ = gen.reader.Close()
-			continue
-		}
-		part, previewErr := previewReplaceGeneration(ctx, gen, req, paths, excludes, matcher, prefilter, ReplaceMaxFiles-len(result.Files), ReplaceMaxHunks-totalHunk)
-		if previewErr != nil {
-			return ReplacePreviewResult{}, previewErr
-		}
-		result.Files = append(result.Files, part.files...)
-		for _, file := range part.files {
-			totalHunk += len(file.Hunks)
-		}
-		report.SkippedFiles += part.skipped
-		result.Truncated = result.Truncated || part.truncated
+
 	}
 	if err := ctx.Err(); err != nil {
 		return ReplacePreviewResult{}, err

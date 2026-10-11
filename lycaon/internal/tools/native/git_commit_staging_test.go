@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/git"
@@ -43,10 +44,10 @@ func (g changedPathsGit) ChangedPaths(context.Context, string) ([]string, error)
 
 func stagingCtx(paths []string) tools.ToolContext {
 	return tools.ToolContext{
-		ProjectID:    "p1",
-		SessionID:    "s1",
-		ActiveRootID: "r1",
-		SourceLedger: stubAuthorship{paths: paths},
+		Identity: tools.InvocationIdentity{ProjectID: "p1",
+			SessionID: "s1"},
+		Source: tools.InvocationSource{ActiveRootID: "r1",
+			History: tools.SourceHistory{Authorship: stubAuthorship{paths: paths}}},
 	}
 }
 
@@ -92,7 +93,7 @@ func TestCommitStagingRejectsWithoutSessionAuthorship(t *testing.T) {
 	gm := changedPathsGit{changed: []string{"peer.go"}}
 	_, err := resolveCommitStaging(
 		context.Background(), map[string]any{}, gm, stagingCtx(nil), "/repo")
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) {
 		t.Fatalf("err = %v, want a structured reject", err)
 	}
@@ -104,9 +105,13 @@ func TestCommitStagingRejectsWithoutSessionAuthorship(t *testing.T) {
 // A ledger that cannot answer authorship is not permission to stage everything.
 func TestCommitStagingRejectsWhenLedgerCannotAnswer(t *testing.T) {
 	gm := changedPathsGit{changed: []string{"peer.go"}}
-	tctx := tools.ToolContext{ProjectID: "p1", SessionID: "s1", ActiveRootID: "r1"}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{ProjectID: "p1",
+			SessionID: "s1"},
+		Source: tools.InvocationSource{ActiveRootID: "r1"},
+	}
 	_, err := resolveCommitStaging(context.Background(), map[string]any{}, gm, tctx, "/repo")
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_COMMIT_NO_SESSION_AUTHORSHIP" {
 		t.Fatalf("err = %v, want GIT_COMMIT_NO_SESSION_AUTHORSHIP", err)
 	}

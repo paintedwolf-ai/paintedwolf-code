@@ -26,14 +26,13 @@ func (s *failingWorkerModelStore) UpdateSession(context.Context, string, func(*a
 
 func TestWorkerModelSaveFailureRemovesPartialChild(t *testing.T) {
 	st := &failingWorkerModelStore{Memory: store.NewMemory(), err: errors.New("model save failed")}
-	manager := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
 	policy := llm.NewInMemoryPolicyStore(llm.ModelPolicy{
 		Coordinator: llm.ModelRef{ProviderID: "fixture", Model: "fixture"},
 	})
-	manager.llmSvc = &llm.Service{Router: llm.NewStaticModelRouter(policy)}
+	manager := NewHost(st, Models{Client: nil, Provider: &llm.Service{Router: llm.NewStaticModelRouter(policy)}, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create worker parent", err)
-	child, err := manager.SpawnChild(t.Context(), parent.ID, api.SpawnChildRequest{AgentType: "implement"})
+	child, err := manager.Workers.SpawnChild(t.Context(), parent.ID, api.SpawnChildRequest{AgentType: "implement"})
 	if child != nil || !errors.Is(err, st.err) {
 		t.Fatalf("spawn = %+v, %v; want no child and save failure", child, err)
 	}
@@ -55,12 +54,11 @@ func TestSpawnedWorkerKeepsPoolAssignmentAfterReload(t *testing.T) {
 			{ProviderID: "second-provider", Model: "second-model"},
 		}},
 	})
-	manager := NewManager(st, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
-	manager.llmSvc = &llm.Service{Policy: policy, Router: llm.NewStaticModelRouter(policy)}
+	manager := NewHost(st, Models{Client: nil, Provider: &llm.Service{Policy: policy, Router: llm.NewStaticModelRouter(policy)}, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create worker parent", err)
 	for i, provider := range []string{"first-provider", "second-provider", "first-provider"} {
-		child, err := manager.SpawnChild(t.Context(), parent.ID, api.SpawnChildRequest{AgentType: "implement", Prompt: "inspect the fixture"})
+		child, err := manager.Workers.SpawnChild(t.Context(), parent.ID, api.SpawnChildRequest{AgentType: "implement", Prompt: "inspect the fixture"})
 		testutil.FailErr(t, "spawn assigned worker", err)
 		if child.ProviderID != provider || child.Model == "" {
 			t.Fatalf("worker %d assignment = %s/%s, want provider %s", i, child.ProviderID, child.Model, provider)

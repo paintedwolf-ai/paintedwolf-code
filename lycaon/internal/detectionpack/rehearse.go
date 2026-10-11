@@ -189,20 +189,28 @@ func ruleMatchesCase(p Pack, rule Rule, fixture FixtureCase, semantics *ActionSe
 		}
 	}
 	action := hitl.ProposedAction{
-		Tool:             tool,
-		Args:             args,
-		Files:            fixture.TargetFiles,
-		ApprovalCategory: fixture.ApprovalCategory,
-		ApprovalSubject:  fixture.ApprovalSubject,
-		ProjectDir:       "/tmp/proj",
-		SessionID:        "rehearsal",
-		ActionID:         "rehearsal-action",
-		Contained: hitl.Contained{
+Invocation: hitl.ActionInvocation{
+Tool: tool,
+Args: args,
+Files: fixture.TargetFiles,
+ActionID: "rehearsal-action",
+},
+Resources: hitl.ActionResources{
+ApprovalCategory: fixture.ApprovalCategory,
+ApprovalSubject: fixture.ApprovalSubject,
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/tmp/proj",
+SessionID: "rehearsal",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{
 			FSJailed: true,
 			Egress:   "proxy",
 			Roots:    []string{"/tmp/proj"},
 		},
-	}
+},
+}
 	source := NewGateSource(NewMatcher(solo), semantics)
 	// Each rule rehearses through the path it takes. A mint rule carries an
 	// inert level and never reaches the ask path.

@@ -20,12 +20,12 @@ func RegisterAnswerDecisionTool(reg *tools.DefaultRegistry, deps AnswerDecisionT
 		option, _ := args["option"].(string)
 		resolvedBy, _ := args["resolved_by"].(string)
 		captureWorkerSubject(tctx, svc.Queue, jobID)
-		out, err := svc.AnswerJob(ctx, strings.TrimSpace(tctx.SessionID), strings.TrimSpace(jobID), strings.TrimSpace(option), strings.TrimSpace(resolvedBy))
+		out, err := svc.AnswerJob(ctx, strings.TrimSpace(tctx.Identity.SessionID), strings.TrimSpace(jobID), strings.TrimSpace(option), strings.TrimSpace(resolvedBy))
 		if err != nil {
 			return "", err
 		}
-		if tctx.Out != nil {
-			subject := tctx.Out.DisplaySubject
+		if tctx.Effects.Out != nil {
+			subject := tctx.Effects.Out.DisplaySubject
 			if subject != "" {
 				subject += " · "
 			}

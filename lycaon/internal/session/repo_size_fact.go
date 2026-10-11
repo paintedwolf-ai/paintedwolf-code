@@ -1,25 +1,19 @@
 package session
 
 import (
-	"context"
-
 	"github.com/lycaon/lycaon/internal/repoinfo"
 )
 
 // SetRepoProvider wires progressive-brief file_count into ToolContext.
-func (m *Manager) SetRepoProvider(p repoinfo.Provider) {
+func (m *Host) SetRepoProvider(p repoinfo.Provider) {
 	if m == nil {
 		return
 	}
-	m.repoProvider = p
+	m.Coordinator.Assembly.Repository = p
+
+	m.Coordinator.Guards.SetRepoProvider(p)
+	m.ToolContext.SetRepoProvider(p)
 }
 
-// sessionWorkspaceKnownEmpty reports a measured empty tree for task() gates.
+// repoinfo.MeasuredEmpty reports a measured empty tree for task() gates.
 // Unmeasured trees return false.
-func sessionWorkspaceKnownEmpty(ctx context.Context, p repoinfo.Provider, workspacePath string) bool {
-	if p == nil || workspacePath == "" {
-		return false
-	}
-	empty, err := p.KnownEmpty(ctx, workspacePath)
-	return err == nil && empty
-}

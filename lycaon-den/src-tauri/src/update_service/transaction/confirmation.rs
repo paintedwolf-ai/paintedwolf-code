@@ -21,7 +21,7 @@ pub async fn confirm_startup(
         && installer::bundle().is_ok_and(|bundle| bundle == t.target)
         && hash(&executable(&t.target))? == t.next_hash
     {
-        let client = reqwest::Client::builder()
+        let client = crate::http_transport::client_builder()
             .no_proxy()
             .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(3))

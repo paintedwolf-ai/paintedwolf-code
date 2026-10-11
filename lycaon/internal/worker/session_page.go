@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/pagecursor"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -87,7 +88,7 @@ func (q *SQLQueue) ListSessionPage(ctx context.Context, query SessionPageQuery) 
 	}
 	tasks := make([]api.WorkerTask, 0, len(rows))
 	for _, row := range rows {
-		task, err := workerTaskFromRow(ctx, q.store.db, row)
+		task, err := jobstate.FromRow(ctx, q.store.db, row)
 		if err != nil {
 			return SessionPage{}, err
 		}

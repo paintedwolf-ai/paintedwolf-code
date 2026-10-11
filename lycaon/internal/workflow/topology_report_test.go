@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"context"
+	workflowgates "github.com/lycaon/lycaon/internal/workflow/gates"
+	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 	"time"
 
@@ -31,7 +33,7 @@ func topologyReportTestManifest() workflowdef.Manifest {
 func TestMaybeDeliverTopologyReportCompletesRun(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	manifest := topologyReportTestManifest()
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
 	ctx := context.Background()
 	run, err := startRun(ctx, mgr, "sess-1", "reporttest", "1.0.0")
 	testutil.FailErr(t, "startRun", err)
@@ -39,8 +41,8 @@ func TestMaybeDeliverTopologyReportCompletesRun(t *testing.T) {
 		t.Fatalf("phase = %q want report", run.CurrentPhase)
 	}
 
-	testutil.FailErr(t, "MaybeDeliverTopologyReport", mgr.MaybeDeliverTopologyReport(ctx, "sess-1", seedTopologyCompletion(t, mgr, run, false, nil)))
-	run, err = mgr.Get(ctx, run.ID)
+	testutil.FailErr(t, "MaybeDeliverTopologyReport", mgr.Reports.MaybeDeliverTopologyReport(ctx, "sess-1", seedTopologyCompletion(t, mgr, run, false, nil)))
+	run, err = mgr.Store.Runs.Get(ctx, run.ID)
 	testutil.FailErr(t, "Get", err)
 	if run.Status != api.WorkflowRunStatusComplete {
 		t.Fatalf("status = %q want complete (phase=%q)", run.Status, run.CurrentPhase)
@@ -69,7 +71,7 @@ func seedTopologyCompletion(t *testing.T, mgr *RunManager, run *api.WorkflowRun,
 	if edit != nil {
 		edit(&msg)
 	}
-	testutil.FailErr(t, "persist phase completion", mgr.Sessions.AppendMessages(t.Context(), run.SessionID, msg))
+	testutil.FailErr(t, "persist phase completion", mgr.Verdicts.Sessions.AppendMessages(t.Context(), run.SessionID, msg))
 	return msg.ID
 }
 
@@ -91,21 +93,21 @@ func TestReportDeliveryRequiresTheCommittedPhaseCompletion(t *testing.T) {
 			mgr, _, _, _ := testManagerWithRegistry(t)
 			manifest := topologyReportTestManifest()
 			manifest.Controls.Report = &workflowdef.ReportControls{Enabled: true}
-			mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
+			mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
 			run, err := startRun(t.Context(), mgr, "sess-1", manifest.ID, manifest.Version)
 			testutil.FailErr(t, "start report run", err)
 			id := seedTopologyCompletion(t, mgr, run, true, tc.edit)
-			testutil.FailErr(t, "reject unrelated completion", mgr.MaybeDeliverTopologyReport(t.Context(), run.SessionID, id))
-			after, err := mgr.Get(t.Context(), run.ID)
+			testutil.FailErr(t, "reject unrelated completion", mgr.Reports.MaybeDeliverTopologyReport(t.Context(), run.SessionID, id))
+			after, err := mgr.Store.Runs.Get(t.Context(), run.ID)
 			testutil.FailErr(t, "read report run", err)
-			vars, err := mgr.Store.GetScaffoldVars(t.Context(), run.ID)
+			vars, err := mgr.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
 			testutil.FailErr(t, "read report gates", err)
-			if after.Status != api.WorkflowRunStatusRunning || gateSatisfiedInVars(vars, "topology_report_delivered") {
+			if after.Status != api.WorkflowRunStatusRunning || workflowgates.SatisfiedInVars(vars, "topology_report_delivered") {
 				t.Fatalf("unrelated completion delivered report: %+v", after)
 			}
 			valid := seedTopologyCompletion(t, mgr, run, true, nil)
-			testutil.FailErr(t, "deliver valid completion", mgr.MaybeDeliverTopologyReport(t.Context(), run.SessionID, valid))
-			after, err = mgr.Get(t.Context(), run.ID)
+			testutil.FailErr(t, "deliver valid completion", mgr.Reports.MaybeDeliverTopologyReport(t.Context(), run.SessionID, valid))
+			after, err = mgr.Store.Runs.Get(t.Context(), run.ID)
 			testutil.FailErr(t, "read delivered run", err)
 			if after.Status != api.WorkflowRunStatusComplete {
 				t.Fatalf("valid report did not complete run: %+v", after)
@@ -126,23 +128,23 @@ func TestReportWithDefectsFailsTheRunAsNotAccepted(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	manifest := topologyReportTestManifest()
 	manifest.Controls.Report = &workflowdef.ReportControls{Enabled: true}
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
 	run, err := startRun(t.Context(), mgr, "sess-1", manifest.ID, manifest.Version)
 	testutil.FailErr(t, "start report run", err)
 	id := seedTopologyCompletion(t, mgr, run, true, withDefects)
-	testutil.FailErr(t, "settle unaccepted report", mgr.MaybeDeliverTopologyReport(t.Context(), run.SessionID, id))
-	after, err := mgr.Get(t.Context(), run.ID)
+	testutil.FailErr(t, "settle unaccepted report", mgr.Reports.MaybeDeliverTopologyReport(t.Context(), run.SessionID, id))
+	after, err := mgr.Store.Runs.Get(t.Context(), run.ID)
 	testutil.FailErr(t, "read settled run", err)
 	if after.Status != api.WorkflowRunStatusFailed || after.Failure == nil ||
-		after.Failure.Code != ReportNotAcceptedFailureCode || after.Failure.Phase != "report" || after.Failure.Retryable {
+		after.Failure.Code != runstate.ReportNotAcceptedFailureCode || after.Failure.Phase != "report" || after.Failure.Retryable {
 		t.Fatalf("run = %+v failure = %+v, want failed as not accepted in report", after, after.Failure)
 	}
-	vars, err := mgr.Store.GetScaffoldVars(t.Context(), run.ID)
+	vars, err := mgr.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
 	testutil.FailErr(t, "read report gates", err)
-	if gateSatisfiedInVars(vars, "topology_report_delivered") {
+	if workflowgates.SatisfiedInVars(vars, "topology_report_delivered") {
 		t.Fatal("an unaccepted report satisfied the delivery gate")
 	}
-	available, err := mgr.ReportAvailable(t.Context(), run.ID)
+	available, err := mgr.Presentation.ReportAvailable(t.Context(), run.ID)
 	testutil.FailErr(t, "authorize unaccepted report", err)
 	if !available {
 		t.Fatal("unaccepted report must stay downloadable")
@@ -153,7 +155,7 @@ func TestReportWithAdvisoryDefectCompletesRun(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	manifest := topologyReportTestManifest()
 	manifest.Controls.Report = &workflowdef.ReportControls{Enabled: true}
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
 	run, err := startRun(t.Context(), mgr, "sess-1", manifest.ID, manifest.Version)
 	testutil.FailErr(t, "start report run", err)
 	advisory := func(m *api.Message) {
@@ -165,8 +167,8 @@ func TestReportWithAdvisoryDefectCompletesRun(t *testing.T) {
 		}}
 	}
 	id := seedTopologyCompletion(t, mgr, run, true, advisory)
-	testutil.FailErr(t, "deliver report with advisory defect", mgr.MaybeDeliverTopologyReport(t.Context(), run.SessionID, id))
-	after, err := mgr.Get(t.Context(), run.ID)
+	testutil.FailErr(t, "deliver report with advisory defect", mgr.Reports.MaybeDeliverTopologyReport(t.Context(), run.SessionID, id))
+	after, err := mgr.Store.Runs.Get(t.Context(), run.ID)
 	testutil.FailErr(t, "read settled run", err)
 	if after.Status != api.WorkflowRunStatusComplete {
 		t.Fatalf("run status = %q, want complete", after.Status)
@@ -179,16 +181,16 @@ func TestReportWithAdvisoryDefectCompletesRun(t *testing.T) {
 func TestLateReportCannotCompleteReplacementRun(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	manifest := topologyReportTestManifest()
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
 	old, err := startRun(t.Context(), mgr, "sess-1", manifest.ID, manifest.Version)
 	testutil.FailErr(t, "start original run", err)
 	messageID := seedTopologyCompletion(t, mgr, old, false, nil)
-	_, err = mgr.Cancel(t.Context(), old.ID, "replaced")
+	_, err = mgr.Controls.Cancel(t.Context(), old.ID, "replaced")
 	testutil.FailErr(t, "cancel original run", err)
 	replacement, err := startRun(t.Context(), mgr, "sess-1", manifest.ID, manifest.Version)
 	testutil.FailErr(t, "start replacement run", err)
-	testutil.FailErr(t, "handle late completion", mgr.MaybeDeliverTopologyReport(t.Context(), old.SessionID, messageID))
-	after, err := mgr.Get(t.Context(), replacement.ID)
+	testutil.FailErr(t, "handle late completion", mgr.Reports.MaybeDeliverTopologyReport(t.Context(), old.SessionID, messageID))
+	after, err := mgr.Store.Runs.Get(t.Context(), replacement.ID)
 	testutil.FailErr(t, "read replacement", err)
 	if after.Status != api.WorkflowRunStatusRunning || after.CurrentPhase != "report" {
 		t.Fatalf("late completion advanced replacement: %+v", after)
@@ -198,11 +200,11 @@ func TestLateReportCannotCompleteReplacementRun(t *testing.T) {
 func TestSuccessfulTurnWithoutCloseoutDoesNotDeliverReport(t *testing.T) {
 	mgr, _, _, _ := testManagerWithRegistry(t)
 	manifest := topologyReportTestManifest()
-	mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
+	mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
 	run, err := startRun(t.Context(), mgr, "sess-1", manifest.ID, manifest.Version)
 	testutil.FailErr(t, "start report run", err)
-	testutil.FailErr(t, "finish turn without closeout", mgr.MaybeDeliverTopologyReport(t.Context(), run.SessionID, ""))
-	after, err := mgr.Get(t.Context(), run.ID)
+	testutil.FailErr(t, "finish turn without closeout", mgr.Reports.MaybeDeliverTopologyReport(t.Context(), run.SessionID, ""))
+	after, err := mgr.Store.Runs.Get(t.Context(), run.ID)
 	testutil.FailErr(t, "read unfinished run", err)
 	if after.Status != api.WorkflowRunStatusRunning {
 		t.Fatalf("turn without closeout completed run: %+v", after)
@@ -224,18 +226,18 @@ func TestOrphanRecoveryPreservesCommittedReportDelivery(t *testing.T) {
 			mgr, _, _, _ := testManagerWithRegistry(t)
 			manifest := topologyReportTestManifest()
 			manifest.Controls.Report = &workflowdef.ReportControls{Enabled: true}
-			mgr.Manifests = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
+			mgr.Resolver.Overlay = workflowdef.NewRegistry(map[string]workflowdef.Manifest{"reporttest@1.0.0": manifest})
 			run, err := startRun(t.Context(), mgr, "sess-1", manifest.ID, manifest.Version)
 			testutil.FailErr(t, "start report run", err)
 			seedTopologyCompletion(t, mgr, run, true, tc.edit)
-			mgr.OrphanReconcileBefore = time.Now().UTC().Add(time.Second)
-			testutil.FailErr(t, "recover after committed message", mgr.ReconcileOrphanedRuns(t.Context(), run.SessionID))
-			after, err := mgr.Get(t.Context(), run.ID)
+			mgr.Recovery.Before = time.Now().UTC().Add(time.Second)
+			testutil.FailErr(t, "recover after committed message", mgr.Recovery.ReconcileOrphanedRuns(t.Context(), run.SessionID))
+			after, err := mgr.Store.Runs.Get(t.Context(), run.ID)
 			testutil.FailErr(t, "read recovered run", err)
 			if after.Status != tc.want {
 				t.Fatalf("recovered status = %s, want %s", after.Status, tc.want)
 			}
-			available, err := mgr.ReportAvailable(t.Context(), run.ID)
+			available, err := mgr.Presentation.ReportAvailable(t.Context(), run.ID)
 			testutil.FailErr(t, "read recovered report availability", err)
 			if available != tc.available {
 				t.Fatalf("recovered report available = %v, want %v", available, tc.available)

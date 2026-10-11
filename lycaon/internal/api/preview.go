@@ -11,9 +11,9 @@ import (
 )
 
 // handleListSessionPreviews returns held preview attachments.
-func (s *Server) handleListSessionPreviews(w http.ResponseWriter, r *http.Request) {
+func (s *Conversation) handleListSessionPreviews(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
-	if !requestscope.SessionExists(s.sessionStore, &s.responses, w, r, id) {
+	if !requestscope.SessionExists(s.sessionStore, s.responses, w, r, id) {
 		return
 	}
 	events := s.preview.SnapshotForSession(r.Context(), id)
@@ -24,9 +24,9 @@ func (s *Server) handleListSessionPreviews(w http.ResponseWriter, r *http.Reques
 }
 
 // handleWatchPreview toggles CDP screencast when Den's preview pane is visible.
-func (s *Server) handleWatchPreview(w http.ResponseWriter, r *http.Request) {
+func (s *Conversation) handleWatchPreview(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
-	if !requestscope.SessionExists(s.sessionStore, &s.responses, w, r, id) {
+	if !requestscope.SessionExists(s.sessionStore, s.responses, w, r, id) {
 		return
 	}
 	var req wire.PreviewWatchRequest

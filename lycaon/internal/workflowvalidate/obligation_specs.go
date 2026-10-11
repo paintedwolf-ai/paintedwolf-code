@@ -2,12 +2,12 @@ package workflowvalidate
 
 import (
 	"github.com/lycaon/lycaon/internal/scan"
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 )
 
 // shippedObligationSpecs validates the app's registered obligation kinds.
-func shippedObligationSpecs() workflow.ObligationSpecs {
-	return workflow.ObligationSpecs{
+func shippedObligationSpecs() workflowvalidation.ObligationSpecs {
+	return workflowvalidation.ObligationSpecs{
 		scan.WorkflowObligationKind: scan.NewWorkflowObligationSpec(),
 	}
 }

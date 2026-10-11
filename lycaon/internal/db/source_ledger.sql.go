@@ -266,26 +266,36 @@ func (q *Queries) FindSourceCheckpointByKind(ctx context.Context, arg FindSource
 }
 
 const getDeletedSourcePathHead = `-- name: GetDeletedSourcePathHead :one
-WITH latest AS (
-  SELECT s.id, s.project_id, s.branch_id, s.file_id, s.root_id, s.path
-  FROM source_versions s
-  WHERE s.project_id = ? AND s.branch_id = ? AND s.root_id = ? AND s.path = ?
-    AND s.landing = 'working_file'
-  ORDER BY s.seq DESC LIMIT 1
+WITH RECURSIVE location(id, rest) AS (
+    SELECT root.id, CAST(?1 AS TEXT) AS rest FROM source_directories root
+    WHERE root.project_id = ?2 AND root.branch_id = ?3
+      AND root.root_id = ?4 AND root.parent_id IS NULL
+    UNION ALL
+    SELECT d.id, substr(l.rest, instr(l.rest, '/') + 1) AS rest
+    FROM location l JOIN source_directories d ON d.parent_id = l.id
+      AND d.name = substr(l.rest, 1, instr(l.rest, '/') - 1)
+    WHERE instr(l.rest, '/') > 0
 )
 SELECT h.file_id, h.version_id, h.observed_ts, f.entry_kind
-FROM latest v
-JOIN source_branch_heads h ON h.project_id = v.project_id AND h.branch_id = v.branch_id
-  AND h.file_id = v.file_id AND h.version_id = v.id AND h.root_id = v.root_id AND h.path = v.path
+FROM location l CROSS JOIN source_head_entries e ON e.directory_id = l.id AND e.name = l.rest
+JOIN source_branch_heads h ON h.project_id = e.project_id AND h.branch_id = e.branch_id AND h.file_id = e.file_id
 JOIN source_files f ON f.id = h.file_id
-WHERE h.state = 'absent'
+JOIN source_versions v ON v.id = h.version_id
+WHERE instr(l.rest, '/') = 0 AND h.state = 'absent'
+  AND NOT EXISTS (
+    SELECT 1 FROM source_versions later
+    WHERE later.project_id = h.project_id AND later.branch_id = h.branch_id
+      AND later.root_id = h.root_id AND later.path = h.path
+      AND later.landing = 'working_file' AND later.seq > h.ordinal
+  )
+ORDER BY h.ordinal DESC, v.seq DESC LIMIT 1
 `
 
 type GetDeletedSourcePathHeadParams struct {
+	Path      string `json:"path"`
 	ProjectID string `json:"project_id"`
 	BranchID  string `json:"branch_id"`
 	RootID    string `json:"root_id"`
-	Path      string `json:"path"`
 }
 
 type GetDeletedSourcePathHeadRow struct {
@@ -297,10 +307,10 @@ type GetDeletedSourcePathHeadRow struct {
 
 func (q *Queries) GetDeletedSourcePathHead(ctx context.Context, arg GetDeletedSourcePathHeadParams) (GetDeletedSourcePathHeadRow, error) {
 	row := q.db.QueryRowContext(ctx, getDeletedSourcePathHead,
+		arg.Path,
 		arg.ProjectID,
 		arg.BranchID,
 		arg.RootID,
-		arg.Path,
 	)
 	var i GetDeletedSourcePathHeadRow
 	err := row.Scan(
@@ -362,25 +372,39 @@ func (q *Queries) GetSourceBranchHeadByFile(ctx context.Context, arg GetSourceBr
 }
 
 const getSourceBranchHeadByPath = `-- name: GetSourceBranchHeadByPath :one
-SELECT project_id, branch_id, file_id, version_id, root_id,
-       path, state, content_sha256, ordinal, observed_ts
-FROM source_branch_heads
-WHERE project_id = ? AND branch_id = ? AND root_id = ? AND path = ? AND state != 'absent'
+WITH RECURSIVE location(id, rest) AS (
+    SELECT root.id, CAST(?3 AS TEXT) AS rest FROM source_directories root
+    WHERE root.project_id = ?1 AND root.branch_id = ?2
+      AND root.root_id = ?4 AND root.parent_id IS NULL
+    UNION ALL
+    SELECT d.id, substr(l.rest, instr(l.rest, '/') + 1) AS rest
+    FROM location l JOIN source_directories d ON d.parent_id = l.id
+      AND d.name = substr(l.rest, 1, instr(l.rest, '/') - 1) AND d.present = 1
+    WHERE instr(l.rest, '/') > 0
+)
+SELECT h.project_id, h.branch_id, h.file_id, h.version_id, h.root_id,
+       h.path, h.state, h.content_sha256, h.ordinal, h.observed_ts
+FROM source_branch_heads h
+WHERE h.project_id = ?1 AND h.branch_id = ?2
+  AND h.file_id = (
+    SELECT e.file_id FROM location l CROSS JOIN source_head_entries e
+    WHERE e.directory_id = l.id AND instr(l.rest, '/') = 0 AND e.name = l.rest AND e.state != 'absent'
+  )
 `
 
 type GetSourceBranchHeadByPathParams struct {
 	ProjectID string `json:"project_id"`
 	BranchID  string `json:"branch_id"`
-	RootID    string `json:"root_id"`
 	Path      string `json:"path"`
+	RootID    string `json:"root_id"`
 }
 
 func (q *Queries) GetSourceBranchHeadByPath(ctx context.Context, arg GetSourceBranchHeadByPathParams) (SourceBranchHeads, error) {
 	row := q.db.QueryRowContext(ctx, getSourceBranchHeadByPath,
 		arg.ProjectID,
 		arg.BranchID,
-		arg.RootID,
 		arg.Path,
+		arg.RootID,
 	)
 	var i SourceBranchHeads
 	err := row.Scan(
@@ -899,25 +923,37 @@ func (q *Queries) GetSourceVersionTextState(ctx context.Context, versionID strin
 }
 
 const getTrunkSourceHeadByPath = `-- name: GetTrunkSourceHeadByPath :one
-SELECT project_id, branch_id, file_id, version_id, root_id,
-       path, state, content_sha256, ordinal, observed_ts
-FROM source_branch_heads
-WHERE project_id = ? AND branch_id = '' AND root_id = ? AND path = ?
-  AND state != 'absent'
-LIMIT 1
+WITH RECURSIVE location(id, rest) AS (
+    SELECT root.id, CAST(?2 AS TEXT) AS rest FROM source_directories root
+    WHERE root.project_id = ?1 AND root.branch_id = ''
+      AND root.root_id = ?3 AND root.parent_id IS NULL
+    UNION ALL
+    SELECT d.id, substr(l.rest, instr(l.rest, '/') + 1) AS rest
+    FROM location l JOIN source_directories d ON d.parent_id = l.id
+      AND d.name = substr(l.rest, 1, instr(l.rest, '/') - 1) AND d.present = 1
+    WHERE instr(l.rest, '/') > 0
+)
+SELECT h.project_id, h.branch_id, h.file_id, h.version_id, h.root_id,
+       h.path, h.state, h.content_sha256, h.ordinal, h.observed_ts
+FROM source_branch_heads h
+WHERE h.project_id = ?1 AND h.branch_id = ''
+  AND h.file_id = (
+    SELECT e.file_id FROM location l CROSS JOIN source_head_entries e
+    WHERE e.directory_id = l.id AND instr(l.rest, '/') = 0 AND e.name = l.rest AND e.state != 'absent'
+  )
 `
 
 type GetTrunkSourceHeadByPathParams struct {
 	ProjectID string `json:"project_id"`
-	RootID    string `json:"root_id"`
 	Path      string `json:"path"`
+	RootID    string `json:"root_id"`
 }
 
 // The trunk's state of one path, whatever branch is asking. A worker branch
 // resolves file identity through this so overlay edits extend that file's
 // history rather than starting a second one.
 func (q *Queries) GetTrunkSourceHeadByPath(ctx context.Context, arg GetTrunkSourceHeadByPathParams) (SourceBranchHeads, error) {
-	row := q.db.QueryRowContext(ctx, getTrunkSourceHeadByPath, arg.ProjectID, arg.RootID, arg.Path)
+	row := q.db.QueryRowContext(ctx, getTrunkSourceHeadByPath, arg.ProjectID, arg.Path, arg.RootID)
 	var i SourceBranchHeads
 	err := row.Scan(
 		&i.ProjectID,
@@ -1014,28 +1050,6 @@ func (q *Queries) InsertSourceCheckpoint(ctx context.Context, arg InsertSourceCh
 		arg.Turn,
 		arg.CreatedOrdinal,
 		arg.CreatedTs,
-	)
-	return err
-}
-
-const insertSourceCheckpointEntry = `-- name: InsertSourceCheckpointEntry :exec
-INSERT INTO source_checkpoint_entries (checkpoint_id, file_id, version_id, ordinal)
-VALUES (?, ?, ?, ?)
-`
-
-type InsertSourceCheckpointEntryParams struct {
-	CheckpointID string `json:"checkpoint_id"`
-	FileID       string `json:"file_id"`
-	VersionID    string `json:"version_id"`
-	Ordinal      int64  `json:"ordinal"`
-}
-
-func (q *Queries) InsertSourceCheckpointEntry(ctx context.Context, arg InsertSourceCheckpointEntryParams) error {
-	_, err := q.db.ExecContext(ctx, insertSourceCheckpointEntry,
-		arg.CheckpointID,
-		arg.FileID,
-		arg.VersionID,
-		arg.Ordinal,
 	)
 	return err
 }
@@ -1944,30 +1958,41 @@ func (q *Queries) ListSourceBlobReclaimCandidates(ctx context.Context, limit int
 }
 
 const listSourceBranchHeadsUnderPath = `-- name: ListSourceBranchHeadsUnderPath :many
-SELECT project_id, branch_id, file_id, version_id, root_id,
-       path, state, content_sha256, ordinal, observed_ts
-FROM source_branch_heads
-WHERE project_id = ?1
-  AND branch_id = ?2
-  AND root_id = ?3
-  AND state != 'absent'
-  AND substr(path, 1, length(?4) + 1) = ?4 || '/'
-ORDER BY length(path), path
+WITH RECURSIVE location(id, rest) AS (
+    SELECT root.id, CAST(?1 AS TEXT) || '/' FROM source_directories root
+    WHERE root.project_id = ?2 AND root.branch_id = ?3
+      AND root.root_id = ?4 AND root.parent_id IS NULL
+    UNION ALL
+    SELECT d.id, substr(l.rest, instr(l.rest, '/') + 1)
+    FROM location l JOIN source_directories d ON d.parent_id = l.id
+      AND d.name = substr(l.rest, 1, instr(l.rest, '/') - 1) AND d.present = 1
+    WHERE instr(l.rest, '/') > 0
+), subtree(id) AS (
+    SELECT id FROM location WHERE rest = ''
+    UNION ALL
+    SELECT d.id FROM subtree s JOIN source_directories d ON d.parent_id = s.id AND d.present = 1
+)
+SELECT h.project_id, h.branch_id, h.file_id, h.version_id, h.root_id,
+       h.path, h.state, h.content_sha256, h.ordinal, h.observed_ts
+FROM subtree s CROSS JOIN source_head_entries e ON e.directory_id = s.id AND e.state != 'absent'
+CROSS JOIN source_branch_heads h ON h.project_id = e.project_id AND h.branch_id = e.branch_id AND h.file_id = e.file_id
+WHERE h.state != 'absent'
+ORDER BY length(h.path), h.path
 `
 
 type ListSourceBranchHeadsUnderPathParams struct {
-	ProjectID  string      `json:"project_id"`
-	BranchID   string      `json:"branch_id"`
-	RootID     string      `json:"root_id"`
-	ParentPath interface{} `json:"parent_path"`
+	ParentPath string `json:"parent_path"`
+	ProjectID  string `json:"project_id"`
+	BranchID   string `json:"branch_id"`
+	RootID     string `json:"root_id"`
 }
 
 func (q *Queries) ListSourceBranchHeadsUnderPath(ctx context.Context, arg ListSourceBranchHeadsUnderPathParams) ([]SourceBranchHeads, error) {
 	rows, err := q.db.QueryContext(ctx, listSourceBranchHeadsUnderPath,
+		arg.ParentPath,
 		arg.ProjectID,
 		arg.BranchID,
 		arg.RootID,
-		arg.ParentPath,
 	)
 	if err != nil {
 		return nil, err
@@ -3912,54 +3937,6 @@ func (q *Queries) ListSourceWalkTurns(ctx context.Context, arg ListSourceWalkTur
 	return items, nil
 }
 
-const listTrunkSourceHeadsAfterOrdinal = `-- name: ListTrunkSourceHeadsAfterOrdinal :many
-SELECT project_id, branch_id, file_id, version_id, root_id,
-       path, state, content_sha256, ordinal, observed_ts
-FROM source_branch_heads
-WHERE project_id = ? AND branch_id = '' AND ordinal > ? ORDER BY file_id
-`
-
-type ListTrunkSourceHeadsAfterOrdinalParams struct {
-	ProjectID string `json:"project_id"`
-	Ordinal   int64  `json:"ordinal"`
-}
-
-// Checkpoint membership is the trunk's own advance; a worker branch's heads
-// are not the project's state.
-func (q *Queries) ListTrunkSourceHeadsAfterOrdinal(ctx context.Context, arg ListTrunkSourceHeadsAfterOrdinalParams) ([]SourceBranchHeads, error) {
-	rows, err := q.db.QueryContext(ctx, listTrunkSourceHeadsAfterOrdinal, arg.ProjectID, arg.Ordinal)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []SourceBranchHeads
-	for rows.Next() {
-		var i SourceBranchHeads
-		if err := rows.Scan(
-			&i.ProjectID,
-			&i.BranchID,
-			&i.FileID,
-			&i.VersionID,
-			&i.RootID,
-			&i.Path,
-			&i.State,
-			&i.ContentSha256,
-			&i.Ordinal,
-			&i.ObservedTs,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const markSourceInventoryError = `-- name: MarkSourceInventoryError :execrows
 UPDATE source_inventory_state SET phase = 'error', completed_ts = ?, last_error = ?
 WHERE project_id = ? AND branch_id = ? AND requested_generation = ?
@@ -4283,47 +4260,6 @@ func (q *Queries) UpsertSourceBlobObject(ctx context.Context, arg UpsertSourceBl
 	return err
 }
 
-const upsertSourceBranchHead = `-- name: UpsertSourceBranchHead :exec
-INSERT INTO source_branch_heads (
-    project_id, branch_id, file_id, version_id, root_id,
-    path, state, content_sha256, ordinal, observed_ts
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(project_id, branch_id, file_id) DO UPDATE SET
-    version_id = excluded.version_id,
-    root_id = excluded.root_id, path = excluded.path, state = excluded.state,
-    content_sha256 = excluded.content_sha256, ordinal = excluded.ordinal,
-    observed_ts = excluded.observed_ts
-`
-
-type UpsertSourceBranchHeadParams struct {
-	ProjectID     string `json:"project_id"`
-	BranchID      string `json:"branch_id"`
-	FileID        string `json:"file_id"`
-	VersionID     string `json:"version_id"`
-	RootID        string `json:"root_id"`
-	Path          string `json:"path"`
-	State         string `json:"state"`
-	ContentSha256 string `json:"content_sha256"`
-	Ordinal       int64  `json:"ordinal"`
-	ObservedTs    string `json:"observed_ts"`
-}
-
-func (q *Queries) UpsertSourceBranchHead(ctx context.Context, arg UpsertSourceBranchHeadParams) error {
-	_, err := q.db.ExecContext(ctx, upsertSourceBranchHead,
-		arg.ProjectID,
-		arg.BranchID,
-		arg.FileID,
-		arg.VersionID,
-		arg.RootID,
-		arg.Path,
-		arg.State,
-		arg.ContentSha256,
-		arg.Ordinal,
-		arg.ObservedTs,
-	)
-	return err
-}
-
 const upsertSourceGitHead = `-- name: UpsertSourceGitHead :exec
 INSERT INTO source_git_heads (project_id, branch_id, root_id, repo_state, head_commit, head_ref, observed_ts)
 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -4350,6 +4286,49 @@ func (q *Queries) UpsertSourceGitHead(ctx context.Context, arg UpsertSourceGitHe
 		arg.RepoState,
 		arg.HeadCommit,
 		arg.HeadRef,
+		arg.ObservedTs,
+	)
+	return err
+}
+
+const upsertSourceHeadEntry = `-- name: UpsertSourceHeadEntry :exec
+INSERT INTO source_head_entries (
+    project_id, branch_id, file_id, version_id, root_id,
+    directory_id, name, state, content_sha256, ordinal, observed_ts
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(project_id, branch_id, file_id) DO UPDATE SET
+    version_id = excluded.version_id,
+    root_id = excluded.root_id, directory_id = excluded.directory_id, name = excluded.name,
+    state = excluded.state, content_sha256 = excluded.content_sha256,
+    ordinal = excluded.ordinal, observed_ts = excluded.observed_ts
+`
+
+type UpsertSourceHeadEntryParams struct {
+	ProjectID     string `json:"project_id"`
+	BranchID      string `json:"branch_id"`
+	FileID        string `json:"file_id"`
+	VersionID     string `json:"version_id"`
+	RootID        string `json:"root_id"`
+	DirectoryID   string `json:"directory_id"`
+	Name          string `json:"name"`
+	State         string `json:"state"`
+	ContentSha256 string `json:"content_sha256"`
+	Ordinal       int64  `json:"ordinal"`
+	ObservedTs    string `json:"observed_ts"`
+}
+
+func (q *Queries) UpsertSourceHeadEntry(ctx context.Context, arg UpsertSourceHeadEntryParams) error {
+	_, err := q.db.ExecContext(ctx, upsertSourceHeadEntry,
+		arg.ProjectID,
+		arg.BranchID,
+		arg.FileID,
+		arg.VersionID,
+		arg.RootID,
+		arg.DirectoryID,
+		arg.Name,
+		arg.State,
+		arg.ContentSha256,
+		arg.Ordinal,
 		arg.ObservedTs,
 	)
 	return err

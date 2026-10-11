@@ -58,7 +58,7 @@ func workerJobLive(status api.WorkerStatus) bool {
 // awaitWorkerBudgetAnswer holds the final round until the coordinator answers
 // the open request, the job stops, or the wait elapses. The request stays on
 // the job after a timeout so a resume inherits it.
-func (l turnNudges) awaitWorkerBudgetAnswer(ctx context.Context, sess *api.Session, st *promptLoopTurnState) {
+func (l *turnNudges) awaitWorkerBudgetAnswer(ctx context.Context, sess *api.Session, st *promptLoopTurnState) {
 	w := &st.workerBudget
 	w.heldFor = w.requestedAt
 	wait := l.Deps.WorkerBudgetAnswerWait
@@ -82,8 +82,8 @@ func (l turnNudges) awaitWorkerBudgetAnswer(ctx context.Context, sess *api.Sessi
 			outcome = "answered"
 			return
 		}
-		if l.Deps.WorkerGracefulCancelPending != nil {
-			if _, pending := l.Deps.WorkerGracefulCancelPending(ctx, sess); pending {
+		if l.Control.Deps.WorkerGracefulCancelPending != nil {
+			if _, pending := l.Control.Deps.WorkerGracefulCancelPending(ctx, sess); pending {
 				outcome = "cancel_pending"
 				return
 			}
@@ -101,7 +101,7 @@ func (l turnNudges) awaitWorkerBudgetAnswer(ctx context.Context, sess *api.Sessi
 
 // maybeWorkerBudgetAnswerNudge tells a worker once how its coordinator
 // answered: a raised ceiling, or a decline.
-func (l turnNudges) maybeWorkerBudgetAnswerNudge(
+func (l *turnNudges) maybeWorkerBudgetAnswerNudge(
 	ctx context.Context,
 	sess *api.Session,
 	sessionID string,
@@ -109,7 +109,7 @@ func (l turnNudges) maybeWorkerBudgetAnswerNudge(
 	iterIndex, maxIter int,
 	st *promptLoopTurnState,
 ) ([]api.Message, error) {
-	if l.PromptLoop == nil || sess == nil {
+	if l == nil || sess == nil {
 		return history, nil
 	}
 	w := &st.workerBudget

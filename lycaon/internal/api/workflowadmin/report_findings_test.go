@@ -3,7 +3,7 @@ package workflowadmin
 import (
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/workflow"
+	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -46,7 +46,7 @@ func TestReportFindings_StatesTheRatedLevel(t *testing.T) {
 			{ID: "F2", Title: "Remote slowdown", Severity: "low", Disposition: wire.CompletionReportFindingDispositionAct, Answers: moderate},
 		},
 	}}
-	claims := []workflow.RunClaim{{ID: "c3", Answers: map[string]string{"reachable": "app_window", "outcome": "limited_misuse", "attacker": "already_inside"}}}
+	claims := []workflowpresentation.RunClaim{{ID: "c3", Answers: map[string]string{"reachable": "app_window", "outcome": "limited_misuse", "attacker": "already_inside"}}}
 	got := reportFindings(msg, brief, claims)
 	if len(got) != 3 || got[0].finding.ID != "F2" || got[1].finding.ID != "c3" || got[2].finding.ID != "sound" {
 		t.Fatalf("findings = %+v, want Moderate, then Low, then the sound area", got)

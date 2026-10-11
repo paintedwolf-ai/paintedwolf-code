@@ -28,7 +28,7 @@ const (
 
 // HandleListApprovalAsks groups recent decisions for display.
 // These counts do not participate in approval decisions.
-func (s *Handler) HandleListApprovalAsks(w http.ResponseWriter, r *http.Request) {
+func (s *Inventory) HandleListApprovalAsks(w http.ResponseWriter, r *http.Request) {
 	days := recentAsksDefaultDays
 	if raw := strings.TrimSpace(r.URL.Query().Get("days")); raw != "" {
 		n, err := strconv.Atoi(raw)

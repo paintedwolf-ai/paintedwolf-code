@@ -3,16 +3,18 @@ package session_test
 import (
 	"context"
 	"errors"
+	"testing"
+
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
-	"testing"
 )
 
 type failingSecretInheritanceStore struct{ *store.Memory }
@@ -48,7 +50,7 @@ func TestReadSensitivePathSetsSecretExposure(t *testing.T) {
 func TestSecretExposureInheritAndMerge(t *testing.T) {
 	ctx := context.Background()
 	mem := store.NewMemory()
-	mgr := session.NewManager(mem, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(mem, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	parent, err := mem.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	testutil.FailErr(t, "seed parent", mem.SeedSecretExposure(ctx, parent.ID))
@@ -58,7 +60,7 @@ func TestSecretExposureInheritAndMerge(t *testing.T) {
 		t.Fatal("parent should be secret-exposed after seed")
 	}
 
-	child, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "implementer", Prompt: "do work"})
+	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "implementer", Prompt: "do work"})
 	testutil.FailErr(t, "SpawnChild", err)
 	exposed, err = mem.SessionSecretExposure(ctx, child.ID)
 	testutil.FailErr(t, "read child exposure", err)
@@ -71,7 +73,7 @@ func TestSecretExposureInheritAndMerge(t *testing.T) {
 	child2, err := mem.CreateChild(ctx, parent2, api.SpawnChildRequest{AgentType: "implementer", Prompt: "x"})
 	testutil.FailErr(t, "create child2", err)
 	testutil.FailErr(t, "seed child2", mem.SeedSecretExposure(ctx, child2.ID))
-	testutil.FailErr(t, "merge", session.MergeWorkerSecretExposureIntoParent(ctx, mem, parent2.ID, child2.ID))
+	testutil.FailErr(t, "merge", workeroutcomes.MergeWorkerSecretExposureIntoParent(ctx, mem, parent2.ID, child2.ID))
 	exposed, err = mem.SessionSecretExposure(ctx, parent2.ID)
 	testutil.FailErr(t, "read merged parent exposure", err)
 	if !exposed {
@@ -86,9 +88,9 @@ func TestSpawnChildRollsBackWhenSecurityInheritanceFails(t *testing.T) {
 	testutil.FailErr(t, "create parent", err)
 	testutil.FailErr(t, "seed parent", mem.SeedSecretExposure(ctx, parent.ID))
 	failing := &failingSecretInheritanceStore{Memory: mem}
-	mgr := session.NewManager(failing, llm.NewMockProvider(&llm.MockConfig{}), tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := session.NewHost(failing, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 
-	if _, err := mgr.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "implementer"}); err == nil {
+	if _, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{AgentType: "implementer"}); err == nil {
 		t.Fatal("SpawnChild succeeded without inheriting secret exposure")
 	}
 	sessions, err := mem.List(ctx)

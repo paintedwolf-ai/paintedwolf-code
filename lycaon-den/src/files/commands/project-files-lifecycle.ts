@@ -174,7 +174,7 @@ export async function deleteSourcePath(
 }
 
 export function trashConfirmBody(name: string, isDir: boolean): string {
-  return `${isDir ? `"${name}" and its contents` : `"${name}"`} will move to the Trash. You can undo this change in file history.`;
+  return `${isDir ? `"${name}" and its contents` : `"${name}"`} will move to the Trash. You can undo this change in file history while the item remains in Trash.`;
 }
 
 export function sourceLifecycleErrorMessage(err: unknown): string {

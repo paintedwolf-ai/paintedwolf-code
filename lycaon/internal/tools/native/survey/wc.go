@@ -158,11 +158,11 @@ func wcFileEntry(ctx context.Context, reads *projectpaths.ReadSession, relSlash,
 }
 
 func (t *WcTool) wcRecursiveDir(ctx context.Context, reads *projectpaths.ReadSession, tctx tools.ToolContext, root projectroot.RootRef, fullRoot, relRoot string, includeWords bool, drafts sourceview.DraftOverlay) (wcResult, error) {
-	if strings.TrimSpace(tctx.WorkerBranchRoot) != "" {
+	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
 		return t.wcRecursiveDirSurvey(ctx, reads, tctx, root, fullRoot, relRoot, includeWords)
 	}
 	var totals wcDirTotals
-	inventory, err := sourceInventoryForScope(ctx, t.Catalog, tctx.ProjectID, root, fullRoot)
+	inventory, err := sourceInventoryForScope(ctx, catalogOrProcess(t.Catalog), tctx.Identity.ProjectID, root, fullRoot)
 	if err != nil {
 		return wcResult{}, err
 	}

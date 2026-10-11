@@ -1,20 +1,22 @@
 package toolhost
 
 import (
+	"github.com/lycaon/lycaon/internal/toolapproval"
+
 	"github.com/lycaon/lycaon/internal/approvals"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 )
 
 type registryExplainer struct {
 	reg *approvals.Registry
 }
 
-func (r *registryExplainer) ExplainApproval(action hitl.ProposedAction) tools.ApprovalExplanation {
+func (r *registryExplainer) ExplainApproval(action hitl.ProposedAction) toolapproval.ApprovalExplanation {
 	tier := settings.ClassifyTier(action)
 	copy := r.reg.ExplainAction(action, tier).Copy
-	return tools.ApprovalExplanation{
+	return toolapproval.ApprovalExplanation{
 		What:      copy.What,
 		Who:       copy.Who,
 		IfWrong:   copy.IfWrong,
@@ -22,7 +24,7 @@ func (r *registryExplainer) ExplainApproval(action hitl.ProposedAction) tools.Ap
 	}
 }
 
-func newRegistryExplainer(reg *approvals.Registry) tools.ApprovalExplainer {
+func newRegistryExplainer(reg *approvals.Registry) toolexecution.ApprovalExplainer {
 	if reg == nil {
 		return nil
 	}

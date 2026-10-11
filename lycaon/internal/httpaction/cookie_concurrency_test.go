@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -44,8 +45,13 @@ func TestParallelHTTPRequestWorkersShareOneCookieJarWithoutSerializingNetwork(t 
 			name := fmt.Sprintf("worker%d", i)
 			out, err := reg.Run(t.Context(), "http_request", map[string]any{
 				"url": server.URL + "?worker=" + name, "cookie_jar": "shared", "capability_request": capability,
-			}, tools.ToolContext{Agent: tools.DefaultToolProfileID, ProjectID: testdbseed.DefaultProjectID,
-				SessionID: name, ParentSessionID: "root-1", ToolCallID: "request"})
+			}, tools.ToolContext{
+				Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID,
+					ProjectID:       testdbseed.DefaultProjectID,
+					SessionID:       name,
+					ParentSessionID: "root-1",
+					ToolCallID:      "request"},
+			})
 			results <- response{out, err}
 		}()
 	}

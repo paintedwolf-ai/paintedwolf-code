@@ -18,7 +18,7 @@ func LoadServerRoutes(repoRoot string) ([]openAPIRoute, error) {
 	}
 	var routes []openAPIRoute
 	apiDir := filepath.Join(repoRoot, "lycaon", "internal", "api")
-	paths := []string{filepath.Join(apiDir, "server.go")}
+	paths := []string{filepath.Join(apiDir, "server.go"), filepath.Join(apiDir, "routes.go")}
 	helpers, err := filepath.Glob(filepath.Join(apiDir, "*_routes.go"))
 	if err != nil {
 		return nil, err

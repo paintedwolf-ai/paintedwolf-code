@@ -47,7 +47,7 @@ func (p *GenerationPin) clone() (*GenerationPin, error) {
 func (s *indexStore) retainGeneration(generation int64, head bool) (*GenerationPin, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.pins.drained || s.navigation.retired {
+	if s.pins.drained || s.navigation.Retired() {
 		return nil, pagedview.ErrExpired
 	}
 	s.initializeStructureLocked()
@@ -108,7 +108,7 @@ func (p *GenerationPin) RetainedBytes() int64 {
 func (s *indexStore) retainCompletedGeneration() (*GenerationPin, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.pins.drained || s.navigation.retired {
+	if s.pins.drained || s.navigation.Retired() {
 		return nil, pagedview.ErrExpired
 	}
 	s.initializeStructureLocked()
@@ -168,6 +168,6 @@ func (s *indexStore) installStructureLocked(next *structuralGeneration) {
 }
 
 func (s *indexStore) structurePublished(ctx context.Context) {
-	s.catalog.navigationChanged(s.root)
-	s.scheduleStructuralCheckpoint(ctx)
+	s.stores.Directories.navigationChanged(s.root)
+	s.checkpoint.Schedule(ctx, s.checkpointStructure)
 }

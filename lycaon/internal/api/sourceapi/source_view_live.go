@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 )
 
-func (s *Handler) watchTreeView(view *sourceView, p *project.Project) {
+func (s *Trees) watchTreeView(view *sourceView, p *project.Project) {
 	wake := make(chan struct{}, 1)
 	unsubscribe := sourcefeed.Subscribe(p.ID, p.WorkspaceID(), func(notice sourcefeed.Notice) {
 		if notice.FileWritesOnly {
@@ -19,7 +19,7 @@ func (s *Handler) watchTreeView(view *sourceView, p *project.Project) {
 		default:
 		}
 	})
-	s.background.Go(view.ctx, func(ctx context.Context) { s.ensureWorkspaceWatch(ctx, p) })
+	s.background.Go(view.ctx, func(ctx context.Context) { s.Watch.ensureWorkspaceWatch(ctx, p) })
 	s.background.Go(view.ctx, func(ctx context.Context) {
 		defer unsubscribe()
 		for {
@@ -32,8 +32,8 @@ func (s *Handler) watchTreeView(view *sourceView, p *project.Project) {
 				return
 			}
 			view.mu.Lock()
-			if view.treeIntent.Review != nil {
-				view.reviewDirty = true
+			if view.navigation.treeIntent.Review != nil {
+				view.reviewing.reviewDirty = true
 			}
 			view.mu.Unlock()
 			s.refreshTreeReview(view)

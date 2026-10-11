@@ -126,7 +126,8 @@ func NormalizeImageBytes(raw []byte, mime string, max bytebound.Transport) (Norm
 
 // UserArtifactWireImage resolves one artifact for provider input.
 func UserArtifactWireImage(sessionID, artifactID string) (mime, data string, ok bool) {
-	if resolveVisualBytes == nil {
+	resolve := visualResolver()
+	if resolve == nil {
 		return "", "", false
 	}
 	sessionID = strings.TrimSpace(sessionID)
@@ -134,7 +135,7 @@ func UserArtifactWireImage(sessionID, artifactID string) (mime, data string, ok 
 	if sessionID == "" || artifactID == "" {
 		return "", "", false
 	}
-	raw, declared, ok := resolveVisualBytes(sessionID, artifactID)
+	raw, declared, ok := resolve(sessionID, artifactID)
 	if !ok || len(raw) == 0 {
 		return "", "", false
 	}
@@ -199,13 +200,6 @@ func PerceiveImageFixtureDigest(raw []byte) string {
 // Missing or deleted bytes return !ok.
 type VisualBytesResolver func(sessionID, artifactID string) (bytes []byte, mime string, ok bool)
 
-var resolveVisualBytes VisualBytesResolver
-
-// SetVisualBytesResolver wires store-backed perceive resolution for tool visuals.
-func SetVisualBytesResolver(fn VisualBytesResolver) {
-	resolveVisualBytes = fn
-}
-
 // wireImageBound caps artifacts resolved for provider wire encoding.
 var wireImageBound atomic.Int64
 
@@ -214,4 +208,4 @@ func SetWireImageBound(max bytebound.Transport) { wireImageBound.Store(max.Int64
 
 func wireImageCeiling() bytebound.Transport { return bytebound.Transport(wireImageBound.Load()) }
 
-func HasVisualResolver() bool { return resolveVisualBytes != nil }
+func HasVisualResolver() bool { return visualResolver() != nil }

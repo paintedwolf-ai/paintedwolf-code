@@ -27,7 +27,7 @@ func TestBackupRequiresTrashRecoveryObjects(t *testing.T) {
 	scope, err := os.OpenRoot(filepath.Dir(source))
 	testutil.FailErr(t, "open source root", err)
 	defer func() { _ = scope.Close() }()
-	writer, err := ledger.BeginRecovery(t.Context(), testdbseed.DefaultProjectID, "recovery")
+	writer, err := ledger.Retention.BeginRecovery(t.Context(), testdbseed.DefaultProjectID, "recovery")
 	testutil.FailErr(t, "begin recovery", err)
 	defer writer.Close()
 	saved, err := writer.Append(t.Context(), sourceledger.RecoveryEntry{Path: ".", Mode: 0o600}, scope, filepath.Base(source), nil)

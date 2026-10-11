@@ -134,3 +134,13 @@ def validate_bridge_advance(offer: dict, current: dict) -> None:
         return
     if compare(parse(offer["version"]), parse(current["version"])) <= 0:
         raise ValueError("bridge must exceed every source-channel version")
+
+
+def bundler_config(registry: dict) -> dict:
+    """Tauri's artifact signer uses the signing key, including on bridge releases."""
+    row = generation(registry, registry["signing_generation"])
+    return {"plugins": {"updater": {"pubkey": row["public_key"]}}}
+
+
+if __name__ == "__main__":
+    print(json.dumps(bundler_config(load_registry())))

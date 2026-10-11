@@ -1,6 +1,8 @@
 package loopwake
 
-import "strings"
+import (
+	"strings"
+)
 
 // HostTurnWaitOnly reports a host turn that ended with only wait().
 func HostTurnWaitOnly(turnTools []string) bool {

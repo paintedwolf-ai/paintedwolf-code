@@ -53,8 +53,8 @@ func (s *Store) PrepareHeldEdit(ctx context.Context, in HeldEdit) (PreparedHeldE
 	if in.SHA256 == "" {
 		return nil, fmt.Errorf("held edit requires content")
 	}
-	release := s.objects.AcquireReferenceLease()
-	object, err := prepareContent(ctx, s.objects, in.SHA256, in.Content, EntryKindFile)
+	release := s.Content.AcquireReferenceLease()
+	object, err := prepareContent(ctx, s.Content, in.SHA256, in.Content, EntryKindFile)
 	if err != nil {
 		release()
 		return nil, err

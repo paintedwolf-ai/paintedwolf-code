@@ -47,17 +47,45 @@ func DefaultConfig() Config {
 	}
 }
 
-// Registry tracks session-scoped background pipelines.
+// Registry composes session-scoped process services and launches pipelines.
 type Registry struct {
-	mu        sync.Mutex
-	sessions  map[string]map[string]*Process
-	publish   StreamPublisher
-	complete  CompletionPublisher
-	refused   RefusalPublisher
-	projector *captureprojection.Projector
-	cfg       Config
-	closed    bool
+	jobs            *processTable
+	ringBufferBytes int
+	Terminal        *Terminal
+	Output          *Output
+	Lifecycle       *ProcessLifecycle
 }
+
+// processTable serializes admission, process state, and teardown across services.
+type processTable struct {
+	mu            sync.Mutex
+	sessions      map[string]map[string]*Process
+	closed        bool
+	maxBackground int
+	maxAwaited    int
+	maxRecent     int
+}
+
+// Terminal owns held PTY interaction and sealed captures.
+type Terminal struct {
+	jobs            *processTable
+	ringBufferBytes int
+	Output          *Output
+	Lifecycle       *ProcessLifecycle
+}
+
+// Output owns capture screening, projections, and observer publication.
+type Output struct {
+	jobs            *processTable
+	ringBufferBytes int
+	publish         StreamPublisher
+	complete        CompletionPublisher
+	refused         RefusalPublisher
+	projector       *captureprojection.Projector
+}
+
+// ProcessLifecycle owns settlement, termination, and resource release.
+type ProcessLifecycle struct{ jobs *processTable }
 
 var ErrRegistryClosed = errors.New("background registry closed")
 
@@ -75,26 +103,24 @@ func NewRegistry(cfg Config, hooks Hooks) *Registry {
 	if cfg.MaxRecent <= 0 {
 		cfg.MaxRecent = DefaultMaxRecent
 	}
-	return &Registry{
-		sessions: make(map[string]map[string]*Process),
-		publish:  hooks.Publish,
-		complete: hooks.Complete,
-		refused:  hooks.Refused,
-		cfg:      cfg,
-	}
+	jobs := &processTable{sessions: make(map[string]map[string]*Process), maxBackground: cfg.MaxBackground, maxAwaited: cfg.MaxAwaited, maxRecent: cfg.MaxRecent}
+	output := &Output{jobs: jobs, ringBufferBytes: cfg.RingBufferBytes, publish: hooks.Publish, complete: hooks.Complete, refused: hooks.Refused}
+	lifecycle := &ProcessLifecycle{jobs: jobs}
+	terminal := &Terminal{jobs: jobs, ringBufferBytes: cfg.RingBufferBytes, Output: output, Lifecycle: lifecycle}
+	return &Registry{jobs: jobs, ringBufferBytes: cfg.RingBufferBytes, Terminal: terminal, Output: output, Lifecycle: lifecycle}
 }
 
 // SetCaptureProjector installs the process-output projection.
-func (r *Registry) SetCaptureProjector(projector *captureprojection.Projector) {
+func (r *Output) SetCaptureProjector(projector *captureprojection.Projector) {
 	if r == nil {
 		return
 	}
-	r.mu.Lock()
+	r.jobs.mu.Lock()
 	r.projector = projector
-	r.mu.Unlock()
+	r.jobs.mu.Unlock()
 }
 
-func (r *Registry) lookup(sessionID, handle string) (*Process, error) {
+func (r *processTable) lookup(sessionID, handle string) (*Process, error) {
 	if r == nil {
 		return nil, fmt.Errorf("background registry not configured")
 	}
@@ -113,7 +139,7 @@ func (r *Registry) lookup(sessionID, handle string) (*Process, error) {
 	return proc, nil
 }
 
-func (r *Registry) remove(sessionID, handle string) {
+func (r *processTable) remove(sessionID, handle string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	procs := r.sessions[sessionID]
@@ -130,7 +156,7 @@ func (r *Registry) remove(sessionID, handle string) {
 	}
 }
 
-func (r *Registry) countRunningBackgroundLocked(sessionID string) int {
+func (r *processTable) countRunningBackgroundLocked(sessionID string) int {
 	n := 0
 	for _, proc := range r.sessions[sessionID] {
 		if proc.mode == JobModeBackground && proc.running {
@@ -140,7 +166,7 @@ func (r *Registry) countRunningBackgroundLocked(sessionID string) int {
 	return n
 }
 
-func (r *Registry) runningConflictsLocked(sessionID, runKey string) (duplicates, awaited []string) {
+func (r *processTable) runningConflictsLocked(sessionID, runKey string) (duplicates, awaited []string) {
 	for _, proc := range r.sessions[sessionID] {
 		if !proc.running || proc.kind != processKindPipeline {
 			continue
@@ -157,7 +183,7 @@ func (r *Registry) runningConflictsLocked(sessionID, runKey string) (duplicates,
 	return duplicates, awaited
 }
 
-func (r *Registry) pruneCompletedLocked(sessionID string) {
+func (r *processTable) pruneCompletedLocked(sessionID string) {
 	procs := r.sessions[sessionID]
 	if len(procs) == 0 {
 		return
@@ -172,18 +198,18 @@ func (r *Registry) pruneCompletedLocked(sessionID string) {
 			completed = append(completed, completedJob{handle: handle, finishedAt: proc.finishedAt})
 		}
 	}
-	if len(completed) <= r.cfg.MaxRecent {
+	if len(completed) <= r.maxRecent {
 		return
 	}
 	sort.Slice(completed, func(i, j int) bool {
 		return completed[i].finishedAt.Before(completed[j].finishedAt)
 	})
-	for _, job := range completed[:len(completed)-r.cfg.MaxRecent] {
+	for _, job := range completed[:len(completed)-r.maxRecent] {
 		delete(procs, job.handle)
 	}
 }
 
-func (r *Registry) countRunningAwaitedLocked(sessionID string) int {
+func (r *processTable) countRunningAwaitedLocked(sessionID string) int {
 	n := 0
 	for _, proc := range r.sessions[sessionID] {
 		if proc.mode == JobModeAwaited && proc.running {

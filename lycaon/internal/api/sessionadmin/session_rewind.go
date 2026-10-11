@@ -8,14 +8,14 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/httpio"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/checkpointcontrol"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // HandleRewindSession restores one human-selected turn boundary.
-func (s *Handler) HandleRewindSession(w http.ResponseWriter, r *http.Request) {
+func (s *Rewind) HandleRewindSession(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var req wire.RewindSessionRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
@@ -42,7 +42,7 @@ func (s *Handler) HandleRewindSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := s.Sessions.RewindToPrompt(r.Context(), req.OperationID, id, req.MessageID, req.PlanDigest)
+	result, err := s.Sessions.Chats.Rewinds.RewindToPrompt(r.Context(), req.OperationID, id, req.MessageID, req.PlanDigest)
 	if err != nil {
 		s.writeRewindError(w, r, err)
 		return
@@ -56,20 +56,20 @@ func (s *Handler) HandleRewindSession(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Handler) writeRewindError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Rewind) writeRewindError(w http.ResponseWriter, r *http.Request, err error) {
 	var blocked *sourceledger.RewindBlockedError
 	switch {
 	case errors.As(err, &blocked):
 		s.responses.Fail(w, wire.ApiErrorCodeRewindBlocked, "files changed since this turn block the rewind")
-	case errors.Is(err, session.ErrRewindPlanChanged):
+	case errors.Is(err, checkpointcontrol.ErrRewindPlanChanged):
 		s.responses.Fail(w, wire.ApiErrorCodeRewindPlanChanged, "the rewind plan changed; preview it again")
-	case errors.Is(err, session.ErrSessionNotIdle):
+	case errors.Is(err, checkpointcontrol.ErrSessionNotIdle):
 		s.responses.Fail(w, wire.ApiErrorCodeSessionNotIdle, "chat has a turn in flight")
-	case errors.Is(err, session.ErrRewindAnchorIneligible):
+	case errors.Is(err, checkpointcontrol.ErrRewindAnchorIneligible):
 		s.responses.Fail(w, wire.ApiErrorCodeRewindAnchorIneligible, "this message cannot be a rewind point")
-	case errors.Is(err, session.ErrRewindAnchorNotFound):
+	case errors.Is(err, checkpointcontrol.ErrRewindAnchorNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeRewindAnchorNotFound, "rewind point not found")
-	case errors.Is(err, session.ErrRewindOperationConflict):
+	case errors.Is(err, checkpointcontrol.ErrRewindOperationConflict):
 		s.responses.Fail(w, wire.ApiErrorCodeIdempotencyConflict, "operation_id was already used for a different rewind")
 	case errors.Is(err, store.ErrSessionNotFound):
 		s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")
@@ -78,7 +78,7 @@ func (s *Handler) writeRewindError(w http.ResponseWriter, r *http.Request, err e
 	}
 }
 
-func (s *Handler) HandlePreviewSessionRewind(w http.ResponseWriter, r *http.Request) {
+func (s *Rewind) HandlePreviewSessionRewind(w http.ResponseWriter, r *http.Request) {
 	var req wire.RewindPreviewRequest
 	if err := httpio.DecodeJSON(w, r, &req); err != nil {
 		s.responses.DecodeError(w, r, err)
@@ -88,7 +88,7 @@ func (s *Handler) HandlePreviewSessionRewind(w http.ResponseWriter, r *http.Requ
 		s.responses.InvalidField(w, "message_id", "must be a UUID")
 		return
 	}
-	result, err := s.Sessions.PreviewRewind(r.Context(), chi.URLParam(r, "id"), req.MessageID)
+	result, err := s.Sessions.Chats.Rewinds.PreviewRewind(r.Context(), chi.URLParam(r, "id"), req.MessageID)
 	if err != nil {
 		s.writeRewindError(w, r, err)
 		return

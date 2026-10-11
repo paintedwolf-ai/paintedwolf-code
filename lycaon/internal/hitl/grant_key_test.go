@@ -13,9 +13,14 @@ import (
 func TestGrantKeyIsOpaque(t *testing.T) {
 	secret := "cargo-token-that-must-not-be-persisted"
 	key := hitl.GrantKey(hitl.ProposedAction{
-		Tool: "command", ProjectDir: "/tmp/project",
-		Args: map[string]any{"command": "cargo publish --token " + secret},
-	})
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "cargo publish --token " + secret},
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/tmp/project",
+},
+})
 	if !strings.HasPrefix(key, "action_") || strings.Contains(key, secret) || strings.Contains(key, "cargo publish") {
 		t.Fatalf("GrantKey exposed action content: %q", key)
 	}
@@ -23,9 +28,17 @@ func TestGrantKeyIsOpaque(t *testing.T) {
 
 func directIPAction(args map[string]any) hitl.ProposedAction {
 	return hitl.ProposedAction{
-		Tool: "command", ProjectDir: "/tmp/proj", Args: args,
-		Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressDirectIP, Roots: []string{"/tmp/proj"}},
-	}
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: args,
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/tmp/proj",
+},
+Execution: hitl.ActionExecution{
+Contained: hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressDirectIP, Roots: []string{"/tmp/proj"}},
+},
+}
 }
 
 // A lease card promises re-ask when "the command, its declared destinations, or
@@ -104,7 +117,15 @@ func TestGrantKeySeparatesAuthorityBearingArgs(t *testing.T) {
 func TestGrantIdentityRefusesUnencodableArguments(t *testing.T) {
 	for name, value := range map[string]any{"channel": make(chan int), "nan": math.NaN()} {
 		t.Run(name, func(t *testing.T) {
-			action := hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "echo ok", "invalid": value}, SessionID: "session"}
+			action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo ok", "invalid": value},
+},
+Scope: hitl.ActionScope{
+SessionID: "session",
+},
+}
 			key := hitl.GrantKey(action)
 			if key != "" {
 				t.Fatalf("unencodable action has usable grant key %q", key)
@@ -131,7 +152,15 @@ func TestGrantIdentityRefusesUnencodableArguments(t *testing.T) {
 }
 
 func TestGrantKeyPreservesEncodedIdentity(t *testing.T) {
-	action := hitl.ProposedAction{Tool: "command", ProjectDir: "/tmp/project", Args: map[string]any{"command": "echo ok"}}
+	action := hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "echo ok"},
+},
+Scope: hitl.ActionScope{
+ProjectDir: "/tmp/project",
+},
+}
 	const want = "action_aPs33LLXNi1xSHjl-xyDpdMYzbxBlOQuC7LtctsIUDM"
 	if got := hitl.GrantKey(action); got != want {
 		t.Fatalf("valid action identity changed: got %q want %q", got, want)

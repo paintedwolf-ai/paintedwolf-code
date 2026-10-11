@@ -2,11 +2,11 @@ package terminal
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"reflect"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestLifecycleRejectionRetainsProcessKindAndCapacity(t *testing.T) {
@@ -21,7 +21,7 @@ func TestLifecycleRejectionRetainsProcessKindAndCapacity(t *testing.T) {
 		{bgprocess.ErrProcessNotRunning, "TERMINAL_NOT_RUNNING", "not_running"},
 		{capacity, "TERMINAL_CAP_REACHED", "cap_reached"},
 	} {
-		reject := tools.AsToolReject(mapTerminalLifecycleReject(tc.err, "fixture-id"))
+		reject := toolrejection.AsToolReject(mapTerminalLifecycleReject(tc.err, "fixture-id"))
 		if reject == nil || reject.Code != tc.code || reject.Data["terminal_failure"] != tc.reason || reject.Data["terminal_not_pty"] != errors.Is(tc.err, bgprocess.ErrNotPTY) || reject.Data["id"] != "fixture-id" {
 			t.Fatalf("lifecycle observation for %v: %+v", tc.err, reject)
 		}

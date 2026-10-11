@@ -58,7 +58,7 @@ func TestGuardContextLazyProvider(t *testing.T) {
 	calls := 0
 	gc.RegisterProvider("paintedwolf.workers_idle", func(g *GuardContext) error {
 		calls++
-		g.WorkersIdle = true
+		g.Workers.WorkersIdle = true
 		return nil
 	})
 	testutil.FailErr(t, "ensure", gc.Ensure("paintedwolf.workers_idle"))
@@ -66,7 +66,7 @@ func TestGuardContextLazyProvider(t *testing.T) {
 	if calls != 1 {
 		t.Fatalf("provider called %d times", calls)
 	}
-	if !gc.WorkersIdle {
+	if !gc.Workers.WorkersIdle {
 		t.Fatal("expected paintedwolf.workers_idle")
 	}
 }
@@ -80,16 +80,16 @@ func TestValidateConditionRejectsUnknownFact(t *testing.T) {
 
 func TestEvaluateConditionGroundingFacts(t *testing.T) {
 	gc := NewGuardContext()
-	gc.ClaimsCompletion = true
-	gc.HasMatchingLedgerJob = false
-	gc.BreakerCount = 2
+	gc.Grounding.ClaimsCompletion = true
+	gc.Grounding.HasMatchingLedgerJob = false
+	gc.Counters.BreakerCount = 2
 	when := `paintedwolf.claims_completion && !paintedwolf.has_matching_ledger_job && breaker_count < 3`
 	ok, err := EvaluateCondition(when, gc)
 	testutil.FailErr(t, "eval", err)
 	if !ok {
 		t.Fatal("expected fire")
 	}
-	gc.BreakerCount = 3
+	gc.Counters.BreakerCount = 3
 	ok, err = EvaluateCondition(when, gc)
 	testutil.FailErr(t, "eval2", err)
 	if ok {
@@ -99,7 +99,7 @@ func TestEvaluateConditionGroundingFacts(t *testing.T) {
 
 func TestPathOutsideScopeFunction(t *testing.T) {
 	gc := NewGuardContext()
-	gc.PathOutsideScopeByTool = map[string]bool{"read": true}
+	gc.Access.PathOutsideScopeByTool = map[string]bool{"read": true}
 	ok, err := EvaluateCondition(`path_outside_scope("read")`, gc)
 	testutil.FailErr(t, "eval", err)
 	if !ok {
@@ -144,8 +144,8 @@ func TestEvaluateBlockObservedPostureRefusal(t *testing.T) {
 	p.EnableAnchor(AnchorToolRejected)
 
 	gc := NewGuardContext()
-	gc.Tool = "state_start"
-	gc.SessionPosture = "spec"
+	gc.Invocation.Tool = "state_start"
+	gc.Session.SessionPosture = "spec"
 	gc.ObservedRejectCode = "SPEC_POSTURE_STATE_FORBIDDEN"
 	res, err := p.EvaluateBlock(t.Context(), AnchorToolRejected, gc)
 	testutil.FailErr(t, "eval", err)
@@ -245,5 +245,61 @@ func TestSyncRegistryFromStockIncludesNonPlatformPack(t *testing.T) {
 	}
 	if n := len(doc.HintCodes); n < 300 {
 		t.Fatalf("stock sync too small: %d codes (expected full pack union)", n)
+	}
+}
+
+func TestRetiredRiskFactRequiresExplicitToolCategories(t *testing.T) {
+	t.Parallel()
+	if err := checkWhenAgainstSpec("paintedwolf.high_risk_tool", nil); err == nil || !strings.Contains(err.Error(), "paintedwolf.high_risk_tool") {
+		t.Fatalf("retired fact load error = %v", err)
+	}
+	const condition = `(paintedwolf.tool_is_state || paintedwolf.tool_is_delegation || paintedwolf.tool_is_handoff || paintedwolf.tool_is_task)`
+	for _, tc := range []struct {
+		tool string
+		want bool
+	}{
+		{"state_start", true}, {"delegate_dispatch", true}, {"handoff_complete", true}, {"task", true}, {"read", false}, {"command", false},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			t.Parallel()
+			facts := NewGuardContext()
+			facts.Invocation.Tool = tc.tool
+			facts.DeriveToolClassFacts()
+			got, err := EvaluateCondition(condition, facts)
+			testutil.FailErr(t, "evaluate explicit tool categories", err)
+			if got != tc.want {
+				t.Fatalf("policy match = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestKernelRefusalSilenceIsComposedByThePublishedRule(t *testing.T) {
+	rule, ok := loadStockRules(t).Get("SANDBOX_REFUSAL_REPORT_SILENT")
+	if !ok {
+		t.Fatal("kernel refusal silence rule is missing")
+	}
+	for _, applied := range []bool{false, true} {
+		for _, failed := range []bool{false, true} {
+			for _, witness := range []string{"", "kernel", "incomplete", "unavailable"} {
+				for _, report := range []bool{false, true} {
+					gc := NewGuardContext()
+					gc.Execution.ConfineApplied = applied
+					gc.Refusals.SandboxRefusalWitness = witness
+					if failed {
+						gc.Execution.FailedStages = []string{"tool"}
+					}
+					if report {
+						gc.Execution.SandboxRefusals = []string{"file-read-data: /fixture"}
+					}
+					fires, err := EvaluateCondition(rule.When, gc)
+					testutil.FailErr(t, "evaluate published kernel-refusal warning", err)
+					want := applied && failed && witness == "kernel" && !report
+					if fires != want {
+						t.Fatalf("applied=%v failed=%v witness=%q report=%v fires=%v, want %v", applied, failed, witness, report, fires, want)
+					}
+				}
+			}
+		}
 	}
 }

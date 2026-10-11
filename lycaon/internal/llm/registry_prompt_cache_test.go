@@ -13,7 +13,7 @@ import (
 )
 
 func TestProviderFeaturesMetaPromptCache(t *testing.T) {
-	reg, err := NewRegistry(
+	reg, err := NewRegistry(t.Context(),
 		mustTestProviderCatalog(t,
 			CatalogEntry{ID: "anthropic", Kind: "anthropic", BaseURL: "https://api.anthropic.com"},
 			CatalogEntry{ID: "ollama", Kind: "ollama", BaseURL: "http://127.0.0.1:11434"},
@@ -41,7 +41,7 @@ func TestProviderFeaturesMetaPromptCache(t *testing.T) {
 }
 
 func TestRegistryListCachedReusesSnapshot(t *testing.T) {
-	reg, err := NewRegistry(
+	reg, err := NewRegistry(t.Context(),
 		mustTestProviderCatalog(t,
 			CatalogEntry{ID: "ollama", Kind: "ollama", BaseURL: "http://127.0.0.1:11434"},
 		),
@@ -63,7 +63,7 @@ func TestRegistryListCachedReusesSnapshot(t *testing.T) {
 
 // Empty provider lists remain JSON arrays.
 func TestRegistryListCachedEmptyStaysArray(t *testing.T) {
-	reg, err := NewRegistry(
+	reg, err := NewRegistry(t.Context(),
 		mustTestProviderCatalog(t),
 		providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")),
 	)
@@ -87,7 +87,7 @@ func TestRegistryListCachedEmptyStaysArray(t *testing.T) {
 }
 
 func TestRegistryListCachedServesStaleWhileRefreshing(t *testing.T) {
-	reg, err := NewRegistry(
+	reg, err := NewRegistry(t.Context(),
 		mustTestProviderCatalog(t,
 			CatalogEntry{ID: "ollama", Kind: "ollama", BaseURL: "http://127.0.0.1:11434"},
 		),

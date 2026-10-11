@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -28,7 +28,7 @@ func (f LegToolListerFunc) ListLegTools(ctx context.Context, sess *api.Session, 
 func resolveLegTools(
 	ctx context.Context,
 	lister LegToolLister,
-	agents session.AgentProfileResolver,
+	agents profiles.AgentProfileResolver,
 	sess *api.Session,
 	agentType string,
 ) []string {
@@ -62,7 +62,7 @@ func playbookPhaseForTaskSpawn(agentType, phaseID string) string {
 
 func mergeTaskSpawnChecklist(
 	matcher PlaybookMatcherInterface,
-	agents session.AgentProfileResolver,
+	agents profiles.AgentProfileResolver,
 	agentType, topology string,
 ) ([]string, error) {
 	if matcher == nil {

@@ -479,7 +479,7 @@ func (s *SQL) commitEvidenceToolResult(ctx context.Context, sessionID, projectDi
 		return "", content, err
 	}
 	if artifactID != "" {
-		s.artifacts.EvidenceHandleBound(artifactID, handle)
+		s.artifacts.EvidenceHandleBound(ctx, artifactID, handle)
 	}
 	return handle, patched, nil
 }

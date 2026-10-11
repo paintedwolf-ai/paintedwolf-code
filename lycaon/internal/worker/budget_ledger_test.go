@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 	"time"
 
@@ -60,21 +61,29 @@ func newBudgetFixture(t *testing.T, maxToolLoops int, budget spawn.WorkerToolBud
 
 func (f *budgetFixture) decline(t *testing.T, sessionID string) (string, error) {
 	t.Helper()
-	return f.reg.Run(t.Context(), "decline_worker_budget", map[string]any{"job_id": "job-1"}, tools.ToolContext{SessionID: sessionID})
+	return f.reg.Run(t.Context(), "decline_worker_budget", map[string]any{"job_id": "job-1"}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sessionID},
+	})
 }
 
 func (f *budgetFixture) request(t *testing.T, rounds int) (string, error) {
 	t.Helper()
 	return f.reg.Run(t.Context(), worker.RequestBudgetTool, map[string]any{
 		"rounds": rounds, "remaining_work": []any{"trace the remaining spawn sites"},
-	}, tools.ToolContext{SessionID: "child-1", ParentSessionID: "parent-1", WorkerJobID: "job-1"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "child-1",
+			ParentSessionID: "parent-1",
+			WorkerJobID:     "job-1"},
+	})
 }
 
 func (f *budgetFixture) extend(t *testing.T, max int) (string, error) {
 	t.Helper()
 	return f.reg.Run(t.Context(), "extend_worker_budget", map[string]any{
 		"job_id": "job-1", "max_tool_loops": max,
-	}, tools.ToolContext{SessionID: "parent-1"})
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "parent-1"},
+	})
 }
 
 func (f *budgetFixture) job(t *testing.T) *api.WorkerTask {
@@ -107,7 +116,7 @@ func TestWorkerAsksAndCoordinatorGrants(t *testing.T) {
 	}
 
 	_, err = f.request(t, 4)
-	if reject := tools.AsToolReject(err); reject == nil || reject.Code != "WORKER_BUDGET_REQUEST_OPEN" {
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "WORKER_BUDGET_REQUEST_OPEN" {
 		t.Fatalf("second request err = %v want WORKER_BUDGET_REQUEST_OPEN", err)
 	}
 	if len(f.notified) != 1 {
@@ -142,7 +151,7 @@ func TestRequestBoundsAskAtHostMaximum(t *testing.T) {
 func TestRequestAtHostMaximumRejects(t *testing.T) {
 	f := newBudgetFixture(t, 120, spawn.WorkerToolBudget{Default: 20, Min: 2, Max: 120})
 	_, err := f.request(t, 10)
-	if reject := tools.AsToolReject(err); reject == nil || reject.Code != "WORKER_BUDGET_REQUEST_AT_HOST_MAX" {
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "WORKER_BUDGET_REQUEST_AT_HOST_MAX" {
 		t.Fatalf("err = %v want WORKER_BUDGET_REQUEST_AT_HOST_MAX", err)
 	}
 	if len(f.notified) != 0 || f.job(t).BudgetRequest != nil {
@@ -154,8 +163,10 @@ func TestRequestOutsideAWorkerLegRejects(t *testing.T) {
 	f := newBudgetFixture(t, 20, spawn.WorkerToolBudget{Default: 20, Min: 2, Max: 120})
 	_, err := f.reg.Run(t.Context(), worker.RequestBudgetTool, map[string]any{
 		"rounds": 4, "remaining_work": []any{"more"},
-	}, tools.ToolContext{SessionID: "parent-1"})
-	if reject := tools.AsToolReject(err); reject == nil || reject.Code != "REQUEST_BUDGET_ADDRESSED_SESSION" {
+	}, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "parent-1"},
+	})
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "REQUEST_BUDGET_ADDRESSED_SESSION" {
 		t.Fatalf("err = %v want REQUEST_BUDGET_ADDRESSED_SESSION", err)
 	}
 }
@@ -165,7 +176,7 @@ func TestGrantRejectsTerminalJob(t *testing.T) {
 	_, err := f.db.ExecContext(t.Context(), `UPDATE worker_jobs SET status = 'complete' WHERE id = 'job-1'`)
 	testutil.FailErr(t, "settle job", err)
 	_, err = f.extend(t, 40)
-	if reject := tools.AsToolReject(err); reject == nil || reject.Code != "WORKER_BUDGET_EXTEND_NOT_RUNNING" {
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "WORKER_BUDGET_EXTEND_NOT_RUNNING" {
 		t.Fatalf("err = %v want WORKER_BUDGET_EXTEND_NOT_RUNNING", err)
 	}
 	if err := f.ledger.Grant(t.Context(), "child-1", "job-1", 40); !errors.Is(err, worker.ErrWorkerBudgetNotLive) {
@@ -176,7 +187,7 @@ func TestGrantRejectsTerminalJob(t *testing.T) {
 func TestGrantRejectsNonIncrease(t *testing.T) {
 	f := newBudgetFixture(t, 40, spawn.WorkerToolBudget{Default: 20, Min: 2, Max: 120})
 	_, err := f.extend(t, 30)
-	if reject := tools.AsToolReject(err); reject == nil || reject.Code != "WORKER_BUDGET_EXTEND_NOT_INCREASE" {
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "WORKER_BUDGET_EXTEND_NOT_INCREASE" {
 		t.Fatalf("err = %v want WORKER_BUDGET_EXTEND_NOT_INCREASE", err)
 	}
 }
@@ -206,13 +217,13 @@ func TestGrantRollsBackBothCeilings(t *testing.T) {
 func TestCoordinatorDeclinesAnOpenRequest(t *testing.T) {
 	f := newBudgetFixture(t, 20, spawn.WorkerToolBudget{Default: 20, Min: 2, Max: 120})
 	_, err := f.decline(t, "parent-1")
-	if reject := tools.AsToolReject(err); reject == nil || reject.Code != "WORKER_BUDGET_DECLINE_NO_REQUEST" {
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "WORKER_BUDGET_DECLINE_NO_REQUEST" {
 		t.Fatalf("decline without a request err = %v want WORKER_BUDGET_DECLINE_NO_REQUEST", err)
 	}
 	_, err = f.request(t, 6)
 	testutil.FailErr(t, "request budget", err)
 	_, err = f.decline(t, "other-parent")
-	if reject := tools.AsToolReject(err); reject == nil || reject.Code != "WORKER_BUDGET_DECLINE_SESSION_MISMATCH" {
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "WORKER_BUDGET_DECLINE_SESSION_MISMATCH" {
 		t.Fatalf("foreign decline err = %v want WORKER_BUDGET_DECLINE_SESSION_MISMATCH", err)
 	}
 	if f.job(t).BudgetRequest == nil {
@@ -231,7 +242,7 @@ func TestCoordinatorDeclinesAnOpenRequest(t *testing.T) {
 		t.Fatalf("job after decline = max %d request %+v, want the ceiling kept and the request closed", job.MaxToolLoops, job.BudgetRequest)
 	}
 	_, err = f.decline(t, "parent-1")
-	if reject := tools.AsToolReject(err); reject == nil || reject.Code != "WORKER_BUDGET_DECLINE_NO_REQUEST" {
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "WORKER_BUDGET_DECLINE_NO_REQUEST" {
 		t.Fatalf("second decline err = %v want WORKER_BUDGET_DECLINE_NO_REQUEST", err)
 	}
 }

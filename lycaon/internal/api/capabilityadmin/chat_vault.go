@@ -25,8 +25,8 @@ func ChatVaultState(chatSessionID string, unlocks *presence.Unlocks) wire.ChatVa
 
 // HandleGetChatVault reports whether a chat, or the chat a worker belongs
 // to, is unlocked.
-func (s *Handler) HandleGetChatVault(w http.ResponseWriter, r *http.Request) {
-	chat, ok := s.elevatedAccessChat(w, r)
+func (s *HeldValues) HandleGetChatVault(w http.ResponseWriter, r *http.Request) {
+	chat, ok := s.Access.elevatedAccessChat(w, r)
 	if !ok {
 		return
 	}
@@ -34,8 +34,8 @@ func (s *Handler) HandleGetChatVault(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleLockChatVault ends a chat's unlock at the person's request.
-func (s *Handler) HandleLockChatVault(w http.ResponseWriter, r *http.Request) {
-	chat, ok := s.elevatedAccessChat(w, r)
+func (s *HeldValues) HandleLockChatVault(w http.ResponseWriter, r *http.Request) {
+	chat, ok := s.Access.elevatedAccessChat(w, r)
 	if !ok {
 		return
 	}
@@ -45,7 +45,7 @@ func (s *Handler) HandleLockChatVault(w http.ResponseWriter, r *http.Request) {
 
 // HandleLockVault ends every chat's unlock when the person steps away from
 // the device. Locking only removes authority, so any caller may ask.
-func (s *Handler) HandleLockVault(w http.ResponseWriter, r *http.Request) {
+func (s *HeldValues) HandleLockVault(w http.ResponseWriter, r *http.Request) {
 	var body wire.LockVaultRequest
 	if err := httpio.DecodeJSON(w, r, &body); err != nil {
 		s.responses.DecodeError(w, r, err)

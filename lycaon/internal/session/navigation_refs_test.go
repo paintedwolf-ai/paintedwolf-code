@@ -25,19 +25,19 @@ func TestAssistantCommitAndNotePersistNavigationReferences(t *testing.T) {
 	mem := sessionstore.NewMemory()
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create session", err)
-	mgr := NewManager(mem, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetProjectRegistry(registry)
 
-	testutil.FailErr(t, "append agent note", mgr.appendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "append agent note", mgr.Runner.Transcript.Append(ctx, sess.ID, api.Message{
 		ID: "note-1", Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote,
 		Content: "See scripts/.", Visibility: api.MessageVisibilityTranscript,
 	}))
-	testutil.FailErr(t, "append provisional answer", mgr.appendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "append provisional answer", mgr.Runner.Transcript.Append(ctx, sess.ID, api.Message{
 		ID: "answer-1", Role: api.MessageRoleAssistant, Content: "See FINDINGS.md.",
 		SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{{ProjectID: p.ID, RootID: p.Roots[0].ID, Path: "FINDINGS.md", EntryKind: api.NavigationEntryKindFile}}},
 		Visibility:    api.MessageVisibilityInternal,
 	}))
-	testutil.FailErr(t, "commit provisional answer", mgr.updateMessage(ctx, sess.ID, "answer-1", api.Message{
+	testutil.FailErr(t, "commit provisional answer", mgr.Runner.Transcript.Update(ctx, sess.ID, "answer-1", api.Message{
 		ID: "answer-1", Role: api.MessageRoleAssistant, Content: "See FINDINGS.md.",
 		Visibility: api.MessageVisibilityTranscript,
 	}))
@@ -60,10 +60,10 @@ func TestNavigationParsesWorktreeAbsolutePathsWithoutFilesystemValidation(t *tes
 	testutil.FailErr(t, "session", err)
 	branch := filepath.Join(t.TempDir(), "not-materialized")
 	testutil.FailErr(t, "worktree binding", mem.PutWorktreeBinding(t.Context(), sessionstore.WorktreeBinding{SessionID: sess.ID, ProjectID: p.ID, Toplevel: p.Roots[0].Path, WorktreePath: branch, Branch: "work", BaseBranch: "main"}))
-	mgr := NewManager(mem, nil, tools.NewStubRegistry(), settings.DefaultSessionLimits())
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	mgr.SetProjectRegistry(registry)
 	rows := []api.Message{{Role: api.MessageRoleAssistant, Content: "[file](" + filepath.ToSlash(filepath.Join(branch, "src/a.go")) + ")", Visibility: api.MessageVisibilityTranscript}}
-	mgr.attachMessageNavigationRefs(t.Context(), sess.ID, rows)
+	mgr.Runner.Transcript.NavigationRefs(t.Context(), sess.ID, rows)
 	if len(rows[0].NavigationRefs) != 1 || rows[0].NavigationRefs[0].Path != "src/a.go" || rows[0].NavigationRefs[0].RootID != p.Roots[0].ID {
 		t.Fatalf("references=%+v", rows[0].NavigationRefs)
 	}

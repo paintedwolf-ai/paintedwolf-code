@@ -67,7 +67,7 @@ func TestStructuralFileOnlyRepairNeedsNoPageRead(t *testing.T) {
 
 func TestStructuralFinalizeIsReusableUntilAnotherObservation(t *testing.T) {
 	catalog, root := indexFixture(t)
-	store, err := catalog.indexStore(t.Context(), "p", root)
+	store, err := catalog.Trees.indexStore(t.Context(), "p", root)
 	testutil.FailErr(t, "get finalization store", err)
 	builder, err := newStructuralBuilder(store, nil)
 	testutil.FailErr(t, "create finalization builder", err)

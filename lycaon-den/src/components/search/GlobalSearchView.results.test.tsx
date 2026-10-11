@@ -205,6 +205,7 @@ describe("GlobalSearchView", () => {
         "proj-a",
         {
           regex: false,
+          includeDependencies: false,
           caseSensitive: false,
           wholeWord: false,
           include: undefined,
@@ -755,5 +756,14 @@ describe("result type selectors", () => {
       expect(input.value).toContain("(kind:code OR kind:symbol)");
     });
     expect(screen.getByTestId("search-type-symbols").getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("searches explicitly inside dependency folders only when requested", async () => {
+    render(() => <GlobalSearchView projects={[]} originProjectId="proj-a" originName="Alpha" seed="auth" appStore={createAppStore()} onNavigate={vi.fn()} />);
+    await waitFor(() => expect(searchMock).toHaveBeenCalled());
+    expect(searchMock).toHaveBeenLastCalledWith("auth", "proj-a", expect.objectContaining({ includeDependencies: false }), expect.any(AbortSignal));
+    fireEvent.click(await screen.findByTestId("search-filter"));
+    fireEvent.click(await screen.findByTestId("search-include-dependencies"));
+    await waitFor(() => expect(searchMock).toHaveBeenLastCalledWith("auth", "proj-a", expect.objectContaining({ includeDependencies: true }), expect.any(AbortSignal)));
   });
 });

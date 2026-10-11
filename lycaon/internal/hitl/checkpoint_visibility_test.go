@@ -22,7 +22,16 @@ func TestCheckpointCreationReadParity(t *testing.T) {
 			var response *hitl.CheckpointResponse
 			var err error
 			if kind == api.CheckpointKindToolApproval {
-				req.ProposedAction = &hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "printf fixture"}, SessionID: sid, ProjectID: req.ProjectID}
+				req.ProposedAction = &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "printf fixture"},
+},
+Scope: hitl.ActionScope{
+SessionID: sid,
+ProjectID: req.ProjectID,
+},
+}
 				response, err = requestExplicitApprovalCheckpoint(t, testdbseed.OwnerCaller(t, t.Context(), database), mgr, req)
 				testutil.FailErr(t, "request tool approval", err)
 			} else {
@@ -32,7 +41,7 @@ func TestCheckpointCreationReadParity(t *testing.T) {
 			}
 			for _, restart := range []bool{false, true} {
 				if restart {
-					mgr = hitl.NewManager(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
+					mgr = hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
 					testutil.FailErr(t, "restore pending approvals", mgr.RestorePending(testdbseed.OwnerCaller(t, t.Context(), database)))
 				}
 				direct, err := mgr.ListPending(testdbseed.OwnerCaller(t, t.Context(), database), sid, nil)
@@ -65,7 +74,12 @@ func TestChildCheckpointAttention(t *testing.T) {
 			}))
 			response, err := requestExplicitApprovalCheckpoint(t, testdbseed.OwnerCaller(t, t.Context(), database), mgr, hitl.CheckpointRequest{
 				SessionID: "child", Kind: api.CheckpointKindToolApproval,
-				ProposedAction: &hitl.ProposedAction{Tool: "command", Args: map[string]any{"command": "printf fixture"}},
+				ProposedAction: &hitl.ProposedAction{
+Invocation: hitl.ActionInvocation{
+Tool: "command",
+Args: map[string]any{"command": "printf fixture"},
+},
+},
 			})
 			testutil.FailErr(t, "create child approval", err)
 			combined, err := mgr.ListPendingForParent(testdbseed.OwnerCaller(t, t.Context(), database), parent, nil)

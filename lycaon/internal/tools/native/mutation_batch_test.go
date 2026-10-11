@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
@@ -42,7 +43,7 @@ func TestMutationBatchesRetainCommittedItemsOnLaterRefusal(t *testing.T) {
 			root := t.TempDir()
 			testutil.FailErr(t, "seed first target", os.WriteFile(filepath.Join(root, "a"), []byte("retained"), 0o644))
 			output, err := tc.tool(nativefixture.Boundary(t)).Run(t.Context(), tc.args, nativefixture.Context(root))
-			reject := tools.AsToolReject(err)
+			reject := toolrejection.AsToolReject(err)
 			if reject == nil || reject.Code != tc.code {
 				t.Fatalf("later item refusal = %v", err)
 			}
@@ -119,7 +120,7 @@ func TestCopyByteBudgetCannotOverflowToEmptySuccess(t *testing.T) {
 	}
 	for _, invalid := range []any{0, -1, 0.5, float64(1 << 63), "100"} {
 		_, _, err := parseCopyPairs(map[string]any{"max_file_bytes": invalid})
-		if reject := tools.AsToolReject(err); reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
+		if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 			t.Fatalf("budget %v accepted or misclassified: %v", invalid, err)
 		}
 	}

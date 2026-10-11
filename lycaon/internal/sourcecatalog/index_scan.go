@@ -72,7 +72,7 @@ func (w *indexWalk) begin(ctx context.Context) error {
 	if w.tx != nil {
 		return nil
 	}
-	release, err := w.store.write(ctx)
+	release, err := w.store.writer.Write(ctx, w.store.writable)
 	if err != nil {
 		return err
 	}
@@ -218,6 +218,9 @@ func (w *indexWalk) nextDir(ctx context.Context) (string, error) {
 }
 
 func (w *indexWalk) enqueueDir(ctx context.Context, rel string) error {
+	if !w.store.policy.selects(rel, true) || w.store.policy.boundaryPath(rel, true) != "" {
+		return nil
+	}
 	_, err := w.tx.ExecContext(ctx, "INSERT OR IGNORE INTO frontier(path,deferred) VALUES(?,?)",
 		rel, w.store.policy.deferDir(rel))
 	return err
@@ -250,7 +253,7 @@ func (w *indexWalk) cut(ctx context.Context, c indexCut) error {
 	if c.Reason == sandbox.BoundaryWalkBudget {
 		return w.exhaust(ctx)
 	}
-	if c.Reason == sandbox.BoundaryDirectoryCap {
+	if c.Reason == sandbox.BoundaryDirectoryCap || c.Reason == sandbox.BoundaryLazy {
 		if err := w.hideIndexSubtree(ctx, c.Dir); err != nil {
 			return err
 		}

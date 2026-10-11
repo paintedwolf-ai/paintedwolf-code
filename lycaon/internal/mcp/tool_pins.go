@@ -237,7 +237,7 @@ func toolDefinitionFingerprint(def sanitizedToolDefinition) (string, error) {
 }
 
 // observeToolDefinition records a definition for a remote provider.
-func (r *RegistryImpl) observeToolDefinition(providerID string, def sanitizedToolDefinition) error {
+func (r *ToolDiscovery) observeToolDefinition(providerID string, def sanitizedToolDefinition) error {
 	if r == nil || r.pins == nil {
 		return nil
 	}
@@ -250,7 +250,7 @@ func (r *RegistryImpl) observeToolDefinition(providerID string, def sanitizedToo
 }
 
 // observeProviderToolDefinitions validates all pins before publishing a provider's tools.
-func (r *RegistryImpl) observeProviderToolDefinitions(providerID string, defs []sanitizedToolDefinition) error {
+func (r *ToolDiscovery) observeProviderToolDefinitions(providerID string, defs []sanitizedToolDefinition) error {
 	for _, def := range defs {
 		if err := r.observeToolDefinition(providerID, def); err != nil {
 			return fmt.Errorf("pin mcp tool definition %s.%s: %w", providerID, def.Name, err)
@@ -260,7 +260,7 @@ func (r *RegistryImpl) observeProviderToolDefinitions(providerID string, defs []
 }
 
 // acceptToolDefinition re-pins the observed definition for a tool whose call is proceeding.
-func (r *RegistryImpl) acceptToolDefinition(providerID, toolName string) error {
+func (r *ToolDiscovery) acceptToolDefinition(providerID, toolName string) error {
 	if r == nil || r.pins == nil {
 		return nil
 	}
@@ -268,7 +268,7 @@ func (r *RegistryImpl) acceptToolDefinition(providerID, toolName string) error {
 }
 
 // ToolDefinitionChanged reports a remote tool-definition mismatch.
-func (r *RegistryImpl) ToolDefinitionChanged(qualifiedTool string) bool {
+func (r *ToolDiscovery) ToolDefinitionChanged(qualifiedTool string) bool {
 	if r == nil || r.pins == nil {
 		return false
 	}
@@ -282,8 +282,8 @@ func (r *RegistryImpl) ToolDefinitionChanged(qualifiedTool string) bool {
 }
 
 // isRemoteWebProvider reports whether providerID is an HTTP entry whose URL is not loopback.
-func (r *RegistryImpl) isRemoteWebProvider(providerID string) bool {
-	entry, ok := r.deviceEntry(providerID)
+func (r *ToolDiscovery) isRemoteWebProvider(providerID string) bool {
+	entry, ok := r.Catalog.deviceEntry(providerID)
 	if !ok {
 		return false
 	}

@@ -69,7 +69,7 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		if info.IsDir() {
 			counted := false
 			if t.Catalog != nil {
-				current := catalogOrProcess(t.Catalog).Current(ctx, tctx.ProjectID, []sourcecatalog.Root{{ID: resolved.Root.ID, Path: resolved.Root.Path}})
+				current := catalogOrProcess(t.Catalog).Current(ctx, tctx.Identity.ProjectID, []sourcecatalog.Root{{ID: resolved.Root.ID, Path: resolved.Root.Path}})
 				if current.State == sourcecatalog.StateReady {
 					rel := projectroot.ScopeRel(resolved.Root, fullPath)
 					if children, ok := current.Listing(resolved.Root.ID, rel); ok {

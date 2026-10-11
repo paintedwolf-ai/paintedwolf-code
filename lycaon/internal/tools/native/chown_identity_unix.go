@@ -4,13 +4,12 @@ package native
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"os/user"
 	"strconv"
 	"strings"
 	"syscall"
-
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func chownSupported() bool { return true }
@@ -38,7 +37,7 @@ func resolveChownUID(spec string) (int, error) {
 			return 0, chownTargetDenied("owner", spec)
 		}
 		if uid == 0 && os.Getuid() != 0 {
-			return 0, &tools.ToolReject{
+			return 0, &toolrejection.ToolReject{
 				Code: "CHOWN_ROOT_DENIED",
 				Data: chownIdentityData("owner", spec),
 			}
@@ -50,7 +49,7 @@ func resolveChownUID(spec string) (int, error) {
 	}
 	u, lookupErr := user.Lookup(spec)
 	if lookupErr != nil {
-		return 0, &tools.ToolReject{
+		return 0, &toolrejection.ToolReject{
 			Code: "CHOWN_USER_UNKNOWN",
 			Data: chownIdentityData("owner", spec),
 		}
@@ -60,7 +59,7 @@ func resolveChownUID(spec string) (int, error) {
 		return 0, chownTargetDenied("owner", spec)
 	}
 	if uid == 0 && os.Getuid() != 0 {
-		return 0, &tools.ToolReject{
+		return 0, &toolrejection.ToolReject{
 			Code: "CHOWN_ROOT_DENIED",
 			Data: chownIdentityData("owner", spec),
 		}
@@ -88,7 +87,7 @@ func resolveChownGID(spec string) (int, error) {
 	}
 	g, lookupErr := user.LookupGroup(spec)
 	if lookupErr != nil {
-		return 0, &tools.ToolReject{
+		return 0, &toolrejection.ToolReject{
 			Code: "CHOWN_GROUP_UNKNOWN",
 			Data: chownIdentityData("group", spec),
 		}
@@ -116,7 +115,7 @@ func isNumericIDSpec(spec string) bool {
 }
 
 func chownTargetDenied(field, value string) error {
-	return &tools.ToolReject{
+	return &toolrejection.ToolReject{
 		Code: "CHOWN_TARGET_DENIED",
 		Data: chownIdentityData(field, value),
 	}

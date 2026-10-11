@@ -3,11 +3,11 @@
 package session_test
 
 import (
-	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"testing"
 
 	"github.com/google/uuid"
 	coordinatorsurface "github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -45,8 +45,8 @@ func TestMockLLMRecoversPersistedToolSchemas(t *testing.T) {
 	})
 	testutil.FailErr(t, "record request receipt", err)
 	// A host restart drops the activation cache while retaining the store.
-	fixture.Mgr.SetTurnLoads(turnload.NewLedger())
-	_, err = fixture.Mgr.Prompt(t.Context(), fixture.Sess.ID, "continue after restart")
+	fixture.Mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
+	_, err = fixture.Mgr.Submissions.Prompt(t.Context(), fixture.Sess.ID, "continue after restart")
 	testutil.FailErr(t, "resume persisted session", err)
 	for _, meta := range recorder.LastRequest().Tools {
 		if meta.Name == "command" {

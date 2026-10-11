@@ -16,7 +16,7 @@ import (
 func NewProvider(t testing.TB) repoinfo.Provider {
 	t.Helper()
 	catalog := sourcecatalog.New()
-	provider := repoinfo.NewProvider(catalog, func(_ context.Context, path string) (repoinfo.CatalogRoot, bool, error) {
+	provider := repoinfo.NewProvider(catalog.Trees, func(_ context.Context, path string) (repoinfo.CatalogRoot, bool, error) {
 		root, err := filepath.Abs(path)
 		return repoinfo.CatalogRoot{ProjectID: root, RootID: root}, err == nil, err
 	}, "")

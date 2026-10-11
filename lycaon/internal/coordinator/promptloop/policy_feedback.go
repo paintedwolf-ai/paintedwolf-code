@@ -2,7 +2,7 @@ package promptloop
 
 import "context"
 
-func (l *PromptLoop) takePolicyFeedback(ctx context.Context, sessionID string, state *promptLoopTurnState) error {
+func (l *turnInbox) takePolicyFeedback(ctx context.Context, sessionID string, state *promptLoopTurnState) error {
 	if l.Deps.TakePolicyFeedback == nil {
 		return nil
 	}

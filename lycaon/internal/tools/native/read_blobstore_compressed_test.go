@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/bytebound"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tooloutput"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
@@ -39,7 +39,7 @@ func TestReadToolDecompressesBlobstoreManagedSpill(t *testing.T) {
 	}
 
 	ctx := nativefixture.Context(tmpDir)
-	ctx.HostDataDir = host
+	ctx.Host.HostDataDir = host
 	tool := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
 	out, err := tool.Run(context.Background(), map[string]any{"path": blob.Rel}, ctx)
 	testutil.FailErr(t, "tool.Run failed", err)
@@ -77,7 +77,7 @@ func TestReadRetainedDiffPagesIgnoreLaterWorkspaceChanges(t *testing.T) {
 	}
 	testutil.FailErr(t, "replace working file", os.WriteFile(filepath.Join(root, "file.go"), []byte("completely different now\n"), 0o644))
 	ctx := nativefixture.Context(root)
-	ctx.HostDataDir = host
+	ctx.Host.HostDataDir = host
 	tool := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
 	out, err := tool.Run(t.Context(), map[string]any{"path": spill.SpillPath, "offset": 2500, "limit": 2}, ctx)
 	testutil.FailErr(t, "read captured hunk tail", err)
@@ -96,10 +96,10 @@ func TestReadLargeToolSpillUsesRetentionBound(t *testing.T) {
 		t.Fatal("fixture must retain an observation above the project-file limit")
 	}
 	ctx := editorCtx(root, &fakeEditorDocuments{openErr: errors.New("spill reads must not consult project editor documents")})
-	ctx.HostDataDir = host
+	ctx.Host.HostDataDir = host
 	tool := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
 	for _, limit := range []int{0, len(plain)} {
-		ctx.MaxToolSpillBytes = limit
+		ctx.Host.MaxToolSpillBytes = limit
 		out, err := tool.Run(t.Context(), map[string]any{"path": spill.SpillPath, "offset": 2051, "limit": 1}, ctx)
 		testutil.FailErr(t, "read large retained observation", err)
 		var response surveytools.ReadResponse
@@ -108,16 +108,16 @@ func TestReadLargeToolSpillUsesRetentionBound(t *testing.T) {
 			t.Fatalf("lost retained tail: %q", response.Content)
 		}
 	}
-	ctx.MaxToolSpillBytes = len(plain) - 1
+	ctx.Host.MaxToolSpillBytes = len(plain) - 1
 	_, err := tool.Run(t.Context(), map[string]any{"path": spill.SpillPath, "offset": 2051, "limit": 1}, ctx)
-	var reject *tools.ToolReject
+	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "READ_FILE_TOO_LARGE" || reject.Data["max_file_bytes"] != int64(len(plain)-1) {
 		t.Fatalf("retention read ignored configured bound: %v", err)
 	}
 	// A matching directory name in a project is not host spill authority.
-	ctx.HostDataDir = ""
-	ctx.EditorDocuments = nil
-	ctx.MaxToolSpillBytes = tooloutput.DefaultMaxSpillFileBytes
+	ctx.Host.HostDataDir = ""
+	ctx.Source.EditorDocuments = nil
+	ctx.Host.MaxToolSpillBytes = tooloutput.DefaultMaxSpillFileBytes
 	path := filepath.Join(root, "tool-output", "project.txt")
 	testutil.FailErr(t, "create project directory", os.MkdirAll(filepath.Dir(path), 0o755))
 	testutil.FailErr(t, "write project fixture", os.WriteFile(path, []byte(plain), 0o600))
