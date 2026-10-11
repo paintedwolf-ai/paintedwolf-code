@@ -132,7 +132,7 @@ func runBugbashToExpand(
 	result, err := orch.Run(ctx, orchestration.RunRequest{
 		SessionID:       sess.ID,
 		WorkflowID:      "bugbash",
-		WorkflowVersion: "1.0.0",
+		WorkflowVersion: "1.1.0",
 		Input:           map[string]any{"project_dir": dir, "project_id": testdbseed.DefaultProjectID},
 	})
 	testutil.FailErr(t, "orch.Run failed", err)
@@ -167,7 +167,7 @@ func TestOrchestratorRunCreatesWorkflowRun(t *testing.T) {
 	if del.WorkflowID != "bugbash" {
 		t.Fatalf("workflow_id = %q", del.WorkflowID)
 	}
-	if del.WorkflowVersion != "1.0.0" {
+	if del.WorkflowVersion != "1.1.0" {
 		t.Fatalf("workflow_version = %q", del.WorkflowVersion)
 	}
 	if del.WorkflowRunID != active.ID {
@@ -186,7 +186,7 @@ func TestOrchestratorFailureSettlesWorkflowRun(t *testing.T) {
 	sess := createOrchestrateSession(t, sqlDB, sessMgr, dir)
 
 	_, err := orch.Run(ctx, orchestration.RunRequest{
-		SessionID: sess.ID, WorkflowID: "bugbash", WorkflowVersion: "1.0.0",
+		SessionID: sess.ID, WorkflowID: "bugbash", WorkflowVersion: "1.1.0",
 		Input: map[string]any{"project_dir": dir, "project_id": testdbseed.DefaultProjectID},
 	})
 	if err == nil {
@@ -211,7 +211,7 @@ func TestOrchestratorMarkStageOnPipelineComplete(t *testing.T) {
 
 	wfRun, err := wfMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID:      "bugbash",
-		WorkflowVersion: "1.0.0",
+		WorkflowVersion: "1.1.0",
 	})
 	testutil.FailErr(t, "wfMgr.Starts.StartHuman failed", err)
 
@@ -247,7 +247,7 @@ func TestOrchestratorMarkStageOnPipelineComplete(t *testing.T) {
 			"project_id":       testdbseed.DefaultProjectID,
 			"workflow_run_id":  wfRun.ID,
 			"workflow_id":      "bugbash",
-			"workflow_version": "1.0.0",
+			"workflow_version": "1.1.0",
 		},
 	})
 	testutil.FailErr(t, "orch.Run failed", err)
@@ -265,7 +265,7 @@ func TestOrchestratorPauseRespectsAssertRunnable(t *testing.T) {
 
 	wfRun, err := wfMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID:      "bugbash",
-		WorkflowVersion: "1.0.0",
+		WorkflowVersion: "1.1.0",
 	})
 	testutil.FailErr(t, "wfMgr.Starts.StartHuman failed", err)
 
@@ -296,7 +296,7 @@ func TestOrchestratorPauseRespectsAssertRunnable(t *testing.T) {
 			"project_id":       testdbseed.DefaultProjectID,
 			"workflow_run_id":  wfRun.ID,
 			"workflow_id":      "bugbash",
-			"workflow_version": "1.0.0",
+			"workflow_version": "1.1.0",
 		},
 	})
 	if err == nil {

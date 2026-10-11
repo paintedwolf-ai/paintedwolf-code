@@ -64,6 +64,7 @@ func TestEffectiveAdvancePolicyShippedManifestContractParity(t *testing.T) {
 		"options@1.0.0":         {},
 		// bugbash host-advances so a human triage approval never sits waiting
 		// for the coordinator to call workflow_advance (see its manifest note).
+		"bugbash@1.1.0": {},
 		"bugbash@1.0.0": {},
 	}
 	coordKeys := map[string]struct{}{}

@@ -92,7 +92,7 @@ func TestDefaultPipelineActiveWorkflowInjectVisible(t *testing.T) {
 	sess, err := store.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	contractcheck.FailErr(t, "store.Create failed", err)
 	if _, err := wfMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
-		WorkflowID: "bugbash", WorkflowVersion: "1.0.0",
+		WorkflowID: "bugbash", WorkflowVersion: "1.1.0",
 	}); err != nil {
 		t.Fatal(err)
 	}

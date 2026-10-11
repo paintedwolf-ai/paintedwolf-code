@@ -15,11 +15,12 @@ import (
 func TestResumeReconcilesTopologyCompletedWhilePaused(t *testing.T) {
 	for _, tc := range []struct {
 		workflow string
+		version  string
 		stages   []string
 		next     string
 	}{
-		{"options", []string{"fan_out"}, "judge"},
-		{"bugbash", []string{"hunt_correctness", "hunt_edges", "hunt_races"}, "triage"},
+		{"options", "1.0.0", []string{"fan_out"}, "judge"},
+		{"bugbash", "1.1.0", []string{"hunt_correctness", "hunt_edges", "hunt_races"}, "triage"},
 	} {
 		for _, restart := range []bool{false, true} {
 			name := tc.workflow + "/same_process"
@@ -30,7 +31,7 @@ func TestResumeReconcilesTopologyCompletedWhilePaused(t *testing.T) {
 				mgr, _, _, _ := testManagerWithRegistry(t)
 				ctx := t.Context()
 				run, err := mgr.Starts.StartHuman(ctx, "sess-1", api.StartWorkflowRunRequest{
-					WorkflowID: tc.workflow, WorkflowVersion: "1.0.0", Request: "Inspect the fixture.",
+					WorkflowID: tc.workflow, WorkflowVersion: tc.version, Request: "Inspect the fixture.",
 				})
 				testutil.FailErr(t, "start run", err)
 				phase := run.CurrentPhase
