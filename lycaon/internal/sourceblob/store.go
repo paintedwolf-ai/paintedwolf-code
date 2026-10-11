@@ -2,7 +2,6 @@
 package sourceblob
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha1" //nolint:gosec // SHA-1 identifies source objects.
 	"crypto/sha256"
@@ -18,7 +17,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/contextio"
-	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/hostlock"
@@ -197,34 +195,6 @@ type Capture struct {
 	ModifiedNS int64
 }
 
-// Put stores a complete payload already held in memory.
-func (s *Store) Put(sha string, plain []byte) (rel string, stored int64, oids GitOIDs, err error) {
-	if s == nil {
-		return "", 0, GitOIDs{}, fmt.Errorf("content store unavailable")
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if ContentSHA(plain) != strings.ToLower(strings.TrimSpace(sha)) {
-		return "", 0, GitOIDs{}, fmt.Errorf("content sha mismatch")
-	}
-	oids = ContentGitOIDs(plain)
-	rel, err = RelPath(sha)
-	if err != nil {
-		return "", 0, GitOIDs{}, err
-	}
-	if info, statErr := os.Stat(filepath.Join(s.root, rel)); statErr == nil {
-		return rel, info.Size(), oids, nil
-	}
-	compressed, err := zstdcodec.Compress(bytes.NewReader(plain))
-	if err != nil {
-		return "", 0, GitOIDs{}, err
-	}
-	if err := s.commitBytes(rel, compressed); err != nil {
-		return "", 0, GitOIDs{}, err
-	}
-	return rel, int64(len(compressed)), oids, nil
-}
-
 // PutFile hashes and compresses a worktree file in one read.
 func (s *Store) PutFile(ctx context.Context, abs string) (Capture, error) {
 	return s.putFile(ctx, abs, os.Lstat, os.Open, nil)
@@ -279,7 +249,7 @@ func (s *Store) putFile(ctx context.Context, abs string, stat func(string) (os.F
 	if err != nil {
 		return Capture{}, err
 	}
-	matched, err := s.matchesCapture(ctx, out.Rel, staged)
+	matched, err := s.matchesObject(ctx, out.Rel, staged.stored, staged.storedSHA)
 	if err != nil {
 		return Capture{}, err
 	}
@@ -395,22 +365,6 @@ func (s *Store) promote(tempPath, rel string) error {
 		return err
 	}
 	return syncDir(filepath.Dir(dest))
-}
-
-// commitBytes atomically publishes a complete object.
-func (s *Store) commitBytes(rel string, compressed []byte) error {
-	if err := os.MkdirAll(s.root, 0o700); err != nil {
-		return fmt.Errorf("create content object directory: %w", err)
-	}
-	if _, err := fseffect.Replace(fseffect.ReplaceRequest{
-		Location: fseffect.Location{Root: s.root, Rel: rel},
-		Source:   bytes.NewReader(compressed),
-		Mode:     0o600,
-		DirMode:  0o700,
-	}); err != nil {
-		return fmt.Errorf("commit content object: %w", err)
-	}
-	return nil
 }
 
 func (s *Store) Get(rel string) ([]byte, error) {
