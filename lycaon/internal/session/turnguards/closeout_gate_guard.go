@@ -39,7 +39,7 @@ func (m *Service) OpenGates(ctx context.Context, sess *api.Session, workersIdle,
 		return nil
 	})
 	if blocked && !retry {
-		reject.WithCause(guidance.ErrCloseoutStopped)
+		reject = reject.WithCause(guidance.ErrCloseoutStopped)
 	}
 	return reject, blocked
 }
