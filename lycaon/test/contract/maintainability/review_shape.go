@@ -108,7 +108,8 @@ func canonicalShapeImports(file *ast.File) string {
 		name := path.Base(source)
 		if spec.Name != nil {
 			name = spec.Name.Name
-		} else {
+		}
+		if spec.Name == nil || name == "." {
 			unaliased = append(unaliased, source)
 		}
 		imports[name] = fmt.Sprintf("import_%x", sha256.Sum256([]byte(source)))

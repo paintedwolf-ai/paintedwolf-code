@@ -74,3 +74,10 @@ func TestTypeShapeTracksUnaliasedImportWithDifferentPackageName(t *testing.T) {
 		t.Fatal("unaliased dependency identity disappeared from shape")
 	}
 }
+
+func TestTypeShapeTracksDotImportIdentity(t *testing.T) {
+	base := measuredShape(t, `package p; import . "example/first"; type Service struct { Value Record }`)
+	if got := measuredShape(t, `package p; import . "example/second"; type Service struct { Value Record }`); got == base {
+		t.Fatal("dot import identity disappeared from shape")
+	}
+}

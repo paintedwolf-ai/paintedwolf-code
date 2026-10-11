@@ -261,7 +261,7 @@ boundaries whose changes invalidate the decision; avoid whole implementation
 files when the type shape and focused contracts express that boundary. Retained Go artifacts also record `reviewed_shape`, the signature printed in
 the tracking report. The checker derives that signature from the type declaration
 and method signatures, including receiver kinds, type parameters, and dependency
-identity. Bodies, comments, and declaration order are excluded. Unaliased imports
+identity. Bodies, comments, and declaration order are excluded. Unaliased and dot imports
 are conservatively included because import paths need not match package names. A
 changed signature renews review even when the size stays constant. Review state
 is measured, never authored.
