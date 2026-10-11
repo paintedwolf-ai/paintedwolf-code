@@ -35,10 +35,11 @@ type symbolProgressEntry struct {
 }
 
 type symbolSourceStamp struct {
-	Root     string
-	Revision uint64
-	Instance uint64
-	Epoch    repochange.Epoch
+	Root        string
+	Revision    uint64
+	Instance    uint64
+	Epoch       repochange.Epoch
+	ValidatedAt time.Time
 }
 
 func symbolStamp(ctx context.Context, p *project.Project, rootIDs []string) (string, error) {
@@ -55,7 +56,7 @@ func symbolStamp(ctx context.Context, p *project.Project, rootIDs []string) (str
 		if err != nil {
 			return "", err
 		}
-		stamps = append(stamps, symbolSourceStamp{Root: root.Path, Revision: status.Revision, Instance: status.Instance, Epoch: repochange.CurrentEpoch(root.Path)})
+		stamps = append(stamps, symbolSourceStamp{Root: root.Path, Revision: status.Revision, Instance: status.Instance, Epoch: repochange.CurrentEpoch(root.Path), ValidatedAt: status.ValidatedAt})
 	}
 	body, err := json.Marshal(stamps)
 	return string(body), err
@@ -133,7 +134,7 @@ func (c *symbolProgressCache) acquire(ctx context.Context, p *project.Project, l
 		release()
 		return nil, nil, err
 	}
-	if entry.discovery == nil || entry.stamp != stamp {
+	if entry.discovery == nil || entry.stamp != stamp || !symbolEpochsCurrent(entry.stamp) {
 		entry.state = symbolsearch.Progress{}
 		entry.discovery = declarationSearchIn(leg.DiscoveryScope(), leg.Flags.Include, leg.Flags.Exclude, leg.IncludeDependencies)
 		entry.stamp = stamp
@@ -148,6 +149,12 @@ func symbolEpochsCurrent(stamp string) bool {
 	}
 	for _, source := range sources {
 		if !repochange.EpochCurrent(source.Root, source.Epoch) {
+			return false
+		}
+		// Incomplete watches trust an observed generation only within the catalog
+		// reconciliation interval; discovery coverage gaps remain independent.
+		if !repochange.Coverage(source.Root).Complete &&
+			(source.ValidatedAt.IsZero() || time.Since(source.ValidatedAt) > repochange.CoverageRevalidationInterval) {
 			return false
 		}
 	}
