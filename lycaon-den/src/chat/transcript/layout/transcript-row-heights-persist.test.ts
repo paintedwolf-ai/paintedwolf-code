@@ -11,6 +11,7 @@ import {
   getAppStateSnapshot,
   resetAppStateSnapshotForTests,
 } from "../../../store/app-state-snapshot.ts";
+import { TRANSCRIPT_ROW_HEIGHTS_PER_SESSION_CAP } from "../../../../shared/app-state-types.ts";
 import { transcriptRowEstimatedHeight } from "./transcript-virtualizer.ts";
 
 describe("transcript-row-heights-persist", () => {
@@ -67,6 +68,38 @@ describe("transcript-row-heights-persist", () => {
 
     expect(transcriptRowHeightForScope(scope, "tool-1", "collapsed")).toBe(32);
     expect(transcriptRowHeightForScope(scope, "tool-1", '["tool-1"]')).toBe(376);
+  });
+
+  it("bounds variants per row without evicting other measured rows during repeated resizes", async () => {
+    const scope = { projectId: "p", sessionId: "resized" };
+    for (let row = 0; row < TRANSCRIPT_ROW_HEIGHTS_PER_SESSION_CAP; row++) {
+      recordTranscriptRowHeight(scope, `row-${row}`, "initial", row + 1);
+    }
+    for (let width = 0; width < 20; width++) {
+      recordTranscriptRowHeight(scope, "row-0", `width-${width}`, 40 + width);
+    }
+    expect(transcriptRowHeightForScope(scope, "row-1", "initial")).toBe(2);
+    expect(transcriptRowHeightForScope(scope, "row-0", "width-19")).toBe(59);
+    expect(transcriptRowHeightForScope(scope, "row-0", "initial")).toBeUndefined();
+    await flushTranscriptRowHeightsToDisk();
+    const stored = getAppStateSnapshot().transcriptRowHeights?.[0];
+    expect(Object.keys(stored?.rows ?? {})).toHaveLength(TRANSCRIPT_ROW_HEIGHTS_PER_SESSION_CAP);
+    expect(Object.keys(stored?.rows["row-0"] ?? {})).toHaveLength(4);
+    clearTranscriptRowHeightsForTests();
+    loadTranscriptRowHeightsFromSnapshot();
+    expect(transcriptRowHeightForScope(scope, "row-1", "initial")).toBe(2);
+    expect(transcriptRowHeightForScope(scope, "row-0", "width-19")).toBe(59);
+  });
+
+  it("refreshes a read row before evicting the least recently used row", () => {
+    const scope = { projectId: "p", sessionId: "read" };
+    for (let row = 0; row < TRANSCRIPT_ROW_HEIGHTS_PER_SESSION_CAP; row++) {
+      recordTranscriptRowHeight(scope, `row-${row}`, "initial", row + 1);
+    }
+    expect(transcriptRowHeightForScope(scope, "row-0", "initial")).toBe(1);
+    recordTranscriptRowHeight(scope, "new", "initial", 50);
+    expect(transcriptRowHeightForScope(scope, "row-0", "initial")).toBe(1);
+    expect(transcriptRowHeightForScope(scope, "row-1", "initial")).toBeUndefined();
   });
 
   it("debounces disk writes until flush", async () => {

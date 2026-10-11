@@ -23,7 +23,7 @@ import {
 import { findSearchesChat } from "../../find/find-controller.ts";
 import { prefersReducedMotion } from "../../platform/interaction/reduced-motion.ts";
 import { TAB_PANEL_TRANSITION_MS } from "../../components/chatview/tabs.ts";
-import { watchTranscriptLoadMore } from "../transcript/layout/transcript-load-more.ts";
+import { createTranscriptPaging } from "../transcript/layout/transcript-load-more.ts";
 import type { TranscriptReadingPosition } from "../transcript/layout/transcript-virtualizer.ts";
 import {
   persistTranscriptViewportSnapshot,
@@ -348,6 +348,11 @@ export function createTranscriptViewportController(opts: {
         presentationWatch?.disconnect();
         presentationWatch = undefined;
       };
+      const paging = createTranscriptPaging(target, {
+        client: runtime.client,
+        appStore: runtime.appStore,
+        sessionId: runtime.sessionId,
+      });
       const stops = [
         watchStreamScrollFade(target),
         watchStreamReaderIntent(target, {
@@ -357,7 +362,8 @@ export function createTranscriptViewportController(opts: {
           resumeFollowing: () => {
             if (presentsLiveTail()) followLatest();
           },
-          onReaderInput: () => {
+          onReaderInput: (direction) => {
+            if (direction) paging.readerInput(direction);
             if (disclosureMotion) disclosureMotion.userScrolledAway = true;
             disclosureMotion = undefined;
             openTailDisclosures.clear();
@@ -365,11 +371,7 @@ export function createTranscriptViewportController(opts: {
             panelOpenedManually = false;
           },
         }),
-        watchTranscriptLoadMore(target, {
-          client: runtime.client,
-          appStore: runtime.appStore,
-          sessionId: runtime.sessionId,
-        }),
+        paging.dispose,
         watchStreamTabPanelRetract(target, {
           tabOpen: runtime.tabOpen,
           retracted: runtime.panelRetracted,

@@ -78,7 +78,7 @@ export type StreamReaderIntentHandlers = {
   /** The reader requested the live tail. */
   resumeFollowing: () => void;
   /** Reader input able to move the stream. */
-  onReaderInput: () => void;
+  onReaderInput: (direction?: "up" | "down") => void;
 };
 
 function syncStreamReaderScroll(
@@ -207,7 +207,7 @@ export function watchStreamReaderIntent(
     if (event.deltaY > 0) {
       state.lastUpwardIntentAt = undefined;
       state.lastDownwardIntentAt = performance.now();
-      handlers.onReaderInput();
+      handlers.onReaderInput("down");
       resumeDownwardIntent();
       return;
     }
@@ -216,7 +216,7 @@ export function watchStreamReaderIntent(
     state.lastDownwardIntentAt = undefined;
     state.lastUpwardIntentAt = performance.now();
     cancelStreamSpringScroll(streamTarget);
-    handlers.onReaderInput();
+    handlers.onReaderInput("up");
     if (handlers.following()) handlers.stopFollowing();
   };
 
@@ -257,7 +257,7 @@ export function watchStreamReaderIntent(
       state.lastDownwardIntentAt = undefined;
       state.lastUpwardIntentAt = performance.now();
       cancelStreamSpringScroll(streamTarget);
-      handlers.onReaderInput();
+      handlers.onReaderInput("up");
     } else if (deltaY > 4) {
       if (state.selectionPress || isStreamSelecting(streamTarget)) {
         state.selectionPress = true;
@@ -266,7 +266,7 @@ export function watchStreamReaderIntent(
       }
       state.lastUpwardIntentAt = undefined;
       state.lastDownwardIntentAt = performance.now();
-      handlers.onReaderInput();
+      handlers.onReaderInput("down");
       resumeDownwardIntent();
     }
   };
@@ -307,7 +307,7 @@ export function watchStreamReaderIntent(
       return;
     }
     state.suppressEngageUntil = 0;
-    handlers.onReaderInput();
+    handlers.onReaderInput(direction);
     if (event.key === "End") {
       event.preventDefault();
       state.lastUpwardIntentAt = undefined;

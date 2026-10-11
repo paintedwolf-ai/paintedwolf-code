@@ -16,7 +16,7 @@ import {
 import { wireProject } from "../../api/mocks/project-fixture.ts";
 import {
   TRANSCRIPT_PAGE_BUDGET,
-  TRANSCRIPT_PERSIST_TAIL_LIMIT,
+  TRANSCRIPT_TAIL_BUDGET,
 } from "../transcript/layout/transcript-window.ts";
 
 vi.mock("../../platform/connection/health.ts", () => ({
@@ -189,23 +189,36 @@ describe("persisted snapshot size", () => {
   });
 
   it("bounds the tail and never writes the derivable message list", () => {
-    const tail = Array.from({ length: TRANSCRIPT_PERSIST_TAIL_LIMIT + 50 }, (_, i) =>
+    const tail = Array.from({ length: TRANSCRIPT_TAIL_BUDGET + 50 }, (_, i) =>
       row(`m${i}`, i),
     );
     const persisted = trimSnapshotForPersist(withTail(tail));
 
-    // Persistence caps the tail independently of live memory.
-    expect(persisted.transcript.tail).toHaveLength(TRANSCRIPT_PERSIST_TAIL_LIMIT);
-    expect(persisted.transcript.tail[TRANSCRIPT_PERSIST_TAIL_LIMIT - 1]?.id).toBe(
+    // Oversized snapshots obey the live tail budget.
+    expect(persisted.transcript.tail).toHaveLength(TRANSCRIPT_TAIL_BUDGET);
+    expect(persisted.transcript.tail[TRANSCRIPT_TAIL_BUDGET - 1]?.id).toBe(
       tail[tail.length - 1]?.id,
     );
     expect(persisted.transcript.hasMoreBefore).toBe(true);
     expect("messages" in persisted).toBe(false);
   });
 
+  it("preserves contiguous live history through repeated persistence and restore", () => {
+    const tail = Array.from({ length: 150 }, (_, index) => ({ ...row(`m${index}`, index + 2), ord: index + 2 }));
+    let snapshot = withTail(tail);
+    snapshot.transcript.pages = { "1:1": [{ ...row("older", 1), ord: 1 }] };
+    for (let cycle = 0; cycle < 20; cycle++) {
+      const persisted = trimSnapshotForPersist(snapshot);
+      expect(persisted.transcript.hasTailGap).toBe(false);
+      expect(persisted.transcript.tail).toHaveLength(150);
+      snapshot = toSessionChatSnapshot(persisted);
+      expect(snapshot.messages.at(-1)?.id).toBe("m149");
+    }
+  });
+
   it("records a gap when persistence trims a tail above retained pages", () => {
     const tail = Array.from(
-      { length: TRANSCRIPT_PERSIST_TAIL_LIMIT + 1 },
+      { length: TRANSCRIPT_TAIL_BUDGET + 1 },
       (_, index) => row(`m${index}`, index + 2),
     );
     const snapshot = withTail(tail);

@@ -27,9 +27,6 @@ export const TRANSCRIPT_PAGE_BUDGET = 5;
 /** Tail overflow becomes older pages while remaining available to scrollback. */
 export const TRANSCRIPT_TAIL_BUDGET = DEFAULT_TRANSCRIPT_PAGE_LIMIT * 2;
 
-/** Newest tail rows included in app-state persistence. */
-export const TRANSCRIPT_PERSIST_TAIL_LIMIT = DEFAULT_TRANSCRIPT_PAGE_LIMIT;
-
 export type TranscriptWindow = {
   /** Live SSE append target. */
   tail: Message[];

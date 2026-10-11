@@ -9,17 +9,12 @@ import {
   TRANSCRIPT_ROW_HEIGHTS_SESSION_CAP,
 } from "../../../../shared/app-state-types.ts";
 
-type RowHeightEntry = {
-  itemKey: string;
-  presentation: string;
-  height: number;
-  touchedAt: number;
-};
+const PRESENTATIONS_PER_ROW = 4;
 
 type SessionRowHeights = {
   scope: SessionChatScope;
   touchedAt: number;
-  heights: Map<string, RowHeightEntry>;
+  heights: Map<string, Map<string, number>>;
 };
 
 const persistedByScope = new Map<string, SessionRowHeights>();
@@ -29,16 +24,24 @@ function scopeKey(scope: SessionChatScope): string {
   return `${scope.projectId}:${scope.sessionId}`;
 }
 
-function rowLayoutKey(itemKey: string, presentation: string): string {
-  return JSON.stringify([itemKey, presentation]);
-}
-
 function capSessionHeights(session: SessionRowHeights): void {
   while (session.heights.size > TRANSCRIPT_ROW_HEIGHTS_PER_SESSION_CAP) {
     const oldest = session.heights.keys().next().value;
     if (oldest === undefined) break;
     session.heights.delete(oldest);
   }
+}
+
+function storeHeight(session: SessionRowHeights, item: string, presentation: string, height: number): boolean {
+  const variants = session.heights.get(item) ?? new Map<string, number>();
+  const changed = variants.get(presentation) !== height;
+  variants.delete(presentation);
+  variants.set(presentation, height);
+  while (variants.size > PRESENTATIONS_PER_ROW) variants.delete(variants.keys().next().value!);
+  session.heights.delete(item);
+  session.heights.set(item, variants);
+  capSessionHeights(session);
+  return changed;
 }
 
 function capPersistedSessions(): void {
@@ -59,25 +62,15 @@ function sessionFromPersisted(row: TranscriptRowHeightsSession): SessionRowHeigh
   const projectId = row.projectId.trim();
   const sessionId = row.sessionId.trim();
   if (!projectId || !sessionId) return null;
-  const heights = new Map<string, RowHeightEntry>();
+  const session: SessionRowHeights = { scope: { projectId, sessionId }, touchedAt: row.touchedAt, heights: new Map() };
   for (const [itemKey, presentations] of Object.entries(row.rows)) {
     if (!itemKey) continue;
     for (const [presentation, value] of Object.entries(presentations)) {
-      if (!presentation || (!Number.isFinite(value) || !(value > 0))) continue;
-      heights.set(rowLayoutKey(itemKey, presentation), {
-        itemKey,
-        presentation,
-        height: Math.round(value * 64) / 64,
-        touchedAt: row.touchedAt,
-      });
+      if (!presentation || !Number.isFinite(value) || !(value > 0)) continue;
+      storeHeight(session, itemKey, presentation, Math.round(value * 64) / 64);
     }
   }
-  if (heights.size === 0) return null;
-  return {
-    scope: { projectId, sessionId },
-    touchedAt: row.touchedAt,
-    heights,
-  };
+  return session.heights.size ? session : null;
 }
 
 function ensurePersistedSession(scope: SessionChatScope): SessionRowHeights {
@@ -126,27 +119,10 @@ export function recordTranscriptRowHeight(
   const rounded = Math.round(height * 64) / 64;
   const now = Date.now();
   const session = ensurePersistedSession(scope);
-  const layoutKey = rowLayoutKey(key, state);
-  const existing = session.heights.get(layoutKey);
-  if (existing) {
-    session.heights.delete(layoutKey);
-    session.heights.set(layoutKey, existing);
-  }
-  if (existing?.height === rounded) {
-    existing.touchedAt = now;
-    session.touchedAt = now;
-    return;
-  }
-  session.heights.set(layoutKey, {
-    itemKey: key,
-    presentation: state,
-    height: rounded,
-    touchedAt: now,
-  });
+  const changed = storeHeight(session, key, state, rounded);
   session.touchedAt = now;
-  capSessionHeights(session);
   capPersistedSessions();
-  schedulePersistToDisk();
+  if (changed) schedulePersistToDisk();
 }
 
 export function transcriptRowHeightForScope(
@@ -157,9 +133,14 @@ export function transcriptRowHeightForScope(
   const key = itemKey.trim();
   const state = presentation.trim();
   if (!key || !state) return undefined;
-  return persistedByScope
-    .get(scopeKey(scope))
-    ?.heights.get(rowLayoutKey(key, state))?.height;
+  const session = persistedByScope.get(scopeKey(scope));
+  const variants = session?.heights.get(key);
+  const height = variants?.get(state);
+  if (height !== undefined && session) {
+    storeHeight(session, key, state, height);
+    session.touchedAt = Date.now();
+  }
+  return height;
 }
 
 export async function flushTranscriptRowHeightsToDisk(): Promise<void> {
@@ -173,14 +154,7 @@ export async function flushTranscriptRowHeightsToDisk(): Promise<void> {
       projectId: session.scope.projectId,
       sessionId: session.scope.sessionId,
       touchedAt: session.touchedAt,
-      rows: [...session.heights.values()].reduce<
-        Record<string, Record<string, number>>
-      >((rows, entry) => {
-        const presentations = rows[entry.itemKey] ?? {};
-        presentations[entry.presentation] = entry.height;
-        rows[entry.itemKey] = presentations;
-        return rows;
-      }, {}),
+      rows: Object.fromEntries([...session.heights].map(([item, variants]) => [item, Object.fromEntries(variants)])),
     }));
   await persistAppState({
     transcriptRowHeights:
@@ -210,12 +184,7 @@ export function seedTranscriptRowHeightsForTests(
     if (!itemKey) continue;
     for (const [presentation, value] of Object.entries(presentations)) {
       if (!presentation || (!Number.isFinite(value) || !(value > 0))) continue;
-      session.heights.set(rowLayoutKey(itemKey, presentation), {
-        itemKey,
-        presentation,
-        height: Math.round(value * 64) / 64,
-        touchedAt: now,
-      });
+      storeHeight(session, itemKey, presentation, Math.round(value * 64) / 64);
     }
   }
   session.touchedAt = now;

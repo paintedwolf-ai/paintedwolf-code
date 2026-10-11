@@ -3,7 +3,8 @@ import { stubClient } from "../../../test/client-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import {
   ensureTranscriptRevealAnchorLoaded,
-  watchTranscriptLoadMore,
+  loadTranscriptPage,
+  createTranscriptPaging,
 } from "./transcript-load-more.ts";
 import {
   clearTranscriptEntryMemory,
@@ -52,7 +53,7 @@ function mockStreamHost(opts: {
   return { el, writes };
 }
 
-describe("watchTranscriptLoadMore", () => {
+describe("createTranscriptPaging", () => {
   it("reads from the end of gapped history back to the live tail", async () => {
     const row = (ord: number): Message => ({ ...older(ord - 1), seq: ord });
     const rows = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => row(from + i));
@@ -76,7 +77,7 @@ describe("watchTranscriptLoadMore", () => {
     });
     // The reader sits at the bottom of presented history, far from its top.
     const { el } = mockStreamHost({ scrollTop: 5_000, scrollHeight: () => 5_500, clientHeight: 500 });
-    const stop = watchTranscriptLoadMore(el, {
+    const stop = createTranscriptPaging(el, {
       client: () => stubClient({ listSessionMessages }),
       appStore,
       sessionId: () => "s-gap",
@@ -88,7 +89,7 @@ describe("watchTranscriptLoadMore", () => {
       for (let i = 1; i < ords.length; i++) expect(ords[i]).toBe((ords[i - 1] ?? 0) + 1);
       expect(ords.at(-1)).toBe(800);
     } finally {
-      stop();
+      stop.dispose();
       el.remove();
     }
   });
@@ -112,7 +113,7 @@ describe("watchTranscriptLoadMore", () => {
     });
     const client = stubClient({ listSessionMessages });
 
-    const stop = watchTranscriptLoadMore(el, {
+    const stop = createTranscriptPaging(el, {
       client: () => client,
       appStore,
       sessionId: () => "s1",
@@ -127,7 +128,7 @@ describe("watchTranscriptLoadMore", () => {
       expect(appStore.state.messages.length).toBeGreaterThan(1);
       expect(writes).toEqual([]);
     } finally {
-      stop();
+      stop.dispose();
       el.remove();
     }
   });
@@ -150,7 +151,7 @@ describe("watchTranscriptLoadMore", () => {
     });
     const client = stubClient({ listSessionMessages });
 
-    const stop = watchTranscriptLoadMore(el, {
+    const stop = createTranscriptPaging(el, {
       client: () => client,
       appStore,
       sessionId: () => "s-prefetch",
@@ -160,7 +161,7 @@ describe("watchTranscriptLoadMore", () => {
         expect(listSessionMessages).toHaveBeenCalledTimes(1);
       });
     } finally {
-      stop();
+      stop.dispose();
       el.remove();
     }
   });
@@ -179,7 +180,7 @@ describe("watchTranscriptLoadMore", () => {
     const listSessionMessages = vi.fn();
     const client = stubClient({ listSessionMessages });
 
-    const stop = watchTranscriptLoadMore(el, {
+    const stop = createTranscriptPaging(el, {
       client: () => client,
       appStore,
       sessionId: () => "s-far",
@@ -189,7 +190,7 @@ describe("watchTranscriptLoadMore", () => {
       await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
       expect(listSessionMessages).not.toHaveBeenCalled();
     } finally {
-      stop();
+      stop.dispose();
       el.remove();
     }
   });
@@ -219,7 +220,7 @@ describe("watchTranscriptLoadMore", () => {
       });
     const client = stubClient({ listSessionMessages });
 
-    const stop = watchTranscriptLoadMore(el, {
+    const stop = createTranscriptPaging(el, {
       client: () => client,
       appStore,
       sessionId: () => "s-fill",
@@ -230,7 +231,7 @@ describe("watchTranscriptLoadMore", () => {
       });
       expect(appStore.state.transcript.hasMoreBefore).toBe(false);
     } finally {
-      stop();
+      stop.dispose();
       el.remove();
     }
   });
@@ -258,7 +259,7 @@ describe("watchTranscriptLoadMore", () => {
     });
     const client = stubClient({ listSessionMessages });
 
-    const stop = watchTranscriptLoadMore(el, {
+    const stop = createTranscriptPaging(el, {
       client: () => client,
       appStore,
       sessionId: () => "s-stalled-fill",
@@ -272,9 +273,94 @@ describe("watchTranscriptLoadMore", () => {
       );
       expect(listSessionMessages).toHaveBeenCalledTimes(1);
     } finally {
-      stop();
+      stop.dispose();
       el.remove();
     }
+  });
+
+  it("does not alternate page edges when compact history has both edges in reach", async () => {
+    const rows = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => older(from + i - 1));
+    const page = (from: number, to: number) => ({
+      messages: rows(from, to), watermark: 1_000, before_cursor: from > 1 ? "older" : undefined,
+      after_cursor: to < 1_000 ? "newer" : undefined, turn_clocks: {}, turn_loads: {},
+    });
+    const appStore = createAppStore();
+    appStore.actions.installTranscriptBaseline("compact", rows(901, 1_000), 1_000, { hasMoreBefore: true });
+    for (let from = 801; from >= 301; from -= 100) {
+      appStore.actions.loadTranscriptPage({ edge: "older", beforeMessageId: older(from + 99).id }, page(from, from + 99));
+    }
+    expect(appStore.state.transcript.hasTailGap).toBe(true);
+    const directions: string[] = [];
+    const listSessionMessages = vi.fn(async (_id: string, options?: { beforeMessageId?: string; afterMessageId?: string }) => {
+      const before = options?.beforeMessageId;
+      const after = options?.afterMessageId;
+      const boundary = Number((before ?? after ?? "").slice(4)) + 1;
+      directions.push(before ? "older" : "newer");
+      return before ? page(Math.max(1, boundary - 100), boundary - 1) : page(boundary + 1, Math.min(1_000, boundary + 100));
+    });
+    const { el } = mockStreamHost({ scrollTop: 500, scrollHeight: () => 2_000, clientHeight: 500 });
+    const paging = createTranscriptPaging(el, { client: () => stubClient({ listSessionMessages }), appStore, sessionId: () => "compact" });
+    try {
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      expect(directions).toEqual([]);
+      paging.readerInput("up");
+      await vi.waitFor(() => expect(appStore.state.transcript.hasMoreBefore).toBe(false));
+      expect(directions).toEqual(["older", "older", "older"]);
+      paging.readerInput("down");
+      await vi.waitFor(() => expect(appStore.state.transcript.hasTailGap).toBe(false));
+      expect(directions.slice(3).every(edge => edge === "newer")).toBe(true);
+      expect(Object.keys(appStore.state.transcript.pages).length).toBeLessThanOrEqual(5);
+      expect(appStore.state.transcript.tail.at(-1)?.ord).toBe(1_000);
+    } finally { paging.dispose(); el.remove(); }
+  });
+
+  it("rejects a page after the session view generation changes", async () => {
+    const appStore = createAppStore();
+    appStore.actions.installTranscriptBaseline("s-generation", [older(50)], 51, { hasMoreBefore: true });
+    let resolve!: (value: { messages: Message[]; turn_clocks: Record<string, never>; turn_loads: Record<string, never> }) => void;
+    const response = new Promise<{ messages: Message[]; turn_clocks: Record<string, never>; turn_loads: Record<string, never> }>(done => { resolve = done; });
+    const pending = loadTranscriptPage(stubClient({ listSessionMessages: () => response }), appStore, "s-generation", "older");
+    appStore.actions.invalidateSessionViewRequests();
+    resolve({ messages: [older(40)], turn_clocks: {}, turn_loads: {} });
+    expect(await pending).toBe(false);
+    expect(appStore.state.messages.map(row => row.id)).toEqual(["old-50"]);
+  });
+
+  it("retries a transient failure after renewed reader input", async () => {
+    const appStore = createAppStore();
+    appStore.actions.installTranscriptBaseline("s-retry", [older(50)], 51, { hasMoreBefore: true });
+    const { el } = mockStreamHost({ scrollTop: 0, scrollHeight: () => 10_000, clientHeight: 500 });
+    const listSessionMessages = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue({
+      messages: [older(40)], turn_clocks: {}, turn_loads: {},
+    });
+    const stop = createTranscriptPaging(el, {
+      client: () => stubClient({ listSessionMessages }), appStore, sessionId: () => "s-retry",
+    });
+    try {
+      await vi.waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(1));
+      stop.readerInput("up");
+      await vi.waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(2));
+      expect(appStore.state.messages.map(row => row.id)).toEqual(["old-40", "old-50"]);
+    } finally { stop.dispose(); el.remove(); }
+  });
+
+  it("retries after input received before an in-flight request fails", async () => {
+    const appStore = createAppStore();
+    appStore.actions.installTranscriptBaseline("s-flight", [older(50)], 51, { hasMoreBefore: true });
+    const { el } = mockStreamHost({ scrollTop: 0, scrollHeight: () => 10_000, clientHeight: 500 });
+    let reject!: (reason: Error) => void;
+    const first = new Promise<never>((_resolve, fail) => { reject = fail; });
+    const listSessionMessages = vi.fn().mockReturnValueOnce(first).mockResolvedValue({
+      messages: [older(40)], turn_clocks: {}, turn_loads: {},
+    });
+    const paging = createTranscriptPaging(el, { client: () => stubClient({ listSessionMessages }), appStore, sessionId: () => "s-flight" });
+    try {
+      await vi.waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(1));
+      paging.readerInput("up");
+      reject(new Error("offline"));
+      await vi.waitFor(() => expect(listSessionMessages).toHaveBeenCalledTimes(2));
+      expect(appStore.state.messages.map(row => row.id)).toEqual(["old-40", "old-50"]);
+    } finally { paging.dispose(); el.remove(); }
   });
 
   it("walks through deep history until the anchor is resident", async () => {
