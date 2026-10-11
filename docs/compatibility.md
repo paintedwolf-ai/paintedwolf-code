@@ -91,7 +91,9 @@ reserved key is additive; existing runs without it have no repair episode.
 
 Review subjects and assignments are durable run-scoped records. Schema revision
 2 adds them and a review-input revision through a registered migration from the
-released revision-1 shape. Existing results and verdicts remain unchanged. Active
+released revision-1 shape. Existing results and verdicts remain unchanged. Released verdict receipts in
+`evidence_applied` or `committed` state retain their publication acknowledgement;
+upgrading does not replay already-published evidence. Active
 reviews without recorded assignment context require replacement work; the host
 does not reconstruct historical inputs from current state. The optional
 `assignment_binding` manifest member affects only definitions that declare it.

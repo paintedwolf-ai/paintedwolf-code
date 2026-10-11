@@ -33,7 +33,7 @@ func (m *Verdicts) publishVerdictEvidence(ctx context.Context, op runstate.Verdi
 		if outcome.Grounding != nil && len(outcome.Grounding.CitedEvidence) > 0 {
 			cited = outcome.Grounding.CitedEvidence
 		}
-		if err := m.persistReviewLoopEvidence(ctx, input.SessionID, run, *phase.ReviewLoop, op.Phase, input.Verdict, cited, input.CitedURLs, op.EvidenceRecordID, op.CreatedAt, outcome.Attempt); err != nil {
+		if err := m.persistReviewLoopEvidence(ctx, input.SessionID, run, *phase.ReviewLoop, op.Phase, input.Verdict, cited, input.CitedURLs, op.EvidenceRecordID, op.CreatedAt, outcome.EvidenceAttempt); err != nil {
 			return err
 		}
 	}

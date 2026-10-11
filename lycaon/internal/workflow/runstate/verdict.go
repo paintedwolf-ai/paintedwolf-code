@@ -49,9 +49,11 @@ type ReviewOutcome struct {
 	// Terminal reports the gate was satisfied and the host is advancing.
 	Terminal bool
 	// Attempt is the review round counter after this submission.
-	Attempt     int
-	Phase       string
-	EvidenceKey string
+	Attempt int
+	// EvidenceAttempt identifies the round judged by this submission.
+	EvidenceAttempt int
+	Phase           string
+	EvidenceKey     string
 	// MissingAgents lists required reviewers without succeeded envelopes.
 	MissingAgents  []string
 	InventoryIssue *InventoryIssue

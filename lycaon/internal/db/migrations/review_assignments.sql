@@ -37,6 +37,9 @@ WHEN OLD.status IS NOT NEW.status OR OLD.result_json IS NOT NEW.result_json OR O
 BEGIN UPDATE workflow_runs SET review_revision=review_revision+1 WHERE id IN (SELECT workflow_run_id FROM workflow_scan_bindings WHERE scan_id=NEW.id); END;
 
 ALTER TABLE workflow_verdict_operations ADD COLUMN evidence_published INTEGER NOT NULL DEFAULT 0 CHECK (evidence_published IN (0, 1));
+-- Released receipts acknowledge publication before committing the verdict.
+UPDATE workflow_verdict_operations SET evidence_published = 1
+WHERE status IN ('evidence_applied', 'committed');
 DROP INDEX idx_workflow_verdict_operations_recovery;
 CREATE INDEX idx_workflow_verdict_operations_recovery
     ON workflow_verdict_operations(status, created_at, tool_call_id)
