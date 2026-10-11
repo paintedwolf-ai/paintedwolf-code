@@ -1,7 +1,5 @@
-import { editorWordWrapPref, editorLineNumbersPref, saveEditorWordWrap, saveEditorLineNumbers } from "../../settings/editor/editor-prefs.ts";
-import { EDITOR_STANDARD_COMMANDS } from "../../components/source/editor/editor-standard-commands.ts";
-import { focusRegion } from "../../shortcuts/focus-region.ts";
-import { editorTabMovesFocusPref, saveEditorTabMovesFocus } from "../../settings/editor/editor-prefs.ts";
+import { bindFilesCommands } from "../commands/files-command-bindings.ts";
+
 import { createFileContextActions, createFilePathIntents } from "../commands/file-context-actions.ts";
 import { observeSurfaceFailure } from "../../notices/surface-failure.ts";
 import { createFilesSelection } from "../tree/files-selection.ts";
@@ -32,7 +30,7 @@ import { createFilesTreeReveal, hasFilesTreeAddress } from "../tree/files-tree-r
 import { FilesPaneDeck } from "./FilesPaneDeck.tsx";
 import { FilesTreePane } from "./FilesTreePane.tsx";
 import { beginSourceNavigation } from "../../platform/navigation/source-navigation-intent.ts";
-import type { EditorView } from "@codemirror/view";
+
 import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js";
 
 import type { LycaonClient } from "../../api/client.ts";
@@ -53,16 +51,14 @@ import { type FileTabWindowDrag, type ItemWindowDropPosition } from "../../platf
 import { specialTabKind } from "../tabs/files-tab-kind.ts";
 import { isBackendReachable } from "../../platform/connection/sidecar-status.ts";
 import { widenWindowBy } from "../../platform/windows/window-chrome.ts";
-import { editorIndentStylePref, editorIndentWidthPref, editorRevealInTreePref } from "../../settings/editor/editor-prefs.ts";
+import { editorRevealInTreePref } from "../../settings/editor/editor-prefs.ts";
 import { dragRequestsHide, PANE_HIDDEN_PX } from "../../layout/drag-to-hide.ts";
 import { beginListPaneResize, layoutViewportWidthPx, listPaneHidePreviewed, listPanePrefs, navCollapsedPref, preferredChatWidthPx, preferredNavWidthPx, resetListPaneSize, splitHostWidthPx, workspaceOrientationPref } from "../../shell/layout-store.ts";
 import { filesShowWindowDeficitPx } from "../../shell/responsive-collapse.ts";
 
-import { attachDispatcher, registerCommandHandler } from "../../shortcuts/dispatcher.ts";
-import { openFilesSurface } from "../../platform/navigation/open-files-surface.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { createPreparation, createPresentationWaiting } from "../../ui/presentation.ts";
-import { ResidentPresenceProvider, useResidentPresence } from "../../ui/resident-presence-context.tsx";
+import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
 import { createResidentActivity, useResidentLive } from "../../ui/resident-activity.ts";
 import { useSurfaceReveal } from "../../ui/surface-reveal.ts";
 
@@ -73,17 +69,11 @@ import { DenButton } from "../../components/primitives/DenButton.tsx";
 import { ResidentPortal } from "../../components/primitives/ResidentPortal.tsx";
 import { ResizeHandle } from "../../components/primitives/ResizeHandle.tsx";
 import { ProjectLoadingStage } from "../../components/shell/ProjectLoadingStage.tsx";
-import { clearScopePreview, openEditorGotoLine } from "../../components/source/editor/codemirror-theme.ts";
-import { EDITOR_COMMAND_IMPL, EDITOR_EDITING_COMMAND_IDS } from "../../components/source/editor/editor-commands.ts";
+import { clearScopePreview } from "../../components/source/editor/codemirror-theme.ts";
+
 import { loadEditorConfigForBuffer, refreshOpenEditorConfigs } from "../../components/source/editor/editorconfig-load.ts";
-import { indentInfoFromEditorConfig } from "../../components/source/editor/editorconfig.ts";
 
-import { goToNextFinding, goToPreviousFinding } from "../../components/source/annotations/findings-diagnostics.ts";
-import { convertIndentationCommand } from "../../components/source/editor/indent-convert.ts";
 import { inlineEditOpen } from "../../components/source/inline-edit/inline-edit-controller.ts";
-import { beginInlineEditPanel, beginRenameCard } from "../../components/source/inline-edit/run-editor-action.ts";
-
-
 
 import { syncReviewPresence } from "../review/review-live.ts";
 import { agentPresenceFor } from "./agent-presence-store.ts";
@@ -105,8 +95,8 @@ import { filesPaneKey, parseFilesPaneKey } from "./files-pane-key.ts";
 import { orderWithPinnedGroup } from "../tabs/files-tab-strip.ts";
 import { filesTreeClaimed, filesTreeCollapsed, setFilesTreeClaimed, setFilesTreeCollapsed } from "../tree/files-tree-window-state.ts";
 import { createFilesVersionHistory } from "../history/files-version-history.ts";
-import { selectedFileVersion, setSelectedFileVersion, toggleVersionComparison } from "../history/files-version-selection.ts";
-import { versionRestoreOffered } from "../history/file-version-restore.ts";
+import { selectedFileVersion, setSelectedFileVersion } from "../history/files-version-selection.ts";
+
 import { createFilesWorkspace } from "../source/files-workspace.ts";
 import type { FilesScope } from "./files-scope.ts";
 import { FilesTree } from "../tree/FilesTree.tsx";
@@ -115,21 +105,21 @@ import { FileUndoToast } from "../history/FileUndoToast.tsx";
 
 import { FilesStageDialogs } from "./FilesStageDialogs.tsx";
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
-import { applyFilesBufferDraft, dirtyFilesBuffersUnderPath, filesBufferKeyAtAddress, focusedFilesBufferKey, openFilesBuffer, renameFilesBuffer, setFilesActiveBuffer, setFilesBufferIndentOverride, toggleFilesBufferPinned } from "../documents/project-files-buffers.ts";
+import { dirtyFilesBuffersUnderPath, filesBufferKeyAtAddress, focusedFilesBufferKey, openFilesBuffer, renameFilesBuffer, setFilesActiveBuffer } from "../documents/project-files-buffers.ts";
 import { projectFilesState, type BufferOpenIntent, type FileBuffer } from "../documents/files-buffer-state.ts";
 import { filesContextMenuItems, type FilesContextTarget } from "../commands/project-files-context-menu.ts";
 import type { NewEntryKind } from "../commands/project-files-create.ts";
-import { navigateProjectJumpBack, navigateProjectJumpForward, pushProjectJump } from "./project-files-jump-bridge.ts";
+import { pushProjectJump } from "./project-files-jump-bridge.ts";
 import { type DirtyGuardResult } from "../commands/project-files-lifecycle.ts";
 import { applyProjectSourceLoadFailure } from "./project-files-load-error.ts";
 import { diffsBufferKey, fileDisplayName, type FileBufferKey } from "./project-files-model.ts";
 import { onProjectFilesRevealRequest, takeProjectFilesRevealRequest } from "../tree/project-files-reveal.ts";
-import { getFilesStagePaneMode, isComparisonOff, requestScopePicker, setFilesStagePaneMode, subscribeFilesStagePaneMode, cycleSidebarScope, toggleComparison, toggleDeletedLines } from "../review/review-pane.ts";
+import { getFilesStagePaneMode, setFilesStagePaneMode, subscribeFilesStagePaneMode } from "../review/review-pane.ts";
 import { ReviewLens } from "../review/ReviewLens.tsx";
 import { deletedPathsInScope, isAddedInScope, isInScope, resolvedLensView, resolvedScope, scopeBaseline, scopeChangeKindFor, scopeEffectFor } from "../tree/scope-resolution.ts";
 import { StepBar } from "../walk/StepBar.tsx";
-import { currentWalkStep, enterWalk, isWalking, leaveWalk, stepWalk, subscribeWalk, walkState } from "../walk/walk-store.ts";
-import { currentTurnFromStore } from "../../components/project/SidebarScopePicker.tsx";
+import { currentWalkStep, isWalking, leaveWalk, subscribeWalk, walkState } from "../walk/walk-store.ts";
+
 import { diffsAddressKey, diffsPageCopy } from "../review/diffs-address.ts";
 import { WalkTransport } from "../walk/WalkTransport.tsx";
 import { createWalkPresentation } from "../walk/walk-presentation.ts";
@@ -635,7 +625,6 @@ export function ProjectFilesView(props: Props) {
     untrack(() => renameFilesBuffer(props.projectId, diffsBufferKey(diffsAddressKey({ kind: "lens" })), name));
   });
 
-
   const { ctxActions, openContextMenu } = createFileContextActions({
     ...scope, resolveRootId,
     startTreeCreate: () => tree?.startCreate, setRenaming, setMoveError, setMoveSource,
@@ -668,7 +657,6 @@ export function ProjectFilesView(props: Props) {
       if (folder && workspaceSettled()) onCleanup(observeDirectory(folder.root.id, folder.path));
     });
   });
-
 
   const { copyAbsolutePathRef, copyRelativePathRef, addPathToChat, explainFileInReview, activeInfoActions } =
     createFilePathIntents({ ...scope, openReviewRowFile });
@@ -817,190 +805,13 @@ export function ProjectFilesView(props: Props) {
 
   observeDefinitionNavigation();
 
-  // Retained views stay mounted; only an active one answers commands.
-  const presence = useResidentPresence();
-  createEffect(() => {
-    if (presence() !== "active") return;
-    const on = (id: string, run: () => void) => onCleanup(registerCommandHandler(id, run));
-    // Editor commands act on the active text editor; edits also need it writable.
-    const withEditor = (run: (view: EditorView) => unknown, edits = false) => () => {
-      const buf = activeBuffer();
-      if (!buf || isComposedBufferKind(buf.kind)) return;
-      const view = getFilesEditorView(props.projectId, buf.key);
-      if (view && !(edits && view.state.readOnly)) run(view);
-    };
-    const startCreate = (kind: NewEntryKind) => {
-      const target = createTargetDir();
-      if (target) tree?.startCreate(kind, target.rootId, target.dir);
-    };
-    const convertIndent = (toStyle: "spaces" | "tabs") => withEditor((view) => {
-      const buf = activeBuffer();
-      if (!buf) return;
-      const current =
-        buf.indentOverride ??
-        indentInfoFromEditorConfig(buf.editorConfig) ??
-        buf.detectedIndent ?? {
-          style: editorIndentStylePref(),
-          width: editorIndentWidthPref(),
-        };
-      const to = { style: toStyle, width: current.width } as const;
-      convertIndentationCommand(to, current.width)(view);
-      setFilesBufferIndentOverride(props.projectId, buf.key, to);
-      applyFilesBufferDraft(props.projectId, buf.key, view.state.doc.toString());
-    }, true);
-    for (const [id, command] of Object.entries(EDITOR_STANDARD_COMMANDS)) on(id, withEditor(command));
-    on("editor.toggleWrap", () => { void saveEditorWordWrap(!editorWordWrapPref()); });
-    on("editor.toggleLineNumbers", () => { void saveEditorLineNumbers(!editorLineNumbersPref()); });
-    on("editor.toggleTabFocus", () => { void saveEditorTabMovesFocus(!editorTabMovesFocusPref()); });
-    on("files.moveTabLeft", () => tabCommands.moveTab(-1));
-    on("files.moveTabRight", () => tabCommands.moveTab(1));
-    on("go.filesTree", () => {
-      if (filesTreeCollapsed()) showFilesTree();
-      queueMicrotask(() => focusRegion("filesTree"));
-    });
-    on("go.filesTabs", () => focusRegion("filesTabs"));
-    on("files.saveAndClose", () => {
-      const key = aimedKey();
-      if (!key) return;
-      flushFilesDraftSyncFor(props.projectId, key);
-      if (!state().byKey[key]?.dirty) requestCloseTab(key);
-      else void performSave(key).then(saved => { if (saved && !state().byKey[key]?.dirty) requestCloseTab(key); });
-    });
-    on("files.nextTab", () => cycleTab(1));
-    on("files.prevTab", () => cycleTab(-1));
-    on("files.closeTab", () => {
-      const key = aimedKey();
-      if (key) requestCloseTab(key);
-      else props.onCloseTabIdle?.();
-    });
-    on("files.save", () => {
-      const key = state().activeKey;
-      if (key) void performSave(key);
-    });
-    on("files.reveal", () => {
-      const key = aimedKey();
-      const buf = key ? state().byKey[key] : undefined;
-      if (buf && !treeReveal.unavailable(buf)) revealInTree(buf.rootId, buf.path, false);
-    });
-    on("files.collapseAll", () => tree?.collapseAll());
-    on("files.expandAll", () => tree?.expandAll());
-    on("files.openAllDiffs", () => {
-      if (isComparisonOff(props.projectId)) requestScopePicker(props.projectId);
-      else openFilesSurface({ kind: "diffs", projectId: props.projectId, address: { kind: "lens" } });
-    });
-    on("files.chooseComparison", () => requestScopePicker(props.projectId));
-    on("files.toggleComparison", () => {
-      const buf = activeBuffer();
-      const version = buf ? selectedFileVersion(props.projectId, buf.key) : null;
-      if (buf && version) toggleVersionComparison(props.projectId, buf.key, version);
-      else toggleComparison(props.projectId);
-    });
-    const scopeAvailability = () => ({
-      chatSelected: currentTurnFromStore(props.appStore) != null,
-      commitAvailable: resolvedScope(props.projectId).commitAvailable,
-    });
-    on("files.comparisonNext", () => {
-      cycleSidebarScope(props.projectId, 1, scopeAvailability());
-    });
-    on("files.comparisonPrev", () => {
-      cycleSidebarScope(props.projectId, -1, scopeAvailability());
-    });
-    on("files.walkToggle", () => {
-      if (isWalking(props.projectId)) {
-        leaveWalk(props.projectId);
-        return;
-      }
-      const chat = currentTurnFromStore(props.appStore);
-      if (!chat) return;
-      const key = state().activeKey;
-      const buf = key ? state().byKey[key] : undefined;
-      const initialFile = buf ? { path: buf.path, rootId: buf.rootId } : null;
-      void enterWalk(props.projectId, client(), chat.sessionId, initialFile);
-    });
-    on("files.walkNextStep", () => {
-      if (isWalking(props.projectId)) stepWalk(props.projectId, 1);
-    });
-    on("files.walkPrevStep", () => {
-      if (isWalking(props.projectId)) stepWalk(props.projectId, -1);
-    });
-    on("files.newFile", () => startCreate("file"));
-    on("files.newFolder", () => startCreate("folder"));
-    on("files.undoLifecycle", () => void runSourceHistory("undo"));
-    on("files.redoLifecycle", () => void runSourceHistory("redo"));
-    on("editor.goToLine", () => {
-      const buf = activeBuffer();
-      const reader = buf ? readerHandles.get(buf.key) : undefined;
-      if (reader) void reader.gotoLine();
-      else withEditor(openEditorGotoLine)();
-    });
-    on("editor.nextFinding", withEditor(goToNextFinding));
-    on("editor.previousFinding", withEditor(goToPreviousFinding));
-    on("files.jumpBack", () => {
-      const entry = navigateProjectJumpBack(props.projectId);
-      if (entry) restoreJumpEntry(entry);
-    });
-    on("files.jumpForward", () => {
-      const entry = navigateProjectJumpForward(props.projectId);
-      if (entry) restoreJumpEntry(entry);
-    });
-    on("files.currentVersion", () => {
-      const buf = activeBuffer();
-      if (buf && versionForBuffer(buf)) returnToCurrent(buf.key);
-    });
-    on("files.openVersionHistory", () => {
-      editorPaneEl()?.querySelector<HTMLButtonElement>('[data-testid="file-version-trigger"]')?.click();
-    });
-    on("files.previousVersion", () => {
-      const buf = activeBuffer();
-      if (buf) stepVersion(buf, -1);
-    });
-    on("files.nextVersion", () => {
-      const buf = activeBuffer();
-      if (buf) stepVersion(buf, 1);
-    });
-    on("files.restoreVersion", () => {
-      const buf = activeBuffer();
-      const version = buf ? versionForBuffer(buf) : null;
-      if (buf && version && versionRestoreOffered(buf, version)) void restoration.runSelectedVersionRestore(buf, version);
-    });
-    on("files.toggleDeletedLines", () => {
-      toggleDeletedLines(props.projectId);
-    });
-    on("files.toggleLineEndings", () => {
-      const buf = activeBuffer();
-      if (buf) documents.toggleLineEndings(buf);
-    });
-    on("files.openFilesList", openFilesList);
-    on("files.togglePin", () => {
-      const key = aimedKey();
-      if (key) toggleFilesBufferPinned(props.projectId, key);
-    });
-    on("files.reopenClosedTab", reopenClosedTab);
-    on("files.addSelectionToChat", () => handoffSelectionToChat());
-    on("files.toggleTree", toggleFilesTree);
-    on("files.goToDefinition", () => void runGoToDefinition());
-    on("files.markSecret", openMarkSecretDialog);
-    on("files.showSecretScreen", () => setSaveError(secretScreenReport()));
-    on("editor.inlineEdit", () => {
-      const ctx = buildEditorActionContext();
-      if (ctx) void beginInlineEditPanel(ctx);
-    });
-    on("editor.renameSymbol", () => {
-      const ctx = buildEditorActionContext();
-      if (ctx) void beginRenameCard(ctx);
-    });
-    on("files.revertFileChanges", () => {
-      const buf = activeBuffer();
-      if (buf) void runFileRevert(buf.rootId, buf.path);
-    });
-    on("files.rejectHunk", () => void runEditorHunkReject());
-    for (const id of EDITOR_EDITING_COMMAND_IDS) on(id, withEditor((view) => EDITOR_COMMAND_IMPL[id](view), true));
-    on("editor.convertIndentationToSpaces", convertIndent("spaces"));
-    on("editor.convertIndentationToTabs", convertIndent("tabs"));
-  });
-  onMount(() => {
-    onCleanup(attachDispatcher());
-    onCleanup(abortEditorAction);
+  bindFilesCommands({
+    scope, appStore: props.appStore, tree: () => tree, createTargetDir,
+    showFilesTree: () => showFilesTree(), toggleFilesTree: () => toggleFilesTree(),
+    onCloseTabIdle: () => props.onCloseTabIdle?.(), treeReveal, revealInTree,
+    editorPaneEl: () => editorPaneEl(), readerHandles, tabs: tabCommands,
+    requestCloseTab, documents, versions, restoration, editorActions,
+    runSourceHistory, runGoToDefinition,
   });
 
   const [editorPaneEl, setEditorPaneEl] = createSignal<HTMLDivElement>();
@@ -1110,7 +921,6 @@ export function ProjectFilesView(props: Props) {
   /** Rebinds observers after strip remounts. */
   const [tabStripMountEpoch, setTabStripMountEpoch] = createSignal(0);
   const noteTabStripElement = () => setTabStripMountEpoch((n) => n + 1);
-
 
   const { scrollActiveTabIntoView } = createFilesTabMeasurements({
     ...scope, previousVersionForBuffer, tabStripMountEpoch,
