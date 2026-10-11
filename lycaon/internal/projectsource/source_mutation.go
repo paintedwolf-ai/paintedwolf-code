@@ -66,6 +66,10 @@ func (s *SourceMutationService) execute(ctx context.Context, operationID, projec
 		return nil, err
 	}
 	defer unlock()
+	if s.recovery.objects != nil {
+		release := s.recovery.objects.HoldRecoveryReferences()
+		defer release()
+	}
 	row, err := s.prepareExecution(ctx, operationID, projectID, inputDigest, prepare)
 	var release func()
 	if err == nil && row.Status != sourceMutationCommitted {
@@ -109,7 +113,7 @@ func (s *SourceMutationService) prepareExecution(ctx context.Context, operationI
 	} else {
 		plan, prepareErr := prepare()
 		if prepareErr != nil {
-			return nil, errors.Join(prepareErr, s.recovery.pruneSourceRecovery(context.WithoutCancel(ctx), projectID))
+			return nil, prepareErr
 		}
 		if plan.Kind == "copy" || plan.Kind == "rename" || plan.Kind == "restore" {
 			target := plan.ToAbs
@@ -124,7 +128,7 @@ func (s *SourceMutationService) prepareExecution(ctx context.Context, operationI
 		row = &sourceMutationRow{ID: operationID, ProjectID: plan.ProjectID, Kind: plan.Kind,
 			InputDigest: inputDigest, Plan: *plan, Status: sourceMutationPrepared, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
 		if err := s.Journal.insert(ctx, row); err != nil {
-			return nil, errors.Join(err, s.recovery.pruneSourceRecovery(context.WithoutCancel(ctx), projectID))
+			return nil, err
 		}
 	}
 	return row, nil

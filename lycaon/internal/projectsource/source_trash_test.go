@@ -241,6 +241,7 @@ func TestInterruptedPreparationReleasesUnclaimedRecovery(t *testing.T) {
 	testutil.FailErr(t, "capture before interruption", service.recovery.captureRecovery(t.Context(), &plan, abs))
 	restarted := NewSourceMutationService(service.Journal.db, service.settlement.recorder.(*sourceledger.Store))
 	testutil.FailErr(t, "startup", restarted.Recover(t.Context()))
+	testutil.FailErr(t, "background reclamation", service.settlement.recorder.(*sourceledger.Store).Retention.SweepBlobs(t.Context()))
 	var refs int
 	testutil.FailErr(t, "count recovery references", service.Journal.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM source_recovery_objects WHERE recovery_id=?`, plan.RecoveryID).Scan(&refs))
 	if refs != 0 {

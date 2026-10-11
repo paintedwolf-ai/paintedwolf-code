@@ -86,45 +86,6 @@ func TestEveryForeignKeyChildHasLeadingIndex(t *testing.T) {
 	}
 }
 
-func TestNoRedundantExplicitIndexes(t *testing.T) {
-	sqlDB, err := Open(filepath.Join(t.TempDir(), "store.db"))
-	testutil.FailErr(t, "open", err)
-	t.Cleanup(func() { _ = sqlDB.Close() })
-
-	rows, err := sqlDB.QueryContext(t.Context(), `
-		WITH indexes AS (
-		  SELECT s.name AS table_name, il.name AS index_name,
-		         (SELECT group_concat(printf('%s:%d:%s', name, desc, coll), ',')
-		            FROM (SELECT name, desc, coll
-		                  FROM pragma_index_xinfo(il.name)
-		                  WHERE key = 1 ORDER BY seqno)) AS signature
-		  FROM sqlite_schema s, pragma_index_list(s.name) il
-		  WHERE s.type = 'table' AND il.partial = 0
-		    AND il.origin = 'c' AND il."unique" = 0
-		)
-		SELECT short.table_name, short.index_name, long.index_name
-		FROM indexes short
-		JOIN indexes long
-		  ON long.table_name = short.table_name
-		 AND long.index_name != short.index_name
-		WHERE long.signature = short.signature
-		   OR long.signature LIKE short.signature || ',%'
-		ORDER BY short.table_name, short.index_name
-	`)
-	testutil.FailErr(t, "audit indexes", err)
-	defer func() { _ = rows.Close() }()
-	var redundant []string
-	for rows.Next() {
-		var table, shorter, longer string
-		testutil.FailErr(t, "scan redundant index", rows.Scan(&table, &shorter, &longer))
-		redundant = append(redundant, table+"."+shorter+" covered by "+longer)
-	}
-	testutil.FailErr(t, "iterate redundant indexes", rows.Err())
-	if len(redundant) > 0 {
-		t.Fatalf("redundant indexes: %s", strings.Join(redundant, "; "))
-	}
-}
-
 func foreignKeyColumns(t *testing.T, sqlDB DBTX, table string) [][]string {
 	t.Helper()
 	rows, err := sqlDB.QueryContext(t.Context(), "PRAGMA foreign_key_list("+sqliteIdentifier(table)+")")

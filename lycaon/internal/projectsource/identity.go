@@ -21,6 +21,7 @@ type SourceHeadReader interface {
 }
 
 type RecoveryStorage interface {
+	HoldRecoveryReferences() func()
 	BeginRecovery(context.Context, string, string) (*sourceledger.RecoveryWriter, error)
 	CopyRecoveryFile(context.Context, string, io.Writer) error
 	WalkRecovery(context.Context, string, string, int64, bool, func(sourceledger.RecoveryEntry) error) error

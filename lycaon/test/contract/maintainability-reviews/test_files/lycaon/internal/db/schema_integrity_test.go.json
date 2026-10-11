@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/db/schema_integrity_test.go",
+  "kind": "test_suite",
+  "workstream": "database-integrity",
+  "disposition": "retain",
+  "reason": "The remaining tests exercise the durable SQLite schema contract: strict keys and types, cross-project references, project cleanup, message identity, and terminal isolation receipts. The expression-index audit now has a focused fixture suite. Keep the remaining schema assertions together at the current measured size rather than separating their shared store context.",
+  "reviewed_commit": "16f0b2b4868e58264e658b8e60d4aa9261826ac3",
+  "ceiling": 433,
+  "boundaries": {
+    "lycaon/internal/db/schema_integrity_test.go": "40c3f6ae2cd2be3bd8b16dd852636611406d18ed9f737912351307f0b6169dbe"
+  }
+}

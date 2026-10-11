@@ -197,6 +197,12 @@ Deletion follows declared lifetime relationships, not a hand-maintained list in 
 
 Project deletion first resolves open sessions, worker branches, and filesystem state through their subsystem owners. SQL deletion cannot pretend those external resources disappeared. Project removal receipts in `project_removals` have no project foreign key: they describe an operation whose subject may already be deleted, and the request, reviewed evidence, checkpointed outcome, and operation identity survive it. Settled receipts expire with operation journals; unsettled receipts remain to report interrupted execution without replaying it.
 
+Recovery retention uses indexed references by project and recovery identity. Releasing
+a history entry or mutation claim queues its recovery identity. The existing source
+collector checks indexed undo, redo, and pending-operation references, then removes
+at most one page per manifest table and transaction. Capture leases cover preparation
+through receipt publication. Unrelated retained receipts do not multiply cleanup work.
+
 Maintenance does not run on the boot critical path. Startup and sustained write pressure signal a supervised runner. It deletes at most one configured batch per table and pass, catches up in bounded write transactions, then sleeps until the store signals more work. It removes terminal idempotency receipts and unreachable projections after the operation-journal retention period (14 days); it does not age out sessions, workers, scans, evidence, or other user history. Range predicates compare canonical RFC 3339 values directly so retention indexes remain usable. Incremental page reclamation is bounded; the live store is never full-vacuumed. Content caches and specialist indexes use their own budgets and clear paths.
 
 Under that same journal retention: completed and canceled file lifecycle requests expire, while failed and interrupted ones retain their mutation records for explicit recovery, so a cross-filesystem move cannot lose its recovery journal to age-based cleanup; and terminal editor journal payloads compact, retaining small operation identities until the document is deleted, so a delayed outbox retry can acknowledge an already-completed save without repeating a filesystem write.

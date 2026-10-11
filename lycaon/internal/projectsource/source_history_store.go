@@ -67,7 +67,7 @@ func commitSourceHistoryTx(ctx context.Context, tx *sql.Tx, plan sourceMutationP
 	if err != nil {
 		return err
 	}
-	return pruneSourceRecoveryRows(ctx, tx, entry.ProjectID)
+	return nil
 }
 
 func (s *SourceHistory) commitSourceHistoryMemory(plan sourceMutationPlan, entry *sourceHistoryEntry) error {
