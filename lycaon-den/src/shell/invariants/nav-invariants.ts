@@ -69,7 +69,7 @@ function assertNav06(): void {
   expect(shell).toMatch(/ChatTabChromeProvider/);
   expect(shell).toMatch(/const ChatStageBody/);
   expect(shell).toMatch(/export function ChatWorkspace/);
-  expect(shell).toMatch(/const StageSurface/);
+  expect(shell).toMatch(/export function WorkspaceStage/);
   expect(shell).toMatch(/<ChatView[\s\S]*projects=\{props\.projects\}/);
   const chatViewIdx = shell.indexOf("<ChatView");
   expect(chatViewIdx).toBeGreaterThan(-1);
