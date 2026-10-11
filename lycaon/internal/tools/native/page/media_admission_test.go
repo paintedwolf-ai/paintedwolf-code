@@ -71,6 +71,13 @@ func TestImageHandleViewRetainsCommittedRasterRevision(t *testing.T) {
 	if current.Revision != saved.Revision {
 		t.Fatal("view changed render revision")
 	}
+	raw, err = ViewImageHandler(ViewImageDeps{HandleStore: store})(t.Context(), map[string]any{"handle": "view"}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
+	testutil.FailErr(t, "view render handle without invocation effects", err)
+	var withoutEffects viewImageResult
+	testutil.FailErr(t, "decode render handle without invocation effects", json.Unmarshal([]byte(raw), &withoutEffects))
+	if withoutEffects != response {
+		t.Fatalf("absent invocation effects changed render result: %+v want %+v", withoutEffects, response)
+	}
 }
 
 func TestScreenedRasterNormalizationCannotPublishCorruptPixels(t *testing.T) {
@@ -112,10 +119,22 @@ func TestPageCapacityRefusalPreservesSessionAndLivePageCoordinates(t *testing.T)
 
 func TestRenderRefusesUnsupportedMarkupWithoutCommittingHandle(t *testing.T) {
 	store := renderhandle.NewStore()
-	raw, err := RenderViewHandler(nil, nil, store)(t.Context(), map[string]any{"markup": "valid text", "mime": "unsupported", "handle": "new"}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
-	var reject *toolrejection.ToolReject
-	if raw != "" || !errors.As(err, &reject) || reject.Code != "RENDER_MARKUP_INVALID" || len(store.List("session")) != 0 {
-		t.Fatalf("markup refusal raw=%q err=%v", raw, err)
+	for _, item := range []struct {
+		args map[string]any
+		code string
+	}{
+		{map[string]any{"markup": "valid text", "mime": "unsupported", "handle": "new"}, "RENDER_MARKUP_INVALID"},
+		{map[string]any{"markup": "<p>valid text</p>", "mime": "html", "handle": "new", "fonts": []string{"not-a-catalog-font"}}, "RENDER_KIT_UNKNOWN"},
+	} {
+		effects := &tools.ToolInvocationOut{}
+		raw, err := RenderViewHandler(&browser.Rasterizer{}, nil, store)(t.Context(), item.args, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}, Effects: tools.InvocationEffects{Out: effects}})
+		var reject *toolrejection.ToolReject
+		if raw != "" || !errors.As(err, &reject) || reject.Code != item.code || len(store.List("session")) != 0 || effects.Visual != nil {
+			t.Fatalf("render refusal raw=%q err=%v visual=%+v", raw, err, effects.Visual)
+		}
+		if item.code == "RENDER_KIT_UNKNOWN" && reject.Data["render_kit_kind"] != "font" {
+			t.Fatalf("render refusal lost font facts: %v", reject.Data)
+		}
 	}
 }
 
