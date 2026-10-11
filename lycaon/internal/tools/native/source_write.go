@@ -530,12 +530,17 @@ func commitAgentMutationTx(
 	in sourceledger.RecordInput,
 	change sourcefeed.Change,
 ) error {
+	prepared, err := ledger.Prepare(ctx, []sourceledger.RecordInput{in})
+	if err != nil {
+		return fmt.Errorf("source ledger preparation failed after successful write: %w", err)
+	}
+	defer prepared.Close()
 	tx, err := database.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("source change transaction failed after successful write: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := ledger.RecordTx(ctx, tx, in); err != nil {
+	if _, err := prepared.CommitTx(ctx, tx); err != nil {
 		return fmt.Errorf("source ledger record failed after successful write: %w", err)
 	}
 	delivery, err := sourcefeed.EmitTx(ctx, tx, change)

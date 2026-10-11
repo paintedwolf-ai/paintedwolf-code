@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -21,6 +22,7 @@ type agentAcceptance struct {
 	plan     *agentPlan
 	previous int64
 	mutation *Mutation
+	held     sourceledger.PreparedHeldEdit
 }
 
 // ApplyAgentEdits validates all anchors before accepting any agent text. The
@@ -45,6 +47,13 @@ func (s *Service) ApplyAgentEdits(ctx context.Context, inputs []AgentEdit) ([]*A
 	if replays {
 		return s.replayAgentBatch(ctx, batch)
 	}
+	defer func() {
+		for _, item := range batch {
+			if item.held != nil {
+				item.held.Close()
+			}
+		}
+	}()
 	releases := make([]func(), 0, len(batch))
 	defer func() {
 		for i := len(releases) - 1; i >= 0; i-- {
@@ -172,6 +181,13 @@ func (s *Service) prepareAgentAcceptance(ctx context.Context, item *agentAccepta
 	if err := s.prepareTextTransition(ctx, d, item.previous, textActor{kind: actorAgent}, item.input.OperationID); err != nil {
 		return err
 	}
+	if d.Dirty && d.Diverged {
+		var err error
+		item.held, err = s.prepareRetainedAgentEdit(ctx, d, item.input)
+		if err != nil {
+			return err
+		}
+	}
 	if d.Dirty && !d.Diverged {
 		in := item.input
 		mutation, err := s.prepareSaveMutation(ctx, d, in.OperationID, saveActor{Origin: api.SourceChangeOriginAgent,
@@ -187,7 +203,7 @@ func (s *Service) prepareAgentAcceptance(ctx context.Context, item *agentAccepta
 func (s *Service) commitAgentAcceptance(ctx context.Context, tx *sql.Tx, item *agentAcceptance) error {
 	d := item.document
 	if d.Dirty && d.Diverged {
-		held, err := s.retainAgentEditTx(ctx, tx, d, item.input)
+		held, err := item.held.CommitTx(ctx, tx)
 		if err != nil {
 			return err
 		}

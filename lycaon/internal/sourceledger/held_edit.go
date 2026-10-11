@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -27,19 +28,58 @@ type HeldEdit struct {
 	TS                              time.Time
 }
 
-// RecordHeldEditTx retains an unsaved version atomically with its document.
-// The working-file head stays unchanged.
-func (s *Store) RecordHeldEditTx(ctx context.Context, tx *sql.Tx, in HeldEdit) (string, error) {
-	if s == nil || s.sqlDB == nil || tx == nil {
-		return "", nil
+// PreparedHeldEdit retains its published content through transaction completion.
+type PreparedHeldEdit interface {
+	CommitTx(context.Context, *sql.Tx) (string, error)
+	Close()
+}
+
+type preparedHeldEdit struct {
+	mu      sync.Mutex
+	store   *Store
+	input   HeldEdit
+	object  *db.UpsertSourceBlobObjectParams
+	release func()
+}
+
+func (s *Store) PrepareHeldEdit(ctx context.Context, in HeldEdit) (PreparedHeldEdit, error) {
+	if s == nil || s.sqlDB == nil {
+		return nil, fmt.Errorf("ledger not configured")
 	}
 	in = normalizeHeldEdit(in)
 	if in.ProjectID == "" || in.FileID == "" || in.RootID == "" || in.Path == "" {
-		return "", fmt.Errorf("held edit requires project, file, root, and path")
+		return nil, fmt.Errorf("held edit requires project, file, root, and path")
 	}
 	if in.SHA256 == "" {
-		return "", fmt.Errorf("held edit requires content")
+		return nil, fmt.Errorf("held edit requires content")
 	}
+	release := s.objects.AcquireReferenceLease()
+	object, err := prepareContent(ctx, s.objects, in.SHA256, in.Content, EntryKindFile)
+	if err != nil {
+		release()
+		return nil, err
+	}
+	in.Content = nil
+	return &preparedHeldEdit{store: s, input: in, object: object, release: release}, nil
+}
+
+func (p *preparedHeldEdit) Close() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.release != nil {
+		p.release()
+		p.release = nil
+	}
+}
+
+// CommitTx retains an unsaved version without moving the working-file head.
+func (p *preparedHeldEdit) CommitTx(ctx context.Context, tx *sql.Tx) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.release == nil || tx == nil {
+		return "", fmt.Errorf("prepared held edit is closed or transaction is missing")
+	}
+	s, in := p.store, p.input
 	q := s.queries.WithTx(tx)
 	ts := in.TS.Format(time.RFC3339Nano)
 	operationID := newID()
@@ -66,7 +106,7 @@ func (s *Store) RecordHeldEditTx(ctx context.Context, tx *sql.Tx, in HeldEdit) (
 		FileID: in.FileID, ProjectID: in.ProjectID, BranchID: in.BranchID,
 		ParentVersionID: parentVersionID, OperationID: operationID,
 		RootID: in.RootID, Path: in.Path, EntryKind: EntryKindFile, State: "content",
-		SHA256: in.SHA256, Content: in.Content, Size: in.Size,
+		SHA256: in.SHA256, Object: p.object, Size: in.Size,
 		CaptureQuality: "exact", Landing: LandingEditorDocument, TS: in.TS,
 	})
 }

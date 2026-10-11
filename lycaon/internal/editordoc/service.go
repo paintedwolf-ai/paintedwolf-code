@@ -24,11 +24,8 @@ import (
 type Ledger interface {
 	sourceledger.FileTracker
 	QueryAttribution(context.Context, string, sourcebranch.ID, string, string) (sourceledger.AttributionResult, error)
-	RecordTx(context.Context, *sql.Tx, sourceledger.RecordInput) error
-	// RecordFileTx records a publication and answers the file identity it
-	// landed on, which a recreated path receives fresh.
-	RecordFileTx(context.Context, *sql.Tx, sourceledger.RecordInput) (sourceledger.TrackedFile, error)
-	RecordHeldEditTx(context.Context, *sql.Tx, sourceledger.HeldEdit) (string, error)
+	Prepare(context.Context, []sourceledger.RecordInput) (sourceledger.PreparedRecording, error)
+	PrepareHeldEdit(context.Context, sourceledger.HeldEdit) (sourceledger.PreparedHeldEdit, error)
 }
 
 type Service struct {
@@ -721,8 +718,13 @@ func (s *Service) commit(ctx context.Context, p *project.Project, d *Document, m
 		record.TextBefore = textBefore
 		record.Before, record.BeforeSize = m.BeforeBytes, int64(len(m.BeforeBytes))
 	}
+	prepared, err := s.ledger.Prepare(ctx, []sourceledger.RecordInput{record})
+	if err != nil {
+		return err
+	}
+	defer prepared.Close()
 	err = s.store.Tx(ctx, func(tx *sql.Tx) error {
-		tracked, err := s.ledger.RecordFileTx(ctx, tx, record)
+		tracked, err := prepared.CommitTx(ctx, tx)
 		if err != nil {
 			return err
 		}

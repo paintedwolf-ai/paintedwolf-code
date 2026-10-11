@@ -57,11 +57,12 @@ func (s *txProbeSink) counts() (events, delivered int) {
 	return len(s.events), s.delivered
 }
 
-// failingRecordTx preserves the database and rejects capture.
-type failingRecordTx struct{ *sourceledger.Store }
+type failingPreparedRecord struct{ *sourceledger.Store }
 
-func (failingRecordTx) RecordTx(context.Context, *sql.Tx, sourceledger.RecordInput) error {
-	return errSourceLedgerFixture
+func (failingPreparedRecord) Prepare(context.Context, []sourceledger.RecordInput) (sourceledger.PreparedRecording, error) {
+	return preparedCapture(func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error) {
+		return sourceledger.TrackedFile{}, errSourceLedgerFixture
+	}), nil
 }
 
 func bindProbeSink(t *testing.T, st *sourceledger.Store, sink *txProbeSink) {
@@ -152,7 +153,7 @@ func TestAgentMutationLedgerFailureAnnouncesNothing(t *testing.T) {
 	bindProbeSink(t, st, sink)
 	tctx := nativefixture.Context(dir)
 	tctx.ProjectID, tctx.SessionID, tctx.UserTurn = "p1", "s1", 1
-	tctx.SourceLedger = failingRecordTx{Store: st}
+	tctx.SourceLedger = failingPreparedRecord{Store: st}
 
 	path := filepath.Join(dir, "unrecorded.txt")
 	err := applyAgentFile(t.Context(), tctx, testMutationTarget(path), []byte("after\n"), nil, "")

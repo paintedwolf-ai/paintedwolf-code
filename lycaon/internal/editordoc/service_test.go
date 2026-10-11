@@ -26,14 +26,11 @@ type captureRecorder struct {
 	err     error
 }
 
-func (c *captureRecorder) RecordTx(_ context.Context, _ *sql.Tx, in sourceledger.RecordInput) error {
-	c.records = append(c.records, in)
-	return c.err
-}
-
-func (c *captureRecorder) RecordFileTx(_ context.Context, _ *sql.Tx, in sourceledger.RecordInput) (sourceledger.TrackedFile, error) {
-	c.records = append(c.records, in)
-	return sourceledger.TrackedFile{}, c.err
+func (c *captureRecorder) Prepare(_ context.Context, inputs []sourceledger.RecordInput) (sourceledger.PreparedRecording, error) {
+	return preparedCapture(func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error) {
+		c.records = append(c.records, inputs...)
+		return sourceledger.TrackedFile{}, c.err
+	}), nil
 }
 
 type fixedRoots struct{ p *project.Project }
@@ -500,3 +497,10 @@ func closeServiceAtCleanup(t *testing.T, service *Service) {
 	t.Helper()
 	t.Cleanup(func() { testutil.FailErr(t, "close document service", service.Close(context.Background())) })
 }
+
+type preparedCapture func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error)
+
+func (p preparedCapture) CommitTx(ctx context.Context, tx *sql.Tx) (sourceledger.TrackedFile, error) {
+	return p(ctx, tx)
+}
+func (p preparedCapture) Close() {}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -107,6 +108,18 @@ func (s *SQLStore) CommitPromotion(ctx context.Context, jobID, claimToken string
 			return fmt.Errorf("invalid promotion child status %q", update.Status)
 		}
 	}
+	var prepared sourceledger.PreparedRecording
+	if len(commit.Records) > 0 {
+		if commit.Recorder == nil {
+			return fmt.Errorf("promotion source recorder required")
+		}
+		var err error
+		prepared, err = commit.Recorder.Prepare(ctx, commit.Records)
+		if err != nil {
+			return err
+		}
+		defer prepared.Close()
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -162,11 +175,8 @@ func (s *SQLStore) CommitPromotion(ctx context.Context, jobID, claimToken string
 			return fmt.Errorf("commit promoted editor documents: %w", err)
 		}
 	}
-	if len(commit.Records) > 0 {
-		if commit.Recorder == nil {
-			return fmt.Errorf("promotion source recorder required")
-		}
-		if err := commit.Recorder.RecordBatchTx(ctx, tx, commit.Records); err != nil {
+	if prepared != nil {
+		if _, err := prepared.CommitTx(ctx, tx); err != nil {
 			return err
 		}
 	}

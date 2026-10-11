@@ -26,8 +26,10 @@ func (failingSourceRecorder) Record(context.Context, sourceledger.RecordInput) e
 	return errSourceLedgerFixture
 }
 
-func (failingSourceRecorder) RecordTx(context.Context, *sql.Tx, sourceledger.RecordInput) error {
-	return errSourceLedgerFixture
+func (failingSourceRecorder) Prepare(context.Context, []sourceledger.RecordInput) (sourceledger.PreparedRecording, error) {
+	return preparedCapture(func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error) {
+		return sourceledger.TrackedFile{}, errSourceLedgerFixture
+	}), nil
 }
 
 func TestStreamOverwriteRecordsAddressableEvidence(t *testing.T) {

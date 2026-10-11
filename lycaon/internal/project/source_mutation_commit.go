@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
+	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
 // commit atomically records attribution, events, and completion.
@@ -33,6 +34,14 @@ func (s *SourceMutationService) commitOnce(ctx context.Context, row *sourceMutat
 	if err != nil {
 		return nil, err
 	}
+	var prepared sourceledger.PreparedRecording
+	if row.Plan.Changed && s.ledger != nil {
+		prepared, err = s.ledger.Prepare(ctx, row.Plan.ledgerInputs(row.ID))
+		if err != nil {
+			return nil, err
+		}
+		defer prepared.Close()
+	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
@@ -40,7 +49,7 @@ func (s *SourceMutationService) commitOnce(ctx context.Context, row *sourceMutat
 	defer func() { _ = tx.Rollback() }()
 	response := append(json.RawMessage(nil), row.Plan.Response...)
 	updatedAt := time.Now().UTC()
-	delivery, err := s.commitTx(ctx, tx, row, response, updatedAt, history)
+	delivery, err := commitSourceMutationTx(ctx, tx, row, response, updatedAt, history, prepared)
 	if err != nil {
 		return nil, err
 	}
@@ -51,11 +60,11 @@ func (s *SourceMutationService) commitOnce(ctx context.Context, row *sourceMutat
 	return delivery, nil
 }
 
-func (s *SourceMutationService) commitTx(ctx context.Context, tx *sql.Tx, row *sourceMutationRow, response json.RawMessage, updatedAt time.Time, history *sourceHistoryEntry) (*sourcefeed.StagedDelivery, error) {
+func commitSourceMutationTx(ctx context.Context, tx *sql.Tx, row *sourceMutationRow, response json.RawMessage, updatedAt time.Time, history *sourceHistoryEntry, prepared sourceledger.PreparedRecording) (*sourcefeed.StagedDelivery, error) {
 	var delivery *sourcefeed.StagedDelivery
 	if row.Plan.Changed {
-		if s.ledger != nil {
-			if err := s.ledger.RecordBatchTx(ctx, tx, row.Plan.ledgerInputs(row.ID)); err != nil {
+		if prepared != nil {
+			if _, err := prepared.CommitTx(ctx, tx); err != nil {
 				return nil, err
 			}
 		}
