@@ -101,7 +101,7 @@ func (s *mergeStoreStub) CommitPromotion(ctx context.Context, _ string, _ string
 	}
 	for _, record := range commit.Records {
 		if commit.Recorder != nil {
-			if err := commit.Recorder.RecordTx(ctx, nil, record); err != nil {
+			if err := commit.Recorder.Record(ctx, record); err != nil {
 				return err
 			}
 		}

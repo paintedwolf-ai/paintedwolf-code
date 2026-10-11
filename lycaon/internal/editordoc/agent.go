@@ -2,7 +2,6 @@ package editordoc
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"strings"
 
@@ -91,13 +90,13 @@ func (s *Service) ApplyAgentEdit(ctx context.Context, in AgentEdit) (*AgentEditR
 	return results[0], nil
 }
 
-// retainAgentEditTx records accepted bytes that publication could not place on disk.
-func (s *Service) retainAgentEditTx(ctx context.Context, tx *sql.Tx, d *Document, in AgentEdit) (string, error) {
+// prepareRetainedAgentEdit publishes accepted bytes before document commit.
+func (s *Service) prepareRetainedAgentEdit(ctx context.Context, d *Document, in AgentEdit) (sourceledger.PreparedHeldEdit, error) {
 	encoded, err := textfile.EncodeBounded(serializeEOL(d.Draft, d.EOL), d.Encoding, textfile.LimitsForRaw(project.SourceWriteMaxBytes))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return s.ledger.RecordHeldEditTx(ctx, tx, sourceledger.HeldEdit{
+	return s.ledger.PrepareHeldEdit(ctx, sourceledger.HeldEdit{
 		BranchID:  d.BranchID,
 		ProjectID: d.ProjectID, FileID: d.FileID, RootID: d.RootID, Path: d.Path,
 		Content: encoded, SHA256: textfile.SHA256(encoded), Size: int64(len(encoded)),

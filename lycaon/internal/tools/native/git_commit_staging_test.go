@@ -20,8 +20,10 @@ type stubAuthorship struct {
 
 func (s stubAuthorship) Record(context.Context, sourceledger.RecordInput) error { return nil }
 
-func (s stubAuthorship) RecordTx(context.Context, *sql.Tx, sourceledger.RecordInput) error {
-	return nil
+func (s stubAuthorship) Prepare(context.Context, []sourceledger.RecordInput) (sourceledger.PreparedRecording, error) {
+	return preparedCapture(func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error) {
+		return sourceledger.TrackedFile{}, nil
+	}), nil
 }
 
 func (s stubAuthorship) SessionAuthoredPaths(_ context.Context, _, _, _ string) ([]string, error) {

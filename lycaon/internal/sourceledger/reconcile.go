@@ -79,55 +79,34 @@ func (s *Store) hasTrackingCheckpoint(ctx context.Context, projectID string) (bo
 	return err == nil, err
 }
 
-// recordObservation records one tracked head's drift and reports whether it
-// landed; a head another writer already moved is left alone.
-func (s *Store) recordObservation(
-	ctx context.Context,
-	projectID string,
-	head db.SourceBranchHeads,
-	after *observedFile,
-	transactionID string,
-	cause observationCause,
-) (bool, error) {
+// recordObservation rechecks the observed head before committing its drift.
+func (s *Store) recordObservation(ctx context.Context, projectID string, head db.SourceBranchHeads, after *observedFile, transactionID string, cause observationCause) (bool, error) {
+	prepared, err := s.prepareObservation(ctx, projectID, head, after, transactionID, cause)
+	if err != nil {
+		return false, err
+	}
+	defer prepared.recording.Close()
 	s.recordMu.Lock()
 	defer s.recordMu.Unlock()
 	tx, err := s.sqlDB.BeginTx(ctx, nil)
 	if err != nil {
 		return false, err
 	}
-	defer func() { _ = tx.Rollback() }()
-	landed, err := s.recordObservationTx(ctx, s.queries.WithTx(tx), projectID, head, after, transactionID, cause)
+	defer tx.Rollback()
+	landed, err := prepared.commit(ctx, tx)
 	if err != nil || !landed {
 		return landed, err
 	}
 	return true, tx.Commit()
 }
 
-// recordObservationTx is recordObservation inside a caller's transaction,
-// which a batch of path observations shares.
-func (s *Store) recordObservationTx(
-	ctx context.Context,
-	q *db.Queries,
-	projectID string,
-	head db.SourceBranchHeads,
-	after *observedFile,
-	transactionID string,
-	cause observationCause,
-) (bool, error) {
-	current, err := q.GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{
-		ProjectID: projectID, BranchID: head.BranchID, FileID: head.FileID,
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if current.State != head.State || current.ContentSha256 != head.ContentSha256 ||
-		current.VersionID != head.VersionID || current.Ordinal != head.Ordinal {
-		return false, nil
-	}
+type preparedObservation struct {
+	projectID string
+	head      db.SourceBranchHeads
+	recording PreparedRecording
+}
 
+func (s *Store) prepareObservation(ctx context.Context, projectID string, head db.SourceBranchHeads, after *observedFile, transactionID string, cause observationCause) (*preparedObservation, error) {
 	op := api.SourceChangeOpWrite
 	var afterBytes []byte
 	afterSHA := ""
@@ -143,7 +122,7 @@ func (s *Store) recordObservationTx(
 	var beforeBytes []byte
 	if head.ContentSha256 != "" {
 		if raw, ok, err := s.readVerifiedBlob(ctx, head.ContentSha256); err != nil {
-			return false, err
+			return nil, err
 		} else if ok {
 			beforeBytes = raw
 		}
@@ -162,13 +141,27 @@ func (s *Store) recordObservationTx(
 		}(),
 		OperationID: transactionID,
 	})
-	if err := validateBatch([]RecordInput{in}); err != nil {
+	recording, err := s.Prepare(ctx, []RecordInput{in})
+	if err != nil {
+		return nil, err
+	}
+	return &preparedObservation{projectID: projectID, head: head, recording: recording}, nil
+}
+
+func (p *preparedObservation) commit(ctx context.Context, tx *sql.Tx) (bool, error) {
+	current, err := db.New(tx).GetSourceBranchHeadByFile(ctx, db.GetSourceBranchHeadByFileParams{ProjectID: p.projectID, BranchID: p.head.BranchID, FileID: p.head.FileID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
 		return false, err
 	}
-	if err := s.recordBatchTx(ctx, q, []RecordInput{in}); err != nil {
-		return false, err
+	head := p.head
+	if current.State != head.State || current.ContentSha256 != head.ContentSha256 || current.VersionID != head.VersionID || current.Ordinal != head.Ordinal {
+		return false, nil
 	}
-	return true, nil
+	_, err = p.recording.CommitTx(ctx, tx)
+	return err == nil, err
 }
 
 // recordWindowAdmissions lands a window's admitted files as one operation per

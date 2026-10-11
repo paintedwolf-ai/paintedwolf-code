@@ -20,7 +20,7 @@ type emitSite struct {
 }
 
 var userMutationSites = []emitSite{
-	{relFile: "internal/project/source_mutation_commit.go", fn: "commitTx", call: "EmitBatchTx"},
+	{relFile: "internal/project/source_mutation_commit.go", fn: "commitSourceMutationTx", call: "EmitBatchTx"},
 	{relFile: "internal/project/source_mutation_commit.go", fn: "commitWithoutStore", call: "EmitBatch"},
 }
 
