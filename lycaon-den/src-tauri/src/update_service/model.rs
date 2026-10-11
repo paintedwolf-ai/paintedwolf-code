@@ -137,6 +137,8 @@ pub struct NativeUpdateState {
     pub coordinated: bool,
     #[serde(skip)]
     pub development: bool,
+    #[serde(skip)]
+    pub diagnostic_error: Option<UpdateError>,
     pub install_source: InstallSource,
     pub capabilities: Capabilities,
     pub discovery: Discovery,
@@ -166,6 +168,7 @@ impl NativeUpdateState {
             startup_pending: true,
             coordinated: true,
             development: false,
+            diagnostic_error: None,
             install_source,
             capabilities: Capabilities::default(),
             discovery: Discovery::Idle,
@@ -245,4 +248,41 @@ pub fn now() -> u64 {
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs()
+}
+
+#[cfg(test)]
+mod availability_tests {
+    use super::*;
+
+    #[test]
+    fn development_mode_has_no_update_capabilities() {
+        let mut state = NativeUpdateState::new(
+            "1.0.2".into(),
+            UpdateChannel::Preview,
+            InstallSource::DirectDownload,
+        );
+        state.development = true;
+        state.refresh_capabilities(true);
+        assert_eq!(
+            state.capabilities.blocked_reason.as_deref(),
+            Some("development_build")
+        );
+        assert!(!state.capabilities.can_check);
+        assert!(!state.capabilities.can_download);
+        assert!(!state.capabilities.can_restart_to_update);
+        assert!(!state.capabilities.can_install_automatically);
+    }
+
+    #[test]
+    fn packaged_installations_keep_discovery() {
+        for source in [
+            InstallSource::DirectDownload,
+            InstallSource::HomebrewCask,
+            InstallSource::Unknown,
+        ] {
+            let mut state = NativeUpdateState::new("1.0.2".into(), UpdateChannel::Stable, source);
+            state.refresh_capabilities(false);
+            assert!(state.capabilities.can_check);
+        }
+    }
 }

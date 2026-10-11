@@ -50,6 +50,7 @@ export type ClientNoticeKind =
   | "unexpected_client_error"
   | "update_available"
   | "update_failed"
+  | "update_feed_rejected"
   | "update_ready"
   | "view_render_failed";
 
@@ -234,6 +235,12 @@ export const CLIENT_NOTICES: Readonly<Record<ClientNoticeKind, ClientNoticeCopy>
     title: "Update needs attention",
     message: "Painted Wolf Code could not prepare or install the update.",
     suggestedAction: "Open Settings → General → Updates to review the failure and retry.",
+    scope: "app",
+  },
+  update_feed_rejected: {
+    title: "Update feed could not be verified",
+    message: "Painted Wolf Code could not verify the published update information. No update was installed.",
+    suggestedAction: "Open Settings → General → Updates for details and check again later.",
     scope: "app",
   },
   update_ready: {
