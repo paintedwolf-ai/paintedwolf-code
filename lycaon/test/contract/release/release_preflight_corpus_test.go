@@ -13,6 +13,7 @@ import (
 // preflightInputs are the files release-preflight.sh reads before its corpus check.
 var preflightInputs = []string{
 	"VERSION", "RELEASE_BUILD", "CHANGELOG.md",
+	"lycaon/go.mod", "lycaon/go.sum",
 	"lycaon-den/package.json", "lycaon-den/src-tauri/tauri.conf.json",
 	"lycaon-den/src-tauri/Cargo.toml", "lycaon-den/src-tauri/Cargo.lock",
 	"packaging/update-keys.json", "packaging/release-platforms.json",
@@ -52,6 +53,12 @@ func TestReleasePreflightVerifiesOnlyACompleteCorpus(t *testing.T) {
 				contractcheck.FailErr(t, "write preflight fixture", os.WriteFile(absolute, []byte(body), 0o700))
 			}
 			contractcheck.FailErr(t, "create corpus", os.MkdirAll(corpus, 0o700))
+			// Archive checks read the captured module and release refs; only corpus inputs are synthetic.
+			for _, rel := range []string{".git", "third_party", "lycaon/cmd", "lycaon/internal", "lycaon/pkg", "lycaon/config"} {
+				contractcheck.FailErr(t, "link preflight archive dependency "+rel,
+					os.Symlink(filepath.Join(repo, rel), filepath.Join(root, rel)))
+			}
+
 
 			cmd := exec.CommandContext(t.Context(), "bash", filepath.Join(root, "scripts", "release-preflight.sh"), "--require-corpus")
 			cmd.Env = append(os.Environ(), "PATH="+filepath.Join(root, "tools")+string(os.PathListSeparator)+os.Getenv("PATH"))
