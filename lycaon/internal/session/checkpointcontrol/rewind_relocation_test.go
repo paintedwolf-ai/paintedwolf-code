@@ -26,7 +26,9 @@ func TestRelocatedRewindRecoveryLeavesOriginalInstallationUntouched(t *testing.T
 				}
 				op := sessionstore.RewindOperation{ID: journal.ID, SessionID: journal.TranscriptID, AnchorMessageID: journal.AnchorMessageID, ProjectDir: journal.ProjectDir, InputDigest: rewindInputDigest(journal.TranscriptID, journal.AnchorMessageID)}
 				testutil.FailErr(t, "prepare receipt", mgr.store.PrepareRewind(t.Context(), op))
-				testutil.FailErr(t, "record phase", mgr.store.SetRewindPhase(t.Context(), op.ID, phase, ""))
+				if phase != "prepared" {
+					testutil.FailErr(t, "record phase", mgr.store.SetRewindPhase(t.Context(), op.ID, phase, ""))
+				}
 				before, err := os.ReadFile(journal.Path())
 				testutil.FailErr(t, "read original", err)
 				destination := t.TempDir()
@@ -62,5 +64,31 @@ func TestRelocatedRewindRecoveryLeavesOriginalInstallationUntouched(t *testing.T
 				}
 			})
 		}
+	}
+}
+
+func TestUnreadableRewindRemainsPendingAcrossBoots(t *testing.T) {
+	for _, corrupt := range []bool{false, true} {
+		t.Run(map[bool]string{false: "missing", true: "identity mismatch"}[corrupt], func(t *testing.T) {
+			mgr, journal, _ := prepareJournalFixture(t)
+			op := sessionstore.RewindOperation{ID: journal.ID, SessionID: journal.TranscriptID, AnchorMessageID: journal.AnchorMessageID, ProjectDir: journal.ProjectDir, InputDigest: rewindInputDigest(journal.TranscriptID, journal.AnchorMessageID)}
+			testutil.FailErr(t, "prepare receipt", mgr.store.PrepareRewind(t.Context(), op))
+			if corrupt {
+				journal.TranscriptID = "wrong-session"
+				testutil.FailErr(t, "replace journal identity", journal.Write())
+			} else {
+				testutil.FailErr(t, "remove journal", os.Remove(journal.Path()))
+			}
+			for boot := 0; boot < 2; boot++ {
+				if err := mgr.RecoverRewindsForSession(t.Context(), op.SessionID); err == nil {
+					t.Fatal("unreadable journal admitted")
+				}
+				row, err := mgr.store.GetRewindOperation(t.Context(), op.ID)
+				testutil.FailErr(t, "read pending receipt", err)
+				if row.Status != "prepared" {
+					t.Fatalf("unresolved journal became terminal: %s", row.Status)
+				}
+			}
+		})
 	}
 }
