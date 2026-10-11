@@ -57,6 +57,10 @@ const events = createConnectionEvents({
 export const projectsRegistry = reconcile.projectsRegistry;
 export const handleSessionGone = reconcile.handleSessionGone;
 export const getLycaonClient = host.getClient;
+export function captureConnectionGuard(client: LycaonClient): () => boolean {
+  const generation = host.generation;
+  return () => host.generation === generation && host.client === client;
+}
 export const setLycaonClientForTest = host.setClientForTest;
 export const resumeProjectEventsAfter = events.resumeProjectEventsAfter;
 export const onProjectEvent = events.onProjectEvent;

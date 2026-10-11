@@ -31,6 +31,7 @@ import { watchWindowExitForAppState } from "../persistence/app-state-window.ts";
 vi.mock("./app-connection.ts", () => ({
   connectAppBackend: vi.fn().mockResolvedValue({}),
   disconnectAppBackend: vi.fn(),
+  captureConnectionGuard: () => () => true,
   followEngineState: vi.fn().mockResolvedValue(() => {}),
   getLycaonClient: vi.fn().mockReturnValue({}),
   attachKnownBackend: vi.fn(),

@@ -51,6 +51,7 @@ import { lastSeenStoreRevision } from "./health.ts";
 import {
   attachKnownBackend,
   connectAppBackend,
+  captureConnectionGuard,
   disconnectAppBackend,
   followEngineState,
   getLycaonClient,
@@ -381,6 +382,8 @@ async function bootstrapAppBackend(
     return;
   }
 
+  const connectionCurrent = captureConnectionGuard(client);
+  const shouldApply = () => !signal?.aborted && connectionCurrent();
   try {
     if (stores.requestedSession) {
       await restoreRequestedSession(stores, stores.requestedSession);
@@ -401,8 +404,8 @@ async function bootstrapAppBackend(
   void prefetchRecentSessionCaches(
     client,
     stores.recents.state.recents,
-    stores.projects.state.projects,
     handleSessionGone,
+    shouldApply,
   ).catch(() => undefined);
 }
 

@@ -77,6 +77,7 @@ function App() {
   onCleanup(connectionBinding.dispose);
   createEffect(() => documentResidency.setBudget(windowDocumentBudget(1 + itemWindowViews().length)));
   onMount(() => {
+    if (connectionBinding.signal.aborted) return;
     const stopDocumentDelivery = startDocumentOutboxRelay(getLycaonClient, id => !!editorReplica(id), document => applyFilesBufferDocumentStatus(document.project_id, document, true));
     const stopComposerDocumentMirror = startComposerDocumentMirror();
     const subject = windowSubject();
@@ -112,7 +113,6 @@ function App() {
       stopUpdateRecovery();
       stopUpdateRecovery = () => {};
     };
-    connectionBinding.signal.addEventListener("abort", releaseUpdateRecovery, { once: true });
     if (!subject && isTauriRuntime()) {
       void listenHostEvent("update-resume-engine", () => {
         if (stopped || connectionBinding.signal.aborted) return;
@@ -123,14 +123,19 @@ function App() {
         else stopUpdateRecovery = stop;
       });
     }
-    onCleanup(() => {
+    const releaseBackground = () => {
+      if (stopped) return;
       stopped = true;
-      connectionBinding.signal.removeEventListener("abort", releaseUpdateRecovery);
+      connectionBinding.signal.removeEventListener("abort", releaseBackground);
       releaseUpdateRecovery();
       stopDocumentDelivery();
       stopComposerDocumentMirror();
       unmountNotifications();
       unmountUpdates();
+    };
+    connectionBinding.signal.addEventListener("abort", releaseBackground, { once: true });
+    onCleanup(() => {
+      releaseBackground();
       rememberSessionChatFromStore(appStore);
       void flushTranscriptRowHeightsToDisk().catch(() => undefined);
     });
