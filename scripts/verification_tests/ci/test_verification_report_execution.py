@@ -1,4 +1,3 @@
-import copy
 import json
 from pathlib import Path
 import tempfile
@@ -6,9 +5,6 @@ import unittest
 from unittest.mock import patch
 
 from ci_policy import verification_report as ci
-from ci_policy import hosted_plan
-import verification_plan as planning
-from verification_execute import shard_packages
 
 
 class VerificationReportTests(unittest.TestCase):
@@ -57,4 +53,3 @@ class VerificationReportTests(unittest.TestCase):
                 "::error title=lint:full failed::see the job summary",
                 "::error title=den:test unverified::cancelled before admission",
             ])
-

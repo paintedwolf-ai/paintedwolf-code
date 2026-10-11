@@ -19,7 +19,6 @@ def require_success(results, skipped=(), draft=False):
         raise ValueError("required verification did not pass: " + ", ".join(failed))
 
 
-
 def require_qualification(repository, sha):
     """Release eligibility comes from qualification of this exact commit."""
     query = urlencode({"head_sha": sha, "per_page": 100})
@@ -28,4 +27,3 @@ def require_qualification(repository, sha):
                and run["event"] in {"push", "workflow_dispatch"}
                and run["conclusion"] == "success" for run in runs):
         raise ValueError(f"{sha} has no passing exact-commit qualification; qualify it before releasing")
-

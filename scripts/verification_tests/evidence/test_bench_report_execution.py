@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 
-SCRIPT = Path(__file__).resolve().parents[1].joinpath("go-bench-report.py")
+SCRIPT = Path(__file__).resolve().parents[2].joinpath("go-bench-report.py")
 
 
 class BenchReportTests(unittest.TestCase):

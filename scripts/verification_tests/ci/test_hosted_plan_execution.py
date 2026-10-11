@@ -1,14 +1,9 @@
 import copy
-import json
-from pathlib import Path
-import tempfile
 import unittest
 from unittest.mock import patch
 
 from ci_policy import hosted_plan as ci
-from ci_policy import hosted_plan
 import verification_plan as planning
-from verification_execute import shard_packages
 
 
 class HostedPlanTests(unittest.TestCase):
@@ -24,7 +19,6 @@ class HostedPlanTests(unittest.TestCase):
         self.assertLessEqual(release, check)
         self.assertEqual(release, {"build", "contracts", "behavior", "frontend", "native", "vulnerabilities"})
 
-
     def test_ready_tier_is_one_short_static_job_from_the_handoff_gate(self):
         handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
         rows = ci.matrix("fast")["include"]
@@ -38,7 +32,6 @@ class HostedPlanTests(unittest.TestCase):
         self.assertFalse(set(stages) & {"test:short", "test:contract", "den:test:fast", "coverage:changes",
                                          "den:coverage:changes"})
         self.assertLessEqual(rows[0]["minutes"], 15)
-
 
     def test_partition_drift_refuses_to_plan_before_any_tests_run(self):
         for mutation in ("missing", "fast-outside", "fast-twice", "duplicate", "unknown", "unbounded"):
@@ -59,7 +52,6 @@ class HostedPlanTests(unittest.TestCase):
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
                     ci.matrix("check")
 
-
     def test_nightly_selection_includes_only_requested_and_unconditional_jobs(self):
         lanes = ci.lanes()
         nightly = {target for row in ci.matrix("nightly")["include"] for target in lanes[row["lane"]]["targets"]}
@@ -77,7 +69,6 @@ class HostedPlanTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 ci.matrix(profile, suite)
 
-
     def test_host_platform_and_time_budgets_are_explicit(self):
         for profile in ci.PROFILES:
             for row in ci.matrix(profile)["include"]:
@@ -86,7 +77,6 @@ class HostedPlanTests(unittest.TestCase):
                     self.assertLess(row["job_minutes"], 360)
                     # macOS hosts only the lanes that test macOS-specific behavior.
                     self.assertEqual(row["runner"], "macos-15" if row["lane"] == "webkit" else "ubuntu-latest")
-
 
     def test_each_lane_installs_only_its_declared_setup(self):
         setups = {row["lane"]: row["setup"] for row in ci.matrix("check")["include"]}
@@ -110,13 +100,11 @@ class HostedPlanTests(unittest.TestCase):
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
                     ci.matrix("check")
 
-
     def test_e2e_leaves_merge_admission_and_has_an_explicit_nightly_selection(self):
         self.assertNotIn("den:webkit:scroll", [stage["name"] for stage in planning.expand(["check"])])
         self.assertNotIn("webkit", {row["lane"] for row in ci.matrix("check")["include"]})
         self.assertEqual({row["lane"] for row in ci.matrix("nightly", "e2e")["include"]},
                          {"webkit", "vulnerability-freshness"})
-
 
     def test_each_profile_caps_the_runners_its_matrix_holds(self):
         caps = planning.catalog()["capacity"]["max_parallel"]
@@ -135,7 +123,6 @@ class HostedPlanTests(unittest.TestCase):
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
                     ci.max_parallel("check")
 
-
     def test_capped_matrix_starts_cheap_frequent_failures_then_its_longest_lanes(self):
         lanes = ci.lanes()
         rows = ci.matrix("integration")["include"]
@@ -150,10 +137,8 @@ class HostedPlanTests(unittest.TestCase):
         with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
             ci.matrix("integration")
 
-
     def test_combined_analysis_targets_restore_both_tool_sets(self):
         self.assertEqual(ci.analysis_set(["lint:full", "lint:vuln"]), "all")
-
 
     def test_lane_setup_restores_only_the_required_tool_sets(self):
         for profile in ci.PROFILES:
@@ -169,4 +154,3 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual(len([row for row in ci.matrix("check")["include"] if row["notices"]]), 1)
         # Notices run in the merge queue, not the ready pull request tier.
         self.assertFalse([row for row in ci.matrix("fast")["include"] if row["notices"]])
-

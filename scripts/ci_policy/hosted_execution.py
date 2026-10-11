@@ -22,7 +22,6 @@ def task_json(arguments):
     return result.returncode, json.loads(output) if output else None
 
 
-
 def release_leftover_requests(step):
     """A hosted runner serves one job; withdraw its abandoned queue requests."""
     if os.environ.get("GITHUB_ACTIONS") != "true":
@@ -37,7 +36,6 @@ def release_leftover_requests(step):
         if code != 0:
             unreleased.append(entry["ticket"])
     return unreleased
-
 
 
 def resource_line():
@@ -59,11 +57,9 @@ def resource_line():
             f"disk free {free}; largest {top}")
 
 
-
 def sample_resources(stop, interval=60):
     while not stop.wait(interval):
         print(resource_line(), flush=True)
-
 
 
 def run_lane(name, shard=""):
@@ -118,4 +114,3 @@ def run_lane(name, shard=""):
     record["classification"] = classify(record, verification_report.failures(artifact_root(ROOT)))
     path.write_text(json.dumps(record, indent=2) + "\n")
     return code
-

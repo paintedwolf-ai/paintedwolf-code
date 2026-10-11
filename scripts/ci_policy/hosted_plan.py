@@ -59,7 +59,6 @@ def lanes():
     return values
 
 
-
 def max_parallel(profile):
     """Jobs a profile's matrix runs at once; the catalog's capacity table bounds every hosted class."""
     caps = catalog()["capacity"]["max_parallel"]
@@ -70,12 +69,10 @@ def max_parallel(profile):
     return caps[profile]
 
 
-
 def analysis_set(targets):
     lint = bool(set(targets) & {"lint:fast", "lint:full"})
     vulnerabilities = bool(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
     return "all" if lint and vulnerabilities else "lint" if lint else "vulnerabilities" if vulnerabilities else "none"
-
 
 
 def matrix(profile, suite="all", scope=None):
@@ -109,11 +106,9 @@ def matrix(profile, suite="all", scope=None):
     return {"include": sorted(result, key=lambda row: (not values[row["lane"]].get("first"), -row["minutes"]))}
 
 
-
 def invocation(targets):
     """Expand private groups, which Task refuses to run by name, into their members."""
     plan = catalog()
     private = set(plan.get("private", []))
     return [member for target in targets
             for member in (plan["groups"][target] if target in private else [target])]
-

@@ -1,4 +1,3 @@
-import copy
 import json
 from pathlib import Path
 import tempfile
@@ -7,7 +6,6 @@ from unittest.mock import patch
 
 from ci_policy import hosted_execution as ci
 from ci_policy import hosted_plan
-import verification_plan as planning
 from verification_execute import shard_packages
 
 
@@ -29,7 +27,6 @@ class HostedExecutionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 ci.run_lane("behavior")
 
-
     def test_lane_uses_task_admission_and_preserves_the_verdict(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -44,7 +41,6 @@ class HostedExecutionTests(unittest.TestCase):
                 self.assertEqual(record["status"], status)
                 self.assertGreaterEqual(record["finished_at"], record["started_at"])
 
-
     def test_lane_worker_cap_reaches_admission(self):
         with tempfile.TemporaryDirectory() as directory, \
                 patch.object(ci, "artifact_root", return_value=Path(directory)), \
@@ -54,13 +50,11 @@ class HostedExecutionTests(unittest.TestCase):
             ci.run_lane("frontend")
             self.assertEqual(run.call_args.kwargs["env"].get("PW_TEST_WORKERS"), ci.os.environ.get("PW_TEST_WORKERS"))
 
-
     @unittest.skipUnless(Path("/proc/meminfo").exists(), "reads Linux /proc")
     def test_resource_line_reports_memory_disk_and_largest_processes(self):
         line = ci.resource_line()
         self.assertRegex(line, r"available \d+ MiB, swap free \d+ MiB; disk free / \d+ GiB")
         self.assertRegex(line, r"largest .+\[\d+\] \d+ MiB")
-
 
     def test_resource_line_preserves_process_names_with_spaces(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -75,7 +69,6 @@ class HostedExecutionTests(unittest.TestCase):
             self.assertIn("available 2 MiB, swap free 1 MiB", line)
             self.assertIn("largest Isolated Web Co[123] 3 MiB", line)
 
-
     def test_sharded_lane_expands_into_jobs_that_each_select_their_slice(self):
         count = hosted_plan.lanes()["race"]["shards"]
         rows = [row for row in hosted_plan.matrix("nightly", "race")["include"] if row["lane"] == "race"]
@@ -89,7 +82,6 @@ class HostedExecutionTests(unittest.TestCase):
                 with self.subTest(lane=lane, shard=shard), self.assertRaises(ValueError):
                     ci.run_lane(lane, shard)
 
-
     def test_shards_partition_the_package_selection(self):
         packages = [f"p{n:02d}" for n in range(10)]
         slices = [shard_packages(packages, f"{k}/3") for k in range(1, 4)]
@@ -101,7 +93,6 @@ class HostedExecutionTests(unittest.TestCase):
                 shard_packages(packages, shard)
         with self.assertRaises(ValueError):
             shard_packages(["only"], "2/2")
-
 
     def test_lane_budget_bounds_the_go_watchdog_unless_the_caller_sets_one(self):
         minutes = hosted_plan.lanes()["behavior"]["minutes"]
@@ -115,7 +106,6 @@ class HostedExecutionTests(unittest.TestCase):
                     ci.run_lane("behavior", "1/2")
                     self.assertEqual(run.call_args.kwargs["env"]["PW_GO_TEST_TIMEOUT_SECONDS"], expected)
 
-
     def test_interrupted_invocation_leaves_an_unfinished_record(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -126,7 +116,6 @@ class HostedExecutionTests(unittest.TestCase):
             record = json.loads((root / "ci/run.json").read_text())
             self.assertEqual(record["status"], "running")
             self.assertNotIn("exit_code", record)
-
 
     def test_release_withdraws_every_leftover_request_through_task_cancel(self):
         status = {"runs": [
@@ -151,13 +140,11 @@ class HostedExecutionTests(unittest.TestCase):
             ["test:cancel", "--", "2-b", "--force", "--reason", "e2e:cleanup outlived the Playwright web E2E step"],
         ])
 
-
     def test_release_refuses_outside_a_hosted_runner(self):
         with patch.dict(ci.os.environ, {"GITHUB_ACTIONS": ""}), patch.object(ci, "task_json") as task, \
                 self.assertRaises(ValueError):
             ci.release_leftover_requests("cleanup")
         task.assert_not_called()
-
 
     def test_task_json_reads_past_the_command_echo(self):
         result = ci.subprocess.CompletedProcess([], 2, stdout='task: [test:cancel] python3 x\n{"released": false}\n')
@@ -168,7 +155,6 @@ class HostedExecutionTests(unittest.TestCase):
         with patch.object(ci.subprocess, "run", return_value=refused):
             self.assertEqual(ci.task_json(["test:cancel"]), (1, None))
 
-
     def test_full_qualification_budgets_receive_push_change_base(self):
         scope = dict(base='b' * 40, head='a' * 40, paths=['lycaon/internal/a/a.go'], full=True, reasons=[])
         with tempfile.TemporaryDirectory() as directory, \
@@ -178,4 +164,3 @@ class HostedExecutionTests(unittest.TestCase):
                 patch.object(ci.subprocess, 'call', return_value=0) as command:
             ci.run_lane('limits')
         self.assertEqual(command.call_args.kwargs['env']['PW_CHANGE_BASE'], 'b' * 40)
-

@@ -7,8 +7,8 @@ from unittest.mock import patch
 
 from ci_policy import budget_history as history
 from ci_policy.budget_snapshot import validate
-from verification_tests.test_budget_tracking_execution import report, row
-from verification_tests.test_budget_reconciliation_execution import run
+from verification_tests.ci.test_budget_tracking_execution import report, row
+from verification_tests.ci.test_budget_reconciliation_execution import run
 
 
 class HistoryTests(unittest.TestCase):

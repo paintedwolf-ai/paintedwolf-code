@@ -32,7 +32,6 @@ def failures(root):
     return found
 
 
-
 def excerpt(failure):
     """The digest's failure output, or the end of the stage log when no digest isolated one."""
     for key, tail in (("output", False), ("log", True)):
@@ -43,11 +42,9 @@ def excerpt(failure):
     return []
 
 
-
 def named_subject(failure):
     """The failing package, or nothing for a stage that reports as a single task."""
     return failure["subject"] if failure["subject"] not in {"", "task"} else ""
-
 
 
 def annotation(failure):
@@ -55,7 +52,6 @@ def annotation(failure):
     message = ": ".join(part for part in (named_subject(failure), ", ".join(failure["tests"])) if part)
     message = message or failure.get("reason") or "see the job summary"
     return f"::error title={failure['stage']} {failure['status']}::{message}".replace("\n", "%0A")
-
 
 
 def summary_lines(failure):
@@ -68,7 +64,6 @@ def summary_lines(failure):
         return [heading]
     return [heading, "  <details><summary>Output</summary>", "", "  ```text",
             *(f"  {line}" for line in body), "  ```", "  </details>"]
-
 
 
 def report(status):
@@ -98,4 +93,3 @@ def report(status):
     lines += ["Receipts, stage logs, and available reports are retained with this job's artifacts.", ""]
     with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as output:
         output.write("\n".join(lines))
-

@@ -159,13 +159,13 @@ class AdmissionTests(unittest.TestCase):
                                                 {'type': 'merge_queue', 'parameters': {'max_entries_to_build': 3}}]}
         result = proposed(current)
         self.assertEqual(result['rules'][0], current['rules'][0])
-        reviewed = json.loads((Path(__file__).resolve().parents[1] / 'ci_policy' / 'queue-settings.json').read_text())
+        reviewed = json.loads((Path(__file__).resolve().parents[2] / 'ci_policy' / 'queue-settings.json').read_text())
         self.assertEqual(result['rules'][1]['parameters'], reviewed)
         self.assertEqual(current['rules'][1]['parameters'], {'max_entries_to_build': 3})
 
     def test_dependency_snapshot_does_not_depend_on_the_current_module_graph(self):
         import importlib.util
-        spec = importlib.util.spec_from_file_location('vulndb', Path(__file__).resolve().parents[1] / 'vendor-vulndb.py')
+        spec = importlib.util.spec_from_file_location('vulndb', Path(__file__).resolve().parents[2] / 'vendor-vulndb.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         with tempfile.TemporaryDirectory() as directory:

@@ -11,7 +11,7 @@ import unittest
 
 import verification_plan as planning
 
-SCRIPTS = Path(__file__).resolve().parents[1]
+SCRIPTS = Path(__file__).resolve().parents[2]
 IDENTITY = "eyJmaXh0dXJlIjoiYXV0aGVudGljYXRlZC1lbmdpbmUifQ=="
 
 

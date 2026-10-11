@@ -14,7 +14,7 @@ class ShellResourcesTests(unittest.TestCase):
             scripts.mkdir()
             native = root / "lycaon-den/src-tauri"
             native.mkdir(parents=True)
-            source = Path(__file__).resolve().parents[1]
+            source = Path(__file__).resolve().parents[2]
             for name in ["setup-dev.sh", "warm-workspace-build.sh"]:
                 shutil.copyfile(source / name, scripts / name)
             notices = native / "THIRD-PARTY-NOTICES.md"

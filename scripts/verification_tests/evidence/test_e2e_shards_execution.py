@@ -2,7 +2,7 @@ import importlib.util
 from pathlib import Path
 import unittest
 
-spec = importlib.util.spec_from_file_location("e2e_shards", Path(__file__).resolve().parents[1] / "e2e/deal-test-files.py")
+spec = importlib.util.spec_from_file_location("e2e_shards", Path(__file__).resolve().parents[2] / "e2e/deal-test-files.py")
 shards = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(shards)
 
