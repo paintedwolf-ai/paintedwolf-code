@@ -46,13 +46,13 @@ import { startComposerDocumentMirror } from "./chat/composer/composer-document-s
 import { isTauriRuntime } from "./platform/runtime.ts";
 import { nativeUpdateState } from "./settings/system/update-state.ts";
 import { listenHostEvent } from "./platform/windows/window-channel.ts";
+import { WhatsNewNotice } from "./components/home/WhatsNewNotice.tsx";
 import { mountUpdateNotice } from "./settings/system/mount-update-notice.ts";
 import { EngineStartupStage } from "./components/EngineStartupStage.tsx";
 import { engineStartupState } from "./platform/connection/engine-startup.ts";
 
 const appStore = createAppStore();
-// Its own store, not a slice of appStore: notices are not
-// foreground state. See notices/notice-store.ts.
+// Notice scope survives foreground navigation.
 const noticeStore = createNoticeStore();
 const recentsStore = createRecentsStore();
 const projectsStore = createProjectsStore(() => getLycaonClient(), {
@@ -146,12 +146,13 @@ function App() {
 
   return (
     <>
-      {/* Managed startup and critical stops replace Shell while context actions remain available. */}
+      {/* Context actions remain available during startup and recovery. */}
       <Show
         when={engineStartupState().status === "idle" && !nativeUpdateState.state()?.startup_pending}
         fallback={<EngineStartupStage />}
       >
         <Show when={!criticalStop.spec()} fallback={criticalStop.view()}>
+          <Show when={!windowSubject()}><WhatsNewNotice notices={noticeStore} /></Show>
           <Shell
             shell={shellStore}
             recents={recentsStore}
