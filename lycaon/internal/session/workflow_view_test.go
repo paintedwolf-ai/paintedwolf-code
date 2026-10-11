@@ -270,9 +270,9 @@ func TestKickGateObligationsFollowTheRunArchive(t *testing.T) {
 	}
 }
 
+func (s *recordingWorkflowView) AssertSessionCompletion(context.Context, string) error { return nil }
+
 func (r *recordingWorkflowView) PolicySnapshot(context.Context, string) (toolpolicy.WorkflowSnapshot, error) {
 	r.record("PolicySnapshot")
 	return toolpolicy.WorkflowSnapshot{Phase: "phase-a", AllowedAgents: []string{"coordinator"}, ManifestRules: []string{"manifest-rules.yaml"}, BlueprintPath: "plan-1", PlanContent: "plan body", Vars: map[string]any{"k": "v"}}, nil
 }
-
-func (s *recordingWorkflowView) AssertSessionCompletion(context.Context, string) error { return nil }

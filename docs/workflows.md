@@ -270,9 +270,9 @@ Phase-entry obligations are machine state. Prompt bindings render what is true a
 
 A phase transition is a lifecycle event, not automatically new user-facing work. The coordinator wakes when the entered phase has an active obligation or newer worker, decision, or overlay state to reconcile. If the current user intent already has a committed completion report and the entered phase contains only dormant event-scoped gates, the host records the transition without requesting a second report.
 
-Gated phases and structured review phases cannot finish with unmet completion requirements. The coordinator receives bounded repair opportunities; exhausted repair or a forced finish ends with a turn error and retains the workflow's evidence. Both model-authored and host-assembled prose pass the same completion admission before transcript publication. Session settlement checks the workflow again before publishing a completed disposition. Unreadable workflow state fails closed; explicit human waits and ambient conversation keep their existing lifecycle.
-
 Bindings are scoped by workflow and phase so guidance cannot leak into unrelated sessions. Same-phase re-entry uses an explicit event rather than pretending the phase was newly entered.
+
+Gated phases and structured review phases cannot finish with unmet completion requirements. The coordinator receives bounded repair opportunities; exhausted repair or a forced finish ends with a turn error and retains the workflow's evidence. Both model-authored and host-assembled prose pass the same completion admission before transcript publication. Session settlement checks the workflow again before publishing a completed disposition. Unreadable workflow state fails closed; explicit human waits and ambient conversation keep their existing lifecycle.
 
 A phase's entry guidance reaches the coordinator on the next model call, whether that call opens a turn or continues one: a coordinator whose own `submit_verdict` advances the phase reads the new phase's guidance before it acts again, so a phase entered and left inside one turn is never skipped. Only the current phase's guidance is delivered; guidance for a phase the run already left is dropped with it.
 

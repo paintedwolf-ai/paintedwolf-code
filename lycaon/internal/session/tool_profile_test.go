@@ -187,8 +187,8 @@ func (s stubWorkflowManifest) RecordReviewToolResult(context.Context, string, ap
 	return nil
 }
 
+func (s stubWorkflowManifest) AssertSessionCompletion(context.Context, string) error { return nil }
+
 func (s stubWorkflowManifest) PolicySnapshot(context.Context, string) (toolpolicy.WorkflowSnapshot, error) {
 	return toolpolicy.WorkflowSnapshot{ManifestRules: s.manifest.Rules}, nil
 }
-
-func (s stubWorkflowManifest) AssertSessionCompletion(context.Context, string) error { return nil }
