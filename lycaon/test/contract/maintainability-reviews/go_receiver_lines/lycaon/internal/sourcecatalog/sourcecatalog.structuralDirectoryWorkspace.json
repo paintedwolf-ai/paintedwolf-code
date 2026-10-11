@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/sourcecatalog/sourcecatalog.structuralDirectoryWorkspace",
+  "kind": "runtime_service",
+  "workstream": "source-observations",
+  "disposition": "retain",
+  "reason": "This mutable directory overlay keeps base lookup, staged flags, memory-to-SQLite spill, count and revision-cached freeze consistent. Spill is a private representation of the same collection; a second mutable service would spread its invariants across back-references.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 449,
+  "boundaries": {
+    "lycaon/internal/sourcecatalog/structural_directory_index_test.go": "54747168c486ec708b5c4eaa04445c11ac2b8febe7cc63595060f4898e63ccb3",
+    "lycaon/internal/sourcecatalog/structural_directory_work_test.go": "1a358d376e15be5ad87e7462ba9d39253afb37120a8258d8a505697fbb6ae0c8"
+  },
+  "reviewed_shape": "a79c1c5b46568d6a1a73456ba37296ca27fee5eff895fbb1087560155456c56d"
+}

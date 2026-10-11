@@ -1,0 +1,16 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/confine",
+  "kind": "test_suite",
+  "workstream": "verification-contracts",
+  "disposition": "retain",
+  "reason": "Confinement tests cover platform implementations and common capability contracts in the same package. Directory breadth reflects the security matrix; moving tests for a count target would require broader production visibility or obscure platform parity.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 51,
+  "boundaries": {
+    "lycaon/internal/confine/host_capability_test.go": "9f759c501a7688005b4069ee5430825d0744ba471ca80eee99121a33bc02bec0",
+    "lycaon/internal/confine/policy_write_grants_test.go": "f431e10ffbd201a31a4681a07b0d34d27bf56cd6d5d6528d12458d95cff9ff81",
+    "lycaon/internal/confine/execution_capability_test.go": "7899c0f689c3e6c4433d91e6cc701fc6692789d734a8b80051159771588e802f"
+  },
+  "reviewed_shape": "2da67d87e901c61c2e55707bbeff29af1bac1218ffca918d6a32b92188ab5041"
+}

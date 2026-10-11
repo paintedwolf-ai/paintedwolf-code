@@ -45,7 +45,9 @@ function assertOpen01(): void {
   expect(veil).toMatch(/den-shell-workspace-veil/);
 
   const files = readSourceText(join(denSrc, "files/components/ProjectFilesView.tsx"));
-  expect(files).toMatch(/name: "files-stage"/);
+  expect(files).toMatch(/createFilesWorkspacePresentation\(/);
+  const presentation = readSourceText(join(denSrc, "files/components/files-workspace-presentation.ts"));
+  expect(presentation).toMatch(/name: "files-stage"/);
   expect(shell).toMatch(/workspacePreparation\(projectId\)\.ready\(\)/);
 }
 
@@ -54,7 +56,9 @@ function assertFilesChat01(): void {
   // Chat changes invalidate workspace resolution, not file acquisition.
   expect(view).toMatch(/const sourceSessionId = \(\) => untrack\(chatSessionId\);/);
   expect(view).toMatch(/createFilesWorkspace\(\{[^}]*chatSessionId/);
-  expect(view).toMatch(/<FilesTree[\s\S]*?sessionId=\{filesSourceAddress\(\)\}/);
+  expect(view).toMatch(/<FilesNavigationPane[\s\S]*?sessionId=\{filesSourceAddress\(\)\}/);
+  const navigation = readSourceText(join(denSrc, "files/components/FilesNavigationPane.tsx"));
+  expect(navigation).toMatch(/<FilesTree[\s\S]*?sessionId=\{props\.sessionId\}/);
   // A prop taking the untracked read would freeze on the chat that mounted the stage.
   expect(view).not.toMatch(/=\{sourceSessionId\(\)\}/);
   const workspace = readSourceText(join(denSrc, "files/source/files-workspace.ts"));
@@ -68,15 +72,15 @@ function assertFilesChat01(): void {
 function assertView01(): void {
   const subject = readSourceText(join(denSrc, "platform/windows/window-subject.ts"));
   const registry = readSourceText(join(denSrc, "platform/windows/workspace-view-registry.ts"));
-  const host = readSourceText(join(denSrc, "../src-tauri/src/item_windows.rs"));
+  const host = readSourceText(join(denSrc, "../src-tauri/src/windows/item_windows.rs"));
   expect(subject).toMatch(/WindowSubject[\s\S]*viewId: string/);
   expect(registry).toMatch(/setCurrentWorkspaceContexts/);
   expect(host).toMatch(/Window \{view_id\}/);
 }
 
 function assertView02(): void {
-  const items = readSourceText(join(denSrc, "../src-tauri/src/item_windows.rs"));
-  const appearance = readSourceText(join(denSrc, "../src-tauri/src/window_appearance.rs"));
+  const items = readSourceText(join(denSrc, "../src-tauri/src/windows/item_windows.rs"));
+  const appearance = readSourceText(join(denSrc, "../src-tauri/src/windows/window_appearance.rs"));
   expect(items).toMatch(/close_item_window/);
   expect(appearance).toMatch(/CloseRequested[\s\S]*main\.hide\(\)/);
 }

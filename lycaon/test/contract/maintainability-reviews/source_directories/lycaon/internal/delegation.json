@@ -1,0 +1,16 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/delegation",
+  "kind": "module",
+  "workstream": "worker-workflow-lifecycle",
+  "disposition": "retain",
+  "reason": "Delegation already separates dispatch, settlement, grounding and SQL transitions into cohesive files. Its leg and delegation settlement must remain coordinated under one operation contract. A directory count alone does not justify exporting private transition machinery into new packages.",
+  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
+  "ceiling": 31,
+  "boundaries": {
+    "lycaon/internal/delegation/sql_dispatch_test.go": "0ba4a1013441a43a5394273473a9e177a3c06b66b243648aa02e656591f378e9",
+    "lycaon/internal/delegation/outcome_transition_test.go": "57c122291ae1a1c46c2f54e9a86fd84e46c48d71e2c544393ffe5c23d278c068",
+    "lycaon/internal/delegation/workflow_cancellation_test.go": "fb62d645fd97f2e43163f579cbd9b21d2834df9f934a4346793ad769edc6bc24"
+  },
+  "reviewed_shape": "95697d4b4bfbefc46e4cfb82ace0425ef8eab86d08b34782a60625d25d072abc"
+}

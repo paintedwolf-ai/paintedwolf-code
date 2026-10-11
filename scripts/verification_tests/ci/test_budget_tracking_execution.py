@@ -101,7 +101,7 @@ class IssueLifecycleTests(unittest.TestCase):
 
     def test_dismissal_suppresses_reopening_and_duplicate_creation(self):
         current = issue(state='closed', state_reason='not_planned')
-        self.assertEqual(issues.plan([current], self.artifacts, observation('e' * 40)), ([], 1))
+        self.assertEqual(issues.plan([current], self.artifacts, observation('e' * 40), intake_keys=set()), ([], 1))
 
     def test_adopt_legacy_bot_issue_and_deduplicate(self):
         old = issue(body='Original evidence')

@@ -1,5 +1,7 @@
 //! Streams archives between a picker-granted file and the authenticated local engine.
 
+pub(crate) mod journal;
+
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -10,7 +12,7 @@ use tauri::{Emitter, Manager};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::Notify;
 
-use crate::picked_file::{self, GrantMode};
+use crate::files::picked_file::{self, GrantMode};
 use crate::sidecar::SidecarState;
 
 fn archive_limit() -> u64 {
@@ -314,7 +316,7 @@ async fn receive_archive(
     let mut digest = Sha256::new();
     let parent = path.parent().ok_or("Invalid backup destination")?;
     let (temporary, opened) =
-        crate::backup_transfer_journal::TemporaryArchive::create(config, parent)
+        crate::backup_transfer::journal::TemporaryArchive::create(config, parent)
             .map_err(|error| error.to_string())?;
     let mut file = tokio::fs::File::from_std(opened);
     let mut received = 0;

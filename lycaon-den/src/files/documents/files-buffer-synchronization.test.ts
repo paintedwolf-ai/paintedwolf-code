@@ -2,7 +2,7 @@
 import { createRoot } from "solid-js";
 import { produce } from "solid-js/store";
 import { afterEach, expect, it, vi } from "vitest";
-import type { LycaonClient } from "../../api/client.ts";
+import { stubClient } from "../../test/client-fixture.ts";
 import type { ProjectSourceReadResponse, SourceChange } from "../../api/types.ts";
 import { applyBufferSourceChanged, setBufferLiveHandlers } from "./buffer-live.ts";
 import { bindFilesBufferSynchronization } from "./files-buffer-synchronization.ts";
@@ -37,7 +37,7 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 function bind(read = vi.fn().mockResolvedValue(source("current"))) {
-  const client = { getProjectSource: read } as unknown as LycaonClient;
+  const client = stubClient({ getProjectSource: read });
   const stop = createRoot((dispose) => {
     bindFilesBufferSynchronization({
       projectId: () => projectId, client: () => client, sourceSessionId: () => undefined,

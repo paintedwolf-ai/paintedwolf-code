@@ -1,19 +1,19 @@
 import { createEffect } from "solid-js";
-import type { ContextNavItemId } from "../../../shared/app-state-types.ts";
+import { setCurrentWorkspaceContexts, workspaceContextEqual, workspaceContextIsOpen, type WorkspaceContext } from "../../platform/windows/workspace-view-registry.ts";
+import { type ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { clearSourceReturn, returnToSource, sourceReturn } from "../../files/source/source-return.ts";
-import { workspaceContextEqual, workspaceContextIsOpen, type WorkspaceContext } from "../../platform/windows/workspace-view-registry.ts";
 import { isContextNavItemId } from "../../settings/editor/context-nav-prefs.ts";
 import { hiddenSplitPanePref } from "../../shell/layout-store.ts";
 import { isHomePresentation, type ProjectPresentation } from "../../shell/project-presentation.ts";
 import { routedReturnOffer, type RoutedOrigin } from "../../shell/routed-return.ts";
-import type { ActiveChat } from "../../shell/stage-scope.ts";
-import type { SplitColumnsOnScreen } from "../../shell/stage-placement.ts";
+import { type ActiveChat } from "../../shell/stage-scope.ts";
+import { type SplitColumnsOnScreen } from "../../shell/stage-placement.ts";
 import { stageDefinition, stageLabelFor } from "../stage/stage-registry.tsx";
-import type { StageBack } from "./StageBackChip.tsx";
-import type { Nav, ShellNav, ShellNavigation } from "./shell-navigation-state.ts";
-import type { ShellPaneVisibility } from "./shell-pane-visibility.ts";
-import type { ShellScope } from "./shell-scope.ts";
-import type { ShellWorkerDrawer } from "./shell-worker-drawer.ts";
+import { type StageBack } from "./StageBackChip.tsx";
+import { type Nav, type ShellNav, type ShellNavigation } from "./shell-navigation-state.ts";
+import { type ShellPaneVisibility } from "./shell-pane-visibility.ts";
+import { type ShellScope } from "./shell-scope.ts";
+import { type ShellWorkerDrawer } from "./shell-worker-drawer.ts";
 
 /** Full-stage panels outside the stage registry, as workspace contexts. */
 const SHELL_PANEL_CONTEXTS: Record<
@@ -168,6 +168,8 @@ export function createShellWorkspaceContext({ activeProjectId, presentedChat,
     sourceBack() || stageDefinition(stage).backPlacement !== "stage"
       ? null
       : backFor(stage, `${stage}-back`);
+
+  createEffect(() => setCurrentWorkspaceContexts(shownWorkspaceContexts()));
 
   return { shownWorkspaceContexts, backFor, sourceBack, titlebarBack, stageBack };
 }
