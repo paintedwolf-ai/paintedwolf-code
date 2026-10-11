@@ -5,7 +5,7 @@ import { createCostStore } from "../../store/cost-store.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import type { CostSummary } from "../../api/types.ts";
 import { describe, expect, it, vi } from "vitest";
-import { createAppStore } from "../../store/app-state.ts";
+import { createFixtureApp } from "./app-connection-test-fixture.ts";
 
 import { createProjectsStore } from "../../store/projects-store.ts";
 
@@ -21,7 +21,7 @@ installConnectionFixtureCleanup();
 describe("app connection host", () => {
   it("invalidates pending cost reads when a backend is replaced", async () => {
     const mod = await loadModule();
-    const store = createAppStore();
+    const store = createFixtureApp();
     const costs = createCostStore();
     bindFixtureServices(mod, { costs: costs });
     let answer!: (value: CostSummary) => void;
@@ -35,7 +35,7 @@ describe("app connection host", () => {
 
   it("keeps a replacement backend when an old discovery fails", async () => {
     const mod = await loadModule();
-    const store = createAppStore();
+    const store = createFixtureApp();
     let rejectDiscovery!: (error: Error) => void;
     discoverBackend.mockImplementationOnce(() => new Promise((_resolve, reject) => { rejectDiscovery = reject; }));
     const connecting = mod.connectAppBackend(store);
@@ -51,7 +51,7 @@ describe("app connection host", () => {
 
   it("does not disconnect a replacement while verifying the old cached client", async () => {
     const mod = await loadModule();
-    const store = createAppStore();
+    const store = createFixtureApp();
     let answer!: (projects: never[]) => void;
     const listProjects = vi.fn().mockResolvedValueOnce([]).mockImplementationOnce(() => new Promise<never[]>((resolve) => { answer = resolve; }));
     createLycaonClient.mockReturnValueOnce(stubClient({ listProjects }));
@@ -69,7 +69,7 @@ describe("app connection host", () => {
 
   it.each(["found", "missing"])("ignores an old backend's %s project lookup after replacement", async (result) => {
     const mod = await loadModule();
-    const store = createAppStore();
+    const store = createFixtureApp();
     const shell = createShellStore("connected");
     shell.commitStageScope({ projectId: "old", sessionId: "old-session" });
     bindFixtureServices(mod, { shell: shell });
@@ -95,7 +95,7 @@ describe("app connection host", () => {
 
   it("does not install old connection settings after backend replacement", async () => {
     const mod = await loadModule();
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     bindFixtureServices(mod, { shell: createShellStore("connected") });
     bindFixtureServices(mod, { projects: createProjectsStore(mod.getLycaonClient, { onProjectEvent: () => () => {} }) });
     const settings = createSettingsStore();
@@ -120,7 +120,7 @@ describe("app connection host", () => {
 
   it("does not publish notices when bootstrap connect fails", async () => {
     discoverBackend.mockRejectedValue(new TypeError("Load failed"));
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const { mod, all } = await loadModuleWithNotices();
     await expect(mod.connectAppBackend(appStore)).rejects.toThrow("Load failed");
     expect(all()).toHaveLength(0);
@@ -128,7 +128,7 @@ describe("app connection host", () => {
   });
 
   it("uses shared HTTP transport observations for window reachability", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const mod = await loadModule();
     bindFixtureServices(mod, { app: appStore });
     appStore.actions.setSidecarStatus("connected");
@@ -142,7 +142,7 @@ describe("app connection host", () => {
   });
 
   it("does not turn failed readiness reads into a reachable-request feedback loop", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const mod = await loadModule();
     bindFixtureServices(mod, { app: appStore });
     let reads = 0;
@@ -164,7 +164,7 @@ describe("app connection host", () => {
   });
 
   it("refreshes preflight on recovery but not on a planned stream open", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const mod = await loadModule();
     await mod.connectAppBackend(appStore);
     mod.subscribeProjectEvents(appStore, "proj-1");
@@ -183,7 +183,7 @@ describe("app connection host", () => {
   // CriticalStop renders connectivity failures.
   it("keeps connectivity off the rail even for user-initiated connect", async () => {
     discoverBackend.mockRejectedValue(new TypeError("Load failed"));
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const { mod, all } = await loadModuleWithNotices();
     await expect(
       mod.connectAppBackend(appStore, { reportFailure: true }),
@@ -200,7 +200,7 @@ describe("app connection host", () => {
       await gate;
       throw new TypeError("Load failed");
     });
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const { mod, all } = await loadModuleWithNotices();
     const boot = mod.connectAppBackend(appStore);
     const user = mod.connectAppBackend(appStore, { reportFailure: true });
@@ -216,7 +216,7 @@ describe("app connection host", () => {
         title: "Not authorized",
       }),
     );
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const { mod, all } = await loadModuleWithNotices();
     await expect(
       mod.connectAppBackend(appStore, { reportFailure: true }),
@@ -227,7 +227,7 @@ describe("app connection host", () => {
 
   it("does not subscribe a successful handshake replaced before its continuation", async () => {
     const mod = await loadModule();
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     let second!: (host: typeof TEST_HOST_INFO) => void;
     getHost.mockResolvedValueOnce(TEST_HOST_INFO).mockImplementationOnce(() => new Promise((resolve) => { second = resolve; }));
     mod.attachKnownBackend(appStore, { baseUrl: "http://127.0.0.1:8788", apiToken: "first" });
@@ -240,7 +240,7 @@ describe("app connection host", () => {
 
   it("uses no routes of a host serving a different major contract", async () => {
     getHost.mockResolvedValue(testHostInfo({ contract_version: "2.0.0" }));
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const client = { listProjects: vi.fn(async () => []) };
     createLycaonClient.mockReturnValue(client);
 
@@ -255,7 +255,7 @@ describe("app connection host", () => {
 
   it("fails the connection when the host handshake cannot be read", async () => {
     getHost.mockRejectedValue(new LycaonApiError("unavailable", 500, "internal_error"));
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const client = { listProjects: vi.fn(async () => []) };
     createLycaonClient.mockReturnValue(client);
 
@@ -266,7 +266,7 @@ describe("app connection host", () => {
   });
 
   it("disconnectAppBackend marks the app offline", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const mod = await loadModule();
     bindFixtureServices(mod, { app: appStore });
     await mod.connectAppBackend(appStore);

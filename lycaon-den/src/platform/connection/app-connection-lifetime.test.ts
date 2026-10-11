@@ -13,11 +13,11 @@ describe("connection service lifetime", () => {
     const mod = await loadModule();
     for (let cycle = 0; cycle < 20; cycle++) {
       const first = connectionServicesFixture();
-      const stopFirst = mod.bindAppConnection(first);
+      const stopFirst = mod.bindAppConnection(first).dispose;
       noteBackendReachable();
       expect(first.app.state.sidecarStatus).toBe("connected");
       const second = connectionServicesFixture();
-      const stopSecond = mod.bindAppConnection(second);
+      const stopSecond = mod.bindAppConnection(second).dispose;
       stopFirst();
       expect(mod.getCostStore()).toBe(second.costs);
       expect(mod.getRegisteredNoticeStore()).toBe(second.notices);
@@ -36,14 +36,14 @@ describe("connection service lifetime", () => {
   it("rejects discovery completing after the service binding was replaced", async () => {
     const mod = await loadModule();
     const first = connectionServicesFixture();
-    const stopFirst = mod.bindAppConnection(first);
+    const stopFirst = mod.bindAppConnection(first).dispose;
     let resolve!: (connection: { baseUrl: string; apiToken: string }) => void;
     discoverBackend.mockReturnValueOnce(new Promise(done => { resolve = done; }));
     const pending = mod.connectAppBackend(first.app);
     const rejected = expect(pending).rejects.toThrow();
     await vi.waitFor(() => expect(discoverBackend).toHaveBeenCalledOnce());
     const second = connectionServicesFixture();
-    const stopSecond = mod.bindAppConnection(second);
+    const stopSecond = mod.bindAppConnection(second).dispose;
     resolve({ baseUrl: "http://old", apiToken: "old" });
     await rejected;
     expect(mod.getLycaonClient()).toBeNull();
@@ -55,7 +55,7 @@ describe("connection service lifetime", () => {
   it("closes engine subscriptions whose setup finishes after disposal", async () => {
     const mod = await loadModule();
     const services = connectionServicesFixture();
-    const stop = mod.bindAppConnection(services);
+    const stop = mod.bindAppConnection(services).dispose;
     let resolve!: (stop: () => void) => void;
     const { watchEngineState } = await import("./engine-supervision.ts");
     vi.mocked(watchEngineState).mockReturnValueOnce(new Promise(done => { resolve = done; }));
@@ -72,7 +72,7 @@ describe("connection service lifetime", () => {
   it("does not rebind from engine information received after disposal", async () => {
     const mod = await loadModule();
     const services = connectionServicesFixture();
-    const stop = mod.bindAppConnection(services);
+    const stop = mod.bindAppConnection(services).dispose;
     await mod.followEngineState(services.app);
     emitEngineState({ state: "stopped", exit: { signal: 9, description: "stopped" } });
     let resolve!: (connection: { baseUrl: string; apiToken: string; engineGeneration: number }) => void;
@@ -86,10 +86,34 @@ describe("connection service lifetime", () => {
     expect(discoverBackend).not.toHaveBeenCalled();
   });
 
+  it("refuses old stores before joining a replacement flight or replacing its follower", async () => {
+    const mod = await loadModule();
+    const first = connectionServicesFixture();
+    const firstBinding = mod.bindAppConnection(first);
+    const second = connectionServicesFixture();
+    const secondBinding = mod.bindAppConnection(second);
+    await mod.followEngineState(second.app);
+    let resolve!: (connection: { baseUrl: string; apiToken: string }) => void;
+    discoverBackend.mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    const current = mod.connectAppBackend(second.app);
+    await vi.waitFor(() => expect(discoverBackend).toHaveBeenCalledOnce());
+    await expect(mod.connectAppBackend(first.app)).rejects.toThrow();
+    await expect(mod.followEngineState(first.app)).rejects.toThrow();
+    expect(() => mod.subscribeProjectEvents(first.app, "old-project")).toThrow();
+    expect(() => mod.attachKnownBackend(first.app, { baseUrl: "http://old", apiToken: "old" })).toThrow();
+    emitEngineState({ state: "restarting", exit: { signal: 9, description: "stopped" }, attempt: 1 });
+    expect(second.app.state.sidecarStatus).toBe("disconnected");
+    resolve({ baseUrl: "http://current", apiToken: "current" });
+    expect(await current).toBe(mod.getLycaonClient());
+    expect(firstBinding.signal.aborted).toBe(true);
+    firstBinding.dispose();
+    secondBinding.dispose();
+  });
+
   it("shares cached backend verification across concurrent callers", async () => {
     const mod = await loadModule();
     const services = connectionServicesFixture();
-    const stop = mod.bindAppConnection(services);
+    const stop = mod.bindAppConnection(services).dispose;
     const listProjects = vi.fn(async () => []);
     createLycaonClient.mockReturnValue({ listProjects });
     try {

@@ -1,3 +1,4 @@
+import { createAppStore } from "../../store/app-state.ts";
 import { connectionServicesFixture } from "../../test/connection-services-fixture.ts";
 import type { ConnectionServices } from "./connection-services.ts";
 import { createSettingsStore } from "../../store/settings-store.ts";
@@ -141,11 +142,18 @@ export let closeMock: ReturnType<typeof vi.fn<() => Promise<void>>>;
 export let registeredShell: ReturnType<typeof createShellStore>;
 
 let fixtureServices: ConnectionServices;
+let fixtureModule: typeof import("./app-connection.ts");
 let releaseConnection = () => {};
+
+export function createFixtureApp() {
+  const app = createAppStore();
+  bindFixtureServices(fixtureModule, { app });
+  return app;
+}
 
 export function bindFixtureServices(mod: typeof import("./app-connection.ts"), overrides: Partial<ConnectionServices>): void {
   fixtureServices = { ...fixtureServices, ...overrides };
-  releaseConnection = mod.bindAppConnection(fixtureServices);
+  releaseConnection = mod.bindAppConnection(fixtureServices).dispose;
 }
 
 export function installConnectionFixtureCleanup() {
@@ -202,7 +210,7 @@ export function installConnectionFixtureCleanup() {
     refreshCodeScanCache.mockResolvedValue(undefined);
     reconcileRecentsWithStores.mockResolvedValue([]);
     reconcileActiveScope.mockResolvedValue(undefined);
-    const mod = await import("./app-connection.ts");
+    const mod = fixtureModule = await import("./app-connection.ts");
     fixtureServices = connectionServicesFixture();
     registeredShell = createShellStore("connected");
     bindFixtureServices(mod, {

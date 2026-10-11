@@ -69,11 +69,11 @@ const entityRetire = createEntityRetire({
 });
 
 function App() {
-  const releaseConnection = bindAppConnection({
+  const connectionBinding = bindAppConnection({
     app: appStore, settings: settingsStore, costs: costStore, notices: noticeStore,
     retire: entityRetire, recents: recentsStore, shell: shellStore, projects: projectsStore,
   });
-  onCleanup(releaseConnection);
+  onCleanup(connectionBinding.dispose);
   createEffect(() => documentResidency.setBudget(windowDocumentBudget(1 + itemWindowViews().length)));
   onMount(() => {
     const stopDocumentDelivery = startDocumentOutboxRelay(getLycaonClient, id => !!editorReplica(id), document => applyFilesBufferDocumentStatus(document.project_id, document, true));
@@ -93,7 +93,7 @@ function App() {
           ? subject.projectId
           : null,
       attachOnly: subject != null,
-    });
+    }, connectionBinding.signal);
     // Only the main window delivers system notifications.
     const unmountNotifications = subject
       ? () => {}

@@ -3,7 +3,7 @@ import { installConnectionFixtureCleanup, fetchHealth, noteHealthResponse, watch
 
 import { describe, expect, it, vi } from "vitest";
 import { LycaonApiError } from "../../api/http.ts";
-import { createAppStore } from "../../store/app-state.ts";
+import { createFixtureApp } from "./app-connection-test-fixture.ts";
 
 import { createProjectsStore } from "../../store/projects-store.ts";
 import { createRecentsStore } from "../../store/recents-store.ts";
@@ -18,7 +18,7 @@ installConnectionFixtureCleanup();
 describe("app connection events", () => {
   it.each(["revision", "reconnect", "event"])("ignores a delayed %s scope failure from a replaced backend", async mode => {
     const mod = await loadModule();
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     let rejectRead!: (error: Error) => void;
     const client = {
       listProjects: vi.fn(async () => []),
@@ -50,7 +50,7 @@ describe("app connection events", () => {
 
   it("ignores reconnect health after its backend was replaced", async () => {
     const mod = await loadModule();
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const oldClient = { listProjects: vi.fn(async () => []) };
     createLycaonClient.mockReturnValue(oldClient);
     await mod.connectAppBackend(appStore);
@@ -69,7 +69,7 @@ describe("app connection events", () => {
   });
 
   it("closes the old event stream before attaching a replacement backend", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const mod = await loadModule();
     await mod.connectAppBackend(appStore);
     const order: string[] = [];
@@ -88,7 +88,7 @@ describe("app connection events", () => {
 
   it("keeps an attached home window subscribed for engine recovery", async () => {
     const mod = await loadModule();
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     mod.attachKnownBackend(appStore, { baseUrl: "http://127.0.0.1:8788", apiToken: "attached" });
     await vi.waitFor(() => expect(subscribeEvents).toHaveBeenCalledOnce());
     expect(subscribedProjectIds).toEqual([""]);
@@ -99,7 +99,7 @@ describe("app connection events", () => {
   });
 
   it("subscribes device-wide when no project is foreground", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const mod = await loadModule();
 
     await mod.connectAppBackend(appStore);
@@ -108,7 +108,7 @@ describe("app connection events", () => {
   });
 
   it("refreshes global provider readiness without a foreground workspace", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const mod = await loadModule();
     await mod.connectAppBackend(appStore);
     refreshPreflight.mockClear();
@@ -124,7 +124,7 @@ describe("app connection events", () => {
       listProjects: vi.fn(async () => []),
       getSessionFindings,
     });
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     appStore.actions.setCurrentSession({
       id: "session-a",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
@@ -148,7 +148,7 @@ describe("app connection events", () => {
   });
 
   it("applies project source changes from a background session", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     appStore.actions.setCurrentSession({
       id: "session-a",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
@@ -198,7 +198,7 @@ describe("app connection events", () => {
   });
 
   it("revalidates cached source projections on initial stream open and resume", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const mod = await loadModule();
     await mod.connectAppBackend(appStore);
     mod.subscribeProjectEvents(appStore, "proj-1");
@@ -223,7 +223,7 @@ describe("app connection events", () => {
   });
 
   it("refreshes scan cache on scan invalidation", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const client = { listProjects: vi.fn(async () => []) };
     createLycaonClient.mockReturnValue(client);
 
@@ -262,7 +262,7 @@ describe("app connection events", () => {
       capturedOnSessionGone = opts?.onSessionGone;
     });
 
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     appStore.actions.setCurrentSession({
       id: "gone",
       owner_person_id: "00000000-0000-4000-8000-000000000002",
@@ -317,7 +317,7 @@ describe("app connection events", () => {
   });
 
   it("uses deleted session events to retire peer-window state", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const recents = createRecentsStore();
     const shell = createShellStore("connected");
     const mod = await loadModule();
@@ -356,7 +356,7 @@ describe("app connection events", () => {
   });
 
   it("resubscribes SSE when shell activeProjectId already matches a new project", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const client = { listProjects: vi.fn(async () => []) };
     createLycaonClient.mockReturnValue(client);
     const shell = createShellStore("connected");
@@ -377,7 +377,7 @@ describe("app connection events", () => {
   });
 
   it("skips duplicate subscribeProjectEvents for the same project", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const client = { listProjects: vi.fn(async () => []) };
     createLycaonClient.mockReturnValue(client);
 
@@ -395,7 +395,7 @@ describe("app connection events", () => {
   });
 
   it("awaits the current event stream at native close and reconnects if kept open", async () => {
-    const appStore = createAppStore();
+    const appStore = createFixtureApp();
     const mod = await loadModule();
     await mod.connectAppBackend(appStore);
     mod.subscribeProjectEvents(appStore, "proj-1");

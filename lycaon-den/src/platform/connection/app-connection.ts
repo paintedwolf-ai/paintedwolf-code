@@ -27,6 +27,7 @@ import { createConnectionEvents } from "./connection-events.ts";
 
 const host = new ConnectionHost();
 let services: ConnectionServices | null = null;
+let bindingLifetime: AbortController | undefined;
 let engineFollower: ReturnType<typeof createEngineFollower> | undefined;
 let connectInFlight: Promise<LycaonClient> | null = null;
 /** OR-merged across concurrent connect callers for this in-flight attempt. */
@@ -65,13 +66,22 @@ export const onAttentionResync = events.onAttentionResync;
 export const onSessionEvent = events.onSessionEvent;
 export const projectEventsAreSubscribed = events.projectEventsAreSubscribed;
 export const waitForProjectEvents = events.waitForProjectEvents;
-export const subscribeProjectEvents = events.subscribeProjectEvents;
+export function subscribeProjectEvents(app: AppStore, projectId: string): void {
+  assertBoundAppStore(app);
+  events.subscribeProjectEvents(app, projectId);
+}
+
+function assertBoundAppStore(app: AppStore): void {
+  if (services?.app !== app) throw new Error("The window connection binding is no longer active.");
+}
 
 /** Rebinding retires asynchronous work before exposing replacement services. */
-export function bindAppConnection(next: ConnectionServices): () => void {
+export function bindAppConnection(next: ConnectionServices): { signal: AbortSignal; dispose(): void } {
   engineFollower?.dispose();
   engineFollower = undefined;
   disconnectAppBackend();
+  bindingLifetime?.abort();
+  const lifetime = bindingLifetime = new AbortController();
   const binding = services = Object.freeze({ ...next });
   invalidation.resetSettings();
   registerNoticePublisher(binding.notices);
@@ -79,15 +89,17 @@ export function bindAppConnection(next: ConnectionServices): () => void {
     reachable: () => { if (services === binding) markSidecarConnected(binding.app); },
     unreachable: () => { if (services === binding) binding.app.actions.setSidecarStatus("disconnected"); },
   });
-  return () => {
+  return { signal: lifetime.signal, dispose: () => {
     if (services !== binding) return;
     engineFollower?.dispose();
     engineFollower = undefined;
     disconnectAppBackend();
+    lifetime.abort();
+    bindingLifetime = undefined;
     setBackendReachabilityObserver(null);
     registerNoticePublisher(null);
     services = null;
-  };
+  } };
 }
 
 /** Cost store for stage views mounted outside the store-prop tree. */
@@ -150,6 +162,7 @@ export function attachKnownBackend(
   appStore: AppStore,
   connection: BackendConnection,
 ): LycaonClient {
+  assertBoundAppStore(appStore);
   host.advance();
   connectInFlight = null;
   connectFailureNotices = false;
@@ -192,6 +205,7 @@ export async function connectAppBackend(
   appStore: AppStore,
   opts?: ConnectAppBackendOpts,
 ): Promise<LycaonClient> {
+  assertBoundAppStore(appStore);
   if (connectInFlight) {
     if (opts?.reportFailure) connectFailureNotices = true;
     return connectInFlight;
@@ -314,6 +328,7 @@ export function boundEngineGeneration(): number | undefined {
 
 /** Follows engine replacements for the active service binding. */
 export async function followEngineState(appStore: AppStore): Promise<() => void> {
+  assertBoundAppStore(appStore);
   engineFollower?.dispose();
   const follower = engineFollower = createEngineFollower({
     app: appStore,
