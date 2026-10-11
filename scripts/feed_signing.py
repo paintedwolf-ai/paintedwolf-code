@@ -47,7 +47,7 @@ def verify(pointer: Path, signature: str, public_key: str) -> None:
     with tempfile.TemporaryDirectory(prefix="feed-verification-") as directory:
         signature_path = Path(directory) / "pointer.minisig"
         public_path = Path(directory) / "feed.pub"
-        signature_path.write_bytes(base64.b64decode(signature, validate=True))
+        signature_path.write_bytes(base64.b64decode(signature.strip(), validate=True))
         public_path.write_bytes(base64.b64decode(public_key, validate=True))
         # Verification needs only public data; neither credentials nor tool diagnostics escape.
         try:

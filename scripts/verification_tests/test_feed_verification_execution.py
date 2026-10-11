@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import feed_signing
 import feed_credentials_migrate as migration
-from test_feed_signing_execution import public_key, signature
+from verification_tests.test_feed_signing_execution import public_key, signature
 
 
 class FeedVerificationTests(unittest.TestCase):
@@ -35,7 +35,7 @@ class FeedVerificationTests(unittest.TestCase):
                 return subprocess.CompletedProcess(command, 0)
             with patch.dict(os.environ, {"FEED_SIGNING_KEYS_JSON": "private", "TAURI_SIGNING_PRIVATE_KEY": "private"}), \
                     patch.object(feed_signing.subprocess, "run", side_effect=run):
-                feed_signing.verify(pointer, signed, public)
+                feed_signing.verify(pointer, signed + "\n", public)
         self.assertEqual(len(paths), 2)
         self.assertTrue(all(not path.exists() for path in paths))
 
