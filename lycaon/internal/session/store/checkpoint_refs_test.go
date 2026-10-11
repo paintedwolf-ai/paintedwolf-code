@@ -20,7 +20,7 @@ func TestCheckpointBodiesShareContentUntilLastOwnerReleases(t *testing.T) {
 	body := []byte("one source body used by independent rewind anchors")
 	sha := sourceblob.ContentSHA(body)
 	objects := sourceblob.New(filepath.Join(root, "source-content"))
-	rel, stored, oids, err := objects.Put(sha, body)
+	rel, stored, oids, err := objects.Put(t.Context(), sha, body)
 	testutil.FailErr(t, "publish compressed body", err)
 	ref := CheckpointObject{Path: "file.go", SHA256: sha, Rel: rel, GitSHA1: oids.SHA1, GitSHA256: oids.SHA256, Size: int64(len(body)), StoredSize: stored, Mode: 0o644}
 	s := NewSQL(database)

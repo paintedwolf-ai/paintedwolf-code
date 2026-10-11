@@ -17,7 +17,7 @@ func TestCopySHAVerifiesContent(t *testing.T) {
 	store := New(t.TempDir())
 	body := []byte("complete content\n")
 	sha := ContentSHA(body)
-	rel, _, _, err := store.Put(sha, body)
+	rel, _, _, err := store.Put(t.Context(), sha, body)
 	testutil.FailErr(t, "put object", err)
 	var out bytes.Buffer
 	testutil.FailErr(t, "stream object", store.CopySHA(t.Context(), sha, &out))

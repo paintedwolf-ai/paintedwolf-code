@@ -219,7 +219,7 @@ func (s *Store) retainWindowStart(ctx context.Context, w *openCommandWindow) err
 		if err != nil {
 			return err
 		}
-		rel, stored, oids, err := s.objects.Put(entry.SHA256, raw)
+		rel, stored, oids, err := s.objects.Put(ctx, entry.SHA256, raw)
 		if err != nil {
 			return err
 		}

@@ -17,7 +17,7 @@ import (
 // agedOrphan plants an object no row names, old enough for a pass to judge.
 func agedOrphan(t *testing.T, store *Store, content string) string {
 	t.Helper()
-	rel, _, _, err := store.objects.Put(sourceblob.ContentSHA([]byte(content)), []byte(content))
+	rel, _, _, err := store.objects.Put(t.Context(), sourceblob.ContentSHA([]byte(content)), []byte(content))
 	testutil.FailErr(t, "store orphan", err)
 	settled := time.Now().Add(-48 * time.Hour)
 	testutil.FailErr(t, "age orphan", os.Chtimes(filepath.Join(store.objects.Root(), rel), settled, settled))
@@ -110,7 +110,7 @@ func TestMaintenanceWaitsForARecordTransactionToCommit(t *testing.T) {
 	content := []byte("recorded through a caller transaction\n")
 	sha := sourceblob.ContentSHA(content)
 	// An unreferenced, reclaimable object the pending record is about to reuse.
-	rel, stored, oids, err := store.objects.Put(sha, content)
+	rel, stored, oids, err := store.objects.Put(t.Context(), sha, content)
 	testutil.FailErr(t, "store object", err)
 	settled := time.Now().Add(-48 * time.Hour)
 	testutil.FailErr(t, "age object", os.Chtimes(filepath.Join(store.objects.Root(), rel), settled, settled))

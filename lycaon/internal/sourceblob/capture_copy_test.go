@@ -33,7 +33,7 @@ func TestCaptureRepairsAnExistingDamagedObject(t *testing.T) {
 	store := New(t.TempDir())
 	body := []byte("complete recovery")
 	sha := ContentSHA(body)
-	rel, _, _, err := store.Put(sha, body)
+	rel, _, _, err := store.Put(t.Context(), sha, body)
 	testutil.FailErr(t, "seed object", err)
 	damaged, err := os.ReadFile(filepath.Join(store.Root(), rel))
 	testutil.FailErr(t, "read encoded object", err)

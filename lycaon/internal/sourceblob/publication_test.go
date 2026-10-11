@@ -3,6 +3,8 @@ package sourceblob
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -19,7 +21,7 @@ func TestPublicationRepairsDamagedObjects(t *testing.T) {
 				store := New(t.TempDir())
 				body := []byte("retained source history\n")
 				sha := ContentSHA(body)
-				rel, _, _, err := store.Put(sha, body)
+				rel, _, _, err := store.Put(t.Context(), sha, body)
 				testutil.FailErr(t, "seed object", err)
 				path := filepath.Join(store.Root(), rel)
 				encoded, err := os.ReadFile(path)
@@ -61,7 +63,7 @@ func publishObject(t *testing.T, store *Store, capture, sha string, body []byte)
 	var stored int64
 	if capture == "memory" {
 		var err error
-		rel, stored, _, err = store.Put(sha, body)
+		rel, stored, _, err = store.Put(t.Context(), sha, body)
 		testutil.FailErr(t, "publish memory content", err)
 	} else {
 		path := filepath.Join(t.TempDir(), "source")
@@ -84,14 +86,14 @@ func TestPublicationRefusesInvalidDestinations(t *testing.T) {
 	body := []byte("retained")
 	sha := ContentSHA(body)
 	var absent *Store
-	if _, _, _, err := absent.Put(sha, body); err == nil {
+	if _, _, _, err := absent.Put(t.Context(), sha, body); err == nil {
 		t.Fatal("nil store accepted content")
 	}
 	store := New(t.TempDir())
 	rel, err := RelPath(sha)
 	testutil.FailErr(t, "derive object path", err)
 	testutil.FailErr(t, "occupy object path", os.MkdirAll(filepath.Join(store.Root(), rel), 0o700))
-	if _, _, _, err := store.Put(sha, body); err == nil {
+	if _, _, _, err := store.Put(t.Context(), sha, body); err == nil {
 		t.Fatal("directory accepted as retained content")
 	}
 }
@@ -99,7 +101,7 @@ func TestPublicationRefusesInvalidDestinations(t *testing.T) {
 func TestObjectVerificationHonorsCancellation(t *testing.T) {
 	store := New(t.TempDir())
 	body := []byte("retained")
-	rel, _, _, err := store.Put(ContentSHA(body), body)
+	rel, _, _, err := store.Put(t.Context(), ContentSHA(body), body)
 	testutil.FailErr(t, "publish object", err)
 	encoded, err := os.ReadFile(filepath.Join(store.Root(), rel))
 	testutil.FailErr(t, "read encoded object", err)
@@ -109,4 +111,31 @@ func TestObjectVerificationHonorsCancellation(t *testing.T) {
 		t.Fatal("canceled verification accepted an object")
 	}
 	testutil.FailErr(t, "retained object remains readable", store.CopySHA(t.Context(), ContentSHA(body), io.Discard))
+}
+
+func TestPublicationHonorsCancellation(t *testing.T) {
+	for _, existing := range []bool{false, true} {
+		t.Run(fmt.Sprint(existing), func(t *testing.T) {
+			store := New(t.TempDir())
+			body := []byte("retained")
+			sha := ContentSHA(body)
+			if existing {
+				_, _, _, err := store.Put(t.Context(), sha, body)
+				testutil.FailErr(t, "seed existing object", err)
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			cancel()
+			if _, _, _, err := store.Put(ctx, sha, body); !errors.Is(err, context.Canceled) {
+				t.Fatalf("canceled publication returned %v", err)
+			}
+			rel, err := RelPath(sha)
+			testutil.FailErr(t, "derive object path", err)
+			_, err = os.Stat(filepath.Join(store.Root(), rel))
+			if existing {
+				testutil.FailErr(t, "existing object survives cancellation", err)
+			} else if !os.IsNotExist(err) {
+				t.Fatalf("canceled publication created an object: %v", err)
+			}
+		})
+	}
 }

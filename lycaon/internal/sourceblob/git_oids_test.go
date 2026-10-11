@@ -39,13 +39,13 @@ func TestContentGitOIDsMatchGitHashObject(t *testing.T) {
 func TestPutDerivesGitOIDs(t *testing.T) {
 	store := New(t.TempDir())
 	content := []byte("hello\n")
-	_, _, oids, err := store.Put(ContentSHA(content), content)
+	_, _, oids, err := store.Put(t.Context(), ContentSHA(content), content)
 	testutil.FailErr(t, "store object", err)
 	if oids.SHA1 != gitOIDVectors[1].sha1 || oids.SHA256 != gitOIDVectors[1].sha256 {
 		t.Fatalf("stored oids = %+v", oids)
 	}
 	// A dedup hit answers with the same derived identity.
-	_, _, again, err := store.Put(ContentSHA(content), content)
+	_, _, again, err := store.Put(t.Context(), ContentSHA(content), content)
 	testutil.FailErr(t, "re-store object", err)
 	if again != oids {
 		t.Fatalf("dedup oids = %+v, first store said %+v", again, oids)

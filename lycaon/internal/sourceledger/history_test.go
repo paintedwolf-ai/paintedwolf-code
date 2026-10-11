@@ -409,7 +409,7 @@ func TestMaintenanceReclaimsObjectsNoHistoryNames(t *testing.T) {
 	testutil.FailErr(t, "publish snapshot", err)
 	extra := []byte("unprotected content\n")
 	extraSHA := sourceblob.ContentSHA(extra)
-	extraRel, extraStored, extraOIDs, err := store.objects.Put(extraSHA, extra)
+	extraRel, extraStored, extraOIDs, err := store.objects.Put(t.Context(), extraSHA, extra)
 	testutil.FailErr(t, "store unprotected object", err)
 	testutil.FailErr(t, "index unprotected object", store.queries.UpsertSourceBlobObject(ctx, db.UpsertSourceBlobObjectParams{
 		Sha256: extraSHA, Size: int64(len(extra)), StoredSize: extraStored,

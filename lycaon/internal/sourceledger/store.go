@@ -865,7 +865,7 @@ func (s *Store) insertVersion(ctx context.Context, q *db.Queries, spec versionSp
 			captureReason = "content_too_large"
 		}
 		if spec.Content != nil && len(spec.Content) <= MaxRevisionContentBytes {
-			rel, stored, oids, err := s.objects.Put(spec.SHA256, spec.Content)
+			rel, stored, oids, err := s.objects.Put(ctx, spec.SHA256, spec.Content)
 			if err != nil {
 				return "", err
 			}
