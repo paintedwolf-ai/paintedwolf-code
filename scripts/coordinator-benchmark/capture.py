@@ -30,6 +30,10 @@ def digest(path):
 
 
 def executable_identity(engine):
+    for name in RUNTIME_EXECUTABLES:
+        path = engine.parent / name
+        if path.is_symlink() or not path.is_file() or not path.stat().st_mode & 0o111:
+            raise ValueError('required runtime executable is unavailable: ' + str(path))
     return {name: {'sha256': file_hash(engine.parent / name),
                    'mode': (engine.parent / name).stat().st_mode & 0o777}
             for name in RUNTIME_EXECUTABLES}

@@ -10,6 +10,9 @@ class CaptureStorageTests(unittest.TestCase):
     def test_forced_launcher_exit_does_not_retain_copied_credentials(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
+            for name in ('pw-logs', 'pw-document-core', 'bialy'):
+                (root / name).write_bytes(name.encode())
+                (root / name).chmod(0o755)
             source, captured = root / 'source', root / 'capture/config'
             source.mkdir()
             captured.mkdir(parents=True)
@@ -41,6 +44,9 @@ class CaptureStorageTests(unittest.TestCase):
     def test_private_cleanup_never_follows_configuration_links(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
+            for name in ('pw-logs', 'pw-document-core', 'bialy'):
+                (root / name).write_bytes(name.encode())
+                (root / name).chmod(0o755)
             source = root / 'source'
             source.mkdir()
             key = source / 'providers.local.yaml'
@@ -59,13 +65,22 @@ class CaptureStorageTests(unittest.TestCase):
     def test_active_runtime_copies_cannot_mutate_the_frozen_source(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
+            for name in ('pw-logs', 'pw-document-core', 'bialy'):
+                (root / name).write_bytes(name.encode())
+                (root / name).chmod(0o755)
             engine, catalog, capture = root / 'binary', root / 'catalog', root / 'capture'
             engine.write_bytes(b'engine')
+            engine.chmod(0o755)
             engine.chmod(0o755)
             catalog.mkdir()
             (catalog / 'policy').write_text('original')
             (capture / 'module').mkdir(parents=True)
             stage_runtime(engine, catalog, capture)
+            for name in ('pw-logs', 'pw-document-core', 'bialy'):
+                self.assertFalse((root / name).samefile(capture / name))
+                self.assertEqual((capture / name).stat().st_mode & 0o777, 0o755)
+                (capture / name).write_bytes(b'changed')
+                self.assertEqual((root / name).read_bytes(), name.encode())
             self.assertFalse(engine.samefile(capture / 'engine'))
             self.assertEqual((capture / 'engine').stat().st_mode & 0o777, 0o755)
             (capture / 'engine').write_bytes(b'changed')
@@ -75,9 +90,22 @@ class CaptureStorageTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 clone_file(engine, capture / 'engine')
 
+    def test_incomplete_runtime_is_rejected_before_capture(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = pathlib.Path(tmp)
+            engine = root / 'engine'
+            engine.write_bytes(b'engine')
+            engine.chmod(0o755)
+            with self.assertRaisesRegex(ValueError, 'runtime executable is unavailable'):
+                stage_runtime(engine, root / 'catalog', root / 'capture')
+            self.assertFalse((root / 'capture').exists())
+
     def test_only_identical_completed_files_share_storage(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
+            for name in ('pw-logs', 'pw-document-core', 'bialy'):
+                (root / name).write_bytes(name.encode())
+                (root / name).chmod(0o755)
             original, captured = root / 'original', root / 'captured'
             original.write_bytes(b'frozen runtime')
             captured.write_bytes(b'frozen runtime')
