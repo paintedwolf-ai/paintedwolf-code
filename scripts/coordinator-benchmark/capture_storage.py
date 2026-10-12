@@ -10,6 +10,8 @@ import sys
 import tempfile
 from snapshot import RUNTIME_METADATA
 
+RUNTIME_EXECUTABLES = ('pw-logs', 'pw-document-core', 'bialy')
+
 PRIVATE_CONFIG_FILES = ('credential-vault.age', '.credential-vault-development-identity',
                         'providers.local.yaml', 'model-policy.yaml', 'api.token')
 
@@ -49,7 +51,13 @@ def clone_file(source, destination):
 
 
 def stage_runtime(engine, catalog, capture):
+    executables = [engine, *[engine.parent / name for name in RUNTIME_EXECUTABLES]]
+    for executable in executables:
+        if executable.is_symlink() or not executable.is_file() or not os.access(executable, os.X_OK):
+            raise ValueError('required runtime executable is unavailable: ' + str(executable))
     clone_file(engine, capture / 'engine')
+    for executable in executables[1:]:
+        clone_file(executable, capture / executable.name)
     shutil.copytree(catalog, capture / 'module/config', copy_function=clone_file,
                     symlinks=True, ignore=shutil.ignore_patterns(*RUNTIME_METADATA))
 
@@ -83,6 +91,8 @@ def share_file(original, captured):
 
 def deduplicate_runtime(capture, source):
     share_file(source / '.bin/lycaon-dev', capture / 'engine')
+    for name in RUNTIME_EXECUTABLES:
+        share_file(source / '.bin' / name, capture / name)
     catalog = source / 'lycaon/config'
     for original in catalog.rglob('*'):
         if original.is_file():

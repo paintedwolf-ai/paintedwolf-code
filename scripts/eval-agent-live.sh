@@ -130,6 +130,8 @@ NODE
   export LYCAON_ADDR="127.0.0.1:$EVAL_PORT" LYCAON_API_TOKEN="$(openssl rand -hex 24)"
   printf '%s' "$LYCAON_API_TOKEN" >"$EVAL_RUN_DIR/config/api.token"
   chmod 600 "$EVAL_RUN_DIR/config/api.token"
+  unset LYCAON_DOCUMENT_CORE_BINARY LYCAON_DECIDE_BINARY LYCAON_DECIDE_DISABLED
+  unset LYCAON_DECIDE_MODEL_DIR LYCAON_DECIDE_HEADS LYCAON_DECIDE_METALLIB LYCAON_DECIDE_DEVICE
   export LYCAON_DEV=1 LYCAON_HARNESS=1 LYCAON_LLM_MOCK=0
   if [[ -n "$EVAL_RATE_STATE_DIR" ]]; then
     [[ "$EVAL_RATE_STATE_DIR" == /* ]] || { echo 'Provider rate state directory must be absolute.'; exit 2; }
@@ -142,6 +144,7 @@ NODE
   export LYCAON_LLM_DEBUG_FILE="$EVAL_RUN_DIR/llm-requests.jsonl"
   export LYCAON_SESSION_DEBUG_FILE="$EVAL_RUN_DIR/sessions.jsonl"
   export LYCAON_TOOL_DEBUG_FILE="$EVAL_RUN_DIR/tool-invocations.jsonl"
+  "$EVAL_RUN_DIR/engine" decide ensure
   "$EVAL_RUN_DIR/engine" serve --db "$EVAL_RUN_DIR/store.db" >"$EVAL_RUN_DIR/sidecar.log" 2>&1 &
   EVAL_PID=$!
   EVAL_URL="http://$LYCAON_ADDR"

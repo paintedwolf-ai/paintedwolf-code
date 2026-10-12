@@ -145,7 +145,8 @@ seal_application(pathlib.Path(sys.argv[1]))
                 built_runtime.seal_application(source)
                 if change in ('scanner', 'engine', 'driver', 'logs'):
                     path = {'scanner': runtime / 'scanner', 'engine': source / '.bin/lycaon-dev',
-                            'driver': source / '.bin/lycaon-debug', 'logs': source / '.bin/pw-logs'}[change]
+                            'driver': source / '.bin/lycaon-debug', 'logs': source / '.bin/pw-logs',
+                            'document-core': source / '.bin/pw-document-core', 'decision': source / '.bin/bialy'}[change]
                     path.write_text('changed')
                 elif change == 'permissions':
                     (source / '.bin/lycaon-dev').chmod(0o644)

@@ -34,6 +34,9 @@ class LocalRuntimeTests(unittest.TestCase):
     def test_capture_hides_endpoint_and_verification_rejects_model_changes(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
+            for name in ('pw-logs', 'pw-document-core', 'bialy'):
+                (root / name).write_bytes(name.encode())
+                (root / name).chmod(0o755)
             providers = {'providers': [{'id': 'local', 'kind': 'ollama', 'base_url': 'http://private-server:11434',
                                         'models': [{'id': 'qwen:latest'}]},
                                        {'id': 'cloud', 'kind': 'fixture', 'base_url': 'https://example.com/v1'}]}

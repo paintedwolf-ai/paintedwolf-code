@@ -2,9 +2,10 @@
 import json
 from snapshot import file_hash, identity, read_source, tree_entries
 from progress import save
+from capture_storage import RUNTIME_EXECUTABLES
 
 RUNTIME = 'lycaon-den/src-tauri/engine-root'
-EXECUTABLES = ('.bin/lycaon-dev', '.bin/lycaon-debug', '.bin/pw-logs')
+EXECUTABLES = ('.bin/lycaon-dev', '.bin/lycaon-debug', *('.bin/' + name for name in RUNTIME_EXECUTABLES))
 
 
 def build_manifest(source):
