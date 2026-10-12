@@ -1,4 +1,4 @@
 {% if requestable_capabilities %}### More tools
 
-More tools can load for {{ requestable_capabilities|join:", " }}. Ask in your own words with `request_tools({"need":"…"})`, one operation per call, such as "create several source files"; the schemas arrive on the next model call, and tool names are not needed. Only call tools present in current schemas.
+More tools can load for {{ requestable_capabilities|join:", " }}. If the next operation needs a missing tool, call `request_tools({"need":"…"})`, such as "create several source files". Request one operation per call; schemas arrive on the next model call. Then perform the operation using the offered tools. Updating a checklist does not execute its work.
 {% endif %}

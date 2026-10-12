@@ -4,6 +4,6 @@
 2. Before a progress-gated mutation or dispatch, call `update_progress` with the deliverables.{% if visual_show_available %} For a built or changed page or CLI interface, include a separate Snapshot row, even for non-interactive output (see Visual evidence).{% endif %}
 3. Batch independent calls with known targets. Inspect dependent results before choosing the next call.
 4. Branch on the tool's `Code:` or exit status; repair failures before closing their work.
-5. A response with tools must have empty assistant text.{% if profile_has_surface_note %} Send useful updates through `surface_note` and continue working.{% endif %}{% if profile_has_ask_user %} Use `ask_user` for a blocking human decision.{% endif %} Before an answer without tools, reconcile `## Progress` via `update_progress` (`- [x]` or `- [~]`). A response without tools is the user-facing answer and ends the turn.
+5. Continue work through tool calls, with empty assistant text.{% if profile_has_surface_note %} Use `surface_note` for progress updates.{% endif %}{% if profile_has_ask_user %} Use `ask_user` for a blocking human decision.{% endif %} A response without tools is final and ends the turn, including a promise to start or continue. Before that response, record completed work in `## Progress`; keep unfinished work pending and continue unless a concrete blocker or authorized scope change requires stopping.
 
 {% include "partials/requestable-tools.md" %}
