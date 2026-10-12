@@ -5,11 +5,11 @@
   "workstream": "approval-intent-lifecycle",
   "disposition": "retain",
   "reason": "Checkpoint admission, expiry, cancellation, and human resolution share the resolution locks and settlement events. Retain this lifecycle owner with intent-scoped suppression; capability runtimes do not own denial history.",
-  "reviewed_commit": "4b74660224521ef8e48d2ac91fdbc7f8d57c6dea",
+  "reviewed_commit": "10d0822c7c4275eb12a9ae9e2d26324df60cfe43",
   "ceiling": 25,
   "boundaries": {
     "lycaon/internal/hitl/checkpoint_expiry_test.go": "04f494ae92c3f3d7e1e95dccff14d9713888a29abeb7d465b4d73aca72f2d07b",
-    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "168f3818eaaace4232617263387f617f0cebb367fb20044c21eea0ac86e2b062"
+    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "5a78b3c87377e0209a42f85f50b6332847a460719df2946e071d57a33130c8de"
   },
   "reviewed_shape": "71e522983ec58b85f8673727a742535eb1bd22c3793de6dd3abea6b679f98db4"
 }

@@ -5,12 +5,12 @@
   "workstream": "approval-intent-lifecycle",
   "disposition": "retain",
   "reason": "Executor settles one invocation across validation, canonical arguments, confinement, prepared approval, dispatch, and secret effects. Domain collaborators own their behavior; retain the ordered operation and carry constituent review keys with its compiled plan.",
-  "reviewed_commit": "4b74660224521ef8e48d2ac91fdbc7f8d57c6dea",
+  "reviewed_commit": "10d0822c7c4275eb12a9ae9e2d26324df60cfe43",
   "ceiling": 567,
   "boundaries": {
     "lycaon/internal/toolexecution/executor_settled_join_test.go": "eb332fa82834d7eaf0305862aca9143e473512cb621eb1ff43621af261494c00",
     "lycaon/internal/toolexecution/approval_identity_test.go": "0bfda5fdc0a03359333c67eaa9f6aa368cc8bb778c54e1cebe00342b3f21356e",
-    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "168f3818eaaace4232617263387f617f0cebb367fb20044c21eea0ac86e2b062"
+    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "5a78b3c87377e0209a42f85f50b6332847a460719df2946e071d57a33130c8de"
   },
   "reviewed_shape": "a7209809bf61729626e7c8f7e936e3c11f7d747cf16c359d43a24eb322ab2f73"
 }
