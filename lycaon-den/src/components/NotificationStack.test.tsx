@@ -99,7 +99,11 @@ describe("NotificationStack", () => {
 
     mount(store);
     const appRail = screen.getByTestId("notice-rail");
-    within(appRail).getAllByLabelText("Dismiss")[0].click();
+    const appOne = within(appRail).getAllByTestId("notice").find(
+      (card) => within(card).queryByText("App one"),
+    );
+    expect(appOne).toBeDefined();
+    within(appOne!).getByLabelText("Dismiss").click();
 
     expect(screen.queryByText("App one")).toBeNull();
     expect(screen.getByText("App two")).toBeTruthy();
