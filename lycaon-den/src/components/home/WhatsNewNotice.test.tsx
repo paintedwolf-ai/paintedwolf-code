@@ -16,16 +16,12 @@ vi.mock("../../settings/system/onboarding-prefs.ts", () => ({
 }));
 
 describe("WhatsNewNotice", () => {
-  it.each(["Got it", "Dismiss", "Dismiss all"])("acknowledges through %s across shared surfaces", async (action) => {
+  it.each(["Got it", "Dismiss"])("acknowledges through %s across shared surfaces", async (action) => {
     const saveLatch = vi.fn(async (version: string) => resetWhatsNewPrefsForTests({ lastSeenVersion: version }));
     render(() => <><Notice currentVersion="0.2.0" notesFor={() => "Release notes"} saveLatch={saveLatch} /><NoticeRail notices={rows()} onDismiss={notices.dismiss} /></>);
     await waitFor(() => expect(rows()).toHaveLength(1));
-    if (action === "Dismiss all") {
-      notices.publish({ title: "Other condition", message: "Still works" }, APP_SCOPE);
-      fireEvent.click(screen.getAllByRole("button", { name: "Dismiss all" })[0]!);
-    } else {
-      fireEvent.click(screen.getAllByRole("button", { name: action })[0]!);
-    }
+    expect(screen.queryByText("Notice")).toBeNull();
+    fireEvent.click(screen.getAllByRole("button", { name: action })[0]!);
     await waitFor(() => expect(saveLatch).toHaveBeenCalledExactlyOnceWith("0.2.0"));
     expect(rows()).toHaveLength(0);
   });
@@ -41,7 +37,7 @@ describe("WhatsNewNotice", () => {
   let notices: ReturnType<typeof createNoticeStore>;
   const rows = () => notices.index().get(noticeScopeKey(APP_SCOPE)) ?? [];
   function Notice(props: Omit<Parameters<typeof WhatsNewNotice>[0], "notices">) {
-    return <><WhatsNewNotice {...props} notices={notices} /><NoticeRail notices={rows()} onDismiss={notices.dismiss} onDismissAll={() => notices.dismissScope(APP_SCOPE)} /></>;
+    return <><WhatsNewNotice {...props} notices={notices} /><NoticeRail notices={rows()} onDismiss={notices.dismiss} /></>;
   }
   beforeEach(() => {
     notices = createNoticeStore();

@@ -87,8 +87,8 @@ describe("chat workspace composition", () => {
 
   it("routes notices, recovery limits, and project nudges to their owning scope", async () => {
     const { notices, settingsStore, callbacks, actions } = mountChat();
-    seams.notices.onDismiss?.("notice"); seams.notices.onDismissAll?.();
-    expect(notices.dismiss).toHaveBeenCalledWith("notice"); expect(notices.dismissScope).toHaveBeenCalledWith(expect.objectContaining({ projectId: "project", sessionId: "session" }));
+    seams.notices.onDismiss?.("notice");
+    expect(notices.dismiss).toHaveBeenCalledWith("notice");
     await seams.reached.onResume?.(); expect(actions.resumeSpendLimitedChat).toHaveBeenCalledWith({ projectId: "project", sessionId: "session" });
     seams.reached.onOpenBudgets?.(); expect(callbacks.onOpenBudgets).toHaveBeenCalledOnce();
     const projectLimits = { max_session_usd: 12 } as never;

@@ -133,7 +133,6 @@
   background: transparent;
 }
 /* Align notice content with the dock edges. */
-.den-chat-top-dock .den-notice-rail-header,
 .den-chat-top-dock .den-notice-rail-list__content {
   padding: 8px 0 0;
 }

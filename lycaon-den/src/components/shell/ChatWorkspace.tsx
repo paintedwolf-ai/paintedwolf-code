@@ -9,7 +9,6 @@ import { ChatTabChromeProvider } from "../../chat/composer/chat-tab-chrome.tsx";
 import { coordinatorModelVisionSupport } from "../../chat/composer/composer-vision.ts";
 import { hasSpendRecoveryDraft } from "../../chat/recovery/spend-ceiling-recovery.ts";
 import { isAnySessionActivityLive } from "../../chat/session/session-activity.ts";
-import { sessionScope } from "../../notices/notice-scope.ts";
 import { hasSharedNotices, selectSessionNotices } from "../../notices/notice-select.ts";
 import { type NoticeStore } from "../../notices/notice-store.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
@@ -166,11 +165,6 @@ export function ChatWorkspace(props: Props) {
             <NoticeRail
               notices={selectSessionNotices(noticeIndex(), chat.sessionId)}
               onDismiss={(id) => props.notices.dismiss(id)}
-              onDismissAll={() =>
-                props.notices.dismissScope(
-                  sessionScope(chat.projectId, chat.sessionId),
-                )
-              }
               announceLive={!isAnySessionActivityLive(props.appStore)}
             />
           ),

@@ -34,7 +34,6 @@ function mount(
       projectName={(projectId) => names[projectId]}
       onOpenProject={overrides.onOpenProject ?? (() => undefined)}
       onDismiss={(id) => store.dismiss(id)}
-      onDismissApp={() => store.dismissScope(APP_SCOPE)}
     />
   ));
 }
@@ -92,17 +91,22 @@ describe("NotificationStack", () => {
     expect(screen.queryByTestId("notification-stack")).toBeNull();
   });
 
-  it("dismisses all app notices without touching project notices", () => {
+  it("dismisses one app notice without touching other app or project notices", () => {
     const store = createNoticeStore();
     publish(store, APP_SCOPE, "App one");
     publish(store, APP_SCOPE, "App two");
     publish(store, projectScope("proj-a"), "Project condition");
 
     mount(store);
-    screen.getByText("Dismiss all").click();
+    const appRail = screen.getByTestId("notice-rail");
+    const appOne = within(appRail).getAllByTestId("notice").find(
+      (card) => within(card).queryByText("App one"),
+    );
+    expect(appOne).toBeDefined();
+    within(appOne!).getByLabelText("Dismiss").click();
 
     expect(screen.queryByText("App one")).toBeNull();
-    expect(screen.queryByText("App two")).toBeNull();
+    expect(screen.getByText("App two")).toBeTruthy();
     expect(screen.getByText("Project condition")).toBeTruthy();
   });
 
