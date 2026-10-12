@@ -4,13 +4,15 @@
   "kind": "module",
   "workstream": "backup-process-lifecycle",
   "disposition": "retain",
-  "reason": "Backup already separates admission, staging, publication and recovery files. Their shared restore transaction and preimage lifecycle are intentional; creating subpackages to remove two files from the count would complicate the recovery protocol.",
-  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
-  "ceiling": 27,
+  "reason": "The package owns one archive lifecycle across capture, admission, staged replacement, and recovery. Phase files expose those transaction boundaries. Native editor capture and reasoning history use this existing snapshot owner and project payload capture.",
+  "reviewed_commit": "3eea863db8acb72e10e6766da8b55fce3ee992cd",
+  "ceiling": 28,
   "boundaries": {
     "lycaon/internal/backup/restore_transaction_test.go": "186747724478720db309f06469fddcfb1f52292ff82f5e7200edc6276e78d445",
     "lycaon/internal/backup/recovery_publication_test.go": "6604aa8cd3aa9ea776cbb7020eb77ec4c12b0895015da8c100c8e8b9dec8b7cb",
-    "lycaon/internal/backup/upgrade_recovery_test.go": "c9a2ec60b31d7e989002dab7833470881f83d6bcbe11a9ee8f55c7bf028af80f"
+    "lycaon/internal/backup/upgrade_recovery_test.go": "c9a2ec60b31d7e989002dab7833470881f83d6bcbe11a9ee8f55c7bf028af80f",
+    "lycaon/internal/backup/reasoning_retention_test.go": "708e2bb19d53d71f00754dcb9be34c85a897bc772b9b0726bff6810f8b02e06c",
+    "lycaon/internal/backup/editor_outbox_test.go": "e7ab2c1eacf397d612cb7b918a6ce0dfc189069c09a1f04ed71f9b6279a71b84"
   },
-  "reviewed_shape": "a85f2f0cfdab8b7b9bc6bb2ae03dc03597dbf1862020982e1d00fd4b620ae4e7"
+  "reviewed_shape": "3121dc205bebc54cca1c1fd3ae5dde5cc8a63f456a582ffbc585bb0aa4981e09"
 }

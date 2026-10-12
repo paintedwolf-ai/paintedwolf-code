@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/llm/providers/anthropic/anthropic_wire.go",
+  "kind": "projection",
+  "workstream": "project-reasoning-retention",
+  "disposition": "retain",
+  "reason": "This file maps ordered transcript blocks to one native transport, including signed thinking and tool results. Keep the mapping cohesive while shared replay selection owns provenance and history eligibility.",
+  "reviewed_commit": "3eea863db8acb72e10e6766da8b55fce3ee992cd",
+  "ceiling": 335,
+  "boundaries": {
+    "lycaon/internal/llm/providers/anthropic/thinking_wire_test.go": "e79790a0b6341817ca5045199ff0aa5a67699e9f33ad941a2dda824fba735311"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/llm/providers/ollama/ollama.Provider",
+  "kind": "runtime_service",
+  "workstream": "project-reasoning-retention",
+  "disposition": "retain",
+  "reason": "The native provider owns request preparation, admission, and stream lifetime. Request projection is computed once for both context estimation and transport serialization; shared replay policy and wire mapping remain separate domain boundaries.",
+  "reviewed_commit": "3eea863db8acb72e10e6766da8b55fce3ee992cd",
+  "ceiling": 21,
+  "boundaries": {
+    "lycaon/internal/llm/providers/ollama/reasoning_recovery_test.go": "3c41f93806ae14eda2dbb2a7ceba11b4a34e70009ce35b7e653ef635fdc0ae27",
+    "lycaon/internal/llm/providers/ollama/context_cap_test.go": "761f807bacd5b77441f933cb84a612a37cd0bed9a62c477a9d7afe42fcacaa72"
+  },
+  "reviewed_shape": "9086898830de94a1fb74684e2ba612f97e63c8c0e8b33c1662e0e2a82346e0e8"
+}
