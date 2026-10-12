@@ -133,7 +133,7 @@ func TestCloseoutBoundedPerPrompt(t *testing.T) {
 	}
 }
 
-func TestCloseoutPendingWorkRequiresExecutionBeforeCompletion(t *testing.T) {
+func TestCloseoutPendingProgressDoesNotArmWorkerCompletionLatch(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register progress", native.RegisterUpdateProgressTool(reg, mgr.RewindRuntime.Progress, func(_ context.Context, id string) string { return id }))
