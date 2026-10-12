@@ -24,7 +24,7 @@ func (c *RoutingClient) openWithCapacity(ctx context.Context, sel *ModelSelectio
 	}
 	handedOff := false
 	defer func() {
-		if !handedOff {
+		if !handedOff && release != nil {
 			release()
 		}
 	}()
