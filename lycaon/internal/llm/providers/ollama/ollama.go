@@ -187,7 +187,7 @@ func (p *Provider) Prepare(ctx context.Context, req modelcall.CompletionRequest,
 	vision := modelinfo.Supported(entry.EffectiveCapabilities().Vision)
 	req.Messages = providerwire.PrepareMessagesForVision(req.Messages, vision, req.Debug.SessionID)
 	temperature, numPredict := p.resolveControls(req, model)
-	messages := ProjectMessages(req.Messages, messageProjection{vision: vision, sessionID: req.Debug.SessionID, providerID: p.id, model: model})
+	messages := ProjectMessages(req.Messages, MessageProjection{Vision: vision, SessionID: req.Debug.SessionID, ProviderID: p.id, Model: model})
 	callableTools := ollamaCallableTools(req)
 	promptTokens := estimatePromptTokens(messages, callableTools)
 	projectedPromptTokens := p.projectPromptTokens(model, promptTokens)

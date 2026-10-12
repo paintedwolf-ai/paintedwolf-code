@@ -74,16 +74,16 @@ type ollamaChatResponse struct {
 	Error              string            `json:"error"`
 }
 
-type messageProjection struct {
-	vision     bool
-	sessionID  string
-	providerID string
-	model      string
+type MessageProjection struct {
+	Vision     bool
+	SessionID  string
+	ProviderID string
+	Model      string
 }
 
-func ProjectMessages(msgs []api.Message, projection messageProjection) []ollamaChatMessage {
+func ProjectMessages(msgs []api.Message, projection MessageProjection) []ollamaChatMessage {
 	msgs = providerwire.SystemPreamble(msgs)
-	msgs = providerwire.ProjectReasoning(msgs, projection.providerID, projection.model, providerwire.ReasoningReplayCurrentToolLoop)
+	msgs = providerwire.ProjectReasoning(msgs, projection.ProviderID, projection.Model, providerwire.ReasoningReplayCurrentToolLoop)
 	out := make([]ollamaChatMessage, 0, len(msgs))
 	// Model templates render images on user turns, so a run of tool results
 	// is followed by one user message carrying their images.
@@ -133,9 +133,9 @@ func ProjectMessages(msgs []api.Message, projection messageProjection) []ollamaC
 			out = append(out, ollamaChatMessage{Role: "system", Content: m.Content})
 		default:
 			wire := ollamaChatMessage{Role: "user", Content: m.Content}
-			if projection.vision {
+			if projection.Vision {
 				for _, artifactID := range m.ArtifactIDs {
-					_, encoded, ok := providerwire.UserArtifactWireImage(projection.sessionID, artifactID)
+					_, encoded, ok := providerwire.UserArtifactWireImage(projection.SessionID, artifactID)
 					if ok {
 						wire.Images = append(wire.Images, encoded)
 					}

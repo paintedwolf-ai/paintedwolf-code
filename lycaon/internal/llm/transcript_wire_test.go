@@ -159,7 +159,7 @@ func toolResultWithDecision(decision *api.CheckpointDecisionMeta) api.Message {
 func TestApprovedCheckpointSurvivesNativeWire(t *testing.T) {
 	msg := toolResultWithDecision(&api.CheckpointDecisionMeta{CheckpointID: "cp-approved", Kind: api.CheckpointKindToolApproval, Status: api.CheckpointStatusApproved, Tool: "command", Subject: "local network", Guidance: "not direction on an approval"})
 	projected := projectOne(t, msg)
-	wire := ollamaprovider.ProjectMessages([]api.Message{projected}, false, "")
+	wire := ollamaprovider.ProjectMessages([]api.Message{projected}, ollamaprovider.MessageProjection{})
 	if len(wire) != 1 || wire[0].Content != projected.Content || wire[0].Role != "tool" {
 		t.Fatalf("approval receipt lost on native wire: %+v", wire)
 	}

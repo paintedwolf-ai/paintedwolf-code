@@ -16,7 +16,7 @@ func TestOllamaNoteReplayKeepsCompletedToolBoundary(t *testing.T) {
 		{Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote, Content: "Smoke passed."},
 		{Role: api.MessageRoleSystem, Content: "Current host state."},
 	}
-	wire := ProjectMessages(messages, messageProjection{})
+	wire := ProjectMessages(messages, MessageProjection{})
 	if len(wire) != 4 || wire[2].Role != "tool" || wire[2].ToolName != "surface_note" || wire[3].Role != "user" {
 		t.Fatalf("note echo changed the completed tool boundary: %+v", wire)
 	}
@@ -27,11 +27,11 @@ func TestOllamaNoteReplayKeepsCompletedToolBoundary(t *testing.T) {
 		t.Fatal("provider projection changed the user-visible transcript")
 	}
 	withoutEcho := append(append([]api.Message(nil), messages[:3]...), messages[4:]...)
-	if estimatePromptTokens(wire, nil) != estimatePromptTokens(ProjectMessages(withoutEcho, messageProjection{}), nil) {
+	if estimatePromptTokens(wire, nil) != estimatePromptTokens(ProjectMessages(withoutEcho, MessageProjection{}), nil) {
 		t.Fatal("context sizing counted a presentation echo absent from the wire")
 	}
 	messages = append(messages, api.Message{Role: api.MessageRoleAssistant, Content: "The final answer."})
-	wire = ProjectMessages(messages, messageProjection{})
+	wire = ProjectMessages(messages, MessageProjection{})
 	if wire[len(wire)-1].Content != "The final answer." {
 		t.Fatal("ordinary assistant history was removed")
 	}
@@ -41,7 +41,7 @@ func TestOllamaToolResultsCarryNativeNames(t *testing.T) {
 	wire := ProjectMessages([]api.Message{
 		{Role: api.MessageRoleTool, Content: "first result", ToolResult: &api.ToolResult{Tool: "read"}},
 		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "command", Content: "second result"}},
-	}, messageProjection{})
+	}, MessageProjection{})
 	encoded, err := json.Marshal(wire)
 	testutil.FailErr(t, "encode native tool results", err)
 	var decoded []map[string]any

@@ -82,7 +82,7 @@ func TestOllamaReasoningProjectionRespectsProvenanceAndTurn(t *testing.T) {
 		assistant("local", "model", false), assistant("local", "model", true),
 		{Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Visibility: api.MessageVisibilityInternal, Kind: api.MessageKindUserContinuation, Content: "Host feedback."},
 	}
-	out := ProjectMessages(msgs, messageProjection{providerID: "local", model: "model"})
+	out := ProjectMessages(msgs, MessageProjection{ProviderID: "local", Model: "model"})
 	for i, m := range out {
 		want := ""
 		if i == 7 {
