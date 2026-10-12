@@ -26,11 +26,13 @@ func TestReleasePreflightVerifiesOnlyACompleteCorpus(t *testing.T) {
 	repo := contractcheck.RepoRoot(t)
 	version := strings.TrimSpace(contractcheck.ReadRepoFile(t, repo, "VERSION"))
 	for _, tc := range []struct {
-		name     string
-		manifest bool
+		name           string
+		manifest       bool
+		engineOverride bool
 	}{
-		{name: "missing manifest"},
-		{name: "complete corpus", manifest: true},
+		{name: "missing manifest", engineOverride: true},
+		{name: "complete corpus", manifest: true, engineOverride: true},
+		{name: "complete corpus with checkout engine", manifest: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -54,15 +56,19 @@ func TestReleasePreflightVerifiesOnlyACompleteCorpus(t *testing.T) {
 			}
 			contractcheck.FailErr(t, "create corpus", os.MkdirAll(corpus, 0o700))
 			// Archive checks read the captured module and release refs; only corpus inputs are synthetic.
-			for _, rel := range []string{".git", "third_party", "lycaon/cmd", "lycaon/internal", "lycaon/pkg", "lycaon/config"} {
+			for _, rel := range []string{".git", "third_party", "lycaon/cmd", "lycaon/internal", "lycaon/pkg", "lycaon/config", "lycaon-den/src-tauri/engine-root"} {
 				contractcheck.FailErr(t, "link preflight archive dependency "+rel,
 					os.Symlink(filepath.Join(repo, rel), filepath.Join(root, rel)))
 			}
 			cmd := exec.CommandContext(t.Context(), "bash", filepath.Join(root, "scripts", "release-preflight.sh"), "--require-corpus")
 			cmd.Env = append(os.Environ(), "PATH="+filepath.Join(root, "tools")+string(os.PathListSeparator)+os.Getenv("PATH"))
 			cmd.Env = append(cmd.Env, paths.Env()...)
-			// The Go child uses the captured, verified Git payload, not the synthetic build directory.
-			cmd.Env = append(cmd.Env, "LYCAON_ENGINE_ROOT="+filepath.Join(repo, "lycaon-den", "src-tauri", "engine-root"))
+			// Exercise both an explicit engine root and the staged checkout default.
+			engineRoot := ""
+			if tc.engineOverride {
+				engineRoot = filepath.Join(repo, "lycaon-den", "src-tauri", "engine-root")
+			}
+			cmd.Env = append(cmd.Env, "LYCAON_ENGINE_ROOT="+engineRoot)
 			out, err := cmd.CombinedOutput()
 			raw, readErr := os.ReadFile(calls)
 			if readErr != nil && !os.IsNotExist(readErr) {

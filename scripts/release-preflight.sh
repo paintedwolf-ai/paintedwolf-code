@@ -39,7 +39,7 @@ VERSION="${PRODUCT_VERSION}"
 # Pinned shipped workflows must match their released bytes before publication.
 for sealed in "painted-wolf/security-survey security-survey v1.0.1" "painted-wolf/bugbash bugbash v1.0.1"; do
   read -r pack workflow tag <<<"${sealed}"
-  (cd "${ROOT}/lycaon" && go run ./cmd/codegen-workflow-archive --check "${pack}" "${workflow}" "${tag}")
+  (cd "${ROOT}/lycaon" && LYCAON_ENGINE_ROOT="${LYCAON_ENGINE_ROOT:-${ROOT}/lycaon-den/src-tauri/engine-root}" go run ./cmd/codegen-workflow-archive --check "${pack}" "${workflow}" "${tag}")
 done
 
 fail=0
