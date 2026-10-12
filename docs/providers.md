@@ -564,7 +564,7 @@ A provider slot cools after an overload, after silence, and after an unreachable
 
 The utility plane runs bounded host-internal model work such as compaction or narrowly scoped classification. It is not an invisible second coordinator. Utility calls use an explicitly selected eligible slot, have a per-attempt time and token budget, receive only the minimum projected input, cannot invoke tools or change workflow state, record usage/cost provenance separately, and apply a feature-specific failure policy.
 
-Local utility calls are single-flight per driver instance so one slow request cannot create a queue of identical long waits. Foreground coordinator calls and utility calls have distinct schedulers even when they share a configured provider.
+Local foreground and utility calls share atomic admission per provider instance. Foreground calls acquire admission before provider preparation and opening, retain it until the upstream stream drains, and take priority over waiting utility work. An admitted utility call finishes before foreground work starts. Overlay calls retain their bounded admission wait; required utility work waits on its caller context. Hosted providers retain concurrent admission. Admission protects active calls, not model residency between calls.
 
 ### Utility call budget
 

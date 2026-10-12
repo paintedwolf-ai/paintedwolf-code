@@ -12,8 +12,11 @@ from application_environment import isolated_command
 
 
 ENGINE = '''
-import http.server, json, os, pathlib
+import http.server, json, os, pathlib, sys
 config = pathlib.Path(os.environ['LYCAON_CONFIG_DIR'])
+if sys.argv[1:] == ['decide', 'ensure']:
+    (config.parent / 'decision-provisioned').touch()
+    sys.exit(0)
 (config.parent / 'engine-rate-state.txt').write_text(os.environ.get('LYCAON_LLM_RATE_STATE_DIR', ''))
 (config.parent / 'engine-controls.json').write_text(json.dumps({k:v for k,v in os.environ.items() if k.startswith('LYCAON_')}))
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -58,6 +61,9 @@ class LauncherTests(unittest.TestCase):
                 'agent_pool': {'selection': 'first', 'models': [ref]}}))
             (root / 'source/credential-vault.age').write_text('fixture credential')
             (root / 'suite.json').write_text('{}')
+            for name in ('pw-logs', 'pw-document-core', 'bialy'):
+                (root / name).write_bytes(name.encode())
+                (root / name).chmod(0o755)
             for name, body in [('engine', ENGINE), ('driver', DRIVER)]:
                 (root / name).write_text('#!' + sys.executable + '\n' + body)
                 (root / name).chmod(0o755)
@@ -86,6 +92,9 @@ class LauncherTests(unittest.TestCase):
                     self.assertFalse((capture / 'config/credential-vault.age').exists())
                     return
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertTrue((capture / 'decision-provisioned').exists())
+                for name in ('pw-logs', 'pw-document-core', 'bialy'):
+                    self.assertFalse((capture / name).samefile(root / name))
                 self.assertTrue((capture / 'driver-calls.jsonl').exists(), result.stdout + result.stderr)
                 calls = [json.loads(line) for line in (capture / 'driver-calls.jsonl').read_text().splitlines()]
                 self.assertEqual(len(calls), 2)

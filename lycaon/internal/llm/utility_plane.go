@@ -3,15 +3,13 @@ package llm
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 )
 
-// UtilityPlane is the one runtime entry for every lite call: health, the
-// single-flight lane, and class-aware budgets.
+// UtilityPlane owns lite health, shared call admission, and utility budgets.
 type UtilityPlane struct {
 	health *slotHealth
 	lanes  *utilityLanes
@@ -93,17 +91,14 @@ func (p *UtilityPlane) acquireLane(ctx context.Context, provider modelcall.Provi
 	return p.lanes.acquire(ctx, provider.ID(), provider.Profile().UtilitySingleFlight, class)
 }
 
-// holdCoordinator marks a single-flight instance occupied by a coordinator stream.
-func (p *UtilityPlane) holdCoordinator(providerID string) func() {
-	if p == nil || p.lanes == nil || strings.TrimSpace(providerID) == "" {
-		return func() {}
+func (p *UtilityPlane) acquireForeground(ctx context.Context, provider modelcall.Provider) (func(), error) {
+	if p == nil || provider == nil {
+		return func() {}, nil
 	}
-	return p.lanes.holdCoordinator(providerID)
+	return p.lanes.acquireForeground(ctx, provider.ID(), provider.Profile().UtilitySingleFlight)
 }
 
-// resolveUtilityAttemptTimeout is the wall clock for one attempt. Local
-// background work retains its background budget even when weights are already
-// resident: residency removes load time, not prompt-eval or generation time.
+// Residency removes load time, not prompt evaluation or generation.
 func resolveUtilityAttemptTimeout(p modelcall.Provider, class UtilityClass) time.Duration {
 	profile := providerprofile.Default()
 	if p != nil {

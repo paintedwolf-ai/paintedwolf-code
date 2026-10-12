@@ -3,7 +3,7 @@ import tempfile
 import unittest
 import yaml
 
-from capture import describe, digest, validate_expected, verify_capture_files
+from capture import executable_identity, describe, digest, validate_expected, verify_capture_files
 from capture_storage import stage_runtime
 from snapshot import file_hash, tree_hash
 
@@ -12,6 +12,9 @@ class CatalogIdentityTests(unittest.TestCase):
     def test_bundled_runtime_identity_excludes_metadata_but_includes_executables_and_links(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
+            for name in ('pw-logs', 'pw-document-core', 'bialy'):
+                (root / name).write_bytes(name.encode())
+                (root / name).chmod(0o755)
             (root / 'tool').write_bytes(b'tool')
             (root / 'different-tool').write_bytes(b'other tool')
             (root / 'alias').symlink_to('tool')
@@ -28,13 +31,17 @@ class CatalogIdentityTests(unittest.TestCase):
     def test_retained_runtime_is_verified_again_before_grading(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
+            for name in ('pw-logs', 'pw-document-core', 'bialy'):
+                (root / name).write_bytes(name.encode())
+                (root / name).chmod(0o755)
             catalog = root / 'module/config'
             catalog.mkdir(parents=True)
             policy = catalog / 'policy.yaml'
             policy.write_text('required: true\n')
             engine = root / 'engine'
             engine.write_bytes(b'admitted engine')
-            config = {'catalog_sha256': digest(catalog), 'engine_sha256': file_hash(engine)}
+            config = {'catalog_sha256': digest(catalog), 'engine_sha256': file_hash(engine),
+                      'runtime_executables': executable_identity(engine)}
             verify_capture_files(root, config)
             (catalog / '.DS_Store').write_bytes(b'new metadata')
             verify_capture_files(root, config)
@@ -45,10 +52,27 @@ class CatalogIdentityTests(unittest.TestCase):
             policy.write_text('required: false\n')
             with self.assertRaisesRegex(ValueError, 'catalog differs'):
                 verify_capture_files(root, config)
+            policy.write_text('required: true\n')
+            companion = root / 'pw-document-core'
+            companion.write_bytes(b'changed core')
+            with self.assertRaisesRegex(ValueError, 'runtime executables differ'):
+                verify_capture_files(root, config)
+            companion.write_bytes(b'pw-document-core')
+            companion.chmod(0o700)
+            with self.assertRaisesRegex(ValueError, 'runtime executables differ'):
+                verify_capture_files(root, config)
+            companion.chmod(0o755)
+            companion.unlink()
+            companion.symlink_to(engine)
+            with self.assertRaisesRegex(ValueError, 'runtime executable is unavailable'):
+                verify_capture_files(root, config)
 
     def test_request_controls_for_every_role_participate_in_configuration_admission(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
+            for name in ('pw-logs', 'pw-document-core', 'bialy'):
+                (root / name).write_bytes(name.encode())
+                (root / name).chmod(0o755)
             catalog = root / 'catalog'
             catalog.mkdir()
             engine = root / 'engine'
@@ -89,6 +113,9 @@ class CatalogIdentityTests(unittest.TestCase):
     def test_finder_metadata_does_not_change_catalog_identity_or_enter_runtime(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
+            for name in ('pw-logs', 'pw-document-core', 'bialy'):
+                (root / name).write_bytes(name.encode())
+                (root / name).chmod(0o755)
             catalog = root / 'catalog'
             (catalog / 'nested').mkdir(parents=True)
             (catalog / 'nested/policy.yaml').write_text('required: true\n')
@@ -98,6 +125,7 @@ class CatalogIdentityTests(unittest.TestCase):
             self.assertEqual(digest(catalog), expected)
             engine = root / 'engine'
             engine.write_bytes(b'engine')
+            engine.chmod(0o755)
             captured = root / 'capture'
             captured.mkdir()
             stage_runtime(engine, catalog, captured)
@@ -107,6 +135,9 @@ class CatalogIdentityTests(unittest.TestCase):
     def test_catalog_edits_additions_removals_and_renames_change_identity(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
+            for name in ('pw-logs', 'pw-document-core', 'bialy'):
+                (root / name).write_bytes(name.encode())
+                (root / name).chmod(0o755)
             policy = root / 'policy.yaml'
             policy.write_text('required: true\n')
             initial = digest(root)
@@ -126,6 +157,9 @@ class CatalogIdentityTests(unittest.TestCase):
     def test_catalog_symlinks_are_not_silently_followed(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
+            for name in ('pw-logs', 'pw-document-core', 'bialy'):
+                (root / name).write_bytes(name.encode())
+                (root / name).chmod(0o755)
             (root / 'policy.yaml').write_text('required: true\n')
             (root / 'alias.yaml').symlink_to('policy.yaml')
             with self.assertRaisesRegex(ValueError, 'regular files'):

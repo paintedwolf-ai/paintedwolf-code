@@ -137,29 +137,6 @@ func (c *RoutingClient) openProviderStream(ctx context.Context, req modelcall.Co
 	return c.openWithCapacity(ctx, sel, req)
 }
 
-func (c *RoutingClient) occupyLocalStream(ctx context.Context, sel *ModelSelection, ch <-chan modelcall.StreamChunk) <-chan modelcall.StreamChunk {
-	if c == nil || c.plane == nil || c.registry == nil || sel == nil || ch == nil {
-		return ch
-	}
-	p, err := c.registry.Get(sel.ProviderID)
-	if err != nil || p == nil || !p.Profile().UtilitySingleFlight {
-		return ch
-	}
-	release := c.plane.holdCoordinator(sel.ProviderID)
-	out := make(chan modelcall.StreamChunk)
-	go func() {
-		defer close(out)
-		defer release()
-		for chunk := range ch {
-			if !modelcall.SendChunk(ctx, out, chunk) {
-				modelcall.DrainStream(ch)
-				return
-			}
-		}
-	}()
-	return out
-}
-
 func (c *RoutingClient) resolveSelection(ctx context.Context) (*ModelSelection, error) {
 	if c.resolve == nil {
 		return nil, nil
