@@ -69,11 +69,11 @@ func TestManagerRequestApproveResolve(t *testing.T) {
 		Type:      hitl.DecisionTypeApprove,
 		Title:     "Approve command",
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo hi"},
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "echo hi"},
+			},
+		},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	if resp.Status != hitl.DecisionStatusPending {
@@ -110,14 +110,14 @@ func TestManagerPersistsRedactedApprovalArguments(t *testing.T) {
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": command, "token": secret},
-},
-Presentation: hitl.ActionPresentation{
-Command: command,
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": command, "token": secret},
+			},
+			Presentation: hitl.ActionPresentation{
+				Command: command,
+			},
+		},
 	})
 	testutil.FailErr(t, "request redacted checkpoint", err)
 	var argsJSON, payloadJSON string
@@ -140,11 +140,11 @@ func TestCancelPendingForSessionResolvesCheckpointWithoutAuthority(t *testing.T)
 		Type:      hitl.DecisionTypeApprove,
 		Title:     "Approve command",
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo hi"},
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "echo hi"},
+			},
+		},
 	})
 	testutil.FailErr(t, "request checkpoint", err)
 	mgr.Sessions.SetSessionAdmission(func(context.Context, string, func() error) error {
@@ -197,14 +197,14 @@ func TestManagerPersistsHostPresentationCommandForToolApproval(t *testing.T) {
 		Kind:      api.CheckpointKindToolApproval,
 		Type:      hitl.DecisionTypeApprove,
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command_stop",
-Args: map[string]any{"handle": "process-123"},
-},
-Presentation: hitl.ActionPresentation{
-Command: "npm run dev",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command_stop",
+				Args: map[string]any{"handle": "process-123"},
+			},
+			Presentation: hitl.ActionPresentation{
+				Command: "npm run dev",
+			},
+		},
 	})
 	testutil.FailErr(t, "RequestCheckpoint", err)
 	pending, err := mgr.ListPending(ctx, sessionID, nil)
@@ -226,14 +226,14 @@ func TestManagerRejectsPlanForDifferentAction(t *testing.T) {
 	ctx := testdbseed.OwnerCaller(t, context.Background(), sqlDB)
 	insertSession(t, sqlDB, sessionID)
 	planned := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "first"},
-},
-Presentation: hitl.ActionPresentation{
-Command: "first",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "first"},
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "first",
+		},
+	}
 	presentation, reasons := approvalPlanPresentation()
 	plan, err := hitl.NewApprovalPlan(planned, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
 		Kind: hitl.ApprovalSubjectAction, Title: "First",
@@ -241,14 +241,14 @@ Command: "first",
 	}, presentation, reasons, []hitl.ApprovalOption{hitl.CurrentActionOption()}, hitl.FaceContext{})
 	testutil.FailErr(t, "NewApprovalPlan", err)
 	other := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "second"},
-},
-Presentation: hitl.ActionPresentation{
-Command: "second",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "second"},
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: "second",
+		},
+	}
 	_, err = mgr.RequestCheckpoint(ctx, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
 		ProposedAction: &other, ApprovalPlan: plan,
@@ -258,19 +258,19 @@ Command: "second",
 	}
 }
 
-func TestManagerRejectSetsApprovalDenied(t *testing.T) {
+func TestManagerRedirectRenewsApprovalReview(t *testing.T) {
 	sqlDB, mgr, sessionID := newTestManager(t)
 	ctx := testdbseed.OwnerCaller(t, context.Background(), sqlDB)
 	insertSession(t, sqlDB, sessionID)
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
-		SessionID:      sessionID,
-		Kind:           api.CheckpointKindToolApproval,
-		ToolCallID:     "call-denied-guidance",
+		SessionID:  sessionID,
+		Kind:       api.CheckpointKindToolApproval,
+		ToolCallID: "call-denied-guidance",
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "write",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "write",
+			},
+		},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	final, err := mgr.ResolveCheckpoint(ctx, sessionID, resp.CheckpointID, api.CheckpointKindToolApproval, &hitl.DecisionResult{
@@ -281,7 +281,7 @@ Tool: "write",
 		testutil.FailErr(t, "mgr.ResolveCheckpoint failed", err)
 	}
 	ok, err := mgr.SessionApprovalDenied(ctx, sessionID)
-	if err != nil || !ok {
+	if err != nil || ok {
 		t.Fatalf("approval_denied = %v err=%v", ok, err)
 	}
 	if final.Result == nil || final.Result.Comments != "Keep the existing file and report what differs." {
@@ -318,13 +318,13 @@ func TestManagerResolveWrongSession(t *testing.T) {
 	insertSession(t, sqlDB, "other-session")
 
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
-		SessionID:      sessionID,
-		Kind:           api.CheckpointKindToolApproval,
+		SessionID: sessionID,
+		Kind:      api.CheckpointKindToolApproval,
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "write",
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "write",
+			},
+		},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 	_, err = mgr.ResolveCheckpoint(ctx, "other-session", resp.CheckpointID, api.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: true}, nil)
@@ -384,4 +384,31 @@ INSERT INTO messages(id, entry_id, session_id, role, content, origin, authority,
 VALUES(?, ?, ?, 'user', 'carry on', 'user', 'user', 'trusted', 1, 1, ?)`,
 		messageID, entryID, sessionID, db.FormatTime(at))
 	testutil.FailErr(t, "insert user intent message", err)
+}
+
+func TestReviewMetadataPersistsOpaqueOperationIdentity(t *testing.T) {
+	database, mgr, sessionID := newTestManager(t)
+	insertSession(t, database, sessionID)
+	ctx := testdbseed.OwnerCaller(t, t.Context(), database)
+	const key = "sandbox:read_path:/private/operation-subject"
+	response, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
+		SessionID: sessionID, Kind: api.CheckpointKindToolApproval, ReviewKeys: []string{key},
+		ProposedAction: &hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "command", Args: map[string]any{"command": "fixture"}}},
+	})
+	testutil.FailErr(t, "request review", err)
+	var payload string
+	testutil.FailErr(t, "read persisted metadata", database.QueryRowContext(ctx, "SELECT payload_json FROM checkpoints WHERE id = ?", response.CheckpointID).Scan(&payload))
+	if strings.Contains(payload, key) {
+		t.Fatal("review metadata retained subject text")
+	}
+	_, err = mgr.ResolveCheckpoint(ctx, sessionID, response.CheckpointID, api.CheckpointKindToolApproval, &hitl.DecisionResult{}, nil)
+	testutil.FailErr(t, "reject review", err)
+	suppressed, err := mgr.ApprovalReviewSuppressed(ctx, sessionID, key)
+	testutil.FailErr(t, "read opaque suppression", err)
+	if !suppressed {
+		t.Fatal("opaque identity failed to suppress the same operation")
+	}
+	if _, err := mgr.ApprovalReviewIntent(ctx, "missing"); err == nil {
+		t.Fatal("missing chat supplied an intent")
+	}
 }

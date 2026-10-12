@@ -32,16 +32,16 @@ func capabilityPathReviewWithRung(t *testing.T, read bool, rung ApprovalOptionRu
 		kind, target, subject, category = AuthorityReadPathChat, "read_path", ApprovalSubjectReadPathSet, ApprovalGrantCategoryReadPath
 	}
 	action := ProposedAction{
-Invocation: ActionInvocation{
-Tool: target,
-Args: map[string]any{"path": path},
-ActionID: "call",
-},
-Scope: ActionScope{
-SessionID: "session",
-ProjectID: "project",
-},
-}
+		Invocation: ActionInvocation{
+			Tool:     target,
+			Args:     map[string]any{"path": path},
+			ActionID: "call",
+		},
+		Scope: ActionScope{
+			SessionID: "session",
+			ProjectID: "project",
+		},
+	}
 	grant := ApprovalGrant{
 		ID: "grant_" + target, Scope: scope, ChatSessionID: "session", ProjectID: "project",
 		Predicate: ApprovalGrantPredicate{Category: category, Pattern: path},
@@ -70,16 +70,16 @@ ProjectID: "project",
 func TestCapabilityCompositionPreservesIndependentPathAuthority(t *testing.T) {
 	write, read := capabilityPathReview(t, false), capabilityPathReview(t, true)
 	action := ProposedAction{
-Invocation: ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "true"},
-ActionID: "call",
-},
-Scope: ActionScope{
-SessionID: "session",
-ProjectID: "project",
-},
-}
+		Invocation: ActionInvocation{
+			Tool:     "command",
+			Args:     map[string]any{"command": "true"},
+			ActionID: "call",
+		},
+		Scope: ActionScope{
+			SessionID: "session",
+			ProjectID: "project",
+		},
+	}
 	plan, _, err := ComposeCapabilityApprovals(action, []*PreparedApproval{write, read})
 	testutil.FailErr(t, "compose path approvals", err)
 	option, ok := plan.Option(plan.RecommendedOptionID)
@@ -197,7 +197,7 @@ func TestPreparedApprovalAnswerBindsExactSubject(t *testing.T) {
 	if _, ok := PreparedApprovalAnswer(ctx, review.Request.ProposedAction, &changed); ok {
 		t.Fatal("a broader read inherited the answer")
 	}
-	err := PrepareApproval(WithApprovalPreparation(t.Context()), review.Request, nil)
+	err := PrepareApproval(WithApprovalPreparation(t.Context()), review.Request)
 	var prepared *PreparedApproval
 	if !errors.As(err, &prepared) || prepared.Request.ApprovalPlan.ID != review.Request.ApprovalPlan.ID {
 		t.Fatalf("preparation did not suspend the review: %v", err)

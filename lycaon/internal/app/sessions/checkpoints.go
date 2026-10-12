@@ -69,6 +69,7 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 		deps.Execution.Host.Authority.SetAuthzRecorder(authzRec)
 	}
 	r.Checkpoints = checkpointMgr
+	r.Manager.Coordinator.Nudging.DoomLoop.SetReviewIntentResolver(checkpointMgr.ApprovalReviewIntent)
 	r.Manager.Stops.SetCheckpointStop(checkpointMgr)
 	r.Manager.Observations.SetExecutionCheckpoints(checkpointMgr)
 	deps.Execution.Host.Authority.SetCheckpointManager(ctx, checkpointMgr)
@@ -189,15 +190,8 @@ func wireAskSpamGuards(r *Runtime, authority *toolhost.AuthorityServices) *appro
 }
 
 func wireToolApprovalCheckpointHooks(ctx context.Context, mgr *hitl.Checkpoints, toolApprovalRT *approvalstate.ToolApprovalCoalesce) error {
-	mgr.Authority.SetToolApprovalTerminalHook(func(chatSessionID, grantKey string, status hitl.DecisionStatus) {
+	mgr.Authority.SetToolApprovalTerminalHook(func(chatSessionID, grantKey string, _ hitl.DecisionStatus) {
 		toolApprovalRT.ClearPending(chatSessionID, grantKey)
-		switch status {
-		case hitl.DecisionStatusRejected:
-			toolApprovalRT.RecordDeny(chatSessionID, grantKey)
-		case hitl.DecisionStatusApproved:
-			toolApprovalRT.ClearDeny(chatSessionID, grantKey)
-		case hitl.DecisionStatusPending, hitl.DecisionStatusExpired, hitl.DecisionStatusCanceled:
-		}
 	})
 	mgr.Authority.SetToolApprovalRestoreHook(func(row hitl.StoredCheckpoint) {
 		chat, _ := row.Payload["coalesce_chat"].(string)
@@ -222,21 +216,8 @@ func wireToolApprovalCheckpointHooks(ctx context.Context, mgr *hitl.Checkpoints,
 		}
 		toolApprovalRT.RestorePending(chat, key, row.ID, joined, ids)
 	})
-	mgr.Authority.SetToolApprovalDenyRestoreHook(func(row hitl.StoredCheckpoint) {
-		chat, _ := row.Payload["coalesce_chat"].(string)
-		if strings.TrimSpace(chat) == "" {
-			chat = row.SessionID
-		}
-		key, _ := row.Payload["coalesce_grant_key"].(string)
-		if strings.TrimSpace(key) != "" {
-			toolApprovalRT.RecordDeny(chat, key)
-		}
-	})
 	if err := mgr.RestorePending(ctx); err != nil {
 		return fmt.Errorf("restore pending checkpoints: %w", err)
-	}
-	if err := mgr.Authority.RestoreRejectedToolApprovalDenials(ctx); err != nil {
-		return fmt.Errorf("restore rejected tool-approval denials: %w", err)
 	}
 	return nil
 }

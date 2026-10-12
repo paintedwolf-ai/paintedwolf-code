@@ -293,3 +293,7 @@ func stringifyAny(v any) string {
 func (m *secretScreenHITL) ListPendingForParent(context.Context, string, *api.CheckpointKind) ([]api.CheckpointEvent, error) {
 	return nil, nil
 }
+
+func (m *secretScreenHITL) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
+}

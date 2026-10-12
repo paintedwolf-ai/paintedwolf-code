@@ -48,7 +48,6 @@ func (b *LoopbackCheckpointBroker) Await(ctx context.Context, in tools.LoopbackC
 		return tools.LoopbackConnectResult{Authorized: true, Ports: covered}, nil
 	}
 	if b.ApprovalsDisabled != nil && b.ApprovalsDisabled(in.ProjectDir) {
-		b.Runtime.ClearDenied(invokingSessionID, loopbackAxisKey)
 		b.Runtime.GrantSessionPorts(rootSessionID, nil)
 		return tools.LoopbackConnectResult{Authorized: true}, nil
 	}
@@ -66,7 +65,6 @@ func (b *LoopbackCheckpointBroker) Await(ctx context.Context, in tools.LoopbackC
 	// cannot be skipped by a retry.
 	verdict, _ := gate.Evaluate(facts, b.posture(in.ProjectDir))
 	if verdict != gate.Ask {
-		b.Runtime.ClearDenied(invokingSessionID, loopbackAxisKey)
 		b.Runtime.GrantSessionPorts(rootSessionID, ports)
 		return tools.LoopbackConnectResult{Authorized: true, Ports: ports}, nil
 	}
@@ -99,23 +97,23 @@ func (b *LoopbackCheckpointBroker) buildCard(in tools.LoopbackConnectAsk, invoki
 	summary := sandboxAskCommandSummary(in.Command)
 	label := loopbackGrantLabel(ports)
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "loopback_connect",
-Args: map[string]any{"connect_ports": listenPortInts(ports)},
-},
-Scope: hitl.ActionScope{
-ProjectID: in.ProjectID,
-ProjectDir: in.ProjectDir,
-SessionID: invokingSessionID,
-RootSessionID: rootSessionID,
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
-			ProjectID: in.ProjectID, Roots: projectRoots(in.ProjectDir),
-			LoopbackConnect: true, LoopbackConnectPorts: ports,
-		}),
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "loopback_connect",
+			Args: map[string]any{"connect_ports": listenPortInts(ports)},
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:     in.ProjectID,
+			ProjectDir:    in.ProjectDir,
+			SessionID:     invokingSessionID,
+			RootSessionID: rootSessionID,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
+				ProjectID: in.ProjectID, Roots: projectRoots(in.ProjectDir),
+				LoopbackConnect: true, LoopbackConnectPorts: ports,
+			}),
+		},
+	}
 	grant := loopbackChatGrant(action)
 	options := portAuthorityLadder(
 		"approve_loopback_connect_once",

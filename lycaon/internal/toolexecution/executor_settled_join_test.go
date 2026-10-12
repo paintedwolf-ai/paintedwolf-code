@@ -121,3 +121,7 @@ func TestExecutorSettledJoinReviewsItsOwnAction(t *testing.T) {
 		t.Fatalf("join attempts = %d want 1", mgr.joins.Load())
 	}
 }
+
+func (m *settledJoinHITL) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
+}

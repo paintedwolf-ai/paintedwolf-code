@@ -1,13 +1,9 @@
 package toolexecution
 
 import (
-	"github.com/lycaon/lycaon/internal/toolapproval"
-
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
@@ -15,6 +11,9 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/toolapproval"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -36,6 +35,7 @@ type toolApprovalRaise struct {
 	Rationale              toolapproval.AIRationaleAttachRequest
 	GrantOffers            []hitl.ApprovalGrantOffer
 	GrantDelta             string
+	ReviewKeys             []string
 	CoalesceKey            string
 	SocketCapability       *hitl.SocketCapability
 	DirectIPCapability     *hitl.DirectIPCapability
@@ -124,18 +124,24 @@ func (e *Approvals) raiseAndWaitToolApproval(ctx context.Context, in toolApprova
 		}, nil
 	}
 
+	reviewKeys := hitl.ApprovalReviewKeys(hitl.CheckpointRequest{ReviewKeys: in.ReviewKeys, CoalesceGrantKey: grantKey})
+	for _, key := range reviewKeys {
+		suppressed, err := e.checkpointMgr.ApprovalReviewSuppressed(ctx, in.Action.Scope.SessionID, key)
+		if err != nil {
+			return nil, err
+		}
+		if suppressed {
+			e.noteRepeatSuppressed(chat, in)
+			e.recordAskSuppressed(ctx, in, authzledger.AskSuppressedCausePriorDeny)
+			return &hitl.CheckpointResponse{Status: hitl.DecisionStatusRejected}, nil
+		}
+	}
 	if e.approvalCoalesce != nil {
 		// A card that settled between Begin and the join answered only the
 		// actions it held; the joiner drops the stale entry and reviews its own.
 		for attempt := 0; attempt < 2; attempt++ {
 			begin, existingID := e.approvalCoalesce.Begin(chat, grantKey)
 			switch begin {
-			case toolapproval.ToolApprovalCoalesceSkipDenied:
-				e.noteRepeatSuppressed(chat, in)
-				e.recordAskSuppressed(ctx, in, authzledger.AskSuppressedCausePriorDeny)
-				// No checkpoint exists for a prior-deny suppression; the original card's
-				// resolution already sealed its detection_resolved row in-tx.
-				return &hitl.CheckpointResponse{Status: hitl.DecisionStatusRejected}, nil
 			case toolapproval.ToolApprovalCoalesceJoin:
 				final, err := e.joinOpenCard(ctx, in, chat, grantKey, toolCallID, existingID)
 				if !errors.Is(err, hitl.ErrCheckpointNotPending) {
@@ -182,6 +188,7 @@ func (e *Approvals) raiseAndWaitToolApproval(ctx context.Context, in toolApprova
 		JoinedCount:        1,
 		Repeat:             repeat,
 		JoinedToolCallIDs:  joinedIDs,
+		ReviewKeys:         reviewKeys,
 		CoalesceChat:       chat,
 		CoalesceGrantKey:   grantKey,
 		ConsequenceBand:    band,
@@ -192,11 +199,7 @@ func (e *Approvals) raiseAndWaitToolApproval(ctx context.Context, in toolApprova
 		SecretScreen:       in.SecretScreen,
 		QuietSkipKeys:      e.quietSkipKeys(chat, in),
 	}
-	if err := hitl.PrepareApproval(ctx, checkpoint, func(final *hitl.CheckpointResponse) {
-		if final != nil && final.Status == hitl.DecisionStatusRejected && e.approvalCoalesce != nil {
-			e.approvalCoalesce.RecordDeny(chat, grantKey)
-		}
-	}); err != nil {
+	if err := hitl.PrepareApproval(ctx, checkpoint); err != nil {
 		if e.approvalCoalesce != nil {
 			e.approvalCoalesce.AbortMint(chat, grantKey)
 		}

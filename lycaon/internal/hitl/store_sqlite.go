@@ -39,15 +39,18 @@ func (s *SQLStore) SessionProjectID(ctx context.Context, sessionID string) (stri
 
 // Insert commits a checkpoint and its opening event together.
 func (s *SQLStore) Insert(ctx context.Context, row StoredCheckpoint) error {
-	params, err := checkpointInsertParams(row)
-	if err != nil {
-		return err
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := s.captureReviewIntent(ctx, tx, &row); err != nil {
+		return err
+	}
+	params, err := checkpointInsertParams(row)
+	if err != nil {
+		return err
+	}
 	if err := s.queries.WithTx(tx).InsertCheckpoint(ctx, params); err != nil {
 		return fmt.Errorf("insert checkpoint: %w", err)
 	}
@@ -259,27 +262,6 @@ func (s *SQLStore) OldestPendingBySession(ctx context.Context) (map[string]time.
 	return out, nil
 }
 
-// ListRejectedToolApprovals returns the denials resolved after their chat's
-// latest user intent boundary; earlier denials no longer coalesce anything.
-func (s *SQLStore) ListRejectedToolApprovals(ctx context.Context) ([]StoredCheckpoint, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	rows, err := s.queries.ListRejectedToolApprovalCheckpoints(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list rejected tool approvals: %w", err)
-	}
-	out := make([]StoredCheckpoint, 0, len(rows))
-	for _, stored := range rows {
-		row, err := checkpointFromRow(stored)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, *row)
-	}
-	return out, nil
-}
-
 // SetPendingAIRationale writes Payload["ai_rationale"] only while the row is pending.
 func (s *SQLStore) SetPendingAIRationale(ctx context.Context, checkpointID, text string) (bool, error) {
 	return s.mutatePendingPayload(ctx, checkpointID, "ai_rationale patch", func(payload map[string]any) bool {
@@ -392,25 +374,6 @@ func (s *SQLStore) mutatePendingPayload(ctx context.Context, checkpointID, op st
 	}
 	s.outbox.Notify()
 	return true, nil
-}
-
-// LatestResolvedToolApprovalStatus returns the most recent resolved tool_approval status.
-func (s *SQLStore) LatestResolvedToolApprovalStatus(ctx context.Context, sessionID string) (DecisionStatus, bool, error) {
-	if err := ctx.Err(); err != nil {
-		return "", false, err
-	}
-	status, err := s.queries.LatestResolvedCheckpointStatus(ctx, db.LatestResolvedCheckpointStatusParams{
-		SessionID: sessionID,
-		Kind:      string(api.CheckpointKindToolApproval),
-		Status:    string(DecisionStatusPending),
-	})
-	if db.IsNoRows(err) {
-		return "", false, nil
-	}
-	if err != nil {
-		return "", false, fmt.Errorf("latest resolved tool approval: %w", err)
-	}
-	return DecisionStatus(status), true, nil
 }
 
 // checkpointFromRow maps a generated checkpoints row onto the store's domain type.

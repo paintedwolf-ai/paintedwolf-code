@@ -15,8 +15,6 @@ const (
 	SandboxAskMint SandboxAskBegin = iota
 	// SandboxAskJoin waits on the checkpoint already open for this key.
 	SandboxAskJoin
-	// SandboxAskSkipDenied marks a key the human already refused this turn.
-	SandboxAskSkipDenied
 	// SandboxAskSkipToolCall marks an invocation whose ask was already handled.
 	SandboxAskSkipToolCall
 )
@@ -28,7 +26,6 @@ type sandboxChatGrant interface {
 }
 
 type sandboxGuardState[T sandboxChatGrant] struct {
-	denySet      scopedstore.LRU[struct{}]
 	pending      map[string]string // normalized key → checkpointID
 	toolCallSeen scopedstore.LRU[struct{}]
 	// grants holds human-approved grants, which carry an id and last for the
@@ -36,7 +33,7 @@ type sandboxGuardState[T sandboxChatGrant] struct {
 	grants []T
 }
 
-// sandboxAskGuard coalesces pending asks and tracks denials per chat.
+// sandboxAskGuard coalesces pending asks per chat.
 // Approvals install revocable grants that last until the chat is disposed.
 type sandboxAskGuard[T sandboxChatGrant] struct {
 	mu sync.Mutex
@@ -84,9 +81,6 @@ func (g *sandboxAskGuard[T]) begin(sessionID, rawKey, toolCallID string) (Sandbo
 	defer g.mu.Unlock()
 	st := g.state(sessionID)
 	if key != "" {
-		if _, denied := st.denySet.Load(key); denied {
-			return SandboxAskSkipDenied, ""
-		}
 		if id, pending := st.pending[key]; pending && strings.TrimSpace(id) != "" {
 			return SandboxAskJoin, id
 		}
@@ -129,8 +123,8 @@ func (g *sandboxAskGuard[T]) abortMint(sessionID, toolCallID string) {
 	g.state(sessionID).toolCallSeen.Delete(toolCallID)
 }
 
-// finish clears pending after HITL resolves. A denial enters the deny set.
-func (g *sandboxAskGuard[T]) finish(sessionID, rawKey string, denied bool) {
+// finish clears the pending checkpoint after resolution.
+func (g *sandboxAskGuard[T]) finish(sessionID, rawKey string) {
 	if g == nil {
 		return
 	}
@@ -142,53 +136,9 @@ func (g *sandboxAskGuard[T]) finish(sessionID, rawKey string, denied bool) {
 	defer g.mu.Unlock()
 	st := g.state(sessionID)
 	delete(st.pending, key)
-	if denied {
-		st.denySet.Store(key, struct{}{})
-	}
 }
 
-// recordDenied leaves concurrent pending reviews untouched.
-func (g *sandboxAskGuard[T]) recordDenied(sessionID, rawKey string) {
-	if g == nil || g.key(rawKey) == "" {
-		return
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.state(sessionID).denySet.Store(g.key(rawKey), struct{}{})
-}
-
-// clearDenied removes a key from the deny set after approval.
-func (g *sandboxAskGuard[T]) clearDenied(sessionID, rawKey string) {
-	if g == nil {
-		return
-	}
-	key := g.key(rawKey)
-	if key == "" {
-		return
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	g.state(sessionID).denySet.Delete(key)
-}
-
-// A new user turn clears denials while preserving pending reviews.
-func (g *sandboxAskGuard[T]) noteUserIntentBoundary(chatSessionID string) {
-	if g == nil {
-		return
-	}
-	chatSessionID = strings.TrimSpace(chatSessionID)
-	if chatSessionID == "" {
-		chatSessionID = "_"
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if st, ok := g.bySession[chatSessionID]; ok && st != nil {
-		st.denySet.Clear()
-	}
-}
-
-// releaseRun drops what one run of the chat accumulated: open reviews,
-// denials, and unnamed run grants. Human-approved grants survive Stop.
+// Human-approved grants survive Stop.
 func (g *sandboxAskGuard[T]) releaseRun(sessionID string) {
 	if g == nil {
 		return
@@ -377,7 +327,5 @@ type AskGate interface {
 	Begin(chatSessionID, key, toolCallID string) (SandboxAskBegin, string)
 	RegisterPending(chatSessionID, key, checkpointID string)
 	AbortMint(chatSessionID, toolCallID string)
-	Finish(chatSessionID, key string, denied bool)
-	ClearDenied(chatSessionID, key string)
-	RecordDenied(chatSessionID, key string)
+	Finish(chatSessionID, key string)
 }

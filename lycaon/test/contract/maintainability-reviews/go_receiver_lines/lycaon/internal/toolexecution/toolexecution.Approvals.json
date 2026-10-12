@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/toolexecution/toolexecution.Approvals",
+  "kind": "runtime_service",
+  "workstream": "approval-intent-lifecycle",
+  "disposition": "retain",
+  "reason": "Approval assembly, suppression, pending joins, waiting, and dismissal form one ordered review protocol. HITL owns persisted intent and authority installation. Retain this protocol without an adapter that hides approval dependencies.",
+  "reviewed_commit": "4b74660224521ef8e48d2ac91fdbc7f8d57c6dea",
+  "ceiling": 562,
+  "boundaries": {
+    "lycaon/internal/toolexecution/executor_settled_join_test.go": "eb332fa82834d7eaf0305862aca9143e473512cb621eb1ff43621af261494c00",
+    "lycaon/internal/toolexecution/approval_identity_test.go": "0bfda5fdc0a03359333c67eaa9f6aa368cc8bb778c54e1cebe00342b3f21356e",
+    "lycaon/internal/hitl/checkpoint_expiry_test.go": "04f494ae92c3f3d7e1e95dccff14d9713888a29abeb7d465b4d73aca72f2d07b"
+  },
+  "reviewed_shape": "fd02519575936a08eca1ccd7b966d758aa9d689620f397153c2c2eac425652df"
+}

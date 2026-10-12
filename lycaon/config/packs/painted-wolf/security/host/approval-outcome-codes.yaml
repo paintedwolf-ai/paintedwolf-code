@@ -2,11 +2,12 @@
 # User notices and guard rejects use separate catalogs.
 
 approval_outcomes:
-  # Direction the person attached is not repeated here: it reaches the model as
-  # user-authority content on this same tool result, off the checkpoint decision.
+  # Attached direction arrives separately as user-authority content.
   approval_denied:
     message: >-
-      approval denied by the user — the action did not run.
+      approval denied by the user — the action did not run. Follow attached user
+      direction before requesting approval for a corrected action; otherwise wait
+      for new user direction.
     scenarios:
       - id: denied
         expect_contains:

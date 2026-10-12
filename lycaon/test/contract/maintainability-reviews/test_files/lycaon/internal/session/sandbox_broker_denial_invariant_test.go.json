@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/session/sandbox_broker_denial_invariant_test.go",
+  "kind": "test_suite",
+  "workstream": "approval-intent-lifecycle",
+  "disposition": "retain",
+  "reason": "These cases share the production fixture for one approval contract. Retain the suite together so authority installation, rejection, waiting, and renewed review are checked against the same setup.",
+  "reviewed_commit": "10d0822c7c4275eb12a9ae9e2d26324df60cfe43",
+  "ceiling": 380,
+  "boundaries": {
+    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "5a78b3c87377e0209a42f85f50b6332847a460719df2946e071d57a33130c8de"
+  }
+}

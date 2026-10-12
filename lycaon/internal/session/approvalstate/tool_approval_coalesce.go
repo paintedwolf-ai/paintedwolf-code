@@ -12,7 +12,7 @@ import (
 // may still grow past this.
 const joinedToolCallIDCap = 32
 
-// ToolApprovalCoalesce tracks pending reviews and exact-action denials per chat.
+// ToolApprovalCoalesce tracks pending reviews per chat.
 type ToolApprovalCoalesce struct {
 	mu sync.Mutex
 	// byChat bounds per-session approval state; ForgetSession releases it.
@@ -20,7 +20,6 @@ type ToolApprovalCoalesce struct {
 }
 
 type toolApprovalGuards struct {
-	denySet map[string]struct{}
 	pending map[string]*toolApprovalPending // grantKey → entry
 }
 
@@ -40,8 +39,6 @@ const (
 	ToolApprovalCoalesceMint ToolApprovalCoalesceBegin = iota
 	// ToolApprovalCoalesceJoin waits on the card already open for grantKey.
 	ToolApprovalCoalesceJoin
-	// ToolApprovalCoalesceSkipDenied marks a grantKey in the deny set; the tool fails.
-	ToolApprovalCoalesceSkipDenied
 )
 
 // NewToolApprovalCoalesce constructs empty guard state.
@@ -54,7 +51,6 @@ func (r *ToolApprovalCoalesce) guards(chatSessionID string) *toolApprovalGuards 
 	g, ok := r.byChat.Load(chatSessionID)
 	if !ok {
 		g = &toolApprovalGuards{
-			denySet: make(map[string]struct{}),
 			pending: make(map[string]*toolApprovalPending),
 		}
 		r.byChat.Store(chatSessionID, g)
@@ -70,7 +66,7 @@ func normalizeChat(chatSessionID string) string {
 	return chatSessionID
 }
 
-// Begin consults the deny set and exact pending action identity. A Mint caller
+// Begin consults the exact pending action identity. A Mint caller
 // follows RequestCheckpoint with RegisterPending, or AbortMint if the request fails.
 func (r *ToolApprovalCoalesce) Begin(chatSessionID, grantKey string) (ToolApprovalCoalesceBegin, string) {
 	if r == nil {
@@ -81,9 +77,6 @@ func (r *ToolApprovalCoalesce) Begin(chatSessionID, grantKey string) (ToolApprov
 	defer r.mu.Unlock()
 	g := r.guards(chatSessionID)
 	if grantKey != "" {
-		if _, denied := g.denySet[grantKey]; denied {
-			return ToolApprovalCoalesceSkipDenied, ""
-		}
 		if entry, pending := g.pending[grantKey]; pending && entry != nil {
 			if id := strings.TrimSpace(entry.checkpointID); id != "" {
 				return ToolApprovalCoalesceJoin, id
@@ -242,35 +235,7 @@ func (r *ToolApprovalCoalesce) ClearPending(chatSessionID, grantKey string) {
 	delete(g.pending, grantKey)
 }
 
-// RecordDeny inserts grantKey into the chat deny-set (after Deny only).
-func (r *ToolApprovalCoalesce) RecordDeny(chatSessionID, grantKey string) {
-	if r == nil {
-		return
-	}
-	grantKey = strings.TrimSpace(grantKey)
-	if grantKey == "" {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.guards(chatSessionID).denySet[grantKey] = struct{}{}
-}
-
-// ClearDeny removes grantKey from the deny-set after approval.
-func (r *ToolApprovalCoalesce) ClearDeny(chatSessionID, grantKey string) {
-	if r == nil {
-		return
-	}
-	grantKey = strings.TrimSpace(grantKey)
-	if grantKey == "" {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.guards(chatSessionID).denySet, grantKey)
-}
-
-// ForgetSession clears pending actions and the exact-action deny set for the chat.
+// ForgetSession clears pending actions for the chat.
 func (r *ToolApprovalCoalesce) ForgetSession(chatSessionID string) {
 	if r == nil {
 		return
@@ -278,18 +243,6 @@ func (r *ToolApprovalCoalesce) ForgetSession(chatSessionID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.byChat.Delete(normalizeChat(chatSessionID))
-}
-
-// NoteUserIntentBoundary clears the chat's deny-set on a new user turn.
-// Pending entries are untouched — an open card stays open across turns.
-func (r *ToolApprovalCoalesce) NoteUserIntentBoundary(chatSessionID string) {
-	if r == nil {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	g := r.guards(chatSessionID)
-	g.denySet = make(map[string]struct{})
 }
 
 // NoteJoin records a joiner for the pending grantKey and returns the new joined_count.

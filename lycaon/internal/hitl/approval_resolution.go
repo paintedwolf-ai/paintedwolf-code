@@ -260,21 +260,19 @@ func (m *ApprovalAuthority) RecoverApprovalOperations(ctx context.Context) error
 }
 
 type ApprovalAuthority struct {
-	store                      approvalAuthorityStore
-	authzRecorder              AuthzRecorder
-	authorityMutation          sync.Mutex
-	authorityInstaller         ApprovalAuthorityInstaller
-	checkpoints                checkpointSettlement
-	sessions                   *SessionCoupling
-	presence                   heldPresence
-	onToolApprovalTerminal     func(string, string, DecisionStatus)
-	onToolApprovalRestored     func(StoredCheckpoint)
-	onToolApprovalDenyRestored func(StoredCheckpoint)
+	store                  approvalAuthorityStore
+	authzRecorder          AuthzRecorder
+	authorityMutation      sync.Mutex
+	authorityInstaller     ApprovalAuthorityInstaller
+	checkpoints            checkpointSettlement
+	sessions               *SessionCoupling
+	presence               heldPresence
+	onToolApprovalTerminal func(string, string, DecisionStatus)
+	onToolApprovalRestored func(StoredCheckpoint)
 }
 
 type approvalAuthorityStore interface {
 	Get(context.Context, string) (*StoredCheckpoint, error)
-	ListRejectedToolApprovals(context.Context) ([]StoredCheckpoint, error)
 	prepareApprovalOperation(context.Context, string, string, ApprovalOption) error
 	commitApprovalOperation(context.Context, StoredCheckpoint, *DecisionResult, time.Time, Resolution, func(*sql.Tx) error) (bool, error)
 	rollbackApprovalOperation(context.Context, string) error

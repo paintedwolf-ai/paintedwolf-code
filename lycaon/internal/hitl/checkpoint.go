@@ -61,6 +61,8 @@ type CheckpointRequest struct {
 	Repeat *RepeatContext
 	// JoinedToolCallIDs lists tool_call ids that have joined (capped).
 	JoinedToolCallIDs []string
+	// ReviewKeys identify the held operations for retry suppression.
+	ReviewKeys []string
 	// Coalesce fields identify pending approval guard state.
 	CoalesceChat     string
 	CoalesceGrantKey string
@@ -119,6 +121,7 @@ type CheckpointManager interface {
 	// OldestPendingCheckpoints reports each session scope’s oldest live checkpoint,
 	// including worker children, for the cross-project attention view.
 	OldestPendingCheckpoints(ctx context.Context) (map[string]time.Time, error)
+	ApprovalReviewSuppressed(ctx context.Context, sessionID, key string) (bool, error)
 	SessionApprovalDenied(ctx context.Context, sessionID string) (bool, error)
 	// PatchPendingToolApprovalAIRationale sets ai_rationale on a still-pending
 	// tool_approval checkpoint and republishes SSE only when the write applied.

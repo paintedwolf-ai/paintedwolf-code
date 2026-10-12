@@ -247,3 +247,7 @@ func TestSecretCanaryNeverEchoedByHTTPRequestResult(t *testing.T) {
 		})
 	}
 }
+
+func (*canaryReview) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
+}

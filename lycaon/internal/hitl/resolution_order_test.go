@@ -37,7 +37,7 @@ func insertOrderCheckpoint(t *testing.T, store *SQLStore, id string) StoredCheck
 	return row
 }
 
-func TestLatestApprovalFollowsResolutionOrderAcrossTimestampTies(t *testing.T) {
+func TestReviewDirectionFollowsResolutionOrderAcrossTimestampTies(t *testing.T) {
 	for _, reverse := range []bool{false, true} {
 		name := "admission order"
 		if reverse {
@@ -52,14 +52,14 @@ func TestLatestApprovalFollowsResolutionOrderAcrossTimestampTies(t *testing.T) {
 			if reverse {
 				rows[0], rows[1] = rows[1], rows[0]
 			}
-			for i, status := range []DecisionStatus{DecisionStatusApproved, DecisionStatusRejected} {
-				_, err := store.resolveCheckpoint(t.Context(), rows[i], status, nil, nil, rows[i].CreatedAt, ownerAnswer(t, store), nil)
+			for i := range rows {
+				_, err := store.resolveCheckpoint(t.Context(), rows[i], DecisionStatusRejected, &DecisionResult{Comments: rows[i].ID}, nil, rows[i].CreatedAt, ownerAnswer(t, store), nil)
 				testutil.FailErr(t, "resolve checkpoint", err)
 			}
-			got, found, err := store.LatestResolvedToolApprovalStatus(t.Context(), "session")
-			testutil.FailErr(t, "read latest approval", err)
-			if !found || got != DecisionStatusRejected {
-				t.Fatalf("latest = %s, found=%v; want last resolved rejection", got, found)
+			intent, err := store.queries.CurrentApprovalReviewIntent(t.Context(), "session")
+			testutil.FailErr(t, "read latest direction", err)
+			if intent.DirectionID != rows[1].ID {
+				t.Fatalf("latest direction = %s, want %s", intent.DirectionID, rows[1].ID)
 			}
 		})
 	}
@@ -68,19 +68,19 @@ func TestLatestApprovalFollowsResolutionOrderAcrossTimestampTies(t *testing.T) {
 func TestResolutionOrderRollsBackAndCascadesWithCheckpoint(t *testing.T) {
 	store := resolutionOrderStore(t)
 	first := insertOrderCheckpoint(t, store, "first")
-	_, err := store.resolveCheckpoint(t.Context(), first, DecisionStatusRejected, nil, nil, first.CreatedAt, ownerAnswer(t, store), nil)
+	_, err := store.resolveCheckpoint(t.Context(), first, DecisionStatusRejected, &DecisionResult{Comments: "First direction"}, nil, first.CreatedAt, ownerAnswer(t, store), nil)
 	testutil.FailErr(t, "resolve first checkpoint", err)
 	second := insertOrderCheckpoint(t, store, "second")
 	sealErr := errors.New("seal failed")
-	_, err = store.resolveCheckpoint(t.Context(), second, DecisionStatusApproved, nil, nil, second.CreatedAt, ownerAnswer(t, store),
+	_, err = store.resolveCheckpoint(t.Context(), second, DecisionStatusRejected, &DecisionResult{Comments: "Second direction"}, nil, second.CreatedAt, ownerAnswer(t, store),
 		func(*sql.Tx, StoredCheckpoint) error { return sealErr })
 	if !errors.Is(err, sealErr) {
 		t.Fatalf("resolve rollback = %v, want seal error", err)
 	}
-	got, found, err := store.LatestResolvedToolApprovalStatus(t.Context(), "session")
-	testutil.FailErr(t, "read latest after rollback", err)
-	if !found || got != DecisionStatusRejected {
-		t.Fatalf("rolled-back decision became latest: %s, %v", got, found)
+	intent, err := store.queries.CurrentApprovalReviewIntent(t.Context(), "session")
+	testutil.FailErr(t, "read direction after rollback", err)
+	if intent.DirectionID != first.ID {
+		t.Fatalf("rolled-back direction became current: %s", intent.DirectionID)
 	}
 	var count int
 	testutil.FailErr(t, "read committed ordinals", store.db.QueryRowContext(t.Context(),

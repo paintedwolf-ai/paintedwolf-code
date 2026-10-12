@@ -275,8 +275,7 @@ func TestPreparedCapabilityDenialPreservesConcurrentCheckpoint(t *testing.T) {
 		t.Fatalf("reserve concurrent checkpoint: %v", begin)
 	}
 	runtime.RegisterPending("session", path, "other-checkpoint")
-	runtime.RecordDenied("session", path)
-	runtime.ClearDenied("session", path)
+
 	begin, checkpoint := runtime.Begin("session", path, "later-call")
 	if begin != approvalstate.SandboxAskJoin || checkpoint != "other-checkpoint" {
 		t.Fatalf("prepared denial lost concurrent checkpoint: %v %q", begin, checkpoint)

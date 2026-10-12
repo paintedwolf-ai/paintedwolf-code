@@ -29,14 +29,6 @@ func (a toolApprovalCoalesceAdapter) ClearPending(chatSessionID, grantKey string
 	a.rt.ClearPending(chatSessionID, grantKey)
 }
 
-func (a toolApprovalCoalesceAdapter) RecordDeny(chatSessionID, grantKey string) {
-	a.rt.RecordDeny(chatSessionID, grantKey)
-}
-
-func (a toolApprovalCoalesceAdapter) ClearDeny(chatSessionID, grantKey string) {
-	a.rt.ClearDeny(chatSessionID, grantKey)
-}
-
 func (a toolApprovalCoalesceAdapter) NoteJoin(chatSessionID, grantKey, toolCallID string) int {
 	return a.rt.NoteJoin(chatSessionID, grantKey, toolCallID)
 }

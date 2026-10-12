@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/session/loopguard/memory_doom_loop.go",
+  "kind": "algorithm",
+  "workstream": "approval-intent-lifecycle",
+  "disposition": "retain",
+  "reason": "Fingerprint, response, rejection-code, search, and effect counters form one repetition algorithm. Intent renewal and admission tokens reset its counters together and exclude late responses. Retain the algorithm while the resolver adapter stays separate from fingerprinting.",
+  "reviewed_commit": "395dcfab78ea0b667222c7cd67b7029fd908c891",
+  "ceiling": 393,
+  "boundaries": {
+    "lycaon/internal/session/loopguard/review_intent_test.go": "ee600a29b6632eddb412ab4e4e8bfdbecec3f41dcb4230424328e33e4f2ce1d7",
+    "lycaon/internal/session/loopguard/response_repetition_test.go": "520b7036684fa54b26673df14a2e5151b80104cc71c8c5642b884b559e107499"
+  }
+}

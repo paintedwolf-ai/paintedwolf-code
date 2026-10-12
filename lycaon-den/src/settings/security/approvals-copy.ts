@@ -64,7 +64,7 @@ export const APPROVALS_COPY = {
     /** Decline uses the full danger-button style. */
     no: "No",
     noArmed: "No — send instruction",
-    noAssurance: "No stops only this action — the chat keeps going.",
+    noAssurance: "No stops this action. Give a new instruction to review it again.",
     viewDiff: "View diff",
     secretShapeLabel: "Looks like",
     protectedValuesLabel: "Protected values",
@@ -118,11 +118,11 @@ export const APPROVALS_COPY = {
       lead: "Or tell the agent what to do instead —",
       typeBelow: "type below",
       tail: "and Send.",
-      armed: "Send will deny this and pass your instruction to the agent.",
+      armed: "Send denies this request and passes your instruction. A corrected request can ask for approval again.",
     },
     composerRedirect: {
       title: "Directing the agent",
-      detail: "Send denies the action above and passes your instruction.",
+      detail: "Send denies the action above and passes your instruction. A corrected request can ask for approval again.",
       placeholder: "Tell the agent what to do instead…",
     },
     /** Labels agent-authored context. */

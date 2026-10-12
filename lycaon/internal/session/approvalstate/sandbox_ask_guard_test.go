@@ -4,8 +4,7 @@ import (
 	"testing"
 )
 
-// The coalescing rules on each façade: a refused axis is not re-asked, a
-// concurrent call joins the open card, one tool call raises one ask.
+// Matching calls join an open card; settled cards release the reservation.
 func TestAskGuardCoalescesAcrossBothRuntimes(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -33,26 +32,11 @@ func TestAskGuardCoalescesAcrossBothRuntimes(t *testing.T) {
 				t.Fatalf("concurrent ask = %v/%q, want join on cp-1", begin, existing)
 			}
 
-			gate.Finish("root", tc.key, true)
-			if begin, _ := gate.Begin("root", tc.key, "call-3"); begin != SandboxAskSkipDenied {
-				t.Fatalf("after denial = %v, want skip-denied", begin)
+			gate.Finish("root", tc.key)
+			if begin, _ := gate.Begin("root", tc.key, "call-3"); begin != SandboxAskMint {
+				t.Fatalf("after settlement = %v, want mint", begin)
 			}
 		})
-	}
-}
-
-func TestAskGuardDenialEndsAtTheNextUserTurn(t *testing.T) {
-	t.Parallel()
-	runtime := NewSandboxPathGrantRuntime()
-	runtime.Begin("root", "/tmp/root", "call-1")
-	runtime.Finish("root", "/tmp/root", true)
-	if begin, _ := runtime.Begin("root", "/tmp/root", "call-2"); begin != SandboxAskSkipDenied {
-		t.Fatalf("denied axis = %v, want skip-denied", begin)
-	}
-
-	runtime.NoteUserIntentBoundary("root")
-	if begin, _ := runtime.Begin("root", "/tmp/root", "call-3"); begin != SandboxAskMint {
-		t.Fatalf("after a new user turn = %v, want mint — a denial is scoped to one turn", begin)
 	}
 }
 
@@ -63,7 +47,7 @@ func TestAskGuardKeepsCapabilitiesApart(t *testing.T) {
 	listens := NewSandboxPortGrantRuntime()
 
 	paths.Begin("root", "/tmp/root", "call-1")
-	paths.Finish("root", "/tmp/root", true)
+	paths.Finish("root", "/tmp/root")
 
 	if begin, _ := listens.Begin("root", "any", "call-2"); begin != SandboxAskMint {
 		t.Fatalf("listen ask after a write-root denial = %v, want mint", begin)
@@ -94,7 +78,7 @@ func TestReleaseRunKeepsApprovedPathGrants(t *testing.T) {
 	runtime.GrantChat("root", "/tmp/approved", "grant-approved", "cp-1", nil)
 	runtime.GrantSessionWriteRoot("root", "/tmp/derived")
 	runtime.Begin("root", "/tmp/denied", "call-1")
-	runtime.Finish("root", "/tmp/denied", true)
+	runtime.Finish("root", "/tmp/denied")
 
 	runtime.ReleaseRun("root")
 	roots := runtime.SessionWriteRoots("root")
@@ -107,31 +91,5 @@ func TestReleaseRunKeepsApprovedPathGrants(t *testing.T) {
 	runtime.ForgetSession("root")
 	if roots := runtime.SessionWriteRoots("root"); len(roots) != 0 {
 		t.Fatalf("roots after the chat is disposed = %v", roots)
-	}
-}
-
-func TestSiblingWorkerDenialSuppressesAndApprovalClears(t *testing.T) {
-	t.Parallel()
-	paths := NewSandboxPathGrantRuntime()
-	rootChat := "root-chat-1"
-	axisKey := "/tmp/outside"
-
-	begin, _ := paths.Begin(rootChat, axisKey, "worker-1-call")
-	if begin != SandboxAskMint {
-		t.Fatalf("worker 1 first ask = %v, want mint", begin)
-	}
-
-	paths.Finish(rootChat, axisKey, true)
-
-	begin, _ = paths.Begin(rootChat, axisKey, "worker-2-call")
-	if begin != SandboxAskSkipDenied {
-		t.Fatalf("sibling worker 2 ask after denial = %v, want skip-denied", begin)
-	}
-
-	paths.ClearDenied(rootChat, axisKey)
-
-	begin, _ = paths.Begin(rootChat, axisKey, "worker-2-retry")
-	if begin != SandboxAskMint {
-		t.Fatalf("sibling worker ask after approval clear = %v, want mint", begin)
 	}
 }

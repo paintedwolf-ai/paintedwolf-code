@@ -74,22 +74,10 @@ func (m *Service) Apply(ctx context.Context, id string, in promptinput.Input) (s
 				return "", fmt.Errorf("resolve user feedback: %w", err)
 			}
 		}
-		if m.toolApprovalCoalesce != nil && promptinput.VisibleIntent(userMsg) {
-			m.toolApprovalCoalesce.NoteUserIntentBoundary(id)
-		}
+
 		if m.gateRepeatLedger != nil && promptinput.VisibleIntent(userMsg) {
 			// User intent resets per-turn repeat counts.
 			m.gateRepeatLedger.NoteUserIntentBoundary(id)
-		}
-		if m.writeRootRuntime != nil && promptinput.VisibleIntent(userMsg) {
-			// Parent intent clears write denials for its session tree.
-			m.writeRootRuntime.NoteUserIntentBoundary(id)
-		}
-		if m.listenRuntime != nil && promptinput.VisibleIntent(userMsg) {
-			m.listenRuntime.NoteUserIntentBoundary(id)
-		}
-		if m.loopbackRuntime != nil && promptinput.VisibleIntent(userMsg) {
-			m.loopbackRuntime.NoteUserIntentBoundary(id)
 		}
 	}
 	return userMsg.ID, nil

@@ -138,3 +138,7 @@ func TestSetupPermissionCoversRepeatedAuthenticatedServiceUse(t *testing.T) {
 		t.Fatal("revocation did not require fresh secret review")
 	}
 }
+
+func (*servicePermissionReview) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
+}

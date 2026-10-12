@@ -49,8 +49,6 @@ func (b *LocalNetworkCheckpointBroker) AwaitCombined(ctx context.Context, in too
 		return tools.LocalNetworkResult{Authorized: true}, nil
 	}
 	if b.ApprovalsDisabled != nil && b.ApprovalsDisabled(in.ProjectDir) {
-		b.Listen.ClearDenied(invokingSessionID, listenAxisKey)
-		b.Loopback.ClearDenied(invokingSessionID, loopbackAxisKey)
 		b.Listen.GrantSessionPorts(rootSessionID, nil)
 		b.Loopback.GrantSessionPorts(rootSessionID, nil)
 		return tools.LocalNetworkResult{Authorized: true}, nil
@@ -77,8 +75,6 @@ func (b *LocalNetworkCheckpointBroker) AwaitCombined(ctx context.Context, in too
 	}
 	verdict, _ := gate.Evaluate(facts, b.posture(in.ProjectDir))
 	if verdict != gate.Ask {
-		b.Listen.ClearDenied(invokingSessionID, listenAxisKey)
-		b.Loopback.ClearDenied(invokingSessionID, loopbackAxisKey)
 		b.Listen.GrantSessionPorts(rootSessionID, listenPorts)
 		b.Loopback.GrantSessionPorts(rootSessionID, connectPorts)
 		if len(reach) > 0 {
@@ -96,6 +92,7 @@ func (b *LocalNetworkCheckpointBroker) AwaitCombined(ctx context.Context, in too
 func (b *LocalNetworkCheckpointBroker) raise(ctx context.Context, in tools.LocalNetworkAsk, invokingSessionID, rootSessionID string) (tools.LocalNetworkResult, error) {
 	resolved, err := awaitSandboxAsk(ctx, sandboxAskRequest{
 		Gate: b.Listen, Checkpoints: b.Checkpoints, Authz: b.Authz,
+		ReviewKeys:        []string{"sandbox:" + authzledger.AskFamilyLocalListen + ":" + in.SecretPermission.Key(listenAxisKey), "sandbox:" + authzledger.AskFamilyLoopbackConnect + ":" + in.SecretPermission.Key(loopbackAxisKey)},
 		InvokingSessionID: invokingSessionID, Key: in.SecretPermission.Key(localNetworkAxisKey), ToolCallID: in.ToolCallID,
 		ProjectID: in.ProjectID, Tool: "local_network",
 		AskFamily: authzledger.AskFamilyLocalListen, CheckpointLabel: "local-network",
@@ -103,9 +100,6 @@ func (b *LocalNetworkCheckpointBroker) raise(ctx context.Context, in tools.Local
 	})
 	if err != nil || !resolved.Answered {
 		return tools.LocalNetworkResult{}, err
-	}
-	if resolved.Authorized && b.Loopback != nil {
-		b.Loopback.ClearDenied(invokingSessionID, loopbackAxisKey)
 	}
 	return tools.LocalNetworkResult{
 		Raised: resolved.Raised, Authorized: resolved.Authorized, Denied: resolved.Denied,
@@ -119,27 +113,27 @@ func (b *LocalNetworkCheckpointBroker) buildCard(in tools.LocalNetworkAsk, invok
 	listenPorts := append([]uint16(nil), in.ListenPorts...)
 	connectPorts := append([]uint16(nil), in.ConnectPorts...)
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "local_network",
-Args: map[string]any{
-			"listen_ports":  listenPortInts(listenPorts),
-			"connect_ports": listenPortInts(connectPorts),
+		Invocation: hitl.ActionInvocation{
+			Tool: "local_network",
+			Args: map[string]any{
+				"listen_ports":  listenPortInts(listenPorts),
+				"connect_ports": listenPortInts(connectPorts),
+			},
 		},
-},
-Scope: hitl.ActionScope{
-ProjectID: in.ProjectID,
-ProjectDir: in.ProjectDir,
-SessionID: invokingSessionID,
-RootSessionID: rootSessionID,
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
-			ProjectID: in.ProjectID, Roots: projectRoots(in.ProjectDir),
-			LocalListen: true, LocalListenPorts: listenPorts,
-			LoopbackConnect: true, LoopbackConnectPorts: connectPorts,
-		}),
-},
-}
+		Scope: hitl.ActionScope{
+			ProjectID:     in.ProjectID,
+			ProjectDir:    in.ProjectDir,
+			SessionID:     invokingSessionID,
+			RootSessionID: rootSessionID,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
+				ProjectID: in.ProjectID, Roots: projectRoots(in.ProjectDir),
+				LocalListen: true, LocalListenPorts: listenPorts,
+				LoopbackConnect: true, LoopbackConnectPorts: connectPorts,
+			}),
+		},
+	}
 	listenGrant := listenChatGrant(action)
 	connectGrant := loopbackChatGrant(action)
 	listenOptions := portAuthorityLadder(

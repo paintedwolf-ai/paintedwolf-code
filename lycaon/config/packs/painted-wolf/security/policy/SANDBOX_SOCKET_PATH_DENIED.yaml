@@ -14,9 +14,10 @@ copy:
   what: Local-service socket authority was declined for this action.
   cause: The person answered the host approval request without granting the requested socket paths.
   why: Retrying the same request would disregard that decision.
-  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }} {% endif %}Continue
-    without those local services, or wait for new user direction before requesting them again.'
-  instead: Branch on Code; do not retry the declined socket request
+  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }}. Follow that direction
+    before requesting approval for a corrected action.{% else %}Continue without those local services.
+    Wait for new user direction before requesting approval again.{% endif %}'
+  instead: Respect this rejection; fresh user direction permits a new approval request
 x-paintedwolf-category: user-decision
 x-paintedwolf-emit: guard:sandbox_socket
 x-paintedwolf-message: local-service socket authority declined

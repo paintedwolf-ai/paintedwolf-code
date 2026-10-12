@@ -17,7 +17,6 @@ type approvalAnswersKey struct{}
 // PreparedApproval holds a review pending invocation-wide approval.
 type PreparedApproval struct {
 	Request CheckpointRequest
-	Settled func(*CheckpointResponse)
 }
 
 func (*PreparedApproval) Error() string { return "approval prepared for invocation review" }
@@ -37,7 +36,7 @@ func ApprovalPreparing(ctx context.Context) bool {
 }
 
 // PrepareApproval returns a typed suspension only inside invocation preparation.
-func PrepareApproval(ctx context.Context, req CheckpointRequest, settled func(*CheckpointResponse)) error {
+func PrepareApproval(ctx context.Context, req CheckpointRequest) error {
 	if !ApprovalPreparing(ctx) {
 		return nil
 	}
@@ -47,7 +46,7 @@ func PrepareApproval(ctx context.Context, req CheckpointRequest, settled func(*C
 	if err := req.ApprovalPlan.Validate(); err != nil {
 		return err
 	}
-	return &PreparedApproval{Request: req, Settled: settled}
+	return &PreparedApproval{Request: req}
 }
 
 // WithPreparedApprovalAnswer binds a decision to this invocation’s reviewed subjects.
@@ -56,9 +55,6 @@ func WithPreparedApprovalAnswer(ctx context.Context, prepared []*PreparedApprova
 	for _, review := range prepared {
 		if key := preparedApprovalKey(review.Request.ProposedAction, review.Request.ApprovalPlan); key != "" {
 			answers[key] = final
-		}
-		if review.Settled != nil {
-			review.Settled(final)
 		}
 	}
 	return context.WithValue(ctx, approvalAnswersKey{}, answers)

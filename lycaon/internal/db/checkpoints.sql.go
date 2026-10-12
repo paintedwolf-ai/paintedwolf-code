@@ -208,27 +208,6 @@ func (q *Queries) InsertCheckpoint(ctx context.Context, arg InsertCheckpointPara
 	return err
 }
 
-const latestResolvedCheckpointStatus = `-- name: LatestResolvedCheckpointStatus :one
-SELECT c.status FROM checkpoints c
-JOIN checkpoint_resolution_ordinals resolved ON resolved.checkpoint_id = c.id
-WHERE c.session_id = ? AND c.kind = ? AND c.status != ?
-ORDER BY resolved.ordinal DESC
-LIMIT 1
-`
-
-type LatestResolvedCheckpointStatusParams struct {
-	SessionID string `json:"session_id"`
-	Kind      string `json:"kind"`
-	Status    string `json:"status"`
-}
-
-func (q *Queries) LatestResolvedCheckpointStatus(ctx context.Context, arg LatestResolvedCheckpointStatusParams) (string, error) {
-	row := q.db.QueryRowContext(ctx, latestResolvedCheckpointStatus, arg.SessionID, arg.Kind, arg.Status)
-	var status string
-	err := row.Scan(&status)
-	return status, err
-}
-
 const listChatGrants = `-- name: ListChatGrants :many
 SELECT chat_session_id, id, checkpoint_id, delta_json, expires_at
 FROM chat_grants
@@ -440,72 +419,6 @@ func (q *Queries) ListPreparedApprovalOperations(ctx context.Context) ([]ListPre
 	for rows.Next() {
 		var i ListPreparedApprovalOperationsRow
 		if err := rows.Scan(&i.CheckpointID, &i.SessionID, &i.OptionJson); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRejectedToolApprovalCheckpoints = `-- name: ListRejectedToolApprovalCheckpoints :many
-SELECT c.id, c.session_id, c.project_dir, c.kind, c.status, c.type, c.title, c.description,
-       c.tool_name, c.path, c.args_json, c.files_json, c.payload_json, c.result_json, c.created_at, c.resolved_at, c.resolved_by, c.resolved_by_person_id,
-       c.project_id
-FROM checkpoints c
-WHERE c.kind = 'tool_approval' AND c.status = 'rejected'
-  AND c.resolved_at > COALESCE((
-    SELECT m.ts FROM messages m
-    WHERE m.session_id = c.session_id
-      AND m.role = 'user'
-      AND m.visibility <> 'internal'
-      AND m.kind <> 'workflow_boundary'
-      AND m.kind <> 'user_continuation'
-      AND m.workflow_boundary_json IS NULL
-    ORDER BY m.ord DESC
-    LIMIT 1), '')
-ORDER BY c.resolved_at ASC, c.id ASC
-`
-
-// A denial coalesces repeated asks only until the chat's next visible user
-// intent, so restart restores the denials resolved after that boundary. The
-// boundary predicate is idx_messages_user_turn; timestamps use the fixed-width
-// UTC layout, so text order is time order.
-func (q *Queries) ListRejectedToolApprovalCheckpoints(ctx context.Context) ([]Checkpoints, error) {
-	rows, err := q.db.QueryContext(ctx, listRejectedToolApprovalCheckpoints)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Checkpoints
-	for rows.Next() {
-		var i Checkpoints
-		if err := rows.Scan(
-			&i.ID,
-			&i.SessionID,
-			&i.ProjectDir,
-			&i.Kind,
-			&i.Status,
-			&i.Type,
-			&i.Title,
-			&i.Description,
-			&i.ToolName,
-			&i.Path,
-			&i.ArgsJson,
-			&i.FilesJson,
-			&i.PayloadJson,
-			&i.ResultJson,
-			&i.CreatedAt,
-			&i.ResolvedAt,
-			&i.ResolvedBy,
-			&i.ResolvedByPersonID,
-			&i.ProjectID,
-		); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

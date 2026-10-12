@@ -18,7 +18,6 @@ import (
 // SetInvocationRecorder wires durable invocation receipts.
 func (m *Host) SetInvocationRecorder(recorder invocation.Recorder) {
 	m.Coordinator.Tools.Invocations = recorder
-	m.Coordinator.Tools.Invocations = recorder
 
 	m.Stops.Recovery.SetRecorder(recorder)
 }
@@ -110,8 +109,6 @@ func (m *Host) SetEffectiveCatalogDeps(moduleRoot string, boot *extpacks.Effecti
 func (m *Host) SetSandboxPathGrantRuntime(runtime *approvalstate.SandboxPathGrantRuntime) {
 	if m != nil {
 		m.Resources.Authority.Writes = runtime
-		m.Resources.Authority.Writes = runtime
-		m.Runner.Instructions.SetIntentBoundaries(m.Resources.Tools.Approvals, m.Resources.Tools.Repeat, m.Resources.Authority.Writes, m.Resources.Authority.Listen, m.Resources.Authority.Loopback)
 	}
 }
 
@@ -119,16 +116,12 @@ func (m *Host) SetSandboxPathGrantRuntime(runtime *approvalstate.SandboxPathGran
 func (m *Host) SetSandboxListenRuntime(runtime *approvalstate.SandboxPortGrantRuntime) {
 	if m != nil {
 		m.Resources.Authority.Listen = runtime
-		m.Resources.Authority.Listen = runtime
-		m.Runner.Instructions.SetIntentBoundaries(m.Resources.Tools.Approvals, m.Resources.Tools.Repeat, m.Resources.Authority.Writes, m.Resources.Authority.Listen, m.Resources.Authority.Loopback)
 	}
 }
 
 func (m *Host) SetSandboxLoopbackRuntime(runtime *approvalstate.SandboxPortGrantRuntime) {
 	if m != nil {
 		m.Resources.Authority.Loopback = runtime
-		m.Resources.Authority.Loopback = runtime
-		m.Runner.Instructions.SetIntentBoundaries(m.Resources.Tools.Approvals, m.Resources.Tools.Repeat, m.Resources.Authority.Writes, m.Resources.Authority.Listen, m.Resources.Authority.Loopback)
 	}
 }
 
@@ -136,8 +129,6 @@ func (m *Host) SetSandboxLoopbackRuntime(runtime *approvalstate.SandboxPortGrant
 func (m *Host) SetToolApprovalCoalesce(coalesce *approvalstate.ToolApprovalCoalesce) {
 	if m != nil {
 		m.Resources.Tools.Approvals = coalesce
-		m.Resources.Tools.Approvals = coalesce
-		m.Runner.Instructions.SetIntentBoundaries(m.Resources.Tools.Approvals, m.Resources.Tools.Repeat, m.Resources.Authority.Writes, m.Resources.Authority.Listen, m.Resources.Authority.Loopback)
 	}
 }
 
@@ -145,8 +136,7 @@ func (m *Host) SetToolApprovalCoalesce(coalesce *approvalstate.ToolApprovalCoale
 func (m *Host) SetGateRepeatLedger(ledger *approvalstate.GateRepeatLedger) {
 	if m != nil {
 		m.Resources.Tools.Repeat = ledger
-		m.Resources.Tools.Repeat = ledger
-		m.Runner.Instructions.SetIntentBoundaries(m.Resources.Tools.Approvals, m.Resources.Tools.Repeat, m.Resources.Authority.Writes, m.Resources.Authority.Listen, m.Resources.Authority.Loopback)
+		m.Runner.Instructions.SetRepeatBoundary(m.Resources.Tools.Repeat)
 	}
 }
 

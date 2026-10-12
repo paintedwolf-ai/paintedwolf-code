@@ -65,7 +65,6 @@ func (b *WriteRootCheckpointBroker) AuthorizeRead(ctx context.Context, in comman
 		autoGrant = true
 	}
 	if autoGrant {
-		b.ReadRuntime.ClearDenied(invokingSessionID, proposed)
 		b.ReadRuntime.GrantSessionWriteRoot(rootSessionID, proposed)
 		return command.SandboxReadPathResult{Authorized: true, ProposedReadPath: proposed}, nil
 	}

@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/toolexecution/executor_coalesce_test.go",
+  "kind": "test_suite",
+  "workstream": "approval-intent-lifecycle",
+  "disposition": "retain",
+  "reason": "These cases share the production fixture for one approval contract. Retain the suite together so authority installation, rejection, waiting, and renewed review are checked against the same setup.",
+  "reviewed_commit": "4b74660224521ef8e48d2ac91fdbc7f8d57c6dea",
+  "ceiling": 449,
+  "boundaries": {
+    "lycaon/internal/toolexecution/executor_coalesce_test.go": "df7fb8a65426cd2cc63f0fcdf70b318dc4d2d01c0071ed8349c22dfe531f0239"
+  }
+}

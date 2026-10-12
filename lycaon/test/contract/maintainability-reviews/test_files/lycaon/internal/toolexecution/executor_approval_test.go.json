@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/toolexecution/executor_approval_test.go",
+  "kind": "test_suite",
+  "workstream": "approval-intent-lifecycle",
+  "disposition": "retain",
+  "reason": "These cases share the production fixture for one approval contract. Retain the suite together so authority installation, rejection, waiting, and renewed review are checked against the same setup.",
+  "reviewed_commit": "4b74660224521ef8e48d2ac91fdbc7f8d57c6dea",
+  "ceiling": 612,
+  "boundaries": {
+    "lycaon/internal/toolexecution/executor_approval_test.go": "5ce748dae9d8f12707bb0d81d6c053ee300c8ae0a38a6f9480b8489dda9cbc36"
+  }
+}

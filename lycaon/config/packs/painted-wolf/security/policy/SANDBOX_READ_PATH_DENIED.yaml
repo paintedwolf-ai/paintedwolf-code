@@ -15,10 +15,10 @@ copy:
   what: '{{ tool }} was not granted read access to {{ paintedwolf.path }}.'
   cause: Read authority is not on this invocation.
   why: Retrying the same read_path request loops on the same refusal.
-  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }} {% endif %}Continue
-    without the content and report what is missing. If the task cannot proceed without that path, wait for
-    new user direction.'
-  instead: Branch on Code; continue without the content — do not re-request the denied path
+  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }}. Follow that direction
+    before requesting approval for a corrected action.{% else %}Continue without the content and report what is missing.
+    Wait for new user direction before requesting approval again.{% endif %}'
+  instead: Respect this rejection; fresh user direction permits a new approval request
 x-paintedwolf-category: user-decision
 x-paintedwolf-emit: guard:sandbox_read_path
 x-paintedwolf-message: this command cannot read the protected path

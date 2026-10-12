@@ -25,7 +25,7 @@ func TestLoopbackRuntimeIsIndependentFromListenRuntime(t *testing.T) {
 	if granted, _ := listen.SessionPorts("chat"); !granted {
 		t.Fatal("connection revocation removed listener authority")
 	}
-	connect.RecordDenied("chat", "8123")
+
 	if begin, _ := listen.Begin("chat", "8123", "listen-call"); begin != approvalstate.SandboxAskMint {
 		t.Fatalf("connection denial blocked listener review: %v", begin)
 	}

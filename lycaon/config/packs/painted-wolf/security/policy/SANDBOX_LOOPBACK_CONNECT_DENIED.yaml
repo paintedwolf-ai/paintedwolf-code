@@ -14,9 +14,10 @@ copy:
   what: '{{ tool }} was not granted the requested connection to the local service.'
   cause: Local client authority is not on this invocation.
   why: Retrying loopback_connect loops on the same refusal.
-  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }} {% endif %}Continue
-    without that client connection, or wait for new user direction.'
-  instead: Do not retry loopback_connect; continue without that local client
+  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }}. Follow that direction
+    before requesting approval for a corrected action.{% else %}Continue without that local service and report unmet verification.
+    Wait for new user direction before requesting approval again.{% endif %}'
+  instead: Respect this rejection; fresh user direction permits a new approval request
 x-paintedwolf-category: user-decision
 x-paintedwolf-emit: guard:sandbox_loopback_connect
 x-paintedwolf-message: local service connection authority declined

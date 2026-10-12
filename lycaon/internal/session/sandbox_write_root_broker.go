@@ -152,7 +152,6 @@ func (b *WriteRootCheckpointBroker) Authorize(ctx context.Context, in command.Sa
 		autoGrant = true
 	}
 	if autoGrant {
-		b.Runtime.ClearDenied(invokingSessionID, proposed)
 		b.Runtime.GrantSessionWriteRoot(rootSessionID, proposed)
 		return command.SandboxWriteRootResult{
 			Authorized:        true,
