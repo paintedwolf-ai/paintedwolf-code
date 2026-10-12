@@ -180,7 +180,7 @@ Fixed mode requires exactly one of `effort`, `enabled`, or `budget_tokens`. A pr
 
 The UI consumes host capability metadata instead of a universal effort ladder. Precedence is explicit per-model YAML, provider discovery, then the first matching family rule. Controls are intersected with the adapter's supported wire forms; unknown controls remain unknown, and transport limitations are reported as unavailable. Test connection and Refresh models use metadata calls, never paid inference.
 
-OpenRouter supplies reasoning metadata through its [model catalog](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens); the [Anthropic Models API](https://platform.claude.com/docs/en/api/typescript/models) supplies effort levels and adaptive/manual thinking support. Other providers use declared model-family controls.
+OpenRouter supplies reasoning metadata through its [model catalog](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens); the [Anthropic Models API](https://platform.claude.com/docs/en/api/typescript/models) supplies effort levels and adaptive/manual thinking support. Ollama supplies thinking support through its native `/api/show` capabilities; family declarations retain native effort vocabularies where applicable. Other providers use declared model-family controls.
 
 Capability declarations can be supplied in `providers.local.yaml` for any provider instance, or shared by a model-family rule. They describe what an endpoint accepts; they do not activate an override, and YAML does not add a protocol implementation:
 
@@ -202,7 +202,7 @@ providers:
           efforts: [low, high]
 ```
 
-Other controls are `can_enable: true`, `can_disable: true`, and `budget: {min: 1024, max: 32768}`; omit `max` when the provider has no fixed ceiling. Use `state: unsupported` for a known lack of controls, or `state: unknown` to suppress a family assumption. The per-model `thinking` declaration takes precedence over discovered metadata.
+Other controls are `can_enable: true`, `can_disable: true`, and `budget: {min: 1024, max: 32768}`; omit `max` when the provider has no fixed ceiling. Use `state: unsupported` for a known lack of controls, or `state: unknown` to suppress a family assumption. The per-model `thinking` declaration takes precedence over discovered metadata. Explicit unsupported reasoning evidence suppresses family and transport defaults when no control declaration is available. An explicit `unknown` control declaration suppresses automatic thinking fields and fixed overrides; absent metadata preserves application defaults.
 
 ### Model-family rules
 
