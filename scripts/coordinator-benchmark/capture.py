@@ -8,6 +8,7 @@ import yaml
 from local_runtime import ollama_model
 from snapshot import file_hash, RUNTIME_METADATA
 from progress import save
+from capture_storage import RUNTIME_EXECUTABLES
 
 MODEL_CONTROLS = ('reasoning_effort', 'max_tokens', 'temperature', 'context_length', 'think_style', 'thinking_always_on')
 
@@ -28,10 +29,22 @@ def digest(path):
     return h.hexdigest()
 
 
+def executable_identity(engine):
+    for name in RUNTIME_EXECUTABLES:
+        path = engine.parent / name
+        if path.is_symlink() or not path.is_file() or not path.stat().st_mode & 0o111:
+            raise ValueError('required runtime executable is unavailable: ' + str(path))
+    return {name: {'sha256': file_hash(engine.parent / name),
+                   'mode': (engine.parent / name).stat().st_mode & 0o777}
+            for name in RUNTIME_EXECUTABLES}
+
+
 def verify_capture_files(run, configuration):
     engine = run / 'engine'
     if engine.is_symlink() or not engine.is_file() or file_hash(engine) != configuration['engine_sha256']:
         raise ValueError('captured engine differs from the admitted application')
+    if executable_identity(engine) != configuration['runtime_executables']:
+        raise ValueError('captured runtime executables differ from the admitted application')
     if digest(run / 'module/config') != configuration['catalog_sha256']:
         raise ValueError('captured catalog differs from the admitted application')
 
@@ -61,7 +74,7 @@ def describe(config, engine, catalog, time_limit="0s", application=None):
                    {'hosted_runtime': hosted_runtime(provider['base_url'], ref['model'])}),
                 'configured_settings': {key: entry.get(key) for key in MODEL_CONTROLS}}
     result = {'request_control_policy': 'application', 'engine_sha256': file_hash(engine),
-              'catalog_sha256': digest(catalog),
+              'catalog_sha256': digest(catalog), 'runtime_executables': executable_identity(engine),
               'coordinator': model(policy['coordinator']), 'lite': model(policy['lite']),
               'workers': [model(ref) for ref in policy['agent_pool']['models']],
               'worker_selection': policy['agent_pool']['selection'], 'episode_time_limit': time_limit,

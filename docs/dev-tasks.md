@@ -494,7 +494,7 @@ directory as private. Options:
 
 - `--config-root MODULE` selects a frozen `MODULE/config` snapshot for prompt comparisons. Apply the same settings to both comparison arms.
 - `--cases recall --recall-stress` runs recall alone with the compaction target at 1% and recent messages at two, retaining the model's real context window so historical retrieval is exercised. Mixed recall/normal case sets are rejected so the stress settings cannot degrade delivery tests.
-- `--engine /path/to/task-built-binary` reuses one build across prompt arms; the launcher retains its own executable copy and SHA-256. Otherwise it builds through `./task build:lycaon-dev` first.
+- `--engine /path/to/task-built-binary` reuses one build across prompt arms; the launcher retains the host and its required `pw-logs`, `pw-document-core`, and `bialy` siblings, recording their bytes and permissions. Otherwise it builds through `./task build:lycaon-dev` first. Missing siblings stop setup before model calls. The isolated host provisions its pinned decision checkpoint and ignores ambient decision and document-core overrides.
 - `--timeout 25m` replaces the 12-minute per-case deadline without changing outcome criteria.
 
 The one-million captured prompt-token circuit breaker is checked between cases;
