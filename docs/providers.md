@@ -130,6 +130,8 @@ Profiles are keyed by provider kind or explicit catalog field, never model-name 
 
 Coordinator and worker requests use one reasoning policy across tool and prose turns: moderate effort for normal work. Adapters translate that intent to the model's middle effort level, enabled binary thinking, or the native token budget. Host utility requests and explicit turn directives may disable reasoning; strict recovery uses the minimum supported control. A model's always-on capability outranks an unsupported disable request. Provider controls describe protocol capabilities; the thinking overrides below take precedence over application intent.
 
+Automatic thinking controls follow model capability evidence across every adapter. A model that explicitly lacks reasoning receives no thinking fields, including disable fields. Settings and fixed-override validation use the same evidence. Missing metadata preserves the adapter's application defaults; it does not establish support for a fixed override. Reasoning response history remains independent of control support.
+
 Together hybrid models receive `reasoning.enabled`; effort-capable models use the separate `reasoning_effort` field. OpenRouter's `reasoning.effort` object is a different protocol and is not sent to Together. A requested effort is not a claim of equal reasoning compute across models. Debug captures retain resolved request controls, including reasoning fallback attempts.
 
 ### Reasoning continuity in tool loops
