@@ -130,6 +130,8 @@ Profiles are keyed by provider kind or explicit catalog field, never model-name 
 
 Coordinator and worker requests use one reasoning policy across tool and prose turns: moderate effort for normal work. Adapters translate that intent to the model's middle effort level, enabled binary thinking, or the native token budget. Host utility requests and explicit turn directives may disable reasoning; strict recovery uses the minimum supported control. A model's always-on capability outranks an unsupported disable request. Provider controls describe protocol capabilities; the thinking overrides below take precedence over application intent.
 
+Automatic thinking controls follow model capability evidence across every adapter. A model that explicitly lacks reasoning receives no thinking fields, including disable fields. Settings and fixed-override validation use the same evidence. Missing metadata preserves the adapter's application defaults; it does not establish support for a fixed override. Reasoning response history remains independent of control support.
+
 Together hybrid models receive `reasoning.enabled`; effort-capable models use the separate `reasoning_effort` field. OpenRouter's `reasoning.effort` object is a different protocol and is not sent to Together. A requested effort is not a claim of equal reasoning compute across models. Debug captures retain resolved request controls, including reasoning fallback attempts.
 
 ### Reasoning continuity in tool loops
@@ -178,7 +180,7 @@ Fixed mode requires exactly one of `effort`, `enabled`, or `budget_tokens`. A pr
 
 The UI consumes host capability metadata instead of a universal effort ladder. Precedence is explicit per-model YAML, provider discovery, then the first matching family rule. Controls are intersected with the adapter's supported wire forms; unknown controls remain unknown, and transport limitations are reported as unavailable. Test connection and Refresh models use metadata calls, never paid inference.
 
-OpenRouter supplies reasoning metadata through its [model catalog](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens); the [Anthropic Models API](https://platform.claude.com/docs/en/api/typescript/models) supplies effort levels and adaptive/manual thinking support. Other providers use declared model-family controls.
+OpenRouter supplies reasoning metadata through its [model catalog](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens); the [Anthropic Models API](https://platform.claude.com/docs/en/api/typescript/models) supplies effort levels and adaptive/manual thinking support. Ollama supplies thinking support through its native `/api/show` capabilities; family declarations retain native effort vocabularies where applicable. Other providers use declared model-family controls.
 
 Capability declarations can be supplied in `providers.local.yaml` for any provider instance, or shared by a model-family rule. They describe what an endpoint accepts; they do not activate an override, and YAML does not add a protocol implementation:
 
@@ -200,7 +202,7 @@ providers:
           efforts: [low, high]
 ```
 
-Other controls are `can_enable: true`, `can_disable: true`, and `budget: {min: 1024, max: 32768}`; omit `max` when the provider has no fixed ceiling. Use `state: unsupported` for a known lack of controls, or `state: unknown` to suppress a family assumption. The per-model `thinking` declaration takes precedence over discovered metadata.
+Other controls are `can_enable: true`, `can_disable: true`, and `budget: {min: 1024, max: 32768}`; omit `max` when the provider has no fixed ceiling. Use `state: unsupported` for a known lack of controls, or `state: unknown` to suppress a family assumption. The per-model `thinking` declaration takes precedence over discovered metadata. Explicit unsupported reasoning evidence suppresses family and transport defaults when no control declaration is available. An explicit `unknown` control declaration suppresses automatic thinking fields and fixed overrides; absent metadata preserves application defaults.
 
 ### Model-family rules
 

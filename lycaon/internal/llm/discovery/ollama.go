@@ -73,7 +73,7 @@ func OllamaModels(ctx context.Context, baseURL, apiKey string, client *http.Clie
 			continue
 		}
 		seen[id] = struct{}{}
-		out = append(out, modelinfo.Entry{ID: id, ContextLength: ollamaContextLength(shown.ModelInfo), Capabilities: modelinfo.ModelCapabilities{
+		out = append(out, modelinfo.Entry{ID: id, DiscoveredThinking: ollamaThinking(shown.Capabilities, id), ContextLength: ollamaContextLength(shown.ModelInfo), Capabilities: modelinfo.ModelCapabilities{
 			Chat:      modelinfo.Evidence(modelinfo.CapabilitySupported, "ollama-show"),
 			Streaming: modelinfo.Evidence(modelinfo.CapabilitySupported, "ollama-show"),
 			Tools:     modelinfo.Evidence(ListAnyEvidence(shown.Capabilities, "tools"), "ollama-show"),
