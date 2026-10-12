@@ -43,28 +43,28 @@ func (e *Executor) reviewInvocationCapabilities(ctx context.Context, tool string
 		return ctx, err
 	}
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: tool,
-Args: args,
-ActionID: tc.Identity.ToolCallID,
-},
-Presentation: hitl.ActionPresentation{
-Command: commandsurface.PrimaryCommandLine(args, nil),
-},
-Scope: hitl.ActionScope{
-ProjectID: tc.Identity.ProjectID,
-ProjectDir: tc.ActiveRootPath(),
-SessionID: tc.Identity.SessionID,
-RootSessionID: tc.ChatSessionID(),
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.ContainedForRequest(e.Boundary.actionConfineRequest(ctx, tc)),
-},
-Resources: hitl.ActionResources{
-HostResources: append([]string(nil), tc.Host.HostResources...),
-HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool:     tool,
+			Args:     args,
+			ActionID: tc.Identity.ToolCallID,
+		},
+		Presentation: hitl.ActionPresentation{
+			Command: commandsurface.PrimaryCommandLine(args, nil),
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:     tc.Identity.ProjectID,
+			ProjectDir:    tc.ActiveRootPath(),
+			SessionID:     tc.Identity.SessionID,
+			RootSessionID: tc.ChatSessionID(),
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.ContainedForRequest(e.Boundary.actionConfineRequest(ctx, tc)),
+		},
+		Resources: hitl.ActionResources{
+			HostResources:        append([]string(nil), tc.Host.HostResources...),
+			HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
+		},
+	}
 	plan, decision, err := hitl.ComposeCapabilityApprovals(action, reviews)
 	if len(reviews) == 1 {
 		action = *reviews[0].Request.ProposedAction
@@ -84,6 +84,7 @@ HostResourceFamilies: append([]string(nil), tc.Host.HostResourceFamilies...),
 		ApprovalMatches:        plan.Presentation.ApprovalRules, Detection: plan.Presentation.Detection,
 		ConsequenceBand: api.ConsequenceBand(plan.Presentation.ConsequenceBand),
 		ConsequenceCode: api.ConsequenceCode(plan.Presentation.ConsequenceCode),
+		ReviewKeys:      hitl.PreparedReviewKeys(reviews),
 		CoalesceKey:     hitl.CapabilityApprovalKey(action, plan),
 		SecretScreenHit: secretIncluded,
 	})

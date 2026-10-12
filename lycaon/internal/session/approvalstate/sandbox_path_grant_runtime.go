@@ -68,35 +68,12 @@ func (r *SandboxPathGrantRuntime) AbortMint(rootSessionID, toolCallID string) {
 	r.guard.abortMint(rootSessionID, toolCallID)
 }
 
-// Finish clears pending for the root after HITL resolves. When denied, inserts deny-set.
-func (r *SandboxPathGrantRuntime) Finish(rootSessionID, proposedRoot string, denied bool) {
+// Finish releases the pending review.
+func (r *SandboxPathGrantRuntime) Finish(rootSessionID, proposedRoot string) {
 	if r == nil {
 		return
 	}
-	r.guard.finish(rootSessionID, proposedRoot, denied)
-}
-
-// RecordDenied records a combined review without clearing another open card.
-func (r *SandboxPathGrantRuntime) RecordDenied(rootSessionID, proposedRoot string) {
-	if r != nil {
-		r.guard.recordDenied(rootSessionID, proposedRoot)
-	}
-}
-
-// ClearDenied removes a root from the deny-set after approval.
-func (r *SandboxPathGrantRuntime) ClearDenied(rootSessionID, proposedRoot string) {
-	if r == nil {
-		return
-	}
-	r.guard.clearDenied(rootSessionID, proposedRoot)
-}
-
-// NoteUserIntentBoundary clears the chat's deny-set on a new user turn.
-func (r *SandboxPathGrantRuntime) NoteUserIntentBoundary(chatSessionID string) {
-	if r == nil {
-		return
-	}
-	r.guard.noteUserIntentBoundary(chatSessionID)
+	r.guard.finish(rootSessionID, proposedRoot)
 }
 
 // GrantSessionWriteRoot records implicit chat authority.

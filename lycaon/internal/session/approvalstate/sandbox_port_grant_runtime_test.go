@@ -83,12 +83,11 @@ func TestPortGrantRuntimeGuards(t *testing.T) {
 	if action, id := rt.Begin("chat", key, "call2"); action != SandboxAskJoin || id != "cp1" {
 		t.Fatalf("concurrent ask should join cp1, got %v %q", action, id)
 	}
-	rt.Finish("chat", key, true)
-	if action, _ := rt.Begin("chat", key, "call3"); action != SandboxAskSkipDenied {
-		t.Fatalf("denied key should skip, got %v", action)
+	rt.Finish("chat", key)
+	if action, _ := rt.Begin("chat", key, "call3"); action != SandboxAskMint {
+		t.Fatalf("settled key should mint, got %v", action)
 	}
 	// A new user turn clears the deny-set.
-	rt.NoteUserIntentBoundary("chat")
 	if action, _ := rt.Begin("chat", key, "call4"); action != SandboxAskMint {
 		t.Fatalf("cleared deny-set should mint, got %v", action)
 	}

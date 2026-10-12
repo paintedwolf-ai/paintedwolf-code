@@ -9,30 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 )
 
-func TestSandboxPathGrantRuntimeDenySet(t *testing.T) {
-	t.Parallel()
-	rt := approvalstate.NewSandboxPathGrantRuntime()
-	root := "coord-sess"
-	proposed := "/opt/cache"
-
-	action, id := rt.Begin(root, proposed, "tc-1")
-	if action != approvalstate.SandboxAskMint || id != "" {
-		t.Fatalf("Begin mint: action=%v id=%q", action, id)
-	}
-	rt.RegisterPending(root, proposed, "cp-1")
-	rt.Finish(root, proposed, true) // deny
-
-	action, _ = rt.Begin(root, proposed, "tc-2")
-	if action != approvalstate.SandboxAskSkipDenied {
-		t.Fatalf("after deny want SkipDenied, got %v", action)
-	}
-	rt.ClearDenied(root, proposed)
-	action, _ = rt.Begin(root, proposed, "tc-3")
-	if action != approvalstate.SandboxAskMint {
-		t.Fatalf("after ClearDenied want Mint, got %v", action)
-	}
-}
-
 func TestSandboxPathGrantRuntimePendingCoalesce(t *testing.T) {
 	t.Parallel()
 	rt := approvalstate.NewSandboxPathGrantRuntime()
@@ -48,29 +24,6 @@ func TestSandboxPathGrantRuntimePendingCoalesce(t *testing.T) {
 	action, id := rt.Begin(root, proposed, "tc-b")
 	if action != approvalstate.SandboxAskJoin || id != "cp-shared" {
 		t.Fatalf("second Begin: action=%v id=%q", action, id)
-	}
-}
-
-func TestSandboxPathGrantRuntimeUserTurnClearsDeny(t *testing.T) {
-	t.Parallel()
-	rt := approvalstate.NewSandboxPathGrantRuntime()
-	chat := "chat-1"
-	proposed := "/opt/cache"
-
-	_, _ = rt.Begin(chat, proposed, "tc-1")
-	rt.RegisterPending(chat, proposed, "cp-open")
-	rt.Finish(chat, proposed, true)
-
-	action, _ := rt.Begin(chat, proposed, "tc-2")
-	if action != approvalstate.SandboxAskSkipDenied {
-		t.Fatalf("after deny want SkipDenied, got %v", action)
-	}
-
-	rt.NoteUserIntentBoundary(chat)
-
-	action, _ = rt.Begin(chat, proposed, "tc-3")
-	if action != approvalstate.SandboxAskMint {
-		t.Fatalf("user turn must clear deny-set, got %v", action)
 	}
 }
 

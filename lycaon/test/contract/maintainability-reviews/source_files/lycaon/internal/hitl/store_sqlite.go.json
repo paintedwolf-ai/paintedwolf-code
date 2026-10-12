@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/hitl/store_sqlite.go",
+  "kind": "runtime_service",
+  "workstream": "approval-intent-lifecycle",
+  "disposition": "retain",
+  "reason": "Checkpoint insertion, intent capture, authorization evidence, and outbox writes share the store transaction. Retain one store owner for these atomic boundaries; suppression queries derive current intent without a second denial store.",
+  "reviewed_commit": "10d0822c7c4275eb12a9ae9e2d26324df60cfe43",
+  "ceiling": 471,
+  "boundaries": {
+    "lycaon/internal/hitl/checkpoint_expiry_test.go": "04f494ae92c3f3d7e1e95dccff14d9713888a29abeb7d465b4d73aca72f2d07b",
+    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "5a78b3c87377e0209a42f85f50b6332847a460719df2946e071d57a33130c8de",
+    "lycaon/internal/hitl/checkpoint_admission_test.go": "4b2077a49bfff957faba5933a120d71687f982d7d77129d4a1af3cadef7f0bf1"
+  }
+}

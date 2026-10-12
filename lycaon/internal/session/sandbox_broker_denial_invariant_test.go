@@ -10,14 +10,22 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
+	"github.com/lycaon/lycaon/internal/session/promptinput"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // Invariant: a denied capability ask leaves no authority, leases, or cached grants across broker entry points.
@@ -25,17 +33,22 @@ const denialInvariantChat = "chat-denial-invariant"
 
 // denialInvariantCheckpoints denies every ask and counts how many were raised.
 type denialInvariantCheckpoints struct {
-	*cannedWriteRootCheckpoints
-	asks int
+	*hitl.Checkpoints
+	asks     int
+	guidance string
 }
 
 func (c *denialInvariantCheckpoints) RequestCheckpoint(ctx context.Context, req hitl.CheckpointRequest) (*hitl.CheckpointResponse, error) {
 	c.asks++
-	return c.cannedWriteRootCheckpoints.RequestCheckpoint(ctx, req)
+	response, err := c.Checkpoints.RequestCheckpoint(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	_, err = c.ResolveCheckpoint(ctx, req.SessionID, response.CheckpointID, api.CheckpointKindToolApproval, &hitl.DecisionResult{Comments: c.guidance}, nil)
+	return response, err
 }
 
-// denialInvariantProvenance reports every port as served by the chat itself,
-// the fact most likely to tempt a broker into recording a lease early.
+// The fixture reports every port as served by this chat.
 type denialInvariantProvenance struct{}
 
 func (denialInvariantProvenance) IsSessionOwned(context.Context, string, string, uint16) (bool, ProvenanceEvidence) {
@@ -51,17 +64,33 @@ func (denialInvariantProvenance) ForgetSession(string)                          
 type denialInvariantStores struct {
 	listen, loopback *approvalstate.SandboxPortGrantRuntime
 	write, read      *approvalstate.SandboxPathGrantRuntime
+	store            Store
+	invokingSession  string
 	checkpoints      *denialInvariantCheckpoints
+	host             *Host
+	ctx              context.Context
 }
 
-func newDenialInvariantStores() *denialInvariantStores {
+func newDenialInvariantStores(t *testing.T) *denialInvariantStores {
+	t.Helper()
+	database := testdbfixture.Open(t, "denial-lifecycle.db")
+	testdbseed.InsertSessionWithRoot(t, database, denialInvariantChat, testdbseed.DefaultProjectID, t.TempDir())
+	ctx := testdbseed.OwnerCaller(t, t.Context(), database)
+	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
+	checkpoints.SetCheckpointExpiry(func() time.Duration { return 0 })
 	return &denialInvariantStores{
-		listen:      approvalstate.NewSandboxPortGrantRuntime(),
-		loopback:    approvalstate.NewSandboxPortGrantRuntime(),
-		write:       approvalstate.NewSandboxPathGrantRuntime(),
-		read:        approvalstate.NewSandboxPathGrantRuntime(),
-		checkpoints: &denialInvariantCheckpoints{cannedWriteRootCheckpoints: &cannedWriteRootCheckpoints{approve: false}},
+		listen: approvalstate.NewSandboxPortGrantRuntime(), loopback: approvalstate.NewSandboxPortGrantRuntime(),
+		write: approvalstate.NewSandboxPathGrantRuntime(), read: approvalstate.NewSandboxPathGrantRuntime(),
+		checkpoints: &denialInvariantCheckpoints{Checkpoints: checkpoints}, ctx: ctx,
+		host:  NewHost(sessionstore.NewSQL(database), Models{Limits: settings.DefaultSessionLimits()}, nil),
+		store: sessionstore.NewSQL(database), invokingSession: denialInvariantChat,
 	}
+}
+
+func (s *denialInvariantStores) userDirection(t *testing.T) {
+	t.Helper()
+	_, err := s.host.Runner.Instructions.Apply(s.ctx, denialInvariantChat, promptinput.Input{Text: "Fix the request and try again."})
+	testutil.FailErr(t, "apply new user direction", err)
 }
 
 // authority lists every lease or grant any store holds for the chat.
@@ -92,14 +121,6 @@ func (s *denialInvariantStores) authority() []string {
 	return held
 }
 
-// userTurn is the boundary after which a denied capability may be asked again.
-func (s *denialInvariantStores) userTurn() {
-	s.listen.NoteUserIntentBoundary(denialInvariantChat)
-	s.loopback.NoteUserIntentBoundary(denialInvariantChat)
-	s.write.NoteUserIntentBoundary(denialInvariantChat)
-	s.read.NoteUserIntentBoundary(denialInvariantChat)
-}
-
 type denialInvariantOutcome struct {
 	raised, authorized, denied bool
 }
@@ -120,33 +141,33 @@ func denialInvariantCases(t *testing.T) []denialInvariantCase {
 	ports := []uint16{8000}
 	return []denialInvariantCase{
 		{name: "ListenCheckpointBroker.Await", request: func(ctx context.Context, s *denialInvariantStores, call string) (denialInvariantOutcome, error) {
-			b := &ListenCheckpointBroker{Checkpoints: s.checkpoints, Runtime: s.listen, Loopback: s.loopback,
+			b := &ListenCheckpointBroker{Checkpoints: s.checkpoints, Store: s.store, Runtime: s.listen, Loopback: s.loopback,
 				Provenance: denialInvariantProvenance{}, Posture: strict}
-			res, err := b.Await(ctx, tools.LocalListenAsk{SessionID: denialInvariantChat, ToolCallID: call, ProjectDir: projectDir, Ports: ports})
+			res, err := b.Await(ctx, tools.LocalListenAsk{SessionID: s.invokingSession, ToolCallID: call, ProjectDir: projectDir, Ports: ports})
 			return denialInvariantOutcome{res.Raised, res.Authorized, res.Denied}, err
 		}},
 		{name: "LoopbackCheckpointBroker.Await", request: func(ctx context.Context, s *denialInvariantStores, call string) (denialInvariantOutcome, error) {
-			b := &LoopbackCheckpointBroker{Checkpoints: s.checkpoints, Runtime: s.loopback,
+			b := &LoopbackCheckpointBroker{Checkpoints: s.checkpoints, Store: s.store, Runtime: s.loopback,
 				Provenance: denialInvariantProvenance{}, Posture: strict}
-			res, err := b.Await(ctx, tools.LoopbackConnectAsk{SessionID: denialInvariantChat, ToolCallID: call, ProjectDir: projectDir, Ports: ports})
+			res, err := b.Await(ctx, tools.LoopbackConnectAsk{SessionID: s.invokingSession, ToolCallID: call, ProjectDir: projectDir, Ports: ports})
 			return denialInvariantOutcome{res.Raised, res.Authorized, res.Denied}, err
 		}},
 		{name: "LocalNetworkCheckpointBroker.AwaitCombined", request: func(ctx context.Context, s *denialInvariantStores, call string) (denialInvariantOutcome, error) {
-			b := &LocalNetworkCheckpointBroker{Checkpoints: s.checkpoints, Listen: s.listen, Loopback: s.loopback,
+			b := &LocalNetworkCheckpointBroker{Checkpoints: s.checkpoints, Store: s.store, Listen: s.listen, Loopback: s.loopback,
 				Provenance: denialInvariantProvenance{}, Posture: strict}
-			res, err := b.AwaitCombined(ctx, tools.LocalNetworkAsk{SessionID: denialInvariantChat, ToolCallID: call, ProjectDir: projectDir,
+			res, err := b.AwaitCombined(ctx, tools.LocalNetworkAsk{SessionID: s.invokingSession, ToolCallID: call, ProjectDir: projectDir,
 				ListenPorts: ports, ConnectPorts: ports})
 			return denialInvariantOutcome{res.Raised, res.Authorized, res.Denied}, err
 		}},
 		{name: "WriteRootCheckpointBroker.Authorize", request: func(ctx context.Context, s *denialInvariantStores, call string) (denialInvariantOutcome, error) {
-			b := &WriteRootCheckpointBroker{Checkpoints: s.checkpoints, Runtime: s.write, ReadRuntime: s.read, Posture: strict}
-			res, err := b.Authorize(ctx, command.SandboxWriteRootAsk{SessionID: denialInvariantChat, ToolCallID: call, ProjectDir: projectDir,
+			b := &WriteRootCheckpointBroker{Checkpoints: s.checkpoints, Store: s.store, Runtime: s.write, ReadRuntime: s.read, Posture: strict}
+			res, err := b.Authorize(ctx, command.SandboxWriteRootAsk{SessionID: s.invokingSession, ToolCallID: call, ProjectDir: projectDir,
 				ProposedWriteRoot: outsideWriteRoot})
 			return denialInvariantOutcome{res.Raised, res.Authorized, res.Denied}, err
 		}},
 		{name: "WriteRootCheckpointBroker.AuthorizeRead", request: func(ctx context.Context, s *denialInvariantStores, call string) (denialInvariantOutcome, error) {
-			b := &WriteRootCheckpointBroker{Checkpoints: s.checkpoints, Runtime: s.write, ReadRuntime: s.read, Posture: strict}
-			res, err := b.AuthorizeRead(ctx, command.SandboxReadPathAsk{SessionID: denialInvariantChat, ToolCallID: call, ProjectDir: projectDir,
+			b := &WriteRootCheckpointBroker{Checkpoints: s.checkpoints, Store: s.store, Runtime: s.write, ReadRuntime: s.read, Posture: strict}
+			res, err := b.AuthorizeRead(ctx, command.SandboxReadPathAsk{SessionID: s.invokingSession, ToolCallID: call, ProjectDir: projectDir,
 				ProposedReadPath: outsidePath, ReadDenyPaths: []string{outsidePath}})
 			return denialInvariantOutcome{res.Raised, res.Authorized, res.Denied}, err
 		}},
@@ -174,8 +195,8 @@ func TestSandboxBrokerDenialLeavesNoAuthority(t *testing.T) {
 	for _, tc := range denialInvariantCases(t) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			s := newDenialInvariantStores()
-			ctx := t.Context()
+			s := newDenialInvariantStores(t)
+			ctx := s.ctx
 
 			first, err := tc.request(ctx, s, "call-1")
 			testutil.FailErr(t, tc.name+" first request", err)
@@ -196,14 +217,14 @@ func TestSandboxBrokerDenialLeavesNoAuthority(t *testing.T) {
 			if retry.authorized {
 				t.Fatalf("%s authorized an identical retry after the human denied it (asks=%d, outcome %+v); a denial must not leave authority a retry can ride", tc.name, s.checkpoints.asks, retry)
 			}
-			if !retry.denied && s.checkpoints.asks != 2 {
+			if !retry.denied || s.checkpoints.asks != 1 {
 				t.Fatalf("%s neither re-asked nor refused an identical retry after a denial (asks=%d, outcome %+v); a retry must reach the human or the recorded denial", tc.name, s.checkpoints.asks, retry)
 			}
 			if held := s.authority(); len(held) > 0 {
 				t.Fatalf("%s recorded authority on a retry of a denied ask: %v; record authority only after an approving decision", tc.name, held)
 			}
 
-			s.userTurn()
+			s.userDirection(t)
 			asksBefore := s.checkpoints.asks
 			again, err := tc.request(ctx, s, "call-3")
 			testutil.FailErr(t, tc.name+" retry after a new user turn", err)
@@ -213,6 +234,73 @@ func TestSandboxBrokerDenialLeavesNoAuthority(t *testing.T) {
 			}
 			if held := s.authority(); len(held) > 0 {
 				t.Fatalf("%s recorded authority on a denied re-ask: %v; record authority only after an approving decision", tc.name, held)
+			}
+		})
+	}
+}
+
+func TestSandboxBrokerAttachedDirectionRenewsReview(t *testing.T) {
+	for _, tc := range denialInvariantCases(t) {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newDenialInvariantStores(t)
+			s.checkpoints.guidance = "Correct the request and ask again."
+			for i := 0; i < 2; i++ {
+				answer, err := tc.request(s.ctx, s, fmt.Sprintf("call-%d", i))
+				testutil.FailErr(t, "redirected request", err)
+				if !answer.denied || answer.authorized || s.checkpoints.asks != i+1 {
+					t.Fatalf("request %d: %+v, asks=%d", i, answer, s.checkpoints.asks)
+				}
+			}
+			if held := s.authority(); len(held) != 0 {
+				t.Fatalf("direction installed authority: %v", held)
+			}
+		})
+	}
+}
+
+func TestSandboxCombinedDenialSuppressesConstituents(t *testing.T) {
+	s := newDenialInvariantStores(t)
+	cases := denialInvariantCases(t)
+	_, err := cases[2].request(s.ctx, s, "combined")
+	testutil.FailErr(t, "combined request", err)
+	for _, tc := range cases[:2] {
+		answer, err := tc.request(s.ctx, s, tc.name)
+		testutil.FailErr(t, "constituent retry", err)
+		if !answer.denied || answer.authorized || s.checkpoints.asks != 1 {
+			t.Fatalf("%s: %+v, asks=%d", tc.name, answer, s.checkpoints.asks)
+		}
+	}
+	s.userDirection(t)
+	_, err = cases[0].request(s.ctx, s, "renewed-listener")
+	testutil.FailErr(t, "renewed listener", err)
+	if s.checkpoints.asks != 2 {
+		t.Fatalf("renewed listener asks=%d", s.checkpoints.asks)
+	}
+}
+
+func TestSandboxWorkerDenialRenewsFromRootDirection(t *testing.T) {
+	for _, tc := range denialInvariantCases(t) {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newDenialInvariantStores(t)
+			parent, err := s.store.Get(s.ctx, denialInvariantChat)
+			testutil.FailErr(t, "read root", err)
+			child, err := s.store.CreateChild(s.ctx, parent, api.SpawnChildRequest{AgentType: "investigator", Prompt: "Review the operation."})
+			testutil.FailErr(t, "create worker", err)
+			s.invokingSession = child.ID
+			_, err = tc.request(s.ctx, s, "worker-denied")
+			testutil.FailErr(t, "worker request", err)
+			s.invokingSession = denialInvariantChat
+			answer, err := tc.request(s.ctx, s, "root-retry")
+			testutil.FailErr(t, "root retry", err)
+			if !answer.denied || s.checkpoints.asks != 1 {
+				t.Fatalf("worker denial did not suppress root: %+v, asks=%d", answer, s.checkpoints.asks)
+			}
+			s.userDirection(t)
+			s.invokingSession = child.ID
+			_, err = tc.request(s.ctx, s, "worker-renewed")
+			testutil.FailErr(t, "renewed worker request", err)
+			if s.checkpoints.asks != 2 {
+				t.Fatalf("root input did not renew worker review: asks=%d", s.checkpoints.asks)
 			}
 		})
 	}

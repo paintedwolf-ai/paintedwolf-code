@@ -140,6 +140,12 @@ func TestCheckpointHandlersRejectWithGuidance(t *testing.T) {
 	if rejected.Result["guidance"] != "Use the read tool instead." {
 		t.Fatalf("guidance = %#v", rejected.Result["guidance"])
 	}
+	suppressed, err := mgr.SessionApprovalDenied(t.Context(), sess.ID)
+	testutil.FailErr(t, "read approval suppression after redirect", err)
+	if suppressed {
+		t.Fatal("HTTP rejection guidance did not renew approval review")
+	}
+
 }
 
 func TestCheckpointHandlersValidationErrors(t *testing.T) {

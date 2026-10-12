@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/api/sessioncontracts/checkpoint_handlers_integration_test.go",
+  "kind": "test_suite",
+  "workstream": "approval-intent-lifecycle",
+  "disposition": "retain",
+  "reason": "These cases share the production fixture for one approval contract. Retain the suite together so authority installation, rejection, waiting, and renewed review are checked against the same setup.",
+  "reviewed_commit": "4b74660224521ef8e48d2ac91fdbc7f8d57c6dea",
+  "ceiling": 453,
+  "boundaries": {
+    "lycaon/internal/api/sessioncontracts/checkpoint_handlers_integration_test.go": "ef4472634217d54d8379d0215f31b9dd6806209f53a3cffdf34c8c8f4db64518"
+  }
+}

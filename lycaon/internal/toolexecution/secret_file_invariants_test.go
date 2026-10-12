@@ -683,3 +683,7 @@ func fingerprintFor(m *secretmatch.Matcher, value string) secretmatch.SecretFing
 	}
 	return match.Fingerprint
 }
+
+func (*invariantCheckpointMgr) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
+}

@@ -1,6 +1,7 @@
 package loopguard
 
 import (
+	"context"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 )
 
@@ -20,4 +21,5 @@ type DoomLoopGuard interface {
 	CodeRejectResponses(sessionID, tool, code string) int
 	FruitlessSearchRun(sessionID, tool string, args map[string]any) int
 	SetPageTargetResolver(func(sessionID, pageID string) string)
+	SetReviewIntentResolver(func(context.Context, string) (string, error))
 }

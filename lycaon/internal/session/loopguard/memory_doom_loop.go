@@ -35,7 +35,10 @@ type sessionEffects struct {
 
 // MemoryDoomLoopGuard keeps bounded per-session counters in memory.
 type MemoryDoomLoopGuard struct {
-	mu sync.RWMutex
+	mu              sync.RWMutex
+	reviewIntent    func(context.Context, string) (string, error)
+	intents         scopedstore.LRU[string]
+	responseIntents scopedstore.LRU[string]
 	// pageTarget groups live handles by target; unresolved handles retain their ids.
 	pageTarget func(sessionID, pageID string) string
 	// states counts responses with identical invocations per session.
@@ -237,12 +240,18 @@ func (g *MemoryDoomLoopGuard) Check(ctx context.Context, sessionID, responseID, 
 	if strings.EqualFold(strings.TrimSpace(tool), "terminal_send") {
 		return true, 0, "", nil
 	}
+	if err := g.refreshReviewIntent(ctx, sessionID); err != nil {
+		return false, 0, "", err
+	}
 	key, err := g.doomLoopKey(sessionID, tool, args)
 	if err != nil {
 		return false, 0, "", err
 	}
-	g.mu.RLock()
-	defer g.mu.RUnlock()
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if intent, known := g.intents.Load(sessionID); known {
+		g.responseIntents.Store(sessionID+"\x00"+responseID, intent)
+	}
 	sess, _ := g.states.Load(sessionID)
 	st := sess[key]
 	if st == nil {
@@ -303,6 +312,9 @@ func (g *MemoryDoomLoopGuard) RecordAttempt(
 	if strings.EqualFold(strings.TrimSpace(tool), "terminal_send") {
 		return nil
 	}
+	if err := g.refreshReviewIntent(ctx, sessionID); err != nil {
+		return err
+	}
 	key, err := g.doomLoopKey(sessionID, tool, args)
 	if err != nil {
 		return err
@@ -310,6 +322,13 @@ func (g *MemoryDoomLoopGuard) RecordAttempt(
 	rejectCode = strings.TrimSpace(rejectCode)
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	// An older response cannot rebuild counters after fresh direction.
+	if admitted, known := g.responseIntents.Load(sessionID + "\x00" + responseID); known {
+		current, _ := g.intents.Load(sessionID)
+		if admitted != current {
+			return nil
+		}
+	}
 	sess, ok := g.states.Load(sessionID)
 	if !ok || sess == nil {
 		sess = make(map[string]*doomLoopState)

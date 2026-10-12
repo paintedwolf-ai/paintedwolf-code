@@ -14,10 +14,10 @@ copy:
   what: '{{ tool }} was not granted the requested local listener and client authority.'
   cause: Local-network authority is not on this invocation.
   why: Retrying local_listen or loopback_connect loops on the same refusal.
-  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }} {% endif %}Continue without
-    those local effects and report unmet verification. A static preview cannot stand in for required server/client
-    behavior; wait for new user direction before re-requesting.'
-  instead: Do not retry local_listen or loopback_connect; continue without that server and client
+  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }}. Follow that direction
+    before requesting approval for a corrected action.{% else %}Continue without those local effects and report unmet verification.
+    Wait for new user direction before requesting approval again.{% endif %}'
+  instead: Respect this rejection; fresh user direction permits a new approval request
 x-paintedwolf-category: user-decision
 x-paintedwolf-emit: guard:sandbox_local_network
 x-paintedwolf-message: local network authority declined

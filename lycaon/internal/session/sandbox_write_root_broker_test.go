@@ -508,3 +508,11 @@ func TestReadPathOwnScratchNeedsNoApprovalEvenUnderConfiguredReadDeny(t *testing
 		}
 	}
 }
+
+func (*cannedWriteRootCheckpoints) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
+func (unusedWriteRootCheckpoints) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
+}

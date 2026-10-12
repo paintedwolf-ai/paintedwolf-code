@@ -27,31 +27,6 @@ func TestToolApprovalCoalesceMintThenJoin(t *testing.T) {
 	}
 }
 
-func TestToolApprovalCoalesceDenySet(t *testing.T) {
-	t.Parallel()
-	rt := approvalstate.NewToolApprovalCoalesce()
-	chat := "chat-1"
-	key := "command\x00/proj\x00{\"command\":\"rm -rf x\"}"
-
-	action, _ := rt.Begin(chat, key)
-	if action != approvalstate.ToolApprovalCoalesceMint {
-		t.Fatalf("Begin mint: %v", action)
-	}
-	rt.RegisterPending(chat, key, "cp-1", "tc-1")
-	rt.ClearPending(chat, key)
-	rt.RecordDeny(chat, key)
-
-	action, _ = rt.Begin(chat, key)
-	if action != approvalstate.ToolApprovalCoalesceSkipDenied {
-		t.Fatalf("after deny want SkipDenied, got %v", action)
-	}
-	rt.ClearDeny(chat, key)
-	action, _ = rt.Begin(chat, key)
-	if action != approvalstate.ToolApprovalCoalesceMint {
-		t.Fatalf("after ClearDeny want Mint, got %v", action)
-	}
-}
-
 func TestToolApprovalCoalesceAbortMint(t *testing.T) {
 	t.Parallel()
 	rt := approvalstate.NewToolApprovalCoalesce()
@@ -93,35 +68,12 @@ func TestToolApprovalCoalesceForgetSession(t *testing.T) {
 	_, _ = rt.Begin(chat, key)
 	rt.RegisterPending(chat, key, "cp-1", "tc-1")
 	rt.ClearPending(chat, key)
-	rt.RecordDeny(chat, key)
+
 	rt.ForgetSession(chat)
 
 	action, _ := rt.Begin(chat, key)
 	if action != approvalstate.ToolApprovalCoalesceMint {
 		t.Fatalf("after ForgetSession want Mint, got %v", action)
-	}
-}
-
-func TestToolApprovalCoalesceUserTurnClearsDeny(t *testing.T) {
-	t.Parallel()
-	rt := approvalstate.NewToolApprovalCoalesce()
-	chat := "chat-1"
-	deniedKey := "key-denied"
-	pendingKey := "key-pending"
-
-	_, _ = rt.Begin(chat, pendingKey)
-	rt.RegisterPending(chat, pendingKey, "cp-open", "tc-pending")
-	rt.RecordDeny(chat, deniedKey)
-
-	rt.NoteUserIntentBoundary(chat)
-
-	action, _ := rt.Begin(chat, deniedKey)
-	if action != approvalstate.ToolApprovalCoalesceMint {
-		t.Fatalf("user turn must clear deny-set, got %v", action)
-	}
-	action, id := rt.Begin(chat, pendingKey)
-	if action != approvalstate.ToolApprovalCoalesceJoin || id != "cp-open" {
-		t.Fatalf("pending must survive user turn: action=%v id=%q", action, id)
 	}
 }
 
@@ -195,8 +147,7 @@ func TestToolApprovalCoalesceConcurrentBegin(t *testing.T) {
 				// A join before RegisterPending sees an empty id; after it, the registered id.
 				t.Fatalf("join id=%q", ids[i])
 			}
-		case approvalstate.ToolApprovalCoalesceSkipDenied:
-			t.Fatalf("unexpected Begin result %v at %d", action, i)
+
 		}
 	}
 	if mints < 1 {
@@ -210,15 +161,15 @@ func TestToolApprovalCoalesceConcurrentBegin(t *testing.T) {
 func TestGrantKeyParity(t *testing.T) {
 	t.Parallel()
 	action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "aws s3 rm --recursive s3://x", "z": 1, "a": "first"},
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/proj",
-SessionID: "s1",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"command": "aws s3 rm --recursive s3://x", "z": 1, "a": "first"},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: "/proj",
+			SessionID:  "s1",
+		},
+	}
 	k1 := hitl.GrantKey(action)
 	k2 := hitl.GrantKey(action)
 	if k1 == "" || k1 != k2 {
@@ -226,15 +177,15 @@ SessionID: "s1",
 	}
 	// Map key order leaves the fingerprint unchanged (json.Marshal sorts keys).
 	reordered := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"a": "first", "command": "aws s3 rm --recursive s3://x", "z": 1},
-},
-Scope: hitl.ActionScope{
-ProjectDir: "/proj",
-SessionID: "s1",
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "command",
+			Args: map[string]any{"a": "first", "command": "aws s3 rm --recursive s3://x", "z": 1},
+		},
+		Scope: hitl.ActionScope{
+			ProjectDir: "/proj",
+			SessionID:  "s1",
+		},
+	}
 	if hitl.GrantKey(reordered) != k1 {
 		t.Fatalf("reordered args must share GrantKey: %q vs %q", hitl.GrantKey(reordered), k1)
 	}
