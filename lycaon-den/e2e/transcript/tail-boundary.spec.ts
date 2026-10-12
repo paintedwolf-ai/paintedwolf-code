@@ -437,7 +437,7 @@ webE2e("split sidebar restoration stays inside the transcript tail", async ({
     await page.mouse.up();
   }
 
-  await page.setViewportSize({ width: 1_300, height: 720 });
+  await page.setViewportSize({ width: 1_000, height: 720 });
   const restore = page.getByTestId("nav-auto-restore-btn").first();
   await expect(restore).toBeVisible();
   await placeTranscriptAtTail(page);
@@ -449,7 +449,7 @@ webE2e("split sidebar restoration stays inside the transcript tail", async ({
   await page.setViewportSize({ width: 1_700, height: 720 });
   await expect(page.getByTestId("nav-collapse-btn")).toBeVisible();
   await setTailBoundaryTracePhase(page, "second contraction");
-  await page.setViewportSize({ width: 1_280, height: 720 });
+  await page.setViewportSize({ width: 980, height: 720 });
   await expect(restore).toBeVisible();
   await setTailBoundaryTracePhase(page, "second restore click");
   await restore.click();

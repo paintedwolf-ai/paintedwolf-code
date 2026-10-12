@@ -40,6 +40,10 @@ webE2e.describe("narrow split survivor", () => {
     await expect(stageCol(page)).toBeVisible();
 
     await page.setViewportSize({ width: 1000, height: 900 });
+    await expect(stageCol(page)).toBeVisible();
+    await expect(chatCol(page)).toBeVisible();
+
+    await page.setViewportSize({ width: 800, height: 900 });
     await expect(stageCol(page)).toBeHidden();
     await expect(chatCol(page)).toBeVisible();
     await expect(page.getByTestId("split-divider")).toBeHidden();
@@ -55,7 +59,7 @@ webE2e.describe("narrow split survivor", () => {
     await openFilesSplit(page);
     await pinSurvivor(page, "stage");
 
-    await page.setViewportSize({ width: 1000, height: 900 });
+    await page.setViewportSize({ width: 800, height: 900 });
     await expect(chatCol(page)).toBeHidden();
     await expect(stageCol(page)).toBeVisible();
     await expect(page.getByTestId("files-tree")).toBeVisible();
