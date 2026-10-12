@@ -152,8 +152,8 @@ Streaming and complete responses retain reasoning separately from visible assist
 
 ### Reasoning storage and retention
 
-Reasoning is private continuation state attached to the assistant output, with
-its exact provider instance and model identity. Retain both plaintext traces and
+Reasoning belongs to the producing assistant output, with its exact provider
+instance and model identity. Retain both plaintext traces and
 structured provider blocks when returned, including outputs that finish without
 a tool call. They stay separate from visible assistant text and are excluded
 from transcript HTTP/SSE encoding. Reasoning prose has no authority over host
@@ -201,6 +201,28 @@ and temporary WAL growth. Compression and content addressing do not impose a
 retention limit. Measure actual bytes and output counts before changing the
 session-wide retention policy; short benchmark sessions cannot establish a
 long-term storage distribution.
+
+Project retention already follows from this ownership: retained chats and their
+model-output envelopes belong to a project. User access and search do not require
+an archive with a separate lifetime. The recommended search design indexes
+screened readable text once at settlement, resolves the body from existing
+history, and removes entries with their chat. Keep opaque provider blocks private.
+Expose reasoning as a distinct channel with its originating output and model;
+it records generated reasoning, not verified execution. Search inclusion must be
+explicit so speculative traces do not displace ordinary messages or source hits.
+Search retention must not expand adapter replay or bypass context admission.
+This user-facing search surface is not currently implemented.
+
+A local diagnostic sample of 131 Gemma outputs contained 255,892 bytes of encoded
+reasoning and 243,784 bytes of readable text. A standalone contentless SQLite
+FTS5 index added 106,496 bytes after optimization, using 4 KiB pages. At that
+sample's averages, 100,000 outputs would add approximately 186 MiB of message
+projection data and 78 MiB of index data, excluding row overhead, WAL, backups,
+and the already retained compressed envelopes. These short E2B/E4B runs are a
+cost sample, not an upper bound or model-quality qualification. Large-model
+traces, structured duplication, index maintenance, and backup amplification need
+separate measurement before choosing a retention limit. Storage accounting
+should distinguish canonical envelopes, message projections, and derived indexes.
 
 Diagnostic captures normally retain reasoning byte counts. Failed empty or
 reasoning-truncated calls may include a redacted tail of at most 2,048 characters;
