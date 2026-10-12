@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from progress import save, timestamp
 from snapshot import freeze, read_source, file_hash, identity
 from built_runtime import seal_application, verify_application, require_unadmitted, build_manifest, application_identity
-from capture_storage import clone_file
+from capture_storage import clone_file, RUNTIME_EXECUTABLES
 from dispatch_graph import waves, dependency_check_id
 from workflow_evidence import validate_receipts
 
@@ -265,7 +265,7 @@ def build_application(run, environment):
         next_evaluation = json.loads((source / 'evaluation-source.json').read_text())
         if prior_evaluation['harness_sha256'] == next_evaluation['harness_sha256']:
             (source / '.bin').mkdir(exist_ok=True)
-            for name in ('lycaon-dev', 'pw-logs', 'pw-document-core', 'bialy'):
+            for name in ('lycaon-dev', *RUNTIME_EXECUTABLES):
                 destination = source / '.bin' / name
                 destination.unlink(missing_ok=True)
                 clone_file(retained / '.bin' / name, destination)
