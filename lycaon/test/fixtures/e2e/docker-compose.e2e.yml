@@ -130,9 +130,6 @@ services:
       - type: bind
         source: ${LYCAON_E2E_STATE_DIR}
         target: ${LYCAON_E2E_STATE_DIR}
-      - type: bind
-        source: ${LYCAON_E2E_PROJECT_DIR}
-        target: ${LYCAON_E2E_PROJECT_DIR}
       # Specs install the example packs from their checkout paths.
       - type: bind
         source: ${LYCAON_REPO_ROOT}/lycaon/config/fixtures/example-packs
