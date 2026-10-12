@@ -385,3 +385,30 @@ VALUES(?, ?, ?, 'user', 'carry on', 'user', 'user', 'trusted', 1, 1, ?)`,
 		messageID, entryID, sessionID, db.FormatTime(at))
 	testutil.FailErr(t, "insert user intent message", err)
 }
+
+func TestReviewMetadataPersistsOpaqueOperationIdentity(t *testing.T) {
+	database, mgr, sessionID := newTestManager(t)
+	insertSession(t, database, sessionID)
+	ctx := testdbseed.OwnerCaller(t, t.Context(), database)
+	const key = "sandbox:read_path:/private/operation-subject"
+	response, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
+		SessionID: sessionID, Kind: api.CheckpointKindToolApproval, ReviewKeys: []string{key},
+		ProposedAction: &hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "command", Args: map[string]any{"command": "fixture"}}},
+	})
+	testutil.FailErr(t, "request review", err)
+	var payload string
+	testutil.FailErr(t, "read persisted metadata", database.QueryRowContext(ctx, "SELECT payload_json FROM checkpoints WHERE id = ?", response.CheckpointID).Scan(&payload))
+	if strings.Contains(payload, key) {
+		t.Fatal("review metadata retained subject text")
+	}
+	_, err = mgr.ResolveCheckpoint(ctx, sessionID, response.CheckpointID, api.CheckpointKindToolApproval, &hitl.DecisionResult{}, nil)
+	testutil.FailErr(t, "reject review", err)
+	suppressed, err := mgr.ApprovalReviewSuppressed(ctx, sessionID, key)
+	testutil.FailErr(t, "read opaque suppression", err)
+	if !suppressed {
+		t.Fatal("opaque identity failed to suppress the same operation")
+	}
+	if _, err := mgr.ApprovalReviewIntent(ctx, "missing"); err == nil {
+		t.Fatal("missing chat supplied an intent")
+	}
+}

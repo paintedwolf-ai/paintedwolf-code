@@ -62,7 +62,6 @@ type Store interface {
 	OldestPendingBySession(ctx context.Context) (map[string]time.Time, error)
 	ApprovalReviewSuppressed(context.Context, string, string) (bool, error)
 	ApprovalReviewIntent(context.Context, string) (string, error)
-	LatestResolvedToolApprovalStatus(ctx context.Context, sessionID string) (DecisionStatus, bool, error)
 	// SetPendingAIRationale writes Payload["ai_rationale"] (and clears the
 	// ai_rationale_pending flag) only while status is pending. Returns
 	// applied=false when the row is missing or already resolved.

@@ -208,27 +208,6 @@ func (q *Queries) InsertCheckpoint(ctx context.Context, arg InsertCheckpointPara
 	return err
 }
 
-const latestResolvedCheckpointStatus = `-- name: LatestResolvedCheckpointStatus :one
-SELECT c.status FROM checkpoints c
-JOIN checkpoint_resolution_ordinals resolved ON resolved.checkpoint_id = c.id
-WHERE c.session_id = ? AND c.kind = ? AND c.status != ?
-ORDER BY resolved.ordinal DESC
-LIMIT 1
-`
-
-type LatestResolvedCheckpointStatusParams struct {
-	SessionID string `json:"session_id"`
-	Kind      string `json:"kind"`
-	Status    string `json:"status"`
-}
-
-func (q *Queries) LatestResolvedCheckpointStatus(ctx context.Context, arg LatestResolvedCheckpointStatusParams) (string, error) {
-	row := q.db.QueryRowContext(ctx, latestResolvedCheckpointStatus, arg.SessionID, arg.Kind, arg.Status)
-	var status string
-	err := row.Scan(&status)
-	return status, err
-}
-
 const listChatGrants = `-- name: ListChatGrants :many
 SELECT chat_session_id, id, checkpoint_id, delta_json, expires_at
 FROM chat_grants

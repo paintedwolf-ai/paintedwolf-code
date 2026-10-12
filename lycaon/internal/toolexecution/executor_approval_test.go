@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -114,6 +115,7 @@ func (g *denyRuleGate) Evaluate(context.Context, hitl.ProposedAction) (*hitl.App
 }
 
 func TestApprovalRuleDenyRendersTheMatchedRule(t *testing.T) {
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	boundary := sandbox.NewBoundary(sandbox.Config{}, []sandbox.ToolProfile{{
 		ID:    "implement",
 		Tools: map[string]bool{"command": true},

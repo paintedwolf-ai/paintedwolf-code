@@ -2,7 +2,9 @@ package hitl
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -44,6 +46,13 @@ func (s *SQLStore) captureReviewIntent(ctx context.Context, tx *sql.Tx, row *Sto
 	if row.Payload == nil {
 		row.Payload = map[string]any{}
 	}
+	if keys, ok := row.Payload["review_keys"].([]string); ok {
+		opaque := make([]string, len(keys))
+		for i, key := range keys {
+			opaque[i] = reviewKeyDigest(key)
+		}
+		row.Payload["review_keys"] = opaque
+	}
 	row.Payload["review_chat"] = intent.ChatID
 	row.Payload["review_message"] = intent.MessageID
 	row.Payload["review_direction"] = intent.DirectionID
@@ -53,7 +62,7 @@ func (s *SQLStore) captureReviewIntent(ctx context.Context, tx *sql.Tx, row *Sto
 // Suppression follows the persisted intent identity across workers and restart.
 func (s *SQLStore) ApprovalReviewSuppressed(ctx context.Context, sessionID, key string) (bool, error) {
 	suppressed, err := s.queries.ApprovalReviewSuppressed(ctx, db.ApprovalReviewSuppressedParams{
-		SessionID: sessionID, ReviewKey: key,
+		SessionID: sessionID, ReviewKey: reviewKeyDigest(key),
 	})
 	if err != nil {
 		return false, fmt.Errorf("read approval review suppression: %w", err)
@@ -81,4 +90,13 @@ func (s *SQLStore) ApprovalReviewIntent(ctx context.Context, sessionID string) (
 
 func (m *Checkpoints) ApprovalReviewIntent(ctx context.Context, sessionID string) (string, error) {
 	return m.Store.ApprovalReviewIntent(ctx, sessionID)
+}
+
+// Operation keys may contain paths; persisted identity contains no subject text.
+func reviewKeyDigest(key string) string {
+	if key == "" {
+		return ""
+	}
+	digest := sha256.Sum256([]byte(key))
+	return hex.EncodeToString(digest[:])
 }

@@ -42,13 +42,6 @@ GROUP BY session_id;
 -- name: UpdatePendingCheckpointPayload :execrows
 UPDATE checkpoints SET payload_json = ? WHERE id = ? AND status = ?;
 
--- name: LatestResolvedCheckpointStatus :one
-SELECT c.status FROM checkpoints c
-JOIN checkpoint_resolution_ordinals resolved ON resolved.checkpoint_id = c.id
-WHERE c.session_id = ? AND c.kind = ? AND c.status != ?
-ORDER BY resolved.ordinal DESC
-LIMIT 1;
-
 -- name: ResolveCheckpointForSession :execrows
 UPDATE checkpoints
 SET status = sqlc.arg(new_status), result_json = sqlc.arg(result_json),

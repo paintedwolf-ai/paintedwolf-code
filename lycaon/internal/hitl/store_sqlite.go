@@ -376,25 +376,6 @@ func (s *SQLStore) mutatePendingPayload(ctx context.Context, checkpointID, op st
 	return true, nil
 }
 
-// LatestResolvedToolApprovalStatus returns the most recent resolved tool_approval status.
-func (s *SQLStore) LatestResolvedToolApprovalStatus(ctx context.Context, sessionID string) (DecisionStatus, bool, error) {
-	if err := ctx.Err(); err != nil {
-		return "", false, err
-	}
-	status, err := s.queries.LatestResolvedCheckpointStatus(ctx, db.LatestResolvedCheckpointStatusParams{
-		SessionID: sessionID,
-		Kind:      string(api.CheckpointKindToolApproval),
-		Status:    string(DecisionStatusPending),
-	})
-	if db.IsNoRows(err) {
-		return "", false, nil
-	}
-	if err != nil {
-		return "", false, fmt.Errorf("latest resolved tool approval: %w", err)
-	}
-	return DecisionStatus(status), true, nil
-}
-
 // checkpointFromRow maps a generated checkpoints row onto the store's domain type.
 func checkpointFromRow(r db.Checkpoints) (*StoredCheckpoint, error) {
 	row := StoredCheckpoint{
