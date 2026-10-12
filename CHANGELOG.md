@@ -29,6 +29,10 @@ First release candidate for 1.0.2, published on the preview channel for upgrade 
 - Workflow runs pin sealed definitions and guidance. Project guidance overlays
   do not change a sealed run; retained shipped workflow versions remain available.
 
+- Transcript history keeps scroll position and measured row heights across
+  paging, resizing, and restore; estimates no longer count hidden attachment
+  content such as extracted PDF text.
+
 ## [1.0.1]
 
 ### Fixed
