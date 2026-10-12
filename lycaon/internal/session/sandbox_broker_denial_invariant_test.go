@@ -44,7 +44,7 @@ func (c *denialInvariantCheckpoints) RequestCheckpoint(ctx context.Context, req 
 	if err != nil {
 		return nil, err
 	}
-	_, err = c.Checkpoints.ResolveCheckpoint(ctx, req.SessionID, response.CheckpointID, api.CheckpointKindToolApproval, &hitl.DecisionResult{Comments: c.guidance}, nil)
+	_, err = c.ResolveCheckpoint(ctx, req.SessionID, response.CheckpointID, api.CheckpointKindToolApproval, &hitl.DecisionResult{Comments: c.guidance}, nil)
 	return response, err
 }
 
