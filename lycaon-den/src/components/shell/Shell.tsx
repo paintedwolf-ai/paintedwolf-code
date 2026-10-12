@@ -476,7 +476,6 @@ export function Shell(props: ShellProps) {
       projectName={(projectId) => props.projects.summary(projectId)?.displayName}
       onOpenProject={openProject}
       onDismiss={(id) => props.notices.dismiss(id)}
-      onDismissApp={() => props.notices.dismissScope(APP_SCOPE)}
       announceLive={!isAnySessionActivityLive(props.appStore)}
     />
   );

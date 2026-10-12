@@ -64,10 +64,6 @@
   border-color: color-mix(in srgb, var(--den-accent-signal) 22%, var(--den-border));
 }
 
-.den-notice--info .den-notice-kind {
-  color: var(--den-accent-signal);
-}
-
 .den-notice-toggle,
 .den-notice-dismiss {
   border: none;

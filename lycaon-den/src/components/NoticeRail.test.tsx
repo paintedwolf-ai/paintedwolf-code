@@ -140,7 +140,6 @@ describe("NoticeRail", () => {
           },
         ]}
         onDismiss={vi.fn()}
-        onDismissAll={vi.fn()}
       />
     ));
 
@@ -151,7 +150,7 @@ describe("NoticeRail", () => {
     expect(screen.queryByText("First failure detail")).toBeNull();
     expect(screen.queryByText("Most recent failure detail")).toBeTruthy();
     expect(screen.queryByText("Retry now")).toBeTruthy();
-    expect(screen.getByText("Dismiss all")).toBeTruthy();
+    expect(screen.queryByText("Dismiss all")).toBeNull();
   });
 
   it("renders multiple action buttons and invokes callback on click", () => {
