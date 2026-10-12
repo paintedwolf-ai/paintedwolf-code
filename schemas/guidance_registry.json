@@ -880,13 +880,13 @@
       "summary": "The shared document `{{ paintedwolf.path }}` changed in an area this edit depends on; this edit was not applied."
     },
     "EDITOR_DOCUMENT_READ_REQUIRED": {
-      "branch_instruction": "Continue with another file until you are ready to read this one.",
+      "branch_instruction": "Read this file now; retry the mutation in your next response.",
       "category": "recoverable",
       "emit": "guard:editor_document",
       "summary": "Read `{{ paintedwolf.path }}` before editing its shared document."
     },
     "EDIT_ARGS_CONFLICT": {
-      "branch_instruction": "Branch on Code; fix args and retry once",
+      "branch_instruction": "Retry edit with the corrected arguments.",
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "edit received conflicting arguments: {{ paintedwolf.detail }}."

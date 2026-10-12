@@ -122,6 +122,16 @@ pending and directs the coordinator to continue with tools. Completed work is
 recorded before the final response. A tool-free response ends the turn, so
 continuing progress updates use `surface_note`.
 
+### Editing after source discovery
+
+Summary and grep windows locate source but do not establish an editor read base.
+Before editing, call `read` in a prior response; a successful write to the same
+file also establishes a base. Read and edit in one parallel batch cannot satisfy
+that ordering. Edit spans contain source text with its indentation, excluding
+displayed line labels. Recovery names the exact path to read and directs a retry
+in the next response; the read-before-mutation and frozen-base checks remain
+unchanged.
+
 ### Review verdict rejections
 
 `submit_verdict` rejects with a `SUBMIT_VERDICT_*` code and typed details. Its arguments have three top-level channels: `verdict`, `cited_evidence`, and `cited_urls` ([`submit_verdict_tool.go`](../lycaon/internal/workflow/review/submit_verdict_tool.go)). The active phase schema exclusively defines the keys inside `verdict`, so misplaced citation channels and stale phase fields reject instead of being silently ignored. The two citation channels anchor the evidence a verdict rests on and are never projected as members of it.

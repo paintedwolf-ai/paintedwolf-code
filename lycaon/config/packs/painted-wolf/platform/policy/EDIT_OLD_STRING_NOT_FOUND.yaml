@@ -21,10 +21,9 @@ copy:
     in the current file ({{ paintedwolf.total_lines }} lines).
   cause: old_string must match the file text exactly. Stale content, copied line-number prefixes, or literal
     backslash-escape text can cause misses; valid JSON Unicode escapes are decoded before matching.
-  why: Structured rejects steer agents back to read for a verbatim copy instead of guessing from free-form
-    errors.
-  fix: Re-read {{ paintedwolf.path }} and copy the exact substring after the line-number tab into old_string.
-    When near_line is present, call the read_hint first so the slice is current.
+  why: The replacement must match exact source bytes.
+  fix: Call read for {{ paintedwolf.path }} again; use read_hint when present. Copy the source substring into
+    old_string without displayed line labels, preserving indentation.
   instead: Use a fresh verbatim substring. Do not replace the whole file merely to bypass a failed exact edit.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:edit
