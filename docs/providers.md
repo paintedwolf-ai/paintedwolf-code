@@ -162,7 +162,14 @@ control, completion, or tool admission.
 Settlement stores the screened output in the existing compressed,
 content-addressed model-output envelope and projects it into the message row.
 The immutable envelope supports interrupted-projection recovery; the row supports
-history loading. Both follow the session's retention and deletion lifecycle.
+history loading. Both belong to the project through their originating chat.
+Deleting a chat deletes its reasoning and its child chats' reasoning in the same
+transaction as their history. Deleting the project deletes all its retained chats.
+Unreferenced envelopes enter the existing bounded blob reclaim queue; envelopes
+still referenced by another retained chat remain. Physical reclamation follows
+maintenance rather than blocking chat deletion. Recovery captures and backups
+retain their point-in-time history under the existing backup lifecycle; deleting
+a live chat does not rewrite older backups.
 Do not expire reasoning independently by age or delete it on a model switch:
 resuming, rewinding, or switching back can need the original continuation.
 Prompt compaction changes the request view rather than deleting durable history.
@@ -195,9 +202,13 @@ Storage grows with retained model outputs, independently of the prompt window.
 For `N` outputs averaging `R` bytes of encoded reasoning, the message projection
 adds roughly `N × R` bytes before SQLite overhead. The immutable envelope adds a
 compressed copy; plaintext and structured blocks may themselves contain duplicate
-text required by the transport. For example, 100,000 outputs averaging 10 KiB
-add about 0.95 GiB to message projections, plus compressed envelopes, backups,
-and temporary WAL growth. Compression and content addressing do not impose a
+text required by the transport. Use the working-year fixtures' 250 working days
+for planning. An assumed 20 requests per day with ten outputs per request,
+including worker and utility calls, yields 50,000 retained outputs per year.
+At 10 KiB per encoded trace, their message projections add about 488 MiB, plus
+compressed envelopes, backups, and temporary WAL growth. This request rate and
+trace size are planning assumptions, not a measured developer workload.
+Compression and content addressing do not impose a
 retention limit. Measure actual bytes and output counts before changing the
 session-wide retention policy; short benchmark sessions cannot establish a
 long-term storage distribution.
