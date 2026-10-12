@@ -43,12 +43,13 @@ modelIndependentWebE2e("retry retrieves an accepted trash result with its origin
   });
   const operations: string[] = [];
   const retries: string[] = [];
+  let acceptedRequest: { url: string; headers: Record<string, string> } | undefined;
   await page.route(`**/v1/projects/${project.id}/source?*`, async (route) => {
     if (route.request().method() !== "DELETE") return route.continue();
     operations.push(new URL(route.request().url()).searchParams.get("operation_id") ?? "");
-    const accepted = await route.fetch();
-    expect([202, 204]).toContain(accepted.status());
-    await expect.poll(() => existsSync(path.join(root, "retry.txt"))).toBe(false);
+    // Hold host completion until the failed response reaches the dialog. Otherwise
+    // the authenticated completion stream can correctly win the response race.
+    acceptedRequest = { url: route.request().url(), headers: route.request().headers() };
     return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({
       code: "source_trash_failed", message: "The system could not move the item to trash.", retryable: true, suggested_action: "Close applications using this file, then retry.",
     }) });
@@ -61,7 +62,10 @@ modelIndependentWebE2e("retry retrieves an accepted trash result with its origin
   await page.getByTestId("files-ctx-trash").click();
   await page.getByTestId("files-trash-confirm").click();
   await expect(page.getByRole("heading", { name: "Couldn’t move “retry.txt” to trash" })).toBeVisible();
-  expect(existsSync(path.join(root, "retry.txt"))).toBe(false);
+  expect(acceptedRequest).toBeDefined();
+  const accepted = await request.delete(acceptedRequest!.url, { headers: acceptedRequest!.headers });
+  expect([202, 204]).toContain(accepted.status());
+  await expect.poll(() => existsSync(path.join(root, "retry.txt"))).toBe(false);
   await page.getByTestId("files-trash-dialog").screenshot({ path: testInfo.outputPath("trash-retry.png"), animations: "disabled" });
   await page.getByRole("button", { name: "Retry", exact: true }).click();
   await expect(page.getByTestId("files-trash-dialog")).toBeHidden();
