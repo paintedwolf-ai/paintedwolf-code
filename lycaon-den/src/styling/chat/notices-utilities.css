@@ -1,9 +1,9 @@
 @utility den-notice {
 display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0 10px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0 12px;
   align-items: start;
-  padding: 8px 10px;
+  padding: 12px 14px;
   border: 1px solid var(--den-border);
   border-radius: var(--den-radius-sm);
   background: var(--den-background);
@@ -12,7 +12,7 @@ display: grid;
 
 
 @utility den-notice-action {
-margin: 4px 0 0;
+margin: 6px 0 0;
   font-size: var(--text-den-hint);
   line-height: 1.45;
   color: var(--den-text-muted);
@@ -22,6 +22,14 @@ margin: 4px 0 0;
 
 @utility den-notice-body {
 min-width: 0;
+}
+
+@utility den-notice-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 
@@ -50,7 +58,7 @@ margin-right: 6px;
 
 
 @utility den-notice-message {
-margin: 6px 0 0;
+margin: 8px 0 0;
   font-size: var(--text-den-hint);
   line-height: 1.45;
   color: var(--den-text);
@@ -69,17 +77,10 @@ flex-shrink: 0;
 @utility den-notice-rail-header {
 display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   flex-wrap: wrap;
   gap: 4px 12px;
   padding: 8px 16px 0;
-}
-
-
-@utility den-notice-rail-heading {
-font-size: var(--text-den-caption);
-  font-weight: 500;
-  color: var(--den-text-muted);
 }
 
 

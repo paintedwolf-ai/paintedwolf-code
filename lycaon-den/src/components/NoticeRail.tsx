@@ -152,9 +152,8 @@ export function NoticeRail(props: Props) {
         aria-live={announceLive() ? "polite" : "off"}
         aria-relevant="additions"
       >
-        <div class="den-notice-rail-header">
-          <span class="den-notice-rail-heading">Attention needed</span>
-          <Show when={notices().length > 1}>
+        <Show when={notices().length > 1}>
+          <div class="den-notice-rail-header">
             <DenButton
               variant="ghost"
               compact
@@ -162,8 +161,8 @@ export function NoticeRail(props: Props) {
             >
               Dismiss all
             </DenButton>
-          </Show>
-        </div>
+          </div>
+        </Show>
         <Scrollport class="den-notice-rail-list" contentAs="ul" contentClass="den-notice-rail-list__content">
           <For each={notices()}>
             {(notice) => {
