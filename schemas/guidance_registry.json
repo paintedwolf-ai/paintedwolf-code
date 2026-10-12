@@ -2075,7 +2075,7 @@
       "summary": "A run-once direct network authorization was no longer valid at spawn."
     },
     "SANDBOX_DIRECT_IP_DENIED": {
-      "branch_instruction": "Branch on Code; do not retry the declined direct network request",
+      "branch_instruction": "Respect this rejection; fresh user direction permits a new approval request",
       "category": "user-decision",
       "emit": "guard:sandbox_direct_ip",
       "summary": "Direct network authority was declined for this action."
@@ -2099,13 +2099,13 @@
       "summary": "Process control cannot retain an active sandbox for this invocation."
     },
     "SANDBOX_EXECUTION_CAPABILITY_DENIED": {
-      "branch_instruction": "Branch on Code; respect the decision. Continue with work that does not require this authority.",
+      "branch_instruction": "Fresh user direction permits a new review; it does not grant execution authority",
       "category": "user-decision",
       "emit": "guard:execution_capability",
       "summary": "The person did not approve this execution capability."
     },
     "SANDBOX_LOCAL_LISTEN_DENIED": {
-      "branch_instruction": "Do not retry local_listen; continue with serverless verification",
+      "branch_instruction": "Respect this rejection; fresh user direction permits a new approval request",
       "category": "user-decision",
       "emit": "guard:sandbox_local_listen",
       "summary": "{{ tool }} was not granted the requested local listener authority."
@@ -2117,13 +2117,13 @@
       "summary": "The local listener capability request was invalid."
     },
     "SANDBOX_LOCAL_NETWORK_DENIED": {
-      "branch_instruction": "Do not retry local_listen or loopback_connect; continue without that server and client",
+      "branch_instruction": "Respect this rejection; fresh user direction permits a new approval request",
       "category": "user-decision",
       "emit": "guard:sandbox_local_network",
       "summary": "{{ tool }} was not granted the requested local listener and client authority."
     },
     "SANDBOX_LOOPBACK_CONNECT_DENIED": {
-      "branch_instruction": "Do not retry loopback_connect; continue without that local client",
+      "branch_instruction": "Respect this rejection; fresh user direction permits a new approval request",
       "category": "user-decision",
       "emit": "guard:sandbox_loopback_connect",
       "summary": "{{ tool }} was not granted the requested connection to the local service."
@@ -2135,7 +2135,7 @@
       "summary": "The local service connection request was invalid."
     },
     "SANDBOX_READ_PATH_DENIED": {
-      "branch_instruction": "Branch on Code; continue without the content — do not re-request the denied path",
+      "branch_instruction": "Respect this rejection; fresh user direction permits a new approval request",
       "category": "user-decision",
       "emit": "guard:sandbox_read_path",
       "summary": "{{ tool }} was not granted read access to {{ paintedwolf.path }}."
@@ -2153,7 +2153,7 @@
       "summary": "A host-approved socket grant could not be revalidated before use."
     },
     "SANDBOX_SOCKET_PATH_DENIED": {
-      "branch_instruction": "Branch on Code; do not retry the declined socket request",
+      "branch_instruction": "Respect this rejection; fresh user direction permits a new approval request",
       "category": "user-decision",
       "emit": "guard:sandbox_socket",
       "summary": "Local-service socket authority was declined for this action."
@@ -2249,7 +2249,7 @@
       "summary": "`{{ tool }}` changed the Git index for agent-policy files the sandbox kept unchanged in the worktree."
     },
     "SANDBOX_WRITE_ROOT_DENIED": {
-      "branch_instruction": "Preserve the intended destination and the denied write boundary",
+      "branch_instruction": "Respect this rejection; fresh user direction permits a new approval request",
       "category": "user-decision",
       "emit": "guard:sandbox_write_root",
       "summary": "{{ tool }} was not granted write access to {{ paintedwolf.path }}."
