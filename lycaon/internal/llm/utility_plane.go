@@ -93,12 +93,11 @@ func (p *UtilityPlane) acquireLane(ctx context.Context, provider modelcall.Provi
 	return p.lanes.acquire(ctx, provider.ID(), provider.Profile().UtilitySingleFlight, class)
 }
 
-// holdCoordinator marks a single-flight instance occupied by a coordinator stream.
-func (p *UtilityPlane) holdCoordinator(providerID string) func() {
-	if p == nil || p.lanes == nil || strings.TrimSpace(providerID) == "" {
-		return func() {}
+func (p *UtilityPlane) acquireForeground(ctx context.Context, provider modelcall.Provider) (func(), error) {
+	if p == nil || provider == nil {
+		return func() {}, nil
 	}
-	return p.lanes.holdCoordinator(providerID)
+	return p.lanes.acquireForeground(ctx, provider.ID(), provider.Profile().UtilitySingleFlight)
 }
 
 // resolveUtilityAttemptTimeout is the wall clock for one attempt. Local
