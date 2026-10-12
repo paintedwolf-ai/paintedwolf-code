@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestReviewIntentRenewsAllRepetitionCounters(t *testing.T) {
@@ -15,9 +17,7 @@ func TestReviewIntentRenewsAllRepetitionCounters(t *testing.T) {
 	check := func(response string) bool {
 		t.Helper()
 		allowed, _, _, err := g.Check(t.Context(), "worker", response, "command", args)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "check review intent", err)
 		return allowed
 	}
 	if !check("first") {
@@ -28,14 +28,14 @@ func TestReviewIntentRenewsAllRepetitionCounters(t *testing.T) {
 			t.Fatal("attempt blocked before threshold")
 		}
 		if err := g.RecordAttempt(t.Context(), "worker", fmt.Sprint(i), "command", args, "SANDBOX_READ_PATH_DENIED", false); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "record rejected attempt", err)
 		}
 	}
 	if check("blocked") {
 		t.Fatal("unchanged intent must remain blocked")
 	}
 	if _, err := g.RecordSearchOutcome(t.Context(), "worker", "search", map[string]any{"query": "missing"}, false); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "record fruitless search", err)
 	}
 	intent = "fresh direction"
 	if !check("renewed") {
@@ -69,14 +69,12 @@ func TestLateResponseCannotRestoreRepetitionAfterDirection(t *testing.T) {
 	args := map[string]any{"command": "read protected-file"}
 	for i := 0; i < DoomLoopMaxCodeRepeats; i++ {
 		_, _, _, err := g.Check(t.Context(), "worker", fmt.Sprint(i), "command", args)
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "admit response before direction", err)
 	}
 	intent = "direction attached to rejection"
 	for i := 0; i < DoomLoopMaxCodeRepeats; i++ {
 		if err := g.RecordAttempt(t.Context(), "worker", fmt.Sprint(i), "command", args, "SANDBOX_READ_PATH_DENIED", false); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "record late rejected attempt", err)
 		}
 	}
 	if got := g.CodeRejectResponses("worker", "command", "SANDBOX_READ_PATH_DENIED"); got != 0 {
