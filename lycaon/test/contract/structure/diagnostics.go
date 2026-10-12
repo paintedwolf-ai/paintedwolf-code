@@ -6,9 +6,8 @@ import (
 	"strings"
 )
 
-// diagnostics is the structural evidence for one declared directory. Every
-// field is a fact about how the graph uses the directory's members; none of
-// them decides whether the directory is one concern.
+// diagnostics is the structural evidence for one declared directory. The
+// facts describe how the graph uses the members; they do not decide cohesion.
 type diagnostics struct {
 	Kind        character
 	Members     []string
@@ -37,10 +36,9 @@ func analyze(graph *Graph, key string, d declaration) (*diagnostics, error) {
 	return out, nil
 }
 
-// isolatedMembers lists members no outside consumer ever imports alongside a
-// sibling. An isolated member is evidence for review, not a verdict: a public
-// entry point with internal collaborators, or an alternative behind one
-// family contract, both look isolated and may be exactly right.
+// isolatedMembers lists members no outside consumer imports alongside a
+// sibling. Isolation is evidence, not a verdict: an entry point with internal
+// collaborators can be exactly right.
 func isolatedMembers(external map[string][]string, root string) []string {
 	var out []string
 	for member, consumers := range external {
@@ -68,9 +66,7 @@ func isolatedMembers(external map[string][]string, root string) []string {
 }
 
 // disconnectedGroups splits members into sets that never reach each other
-// through internal imports, directly or through one intermediate internal
-// package. Within a declared subsystem, disconnected groups are the strongest
-// signal that the declared concern is really several.
+// through internal imports, directly or through one intermediate package.
 func disconnectedGroups(graph *Graph, members []string) [][]string {
 	set := map[string]bool{}
 	for _, m := range members {

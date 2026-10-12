@@ -20,10 +20,9 @@ const (
 )
 
 // declaration states what kind of thing one directory under lycaon/internal is.
-// A subsystem promises one concern: its members may be imported from outside
-// only through its declared entry points. A family holds alternatives behind
-// one contract package. A container makes no shared-concern promise; its
-// members are individually governed.
+// A subsystem may be imported from outside only through its entry points. A
+// family holds alternatives behind one contract package. A container's members
+// are governed individually.
 type declaration struct {
 	Kind        character `yaml:"kind"`
 	Description string    `yaml:"description"`

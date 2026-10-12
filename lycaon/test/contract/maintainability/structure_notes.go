@@ -6,10 +6,8 @@ import (
 	"github.com/lycaon/lycaon/test/contract/structure"
 )
 
-// structureNotes renders the structural diagnostics of every declared
-// directory into the budget report. Declared rules are enforced by the
-// structure contract tests; these lines are review evidence for the warnings
-// above them, naming the relationships worth inspecting.
+// structureNotes renders structural diagnostics of declared directories into
+// the budget report as review evidence for the findings above them.
 func structureNotes(root string) []string {
 	tree := structure.NewFileSystem(root)
 	graph, err := structure.BuildGraph(tree)
