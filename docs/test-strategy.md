@@ -287,6 +287,31 @@ issue bodies show classification, rationale, reviewed source, current observatio
 and the previous observation and delta when evidence advances. Human prose
 outside the managed block remains unchanged.
 
+#### Structure declarations and diagnostics
+
+Every directory directly under `lycaon/internal` with ten or more member packages declares its
+character in [`structure/declarations.yaml`](../lycaon/test/contract/structure/declarations.yaml):
+a `subsystem` promises one concern and names its entry points, a `family` holds alternatives
+behind one contract package, and a `container` is an organizational boundary whose members are
+governed individually. [`TestDeclaredDirectoriesMatchCheckout`](../lycaon/test/contract/structure/checkout_test.go)
+validates declarations against the production import graph and fails when a large directory
+stays undeclared, so an accreting boundary must state what it is instead of growing silently.
+Entry points and family contracts must name existing production packages inside their declared
+directory. A subsystem's explicit access boundary is gated: outside packages may import only
+its entry points, including when the private package is nested more deeply. Rejections name the
+consumer and private package so an agent can repair the import or review the declared boundary.
+Family implementation imports remain allowed for composition; declaring a shared contract does
+not impose a new import policy. The graph uses tracked and nonignored regular files, matching
+the budget inventory, scoped to `lycaon/cmd`, `lycaon/internal`, and `lycaon/pkg`;
+ignored scratch files, deleted files, symlinks, and scanner rule fixtures do not contribute.
+
+The maintainability report carries structural diagnostics for each declared directory as notes:
+disconnected member groups, isolated members (no outside consumer imports them alongside a
+sibling), and, for subsystems, unused entry points. These are review evidence, not findings:
+co-consumption patterns prompt judgment about whether a declared concern is really one, and
+never decide it. A subsystem with one public entry point and internal collaborators legitimately
+reads as isolated.
+
 #### Prompt budgets
 
 The host assembles a prompt per turn: instruction units render only while

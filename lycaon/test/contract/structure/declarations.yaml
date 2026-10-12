@@ -1,0 +1,59 @@
+# Directory character under lycaon/internal.
+#
+# kind selects what the directory promises:
+#   subsystem — one concern; outside imports go through entry_points
+#   family    — alternatives behind one contract package
+#   container — an organizational boundary; members are governed individually
+#
+# Directories with at least ten member packages must be declared here.
+# A container with that many members states what the boundary is for.
+
+internal/db:
+    kind: subsystem
+    description: The SQL adapter; every durable fact crosses its queries.
+    entry_points:
+        - github.com/lycaon/lycaon/internal/db
+        - github.com/lycaon/lycaon/internal/db/migrations
+
+internal:
+    kind: container
+    description: Engine access boundary. Members are individually governed;
+        the layering rules, not shared concern, decide what belongs.
+
+internal/session:
+    kind: container
+    description: Session orchestration hub and the subpackages Manager composes.
+
+internal/workflow:
+    kind: container
+    description: Workflow run management across its lifecycle packages.
+
+internal/scan:
+    kind: container
+    description: Scan admission, findings, drivers, and schedulers.
+
+internal/api:
+    kind: container
+    description: HTTP transport, route families, and shared request contracts.
+
+internal/tools:
+    kind: container
+    description: Tool definitions, execution, and native tool families;
+        leaves such as readcaps and surveyreceipt sit below the hub.
+
+internal/coordinator:
+    kind: container
+    description: Coordinator loop, wake policy, and assembly.
+
+internal/app:
+    kind: container
+    description: Serve composition root; wires hub-to-hub in topical build files.
+
+internal/llm:
+    kind: container
+    description: Provider registry, dispatch, and shared transport concerns.
+
+internal/projectsource:
+    kind: container
+    description: Filesystem observation, navigation, search, and durable file
+        operations over project sources.
