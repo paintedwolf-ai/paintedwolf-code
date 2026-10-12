@@ -83,7 +83,7 @@ type messageProjection struct {
 
 func ProjectMessages(msgs []api.Message, projection messageProjection) []ollamaChatMessage {
 	msgs = providerwire.SystemPreamble(msgs)
-	turnStart := api.UserIntentBoundary(msgs)
+	msgs = providerwire.ProjectReasoning(msgs, projection.providerID, projection.model, providerwire.ReasoningReplayCurrentToolLoop)
 	out := make([]ollamaChatMessage, 0, len(msgs))
 	// Model templates render images on user turns, so a run of tool results
 	// is followed by one user message carrying their images.
@@ -95,7 +95,7 @@ func ProjectMessages(msgs []api.Message, projection messageProjection) []ollamaC
 		}
 		toolImages = ollamaChatMessage{}
 	}
-	for i, m := range msgs {
+	for _, m := range msgs {
 		// Replaying a note's UI echo as assistant text invites a continuation.
 		if api.IsAgentNoteMessage(m) {
 			continue
@@ -106,11 +106,8 @@ func ProjectMessages(msgs []api.Message, projection messageProjection) []ollamaC
 		switch m.Role {
 		case api.MessageRoleAssistant:
 			wMsg := ollamaChatMessage{Role: "assistant", Content: m.Content}
-			// Tool continuations retain reasoning from this provider, model, and turn.
-			if i >= turnStart && len(m.ToolCalls) > 0 {
-				if reasoning := providerwire.ReasoningForModel(m, projection.providerID, projection.model); reasoning != nil {
-					wMsg.Thinking = reasoning.Text
-				}
+			if m.ModelReasoning != nil {
+				wMsg.Thinking = m.ModelReasoning.Text
 			}
 			for _, tc := range m.ToolCalls {
 				wMsg.ToolCalls = append(wMsg.ToolCalls, ollamaToolCall{

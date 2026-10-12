@@ -302,3 +302,60 @@ func TestUpdateMessagePatchPersistsMessageKind(t *testing.T) {
 		t.Fatalf("stored kind = %q want draft", stored[0].Kind)
 	}
 }
+
+func TestTranscriptUpdateStoresReasoningAndRecoveryRestoresIt(t *testing.T) {
+	sqlDB := testdbfixture.Open(t, "reasoning-patch.db")
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
+	st := store.NewSQL(sqlDB)
+	mgr := NewHost(st, Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
+	ctx := t.Context()
+	sess, err := st.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	trace := &wire.ModelReasoning{ProviderID: "p", Model: "m", Text: "read first", Details: []json.RawMessage{json.RawMessage(`{"type":"thinking","thinking":"read first","signature":"signed"}`)}}
+	message := wire.Message{ID: "assistant", Role: wire.MessageRoleAssistant, Content: "draft", CreatedAt: time.Now().UTC()}
+	testutil.FailErr(t, "append placeholder", mgr.Runner.Transcript.Append(ctx, sess.ID, message))
+	message.Content = "reading"
+	message.ToolCalls = []wire.ToolCall{{ID: "call", Name: "read", Args: map[string]any{"path": "a.txt"}}}
+	message.ModelReasoning = trace
+	testutil.FailErr(t, "settle through update", mgr.Runner.Transcript.Update(ctx, sess.ID, message.ID, message))
+	reloaded := store.NewSQL(sqlDB)
+	got, err := reloaded.GetMessage(ctx, sess.ID, message.ID)
+	testutil.FailErr(t, "reload settled reasoning", err)
+	if got.ModelReasoning == nil || got.ModelReasoning.Text != trace.Text || string(got.ModelReasoning.Details[0]) != string(trace.Details[0]) {
+		t.Fatal("live patch lost reasoning")
+	}
+	message.ModelReasoning = nil
+	testutil.FailErr(t, "replace without reasoning", mgr.Runner.Transcript.Update(ctx, sess.ID, message.ID, message))
+	got, err = reloaded.GetMessage(ctx, sess.ID, message.ID)
+	testutil.FailErr(t, "reload cleared reasoning", err)
+	if got.ModelReasoning != nil {
+		t.Fatal("replacement retained stale reasoning")
+	}
+	execution, err := st.BeginTurn(ctx, store.TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: `{}`})
+	testutil.FailErr(t, "begin recovery fixture", err)
+	reasoning, err := json.Marshal(trace)
+	testutil.FailErr(t, "encode replay state", err)
+	calls, err := json.Marshal(message.ToolCalls)
+	testutil.FailErr(t, "encode tool calls", err)
+	_, err = st.SettleModelOutput(ctx, store.ModelOutput{ID: "output", TurnAttemptID: execution.Attempt.ID, SessionID: sess.ID, Iteration: 1, MessageID: message.ID, ProviderID: "p", Model: "m", Content: message.Content, ToolCallsJSON: string(calls), ReasoningJSON: string(reasoning), CreatedAt: message.CreatedAt})
+	testutil.FailErr(t, "settle immutable output", err)
+	testutil.FailErr(t, "repair interrupted projection", mgr.Runner.Transcript.RepairPendingOutputs(ctx))
+	got, err = reloaded.GetMessage(ctx, sess.ID, message.ID)
+	testutil.FailErr(t, "reload repaired reasoning", err)
+	if got.ModelReasoning == nil || got.ModelReasoning.Text != trace.Text || len(got.ToolCalls) != 1 {
+		t.Fatal("recovery lost reasoning or tool association")
+	}
+	pending, err := st.ListPendingModelOutputProjections(ctx)
+	testutil.FailErr(t, "read projection acknowledgement", err)
+	if len(pending) != 0 {
+		t.Fatal("repaired output remained pending")
+	}
+	_, err = st.SettleModelOutput(ctx, store.ModelOutput{ID: "output-without-reasoning", TurnAttemptID: execution.Attempt.ID, SessionID: sess.ID, Iteration: 2, MessageID: message.ID, ProviderID: "p", Model: "m", Content: "replaced", ToolCallsJSON: `[]`, ReasoningJSON: `null`, CreatedAt: message.CreatedAt})
+	testutil.FailErr(t, "settle output without replay state", err)
+	testutil.FailErr(t, "repair replacement", mgr.Runner.Transcript.RepairPendingOutputs(ctx))
+	got, err = reloaded.GetMessage(ctx, sess.ID, message.ID)
+	testutil.FailErr(t, "reload replacement", err)
+	if got.ModelReasoning != nil {
+		t.Fatal("recovery revived reasoning absent from immutable output")
+	}
+}

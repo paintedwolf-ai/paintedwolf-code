@@ -61,7 +61,7 @@ func TestModelReasoningRoundTripsThroughTheStore(t *testing.T) {
 	}
 }
 
-// TestModelReasoningFollowsThePatchedRow keeps trace state row-local.
+// Reasoning belongs to the settled message.
 func TestModelReasoningFollowsThePatchedRow(t *testing.T) {
 	ctx := context.Background()
 	s, sessionID := reasoningStore(t)
@@ -96,7 +96,7 @@ func TestModelReasoningFollowsThePatchedRow(t *testing.T) {
 	}
 }
 
-// TestModelReasoningStaysOffTheWire keeps reasoning internal.
+// Public transcript encoding excludes reasoning.
 func TestModelReasoningStaysOffTheWire(t *testing.T) {
 	raw, err := json.Marshal(api.Message{
 		Role:           api.MessageRoleAssistant,
@@ -108,5 +108,16 @@ func TestModelReasoningStaysOffTheWire(t *testing.T) {
 		if strings.Contains(string(raw), needle) {
 			t.Fatalf("wire message leaked %q: %s", needle, raw)
 		}
+	}
+}
+
+func TestDeletingSessionRemovesReasoning(t *testing.T) {
+	s, id := reasoningStore(t)
+	testutil.FailErr(t, "append reasoning", s.AppendMessages(t.Context(), id, api.Message{Role: api.MessageRoleAssistant, ModelReasoning: &api.ModelReasoning{ProviderID: "p", Model: "m", Text: "private"}}))
+	testutil.FailErr(t, "delete session", s.Delete(t.Context(), id))
+	var count int
+	testutil.FailErr(t, "count retained reasoning", s.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM messages WHERE session_id=? AND reasoning_json IS NOT NULL`, id).Scan(&count))
+	if count != 0 {
+		t.Fatal("session deletion retained reasoning")
 	}
 }

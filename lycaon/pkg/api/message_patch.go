@@ -7,9 +7,10 @@ func MergeMessagePatch(existing, patch Message) Message {
 	if patch.Role != "" {
 		merged.Role = patch.Role
 	}
-	// Content and its structured parts replace together.
+	// Content, its parts, and replay state replace together.
 	merged.Content = patch.Content
 	merged.ContentParts = patch.ContentParts
+	merged.ModelReasoning = patch.ModelReasoning
 	// Live patches do not clear compaction stamps.
 	if patch.DietStamp != "" {
 		merged.DietStamp = patch.DietStamp

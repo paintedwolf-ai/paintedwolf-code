@@ -150,6 +150,63 @@ providers:
 
 Streaming and complete responses retain reasoning separately from visible assistant text. Replay is restricted to the exact provider instance and model that produced it; tool-call identities remain paired with their results. Reasoning control (`think_style`, effort mapping, thinking settings) is a separate axis from preserving the response history.
 
+### Reasoning storage and retention
+
+Reasoning is private continuation state attached to the assistant output, with
+its exact provider instance and model identity. Retain both plaintext traces and
+structured provider blocks when returned, including outputs that finish without
+a tool call. They stay separate from visible assistant text and are excluded
+from transcript HTTP/SSE encoding. Reasoning prose has no authority over host
+control, completion, or tool admission.
+
+Settlement stores the screened output in the existing compressed,
+content-addressed model-output envelope and projects it into the message row.
+The immutable envelope supports interrupted-projection recovery; the row supports
+history loading. Both follow the session's retention and deletion lifecycle.
+Do not expire reasoning independently by age or delete it on a model switch:
+resuming, rewinding, or switching back can need the original continuation.
+Prompt compaction changes the request view rather than deleting durable history.
+No additional reasoning archive or diagnostic database is maintained.
+
+A message replacement replaces its reasoning too. Recovery restores the exact
+payload from the settled output, including absence of reasoning. Secret screening
+drops the entire trace if any plaintext or structured block matches; it never
+rewrites a signed block. A retained assistant's content and reasoning are not
+independently summarized or truncated. Whole old exchanges may leave the request
+through normal compaction, while retained tool exchanges keep their replay state.
+
+Adapters select replay without mutating the stored history:
+
+| Transport | Replay selection |
+| --- | --- |
+| Native Ollama | Tool-call assistant rows in the current user intent; host feedback preserves that boundary |
+| Native Anthropic | Matching assistant history, preserving thinking and redacted-thinking blocks |
+| Compatible chat | Matching assistant history in the configured `reasoning_wire` format; `none` omits it |
+| Google tool signatures | Existing signature metadata remains attached to its producing tool call |
+
+Every selection requires the exact originating provider/model pair. Host context
+estimates include retained plaintext, structured payloads, and opaque tool-call
+metadata conservatively;
+Ollama admission counts the actual projected thinking, messages, tool arguments,
+and callable schemas. Required replay state is never clipped to make a request
+fit: existing context admission or compaction must resolve excess.
+
+Storage grows with retained model outputs, independently of the prompt window.
+For `N` outputs averaging `R` bytes of encoded reasoning, the message projection
+adds roughly `N × R` bytes before SQLite overhead. The immutable envelope adds a
+compressed copy; plaintext and structured blocks may themselves contain duplicate
+text required by the transport. For example, 100,000 outputs averaging 10 KiB
+add about 0.95 GiB to message projections, plus compressed envelopes, backups,
+and temporary WAL growth. Compression and content addressing do not impose a
+retention limit. Measure actual bytes and output counts before changing the
+session-wide retention policy; short benchmark sessions cannot establish a
+long-term storage distribution.
+
+Diagnostic captures normally retain reasoning byte counts. Failed empty or
+reasoning-truncated calls may include a redacted tail of at most 2,048 characters;
+if the complete screening buffer exceeds 512 KiB, omit that tail. Diagnostic log
+retention remains independent of the durable session history.
+
 ### Thinking overrides
 
 Settings → AI providers places optional **Thinking overrides** below the model assignments, hidden until **Override thinking** is checked. Turning it off clears the overrides at that scope. Each row belongs to an exact provider instance and model id; the same model served by another provider is a separate choice. Project configuration → AI providers has independent overrides: an unchecked row inherits the device setting, **Use application behavior** masks an inherited fixed setting, and clearing the project row restores inheritance. Assignment changes do not pin or clear thinking settings.
