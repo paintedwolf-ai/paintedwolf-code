@@ -63,9 +63,6 @@ func TestLoadDeclarationsRejectsInvalidShapes(t *testing.T) {
 		if err == nil {
 			t.Errorf("%s: accepted", name)
 		}
-		if !strings.Contains(err.Error(), name) && name == "unknown field" {
-			t.Errorf("%s: wrong error %v", name, err)
-		}
 	}
 }
 

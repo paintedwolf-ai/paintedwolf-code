@@ -2,7 +2,7 @@ package structure
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -12,23 +12,24 @@ import (
 type diagnostics struct {
 	Kind        character
 	Members     []string
-	EntryPoints []string          // declared, for subsystems
+	EntryPoints []string           // declared, for subsystems
 	External    map[string][]string // member → consumer packages outside the directory
-	Isolated    []string          // members with no external consumer that touches any sibling
-	Groups      [][]string        // internally disconnected member groups
+	Isolated    []string           // members no outside consumer imports alongside a sibling
+	Groups      [][]string         // internally disconnected member groups
 }
 
-// analyze computes the diagnostics for one declared directory.
-func analyze(graph *Graph, name string, d declaration) (*diagnostics, error) {
-	members := graph.members("internal/" + name)
+// analyze computes the diagnostics for one declared directory. The key is the
+// declaration's directory: "internal" itself, or one direct child of it.
+func analyze(graph *Graph, key string, d declaration) (*diagnostics, error) {
+	members := graph.members(key)
 	if len(members) == 0 {
-		return nil, fmt.Errorf("declared directory %s has no packages", name)
+		return nil, fmt.Errorf("declared directory %s has no production packages", key)
 	}
 	out := &diagnostics{Kind: d.Kind, Members: members, External: map[string][]string{}}
 	for _, member := range members {
-		out.External[member] = graph.outsideConsumers("internal/"+name, member)
+		out.External[member] = graph.outsideConsumers(key, member)
 	}
-	out.Isolated = isolatedMembers(out.External, "internal/"+name)
+	out.Isolated = isolatedMembers(out.External, key)
 	if d.Kind == subsystem {
 		out.EntryPoints = d.EntryPoints
 	}
@@ -42,14 +43,14 @@ func analyze(graph *Graph, name string, d declaration) (*diagnostics, error) {
 // family contract, both look isolated and may be exactly right.
 func isolatedMembers(external map[string][]string, root string) []string {
 	var out []string
-	for member := range external {
+	for member, consumers := range external {
 		shared := false
-		for _, consumer := range external[member] {
-			for other := range external {
+		for _, consumer := range consumers {
+			for other, otherConsumers := range external {
 				if other == member || !within(root, other) {
 					continue
 				}
-				if contains(external[other], consumer) {
+				if slices.Contains(otherConsumers, consumer) {
 					shared = true
 					break
 				}
@@ -62,22 +63,14 @@ func isolatedMembers(external map[string][]string, root string) []string {
 			out = append(out, member)
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
-func contains(list []string, value string) bool {
-	for _, item := range list {
-		if item == value {
-			return true
-		}
-	}
-	return false
-}
-
 // disconnectedGroups splits members into sets that never reach each other
-// through internal imports. Within a subsystem, disconnected groups are the
-// strongest signal that the declared concern is really several.
+// through internal imports, directly or through one intermediate internal
+// package. Within a declared subsystem, disconnected groups are the strongest
+// signal that the declared concern is really several.
 func disconnectedGroups(graph *Graph, members []string) [][]string {
 	set := map[string]bool{}
 	for _, m := range members {
@@ -87,23 +80,19 @@ func disconnectedGroups(graph *Graph, members []string) [][]string {
 		if set[to] && graph.Imports[from][to] {
 			return true
 		}
-		// An import through an unlisted internal package connects two members
-		// only when that package imports the other side; hub-over-hub edges
-		// count as connections between the groups they join.
-		for _, dep := range graph.Imports[from] {
+		for dep := range graph.Imports[from] {
 			if set[dep] && graph.Imports[dep][to] {
 				return true
 			}
 		}
 		return false
 	}
-	remaining := append([]string{}, members...)
+	remaining := slices.Clone(members)
 	var groups [][]string
 	for len(remaining) > 0 {
 		group := []string{remaining[0]}
 		remaining = remaining[1:]
-		changed := true
-		for changed {
+		for changed := true; changed; {
 			changed = false
 			for i, candidate := range remaining {
 				joined := false
@@ -115,7 +104,7 @@ func disconnectedGroups(graph *Graph, members []string) [][]string {
 				}
 				if joined {
 					group = append(group, candidate)
-					remaining = append(remaining[:i], remaining[i+1:]...)
+					remaining = slices.Delete(remaining, i, i+1)
 					changed = true
 					break
 				}
@@ -123,14 +112,14 @@ func disconnectedGroups(graph *Graph, members []string) [][]string {
 		}
 		groups = append(groups, group)
 	}
-	sort.Slice(groups, func(i, j int) bool { return groups[i][0] < groups[j][0] })
+	slices.SortStableFunc(groups, func(a, b []string) int { return strings.Compare(a[0], b[0]) })
 	return groups
 }
 
 // describe renders the diagnostics as report lines.
-func (d *diagnostics) describe(name string) []string {
+func (d *diagnostics) describe() []string {
 	var lines []string
-	lines = append(lines, fmt.Sprintf("kind: %s", d.Kind))
+	lines = append(lines, "kind: "+string(d.Kind))
 	if len(d.Groups) > 1 {
 		for _, group := range d.Groups {
 			lines = append(lines, "disconnected group: "+strings.Join(group, ", "))
@@ -142,7 +131,8 @@ func (d *diagnostics) describe(name string) []string {
 	if d.Kind == subsystem {
 		var entries []string
 		for _, entry := range d.EntryPoints {
-			if len(d.External) == 0 || externalCount(d, entry) > 0 {
+			member := strings.TrimPrefix(entry, module+"/")
+			if len(d.External[member]) > 0 {
 				entries = append(entries, entry)
 			} else {
 				lines = append(lines, "unused entry point: "+entry)
@@ -153,8 +143,4 @@ func (d *diagnostics) describe(name string) []string {
 		}
 	}
 	return lines
-}
-
-func externalCount(d *diagnostics, entry string) int {
-	return len(d.External[strings.TrimPrefix(entry, module+"/")])
 }

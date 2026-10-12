@@ -35,6 +35,7 @@ type declaration struct {
 // declaration. Directories absent from the map are containers.
 type declarations map[string]declaration
 
+// loadDeclarations reads and validates the declaration document through read.
 func loadDeclarations(read func(string) ([]byte, error)) (declarations, error) {
 	raw, err := read(declarationPath)
 	if err != nil {
@@ -60,8 +61,11 @@ func loadDeclarations(read func(string) ([]byte, error)) (declarations, error) {
 }
 
 func validate(name string, d declaration) error {
-	if name != "" && (!cleanDir(name) || strings.Contains(name, "/lycaon/")) {
-		return fmt.Errorf("directory %q is not a directory under lycaon/internal", name)
+	switch {
+	case name == "internal":
+	case strings.HasPrefix(name, "internal/") && !strings.Contains(strings.TrimPrefix(name, "internal/"), "/") && cleanDir(name):
+	default:
+		return fmt.Errorf("declaration %q is not a directory directly under lycaon/internal", name)
 	}
 	switch d.Kind {
 	case subsystem:

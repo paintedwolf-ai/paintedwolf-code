@@ -5,7 +5,8 @@ import (
 	"go/parser"
 	"go/token"
 	"path"
-	"sort"
+	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -13,27 +14,31 @@ const module = "github.com/lycaon/lycaon"
 
 // Tree is the read view of a checkout the package needs.
 type Tree interface {
-	Files() []string
+	Files() ([]string, error)
 	Read(relative string) ([]byte, error)
 }
 
 // Graph is the production import graph of the engine's Go packages.
-// Imports maps a package directory to the module packages it imports;
-// Consumers is the inverted view.
+// Imports maps a package directory (relative to lycaon/) to the module
+// packages it imports; Consumers is the inverted view; Packages is every
+// package directory with at least one production file.
 type Graph struct {
 	Imports   map[string]map[string]bool
 	Consumers map[string]map[string]bool
+	Packages  map[string]bool
 }
 
 // buildGraph parses production Go files under lycaon/ and records package
-// imports between module packages. Test and contract-test files are excluded:
-// the graph answers how the engine is wired, not how it is verified.
+// imports between module packages. Test files are excluded: the graph answers
+// how the engine is wired, not how it is verified.
 func buildGraph(tree Tree) (*Graph, error) {
-	g := &Graph{Imports: map[string]map[string]bool{}, Consumers: map[string]map[string]bool{}}
-	for _, file := range tree.Files() {
-		if !strings.HasSuffix(file, ".go") || strings.HasSuffix(file, "_test.go") ||
-			!strings.HasPrefix(file, "lycaon/") || strings.HasPrefix(file, "lycaon/test/") ||
-			strings.Contains(file, "/testdata/") {
+	files, err := tree.Files()
+	if err != nil {
+		return nil, fmt.Errorf("list checkout: %w", err)
+	}
+	g := &Graph{Imports: map[string]map[string]bool{}, Consumers: map[string]map[string]bool{}, Packages: map[string]bool{}}
+	for _, file := range files {
+		if !isProductionGo(file) {
 			continue
 		}
 		body, err := tree.Read(file)
@@ -45,8 +50,12 @@ func buildGraph(tree Tree) (*Graph, error) {
 			return nil, fmt.Errorf("parse %s: %w", file, err)
 		}
 		pkg := path.Dir(strings.TrimPrefix(file, "lycaon/"))
+		g.Packages[pkg] = true
 		for _, spec := range parsed.Imports {
-			imported := strings.Trim(spec.Path.Value, `"`)
+			imported, err := strconv.Unquote(spec.Path.Value)
+			if err != nil {
+				continue
+			}
 			if !strings.HasPrefix(imported, module+"/") {
 				continue
 			}
@@ -67,7 +76,17 @@ func buildGraph(tree Tree) (*Graph, error) {
 	return g, nil
 }
 
-// outsideConsumers lists packages outside root that import a member of root.
+func isProductionGo(file string) bool {
+	if !strings.HasSuffix(file, ".go") || strings.HasSuffix(file, "_test.go") {
+		return false
+	}
+	if !strings.HasPrefix(file, "lycaon/") || strings.HasPrefix(file, "lycaon/test/") {
+		return false
+	}
+	return !slices.Contains(strings.Split(file, "/"), "testdata")
+}
+
+// outsideConsumers lists packages outside root that import member.
 func (g *Graph) outsideConsumers(root, member string) []string {
 	var out []string
 	for consumer := range g.Consumers[member] {
@@ -75,7 +94,7 @@ func (g *Graph) outsideConsumers(root, member string) []string {
 			out = append(out, consumer)
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -83,20 +102,13 @@ func within(root, dir string) bool {
 	return dir == root || strings.HasPrefix(dir, root+"/")
 }
 
-// members lists the packages under root, the directory itself first when it
-// carries its own files.
+// members lists the direct package children of root, then the directory
+// itself when it carries production files. Deeper packages belong to their
+// own directory's diagnostics.
 func (g *Graph) members(root string) []string {
 	seen := map[string]bool{}
-	if len(g.Imports[root]) > 0 || len(g.Consumers[root]) > 0 {
-		seen[root] = true
-	}
-	for pkg := range g.Imports {
-		if pkg != root && within(root, pkg) {
-			seen[pkg] = true
-		}
-	}
-	for pkg := range g.Consumers {
-		if pkg != root && within(root, pkg) {
+	for pkg := range g.Packages {
+		if pkg == root || (within(root, pkg) && !strings.Contains(strings.TrimPrefix(pkg, root+"/"), "/")) {
 			seen[pkg] = true
 		}
 	}
@@ -104,6 +116,6 @@ func (g *Graph) members(root string) []string {
 	for pkg := range seen {
 		out = append(out, pkg)
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }

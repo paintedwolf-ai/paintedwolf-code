@@ -44,6 +44,10 @@ internal/coordinator:
     kind: container
     description: Coordinator loop, wake policy, and assembly.
 
+internal/app:
+    kind: container
+    description: Serve composition root; wires hub-to-hub in topical build files.
+
 internal/llm:
     kind: container
     description: Provider registry, dispatch, and shared transport concerns.
