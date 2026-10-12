@@ -1,0 +1,15 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/hitl",
+  "kind": "module",
+  "workstream": "approval-intent-lifecycle",
+  "disposition": "retain",
+  "reason": "HITL owns checkpoint admission, settlement, authority installation, and recovery. Review intent is a derived checkpoint projection in that owner; capability runtimes retain pending state and grants. Keep these transaction and resolution-lock contracts together.",
+  "reviewed_commit": "4b74660224521ef8e48d2ac91fdbc7f8d57c6dea",
+  "ceiling": 51,
+  "boundaries": {
+    "lycaon/internal/hitl/checkpoint_expiry_test.go": "04f494ae92c3f3d7e1e95dccff14d9713888a29abeb7d465b4d73aca72f2d07b",
+    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "168f3818eaaace4232617263387f617f0cebb367fb20044c21eea0ac86e2b062"
+  },
+  "reviewed_shape": "b39bef32438bfee1988481fd6c89445bb83b776e1b5f543dda69d3117d04481a"
+}

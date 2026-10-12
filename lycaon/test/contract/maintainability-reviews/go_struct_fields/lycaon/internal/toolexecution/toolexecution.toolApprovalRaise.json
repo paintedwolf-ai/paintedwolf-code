@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/toolexecution/toolexecution.toolApprovalRaise",
+  "kind": "data_record",
+  "workstream": "approval-intent-lifecycle",
+  "disposition": "retain",
+  "reason": "This record carries one immutable approval request across compilation and checkpoint admission. Review keys accompany the held operations without granting authority. Keep the explicit request fields together instead of hiding their dependencies in a context bag.",
+  "reviewed_commit": "4b74660224521ef8e48d2ac91fdbc7f8d57c6dea",
+  "ceiling": 26,
+  "boundaries": {
+    "lycaon/internal/hitl/checkpoint_expiry_test.go": "04f494ae92c3f3d7e1e95dccff14d9713888a29abeb7d465b4d73aca72f2d07b",
+    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "168f3818eaaace4232617263387f617f0cebb367fb20044c21eea0ac86e2b062"
+  },
+  "reviewed_shape": "e0df4ffb3ec78d1c6304810d75aa983812995fe62afad13d1dc2bf0a96055f92"
+}

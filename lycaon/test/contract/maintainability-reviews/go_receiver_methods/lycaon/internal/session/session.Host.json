@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/session/session.Host",
+  "kind": "construction",
+  "workstream": "approval-intent-lifecycle",
+  "disposition": "retain",
+  "reason": "Session wiring binds existing approval, capability, and repetition owners. Denial suppression belongs to HITL and the repetition guard reads its persisted intent. Retain explicit wiring here without creating another authority owner.",
+  "reviewed_commit": "4b74660224521ef8e48d2ac91fdbc7f8d57c6dea",
+  "ceiling": 40,
+  "boundaries": {
+    "lycaon/internal/hitl/checkpoint_expiry_test.go": "04f494ae92c3f3d7e1e95dccff14d9713888a29abeb7d465b4d73aca72f2d07b",
+    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "168f3818eaaace4232617263387f617f0cebb367fb20044c21eea0ac86e2b062"
+  },
+  "reviewed_shape": "277a3b3de9f9d1ff6f49173f1a8b1ac95fc26d265505aa93d93f3c8296adad9e"
+}

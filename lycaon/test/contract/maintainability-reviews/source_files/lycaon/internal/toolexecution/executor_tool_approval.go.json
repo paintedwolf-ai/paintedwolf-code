@@ -1,14 +1,15 @@
 {
   "category": "source_files",
   "artifact": "lycaon/internal/toolexecution/executor_tool_approval.go",
-  "kind": "module",
-  "workstream": "tool-domains",
+  "kind": "runtime_service",
+  "workstream": "approval-intent-lifecycle",
   "disposition": "retain",
-  "reason": "Approval checkpoint coalescing, waiting, dismissal and denial recording form one ordered protocol. Keep the complete path visible rather than introducing a helper with broad access to approval state.",
-  "reviewed_commit": "f9991b89ce895dc20f77aa80611c2e2217518cdb",
-  "ceiling": 335,
+  "reason": "Approval assembly, suppression, pending joins, waiting, and dismissal form one ordered review protocol. HITL owns persisted intent and authority installation. Retain this protocol without an adapter that hides approval dependencies.",
+  "reviewed_commit": "4b74660224521ef8e48d2ac91fdbc7f8d57c6dea",
+  "ceiling": 341,
   "boundaries": {
-    "lycaon/internal/toolexecution/executor_approval_test.go": "1239875b7c9f21715108debd5af6d37cd667472d296ab6a50a5236f72c5634d7",
-    "lycaon/internal/toolexecution/approval_identity_test.go": "4a3cd3279686d4df1b75cbd80306fcf7a22ac0b1c1dfcf4d4dcd5486c70b1b65"
+    "lycaon/internal/toolexecution/executor_settled_join_test.go": "eb332fa82834d7eaf0305862aca9143e473512cb621eb1ff43621af261494c00",
+    "lycaon/internal/toolexecution/approval_identity_test.go": "0bfda5fdc0a03359333c67eaa9f6aa368cc8bb778c54e1cebe00342b3f21356e",
+    "lycaon/internal/hitl/checkpoint_expiry_test.go": "04f494ae92c3f3d7e1e95dccff14d9713888a29abeb7d465b4d73aca72f2d07b"
   }
 }
