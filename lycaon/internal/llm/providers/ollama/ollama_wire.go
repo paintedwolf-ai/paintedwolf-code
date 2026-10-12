@@ -82,8 +82,8 @@ type MessageProjection struct {
 }
 
 func ProjectMessages(msgs []api.Message, projection MessageProjection) []ollamaChatMessage {
-	msgs = providerwire.SystemPreamble(msgs)
 	msgs = providerwire.ProjectReasoning(msgs, projection.ProviderID, projection.Model, providerwire.ReasoningReplayCurrentToolLoop)
+	msgs = providerwire.SystemPreamble(msgs)
 	out := make([]ollamaChatMessage, 0, len(msgs))
 	// Model templates render images on user turns, so a run of tool results
 	// is followed by one user message carrying their images.

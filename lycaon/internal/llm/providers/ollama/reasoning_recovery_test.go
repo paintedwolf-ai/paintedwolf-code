@@ -56,12 +56,13 @@ func TestOllamaToolContinuationReplaysReasoning(t *testing.T) {
 	req.Messages = append(req.Messages,
 		api.Message{Role: api.MessageRoleAssistant, ToolCalls: completion.ToolCalls, ModelReasoning: completion.ModelReasoning()},
 		api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "read", Content: "file text"}},
-		api.Message{Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Visibility: api.MessageVisibilityInternal, Kind: api.MessageKindUserContinuation, Content: "Current host state."})
+		api.Message{Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Visibility: api.MessageVisibilityInternal, Kind: api.MessageKindUserContinuation, Content: "Current host state."},
+		api.Message{Role: api.MessageRoleSystem, Content: "Current tool availability."})
 	ch, err = p.Stream(t.Context(), req)
 	testutil.FailErr(t, "open tool continuation", err)
 	_, _, err = modelcall.CollectStream(ch)
 	testutil.FailErr(t, "collect tool continuation", err)
-	if len(received.Messages) != 4 || received.Messages[1].Thinking != "Read the file before editing." || len(received.Messages[1].ToolCalls) != 1 || received.Messages[2].ToolName != "read" {
+	if len(received.Messages) != 5 || received.Messages[1].Thinking != "Read the file before editing." || len(received.Messages[1].ToolCalls) != 1 || received.Messages[2].ToolName != "read" {
 		t.Fatalf("tool continuation lost reasoning or association: %+v", received.Messages)
 	}
 }
@@ -102,6 +103,7 @@ func TestOllamaContextAdmissionCountsReplayedReasoning(t *testing.T) {
 	req := modelcall.CompletionRequest{Model: "model", MaxTokens: 1024, Messages: []api.Message{
 		{Role: api.MessageRoleUser, Content: "Continue."},
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{Name: "read"}}, ModelReasoning: &api.ModelReasoning{ProviderID: "local", Model: "model", Text: strings.Repeat("reasoning ", 10000)}},
+		{Role: api.MessageRoleSystem, Content: "Current tool availability."},
 	}}
 	_, _, err := p.Prepare(t.Context(), req, false)
 	if !errors.Is(err, failure.ErrProviderContextTooSmall) {
