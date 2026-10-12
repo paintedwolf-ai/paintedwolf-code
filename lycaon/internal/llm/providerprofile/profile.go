@@ -53,7 +53,7 @@ type Profile struct {
 	// BackgroundUtilityCallTimeout bounds low-priority projection work. Zero
 	// uses UtilityCallTimeout.
 	BackgroundUtilityCallTimeout time.Duration
-	// UtilitySingleFlight serializes lite calls on this instance.
+	// UtilitySingleFlight serializes foreground and utility calls.
 	UtilitySingleFlight bool
 	// ToolResultImages places tool-result pixels on the chat-completions
 	// transport, whose tool messages accept images only on some providers.

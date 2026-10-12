@@ -138,7 +138,8 @@ func TestUtilityLaneGiftWaitsForHolder(t *testing.T) {
 func TestUtilityLaneGiftWaitsForCoordinatorHold(t *testing.T) {
 	lanes := newUtilityLanes()
 	ctx := context.Background()
-	release := lanes.holdCoordinator("ollama-1")
+	release, err := lanes.acquireForeground(ctx, "ollama-1", true)
+	testutil.FailErr(t, "foreground admission", err)
 
 	got := make(chan error, 1)
 	go func() {
@@ -162,16 +163,15 @@ func TestUtilityLaneGiftWaitsForCoordinatorHold(t *testing.T) {
 	}
 }
 
-// testOverlayWait replaces OverlayLaneWait where the assertion is that the wait
-// is bounded and reports ErrLiteBusy, not how long the bound is.
-// TestOverlayLaneWaitDefaultHolds pins the shipped value.
+// Short waits exercise busy outcomes without delaying the suite.
 const testOverlayWait = 50 * time.Millisecond
 
 func TestUtilityLaneOverlaySkipsWhenCoordinatorHeld(t *testing.T) {
 	lanes := newUtilityLanes()
 	lanes.overlayWait = testOverlayWait
 	ctx := context.Background()
-	release := lanes.holdCoordinator("ollama-1")
+	release, err := lanes.acquireForeground(ctx, "ollama-1", true)
+	testutil.FailErr(t, "foreground admission", err)
 	t.Cleanup(release)
 
 	var gotBusy atomic.Bool
