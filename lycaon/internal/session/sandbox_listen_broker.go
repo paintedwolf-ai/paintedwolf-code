@@ -50,10 +50,8 @@ func (b *ListenCheckpointBroker) Await(ctx context.Context, in tools.LocalListen
 		return tools.LocalListenResult{Authorized: true, Ports: covered}, nil
 	}
 	if b.ApprovalsDisabled != nil && b.ApprovalsDisabled(in.ProjectDir) {
-		b.Runtime.ClearDenied(invokingSessionID, listenAxisKey)
 		b.Runtime.GrantSessionPorts(rootSessionID, nil)
 		if b.Loopback != nil {
-			b.Loopback.ClearDenied(invokingSessionID, loopbackAxisKey)
 			b.Loopback.GrantSessionPorts(rootSessionID, nil)
 		}
 		return tools.LocalListenResult{Authorized: true}, nil
@@ -69,10 +67,8 @@ func (b *ListenCheckpointBroker) Await(ctx context.Context, in tools.LocalListen
 	}
 	verdict, _ := gate.Evaluate(facts, b.posture(in.ProjectDir))
 	if verdict != gate.Ask {
-		b.Runtime.ClearDenied(invokingSessionID, listenAxisKey)
 		b.Runtime.GrantSessionPorts(rootSessionID, ports)
 		if reach := connectCoGrant(ctx, b.Provenance, invokingSessionID, in.ProjectDir, ports); len(reach) > 0 && b.Loopback != nil {
-			b.Loopback.ClearDenied(invokingSessionID, loopbackAxisKey)
 			b.Loopback.GrantSessionPorts(rootSessionID, reach)
 		}
 		return tools.LocalListenResult{Authorized: true, Ports: ports}, nil
@@ -150,9 +146,6 @@ func (b *ListenCheckpointBroker) raiseListenCard(
 	if err != nil || !resolved.Answered {
 		return tools.LocalListenResult{}, err
 	}
-	if resolved.Authorized && b.Loopback != nil {
-		b.Loopback.ClearDenied(invokingSessionID, loopbackAxisKey)
-	}
 	return tools.LocalListenResult{
 		Raised: resolved.Raised, Authorized: resolved.Authorized, Denied: resolved.Denied,
 		SecretApproved: resolved.Authorized && in.SecretPermission != nil,
@@ -168,25 +161,25 @@ func (b *ListenCheckpointBroker) buildListenCard(
 	summary := sandboxAskCommandSummary(in.Command)
 	label := listenGrantLabel(ports)
 	grantAction := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "local_listen",
-Args: map[string]any{"listen_ports": listenPortInts(ports)},
-},
-Scope: hitl.ActionScope{
-ProjectID: in.ProjectID,
-ProjectDir: in.ProjectDir,
-SessionID: invokingSessionID,
-RootSessionID: rootSessionID,
-},
-Execution: hitl.ActionExecution{
-Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
-			ProjectID:        in.ProjectID,
-			Roots:            projectRoots(in.ProjectDir),
-			LocalListen:      true,
-			LocalListenPorts: ports,
-		}),
-},
-}
+		Invocation: hitl.ActionInvocation{
+			Tool: "local_listen",
+			Args: map[string]any{"listen_ports": listenPortInts(ports)},
+		},
+		Scope: hitl.ActionScope{
+			ProjectID:     in.ProjectID,
+			ProjectDir:    in.ProjectDir,
+			SessionID:     invokingSessionID,
+			RootSessionID: rootSessionID,
+		},
+		Execution: hitl.ActionExecution{
+			Contained: hitl.ContainedForAction(hitl.ActionConfineInputs{
+				ProjectID:        in.ProjectID,
+				Roots:            projectRoots(in.ProjectDir),
+				LocalListen:      true,
+				LocalListenPorts: ports,
+			}),
+		},
+	}
 	chatGrant := listenChatGrant(grantAction)
 	options := portAuthorityLadder(
 		"approve_local_listen_once",

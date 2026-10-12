@@ -126,6 +126,7 @@ func (m *Checkpoints) RequestCheckpoint(ctx context.Context, req CheckpointReque
 		if err != nil {
 			return nil, err
 		}
+		row.Payload["review_keys"] = ApprovalReviewKeys(req)
 		row.Payload["approval_plan"] = stored
 		seedPayloadConsequence(&row, plan)
 		seedPayloadDetection(&row, req)
@@ -365,15 +366,6 @@ func (m *Checkpoints) ListPending(ctx context.Context, sessionID string, kind *a
 // checkpoint was issued. It feeds the cross-project attention view in one read.
 func (m *Checkpoints) OldestPendingCheckpoints(ctx context.Context) (map[string]time.Time, error) {
 	return m.Store.OldestPendingBySession(ctx)
-}
-
-// SessionApprovalDenied is true when the latest resolved tool_approval was rejected.
-func (m *Checkpoints) SessionApprovalDenied(ctx context.Context, sessionID string) (bool, error) {
-	status, ok, err := m.Store.LatestResolvedToolApprovalStatus(ctx, sessionID)
-	if err != nil || !ok {
-		return false, err
-	}
-	return status == DecisionStatusRejected || status == DecisionStatusExpired, nil
 }
 
 // ListPendingForParent includes worker checkpoints without enumerating old workers.

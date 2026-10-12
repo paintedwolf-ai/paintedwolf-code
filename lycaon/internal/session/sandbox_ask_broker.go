@@ -3,7 +3,6 @@ package session
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
@@ -13,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -44,6 +44,7 @@ type sandboxAskRequest struct {
 	InvokingSessionID string
 	// Key is the capability's axis key — a normalized path, a port set, an axis name.
 	Key        string
+	ReviewKeys []string
 	ToolCallID string
 	ProjectID  string
 	// Tool and AskFamily attribute a suppressed ask in the authz ledger.
@@ -85,11 +86,23 @@ func awaitSandboxAsk(ctx context.Context, req sandboxAskRequest) (sandboxAskReso
 		return out, &toolrejection.ToolReject{Code: isolation.CodeApprovalUnavailable, Data: map[string]any{"reason": "reviewed capabilities changed before execution"}}
 	}
 
+	card, err := req.BuildCard()
+	if err != nil {
+		return out, err
+	}
+	reviewKeys := hitl.ApprovalReviewKeys(hitl.CheckpointRequest{ReviewKeys: append(req.ReviewKeys, "sandbox:"+req.AskFamily+":"+req.Key)})
+	for _, key := range reviewKeys {
+		suppressed, err := req.Checkpoints.ApprovalReviewSuppressed(ctx, req.InvokingSessionID, key)
+		if err != nil {
+			return out, err
+		}
+		if suppressed {
+			recordSandboxAskSuppressed(ctx, req, authzledger.AskSuppressedCausePriorDeny)
+			return sandboxAskResolution{Answered: true, Raised: true, Denied: true}, nil
+		}
+	}
 	begin, existing := req.Gate.Begin(req.InvokingSessionID, req.Key, req.ToolCallID)
 	switch begin {
-	case approvalstate.SandboxAskSkipDenied:
-		recordSandboxAskSuppressed(ctx, req, authzledger.AskSuppressedCausePriorDeny)
-		return sandboxAskResolution{Answered: true, Raised: true, Denied: true}, nil
 	case approvalstate.SandboxAskSkipToolCall:
 		recordSandboxAskSuppressed(ctx, req, authzledger.AskSuppressedCauseDuplicateToolCall)
 		return out, nil
@@ -100,24 +113,13 @@ func awaitSandboxAsk(ctx context.Context, req sandboxAskRequest) (sandboxAskReso
 		return out, nil
 	}
 
-	card, err := req.BuildCard()
-	if err != nil {
-		req.Gate.AbortMint(req.InvokingSessionID, req.ToolCallID)
-		return out, err
-	}
 	checkpoint := hitl.CheckpointRequest{
 		SessionID: req.InvokingSessionID, Kind: api.CheckpointKindToolApproval, Title: card.Title,
 		ToolCallID: req.ToolCallID, ProjectID: req.ProjectID, Type: hitl.DecisionTypeApprove,
 		ProposedAction: &card.Action, ApprovalPlan: card.Plan, Decision: card.Decision,
-		ApprovalMatches: card.ApprovalMatches,
+		ApprovalMatches: card.ApprovalMatches, ReviewKeys: reviewKeys,
 	}
-	if err := hitl.PrepareApproval(ctx, checkpoint, func(final *hitl.CheckpointResponse) {
-		if hitl.CheckpointAuthorizes(final) {
-			req.Gate.ClearDenied(req.InvokingSessionID, req.Key)
-		} else {
-			req.Gate.RecordDenied(req.InvokingSessionID, req.Key)
-		}
-	}); err != nil {
+	if err := hitl.PrepareApproval(ctx, checkpoint); err != nil {
 		req.Gate.AbortMint(req.InvokingSessionID, req.ToolCallID)
 		return out, err
 	}
@@ -135,16 +137,12 @@ func settleSandboxAsk(ctx context.Context, req sandboxAskRequest, checkpointID s
 	final, err := hitl.WaitForCheckpoint(ctx, req.Checkpoints, checkpointID)
 	if err != nil {
 		if minted {
-			req.Gate.Finish(req.InvokingSessionID, req.Key, true)
+			req.Gate.Finish(req.InvokingSessionID, req.Key)
 		}
 		return sandboxAskResolution{}, err
 	}
-	authorized := hitl.CheckpointAuthorizes(final)
 	if minted {
-		req.Gate.Finish(req.InvokingSessionID, req.Key, !authorized)
-		if authorized {
-			req.Gate.ClearDenied(req.InvokingSessionID, req.Key)
-		}
+		req.Gate.Finish(req.InvokingSessionID, req.Key)
 	}
 	return sandboxAskAnswer(final), nil
 }

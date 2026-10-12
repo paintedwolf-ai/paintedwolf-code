@@ -1,6 +1,7 @@
 package toolexecution
 
 import (
+	"context"
 	"github.com/lycaon/lycaon/internal/capabilitygrants"
 
 	"github.com/lycaon/lycaon/internal/toolapproval"
@@ -36,11 +37,11 @@ func TestApprovalRejectsUnencodableIdentityBeforeCoalescing(t *testing.T) {
 				return e
 			}()
 			action := hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"invalid": make(chan int)},
-},
-}
+				Invocation: hitl.ActionInvocation{
+					Tool: "command",
+					Args: map[string]any{"invalid": make(chan int)},
+				},
+			}
 			response, err := executor.Approvals.raiseAndWaitToolApproval(t.Context(), toolApprovalRaise{Action: action, CoalesceKey: coalesceKey})
 			if err == nil || response != nil || coalescer.called {
 				t.Fatalf("unencodable action reached coalescing: response=%+v err=%v coalesced=%t", response, err, coalescer.called)
@@ -57,4 +58,8 @@ Args: map[string]any{"invalid": make(chan int)},
 			}
 		})
 	}
+}
+
+func (identityCheckpointManager) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
 }

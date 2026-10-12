@@ -35,7 +35,9 @@ type sessionEffects struct {
 
 // MemoryDoomLoopGuard keeps bounded per-session counters in memory.
 type MemoryDoomLoopGuard struct {
-	mu sync.RWMutex
+	mu           sync.RWMutex
+	reviewIntent func(context.Context, string) (string, error)
+	intents      scopedstore.LRU[string]
 	// pageTarget groups live handles by target; unresolved handles retain their ids.
 	pageTarget func(sessionID, pageID string) string
 	// states counts responses with identical invocations per session.
@@ -236,6 +238,9 @@ func (g *MemoryDoomLoopGuard) Check(ctx context.Context, sessionID, responseID, 
 	}
 	if strings.EqualFold(strings.TrimSpace(tool), "terminal_send") {
 		return true, 0, "", nil
+	}
+	if err := g.refreshReviewIntent(ctx, sessionID); err != nil {
+		return false, 0, "", err
 	}
 	key, err := g.doomLoopKey(sessionID, tool, args)
 	if err != nil {

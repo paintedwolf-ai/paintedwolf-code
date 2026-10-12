@@ -77,35 +77,12 @@ func (r *SandboxPortGrantRuntime) AbortMint(rootSessionID, toolCallID string) {
 	r.guard.abortMint(rootSessionID, toolCallID)
 }
 
-// Finish clears pending after HITL resolves. When denied, inserts deny-set.
-func (r *SandboxPortGrantRuntime) Finish(rootSessionID, portKey string, denied bool) {
+// Finish releases the pending review.
+func (r *SandboxPortGrantRuntime) Finish(rootSessionID, portKey string) {
 	if r == nil {
 		return
 	}
-	r.guard.finish(rootSessionID, portKey, denied)
-}
-
-// RecordDenied preserves concurrent pending reviews.
-func (r *SandboxPortGrantRuntime) RecordDenied(rootSessionID, portKey string) {
-	if r != nil {
-		r.guard.recordDenied(rootSessionID, portKey)
-	}
-}
-
-// ClearDenied permits another review of the capability.
-func (r *SandboxPortGrantRuntime) ClearDenied(rootSessionID, portKey string) {
-	if r == nil {
-		return
-	}
-	r.guard.clearDenied(rootSessionID, portKey)
-}
-
-// NoteUserIntentBoundary clears the chat's deny-set on a new user turn.
-func (r *SandboxPortGrantRuntime) NoteUserIntentBoundary(chatSessionID string) {
-	if r == nil {
-		return
-	}
-	r.guard.noteUserIntentBoundary(chatSessionID)
+	r.guard.finish(rootSessionID, portKey)
 }
 
 // GrantSessionPorts records implicit chat authority.

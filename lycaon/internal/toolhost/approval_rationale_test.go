@@ -362,3 +362,7 @@ func TestApprovalRationale_mockStub(t *testing.T) {
 func (p *patchCapture) ListPendingForParent(context.Context, string, *api.CheckpointKind) ([]api.CheckpointEvent, error) {
 	return nil, nil
 }
+
+func (p *patchCapture) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
+}

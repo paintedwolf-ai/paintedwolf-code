@@ -136,7 +136,7 @@ func (l *GateRepeatLedger) NoteAsk(chatSessionID, reasonKey, subject string) Rep
 	return state.snapshot(reasonKey, subject)
 }
 
-// NoteSuppressed records a SkipDenied ask that never minted a card.
+// NoteSuppressed records an ask that did not mint a card.
 func (l *GateRepeatLedger) NoteSuppressed(chatSessionID, reasonKey, subject string) {
 	if l == nil {
 		return

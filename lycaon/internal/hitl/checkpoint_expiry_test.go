@@ -20,16 +20,16 @@ func TestCheckpointAutoExpiresToDenied(t *testing.T) {
 	mgr.SetCheckpointExpiry(func() time.Duration { return 15 * time.Millisecond })
 
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
-		SessionID:      sessionID,
-		Kind:           api.CheckpointKindToolApproval,
-		Type:           hitl.DecisionTypeApprove,
-		Title:          "Approve command",
+		SessionID: sessionID,
+		Kind:      api.CheckpointKindToolApproval,
+		Type:      hitl.DecisionTypeApprove,
+		Title:     "Approve command",
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo hi"},
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "echo hi"},
+			},
+		},
 	})
 	testutil.FailErr(t, "mgr.RequestCheckpoint failed", err)
 
@@ -46,8 +46,8 @@ Args: map[string]any{"command": "echo hi"},
 		}
 		denied, derr := mgr.SessionApprovalDenied(ctx, sessionID)
 		testutil.FailErr(t, "SessionApprovalDenied", derr)
-		if !denied {
-			t.Fatal("expired checkpoint must count as a denied approval")
+		if denied {
+			t.Fatal("expiry must not suppress a new approval review")
 		}
 		return
 	}
@@ -70,16 +70,16 @@ func TestCheckpointExpiryNotifiesToolApprovalTerminal(t *testing.T) {
 
 	const grantKey = "command\x00\x00{\"command\":\"echo hi\"}"
 	resp, err := requestExplicitApprovalCheckpoint(t, ctx, mgr, hitl.CheckpointRequest{
-		SessionID:        sessionID,
-		Kind:             api.CheckpointKindToolApproval,
-		Type:             hitl.DecisionTypeApprove,
-		Title:            "Approve command",
-		ProposedAction:   &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo hi"},
-},
-},
+		SessionID: sessionID,
+		Kind:      api.CheckpointKindToolApproval,
+		Type:      hitl.DecisionTypeApprove,
+		Title:     "Approve command",
+		ProposedAction: &hitl.ProposedAction{
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "echo hi"},
+			},
+		},
 		JoinedCount:      1,
 		CoalesceChat:     sessionID,
 		CoalesceGrantKey: grantKey,
@@ -120,11 +120,11 @@ func TestRestorePendingExpiresFromOriginalCreationTime(t *testing.T) {
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
 		Type: hitl.DecisionTypeApprove, Title: "Old approval",
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo old"},
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "echo old"},
+			},
+		},
 	})
 	testutil.FailErr(t, "create pending checkpoint", err)
 	_, err = sqlDB.ExecContext(ctx, "UPDATE checkpoints SET created_at = ? WHERE id = ?", db.FormatTime(time.Now().UTC().Add(-time.Hour)), resp.CheckpointID)
@@ -154,12 +154,12 @@ func TestRestorePendingRebuildsCoalescingBeforeExpiry(t *testing.T) {
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
 		Type: hitl.DecisionTypeApprove, Title: "Restored approval",
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo restored"},
-},
-},
-		CoalesceChat:   sessionID, CoalesceGrantKey: "restored-key",
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "echo restored"},
+			},
+		},
+		CoalesceChat: sessionID, CoalesceGrantKey: "restored-key",
 	})
 	testutil.FailErr(t, "create pending checkpoint", err)
 
@@ -187,46 +187,6 @@ Args: map[string]any{"command": "echo restored"},
 	}
 }
 
-func TestRestoreRejectedToolApprovalDenials(t *testing.T) {
-	sqlDB, original, sessionID := newTestManager(t)
-	ctx := testdbseed.OwnerCaller(t, context.Background(), sqlDB)
-	insertSession(t, sqlDB, sessionID)
-	resp, err := requestExplicitApprovalCheckpoint(t, ctx, original, hitl.CheckpointRequest{
-		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
-		Type: hitl.DecisionTypeApprove, Title: "Denied approval",
-		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo denied"},
-},
-},
-		CoalesceChat:   sessionID, CoalesceGrantKey: "denied-key",
-	})
-	testutil.FailErr(t, "create checkpoint", err)
-	_, err = original.ResolveCheckpoint(ctx, sessionID, resp.CheckpointID, api.CheckpointKindToolApproval,
-		&hitl.DecisionResult{Approved: false}, nil)
-	testutil.FailErr(t, "reject checkpoint", err)
-
-	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), nil, authzcontext.SQLRecorder(sqlDB))
-	var restored []hitl.StoredCheckpoint
-	restarted.Authority.SetToolApprovalDenyRestoreHook(func(row hitl.StoredCheckpoint) { restored = append(restored, row) })
-	testutil.FailErr(t, "restore rejected tool approvals", restarted.Authority.RestoreRejectedToolApprovalDenials(ctx))
-	if len(restored) != 1 || restored[0].ID != resp.CheckpointID {
-		t.Fatalf("restored denials = %+v", restored)
-	}
-
-	// A visible user intent after the denial is the boundary that clears the
-	// deny set, so a restart after it restores nothing for this chat.
-	insertUserIntentMessage(t, sqlDB, sessionID, "msg-after-denial", time.Now().Add(time.Second))
-	afterBoundary := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), nil, authzcontext.SQLRecorder(sqlDB))
-	restored = nil
-	afterBoundary.Authority.SetToolApprovalDenyRestoreHook(func(row hitl.StoredCheckpoint) { restored = append(restored, row) })
-	testutil.FailErr(t, "restore after intent boundary", afterBoundary.Authority.RestoreRejectedToolApprovalDenials(ctx))
-	if len(restored) != 0 {
-		t.Fatalf("denial restored across an intent boundary: %+v", restored)
-	}
-}
-
 func TestStoppedCheckpointsPreservePendingRowsForRestart(t *testing.T) {
 	database, original, sessionID := newTestManager(t)
 	ctx := testdbseed.OwnerCaller(t, t.Context(), database)
@@ -235,11 +195,11 @@ func TestStoppedCheckpointsPreservePendingRowsForRestart(t *testing.T) {
 	response, err := requestExplicitApprovalCheckpoint(t, ctx, original, hitl.CheckpointRequest{
 		SessionID: sessionID, Kind: api.CheckpointKindToolApproval,
 		ProposedAction: &hitl.ProposedAction{
-Invocation: hitl.ActionInvocation{
-Tool: "command",
-Args: map[string]any{"command": "echo restart"},
-},
-},
+			Invocation: hitl.ActionInvocation{
+				Tool: "command",
+				Args: map[string]any{"command": "echo restart"},
+			},
+		},
 	})
 	testutil.FailErr(t, "request pending approval", err)
 	testutil.FailErr(t, "stop original checkpoint expiries", original.StopExpiryTimers(ctx))
@@ -251,12 +211,123 @@ Args: map[string]any{"command": "echo restart"},
 	_, err = database.ExecContext(ctx, "UPDATE checkpoints SET created_at = ? WHERE id = ?", db.FormatTime(time.Now().UTC().Add(-2*time.Hour)), response.CheckpointID)
 	testutil.FailErr(t, "age original deadline", err)
 	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
-	t.Cleanup(func() { testutil.FailErr(t, "stop restored checkpoint expiries", restarted.StopExpiryTimers(context.WithoutCancel(ctx))) })
+	t.Cleanup(func() {
+		testutil.FailErr(t, "stop restored checkpoint expiries", restarted.StopExpiryTimers(context.WithoutCancel(ctx)))
+	})
 	restarted.SetCheckpointExpiry(func() time.Duration { return time.Hour })
 	testutil.FailErr(t, "restore approval after shutdown", restarted.RestorePending(ctx))
 	settled, err := restarted.PollCheckpoint(ctx, response.CheckpointID)
 	testutil.FailErr(t, "read restored expiry", err)
 	if settled.Status != hitl.DecisionStatusExpired {
 		t.Fatalf("restored status=%s, want expired from original deadline", settled.Status)
+	}
+}
+
+func TestApprovalReviewIntentSurvivesRestartAndRejectsLateDenials(t *testing.T) {
+	for _, renewal := range []string{"message", "continuation", "redirect"} {
+		t.Run(renewal, func(t *testing.T) {
+			database, checkpoints, chat := newTestManager(t)
+			insertSession(t, database, chat)
+			ctx := testdbseed.OwnerCaller(t, t.Context(), database)
+			checkpoints.SetCheckpointExpiry(func() time.Duration { return 0 })
+			request := func(session, key string) string {
+				t.Helper()
+				response, err := requestExplicitApprovalCheckpoint(t, ctx, checkpoints, hitl.CheckpointRequest{
+					SessionID: session, Kind: api.CheckpointKindToolApproval, ReviewKeys: []string{key},
+					ProposedAction: &hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "command", Args: map[string]any{"command": "fixture"}}},
+				})
+				testutil.FailErr(t, "request review", err)
+				return response.CheckpointID
+			}
+			reject := func(session, checkpoint, direction string) {
+				t.Helper()
+				_, err := checkpoints.ResolveCheckpoint(ctx, session, checkpoint, api.CheckpointKindToolApproval,
+					&hitl.DecisionResult{Comments: direction}, nil)
+				testutil.FailErr(t, "reject review", err)
+			}
+			assertSuppressed := func(manager *hitl.Checkpoints, session, key string, want bool) {
+				t.Helper()
+				got, err := manager.ApprovalReviewSuppressed(ctx, session, key)
+				testutil.FailErr(t, "read suppression", err)
+				if got != want {
+					t.Fatalf("suppression for %s/%s = %v, want %v", session, key, got, want)
+				}
+			}
+			for _, child := range []string{"worker-a", "worker-b"} {
+				testdbseed.InsertSession(t, database, child, testdbseed.DefaultProjectID)
+				_, err := database.ExecContext(ctx, "UPDATE sessions SET parent_session_id = ? WHERE id = ?", chat, child)
+				testutil.FailErr(t, "attach worker", err)
+			}
+			beforeIntent, err := checkpoints.ApprovalReviewIntent(ctx, chat)
+			testutil.FailErr(t, "read initial intent", err)
+			workerIntent, err := checkpoints.ApprovalReviewIntent(ctx, "worker-a")
+			testutil.FailErr(t, "read worker intent", err)
+			if workerIntent != beforeIntent {
+				t.Fatal("worker intent differs from root")
+			}
+			const key = "sandbox:read_path:/protected"
+			denied := request("worker-a", key)
+			late := request("worker-a", "late-review")
+			reject("worker-a", denied, "")
+			assertSuppressed(checkpoints, "worker-b", key, true)
+			assertSuppressed(checkpoints, chat, "other-path", false)
+			restarted := hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
+			assertSuppressed(restarted, chat, key, true)
+			switch renewal {
+			case "message", "continuation":
+				insertUserIntentMessage(t, database, chat, "renewal", time.Now())
+				if renewal == "continuation" {
+					_, err := database.ExecContext(ctx, "UPDATE messages SET kind = 'user_continuation' WHERE id = 'renewal'")
+					testutil.FailErr(t, "mark user continuation", err)
+				}
+			case "redirect":
+				redirect := request("worker-b", "redirect")
+				reject("worker-b", redirect, "Fix the request and try again.")
+				assertSuppressed(checkpoints, chat, "redirect", false)
+			}
+			assertSuppressed(checkpoints, "worker-b", key, false)
+			renewedIntent, err := checkpoints.ApprovalReviewIntent(ctx, chat)
+			testutil.FailErr(t, "read renewed intent", err)
+			if renewedIntent == beforeIntent {
+				t.Fatal("fresh input did not renew intent")
+			}
+			reject("worker-a", late, "")
+			assertSuppressed(checkpoints, chat, "late-review", false)
+			restarted = hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
+			assertSuppressed(restarted, "worker-b", key, false)
+			assertSuppressed(restarted, chat, "late-review", false)
+			restoredIntent, err := restarted.ApprovalReviewIntent(ctx, "worker-b")
+			testutil.FailErr(t, "read restored intent", err)
+			if restoredIntent != renewedIntent {
+				t.Fatal("late denial or restart changed renewed intent")
+			}
+			newAttempt := request("worker-b", key)
+			reject("worker-b", newAttempt, "")
+			assertSuppressed(checkpoints, chat, key, true)
+			testdbseed.InsertSession(t, database, "unrelated", testdbseed.DefaultProjectID)
+			assertSuppressed(checkpoints, "unrelated", key, false)
+		})
+	}
+}
+
+func TestCanceledReviewDoesNotSuppressAnotherAsk(t *testing.T) {
+	database, checkpoints, chat := newTestManager(t)
+	insertSession(t, database, chat)
+	ctx := testdbseed.OwnerCaller(t, t.Context(), database)
+	response, err := requestExplicitApprovalCheckpoint(t, ctx, checkpoints, hitl.CheckpointRequest{
+		SessionID: chat, Kind: api.CheckpointKindToolApproval, ReviewKeys: []string{"request"},
+		ProposedAction: &hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "command"}},
+	})
+	testutil.FailErr(t, "request review", err)
+	testutil.FailErr(t, "cancel review", checkpoints.CancelPendingForSession(ctx, chat, "stop"))
+	final, err := checkpoints.PollCheckpoint(ctx, response.CheckpointID)
+	testutil.FailErr(t, "read canceled review", err)
+	if final.Status != hitl.DecisionStatusCanceled {
+		t.Fatalf("status = %s", final.Status)
+	}
+	suppressed, err := checkpoints.ApprovalReviewSuppressed(ctx, chat, "request")
+	testutil.FailErr(t, "read suppression", err)
+	if suppressed {
+		t.Fatal("cancellation suppressed a later review")
 	}
 }

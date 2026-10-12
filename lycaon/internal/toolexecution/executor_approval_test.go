@@ -677,3 +677,15 @@ func (m *expireHITL) ListPendingForParent(context.Context, string, *api.Checkpoi
 func (m *asyncHITL) ListPendingForParent(context.Context, string, *api.CheckpointKind) ([]api.CheckpointEvent, error) {
 	return nil, nil
 }
+
+func (m *rejectHITL) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
+func (m *expireHITL) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
+func (m *asyncHITL) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
+}

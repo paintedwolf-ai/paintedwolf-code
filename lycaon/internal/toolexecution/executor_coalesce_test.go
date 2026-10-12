@@ -170,8 +170,6 @@ func (a coalesceAdapter) AbortMint(chat, key string) { a.rt.AbortMint(chat, key)
 func (a coalesceAdapter) ClearPending(chat, key string) {
 	a.rt.ClearPending(chat, key)
 }
-func (a coalesceAdapter) RecordDeny(chat, key string) { a.rt.RecordDeny(chat, key) }
-func (a coalesceAdapter) ClearDeny(chat, key string)  { a.rt.ClearDeny(chat, key) }
 func (a coalesceAdapter) NoteJoin(chat, key, tc string) int {
 	return a.rt.NoteJoin(chat, key, tc)
 }
@@ -489,4 +487,12 @@ func (m *coalesceHITL) ListPendingForParent(context.Context, string, *api.Checkp
 
 func (m *failOnceHITL) ListPendingForParent(context.Context, string, *api.CheckpointKind) ([]api.CheckpointEvent, error) {
 	return nil, nil
+}
+
+func (m *coalesceHITL) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+
+func (m *failOnceHITL) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
+	return false, nil
 }

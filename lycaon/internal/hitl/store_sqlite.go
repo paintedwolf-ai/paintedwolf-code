@@ -39,15 +39,18 @@ func (s *SQLStore) SessionProjectID(ctx context.Context, sessionID string) (stri
 
 // Insert commits a checkpoint and its opening event together.
 func (s *SQLStore) Insert(ctx context.Context, row StoredCheckpoint) error {
-	params, err := checkpointInsertParams(row)
-	if err != nil {
-		return err
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := s.captureReviewIntent(ctx, tx, &row); err != nil {
+		return err
+	}
+	params, err := checkpointInsertParams(row)
+	if err != nil {
+		return err
+	}
 	if err := s.queries.WithTx(tx).InsertCheckpoint(ctx, params); err != nil {
 		return fmt.Errorf("insert checkpoint: %w", err)
 	}
@@ -255,27 +258,6 @@ func (s *SQLStore) OldestPendingBySession(ctx context.Context) (map[string]time.
 			return nil, fmt.Errorf("pending checkpoint %s created_at: %w", row.SessionID, err)
 		}
 		out[row.SessionID] = issued
-	}
-	return out, nil
-}
-
-// ListRejectedToolApprovals returns the denials resolved after their chat's
-// latest user intent boundary; earlier denials no longer coalesce anything.
-func (s *SQLStore) ListRejectedToolApprovals(ctx context.Context) ([]StoredCheckpoint, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	rows, err := s.queries.ListRejectedToolApprovalCheckpoints(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("list rejected tool approvals: %w", err)
-	}
-	out := make([]StoredCheckpoint, 0, len(rows))
-	for _, stored := range rows {
-		row, err := checkpointFromRow(stored)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, *row)
 	}
 	return out, nil
 }

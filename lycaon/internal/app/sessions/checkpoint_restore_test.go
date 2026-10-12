@@ -13,14 +13,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestCheckpointRestartRestoresJoinedApprovalAndDurableDenial(t *testing.T) {
+func TestCheckpointRestartRestoresJoinedApproval(t *testing.T) {
 	database := testdbfixture.Open(t, "checkpoint-restore.db")
 	testdbseed.InsertSession(t, database, "chat", testdbseed.DefaultProjectID)
 	saved := hitl.NewSQLStore(database)
-	resolvedAt := time.Now()
 	for _, row := range []hitl.StoredCheckpoint{
 		{ID: "pending", SessionID: "chat", ProjectID: testdbseed.DefaultProjectID, Kind: api.CheckpointKindToolApproval, Status: hitl.DecisionStatusPending, Type: hitl.DecisionTypeApprove, Title: "Pending command", ToolName: "command", CreatedAt: time.Now(), Payload: map[string]any{"coalesce_chat": "chat", "coalesce_grant_key": "pending-key", "joined_count": 3, "joined_tool_call_ids": []any{"call-1", "call-2", "call-3"}}},
-		{ID: "rejected", SessionID: "chat", ProjectID: testdbseed.DefaultProjectID, Kind: api.CheckpointKindToolApproval, Status: hitl.DecisionStatusRejected, ResolvedAt: &resolvedAt, Type: hitl.DecisionTypeApprove, Title: "Rejected command", ToolName: "command", CreatedAt: time.Now(), Payload: map[string]any{"coalesce_grant_key": "denied-key"}},
 	} {
 		testutil.FailErr(t, "persist approval before restart", saved.Insert(t.Context(), row))
 	}
@@ -31,9 +29,5 @@ func TestCheckpointRestartRestoresJoinedApprovalAndDurableDenial(t *testing.T) {
 	action, id := coalesce.Begin("chat", "pending-key")
 	if action != approvalstate.ToolApprovalCoalesceJoin || id != "pending" {
 		t.Fatalf("restart duplicated pending approval: %v,%q", action, id)
-	}
-	action, _ = coalesce.Begin("chat", "denied-key")
-	if action != approvalstate.ToolApprovalCoalesceSkipDenied {
-		t.Fatalf("restart forgot durable denial: %v", action)
 	}
 }

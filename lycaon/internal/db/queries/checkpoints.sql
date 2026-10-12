@@ -39,28 +39,6 @@ SELECT session_id, CAST(MIN(created_at) AS TEXT) AS oldest_created_at
 FROM pending_checkpoint_scopes
 GROUP BY session_id;
 
--- A denial coalesces repeated asks only until the chat's next visible user
--- intent, so restart restores the denials resolved after that boundary. The
--- boundary predicate is idx_messages_user_turn; timestamps use the fixed-width
--- UTC layout, so text order is time order.
--- name: ListRejectedToolApprovalCheckpoints :many
-SELECT c.id, c.session_id, c.project_dir, c.kind, c.status, c.type, c.title, c.description,
-       c.tool_name, c.path, c.args_json, c.files_json, c.payload_json, c.result_json, c.created_at, c.resolved_at, c.resolved_by, c.resolved_by_person_id,
-       c.project_id
-FROM checkpoints c
-WHERE c.kind = 'tool_approval' AND c.status = 'rejected'
-  AND c.resolved_at > COALESCE((
-    SELECT m.ts FROM messages m
-    WHERE m.session_id = c.session_id
-      AND m.role = 'user'
-      AND m.visibility <> 'internal'
-      AND m.kind <> 'workflow_boundary'
-      AND m.kind <> 'user_continuation'
-      AND m.workflow_boundary_json IS NULL
-    ORDER BY m.ord DESC
-    LIMIT 1), '')
-ORDER BY c.resolved_at ASC, c.id ASC;
-
 -- name: UpdatePendingCheckpointPayload :execrows
 UPDATE checkpoints SET payload_json = ? WHERE id = ? AND status = ?;
 
