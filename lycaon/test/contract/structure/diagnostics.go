@@ -11,15 +11,18 @@ import (
 type diagnostics struct {
 	Kind        character
 	Members     []string
-	EntryPoints []string           // declared, for subsystems
+	EntryPoints []string            // declared, for subsystems
 	External    map[string][]string // member → consumer packages outside the directory
-	Isolated    []string           // members no outside consumer imports alongside a sibling
-	Groups      [][]string         // internally disconnected member groups
+	Isolated    []string            // members no outside consumer imports alongside a sibling
+	Groups      [][]string          // internally disconnected member groups
 }
 
 // analyze computes the diagnostics for one declared directory. The key is the
 // declaration's directory: "internal" itself, or one direct child of it.
 func analyze(graph *Graph, key string, d declaration) (*diagnostics, error) {
+	if err := validateBoundary(graph, key, d); err != nil {
+		return nil, err
+	}
 	members := graph.members(key)
 	if len(members) == 0 {
 		return nil, fmt.Errorf("declared directory %s has no production packages", key)

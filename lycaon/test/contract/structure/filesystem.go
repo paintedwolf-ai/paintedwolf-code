@@ -1,42 +1,42 @@
 package structure
 
 import (
-	"io/fs"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
+	"strings"
 )
 
-// FileSystem adapts the checkout on disk to Tree.
-type FileSystem struct {
-	root string
-}
+// FileSystem reads tracked and nonignored checkout sources, matching the budget inventory.
+type FileSystem struct{ root string }
 
 func NewFileSystem(root string) *FileSystem { return &FileSystem{root: root} }
 
 func (f *FileSystem) Files() ([]string, error) {
-	var out []string
-	err := filepath.WalkDir(f.root, func(path string, entry fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if entry.IsDir() {
-			switch entry.Name() {
-			case ".git", "node_modules", "vendor":
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		relative, err := filepath.Rel(f.root, path)
-		if err != nil {
-			return err
-		}
-		out = append(out, filepath.ToSlash(relative))
-		return nil
-	})
+	raw, err := exec.Command("git", "-C", f.root, "ls-files", "--cached", "--others", "--exclude-standard", "-z").Output()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list working tree: %w", err)
 	}
-	return out, nil
+	var files []string
+	for _, name := range strings.Split(string(raw), "\x00") {
+		if name == "" {
+			continue
+		}
+		info, err := os.Lstat(filepath.Join(f.root, filepath.FromSlash(name)))
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("inspect %s: %w", name, err)
+		}
+		if info.Mode().IsRegular() {
+			files = append(files, name)
+		}
+	}
+	slices.Sort(files)
+	return slices.Compact(files), nil
 }
 
 func (f *FileSystem) Read(relative string) ([]byte, error) {

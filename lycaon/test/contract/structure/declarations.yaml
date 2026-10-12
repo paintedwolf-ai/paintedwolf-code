@@ -13,6 +13,7 @@ internal/db:
     description: The SQL adapter; every durable fact crosses its queries.
     entry_points:
         - github.com/lycaon/lycaon/internal/db
+        - github.com/lycaon/lycaon/internal/db/migrations
 
 internal:
     kind: container

@@ -296,6 +296,14 @@ behind one contract package, and a `container` is an organizational boundary who
 governed individually. [`TestDeclaredDirectoriesMatchCheckout`](../lycaon/test/contract/structure/checkout_test.go)
 validates declarations against the production import graph and fails when a large directory
 stays undeclared, so an accreting boundary must state what it is instead of growing silently.
+Entry points and family contracts must name existing production packages inside their declared
+directory. A subsystem's explicit access boundary is gated: outside packages may import only
+its entry points, including when the private package is nested more deeply. Rejections name the
+consumer and private package so an agent can repair the import or review the declared boundary.
+Family implementation imports remain allowed for composition; declaring a shared contract does
+not impose a new import policy. The graph uses tracked and nonignored regular files, matching
+the budget inventory, scoped to `lycaon/cmd`, `lycaon/internal`, and `lycaon/pkg`;
+ignored scratch files, deleted files, symlinks, and scanner rule fixtures do not contribute.
 
 The maintainability report carries structural diagnostics for each declared directory as notes:
 disconnected member groups, isolated members (no outside consumer imports them alongside a

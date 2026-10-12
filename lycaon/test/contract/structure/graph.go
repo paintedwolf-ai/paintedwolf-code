@@ -80,7 +80,7 @@ func isProductionGo(file string) bool {
 	if !strings.HasSuffix(file, ".go") || strings.HasSuffix(file, "_test.go") {
 		return false
 	}
-	if !strings.HasPrefix(file, "lycaon/") || strings.HasPrefix(file, "lycaon/test/") {
+	if !strings.HasPrefix(file, "lycaon/internal/") && !strings.HasPrefix(file, "lycaon/cmd/") && !strings.HasPrefix(file, "lycaon/pkg/") {
 		return false
 	}
 	return !slices.Contains(strings.Split(file, "/"), "testdata")
