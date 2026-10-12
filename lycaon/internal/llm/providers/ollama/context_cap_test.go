@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -16,11 +15,9 @@ func TestOllamaEstimatesToolContentOnce(t *testing.T) {
 		{Role: api.MessageRoleTool, Content: content, ToolResult: &api.ToolResult{Content: "stored original"}},
 		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Content: content}},
 	} {
-		wire := ProjectMessages([]api.Message{message}, false, "")
-		want := estimatePromptTokens(modelcall.CompletionRequest{Messages: []api.Message{
-			{Role: api.MessageRoleTool, Content: wire[0].Content},
-		}})
-		if got := estimatePromptTokens(modelcall.CompletionRequest{Messages: []api.Message{message}}); got != want {
+		wire := ProjectMessages([]api.Message{message}, messageProjection{})
+		want := estimatePromptTokens([]ollamaChatMessage{{Role: "tool", Content: wire[0].Content}}, nil)
+		if got := estimatePromptTokens(wire, nil); got != want {
 			t.Fatalf("tool estimate = %d, want wire content estimate %d", got, want)
 		}
 	}

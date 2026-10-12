@@ -74,8 +74,16 @@ type ollamaChatResponse struct {
 	Error              string            `json:"error"`
 }
 
-func ProjectMessages(msgs []api.Message, vision bool, sessionID string) []ollamaChatMessage {
+type messageProjection struct {
+	vision     bool
+	sessionID  string
+	providerID string
+	model      string
+}
+
+func ProjectMessages(msgs []api.Message, projection messageProjection) []ollamaChatMessage {
 	msgs = providerwire.SystemPreamble(msgs)
+	turnStart := api.UserIntentBoundary(msgs)
 	out := make([]ollamaChatMessage, 0, len(msgs))
 	// Model templates render images on user turns, so a run of tool results
 	// is followed by one user message carrying their images.
@@ -87,7 +95,7 @@ func ProjectMessages(msgs []api.Message, vision bool, sessionID string) []ollama
 		}
 		toolImages = ollamaChatMessage{}
 	}
-	for _, m := range msgs {
+	for i, m := range msgs {
 		// Replaying a note's UI echo as assistant text invites a continuation.
 		if api.IsAgentNoteMessage(m) {
 			continue
@@ -98,6 +106,12 @@ func ProjectMessages(msgs []api.Message, vision bool, sessionID string) []ollama
 		switch m.Role {
 		case api.MessageRoleAssistant:
 			wMsg := ollamaChatMessage{Role: "assistant", Content: m.Content}
+			// Tool continuations retain reasoning from this provider, model, and turn.
+			if i >= turnStart && len(m.ToolCalls) > 0 {
+				if reasoning := providerwire.ReasoningForModel(m, projection.providerID, projection.model); reasoning != nil {
+					wMsg.Thinking = reasoning.Text
+				}
+			}
 			for _, tc := range m.ToolCalls {
 				wMsg.ToolCalls = append(wMsg.ToolCalls, ollamaToolCall{
 					Function: ollamaToolCallFunction{Name: tc.Name, Arguments: providerwire.ToolArgs(tc.Args)},
@@ -122,9 +136,9 @@ func ProjectMessages(msgs []api.Message, vision bool, sessionID string) []ollama
 			out = append(out, ollamaChatMessage{Role: "system", Content: m.Content})
 		default:
 			wire := ollamaChatMessage{Role: "user", Content: m.Content}
-			if vision {
+			if projection.vision {
 				for _, artifactID := range m.ArtifactIDs {
-					_, encoded, ok := providerwire.UserArtifactWireImage(sessionID, artifactID)
+					_, encoded, ok := providerwire.UserArtifactWireImage(projection.sessionID, artifactID)
 					if ok {
 						wire.Images = append(wire.Images, encoded)
 					}

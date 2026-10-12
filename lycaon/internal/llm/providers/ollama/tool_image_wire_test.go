@@ -16,7 +16,7 @@ func TestToolImagesRideTheNextUserMessage(t *testing.T) {
 			ToolCallID: "call-1", Tool: "capture_page", Content: "captured",
 			Visual: &api.VisualArtifact{ID: "art-1", Mime: "image/png", Bytes: png, Perceive: true},
 		}},
-	}, true, "sess-1")
+	}, messageProjection{vision: true, sessionID: "sess-1"})
 	if len(out) != 4 {
 		t.Fatalf("messages = %+v", out)
 	}

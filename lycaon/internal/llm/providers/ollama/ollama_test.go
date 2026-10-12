@@ -160,7 +160,7 @@ func TestMessagesToOllamaRoundTrip(t *testing.T) {
 		}},
 		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Content: "ok"}},
 	}
-	out := ProjectMessages(msgs, false, "")
+	out := ProjectMessages(msgs, messageProjection{})
 	if len(out) != 4 {
 		t.Fatalf("mapped %d messages, want 4", len(out))
 	}
@@ -179,7 +179,7 @@ func TestMessagesToOllamaNilArgsAreObject(t *testing.T) {
 	out := ProjectMessages([]api.Message{{
 		Role:      api.MessageRoleAssistant,
 		ToolCalls: []api.ToolCall{{Name: "write", Args: nil}},
-	}}, false, "")
+	}}, messageProjection{})
 	if len(out) != 1 || len(out[0].ToolCalls) != 1 {
 		t.Fatalf("got %+v", out)
 	}
@@ -197,7 +197,7 @@ func TestMessagesToOllamaProjectsVisionImage(t *testing.T) {
 
 	out := ProjectMessages([]api.Message{{
 		Role: api.MessageRoleUser, Content: "describe", ArtifactIDs: []string{"art-1"},
-	}}, true, "session-1")
+	}}, messageProjection{vision: true, sessionID: "session-1"})
 	if len(out) != 1 || len(out[0].Images) != 1 {
 		t.Fatalf("messages = %+v", out)
 	}
@@ -457,7 +457,7 @@ func TestEstimatePromptTokensCountsTools(t *testing.T) {
 			{Name: "update_progress", Description: "plan", ArgsSchema: map[string]any{"type": "object"}},
 		},
 	}
-	got := estimatePromptTokens(req)
+	got := estimatePromptTokens(ProjectMessages(req.Messages, messageProjection{}), toolsToOllama(req.Tools))
 	if got < 100 {
 		t.Fatalf("estimate too low: %d", got)
 	}
