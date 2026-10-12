@@ -265,7 +265,7 @@ def build_application(run, environment):
         next_evaluation = json.loads((source / 'evaluation-source.json').read_text())
         if prior_evaluation['harness_sha256'] == next_evaluation['harness_sha256']:
             (source / '.bin').mkdir(exist_ok=True)
-            for name in ('lycaon-dev', 'pw-logs'):
+            for name in ('lycaon-dev', 'pw-logs', 'pw-document-core', 'bialy'):
                 destination = source / '.bin' / name
                 destination.unlink(missing_ok=True)
                 clone_file(retained / '.bin' / name, destination)

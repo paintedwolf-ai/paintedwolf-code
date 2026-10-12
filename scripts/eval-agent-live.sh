@@ -130,6 +130,7 @@ NODE
   export LYCAON_ADDR="127.0.0.1:$EVAL_PORT" LYCAON_API_TOKEN="$(openssl rand -hex 24)"
   printf '%s' "$LYCAON_API_TOKEN" >"$EVAL_RUN_DIR/config/api.token"
   chmod 600 "$EVAL_RUN_DIR/config/api.token"
+  unset LYCAON_DOCUMENT_CORE_BINARY LYCAON_DECIDE_BINARY LYCAON_DECIDE_DISABLED
   export LYCAON_DEV=1 LYCAON_HARNESS=1 LYCAON_LLM_MOCK=0
   if [[ -n "$EVAL_RATE_STATE_DIR" ]]; then
     [[ "$EVAL_RATE_STATE_DIR" == /* ]] || { echo 'Provider rate state directory must be absolute.'; exit 2; }
