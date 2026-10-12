@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
+## [1.0.2-rc2]
+
+Second release candidate for 1.0.2, published on the preview channel for upgrade testing.
+
+### Changed
+
+- Structure diagnostics report directory character declarations and cohesion evidence.
+- Notice cards use simpler presentation and clearer action spacing.
+
+### Fixed
+
+- Thinking controls respect the selected model's capabilities.
+- Fresh user direction renews approval review.
+- Transcript history keeps scroll position and measured row heights across
+  paging, resizing, and restore; estimates no longer count hidden attachment
+  content such as extracted PDF text.
+
 ## [1.0.2-rc1]
 
 First release candidate for 1.0.2, published on the preview channel for upgrade testing.
@@ -28,10 +45,6 @@ First release candidate for 1.0.2, published on the preview channel for upgrade 
   keeps manual update actions available.
 - Workflow runs pin sealed definitions and guidance. Project guidance overlays
   do not change a sealed run; retained shipped workflow versions remain available.
-
-- Transcript history keeps scroll position and measured row heights across
-  paging, resizing, and restore; estimates no longer count hidden attachment
-  content such as extracted PDF text.
 
 ## [1.0.1]
 

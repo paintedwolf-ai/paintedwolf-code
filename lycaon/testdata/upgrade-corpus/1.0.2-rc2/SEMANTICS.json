@@ -1,0 +1,75 @@
+{
+  "artifact": {
+    "id": "b1fd4f7e-3304-4208-9f56-0f563afba339",
+    "mime": "image/png",
+    "sha256": "cd08723e6cfd3f359d7994f4e64d439e7f75ec22080e760be1bb993b40fbe900"
+  },
+  "grant": {
+    "category": "host",
+    "expires_at": "2099-01-01T00:00:00Z",
+    "granted_at": "2026-10-12T20:08:31.898929Z",
+    "id": "grant_vZryNRplPGGrAtV-Z93HbKuK3SxTPEYb3EnTg_rEkU0",
+    "pattern": "*.example.com",
+    "scope": "device"
+  },
+  "messages": [
+    {
+      "content": "",
+      "id": "11b6eb93-2568-491f-8f18-de002e218a3e",
+      "role": "tool"
+    },
+    {
+      "content": "corpus seed",
+      "id": "598f84b9-3c58-45fc-afae-5680f99352d1",
+      "role": "user"
+    },
+    {
+      "content": "",
+      "id": "a03cec12-d5ad-4096-ab49-b56fbb1c5ee5",
+      "role": "assistant"
+    },
+    {
+      "content": "Corpus seed turn complete.",
+      "id": "a8c9d4c0-81d0-4c0f-a333-2fa70925e2c9",
+      "role": "assistant"
+    },
+    {
+      "content": "",
+      "id": "e17bfdeb-13bb-5b3e-b9cf-e2c7fcb01de5",
+      "role": "system"
+    }
+  ],
+  "project_id": "adf32f44-fada-4b39-abe8-c44eedc15f47",
+  "trust_read": {
+    "review": {
+      "changes": [
+        {
+          "after": "# Retained configuration change.\nformat: 1\ndisabled: []\n",
+          "before": "format: 1\ndisabled: []\n",
+          "id": "48ad677b-0b77-5dfd-8bd6-72673c66efc6",
+          "kind": "modified",
+          "path": ".paintedwolf/extensions.yaml",
+          "root_id": "6f7d2ef6-e002-4feb-9965-89d855b0f7cb",
+          "root_label": "seed-project",
+          "surface_ids": [
+            "extension_config",
+            "extension_suggestions"
+          ]
+        }
+      ],
+      "id": "14171849-40e4-52b4-b2d5-61fbf3b0a544",
+      "project_id": "adf32f44-fada-4b39-abe8-c44eedc15f47"
+    },
+    "surfaces": {
+      "agents_md": true,
+      "extension_config": true,
+      "extension_suggestions": true,
+      "project_mcp": true,
+      "project_settings": true,
+      "prompt_overrides": true,
+      "scan_config": true,
+      "skills": true
+    },
+    "unread_count": 0
+  }
+}
