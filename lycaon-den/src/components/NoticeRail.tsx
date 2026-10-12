@@ -18,7 +18,6 @@ import { chromeProps, proseProps } from "../styling/ui-chrome.ts";
 type Props = {
   notices: readonly AppNotice[];
   onDismiss: (id: string) => void;
-  onDismissAll?: () => void;
   /**
    * When false, the composer activity cell controls live announcements during an active turn.
    */
@@ -33,7 +32,7 @@ function severityLabel(severity: AppNotice["severity"]): string {
     case "warning":
       return "Warning";
     case "info":
-      return "Notice";
+      return "";
     default:
       return "Error";
   }
@@ -152,17 +151,6 @@ export function NoticeRail(props: Props) {
         aria-live={announceLive() ? "polite" : "off"}
         aria-relevant="additions"
       >
-        <Show when={notices().length > 1}>
-          <div class="den-notice-rail-header">
-            <DenButton
-              variant="ghost"
-              compact
-              onClick={() => props.onDismissAll?.()}
-            >
-              Dismiss all
-            </DenButton>
-          </div>
-        </Show>
         <Scrollport class="den-notice-rail-list" contentAs="ul" contentClass="den-notice-rail-list__content">
           <For each={notices()}>
             {(notice) => {
@@ -185,7 +173,9 @@ export function NoticeRail(props: Props) {
                 <div class="den-notice-body" {...proseProps()}>
                   <div class="den-notice-summary">
                     <p class="den-notice-title">
-                      <span class="den-notice-kind">{severityLabel(notice.severity)}</span>
+                      <Show when={severityLabel(notice.severity)} keyed>
+                        {(label) => <span class="den-notice-kind">{label}</span>}
+                      </Show>
                       {notice.title}
                     </p>
                     <Show when={!isExpanded(notice.id)}>

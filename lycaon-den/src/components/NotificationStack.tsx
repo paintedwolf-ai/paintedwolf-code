@@ -13,7 +13,6 @@ type Props = {
   projectName: (projectId: string) => string | undefined;
   onOpenProject: (projectId: string) => void;
   onDismiss: (id: string) => void;
-  onDismissApp: () => void;
   announceLive?: boolean;
 };
 
@@ -32,7 +31,6 @@ export function NotificationStack(props: Props): JSX.Element {
           <NoticeRail
             notices={appNotices()}
             onDismiss={props.onDismiss}
-            onDismissAll={props.onDismissApp}
             announceLive={props.announceLive}
           />
         </Show>

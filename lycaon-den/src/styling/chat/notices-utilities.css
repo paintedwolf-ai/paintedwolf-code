@@ -74,16 +74,6 @@ flex-shrink: 0;
 }
 
 
-@utility den-notice-rail-header {
-display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 4px 12px;
-  padding: 8px 16px 0;
-}
-
-
 @utility den-notice-rail-list {
   /* The cap scales with text and fits one expanded notice. */
   max-height: min(22rem, 40vh);
