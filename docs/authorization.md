@@ -345,7 +345,7 @@ Approval plans carry a standard or high-risk presentation band. The band is deri
 
 ## Denial guidance
 
-A human may attach explicit guidance when rejecting an action. The guidance is user-authority content delivered with the denied tool result so the agent can choose a different approach. It does not approve a replacement, clear the denial, install a lease, or authorize retry. The stamp follows the tool-call identity so it also reaches a call that completed while one internal capability was denied; where no tool call exists, the refusal carries the guidance directly.
+A human may attach explicit guidance when rejecting an action. The guidance is user-authority content delivered with the denied tool result so the agent can choose a different approach. Reject refuses the held operation. New user input, including direction attached to a rejection, ends repeat-request suppression for the chat and its workers. A replacement still passes every policy gate and requires a new approval when applicable; direction never installs authority. The stamp follows the tool-call identity so it also reaches a call that completed while one internal capability was denied; where no tool call exists, the refusal carries the guidance directly.
 
 ## Invariants
 
