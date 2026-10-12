@@ -7,7 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
-## [1.0.2]
+## [1.0.2-rc1]
+
+First release candidate for 1.0.2, published on the preview channel for upgrade testing.
 
 ### Changed
 
