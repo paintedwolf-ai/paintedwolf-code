@@ -81,8 +81,8 @@ func validate(name string, d declaration) error {
 			return fmt.Errorf("family requires its contract package")
 		}
 	case container:
-		if d.Description != "" || len(d.EntryPoints) != 0 || d.Contract != "" {
-			return fmt.Errorf("container declares only its kind")
+		if len(d.EntryPoints) != 0 || d.Contract != "" {
+			return fmt.Errorf("container declares no entry points or contract")
 		}
 	default:
 		return fmt.Errorf("unknown kind %q", d.Kind)
