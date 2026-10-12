@@ -152,7 +152,7 @@ webE2e.describe("independent split order", () => {
         await expect(chat.getByTestId("context-expand-btn")).toBeVisible();
         await expect(chat.locator(".den-pane-toggle--labelled:visible")).toHaveCount(swapped ? 0 : 2);
         await expectSeparateRestoreTargets(page);
-        await page.setViewportSize({ width: 1000, height: 900 });
+        await page.setViewportSize({ width: 800, height: 900 });
         await expect(chat).toBeVisible();
         await expect(stage).toBeHidden();
         await expectSeparateRestoreTargets(page);
@@ -196,7 +196,7 @@ webE2e.describe("independent split order", () => {
       await expect(page.getByTestId("nav-collapse-btn")).toBeVisible();
 
       // Automatic collapse keeps double chevrons and only one sidebar restore.
-      await page.setViewportSize({ width: 1000, height: 900 });
+      await page.setViewportSize({ width: 800, height: 900 });
       await expect(chat).toBeVisible();
       await expect(stage).toBeHidden();
       await expect(page.getByTestId("split-fit-restore-stage")).toBeVisible();
@@ -210,7 +210,7 @@ webE2e.describe("independent split order", () => {
       await page.getByTestId("display-narrow-survivor").click();
       await page.locator('[role="option"][data-value="stage"]').click();
       await page.getByTestId("settings-stage-close").click();
-      await page.setViewportSize({ width: 1000, height: 900 });
+      await page.setViewportSize({ width: 800, height: 900 });
       await expect(chat).toBeHidden();
       await expect(stage).toBeVisible();
       await expect(stage.getByTestId("nav-auto-restore-btn")).toBeVisible();
