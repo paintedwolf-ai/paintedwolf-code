@@ -1,6 +1,6 @@
 ## Overlay promote turn
 
-Review pending overlays against the requested outcome. Resume the same child for unfinished work; promote completed, wanted changes or reject unwanted changes.
+Review pending overlays against the requested outcome. Resume the same child for unfinished work; promote reviewed, wanted changes or reject unwanted changes.
 
 {% if profile_has_verify or profile_has_command %}{% include "partials/coordinator-verify-before-close.md" %}{% endif %}
 
