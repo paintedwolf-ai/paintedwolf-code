@@ -98,3 +98,32 @@ func TestReviewFeedbackRetainsExactIDsOnModelProjection(t *testing.T) {
 		}
 	}
 }
+
+func TestToolFeedbackIncludesSettledInvocationOutcome(t *testing.T) {
+	receipt := &api.InvocationReceipt{ID: "receipt-1", Tool: "edit", ToolCallID: "edit-call", Status: api.InvocationStatusRejected, Invoked: false,
+		Failure: &api.InvocationFailure{Code: "PROGRESS_MISSING", Class: "precondition"},
+	}
+	message := api.Message{Role: api.MessageRoleTool, Content: "The requested edit needs a checklist.", ToolResult: &api.ToolResult{Tool: "edit", ToolCallID: "edit-call", Outcome: api.ToolResultOutcomeRejected, Invocation: receipt}}
+	parts := toolFeedbackParts(message)
+	if len(parts) != 1 {
+		t.Fatalf("settled invocation not projected: %+v", parts)
+	}
+	var payload struct {
+		Invocation *struct {
+			ID         string               `json:"id"`
+			Tool       string               `json:"tool"`
+			ToolCallID string               `json:"tool_call_id"`
+			Status     api.InvocationStatus `json:"status"`
+			Invoked    bool                 `json:"invoked"`
+			Code       string               `json:"code"`
+		} `json:"invocation"`
+	}
+	testutil.FailErr(t, "decode invocation feedback", json.Unmarshal([]byte(parts[0].Content), &payload))
+	got := payload.Invocation
+	if got == nil || got.ID != receipt.ID || got.Tool != "edit" || got.ToolCallID != "edit-call" || got.Status != api.InvocationStatusRejected || got.Invoked || got.Code != "PROGRESS_MISSING" {
+		t.Fatalf("invocation facts changed: %+v", got)
+	}
+	if parts[0].Origin != api.MessageOriginHost || parts[0].Authority != api.ContentAuthorityNone {
+		t.Fatalf("invocation must remain host data: %+v", parts[0])
+	}
+}
