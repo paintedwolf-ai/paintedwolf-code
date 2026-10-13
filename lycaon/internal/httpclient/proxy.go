@@ -36,7 +36,7 @@ func hostProxy() func(*http.Request) (*url.URL, error) {
 		}
 		proxy, err := systemProxyLookup(request.URL)
 		if err != nil {
-			return nil, fmt.Errorf("resolve macOS system proxy: %w", err)
+			return nil, fmt.Errorf("resolve system proxy: %w", err)
 		}
 		return proxy, nil
 	}

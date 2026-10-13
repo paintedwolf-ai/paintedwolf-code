@@ -54,6 +54,8 @@ type iokitLease struct {
 
 func (l *iokitLease) Done() <-chan error { return l.done }
 
+func (*iokitLease) Provider() string { return "iokit" }
+
 func (l *iokitLease) Release() error {
 	var err error
 	l.once.Do(func() {

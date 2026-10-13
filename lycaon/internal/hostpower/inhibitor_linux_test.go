@@ -4,12 +4,14 @@ package hostpower
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -41,25 +43,47 @@ func fixtureSocketDirectory(t *testing.T) string {
 	return directory
 }
 
-func fixtureBus(t *testing.T) string {
+type fixtureDaemon struct {
+	path string
+	cmd  *exec.Cmd
+}
+
+func (d *fixtureDaemon) stop() { _ = d.cmd.Process.Kill(); _ = d.cmd.Wait() }
+
+func startFixtureBus(t *testing.T) *fixtureDaemon {
 	t.Helper()
 	path := filepath.Join(fixtureSocketDirectory(t), "bus")
 	cmd := exec.Command("dbus-daemon", "--session", "--nofork", "--address=unix:path="+path)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	testutil.FailErr(t, "start isolated bus", cmd.Start())
-	t.Cleanup(func() { _ = cmd.Process.Kill(); _ = cmd.Wait() })
+	daemon := &fixtureDaemon{path: path, cmd: cmd}
+	t.Cleanup(daemon.stop)
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(path); err == nil {
-			return path
+			return daemon
 		}
 		time.Sleep(time.Millisecond)
 	}
-	_ = cmd.Process.Kill()
-	_ = cmd.Wait()
+	daemon.stop()
 	t.Fatalf("isolated bus did not start: %s", stderr.String())
-	return ""
+	return nil
+}
+
+func fixtureBus(t *testing.T) string { return startFixtureBus(t).path }
+
+func connectTo(path string) busConnector {
+	return func(ctx context.Context) (*dbus.Conn, error) { return linuxbus.Connect(ctx, path) }
+}
+
+func ownName(t *testing.T, server *dbus.Conn, name string) {
+	t.Helper()
+	result, err := server.RequestName(name, dbus.NameFlagDoNotQueue)
+	testutil.FailErr(t, "own fixture service name "+name, err)
+	if result != dbus.RequestNameReplyPrimaryOwner {
+		t.Fatalf("fixture service name %s not owned", name)
+	}
 }
 
 func TestLogindLeaseTransfersDescriptorAndBlocksAutomaticSuspend(t *testing.T) {
@@ -71,18 +95,18 @@ func TestLogindLeaseTransfersDescriptorAndBlocksAutomaticSuspend(t *testing.T) {
 	testutil.FailErr(t, "create inhibitor pipe", err)
 	defer func() { _ = reader.Close(); _ = writer.Close() }()
 	fixture := &fixtureLogind{writer: writer}
-	testutil.FailErr(t, "export fixture service", server.Export(fixture, logindPath, logindName+".Manager"))
-	result, err := server.RequestName(logindName, dbus.NameFlagDoNotQueue)
-	testutil.FailErr(t, "own fixture service name", err)
-	if result != dbus.RequestNameReplyPrimaryOwner {
-		t.Fatal("fixture service name not owned")
+	testutil.FailErr(t, "export fixture service", server.Export(fixture, linuxbus.Login1Path, linuxbus.Login1Name+".Manager"))
+	ownName(t, server, linuxbus.Login1Name)
+	subject := login1Provider{connect: connectTo(path)}
+	if !subject.Available(t.Context()) {
+		t.Fatal("served login manager was not advertised")
 	}
-	client, err := linuxbus.Connect(t.Context(), path)
-	testutil.FailErr(t, "connect inhibitor client", err)
-	defer func() { _ = client.Close() }()
-	held, err := acquireLogindLease(client)
+	held, err := subject.Acquire(t.Context())
 	testutil.FailErr(t, "acquire native descriptor lease", err)
 	defer func() { _ = held.Release() }()
+	if held.Provider() != "login1" {
+		t.Fatalf("provider = %q", held.Provider())
+	}
 	fixture.mu.Lock()
 	args := append([]string(nil), fixture.arguments...)
 	fixture.mu.Unlock()
@@ -154,15 +178,33 @@ func TestLogindLeaseRejectsAClosedDescriptor(t *testing.T) {
 	}
 }
 
-func TestMissingLogindDoesNotAdvertiseOrAcquireAnInhibitor(t *testing.T) {
-	client, err := linuxbus.Connect(t.Context(), fixtureBus(t))
+func TestMissingServicesAdvertiseNoProviderAndAcquireNothing(t *testing.T) {
+	path := fixtureBus(t)
+	providers := []provider{
+		login1Provider{connect: connectTo(path)},
+		portalProvider{connect: connectTo(path)},
+		powerManagementProvider{connect: connectTo(path)},
+	}
+	if supportedBy(providers) {
+		t.Fatal("missing services advertised support")
+	}
+	if held, err := acquireFrom(providers); held != nil || err == nil {
+		t.Fatalf("missing services lease=%v error=%v", held, err)
+	}
+	client, err := linuxbus.Connect(t.Context(), path)
 	testutil.FailErr(t, "connect bus without logind", err)
 	defer func() { _ = client.Close() }()
-	if logindAvailable(client) {
-		t.Fatal("missing service advertised support")
+	if held, err := acquireLogindLease(t.Context(), client); held != nil || err == nil {
+		t.Fatalf("missing login manager lease=%v error=%v", held, err)
 	}
-	if held, err := acquireLogindLease(client); held != nil || err == nil {
-		t.Fatalf("missing service lease=%v error=%v", held, err)
+	unreachable := connectTo(filepath.Join(t.TempDir(), "missing"))
+	for _, candidate := range []provider{login1Provider{connect: unreachable}, portalProvider{connect: unreachable}, powerManagementProvider{connect: unreachable}} {
+		if candidate.Available(t.Context()) {
+			t.Fatalf("%s advertised support without a bus", candidate.Name())
+		}
+		if held, err := candidate.Acquire(t.Context()); held != nil || err == nil {
+			t.Fatalf("%s acquired without a bus: %v, %v", candidate.Name(), held, err)
+		}
 	}
 }
 
@@ -177,7 +219,7 @@ func TestLogindAuthenticationCannotHangHostStartup(t *testing.T) {
 	if bus, err := linuxbus.Connect(t.Context(), path); bus != nil || err == nil {
 		t.Fatal("silent bus authenticated")
 	}
-	if time.Since(started) > 2*logindDeadline {
+	if time.Since(started) > 2*busDeadline {
 		t.Fatal("silent bus exceeded the authentication deadline")
 	}
 	connection := <-accepted
@@ -185,3 +227,200 @@ func TestLogindAuthenticationCannotHangHostStartup(t *testing.T) {
 		_ = connection.Close()
 	}
 }
+
+type fixturePortal struct {
+	mu       sync.Mutex
+	server   *dbus.Conn
+	deny     bool
+	flags    uint32
+	options  map[string]dbus.Variant
+	request  dbus.ObjectPath
+	closed   chan struct{}
+	exported bool
+}
+
+func (f *fixturePortal) Inhibit(window string, flags uint32, options map[string]dbus.Variant) (dbus.ObjectPath, *dbus.Error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.deny {
+		return "", dbus.NewError("org.freedesktop.portal.Error.NotAllowed", []any{"inhibit denied"})
+	}
+	f.flags, f.options = flags, options
+	token, _ := options["handle_token"].Value().(string)
+	sender := strings.TrimPrefix(strings.ReplaceAll(f.server.Names()[0], ".", "_"), ":")
+	f.request = dbus.ObjectPath("/org/freedesktop/portal/desktop/request/" + sender + "/" + token)
+	if !f.exported {
+		f.exported = true
+		if err := f.server.Export(f, f.request, portalRequest); err != nil {
+			return "", dbus.MakeFailedError(err)
+		}
+	}
+	return f.request, nil
+}
+
+func (f *fixturePortal) Close() *dbus.Error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	select {
+	case <-f.closed:
+	default:
+		close(f.closed)
+	}
+	return nil
+}
+
+func servePortal(t *testing.T, path string, deny bool) *fixturePortal {
+	t.Helper()
+	server, err := linuxbus.Connect(t.Context(), path)
+	testutil.FailErr(t, "connect portal fixture", err)
+	t.Cleanup(func() { _ = server.Close() })
+	fixture := &fixturePortal{server: server, deny: deny, closed: make(chan struct{})}
+	testutil.FailErr(t, "export portal fixture", server.Export(fixture, portalPath, portalInhibit))
+	ownName(t, server, portalName)
+	return fixture
+}
+
+func TestPortalInhibitorRequestsSuspendAndIdleAndClosesOnRelease(t *testing.T) {
+	path := fixtureBus(t)
+	fixture := servePortal(t, path, false)
+	subject := portalProvider{connect: connectTo(path)}
+	if !subject.Available(t.Context()) {
+		t.Fatal("served portal was not advertised")
+	}
+	held, err := subject.Acquire(t.Context())
+	testutil.FailErr(t, "acquire portal inhibitor", err)
+	if held.Provider() != "portal" {
+		t.Fatalf("provider = %q", held.Provider())
+	}
+	fixture.mu.Lock()
+	flags, reason := fixture.flags, fixture.options["reason"].Value()
+	fixture.mu.Unlock()
+	if flags != portalFlagSuspend|portalFlagIdle || reason != "Painted Wolf Code: active work" {
+		t.Fatalf("portal request flags=%d reason=%v", flags, reason)
+	}
+	select {
+	case err := <-held.Done():
+		t.Fatalf("lease ended before release: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+	testutil.FailErr(t, "release portal inhibitor", held.Release())
+	testutil.FailErr(t, "repeat release", held.Release())
+	select {
+	case <-fixture.closed:
+	case <-time.After(time.Second):
+		t.Fatal("release did not close the portal request")
+	}
+	if _, open := <-held.Done(); open {
+		t.Fatal("released lease still reports completion values")
+	}
+}
+
+func TestPortalDenialAndResponseEndTheLease(t *testing.T) {
+	path := fixtureBus(t)
+	fixture := servePortal(t, path, true)
+	subject := portalProvider{connect: connectTo(path)}
+	if held, err := subject.Acquire(t.Context()); held != nil || err == nil || !strings.Contains(err.Error(), "inhibit denied") {
+		t.Fatalf("denied portal lease=%v error=%v", held, err)
+	}
+	fixture.mu.Lock()
+	fixture.deny = false
+	fixture.mu.Unlock()
+	held, err := subject.Acquire(t.Context())
+	testutil.FailErr(t, "acquire portal inhibitor", err)
+	defer func() { _ = held.Release() }()
+	fixture.mu.Lock()
+	request := fixture.request
+	fixture.mu.Unlock()
+	testutil.FailErr(t, "emit portal response", fixture.server.Emit(request, portalRequest+".Response", uint32(2), map[string]dbus.Variant{}))
+	select {
+	case err := <-held.Done():
+		if err == nil || !strings.Contains(err.Error(), "response 2") {
+			t.Fatalf("portal response = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("portal response did not end the lease")
+	}
+}
+
+func TestSessionLeaseReportsBusDisconnection(t *testing.T) {
+	daemon := startFixtureBus(t)
+	servePortal(t, daemon.path, false)
+	held, err := portalProvider{connect: connectTo(daemon.path)}.Acquire(t.Context())
+	testutil.FailErr(t, "acquire portal inhibitor", err)
+	daemon.stop()
+	select {
+	case err := <-held.Done():
+		if err == nil {
+			t.Fatal("bus loss had no failure")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("bus loss was not detected")
+	}
+	testutil.FailErr(t, "release after bus loss", held.Release())
+}
+
+type fixturePowerManagement struct {
+	mu          sync.Mutex
+	deny        bool
+	application string
+	reason      string
+	released    []uint32
+}
+
+func (f *fixturePowerManagement) Inhibit(application, reason string) (uint32, *dbus.Error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.deny {
+		return 0, dbus.NewError("org.freedesktop.PowerManagement.Error", []any{"refused"})
+	}
+	f.application, f.reason = application, reason
+	return 42, nil
+}
+
+func (f *fixturePowerManagement) UnInhibit(cookie uint32) *dbus.Error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.released = append(f.released, cookie)
+	return nil
+}
+
+func TestPowerManagementInhibitorReleasesItsCookie(t *testing.T) {
+	path := fixtureBus(t)
+	server, err := linuxbus.Connect(t.Context(), path)
+	testutil.FailErr(t, "connect power management fixture", err)
+	defer func() { _ = server.Close() }()
+	fixture := &fixturePowerManagement{deny: true}
+	testutil.FailErr(t, "export power management fixture", server.Export(fixture, powerManagementPath, powerManagementInhibit))
+	ownName(t, server, powerManagementName)
+	subject := powerManagementProvider{connect: connectTo(path)}
+	if !subject.Available(t.Context()) {
+		t.Fatal("served power management was not advertised")
+	}
+	if held, err := subject.Acquire(t.Context()); held != nil || err == nil {
+		t.Fatalf("refused power management lease=%v error=%v", held, err)
+	}
+	fixture.mu.Lock()
+	fixture.deny = false
+	fixture.mu.Unlock()
+	held, err := acquireFrom([]provider{login1Provider{connect: connectTo(path)}, subject})
+	testutil.FailErr(t, "acquire through provider order", err)
+	if held.Provider() != "power-management" {
+		t.Fatalf("provider = %q", held.Provider())
+	}
+	controller := newController(true, &staticInhibitor{held: held})
+	controller.SetActive("work", true)
+	if status := controller.Snapshot(); !status.Inhibiting || status.Provider != "power-management" {
+		t.Fatalf("status = %+v", status)
+	}
+	testutil.FailErr(t, "close controller", controller.Close())
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	if fixture.application != "Painted Wolf Code" || fixture.reason == "" || len(fixture.released) != 1 || fixture.released[0] != 42 {
+		t.Fatalf("power management fixture = %+v", fixture)
+	}
+}
+
+type staticInhibitor struct{ held lease }
+
+func (staticInhibitor) Supported() bool            { return true }
+func (s *staticInhibitor) Acquire() (lease, error) { return s.held, nil }

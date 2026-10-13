@@ -47,6 +47,7 @@ type fakeLease struct {
 }
 
 func (l *fakeLease) Done() <-chan error { return l.done }
+func (*fakeLease) Provider() string     { return "fake" }
 func (l *fakeLease) Release() error {
 	if !l.released {
 		l.released = true

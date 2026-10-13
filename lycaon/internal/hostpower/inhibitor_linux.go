@@ -16,46 +16,101 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-const logindDeadline = 500 * time.Millisecond
-const logindName = "org.freedesktop.login1"
-const logindPath = dbus.ObjectPath("/org/freedesktop/login1")
+const busDeadline = 500 * time.Millisecond
+
+// provider is one named inhibition protocol. Availability comes from the bus
+// name being served; which program serves it is never inspected.
+type provider interface {
+	Name() string
+	Available(ctx context.Context) bool
+	Acquire(ctx context.Context) (lease, error)
+}
+
+type busConnector func(context.Context) (*dbus.Conn, error)
+
+// linuxProviders are tried in order; a desktop without a login manager keeps
+// its session-level inhibition protocols.
+var linuxProviders = []provider{
+	login1Provider{connect: linuxbus.ConnectSystem},
+	portalProvider{connect: linuxbus.ConnectSession},
+	powerManagementProvider{connect: linuxbus.ConnectSession},
+}
 
 type platformInhibitor struct{}
 
-func logindAvailable(bus *dbus.Conn) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), logindDeadline)
+func (platformInhibitor) Supported() bool { return supportedBy(linuxProviders) }
+
+func (platformInhibitor) Acquire() (lease, error) { return acquireFrom(linuxProviders) }
+
+func supportedBy(providers []provider) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), busDeadline)
 	defer cancel()
-	var owned bool
-	return bus.SupportsUnixFDs() && bus.BusObject().CallWithContext(ctx, "org.freedesktop.DBus.NameHasOwner", 0, logindName).Store(&owned) == nil && owned
+	for _, candidate := range providers {
+		if candidate.Available(ctx) {
+			return true
+		}
+	}
+	return false
 }
 
-func (platformInhibitor) Supported() bool {
-	bus, err := linuxbus.Connect(context.Background(), "/run/dbus/system_bus_socket")
+// acquireFrom returns the first provider that grants a lease; refusals from
+// earlier providers travel with the final error.
+func acquireFrom(providers []provider) (lease, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*busDeadline)
+	defer cancel()
+	var failures []error
+	for _, candidate := range providers {
+		if !candidate.Available(ctx) {
+			continue
+		}
+		held, err := candidate.Acquire(ctx)
+		if err == nil {
+			return held, nil
+		}
+		failures = append(failures, fmt.Errorf("%s: %w", candidate.Name(), err))
+	}
+	if len(failures) == 0 {
+		return nil, errors.New("idle-sleep inhibition is unavailable")
+	}
+	return nil, errors.Join(failures...)
+}
+
+// login1Provider holds a login manager inhibitor descriptor; systemd-logind
+// and elogind both serve the protocol.
+type login1Provider struct{ connect busConnector }
+
+func (login1Provider) Name() string { return "login1" }
+
+func (p login1Provider) Available(ctx context.Context) bool {
+	bus, err := p.connect(ctx)
 	if err != nil {
 		return false
 	}
 	defer func() { _ = bus.Close() }()
-	return logindAvailable(bus)
+	return logindAvailable(ctx, bus)
 }
 
-func (platformInhibitor) Acquire() (lease, error) {
-	bus, err := linuxbus.Connect(context.Background(), "/run/dbus/system_bus_socket")
+func (p login1Provider) Acquire(ctx context.Context) (lease, error) {
+	bus, err := p.connect(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("connect to sleep inhibitor service: %w", err)
+		return nil, fmt.Errorf("connect to login manager: %w", err)
 	}
 	defer func() { _ = bus.Close() }()
-	return acquireLogindLease(bus)
+	return acquireLogindLease(ctx, bus)
 }
 
-func acquireLogindLease(bus *dbus.Conn) (lease, error) {
-	if !logindAvailable(bus) {
-		return nil, errors.New("idle-sleep inhibition is unavailable")
+func logindAvailable(ctx context.Context, bus *dbus.Conn) bool {
+	owned, err := linuxbus.NameOwned(ctx, bus, linuxbus.Login1Name)
+	return bus.SupportsUnixFDs() && err == nil && owned
+}
+
+func acquireLogindLease(ctx context.Context, bus *dbus.Conn) (lease, error) {
+	if !logindAvailable(ctx, bus) {
+		return nil, errors.New("login manager is unavailable")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), logindDeadline)
-	defer cancel()
 	var descriptor dbus.UnixFD
-	// Desktop power managers request sleep directly.
-	err := bus.Object(logindName, logindPath).CallWithContext(ctx, logindName+".Manager.Inhibit", 0,
+	// Desktop power managers request sleep directly, so idle alone is not enough.
+	err := bus.Object(linuxbus.Login1Name, linuxbus.Login1Path).CallWithContext(ctx, linuxbus.Login1Name+".Manager.Inhibit", 0,
 		"idle:sleep", "Painted Wolf Code", "Active work", "block").Store(&descriptor)
 	if err != nil {
 		return nil, fmt.Errorf("acquire idle-sleep inhibitor: %w", err)
@@ -84,6 +139,9 @@ type logindLease struct {
 }
 
 func (l *logindLease) Done() <-chan error { return l.done }
+
+func (*logindLease) Provider() string { return "login1" }
+
 func (l *logindLease) watch() {
 	defer close(l.stopped)
 	defer close(l.done)
@@ -113,6 +171,7 @@ func (l *logindLease) watch() {
 		}
 	}
 }
+
 func (l *logindLease) Release() error {
 	l.once.Do(func() {
 		close(l.stop)

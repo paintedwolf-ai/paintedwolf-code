@@ -17,6 +17,8 @@ const retryDelay = 5 * time.Second
 type lease interface {
 	Release() error
 	Done() <-chan error
+	// Provider names the operating-system protocol holding the assertion.
+	Provider() string
 }
 
 type inhibitor interface {
@@ -31,6 +33,8 @@ type Status struct {
 	Inhibiting      bool
 	ActiveWorkCount int
 	LastError       string
+	// Provider is the protocol behind the held assertion; empty when none is held.
+	Provider string
 }
 
 // Controller holds one assertion while work is active.
@@ -145,13 +149,17 @@ func (c *Controller) Snapshot() Status {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	supported := c.inhibitor != nil && c.inhibitor.Supported()
-	return Status{
+	status := Status{
 		Enabled:         c.enabled,
 		Supported:       supported,
 		Inhibiting:      c.lease != nil,
 		ActiveWorkCount: len(c.active),
 		LastError:       c.lastError,
 	}
+	if c.lease != nil {
+		status.Provider = c.lease.Provider()
+	}
+	return status
 }
 
 func (c *Controller) reconcileLocked() {
