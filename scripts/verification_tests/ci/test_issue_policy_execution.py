@@ -13,6 +13,7 @@ const tracked = { number: 1, user: { login: "github-actions[bot]" },
   body: "<!-- paintedwolf-maintainability:v1 -->", labels: [],
   updated_at: "2000-01-01T00:00:00Z" };
 assert.equal(isExempt(tracked), true);
+assert.equal(isExempt({ ...tracked, body: "<!-- paintedwolf-maintainability:v2 -->" }), true);
 assert.equal(isExempt({ ...tracked, user: { login: "someone" } }), false);
 assert.equal(isExempt({ ...tracked, body: "ordinary automated report" }), false);
 const writes = [];
