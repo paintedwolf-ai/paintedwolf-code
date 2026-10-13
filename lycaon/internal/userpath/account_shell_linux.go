@@ -18,7 +18,11 @@ import (
 func defaultAccountShell(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	return linuxAccountShell(ctx, "/usr/bin/getent", uint64(os.Getuid()))
+	uid := os.Getuid()
+	if uid < 0 {
+		return "", errors.New("account lookup requires a nonnegative uid")
+	}
+	return linuxAccountShell(ctx, "/usr/bin/getent", uint64(uid))
 }
 
 // NSS resolves local and directory-backed accounts by uid.
