@@ -61,12 +61,18 @@ func projectSourceText(message api.Message, parts []api.MessageContentPart) []ap
 			}
 			sources = append(sources, text)
 		}
-		encoded, _ := json.Marshal(ranges)
+		encoded, err := json.Marshal(ranges)
+		if err != nil {
+			return parts
+		}
 		metadata["ranges"] = encoded
 	default:
 		return parts
 	}
-	encoded, _ := json.Marshal(metadata)
+	encoded, err := json.Marshal(metadata)
+	if err != nil {
+		return parts
+	}
 	out := make([]api.MessageContentPart, 0, len(sources)+1)
 	part.Source = "read_metadata"
 	part.Content = strings.Join(append(handles, string(encoded)), "\n")
