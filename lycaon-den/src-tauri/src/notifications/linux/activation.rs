@@ -9,6 +9,12 @@ pub(super) fn activate(app: &AppHandle, session_id: Option<String>, token: Optio
     }
     let target = app.clone();
     let _ = app.run_on_main_thread(move || {
+        if target
+            .try_state::<super::NativeNotifications>()
+            .is_none_or(|state| state.stopped.load(std::sync::atomic::Ordering::Acquire))
+        {
+            return;
+        }
         if let Some(window) = target.get_webview_window("main") {
             if let Ok(native) = window.gtk_window() {
                 if let Some(token) = token {

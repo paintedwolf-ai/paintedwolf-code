@@ -29,12 +29,9 @@ impl Delivery {
         if capabilities.len() > 64 || capabilities.iter().any(|capability| capability.len() > 128) {
             return Err("Desktop notification capabilities exceeded their limit".into());
         }
-        if !capabilities
+        let can_activate = capabilities
             .iter()
-            .any(|capability| capability == "actions")
-        {
-            return Err("The desktop notification service cannot activate chats".into());
-        }
+            .any(|capability| capability == "actions");
         let delivered = Rc::new(RefCell::new(Delivered::default()));
         let mut subscriptions = Vec::new();
         let entries = delivered.clone();
@@ -57,6 +54,9 @@ impl Delivery {
                     }
                 }
                 "ActionInvoked" => {
+                    if !can_activate {
+                        return;
+                    }
                     if let Some((id, action)) = parameters.get::<(u32, String)>() {
                         let activation = entries.borrow_mut().activate(id, &action);
                         if let Some((session_id, token)) = activation {
@@ -125,13 +125,22 @@ impl Delivery {
             ("desktop-entry", "dev.paintedwolf.code".to_variant()),
             ("suppress-sound", true.to_variant()),
         ]);
+        let actions = if self
+            .capabilities
+            .iter()
+            .any(|capability| capability == "actions")
+        {
+            vec!["default", "Open chat"]
+        } else {
+            Vec::new()
+        };
         let parameters = (
             "Painted Wolf Code",
             replacement,
             "",
             title,
             body,
-            vec!["default", "Open chat"],
+            actions,
             hints,
             -1i32,
         )
@@ -178,6 +187,11 @@ impl Drop for Delivery {
         for subscription in self.subscriptions.drain(..) {
             self.connection.signal_unsubscribe(subscription);
         }
+        let context = glib::MainContext::ref_thread_default();
+        let _ = context.block_on(glib::future_with_timeout(
+            std::time::Duration::from_millis(500),
+            self.connection.close_future(),
+        ));
     }
 }
 
