@@ -134,7 +134,7 @@ def write_root_trajectory(application,spec,kind):
             import shlex
             body = f"from pathlib import Path; Path({str(target)!r}).write_text({(json.dumps(contract['expected'])+chr(10))!r})"
             command = 'python3 -B -c '+shlex.quote(body)
-        application.request('/harness/llm/respond',{'id':pending['id'],'tool_calls':[{'id':call,'name':'request_tools','args':{'requests':['command']}}]})
+        application.request('/harness/llm/respond',{'id':pending['id'],'tool_calls':[{'id':call,'name':'request_tools','args':{'need':'command'}}]})
         pending=application.wait_for(lambda: smoke_workers.pending(application, session),'write root command turn',session)
         verify_ungranted_write(application,session,pending,project,target)
         pending=application.wait_for(lambda: smoke_workers.pending(application, session),'write root recovery turn',session)

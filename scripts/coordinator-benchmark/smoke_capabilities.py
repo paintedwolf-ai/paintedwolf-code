@@ -9,7 +9,7 @@ CASES = {'capability-background-service'}
 
 
 def invoke(application, session, spec, tool, args, expected_outcome='completed'):
-    smoke_workers.invoke(application, session, 'request_tools', {'requests': [tool]})
+    smoke_workers.invoke(application, session, 'request_tools', {'need': tool})
     request = application.wait_for(lambda: smoke_workers.pending(application, session), 'capability command request', session)
     call = str(uuid.uuid4())
     application.request('/harness/llm/respond', {'id': request['id'], 'tool_calls': [{'id': call, 'name': tool, 'args': args}]})
