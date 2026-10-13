@@ -5,8 +5,6 @@ package gitexec
 import (
 	"context"
 	"os"
-	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/godbus/dbus/v5"
@@ -17,14 +15,13 @@ func defaultAgentSocket(ctx context.Context) string {
 	if socket := validAgentSocket(os.Getenv("SSH_AUTH_SOCK")); socket != "" {
 		return socket
 	}
-	path := filepath.Join("/run/user", strconv.Itoa(os.Getuid()), "bus")
-	return sessionAgentSocket(ctx, path)
+	return sessionAgentSocket(ctx)
 }
 
-func sessionAgentSocket(ctx context.Context, path string) string {
+func sessionAgentSocket(ctx context.Context) string {
 	ctx, cancel := context.WithTimeout(ctx, agentSocketLookupTimeout)
 	defer cancel()
-	bus, err := linuxbus.Connect(ctx, path)
+	bus, err := linuxbus.ConnectSession(ctx)
 	if err != nil {
 		return ""
 	}

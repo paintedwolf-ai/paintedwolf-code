@@ -19,6 +19,7 @@ import (
 func agentFixtureBus(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(agentFixtureDirectory(t), "bus")
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path="+path)
 	command := exec.Command("dbus-daemon", "--session", "--nofork", "--address=unix:path="+path)
 	if err := command.Start(); err != nil {
 		t.Fatalf("start private bus: %v", err)
@@ -65,7 +66,7 @@ func TestLinuxAgentDiscoveryReadsTheNativeUserManagerProperty(t *testing.T) {
 	if err != nil || result != dbus.RequestNameReplyPrimaryOwner {
 		t.Fatalf("own native service: %v, %v", result, err)
 	}
-	if got := sessionAgentSocket(t.Context(), path); got != socket {
+	if got := sessionAgentSocket(t.Context()); got != socket {
 		t.Fatalf("discovered socket = %q, want %q", got, socket)
 	}
 	query := <-fixture.queried
@@ -75,17 +76,18 @@ func TestLinuxAgentDiscoveryReadsTheNativeUserManagerProperty(t *testing.T) {
 	fixture.mu.Lock()
 	fixture.value = dbus.MakeVariant(true)
 	fixture.mu.Unlock()
-	if got := sessionAgentSocket(t.Context(), path); got != "" {
+	if got := sessionAgentSocket(t.Context()); got != "" {
 		t.Fatalf("accepted mistyped environment %q", got)
 	}
 }
 
 func TestLinuxAgentDiscoveryRejectsMissingServiceAndPreservesExplicitSocket(t *testing.T) {
-	path := agentFixtureBus(t)
-	if got := sessionAgentSocket(t.Context(), path); got != "" {
+	agentFixtureBus(t)
+	if got := sessionAgentSocket(t.Context()); got != "" {
 		t.Fatalf("missing user manager supplied %q", got)
 	}
-	if got := sessionAgentSocket(t.Context(), filepath.Join(t.TempDir(), "missing")); got != "" {
+	t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path="+filepath.Join(t.TempDir(), "missing"))
+	if got := sessionAgentSocket(t.Context()); got != "" {
 		t.Fatalf("missing user bus supplied %q", got)
 	}
 	socket := agentFixtureSocket(t)
