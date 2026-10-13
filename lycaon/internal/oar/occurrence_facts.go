@@ -280,6 +280,8 @@ var occurrenceFactDecls = []factDecl{
 	{"largest_subtree", oarcore.TypeString, FactTierHost, ""},
 	{"offset", oarcore.TypeString, FactTierHost, ""},
 	{"old_string_chars", oarcore.TypeString, FactTierHost, ""},
+	{"replacement_matches", oarcore.TypeInt, FactTierHost, ""},
+	{"replacement_line", oarcore.TypeInt, FactTierHost, ""},
 	{"opaque_overflow", oarcore.TypeBool, FactTierHost, ""},
 	{"operator", oarcore.TypeString, FactTierHost, ""},
 	{"original_author", oarcore.TypeString, FactTierHost, ""},

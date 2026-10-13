@@ -25,9 +25,17 @@ copy:
     old_string can also fail; changed_by identifies the recorded actors and times.
   why: Read the current text before attributing the mismatch or recomputing an edit; the existence of a foreign
     change alone does not prove it caused this miss.
-  fix: Re-read {{ paintedwolf.path }} to load the current bytes, then retry edit with a verbatim substring
-    of the new content. Query source_history for the full change record when the listed effects are not enough.
-  instead: Branch on Code; never retry the same old_string without a fresh read
+  fix: >-
+    {% if paintedwolf.replacement_matches > 0 %}The requested nonempty new_string already occurs
+    {{ paintedwolf.replacement_matches }} time(s) in the edit basis, first at line
+    {{ paintedwolf.replacement_line }}. This call made no change; this observation does not prove an earlier
+    edit succeeded. Read {{ paintedwolf.path }} to check whether the intended change is already satisfied
+    before attempting another mutation.{% else %}Read {{ paintedwolf.path }} again; use read_hint when present.
+    Check whether the intended change is still needed. If it is, copy a fresh verbatim substring into old_string,
+    without displayed line labels and preserving indentation.{% endif %}
+  instead: Inspect source_history when attribution is needed. Do not repeat the same edit or replace the whole
+    file merely to bypass a missing match.
+
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:edit
 x-paintedwolf-message: edit target changed by another actor this session
@@ -43,3 +51,18 @@ x-paintedwolf-scenarios:
   expect_contains:
   - 'Rejected:'
   - 'Code: EDIT_TARGET_CHANGED_BY_OTHERS'
+
+- id: replacement_present
+  vars:
+    change_count: 2
+    old_string_chars: 42
+    path: internal/foo.go
+    profile: implement
+    tool: edit
+    total_lines: 120
+    replacement_matches: 1
+    replacement_line: 7
+  expect_contains:
+  - 'already occurs'
+  - 'This call made no change'
+  - 'does not prove an earlier'
