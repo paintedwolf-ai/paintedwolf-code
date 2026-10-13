@@ -133,6 +133,26 @@ func TestLogindLeaseReportsServiceLossAndClosesItsDescriptor(t *testing.T) {
 	}
 }
 
+func TestLogindLeaseRejectsAClosedDescriptor(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	testutil.FailErr(t, "create closed descriptor fixture", err)
+	defer func() { _ = reader.Close() }()
+	testutil.FailErr(t, "close fixture descriptor", writer.Close())
+	held := &logindLease{file: writer, done: make(chan error, 1), stop: make(chan struct{}), stopped: make(chan struct{})}
+	go held.watch()
+	select {
+	case err := <-held.Done():
+		if err == nil {
+			t.Fatal("closed descriptor had no failure")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("closed descriptor was not detected")
+	}
+	if err := held.Release(); !errors.Is(err, os.ErrClosed) {
+		t.Fatalf("closed descriptor release = %v", err)
+	}
+}
+
 func TestMissingLogindDoesNotAdvertiseOrAcquireAnInhibitor(t *testing.T) {
 	client, err := connectLogindBus(fixtureBus(t))
 	testutil.FailErr(t, "connect bus without logind", err)

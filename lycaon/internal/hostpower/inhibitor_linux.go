@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"sync"
@@ -22,7 +23,7 @@ const logindPath = dbus.ObjectPath("/org/freedesktop/login1")
 type platformInhibitor struct{}
 
 func connectLogindBus(path string) (*dbus.Conn, error) {
-	connection, err := net.DialTimeout("unix", path, logindDeadline)
+	connection, err := (&net.Dialer{Timeout: logindDeadline}).DialContext(context.Background(), "unix", path)
 	if err != nil {
 		return nil, err
 	}
@@ -109,13 +110,18 @@ func (l *logindLease) watch() {
 	defer close(l.stopped)
 	defer close(l.done)
 	defer func() { l.releaseError = l.file.Close() }()
+	fd := l.file.Fd()
+	if fd > math.MaxInt32 {
+		l.done <- errors.New("sleep inhibitor descriptor is unavailable")
+		return
+	}
+	descriptors := []unix.PollFd{{Fd: int32(fd), Events: unix.POLLERR | unix.POLLHUP}}
 	for {
 		select {
 		case <-l.stop:
 			return
 		default:
 		}
-		descriptors := []unix.PollFd{{Fd: int32(l.file.Fd()), Events: unix.POLLERR | unix.POLLHUP}}
 		_, err := unix.Poll(descriptors, 100)
 		if errors.Is(err, unix.EINTR) {
 			continue
