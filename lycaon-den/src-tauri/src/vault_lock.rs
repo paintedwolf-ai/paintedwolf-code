@@ -71,12 +71,36 @@ pub fn setup(app: AppHandle) -> Result<(), String> {
     {
         macos::setup_macos(app)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        linux::setup_linux(app)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = app;
         Ok(())
     }
 }
+
+/// The lock a Linux desktop signal requests. logind announces the session
+/// lock and the coming sleep; desktops without a logind session lock signal
+/// announce their screensaver instead. Unlock and wake signals carry false
+/// and request nothing.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn lock_reason_for_signal(interface: &str, member: &str, active: bool) -> Option<LockReason> {
+    if !active {
+        return None;
+    }
+    match (interface, member) {
+        ("org.freedesktop.login1.Manager", "PrepareForSleep") => Some(LockReason::Sleep),
+        ("org.freedesktop.login1.Session", "Lock") => Some(LockReason::ScreenLocked),
+        ("org.freedesktop.ScreenSaver", "ActiveChanged") => Some(LockReason::ScreenLocked),
+        _ => None,
+    }
+}
+
+#[cfg(target_os = "linux")]
+mod linux;
 
 #[cfg(target_os = "macos")]
 mod macos {
@@ -173,6 +197,28 @@ mod macos {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn linux_signals_map_to_lock_reasons() {
+        assert_eq!(
+            lock_reason_for_signal("org.freedesktop.login1.Manager", "PrepareForSleep", true),
+            Some(LockReason::Sleep)
+        );
+        assert_eq!(
+            lock_reason_for_signal("org.freedesktop.login1.Session", "Lock", true),
+            Some(LockReason::ScreenLocked)
+        );
+        assert_eq!(
+            lock_reason_for_signal("org.freedesktop.ScreenSaver", "ActiveChanged", true),
+            Some(LockReason::ScreenLocked)
+        );
+        // Waking and unlocking request nothing; `Lock` carries no argument
+        // and is announced as active.
+        assert_eq!(lock_reason_for_signal("org.freedesktop.login1.Manager", "PrepareForSleep", false), None);
+        assert_eq!(lock_reason_for_signal("org.freedesktop.ScreenSaver", "ActiveChanged", false), None);
+        assert_eq!(lock_reason_for_signal("org.freedesktop.login1.Session", "Unlock", true), None);
+        assert_eq!(lock_reason_for_signal("org.example.Other", "Lock", true), None);
+    }
 
     #[test]
     fn lock_reasons_use_the_engine_wire_names() {

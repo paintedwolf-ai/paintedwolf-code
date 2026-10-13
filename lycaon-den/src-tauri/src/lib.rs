@@ -10,6 +10,8 @@ mod clipboard;
 mod config_dir;
 mod detect_editors;
 mod http_transport;
+#[cfg(target_os = "linux")]
+mod linux_bus;
 mod open_external;
 mod open_third_party_notices;
 mod presence;
@@ -29,6 +31,7 @@ use tauri::{Manager, RunEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    harden_process();
     // The launch guard runs before any window so an interrupted update finishes first.
     let launch = match update_service::transaction::launch() {
         Ok(launch) => launch,
@@ -194,6 +197,20 @@ pub fn run() {
         });
 }
 
+
+/// The shell holds the vault password and the presence signing key, so on
+/// Linux it is non-dumpable: no same-user process can ptrace it or read its
+/// memory through the process filesystem. Debug builds stay debuggable.
+fn harden_process() {
+    #[cfg(all(target_os = "linux", not(debug_assertions)))]
+    {
+        // SAFETY: PR_SET_DUMPABLE takes one integer argument and touches no memory.
+        let status = unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0) };
+        if status != 0 {
+            eprintln!("Could not make the shell non-dumpable: {}", std::io::Error::last_os_error());
+        }
+    }
+}
 
 /// The installer mode never initializes windows, tools, or the engine.
 pub fn run_update_helper(id: &str, installation: &str) -> Result<(), String> {

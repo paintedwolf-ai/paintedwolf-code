@@ -15,6 +15,9 @@ use tauri::Manager;
 
 use crate::sidecar::SidecarState;
 
+#[cfg(target_os = "linux")]
+mod linux;
+
 const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, Deserialize)]
@@ -525,7 +528,26 @@ fn verify_user_presence(
     }
 }
 
-#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+/// polkit confirms the person through the desktop's agent. Without one, the
+/// native app-password dialog stands in only while the vault is on the
+/// app-password path; a click never does.
+#[cfg(target_os = "linux")]
+fn verify_user_presence(
+    window: &tauri::Window,
+    prompt: &str,
+) -> Result<&'static str, PresenceCommandError> {
+    match linux::confirm_with_polkit(prompt) {
+        Ok(()) => Ok(linux::AUTHENTICATOR_POLKIT),
+        Err(linux::PolkitRefusal::Denied(message)) => Err(PresenceCommandError::denied(message)),
+        Err(linux::PolkitRefusal::Failed(message)) => Err(PresenceCommandError::failed(message)),
+        Err(linux::PolkitRefusal::Unavailable(reason)) => {
+            linux::confirm_app_password(window, prompt, &reason)
+                .map(|()| linux::AUTHENTICATOR_APP_PASSWORD)
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
 fn verify_user_presence(
     _window: &tauri::Window,
     _prompt: &str,
@@ -534,7 +556,7 @@ fn verify_user_presence(
         "This operating system cannot confirm you.",
     )
     .with_suggested_action(
-        "Use the installed desktop app on macOS or Windows for values you gave Painted Wolf Code.",
+        "Use the installed desktop app for values you gave Painted Wolf Code.",
     ))
 }
 

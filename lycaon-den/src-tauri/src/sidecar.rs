@@ -203,6 +203,18 @@ impl SidecarState {
         URL_SAFE_NO_PAD.encode(self.presence_signing_key.verifying_key().as_bytes())
     }
 
+    /// Whether this shell unlocked the vault with an app password it still holds.
+    pub(crate) fn holds_vault_password(&self) -> bool {
+        self.vault_password.lock().unwrap().is_some()
+    }
+
+    /// Compares a re-entered app password with the one that unlocked the
+    /// vault. None when the vault is not on the app-password path.
+    pub(crate) fn verify_vault_password(&self, candidate: &[u8]) -> Option<bool> {
+        let held = self.vault_password.lock().unwrap();
+        held.as_ref().map(|held| constant_time_eq(&held.0, candidate))
+    }
+
     pub(crate) fn sign_presence(&self, proof_payload: &str, authenticator: &str) -> String {
         let message =
             format!("painted-wolf-presence-v1\n{proof_payload}\nauthenticator={authenticator}");
@@ -212,6 +224,19 @@ impl SidecarState {
                 .to_bytes(),
         )
     }
+}
+
+/// Equal-length byte comparison whose time does not depend on where the
+/// inputs differ.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b) {
+        diff |= x ^ y;
+    }
+    std::hint::black_box(diff) == 0
 }
 
 fn generate_presence_signing_key() -> SigningKey {
