@@ -22,7 +22,7 @@ pub fn product_version(image: &Path, failure: Failure) -> Result<String, UpdateE
     crate::config_dir::ensure_private_dir(&directory).map_err(|e| UpdateError::new(failure, e))?;
     let cleanup = Extraction(directory);
     let mut child = std::process::Command::new(image)
-        .args(["--appimage-extract", "*release-version"])
+        .args(["--appimage-extract", "usr/lib/*/release-version"])
         .current_dir(&cleanup.0)
         .env_remove("APPIMAGE")
         .env_remove("APPDIR")
