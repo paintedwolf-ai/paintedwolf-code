@@ -264,7 +264,7 @@ describe("ScrollportMotion live tail", () => {
         initialScrollTop: 1_400,
       });
       const { motion, viewport } = fixture;
-      let tail = 1_100;
+      const tail = 1_100;
       motion.tail.setTailOffsetResolver(() => tail);
 
       // Schedule with a single confirmation attempt, then interrupt with direct input that outlives the first timer.
