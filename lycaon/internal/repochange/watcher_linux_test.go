@@ -104,19 +104,21 @@ func TestInotifyBurstKeepsCoverageComplete(t *testing.T) {
 	for i := range files {
 		testutil.FailErr(t, "write burst file", os.WriteFile(filepath.Join(burst, fmt.Sprintf("f%04d", i)), []byte("x"), 0o644))
 	}
+	// The marker's own event may fall into a dropped window; the resync that
+	// closes the window is then what tells observers to look again.
 	testutil.FailErr(t, "write marker", os.WriteFile(filepath.Join(fixture.root, "after-burst.txt"), []byte("x"), 0o644))
-	fixture.waitFor("after-burst.txt", WorktreeChangeUnknown)
+	testutil.WaitFor(t, 3*time.Second, func() bool {
+		ResetDebouncerForTest(t.Context())
+		return fixture.seen("after-burst.txt") || fixture.seen(".")
+	})
 	testutil.WaitFor(t, 3*time.Second, func() bool { return fixture.registry.Coverage(fixture.root).Complete })
 	coverage := fixture.registry.Coverage(fixture.root)
-	t.Logf("burst of %d writes: overflows=%d watched=%d complete=%t", files, coverage.Overflows, coverage.Watched, coverage.Complete)
+	t.Logf("burst of %d writes: overflows=%d watched=%d complete=%t marker=%t resync=%t", files, coverage.Overflows, coverage.Watched, coverage.Complete, fixture.seen("after-burst.txt"), fixture.seen("."))
 	if coverage.Faulted || coverage.Truncated != 0 {
 		t.Fatalf("burst coverage = %+v", coverage)
 	}
-	fixture.mu.Lock()
-	defer fixture.mu.Unlock()
-	resynced := slices.ContainsFunc(fixture.changes, func(change WorktreeChange) bool { return change.Path == "." })
-	if coverage.Overflows > 0 && !resynced {
-		t.Fatal("overflow closed without a resync reaching observers")
+	if (coverage.Overflows > 0 && !fixture.seen(".")) || (coverage.Overflows == 0 && !fixture.seen("after-burst.txt")) {
+		t.Fatal("neither the marker nor an overflow resync reached observers")
 	}
 }
 
