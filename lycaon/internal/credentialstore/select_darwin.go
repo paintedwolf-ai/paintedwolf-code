@@ -1,7 +1,11 @@
 package credentialstore
 
-// unattendedIdentityProvider: the release Keychain identity needs no password.
-const unattendedIdentityProvider = true
+// unattendedIdentity: the release Keychain identity needs no password.
+func unattendedIdentity() bool { return true }
+
+// verifiedLauncherPID: macOS verifies the launcher by code signature, not
+// through an identity service.
+func verifiedLauncherPID() int { return 0 }
 
 func selectIdentityProvider(path string, isolated, release bool) identityProvider {
 	if isolated || !release {

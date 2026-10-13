@@ -1,9 +1,11 @@
-//go:build !darwin
+//go:build !darwin && !linux
 
 package credentialstore
 
-// unattendedIdentityProvider: the release identity is wrapped by the app password.
-const unattendedIdentityProvider = false
+// unattendedIdentity: the release identity is wrapped by the app password.
+func unattendedIdentity() bool { return false }
+
+func verifiedLauncherPID() int { return 0 }
 
 func selectIdentityProvider(path string, isolated, release bool) identityProvider {
 	if isolated || !release {
