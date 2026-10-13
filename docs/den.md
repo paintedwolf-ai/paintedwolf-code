@@ -22,6 +22,33 @@ Den may implement complex local behavior (focus, panes, shortcuts, drafts, virtu
 
 If a rendering decision requires two host projections, Den waits until they describe one coherent scope. It does not fill a gap by inspecting transcript wording or an older project cache.
 
+## Linux capability contract
+
+The Linux release uses the same host contracts and client stores. An OS adapter
+owns native effects and reports capability facts; feature code must not infer
+support from a platform name or treat a successful no-op as implementation.
+The release target catalog is [`packaging/release-platforms.json`](../packaging/release-platforms.json).
+Both Linux architectures are candidates, not qualified public releases.
+
+The table identifies current owners and required native evidence. “Shared” means
+the same implementation owns the workflow; it does not claim that an installed
+Linux artifact has passed the desktop matrix. Linked issues own unresolved
+implementation and qualification. The support contract and complete inventory
+remain open under [#444](https://github.com/paintedwolf-ai/paintedwolf-code/issues/444).
+
+| User outcome | Shared owner and native boundary | Linux release evidence and tracking |
+|--------------|----------------------------------|-------------------------------------|
+| Chats, workflows, approvals, provider setup, and MCP | Host `internal/session`, `internal/workflow`, `internal/llm`, `internal/mcp`; Den stores and feature surfaces consume the same API | Shared workflows require installed WebKitGTK journeys, including reconnect, cancellation, tool refusal, and provider authentication: [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456) |
+| Files, editor, search, review, and watching | Host `internal/document`, `internal/projectsource`, `internal/search`, `internal/repochange`; Den `files/`; filesystem identity and watchers use native adapters | Qualify outside edits, atomic save, rename, watch overflow, permissions, and recovery: [#452](https://github.com/paintedwolf-ai/paintedwolf-code/issues/452), [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456) |
+| Command, terminal, background work, and authenticated Git | Host `internal/exec`, `internal/userpath`, `internal/gitexec`, `internal/gitcredential`; shell lookup and SSH-agent discovery have OS boundaries | Non-Darwin account-shell lookup is unavailable and agent discovery has no native fallback; verify desktop-launched PATH, login shell, agent lifetime, credentials, and cancellation: [#47](https://github.com/paintedwolf-ai/paintedwolf-code/issues/47) |
+| Stored credentials survive restart and recovery | Host `internal/credentialstore`; Darwin selects Keychain, other release platforms select the app-password identity provider; Den private startup pipe supplies the password | Linux-native alternative exists; qualify onboarding, wrong password, restart, backup/restore, wipe boundaries, and no credential exposure: [#448](https://github.com/paintedwolf-ai/paintedwolf-code/issues/448) |
+| Confirm the person before reveal or unlock | Den `src-tauri/src/presence.rs` validates and signs host challenges; native verification is selected at the effect | Linux verification is unavailable; macOS LocalAuthentication and Windows Hello have distinct implementations. Preserve purpose, subject, window binding, cancellation, and lock invalidation: [#449](https://github.com/paintedwolf-ai/paintedwolf-code/issues/449) |
+| End unlocks when the person steps away | Host vault owns unlock lifetime; Den `src-tauri/src/vault_lock.rs` reports native lock/sleep/quit reasons | Linux has no lock/sleep observer; current-session resolution, initial lock state, reconnection, and suspend require evidence: [#45](https://github.com/paintedwolf-ai/paintedwolf-code/issues/45) |
+| Contain tools and their descendants | Host `internal/confine`, `internal/toolexecution`, `internal/isolation`; native adapter applies host policy | Linux has no enforcement adapter; approval for unconfined actions is not confinement parity. Admission, filesystem/process/network policy, restricted hosts, and refusal recovery: [#445](https://github.com/paintedwolf-ai/paintedwolf-code/issues/445), [#191](https://github.com/paintedwolf-ai/paintedwolf-code/issues/191), [#192](https://github.com/paintedwolf-ai/paintedwolf-code/issues/192), [#193](https://github.com/paintedwolf-ai/paintedwolf-code/issues/193), [#194](https://github.com/paintedwolf-ai/paintedwolf-code/issues/194), [#196](https://github.com/paintedwolf-ai/paintedwolf-code/issues/196) |
+| Browse, capture, and analyze documents | Host browser, capture, visual/document extraction, and scan owners retain their contracts; OCR and browser launch have native effects | Qualify managed-browser confinement and functionality, native OCR, and complete document/scanner artifacts: [#43](https://github.com/paintedwolf-ai/paintedwolf-code/issues/43), [#454](https://github.com/paintedwolf-ai/paintedwolf-code/issues/454), [#49](https://github.com/paintedwolf-ai/paintedwolf-code/issues/49) |
+| Route host and desktop networking through system configuration | Host `internal/systemproxy`; desktop networking has its own native client boundary | The non-Darwin host lookup returns no system proxy. Qualify manual proxy, bypass, PAC, authentication, failures, and configuration changes across clients: [#453](https://github.com/paintedwolf-ai/paintedwolf-code/issues/453) |
+| Notify and open the correct chat | Den `platform/desktop/notifications.ts` owns client delivery decisions; `src-tauri/src/notifications` owns the macOS native bridge | Other platforms use plugin delivery; native session cancellation and activation are not synthesized. Qualify permission facts, delivery, chat activation, and stale notifications: [#451](https://github.com/paintedwolf-ai/paintedwolf-code/issues/451) |
+
 ## Store authority
 
 Each domain has one client store:
