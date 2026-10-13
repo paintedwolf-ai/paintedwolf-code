@@ -2,6 +2,8 @@ import { createSignal } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { reconcileOsColorScheme, osColorSchemeIsDark } from "../../theme.ts";
 import { isTauriRuntime, tauriPlatform } from "../runtime.ts";
+import { drawsWindowControls, loadWindowChromeLayout } from "./window-chrome-layout.ts";
+import { trackWindowMaximized } from "./window-maximized.ts";
 
 function tauriThemeIsDark(theme: string | null | undefined): boolean {
   if (theme === "dark") return true;
@@ -143,6 +145,11 @@ async function growWindowBy(deltaPx: number): Promise<WidenOutcome> {
 export async function setupWindowChrome(): Promise<void> {
   if (!isTauriRuntime()) return;
   tagTauriPlatformClasses();
+  if (drawsWindowControls()) {
+    // Drawn controls need the desktop's layout and the maximized state.
+    void loadWindowChromeLayout();
+    void trackWindowMaximized();
+  }
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   const win = getCurrentWindow();
 

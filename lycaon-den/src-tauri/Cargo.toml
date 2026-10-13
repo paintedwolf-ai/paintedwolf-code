@@ -125,6 +125,9 @@ arboard = "3"
 uuid = { version = "1", features = ["v4"] }
 wheel-glide = { path = "crates/wheel-glide" }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+
 # macOS posts through UserNotifications directly; other targets use the plugin.
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 tauri-plugin-notification = "2"

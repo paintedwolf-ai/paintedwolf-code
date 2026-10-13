@@ -416,7 +416,13 @@ var osInterceptedChords = map[string][]string{
 		"Ctrl+ArrowUp", "Ctrl+ArrowDown", "Ctrl+ArrowLeft", "Ctrl+ArrowRight",
 	},
 	"windows": {"Alt+Tab", "Mod+Shift+Escape", "Mod+Alt+Delete", "Super+*"},
-	"linux":   {"Super+*", "Alt+Tab", "Mod+Alt+Delete"},
+	"linux": {
+		"Super+*", "Alt+Tab", "Mod+Alt+Delete",
+		// Workspace switching, the window menu, and the window manager's move,
+		// resize, and maximize gestures.
+		"Mod+Alt+ArrowUp", "Mod+Alt+ArrowDown", "Mod+Alt+ArrowLeft", "Mod+Alt+ArrowRight",
+		"Alt+Space", "Alt+F1", "Alt+F2", "Alt+F7", "Alt+F8", "Alt+F10",
+	},
 }
 
 // assistiveReservedKeys belong to assistive navigation on every platform.

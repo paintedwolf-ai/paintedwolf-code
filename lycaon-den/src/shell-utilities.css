@@ -39,14 +39,6 @@ position: relative;
 }
 
 
-@utility den-shell-header-drawers {
-display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-
 @utility den-shell-header-titlebar {
 display: flex;
   align-items: center;
@@ -55,10 +47,6 @@ display: flex;
   min-width: 0;
   order: 1;
   position: relative;
-
-  & .den-shell-header-drawers:empty {
-    display: none;
-  }
 }
 
 @utility den-shell-header-titlebar__edge--trailing {
@@ -313,16 +301,13 @@ display: flex;
 display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: max(24px, 1.75em);
-  min-height: max(24px, 1.5em);
-  width: auto;
-  height: auto;
-  padding: 0 0.25em;
+  width: var(--den-titlebar-edge-control);
+  height: var(--den-titlebar-edge-control);
+  padding: 0;
   border: none;
   border-radius: var(--den-radius-sm);
   background: transparent;
   color: var(--den-text-muted);
-  font-size: var(--text-den-body);
   line-height: 1;
   cursor: pointer;
   transition:
@@ -336,7 +321,7 @@ display: inline-flex;
 
 
 .den-shell-window-control-close:hover {
-  background: color-mix(in srgb, var(--den-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--den-danger) 18%, transparent);
   color: var(--den-text);
 }
 
@@ -347,7 +332,18 @@ display: flex;
   flex-shrink: 0;
 }
 
-.den-shell-chrome-drag-surface[data-tauri-drag-region] ~ .den-shell-header-drawers .den-shell-window-control,
+/* Glyphs are drawn as strokes so they stay crisp at every display scale. */
+.den-shell-window-control__glyph {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.den-shell-window-control,
 .den-shell-header-titlebar .den-stage-back,
 .den-shell-aside-titlebar .den-inset-icon-btn,
 .den-shell-header-titlebar .den-inset-icon-btn,
@@ -511,10 +507,6 @@ display: flex;
   right: 0;
   width: 100%;
   z-index: 0;
-}
-
-.den-shell-header-chat .tabs__rail-trailing .den-shell-window-controls {
-  pointer-events: auto;
 }
 
 @utility den-stage-wash-fill {
