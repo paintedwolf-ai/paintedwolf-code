@@ -66,91 +66,71 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotEqual(snapshot.key('source_files', 'pkg/server.go'), snapshot.key('test_files', 'pkg/server.go'))
 
 
-class IssueLifecycleTests(unittest.TestCase):
+class WorkstreamTests(unittest.TestCase):
     def setUp(self):
-        self.artifacts = {snapshot.key(row()['category'], row()['id']): row()}
+        from ci_policy import budget_workstreams
+        self.groups = budget_workstreams
 
-    def test_create_then_repeat_has_no_writes(self):
-        operations, suppressed = issues.plan([], self.artifacts, observation())
-        self.assertEqual([op['action'] for op in operations], ['create'])
-        current = issue(body=operations[0]['body']['body'])
-        self.assertEqual(issues.plan([current], self.artifacts, observation()), ([], 0))
-        self.assertEqual(suppressed, 0)
+    def artifacts(self, *rows):
+        return {snapshot.key(r['category'], r['id']): r for r in rows}
 
-    def test_later_merge_updates_same_issue_preserving_human_prose(self):
-        current = issue(body='Human notes\n\n' + issues.block(row(), observation(), True) + '\nAfterword')
-        changed = {next(iter(self.artifacts)): row(measured=400)}
-        operations, _ = issues.plan([current], changed, observation('e' * 40))
-        self.assertEqual(operations[0]['action'], 'update')
-        self.assertEqual(operations[0]['number'], 1)
-        body = operations[0]['body']['body']
-        self.assertTrue(body.startswith('Human notes\n\n'))
-        self.assertTrue(body.endswith('\nAfterword'))
-        self.assertNotIn('title', operations[0]['body'])
-        self.assertEqual(issues.tracked(issue(body=body))['measured'], 400)
+    def test_structural_grouping_grows_without_a_module_catalog(self):
+        for path, expected in [('lycaon/internal/newmodule/nested/service.go', 'lycaon/internal'),
+                               ('new-client/src/newarea/file.ts', 'new-client/src'),
+                               ('lycaon/test/contract/new/test.go', 'lycaon/test'),
+                               ('scripts/new/path.py', 'scripts'), ('client/src/App.tsx', 'client/src')]:
+            self.assertEqual(self.groups.workstream(row(path)), expected)
 
-    def test_resolution_and_recurrence_reuse_original_issue(self):
-        operations, _ = issues.plan([issue()], {}, observation('e' * 40))
-        self.assertEqual(operations[0]['action'], 'resolve')
-        self.assertEqual(operations[0]['body']['state_reason'], 'completed')
-        resolved = issue(state='closed', state_reason='completed', body=operations[0]['body']['body'])
-        self.assertEqual(issues.plan([resolved], {}, observation('f' * 40)), ([], 0))
-        operations, _ = issues.plan([resolved], self.artifacts, observation('f' * 40))
-        self.assertEqual(operations[0]['action'], 'reopen')
-        self.assertEqual(operations[0]['number'], 1)
-
-    def test_dismissal_suppresses_reopening_and_duplicate_creation(self):
-        current = issue(state='closed', state_reason='not_planned')
-        self.assertEqual(issues.plan([current], self.artifacts, observation('e' * 40), intake_keys=set()), ([], 1))
-
-    def test_adopt_legacy_bot_issue_and_deduplicate(self):
-        old = issue(body='Original evidence')
-        old['title'] = 'Maintainability debt: source_files pkg/server.go'
-        operations, _ = issues.plan([issue(number=2), old], self.artifacts, observation())
-        self.assertEqual([op['action'] for op in operations], ['deduplicate', 'update'])
+    def test_migration_adopts_oldest_and_preserves_human_notes_and_evidence(self):
+        first = row('app/internal/module/a.go')
+        second = row('app/internal/module/module.Service', 'go_receiver_lines')
+        old = issue(number=2, body='Human notes\n' + issues.block(first, observation(), True) + '\nAfterword')
+        other = issue(number=3, body=issues.block(second, observation(), True))
+        operations, _ = self.groups.plan([other, old], self.artifacts(first, second), observation())
+        self.assertEqual([o['action'] for o in operations], ['update', 'consolidate'])
         self.assertEqual(operations[0]['number'], 2)
-        self.assertIn('Tracked by #1', operations[0]['body']['body'])
-        self.assertTrue(operations[1]['body']['body'].startswith('Original evidence'))
+        body = operations[0]['body']['body']
+        self.assertTrue(body.startswith('Human notes\n'))
+        self.assertTrue(body.endswith('\nAfterword'))
+        self.assertEqual(len(self.groups.group_state(issue(body=body))['artifacts']), 2)
+        self.assertIn('Consolidated into #2', operations[1]['body']['body'])
+        current = {**old, **operations[0]['body']}
+        duplicate = {**other, **operations[1]['body']}
+        self.assertEqual(self.groups.plan([current, duplicate], self.artifacts(first, second), observation('f' * 40)), ([], 0))
 
-    def test_human_copy_of_marker_cannot_be_mutated(self):
-        current = issue()
-        current['user']['login'] = 'human'
-        operations, _ = issues.plan([current], self.artifacts, observation())
-        self.assertEqual([op['action'] for op in operations], ['create'])
+    def test_partial_migration_replay_does_not_recreate_artifact_issues(self):
+        first, second = row('pkg/a.go'), row('pkg/b.go')
+        old = issue(body=issues.block(first, observation(), True))
+        other = issue(number=2, body=issues.block(second, observation(), True))
+        ops, _ = self.groups.plan([old, other], self.artifacts(first, second), observation())
+        current = {**old, **ops[0]['body']}
+        repeated, _ = self.groups.plan([current, other], self.artifacts(first, second), observation())
+        self.assertEqual([o['action'] for o in repeated], ['consolidate'])
 
-    def test_malformed_tracking_blocks_abort_the_whole_plan(self):
-        for body in [issues.START, issues.START + '\n' + issues.END,
-                     issues.block(row(), observation(), True) * 2,
-                     issues.block(row(), observation(), True).replace('pkg/server.go', 'changed.go', 1)]:
-            with self.subTest(body=body), self.assertRaises(ValueError):
-                issues.plan([issue(body=body)], self.artifacts, observation())
+    def test_resolve_recur_retention_and_new_untouched_debt(self):
+        entry = row('pkg/a.go')
+        ops, _ = self.groups.plan([], self.artifacts(entry), observation())
+        current = issue(body=ops[0]['body']['body'])
+        from verification_tests.ci.test_budget_review_execution import reviewed
+        retained = {**entry, 'review': reviewed()['review']}
+        ops, suppressed = self.groups.plan([current], self.artifacts(retained), observation())
+        self.assertEqual(ops[0]['action'], 'resolve')
+        self.assertEqual(suppressed, 1)
+        closed = {**current, **ops[0]['body']}
+        self.assertEqual(self.groups.plan([closed], {}, observation()), ([], 0))
+        renewed = {**retained, 'review': {**retained['review'], 'state': 'boundary_changed'}}
+        ops, _ = self.groups.plan([closed], self.artifacts(renewed), observation(), intake_keys=set())
+        self.assertEqual(ops[0]['action'], 'reopen')
+        untouched = {**entry, 'id': 'pkg/b.go', 'touched': False}
+        ops, _ = self.groups.plan([current], self.artifacts(entry, untouched), observation())
+        self.assertEqual(ops, [])
 
-    def test_exception_copy_cannot_escape_the_state_comment(self):
-        special = {**row(), 'exception_reason': '--> <script>danger</script>'}
-        current = issue(body=issues.block(special, observation(), True))
-        self.assertEqual(issues.tracked(current)['exception_reason'], special['exception_reason'])
-        self.assertNotIn('<script>', current['body'])
-
-    def test_gradual_intake_tracks_existing_issues_without_baseline_flood(self):
-        untouched = {identity: {**entry, 'touched': False} for identity, entry in self.artifacts.items()}
-        self.assertEqual(issues.plan([], untouched, observation()), ([], 0))
-        operations, _ = issues.plan([], untouched, observation(), backfill=True)
-        self.assertEqual(operations[0]['action'], 'create')
-        operations, _ = issues.plan([issue()], untouched, observation('e' * 40), intake_keys=set(untouched))
-        self.assertEqual(operations[0]['action'], 'update')
-        operations, _ = issues.plan([], untouched, observation(), intake_keys=set(untouched))
-        self.assertEqual(operations[0]['action'], 'create')
-
-    def test_untouched_unchanged_issue_does_not_receive_per_merge_updates(self):
-        untouched = {identity: {**entry, 'touched': False} for identity, entry in self.artifacts.items()}
-        self.assertEqual(issues.plan([issue()], untouched, observation('e' * 40)), ([], 0))
-        changed = {identity: {**entry, 'warn': 250} for identity, entry in untouched.items()}
-        operations, _ = issues.plan([issue()], changed, observation('e' * 40))
-        self.assertEqual(operations[0]['action'], 'update')
-
-    def test_long_artifact_identity_survives_a_bounded_title(self):
-        entry = row('pkg/' + 'a' * 300 + '.go')
-        identity = snapshot.key(entry['category'], entry['id'])
-        operations, _ = issues.plan([], {identity: entry}, observation())
-        self.assertEqual(len(operations[0]['body']['title']), 240)
-        self.assertEqual(issues.tracked(issue(body=operations[0]['body']['body']))['key'], identity)
+    def test_human_copies_and_malformed_state_cannot_mutate_issues(self):
+        ops, _ = self.groups.plan([], self.artifacts(row()), observation())
+        body = ops[0]['body']['body']
+        human = issue(body=body)
+        human['user']['login'] = 'someone'
+        self.assertEqual(self.groups.plan([human], self.artifacts(row()), observation())[0][0]['action'], 'create')
+        for broken in [body * 2, self.groups.START, body.replace('"workstream":"pkg"', '"workstream":"../unsafe"')]:
+            with self.assertRaises(ValueError):
+                self.groups.plan([issue(body=broken)], self.artifacts(row()), observation())
