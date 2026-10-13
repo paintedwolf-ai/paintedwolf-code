@@ -81,19 +81,5 @@ def block(row, observation, active, previous=None):
     return '\n'.join(lines)
 
 
-def body_for(issue, row, observation, active):
-    managed = block(row, observation, active, tracked(issue))
-    body = issue.get('body') or ''
-    if START in body:
-        start, end = body.index(START), body.index(END) + len(END)
-        return body[:start] + managed + body[end:]
-    return body.rstrip() + ('\n\n' if body.strip() else '') + managed
-
-
-def title(row):
-    text = f"Maintainability debt: {row['category']} {row['id']}"
-    return text if len(text) <= 240 else text[:237] + '...'
-
-
 def expected(issue):
     return {name: issue.get(name) for name in ['title', 'body', 'state', 'state_reason']}
