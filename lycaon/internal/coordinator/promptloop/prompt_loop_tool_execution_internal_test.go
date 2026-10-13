@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -340,24 +341,22 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
 		code         string
-		loadable     bool
+		deferred     []string
 		offered      []string
 		recovery     string
 		wantRecovery bool
 	}{
-		{"deferred loading offered", "TOOL_NOT_OFFERED", true, []string{"request_tools"}, "request_tools", true},
-		{"deferred loading unavailable", "TOOL_NOT_OFFERED", true, []string{"read"}, "request_tools", false},
-		{"unavailable name", "TOOL_NOT_OFFERED", false, []string{"request_tools"}, "request_tools", false},
-		{"worker completion", "TOOL_INVOKE_PROSE_TURN", false, []string{"complete_leg"}, "complete_leg", true},
-		{"coordinator completion", "TOOL_INVOKE_PROSE_TURN", false, []string{}, "complete_leg", false},
+		{"deferred loading offered", "TOOL_NOT_OFFERED", []string{"command"}, []string{"request_tools"}, "request_tools", true},
+		{"deferred loading unavailable", "TOOL_NOT_OFFERED", []string{"command"}, []string{"read"}, "request_tools", false},
+		{"unavailable name with alternatives", "TOOL_NOT_OFFERED", []string{"task"}, []string{"request_tools"}, "describing the capability", true},
+		{"alternatives without loader", "TOOL_NOT_OFFERED", []string{"task"}, []string{"read"}, "request_tools", false},
+		{"unavailable name", "TOOL_NOT_OFFERED", nil, []string{"request_tools"}, "request_tools", false},
+		{"worker completion", "TOOL_INVOKE_PROSE_TURN", nil, []string{"complete_leg"}, "complete_leg", true},
+		{"coordinator completion", "TOOL_INVOKE_PROSE_TURN", nil, []string{}, "complete_leg", false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			sess := &api.Session{ID: t.Name(), AgentType: "coordinator"}
-			var deferred []string
-			if tc.loadable {
-				deferred = []string{"command"}
-			}
-			reject := loop.Tools.rejectToolOccurrence(t.Context(), sess, api.ToolCall{Name: "command"}, tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator"}, Turn: tools.InvocationTurn{TurnOfferedToolNames: tc.offered, TurnToolPlan: toolsurface.Compile(tc.offered, deferred)}}, tc.code, nil)
+			reject := loop.Tools.rejectToolOccurrence(t.Context(), sess, api.ToolCall{Name: "command"}, tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator"}, Turn: tools.InvocationTurn{TurnOfferedToolNames: tc.offered, TurnToolPlan: toolsurface.Compile(tc.offered, tc.deferred)}}, tc.code, nil)
 			if reject.Code() != tc.code || reject.Copy == nil || toolrejection.AsToolReject(reject) == nil {
 				t.Fatalf("pre-executor refusal lost decision: %+v", reject)
 			}
@@ -366,7 +365,11 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 			}
 			if tc.code == "TOOL_NOT_OFFERED" {
 				data := toolrejection.AsToolReject(reject).Data
-				wantLoad := tc.loadable && tc.wantRecovery
+				wantLoad := slices.Contains(tc.deferred, "command") && slices.Contains(tc.offered, "request_tools")
+				wantDiscovery := len(tc.deferred) > 0 && slices.Contains(tc.offered, "request_tools")
+				if data["can_request_tools"] != wantDiscovery {
+					t.Fatalf("discovery fact = %v, want %v", data, wantDiscovery)
+				}
 				if data["tool_loadable"] != wantLoad {
 					t.Fatalf("loading fact = %v, want %v", data, wantLoad)
 				}
