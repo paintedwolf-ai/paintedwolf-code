@@ -25,20 +25,40 @@ const FILE_MANAGER_OBJECT_PATH: &str = "/org/freedesktop/FileManager1";
 const CALL_TIMEOUT_MS: i32 = 5_000;
 const IDENTITY_TIMEOUT: Duration = Duration::from_secs(2);
 
+/// The service that handled an open request, for diagnostics.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Via {
+    Portal,
+    FileManager,
+    DefaultHandler,
+    XdgOpen,
+}
+
+impl std::fmt::Display for Via {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Via::Portal => "desktop portal",
+            Via::FileManager => "file manager",
+            Via::DefaultHandler => "default handler",
+            Via::XdgOpen => "xdg-open",
+        })
+    }
+}
+
 /// The window identity the portal parents its dialogs to, in the
 /// `x11:<xid>` or `wayland:<handle>` form the OpenURI interface defines.
 /// Empty when the display server exposes none within the budget.
-pub(crate) struct ParentWindow {
+pub struct ParentWindow {
     identity: String,
     exported: Option<tauri::WebviewWindow>,
 }
 
 impl ParentWindow {
-    pub(crate) fn none() -> Self {
+    pub fn none() -> Self {
         Self { identity: String::new(), exported: None }
     }
 
-    pub(crate) fn of(window: &tauri::WebviewWindow) -> Self {
+    pub fn of(window: &tauri::WebviewWindow) -> Self {
         let (sender, receiver) = mpsc::channel();
         let target = window.clone();
         if window.run_on_main_thread(move || identify_on_main_thread(&target, sender)).is_err() {
@@ -53,7 +73,7 @@ impl ParentWindow {
         }
     }
 
-    pub(crate) fn identity(&self) -> &str {
+    pub fn identity(&self) -> &str {
         &self.identity
     }
 }
@@ -149,9 +169,14 @@ fn session_bus() -> Result<gio::DBusConnection, String> {
         .map_err(|error| format!("The desktop session bus is unavailable: {error}"))
 }
 
+/// Whether a portal service currently owns its bus name on this session.
+pub fn portal_running() -> bool {
+    session_bus().is_ok_and(|bus| portal_owned(&bus))
+}
+
 /// A portal counts only while a service owns its bus name; a merely
 /// activatable portal would start into a session that has no backend for it.
-fn portal_running(bus: &gio::DBusConnection) -> bool {
+fn portal_owned(bus: &gio::DBusConnection) -> bool {
     bus.call_sync(
         Some("org.freedesktop.DBus"),
         "/org/freedesktop/DBus",
@@ -239,35 +264,40 @@ fn through_portal(
     parent: &ParentWindow,
     portal: impl FnOnce(&gio::DBusConnection, &str) -> Result<(), String>,
     uri: &str,
-) -> Result<(), String> {
+) -> Result<Via, String> {
     if let Ok(bus) = session_bus() {
-        if portal_running(&bus) && portal(&bus, parent.identity()).is_ok() {
-            return Ok(());
+        if portal_owned(&bus) && portal(&bus, parent.identity()).is_ok() {
+            return Ok(Via::Portal);
         }
     }
-    launch_default_handler(uri).or_else(|handler| xdg_open(uri).map_err(|open| format!("{handler}; {open}")))
+    match launch_default_handler(uri) {
+        Ok(()) => Ok(Via::DefaultHandler),
+        Err(handler) => xdg_open(uri)
+            .map(|()| Via::XdgOpen)
+            .map_err(|open| format!("{handler}; {open}")),
+    }
 }
 
 /// Opens a web or mail URI with the default application.
-pub(crate) fn open_uri(parent: &ParentWindow, uri: &str) -> Result<(), String> {
+pub fn open_uri(parent: &ParentWindow, uri: &str) -> Result<Via, String> {
     through_portal(parent, |bus, identity| portal_open_uri(bus, identity, uri), uri)
 }
 
 /// Opens a local file with the application registered for its type.
-pub(crate) fn open_file(parent: &ParentWindow, path: &Path) -> Result<(), String> {
+pub fn open_file(parent: &ParentWindow, path: &Path) -> Result<Via, String> {
     let uri = file_uri(path);
     through_portal(parent, |bus, identity| portal_open_fd(bus, "OpenFile", identity, path), &uri)
 }
 
 /// Opens a directory in the file manager.
-pub(crate) fn open_directory(parent: &ParentWindow, path: &Path) -> Result<(), String> {
+pub fn open_directory(parent: &ParentWindow, path: &Path) -> Result<Via, String> {
     let uri = file_uri(path);
     through_portal(parent, |bus, identity| portal_open_fd(bus, "OpenDirectory", identity, path), &uri)
 }
 
 /// Selects the entry in the file manager, falling back to opening its parent
 /// directory where no file manager implements the selection interface.
-pub(crate) fn show_item(parent: &ParentWindow, path: &Path) -> Result<(), String> {
+pub fn show_item(parent: &ParentWindow, path: &Path) -> Result<Via, String> {
     if let Ok(bus) = session_bus() {
         let items = vec![file_uri(path)];
         let shown = bus.call_sync(
@@ -282,7 +312,7 @@ pub(crate) fn show_item(parent: &ParentWindow, path: &Path) -> Result<(), String
             gio::Cancellable::NONE,
         );
         if shown.is_ok() {
-            return Ok(());
+            return Ok(Via::FileManager);
         }
     }
     let directory = if path.is_dir() { path } else { path.parent().unwrap_or(path) };
@@ -290,7 +320,7 @@ pub(crate) fn show_item(parent: &ParentWindow, path: &Path) -> Result<(), String
 }
 
 /// Opens a URI with the browser registered for `https`, whatever its scheme.
-pub(crate) fn open_in_default_browser(uri: &str) -> Result<(), String> {
+pub fn open_in_default_browser(uri: &str) -> Result<(), String> {
     let browser = gio::AppInfo::default_for_uri_scheme("https")
         .ok_or_else(|| "No default browser is configured.".to_string())?;
     browser

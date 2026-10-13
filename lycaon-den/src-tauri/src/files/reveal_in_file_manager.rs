@@ -164,7 +164,7 @@ fn spawn_reveal(path: &Path, window: &tauri::WebviewWindow) -> Result<(), String
     #[cfg(target_os = "linux")]
     {
         use crate::files::linux_desktop_open::{show_item, ParentWindow};
-        show_item(&ParentWindow::of(window), path)
+        show_item(&ParentWindow::of(window), path).map(|_| ())
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]

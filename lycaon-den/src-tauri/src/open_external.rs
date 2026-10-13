@@ -257,7 +257,7 @@ fn spawn_system_browser(url: &str, window: &tauri::WebviewWindow) -> Result<(), 
     #[cfg(target_os = "linux")]
     {
         use crate::files::linux_desktop_open::{open_uri, ParentWindow};
-        open_uri(&ParentWindow::of(window), url)
+        open_uri(&ParentWindow::of(window), url).map(|_| ())
     }
     #[cfg(target_os = "windows")]
     {

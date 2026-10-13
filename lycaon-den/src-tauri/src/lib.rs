@@ -1,5 +1,5 @@
 mod app_state;
-mod files;
+pub mod files;
 mod notifications;
 mod windows;
 mod app_exit;
