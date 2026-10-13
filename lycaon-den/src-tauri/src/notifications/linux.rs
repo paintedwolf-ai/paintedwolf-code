@@ -1,5 +1,6 @@
 //! Native Linux desktop notification ownership.
 
+mod activation;
 mod delivery;
 mod identity;
 
@@ -159,8 +160,15 @@ fn run(
             delivery = None;
         }
         if delivery.is_none() {
+            let target = app.clone();
             delivery = crate::linux_desktop::session_bus::connect(context)
-                .and_then(|connection| Delivery::new(connection, app, deadline))
+                .and_then(|connection| {
+                    Delivery::new(
+                        connection,
+                        move |session, token| activation::activate(&target, session, token),
+                        deadline,
+                    )
+                })
                 .ok();
         }
         let result = match (&request.command, &delivery) {
