@@ -17,7 +17,6 @@ type PromptBudgetInjectSpec struct {
 var (
 	coordinatorTurns = []promptunit.Host{promptunit.HostCoordinator}
 	workerTurns      = []promptunit.Host{promptunit.HostWorker}
-	everyTurn        = []promptunit.Host{promptunit.HostCoordinator, promptunit.HostWorker}
 )
 
 // PromptBudgetInjectMatrix is the SSOT for coordinator inject budget fixtures.
