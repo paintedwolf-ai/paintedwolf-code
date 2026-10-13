@@ -3,12 +3,15 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/hostpower"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -83,5 +86,45 @@ func TestServeRejectsUnsupportedStartupProtocolBeforeOpeningStore(t *testing.T) 
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("protocol refusal touched store: %v", err)
+	}
+}
+
+func TestDescribeSystemProxyReportsTheHostDecision(t *testing.T) {
+	for _, key := range []string{"HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy"} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("HTTPS_PROXY", "http://alice:secret@proxy.example:3128")
+	var out bytes.Buffer
+	testutil.FailErr(t, "describe proxied target", describeSystemProxy("https://api.example/v1", &out))
+	if out.String() != "http://redacted@proxy.example:3128\n" {
+		t.Fatalf("proxied target = %q", out.String())
+	}
+	out.Reset()
+	testutil.FailErr(t, "describe loopback", describeSystemProxy("http://127.0.0.1:8787/health", &out))
+	if out.String() != "direct\n" {
+		t.Fatalf("loopback = %q", out.String())
+	}
+	for _, raw := range []string{"", "api.example", "://x", "https://"} {
+		if err := describeSystemProxy(raw, &out); err == nil {
+			t.Fatalf("%q was accepted as a target", raw)
+		}
+	}
+}
+
+func TestHoldPowerInhibitorReportsProviderOrUnavailability(t *testing.T) {
+	var out bytes.Buffer
+	err := holdPowerInhibitor(t.Context(), hostpower.New(true), 0, &out)
+	line := out.String()
+	if !strings.HasPrefix(line, "supported=") || !strings.Contains(line, "provider=") {
+		t.Fatalf("status line = %q", line)
+	}
+	if strings.Contains(line, "inhibiting=true") != (err == nil) {
+		t.Fatalf("status %q with error %v", line, err)
+	}
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	out.Reset()
+	if err := holdPowerInhibitor(canceled, hostpower.New(true), time.Hour, &out); err == nil || (!strings.Contains(out.String(), "inhibiting=false") && !errors.Is(err, context.Canceled)) {
+		t.Fatalf("canceled hold = %v with %q", err, out.String())
 	}
 }

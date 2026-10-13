@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/diagnostics"
 	"github.com/lycaon/lycaon/internal/documentcore"
+	"github.com/lycaon/lycaon/internal/hostpower"
 	"github.com/lycaon/lycaon/internal/httpclient"
 	"github.com/lycaon/lycaon/internal/systemproxy"
 	"github.com/lycaon/lycaon/internal/upgradefixture"
@@ -38,8 +39,15 @@ func runDiagnostics(ctx context.Context, args []string) error {
 	if len(args) == 2 && args[0] == "system-proxy" {
 		return describeSystemProxy(args[1], os.Stdout)
 	}
+	if len(args) == 2 && args[0] == "power-inhibit" {
+		hold, err := time.ParseDuration(args[1])
+		if err != nil || hold < 0 {
+			return fmt.Errorf("power-inhibit requires a hold duration such as 30s")
+		}
+		return holdPowerInhibitor(ctx, hostpower.New(true), hold, os.Stdout)
+	}
 	if len(args) != 1 || args[0] != "startup-diagnostics" {
-		return fmt.Errorf("usage: pw diagnostics startup-diagnostics | document-core | system-proxy <url> | schema-baseline | store-baseline <store.db> | upgrade-fixture-verify <config-dir> <manifest.json>")
+		return fmt.Errorf("usage: pw diagnostics startup-diagnostics | document-core | system-proxy <url> | power-inhibit <duration> | schema-baseline | store-baseline <store.db> | upgrade-fixture-verify <config-dir> <manifest.json>")
 	}
 	dir, err := configdir.UserConfigDir()
 	if err != nil {
@@ -61,6 +69,29 @@ func describeSystemProxy(raw string, out io.Writer) error {
 	}
 	_, err = fmt.Fprintf(out, "%s\n", systemproxy.Redact(proxy))
 	return err
+}
+
+// holdPowerInhibitor acquires the host's sleep inhibitor as active work would,
+// reports which provider holds it, and keeps it for the requested time so the
+// desktop's own inhibitor listing can be checked alongside.
+func holdPowerInhibitor(ctx context.Context, controller *hostpower.Controller, hold time.Duration, out io.Writer) error {
+	defer func() { _ = controller.Close() }()
+	controller.SetActive("diagnostics", true)
+	status := controller.Snapshot()
+	if _, err := fmt.Fprintf(out, "supported=%t inhibiting=%t provider=%q error=%q\n", status.Supported, status.Inhibiting, status.Provider, status.LastError); err != nil {
+		return err
+	}
+	if !status.Inhibiting {
+		return fmt.Errorf("sleep inhibition is unavailable on this host")
+	}
+	timer := time.NewTimer(hold)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // verifyDocumentCore proves the installed document core runs from this
