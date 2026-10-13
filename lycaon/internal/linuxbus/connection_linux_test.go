@@ -6,13 +6,19 @@ import (
 	"context"
 	"errors"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
 
 func TestConnectionCancellationBoundsSilentAuthentication(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "bus")
+	directory, err := os.MkdirTemp(os.TempDir(), "pwb-") //nolint:usetesting // Unix socket paths must fit sockaddr_un.
+	if err != nil {
+		t.Fatalf("create socket fixture directory: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(directory) })
+	path := filepath.Join(directory, "bus")
 	listener, err := net.Listen("unix", path)
 	if err != nil {
 		t.Fatalf("listen on authentication fixture: %v", err)

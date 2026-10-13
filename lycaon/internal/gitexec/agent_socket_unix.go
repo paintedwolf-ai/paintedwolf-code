@@ -12,8 +12,11 @@ import (
 const agentSocketLookupTimeout = 2 * time.Second
 
 func validAgentSocket(path string) string {
+	if strings.ContainsAny(path, "\x00\r\n") {
+		return ""
+	}
 	path = strings.TrimSpace(path)
-	if path == "" || !filepath.IsAbs(path) || strings.ContainsAny(path, "\x00\r\n") {
+	if path == "" || !filepath.IsAbs(path) {
 		return ""
 	}
 	info, err := os.Stat(path) //nolint:gosec // G703 — validated absolute socket path
