@@ -14,6 +14,8 @@ requires:
   - paintedwolf.old_string_chars
   - paintedwolf.path
   - paintedwolf.total_lines
+  - paintedwolf.replacement_matches
+  - paintedwolf.replacement_line
   - paintedwolf.change_count
 when: paintedwolf.rejection_code == "EDIT_TARGET_CHANGED_BY_OTHERS"
 effect: block
@@ -26,7 +28,7 @@ copy:
   why: Read the current text before attributing the mismatch or recomputing an edit; the existence of a foreign
     change alone does not prove it caused this miss.
   fix: >-
-    {% if paintedwolf.replacement_matches > 0 %}The requested nonempty new_string already occurs
+    {% if paintedwolf.replacement_matches %}The requested nonempty new_string already occurs
     {{ paintedwolf.replacement_matches }} time(s) in the edit basis, first at line
     {{ paintedwolf.replacement_line }}. This call made no change; this observation does not prove an earlier
     edit succeeded. Read {{ paintedwolf.path }} to check whether the intended change is already satisfied
