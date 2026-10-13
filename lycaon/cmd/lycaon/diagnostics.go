@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/diagnostics"
 	"github.com/lycaon/lycaon/internal/documentcore"
+	"github.com/lycaon/lycaon/internal/httpclient"
+	"github.com/lycaon/lycaon/internal/systemproxy"
 	"github.com/lycaon/lycaon/internal/upgradefixture"
 )
 
@@ -32,14 +35,32 @@ func runDiagnostics(ctx context.Context, args []string) error {
 	if len(args) == 1 && args[0] == "document-core" {
 		return verifyDocumentCore(ctx)
 	}
+	if len(args) == 2 && args[0] == "system-proxy" {
+		return describeSystemProxy(args[1], os.Stdout)
+	}
 	if len(args) != 1 || args[0] != "startup-diagnostics" {
-		return fmt.Errorf("usage: pw diagnostics startup-diagnostics | document-core | schema-baseline | store-baseline <store.db> | upgrade-fixture-verify <config-dir> <manifest.json>")
+		return fmt.Errorf("usage: pw diagnostics startup-diagnostics | document-core | system-proxy <url> | schema-baseline | store-baseline <store.db> | upgrade-fixture-verify <config-dir> <manifest.json>")
 	}
 	dir, err := configdir.UserConfigDir()
 	if err != nil {
 		return fmt.Errorf("diagnostics config directory: %w", err)
 	}
 	return writeStartupDiagnostics(ctx, args, dir, os.Stdout, time.Now())
+}
+
+// describeSystemProxy prints the proxy host clients would use for a URL, with
+// credentials removed, or the reason the configured mechanism is refused.
+func describeSystemProxy(raw string, out io.Writer) error {
+	target, err := url.Parse(raw)
+	if err != nil || target.Scheme == "" || target.Host == "" {
+		return fmt.Errorf("system-proxy requires an absolute URL")
+	}
+	proxy, err := httpclient.ResolveProxy(target)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintf(out, "%s\n", systemproxy.Redact(proxy))
+	return err
 }
 
 // verifyDocumentCore proves the installed document core runs from this

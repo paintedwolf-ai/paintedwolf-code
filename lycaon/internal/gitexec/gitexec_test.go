@@ -124,7 +124,7 @@ func TestNeutralizePrefixOrder(t *testing.T) {
 		}
 	}
 
-	argv, err := buildArgv(t.Context(), t.TempDir(), Opts{
+	argv, _, err := buildArgv(t.Context(), t.TempDir(), Opts{
 		ExtraConfig: []string{"foo.bar=baz", "a.b=c"},
 	}, []string{"status", "--porcelain"})
 	testutil.FailErr(t, "buildArgv", err)
@@ -167,7 +167,7 @@ func TestLFSFilterPrefixWhenPresent(t *testing.T) {
 		}
 	}
 
-	argv, err := buildArgv(t.Context(), t.TempDir(), Opts{}, []string{"status"})
+	argv, _, err := buildArgv(t.Context(), t.TempDir(), Opts{}, []string{"status"})
 	testutil.FailErr(t, "buildArgv", err)
 	prefix, err := neutralizeArgs(defaultSSHCommand)
 	testutil.FailErr(t, "neutralizeArgs", err)
@@ -220,7 +220,7 @@ func TestLFSFilterOmittedWhenAbsent(t *testing.T) {
 	if got := lfsFilterArgs(); len(got) != 0 {
 		t.Fatalf("lfsFilterArgs = %v, want nil when LFS absent", got)
 	}
-	argv, err := buildArgv(t.Context(), t.TempDir(), Opts{}, []string{"status"})
+	argv, _, err := buildArgv(t.Context(), t.TempDir(), Opts{}, []string{"status"})
 	testutil.FailErr(t, "buildArgv", err)
 	for i := 0; i+1 < len(argv); i++ {
 		if argv[i] == "-c" && strings.HasPrefix(argv[i+1], "filter.lfs.") {
@@ -251,7 +251,7 @@ func TestNilHostConfig(t *testing.T) {
 	useBundledGit(t)
 	SetHostConfig(nil)
 
-	argv, err := buildArgv(t.Context(), t.TempDir(), Opts{
+	argv, _, err := buildArgv(t.Context(), t.TempDir(), Opts{
 		Profile:   ProfileNetwork,
 		RemoteURL: "https://example.com/repo.git",
 	}, []string{"ls-remote", "https://example.com/repo.git"})
@@ -467,7 +467,7 @@ func TestHostConfigInjectsHelper(t *testing.T) {
 	executablePath = func() (string, error) { return "/Applications/Painted Wolf Code.app/Contents/MacOS/pw", nil }
 	t.Cleanup(func() { executablePath = os.Executable })
 
-	argv, err := buildArgv(context.Background(), t.TempDir(), Opts{
+	argv, _, err := buildArgv(context.Background(), t.TempDir(), Opts{
 		Profile:   ProfileNetwork,
 		RemoteURL: "https://example.com/r.git",
 	}, []string{"fetch"})

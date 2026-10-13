@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 )
@@ -128,13 +129,21 @@ func run(ctx context.Context, projectDir string, args []string, opts Opts, stdou
 	if err := auditRepoConfig(ctx, cwd); err != nil {
 		return nil, -1, err
 	}
-	argv, err := buildArgv(ctx, cwd, opts, args)
+	argv, served, err := buildArgv(ctx, cwd, opts, args)
 	if err != nil {
 		return nil, -1, err
 	}
 	env, err := buildEnv(ctx, bin, opts)
 	if err != nil {
 		return nil, -1, err
+	}
+	if served == hostHelperVault {
+		socket, stop, err := credentialServiceFn(ctx, bin)
+		if err != nil {
+			return nil, -1, fmt.Errorf("gitexec: start credential service: %w", err)
+		}
+		defer func() { _ = stop() }()
+		env = append(env, gitcredential.SocketEnv+"="+socket)
 	}
 
 	timeout := opts.Timeout
@@ -194,10 +203,11 @@ func validateProjectDir(projectDir string) (string, error) {
 	return root, nil
 }
 
-func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]string, error) {
+// buildArgv also reports which host helper, if any, the invocation needs served.
+func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]string, hostHelper, error) {
 	prefix, err := neutralizeArgs(resolveSSHCommand(ctx))
 	if err != nil {
-		return nil, err
+		return nil, hostHelperNone, err
 	}
 	// Override order is security-sensitive.
 	out := append([]string{}, prefix...)
@@ -209,22 +219,24 @@ func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]str
 		}
 		out = append(out, "-c", kv)
 	}
+	served := hostHelperNone
 	if opts.Profile == ProfileNetwork {
 		if h := getHostConfig(); h != nil {
 			remote := strings.TrimSpace(opts.RemoteURL)
 			if remote == "" {
 				remote = remoteURLFor(ctx, cwd, args)
 			}
-			if helper := strings.TrimSpace(h.HelperFor(ctx, remote)); helper != "" {
-				resolved, err := resolveCredentialHelper(helper)
-				if err != nil {
-					return nil, err
-				}
+			resolved, selected, err := resolveCredentialHelper(h.HelperFor(ctx, remote))
+			if err != nil {
+				return nil, hostHelperNone, err
+			}
+			if resolved != "" {
 				out = append(out, "-c", "credential.helper="+resolved)
+				served = selected
 			}
 		}
 	}
-	return append(out, diffDriverFlagArgs(args)...), nil
+	return append(out, diffDriverFlagArgs(args)...), served, nil
 }
 
 func gitExecPath(bin string) string {

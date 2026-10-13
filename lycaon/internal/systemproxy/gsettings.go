@@ -165,7 +165,9 @@ func parseGVariantStringArray(text string) ([]string, error) {
 		if body[0] != ',' {
 			return nil, errors.New("array elements are not comma separated")
 		}
-		body = strings.TrimSpace(body[1:])
+		if body = strings.TrimSpace(body[1:]); body == "" {
+			return nil, errors.New("array ends with a separator")
+		}
 	}
 	return list, nil
 }

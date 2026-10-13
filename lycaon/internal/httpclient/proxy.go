@@ -15,26 +15,41 @@ var systemProxyLookup = systemproxy.Lookup
 
 // Explicit environment proxies take precedence over system proxy selection.
 func hostProxy() func(*http.Request) (*url.URL, error) {
-	config := httpproxy.FromEnvironment()
-	environment := config.ProxyFunc()
+	resolve := proxyResolver()
 	return func(request *http.Request) (*url.URL, error) {
 		if request == nil || request.URL == nil {
 			return nil, nil
 		}
-		if loopbackDestination(request.URL) {
+		return resolve(request.URL)
+	}
+}
+
+// ResolveProxy reports the proxy every host client would use for target.
+func ResolveProxy(target *url.URL) (*url.URL, error) {
+	if target == nil {
+		return nil, fmt.Errorf("proxy resolution requires a target")
+	}
+	return proxyResolver()(target)
+}
+
+func proxyResolver() func(*url.URL) (*url.URL, error) {
+	config := httpproxy.FromEnvironment()
+	environment := config.ProxyFunc()
+	return func(target *url.URL) (*url.URL, error) {
+		if loopbackDestination(target) {
 			return nil, nil
 		}
-		if explicitEnvironmentProxy(config, request.URL.Scheme) {
-			proxy, err := environment(request.URL)
+		if explicitEnvironmentProxy(config, target.Scheme) {
+			proxy, err := environment(target)
 			if err != nil || proxy == nil {
 				return nil, err
 			}
 			return proxy, nil
 		}
-		if environmentProxyBypass(config, request.URL) {
+		if environmentProxyBypass(config, target) {
 			return nil, nil
 		}
-		proxy, err := systemProxyLookup(request.URL)
+		proxy, err := systemProxyLookup(target)
 		if err != nil {
 			return nil, fmt.Errorf("resolve system proxy: %w", err)
 		}
