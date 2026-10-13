@@ -27,9 +27,11 @@ for history and evidence. The shared transcript projection sends each source
 block as unescaped text, with its line range and read receipt in separate
 metadata. Indentation and blank lines remain source bytes; display line labels
 are not part of an edit string. Evidence handles and source coordinates remain
-available for citations.
+available for citations. `summarize` source windows follow the same
+presentation: each window's text follows the result metadata in window order,
+and its path, line range, and handle stay in that metadata.
 
-Projection accepts only complete host-written read blocks with consistent line
+Projection accepts only complete host-written source blocks with consistent line
 coordinates. Unsupported or incomplete results keep their original presentation.
 Every projected source line remains non-authoritative tool data. Projection does
 not change retained messages, edit arguments, read prerequisites, or permissions.

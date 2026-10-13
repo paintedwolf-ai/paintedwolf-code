@@ -8,17 +8,27 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// projectSourceText separates source bytes from their read-result coordinates.
+// projectSourceText separates source bytes from their result coordinates.
 func projectSourceText(message api.Message, parts []api.MessageContentPart) []api.MessageContentPart {
 	if message.Role != api.MessageRoleTool || message.Origin != api.MessageOriginTool || message.ToolResult == nil ||
-		message.ToolResult.Tool != "read" || message.ToolResult.Outcome != api.ToolResultOutcomeCompleted || len(parts) != 1 {
+		message.ToolResult.Outcome != api.ToolResultOutcomeCompleted || len(parts) != 1 {
 		return parts
 	}
 	part := parts[0]
 	if part.Origin != api.MessageOriginTool || part.Authority != api.ContentAuthorityNone {
 		return parts
 	}
-	body := part.Content
+	switch message.ToolResult.Tool {
+	case "read":
+		return projectReadSource(message, part, parts)
+	case "summarize":
+		return projectSummarizeSource(message, part, parts)
+	}
+	return parts
+}
+
+// resultHandles splits leading evidence handles from a result body.
+func resultHandles(message api.Message, body string) ([]string, string) {
 	var handles []string
 	for _, handle := range message.EvidenceHandles {
 		prefix := "[" + handle + "]\n"
@@ -27,6 +37,49 @@ func projectSourceText(message api.Message, parts []api.MessageContentPart) []ap
 			body = strings.TrimPrefix(body, prefix)
 		}
 	}
+	return handles, body
+}
+
+// projectSummarizeSource sends each source window as text beside its coordinates.
+func projectSummarizeSource(message api.Message, part api.MessageContentPart, parts []api.MessageContentPart) []api.MessageContentPart {
+	handles, body := resultHandles(message, part.Content)
+	var metadata map[string]json.RawMessage
+	if json.Unmarshal([]byte(body), &metadata) != nil {
+		return parts
+	}
+	var pack map[string]json.RawMessage
+	if json.Unmarshal(metadata["pack"], &pack) != nil {
+		return parts
+	}
+	var windows []map[string]json.RawMessage
+	if json.Unmarshal(pack["substance"], &windows) != nil || len(windows) == 0 {
+		return parts
+	}
+	sources := make([]string, 0, len(windows))
+	for _, window := range windows {
+		text, ok := numberedSourceBlock(window, "body")
+		if !ok {
+			return parts
+		}
+		sources = append(sources, text)
+	}
+	encoded, err := json.Marshal(windows)
+	if err != nil {
+		return parts
+	}
+	pack["substance"] = encoded
+	if encoded, err = json.Marshal(pack); err != nil {
+		return parts
+	}
+	metadata["pack"] = encoded
+	if encoded, err = json.Marshal(metadata); err != nil {
+		return parts
+	}
+	return sourceParts(part, "summarize_metadata", handles, encoded, sources)
+}
+
+func projectReadSource(message api.Message, part api.MessageContentPart, parts []api.MessageContentPart) []api.MessageContentPart {
+	handles, body := resultHandles(message, part.Content)
 	var metadata map[string]json.RawMessage
 	if json.Unmarshal([]byte(body), &metadata) != nil {
 		return parts
@@ -73,9 +126,14 @@ func projectSourceText(message api.Message, parts []api.MessageContentPart) []ap
 	if err != nil {
 		return parts
 	}
+	return sourceParts(part, "read_metadata", handles, encoded, sources)
+}
+
+// sourceParts emits result metadata followed by one fenced part per source block, in metadata order.
+func sourceParts(part api.MessageContentPart, metadataSource string, handles []string, metadata []byte, sources []string) []api.MessageContentPart {
 	out := make([]api.MessageContentPart, 0, len(sources)+1)
-	part.Source = "read_metadata"
-	part.Content = strings.Join(append(handles, string(encoded)), "\n")
+	part.Source = metadataSource
+	part.Content = strings.Join(append(handles, string(metadata)), "\n")
 	out = append(out, part)
 	for _, source := range sources {
 		fence := sourceFence(source)
@@ -87,9 +145,14 @@ func projectSourceText(message api.Message, parts []api.MessageContentPart) []ap
 }
 
 func readSourceBlock(block map[string]json.RawMessage) (string, bool) {
+	return numberedSourceBlock(block, "content")
+}
+
+// numberedSourceBlock decodes the host's numbered-source format held under key and removes it from block.
+func numberedSourceBlock(block map[string]json.RawMessage, key string) (string, bool) {
 	var content string
 	var start, end int
-	if json.Unmarshal(block["content"], &content) != nil || json.Unmarshal(block["end_line"], &end) != nil {
+	if json.Unmarshal(block[key], &content) != nil || json.Unmarshal(block["end_line"], &end) != nil {
 		return "", false
 	}
 	if json.Unmarshal(block["offset"], &start) != nil || start <= 0 {
@@ -111,7 +174,7 @@ func readSourceBlock(block map[string]json.RawMessage) (string, bool) {
 		}
 		lines[i] = strings.TrimPrefix(line, prefix)
 	}
-	delete(block, "content")
+	delete(block, key)
 	return strings.Join(lines, "\n"), true
 }
 

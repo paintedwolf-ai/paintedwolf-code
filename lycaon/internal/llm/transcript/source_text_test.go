@@ -129,3 +129,70 @@ func sourceReadMessage(body string) api.Message {
 		ToolResult: &api.ToolResult{Tool: "read", Content: body, Outcome: api.ToolResultOutcomeCompleted},
 	}
 }
+
+func TestSummarizeProjectionSeparatesExactSourceWindows(t *testing.T) {
+	body := `{"anchors":[{"excerpt":"def rank():","handle":"summarize#1","line":4,"path":"ranking.py"}],` +
+		`"pack":{"skeleton":[{"kind":"function","line":4,"name":"rank"}],"substance":[` +
+		`{"body":"     4: def rank():\n     5:     return \"score\"\n     6: ","end_line":6,"handle":"summarize#1","path":"ranking.py","start_line":4},` +
+		`{"body":"    10: \tlast()","end_line":10,"handle":"summarize#2","path":"app.py","start_line":10}]},` +
+		`"sources_touched":["ranking.py","app.py"]}`
+	original := "[summarize#3]\n" + body
+	message := summarizeMessage(original)
+	message.EvidenceHandles = []string{"summarize#3"}
+	projected := transcript.Project([]api.Message{message})
+	got := projected[len(projected)-1].Content
+	for _, want := range []string{"⟦D:tool:summarize_metadata⟧", "[summarize#3]", `"start_line":4`, `"end_line":6`, `"path":"app.py"`,
+		`"anchors":`, `"skeleton":`, "⟦D⟧def rank():\n⟦D⟧    return \"score\"\n⟦D⟧\n", "⟦D⟧\tlast()"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("projection lacks %q: %s", want, got)
+		}
+	}
+	if strings.Contains(got, `"body":`) || strings.Contains(got, "     4: ") || strings.Contains(got, `\n    `) {
+		t.Fatalf("source window still carries display labels or JSON escapes: %s", got)
+	}
+	if strings.Index(got, "def rank():") > strings.Index(got, "last()") {
+		t.Fatalf("source windows left metadata order: %s", got)
+	}
+	if message.Content != original || message.ToolResult.Content != original {
+		t.Fatal("projection changed retained result")
+	}
+	again := transcript.Project(projected)
+	if again[len(again)-1].Content != got {
+		t.Fatal("second projection changed source presentation")
+	}
+}
+
+func TestSummarizeProjectionPreservesUnsupportedResults(t *testing.T) {
+	valid := `{"pack":{"substance":[{"body":"     1: original","end_line":1,"start_line":1,"path":"a.py"}]}}`
+	for _, tc := range []struct{ name, body string }{
+		{"malformed", "not json"},
+		{"no_pack", `{"digest":"overview"}`},
+		{"bad_pack", `{"pack":1}`},
+		{"no_windows", `{"pack":{"substance":[]}}`},
+		{"bad_windows", `{"pack":{"substance":1}}`},
+		{"unlabelled", strings.ReplaceAll(valid, "     1: ", "")},
+		{"missing_start", strings.ReplaceAll(valid, `,"start_line":1`, "")},
+		{"extent_mismatch", strings.ReplaceAll(valid, `"end_line":1`, `"end_line":2`)},
+		{"mixed_windows", `{"pack":{"substance":[{"body":"     1: original","end_line":1,"start_line":1},{"body":"prose","end_line":1,"start_line":1}]}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			projected := transcript.Project([]api.Message{summarizeMessage(tc.body)})
+			got := projected[len(projected)-1].Content
+			if strings.Contains(got, "⟦D:tool:source⟧") || strings.Contains(got, "⟦D:tool:summarize_metadata⟧") {
+				t.Fatalf("unsupported result projected as source: %s", got)
+			}
+		})
+	}
+	rejected := summarizeMessage(valid)
+	rejected.ToolResult.Outcome = api.ToolResultOutcomeRejected
+	projected := transcript.Project([]api.Message{rejected})
+	if strings.Contains(projected[len(projected)-1].Content, "⟦D:tool:source⟧") {
+		t.Fatal("rejected result projected as source")
+	}
+}
+
+func summarizeMessage(body string) api.Message {
+	message := sourceReadMessage(body)
+	message.ToolResult.Tool = "summarize"
+	return message
+}
