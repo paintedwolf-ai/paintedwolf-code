@@ -73,6 +73,14 @@ func TestLinuxAgentDiscoveryReadsTheNativeUserManagerProperty(t *testing.T) {
 	if query[0] != "org.freedesktop.systemd1.Manager" || query[1] != "Environment" {
 		t.Fatalf("native property query = %v", query)
 	}
+	for _, address := range []string{"", "unix:path=" + filepath.Join(filepath.Dir(path), "missing") + ";unix:path=" + path} {
+		t.Setenv("DBUS_SESSION_BUS_ADDRESS", address)
+		t.Setenv("XDG_RUNTIME_DIR", filepath.Dir(path))
+		if got := sessionAgentSocket(t.Context()); got != socket {
+			t.Fatalf("selected session %q supplied %q, want %q", address, got, socket)
+		}
+		<-fixture.queried
+	}
 	fixture.mu.Lock()
 	fixture.value = dbus.MakeVariant(true)
 	fixture.mu.Unlock()
