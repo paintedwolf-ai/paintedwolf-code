@@ -2,6 +2,7 @@ package loopguard
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 
 	"github.com/google/uuid"
@@ -17,7 +18,7 @@ func TestMemoryDoomLoopGuardBlocksAfterMaxIdenticalCompletion(t *testing.T) {
 	args := map[string]any{"path": "main.go"}
 
 	for attempt := 1; attempt <= DoomLoopMaxAttempts; attempt++ {
-		allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), tool, args)
+		allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), tool, args, false, nil)
 		testutil.FailErr(t, "g.Check failed", err)
 		if !allowed {
 			t.Fatalf("attempt %d: expected allowed, count=%d", attempt, count)
@@ -25,12 +26,12 @@ func TestMemoryDoomLoopGuardBlocksAfterMaxIdenticalCompletion(t *testing.T) {
 		if count != attempt-1 {
 			t.Fatalf("attempt %d: count=%d want %d", attempt, count, attempt-1)
 		}
-		if err := g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, "", false); err != nil {
+		if err := g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, nil, false); err != nil {
 			testutil.FailErr(t, "g.RecordAttempt failed", err)
 		}
 	}
 
-	allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), tool, args)
+	allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), tool, args, false, nil)
 	testutil.FailErr(t, "g.Check failed", err)
 	if allowed {
 		t.Fatalf("attempt after max should be blocked, count=%d", count)
@@ -48,12 +49,12 @@ func TestMemoryDoomLoopGuardDifferentArgsAllowed(t *testing.T) {
 
 	for i := 0; i < 5; i++ {
 		args := map[string]any{"path": "file-" + string(rune('a'+i)) + ".go"}
-		allowed, _, _, err := g.Check(ctx, sid, uuid.NewString(), tool, args)
+		allowed, _, _, err := g.Check(ctx, sid, uuid.NewString(), tool, args, false, nil)
 		testutil.FailErr(t, "g.Check failed", err)
 		if !allowed {
 			t.Fatalf("distinct args should stay allowed: %+v", args)
 		}
-		if err := g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, "", false); err != nil {
+		if err := g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, nil, false); err != nil {
 			testutil.FailErr(t, "g.RecordAttempt failed", err)
 		}
 	}
@@ -65,20 +66,20 @@ func TestMemoryDoomLoopGuardSummarizeIgnoresTaskParaphrase(t *testing.T) {
 	const sid = "sess-sum"
 	pathArgs := map[string]any{"path": "lycaon/AGENTS.md", "task": "Summarize the contents of this policy file"}
 	for i := 0; i < DoomLoopMaxAttempts; i++ {
-		if err := g.RecordAttempt(ctx, sid, uuid.NewString(), "summarize", pathArgs, "", false); err != nil {
+		if err := g.RecordAttempt(ctx, sid, uuid.NewString(), "summarize", pathArgs, nil, false); err != nil {
 			testutil.FailErr(t, "RecordAttempt", err)
 		}
 	}
 	// Same path, rephrased task: shares the fingerprint and hard-blocks.
 	paraphrase := map[string]any{"path": "lycaon/AGENTS.md", "task": "Summarize this file in a few anchors"}
-	allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), "summarize", paraphrase)
+	allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), "summarize", paraphrase, false, nil)
 	testutil.FailErr(t, "Check paraphrase", err)
 	if allowed {
 		t.Fatalf("summarize task paraphrase should share doom key, count=%d", count)
 	}
 	// Different path stays allowed.
 	other := map[string]any{"path": "lycaon/go.mod", "task": "Summarize the contents of this policy file"}
-	allowed, _, _, err = g.Check(ctx, sid, uuid.NewString(), "summarize", other)
+	allowed, _, _, err = g.Check(ctx, sid, uuid.NewString(), "summarize", other, false, nil)
 	testutil.FailErr(t, "Check other path", err)
 	if !allowed {
 		t.Fatal("different summarize path must not share doom key")
@@ -95,7 +96,7 @@ func TestMemoryDoomLoopGuardCapturePageIgnoresCaptionAndWaitPadding(t *testing.T
 		"actions":     []any{map[string]any{"type": "wait", "wait": "idle"}},
 	}
 	for i := 0; i < DoomLoopMaxAttempts; i++ {
-		if err := g.RecordAttempt(ctx, sid, uuid.NewString(), "capture_page", base, "", false); err != nil {
+		if err := g.RecordAttempt(ctx, sid, uuid.NewString(), "capture_page", base, nil, false); err != nil {
 			testutil.FailErr(t, "RecordAttempt", err)
 		}
 	}
@@ -108,7 +109,7 @@ func TestMemoryDoomLoopGuardCapturePageIgnoresCaptionAndWaitPadding(t *testing.T
 			map[string]any{"type": "wait", "wait": "idle"},
 		},
 	}
-	allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), "capture_page", padded)
+	allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), "capture_page", padded, false, nil)
 	testutil.FailErr(t, "Check padded capture", err)
 	if allowed {
 		t.Fatalf("wait-padded capture_page should share doom key, count=%d", count)
@@ -122,7 +123,7 @@ func TestMemoryDoomLoopGuardCapturePageIgnoresCaptionAndWaitPadding(t *testing.T
 			map[string]any{"type": "wait", "wait": "idle"},
 		},
 	}
-	allowed, _, _, err = g.Check(ctx, sid, uuid.NewString(), "capture_page", driven)
+	allowed, _, _, err = g.Check(ctx, sid, uuid.NewString(), "capture_page", driven, false, nil)
 	testutil.FailErr(t, "Check driven capture", err)
 	if !allowed {
 		t.Fatal("capture_page with a click action should stay allowed")
@@ -136,17 +137,17 @@ func TestMemoryDoomLoopGuardSessionsIsolated(t *testing.T) {
 	args := map[string]any{"path": "x.go"}
 
 	for i := 0; i < DoomLoopMaxAttempts; i++ {
-		if err := g.RecordAttempt(ctx, "a", uuid.NewString(), tool, args, "", false); err != nil {
+		if err := g.RecordAttempt(ctx, "a", uuid.NewString(), tool, args, nil, false); err != nil {
 			testutil.FailErr(t, "g.RecordAttempt failed", err)
 		}
 	}
-	allowed, _, _, err := g.Check(ctx, "a", uuid.NewString(), tool, args)
+	allowed, _, _, err := g.Check(ctx, "a", uuid.NewString(), tool, args, false, nil)
 	testutil.FailErr(t, "g.Check failed", err)
 	if allowed {
 		t.Fatal("session a should be blocked after max identical attempts")
 	}
 
-	allowed, count, _, err := g.Check(ctx, "b", uuid.NewString(), tool, args)
+	allowed, count, _, err := g.Check(ctx, "b", uuid.NewString(), tool, args, false, nil)
 	testutil.FailErr(t, "g.Check failed", err)
 	if !allowed || count != 0 {
 		t.Fatalf("session b should start fresh: allowed=%v count=%d", allowed, count)
@@ -158,10 +159,10 @@ func TestMemoryDoomLoopGuardContextCancellation(t *testing.T) {
 	cancel()
 	g := NewMemoryDoomLoopGuard()
 
-	if _, _, _, err := g.Check(ctx, "s", uuid.NewString(), "read", map[string]any{}); err == nil {
+	if _, _, _, err := g.Check(ctx, "s", uuid.NewString(), "read", map[string]any{}, false, nil); err == nil {
 		t.Fatal("Check: expected context error")
 	}
-	if err := g.RecordAttempt(ctx, "s", uuid.NewString(), "read", map[string]any{}, "", false); err == nil {
+	if err := g.RecordAttempt(ctx, "s", uuid.NewString(), "read", map[string]any{}, nil, false); err == nil {
 		t.Fatal("RecordAttempt: expected context error")
 	}
 }
@@ -174,15 +175,15 @@ func TestMemoryDoomLoopGuardBlocksThirdSameCodeReject(t *testing.T) {
 	args := map[string]any{}
 
 	for i := 0; i < DoomLoopMaxSameCodeRejects; i++ {
-		allowed, _, _, err := g.Check(ctx, sid, uuid.NewString(), tool, args)
+		allowed, _, _, err := g.Check(ctx, sid, uuid.NewString(), tool, args, false, nil)
 		testutil.FailErr(t, "g.Check failed", err)
 		if !allowed {
 			t.Fatalf("reject %d: expected allowed before the run completes", i+1)
 		}
-		testutil.FailErr(t, "g.RecordAttempt failed", g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, "TOOL_ARGS_TRUNCATED", false))
+		testutil.FailErr(t, "g.RecordAttempt failed", g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, &api.InvocationFailure{Code: "TOOL_ARGS_TRUNCATED"}, false))
 	}
 
-	allowed, count, repeatedCode, err := g.Check(ctx, sid, uuid.NewString(), tool, args)
+	allowed, count, repeatedCode, err := g.Check(ctx, sid, uuid.NewString(), tool, args, false, nil)
 	testutil.FailErr(t, "g.Check failed", err)
 	if allowed {
 		t.Fatalf("third identical same-code reject should be blocked, count=%d", count)
@@ -199,9 +200,9 @@ func TestMemoryDoomLoopGuardCodeChangeResetsRun(t *testing.T) {
 	tool := "write"
 	args := map[string]any{}
 
-	testutil.FailErr(t, "record", g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, "TOOL_ARGS_TRUNCATED", false))
-	testutil.FailErr(t, "record", g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, "WRITE_SCOPE_DENIED", false))
-	allowed, _, repeatedCode, err := g.Check(ctx, sid, uuid.NewString(), tool, args)
+	testutil.FailErr(t, "record", g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, &api.InvocationFailure{Code: "TOOL_ARGS_TRUNCATED"}, false))
+	testutil.FailErr(t, "record", g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, &api.InvocationFailure{Code: "WRITE_SCOPE_DENIED"}, false))
+	allowed, _, repeatedCode, err := g.Check(ctx, sid, uuid.NewString(), tool, args, false, nil)
 	testutil.FailErr(t, "g.Check failed", err)
 	if !allowed || repeatedCode != "" {
 		t.Fatalf("alternating codes must not block: allowed=%v code=%q", allowed, repeatedCode)
@@ -215,10 +216,10 @@ func TestMemoryDoomLoopGuardCompletionResetsCodeRun(t *testing.T) {
 	tool := "write"
 	args := map[string]any{}
 
-	testutil.FailErr(t, "record", g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, "TOOL_ARGS_TRUNCATED", false))
-	testutil.FailErr(t, "record", g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, "", false))
-	testutil.FailErr(t, "record", g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, "TOOL_ARGS_TRUNCATED", false))
-	allowed, _, repeatedCode, err := g.Check(ctx, sid, uuid.NewString(), tool, args)
+	testutil.FailErr(t, "record", g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, &api.InvocationFailure{Code: "TOOL_ARGS_TRUNCATED"}, false))
+	testutil.FailErr(t, "record", g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, nil, false))
+	testutil.FailErr(t, "record", g.RecordAttempt(ctx, sid, uuid.NewString(), tool, args, &api.InvocationFailure{Code: "TOOL_ARGS_TRUNCATED"}, false))
+	allowed, _, repeatedCode, err := g.Check(ctx, sid, uuid.NewString(), tool, args, false, nil)
 	testutil.FailErr(t, "g.Check failed", err)
 	if !allowed || repeatedCode != "" {
 		t.Fatalf("completion between rejects must reset the run: allowed=%v code=%q", allowed, repeatedCode)
@@ -233,12 +234,12 @@ func TestMemoryDoomLoopGuardExemptsTerminalSend(t *testing.T) {
 	const sid = "sess-pty"
 	args := map[string]any{"id": "pty-1", "input": "{Enter}"}
 	for i := 0; i < DoomLoopMaxAttempts+5; i++ {
-		allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), "terminal_send", args)
+		allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), "terminal_send", args, false, nil)
 		testutil.FailErr(t, "Check", err)
 		if !allowed {
 			t.Fatalf("terminal_send must stay allowed after %d identical keystrokes, count=%d", i, count)
 		}
-		if err := g.RecordAttempt(ctx, sid, uuid.NewString(), "terminal_send", args, "", false); err != nil {
+		if err := g.RecordAttempt(ctx, sid, uuid.NewString(), "terminal_send", args, nil, false); err != nil {
 			testutil.FailErr(t, "RecordAttempt", err)
 		}
 	}
@@ -260,20 +261,20 @@ func TestMemoryDoomLoopGuardPageIDResolvesToTarget(t *testing.T) {
 		return map[string]any{"id": id, "caption": caption}
 	}
 	for i := 0; i < DoomLoopMaxAttempts; i++ {
-		if err := g.RecordAttempt(ctx, sid, uuid.NewString(), "page_snapshot", snap("page-a", "before reload"), "", false); err != nil {
+		if err := g.RecordAttempt(ctx, sid, uuid.NewString(), "page_snapshot", snap("page-a", "before reload"), nil, false); err != nil {
 			testutil.FailErr(t, "RecordAttempt", err)
 		}
 	}
 
 	// Neither the fresh id nor the reworded caption may reset the count.
-	allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), "page_snapshot", snap("page-a-again", "status UI before reload"))
+	allowed, count, _, err := g.Check(ctx, sid, uuid.NewString(), "page_snapshot", snap("page-a-again", "status UI before reload"), false, nil)
 	testutil.FailErr(t, "Check reopened page", err)
 	if allowed {
 		t.Fatalf("reopened page on the same target must share the doom key, count=%d", count)
 	}
 
 	// A different live page is its own bucket.
-	allowed, _, _, err = g.Check(ctx, sid, uuid.NewString(), "page_snapshot", snap("page-b", "other app"))
+	allowed, _, _, err = g.Check(ctx, sid, uuid.NewString(), "page_snapshot", snap("page-b", "other app"), false, nil)
 	testutil.FailErr(t, "Check second target", err)
 	if !allowed {
 		t.Fatal("a snapshot of a different live page must not inherit another page's count")
@@ -285,7 +286,7 @@ func TestMemoryDoomLoopGuardPageFingerprintLeavesArgsIntact(t *testing.T) {
 	g := NewMemoryDoomLoopGuard()
 	g.SetPageTargetResolver(func(_, _ string) string { return "http://127.0.0.1:8765/" })
 	args := map[string]any{"id": "page-a"}
-	if err := g.RecordAttempt(ctx, "sess-args", uuid.NewString(), "page_close", args, "", false); err != nil {
+	if err := g.RecordAttempt(ctx, "sess-args", uuid.NewString(), "page_close", args, nil, false); err != nil {
 		testutil.FailErr(t, "RecordAttempt", err)
 	}
 	if _, ok := args["page_target"]; ok {

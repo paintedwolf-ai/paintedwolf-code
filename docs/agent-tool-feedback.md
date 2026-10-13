@@ -82,6 +82,12 @@ unavailable-capability explanation. Loading changes schema visibility, not acces
 or approval. This guidance appears only on rejection, without expanding standing
 prompts.
 
+Repetition admission evaluates resolved prerequisites and counters atomically.
+It releases an identical `TOOL_NOT_OFFERED` retry when that tool is offered, or an
+`EDITOR_DOCUMENT_READ_REQUIRED` retry when the response's frozen read basis names
+the rejected document. A read completed in the same response cannot establish that
+basis. Other rejection codes and cross-argument rejection history remain intact;
+the handler still validates source state, scope, and authorization before effects.
 
 ## Envelope reject codes
 

@@ -7,14 +7,14 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // DoomLoopGuard tracks repetition and structured survey outcomes.
 type DoomLoopGuard interface {
-	Check(ctx context.Context, sessionID, responseID, tool string, args map[string]any) (allowed bool, count int, repeatedCode string, err error)
-	ResolveRejection(ctx context.Context, sessionID, tool string, args map[string]any, code string) error
-	RecordAttempt(ctx context.Context, sessionID, responseID, tool string, args map[string]any, rejectCode string, mutated bool) error
+	Check(ctx context.Context, sessionID, responseID, tool string, args map[string]any, offered bool, reads *tools.AgentReadBases) (allowed bool, count int, repeatedCode string, err error)
+	RecordAttempt(ctx context.Context, sessionID, responseID, tool string, args map[string]any, failure *api.InvocationFailure, mutated bool) error
 	RecordSearchOutcome(ctx context.Context, sessionID, tool string, args map[string]any, foundMaterial bool) (int, error)
 }
 

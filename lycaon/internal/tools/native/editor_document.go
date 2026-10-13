@@ -28,7 +28,7 @@ func loadAgentSourceText(ctx context.Context, tool string, tctx tools.ToolContex
 	}
 	base, err := documents.AgentReadBase(ctx, tctx.Identity.ProjectID, tctx.Identity.SessionID, st.Editor.ID, tctx.Source.EditorReadBases)
 	if errors.Is(err, tools.ErrEditorReadRequired) {
-		return sourceview.Text{}, &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_READ_REQUIRED", Data: map[string]any{"path": resolved.DisplayPath}}
+		return sourceview.Text{}, &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_READ_REQUIRED", Data: map[string]any{"path": resolved.DisplayPath, "document_id": st.Editor.ID}}
 	}
 	if err != nil && base.ID == "" {
 		return sourceview.Text{}, err

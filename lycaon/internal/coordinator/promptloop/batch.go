@@ -466,7 +466,7 @@ func (l *toolBatch) executeOneToolCall(
 	if proseTurn && !workerProseAllowsTool(sess, tc.Name) {
 		return l.refuseToolCall(tc, assistantMessageID, l.Tools.rejectToolOccurrence(ctx, sess, tc, toolCtx, "TOOL_INVOKE_PROSE_TURN", nil))
 	}
-	ctx, doomPreCount, reject := l.preflightToolCall(ctx, sess, sessionID, assistantMessageID, tc, taskAllowlist)
+	ctx, doomPreCount, reject := l.preflightToolCall(ctx, sess, sessionID, assistantMessageID, tc, taskAllowlist, toolCtx.Source.EditorReadBases)
 	if reject != nil {
 		return l.refuseToolCall(tc, assistantMessageID, reject)
 	}

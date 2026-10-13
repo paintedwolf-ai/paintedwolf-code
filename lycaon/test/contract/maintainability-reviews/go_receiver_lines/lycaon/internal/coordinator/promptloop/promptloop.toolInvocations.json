@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/coordinator/promptloop/promptloop.toolInvocations",
+  "kind": "runtime_service",
+  "workstream": "tool-prerequisite-recovery",
+  "disposition": "retain",
+  "reason": "Invocation staging and settlement keep the frozen definition, typed failure, and receipt identity together. The helper records stated outcomes; handlers still determine operation results. Retain the existing settlement seam with ledger and fault-classification contracts.",
+  "reviewed_commit": "46d87a5d6ed1fe53c4cf707f18062a37ca65d7ed",
+  "ceiling": 730,
+  "boundaries": {
+    "lycaon/internal/coordinator/promptloop/doom_loop_fault_test.go": "e7c61616e8cc217464304dba274b3e41f23f584dfa9f974c67a7fb3fd901dbbe",
+    "lycaon/internal/coordinator/promptloop/host_answered_receipt_test.go": "232b19eb8e5b04ad28f5a87a5fee606a891dcfa505e714629f85bc202d20b532"
+  },
+  "reviewed_shape": "f34c7e1f42ca5387c0d6126d87ba8bcbcd6343b3d86dbc8bb4f266ed2652c0f7"
+}

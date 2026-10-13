@@ -68,7 +68,7 @@ func TestBlockedLoopClosesOutInsteadOfSpinning(t *testing.T) {
 
 	// Put the guard past its threshold so every attempt is blocked from the start.
 	for i := 0; i < loopguard.DoomLoopMaxAttempts; i++ {
-		testutil.FailErr(t, "seed doom loop attempt", guard.RecordAttempt(ctx, sess.ID, uuid.NewString(), "read", args, "", false))
+		testutil.FailErr(t, "seed doom loop attempt", guard.RecordAttempt(ctx, sess.ID, uuid.NewString(), "read", args, nil, false))
 	}
 
 	fmttr := guidance.NewStaticRejectFormatter(&guidance.HintConfig{
@@ -153,7 +153,7 @@ func TestBlockedLoopFinalTurnToolCallIsReportedAsTheModelsMiss(t *testing.T) {
 	sess, err := msgStore.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for i := 0; i < loopguard.DoomLoopMaxAttempts; i++ {
-		testutil.FailErr(t, "seed doom loop attempt", guard.RecordAttempt(ctx, sess.ID, uuid.NewString(), "read", args, "", false))
+		testutil.FailErr(t, "seed doom loop attempt", guard.RecordAttempt(ctx, sess.ID, uuid.NewString(), "read", args, nil, false))
 	}
 	fmttr := guidance.NewStaticRejectFormatter(&guidance.HintConfig{HintCodes: map[string]guidance.HintEntry{"DOOM_LOOP_REPEAT": {Message: "blocked repeat"}}})
 	client := &alwaysSameToolClient{args: args, ignoreCloseout: true}
@@ -200,7 +200,7 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 
 	for i := 0; i < loopguard.DoomLoopMaxAttempts; i++ {
-		testutil.FailErr(t, "seed doom loop attempt", guard.RecordAttempt(ctx, sess.ID, uuid.NewString(), "read", args, "", false))
+		testutil.FailErr(t, "seed doom loop attempt", guard.RecordAttempt(ctx, sess.ID, uuid.NewString(), "read", args, nil, false))
 	}
 
 	fmttr := guidance.NewStaticRejectFormatter(&guidance.HintConfig{

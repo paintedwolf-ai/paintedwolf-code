@@ -126,7 +126,7 @@ func TestLoopDoomLoopRejectKeepsCallResultPair(t *testing.T) {
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	for i := 0; i < loopguard.DoomLoopMaxAttempts; i++ {
-		_ = guard.RecordAttempt(ctx, sess.ID, uuid.NewString(), "read", args, "", false)
+		_ = guard.RecordAttempt(ctx, sess.ID, uuid.NewString(), "read", args, nil, false)
 	}
 	client := &sequentialLLMClient{completions: []*modelcall.Completion{
 		{ToolCalls: []api.ToolCall{{ID: "tc1", Name: "read", Args: args}}},
