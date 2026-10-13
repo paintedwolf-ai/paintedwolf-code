@@ -1,0 +1,47 @@
+name: Release staple probe
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: release-static-update
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - name: Inspect the published rc1 disk image
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/staple-probe/mount"
+          curl --fail --silent --show-error --location --max-time 300 \
+            https://downloads.paintedwolf.dev/releases/v1.0.2-rc1/painted-wolf-code_v1.0.2-rc1_darwin-aarch64.dmg \
+            --output "${RUNNER_TEMP}/staple-probe/rc1.dmg"
+          hdiutil attach "${RUNNER_TEMP}/staple-probe/rc1.dmg" -readonly -nobrowse \
+            -mountpoint "${RUNNER_TEMP}/staple-probe/mount"
+          ./task bundle:verify -- \
+            --app "${RUNNER_TEMP}/staple-probe/mount/Painted Wolf Code.app" \
+            --dmg "${RUNNER_TEMP}/staple-probe/rc1.dmg" --require-signed --json \
+            > "${RUNNER_TEMP}/staple-probe/report.log" 2>&1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: release-staple-probe
+          path: ${{ runner.temp }}/staple-probe/report.log
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Unmount the probe image
+        if: always()
+        run: hdiutil detach "${RUNNER_TEMP}/staple-probe/mount" || true

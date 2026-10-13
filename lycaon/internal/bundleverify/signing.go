@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"strings"
 )
 
 func signingSeverity(requireSigned bool) Severity {
@@ -126,12 +127,17 @@ func checkDeepVerify(ctx context.Context, runner Runner, opts Options, severity 
 }
 
 func checkStaple(ctx context.Context, runner Runner, opts Options, target string, severity Severity) ([]Finding, string) {
-	if _, _, err := runner.Run(ctx, "xcrun", "stapler", "validate", target); err != nil {
+	if stdout, stderr, err := runner.Run(ctx, "xcrun", "stapler", "validate", target); err != nil {
 		if isToolMissing(err) {
 			return nil, "xcrun"
 		}
 		return []Finding{{
 			Code: CodeNotStapled, Severity: severity, Path: bundleRel(opts.AppPath, target),
+			Detail: map[string]string{
+				"reason": err.Error(),
+				"stdout": strings.TrimSpace(string(stdout)),
+				"stderr": strings.TrimSpace(string(stderr)),
+			},
 		}}, ""
 	}
 	return nil, ""
