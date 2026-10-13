@@ -30,12 +30,10 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey) tools.Tool
 			return "", &toolrejection.ToolReject{Code: code, Data: data}
 		}
 		prev := store.Get(ctx, root)
-		// An identical checklist writes nothing, so a replay adds no revision or
-		// transcript row. already_open says the progress gate was open before this call.
+		// Identical content adds no revision or transcript row.
 		if strings.TrimSpace(prev) == content {
 			raw, _ := surveyjson.Marshal(map[string]any{
-				"status":     "unchanged",
-				"gate_state": "already_open",
+				"status": "unchanged",
 			})
 			return string(raw), nil
 		}

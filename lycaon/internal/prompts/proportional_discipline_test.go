@@ -42,8 +42,8 @@ func TestProportionalCoordinatorDisciplineRender(t *testing.T) {
 		"verification results and remaining limits",
 		"do not over-survey a small diagnosed change",
 		"## This turn",
-		"A response with tools must have empty assistant text",
-		"A response without tools is the user-facing answer and ends the turn",
+		"Continue work through tool calls, with empty assistant text",
+		"A response without tools is final and ends the turn, including a promise to start or continue",
 	} {
 		if !strings.Contains(core, want) {
 			t.Fatalf("coordinator-core missing %q:\n%s", want, core[:min(800, len(core))])
@@ -56,7 +56,7 @@ func TestProportionalCoordinatorDisciplineRender(t *testing.T) {
 	})
 	testutil.FailErr(t, "render coordinator-core with surface_note", err)
 	for _, want := range []string{
-		"Send useful updates through `surface_note` and continue working.",
+		"Use `surface_note` for progress updates.",
 		"## Mid-turn note (`surface_note`)",
 		"Use `surface_note` whenever it would help keep the user up to date",
 		"meaningful progress or changes during the turn",

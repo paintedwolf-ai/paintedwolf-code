@@ -11,14 +11,14 @@ requires:
 when: paintedwolf.workers_idle && paintedwolf.progress_open_items > 0 && paintedwolf.batch_ready_ignoring_progress && paintedwolf.synthesis_delay_count < 2
 effect: block
 copy:
-  what: "The closing synthesis was attempted while {{ paintedwolf.progress_open_items }} progress steps remain open."
-  cause: The progress checklist doesn't yet reflect where the work actually landed.
-  why: The user-facing "done" and the checklist must agree — an open step says that work is still outstanding.
-  fix: Make the checklist true via `update_progress`, then deliver your synthesis — `- [x]` done, or `- [~]` for anything you won't pursue (no longer applicable, descoped, or you're stopping early), or `- [>]` for a non-deliverable note. Changing course or handing back partial is fine; just mark the steps you won't reach `- [~]` so the closeout is honest.
-  instead: "Reconcile the checklist with observed results, then report honestly. Do not mark required unfinished work done, turn a deliverable into a note, or descope it merely to clear this gate."
+  what: "This tool-free response would end the turn with {{ paintedwolf.progress_open_items }} progress steps still pending."
+  cause: Work remains unfinished, or completed work has not been recorded.
+  why: The final response and checklist must agree with observed results.
+  fix: 'If work remains, continue with tools and keep its rows pending. If work is complete, record it with `update_progress`, then answer. Use `surface_note` for updates while continuing.'
+  instead: 'Repeating the same pending checklist does not resolve this rejection. Do not close unfinished rows to clear it. For a concrete blocker or authorized scope change, mark only the work you will not pursue `- [~]` and report the limitation.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: Close out blocked — the progress checklist must reflect reality first
+x-paintedwolf-message: Continue unfinished work or record completed results before answering
 x-paintedwolf-scenarios:
   - id: open_steps
     vars:
