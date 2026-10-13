@@ -159,7 +159,7 @@ fn run(
             delivery = None;
         }
         if delivery.is_none() {
-            delivery = crate::linux_desktop::connect(context)
+            delivery = crate::linux_desktop::session_bus::connect(context)
                 .and_then(|connection| Delivery::new(connection, app, deadline))
                 .ok();
         }

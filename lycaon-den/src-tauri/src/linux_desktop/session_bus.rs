@@ -2,7 +2,7 @@ use std::time::Duration;
 
 use gtk::{gio, glib};
 
-pub(super) fn connect(context: &glib::MainContext) -> Result<gio::DBusConnection, String> {
+pub(crate) fn connect(context: &glib::MainContext) -> Result<gio::DBusConnection, String> {
     let address = session_address(
         std::env::var("DBUS_SESSION_BUS_ADDRESS").ok().as_deref(),
         std::env::var("XDG_RUNTIME_DIR").ok().as_deref(),
