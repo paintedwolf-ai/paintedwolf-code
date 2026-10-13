@@ -30,6 +30,9 @@ func Connect(ctx context.Context, path string) (*dbus.Conn, error) {
 	bus, err := dbus.ConnectUnix(conn)
 	if err != nil {
 		_ = conn.Close()
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
 		return nil, err
 	}
 	stop()
