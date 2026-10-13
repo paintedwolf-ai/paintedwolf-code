@@ -346,4 +346,20 @@ describe("LycaonClient", () => {
     ]);
     expect((fetchMock.mock.calls[1]![1] as RequestInit).method).toBe("PATCH");
   });
+
+  it("sends ordinal bounds on session message window requests", async () => {
+    const fetchMock = vi.fn().mockImplementation(() =>
+      Promise.resolve(new Response(JSON.stringify({ messages: [], turn_clocks: {}, turn_loads: {}, watermark: 0 }), { status: 200 })),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const client = createLycaonClient(connection);
+    await client.listSessionMessages("sess-1", { limit: 50, beforeOrd: 120 });
+    await client.listSessionMessages("sess-1", { limit: 50, afterOrd: 0 });
+
+    expect(fetchMock.mock.calls.map((call) => String(call[0]))).toEqual([
+      "http://127.0.0.1:8787/v1/sessions/sess-1/messages?limit=50&before_ord=120",
+      "http://127.0.0.1:8787/v1/sessions/sess-1/messages?limit=50&after_ord=0",
+    ]);
+  });
 });
