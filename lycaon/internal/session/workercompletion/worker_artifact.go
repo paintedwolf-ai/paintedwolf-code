@@ -11,6 +11,13 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// WorkspaceChangeObservation is the host inspection of a worker-owned baseline.
+// Reported file names and primary-workspace dirt are not baseline observations.
+type WorkspaceChangeObservation struct {
+	Paths []string
+	Err   error
+}
+
 // WorkspaceChangeChecker reports whether the project tree changed during a worker run.
 type WorkspaceChangeChecker interface {
 	HasChanges(ctx context.Context, projectDir string) (bool, error)
@@ -49,9 +56,18 @@ const (
 )
 
 // childHadImplementerArtifact checks for mutation ledger records or workspace modifications.
-func childHadImplementerArtifact(ctx context.Context, projectDir string, msgs []api.Message, wc WorkspaceChangeChecker) artifactProof {
+func childHadImplementerArtifact(ctx context.Context, projectDir string, msgs []api.Message, wc WorkspaceChangeChecker, changes *WorkspaceChangeObservation) artifactProof {
 	if childHadSuccessfulMutationTool(msgs) {
 		return artifactPresent
+	}
+	if changes != nil {
+		if changes.Err != nil {
+			return artifactUndetermined
+		}
+		if len(changes.Paths) > 0 {
+			return artifactPresent
+		}
+		return artifactAbsent
 	}
 	if wc == nil || strings.TrimSpace(projectDir) == "" {
 		return artifactAbsent
