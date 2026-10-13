@@ -1,5 +1,5 @@
 tags: [edit, filesystem]
-description: "@scratch/<path> addresses private working files. Replace an exact text span in an existing file. Batch independent edits to distinct files. Call read in an earlier response; summarize and grep do not establish an edit base. Same-batch read+edit rejects: EDITOR_DOCUMENT_READ_REQUIRED. Omit displayed line labels; preserve source indentation. old_string must be unique unless replace_all. Parse-breaking splices: MUTATION_BROKE_PARSE."
+description: "@scratch/<path> addresses private working files. Replace an exact text span in an existing file. Batch independent edits to distinct files. Call read in an earlier response; summarize and grep do not establish an edit base. Same-batch read+edit rejects: EDITOR_DOCUMENT_READ_REQUIRED. Omit displayed line labels; preserve source indentation. old_string must be unique unless replace_all. Parse-breaking splices: MUTATION_BROKE_PARSE. Replaces command: sed -i / perl -pi in-place edit."
 schema:
   type: object
   properties:
