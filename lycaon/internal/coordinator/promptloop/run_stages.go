@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonshape"
+	"github.com/lycaon/lycaon/internal/llm/actionenvelope"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -249,7 +250,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		var refusal *guidance.Refusal
 		var err error
 		st.history, refusal, blocked, err = l.Tools.tryRejectNoToolTurn(
-			ctx, sess, st.history, userPrompt, st.lastAssistantContent, surfaceID, st.turnTools, sessionID, st.lastAssistantID, st, invokeAllowed,
+			ctx, sess, st.history, userPrompt, st.lastAssistantContent, surfaceID, st.turnTools, sessionID, st.lastAssistantID, st, invokeAllowed, actionenvelope.Names(assistantMsg.Content, st.offeredToolNames),
 		)
 		if err != nil {
 			return out, err

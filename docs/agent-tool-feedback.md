@@ -113,6 +113,14 @@ An already rejected operation pins its original typed code in the policy context
 
 ## Coordinator nudges
 
+`TOOL_ACTION_IN_TEXT` rejects a coordinator response that is entirely the reserved
+`tool_name` / `tool_args` JSON envelope (or batch), names only tools offered on
+that request, and contains no native calls. Arguments must be objects; the host
+never executes or repairs this text. Fenced examples, explanatory prose, and
+unknown tools are outside the grammar. Recovery uses the existing rejected-draft
+and bounded no-progress retry lifecycle. Tool schemas and permission checks apply
+to the subsequent native call.
+
 Post-turn nudges carry OAR or grounding decisions that could not reject an already-finished generation. All matched advisories are retained in evaluation order; the envelope identifies the primary code.
 
 Delivery routes each resolved advisory once ([`advisory_delivery.go`](../lycaon/internal/oar/advisory_delivery.go), [`policy_advisories.go`](../lycaon/internal/session/guidancedelivery/policy_advisories.go)). Warnings at `tool.post_invoke` and `credential.assignment` stay attached to the tool result; `worker.finalize` advisories travel in the parent envelope. Everything else enters an acknowledged policy queue, separate from lifecycle kicks, that the model loop drains on every iteration and after model-input evaluation, so feedback raised during a tool call reaches the next model request without waiting for a user turn.

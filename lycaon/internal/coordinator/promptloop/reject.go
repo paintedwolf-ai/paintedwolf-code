@@ -54,8 +54,9 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 	assistantMessageID string,
 	st *promptLoopTurnState,
 	invokeAllowed bool,
+	textActionTools []string,
 ) (hist []api.Message, reject *guidance.Refusal, blocked bool, err error) {
-	if l.Closeout.Deps.BeforeFinishNoToolTurn == nil {
+	if l.Closeout.Deps.BeforeFinishNoToolTurn == nil && len(textActionTools) == 0 {
 		return history, nil, false, nil
 	}
 	workersIdle := true
@@ -63,7 +64,16 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 		state := l.Context.Deps.ImplementSessionState(ctx, sess)
 		workersIdle = state.WorkersInFlight == 0
 	}
-	reject, block := l.Closeout.Deps.BeforeFinishNoToolTurn(ctx, sess, history, userPrompt, lastAssistantContent, surfaceID, workersIdle, turnTools, invokeAllowed)
+	if invokeAllowed {
+		reject, err = l.Closeout.rejectTextAction(ctx, sess, textActionTools)
+		if err != nil {
+			return history, nil, false, err
+		}
+	}
+	block := reject != nil
+	if !block && l.Closeout.Deps.BeforeFinishNoToolTurn != nil {
+		reject, block = l.Closeout.Deps.BeforeFinishNoToolTurn(ctx, sess, history, userPrompt, lastAssistantContent, surfaceID, workersIdle, turnTools, invokeAllowed)
+	}
 	if !block {
 		return history, nil, false, nil
 	}

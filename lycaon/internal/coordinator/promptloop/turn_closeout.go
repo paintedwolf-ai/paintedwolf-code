@@ -330,7 +330,7 @@ func (l *turnCloseout) runEarlyTurnCloseout(
 	coercedContent, unread := l.Tools.maybeCoerceCloseoutContent(ctx, history, sessionID, surfaceID, assistantMsg.Content, assistantMsg.ID)
 	assistantMsg.Content = coercedContent
 	history, reject, blocked, err := l.Tools.tryRejectNoToolTurn(
-		ctx, sess, history, userPrompt, coercedContent, surfaceID, turnTools, sessionID, assistantMsg.ID, st, false,
+		ctx, sess, history, userPrompt, coercedContent, surfaceID, turnTools, sessionID, assistantMsg.ID, st, false, nil,
 	)
 	if err != nil {
 		return history, "", "", err

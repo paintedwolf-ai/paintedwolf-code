@@ -1,0 +1,27 @@
+oar: '1.0'
+id: TOOL_ACTION_IN_TEXT
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.reject_observation
+    - paintedwolf.offenders_sample
+when: paintedwolf.reject_observation == "text_action_envelope"
+effect: block
+copy:
+  what: 'No tool executed. The assistant response contained a text action envelope for {{ paintedwolf.offenders_sample }}.'
+  cause: A plain-text tool_name/tool_args envelope is not a native tool call.
+  why: The host does not execute this reserved text format or treat it as task completion.
+  fix: Resubmit the intended action through the native tool channel using an offered tool and its schema. Do not repeat the JSON in assistant text.
+  instead: If explaining tool syntax or logs, use a fenced code example with an explanation.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: A reserved text action envelope did not invoke a tool
+x-paintedwolf-scenarios:
+  - id: offered_read
+    vars:
+      offenders_sample: read
+    expect_contains:
+      - 'No tool executed.'
+      - native tool channel
+      - 'Code: TOOL_ACTION_IN_TEXT'
