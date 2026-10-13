@@ -525,9 +525,9 @@ Appearance is device scope. Mode, theme choice, type scale, and layout preferenc
 
 ### Settings → General → Power
 
-**Keep Mac awake while sessions are working** defaults on (`internal/settings/power.go`). The sidecar holds one macOS idle-sleep assertion while structured session work is active: a running session-tree turn, a host activity lease shown by the composer, a pending or running worker, or a pending or running security scan. Overlapping work shares one assertion, and disabling the setting or settling the final lease releases it immediately.
+**Keep computer awake while sessions are working** defaults on (`internal/settings/power.go`). The sidecar holds one native idle-sleep lease while structured session work is active: a running session-tree turn, a host activity lease shown by the composer, a pending or running worker, or a pending or running security scan. Overlapping work shares one lease, and disabling the setting or settling the final work lease releases it. macOS uses an IOKit idle-sleep assertion; Linux uses a logind `idle` inhibitor with a close-on-exec descriptor. Missing bus or logind services report unavailable support; while work is active the controller retries service availability. Service loss ends the lease and the controller attempts to reacquire it.
 
-The host persists this state across projects and windows; Den only reads and updates the device preference and renders live assertion status. The assertion prevents idle system sleep, not display sleep, explicit sleep, or lid-close sleep. Unsupported hosts report the capability as unavailable rather than pretending the preference has an effect.
+The host persists this state across projects and windows; Den only reads and updates the device preference and renders native inhibition status. The lease prevents automatic idle system sleep while preserving screen locking, display sleep, explicit sleep, and lid-close sleep. Unsupported hosts report the capability as unavailable rather than pretending the preference has an effect.
 
 ### Type
 
