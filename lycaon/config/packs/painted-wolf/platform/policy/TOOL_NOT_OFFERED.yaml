@@ -4,15 +4,15 @@ kind: policy
 anchor: tool.rejected
 requires:
   profiles: [tool]
-  facts: [paintedwolf.rejection_code, paintedwolf.tool_loadable, paintedwolf.can_request_tools]
+  facts: [paintedwolf.rejection_code, paintedwolf.tool_loadable, paintedwolf.tool_discovery_available, paintedwolf.offered_tools]
 when: paintedwolf.rejection_code == "TOOL_NOT_OFFERED"
 effect: block
 copy:
   what: '{% if paintedwolf.tool_loadable %}`{{ tool }}` is available but its schema is not loaded{% else %}`{{ tool }}` is unavailable on this model call{% endif %}'
   cause: '{% if paintedwolf.tool_loadable %}The current tool plan permits this tool to be loaded with `request_tools`{% else %}The current tool plan provides no loading path for this name{% endif %}'
-  why: A tool call must use a schema offered on the current request
-  fix: '{% if paintedwolf.tool_loadable %}Call `request_tools` with `need` set to exactly `{{ tool }}`. Its schema arrives on the next model call; then retry using that schema. Loading grants no additional permissions.{% else %}{% if paintedwolf.can_request_tools %}Do not request or retry this unavailable name. Call `request_tools` with `need` describing the capability you need, rather than this tool name, to discover an allowed alternative. Follow the returned schema on the next model call. Discovery does not grant permissions or guarantee that a suitable tool exists.{% else %}Choose an available tool that can perform the work. Do not request or retry this unavailable name; report the missing capability if the available tools cannot complete the assignment.{% endif %}{% endif %}'
-  instead: '{% if paintedwolf.tool_loadable %}Load `{{ tool }}` with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.can_request_tools %}Describe the needed capability to `request_tools` to discover an allowed alternative{% else %}Use an available capability or report the constraint{% endif %}{% endif %}'
+  why: 'A tool call must use a schema offered on the current request. Tools offered now: {% if paintedwolf.offered_tools %}{{ paintedwolf.offered_tools }}{% else %}none{% endif %}.'
+  fix: '{% if paintedwolf.tool_loadable %}Call `request_tools` with `need` set to exactly `{{ tool }}`. Its schema arrives on the next model call; then retry using that schema. Loading grants no additional permissions.{% else %}{% if paintedwolf.tool_discovery_available %}Your current tools are a subset of the tools you can use, but `{{ tool }}` cannot be loaded here. Call `request_tools` with `need` describing the operation and target in your own words; you do not need a tool name. Use the returned schema on the next model call. Loading grants no additional permissions.{% else %}Choose an available tool that can perform the work. Do not request or retry this unavailable name; report the missing capability if the available tools cannot complete the assignment.{% endif %}{% endif %}'
+  instead: '{% if paintedwolf.tool_loadable %}Load `{{ tool }}` with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.tool_discovery_available %}Describe the operation and target to `request_tools` to discover an allowed alternative{% else %}Use an available capability or report the constraint{% endif %}{% endif %}'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 x-paintedwolf-message: This tool was not offered on this request
@@ -33,10 +33,12 @@ x-paintedwolf-scenarios:
       - report the missing capability
   - id: unavailable-name-with-discovery
     vars:
-      tool: unavailable_example
+      tool: delegate_dispatch
       tool_loadable: false
-      can_request_tools: true
+      tool_discovery_available: true
+      offered_tools: [read, request_tools]
     expect_contains:
       - 'Code: TOOL_NOT_OFFERED'
-      - describing the capability
-      - does not grant permissions
+      - 'Tools offered now: read, request_tools'
+      - describing the operation and target
+      - Loading grants no additional permissions

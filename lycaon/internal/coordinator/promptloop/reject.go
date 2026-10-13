@@ -177,7 +177,8 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 	if code == "TOOL_NOT_OFFERED" {
 		loadable := toolCtx.Turn.TurnToolPlan.Deferred(tc.Name) && tools.ToolOffered(ctx, "request_tools")
 		data["tool_loadable"] = loadable
-		data["can_request_tools"] = tools.ToolOffered(ctx, "request_tools") && len(toolCtx.Turn.TurnToolPlan.DeferredNames()) > 0
+		data["offered_tools"] = append([]string(nil), toolCtx.Turn.TurnOfferedToolNames...)
+		data["tool_discovery_available"] = tools.ToolOffered(ctx, "request_tools") && len(toolCtx.Turn.TurnToolPlan.DeferredNames()) > 0
 		if loadable {
 			data["replacement_calls"] = []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": tc.Name}}}
 		}

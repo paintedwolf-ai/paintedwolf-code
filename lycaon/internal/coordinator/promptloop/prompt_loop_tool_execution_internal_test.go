@@ -348,7 +348,7 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 	}{
 		{"deferred loading offered", "TOOL_NOT_OFFERED", []string{"command"}, []string{"request_tools"}, "request_tools", true},
 		{"deferred loading unavailable", "TOOL_NOT_OFFERED", []string{"command"}, []string{"read"}, "request_tools", false},
-		{"unavailable name with alternatives", "TOOL_NOT_OFFERED", []string{"task"}, []string{"request_tools"}, "describing the capability", true},
+		{"unavailable name with alternatives", "TOOL_NOT_OFFERED", []string{"task"}, []string{"request_tools"}, "describing the operation and target", true},
 		{"alternatives without loader", "TOOL_NOT_OFFERED", []string{"task"}, []string{"read"}, "request_tools", false},
 		{"unavailable name", "TOOL_NOT_OFFERED", nil, []string{"request_tools"}, "request_tools", false},
 		{"worker completion", "TOOL_INVOKE_PROSE_TURN", nil, []string{"complete_leg"}, "complete_leg", true},
@@ -365,9 +365,12 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 			}
 			if tc.code == "TOOL_NOT_OFFERED" {
 				data := toolrejection.AsToolReject(reject).Data
+				if got, _ := data["offered_tools"].([]string); !slices.Equal(got, tc.offered) || !strings.Contains(reject.Copy["why"], strings.Join(tc.offered, ", ")) {
+					t.Fatalf("offered inventory disagrees with request %v: %v", tc.offered, reject.Copy)
+				}
 				wantLoad := slices.Contains(tc.deferred, "command") && slices.Contains(tc.offered, "request_tools")
 				wantDiscovery := len(tc.deferred) > 0 && slices.Contains(tc.offered, "request_tools")
-				if data["can_request_tools"] != wantDiscovery {
+				if data["tool_discovery_available"] != wantDiscovery {
 					t.Fatalf("discovery fact = %v, want %v", data, wantDiscovery)
 				}
 				if data["tool_loadable"] != wantLoad {
