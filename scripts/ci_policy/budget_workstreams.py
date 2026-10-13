@@ -176,6 +176,9 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
         state = group_state(canonical)
         desired = 'open' if rows else 'closed'
         same = state and [evidence(r) for r in rows] == state['artifacts']
+        # A dismissal retains its comparison evidence until facts renew intake.
+        if state and not rows and canonical['state'] == 'closed' and canonical.get('state_reason') == 'not_planned':
+            same = True
         if not rows and not candidates and canonical['state'] == 'closed':
             continue
         if not same or canonical['state'] != desired:

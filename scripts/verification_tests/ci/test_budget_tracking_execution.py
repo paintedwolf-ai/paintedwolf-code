@@ -174,3 +174,12 @@ class WorkstreamTests(unittest.TestCase):
         from verification_tests.ci.test_budget_review_execution import reviewed
         entry['review'] = reviewed('boundary_changed')['review']
         self.assertEqual(self.groups.plan([], self.artifacts(entry), observation())[0][0]['action'], 'create')
+
+    def test_area_dismissal_retains_fingerprints_until_facts_change(self):
+        entry = row()
+        ops, _ = self.groups.plan([], self.artifacts(entry), observation())
+        closed = issue(state='closed', state_reason='not_planned', body=ops[0]['body']['body'])
+        self.assertEqual(self.groups.plan([closed], self.artifacts(entry), observation(), intake_keys=set()), ([], 1))
+        for changed in [{**entry, 'measured': 360}, {**entry, 'warn': 250}]:
+            ops, _ = self.groups.plan([closed], self.artifacts(changed), observation(), intake_keys=set())
+            self.assertEqual(ops[0]['action'], 'reopen')
