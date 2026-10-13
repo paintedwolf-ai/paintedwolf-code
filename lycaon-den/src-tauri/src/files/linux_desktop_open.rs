@@ -6,7 +6,6 @@
 //! directly, and `xdg-open` remains the last resort for sessions without GIO
 //! application support.
 
-use std::os::fd::AsFd;
 use std::path::Path;
 use std::process::Command;
 use std::sync::mpsc;
@@ -218,9 +217,7 @@ fn portal_open_uri(bus: &gio::DBusConnection, parent: &str, uri: &str) -> Result
 fn portal_open_fd(bus: &gio::DBusConnection, method: &str, parent: &str, path: &Path) -> Result<(), String> {
     let file = std::fs::File::open(path).map_err(|error| format!("{}: {error}", path.display()))?;
     let fd_list = gio::UnixFDList::new();
-    let index = fd_list
-        .append(file.as_fd())
-        .map_err(|error| error.to_string())?;
+    let index = fd_list.append(&file).map_err(|error| error.to_string())?;
     bus.call_with_unix_fd_list_sync(
         Some(PORTAL_BUS_NAME),
         PORTAL_OBJECT_PATH,
