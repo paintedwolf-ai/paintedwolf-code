@@ -353,7 +353,7 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 				result.replaceContent(result.content)
 			}
 			if run.runErr == nil && result.facts.Succeeded() {
-				_ = l.Nudges.recordDoomLoopAttempt(ctx, run.sessionID, run.responseID, run.call.Name, run.call.Args, "", run.contract.MutatesWorld())
+				_ = l.Nudges.recordDoomLoopAttempt(ctx, run.sessionID, run.responseID, run.call.Name, run.call.Args, nil, run.contract.MutatesWorld())
 			}
 		}
 		observability.LogToolInvocation(observability.ToolInvocationCapture{

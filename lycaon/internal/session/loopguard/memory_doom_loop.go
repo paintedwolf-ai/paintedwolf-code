@@ -9,6 +9,8 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/scopedstore"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type responseCounts struct {
@@ -22,7 +24,8 @@ type doomLoopState struct {
 	responseID     string
 	beforeResponse responseCounts
 	// seenEffectSeq is the session effect sequence at this bucket's last attempt.
-	seenEffectSeq int64
+	seenEffectSeq  int64
+	readDocumentID string
 }
 
 // sessionEffects tracks consecutive effectful calls. Read-only calls preserve the count.
@@ -233,7 +236,7 @@ func doomLoopMaterialActions(raw any) any {
 }
 
 // Check blocks repeated identical calls or consecutive rejects sharing a code.
-func (g *MemoryDoomLoopGuard) Check(ctx context.Context, sessionID, responseID, tool string, args map[string]any) (allowed bool, count int, repeatedCode string, err error) {
+func (g *MemoryDoomLoopGuard) Check(ctx context.Context, sessionID, responseID, tool string, args map[string]any, offered bool, reads *tools.AgentReadBases) (allowed bool, count int, repeatedCode string, err error) {
 	if err := ctx.Err(); err != nil {
 		return false, 0, "", err
 	}
@@ -254,6 +257,17 @@ func (g *MemoryDoomLoopGuard) Check(ctx context.Context, sessionID, responseID, 
 	}
 	sess, _ := g.states.Load(sessionID)
 	st := sess[key]
+	if st != nil {
+		resolved := st.lastCode == "TOOL_NOT_OFFERED" && offered
+		if st.lastCode == "EDITOR_DOCUMENT_READ_REQUIRED" && st.readDocumentID != "" {
+			revision, known := reads.Lookup(st.readDocumentID)
+			resolved = known && revision > 0
+		}
+		if resolved {
+			delete(sess, key)
+			st = nil
+		}
+	}
 	if st == nil {
 		return true, 0, "", nil
 	}
@@ -276,31 +290,12 @@ func (g *MemoryDoomLoopGuard) supersededLocked(sessionID, key string, st *doomLo
 	return effects.seq > st.seenEffectSeq && effects.key != key
 }
 
-// ResolveRejection clears an invocation's retry history when the host resolves its constraint.
-// Cross-argument rejection history remains available for recurring failures.
-func (g *MemoryDoomLoopGuard) ResolveRejection(ctx context.Context, sessionID, tool string, args map[string]any, code string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	key, err := g.doomLoopKey(sessionID, tool, args)
-	if err != nil {
-		return err
-	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	sess, _ := g.states.Load(sessionID)
-	if st := sess[key]; st != nil && code != "" && st.lastCode == code {
-		delete(sess, key)
-	}
-	return nil
-}
-
 // RecordAttempt updates invocation and rejection counts; mutated marks a committed effect.
 func (g *MemoryDoomLoopGuard) RecordAttempt(
 	ctx context.Context,
 	sessionID, responseID, tool string,
 	args map[string]any,
-	rejectCode string,
+	failure *api.InvocationFailure,
 	mutated bool,
 ) error {
 	if err := ctx.Err(); err != nil {
@@ -319,7 +314,10 @@ func (g *MemoryDoomLoopGuard) RecordAttempt(
 	if err != nil {
 		return err
 	}
-	rejectCode = strings.TrimSpace(rejectCode)
+	rejectCode := ""
+	if failure != nil {
+		rejectCode = strings.TrimSpace(failure.Code)
+	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	// An older response cannot rebuild counters after fresh direction.
@@ -351,7 +349,15 @@ func (g *MemoryDoomLoopGuard) RecordAttempt(
 		st.seenEffectSeq = effects.seq
 		g.effects.Store(sessionID, effects)
 	}
+	ignoredSuccess := st.responseID == responseID && rejectCode == ""
 	st.recordResponse(responseID, rejectCode)
+	if ignoredSuccess {
+		return nil
+	}
+	st.readDocumentID = ""
+	if rejectCode == "EDITOR_DOCUMENT_READ_REQUIRED" && failure != nil {
+		st.readDocumentID, _ = failure.Details["document_id"].(string)
+	}
 	return nil
 }
 

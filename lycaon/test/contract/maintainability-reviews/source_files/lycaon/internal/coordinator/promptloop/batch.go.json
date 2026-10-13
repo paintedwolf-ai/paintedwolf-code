@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/coordinator/promptloop/batch.go",
+  "kind": "runtime_service",
+  "workstream": "tool-prerequisite-recovery",
+  "disposition": "retain",
+  "reason": "Batch ordering, frozen response reads, interruption, and result settlement share one admitted response state. Pass prerequisite facts through that batch seam and keep admission atomic in the guard. Retain this helper and its current signatures with response-ordering and interruption contracts.",
+  "reviewed_commit": "46d87a5d6ed1fe53c4cf707f18062a37ca65d7ed",
+  "ceiling": 514,
+  "boundaries": {
+    "lycaon/internal/coordinator/promptloop/response_repetition_test.go": "861ea3ab6dfb9f954a01f1a4bbbd40c73b04127293254a811c110de97d4f0b33",
+    "lycaon/internal/coordinator/promptloop/batch_test.go": "fd8bdd55959458f2f7b2295fdcb49bfe50127ba9bf0edb81a249cbf567691a68",
+    "lycaon/internal/coordinator/promptloop/tool_cancellation_test.go": "2bc00407c2abf57bcf5e0331a9ca5c04c9724653030180a86bdfee81819b5d0b"
+  }
+}
