@@ -266,6 +266,22 @@ fn launch_refuses_a_binary_whose_installed_bundle_has_changed() {
     );
 }
 
+fn change_resources(path: &Path) {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(path).unwrap().permissions();
+        permissions.set_mode(permissions.mode() ^ 0o100);
+        fs::set_permissions(path, permissions).unwrap();
+    }
+    #[cfg(not(target_os = "linux"))]
+    fs::write(
+        path.join("unexpected-resource"),
+        "changed after preparation",
+    )
+    .unwrap();
+}
+
 #[test]
 fn activation_requires_the_whole_prepared_bundle_to_match_its_receipt() {
     let root = crate::test_support::TempDir::new("update-prepared-bundle-changed");
@@ -274,11 +290,7 @@ fn activation_requires_the_whole_prepared_bundle_to_match_its_receipt() {
     let error = activate_using(
         &mut t,
         |_, _| {
-            fs::write(
-                prepared.join("unexpected-resource"),
-                "changed after preparation",
-            )
-            .unwrap();
+            change_resources(&prepared);
             Ok(())
         },
         |_, _| panic!("changed bundle must not be installed"),
@@ -295,11 +307,7 @@ fn recovery_requires_the_whole_installed_bundle_to_match_its_receipt() {
     let root = crate::test_support::TempDir::new("update-installed-bundle-changed");
     let mut t = fixture(&root);
     swap_directories(&t.target, &t.prepared_bundle).unwrap();
-    fs::write(
-        t.target.join("unexpected-resource"),
-        "changed after activation",
-    )
-    .unwrap();
+    change_resources(&t.target);
     let error = activate_using(
         &mut t,
         |_, _| panic!("matching executable must not trigger preparation"),
