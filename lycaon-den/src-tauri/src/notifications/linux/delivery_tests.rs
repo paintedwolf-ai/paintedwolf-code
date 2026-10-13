@@ -103,7 +103,8 @@ impl Fixture {
                                 "GetCapabilities" => invocation
                                     .return_value(Some(&(capabilities.clone(),).to_variant())),
                                 "Notify" => {
-                                    let hints = parameters.child_value(6)
+                                    let hints = parameters
+                                        .child_value(6)
                                         .get::<HashMap<String, glib::Variant>>()
                                         .unwrap();
                                     assert_eq!(
