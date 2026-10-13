@@ -17,10 +17,13 @@ type TailPorts = {
   revealOffset(offset: number, options?: ScrollportRevealOptions): Promise<boolean>;
 };
 
+const MAX_INTERRUPTED_GLIDE_RETRIES = 2;
+
 export class ScrollportTail {
   private tailBound: { attempts: number; sampled: number } | undefined;
   private tailBoundTimer: ReturnType<typeof setTimeout> | undefined;
   private deferredTailBoundAttempts = 0;
+  private interruptedGlideRetries = 0;
   tailRangeReleased = false;
   glidingToTail = false;
   private tailPin: (() => boolean) | null = null;
@@ -117,15 +120,24 @@ export class ScrollportTail {
       return;
     }
     const overrun = this.ports.measureGeometry(() => this.tailOverrunTail());
-    if (overrun === null) return;
+    if (overrun === null) {
+      this.interruptedGlideRetries = 0;
+      return;
+    }
     if (Math.abs(overrun - pending.sampled) > SCROLL_EPSILON_PX && pending.attempts > 1) {
       // Changing geometry needs another confirmation; this sample is the next baseline.
       this.awaitTailBoundConfirmation(pending.attempts - 1, overrun);
       return;
     }
-    // Unheld overrun, such as a native scroll into published runway, never shows blank space.
-    if (this.ports.extentHeld() === 0) {
+    // Unheld overrun, or a glide interrupted past the retry cap, settles immediately.
+    if (this.ports.extentHeld() === 0 || this.interruptedGlideRetries >= MAX_INTERRUPTED_GLIDE_RETRIES) {
+      this.interruptedGlideRetries = 0;
+      this.tailRangeReleased = true;
       this.ports.commit(overrun, "tail_bound");
+      this.ports.measureGeometry(() => {
+        this.ports.resizeRetainedExtent();
+        this.reconcilePinnedTail();
+      });
       return;
     }
     // Range this scrollport held closes smoothly under the reader.
@@ -133,13 +145,17 @@ export class ScrollportTail {
     void this.ports.revealOffset(overrun, { motion: "settle" }).catch(() => false).then((arrived) => {
       this.glidingToTail = false;
       if (this.disposed) return;
-      // A press that interrupted the glide keeps the content under it; other interruptions retry after claims settle.
+      // A press that interrupted the glide keeps the content under it; other interruptions retry up to the cap.
       if (!arrived) {
-        if (!this.ports.pressActive()) {
-          this.scheduleTailBoundReconcile(TAIL_BOUND_CONFIRM_FRAMES);
+        if (this.ports.pressActive()) {
+          this.interruptedGlideRetries = 0;
+          return;
         }
+        this.interruptedGlideRetries += 1;
+        this.scheduleTailBoundReconcile(TAIL_BOUND_CONFIRM_FRAMES);
         return;
       }
+      this.interruptedGlideRetries = 0;
       this.tailRangeReleased = true;
       this.ports.measureGeometry(() => {
         this.ports.resizeRetainedExtent();
