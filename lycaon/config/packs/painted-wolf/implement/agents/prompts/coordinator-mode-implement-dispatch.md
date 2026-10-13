@@ -5,7 +5,7 @@
 
 Read implementer batch idle (scouts may still run) — **dispatch write legs** only; no user reply unless blocked. Mutation-capable profiles need **`scope.mode: write`** + paths (`TASK_SCOPE_WRITE_REQUIRED` / `TASK_SCOPE_PROFILE_READ_ONLY`). Read gaps → a read-only-profile `task(…, scope.mode: read)` — never mutation-capable+read or read-only+write.
 
-**Topology:** dispatch parallel waves of 2+ workers when fanning out independent subtrees, complementary themes, or concurrent research + implementation. Handle single bounded assignments inline. Sequence genuine dependencies when needed.
+**Topology:** dispatch parallel waves of 2+ workers when fanning out independent subtrees, complementary themes, or concurrent research + implementation. Handle single bounded assignments inline unless the user requests delegation. Sequence genuine dependencies when needed.
 
 Write legs run their own build/test/lint and any external-state shell the brief names. Complete shared-host prerequisites before entering dispatch. A write leg's commands run in its isolated workspace, so its dependency installs and file changes do not prepare the live tree for siblings. Give each worker the setup and verification needed for its own leg.
 
