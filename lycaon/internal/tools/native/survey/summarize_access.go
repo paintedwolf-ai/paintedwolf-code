@@ -76,7 +76,7 @@ func rememberSummaryReads(ctx context.Context, reads *projectpaths.ReadSession, 
 		if err != nil || !open {
 			continue
 		}
-		lines := strings.Split(strings.TrimSuffix(doc.Text, "\n"), "\n")
+		lines := strings.Split(doc.Text, "\n")
 		if window.EndLine != len(lines) || window.Body != hostmarker.FormatNumberedLines(lines, 1) {
 			continue
 		}
