@@ -2,7 +2,6 @@ package llm
 
 import (
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"strings"
 	"testing"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	vertexexpressprovider "github.com/lycaon/lycaon/internal/llm/providers/vertexexpress"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 

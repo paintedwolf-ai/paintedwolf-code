@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/transcript"
-
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/loopguard"

@@ -13,6 +13,8 @@ Before `write`, `edit`, `replace_lines`, `restore_version`, `jq_edit`, `task`, `
 
 Markers: `- [ ]` pending; `- [x]` completed; `- [~]` terminal will-not-pursue, never in-progress; `- [>]` note. A rejected action did not do the work. Change rows only when scope or status changes. `unchanged` is successful storage of the same checklist; do not repeat it.
 
-Pending rows permit work. A successful worker finish latches progress: reconcile its observed result with `update_progress` before dispatch, resume, or edit (`PROGRESS_ITEM_NOT_CLOSED`). Partial, failed, and held legs do not latch it. Lifecycle tools are never gated. An unchanged checklist does not clear the latch.
+Pending rows permit work. A successful worker finish latches progress: reconcile its observed result with `update_progress` before dispatch, resume, or edit (`PROGRESS_ITEM_NOT_CLOSED`). Partial, failed, and held legs do not latch it. An unchanged checklist does not clear the latch.
+
+Lifecycle tools are never gated: `preview_overlay`, `promote_overlay`, `reject_overlay`, `wait`, `answer_decision`, and `pack_board`.
 
 Reconcile an existing checklist before final synthesis.

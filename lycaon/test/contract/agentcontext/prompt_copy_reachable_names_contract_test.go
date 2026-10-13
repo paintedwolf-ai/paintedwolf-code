@@ -173,18 +173,17 @@ func TestCloseoutCopyMatchesTheReportDecoder(t *testing.T) {
 	contractcheck.FailViolations(t, "closeout copy names a key the report decoder rejects", contractcheck.DedupeStrings(violations))
 }
 
-// progressClosurePartial names the tools that stay usable under the latch.
-const progressClosurePartial = packRoot + "/platform/shared/partials/coordinator-progress-closure.md"
+const progressClosureProcedure = packRoot + "/platform/shared/units/coordinator-progress-procedure.md"
 
 // TestProgressClosureCopyNamesOnlyUngatedTools verifies latch claims.
 func TestProgressClosureCopyNamesOnlyUngatedTools(t *testing.T) {
 	t.Parallel()
-	raw, err := os.ReadFile(filepath.Join(contractcheck.RepoRoot(t), progressClosurePartial))
-	contractcheck.FailErr(t, "read progress-closure partial", err)
+	raw, err := os.ReadFile(filepath.Join(contractcheck.RepoRoot(t), progressClosureProcedure))
+	contractcheck.FailErr(t, "read progress procedure", err)
 
 	_, after, found := strings.Cut(string(raw), "never gated:")
 	if !found {
-		t.Fatal("progress-closure partial no longer states which tools stay usable — this test guards that sentence")
+		t.Fatal("progress procedure does not name the ungated lifecycle tools")
 	}
 	sentence, _, _ := strings.Cut(after, "\n")
 
