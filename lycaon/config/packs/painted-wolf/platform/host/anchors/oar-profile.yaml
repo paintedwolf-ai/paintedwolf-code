@@ -1133,6 +1133,8 @@ host_facts:
    type: bool
  - name: paintedwolf.misplaced_fields
    type: list<string>
+ - name: paintedwolf.inapplicable_fields
+   type: list<string>
  - name: paintedwolf.found_under
    type: string
  - name: paintedwolf.belongs_under
