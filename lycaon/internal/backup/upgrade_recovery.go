@@ -468,7 +468,7 @@ func StageLatestUpgradeRecovery(ctx context.Context, opts StageOpts) (StageResul
 		if err != nil {
 			return err
 		}
-		if _, err := copySnapshotRegular(ctx, source, dest, os.FileMode(entry.Mode)); err != nil {
+		if _, err := copySnapshotRegular(ctx, archiveSource{path: source, mode: os.FileMode(entry.Mode)}, dest); err != nil {
 			return err
 		}
 		return verifySnapshotFile(ctx, root, entry)

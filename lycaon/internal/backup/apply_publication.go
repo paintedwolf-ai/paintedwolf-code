@@ -72,7 +72,7 @@ func installFileAtomic(ctx context.Context, root, src, dest string, entry Pendin
 	}
 	tmp := filepath.Join(filepath.Dir(dest), ".restore-file-"+uuid.NewString())
 	defer func() { _ = os.Remove(tmp) }()
-	if _, err := copySnapshotRegular(ctx, src, tmp, os.FileMode(entry.Mode)); err != nil {
+	if _, err := copySnapshotRegular(ctx, archiveSource{path: src, mode: os.FileMode(entry.Mode)}, tmp); err != nil {
 		return fmt.Errorf("copy staged file: %w", err)
 	}
 	tempRel, err := filepath.Rel(root, tmp)

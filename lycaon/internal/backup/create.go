@@ -36,9 +36,10 @@ type CreateOpts struct {
 }
 
 type archiveSource struct {
-	path string
-	kind string
-	mode os.FileMode
+	path      string
+	kind      string
+	mode      os.FileMode
+	shareBody bool
 }
 
 // Create streams a zip archive of the durable installation to destPath.
@@ -200,7 +201,7 @@ func collectDurableDir(ctx context.Context, configDir, relDir string, files map[
 		if strings.HasPrefix(filepath.ToSlash(rel), enginepaths.WorkerBranchesDirName+"/") && workerMetadataPath(filepath.ToSlash(rel), false) && kind != fileKindRegular {
 			return fmt.Errorf("worker layout metadata must be a regular file")
 		}
-		files[filepath.ToSlash(rel)] = archiveSource{path: path, kind: kind, mode: info.Mode().Perm()}
+		files[filepath.ToSlash(rel)] = archiveSource{path: path, kind: kind, mode: info.Mode().Perm(), shareBody: immutableRecoveryBody(rel, info)}
 		return nil
 	})
 	if err != nil {

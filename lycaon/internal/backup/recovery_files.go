@@ -14,7 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/fssync"
 )
 
-func copySnapshotRegular(ctx context.Context, src, dest string, mode os.FileMode) (bool, error) {
+func copySnapshotRegular(ctx context.Context, source archiveSource, dest string) (bool, error) {
+	src, mode := source.path, source.mode
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -39,6 +40,10 @@ func copySnapshotRegular(ctx context.Context, src, dest string, mode os.FileMode
 			return false, err
 		}
 		return true, closeErr
+	}
+	linked, err := linkSnapshotBody(source, dest)
+	if err != nil || linked {
+		return linked, err
 	}
 	return false, copySnapshotStream(ctx, src, dest, mode)
 }
@@ -96,7 +101,7 @@ func copySnapshotStream(ctx context.Context, src, dest string, mode os.FileMode)
 // Snapshot symlinks store their target as regular-file content.
 func copySnapshotSource(ctx context.Context, source archiveSource, dest string) (bool, error) {
 	if source.kind == fileKindRegular {
-		return copySnapshotRegular(ctx, source.path, dest, source.mode)
+		return copySnapshotRegular(ctx, source, dest)
 	}
 	target, err := os.Readlink(source.path)
 	if err != nil {
