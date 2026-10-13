@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -68,6 +69,8 @@ func TestSandboxLoopbackRecordsAnActualRequest(t *testing.T) {
 }
 
 func TestBenchmarkSuiteLoadsWithExplicitUnattendedSandboxCases(t *testing.T) {
+	catalog, err := sensitivepath.Load(sensitivepath.Bundled())
+	testutil.FailErr(t, "load protected-read catalog", err)
 	suite, err := LoadSuite("../../../test/fixtures/eval/coordinator-benchmark.json")
 	testutil.FailErr(t, "load benchmark suite", err)
 	if suite.Unattended == nil {
@@ -79,6 +82,10 @@ func TestBenchmarkSuiteLoadsWithExplicitUnattendedSandboxCases(t *testing.T) {
 			fallback := []byte("{\n  \"receipt\": \"supplied-fallback\"\n}\n")
 			testutil.FailErr(t, "write supplied fallback", os.WriteFile(filepath.Join(result.ProjectDir, "fallback.json"), fallback, 0o600))
 			testutil.FailErr(t, "prepare file fixture", prepareSuiteSandbox(t.Context(), &spec, &result, t.TempDir()))
+			match, protected := catalog.Match(result.Sandbox.Path, sensitivepath.ModeRead)
+			if !protected || !match.Protected {
+				t.Fatalf("permission fixture does not cross the read floor: %s", result.Sandbox.Path)
+			}
 			preserved, err := os.ReadFile(filepath.Join(result.ProjectDir, "fallback.json"))
 			testutil.FailErr(t, "read prepared fallback", err)
 			if string(preserved) != string(fallback) || (spec.Sandbox == "deny_read" && result.Sandbox.Receipt != "supplied-fallback") {

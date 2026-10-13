@@ -22,7 +22,8 @@ def fixture(project,kind):
     receipt=secrets.token_hex(16)
     if kind not in {'loopback','deny_loopback'}:
         with tempfile.TemporaryDirectory(prefix='paintedwolf-input-') as temporary:
-            path=pathlib.Path(temporary)/'input.json'
+            # The read floor protects this basename even outside an attached project.
+            path=pathlib.Path(temporary)/'.env'
             save(path,{'receipt':receipt})
             yield {'path':str(path),'receipt':receipt,'port':0}
         return
