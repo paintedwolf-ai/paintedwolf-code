@@ -35,19 +35,21 @@ func TestProportionalCoordinatorDisciplineRender(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Handle diagnosed small changes inline",
-		"leaf",
-		"identify the unresolved fact",
+		"Identify the unresolved fact",
 		"Stop when observations answer the request",
 		"Report completion only with supporting evidence",
 		"verification results and remaining limits",
-		"do not over-survey a small diagnosed change",
 		"## This turn",
 		"Continue work through tool calls, with empty assistant text",
-		"A response without tools is final and ends the turn, including a promise to start or continue",
+		"A response without tools ends the turn, including a promise to start or continue",
+		"invoked:false", "action did not run", "invoked:true", "does not prove success",
 	} {
 		if !strings.Contains(core, want) {
 			t.Fatalf("coordinator-core missing %q:\n%s", want, core[:min(800, len(core))])
 		}
+	}
+	if strings.Count(core, "Branch on invocation facts") != 1 {
+		t.Fatal("coordinator invocation guidance must have one home")
 	}
 	noteCore, err := engine.Render(ctx, "agents/coordinator-core.md", map[string]any{
 		"execution_mode":           "investigate",
@@ -175,32 +177,29 @@ func TestProportionalTrustBundleSingleHome(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	progress, err := engine.Render(ctx, "partials/coordinator-mode-investigate-progress.md", map[string]any{
+	progress, err := engine.Render(ctx, "partials/coordinator-trust-bundle-tiers.md", map[string]any{
 		"max_author_progress_lines": 12,
 		"max_progress_label_chars":  80,
 		"visual_show_available":     true,
 	})
 	testutil.FailErr(t, "render progress partial", err)
 	for _, want := range []string{
-		"survey only when needed to identify them",
 		"Non-executable changes",
 		"reading the resulting material",
 		"separately from checklist completion",
 		"Behavior changes",
-		"separate Snapshot row described under visual evidence",
-		"a small leaf needs one row",
 	} {
 		if !strings.Contains(progress, want) {
 			t.Fatalf("progress partial missing %q:\n%s", want, progress)
 		}
 	}
-	progressLean, err := engine.Render(ctx, "partials/coordinator-mode-investigate-progress.md", map[string]any{
+	progressLean, err := engine.Render(ctx, "partials/coordinator-trust-bundle-tiers.md", map[string]any{
 		"max_author_progress_lines": 12,
 		"max_progress_label_chars":  80,
 	})
 	testutil.FailErr(t, "render lean progress partial", err)
-	if strings.Contains(progressLean, "UI- or terminal-visible") {
-		t.Fatal("progress without visual/terminal tools must omit UI trust tier")
+	if progressLean != progress {
+		t.Fatal("verification tiers must not duplicate capability-specific visual guidance")
 	}
 	if strings.Contains(progressLean, "Snapshot the running UI") || strings.Contains(progressLean, "Snapshot the terminal") {
 		t.Fatal("progress without visual/terminal tools must omit the snapshot-row exception")
@@ -213,8 +212,8 @@ func TestProportionalTrustBundleSingleHome(t *testing.T) {
 	for _, want := range []string{
 		"update_progress",
 		"## Progress",
-		"Snapshot the running UI",
-		"Snapshot the terminal",
+		"did not run",
+		"Keep rejected work pending",
 	} {
 		if !strings.Contains(missingKick, want) {
 			t.Fatalf("progress-missing kick missing %q:\n%s", want, missingKick)

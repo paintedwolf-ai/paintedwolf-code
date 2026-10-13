@@ -27,6 +27,7 @@ func allVisualCapabilityVars(vision bool) map[string]any {
 		"visual_show_available":         true,
 		"visual_show_page":              true,
 		"visual_show_terminal":          true,
+		"profile_has_update_progress":   true,
 		"agent_skills": listedSkills(
 			"verify-visual-change", "verify-terminal-change",
 		),
@@ -229,6 +230,11 @@ func TestVisualShowTheDesignCoversUIAndTerminal(t *testing.T) {
 	for _, progressRow := range []string{"Snapshot the running UI", "Snapshot the terminal"} {
 		if !strings.Contains(both, progressRow) {
 			t.Fatalf("guidance must specify contractual progress item %q; got:\n%s", progressRow, both)
+		}
+	}
+	for _, instruction := range []string{"call `update_progress` to add", "Mark it done only after a successful capture"} {
+		if !strings.Contains(both, instruction) {
+			t.Fatalf("capture checklist missing %q", instruction)
 		}
 	}
 
@@ -443,6 +449,9 @@ func TestImplementerPersonaKeepsVisualDiscoveryAndEagerTerminalProcedure(t *test
 	withRoster := map[string]any{"agent_skills": []map[string]any{{"name": "verify-visual-change"}}}
 	got, err := prompts.RenderPersona(context.Background(), engine, "implementer", withRoster)
 	testutil.FailErr(t, "RenderPersona implementer", err)
+	if strings.Contains(got, "call `update_progress` to add") {
+		t.Fatal("worker visual guidance names an unoffered checklist tool")
+	}
 	for _, want := range []string{
 		"Visual evidence",
 		"Snapshot the terminal",

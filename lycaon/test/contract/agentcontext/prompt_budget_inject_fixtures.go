@@ -17,17 +17,23 @@ type PromptBudgetInjectSpec struct {
 var (
 	coordinatorTurns = []promptunit.Host{promptunit.HostCoordinator}
 	workerTurns      = []promptunit.Host{promptunit.HostWorker}
-	everyTurn        = []promptunit.Host{promptunit.HostCoordinator, promptunit.HostWorker}
 )
 
 // PromptBudgetInjectMatrix is the SSOT for coordinator inject budget fixtures.
 var PromptBudgetInjectMatrix = []PromptBudgetInjectSpec{
 	{
 		ID:       "tool_procedures",
-		Hosts:    everyTurn,
+		Hosts:    coordinatorTurns,
 		Template: "guidance/tool-procedures.md",
-		Fixture:  "RenderToolProceduresBlock with command, verify, terminal, HTTP, and browser tools offered",
+		Fixture:  "RenderToolProceduresBlock with every catalogued coordinator procedure attachment offered",
 		Advice:   "Per-call operating guidance — measure separately from the initial prompt.",
+	},
+	{
+		ID:       "worker_tool_procedures",
+		Hosts:    workerTurns,
+		Template: "guidance/tool-procedures.md",
+		Fixture:  "RenderToolProceduresBlock with every catalogued worker procedure attachment offered",
+		Advice:   "Per-call worker operating guidance follows its own catalog host.",
 	},
 	{
 		ID:       "command_jobs",

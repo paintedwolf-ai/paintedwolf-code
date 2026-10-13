@@ -1,0 +1,1 @@
+Branch on invocation facts and tool **`Code:`**, not error prose. `invoked:false` means the action did not run: keep its work pending and follow the authorized Code remedy. `invoked:true` alone does not prove success; inspect the result and any process exit. Heed `DOOM_LOOP_REPEAT*` before repeating unchanged calls.

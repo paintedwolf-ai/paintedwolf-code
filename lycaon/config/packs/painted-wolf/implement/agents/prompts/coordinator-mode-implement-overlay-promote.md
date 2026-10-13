@@ -6,7 +6,6 @@
 
 {% include "partials/coordinator-overlay-promote.md" %}
 
-{% include "partials/coordinator-progress-closure.md" %}
 
 ### This turn
 

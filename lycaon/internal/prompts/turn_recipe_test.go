@@ -9,7 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestTurnRecipeSelectsAvailableSurveyAndCaptureRoutes(t *testing.T) {
+func TestTurnRecipeSelectsAvailableSurveyRoutes(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	for _, available := range []bool{false, true} {
 		out, err := engine.Render(context.Background(), "partials/coordinator-turn-recipe.md", map[string]any{
@@ -18,7 +18,7 @@ func TestTurnRecipeSelectsAvailableSurveyAndCaptureRoutes(t *testing.T) {
 			"visual_show_available": available,
 		})
 		testutil.FailErr(t, "render turn recipe capability selection", err)
-		for _, guidance := range []string{"start with `summarize(path=…)`", "returns the map; omit depth and pagination fields", "include a separate Snapshot row"} {
+		for _, guidance := range []string{"start with `summarize(path=…)`", "returns the map; omit depth and pagination fields"} {
 			if strings.Contains(out, guidance) != available {
 				t.Fatalf("available=%t: selection rule %q in %s", available, guidance, out)
 			}
