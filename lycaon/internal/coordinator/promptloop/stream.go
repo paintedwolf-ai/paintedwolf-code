@@ -337,7 +337,7 @@ func (l *modelTurn) completeStream(
 	// What the provider delivered, before the tool-call contract rewrites it.
 	delivered := completion
 
-	completion, err = llm.EnforceToolCallSupport(l.providerProfile(providerID), req, completion, providerID, model)
+	completion, err = l.resolveToolCallSupport(sess, req, completion, providerID, model)
 	if err != nil {
 		l.recordAbandonedTurnUsage(ctx, sess, llmCallID, providerID, model, req, delivered)
 		return nil, nil, err

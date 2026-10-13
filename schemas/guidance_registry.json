@@ -2959,6 +2959,12 @@
       "emit": "guard:text_write_base",
       "summary": "{% if paintedwolf.text_base_changed %}{{ paintedwolf.path }} no longer matches the validated write base.{% else %}The host could not confirm the current write base for {{ paintedwolf.path }}.{% endif %}"
     },
+    "TOOL_ACTION_IN_TEXT": {
+      "branch_instruction": "If explaining tool syntax or logs, use a fenced code example with an explanation.",
+      "category": "recoverable",
+      "emit": "guard:coordinator",
+      "summary": "No tool executed. The assistant response contained a text action envelope for {{ paintedwolf.offenders_sample }}."
+    },
     "TOOL_ARGS_INVALID": {
       "branch_instruction": "{% if paintedwolf.suggested_tool %}Fix the argument object, or switch to `{{ paintedwolf.suggested_tool }}`.{% else %}Repair the rejected argument object and retry.{% endif %}",
       "category": "recoverable",

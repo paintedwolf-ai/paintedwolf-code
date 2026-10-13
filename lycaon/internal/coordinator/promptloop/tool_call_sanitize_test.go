@@ -1,6 +1,16 @@
 package promptloop
 
 import (
+	"context"
+	"github.com/lycaon/lycaon/internal/anchorcatalog"
+	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -192,4 +202,115 @@ func TestOfferedArgumentSchemasStayBoundToModelRequest(t *testing.T) {
 	if len(st.offeredToolSchemas) != 0 {
 		t.Fatal("a new empty offer retained the previous request's schema")
 	}
+}
+
+func TestTextActionRecoveryThroughLoop(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	root := testutil.CheckoutRoot(t)
+	testutil.FailErr(t, "install anchors", anchorcatalog.InstallFile(filepath.Join(root, "lycaon/config/packs/painted-wolf/platform/host/anchors/catalog.yaml")))
+	loader, err := oar.NewLoader(filepath.Join(root, "schemas"))
+	testutil.FailErr(t, "loader", err)
+	rules, err := loader.LoadEffectivePolicy()
+	testutil.FailErr(t, "policy", err)
+	for _, tc := range []struct {
+		name, text           string
+		repeats              int
+		native               bool
+		wantReject, wantExec int
+	}{
+		{"resubmit", `{"tool_name":"read","tool_args":{"path":"x"}}`, 1, false, 1, 1},
+		{"prefix resubmit", `{"name":"read","arguments":"bad"} Reading now.`, 1, false, 1, 1},
+		{"provider recovery unchanged", `{"name":"read","arguments":{"path":"x"}}`, 1, false, 0, 1},
+		{"native unchanged", `{"tool_name":"read","tool_args":{}}`, 1, true, 0, 1},
+		{"fenced example", "```json\n{\"tool_name\":\"read\",\"tool_args\":{}}\n```", 1, false, 0, 0},
+		{"bounded retry", `{"tool":"read","args":{}}`, 20, false, BlockedLoopRejectCap + 1, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			pipeline := oar.NewGuardPipeline(rules, loader, oar.NewCounterStore())
+			pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
+			reg := tools.NewStubRegistry()
+			executed, rejected, nudges := 0, 0, 0
+			testutil.FailErr(t, "register", reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+				executed++
+				return "file-body", nil
+			}))
+			native := []api.ToolCall{{ID: "native", Name: "read", Args: map[string]any{"path": "x"}}}
+			responses := make([]*modelcall.Completion, tc.repeats)
+			for i := range responses {
+				responses[i] = &modelcall.Completion{Content: tc.text}
+				if tc.native {
+					responses[i].ToolCalls = native
+				}
+			}
+			responses = append(responses, &modelcall.Completion{ToolCalls: native}, &modelcall.Completion{Content: "done"})
+			if tc.wantReject == 0 {
+				responses = responses[:1]
+				responses = append(responses, &modelcall.Completion{Content: "done"})
+			}
+			deps := PromptLoopDeps{
+				Context: ContextDeps{Tools: reg, Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() }, BuildMessages: func(_ context.Context, _ *api.Session, h []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+					return h, nil
+				}},
+				Model: ModelDeps{LLM: &textActionClient{responses: responses}},
+				Closeout: CloseoutDeps{EvaluateCloseoutBlock: func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
+					gc.Session.SessionID = sess.ID
+					result, err := pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorCloseoutCheck, gc)
+					return result.Decision, err
+				}},
+				Projection: ProjectionDeps{
+					AppendDraftVersion: func(_ context.Context, _, _, body, code string) (int, error) {
+						if code == "TOOL_ACTION_IN_TEXT" {
+							rejected++
+							if body != tc.text {
+								t.Fatalf("lost rejected draft: %q", body)
+							}
+						}
+						return rejected, nil
+					},
+					AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+						for _, msg := range msgs {
+							if strings.Contains(msg.Content, "Code: TOOL_ACTION_IN_TEXT") {
+								nudges++
+								if !strings.Contains(msg.Content, "native tool channel") {
+									t.Fatal("missing recovery instruction")
+								}
+							}
+						}
+						return nil
+					},
+				},
+			}
+			loop := NewPromptLoopForTest(deps)
+			sess := &api.Session{ID: t.Name(), Posture: api.SessionPostureBuild}
+			_, err := loop.Run(t.Context(), PromptRunInput{SessionID: sess.ID, Session: sess, History: []api.Message{{Role: api.MessageRoleUser, Content: "Read x"}}, ProfileID: "explore_readonly", ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}})
+			testutil.FailErr(t, "run recovery", err)
+			if rejected != tc.wantReject || executed != tc.wantExec || (rejected > 0 && nudges == 0) {
+				t.Fatalf("rejected=%d nudges=%d executed=%d; want rejected=%d executed=%d", rejected, nudges, executed, tc.wantReject, tc.wantExec)
+			}
+		})
+	}
+}
+
+type textActionClient struct {
+	responses []*modelcall.Completion
+	calls     int
+}
+
+func (c *textActionClient) Complete(context.Context, modelcall.CompletionRequest) (*modelcall.Completion, error) {
+	if c.calls >= len(c.responses) {
+		return &modelcall.Completion{Content: "done"}, nil
+	}
+	response := *c.responses[c.calls]
+	c.calls++
+	return &response, nil
+}
+func (c *textActionClient) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
+	response, err := c.Complete(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	ch := make(chan modelcall.StreamChunk, 1)
+	ch <- modelcall.StreamChunk{Content: response.Content, ToolCalls: response.ToolCalls, Done: true}
+	close(ch)
+	return ch, nil
 }

@@ -113,12 +113,16 @@ An already rejected operation pins its original typed code in the policy context
 
 ## Coordinator nudges
 
-`TOOL_ACTION_IN_TEXT` rejects a coordinator response that is entirely the reserved
-`tool_name` / `tool_args` JSON envelope (or batch), names only tools offered on
-that request, and contains no native calls. Arguments must be objects; the host
-never executes or repairs this text. Fenced examples, explanatory prose, and
-unknown tools are outside the grammar. Recovery uses the existing rejected-draft
-and bounded no-progress retry lifecycle. Tool schemas and permission checks apply
+`TOOL_ACTION_IN_TEXT` rejects coordinator responses beginning with JSON action
+objects or arrays naming a tool offered on that request, when no native calls
+exist. Recognized field pairs are `tool_name`/`tool_args`, `name`/`arguments`,
+`name`/`parameters`, `name`/`args`, and `tool`/`args`, including `tool_calls` and
+`function` containers. Leading whitespace and trailing explanation are allowed.
+Argument validity is left to native resubmission; the host never executes or
+repairs this text. Fenced examples, prose before JSON, unknown tools, and tool
+names inside argument values do not trigger recovery. Parsing is bounded to
+64 KiB and three container levels. Recovery uses the existing rejected-draft and
+bounded no-progress retry lifecycle. Tool schemas and permission checks apply
 to the subsequent native call.
 
 Post-turn nudges carry OAR or grounding decisions that could not reject an already-finished generation. All matched advisories are retained in evaluation order; the envelope identifies the primary code.
