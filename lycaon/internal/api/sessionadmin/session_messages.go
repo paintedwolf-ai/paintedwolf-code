@@ -37,8 +37,11 @@ func (s *Transcript) HandleListSessionMessages(w http.ResponseWriter, r *http.Re
 }
 
 // transcriptPositionParams are the mutually exclusive ways to place a
-// transcript window: a continuation cursor, a message anchor, or an end.
-var transcriptPositionParams = []string{"before", "after", "before_message_id", "after_message_id", "from"}
+// transcript window: a continuation cursor, a message anchor, an ordinal
+// bound, or an end.
+var transcriptPositionParams = []string{
+	"before", "after", "before_message_id", "after_message_id", "before_ord", "after_ord", "from",
+}
 
 func (s *Transcript) parseTranscriptPageQuery(w http.ResponseWriter, r *http.Request, sessionID string) (wire.TranscriptPageQuery, bool) {
 	var q wire.TranscriptPageQuery
@@ -88,6 +91,20 @@ func (s *Transcript) parseTranscriptPageQuery(w http.ResponseWriter, r *http.Req
 	case position["after_message_id"] != "":
 		ord, ok := s.transcriptAnchorOrd(w, r, sessionID, "after_message_id", position["after_message_id"])
 		if !ok {
+			return q, false
+		}
+		q.After = &ord
+	case position["before_ord"] != "":
+		ord, _, err := httpio.OptionalInt64Query(r, "before_ord", 1)
+		if err != nil {
+			s.responses.InvalidQuery(w, err)
+			return q, false
+		}
+		q.Before = &ord
+	case position["after_ord"] != "":
+		ord, _, err := httpio.OptionalInt64Query(r, "after_ord", 0)
+		if err != nil {
+			s.responses.InvalidQuery(w, err)
 			return q, false
 		}
 		q.After = &ord

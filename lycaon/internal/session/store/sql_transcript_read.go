@@ -142,10 +142,13 @@ func (s *SQL) GetTranscriptPage(ctx context.Context, id string, q api.Transcript
 	switch {
 	case strings.TrimSpace(q.WorkerID) != "":
 		var hasBefore, hasAfter bool
-		page.Messages, hasBefore, hasAfter, err = loadWorkerTranscriptPage(ctx, qtx, id, q)
+		var bounds db.GetWorkerJobMessageOrdBoundsRow
+		page.Messages, bounds, err = loadWorkerTranscriptPage(ctx, qtx, id, q)
 		if err != nil {
 			return api.SessionTranscriptPage{}, err
 		}
+		hasBefore, hasAfter = workerWindowHasMore(bounds.MinOrd, bounds.MaxOrd, page.Messages, q)
+		page.OrdBounds = transcriptOrdBounds(bounds.MinOrd, bounds.MaxOrd)
 		if err := SetTranscriptPageCursors(id, &page, hasBefore, hasAfter, q); err != nil {
 			return api.SessionTranscriptPage{}, err
 		}
@@ -214,6 +217,11 @@ func (s *SQL) GetTranscriptPage(ctx context.Context, id string, q api.Transcript
 	if err != nil {
 		return api.SessionTranscriptPage{}, err
 	}
+	bounds, err := qtx.GetSessionMessageOrdBounds(ctx, id)
+	if err != nil {
+		return api.SessionTranscriptPage{}, err
+	}
+	page.OrdBounds = transcriptOrdBounds(bounds.MinOrd, bounds.MaxOrd)
 	if err := SetTranscriptPageCursors(id, &page, hasBefore, hasAfter, q); err != nil {
 		return api.SessionTranscriptPage{}, err
 	}
@@ -225,7 +233,7 @@ func loadWorkerTranscriptPage(
 	queries *db.Queries,
 	sessionID string,
 	query api.TranscriptPageQuery,
-) ([]api.Message, bool, bool, error) {
+) ([]api.Message, db.GetWorkerJobMessageOrdBoundsRow, error) {
 	workerJobID := db.NullString(strings.TrimSpace(query.WorkerID))
 	limit := int64(query.EffectiveLimit())
 	var rows []db.ListSessionMessagesRow
@@ -235,7 +243,7 @@ func loadWorkerTranscriptPage(
 			SessionID: sessionID, WorkerJobID: workerJobID, Ord: *query.Before, Limit: limit,
 		})
 		if err != nil {
-			return nil, false, false, err
+			return nil, db.GetWorkerJobMessageOrdBoundsRow{}, err
 		}
 		rows = make([]db.ListSessionMessagesRow, len(found))
 		for i, row := range found {
@@ -246,7 +254,7 @@ func loadWorkerTranscriptPage(
 			SessionID: sessionID, WorkerJobID: workerJobID, Ord: *query.After, Limit: limit,
 		})
 		if err != nil {
-			return nil, false, false, err
+			return nil, db.GetWorkerJobMessageOrdBoundsRow{}, err
 		}
 		rows = make([]db.ListSessionMessagesRow, len(found))
 		for i, row := range found {
@@ -257,7 +265,7 @@ func loadWorkerTranscriptPage(
 			SessionID: sessionID, WorkerJobID: workerJobID, Limit: limit,
 		})
 		if err != nil {
-			return nil, false, false, err
+			return nil, db.GetWorkerJobMessageOrdBoundsRow{}, err
 		}
 		rows = make([]db.ListSessionMessagesRow, len(found))
 		for i, row := range found {
@@ -268,7 +276,7 @@ func loadWorkerTranscriptPage(
 	for _, row := range rows {
 		message, err := messageFromRow(row)
 		if err != nil {
-			return nil, false, false, err
+			return nil, db.GetWorkerJobMessageOrdBoundsRow{}, err
 		}
 		messages = append(messages, message)
 	}
@@ -279,10 +287,9 @@ func loadWorkerTranscriptPage(
 		SessionID: sessionID, WorkerJobID: workerJobID,
 	})
 	if err != nil {
-		return nil, false, false, err
+		return nil, db.GetWorkerJobMessageOrdBoundsRow{}, err
 	}
-	hasBefore, hasAfter := workerWindowHasMore(bounds.MinOrd, bounds.MaxOrd, messages, query)
-	return messages, hasBefore, hasAfter, nil
+	return messages, bounds, nil
 }
 
 func workerWindowHasMore(minOrd, maxOrd int64, window []api.Message, query api.TranscriptPageQuery) (before, after bool) {

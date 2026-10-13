@@ -473,6 +473,7 @@ func (s *Memory) GetTranscriptPage(ctx context.Context, id string, q api.Transcr
 		TurnClocks: map[string]api.TurnClock{},
 		TurnLoads:  map[string][]api.TurnLoad{},
 		Watermark:  s.transcriptSeq[id],
+		OrdBounds:  messageOrdBounds(all),
 	}
 	if page.Messages == nil {
 		page.Messages = []api.Message{}
