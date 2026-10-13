@@ -225,3 +225,28 @@ func TestCapabilityRequestFieldsReachRejectCopy(t *testing.T) {
 		}
 	}
 }
+
+func TestTaskWorkIdentityRecoveryUsesHostArgumentFacts(t *testing.T) {
+	setupGuidanceRenderer(t)
+	cfg := loadValidatedHints(t)
+	entry := cfg.HintCodes["TOOL_ARGS_INVALID"]
+	for _, tc := range []struct {
+		field, reason string
+		omit          bool
+	}{
+		{"workflow_work_id", "not_a_planned_fanout_phase", true},
+		{"workflow_work_id", "workflow_phase_changed", false},
+		{"child_session_id", "not_a_planned_fanout_phase", false},
+	} {
+		block, err := guidance.RenderUnifiedRejectBlock(t.Context(), "TOOL_ARGS_INVALID", entry, map[string]any{
+			"tool": "task", "field": tc.field, "reason": tc.reason,
+		})
+		testutil.FailErr(t, "render task argument recovery", err)
+		if !strings.Contains(block, "at `"+tc.field+"`") || strings.Contains(block, "Omit `workflow_work_id`") != tc.omit {
+			t.Fatalf("recovery for %+v: %s", tc, block)
+		}
+		if tc.omit && !strings.Contains(block, "keep its `child_session_id`") {
+			t.Fatal("resume recovery lost the worker identity")
+		}
+	}
+}
