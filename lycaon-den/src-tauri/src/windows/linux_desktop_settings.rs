@@ -149,6 +149,7 @@ impl DesktopSettingsState {
         }
     }
 
+    #[cfg(test)]
     pub fn facts(&self) -> &DesktopSettingsFacts {
         &self.facts
     }

@@ -3,8 +3,8 @@
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
+use gtk::gio;
 use gtk::glib::{self, ToVariant, Variant, VariantTy};
-use gtk::{gio, prelude::*};
 use tauri::{AppHandle, Emitter};
 
 use super::{DesktopSettingsState, Emission, SettingValue, SettingsSnapshot, NAMESPACES};
