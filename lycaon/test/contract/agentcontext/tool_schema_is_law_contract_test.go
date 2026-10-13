@@ -3,7 +3,6 @@ package contract
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/llm/actionenvelope"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/llm/actionenvelope"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
