@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Path,
     [Parameter(Mandatory = $true)]
-    [string]$UpdaterArchive,
+    [string]$UpdaterPath,
     [Parameter(Mandatory = $true)]
     [string]$ApplicationPath,
     [Parameter(Mandatory = $true)]
@@ -51,7 +51,7 @@ function Assert-ProductVersion([string]$Target, [Version]$Expected) {
 }
 
 $resolved = (Resolve-Path -LiteralPath $Path).Path
-$resolvedArchive = (Resolve-Path -LiteralPath $UpdaterArchive).Path
+$resolvedUpdater = (Resolve-Path -LiteralPath $UpdaterPath).Path
 $resolvedApplication = (Resolve-Path -LiteralPath $ApplicationPath).Path
 $resolvedSidecar = (Resolve-Path -LiteralPath $SidecarPath).Path
 $resolvedLogViewer = (Resolve-Path -LiteralPath $LogViewerPath).Path
@@ -82,19 +82,10 @@ foreach ($executable in $engineExecutables) {
 $expected = [Version]$ExpectedVersion
 Assert-ProductVersion $resolved $expected
 Assert-ProductVersion $resolvedApplication $expected
-$extract = Join-Path $env:RUNNER_TEMP "windows-updater-signature-$([Guid]::NewGuid().ToString('N'))"
-try {
-    Expand-Archive -LiteralPath $resolvedArchive -DestinationPath $extract
-    $installers = @(Get-ChildItem -LiteralPath $extract -Filter *.exe -File -Recurse)
-    if ($installers.Count -ne 1) {
-        throw "Windows updater archive must contain exactly one installer; found $($installers.Count)"
-    }
-    Assert-CodeSignature $installers[0].FullName
-    $packageHash = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash
-    $archiveHash = (Get-FileHash -LiteralPath $installers[0].FullName -Algorithm SHA256).Hash
-    if ($packageHash -ne $archiveHash) {
-        throw "Windows installer and updater archive contain different signed executables"
-    }
-} finally {
-    Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
+Assert-CodeSignature $resolvedUpdater
+Assert-ProductVersion $resolvedUpdater $expected
+$packageHash = (Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash
+$updaterHash = (Get-FileHash -LiteralPath $resolvedUpdater -Algorithm SHA256).Hash
+if ($packageHash -ne $updaterHash) {
+    throw "Windows installer and updater contain different signed executables"
 }
