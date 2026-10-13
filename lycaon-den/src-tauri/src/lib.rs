@@ -43,12 +43,12 @@ pub fn run() {
             return;
         }
     };
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init());
-    #[cfg(target_os = "macos")]
+    #[cfg(not(target_os = "windows"))]
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init());
