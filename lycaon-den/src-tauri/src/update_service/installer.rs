@@ -16,6 +16,8 @@ pub struct PreparedIdentity {
 mod coordination;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(target_os = "macos")]
 pub use coordination::{
     acquire_gate, acquire_lease, acquire_preparation, downgrade, exchange_coordinated,
