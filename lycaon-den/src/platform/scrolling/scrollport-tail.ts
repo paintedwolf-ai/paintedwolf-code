@@ -20,6 +20,7 @@ type TailPorts = {
 export class ScrollportTail {
   private tailBound: { attempts: number; sampled: number } | undefined;
   private tailBoundTimer: ReturnType<typeof setTimeout> | undefined;
+  private deferredTailBoundAttempts = 0;
   tailRangeReleased = false;
   glidingToTail = false;
   private tailPin: (() => boolean) | null = null;
@@ -88,7 +89,11 @@ export class ScrollportTail {
   }
 
   scheduleTailBoundReconcile(attempts: number): void {
-    if (this.disposed || this.tailBound || attempts <= 0) return;
+    if (this.disposed || attempts <= 0) return;
+    if (this.tailBound) {
+      this.tailBound.attempts = Math.max(this.tailBound.attempts, attempts);
+      return;
+    }
     // Claims can expire without another layout notification.
     if (this.ports.isDirectInputActive()) {
       this.deferTailBoundReconcile(attempts);
@@ -108,14 +113,14 @@ export class ScrollportTail {
     this.tailBound = undefined;
     if (!pending || this.disposed) return;
     if (this.ports.isDirectInputActive()) {
-      this.deferTailBoundReconcile(pending.attempts - 1);
+      this.deferTailBoundReconcile(Math.max(pending.attempts, TAIL_BOUND_CONFIRM_FRAMES));
       return;
     }
     const overrun = this.ports.measureGeometry(() => this.tailOverrunTail());
     if (overrun === null) return;
-    if (Math.abs(overrun - pending.sampled) > SCROLL_EPSILON_PX) {
+    if (Math.abs(overrun - pending.sampled) > SCROLL_EPSILON_PX && pending.attempts > 1) {
       // Changing geometry needs another confirmation; this sample is the next baseline.
-      if (pending.attempts > 1) this.awaitTailBoundConfirmation(pending.attempts - 1, overrun);
+      this.awaitTailBoundConfirmation(pending.attempts - 1, overrun);
       return;
     }
     // Unheld overrun, such as a native scroll into published runway, never shows blank space.
@@ -127,8 +132,14 @@ export class ScrollportTail {
     this.glidingToTail = true;
     void this.ports.revealOffset(overrun, { motion: "settle" }).catch(() => false).then((arrived) => {
       this.glidingToTail = false;
-      // A press that interrupted the glide keeps the content under it.
-      if (!arrived || this.disposed) return;
+      if (this.disposed) return;
+      // A press that interrupted the glide keeps the content under it; other interruptions retry after claims settle.
+      if (!arrived) {
+        if (!this.ports.pressActive()) {
+          this.scheduleTailBoundReconcile(TAIL_BOUND_CONFIRM_FRAMES);
+        }
+        return;
+      }
       this.tailRangeReleased = true;
       this.ports.measureGeometry(() => {
         this.ports.resizeRetainedExtent();
@@ -138,6 +149,11 @@ export class ScrollportTail {
   };
 
   private deferTailBoundReconcile(attempts: number): void {
+    this.deferredTailBoundAttempts = Math.max(
+      this.deferredTailBoundAttempts,
+      attempts,
+      TAIL_BOUND_CONFIRM_FRAMES,
+    );
     if (this.tailBoundTimer !== undefined) return;
     const remaining = Math.max(
       16,
@@ -146,17 +162,22 @@ export class ScrollportTail {
     this.tailBoundTimer = setTimeout(() => {
       this.tailBoundTimer = undefined;
       if (this.disposed) return;
+      if (this.ports.isDirectInputActive()) {
+        this.deferTailBoundReconcile(this.deferredTailBoundAttempts);
+        return;
+      }
+      const nextAttempts = this.deferredTailBoundAttempts;
+      this.deferredTailBoundAttempts = 0;
       // Range a gesture kept open settles to what the reader occupies once its claim ends.
-      if (!this.ports.isDirectInputActive()) this.ports.resizeRetainedExtent();
+      this.ports.resizeRetainedExtent();
       // Geometry retries begin after the input claim expires.
-      this.scheduleTailBoundReconcile(
-        this.ports.isDirectInputActive() ? attempts : TAIL_BOUND_CONFIRM_FRAMES,
-      );
+      this.scheduleTailBoundReconcile(nextAttempts);
     }, remaining);
   }
 
   private cancelTailBoundReconcile(): void {
     this.tailBound = undefined;
+    this.deferredTailBoundAttempts = 0;
     cancelScrollportFrame(this.viewport, this.confirmTailBound);
     if (this.tailBoundTimer !== undefined) {
       clearTimeout(this.tailBoundTimer);

@@ -253,6 +253,74 @@ describe("ScrollportMotion live tail", () => {
     expect(viewport.scrollTop).toBe(1_400);
     setScrollportTailPolicy(host, null);
   });
+
+  it("reconciles the tail bound after direct input interrupts a final confirmation attempt", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    const frames = stubAnimationFrames();
+    try {
+      const fixture = createScrollportFixture({
+        clientHeight: 600,
+        initialScrollHeight: 2_000,
+        initialScrollTop: 1_400,
+      });
+      const { motion, viewport } = fixture;
+      let tail = 1_100;
+      motion.tail.setTailOffsetResolver(() => tail);
+
+      // Schedule with a single confirmation attempt, then interrupt with direct input that outlives the first timer.
+      motion.tail.scheduleTailBoundReconcile(1);
+      motion.input.noteNativeInput("wheel");
+      frames.flush(1, 16);
+      vi.advanceTimersByTime(300);
+      motion.input.noteNativeInput("wheel");
+      vi.advanceTimersByTime(350);
+      expect(motion.input.isDirectInputActive()).toBe(true);
+
+      vi.advanceTimersByTime(300);
+      expect(motion.input.isDirectInputActive()).toBe(false);
+      frames.flush(2, 1_000);
+      expect(viewport.scrollTop).toBe(1_100);
+
+      unbindScrollportMotion(fixture.host);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries tail-bound reconciliation when a non-press event interrupts the settle glide", async () => {
+    const frames = stubAnimationFrames();
+    const fixture = createScrollportFixture({
+      clientHeight: 600,
+      initialScrollHeight: 2_000,
+      initialScrollTop: 1_400,
+    });
+    const { motion, viewport, host } = fixture;
+
+    // Contraction leaves retained extent holding offset 1400 above tail 1100.
+    fixture.setNaturalScrollHeight(1_700);
+    motion.notifyLayoutMutated();
+    expect(extentHoldPx(viewport)).toBe(300);
+
+    // Confirm tail bound and start the settle glide.
+    await Promise.resolve();
+    frames.flush(2, 16);
+    frames.flush(1, 32);
+    expect(motion.tail.glidingToTail).toBe(true);
+
+    // A keydown cancels the reveal without activating a press anchor.
+    host.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // Tail-bound reconciliation re-schedules and finishes settling to the tail.
+    for (let t = 48; t <= 400; t += 16) {
+      frames.flush(2, t);
+      await Promise.resolve();
+    }
+    expect(viewport.scrollTop).toBe(1_100);
+    expect(extentHoldPx(viewport)).toBe(0);
+    unbindScrollportMotion(host);
+  });
 });
 
 describe("ScrollportMotion tail pin versus declared layout", () => {
