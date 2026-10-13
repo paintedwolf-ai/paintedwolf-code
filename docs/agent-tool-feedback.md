@@ -129,6 +129,8 @@ Asynchronous work emits typed completion facts: operation identity, terminal sta
 
 Success is never inferred from a friendly message. The producer states success or failure in the result envelope, and the host persists that state before rendering copy.
 
+Worker artifact checks and parent completion receipts share the same host inspection of the worker baseline. An unchanged worker baseline cannot borrow evidence from unrelated primary-workspace changes or reported file names. An unavailable baseline remains an explicit evidence limitation.
+
 ## Tool-output steering
 
 Some successful tool results include structured state updates such as queue position, active task, new revision, or no-op reason. Prompt steering consumes those fields directly. A no-op remains a result; if the agent must branch, the result needs a structured discriminator, not a parse of “nothing changed.”

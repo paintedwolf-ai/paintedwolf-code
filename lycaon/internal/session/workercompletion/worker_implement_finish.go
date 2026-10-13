@@ -27,7 +27,7 @@ func ObserveImplementerFinishWithoutWrite(
 	if strings.TrimSpace(lastAssistant) == "" {
 		return
 	}
-	proof := childHadImplementerArtifact(ctx, projectDir, history, wc)
+	proof := childHadImplementerArtifact(ctx, projectDir, history, wc, nil)
 	gc.Workers.AgentIsImplementer = true
 	gc.Grounding.WorkerArtifactPresent = proof == artifactPresent
 	gc.Grounding.WorkerArtifactMeasured = proof != artifactUndetermined

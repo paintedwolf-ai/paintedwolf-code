@@ -18,6 +18,7 @@ type workerSummaryDraft struct {
 	task          *api.WorkerTask
 	childMessages []api.Message
 	report        workercompletion.WorkerCompletionReport
+	proof         workercompletion.WorkerCompletionProof
 	summary       string
 	hintCode      string
 	status        string
@@ -71,6 +72,7 @@ func (m *Summaries) Append(ctx context.Context, parentID string, in SummaryInput
 	if maxChars <= 0 {
 		maxChars = compaction.DefaultCompactionConfig().MaxWorkerSummaryChars
 	}
+	proof, changes := m.Proof(ctx, task, childMessages, in.ProjectDir)
 	feedback := in.PolicyFeedback
 	if feedback != nil && feedback.Code != hintCode {
 		return "", fmt.Errorf("worker policy feedback code does not match hint_code")
@@ -79,7 +81,7 @@ func (m *Summaries) Append(ctx context.Context, parentID string, in SummaryInput
 		if report.Brief == "" {
 			report.Brief = summary
 		}
-		eval, err := workercompletion.EvaluateWorkerSummary(ctx, workercompletion.WorkerSummaryEvalInput{MaxChars: maxChars, AgentType: in.AgentType, Report: report, MissingReport: summary == "" && report.LegStatus == "", ChildSessionID: in.ChildSessionID, ChildMessages: childMessages, ProjectDir: in.ProjectDir, ProjectRoots: in.ProjectRoots, ActiveRootID: in.ActiveRootID, WorkspaceCheck: m.workspaceCheck, Hints: m.workflowHints, Ledger: workercloseout.LedgerForMessages(m.store, childMessages), Pipeline: m.oarPipeline})
+		eval, err := workercompletion.EvaluateWorkerSummary(ctx, workercompletion.WorkerSummaryEvalInput{MaxChars: maxChars, AgentType: in.AgentType, Report: report, MissingReport: summary == "" && report.LegStatus == "", ChildSessionID: in.ChildSessionID, ChildMessages: childMessages, ProjectDir: in.ProjectDir, ProjectRoots: in.ProjectRoots, ActiveRootID: in.ActiveRootID, WorkspaceCheck: m.workspaceCheck, WorkspaceChanges: &changes, Hints: m.workflowHints, Ledger: workercloseout.LedgerForMessages(m.store, childMessages), Pipeline: m.oarPipeline})
 		if err != nil {
 			return "", err
 		}
@@ -120,7 +122,7 @@ func (m *Summaries) Append(ctx context.Context, parentID string, in SummaryInput
 		body = strings.TrimSpace(formatted)
 	}
 	return m.completeWorkerSummary(ctx, parentID, workerSummaryDraft{
-		input: in, task: task, childMessages: childMessages, report: report,
+		input: in, task: task, childMessages: childMessages, report: report, proof: proof,
 		summary: summary, hintCode: hintCode, status: status, body: body,
 	})
 }
@@ -162,7 +164,7 @@ func (m *Summaries) completeWorkerSummary(
 	if draft.status == "" {
 		return "", fmt.Errorf("worker summary status invalid")
 	}
-	proof := m.Proof(ctx, draft.task, draft.childMessages, draft.input.ProjectDir)
+	proof := draft.proof
 	draft.report = workercompletion.EnrichWorkerCompletionReport(draft.report, proof, draft.status)
 	draft.report = workercompletion.AnnotateWorkerReportForBranch(draft.report, draft.task)
 	if decisionReq == nil {

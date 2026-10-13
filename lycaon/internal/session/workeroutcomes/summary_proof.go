@@ -10,8 +10,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (m *Summaries) Proof(ctx context.Context, task *api.WorkerTask, messages []api.Message, projectDir string) workercompletion.WorkerCompletionProof {
+func (m *Summaries) Proof(ctx context.Context, task *api.WorkerTask, messages []api.Message, projectDir string) (workercompletion.WorkerCompletionProof, workercompletion.WorkspaceChangeObservation) {
 	changed, changeErr := m.inspectChanges(ctx, task, nil)
+	observation := workercompletion.WorkspaceChangeObservation{Paths: changed, Err: changeErr}
 	var source workercompletion.SourceRevision
 	if task != nil && len(changed) > 0 {
 		source.Revision, source.RootDigest = m.verification.Revision(ctx, task.WorkspaceRoot)
@@ -23,16 +24,16 @@ func (m *Summaries) Proof(ctx context.Context, task *api.WorkerTask, messages []
 		slog.WarnContext(ctx, "worker baseline unavailable", "error", changeErr)
 		proof.WorkspaceDirty = true
 		proof.Verification = &verification.Assessment{Method: verification.Blocked, Reason: "Workspace changes could not be determined from the worker baseline."}
-		return proof
+		return proof, observation
 	}
 	if task == nil {
-		return proof
+		return proof, observation
 	}
 	runs, err := m.verification.WorkerSourceRuns(ctx, task.ChildSessionID)
 	if err != nil {
 		slog.WarnContext(ctx, "worker validation evidence unavailable", "session_id", task.ChildSessionID, "error", err)
 		proof.Verification = &verification.Assessment{Method: verification.Blocked, Reason: "Validation results could not be loaded; their outcome is unavailable."}
-		return proof
+		return proof, observation
 	}
-	return proof.WithSourceRuns(runs)
+	return proof.WithSourceRuns(runs), observation
 }
