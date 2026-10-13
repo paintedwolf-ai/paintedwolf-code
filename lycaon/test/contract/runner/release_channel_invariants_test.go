@@ -250,9 +250,9 @@ func TestReleasePublicationCollectsSharedInstallerUpdaterOnce(t *testing.T) {
 			contractcheck.FailErr(t, "create audit input", os.MkdirAll(filepath.Join(input, "opengrep"), 0o755))
 			stem := "painted-wolf-code_v1.0.0_linux-x86_64"
 			for _, suffix := range []string{extension, extension + ".sha256", extension + ".sig"} {
-				contractcheck.FailErr(t, "write artifact", os.WriteFile(filepath.Join(input, stem + "." + suffix), []byte(suffix), 0o644))
+				contractcheck.FailErr(t, "write artifact", os.WriteFile(filepath.Join(input, stem+"."+suffix), []byte(suffix), 0o644))
 			}
-			contractcheck.FailErr(t, "write audit", os.WriteFile(filepath.Join(input, "opengrep", stem + ".json"), []byte(`{}`), 0o644))
+			contractcheck.FailErr(t, "write audit", os.WriteFile(filepath.Join(input, "opengrep", stem+".json"), []byte(`{}`), 0o644))
 			catalog := filepath.Join(dir, "catalog.json")
 			row := map[string]string{"updater_key": "linux-x86_64", "publication": "public", "package_extension": extension, "updater_extension": extension}
 			writeCatalog := func(rows []map[string]string) {
@@ -279,7 +279,7 @@ func TestReleasePublicationCollectsSharedInstallerUpdaterOnce(t *testing.T) {
 			writeCatalog([]map[string]string{row, row})
 			run(filepath.Join(dir, "repeated"), false)
 			writeCatalog([]map[string]string{row})
-			contractcheck.FailErr(t, "remove signature", os.Remove(filepath.Join(input, stem + "." + extension + ".sig")))
+			contractcheck.FailErr(t, "remove signature", os.Remove(filepath.Join(input, stem+"."+extension+".sig")))
 			run(filepath.Join(dir, "unsigned"), false)
 		})
 	}
