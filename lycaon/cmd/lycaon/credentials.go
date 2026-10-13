@@ -20,14 +20,16 @@ const recoveryUsage = `usage: pw credentials {where|purge|verify-protection} [--
 Inspect and reset every private credential namespace:
   where   name the backend holding each credential set
   purge   remove every stored credential; requires --yes
-  verify-protection   verify native Keychain protection using disposable identities
+  verify-protection   verify the native identity custodian using disposable identities
 
 Purging is refused while an engine is running, because a running engine holds
 the decrypted identity and credential values in memory until it exits.
 
 Release builds keep all credential values in one age-encrypted vault. macOS
-keeps only the vault identity in Keychain. Linux and Windows wrap that identity
-with the app password. Development builds use a private local identity file.`
+keeps only the vault identity in Keychain; packaged Linux installs keep it in
+the vault identity service. Without that service, Linux and Windows wrap the
+identity with the app password. Development builds use a private local
+identity file.`
 
 func runCredentials(args []string) error {
 	if len(args) == 0 {
