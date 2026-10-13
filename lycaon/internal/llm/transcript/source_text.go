@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -43,6 +44,10 @@ func resultHandles(message api.Message, body string) ([]string, string) {
 // projectSummarizeSource sends each source window as text beside its coordinates.
 func projectSummarizeSource(message api.Message, part api.MessageContentPart, parts []api.MessageContentPart) []api.MessageContentPart {
 	handles, body := resultHandles(message, part.Content)
+	prefix, body, suffix, ok := hostmarker.SplitToolJSONBody(body)
+	if !ok || prefix != "" {
+		return parts
+	}
 	var metadata map[string]json.RawMessage
 	if json.Unmarshal([]byte(body), &metadata) != nil {
 		return parts
@@ -75,11 +80,15 @@ func projectSummarizeSource(message api.Message, part api.MessageContentPart, pa
 	if encoded, err = json.Marshal(metadata); err != nil {
 		return parts
 	}
-	return sourceParts(part, "summarize_metadata", handles, encoded, sources)
+	return sourceParts(part, "summarize_metadata", handles, encoded, sources, suffix)
 }
 
 func projectReadSource(message api.Message, part api.MessageContentPart, parts []api.MessageContentPart) []api.MessageContentPart {
 	handles, body := resultHandles(message, part.Content)
+	prefix, body, suffix, ok := hostmarker.SplitToolJSONBody(body)
+	if !ok || prefix != "" {
+		return parts
+	}
 	var metadata map[string]json.RawMessage
 	if json.Unmarshal([]byte(body), &metadata) != nil {
 		return parts
@@ -126,11 +135,11 @@ func projectReadSource(message api.Message, part api.MessageContentPart, parts [
 	if err != nil {
 		return parts
 	}
-	return sourceParts(part, "read_metadata", handles, encoded, sources)
+	return sourceParts(part, "read_metadata", handles, encoded, sources, suffix)
 }
 
 // sourceParts emits result metadata followed by one fenced part per source block, in metadata order.
-func sourceParts(part api.MessageContentPart, metadataSource string, handles []string, metadata []byte, sources []string) []api.MessageContentPart {
+func sourceParts(part api.MessageContentPart, metadataSource string, handles []string, metadata []byte, sources []string, suffix string) []api.MessageContentPart {
 	out := make([]api.MessageContentPart, 0, len(sources)+1)
 	part.Source = metadataSource
 	part.Content = strings.Join(append(handles, string(metadata)), "\n")
@@ -139,6 +148,11 @@ func sourceParts(part api.MessageContentPart, metadataSource string, handles []s
 		fence := sourceFence(source)
 		part.Source = "source"
 		part.Content = fence + "\n" + source + "\n" + fence
+		out = append(out, part)
+	}
+	if strings.TrimSpace(suffix) != "" {
+		part.Source = "result_suffix"
+		part.Content = suffix
 		out = append(out, part)
 	}
 	return out
