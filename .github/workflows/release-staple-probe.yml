@@ -3,6 +3,10 @@ name: Release staple probe
 on:
   workflow_dispatch:
 
+concurrency:
+  group: release-static-update
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
