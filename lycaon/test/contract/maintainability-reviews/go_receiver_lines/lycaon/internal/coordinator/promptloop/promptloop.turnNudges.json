@@ -1,0 +1,16 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/coordinator/promptloop/promptloop.turnNudges",
+  "kind": "algorithm",
+  "workstream": "tool-prerequisite-recovery",
+  "disposition": "retain",
+  "reason": "Repetition admission, refusal escalation, and survey feedback consume structured output and the current compiled turn. Availability and frozen read facts enter admission explicitly; rejection history stays bounded. Retain the helper with response, intent-renewal, and prerequisite contracts.",
+  "reviewed_commit": "46d87a5d6ed1fe53c4cf707f18062a37ca65d7ed",
+  "ceiling": 456,
+  "boundaries": {
+    "lycaon/internal/coordinator/promptloop/response_repetition_test.go": "861ea3ab6dfb9f954a01f1a4bbbd40c73b04127293254a811c110de97d4f0b33",
+    "lycaon/internal/session/loopguard/read_prerequisite_test.go": "d109b7d8cd89c6ce4fcc691a338ed2a31c5160ec9059ed01e9028c05557b9fb5",
+    "lycaon/internal/session/loopguard/review_intent_test.go": "3ddcf96b05faacde27bc364f47e19ad03c4238d291fad9d2b01b9ba48d69b575"
+  },
+  "reviewed_shape": "69fed3903966d076fc3470e9f07244777419e4396f530b15eb129db47270e133"
+}
