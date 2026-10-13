@@ -6,7 +6,7 @@ import {
   type Virtualizer,
   type VirtualizerOptions,
 } from "@tanstack/solid-virtual";
-import { batch, createMemo, createSignal, onCleanup, untrack } from "solid-js";
+import { batch, createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import { observeSharedContentBox } from "../../../layout/shared-resize-observer.ts";
 import { bufferedVirtualRange } from "../../../layout/virtual-runway.ts";
 import { scrollportMotionForViewport } from "../../../platform/scrolling/scrollport-motion.ts";

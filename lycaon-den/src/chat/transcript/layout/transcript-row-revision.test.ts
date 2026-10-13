@@ -49,11 +49,11 @@ describe("transcript row content revision", () => {
   });
 
   it("covers all row kinds", () => {
-    const items: TranscriptItem[] = [
+    const items = [
       { kind: "user", key: "u", text: "hi", artifactIds: ["art-1"] },
       { kind: "pending_user", key: "pu", text: "pending", pending: {} as never },
-      { kind: "fallback", key: "fb", text: "fallback" },
-      { kind: "draft", key: "d", text: "draft", draftStatus: "streaming", draftVersionCount: 2 },
+      { kind: "fallback", key: "fb", text: "fallback", role: "system" },
+      { kind: "draft", key: "d", text: "draft", draftStatus: "live", draftVersionCount: 2 },
       { kind: "tool", key: "t", part: part("t", { error: "err", fileEdit: { path: "a", added: 1, removed: 2 } as never }) },
       {
         kind: "activity_span",
@@ -71,16 +71,23 @@ describe("transcript row content revision", () => {
         anchorMessageId: "m1",
         folds: [{ key: "f1", path: "a.ts", steps: [], net: { added: 2, removed: 1 } as never }],
       },
-      { kind: "progress_complete", key: "pc", steps: [{ label: "step 1", status: "done" }] },
-      { kind: "progress_update", key: "pu2", initial: true, steps: [], changes: [], summary: "ok" },
+      { kind: "progress_complete", key: "pc", steps: [{ label: "step 1", state: "done" }] },
+      {
+        kind: "progress_update",
+        key: "pu2",
+        initial: true,
+        steps: [],
+        changes: [],
+        summary: { change_count: 1, total_steps: 1, pending: 0, done: 1, na: 0 },
+      },
       { kind: "workflow_feedback", key: "wf", meta: { prompt: "q" } as never },
       { kind: "blueprint_card", key: "bc", content: "# plan", meta: {} as never, view: { revisionKey: "r1", phase: "review", collapsed: false } as never },
-      { kind: "workflow_boundary", key: "wb", label: "done" } as unknown as TranscriptItem,
+      { kind: "workflow_boundary", key: "wb", label: "done" },
       { kind: "turn_load", key: "tl2", row: { load: { tokens: 5 } } as never },
       { kind: "time_marker", key: "tm", variant: "day", at: 100 },
       { kind: "unread_marker", key: "um", seenAt: 200 },
       { kind: "turn_tail", key: "tt", anchorMessageId: "a", settledAt: 300, activeMs: 10, workMs: 20 },
-    ];
+    ] as unknown as TranscriptItem[];
     for (const item of items) {
       expect(transcriptRowContentRevision(item)).toMatch(/^[0-9a-z]+\.[0-9a-z]+$/);
     }
@@ -110,7 +117,7 @@ describe("transcript row content revision", () => {
           items,
           scrollElement: () => el,
           contentRevision: transcriptRowContentRevision,
-          rowSizeHint: (item) => (item.key === "top" ? (item.text === "short" ? 80 : 320) : 72),
+          rowSizeHint: (item) => (item.kind === "assistant" && item.key === "top" ? (item.text === "short" ? 80 : 320) : 72),
           revealOffset: () => {},
           shiftContent: (delta) => delta,
           observeElementRect: (_instance, cb) => { cb({ width: 400, height: 200 }); return () => {}; },
