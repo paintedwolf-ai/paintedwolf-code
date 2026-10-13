@@ -9,7 +9,9 @@ use super::{
 };
 use std::fs;
 pub(super) fn fixture(root: &Path) -> Transaction {
-    let candidate = super::super::tests::candidate("1.1.0");
+    let mut candidate = super::super::tests::candidate("1.1.0");
+    candidate.platform = super::super::feed::target().into();
+    candidate.release_id = candidate.identity();
     let target = root.join(if cfg!(target_os = "linux") {
         "Painted Wolf Code.AppImage"
     } else {

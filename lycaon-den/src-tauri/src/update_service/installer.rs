@@ -114,6 +114,9 @@ pub fn current_uid() -> u32 {
     }
 }
 pub fn legacy_prepared_path(target: &Path, candidate: &Candidate) -> Result<PathBuf, UpdateError> {
+    if candidate.platform.starts_with("linux-") {
+        return Err(Failure::InvalidRelease.into());
+    }
     Ok(target
         .parent()
         .ok_or(Failure::InvalidRelease)?

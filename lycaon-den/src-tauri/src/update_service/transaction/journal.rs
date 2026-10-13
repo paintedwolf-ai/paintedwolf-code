@@ -253,6 +253,27 @@ mod tests {
         next.previous_hash = current.next_hash.clone();
         assert!(transition_allowed(&current, &next));
     }
+    #[cfg(unix)]
+    #[test]
+    fn transaction_paths_match_the_offered_platform() {
+        let root = crate::test_support::TempDir::new("update-platform-paths");
+        let mut transaction = super::super::tests::fixture(&root);
+        assert!(valid(&transaction));
+        transaction
+            .target
+            .set_extension(if cfg!(target_os = "linux") {
+                "app"
+            } else {
+                "AppImage"
+            });
+        transaction.prepared_bundle =
+            super::super::installer::prepared_path(&transaction.target, &transaction.candidate)
+                .unwrap();
+        assert!(!valid(&transaction));
+        transaction.candidate.platform = "windows-x86_64".into();
+        transaction.candidate.release_id = transaction.candidate.identity();
+        assert!(!valid(&transaction));
+    }
     #[test]
     fn unknown_legacy_fields_preserve_the_active_record() {
         let root = crate::test_support::TempDir::new("update-journal-unknown-legacy");
