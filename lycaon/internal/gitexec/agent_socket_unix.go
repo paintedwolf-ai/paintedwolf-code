@@ -15,7 +15,6 @@ func validAgentSocket(path string) string {
 	if strings.ContainsAny(path, "\x00\r\n") {
 		return ""
 	}
-	path = strings.TrimSpace(path)
 	if path == "" || !filepath.IsAbs(path) {
 		return ""
 	}
@@ -23,5 +22,5 @@ func validAgentSocket(path string) string {
 	if err != nil || info.Mode()&os.ModeSocket == 0 {
 		return ""
 	}
-	return filepath.Clean(path)
+	return path
 }

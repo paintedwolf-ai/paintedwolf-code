@@ -25,5 +25,5 @@ func defaultAgentSocket(ctx context.Context) string {
 	if err != nil || code != 0 {
 		return ""
 	}
-	return validAgentSocket(strings.TrimSpace(string(out)))
+	return validAgentSocket(strings.TrimSuffix(string(out), "\n"))
 }

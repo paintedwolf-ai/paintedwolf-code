@@ -45,3 +45,26 @@ func TestAgentSocketValidationRequiresAnExistingUnixSocket(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentSocketValidationPreservesNativePathIdentity(t *testing.T) {
+	directory := agentFixtureDirectory(t)
+	real := filepath.Join(directory, "real")
+	if err := os.MkdirAll(filepath.Join(real, "nested"), 0700); err != nil {
+		t.Fatalf("create native socket directories: %v", err)
+	}
+	path := filepath.Join(real, "agent λ ")
+	listener, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatalf("listen on native socket: %v", err)
+	}
+	t.Cleanup(func() { _ = listener.Close() })
+	alias := filepath.Join(directory, "alias")
+	if err := os.Symlink(filepath.Join(real, "nested"), alias); err != nil {
+		t.Fatalf("create native directory alias: %v", err)
+	}
+	for _, path := range []string{path, alias + "/../agent λ "} {
+		if got := validAgentSocket(path); got != path {
+			t.Fatalf("native socket path = %q, want %q", got, path)
+		}
+	}
+}
