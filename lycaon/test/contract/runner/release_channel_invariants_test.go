@@ -47,17 +47,17 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 		"linux-x86_64": {
 			UpdaterKey: "linux-x86_64", Runner: "ubuntu-22.04", ArtifactArch: "x86_64",
 			GOOS: "linux", GOARCH: "amd64", Publication: "candidate",
-			PackageExt: "AppImage", UpdaterExt: "AppImage.tar.gz",
+			PackageExt: "AppImage", UpdaterExt: "AppImage",
 		},
 		"linux-aarch64": {
 			UpdaterKey: "linux-aarch64", Runner: "ubuntu-22.04-arm", ArtifactArch: "aarch64",
 			GOOS: "linux", GOARCH: "arm64", Publication: "candidate",
-			PackageExt: "AppImage", UpdaterExt: "AppImage.tar.gz",
+			PackageExt: "AppImage", UpdaterExt: "AppImage",
 		},
 		"windows-x86_64": {
 			UpdaterKey: "windows-x86_64", Runner: "windows-2025", ArtifactArch: "x86_64",
 			GOOS: "windows", GOARCH: "amd64", Publication: "candidate",
-			PackageExt: "exe", UpdaterExt: "nsis.zip",
+			PackageExt: "exe", UpdaterExt: "exe",
 		},
 	}
 	if catalog.SchemaVersion != 1 || len(catalog.Platforms) != len(want) {
@@ -97,9 +97,9 @@ func TestUpdaterManifestAssemblerRequiresPublicBuildsAndExcludesCandidatePlatfor
 	catalogPath := filepath.Join(dir, "platforms.json")
 	catalog := `{"schema_version":1,"platforms":[` +
 		`{"updater_key":"darwin-aarch64","artifact_arch":"aarch64","publication":"public","updater_extension":"app.tar.gz"},` +
-		`{"updater_key":"linux-x86_64","artifact_arch":"x86_64","publication":"candidate","updater_extension":"AppImage.tar.gz"},` +
-		`{"updater_key":"linux-aarch64","artifact_arch":"aarch64","publication":"candidate","updater_extension":"AppImage.tar.gz"},` +
-		`{"updater_key":"windows-x86_64","artifact_arch":"x86_64","publication":"candidate","updater_extension":"nsis.zip"}]}`
+		`{"updater_key":"linux-x86_64","artifact_arch":"x86_64","publication":"candidate","updater_extension":"AppImage"},` +
+		`{"updater_key":"linux-aarch64","artifact_arch":"aarch64","publication":"candidate","updater_extension":"AppImage"},` +
+		`{"updater_key":"windows-x86_64","artifact_arch":"x86_64","publication":"candidate","updater_extension":"exe"}]}`
 	contractcheck.FailErr(t, "write platform catalog", os.WriteFile(catalogPath, []byte(catalog), 0o644))
 	notes := filepath.Join(dir, "notes.md")
 	contractcheck.FailErr(t, "write notes", os.WriteFile(notes, []byte("Ready to test.\n"), 0o644))
@@ -140,11 +140,11 @@ func TestUpdaterManifestAssemblerRequiresPublicBuildsAndExcludesCandidatePlatfor
 		}
 	}
 	run(true)
-	writeFragment("linux-x86_64", "AppImage.tar.gz")
+	writeFragment("linux-x86_64", "AppImage")
 	run(true)
-	writeFragment("linux-aarch64", "AppImage.tar.gz")
+	writeFragment("linux-aarch64", "AppImage")
 	run(true)
-	writeFragment("windows-x86_64", "nsis.zip")
+	writeFragment("windows-x86_64", "exe")
 	run(true)
 	var manifest struct {
 		Platforms map[string]json.RawMessage `json:"platforms"`

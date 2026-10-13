@@ -19,7 +19,7 @@
       "goarch": "amd64",
       "publication": "candidate",
       "package_extension": "AppImage",
-      "updater_extension": "AppImage.tar.gz"
+      "updater_extension": "AppImage"
     },
     {
       "updater_key": "linux-aarch64",
@@ -29,7 +29,7 @@
       "goarch": "arm64",
       "publication": "candidate",
       "package_extension": "AppImage",
-      "updater_extension": "AppImage.tar.gz"
+      "updater_extension": "AppImage"
     },
     {
       "updater_key": "windows-x86_64",
@@ -39,7 +39,7 @@
       "goarch": "amd64",
       "publication": "candidate",
       "package_extension": "exe",
-      "updater_extension": "nsis.zip"
+      "updater_extension": "exe"
     }
   ]
 }
