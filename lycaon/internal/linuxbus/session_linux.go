@@ -89,7 +89,7 @@ func unixSocketAddress(address string) (string, error) {
 	}
 	path, abstract := values["path"], values["abstract"]
 	if (path == "") == (abstract == "") || (path != "" && !filepath.IsAbs(path)) {
-		return "", errors.New("Unix bus address requires one absolute path or abstract name")
+		return "", errors.New("local bus address requires one absolute path or abstract name")
 	}
 	if abstract != "" {
 		return "\x00" + abstract, nil
