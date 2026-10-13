@@ -30,6 +30,13 @@ pub fn bundle() -> Result<PathBuf, UpdateError> {
     Ok(image)
 }
 
+pub fn supported() -> bool {
+    bundle().is_ok_and(|target| writable_installation(&target))
+}
+pub fn verify_bundle(path: &Path) -> Result<(), UpdateError> {
+    verify_image(path, std::env::consts::ARCH)
+}
+
 pub fn verify_image(path: &Path, architecture: &str) -> Result<(), UpdateError> {
     let metadata =
         fs::symlink_metadata(path).map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;

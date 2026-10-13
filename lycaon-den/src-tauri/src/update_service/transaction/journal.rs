@@ -69,15 +69,8 @@ fn valid(t: &Transaction) -> bool {
         && uuid::Uuid::parse_str(&t.id).is_ok()
         && t.candidate.valid_identity()
         && t.target.is_absolute()
-        && match t.candidate.platform.as_str() {
-            "darwin-aarch64" | "darwin-x86_64" => {
-                t.target.extension().and_then(|s| s.to_str()) == Some("app")
-            }
-            "linux-aarch64" | "linux-x86_64" => {
-                t.target.extension().and_then(|s| s.to_str()) == Some("AppImage")
-            }
-            _ => false,
-        }
+        && super::installer::layout::Layout::for_platform(&t.candidate.platform)
+            .is_ok_and(|layout| layout.matches_path(&t.target))
         && super::installer::valid_prepared_path(&t.target, &t.candidate, &t.prepared_bundle)
         && [&t.previous_hash, &t.next_hash, &t.next_bundle_hash]
             .iter()

@@ -51,20 +51,20 @@ pub fn acquire_lease(
     exclusive: bool,
     nonblocking: bool,
 ) -> Result<InstallationLease, UpdateError> {
-    #[cfg(target_os = "linux")]
-    let file = fs::OpenOptions::new()
-        .read(true)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-        .open(target)
-        .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
-    #[cfg(target_os = "macos")]
-    let file = directory(target)?;
-    if cfg!(target_os = "linux")
-        && !file
+    let layout = super::layout::Layout::native()?;
+    let file = match layout {
+        super::layout::Layout::AppBundle => directory(target)?,
+        super::layout::Layout::AppImage => fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+            .open(target)
+            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?,
+    };
+    if !layout.accepts(
+        &file
             .metadata()
-            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?
-            .is_file()
-    {
+            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?,
+    ) {
         return Err(Failure::UnsupportedInstallation.into());
     }
     lock(file, exclusive, nonblocking)
@@ -95,11 +95,8 @@ fn matches(file: &fs::File, path: &Path) -> bool {
     file.metadata()
         .and_then(|a| {
             fs::symlink_metadata(path).map(|b| {
-                (if cfg!(target_os = "linux") {
-                    b.is_file()
-                } else {
-                    b.is_dir()
-                }) && a.dev() == b.dev()
+                super::layout::Layout::native().is_ok_and(|layout| layout.accepts(&b))
+                    && a.dev() == b.dev()
                     && a.ino() == b.ino()
             })
         })
@@ -115,10 +112,7 @@ pub fn exchange_coordinated(
         return Err(Failure::CandidateChanged.into());
     }
     let next = acquire_lease(prepared, true, true)?;
-    #[cfg(target_os = "macos")]
-    let result = super::macos::exchange(target, prepared);
-    #[cfg(target_os = "linux")]
-    let result = super::linux::exchange(target, prepared);
+    let result = super::platform::exchange(target, prepared);
     // The exchange can succeed even if syncing the parent directory fails.
     if matches(&next.0, target) {
         *lease = next;

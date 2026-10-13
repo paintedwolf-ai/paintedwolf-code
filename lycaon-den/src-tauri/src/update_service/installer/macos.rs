@@ -1,14 +1,50 @@
 //! macOS destination checks, bundle preparation, and atomic exchange.
 use super::{
-    archive, bundle_hash, executable, hash, prepared_path, prepared_prefix, verify_bundle,
-    Candidate, Failure, PreparedIdentity, UpdateError,
+    archive, bundle_hash, executable, hash, prepared_path, prepared_prefix, Candidate, Failure,
+    PreparedIdentity, UpdateError,
 };
 use std::{
     ffi::CString,
     fs,
     os::unix::{ffi::OsStrExt, fs::PermissionsExt},
-    path::Path,
+    path::{Path, PathBuf},
 };
+
+pub const PRODUCT_VERSION_RESOURCE: &str = "Contents/Resources/release-version";
+const PRODUCT_VERSION_LIMIT: u64 = 128;
+pub fn bundle() -> Result<PathBuf, UpdateError> {
+    let exe = std::env::current_exe()
+        .map_err(|e| UpdateError::new(Failure::UnsupportedInstallation, e))?;
+    let root = exe
+        .parent()
+        .and_then(Path::parent)
+        .and_then(Path::parent)
+        .ok_or(Failure::UnsupportedInstallation)?;
+    if root.extension().and_then(|s| s.to_str()) != Some("app") {
+        return Err(Failure::UnsupportedInstallation.into());
+    }
+    fs::canonicalize(root).map_err(|e| UpdateError::new(Failure::UnsupportedInstallation, e))
+}
+pub fn product_version(bundle: &Path, failure: Failure) -> Result<String, UpdateError> {
+    use std::io::Read;
+    let file = fs::File::open(bundle.join(PRODUCT_VERSION_RESOURCE))
+        .map_err(|e| UpdateError::new(failure, e))?;
+    let mut version = String::new();
+    file.take(PRODUCT_VERSION_LIMIT + 1)
+        .read_to_string(&mut version)
+        .map_err(|e| UpdateError::new(failure, e))?;
+    if version.len() as u64 > PRODUCT_VERSION_LIMIT {
+        return Err(UpdateError::new(
+            failure,
+            "The bundle's product version resource is too large",
+        ));
+    }
+    Ok(version.trim().to_string())
+}
+
+pub fn supported() -> bool {
+    bundle().is_ok_and(|target| writable_installation(&target))
+}
 
 pub fn writable_installation(target: &Path) -> bool {
     let Some(parent) = target.parent() else {
@@ -131,5 +167,115 @@ mod tests {
         exchange(&a, &b).unwrap();
         assert_eq!(fs::read_to_string(a.join("identity")).unwrap(), "new");
         assert_eq!(fs::read_to_string(b.join("identity")).unwrap(), "old");
+    }
+    #[test]
+    fn product_version_reads_are_bounded() {
+        let root = crate::test_support::TempDir::new("update-product-version");
+        let resource = root.join(PRODUCT_VERSION_RESOURCE);
+        fs::create_dir_all(resource.parent().unwrap()).unwrap();
+        fs::write(&resource, "1.2.3\n").unwrap();
+        assert_eq!(
+            product_version(&root, Failure::StateUnavailable).unwrap(),
+            "1.2.3"
+        );
+        fs::write(&resource, "9".repeat(PRODUCT_VERSION_LIMIT as usize + 1)).unwrap();
+        assert_eq!(
+            product_version(&root, Failure::VerificationFailed)
+                .unwrap_err()
+                .code,
+            Failure::VerificationFailed
+        );
+    }
+    #[test]
+    fn production_requires_a_developer_id_publisher_and_cannot_inject_a_requirement() {
+        let requirement = publisher_requirement(Some("TEAM123456"), false).unwrap();
+        assert!(requirement.contains("certificate leaf[subject.OU] = \"TEAM123456\""));
+        assert!(requirement.contains("certificate 1[field.1.2.840.113635.100.6.2.6]"));
+        assert!(publisher_requirement(Some("not set"), false).is_err());
+        assert!(publisher_requirement(None, false).is_err());
+        assert!(publisher_requirement(Some("TEAM\" or true"), false).is_err());
+        assert!(publisher_requirement(Some("not set"), true).is_ok());
+    }
+    #[test]
+    fn codesign_failures_are_summarized_without_paths() {
+        let stderr = b"/Applications/Painted Wolf Code.app: invalid signature (code or signature have been modified)\nIn architecture: arm64\n";
+        assert_eq!(
+            codesign_summary(stderr),
+            "invalid signature (code or signature have been modified)"
+        );
+        assert_eq!(codesign_summary(b""), "code signature verification failed");
+    }
+}
+
+pub fn verify_bundle(path: &Path) -> Result<(), UpdateError> {
+    let output = std::process::Command::new("/usr/bin/codesign")
+        .args([
+            "--verify",
+            "--deep",
+            "--strict",
+            "-R",
+            &signing_requirement()?,
+        ])
+        .arg(path)
+        .output()
+        .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
+    if !output.status.success() {
+        return Err(UpdateError::new(
+            Failure::VerificationFailed,
+            codesign_summary(&output.stderr),
+        ));
+    }
+    Ok(())
+}
+/// The verdict line of a codesign failure, without the paths it was asked about.
+fn codesign_summary(stderr: &[u8]) -> String {
+    let text = String::from_utf8_lossy(stderr);
+    text.lines()
+        .filter_map(|line| line.rsplit_once(": ").map(|(_, verdict)| verdict.trim()))
+        .find(|verdict| !verdict.is_empty())
+        .unwrap_or("code signature verification failed")
+        .to_string()
+}
+
+fn signing_requirement() -> Result<String, UpdateError> {
+    static REQUIREMENT: std::sync::LazyLock<Result<String, UpdateError>> =
+        std::sync::LazyLock::new(|| {
+            let executable = std::env::current_exe()
+                .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
+            let output = std::process::Command::new("/usr/bin/codesign")
+                .args(["--display", "--verbose=4"])
+                .arg(executable)
+                .output()
+                .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
+            if !output.status.success() {
+                return Err(Failure::VerificationFailed.into());
+            }
+            let metadata = String::from_utf8_lossy(&output.stderr);
+            let team = metadata
+                .lines()
+                .find_map(|line| line.strip_prefix("TeamIdentifier="));
+            publisher_requirement(team, cfg!(debug_assertions))
+        });
+    REQUIREMENT.clone()
+}
+/// Production bundles must carry a Developer ID Application signature from the running team.
+fn publisher_requirement(team: Option<&str>, development: bool) -> Result<String, UpdateError> {
+    let identifier = "identifier \"dev.paintedwolf.code\"";
+    match team {
+        Some(team)
+            if team.len() == 10
+                && team
+                    .bytes()
+                    .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) =>
+        {
+            Ok(format!(
+                "{identifier} and anchor apple generic \
+                 and certificate 1[field.1.2.840.113635.100.6.2.6] \
+                 and certificate leaf[field.1.2.840.113635.100.6.1.13] \
+                 and certificate leaf[subject.OU] = \"{team}\""
+            ))
+        }
+        Some("not set") | None if development => Ok(identifier.into()),
+        _ => Err(Failure::VerificationFailed.into()),
     }
 }
