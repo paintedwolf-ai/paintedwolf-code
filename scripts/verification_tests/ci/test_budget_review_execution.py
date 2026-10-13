@@ -1,10 +1,10 @@
 """Bounded architectural decisions in the source-bound issue lifecycle."""
 import unittest
 
-from ci_policy import budget_issues as issues, budget_snapshot as snapshot
+from ci_policy import budget_snapshot as snapshot
 import budgets
 from verification_tests.ci.test_change_report_execution import report as display_report, finding
-from verification_tests.ci.test_budget_tracking_execution import row, report, issue, observation
+from verification_tests.ci.test_budget_tracking_execution import row, report
 
 
 def reviewed(state='retained', measured=350):
@@ -13,9 +13,6 @@ def reviewed(state='retained', measured=350):
         'reason': 'One ordered shutdown boundary.', 'reviewed_commit': 'e' * 40,
         'reviewed_shape': '', 'ceiling': 400, 'boundaries': {'pkg/contract.go': 'f' * 64}, 'state': state}}
 
-
-def artifacts(entry):
-    return {snapshot.key(entry['category'], entry['id']): entry}
 
 
 class ArchitecturalReviewTests(unittest.TestCase):
@@ -38,15 +35,6 @@ class ArchitecturalReviewTests(unittest.TestCase):
                 snapshot.validate(report([entry]), 'a' * 40, 'b' * 40)
 
 
-
-
-
-
-
-
-
-
-
     def test_same_size_structural_change_renews_review(self):
         for category, artifact in [('go_struct_fields', 'pkg/p.Service'),
                                    ('ts_local_dependencies', 'pkg/service.ts'),
@@ -57,7 +45,6 @@ class ArchitecturalReviewTests(unittest.TestCase):
                              spans=[{'file': 'pkg/server.go', 'first': 1, 'last': 20}])
                 entry['review']['reviewed_shape'] = '2' * 64
                 snapshot.validate(report([entry]), 'a' * 40, 'b' * 40)
-                closed = issue(state='closed', state_reason='completed', body=issues.block(entry, observation(), True))
                 entry['review']['state'] = 'retained'
                 with self.assertRaises(ValueError):
                     snapshot.validate(report([entry]), 'a' * 40, 'b' * 40)

@@ -96,5 +96,4 @@ def title(row):
 
 
 def expected(issue):
-    return {name: issue.get(name) for name in ['body', 'state', 'state_reason']}
-
+    return {name: issue.get(name) for name in ['title', 'body', 'state', 'state_reason']}

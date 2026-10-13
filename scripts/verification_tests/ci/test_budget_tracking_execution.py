@@ -134,3 +134,43 @@ class WorkstreamTests(unittest.TestCase):
         for broken in [body * 2, self.groups.START, body.replace('"workstream":"pkg"', '"workstream":"../unsafe"')]:
             with self.assertRaises(ValueError):
                 self.groups.plan([issue(body=broken)], self.artifacts(row()), observation())
+
+    def test_resolved_oldest_issue_does_not_leave_open_legacy_siblings(self):
+        closed = issue(state='closed', state_reason='completed')
+        open_issue = issue(number=2)
+        ops, _ = self.groups.plan([closed, open_issue], {}, observation())
+        self.assertEqual(ops[0]['action'], 'resolve')
+        self.assertEqual(ops[0]['number'], 2)
+
+    def test_fingerprint_covers_sources_shape_policy_and_review(self):
+        entry = row()
+        ops, _ = self.groups.plan([], self.artifacts(entry), observation())
+        current = issue(body=ops[0]['body']['body'])
+        for change in [{'sources': ['pkg/new.go']}, {'shape': '1' * 64}, {'warn': 250},
+                       {'exception_reason': 'bounded decision'}, {'measured': 360}]:
+            with self.subTest(change=change):
+                ops, _ = self.groups.plan([current], self.artifacts({**entry, **change}), observation())
+                self.assertEqual(ops[0]['action'], 'update')
+
+    def test_large_area_rolls_up_without_issue_or_body_sprawl(self):
+        entries = [row(f'app/internal/module{i}/long_named_file{i}.go') for i in range(500)]
+        ops, _ = self.groups.plan([], self.artifacts(*entries), observation())
+        self.assertEqual(len(ops), 1)
+        self.assertLess(len(ops[0]['body']['body'].encode()), 60000)
+        self.assertIn('linked complete qualification report', ops[0]['body']['body'])
+        self.assertEqual(len(self.groups.group_state(issue(body=ops[0]['body']['body']))['artifacts']), 500)
+
+    def test_not_planned_dismissal_is_bounded_by_intake_and_facts(self):
+        entry = row()
+        closed = issue(state='closed', state_reason='not_planned')
+        self.assertEqual(self.groups.plan([closed], self.artifacts(entry), observation(), intake_keys=set()), ([], 1))
+        ops, _ = self.groups.plan([closed], self.artifacts({**entry, 'measured': 360}), observation(), intake_keys=set())
+        self.assertEqual(ops[0]['action'], 'reopen')
+
+    def test_backfill_and_invalidated_retention_admit_untouched_findings(self):
+        entry = {**row(), 'touched': False}
+        self.assertEqual(self.groups.plan([], self.artifacts(entry), observation()), ([], 0))
+        self.assertEqual(self.groups.plan([], self.artifacts(entry), observation(), backfill=True)[0][0]['action'], 'create')
+        from verification_tests.ci.test_budget_review_execution import reviewed
+        entry['review'] = reviewed('boundary_changed')['review']
+        self.assertEqual(self.groups.plan([], self.artifacts(entry), observation())[0][0]['action'], 'create')

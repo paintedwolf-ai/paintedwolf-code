@@ -47,7 +47,7 @@ def group_state(issue):
         raise ValueError('invalid workstream tracking block')
     match = re.match(r'\n<!-- state:(\{[^\n]*\}) -->\n', body[body.index(START) + len(START):])
     state = json.loads(match[1]) if match else {}
-    if not relative(state.get('workstream')) or not isinstance(state.get('inventory'), str):
+    if not isinstance(state, dict) or not relative(state.get('workstream')) or not isinstance(state.get('inventory'), str):
         raise ValueError('invalid workstream tracking state')
     try:
         decoder = zlib.decompressobj()
@@ -61,6 +61,8 @@ def group_state(issue):
         raise ValueError('invalid workstream artifacts')
     seen = set()
     for row in state['artifacts']:
+        if not isinstance(row, dict) or set(row) != {'category', 'id', 'evidence_digest'}:
+            raise ValueError('invalid workstream artifact')
         # Reuse the validated v1 artifact identity grammar inside the new envelope.
         encoded = json.dumps(dict(row, key=key(row['category'], row['id'])), separators=(',', ':')).replace('<', '\\u003c')
         parsed = tracked({**issue, 'body': LEGACY_START + '\n<!-- state:' + encoded + ' -->\n' + END})
@@ -100,17 +102,19 @@ def block(identity, rows, observation):
         lines += ['', '<details>', f'<summary>{html.escape(name)} — {len(findings)} findings</summary>', '',
                   '| Artifact | Metric | Measured | Warn | Hard limit | Effective cap | Review |',
                   '| --- | --- | ---: | ---: | ---: | ---: | --- |']
+        notes = []
         for row in findings:
             url = f"https://github.com/{observation['repository']}/blob/{observation['source_sha']}/{quote(row['sources'][0], safe='/')}"
-            label = html.escape(row['id'][len(name) + 1:]).replace('|', '&#124;')
+            artifact = row['id'][len(name) + 1:] if row['id'].startswith(name + '/') else row['id']
+            label = html.escape(artifact).replace('|', '&#124;')
             status = row.get('review', {}).get('state', 'required')
             lines.append(f"| [{label}]({url}) | {row['category']} | {row['measured']} | {row['warn']} | {row['limit']} | {row['effective_cap']} | {status} |")
             review = row.get('review')
             if review:
-                lines.append(f"\nReview `{html.escape(row['id'])}`: {html.escape(review['reason'])} (workstream `{review['workstream']}`).\n")
+                notes.append(f"\nReview `{html.escape(row['id'])}`: {html.escape(review['reason'])} (workstream `{review['workstream']}`).\n")
             if row.get('exception_reason'):
-                lines.append('\nException: ' + html.escape(row['exception_reason']) + '\n')
-        lines += ['', '</details>']
+                notes.append('\nException: ' + html.escape(row['exception_reason']) + '\n')
+        lines += notes + ['', '</details>']
         if len('\n'.join(lines).encode()) > 55000:
             del lines[detail_start:]
             lines += ['', f'Details for `{html.escape(name)}` are in the linked complete qualification report.']
@@ -132,12 +136,12 @@ def body_for(issue, managed):
 def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
     intake_keys = intake_keys if intake_keys is not None else {k for k, r in artifacts.items() if r['touched']}
     groups, old, previous = {}, {}, {}
-    for issue in issues:
+    for issue in sorted(issues, key=lambda i: (START not in (i.get('body') or ''), i['number'])):
         state = group_state(issue)
         if state:
             groups.setdefault(state['workstream'], []).append(issue)
             for row in state['artifacts']:
-                previous[key(row['category'], row['id'])] = (issue, row)
+                previous.setdefault(key(row['category'], row['id']), (issue, row))
         elif SUPERSEDED not in (issue.get('body') or ''):
             row = tracked(issue) or legacy(issue, artifacts)
             if row:
@@ -161,7 +165,7 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
         # Existing v2 issues win, then the oldest artifact issue is adopted in place.
         candidates = sorted(groups.get(identity, []), key=lambda i: i['number'])
         ancestors = sorted(old.get(identity, []), key=lambda i: i['number'])
-        canonical = (candidates or ancestors or [None])[0]
+        canonical = (candidates or [i for i in ancestors if i['state'] == 'open'] or ancestors or [None])[0]
         rows = active.get(identity, [])
         if canonical is None:
             if rows:
@@ -170,8 +174,7 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
             continue
         state = group_state(canonical)
         desired = 'open' if rows else 'closed'
-        same = state and [evidence(r) for r in rows] == [
-            r for r in state['artifacts']]
+        same = state and [evidence(r) for r in rows] == state['artifacts']
         if not rows and not candidates and canonical['state'] == 'closed':
             continue
         if not same or canonical['state'] != desired:
