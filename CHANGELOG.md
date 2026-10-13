@@ -7,9 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
+## [1.0.2-rc3]
+
+Third release candidate for 1.0.2, prepared for preview upgrade testing.
+Includes the changes listed under 1.0.2-rc2, whose publication did not complete.
+
+### Changed
+
+- Tool feedback presents exact source text and invocation outcomes more clearly.
+- Missing executable feedback names available catalog equivalents.
+- Coordinator guidance handles checklist instructions and completed document-read
+  prerequisites consistently.
+
+### Fixed
+
+- Release verification retains native notarization ticket validation errors to
+  diagnose signing failures without weakening release checks.
+
 ## [1.0.2-rc2]
 
-Second release candidate for 1.0.2, published on the preview channel for upgrade testing.
+Second release candidate for 1.0.2. Publication stopped at notarization ticket
+validation; this candidate was not offered on the preview channel.
 
 ### Changed
 
