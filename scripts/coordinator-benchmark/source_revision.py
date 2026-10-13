@@ -60,8 +60,7 @@ def contract(root, revision):
 
 
 def export(root, revision, destination):
-    names = git(root, 'ls-tree', '-r', '--name-only', '-z', revision['tree'], '--',
-                'lycaon', 'third_party', 'scripts', 'schemas', 'task', 'Taskfile.yml', 'VERSION', 'RELEASE_BUILD')
+    names = git(root, 'ls-tree', '-r', '--name-only', '-z', revision['tree'])
     destination.mkdir(parents=True, exist_ok=False)
     with tempfile.TemporaryDirectory() as temporary:
         environment = {**os.environ, 'GIT_INDEX_FILE': str(pathlib.Path(temporary) / 'index')}

@@ -45,12 +45,13 @@ def commit(root, tag):
 
 
 class SnapshotTests(unittest.TestCase):
-    def test_vendored_source_is_pinned_to_the_application(self):
+    def test_complete_source_is_pinned_to_the_application(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary); repo = root / 'repo'; repository(repo)
             vendor = repo / 'third_party/parser/go.mod'
             vendor.parent.mkdir(parents=True)
             vendor.write_text('module original\n')
+            (repo / 'rust-toolchain.toml').write_text('[toolchain]\nchannel = \"stable\"\n')
             target = commit(repo, 'vendored-application')
             vendor.write_text('module changed\n')
             benchmark = commit(repo, 'new-evaluator')
@@ -58,6 +59,8 @@ class SnapshotTests(unittest.TestCase):
             application = freeze_sources(repo, destination, {'application': target, 'benchmark': benchmark})
             retained = destination / 'third_party/parser/go.mod'
             self.assertEqual(retained.read_text(), 'module original\n')
+            self.assertEqual((destination / 'rust-toolchain.toml').read_text(),
+                             '[toolchain]\nchannel = \"stable\"\n')
             self.assertEqual(snapshot.read_source(destination), application)
             retained.write_text('module tampered\n')
             with self.assertRaisesRegex(ValueError, 'source'):
