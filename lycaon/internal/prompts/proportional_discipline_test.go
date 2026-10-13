@@ -35,7 +35,6 @@ func TestProportionalCoordinatorDisciplineRender(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Handle diagnosed small changes inline",
-		"leaf",
 		"identify the unresolved fact",
 		"Stop when observations answer the request",
 		"Report completion only with supporting evidence",

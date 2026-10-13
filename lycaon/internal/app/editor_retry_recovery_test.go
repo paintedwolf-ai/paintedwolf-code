@@ -5,7 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/llm/transcript"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -42,8 +45,23 @@ func TestDocumentReadResolvesIdenticalRejectedEdit(t *testing.T) {
 		testutil.FailErr(t, "record read prerequisite", guard.RecordAttempt(ctx, sess.ID, fmt.Sprint(response), "edit", args, &api.InvocationFailure{Code: reject.Code, Details: reject.Data}, false))
 	}
 	read := &survey.ReadTool{Boundary: boundary}
-	_, err = read.Run(ctx, map[string]any{"path": "a.txt", "mode": "content"}, toolCtx)
+	readResult, err := read.Run(ctx, map[string]any{"path": "a.txt", "mode": "content"}, toolCtx)
 	testutil.FailErr(t, "read document", err)
+	message := api.Message{Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Content: readResult,
+		ToolResult: &api.ToolResult{Tool: "read", Content: readResult, Outcome: api.ToolResultOutcomeCompleted}}
+	projected := transcript.Project([]api.Message{message})
+	modelResult := projected[len(projected)-1]
+	if !strings.Contains(modelResult.Content, "⟦D:tool:read_metadata⟧") || !strings.Contains(modelResult.Content, "⟦D⟧base") || strings.Contains(modelResult.Content, "     1: base") {
+		t.Fatalf("native read did not deliver exact source with detached metadata: %s", modelResult.Content)
+	}
+	for _, part := range modelResult.ContentParts {
+		if part.Authority != api.ContentAuthorityNone {
+			t.Fatalf("native read acquired instruction authority: %+v", part)
+		}
+	}
+	if message.Content != readResult || message.ToolResult.Content != readResult || transcript.Project(projected)[len(projected)-1].Content != modelResult.Content {
+		t.Fatal("native read projection changed durable evidence or duplicated framing")
+	}
 	if len(adapter.FreezeAgentReads(project.ID, sess.ID)) != 1 {
 		t.Fatal("read did not establish document basis")
 	}

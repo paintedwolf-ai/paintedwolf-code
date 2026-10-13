@@ -118,7 +118,7 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 			if strings.Contains(block, "checklist text in an assistant reply does not update it") != want {
 				t.Fatalf("progress procedure present=%v, want %v for %s/%s", strings.Contains(block, "checklist text in an assistant reply does not update it"), want, profile, tool)
 			}
-			if want && (strings.Count(block, "Maintain session progress") != 1 || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") || !strings.Contains(block, "a rejected action did not do the work")) {
+			if want && (strings.Count(block, "Store the checklist") != 1 || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") || !strings.Contains(block, "A rejected action did not do the work") || !strings.Contains(block, "one row is sufficient for a small task")) {
 				t.Fatalf("progress lifecycle contract missing or duplicated: %s", block)
 			}
 		}
