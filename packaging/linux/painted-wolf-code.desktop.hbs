@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name={{name}}
+{{#if comment}}
+Comment={{comment}}
+{{/if}}
+Exec={{exec}} %U
+TryExec={{exec}}
+Icon={{icon}}
+Terminal=false
+Categories={{categories}}
+Keywords=code;agent;review;security;
+StartupNotify=true
+StartupWMClass=dev.paintedwolf.code
+{{#if mime_type}}
+MimeType={{mime_type}}
+{{/if}}

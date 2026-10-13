@@ -13,9 +13,11 @@ const invokeMock = vi.fn();
 let tauriRuntime = true;
 
 import { ShellCommandPanel } from "./ShellCommandPanel.tsx";
+import { shellCommandStatus } from "../../../platform/desktop/shell-command.ts";
 
 const baseStatus = {
   installed: false,
+  package_managed: false,
   bin_dir: "/usr/local/bin",
   pw_link: "/usr/local/bin/pw",
   pw_logs_link: "/usr/local/bin/pw-logs",
@@ -53,6 +55,37 @@ describe("ShellCommandPanel", () => {
     expect(invokeMock).toHaveBeenCalledWith("install_shell_command");
   });
 
+  it("shows package-owned commands and offers neither install nor uninstall", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "shell_command_status") {
+        return {
+          installed: true,
+          package_managed: true,
+          bin_dir: "/usr/bin",
+          pw_link: "/usr/bin/pw",
+          pw_logs_link: "/usr/bin/pw-logs",
+          pw_target: "/opt/painted-wolf-code/bin/pw",
+          pw_logs_target: "/opt/painted-wolf-code/bin/pw-logs",
+          unavailable_reason: null,
+        };
+      }
+      throw new Error(`unexpected ${cmd}`);
+    });
+    render(() => <ShellCommandPanel />);
+    await waitFor(() => {
+      expect(screen.getByTestId("shell-command-status").textContent).toBe(
+        "Installed by the package — /usr/bin/pw",
+      );
+    });
+    const intro = screen.getByTestId("shell-command-package-managed").textContent;
+    expect(intro).toContain("/usr/bin/pw-logs");
+    expect(intro).toContain("belong to the package");
+    expect(screen.queryByText(/administrator password/)).toBeNull();
+    expect(screen.queryByTestId("shell-command-install")).toBeNull();
+    expect(screen.queryByTestId("shell-command-uninstall")).toBeNull();
+    expect(invokeMock).toHaveBeenCalledTimes(1);
+  });
+
   it("describes the desktop capability without invoking Tauri in browser mode", async () => {
     tauriRuntime = false;
     render(() => <ShellCommandPanel />);
@@ -66,5 +99,7 @@ describe("ShellCommandPanel", () => {
       (screen.getByTestId("shell-command-install") as HTMLButtonElement).disabled,
     ).toBe(true);
     expect(invokeMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("shell-command-package-managed")).toBeNull();
+    expect((await shellCommandStatus()).package_managed).toBe(false);
   });
 });

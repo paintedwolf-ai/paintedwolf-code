@@ -2,6 +2,8 @@ import { isTauriRuntime } from "../runtime.ts";
 
 export type ShellCommandStatus = {
   installed: boolean;
+  /** True when a .deb or .rpm package owns the links; install and uninstall are refused. */
+  package_managed: boolean;
   bin_dir: string;
   pw_link: string;
   pw_logs_link: string;
@@ -15,6 +17,7 @@ const DESKTOP_ONLY_REASON = "The command-line tool is available in the desktop a
 function unavailableStatus(): ShellCommandStatus {
   return {
     installed: false,
+    package_managed: false,
     bin_dir: "",
     pw_link: "",
     pw_logs_link: "",

@@ -407,17 +407,17 @@ activation, or own recovery state.
 |----------------|--------------------|
 | Release identity and artifact names | `packaging/release-platforms.json` and `scripts/release-collect-public-artifacts.py`; collected artifacts must match the target catalog and include detached signatures |
 | Feed admission and download | `lycaon-den/src-tauri/src/update_service/{feed,verification,download}.rs`; candidate identity, version policy, signatures, and download limits apply before preparation |
-| Preparation and installation shape | `update_service/installer.rs` and `installer/layout.rs`; platform keys map explicitly to application bundles or AppImages; unknown targets are unavailable |
-| Native installation effects | `installer/macos.rs` owns bundle resources, publisher validation, and bundle exchange; `installer/linux.rs` owns AppImage discovery, ELF validation, bounded metadata extraction, and file exchange; `installer/unsupported.rs` reports unavailable activation |
+| Preparation and installation shape | `update_service/installer.rs` and `installer/layout.rs`; platform keys map explicitly to the macOS application bundle; every other target has no native shape and cannot be prepared or exchanged |
+| Native installation effects | `installer/macos.rs` owns bundle resources, publisher validation, and bundle exchange; `installer/linux.rs` is check-only and refuses every staging or activation request with a structured reason, since the `.deb` or `.rpm` package manager owns the installation (`src-tauri/src/linux_install.rs` reads the owning package from the package database); `installer/unsupported.rs` reports unavailable activation |
 | Installed content identity and coordination | `installer/identity.rs` and `installer/coordination.rs`; content hashes bind receipts to prepared bytes, and inode leases prevent replacing a running installation |
 | Activation and recovery | `update_service/transaction/`; one journal records preparation, helper launch, exchange, engine health confirmation, and cleanup; native effects preserve this lifecycle |
 
 macOS activation requires a writable application bundle and the configured
-publisher. Linux activation requires a writable, user-owned AppImage and its
-parent directory; packaged system installations do not become writable through
-the updater. Windows native activation is unavailable until an installation
-adapter implements the same lifecycle. Artifact support alone does not enable
-activation.
+publisher. Linux has no native activation: the feed check reports the newer
+version and the package manager command, and the package manager owns
+activation and recovery. Windows native activation is unavailable until an
+installation adapter implements the same lifecycle. Artifact support alone does
+not enable activation.
 
 Adapter tests live beside their implementation. Shared transaction tests exercise
 prepared-byte tampering, journal validation, lease contention, and recovery on

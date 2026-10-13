@@ -1,5 +1,6 @@
 {
   "app": {
+    "enableGTKAppId": true,
     "windows": [
       {
         "label": "main",
@@ -15,5 +16,40 @@
         "decorations": false
       }
     ]
+  },
+  "bundle": {
+    "targets": ["deb", "rpm"],
+    "createUpdaterArtifacts": false,
+    "externalBin": [],
+    "resources": {
+      "engine-root/": null,
+      "THIRD-PARTY-NOTICES.md": null,
+      "../../VERSION": null
+    },
+    "category": "DeveloperTool",
+    "publisher": "Painted Wolf release <release-bot@users.noreply.github.com>",
+    "homepage": "https://paintedwolf.ai",
+    "license": "Apache-2.0",
+    "shortDescription": "Agentic coding assistant with a local security engine",
+    "longDescription": "Painted Wolf Code is a desktop coding agent with a local host engine for sessions, tools, workflows, review, and confined execution. The engine, helpers, document core, browser, Git toolchain, decision engine, and resources install under /opt/painted-wolf-code; pw and pw-logs are the command-line entry points.",
+    "linux": {
+      "deb": {
+        "section": "devel",
+        "priority": "optional",
+        "desktopTemplate": "../../packaging/linux/painted-wolf-code.desktop.hbs",
+        "preInstallScript": "../../packaging/linux/deb/preinst",
+        "postInstallScript": "../../packaging/linux/deb/postinst",
+        "preRemoveScript": "../../packaging/linux/deb/prerm",
+        "postRemoveScript": "../../packaging/linux/deb/postrm"
+      },
+      "rpm": {
+        "release": "1",
+        "desktopTemplate": "../../packaging/linux/painted-wolf-code.desktop.hbs",
+        "preInstallScript": "../../packaging/linux/rpm/pre",
+        "postInstallScript": "../../packaging/linux/rpm/post",
+        "preRemoveScript": "../../packaging/linux/rpm/preun",
+        "postRemoveScript": "../../packaging/linux/rpm/postun"
+      }
+    }
   }
 }

@@ -1,4 +1,4 @@
-//! Manages the bundled command symlinks in `/usr/local/bin`.
+//! Manages the bundled command symlinks in `/usr/local/bin`; a Linux package owns its own.
 
 use std::env;
 use std::fs;
@@ -17,6 +17,8 @@ const INSTALL_BIN_DIR: &str = "/usr/local/bin";
 pub struct ShellCommandStatus {
     /// Symlinks for `pw` and `pw-logs` both point at the current bundle binaries.
     pub installed: bool,
+    /// The system package installed the commands; the app neither adds nor removes them.
+    pub package_managed: bool,
     pub bin_dir: String,
     pub pw_link: String,
     pub pw_logs_link: String,
@@ -92,6 +94,7 @@ fn status_with(bin_dir: &Path, bins: Result<BundleBins, String>) -> ShellCommand
 
     ShellCommandStatus {
         installed,
+        package_managed: false,
         bin_dir: bin_dir.display().to_string(),
         pw_link: pw_link.display().to_string(),
         pw_logs_link: pw_logs_link.display().to_string(),
@@ -265,8 +268,40 @@ fn uninstall_with(bin_dir: &Path, bins: &BundleBins) -> Result<(), String> {
     }
 }
 
+/// The entry points a Linux package installed, when this process runs from one.
+fn package_managed_status() -> Option<ShellCommandStatus> {
+    crate::linux_install::installed()?;
+    let layout =
+        crate::linux_install::package_layout(Path::new(crate::linux_install::INSTALL_ROOT))?;
+    let bin_dir = Path::new(crate::linux_install::ENTRY_POINT_DIR);
+    Some(ShellCommandStatus {
+        installed: bin_dir.join(ENGINE_NAME).is_file() && bin_dir.join(LOGS_NAME).is_file(),
+        package_managed: true,
+        bin_dir: bin_dir.display().to_string(),
+        pw_link: bin_dir.join(ENGINE_NAME).display().to_string(),
+        pw_logs_link: bin_dir.join(LOGS_NAME).display().to_string(),
+        pw_target: Some(layout.engine.display().to_string()),
+        pw_logs_target: Some(layout.log_viewer.display().to_string()),
+        unavailable_reason: None,
+    })
+}
+
+fn refuse_package_managed() -> Result<(), String> {
+    match crate::linux_install::installed() {
+        Some(package) => Err(format!(
+            "the {} package owns {entry}/{ENGINE_NAME} and {entry}/{LOGS_NAME}; use the package manager to change them",
+            package.name,
+            entry = crate::linux_install::ENTRY_POINT_DIR,
+        )),
+        None => Ok(()),
+    }
+}
+
 #[tauri::command]
 pub fn shell_command_status() -> Result<ShellCommandStatus, String> {
+    if let Some(status) = package_managed_status() {
+        return Ok(status);
+    }
     Ok(status_with(
         Path::new(INSTALL_BIN_DIR),
         resolve_bundle_bins(),
@@ -275,6 +310,7 @@ pub fn shell_command_status() -> Result<ShellCommandStatus, String> {
 
 #[tauri::command]
 pub fn install_shell_command() -> Result<ShellCommandStatus, String> {
+    refuse_package_managed()?;
     let bins = resolve_bundle_bins()?;
     install_with(Path::new(INSTALL_BIN_DIR), &bins)?;
     Ok(status_with(Path::new(INSTALL_BIN_DIR), Ok(bins)))
@@ -282,6 +318,7 @@ pub fn install_shell_command() -> Result<ShellCommandStatus, String> {
 
 #[tauri::command]
 pub fn uninstall_shell_command() -> Result<ShellCommandStatus, String> {
+    refuse_package_managed()?;
     let bins = resolve_bundle_bins()?;
     uninstall_with(Path::new(INSTALL_BIN_DIR), &bins)?;
     Ok(status_with(Path::new(INSTALL_BIN_DIR), Ok(bins)))

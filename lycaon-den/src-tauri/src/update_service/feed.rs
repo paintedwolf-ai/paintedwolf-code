@@ -172,6 +172,7 @@ pub async fn fetch_with_deadline(
         generation,
         &running,
         super::now(),
+        super::installer::CHECK_ONLY,
     )
     .map_err(Into::into)
 }
@@ -221,6 +222,7 @@ async fn fetch_bytes(
 }
 
 /// Interprets a verified manifest for this build. `now` is the unix time used for the rollout age.
+/// A check-only build has no artifact in the feed and announces the version alone.
 fn offer(
     manifest: &[u8],
     signed_version: &str,
@@ -228,6 +230,7 @@ fn offer(
     generation: u64,
     running: &semver::Version,
     now: u64,
+    check_only: bool,
 ) -> Result<Option<Offer>, UpdateError> {
     let manifest: Manifest = serde_json::from_slice(manifest)
         .map_err(|e| UpdateError::new(Failure::InvalidRelease, e))?;
@@ -270,36 +273,48 @@ fn offer(
         return Ok(None);
     }
     let platform = target();
-    let entry = manifest.platforms.get(platform).ok_or_else(|| {
-        UpdateError::new(
-            Failure::InvalidRelease,
-            format!("Feed has no artifact for {platform}"),
-        )
-    })?;
-    if !entry
-        .url
-        .strip_prefix(DOWNLOAD_ORIGIN)
-        .is_some_and(|path| path.starts_with('/'))
-    {
-        return Err(UpdateError::new(
-            Failure::InvalidRelease,
-            "Feed artifact is not served by the release origin",
-        ));
-    }
-    if manifest.notes.trim().is_empty() || entry.signature.trim().is_empty() {
+    if manifest.notes.trim().is_empty() {
         return Err(UpdateError::new(
             Failure::InvalidRelease,
             "Feed entry is incomplete",
         ));
     }
+    let (artifact_url, artifact_signature) = match manifest.platforms.get(platform) {
+        None if check_only => (String::new(), String::new()),
+        None => {
+            return Err(UpdateError::new(
+                Failure::InvalidRelease,
+                format!("Feed has no artifact for {platform}"),
+            ))
+        }
+        Some(entry) => {
+            if !entry
+                .url
+                .strip_prefix(DOWNLOAD_ORIGIN)
+                .is_some_and(|path| path.starts_with('/'))
+            {
+                return Err(UpdateError::new(
+                    Failure::InvalidRelease,
+                    "Feed artifact is not served by the release origin",
+                ));
+            }
+            if entry.signature.trim().is_empty() {
+                return Err(UpdateError::new(
+                    Failure::InvalidRelease,
+                    "Feed entry is incomplete",
+                ));
+            }
+            (entry.url.clone(), entry.signature.clone())
+        }
+    };
     let mut candidate = Candidate {
         release_id: String::new(),
         version: manifest.version,
         channel,
         platform: platform.into(),
         signing_generation: generation,
-        artifact_url: entry.url.clone(),
-        artifact_signature: entry.signature.clone(),
+        artifact_url,
+        artifact_signature,
         notes: Some(manifest.notes),
         rollout_eligibility: RolloutEligibility::Eligible,
     };
@@ -385,7 +400,8 @@ mod tests {
             1,
             &running(),
             published + 3_600,
-        )
+                false,
+            )
         .unwrap()
         .unwrap();
         assert_eq!(offer.candidate.version, "1.1.0");
@@ -402,7 +418,8 @@ mod tests {
                 UpdateChannel::Stable,
                 1,
                 &running(),
-                0
+                0,
+                false,
             )
             .unwrap_err()
             .code,
@@ -414,8 +431,9 @@ mod tests {
             UpdateChannel::Stable,
             1,
             &running(),
-            0
-        )
+            0,
+                false,
+            )
         .unwrap()
         .is_none());
         assert!(offer(
@@ -424,8 +442,9 @@ mod tests {
             UpdateChannel::Stable,
             1,
             &running(),
-            0
-        )
+            0,
+                false,
+            )
         .unwrap()
         .is_none());
     }
@@ -437,8 +456,9 @@ mod tests {
             UpdateChannel::Stable,
             1,
             &running(),
-            0
-        )
+            0,
+                false,
+            )
         .unwrap()
         .is_none());
         for (version, channel, generation) in [
@@ -452,8 +472,9 @@ mod tests {
                     channel,
                     generation,
                     &running(),
-                    0
-                )
+                    0,
+                false,
+            )
                 .unwrap_err()
                 .code,
                 Failure::InvalidRelease
@@ -465,8 +486,9 @@ mod tests {
             UpdateChannel::Preview,
             1,
             &running(),
-            0
-        )
+            0,
+                false,
+            )
         .unwrap()
         .is_some());
         let foreign = String::from_utf8(manifest("1.1.0", ""))
@@ -479,12 +501,41 @@ mod tests {
                 UpdateChannel::Stable,
                 1,
                 &running(),
-                0
+                0,
+                false,
             )
             .unwrap_err()
             .code,
             Failure::InvalidRelease
         );
+    }
+    #[test]
+    fn check_only_builds_read_the_version_without_an_artifact() {
+        let foreign = String::from_utf8(manifest("1.1.0", ""))
+            .unwrap()
+            .replace(target(), "other-platform");
+        let stable = UpdateChannel::Stable;
+        assert_eq!(
+            offer(foreign.as_bytes(), "1.1.0", stable, 1, &running(), 0, false)
+                .unwrap_err()
+                .code,
+            Failure::InvalidRelease
+        );
+        let offered = offer(foreign.as_bytes(), "1.1.0", stable, 1, &running(), 0, true)
+            .unwrap()
+            .unwrap();
+        assert_eq!(offered.candidate.version, "1.1.0");
+        assert!(offered.candidate.artifact_url.is_empty());
+        assert!(offered.candidate.artifact_signature.is_empty());
+        assert!(offered.candidate.valid_identity());
+        // A present artifact entry is still validated for check-only builds.
+        let bad_origin = String::from_utf8(manifest("1.1.0", ""))
+            .unwrap()
+            .replace(DOWNLOAD_ORIGIN, "https://example.test");
+        assert!(offer(bad_origin.as_bytes(), "1.1.0", stable, 1, &running(), 0, true).is_err());
+        assert!(offer(&manifest("1.0.0", ""), "1.0.0", stable, 1, &running(), 0, true)
+            .unwrap()
+            .is_none());
     }
     #[test]
     fn rfc3339_dates_convert_to_unix_seconds() {

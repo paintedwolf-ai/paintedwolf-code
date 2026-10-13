@@ -60,12 +60,14 @@ fn default_channel(version: &str) -> Result<UpdateChannel, UpdateError> {
 }
 impl UpdateService {
     pub fn new(version: String, launch: transaction::Launch) -> Self {
-        let (source, receipt_channel, error) = persistence::detect_install_source();
-        let channel = receipt_channel
+        let facts = persistence::detect_install_source();
+        let channel = facts
+            .channel
             .unwrap_or_else(|| default_channel(&version).expect("compiled product version"));
-        let mut state = NativeUpdateState::new(version, channel, source);
+        let mut state = NativeUpdateState::new(version, channel, facts.source);
+        state.package = facts.package;
         state.development = cfg!(debug_assertions) && installer::bundle().is_err();
-        state.last_error = error;
+        state.last_error = facts.error;
         // A process outside an installed bundle has nothing to coordinate.
         state.coordinated = launch.lease.is_some() || installer::bundle().is_err();
         let mut preferences = persistence::Preferences {

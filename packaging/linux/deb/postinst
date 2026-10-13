@@ -1,0 +1,21 @@
+#!/bin/sh
+set -e
+# Register the package-authored units and refresh desktop caches; nothing else.
+SOCKET_UNIT=painted-wolf-code-identity.socket
+if [ -f "/usr/lib/systemd/system/${SOCKET_UNIT}" ] && [ -d /run/systemd/system ]; then
+  systemctl daemon-reload || true
+  if [ -f /usr/lib/sysusers.d/painted-wolf-code.conf ] && command -v systemd-sysusers >/dev/null 2>&1; then
+    systemd-sysusers painted-wolf-code.conf || true
+  fi
+  systemctl enable --now "${SOCKET_UNIT}" || true
+fi
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database -q /usr/share/applications || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1 && [ -f /usr/share/icons/hicolor/index.theme ]; then
+  gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
+fi
+if [ "$1" = "configure" ] && command -v apparmor_parser >/dev/null 2>&1 && [ -f /etc/apparmor.d/painted-wolf-code ] && [ -d /sys/kernel/security/apparmor ]; then
+  apparmor_parser -r -T -W /etc/apparmor.d/painted-wolf-code || true
+fi
+exit 0

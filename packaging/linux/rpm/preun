@@ -1,0 +1,7 @@
+# $1 is 0 on removal and 1 on upgrade; only removal stops the identity socket.
+SOCKET_UNIT=painted-wolf-code-identity.socket
+if [ "$1" -eq 0 ] && [ -d /run/systemd/system ] && [ -f "/usr/lib/systemd/system/${SOCKET_UNIT}" ]; then
+  systemctl disable --now "${SOCKET_UNIT}" || :
+  systemctl stop painted-wolf-code-identity.service || :
+fi
+exit 0
