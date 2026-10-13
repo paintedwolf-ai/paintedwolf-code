@@ -3,6 +3,9 @@
 #[cfg(target_os = "macos")]
 pub(crate) mod native;
 
+#[cfg(target_os = "linux")]
+mod linux;
+
 use tauri::Manager;
 
 /// Runs notification work off the main thread.
