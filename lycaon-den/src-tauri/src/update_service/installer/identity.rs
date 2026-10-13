@@ -7,7 +7,9 @@ use std::{
     path::{Path, PathBuf},
 };
 pub(crate) fn executable(bundle: &Path) -> PathBuf {
-    bundle.join("Contents/MacOS/painted-wolf-code")
+    super::layout::Layout::native()
+        .map(|layout| layout.executable(bundle))
+        .unwrap_or_else(|_| bundle.to_path_buf())
 }
 pub(crate) fn hash(path: &Path) -> Result<String, UpdateError> {
     let mut file =
