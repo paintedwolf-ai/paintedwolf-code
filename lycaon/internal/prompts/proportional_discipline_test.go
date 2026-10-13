@@ -189,7 +189,6 @@ func TestProportionalTrustBundleSingleHome(t *testing.T) {
 		"reading the resulting material",
 		"separately from checklist completion",
 		"Behavior changes",
-		"separate Snapshot row described under visual evidence",
 	} {
 		if !strings.Contains(progress, want) {
 			t.Fatalf("progress partial missing %q:\n%s", want, progress)
@@ -200,8 +199,8 @@ func TestProportionalTrustBundleSingleHome(t *testing.T) {
 		"max_progress_label_chars":  80,
 	})
 	testutil.FailErr(t, "render lean progress partial", err)
-	if strings.Contains(progressLean, "UI- or terminal-visible") {
-		t.Fatal("progress without visual/terminal tools must omit UI trust tier")
+	if progressLean != progress {
+		t.Fatal("verification tiers must not duplicate capability-specific visual guidance")
 	}
 	if strings.Contains(progressLean, "Snapshot the running UI") || strings.Contains(progressLean, "Snapshot the terminal") {
 		t.Fatal("progress without visual/terminal tools must omit the snapshot-row exception")
