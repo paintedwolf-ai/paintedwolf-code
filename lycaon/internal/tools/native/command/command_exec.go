@@ -252,7 +252,7 @@ func runCommandForeground(
 	if err != nil {
 		index.Release()
 		bound.close(ctx)
-		return RunOutcome{}, commandStartError(err)
+		return RunOutcome{}, nameCatalogAlternates(commandStartError(err), tctx.Host.ExecutableAlternates)
 	}
 	if directIPApplied {
 		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)

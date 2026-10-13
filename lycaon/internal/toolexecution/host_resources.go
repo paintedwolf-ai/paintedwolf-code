@@ -28,6 +28,13 @@ func (e *Network) SetHostResourceConnectionSource(source HostResourceConnectionS
 	}
 }
 
+// SetExecutableAlternatesSource wires the catalog's equivalent executable names into command feedback.
+func (e *Network) SetExecutableAlternatesSource(source func(name string) []string) {
+	if e != nil {
+		e.execAlternates = source
+	}
+}
+
 func (e *Network) expandHostResourceConnections(
 	ctx context.Context,
 	tool string,
