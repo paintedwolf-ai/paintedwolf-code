@@ -29,7 +29,7 @@ func TestToolchainParsing(t *testing.T) {
 		{"node", "v22.1.0\n", "node 22.1.0"},
 		{"go", "go version go1.26.6 darwin/arm64\n", "go 1.26.6"},
 		{"rustc", "rustc 1.84.0 (9fc6b4312 2025-01-07)\n", "rustc 1.84.0"},
-		{"python3", "Python 3.14.0\n", "python 3.14.0"},
+		{"python3", "Python 3.14.0\n", "python3 3.14.0"},
 		{"java", "openjdk version \"21.0.2\" 2024-01-16\n", "java 21.0.2"},
 	} {
 		if got := byBinary(tc.binary).parse(tc.input); got != tc.want {
