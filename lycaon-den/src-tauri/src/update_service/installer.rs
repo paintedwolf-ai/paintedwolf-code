@@ -1,4 +1,4 @@
-//! Platform installation effects; candidate platforms never enter activation.
+//! Platform preparation, installation identity, and activation effects.
 use super::{staging, verification, Candidate, Failure, UpdateError};
 use std::{
     fs,
@@ -7,72 +7,46 @@ use std::{
 #[cfg(unix)]
 pub(super) mod archive;
 mod identity;
+pub(super) mod layout;
 pub(super) use identity::{bundle_hash, executable, hash};
+use layout::Layout;
 pub struct PreparedIdentity {
     pub executable_hash: String,
     pub bundle_hash: String,
 }
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod coordination;
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub use coordination::{
     acquire_gate, acquire_lease, acquire_preparation, downgrade, exchange_coordinated,
     try_activation, InstallationLease,
 };
 
-pub const PRODUCT_VERSION_RESOURCE: &str = "Contents/Resources/release-version";
-const PRODUCT_VERSION_LIMIT: u64 = 128;
-
-pub fn bundle() -> Result<PathBuf, UpdateError> {
-    let exe = std::env::current_exe()
-        .map_err(|e| UpdateError::new(Failure::UnsupportedInstallation, e))?;
-    let root = exe
-        .parent()
-        .and_then(Path::parent)
-        .and_then(Path::parent)
-        .ok_or(Failure::UnsupportedInstallation)?;
-    if root.extension().and_then(|s| s.to_str()) != Some("app") {
-        return Err(Failure::UnsupportedInstallation.into());
-    }
-    fs::canonicalize(root).map_err(|e| UpdateError::new(Failure::UnsupportedInstallation, e))
-}
-pub fn supported() -> bool {
-    #[cfg(target_os = "macos")]
-    {
-        bundle().is_ok_and(|target| macos::writable_installation(&target))
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        false
-    }
-}
-pub fn product_version(bundle: &Path, failure: Failure) -> Result<String, UpdateError> {
-    use std::io::Read;
-    let file = fs::File::open(bundle.join(PRODUCT_VERSION_RESOURCE))
-        .map_err(|e| UpdateError::new(failure, e))?;
-    let mut version = String::new();
-    file.take(PRODUCT_VERSION_LIMIT + 1)
-        .read_to_string(&mut version)
-        .map_err(|e| UpdateError::new(failure, e))?;
-    if version.len() as u64 > PRODUCT_VERSION_LIMIT {
-        return Err(UpdateError::new(
-            failure,
-            "The bundle's product version resource is too large",
-        ));
-    }
-    Ok(version.trim().to_string())
-}
+#[cfg(target_os = "linux")]
+use linux as platform;
+#[cfg(target_os = "macos")]
+use macos as platform;
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+mod unsupported;
+#[cfg(target_os = "macos")]
+pub use macos::PRODUCT_VERSION_RESOURCE;
+pub use platform::{bundle, product_version, supported, verify_bundle};
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+use unsupported as platform;
 pub fn prepared_path(target: &Path, candidate: &Candidate) -> Result<PathBuf, UpdateError> {
     if !candidate.valid_identity() {
         return Err(Failure::InvalidRelease.into());
     }
+    let extension = Layout::for_platform(&candidate.platform)?.extension();
     Ok(target
         .parent()
         .ok_or(Failure::UnsupportedInstallation)?
         .join(format!(
-            "{}{}.app",
+            "{}{}.{extension}",
             prepared_prefix(target),
             candidate.release_id
         )))
@@ -96,6 +70,9 @@ pub fn current_uid() -> u32 {
     }
 }
 pub fn legacy_prepared_path(target: &Path, candidate: &Candidate) -> Result<PathBuf, UpdateError> {
+    if Layout::for_platform(&candidate.platform)? != Layout::AppBundle {
+        return Err(Failure::InvalidRelease.into());
+    }
     Ok(target
         .parent()
         .ok_or(Failure::InvalidRelease)?
@@ -110,37 +87,46 @@ pub fn valid_prepared_path(target: &Path, candidate: &Candidate, path: &Path) ->
         && (prepared_path(target, candidate).is_ok_and(|p| p == path)
             || legacy_prepared_path(target, candidate).is_ok_and(|p| p == path))
 }
-pub fn current_user_directory(path: &Path) -> bool {
+pub fn current_user_installation(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok_and(|metadata| {
         #[cfg(unix)]
         {
             use std::os::unix::fs::MetadataExt;
-            metadata.is_dir() && metadata.uid() == current_uid()
+            Layout::native().is_ok_and(|layout| layout.accepts(&metadata))
+                && metadata.uid() == current_uid()
         }
         #[cfg(not(unix))]
         {
-            metadata.is_dir()
+            Layout::native().is_ok_and(|layout| layout.accepts(&metadata))
         }
     })
+}
+pub fn remove_installation(path: &Path) -> Result<(), UpdateError> {
+    let result = Layout::native()?.remove(path);
+    match result {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(UpdateError::new(Failure::StateUnavailable, e)),
+    }
 }
 pub fn cleanup_prepared(target: &Path, keep: &[String]) -> Result<(), UpdateError> {
     let parent = target.parent().ok_or(Failure::UnsupportedInstallation)?;
     let prefix = prepared_prefix(target);
+    let suffix = format!(".{}", Layout::native()?.extension());
     for entry in fs::read_dir(parent).map_err(|e| UpdateError::new(Failure::StateUnavailable, e))? {
         let entry = entry.map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
         let name = entry.file_name().to_string_lossy().into_owned();
         let Some(id) = name
             .strip_prefix(&prefix)
-            .and_then(|name| name.strip_suffix(".app"))
+            .and_then(|name| name.strip_suffix(&suffix))
         else {
             continue;
         };
         if super::persistence::hex_digest(id)
             && !keep.iter().any(|kept| kept == id)
-            && current_user_directory(&entry.path())
+            && current_user_installation(&entry.path())
         {
-            fs::remove_dir_all(entry.path())
-                .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
+            remove_installation(&entry.path())?;
         }
     }
     Ok(())
@@ -199,15 +185,7 @@ pub fn prepare_at(target: &Path, candidate: &Candidate) -> Result<PreparedIdenti
     )
     .map_err(|e| UpdateError::new(Failure::VerificationFailed, e));
     retain_verified_artifact(&artifact, verified)?;
-    #[cfg(target_os = "macos")]
-    {
-        macos::prepare(target, candidate, &mut archive)
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = target;
-        Err(Failure::UnsupportedInstallation.into())
-    }
+    platform::prepare(target, candidate, &mut archive)
 }
 // Failed verification evicts the cached archive.
 fn retain_verified_artifact(
@@ -227,89 +205,6 @@ fn retain_verified_artifact(
     Ok(())
 }
 
-pub fn verify_bundle(path: &Path) -> Result<(), UpdateError> {
-    #[cfg(target_os = "macos")]
-    {
-        let output = std::process::Command::new("/usr/bin/codesign")
-            .args([
-                "--verify",
-                "--deep",
-                "--strict",
-                "-R",
-                &signing_requirement()?,
-            ])
-            .arg(path)
-            .output()
-            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
-        if !output.status.success() {
-            return Err(UpdateError::new(
-                Failure::VerificationFailed,
-                codesign_summary(&output.stderr),
-            ));
-        }
-        Ok(())
-    }
-    #[cfg(not(target_os = "macos"))]
-    {
-        let _ = path;
-        Err(Failure::UnsupportedInstallation.into())
-    }
-}
-/// The verdict line of a codesign failure, without the paths it was asked about.
-#[cfg(target_os = "macos")]
-fn codesign_summary(stderr: &[u8]) -> String {
-    let text = String::from_utf8_lossy(stderr);
-    text.lines()
-        .filter_map(|line| line.rsplit_once(": ").map(|(_, verdict)| verdict.trim()))
-        .find(|verdict| !verdict.is_empty())
-        .unwrap_or("code signature verification failed")
-        .to_string()
-}
-
-#[cfg(target_os = "macos")]
-fn signing_requirement() -> Result<String, UpdateError> {
-    static REQUIREMENT: std::sync::LazyLock<Result<String, UpdateError>> =
-        std::sync::LazyLock::new(|| {
-            let executable = std::env::current_exe()
-                .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
-            let output = std::process::Command::new("/usr/bin/codesign")
-                .args(["--display", "--verbose=4"])
-                .arg(executable)
-                .output()
-                .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
-            if !output.status.success() {
-                return Err(Failure::VerificationFailed.into());
-            }
-            let metadata = String::from_utf8_lossy(&output.stderr);
-            let team = metadata
-                .lines()
-                .find_map(|line| line.strip_prefix("TeamIdentifier="));
-            publisher_requirement(team, cfg!(debug_assertions))
-        });
-    REQUIREMENT.clone()
-}
-/// Production bundles must carry a Developer ID Application signature from the running team.
-#[cfg(target_os = "macos")]
-fn publisher_requirement(team: Option<&str>, development: bool) -> Result<String, UpdateError> {
-    let identifier = "identifier \"dev.paintedwolf.code\"";
-    match team {
-        Some(team)
-            if team.len() == 10
-                && team
-                    .bytes()
-                    .all(|b| b.is_ascii_uppercase() || b.is_ascii_digit()) =>
-        {
-            Ok(format!(
-                "{identifier} and anchor apple generic \
-                 and certificate 1[field.1.2.840.113635.100.6.2.6] \
-                 and certificate leaf[field.1.2.840.113635.100.6.1.13] \
-                 and certificate leaf[subject.OU] = \"{team}\""
-            ))
-        }
-        Some("not set") | None if development => Ok(identifier.into()),
-        _ => Err(Failure::VerificationFailed.into()),
-    }
-}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -324,44 +219,5 @@ mod tests {
             retain_verified_artifact(&path, Err(Failure::VerificationFailed.into())).unwrap_err();
         assert_eq!(error.code, Failure::VerificationFailed);
         assert!(!path.exists());
-    }
-    #[test]
-    fn product_version_reads_are_bounded() {
-        let root = crate::test_support::TempDir::new("update-product-version");
-        let resource = root.join(PRODUCT_VERSION_RESOURCE);
-        fs::create_dir_all(resource.parent().unwrap()).unwrap();
-        fs::write(&resource, "1.2.3\n").unwrap();
-        assert_eq!(
-            product_version(&root, Failure::StateUnavailable).unwrap(),
-            "1.2.3"
-        );
-        fs::write(&resource, "9".repeat(PRODUCT_VERSION_LIMIT as usize + 1)).unwrap();
-        assert_eq!(
-            product_version(&root, Failure::VerificationFailed)
-                .unwrap_err()
-                .code,
-            Failure::VerificationFailed
-        );
-    }
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn production_requires_a_developer_id_publisher_and_cannot_inject_a_requirement() {
-        let requirement = publisher_requirement(Some("TEAM123456"), false).unwrap();
-        assert!(requirement.contains("certificate leaf[subject.OU] = \"TEAM123456\""));
-        assert!(requirement.contains("certificate 1[field.1.2.840.113635.100.6.2.6]"));
-        assert!(publisher_requirement(Some("not set"), false).is_err());
-        assert!(publisher_requirement(None, false).is_err());
-        assert!(publisher_requirement(Some("TEAM\" or true"), false).is_err());
-        assert!(publisher_requirement(Some("not set"), true).is_ok());
-    }
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn codesign_failures_are_summarized_without_paths() {
-        let stderr = b"/Applications/Painted Wolf Code.app: invalid signature (code or signature have been modified)\nIn architecture: arm64\n";
-        assert_eq!(
-            codesign_summary(stderr),
-            "invalid signature (code or signature have been modified)"
-        );
-        assert_eq!(codesign_summary(b""), "code signature verification failed");
     }
 }

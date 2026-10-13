@@ -69,7 +69,8 @@ fn valid(t: &Transaction) -> bool {
         && uuid::Uuid::parse_str(&t.id).is_ok()
         && t.candidate.valid_identity()
         && t.target.is_absolute()
-        && t.target.extension().and_then(|s| s.to_str()) == Some("app")
+        && super::installer::layout::Layout::for_platform(&t.candidate.platform)
+            .is_ok_and(|layout| layout.matches_path(&t.target))
         && super::installer::valid_prepared_path(&t.target, &t.candidate, &t.prepared_bundle)
         && [&t.previous_hash, &t.next_hash, &t.next_bundle_hash]
             .iter()
@@ -244,6 +245,27 @@ mod tests {
         assert!(!transition_allowed(&current, &next));
         next.previous_hash = current.next_hash.clone();
         assert!(transition_allowed(&current, &next));
+    }
+    #[cfg(unix)]
+    #[test]
+    fn transaction_paths_match_the_offered_platform() {
+        let root = crate::test_support::TempDir::new("update-platform-paths");
+        let mut transaction = super::super::tests::fixture(&root);
+        assert!(valid(&transaction));
+        transaction
+            .target
+            .set_extension(if cfg!(target_os = "linux") {
+                "app"
+            } else {
+                "AppImage"
+            });
+        transaction.prepared_bundle =
+            super::super::installer::prepared_path(&transaction.target, &transaction.candidate)
+                .unwrap();
+        assert!(!valid(&transaction));
+        transaction.candidate.platform = "windows-x86_64".into();
+        transaction.candidate.release_id = transaction.candidate.identity();
+        assert!(!valid(&transaction));
     }
     #[test]
     fn unknown_legacy_fields_preserve_the_active_record() {

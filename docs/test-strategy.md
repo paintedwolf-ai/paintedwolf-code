@@ -175,6 +175,10 @@ sources a change edited.
 
 #### Maintainability cleanup issues
 
+Cleanup is tracked by source areas rather than one issue for each
+metric and artifact. Module workstream issues keep the individual findings and source
+evidence together so one architectural review can address related measurements.
+
 [`maintainability-issues.yml`](../.github/workflows/maintainability-issues.yml)
 reconciles cleanup issues after a completed Qualification push on main. It checks
 that the commit is the current main tip and is associated with a PR merged into
@@ -199,20 +203,39 @@ touch semantics. First intake starts at the parent of the commit that introduced
 the tracking workflow, so rapid merges during rollout are covered. Missing commit history stops reconciliation; it never silently treats missing evidence
 as completed cleanup.
 
-Identity is the SHA-256 of the canonical JSON array
-`["maintainability", category, artifact_id]`. A machine-owned issue-body block
-stores that identity and the latest observation. The reconciler enumerates open
-and closed issues without GitHub search, preserves titles and human prose outside
-the block, and updates evidence without adding a comment on every run. Untouched issues
-whose measurements and thresholds are unchanged retain their previous evidence. Completed
-issues reopen when actionable debt returns. A **not planned** dismissal lasts only
-while its measurement, thresholds, and source membership remain unchanged and no
-merged change touches the artifact again. Renames create new identities.
-Bot-authored issues carrying the tracking marker are exempt from ordinary issue
-intake, stale closure, and locking; their lifecycle follows the measured debt.
-Only automation-authored issues can be adopted or mutated; exact older automatic
-titles are adopted when their artifact is still above the threshold. Duplicate
-automatic issues point to the oldest canonical issue and close as not planned.
+Artifact identity remains the SHA-256 of `["maintainability", category, artifact_id]`.
+Issue identity is the source area path through `internal/`, `src/`, or `test/`,
+or a top-level directory for other source. Module sections inside the issue use
+the first package under `internal/` or area under `src/`.
+Nested packages and metrics share that issue. Grouping derives from paths in the
+validated report; it needs no application subsystem list and automatically picks
+up new modules. These are cleanup planning areas, not runtime authority boundaries.
+Architectural review workstreams remain evidence on their individual findings.
+
+A version 2 machine-owned issue-body block retains every admitted artifact's
+identity, measurement in the rendered tables, and thresholds. One area fingerprint
+covers all measurements, full source membership, exceptions, structural shapes,
+and review records. The compressed, bounded tracking inventory stores admitted identities; it does
+not duplicate per-artifact hashes or full measurements.
+The linked qualification report
+retains the complete evidence. Module summaries distinguish hard-limit breaches
+and renewed reviews; expandable sections list individual measurements and source links.
+The reconciler preserves human prose outside the block and updates evidence
+without comments on each run. Unchanged findings produce no writes. An issue
+closes when every admitted finding disappears, drops below threshold, or has a
+valid retained review. Invalidated retention renews intake even without a source
+touch. Completed area issues reopen when actionable debt returns. Unchanged
+not-planned artifact dismissals remain suppressed until touched or changed. An area
+dismissal retains its admitted identities and comparison fingerprint. A touch or
+any changed evidence renews the area review.
+
+Migration adopts the oldest automatic artifact issue in each area, then closes
+other artifact issues as **not planned** with a link to the area issue. The
+original evidence and discussion remain accessible; consolidation does not claim
+the debt was fixed. An existing area issue takes precedence during replay.
+Superseded artifact issues cannot reopen or generate duplicates. Only bot-authored
+tracked issues can be adopted or mutated; both marker versions bypass ordinary
+issue intake, stale closure, and locking. Human copies are never mutated.
 
 The workflow serializes reconciliation across runs. It reads one bounded current-
 attempt limits receipt, validates the entire snapshot and plan before writing,
@@ -226,9 +249,12 @@ a completed Qualification push for the current main tip. `dry_run` defaults to
 true. `backfill` defaults to false; setting it true includes untouched baseline
 debt and establishes a fresh checkpoint after a successful apply. Review the
 retained `maintainability-issues.json` plan and category counts before applying a
-backfill. Each apply creates at most 25 new issues, spaces mutations one second
+backfill. Each apply creates at most 25 new area issues, spaces mutations one second
 apart, and records applied/deferred counts. Deferred intake does not advance the
-checkpoint; later runs or another explicit backfill dispatch continue it. The workflow never runs downloaded code or changes admission limits.
+checkpoint; later runs or another explicit backfill dispatch continue it. As details grow, module summaries rank effective-cap breaches and renewed reviews
+first. Summary and detail sections have separate byte bounds; overflow links to the
+complete report without creating more issues. The 60,000-byte issue bound still fails closed before
+any write if even the summary and bounded inventory cannot fit. The workflow never runs downloaded code or changes admission limits.
 
 #### Architectural review decisions
 

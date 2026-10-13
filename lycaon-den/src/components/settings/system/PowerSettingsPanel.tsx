@@ -1,3 +1,4 @@
+import { createResidentActivity } from "../../../ui/resident-activity.ts";
 import { createSurfaceQuery } from "../../../ui/surface-query.ts";
 import { Show, createSignal } from "solid-js";
 import type { LycaonClient } from "../../../api/client.ts";
@@ -19,11 +20,17 @@ export function PowerSettingsPanel(props: Props) {
   const [actionError, setError] = createSignal<string | null>(null);
   const error = () => actionError() ?? query.error();
   const supported = () => status()?.supported ?? false;
+  createResidentActivity(() => {
+    const timer = setInterval(() => {
+      if (!saving() && !query.loading()) void query.refresh();
+    }, 5_000);
+    return () => clearInterval(timer);
+  });
 
   const save = (enabled: boolean) => {
     const client = props.client;
     const previous = status();
-    if (!client || !previous) return;
+    if (!client || !previous || query.loading() || saving()) return;
     const target = query.capture();
     target.publish({ ...previous, keep_awake_while_working: enabled });
     setSaving(true);
@@ -45,15 +52,15 @@ export function PowerSettingsPanel(props: Props) {
             <span class="den-settings-pref-label">{settingLabel("keep-awake")}</span>
             <p class="den-settings-hint">
               Prevents idle sleep while a session, worker, or security scan is active.
-              The display can still turn off, and closing the lid can still put the Mac
-              to sleep.
+              Screen locking and display sleep remain available. The operating system may require
+              confirmation before sleeping while work is active.
             </p>
             <Show when={status() != null && !supported()}>
-              <p class="den-settings-hint">This setting is available on macOS.</p>
+              <p class="den-settings-hint">Sleep inhibition is unavailable in this desktop session.</p>
             </Show>
             <Show when={status()?.inhibiting}>
               <p class="den-settings-hint" data-testid="power-active-status">
-                Keeping this Mac awake for active work.
+                Keeping this computer awake for active work.
               </p>
             </Show>
             <Show when={status()?.last_error}>
@@ -65,7 +72,7 @@ export function PowerSettingsPanel(props: Props) {
           </div>
           <DenCheckbox
             checked={status()?.keep_awake_while_working ?? true}
-            disabled={!props.client || !supported() || saving()}
+            disabled={!props.client || !supported() || saving() || query.loading()}
             data-testid="power-keep-awake"
             onChange={(event) => save(event.currentTarget.checked)}
           >

@@ -397,6 +397,39 @@ Each area has one home. The sidecar's import rules are in [Package layering](pac
 | Den native shell | `lycaon-den/src-tauri/` |
 | Verification runner | `scripts/` and `Taskfile.yml`; runner tests in `scripts/verification_tests/` |
 
+### Native updater boundaries
+
+Den's updater has one lifecycle across supported installations. Platform adapters
+supply filesystem and process effects; they do not select releases, authorize
+activation, or own recovery state.
+
+| Responsibility | Owner and contract |
+|----------------|--------------------|
+| Release identity and artifact names | `packaging/release-platforms.json` and `scripts/release-collect-public-artifacts.py`; collected artifacts must match the target catalog and include detached signatures |
+| Feed admission and download | `lycaon-den/src-tauri/src/update_service/{feed,verification,download}.rs`; candidate identity, version policy, signatures, and download limits apply before preparation |
+| Preparation and installation shape | `update_service/installer.rs` and `installer/layout.rs`; platform keys map explicitly to application bundles or AppImages; unknown targets are unavailable |
+| Native installation effects | `installer/macos.rs` owns bundle resources, publisher validation, and bundle exchange; `installer/linux.rs` owns AppImage discovery, ELF validation, bounded metadata extraction, and file exchange; `installer/unsupported.rs` reports unavailable activation |
+| Installed content identity and coordination | `installer/identity.rs` and `installer/coordination.rs`; content hashes bind receipts to prepared bytes, and inode leases prevent replacing a running installation |
+| Activation and recovery | `update_service/transaction/`; one journal records preparation, helper launch, exchange, engine health confirmation, and cleanup; native effects preserve this lifecycle |
+
+macOS activation requires a writable application bundle and the configured
+publisher. Linux activation requires a writable, user-owned AppImage and its
+parent directory; packaged system installations do not become writable through
+the updater. Windows native activation is unavailable until an installation
+adapter implements the same lifecycle. Artifact support alone does not enable
+activation.
+
+Adapter tests live beside their implementation. Shared transaction tests exercise
+prepared-byte tampering, journal validation, lease contention, and recovery on
+each compiled platform. Native artifact names and collection are covered by
+`lycaon/test/contract/runner/release_channel_invariants_test.go`. These contracts do
+not establish installed-release qualification: signed candidate artifacts are
+tracked in [#42](https://github.com/paintedwolf-ai/paintedwolf-code/issues/42), Linux
+update scenarios in [#450](https://github.com/paintedwolf-ai/paintedwolf-code/issues/450),
+and native desktop and installed-artifact qualification in
+[#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456) and
+[#457](https://github.com/paintedwolf-ai/paintedwolf-code/issues/457).
+
 ### Organizing code
 
 A maintainer should find a feature, see where its state lives, what it depends

@@ -1,0 +1,229 @@
+"""Bounded cleanup workstreams and evidence-preserving migration from artifact issues."""
+import base64
+import hashlib
+import html
+import json
+import re
+import zlib
+from urllib.parse import quote
+
+from .budget_issues import END, START as LEGACY_START, expected, legacy, tracked
+from .budget_review import retained, unchanged
+from .budget_snapshot import key, relative
+
+START = '<!-- paintedwolf-maintainability:v2 -->'
+SUPERSEDED = '<!-- paintedwolf-maintainability-superseded:'
+
+
+def module(row):
+    """Use the source module boundary, independent of metrics and nested packages."""
+    parts = row['id'].split('/')
+    for index, marker in enumerate(parts):
+        if marker in {'internal', 'src', 'test'}:
+            # Test contracts form one review area; production modules own their tests.
+            end = index + 1 if marker == 'test' else index + 2
+            if end <= len(parts) and '.' not in parts[end - 1]:
+                return '/'.join(parts[:end])
+            return '/'.join(parts[:index + 1])
+    return parts[0] if len(parts) > 1 else 'repository'
+
+
+def workstream(row):
+    parts = row['id'].split('/')
+    for index, marker in enumerate(parts):
+        if marker in {'internal', 'src', 'test'}:
+            return '/'.join(parts[:index + 1])
+    return parts[0] if len(parts) > 1 else 'repository'
+
+
+def group_state(issue):
+    if issue.get('user', {}).get('login') != 'github-actions[bot]' or 'pull_request' in issue:
+        return None
+    body = issue.get('body') or ''
+    if START not in body:
+        return None
+    if body.count(START) != 1 or body.count(END) != 1 or body.index(START) >= body.index(END):
+        raise ValueError('invalid workstream tracking block')
+    match = re.match(r'\n<!-- state:(\{[^\n]*\}) -->\n', body[body.index(START) + len(START):])
+    state = json.loads(match[1]) if match else {}
+    if (not isinstance(state, dict) or not relative(state.get('workstream'))
+            or not isinstance(state.get('inventory'), str)
+            or not isinstance(state.get('evidence_digest'), str)
+            or not re.fullmatch('[0-9a-f]{64}', state['evidence_digest'])):
+        raise ValueError('invalid workstream tracking state')
+    try:
+        decoder = zlib.decompressobj()
+        raw = decoder.decompress(base64.b64decode(state['inventory'], validate=True), 8 * 1024 * 1024)
+        if not decoder.eof or decoder.unused_data or decoder.unconsumed_tail:
+            raise ValueError('workstream inventory exceeds the bound or has trailing data')
+        state['artifacts'] = json.loads(raw)
+    except (ValueError, zlib.error) as error:
+        raise ValueError('invalid workstream inventory') from error
+    if not isinstance(state['artifacts'], list):
+        raise ValueError('invalid workstream artifacts')
+    seen = set()
+    for row in state['artifacts']:
+        if not isinstance(row, dict) or set(row) != {'category', 'id'}:
+            raise ValueError('invalid workstream artifact')
+        # Reuse the validated v1 artifact identity grammar inside the new envelope.
+        encoded = json.dumps(dict(row, key=key(row['category'], row['id'])), separators=(',', ':')).replace('<', '\\u003c')
+        parsed = tracked({**issue, 'body': LEGACY_START + '\n<!-- state:' + encoded + ' -->\n' + END})
+        if (set(row) != {'category', 'id'}
+                or parsed['key'] in seen or workstream(row) != state['workstream']):
+            raise ValueError('duplicate or misplaced workstream artifact')
+        seen.add(parsed['key'])
+    return state
+
+
+def evidence(row):
+    full = {k: v for k, v in row.items() if k not in {'spans', 'touched'}}
+    return {'category': row['category'], 'id': row['id'],
+            'evidence_digest': hashlib.sha256(json.dumps(full, sort_keys=True, separators=(',', ':')).encode()).hexdigest()}
+
+
+
+def area_digest(rows):
+    payload = [evidence(row) for row in sorted(rows, key=lambda r: (r['id'], r['category']))]
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+def block(identity, rows, observation):
+    identities = [{k: row[k] for k in ('category', 'id')} for row in sorted(rows, key=lambda r: (r['id'], r['category']))]
+    inventory = json.dumps(identities, sort_keys=True, separators=(',', ':')).encode()
+    state = {'workstream': identity, 'inventory': base64.b64encode(zlib.compress(inventory)).decode(),
+             'evidence_digest': area_digest(rows), **observation}
+    encoded = json.dumps(state, sort_keys=True, separators=(',', ':')).replace('<', '\\u003c').replace('>', '\\u003e')
+    modules = {}
+    for row in rows:
+        modules.setdefault(module(row), []).append(row)
+    lines = [START, '<!-- state:' + encoded + ' -->',
+             f"**{html.escape(identity)}**: {len(rows)} findings across {len(modules)} modules.", '',
+             'Review one module at a time. Related metrics are evidence for one design decision, '
+             'not separate refactor tasks. Preserve operation contracts; choose refactoring, consolidation, or bounded retention.', '',
+             '| Module | Findings | Hard-limit breaches | Renewed reviews |',
+             '| --- | ---: | ---: | ---: |']
+    ranked = sorted(modules.items(), key=lambda item: (
+        -sum(r['measured'] > r['effective_cap'] for r in item[1]),
+        -sum(r.get('review', {}).get('state') in {'boundary_changed', 'shape_changed', 'ceiling_exceeded'} for r in item[1]),
+        -len(item[1]), item[0]))
+    visible = []
+    for name, findings in ranked:
+        hard = sum(r['measured'] > r['limit'] for r in findings)
+        renewed = sum(r.get('review', {}).get('state') in {'boundary_changed', 'shape_changed', 'ceiling_exceeded'} for r in findings)
+        summary = f"| `{html.escape(name)}` | {len(findings)} | {hard} | {renewed} |"
+        if len('\n'.join(lines).encode()) + len(summary.encode()) > 40000:
+            lines += ['', f'{len(modules) - len(visible)} additional modules are listed in the complete qualification report.']
+            break
+        lines.append(summary)
+        visible.append((name, findings))
+    for name, findings in visible:
+        detail_start = len(lines)
+        lines += ['', '<details>', f'<summary>{html.escape(name)} — {len(findings)} findings</summary>', '',
+                  '| Artifact | Metric | Measured | Warn | Hard limit | Effective cap | Review |',
+                  '| --- | --- | ---: | ---: | ---: | ---: | --- |']
+        notes = []
+        for row in findings:
+            url = f"https://github.com/{observation['repository']}/blob/{observation['source_sha']}/{quote(row['sources'][0], safe='/')}"
+            artifact = row['id'][len(name) + 1:] if row['id'].startswith(name + '/') else row['id']
+            label = html.escape(artifact).replace('|', '&#124;')
+            status = row.get('review', {}).get('state', 'required')
+            lines.append(f"| [{label}]({url}) | {row['category']} | {row['measured']} | {row['warn']} | {row['limit']} | {row['effective_cap']} | {status} |")
+            review = row.get('review')
+            if review:
+                notes.append(f"\nReview `{html.escape(row['id'])}`: {html.escape(review['reason'])} (workstream `{review['workstream']}`).\n")
+            if row.get('exception_reason'):
+                notes.append('\nException: ' + html.escape(row['exception_reason']) + '\n')
+        lines += notes + ['', '</details>']
+        if len('\n'.join(lines).encode()) > 55000:
+            del lines[detail_start:]
+            lines += ['', 'Additional module details are in the linked complete qualification report.']
+            break
+    lines += ['', f"[Measured main snapshot and complete report]({observation['run_url']}) at `{observation['source_sha']}`.", '',
+              'The qualification report retains full source membership, exceptions, and review evidence. '
+              'The area fingerprint covers all those facts. This issue closes only when all admitted findings '
+              'are removed, below threshold, or retained by valid bounded review.', END]
+    return '\n'.join(lines)
+
+
+def body_for(issue, managed):
+    body = issue.get('body') or ''
+    marker = START if START in body else LEGACY_START
+    if marker in body:
+        return body[:body.index(marker)] + managed + body[body.index(END) + len(END):]
+    return body.rstrip() + ('\n\n' if body.strip() else '') + managed
+
+
+def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
+    intake_keys = intake_keys if intake_keys is not None else {k for k, r in artifacts.items() if r['touched']}
+    groups, old, previous, states = {}, {}, {}, {}
+    for issue in sorted(issues, key=lambda i: (START not in (i.get('body') or ''), i['number'])):
+        state = group_state(issue)
+        if state:
+            groups.setdefault(state['workstream'], []).append(issue)
+            states[issue['number']] = state
+            for row in state['artifacts']:
+                previous.setdefault(key(row['category'], row['id']), (issue, row))
+        elif SUPERSEDED not in (issue.get('body') or ''):
+            row = tracked(issue) or legacy(issue, artifacts)
+            if row:
+                old.setdefault(workstream(row), []).append(issue)
+                previous.setdefault(row['key'], (issue, row))
+    dismissed_areas = set()
+    for number, state in states.items():
+        issue = next(i for i in issues if i['number'] == number)
+        members = {key(r['category'], r['id']) for r in state['artifacts']}
+        current = [artifacts[k] for k in members if k in artifacts and not retained(artifacts[k])]
+        if (issue['state'] == 'closed' and issue.get('state_reason') == 'not_planned'
+                and not members.intersection(intake_keys) and not any(r.get('review') for r in current)
+                and area_digest(current) == state['evidence_digest']):
+            dismissed_areas.add(number)
+    active, suppressed = {}, 0
+    for identity, row in sorted(artifacts.items()):
+        prior = previous.get(identity)
+        legacy_dismissal = (prior and prior[0]['number'] not in states
+                            and prior[0]['state'] == 'closed' and prior[0].get('state_reason') == 'not_planned'
+                            and identity not in intake_keys and not row.get('review') and unchanged(row, prior[1]))
+        if retained(row) or legacy_dismissal or (prior and prior[0]['number'] in dismissed_areas):
+            suppressed += 1
+            continue
+        renewed = row.get('review', {}).get('state') in {'boundary_changed', 'shape_changed', 'ceiling_exceeded'}
+        if not prior and not backfill and identity not in intake_keys and not renewed:
+            continue
+        active.setdefault(workstream(row), []).append(row)
+    operations = []
+    for identity in sorted(set(groups) | set(old) | set(active)):
+        # Existing v2 issues win, then the oldest artifact issue is adopted in place.
+        candidates = sorted(groups.get(identity, []), key=lambda i: i['number'])
+        ancestors = sorted(old.get(identity, []), key=lambda i: i['number'])
+        canonical = (candidates or [i for i in ancestors if i['state'] == 'open'] or ancestors or [None])[0]
+        rows = active.get(identity, [])
+        if canonical is None:
+            if rows:
+                operations.append({'action': 'create', 'key': identity, 'body': {
+                    'title': 'Maintainability review: ' + identity, 'body': block(identity, rows, observation)}})
+            continue
+        state = group_state(canonical)
+        desired = 'open' if rows else 'closed'
+        same = state and area_digest(rows) == state['evidence_digest']
+        # A dismissal retains its comparison evidence until facts renew intake.
+        if state and not rows and canonical['state'] == 'closed' and canonical.get('state_reason') == 'not_planned':
+            same = True
+        if not rows and not candidates and canonical['state'] == 'closed':
+            continue
+        if not same or canonical['state'] != desired:
+            change = {'body': body_for(canonical, block(identity, rows, observation))}
+            if not state:
+                change['title'] = 'Maintainability review: ' + identity
+            action = 'update'
+            if canonical['state'] != desired:
+                action = 'reopen' if rows else 'resolve'
+                change.update(state=desired, state_reason='reopened' if rows else 'completed')
+            operations.append({'action': action, 'key': identity, 'number': canonical['number'], 'expected': expected(canonical), 'body': change})
+        for duplicate in candidates + ancestors:
+            if duplicate['number'] == canonical['number'] or duplicate['state'] != 'open':
+                continue
+            operations.append({'action': 'consolidate', 'key': identity, 'number': duplicate['number'], 'expected': expected(duplicate), 'body': {
+                'state': 'closed', 'state_reason': 'not_planned', 'body': (duplicate.get('body') or '') +
+                f"\n\nConsolidated into #{canonical['number']}; the debt remains tracked there.\n{SUPERSEDED}{identity} -->"}})
+    if any(len(op['body']['body'].encode()) > 60000 for op in operations):
+        raise ValueError('workstream summary exceeds the issue size bound')
+    return operations, suppressed
