@@ -175,6 +175,10 @@ sources a change edited.
 
 #### Maintainability cleanup issues
 
+Cleanup is tracked by a bounded workstream catalog rather than one issue for each
+metric and artifact. Workstream issues keep the individual findings and source
+evidence together so one architectural review can address related measurements.
+
 [`maintainability-issues.yml`](../.github/workflows/maintainability-issues.yml)
 reconciles cleanup issues after a completed Qualification push on main. It checks
 that the commit is the current main tip and is associated with a PR merged into
