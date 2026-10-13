@@ -30,13 +30,19 @@ const (
 	loopExitBlockedLoop
 )
 
+// modelOutputState keeps a response's durable identity, source provenance, and
+// policy refusal together until that response is settled.
+type modelOutputState struct {
+	id            string
+	sourceContext *api.SourceContext
+	rejection     *guidance.Refusal
+}
+
 type promptLoopTurnState struct {
-	outputRejection         *guidance.Refusal
+	output                  modelOutputState
 	observePrompt           func(inject.CoordinatorTurnFrame)
-	sourceContext           *api.SourceContext
 	turnID                  string
 	attemptID               string
-	lastOutputID            string
 	history                 []api.Message
 	lastAssistantID         string
 	lastAssistantContent    string
@@ -250,7 +256,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		var refusal *guidance.Refusal
 		var err error
 		st.history, refusal, blocked, err = l.Tools.tryRejectNoToolTurn(
-			ctx, sess, st.history, userPrompt, st.lastAssistantContent, surfaceID, st.turnTools, sessionID, st.lastAssistantID, st, invokeAllowed, st.outputRejection,
+			ctx, sess, st.history, userPrompt, st.lastAssistantContent, surfaceID, st.turnTools, sessionID, st.lastAssistantID, st, invokeAllowed, st.output.rejection,
 		)
 		if err != nil {
 			return out, err
@@ -269,7 +275,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		}
 	} else {
 		if st != nil && st.turnID != "" && st.attemptID != "" && l.Projection.Deps.CheckpointTurn != nil {
-			checkpoint := fmt.Sprintf(`{"model_output_id":%q,"assistant_message_id":%q}`, st.lastOutputID, assistantMsg.ID)
+			checkpoint := fmt.Sprintf(`{"model_output_id":%q,"assistant_message_id":%q}`, st.output.id, assistantMsg.ID)
 			if err := l.Projection.Deps.CheckpointTurn(ctx, st.turnID, st.attemptID, store.TurnPhaseTools, checkpoint); err != nil {
 				return out, err
 			}
@@ -550,7 +556,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 	}
 	return &PromptRunResult{
 		LastAssistantID:      st.lastAssistantID,
-		LastOutputID:         st.lastOutputID,
+		LastOutputID:         st.output.id,
 		LastAssistantContent: st.lastAssistantContent,
 		TurnTools:            st.turnTools,
 		TasksDispatchedCount: st.tasksDispatchedCount,

@@ -185,7 +185,7 @@ func (l *turnProjection) settleAssistantStreamTurn(
 		if settleErr != nil {
 			return api.Message{}, settleErr
 		}
-		st.lastOutputID = committed.ID
+		st.output.id = committed.ID
 		canonicalOutputID = committed.ID
 	}
 	if l.Deps.UpdateMessage != nil {
@@ -345,7 +345,7 @@ func (l *modelTurn) completeStream(
 	completion = response.Completion
 	completion.SourceContext = sourceRequest.ForCompletion(completion)
 	if st != nil {
-		st.sourceContext = completion.SourceContext
+		st.output.sourceContext = completion.SourceContext
 	}
 
 	if err := l.recordUsage(ctx, sess, llmCallID, providerID, model, req, completion); err != nil {
@@ -355,13 +355,13 @@ func (l *modelTurn) completeStream(
 	reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{Segments: oarModelOutputSegments(completion.Content), TextActionTools: response.TextActionTools}, "", nil)
 	slog.InfoContext(ctx, "model output gate", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(outputGateStarted).Milliseconds(), "blocked", blocked, "selected_text_protocol", req.ToolProtocol, "text_action_tools", response.TextActionTools)
 	if st != nil {
-		st.outputRejection = nil
+		st.output.rejection = nil
 	}
 	if blocked {
 		if st == nil || len(response.TextActionTools) == 0 || reject == nil || reject.Code() != "TOOL_ACTION_IN_TEXT" {
 			return nil, nil, reject
 		}
-		st.outputRejection = reject
+		st.output.rejection = reject
 	} else if changed {
 		completion.Content = transformed
 		tokens = []string{transformed}
