@@ -32,7 +32,7 @@ class FocusedEvidenceControls(EvidenceCase):
 
     def card(self,id_,session,kind,status,payload):
         call=json.loads(payload)['tool_call_id']
-        self.session['checkpoints'].append({'checkpoint_id':id_,'kind':kind,'status':status,'issued_at':'2026-09-12T00:00:00Z',
+        self.session['checkpoints'].append({'id':id_,'kind':kind,'status':status,'issued_at':'2026-09-12T00:00:00Z',
             'tool_approval':{'tool_call_id':call,'plan':{'subject':{'kind':'direct_ip'}}}})
         self.save()
 
