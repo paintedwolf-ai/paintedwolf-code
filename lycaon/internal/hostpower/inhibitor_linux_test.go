@@ -34,7 +34,7 @@ func (f *fixtureLogind) Inhibit(what, who, why, mode string) (dbus.UnixFD, *dbus
 
 func fixtureSocketDirectory(t *testing.T) string {
 	t.Helper()
-	directory, err := os.MkdirTemp(os.TempDir(), "pwb-")
+	directory, err := os.MkdirTemp(os.TempDir(), "pwb-") //nolint:usetesting // Unix socket paths must fit sockaddr_un.
 	testutil.FailErr(t, "create short socket directory", err)
 	t.Cleanup(func() { _ = os.RemoveAll(directory) })
 	return directory
