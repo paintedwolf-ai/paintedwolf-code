@@ -37,13 +37,13 @@ sources:
 platforms:
   linux-amd64:
     url: "https://github.com/paintedwolf-ai/paintedwolf-tesseract/releases/download/v{engine_version}/paintedwolf-tesseract-{engine_version}-linux-amd64.tar.gz"
-    sha256: ""
-    bytes: 0
-    binary_sha256: ""
-    binary_bytes: 0
+    sha256: "9283d45c3cf18ba2c5fe3f460bdebd977385304dd19ea7a8bbd5555b716ad1a2"
+    bytes: 9196596
+    binary_sha256: "157fb8f9c711769ca488ccd409d75995ee9973b8fbda19c39ad26d89862e9668"
+    binary_bytes: 6474544
   linux-arm64:
     url: "https://github.com/paintedwolf-ai/paintedwolf-tesseract/releases/download/v{engine_version}/paintedwolf-tesseract-{engine_version}-linux-arm64.tar.gz"
-    sha256: ""
-    bytes: 0
-    binary_sha256: ""
-    binary_bytes: 0
+    sha256: "6a8fe6bc38c20f12c12fce438e7acfa3029495aa1a1f3e9c9deb66f91c480223"
+    bytes: 9095761
+    binary_sha256: "12206d71c9b82b7d9a9849ce92cd95eaf4aca716a0ec5b907687ac4967de0b9d"
+    binary_bytes: 6240832

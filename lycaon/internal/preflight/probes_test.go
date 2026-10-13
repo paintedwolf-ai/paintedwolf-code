@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/ocrengine"
 	"github.com/lycaon/lycaon/internal/platformfloor"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -11,6 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"testing"
 )
@@ -439,5 +441,25 @@ func TestDecisionEngineProbe(t *testing.T) {
 				t.Fatalf("got %q/%q/%v, want degraded/%s/%s", got.Status, got.Code, got.Detail, CodeDecisionEngineUnavailable, reason)
 			}
 		})
+	}
+}
+
+func TestOCREngineProbe(t *testing.T) {
+	t.Setenv(ocrengine.EnvRoot, t.TempDir())
+	t.Setenv("LYCAON_ENGINE_ROOT", t.TempDir())
+	got := run(t, ocrEngineProbe{}, Env{})
+	switch runtime.GOOS {
+	case "darwin":
+		if got.Status != StatusOK || got.Code != "" {
+			t.Fatalf("got %q/%q, want ok: macOS recognizes text in-process", got.Status, got.Code)
+		}
+	case "linux":
+		if got.Status != StatusDegraded || got.Code != CodeOCREngineUnavailable || got.Detail["reason"] != ocrengine.ReasonMissing {
+			t.Fatalf("got %q/%q/%v, want degraded/%s/missing without a staged engine", got.Status, got.Code, got.Detail, CodeOCREngineUnavailable)
+		}
+	default:
+		if got.Status != StatusDegraded || got.Detail["reason"] != ocrengine.ReasonUnsupportedPlatform {
+			t.Fatalf("got %q/%q/%v, want degraded/unsupported_platform", got.Status, got.Code, got.Detail)
+		}
 	}
 }

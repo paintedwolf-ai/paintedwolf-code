@@ -15,6 +15,7 @@ Apache-2.0 for application code; CC-BY-4.0 for first-party catalog YAML under `l
 | Bundled OpenGrep binary | **LGPL-2.1** (upstream) |
 | Linked gitleaks / osv-scalibr | **MIT** / **Apache-2.0** (upstream) |
 | Bundled git / git-lfs | **GPL-2.0** / **MIT** (upstream) |
+| Bundled Tesseract OCR engine (Linux) | **Apache-2.0** tesseract and trained data, **BSD-2-Clause** Leptonica, **MIT** musl, **GPL-3.0 with GCC exception** runtime libraries (upstream) |
 | Vendored gate rules | **MIT** (upstream, per vendor catalog) |
 | Vendored Kingfisher secret definitions | **Apache-2.0** (upstream) |
 | Hermetic `render_view` design kit | **OFL-1.1** fonts + **ISC** Lucide-adapted icons ([below](#hermetic-render_view-design-kit)) |
@@ -40,8 +41,9 @@ Painted Wolf Code bundles or links these open-source components at build time. E
 | [osv-scalibr](https://github.com/google/osv-scalibr) | SCA (Go library) | **Apache-2.0** | [`scan-supply-chain.md`](scan-supply-chain.md) |
 | [git](https://github.com/git/git) | Version control engine (bundled binary) | **GPL-2.0** | [`git.md`](git.md) · [`dependencies.md`](dependencies.md) |
 | [git-lfs](https://github.com/git-lfs/git-lfs) | Large-file filter for the bundled git (bundled binary) | **MIT** | [`git.md`](git.md) · [`dependencies.md`](dependencies.md) |
+| [Tesseract](https://github.com/tesseract-ocr/tesseract) with [Leptonica](https://github.com/DanBloomberg/leptonica) and [tessdata_fast](https://github.com/tesseract-ocr/tessdata_fast) | Text recognition for image screening on Linux (bundled static binary and trained data) | **Apache-2.0** / **BSD-2-Clause** / **Apache-2.0**; statically linked musl (**MIT**) and GCC runtime libraries (**GPL-3.0 with GCC Runtime Library Exception**) | [`dependencies.md`](dependencies.md#bundled-ocr-engine) |
 
-Pinned scanner versions, SHA256 checksums, and embedding notes: [`lycaon/config/runtime/scanners/bundled-manifest.yaml`](../lycaon/config/runtime/scanners/bundled-manifest.yaml). The Git toolchain is pinned in [`lycaon/config/gitengine/pin.yaml`](../lycaon/config/gitengine/pin.yaml) and staged into the bundle by `scripts/den-build-bundle.sh`; that staged tree is gitignored, so no dependency manifest sees it and its entries are carried by [`licensing/bundled-binaries.yaml`](../licensing/bundled-binaries.yaml). Git Credential Manager is pruned during fetch and does not ship.
+Pinned scanner versions, SHA256 checksums, and embedding notes: [`lycaon/config/runtime/scanners/bundled-manifest.yaml`](../lycaon/config/runtime/scanners/bundled-manifest.yaml). The Git toolchain is pinned in [`lycaon/config/gitengine/pin.yaml`](../lycaon/config/gitengine/pin.yaml) and staged into the bundle by `scripts/den-build-bundle.sh`; that staged tree is gitignored, so no dependency manifest sees it and its entries are carried by [`licensing/bundled-binaries.yaml`](../licensing/bundled-binaries.yaml). Git Credential Manager is pruned during fetch and does not ship. The Linux OCR engine is pinned in [`lycaon/config/ocrengine/pin.yaml`](../lycaon/config/ocrengine/pin.yaml) and staged the same way; its archive carries the upstream license texts beside the executable, and the catalog carries the same entries for the notices.
 
 ## Vendored third-party rules (upstream licenses)
 

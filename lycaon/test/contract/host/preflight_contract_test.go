@@ -110,7 +110,7 @@ func TestPreflightProbeIDsAreStableAndOrdered(t *testing.T) {
 	t.Parallel()
 	want := []string{
 		"os_version", "config_dir", "disk_space", "command_path", "git_engine",
-		"scanner_engine", "browser_engine", "decision_engine", "provider_configured", "lite_slot",
+		"scanner_engine", "browser_engine", "decision_engine", "ocr_engine", "provider_configured", "lite_slot",
 	}
 
 	got := preflight.Default().IDs()

@@ -69,6 +69,9 @@ cp -R "${ROOT}/schemas/." "${ENGINE_ROOT}/schemas/"
 bash "${ROOT}/scripts/stage-bundled-opengrep.sh" "${ENGINE_ROOT}" "${TARGET}" "${OPENGREP_ARTIFACT}"
 if [[ "${MODE}" == "full" ]]; then
   bash "${ROOT}/scripts/gitengine-fetch.sh"
+  if [[ "${HOST_KIND}" == "linux" ]]; then
+    bash "${ROOT}/scripts/ocrengine-fetch.sh"
+  fi
 fi
 
 VERSION_FILE="${ROOT}/VERSION"
