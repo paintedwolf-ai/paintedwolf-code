@@ -17,12 +17,16 @@ type recordingDoomLoop struct {
 	codes []string
 }
 
-func (g *recordingDoomLoop) Check(context.Context, string, string, string, map[string]any) (bool, int, string, error) {
+func (g *recordingDoomLoop) Check(context.Context, string, string, string, map[string]any, bool, *tools.AgentReadBases) (bool, int, string, error) {
 	return true, 0, "", nil
 }
 
-func (g *recordingDoomLoop) RecordAttempt(_ context.Context, _, _, _ string, _ map[string]any, rejectCode string, _ bool) error {
-	g.codes = append(g.codes, rejectCode)
+func (g *recordingDoomLoop) RecordAttempt(_ context.Context, _, _, _ string, _ map[string]any, failure *api.InvocationFailure, _ bool) error {
+	code := ""
+	if failure != nil {
+		code = failure.Code
+	}
+	g.codes = append(g.codes, code)
 	return nil
 }
 
@@ -130,8 +134,4 @@ func TestCallerFaultClassification(t *testing.T) {
 			t.Errorf("%s: CallerFault() = %v, want %v", name, got, c.want)
 		}
 	}
-}
-
-func (*recordingDoomLoop) ResolveRejection(context.Context, string, string, map[string]any, string) error {
-	return nil
 }

@@ -54,7 +54,7 @@ func TestCheckDoomLoopUsesRejectFormatter(t *testing.T) {
 		},
 	})
 	var n int
-	err := loop.Nudges.checkDoomLoop(context.Background(), "s1", "response", "read", map[string]any{"path": "x"}, &n)
+	err := loop.Nudges.checkDoomLoop(context.Background(), "s1", "response", "read", map[string]any{"path": "x"}, nil, &n)
 	if err == nil || !strings.Contains(err.Error(), "Code: DOOM_LOOP_REPEAT") {
 		t.Fatalf("err = %v", err)
 	}

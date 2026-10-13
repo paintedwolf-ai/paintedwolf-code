@@ -113,6 +113,7 @@ func (l *toolBatch) preflightToolCall(
 	sessionID, responseID string,
 	tc api.ToolCall,
 	taskAllowlist []string,
+	reads *tools.AgentReadBases,
 ) (context.Context, int, *guidance.Refusal) {
 	if taskAllowlist != nil {
 		ctx = toolpolicy.WithTaskSpawnAllowlist(ctx, taskAllowlist)
@@ -123,7 +124,7 @@ func (l *toolBatch) preflightToolCall(
 		}
 	}
 	doomPreCount := 0
-	if err := l.Nudges.checkDoomLoop(ctx, sessionID, responseID, tc.Name, tc.Args, &doomPreCount); err != nil {
+	if err := l.Nudges.checkDoomLoop(ctx, sessionID, responseID, tc.Name, tc.Args, reads, &doomPreCount); err != nil {
 		return ctx, 0, rejectForCallError(err)
 	}
 	return ctx, doomPreCount, nil
@@ -161,7 +162,7 @@ func (l *toolBatch) refusePreInvokeReject(
 	code := reject.Code()
 	advance := l.Tools.overlayIntegrateRejectEndsToolLoop(ctx, sess, sessionID, code)
 	if !advance {
-		_ = l.Nudges.recordDoomLoopAttempt(ctx, sessionID, assistantMessageID, tc.Name, tc.Args, code, false)
+		_ = l.Nudges.recordDoomLoopAttempt(ctx, sessionID, assistantMessageID, tc.Name, tc.Args, rejectionFailure(code, "policy_rejection", "", reject.Facts.FeedbackFor(code).Details), false)
 		// Recorded first so the escalation reads the current total.
 		if escalated := l.Nudges.escalateRepeatedCode(ctx, sessionID, tc.Name, reject); escalated != nil {
 			combined := *reject
@@ -207,7 +208,11 @@ func (l *toolBatch) settleRejectedToolCall(
 	advance := l.Tools.overlayIntegrateRejectEndsToolLoop(ctx, sess, sessionID, rejectCode)
 	// Host-managed failures do not count as caller repetition.
 	if !advance && run.failure.CallerFault() {
-		_ = l.Nudges.recordDoomLoopAttempt(ctx, sessionID, assistantMessageID, tc.Name, tc.Args, rejectCode, false)
+		failure := run.failure
+		if failure == nil {
+			failure = rejectionFailure(rejectCode, "host_rejection", "", run.facts.FeedbackFor(rejectCode).Details)
+		}
+		_ = l.Nudges.recordDoomLoopAttempt(ctx, sessionID, assistantMessageID, tc.Name, tc.Args, failure, false)
 		// Recorded first so the escalation reads the current total.
 		if escalated := l.Nudges.escalateRepeatedCode(ctx, sessionID, tc.Name, run.asReject()); escalated != nil {
 			run.content += "\n\n" + escalated.Body

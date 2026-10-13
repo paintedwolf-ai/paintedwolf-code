@@ -74,7 +74,7 @@ func TestOfferedSchemaResolvesEarlierLoadingRejections(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	args := map[string]any{"path": "portrait.svg"}
 	for response := range loopguard.DoomLoopMaxAttempts {
-		testutil.FailErr(t, "seed missing schema", guard.RecordAttempt(ctx, sess.ID, fmt.Sprint(response), "read", args, "TOOL_NOT_OFFERED", false))
+		testutil.FailErr(t, "seed missing schema", guard.RecordAttempt(ctx, sess.ID, fmt.Sprint(response), "read", args, &api.InvocationFailure{Code: "TOOL_NOT_OFFERED"}, false))
 	}
 	deps := promptloop.StoreDeps(messages)
 	deps.Context.Tools, deps.Context.Policy, deps.Nudges.DoomLoop = tools.NewStubRegistry(), &recordingToolPolicy{}, guard
