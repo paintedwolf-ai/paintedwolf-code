@@ -5,7 +5,7 @@ use super::{
 };
 use std::{path::Path, time::Duration};
 use tauri::{AppHandle, Manager};
-#[cfg(any(target_os = "macos", all(test, unix)))]
+#[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
 mod activation;
 mod admission;
 mod confirmation;
@@ -17,12 +17,12 @@ mod tests;
 
 pub use admission::{launch, run_helper, Launch, Lease};
 pub use confirmation::confirm_startup;
-pub use handoff::Activation;
-pub use state::{clear_failed, recovery_guidance, resume};
-pub(super) use state::{restore, retained_release};
 use handoff::stage_helper;
+pub use handoff::Activation;
 use installer::{executable, hash};
 use journal::{read, write, Phase, Transaction};
+pub use state::{clear_failed, recovery_guidance, resume};
+pub(super) use state::{restore, retained_release};
 
 const OFFER_FRESHNESS: Duration = Duration::from_secs(24 * 60 * 60);
 const RECHECK_DEADLINE: Duration = Duration::from_secs(3);

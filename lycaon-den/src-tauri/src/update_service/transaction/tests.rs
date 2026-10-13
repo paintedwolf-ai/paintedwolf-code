@@ -1,3 +1,5 @@
+#[cfg(target_os = "macos")]
+use super::admission::require_running_version;
 use super::*;
 use super::{
     activation::activate_using,
@@ -5,12 +7,16 @@ use super::{
     handoff::record_spawn_failure,
     state::resume_state,
 };
-#[cfg(target_os = "macos")]
-use super::admission::require_running_version;
 use std::fs;
 pub(super) fn fixture(root: &Path) -> Transaction {
-    let candidate = super::super::tests::candidate("1.1.0");
-    let target = root.join("Painted Wolf Code.app");
+    let mut candidate = super::super::tests::candidate("1.1.0");
+    candidate.platform = super::super::feed::target().into();
+    candidate.release_id = candidate.identity();
+    let target = root.join(if cfg!(target_os = "linux") {
+        "Painted Wolf Code.AppImage"
+    } else {
+        "Painted Wolf Code.app"
+    });
     let staged = installer::prepared_path(&target, &candidate).unwrap();
     for (bundle, contents) in [(&target, "old engine"), (&staged, "new engine")] {
         let exe = executable(bundle);
@@ -262,6 +268,22 @@ fn launch_refuses_a_binary_whose_installed_bundle_has_changed() {
     );
 }
 
+fn change_resources(path: &Path) {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut permissions = fs::metadata(path).unwrap().permissions();
+        permissions.set_mode(permissions.mode() ^ 0o100);
+        fs::set_permissions(path, permissions).unwrap();
+    }
+    #[cfg(not(target_os = "linux"))]
+    fs::write(
+        path.join("unexpected-resource"),
+        "changed after preparation",
+    )
+    .unwrap();
+}
+
 #[test]
 fn activation_requires_the_whole_prepared_bundle_to_match_its_receipt() {
     let root = crate::test_support::TempDir::new("update-prepared-bundle-changed");
@@ -270,7 +292,7 @@ fn activation_requires_the_whole_prepared_bundle_to_match_its_receipt() {
     let error = activate_using(
         &mut t,
         |_, _| {
-            fs::write(prepared.join("unexpected-resource"), "changed after preparation").unwrap();
+            change_resources(&prepared);
             Ok(())
         },
         |_, _| panic!("changed bundle must not be installed"),
@@ -287,7 +309,7 @@ fn recovery_requires_the_whole_installed_bundle_to_match_its_receipt() {
     let root = crate::test_support::TempDir::new("update-installed-bundle-changed");
     let mut t = fixture(&root);
     swap_directories(&t.target, &t.prepared_bundle).unwrap();
-    fs::write(t.target.join("unexpected-resource"), "changed after activation").unwrap();
+    change_resources(&t.target);
     let error = activate_using(
         &mut t,
         |_, _| panic!("matching executable must not trigger preparation"),

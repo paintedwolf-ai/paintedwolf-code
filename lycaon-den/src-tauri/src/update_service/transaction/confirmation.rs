@@ -5,7 +5,7 @@ use crate::update_service::{
     installer::{self, executable, hash},
     staging, Failure, Installation, UpdateError, UpdateService,
 };
-use std::{fs, time::Duration};
+use std::time::Duration;
 use tauri::{AppHandle, Manager};
 
 pub async fn confirm_startup(
@@ -59,14 +59,10 @@ pub async fn confirm_startup(
         }
         drop(inner);
         tauri::async_runtime::spawn_blocking(move || {
-            if previous.exists() && !installer::current_user_directory(&previous) {
+            if previous.exists() && !installer::current_user_installation(&previous) {
                 return Err(Failure::VerificationFailed.into());
             }
-            match fs::remove_dir_all(previous) {
-                Ok(()) => Ok(()),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
-                Err(error) => Err(UpdateError::new(Failure::StateUnavailable, error)),
-            }
+            installer::remove_installation(&previous)
         })
         .await
         .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))??;

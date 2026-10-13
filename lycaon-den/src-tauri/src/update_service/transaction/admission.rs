@@ -1,44 +1,44 @@
 //! Launches and helpers share admission to one installed bundle.
-use crate::update_service::{Failure, UpdateError};
-#[cfg(any(target_os = "macos", all(test, unix)))]
+#[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
 use super::journal::{Phase, Transaction};
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use super::{
     activation::{activate, installed_is_known, record_activation_failure},
     journal::{read, retire, write},
 };
-#[cfg(any(target_os = "macos", all(test, unix)))]
+#[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
 use crate::update_service::installer::{executable, hash};
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use crate::update_service::{installer, persistence};
-#[cfg(target_os = "macos")]
+use crate::update_service::{Failure, UpdateError};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use std::{path::Path, time::Duration};
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 const HELPER_ADMISSION: Duration = Duration::from_secs(10 * 60);
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 const HELPER_POLL: Duration = Duration::from_millis(250);
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub type Lease = installer::InstallationLease;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub type Lease = ();
 
 pub struct Launch {
     /// False when another running copy delays activation.
     pub install_at_startup: bool,
-    /// The shared lifetime lease; absent outside an installed macOS bundle.
+    /// The shared lifetime lease excludes activation beneath this process.
     pub lease: Option<Lease>,
     /// A recovery-relevant failure that did not prevent launching.
     pub error: Option<UpdateError>,
 }
 
-#[cfg(any(target_os = "macos", all(test, unix)))]
+#[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
 pub(super) fn should_reopen_after_wait(t: &Transaction, id: &str) -> bool {
     t.id == id && t.phase == Phase::Committed && t.relaunch
 }
 pub fn run_helper(id: &str) -> Result<(), UpdateError> {
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     {
         let mut t = read()?.ok_or(Failure::JournalUnavailable)?;
         if t.id != id || t.phase != Phase::Committed {
@@ -86,26 +86,40 @@ pub fn run_helper(id: &str) -> Result<(), UpdateError> {
         }
         Ok(())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = id;
         Err(Failure::UnsupportedInstallation.into())
     }
 }
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn reopen(target: &Path) -> Result<(), UpdateError> {
     installer::verify_bundle(target)?;
-    let status = std::process::Command::new("/usr/bin/open")
-        .arg(target)
-        .status()
-        .map_err(|e| UpdateError::new(Failure::ActivationFailed, e))?;
-    if !status.success() {
-        return Err(Failure::ActivationFailed.into());
+    #[cfg(target_os = "macos")]
+    {
+        let status = std::process::Command::new("/usr/bin/open")
+            .arg(target)
+            .status()
+            .map_err(|e| UpdateError::new(Failure::ActivationFailed, e))?;
+        if !status.success() {
+            return Err(Failure::ActivationFailed.into());
+        }
+    }
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new(target)
+            .env_remove("APPIMAGE")
+            .env_remove("APPDIR")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|e| UpdateError::new(Failure::ActivationFailed, e))?;
     }
     Ok(())
 }
 /// Coordinates recovery before any window opens; unsafe admission aborts launch.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub fn launch() -> Result<Launch, UpdateError> {
     let Ok(target) = installer::bundle() else {
         return Ok(Launch {
@@ -172,11 +186,7 @@ pub fn launch() -> Result<Launch, UpdateError> {
             if !t.recovery_relaunch_attempted {
                 t.recovery_relaunch_attempted = true;
                 let _ = write(&t);
-                std::process::Command::new("/usr/bin/open")
-                    .arg("-n")
-                    .arg(&target)
-                    .spawn()
-                    .map_err(|e| UpdateError::new(Failure::ActivationFailed, e))?;
+                reopen(&target)?;
                 std::process::exit(0);
             }
         }
@@ -190,7 +200,7 @@ pub fn launch() -> Result<Launch, UpdateError> {
         error,
     })
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 pub fn launch() -> Result<Launch, UpdateError> {
     Ok(Launch {
         install_at_startup: false,
@@ -199,7 +209,7 @@ pub fn launch() -> Result<Launch, UpdateError> {
     })
 }
 /// Polls for the exclusive lease without holding the launch gate across the wait.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 fn helper_admission(target: &Path) -> Result<Option<installer::InstallationLease>, UpdateError> {
     let deadline = std::time::Instant::now() + HELPER_ADMISSION;
     loop {
@@ -213,7 +223,7 @@ fn helper_admission(target: &Path) -> Result<Option<installer::InstallationLease
     }
 }
 /// The process must be the binary of the bundle it launched from.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) fn require_running_version(target: &Path) -> Result<(), UpdateError> {
     if installer::product_version(target, Failure::StateUnavailable)?
         != env!("PAINTED_WOLF_VERSION")
@@ -226,7 +236,7 @@ pub(super) fn require_running_version(target: &Path) -> Result<(), UpdateError> 
     Ok(())
 }
 /// An activated transaction is superseded when its installed bytes are replaced.
-#[cfg(any(target_os = "macos", all(test, unix)))]
+#[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
 pub(super) fn superseded(t: &Transaction) -> Result<bool, UpdateError> {
     let installed = hash(&executable(&t.target))?;
     Ok(installed != t.next_hash && (t.phase == Phase::Activated || installed != t.previous_hash))

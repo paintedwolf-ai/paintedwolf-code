@@ -8,12 +8,12 @@ use std::{sync::atomic::Ordering, time::Duration};
 use tauri::{AppHandle, Manager};
 use tokio::io::AsyncWriteExt;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 type PreparationPermit = (
     tokio::sync::OwnedMutexGuard<()>,
     super::installer::InstallationLease,
 );
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
 type PreparationPermit = tokio::sync::OwnedMutexGuard<()>;
 
 pub fn start_automatic(app: AppHandle) {
@@ -177,7 +177,7 @@ async fn transfer(
 ) -> Result<(super::installer::PreparedIdentity, PreparationPermit), UpdateError> {
     let service = app.state::<UpdateService>();
     let permit = service.preparation.clone().lock_owned().await;
-    #[cfg(target_os = "macos")]
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
     let permit = {
         let lease = tauri::async_runtime::spawn_blocking(super::installer::acquire_preparation)
             .await

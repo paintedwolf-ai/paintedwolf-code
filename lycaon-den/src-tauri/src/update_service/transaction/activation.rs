@@ -1,16 +1,14 @@
 //! Bundle exchange and recovery follow the installed bytes.
 use super::journal::{Phase, Transaction};
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 use super::{admission::Lease, journal::write};
 use crate::update_service::{
     installer::{self, executable, hash},
     Candidate, Failure, UpdateError,
 };
-#[cfg(target_os = "macos")]
-use std::fs;
 use std::path::Path;
 
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) fn activate(t: &mut Transaction, lease: &mut Lease) -> Result<(), UpdateError> {
     let expected = t.next_hash.clone();
     let expected_bundle = t.next_bundle_hash.clone();
@@ -20,7 +18,7 @@ pub(super) fn activate(t: &mut Transaction, lease: &mut Lease) -> Result<(), Upd
         |target, candidate| {
             let prepared = recorded_prepared;
             // The preparation receipt binds every file, link, and permission.
-            if installer::current_user_directory(&prepared)
+            if installer::current_user_installation(&prepared)
                 && hash(&executable(&prepared)).is_ok_and(|actual| actual == expected)
                 && installer::bundle_hash(&prepared).is_ok_and(|actual| actual == expected_bundle)
                 && installer::verify_bundle(&prepared).is_ok()
@@ -31,11 +29,10 @@ pub(super) fn activate(t: &mut Transaction, lease: &mut Lease) -> Result<(), Upd
             let rebuilt_path = installer::prepared_path(target, candidate)?;
             if rebuilt_path != prepared {
                 if prepared.exists() {
-                    if !installer::current_user_directory(&prepared) {
+                    if !installer::current_user_installation(&prepared) {
                         return Err(Failure::VerificationFailed.into());
                     }
-                    fs::remove_dir_all(&prepared)
-                        .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+                    installer::remove_installation(&prepared)?;
                 }
                 crate::atomic_file::replace(&rebuilt_path, &prepared, true)
                     .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
@@ -49,7 +46,7 @@ pub(super) fn activate(t: &mut Transaction, lease: &mut Lease) -> Result<(), Upd
         write,
     )
 }
-#[cfg(any(target_os = "macos", all(test, unix)))]
+#[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
 pub(super) fn activate_using(
     t: &mut Transaction,
     prepare: impl FnOnce(&Path, &Candidate) -> Result<(), UpdateError>,
@@ -76,7 +73,7 @@ pub(super) fn activate_using(
     record(t)
 }
 /// The recorded phase follows the installed bytes, even after an exchange error.
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) fn record_activation_failure(
     t: &mut Transaction,
     error: &UpdateError,
@@ -89,7 +86,7 @@ pub(super) fn record_activation_failure(
     t.error = Some(error.to_string());
     write(t)
 }
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub(super) fn installed_is_known(t: &Transaction) -> bool {
     hash(&executable(&t.target)).is_ok_and(|hash| {
         hash == t.previous_hash

@@ -54,10 +54,13 @@ pub(super) fn stage_helper(candidate: &Candidate) -> Result<PathBuf, UpdateError
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
             Err(e) => return Err(UpdateError::new(Failure::InstallFailed, e)),
         }
-        let mut source = fs::File::open(
-            std::env::current_exe().map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?,
-        )
-        .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
+        #[cfg(target_os = "linux")]
+        let source_path = super::installer::bundle()?;
+        #[cfg(not(target_os = "linux"))]
+        let source_path =
+            std::env::current_exe().map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
+        let mut source = fs::File::open(source_path)
+            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
         let mut copy = fs::OpenOptions::new()
             .write(true)
             .create_new(true)
