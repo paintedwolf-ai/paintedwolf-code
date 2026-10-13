@@ -168,19 +168,28 @@ func TestApprovedCheckpointSurvivesNativeWire(t *testing.T) {
 }
 
 func TestInvocationFactsSurviveContextAndProviderWire(t *testing.T) {
-	message := api.Message{Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Content: "The file was changed.", ToolResult: &api.ToolResult{
+	message := api.Message{Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Content: "The file was changed.", PromptCacheBreakpoint: api.PromptCacheTierHistory, ToolResult: &api.ToolResult{
 		Tool: "edit", ToolCallID: "edit-call", Outcome: api.ToolResultOutcomeRejected,
 		Invocation: &api.InvocationReceipt{ID: "receipt", Tool: "edit", ToolCallID: "edit-call", Status: api.InvocationStatusRejected, Invoked: false, Failure: &api.InvocationFailure{Code: "PROGRESS_MISSING"}},
 	}}
 	before, err := json.Marshal(message)
 	testutil.FailErr(t, "capture durable result", err)
 	messages := transcript.Project([]api.Message{
+		{Role: api.MessageRoleSystem, Content: "Standing guidance", PromptCacheBreakpoint: api.PromptCacheTierStanding},
 		{Role: api.MessageRoleUser, Content: "Fix the file."},
 		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "edit-call", Name: "edit", Args: map[string]any{}}}}, message,
 	})
 	round := compaction.ContextMessagesToAPI(compaction.ContextMessagesFromAPI(messages), messages)
 	messages = transcript.Project(round)
-	_, anthropic := anthropicprovider.ProjectMessages(messages, nil, false, "", "", "")
+	if messages[0].PromptCacheBreakpoint != api.PromptCacheTierStanding || messages[len(messages)-1].PromptCacheBreakpoint != api.PromptCacheTierHistory {
+		t.Fatal("invocation projection or context fitting moved the cache boundaries")
+	}
+	system, anthropic := anthropicprovider.ProjectMessages(messages, nil, false, "", "", "")
+	standing, err := json.Marshal(system)
+	testutil.FailErr(t, "encode standing prefix", err)
+	if strings.Contains(string(standing), "tool_feedback") || !strings.Contains(string(standing), "Standing guidance") {
+		t.Fatalf("invocation feedback changed the standing prefix: %s", standing)
+	}
 	_, vertex := vertexexpressprovider.ProjectMessages(messages, false, "")
 	for name, wire := range map[string]any{
 		"Ollama":            ollamaprovider.ProjectMessages(messages, ollamaprovider.MessageProjection{}),
