@@ -2,6 +2,7 @@ package reporting_test
 
 import (
 	"context"
+	"encoding/json"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
@@ -61,6 +62,13 @@ func TestUpdateProgress_unchangedContentNoops(t *testing.T) {
 
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	content := "## Progress\n- [ ] Ship feature\n"
+	writes := 0
+	unregister := progress.RegisterWriteObserver(func(_ context.Context, evt progress.WriteEvent) {
+		if evt.SessionID == "sess-1" {
+			writes++
+		}
+	})
+	t.Cleanup(unregister)
 
 	first, err := exec.Invoke(context.Background(), "update_progress", map[string]any{"content": content}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
@@ -74,6 +82,14 @@ func TestUpdateProgress_unchangedContentNoops(t *testing.T) {
 		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
 	})
 	testutil.FailErr(t, "update_progress replay", err)
+	var result map[string]any
+	testutil.FailErr(t, "decode replay result", json.Unmarshal([]byte(second), &result))
+	if len(result) != 1 || result["status"] != "unchanged" {
+		t.Fatalf("replay must report only its write status: %v", result)
+	}
+	if writes != 1 {
+		t.Fatalf("write notifications = %d want 1", writes)
+	}
 	if !strings.Contains(second, "unchanged") {
 		t.Fatalf("replay status = %q want unchanged", second)
 	}

@@ -16,6 +16,9 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -127,5 +130,33 @@ func TestCloseoutBoundedPerPrompt(t *testing.T) {
 	mgr.Runner.Closeouts.BeginPrompt(ctx, sess, promptinput.Input{Text: "continue"})
 	if _, block := rejectCloseout(t, mgr, sess, "implement_investigate", true); !block {
 		t.Fatal("reset should re-arm the push for the next prompt")
+	}
+}
+
+func TestCloseoutPendingProgressDoesNotArmWorkerCompletionLatch(t *testing.T) {
+	mgr, sess := newSynthesisDelayManager(t)
+	reg := tools.NewDefaultRegistry()
+	testutil.FailErr(t, "register progress", native.RegisterUpdateProgressTool(reg, mgr.RewindRuntime.Progress, func(_ context.Context, id string) string { return id }))
+	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
+	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}
+	pending := "## Progress\n- [ ] Build feature"
+	for attempt := 0; attempt < 2; attempt++ {
+		_, err := exec.Invoke(t.Context(), "update_progress", map[string]any{"content": pending}, tctx)
+		testutil.FailErr(t, "record pending work", err)
+		refusal, blocked := mgr.Coordinator.Guards.OpenProgress(t.Context(), sess, nil, "implement_investigate", true, surface.ImplementSessionState{}, true)
+		if !blocked || refusal == nil || refusal.Code() != "PROGRESS_OPEN_BEFORE_CLOSEOUT" {
+			t.Fatalf("pending closeout = %v, %v", refusal, blocked)
+		}
+		if got := mgr.RewindRuntime.Progress.Get(t.Context(), sess.ID); got != pending {
+			t.Fatalf("closeout recovery changed unfinished work: %q", got)
+		}
+		if _, armed := mgr.Coordinator.ProgressClosure.Baseline(sess.ID); armed {
+			t.Fatal("pending work armed a worker-completion latch")
+		}
+	}
+	_, err := exec.Invoke(t.Context(), "update_progress", map[string]any{"content": "## Progress\n- [x] Build feature"}, tctx)
+	testutil.FailErr(t, "record completed work", err)
+	if _, blocked := mgr.Coordinator.Guards.OpenProgress(t.Context(), sess, nil, "implement_investigate", true, surface.ImplementSessionState{}, true); blocked {
+		t.Fatal("completed work still blocks closeout")
 	}
 }

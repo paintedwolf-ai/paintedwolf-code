@@ -880,13 +880,13 @@
       "summary": "The shared document `{{ paintedwolf.path }}` changed in an area this edit depends on; this edit was not applied."
     },
     "EDITOR_DOCUMENT_READ_REQUIRED": {
-      "branch_instruction": "Continue with another file until you are ready to read this one.",
+      "branch_instruction": "Read this file now; retry the mutation in your next response.",
       "category": "recoverable",
       "emit": "guard:editor_document",
       "summary": "Read `{{ paintedwolf.path }}` before editing its shared document."
     },
     "EDIT_ARGS_CONFLICT": {
-      "branch_instruction": "Branch on Code; fix args and retry once",
+      "branch_instruction": "Retry edit with the corrected arguments.",
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "edit received conflicting arguments: {{ paintedwolf.detail }}."
@@ -1743,10 +1743,10 @@
       "summary": "Checklist line \"{{ paintedwolf.line }}\" is indented — only top-level `- [ ]`/`- [x]`/`- [~]`/`- [\u003e]` rows are allowed."
     },
     "PROGRESS_OPEN_BEFORE_CLOSEOUT": {
-      "branch_instruction": "Reconcile the checklist with observed results, then report honestly. Do not mark required unfinished work done, turn a deliverable into a note, or descope it merely to clear this gate.",
+      "branch_instruction": "Repeating the same pending checklist does not resolve this rejection. Do not close unfinished rows to clear it. For a concrete blocker or authorized scope change, mark only the work you will not pursue `- [~]` and report the limitation.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "The closing synthesis was attempted while {{ paintedwolf.progress_open_items }} progress steps remain open."
+      "summary": "This tool-free response would end the turn with {{ paintedwolf.progress_open_items }} progress steps still pending."
     },
     "PROGRESS_PENDING_AFTER_OPTIONAL": {
       "branch_instruction": "Branch on Code; reorder so optional `- [\u003e]` lines are last and retry update_progress",
