@@ -123,7 +123,7 @@ func invocationFeedback(result *api.ToolResult) (json.RawMessage, bool) {
 	if receipt.Failure != nil {
 		code = receipt.Failure.Code
 	}
-	body, _ := json.Marshal(struct {
+	body, err := json.Marshal(struct {
 		ID               string               `json:"id"`
 		Tool             string               `json:"tool"`
 		ToolCallID       string               `json:"tool_call_id"`
@@ -134,7 +134,7 @@ func invocationFeedback(result *api.ToolResult) (json.RawMessage, bool) {
 		SourceRootDigest string               `json:"source_root_digest,omitempty"`
 		SourceVerdict    string               `json:"source_verdict,omitempty"`
 	}{receipt.ID, receipt.Tool, receipt.ToolCallID, receipt.Status, receipt.Invoked, code, receipt.SourceRevision, receipt.SourceRootDigest, receipt.SourceVerdict})
-	if len(body) > 2<<10 {
+	if err != nil || len(body) > 2<<10 {
 		return nil, true
 	}
 	return body, false
