@@ -31,6 +31,7 @@ func (e *Executor) applyPreInvokeBoundary(
 	} else if socks {
 		tc.Local.SocksProxyEnv = true
 	}
+	tc.Host.ExecutableAlternates = e.Network.execAlternates
 	var hostResourceResolution *hostresources.ActionResolution
 	args, hostResourceResolution, err = e.Network.expandHostResourceConnections(ctx, tool, args, tc)
 	if err != nil {

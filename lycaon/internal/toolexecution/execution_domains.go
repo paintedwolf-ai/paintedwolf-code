@@ -73,6 +73,7 @@ type Network struct {
 	Secrets            *Secrets
 	egressPostureFor   func(projectDir string) gate.Posture
 	hostResourceSource HostResourceConnectionSource
+	execAlternates     func(name string) []string
 	hostLedger         SessionHostLedger
 	egressGather       *egressGathers
 	egressGatherOnce   sync.Once

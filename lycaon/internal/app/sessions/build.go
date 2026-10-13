@@ -190,6 +190,7 @@ func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResou
 		host.Authority.SetApprovalRuleSource(&mgr.Catalog)
 		if hostResources != nil {
 			host.Executor.Network.SetHostResourceConnectionSource(hostResources.ResolveAction)
+			host.Executor.Network.SetExecutableAlternatesSource(hostResources.ExecutableAlternates)
 		}
 		host.Skills.SetSkillsCatalog(func(ctx context.Context, tctx tools.ToolContext) []skills.Skill {
 			roots := make([]string, 0, len(tctx.Source.Roots))

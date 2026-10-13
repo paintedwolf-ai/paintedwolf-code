@@ -273,7 +273,7 @@ func runCommandBackground(
 		if egressLease != nil {
 			egressLease.Close(ctx)
 		}
-		return "", commandStartError(err)
+		return "", nameCatalogAlternates(commandStartError(err), tctx.Host.ExecutableAlternates)
 	}
 	if directIPApplied {
 		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)

@@ -159,3 +159,40 @@ func TestResolvableNeighboursReadTheResolvedPath(t *testing.T) {
 		t.Fatalf("neighbours = %v, want [toolshed3] from the resolved PATH", got)
 	}
 }
+
+// A name the host resource catalog declares is answered from the catalog, not
+// from whatever else on PATH shares its prefix.
+func TestCommandNotFoundPrefersCatalogAlternates(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"toolshed-build", "toolshed3"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	t.Setenv("PATH", dir)
+	catalog := func(name string) []string {
+		if name == "toolshed" {
+			return []string{"toolshed3"}
+		}
+		return nil
+	}
+	tr := toolrejection.AsToolReject(nameCatalogAlternates(commandNotFoundReject("toolshed"), catalog))
+	if got, _ := tr.Data["resolvable"].(string); got != "toolshed3" {
+		t.Fatalf("resolvable = %q, want the catalog equivalent", got)
+	}
+	tr = toolrejection.AsToolReject(nameCatalogAlternates(commandNotFoundReject("toolshed-b"), catalog))
+	if got, _ := tr.Data["resolvable"].(string); got != "toolshed-build" {
+		t.Fatalf("uncatalogued name lost its PATH neighbour: %q", got)
+	}
+	tr = toolrejection.AsToolReject(nameCatalogAlternates(commandNotFoundReject("toolshed"), nil))
+	if got, _ := tr.Data["resolvable"].(string); got != "toolshed-build, toolshed3" {
+		t.Fatalf("absent catalog changed PATH neighbours: %q", got)
+	}
+	other := errors.New("boom")
+	if got := nameCatalogAlternates(other, catalog); !errors.Is(got, other) {
+		t.Fatalf("unrelated error changed: %v", got)
+	}
+	if nameCatalogAlternates(nil, catalog) != nil {
+		t.Fatal("nil error changed")
+	}
+}

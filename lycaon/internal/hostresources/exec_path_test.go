@@ -203,3 +203,33 @@ func TestResolvedPathDrivesDiscovery(t *testing.T) {
 		t.Fatalf("status = %q, want available once discovery searches the resolved PATH", status)
 	}
 }
+
+// The catalog declares which names are the same tool; only those on this
+// device are stated, in declared order.
+func TestExecutableAlternatesNameResolvableCatalogEquivalents(t *testing.T) {
+	linkDir, _ := vendorBundle(t, "runtime3", "runtime3.9", "runtime-build")
+	service := serviceForPath(t, execDef("runtime", "runtime3", "runtime", "runtime3.9", "runtime-absent"), []string{linkDir})
+	if got := service.ExecutableAlternates("runtime"); len(got) != 2 || got[0] != "runtime3" || got[1] != "runtime3.9" {
+		t.Fatalf("alternates = %v, want [runtime3 runtime3.9]", got)
+	}
+	if got := service.ExecutableAlternates("runtime-build"); got != nil {
+		t.Fatalf("undeclared name has alternates %v", got)
+	}
+	if got := service.ExecutableAlternates(""); got != nil {
+		t.Fatalf("empty name has alternates %v", got)
+	}
+	var absent *Service
+	if got := absent.ExecutableAlternates("runtime"); got != nil {
+		t.Fatalf("absent service has alternates %v", got)
+	}
+}
+
+func TestExecutableAlternatesSkipOtherPlatforms(t *testing.T) {
+	linkDir, _ := vendorBundle(t, "runtime3")
+	def := execDef("runtime", "runtime3", "runtime")
+	def.Realizations[0].Platforms = []string{"windows"}
+	service := serviceForPath(t, def, []string{linkDir})
+	if got := service.ExecutableAlternates("runtime"); got != nil {
+		t.Fatalf("alternates from another platform's realization = %v", got)
+	}
+}

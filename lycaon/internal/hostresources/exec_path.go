@@ -61,6 +61,39 @@ func (s *Service) canonicalExecutableDir(name string) (string, bool) {
 	return dir, true
 }
 
+// ExecutableAlternates returns the other names the catalog declares for the
+// executable called name that resolve on this device, in declared order.
+func (s *Service) ExecutableAlternates(name string) []string {
+	if s == nil || name == "" {
+		return nil
+	}
+	s.mu.Lock()
+	defs := append([]Definition(nil), s.defs...)
+	s.mu.Unlock()
+	seen := map[string]struct{}{name: {}}
+	var out []string
+	for _, def := range defs {
+		realization := realizationForPlatform(def.Realizations, s.env.platform)
+		if realization == nil {
+			continue
+		}
+		names := executableNames(realization.Discover)
+		if !stringSetIncludes(names, name) {
+			continue
+		}
+		for _, candidate := range names {
+			if _, dup := seen[candidate]; dup {
+				continue
+			}
+			seen[candidate] = struct{}{}
+			if _, err := s.env.lookPath(candidate); err == nil {
+				out = append(out, candidate)
+			}
+		}
+	}
+	return out
+}
+
 // executableNames collects the names an expression tree would look up, in order.
 func executableNames(expr Expression) []string {
 	if expr.Executable != nil {

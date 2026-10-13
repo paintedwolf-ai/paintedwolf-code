@@ -118,3 +118,25 @@ func TestObserveHostResourceResolutionPublishesExternalAuthorizationOutcome(t *t
 		t.Fatalf("docker policy = %q, want deny", got)
 	}
 }
+
+// Command feedback reads catalog equivalents from the invocation's tool context.
+func TestPreInvokeBoundaryCarriesExecutableAlternates(t *testing.T) {
+	executor := NewExecutor(nil, nil, "")
+	executor.Network.SetExecutableAlternatesSource(func(name string) []string { return []string{name + "3"} })
+	args := map[string]any{
+		"command":            "runtime --version",
+		"capability_request": map[string]any{"host_resources": []any{"runtime"}},
+	}
+	_, tc, err := executor.applyPreInvokeBoundary(context.Background(), "command", "coordinator", args, tools.ToolContext{})
+	if err == nil {
+		t.Fatal("an unavailable host resource catalog must reject before invocation")
+	}
+	if tc.Host.ExecutableAlternates == nil {
+		t.Fatal("tool context lacks the alternates source")
+	}
+	if got := tc.Host.ExecutableAlternates("runtime"); !reflect.DeepEqual(got, []string{"runtime3"}) {
+		t.Fatalf("alternates = %v", got)
+	}
+	var absent *Network
+	absent.SetExecutableAlternatesSource(nil)
+}
