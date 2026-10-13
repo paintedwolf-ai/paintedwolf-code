@@ -20,7 +20,31 @@ func compactionMeasure(messages []ContextMessage, counter tokenest.Counter) (int
 			return 0, err
 		}
 		total += n
+		if r := msg.ModelReasoning; r != nil {
+			fields := []string{r.Text}
+			for _, detail := range r.Details {
+				fields = append(fields, string(detail))
+			}
+			for _, field := range fields {
+				n, err := counter.Count(field)
+				if err != nil {
+					return 0, err
+				}
+				total += n
+			}
+		}
 		for _, call := range msg.ToolCalls {
+			if len(call.ExtraContent) > 0 {
+				raw, err := json.Marshal(call.ExtraContent)
+				if err != nil {
+					return 0, err
+				}
+				n, err := counter.Count(string(raw))
+				if err != nil {
+					return 0, err
+				}
+				total += n
+			}
 			raw, err := json.Marshal(call.Args)
 			if err != nil {
 				return 0, err

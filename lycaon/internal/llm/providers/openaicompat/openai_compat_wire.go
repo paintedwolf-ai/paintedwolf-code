@@ -210,6 +210,11 @@ type MessageProjection struct {
 // emits, whatever its role; a message with nothing to mark hands it back to
 // the message before it.
 func ProjectMessages(msgs []api.Message, proj MessageProjection) []Message {
+	scope := providerwire.ReasoningReplayHistory
+	if proj.ReasoningWire == providerprofile.ReasoningWireNone {
+		scope = providerwire.ReasoningReplayNone
+	}
+	msgs = providerwire.ProjectReasoning(msgs, proj.ProviderID, proj.Model, scope)
 	out := make([]Message, 0, len(msgs))
 	pendingToolCallIDs := make(providerwire.ToolCallPairs)
 	vision := proj.Vision
@@ -242,7 +247,7 @@ func ProjectMessages(msgs []api.Message, proj MessageProjection) []Message {
 				Role:    string(openai.ChatMessageRoleAssistant),
 				Content: m.Content,
 			}
-			if reasoning := providerwire.ReasoningForModel(m, proj.ProviderID, proj.Model); reasoning != nil {
+			if reasoning := m.ModelReasoning; reasoning != nil {
 				switch proj.ReasoningWire {
 				case providerprofile.ReasoningWireContent:
 					wMsg.ReasoningContent = reasoning.Text

@@ -101,3 +101,16 @@ func TestMergeMessagePatchAttachesAndPreservesCompletionReport(t *testing.T) {
 		t.Fatalf("completion_report = %+v want stable metadata preserved", streamPatch.CompletionReport)
 	}
 }
+
+func TestMessagePatchReplacesReasoningWithContent(t *testing.T) {
+	existing := api.Message{ID: "a", Role: api.MessageRoleAssistant, ModelReasoning: &api.ModelReasoning{ProviderID: "p", Model: "old", Text: "old trace"}}
+	patch := api.Message{ID: "a", Content: "new answer", ModelReasoning: &api.ModelReasoning{ProviderID: "p", Model: "new", Text: "new trace"}}
+	merged := api.MergeMessagePatch(existing, patch)
+	if merged.ModelReasoning != patch.ModelReasoning || existing.ModelReasoning.Text != "old trace" {
+		t.Fatal("patch did not replace row-local replay state")
+	}
+	merged = api.MergeMessagePatch(merged, api.Message{ID: "a", Content: "answer without reasoning"})
+	if merged.ModelReasoning != nil {
+		t.Fatal("old trace survived replacement content")
+	}
+}

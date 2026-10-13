@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/llm/providers/ollama/ollama_test.go",
+  "kind": "test_suite",
+  "workstream": "project-reasoning-retention",
+  "disposition": "retain",
+  "reason": "The suite covers native request preparation, transcript projection, and stream handling at the provider boundary. Keep its transport fixtures together; continuation and context admission have separate focused suites.",
+  "reviewed_commit": "f3941b0da321257f3a73bef42b041f61f30feaac",
+  "ceiling": 439,
+  "boundaries": {
+    "lycaon/internal/llm/providers/ollama/reasoning_recovery_test.go": "c18d5c4e7f7fef019d9407a286b9d47fcb909fc5c7eb9d7eff52081f203d83b7",
+    "lycaon/internal/llm/providers/ollama/context_cap_test.go": "761f807bacd5b77441f933cb84a612a37cd0bed9a62c477a9d7afe42fcacaa72"
+  }
+}

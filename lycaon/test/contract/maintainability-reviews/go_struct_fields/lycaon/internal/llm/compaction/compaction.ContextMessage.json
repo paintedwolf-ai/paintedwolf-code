@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/llm/compaction/compaction.ContextMessage",
+  "kind": "data_record",
+  "workstream": "project-reasoning-retention",
+  "disposition": "retain",
+  "reason": "One context row carries transcript identity, content, tool pairing, and private continuation state through compaction and projection. Keep these explicit fields together; splitting them would hide the invariants needed to retain a complete exchange.",
+  "reviewed_commit": "3eea863db8acb72e10e6766da8b55fce3ee992cd",
+  "ceiling": 28,
+  "boundaries": {
+    "lycaon/internal/llm/compaction/reasoning_retention_test.go": "c36d19859063bf23bf18f65c20657167e80b2d542c1b8606bade415c3cc9d741",
+    "lycaon/pkg/api/message_transcript_test.go": "9154ac9557dfbe23ed23590d5a3d2de10a1ac904b9e3b343cce14ddd5dd4462c"
+  },
+  "reviewed_shape": "41c395dc05b026d52e5eb905475ceb9e4a9ef9feca20cdbba00664c94e5b7bd5"
+}

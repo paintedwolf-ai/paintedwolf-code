@@ -1,6 +1,7 @@
 package api
 
 import (
+	"reflect"
 	"strings"
 )
 
@@ -299,6 +300,10 @@ func FilterPromptHistory(messages []Message) []Message {
 func RehydrateTranscriptProjectionFields(projected, canonical Message) Message {
 	if projected.ID == "" || canonical.ID == "" || projected.ID != canonical.ID {
 		return projected
+	}
+	projected.ModelReasoning = nil
+	if projected.Role == MessageRoleAssistant && canonical.Role == MessageRoleAssistant && projected.CompactedChunk == nil && projected.Content == canonical.Content && reflect.DeepEqual(projected.ToolCalls, canonical.ToolCalls) {
+		projected.ModelReasoning = canonical.ModelReasoning
 	}
 	projected.Kind = canonical.Kind
 	projected.WorkflowRunID = canonical.WorkflowRunID

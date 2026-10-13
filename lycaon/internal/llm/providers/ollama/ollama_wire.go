@@ -74,7 +74,15 @@ type ollamaChatResponse struct {
 	Error              string            `json:"error"`
 }
 
-func ProjectMessages(msgs []api.Message, vision bool, sessionID string) []ollamaChatMessage {
+type MessageProjection struct {
+	Vision     bool
+	SessionID  string
+	ProviderID string
+	Model      string
+}
+
+func ProjectMessages(msgs []api.Message, projection MessageProjection) []ollamaChatMessage {
+	msgs = providerwire.ProjectReasoning(msgs, projection.ProviderID, projection.Model, providerwire.ReasoningReplayCurrentToolLoop)
 	msgs = providerwire.SystemPreamble(msgs)
 	out := make([]ollamaChatMessage, 0, len(msgs))
 	// Model templates render images on user turns, so a run of tool results
@@ -98,6 +106,9 @@ func ProjectMessages(msgs []api.Message, vision bool, sessionID string) []ollama
 		switch m.Role {
 		case api.MessageRoleAssistant:
 			wMsg := ollamaChatMessage{Role: "assistant", Content: m.Content}
+			if m.ModelReasoning != nil {
+				wMsg.Thinking = m.ModelReasoning.Text
+			}
 			for _, tc := range m.ToolCalls {
 				wMsg.ToolCalls = append(wMsg.ToolCalls, ollamaToolCall{
 					Function: ollamaToolCallFunction{Name: tc.Name, Arguments: providerwire.ToolArgs(tc.Args)},
@@ -122,9 +133,9 @@ func ProjectMessages(msgs []api.Message, vision bool, sessionID string) []ollama
 			out = append(out, ollamaChatMessage{Role: "system", Content: m.Content})
 		default:
 			wire := ollamaChatMessage{Role: "user", Content: m.Content}
-			if vision {
+			if projection.Vision {
 				for _, artifactID := range m.ArtifactIDs {
-					_, encoded, ok := providerwire.UserArtifactWireImage(sessionID, artifactID)
+					_, encoded, ok := providerwire.UserArtifactWireImage(projection.SessionID, artifactID)
 					if ok {
 						wire.Images = append(wire.Images, encoded)
 					}

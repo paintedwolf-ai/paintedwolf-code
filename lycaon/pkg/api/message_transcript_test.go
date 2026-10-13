@@ -280,3 +280,30 @@ func TestCloseToolCallGroupsForPromptIsAStableNoOpWhenEveryCallIsAnswered(t *tes
 		t.Fatalf("out = %+v want the input unchanged", out)
 	}
 }
+
+func TestRehydrateReasoningRequiresUnchangedAssistant(t *testing.T) {
+	canonical := Message{ID: "a", Role: MessageRoleAssistant, Content: "answer", ToolCalls: []ToolCall{{ID: "call", Name: "read"}}, ModelReasoning: &ModelReasoning{ProviderID: "p", Model: "m", Text: "trace"}}
+	for _, change := range []string{"unchanged", "text", "calls", "compacted", "role", "canonical role"} {
+		t.Run(change, func(t *testing.T) {
+			projected := canonical
+			projected.ModelReasoning = nil
+			source := canonical
+			switch change {
+			case "text":
+				projected.Content = "summary"
+			case "calls":
+				projected.ToolCalls = nil
+			case "compacted":
+				projected.CompactedChunk = &CompactedChunkMeta{Strategy: "summarize"}
+			case "role":
+				projected.Role = MessageRoleUser
+			case "canonical role":
+				source.Role = MessageRoleUser
+			}
+			got := RehydrateTranscriptProjectionFields(projected, source)
+			if (got.ModelReasoning != nil) != (change == "unchanged") {
+				t.Fatalf("%s reasoning eligibility incorrect", change)
+			}
+		})
+	}
+}

@@ -48,7 +48,7 @@ func ClassifyMessageDiet(in ClassifyMessageDietInput) MessageDietClass {
 		return MessageDietClass{Eligibility: DietEligibilityEligible, Strategy: evidence.TranscriptDietAgeDefault}
 	}
 	msg := in.Messages[in.Index]
-	if msg.ContextPinned || msg.CompactionCheckpoint || msg.DietStampSource == DietStampSourceWorkerEnvelope {
+	if msg.ContextPinned || msg.ModelReasoning != nil || msg.CompactionCheckpoint || msg.DietStampSource == DietStampSourceWorkerEnvelope {
 		return MessageDietClass{Eligibility: DietEligibilityPinned}
 	}
 	if !in.ForceEligible {

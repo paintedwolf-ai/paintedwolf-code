@@ -143,6 +143,12 @@ func EstimateMessagesTokensWithVision(messages []ContextMessage, attachImages bo
 	toolImages := 0
 	for _, m := range messages {
 		total += tokenest.EstimateDefault(m.Content)
+		if r := m.ModelReasoning; r != nil {
+			total += tokenest.EstimateDefault(r.Text)
+			for _, detail := range r.Details {
+				total += tokenest.EstimateDefault(string(detail))
+			}
+		}
 		if attachImages {
 			total += m.AttachmentImageTokens
 			if m.ToolImageTokens > 0 {
@@ -154,6 +160,11 @@ func EstimateMessagesTokensWithVision(messages []ContextMessage, attachImages bo
 		}
 		for _, tc := range m.ToolCalls {
 			total += tokenest.EstimateDefault(tc.Name)
+			if len(tc.ExtraContent) > 0 {
+				if raw, err := json.Marshal(tc.ExtraContent); err == nil {
+					total += tokenest.EstimateDefault(string(raw))
+				}
+			}
 			if len(tc.Args) > 0 {
 				if raw, err := json.Marshal(tc.Args); err == nil {
 					total += tokenest.EstimateDefault(string(raw))

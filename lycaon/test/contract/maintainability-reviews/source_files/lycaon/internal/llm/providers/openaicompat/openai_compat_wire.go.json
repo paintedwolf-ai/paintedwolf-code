@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/llm/providers/openaicompat/openai_compat_wire.go",
+  "kind": "projection",
+  "workstream": "project-reasoning-retention",
+  "disposition": "retain",
+  "reason": "This file maps transcript content and tool exchanges to the compatible chat wire shape. Shared replay selection owns provenance; configured wire serialization belongs with the transport mapping.",
+  "reviewed_commit": "3eea863db8acb72e10e6766da8b55fce3ee992cd",
+  "ceiling": 453,
+  "boundaries": {
+    "lycaon/internal/llm/providers/openaicompat/reasoning_wire_test.go": "1d0d55ee0958203048e7dc7a4909f365dc8b0039f82261a513050ca14b01612c",
+    "lycaon/internal/llm/providers/openaicompat/reasoning_details_test.go": "d235e1aeeaacbaac1a5c16578b44de1e62c5a579f62c06aa17d1016de34b74af"
+  }
+}

@@ -19,6 +19,7 @@ type ContextMessage struct {
 	Visibility         api.MessageVisibility
 	CheckpointDecision *api.CheckpointDecisionMeta
 	ToolFeedback       []api.ToolFeedback
+	ModelReasoning     *api.ModelReasoning
 	ToolCalls          []api.ToolCall
 	// ToolCallID resolves the producing tool across assistant and result rows.
 	ToolCallID           string
@@ -68,6 +69,7 @@ func ContextMessageFromAPI(m api.Message) ContextMessage {
 		DietStamp:             m.DietStamp,
 		DietStampSource:       m.DietStampSource,
 		ModelProjected:        m.ModelProjected,
+		ModelReasoning:        m.ModelReasoning,
 	}
 	if m.ToolResult != nil {
 		if out.Content == "" {
@@ -121,6 +123,7 @@ func ContextMessageToAPI(m ContextMessage) api.Message {
 		DietStamp:             m.DietStamp,
 		DietStampSource:       m.DietStampSource,
 		ModelProjected:        m.ModelProjected,
+		ModelReasoning:        m.ModelReasoning,
 	}
 	if m.Role == string(api.MessageRoleTool) {
 		out.ToolResult = &api.ToolResult{ToolCallID: m.ToolCallID, Tool: m.ToolName, Content: m.Content,

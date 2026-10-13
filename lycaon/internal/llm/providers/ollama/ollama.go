@@ -22,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const ollamaProbeTimeout = 3 * time.Second
@@ -160,33 +159,22 @@ func (p *Provider) resolveThink(req modelcall.CompletionRequest, model string) a
 	return think
 }
 
-// estimatePromptTokens includes messages, tool calls, and tool schemas.
-func estimatePromptTokens(req modelcall.CompletionRequest) int {
+// estimatePromptTokens counts the projected messages and callable schemas.
+func estimatePromptTokens(messages []ollamaChatMessage, toolMetas []ollamaTool) int {
 	total := 0
-	for _, m := range req.Messages {
-		if api.IsAgentNoteMessage(m) {
-			continue
-		}
-		content := m.Content
-		if m.Role == api.MessageRoleTool && content == "" && m.ToolResult != nil {
-			content = m.ToolResult.Content
-		}
-		total += tokenest.EstimateDefault(content)
+	for _, m := range messages {
+		total += tokenest.EstimateDefault(m.Content) + tokenest.EstimateDefault(m.Thinking)
 		for _, tc := range m.ToolCalls {
-			total += tokenest.EstimateDefault(tc.Name)
-			if len(tc.Args) > 0 {
-				if raw, err := json.Marshal(tc.Args); err == nil {
-					total += tokenest.EstimateDefault(string(raw))
-				}
+			total += tokenest.EstimateDefault(tc.Function.Name)
+			if raw, err := json.Marshal(tc.Function.Arguments); err == nil {
+				total += tokenest.EstimateDefault(string(raw))
 			}
 		}
 	}
-	for _, t := range req.Tools {
-		total += tokenest.EstimateDefault(t.Name) + tokenest.EstimateDefault(t.Description)
-		if t.ArgsSchema != nil {
-			if raw, err := json.Marshal(t.ArgsSchema); err == nil {
-				total += tokenest.EstimateDefault(string(raw))
-			}
+	for _, t := range toolMetas {
+		total += tokenest.EstimateDefault(t.Function.Name) + tokenest.EstimateDefault(t.Function.Description)
+		if raw, err := json.Marshal(t.Function.Parameters); err == nil {
+			total += tokenest.EstimateDefault(string(raw))
 		}
 	}
 	return total
@@ -199,7 +187,9 @@ func (p *Provider) Prepare(ctx context.Context, req modelcall.CompletionRequest,
 	vision := modelinfo.Supported(entry.EffectiveCapabilities().Vision)
 	req.Messages = providerwire.PrepareMessagesForVision(req.Messages, vision, req.Debug.SessionID)
 	temperature, numPredict := p.resolveControls(req, model)
-	promptTokens := estimatePromptTokens(req)
+	messages := ProjectMessages(req.Messages, MessageProjection{Vision: vision, SessionID: req.Debug.SessionID, ProviderID: p.id, Model: model})
+	callableTools := ollamaCallableTools(req)
+	promptTokens := estimatePromptTokens(messages, callableTools)
 	projectedPromptTokens := p.projectPromptTokens(model, promptTokens)
 	maxContext := p.ContextLimit(ctx, model)
 	// Keep automatic answer room inside the model's actual context window.
@@ -242,8 +232,8 @@ func (p *Provider) Prepare(ctx context.Context, req modelcall.CompletionRequest,
 		"max_context", maxContext)
 	body := Request{
 		Model:     model,
-		Messages:  ProjectMessages(req.Messages, vision, req.Debug.SessionID),
-		Tools:     ollamaCallableTools(req),
+		Messages:  messages,
+		Tools:     callableTools,
 		Stream:    stream,
 		KeepAlive: providerwire.ProjectPromptCache(req, p.profile.PromptCache, modelinfo.ModelCapabilities{}).KeepAlive,
 		Options: ollamaOptions{
