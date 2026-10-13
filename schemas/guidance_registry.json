@@ -1589,6 +1589,12 @@
       "emit": "guard:coordinator",
       "summary": "`task()` base_overlay_id {{ paintedwolf.base_overlay_id }} is {{ paintedwolf.merge_status }} — cannot stack on it{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %}"
     },
+    "OVERLAY_DISPOSITION_REQUIRED_BEFORE_CLOSEOUT": {
+      "branch_instruction": "Use native tool calls for the overlay decision. Do not repeat the completion claim, mark pending delivery done, or dispatch replacement work merely to close out. If a human decision is required, use the offered ask_user tool.",
+      "category": "recoverable",
+      "emit": "guard:coordinator",
+      "summary": "Worker `{{ paintedwolf.job_id }}` finished, but its changes still await an overlay decision."
+    },
     "OVERLAY_PARENT_REJECTED": {
       "branch_instruction": "Account for the orphaned child and re-dispatch only work still required",
       "category": "advisory",

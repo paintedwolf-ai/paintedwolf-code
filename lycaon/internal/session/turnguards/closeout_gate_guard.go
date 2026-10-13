@@ -15,6 +15,29 @@ import (
 const workflowGatesOpenCode = "WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT"
 const closeoutGateDelayMaxPerPrompt = 2
 
+const overlayDispositionRequiredCode = "OVERLAY_DISPOSITION_REQUIRED_BEFORE_CLOSEOUT"
+
+// PendingOverlays keeps execution completion separate from delivery to the primary tree.
+func (m *Service) PendingOverlays(ctx context.Context, sess *api.Session, invokeAllowed bool) (*guidance.Refusal, bool) {
+	if m == nil || sess == nil || sess.IsWorkerChild() {
+		return nil, false
+	}
+	pending := m.state.ForSession(ctx, sess).PendingOverlayIDs
+	if len(pending) == 0 {
+		return nil, false
+	}
+	reject, blocked := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
+		gc.Workers.PendingOverlayPromote = true
+		gc.Rejection.RejectObservation = "closeout_pending_overlays"
+		gc.PutRejectData(overlayDispositionRequiredCode, map[string]any{"job_id": pending[0]})
+		return nil
+	})
+	if blocked && !invokeAllowed {
+		reject = reject.WithCause(guidance.ErrCloseoutStopped)
+	}
+	return reject, blocked
+}
+
 // OpenGates bounds repair attempts independently of completion admission.
 func (m *Service) OpenGates(ctx context.Context, sess *api.Session, workersIdle, invokeAllowed bool) (*guidance.Refusal, bool) {
 	if m == nil || sess == nil || sess.IsWorkerChild() || m.workflows == nil {
@@ -48,6 +71,9 @@ func (m *Service) OpenGates(ctx context.Context, sess *api.Session, workersIdle,
 func (m *Service) AssertCompletion(ctx context.Context, sess *api.Session) error {
 	if m == nil || sess == nil || sess.IsWorkerChild() {
 		return nil
+	}
+	if reject, blocked := m.PendingOverlays(ctx, sess, false); blocked {
+		return reject
 	}
 	idle := m.state.ForSession(ctx, sess).WorkersInFlight == 0
 	reject, blocked := m.OpenGates(ctx, sess, idle, false)
