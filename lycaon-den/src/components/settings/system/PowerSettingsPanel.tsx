@@ -1,3 +1,4 @@
+import { createResidentActivity } from "../../../ui/resident-activity.ts";
 import { createSurfaceQuery } from "../../../ui/surface-query.ts";
 import { Show, createSignal } from "solid-js";
 import type { LycaonClient } from "../../../api/client.ts";
@@ -19,11 +20,17 @@ export function PowerSettingsPanel(props: Props) {
   const [actionError, setError] = createSignal<string | null>(null);
   const error = () => actionError() ?? query.error();
   const supported = () => status()?.supported ?? false;
+  createResidentActivity(() => {
+    const timer = setInterval(() => {
+      if (!saving() && !query.loading()) void query.refresh();
+    }, 5_000);
+    return () => clearInterval(timer);
+  });
 
   const save = (enabled: boolean) => {
     const client = props.client;
     const previous = status();
-    if (!client || !previous) return;
+    if (!client || !previous || query.loading() || saving()) return;
     const target = query.capture();
     target.publish({ ...previous, keep_awake_while_working: enabled });
     setSaving(true);
@@ -65,7 +72,7 @@ export function PowerSettingsPanel(props: Props) {
           </div>
           <DenCheckbox
             checked={status()?.keep_awake_while_working ?? true}
-            disabled={!props.client || !supported() || saving()}
+            disabled={!props.client || !supported() || saving() || query.loading()}
             data-testid="power-keep-awake"
             onChange={(event) => save(event.currentTarget.checked)}
           >
