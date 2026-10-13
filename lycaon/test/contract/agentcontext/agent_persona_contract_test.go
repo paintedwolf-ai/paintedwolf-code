@@ -186,11 +186,12 @@ func TestArchetypePartialsInRenderedOutput(t *testing.T) {
 				if !strings.Contains(got, "DOOM_LOOP") {
 					t.Fatalf("agent %q missing doom-loop guidance in tool surface", id)
 				}
-				if !strings.Contains(got, "Branch on tool") {
-					t.Fatalf("agent %q missing branch-on-Code meta-rule in tool surface", id)
+				for _, fact := range []string{"Branch on invocation facts", "Code:", "invoked:false", "action did not run", "invoked:true", "does not prove success"} {
+					if !strings.Contains(got, fact) {
+						t.Fatalf("agent %q missing invocation guidance %q in tool surface", id, fact)
+					}
 				}
-				// Secure floors ride agent-tool-surface (self-gated by profile_has_*_tools)
-				// so new archetypes inherit them without a per-agent include.
+				// Tool profiles determine the included security floors.
 				profileID, err := prompts.ToolProfileForAgent(id)
 				contractcheck.FailErr(t, "resolve agent profile", err)
 				toolSurface, err := prompts.LoadAgentToolSurface(profileID, nil, nil, prompts.SurfaceTurn{}, profiles)

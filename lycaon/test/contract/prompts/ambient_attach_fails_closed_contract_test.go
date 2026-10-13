@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/apitest"
+	"github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -64,7 +65,9 @@ func newAmbientAttachFixture(t *testing.T, startsAdmitted bool) ambientAttachFix
 		Storage:  api.StorageDependencies{ModuleRoot: filepath.Join(contractcheck.RepoRoot(t), "lycaon")},
 		Workflow: api.WorkflowDependencies{Workflows: mgr, WorkflowRuns: store},
 	})
-	return ambientAttachFixture{srv: api.NewServer(deps, nil, api.TestAPIToken), projectID: p.ID, runs: runs}
+	srv := api.NewServer(deps, nil, api.TestAPIToken)
+	contractfixture.StopBackgroundOnCleanup(t, srv)
+	return ambientAttachFixture{srv: srv, projectID: p.ID, runs: runs}
 }
 
 // createSession posts a session and returns the accepted body.
