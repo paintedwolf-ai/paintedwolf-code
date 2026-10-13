@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -35,13 +36,17 @@ func agentFixtureBus(t *testing.T) string {
 }
 
 type agentEnvironmentFixture struct {
+	mu      sync.Mutex
 	value   dbus.Variant
 	queried chan []string
 }
 
 func (f *agentEnvironmentFixture) Get(iface, property string) (dbus.Variant, *dbus.Error) {
+	f.mu.Lock()
+	value := f.value
+	f.mu.Unlock()
 	f.queried <- []string{iface, property}
-	return f.value, nil
+	return value, nil
 }
 
 func TestLinuxAgentDiscoveryReadsTheNativeUserManagerProperty(t *testing.T) {
@@ -67,7 +72,9 @@ func TestLinuxAgentDiscoveryReadsTheNativeUserManagerProperty(t *testing.T) {
 	if query[0] != "org.freedesktop.systemd1.Manager" || query[1] != "Environment" {
 		t.Fatalf("native property query = %v", query)
 	}
+	fixture.mu.Lock()
 	fixture.value = dbus.MakeVariant(true)
+	fixture.mu.Unlock()
 	if got := sessionAgentSocket(t.Context(), path); got != "" {
 		t.Fatalf("accepted mistyped environment %q", got)
 	}
