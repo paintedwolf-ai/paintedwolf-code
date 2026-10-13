@@ -8,6 +8,7 @@
 # GCC runtime libraries, all statically.
 ARG BASE_IMAGE=alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8
 FROM ${BASE_IMAGE} AS build
+ARG BASE_IMAGE
 ARG TARGETARCH
 ARG ENGINE_VERSION
 ARG TESSERACT_VERSION
@@ -52,11 +53,10 @@ RUN cd "tesseract-${TESSERACT_VERSION}" \
       CXXFLAGS="-O2 -ffile-prefix-map=/src=." \
  && make -j"$(nproc)" LDFLAGS="-all-static" && make install
 
-RUN mkdir -p /out/ocr/bin /out/ocr/tessdata/configs /out/ocr/licenses \
+RUN mkdir -p /out/ocr/bin /out/ocr/tessdata /out/ocr/licenses \
  && cp /opt/tess/bin/tesseract /out/ocr/bin/tesseract \
  && strip /out/ocr/bin/tesseract \
  && file /out/ocr/bin/tesseract | grep -q "statically linked" \
- && cp /opt/tess/share/tessdata/configs/tsv /out/ocr/tessdata/configs/tsv \
  && cd /out/ocr/tessdata \
  && curl -fsSL -o eng.traineddata "https://raw.githubusercontent.com/tesseract-ocr/tessdata_fast/${TESSDATA_FAST_COMMIT}/eng.traineddata" \
  && echo "${ENG_SHA256}  eng.traineddata" | sha256sum -c - \
