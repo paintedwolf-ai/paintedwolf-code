@@ -6,7 +6,40 @@ use super::identity::Delivered;
 
 const SERVICE: &str = "org.freedesktop.Notifications";
 const PATH: &str = "/org/freedesktop/Notifications";
+const BUS: &str = "org.freedesktop.DBus";
+const BUS_PATH: &str = "/org/freedesktop/DBus";
 const APPLICATION_NAME: &str = "Painted Wolf Code";
+/// Desktop entry id installed by the Linux packages.
+pub(super) const DESKTOP_ENTRY: &str = "ai.paintedwolf.code";
+const SHELL_NOTIFICATIONS: &str = "org.gnome.Shell.Notifications";
+const BANNER_SCHEMA: &str = "org.gnome.desktop.notifications";
+const BANNER_KEY: &str = "show-banners";
+const DO_NOT_DISTURB_MODE: &str = "do-not-disturb";
+
+/// Properties a notification server exposes while it withholds banners.
+/// A boolean is the paused state; a mode list is paused while it names
+/// do-not-disturb.
+const INHIBITION_PROPERTIES: &[(&str, &str, &str)] = &[
+    (PATH, SERVICE, "Inhibited"),
+    (PATH, "org.dunstproject.cmd0", "paused"),
+    ("/fr/emersion/Mako", "fr.emersion.Mako", "Modes"),
+];
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Outcome {
+    Delivered,
+    /// The service accepted the notification but is withholding banners.
+    Inhibited,
+}
+
+impl Outcome {
+    pub(super) fn as_str(self) -> &'static str {
+        match self {
+            Outcome::Delivered => "delivered",
+            Outcome::Inhibited => "inhibited",
+        }
+    }
+}
 
 pub(super) struct Delivery {
     connection: gio::DBusConnection,
@@ -22,7 +55,7 @@ impl Delivery {
         activated: impl Fn(Option<String>, Option<String>) + 'static,
         deadline: Instant,
     ) -> Result<Self, String> {
-        let owner = current_owner(&connection, deadline)?;
+        let owner = resolve_owner(&connection, deadline)?;
         let reply = call(&connection, &owner, "GetCapabilities", None, deadline)?;
         let (capabilities,) = reply
             .get::<(Vec<String>,)>()
@@ -70,10 +103,10 @@ impl Delivery {
         ));
         let entries = delivered.clone();
         subscriptions.push(connection.signal_subscribe(
-            Some("org.freedesktop.DBus"),
-            Some("org.freedesktop.DBus"),
+            Some(BUS),
+            Some(BUS),
             Some("NameOwnerChanged"),
-            Some("/org/freedesktop/DBus"),
+            Some(BUS_PATH),
             Some(SERVICE),
             gio::DBusSignalFlags::NONE,
             move |_, _, _, _, _, parameters| {
@@ -104,7 +137,7 @@ impl Delivery {
         body: String,
         session_id: Option<String>,
         deadline: Instant,
-    ) -> Result<(), String> {
+    ) -> Result<Outcome, String> {
         if title.len() > 4096
             || body.len() > 32 << 10
             || title.contains('\0')
@@ -123,7 +156,7 @@ impl Delivery {
         self.delivered.borrow().admit(replacement)?;
         let body = notification_body(&body, &self.capabilities);
         let hints = HashMap::from([
-            ("desktop-entry", APPLICATION_NAME.to_variant()),
+            ("desktop-entry", DESKTOP_ENTRY.to_variant()),
             ("suppress-sound", true.to_variant()),
         ]);
         let actions = if self
@@ -158,7 +191,12 @@ impl Delivery {
             .ok_or("Invalid desktop notification identifier")?;
         self.delivered
             .borrow_mut()
-            .record(id, replacement, session_id)
+            .record(id, replacement, session_id)?;
+        Ok(if self.inhibited(deadline) {
+            Outcome::Inhibited
+        } else {
+            Outcome::Delivered
+        })
     }
 
     pub(super) fn cancel(&self, sessions: &[String], deadline: Instant) -> Result<(), String> {
@@ -180,6 +218,59 @@ impl Delivery {
         }
         failure.map_or(Ok(()), Err)
     }
+
+    /// Whether the service currently withholds banners. An unknown state is not
+    /// inhibition.
+    fn inhibited(&self, deadline: Instant) -> bool {
+        for (path, interface, property) in INHIBITION_PROPERTIES {
+            let Ok(remaining) = timeout(deadline) else {
+                return false;
+            };
+            let Ok(reply) = self.connection.call_sync(
+                Some(&self.owner),
+                path,
+                "org.freedesktop.DBus.Properties",
+                "Get",
+                Some(&(*interface, *property).to_variant()),
+                None,
+                gio::DBusCallFlags::NO_AUTO_START,
+                remaining,
+                gio::Cancellable::NONE,
+            ) else {
+                continue;
+            };
+            let Some((value,)) = reply.get::<(glib::Variant,)>() else {
+                continue;
+            };
+            if let Some(paused) = value.get::<bool>() {
+                return paused;
+            }
+            if let Some(modes) = value.get::<Vec<String>>() {
+                return modes.iter().any(|mode| mode == DO_NOT_DISTURB_MODE);
+            }
+        }
+        self.shell_banners_hidden(deadline)
+    }
+
+    /// GNOME Shell's server keeps its banner policy in a settings key rather
+    /// than a bus property.
+    fn shell_banners_hidden(&self, deadline: Instant) -> bool {
+        let shell_owner = name_owner(&self.connection, SHELL_NOTIFICATIONS, deadline);
+        if shell_owner.as_deref() != Ok(self.owner.as_str()) {
+            return false;
+        }
+        let Some(source) = gio::SettingsSchemaSource::default() else {
+            return false;
+        };
+        let Some(schema) = source.lookup(BANNER_SCHEMA, true) else {
+            return false;
+        };
+        if !schema.has_key(BANNER_KEY) {
+            return false;
+        }
+        let settings = gio::Settings::new_full(&schema, None::<&gio::SettingsBackend>, None);
+        !settings.boolean(BANNER_KEY)
+    }
 }
 
 impl Drop for Delivery {
@@ -196,25 +287,72 @@ impl Drop for Delivery {
     }
 }
 
+/// The running owner, or the owner started from an installed service file.
+fn resolve_owner(connection: &gio::DBusConnection, deadline: Instant) -> Result<String, String> {
+    if let Ok(owner) = current_owner(connection, deadline) {
+        return Ok(owner);
+    }
+    let reply = bus_call(
+        connection,
+        "ListActivatableNames",
+        None,
+        timeout(deadline)?,
+    )?;
+    let (names,) = reply
+        .get::<(Vec<String>,)>()
+        .ok_or("Invalid desktop service listing")?;
+    if !names.iter().any(|name| name == SERVICE) {
+        return Err("No desktop notification service is installed".into());
+    }
+    bus_call(
+        connection,
+        "StartServiceByName",
+        Some(&(SERVICE, 0u32).to_variant()),
+        remaining(deadline)?,
+    )?;
+    current_owner(connection, deadline)
+}
+
 fn current_owner(connection: &gio::DBusConnection, deadline: Instant) -> Result<String, String> {
-    let remaining = timeout(deadline)?;
-    let reply = connection
-        .call_sync(
-            Some("org.freedesktop.DBus"),
-            "/org/freedesktop/DBus",
-            "org.freedesktop.DBus",
-            "GetNameOwner",
-            Some(&(SERVICE,).to_variant()),
-            None,
-            gio::DBusCallFlags::NO_AUTO_START,
-            remaining,
-            gio::Cancellable::NONE,
-        )
-        .map_err(|error| error.to_string())?;
+    name_owner(connection, SERVICE, deadline)
+}
+
+fn name_owner(
+    connection: &gio::DBusConnection,
+    name: &str,
+    deadline: Instant,
+) -> Result<String, String> {
+    let reply = bus_call(
+        connection,
+        "GetNameOwner",
+        Some(&(name,).to_variant()),
+        timeout(deadline)?,
+    )?;
     let (owner,) = reply
         .get::<(String,)>()
-        .ok_or("Invalid desktop notification service owner")?;
+        .ok_or("Invalid desktop service owner")?;
     Ok(owner)
+}
+
+fn bus_call(
+    connection: &gio::DBusConnection,
+    method: &str,
+    parameters: Option<&glib::Variant>,
+    timeout_ms: i32,
+) -> Result<glib::Variant, String> {
+    connection
+        .call_sync(
+            Some(BUS),
+            BUS_PATH,
+            BUS,
+            method,
+            parameters,
+            None,
+            gio::DBusCallFlags::NO_AUTO_START,
+            timeout_ms,
+            gio::Cancellable::NONE,
+        )
+        .map_err(|error| error.to_string())
 }
 
 fn call(
@@ -239,11 +377,17 @@ fn call(
         .map_err(|error| error.to_string())
 }
 
+/// Service calls are capped well below the request deadline so one slow call
+/// cannot consume the whole request.
 fn timeout(deadline: Instant) -> Result<i32, String> {
+    remaining(deadline).map(|remaining| remaining.min(500))
+}
+
+fn remaining(deadline: Instant) -> Result<i32, String> {
     let remaining = deadline
         .saturating_duration_since(Instant::now())
         .as_millis()
-        .min(500);
+        .min(i32::MAX as u128);
     if remaining == 0 {
         return Err("The desktop notification request timed out".into());
     }
@@ -282,10 +426,16 @@ mod tests {
     #[test]
     fn request_deadline_bounds_each_service_call() {
         assert!(timeout(Instant::now()).is_err());
-        assert_eq!(
-            timeout(Instant::now() + std::time::Duration::from_secs(10)).unwrap(),
-            500
-        );
+        assert!(remaining(Instant::now()).is_err());
+        let deadline = Instant::now() + std::time::Duration::from_secs(10);
+        assert_eq!(timeout(deadline).unwrap(), 500);
+        assert!(remaining(deadline).unwrap() > 9_000);
+    }
+
+    #[test]
+    fn outcomes_name_delivery_and_inhibition() {
+        assert_eq!(Outcome::Delivered.as_str(), "delivered");
+        assert_eq!(Outcome::Inhibited.as_str(), "inhibited");
     }
 }
 

@@ -13,6 +13,12 @@ export type EnsureNotificationPermissionResult =
   | "denied"
   | "unavailable";
 
+/**
+ * `inhibited`: the service accepted the notification but is withholding
+ * banners (do not disturb). `skipped`: nothing was handed to a service.
+ */
+export type NotificationDeliveryOutcome = "delivered" | "inhibited" | "skipped";
+
 export const NOTIFICATION_ACTIVATED_EVENT = "notifications://activated";
 
 type PluginModule = typeof import("@tauri-apps/plugin-notification");
@@ -94,26 +100,30 @@ export async function cancelNotificationsForSessions(
   }
 }
 
-export async function sendNotification(n: DenNotification): Promise<void> {
-  if (!isTauriRuntime()) return;
+export async function sendNotification(
+  n: DenNotification,
+): Promise<NotificationDeliveryOutcome> {
+  if (!isTauriRuntime()) return "skipped";
   try {
     if (usesNativeNotifications()) {
       const live = await nativePermissionState();
-      if (!nativeAuthAllowsDelivery(live)) return;
+      if (!nativeAuthAllowsDelivery(live)) return "skipped";
       const { invoke } = await import("@tauri-apps/api/core");
-      await invoke("den_notify_send", {
+      const outcome = await invoke<unknown>("den_notify_send", {
         title: n.title,
         body: n.body,
         sessionId: n.sessionId ?? null,
       });
-      return;
+      return outcome === "inhibited" ? "inhibited" : "delivered";
     }
     const plugin = await loadPlugin();
-    if (!plugin) return;
-    if (!(await plugin.isPermissionGranted())) return;
+    if (!plugin) return "skipped";
+    if (!(await plugin.isPermissionGranted())) return "skipped";
     plugin.sendNotification({ title: n.title, body: n.body });
+    return "delivered";
   } catch (err) {
     console.debug("[notifications] send failed", err);
+    return "skipped";
   }
 }
 

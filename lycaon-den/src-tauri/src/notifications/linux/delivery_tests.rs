@@ -1,9 +1,10 @@
 use super::*;
 use std::{
     io::{BufRead, BufReader, Read},
+    path::PathBuf,
     process::{Child, Command, Stdio},
     sync::{
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
         mpsc, Arc, Mutex,
     },
     thread,
@@ -14,7 +15,19 @@ const INTERFACE: &str = r#"<node><interface name="org.freedesktop.Notifications"
 <method name="GetCapabilities"><arg type="as" direction="out"/></method>
 <method name="Notify"><arg type="s" direction="in"/><arg type="u" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="s" direction="in"/><arg type="as" direction="in"/><arg type="a{sv}" direction="in"/><arg type="i" direction="in"/><arg type="u" direction="out"/></method>
 <method name="CloseNotification"><arg type="u" direction="in"/></method>
+<property name="Inhibited" type="b" access="read"/>
 </interface></node>"#;
+
+/// How the fixture service is reachable when the adapter connects.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Service {
+    /// The fixture owns the well-known name before the adapter connects.
+    Owned,
+    /// Only a service file exists; the fixture takes the name on `own_name`.
+    Activatable,
+    /// Neither an owner nor a service file exists.
+    Absent,
+}
 
 struct Fixture {
     _daemon: BusProcess,
@@ -24,15 +37,88 @@ struct Fixture {
     worker: Option<thread::JoinHandle<()>>,
     requests: Arc<Mutex<Vec<(u32, String)>>>,
     closed: Arc<Mutex<Vec<u32>>>,
+    inhibited: Arc<AtomicBool>,
 }
 
-struct BusProcess(Child);
+struct BusProcess {
+    child: Child,
+    config_dir: PathBuf,
+}
 
 impl Drop for BusProcess {
     fn drop(&mut self) {
-        let _ = self.0.kill();
-        let _ = self.0.wait();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        let _ = std::fs::remove_dir_all(&self.config_dir);
     }
+}
+
+static FIXTURES: AtomicUsize = AtomicUsize::new(0);
+
+/// A private bus whose only activatable services are the fixture's own.
+fn start_bus(service: Service) -> (BusProcess, String) {
+    let config_dir = std::env::temp_dir().join(format!(
+        "painted-wolf-notification-fixture-{}-{}",
+        std::process::id(),
+        FIXTURES.fetch_add(1, Ordering::Relaxed)
+    ));
+    let services = config_dir.join("services");
+    std::fs::create_dir_all(&services).unwrap();
+    if service == Service::Activatable {
+        std::fs::write(
+            services.join(format!("{SERVICE}.service")),
+            format!("[D-BUS Service]\nName={SERVICE}\nExec=/bin/sleep 3\n"),
+        )
+        .unwrap();
+    }
+    let config = config_dir.join("session.conf");
+    std::fs::write(
+        &config,
+        format!(
+            r#"<!DOCTYPE busconfig PUBLIC "-//freedesktop//DTD D-Bus Bus Configuration 1.0//EN" "http://www.freedesktop.org/standards/dbus/1.0/busconfig.dtd">
+<busconfig>
+  <type>session</type>
+  <listen>unix:tmpdir={tmp}</listen>
+  <servicedir>{services}</servicedir>
+  <policy context="default">
+    <allow send_destination="*" eavesdrop="true"/>
+    <allow eavesdrop="true"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>
+"#,
+            tmp = std::env::temp_dir().display(),
+            services = services.display(),
+        ),
+    )
+    .unwrap();
+    let mut daemon = BusProcess {
+        child: Command::new("dbus-daemon")
+            .arg(format!("--config-file={}", config.display()))
+            .args(["--nofork", "--print-address=1"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("start private session bus"),
+        config_dir,
+    };
+    let output = daemon.child.stdout.take().unwrap();
+    let (address_ready, address_receive) = mpsc::sync_channel(1);
+    thread::spawn(move || {
+        let mut address = String::new();
+        let result = BufReader::new(output)
+            .take(4096)
+            .read_line(&mut address)
+            .map(|_| address);
+        let _ = address_ready.send(result);
+    });
+    let address = address_receive
+        .recv_timeout(Duration::from_secs(2))
+        .unwrap()
+        .unwrap()
+        .trim_end()
+        .to_string();
+    (daemon, address)
 }
 
 fn connect(context: &glib::MainContext, address: &str) -> gio::DBusConnection {
@@ -50,41 +136,37 @@ fn connect(context: &glib::MainContext, address: &str) -> gio::DBusConnection {
         .unwrap()
 }
 
+fn request_name(connection: &gio::DBusConnection) {
+    connection
+        .call_sync(
+            Some(BUS),
+            BUS_PATH,
+            BUS,
+            "RequestName",
+            Some(&(SERVICE, 0u32).to_variant()),
+            None,
+            gio::DBusCallFlags::NONE,
+            500,
+            gio::Cancellable::NONE,
+        )
+        .unwrap();
+}
+
 impl Fixture {
     fn new(capabilities: Vec<String>) -> Self {
-        let config: serde_json::Value =
-            serde_json::from_str(include_str!("../../../tauri.conf.json")).unwrap();
-        let desktop_entry = config["productName"].as_str().unwrap().to_owned();
-        let mut daemon = BusProcess(
-            Command::new("dbus-daemon")
-                .args(["--session", "--nofork", "--print-address=1"])
-                .stdout(Stdio::piped())
-                .stderr(Stdio::null())
-                .spawn()
-                .expect("start private session bus"),
-        );
-        let output = daemon.0.stdout.take().unwrap();
-        let (address_ready, address_receive) = mpsc::sync_channel(1);
-        thread::spawn(move || {
-            let mut address = String::new();
-            let result = BufReader::new(output)
-                .take(4096)
-                .read_line(&mut address)
-                .map(|_| address);
-            let _ = address_ready.send(result);
-        });
-        let address = address_receive
-            .recv_timeout(Duration::from_secs(2))
-            .unwrap()
-            .unwrap()
-            .trim_end()
-            .to_string();
+        Self::start(capabilities, Service::Owned)
+    }
+
+    fn start(capabilities: Vec<String>, service: Service) -> Self {
+        let (daemon, address) = start_bus(service);
         let stopped = Arc::new(AtomicBool::new(false));
         let stop = stopped.clone();
         let requests = Arc::new(Mutex::new(Vec::new()));
         let recorded = requests.clone();
         let closed = Arc::new(Mutex::new(Vec::new()));
         let canceled = closed.clone();
+        let inhibited = Arc::new(AtomicBool::new(false));
+        let paused = inhibited.clone();
         let server_address = address.clone();
         let (ready, receive) = mpsc::sync_channel(1);
         let worker = thread::spawn(move || {
@@ -109,7 +191,7 @@ impl Fixture {
                                         .unwrap();
                                     assert_eq!(
                                         hints["desktop-entry"].get::<String>().as_deref(),
-                                        Some(desktop_entry.as_str())
+                                        Some("ai.paintedwolf.code")
                                     );
                                     let replacement =
                                         parameters.child_value(1).get::<u32>().unwrap();
@@ -142,23 +224,13 @@ impl Fixture {
                                     "Unknown fixture method",
                                 ),
                             },
-                            |_, _, _, _, _| ().to_variant(),
+                            move |_, _, _, _, _| paused.load(Ordering::Acquire).to_variant(),
                             |_, _, _, _, _, _| false,
                         )
                         .unwrap();
-                    connection
-                        .call_sync(
-                            Some("org.freedesktop.DBus"),
-                            "/org/freedesktop/DBus",
-                            "org.freedesktop.DBus",
-                            "RequestName",
-                            Some(&(SERVICE, 0u32).to_variant()),
-                            None,
-                            gio::DBusCallFlags::NONE,
-                            500,
-                            gio::Cancellable::NONE,
-                        )
-                        .unwrap();
+                    if service == Service::Owned {
+                        request_name(&connection);
+                    }
                     ready.send(connection.clone()).unwrap();
                     while !stop.load(Ordering::Acquire) {
                         for _ in 0..64 {
@@ -186,6 +258,7 @@ impl Fixture {
             worker: Some(worker),
             requests,
             closed,
+            inhibited,
         }
     }
 
@@ -194,6 +267,16 @@ impl Fixture {
             .emit_signal(None, PATH, SERVICE, signal, Some(&parameters))
             .unwrap();
         self.server.flush_sync(gio::Cancellable::NONE).unwrap();
+    }
+
+    /// Takes the well-known name after `delay`, as a service does once the bus
+    /// has launched it.
+    fn own_name_after(&self, delay: Duration) -> thread::JoinHandle<()> {
+        let server = self.server.clone();
+        thread::spawn(move || {
+            thread::sleep(delay);
+            request_name(&server);
+        })
     }
 }
 
@@ -226,6 +309,19 @@ fn pump(context: &glib::MainContext, predicate: impl Fn() -> bool) {
     }
 }
 
+fn settle(context: &glib::MainContext) {
+    for _ in 0..100 {
+        while context.pending() {
+            context.iteration(false);
+        }
+        thread::sleep(Duration::from_millis(2));
+    }
+}
+
+fn deadline() -> Instant {
+    Instant::now() + Duration::from_secs(2)
+}
+
 #[test]
 fn native_service_replaces_cancels_and_routes_only_owned_notifications() {
     let fixture = Fixture::new(vec!["actions".into(), "body".into(), "body-markup".into()]);
@@ -238,26 +334,34 @@ fn native_service_replaces_cancels_and_routes_only_owned_notifications() {
             let delivery = Delivery::new(
                 connection,
                 move |session, token| routed.borrow_mut().push((session, token)),
-                Instant::now() + Duration::from_secs(2),
+                deadline(),
             )
             .unwrap();
-            assert!(delivery.current(Instant::now() + Duration::from_secs(2)));
-            delivery
-                .send(
-                    "Title".into(),
-                    "<private> & text".into(),
-                    Some("chat-a".into()),
-                    Instant::now() + Duration::from_secs(2),
-                )
-                .unwrap();
-            delivery
-                .send(
-                    "Title".into(),
-                    "Replacement".into(),
-                    Some("chat-a".into()),
-                    Instant::now() + Duration::from_secs(2),
-                )
-                .unwrap();
+            assert!(delivery.current(deadline()));
+            assert_eq!(
+                delivery
+                    .send(
+                        "Title".into(),
+                        "<private> & text".into(),
+                        Some("chat-a".into()),
+                        deadline(),
+                    )
+                    .unwrap(),
+                Outcome::Delivered
+            );
+            fixture.inhibited.store(true, Ordering::Release);
+            assert_eq!(
+                delivery
+                    .send(
+                        "Title".into(),
+                        "Replacement".into(),
+                        Some("chat-a".into()),
+                        deadline(),
+                    )
+                    .unwrap(),
+                Outcome::Inhibited
+            );
+            fixture.inhibited.store(false, Ordering::Release);
             assert_eq!(
                 *fixture.requests.lock().unwrap(),
                 vec![
@@ -279,12 +383,10 @@ fn native_service_replaces_cancels_and_routes_only_owned_notifications() {
                     "Title".into(),
                     "Chat B".into(),
                     Some("chat-b".into()),
-                    Instant::now() + Duration::from_secs(2),
+                    deadline(),
                 )
                 .unwrap();
-            delivery
-                .cancel(&["chat-b".into()], Instant::now() + Duration::from_secs(2))
-                .unwrap();
+            delivery.cancel(&["chat-b".into()], deadline()).unwrap();
             assert_eq!(*fixture.closed.lock().unwrap(), vec![3]);
             fixture.signal("ActionInvoked", (3u32, "default").to_variant());
             delivery
@@ -292,7 +394,7 @@ fn native_service_replaces_cancels_and_routes_only_owned_notifications() {
                     "Title".into(),
                     "Chat C".into(),
                     Some("chat-c".into()),
-                    Instant::now() + Duration::from_secs(2),
+                    deadline(),
                 )
                 .unwrap();
             let foreign = connect(&context, &fixture.address);
@@ -305,28 +407,18 @@ fn native_service_replaces_cancels_and_routes_only_owned_notifications() {
                     Some(&(4u32, "default").to_variant()),
                 )
                 .unwrap();
-            for _ in 0..100 {
-                while context.pending() {
-                    context.iteration(false);
-                }
-                thread::sleep(Duration::from_millis(2));
-            }
+            settle(&context);
             assert_eq!(activations.borrow().len(), 1);
             assert!(delivery
                 .send(
                     "Title".into(),
                     "Body".into(),
                     Some("invalid\nchat".into()),
-                    Instant::now() + Duration::from_secs(2)
+                    deadline()
                 )
                 .is_err());
             assert!(delivery
-                .send(
-                    "Title".into(),
-                    "x".repeat((32 << 10) + 1),
-                    None,
-                    Instant::now() + Duration::from_secs(2)
-                )
+                .send("Title".into(), "x".repeat((32 << 10) + 1), None, deadline())
                 .is_err());
         })
         .unwrap();
@@ -339,12 +431,10 @@ fn native_capability_admission_rejects_unbounded_and_disconnected_services() {
         let context = glib::MainContext::new();
         context
             .with_thread_default(|| {
-                assert!(Delivery::new(
-                    connect(&context, &fixture.address),
-                    |_, _| {},
-                    Instant::now() + Duration::from_secs(2)
-                )
-                .is_err());
+                assert!(
+                    Delivery::new(connect(&context, &fixture.address), |_, _| {}, deadline())
+                        .is_err()
+                );
             })
             .unwrap();
     }
@@ -352,18 +442,15 @@ fn native_capability_admission_rejects_unbounded_and_disconnected_services() {
     let context = glib::MainContext::new();
     context
         .with_thread_default(|| {
-            let delivery = Delivery::new(
-                connect(&context, &fixture.address),
-                |_, _| {},
-                Instant::now() + Duration::from_secs(2),
-            )
-            .unwrap();
+            let delivery =
+                Delivery::new(connect(&context, &fixture.address), |_, _| {}, deadline())
+                    .unwrap();
             fixture
                 .server
                 .call_sync(
-                    Some("org.freedesktop.DBus"),
-                    "/org/freedesktop/DBus",
-                    "org.freedesktop.DBus",
+                    Some(BUS),
+                    BUS_PATH,
+                    BUS,
                     "ReleaseName",
                     Some(&(SERVICE,).to_variant()),
                     None,
@@ -372,7 +459,7 @@ fn native_capability_admission_rejects_unbounded_and_disconnected_services() {
                     gio::Cancellable::NONE,
                 )
                 .unwrap();
-            assert!(!delivery.current(Instant::now() + Duration::from_secs(2)));
+            assert!(!delivery.current(deadline()));
         })
         .unwrap();
 }
@@ -388,7 +475,7 @@ fn native_service_without_actions_preserves_delivery_and_clearing() {
             let delivery = Delivery::new(
                 connect(&context, &fixture.address),
                 move |_, _| *routed.borrow_mut() += 1,
-                Instant::now() + Duration::from_secs(2),
+                deadline(),
             )
             .unwrap();
             delivery
@@ -396,22 +483,50 @@ fn native_service_without_actions_preserves_delivery_and_clearing() {
                     "Title".into(),
                     "Body".into(),
                     Some("chat-a".into()),
-                    Instant::now() + Duration::from_secs(2),
+                    deadline(),
                 )
                 .unwrap();
             assert_eq!(*fixture.requests.lock().unwrap(), vec![(0, "Body".into())]);
             fixture.signal("ActionInvoked", (1u32, "default").to_variant());
-            for _ in 0..100 {
-                while context.pending() {
-                    context.iteration(false);
-                }
-                thread::sleep(Duration::from_millis(2));
-            }
+            settle(&context);
             assert_eq!(*activations.borrow(), 0);
-            delivery
-                .cancel(&["chat-a".into()], Instant::now() + Duration::from_secs(2))
-                .unwrap();
+            delivery.cancel(&["chat-a".into()], deadline()).unwrap();
             assert_eq!(*fixture.closed.lock().unwrap(), vec![1]);
         })
         .unwrap();
+}
+
+#[test]
+fn native_service_starts_from_its_service_file_or_reports_absence() {
+    let absent = Fixture::start(vec!["body".into()], Service::Absent);
+    let context = glib::MainContext::new();
+    context
+        .with_thread_default(|| {
+            let error = Delivery::new(connect(&context, &absent.address), |_, _| {}, deadline())
+                .err()
+                .unwrap();
+            assert!(error.contains("No desktop notification service is installed"));
+        })
+        .unwrap();
+    drop(absent);
+
+    let fixture = Fixture::start(vec!["body".into()], Service::Activatable);
+    let owned = fixture.own_name_after(Duration::from_millis(300));
+    let context = glib::MainContext::new();
+    context
+        .with_thread_default(|| {
+            let delivery =
+                Delivery::new(connect(&context, &fixture.address), |_, _| {}, deadline())
+                    .unwrap();
+            assert!(delivery.current(deadline()));
+            assert_eq!(
+                delivery
+                    .send("Title".into(), "Body".into(), None, deadline())
+                    .unwrap(),
+                Outcome::Delivered
+            );
+        })
+        .unwrap();
+    owned.join().unwrap();
+    assert_eq!(*fixture.requests.lock().unwrap(), vec![(0, "Body".into())]);
 }

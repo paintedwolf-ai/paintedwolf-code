@@ -105,12 +105,13 @@ pub(super) async fn permission(app: &AppHandle) -> Result<String, String> {
     request(app, Command::Permission).await
 }
 
+/// Resolves to the delivery outcome name reported by the service.
 pub(super) async fn send(
     app: &AppHandle,
     title: String,
     body: String,
     session_id: Option<String>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     request(
         app,
         Command::Send {
@@ -120,7 +121,6 @@ pub(super) async fn send(
         },
     )
     .await
-    .map(|_| ())
 }
 
 pub(super) async fn cancel(app: &AppHandle, sessions: Vec<String>) -> Result<(), String> {
@@ -183,7 +183,7 @@ fn run(
                 Some(delivery),
             ) => delivery
                 .send(title.clone(), body.clone(), session_id.clone(), deadline)
-                .map(|_| String::new()),
+                .map(|outcome| outcome.as_str().to_string()),
             (Command::Cancel(sessions), Some(delivery)) => {
                 delivery.cancel(sessions, deadline).map(|_| String::new())
             }

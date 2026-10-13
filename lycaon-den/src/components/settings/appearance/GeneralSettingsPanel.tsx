@@ -34,7 +34,9 @@ import { CONTEXT_NAV_CATALOG } from "../../../../shared/app-state-types.ts";
 import { isContextNavItemId } from "../../../settings/editor/context-nav-prefs.ts";
 import { stageLabelFor } from "../../stage/stage-registry.tsx";
 import {
+  recordNotificationDelivery,
   recordNotificationPermission,
+  notificationDeliveryOutcome,
   notificationFinishedPref,
   notificationNeedsApprovalPref,
   notificationNeedsYouPref,
@@ -527,11 +529,15 @@ export function GeneralSettingsPanel(props: Props) {
               void (async () => {
                 const permission = await ensureNotificationPermission();
                 recordNotificationPermission(permission);
-                if (permission !== "granted") return;
-                await sendNotification({
+                if (permission !== "granted") {
+                  recordNotificationDelivery(null);
+                  return;
+                }
+                const outcome = await sendNotification({
                   title: NOTIFICATION_PRODUCT_TITLE,
                   body: "Finished — test notification",
                 });
+                recordNotificationDelivery(outcome);
               })();
             }}
           >
@@ -543,6 +549,15 @@ export function GeneralSettingsPanel(props: Props) {
               data-testid="notifications-shell-unavailable"
             >
               Notifications are unavailable right now.
+            </p>
+          </Show>
+          <Show when={notificationDeliveryOutcome() === "inhibited"}>
+            <p
+              class="den-settings-hint"
+              data-testid="notifications-inhibited"
+            >
+              Do not disturb is on. The notification waits in the desktop's
+              notification list.
             </p>
           </Show>
           <Show when={notificationPermissionResult() === "denied"}>

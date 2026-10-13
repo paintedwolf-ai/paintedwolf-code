@@ -56,18 +56,22 @@ pub(crate) async fn den_notify_request_permission(app: AppHandle) -> Result<Stri
     }
 }
 
+/// Resolves to `delivered`, or `inhibited` when the service accepted the
+/// notification while withholding banners.
 #[tauri::command]
 pub(crate) async fn den_notify_send(
     app: AppHandle,
     title: String,
     body: String,
     session_id: Option<String>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     #[cfg(not(target_os = "linux"))]
     let _ = app;
     #[cfg(target_os = "macos")]
     {
-        await_un(move || native::send(&title, &body, session_id.as_deref())).await
+        await_un(move || native::send(&title, &body, session_id.as_deref()))
+            .await
+            .map(|()| "delivered".to_string())
     }
     #[cfg(target_os = "linux")]
     {

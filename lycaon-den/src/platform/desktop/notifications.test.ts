@@ -61,7 +61,7 @@ describe("notifications wrapper (web / non-Tauri)", () => {
     await expect(ensureNotificationPermission()).resolves.toBe("unavailable");
     await expect(
       send({ title: "Painted Wolf Code", body: "Finished" }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe("skipped");
     await expect(
       cancelNotificationsForSessions(["gone-session"]),
     ).resolves.toBeUndefined();
@@ -118,11 +118,13 @@ describe("notifications wrapper (Windows plugin)", () => {
     isPermissionGranted.mockResolvedValue(true);
     const { sendNotification: send } = await import("./notifications.ts");
 
-    await send({
-      title: "Painted Wolf Code",
-      body: "Needs your input",
-      sessionId: "sess-1",
-    });
+    await expect(
+      send({
+        title: "Painted Wolf Code",
+        body: "Needs your input",
+        sessionId: "sess-1",
+      }),
+    ).resolves.toBe("delivered");
     expect(sendNotification).toHaveBeenCalledWith({
       title: "Painted Wolf Code",
       body: "Needs your input",
@@ -133,7 +135,11 @@ describe("notifications wrapper (Windows plugin)", () => {
     });
     await expect(
       send({ title: "Painted Wolf Code", body: "Finished" }),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe("skipped");
+    isPermissionGranted.mockResolvedValueOnce(false);
+    await expect(
+      send({ title: "Painted Wolf Code", body: "Finished" }),
+    ).resolves.toBe("skipped");
   });
 
   it("uses only supported desktop plugin operations", async () => {
@@ -200,10 +206,11 @@ describe.each(["macos", "linux"] as const)("notifications wrapper (%s native bri
     expect(unlisten).toHaveBeenCalledOnce();
   });
 
-  it("maps UN auth states and sends via den_notify_send", async () => {
+  it("maps native auth states and reports the service's delivery outcome", async () => {
+    let outcome: unknown = "delivered";
     invoke.mockImplementation(async (cmd: string) => {
       if (cmd === "den_notify_permission_state") return "authorized";
-      if (cmd === "den_notify_send") return undefined;
+      if (cmd === "den_notify_send") return outcome;
       throw new Error(`unexpected ${cmd}`);
     });
 
@@ -213,17 +220,44 @@ describe.each(["macos", "linux"] as const)("notifications wrapper (%s native bri
     } = await import("./notifications.ts");
 
     await expect(ensureNotificationPermission()).resolves.toBe("granted");
-    await send({
-      title: "Painted Wolf Code",
-      body: "Finished — test notification",
-      sessionId: "sess-mac",
-    });
+    await expect(
+      send({
+        title: "Painted Wolf Code",
+        body: "Finished — test notification",
+        sessionId: "sess-mac",
+      }),
+    ).resolves.toBe("delivered");
     expect(invoke).toHaveBeenCalledWith("den_notify_send", {
       title: "Painted Wolf Code",
       body: "Finished — test notification",
       sessionId: "sess-mac",
     });
+    outcome = "inhibited";
+    await expect(
+      send({ title: "Painted Wolf Code", body: "Finished", sessionId: "sess-dnd" }),
+    ).resolves.toBe("inhibited");
+    outcome = undefined;
+    await expect(
+      send({ title: "Painted Wolf Code", body: "Finished" }),
+    ).resolves.toBe("delivered");
     expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it("reports a failed native send as skipped", async () => {
+    invoke.mockImplementation(async (cmd: string) => {
+      if (cmd === "den_notify_permission_state") return "authorized";
+      throw new Error("The desktop notification service is unavailable");
+    });
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+    try {
+      const { sendNotification: send } = await import("./notifications.ts");
+      await expect(
+        send({ title: "Painted Wolf Code", body: "Finished", sessionId: "sess-lost" }),
+      ).resolves.toBe("skipped");
+      expect(debug).toHaveBeenCalledOnce();
+    } finally {
+      debug.mockRestore();
+    }
   });
 
   it("preserves native denial without inventing denial on bridge failure", async () => {
@@ -259,10 +293,12 @@ describe.each(["macos", "linux"] as const)("notifications wrapper (%s native bri
       sendNotification: send,
     } = await import("./notifications.ts");
     await expect(ensureNotificationPermission()).resolves.toBe("unavailable");
-    await send({
-      title: "Painted Wolf Code",
-      body: "Finished — test notification",
-    });
+    await expect(
+      send({
+        title: "Painted Wolf Code",
+        body: "Finished — test notification",
+      }),
+    ).resolves.toBe("skipped");
     expect(sendNotification).not.toHaveBeenCalled();
     expect(invoke).not.toHaveBeenCalledWith(
       "den_notify_send",
