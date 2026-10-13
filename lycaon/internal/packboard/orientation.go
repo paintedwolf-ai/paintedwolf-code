@@ -67,18 +67,7 @@ func BuildOrientationLines(snapshot api.BoardSnapshot, opts OrientOpts) []string
 	if other := FormatOtherReposLine(snapshot.Git); other != "" {
 		lines = append(lines, other)
 	}
-	if work := FormatWorkLine(tasks, now); work != "" {
-		lines = append(lines, work)
-	}
-	if merge := FormatBranchMergeLine(tasks); merge != "" {
-		lines = append(lines, merge)
-	}
-	if planLine := FormatOverlayMergePlanLine(OverlayMergePlanFromSnapshot(snapshot)); planLine != "" {
-		lines = append(lines, planLine)
-	}
-	if pathLine := FormatPromotePathStatusLine(PromotePathsFromSnapshot(snapshot)); pathLine != "" {
-		lines = append(lines, pathLine)
-	}
+	lines = append(lines, workerStateLines(snapshot, now)...)
 	if scanLines := FormatScansLines(snapshot.Scans, gitHeadShort(snapshot.Git), now, opts.IncludeDetail); len(scanLines) > 0 {
 		lines = append(lines, scanLines...)
 	}
@@ -102,6 +91,25 @@ func BuildOrientationLines(snapshot api.BoardSnapshot, opts OrientOpts) []string
 				lines = append(lines, line)
 			}
 		}
+	}
+	return lines
+}
+
+// workerStateLines keeps completed execution distinct from pending integration.
+func workerStateLines(snapshot api.BoardSnapshot, now time.Time) []string {
+	tasks := WorkerTasksFromSnapshot(snapshot)
+	var lines []string
+	if work := FormatWorkLine(tasks, now); work != "" {
+		lines = append(lines, work)
+	}
+	if merge := FormatBranchMergeLine(tasks); merge != "" {
+		lines = append(lines, merge)
+	}
+	if planLine := FormatOverlayMergePlanLine(OverlayMergePlanFromSnapshot(snapshot)); planLine != "" {
+		lines = append(lines, planLine)
+	}
+	if pathLine := FormatPromotePathStatusLine(PromotePathsFromSnapshot(snapshot)); pathLine != "" {
+		lines = append(lines, pathLine)
 	}
 	return lines
 }

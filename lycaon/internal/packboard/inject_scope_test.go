@@ -82,3 +82,31 @@ func TestInjectSentinel(t *testing.T) {
 		t.Fatal("pulse sentinel mismatch")
 	}
 }
+
+func TestInjectedBoardRetainsPendingWorkerIntegration(t *testing.T) {
+	now := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
+	snapshot := api.BoardSnapshot{Workers: &api.BoardWorkersSlice{
+		"tasks":              []api.WorkerTask{{ID: "abcd-worker", Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending}},
+		"overlay_merge_plan": &api.OverlayMergePlan{PendingCount: 1, PromoteSequence: []string{"abcd-worker"}},
+		"promote_paths":      []api.WorkerPromoteJobPathStatus{{WorkerID: "abcd-worker", Paths: []api.WorkerPromotePathStatus{{Path: "status.py", Status: api.WorkerPromotePathOutcomeConflict, HunkCount: 1}}}},
+	}}
+	for _, scope := range []packboard.InjectScope{packboard.InjectScopeFull, packboard.InjectScopePulse} {
+		lines, truncated := packboard.FormatInjectBodyScoped(snapshot, scope, false, now, api.MaxBoardInjectChars)
+		body := strings.Join(lines, "\n")
+		if truncated {
+			t.Fatalf("small worker state was truncated: %s", body)
+		}
+		for _, want := range []string{"Work: 1 done", "Merge: pending abcd", "Overlay plan: 1 pending", "status.py:conflict(1)"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("scope %v omitted %q: %s", scope, want, body)
+			}
+		}
+		for _, line := range packboard.BuildOrientationLines(snapshot, packboard.OrientOpts{Now: now}) {
+			if strings.HasPrefix(line, "Merge") || strings.HasPrefix(line, "Overlay plan:") {
+				if !strings.Contains(body, line) {
+					t.Errorf("scope %v differs from board state %q: %s", scope, line, body)
+				}
+			}
+		}
+	}
+}

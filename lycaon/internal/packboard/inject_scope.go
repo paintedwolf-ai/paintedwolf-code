@@ -49,9 +49,7 @@ func BuildInjectLines(snapshot api.BoardSnapshot, scope InjectScope, opts Orient
 			lines = append(lines, other)
 		}
 	}
-	if work := FormatWorkLine(tasks, now); work != "" {
-		lines = append(lines, work)
-	}
+	lines = append(lines, workerStateLines(snapshot, now)...)
 	if scope == InjectScopePulse {
 		for _, t := range inFlightWorkerTasks(tasks) {
 			if line := FormatInFlightWorkerPulseLine(t); line != "" {
