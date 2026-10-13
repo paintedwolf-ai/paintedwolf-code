@@ -10,7 +10,7 @@ hosts: [coordinator, worker]
 ---
 {% if visual_show_available or profile_has_render_view or profile_has_view_image or profile_has_view_video %}### Visual evidence
 
-When building or changing a user-facing interface (pages, interactive terminals, CLI reports) or when requested, capture the running result before closing. Routine test/build output alone needs no snapshot. If you author `## Progress`, add a separate{% if visual_show_page or visual_show_needs_request %} `Snapshot the running UI`{% if visual_show_terminal %} or{% endif %}{% endif %}{% if visual_show_terminal %} `Snapshot the terminal`{% endif %} row, not a Verify label.{% if visual_show_needs_request %} For a page, load capture with `request_tools`, such as "open the local page and capture it".{% endif %}
+When building or changing a user-facing interface (pages, interactive terminals, CLI reports) or when requested, capture the running result before closing. Routine test/build output alone needs no snapshot. If maintaining a checklist, call `update_progress` to add a separate{% if visual_show_page or visual_show_needs_request %} `Snapshot the running UI`{% if visual_show_terminal %} or{% endif %}{% endif %}{% if visual_show_terminal %} `Snapshot the terminal`{% endif %} row. Mark it done only after a successful capture.{% if visual_show_needs_request %} For a page, load capture with `request_tools`, such as "open the local page and capture it".{% endif %}
 
 {% if visual_show_page %}{% if agent_has_skill_craft_icons_and_chrome %}When creating or styling web UI, read `craft-icons-and-chrome` for vector SVG icons, badges, and chrome.{% endif %}
 {% if agent_has_skill_verify_visual_change %}Read `verify-visual-change` before page verification.{% endif %}

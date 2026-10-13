@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -103,6 +104,23 @@ func assertOfferedPageProcedures(t *testing.T, offered []string, block string) {
 	for _, name := range []string{"page_open", "page_snapshot", "page_act", "page_close", "capture_page", "measure_page", "render_view", "view_image"} {
 		if strings.Contains(block, "`"+name+"`") != slices.Contains(offered, name) {
 			t.Fatalf("page procedure %s mismatches actual schema set %v: %s", name, offered, block)
+		}
+	}
+}
+
+func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
+	renderer := promptstest.InjectRenderer(t)
+	for _, tool := range []string{"update_progress", "write", "edit", "replace_lines", "restore_version", "jq_edit", "task", "delegate_dispatch", "delegate_decompose", "read", "delete", "wait"} {
+		for _, profile := range []string{"coordinator", "implementer"} {
+			block, err := inject.RenderToolProceduresBlock(t.Context(), renderer, "progress-procedures", profile, []string{tool}, nil)
+			testutil.FailErr(t, "render progress procedure", err)
+			want := profile == "coordinator" && (tool == "update_progress" || progress.IsProgressGatedTool(tool))
+			if strings.Contains(block, "checklist text in an assistant reply does not update it") != want {
+				t.Fatalf("progress procedure present=%v, want %v for %s/%s", strings.Contains(block, "checklist text in an assistant reply does not update it"), want, profile, tool)
+			}
+			if want && (strings.Count(block, "Maintain session progress") != 1 || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") || !strings.Contains(block, "a rejected action did not do the work")) {
+				t.Fatalf("progress lifecycle contract missing or duplicated: %s", block)
+			}
 		}
 	}
 }

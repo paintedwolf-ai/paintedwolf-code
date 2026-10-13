@@ -175,26 +175,24 @@ func TestProportionalTrustBundleSingleHome(t *testing.T) {
 	})
 	ctx := context.Background()
 
-	progress, err := engine.Render(ctx, "partials/coordinator-mode-investigate-progress.md", map[string]any{
+	progress, err := engine.Render(ctx, "partials/coordinator-trust-bundle-tiers.md", map[string]any{
 		"max_author_progress_lines": 12,
 		"max_progress_label_chars":  80,
 		"visual_show_available":     true,
 	})
 	testutil.FailErr(t, "render progress partial", err)
 	for _, want := range []string{
-		"survey only when needed to identify them",
 		"Non-executable changes",
 		"reading the resulting material",
 		"separately from checklist completion",
 		"Behavior changes",
 		"separate Snapshot row described under visual evidence",
-		"a small leaf needs one row",
 	} {
 		if !strings.Contains(progress, want) {
 			t.Fatalf("progress partial missing %q:\n%s", want, progress)
 		}
 	}
-	progressLean, err := engine.Render(ctx, "partials/coordinator-mode-investigate-progress.md", map[string]any{
+	progressLean, err := engine.Render(ctx, "partials/coordinator-trust-bundle-tiers.md", map[string]any{
 		"max_author_progress_lines": 12,
 		"max_progress_label_chars":  80,
 	})
@@ -213,8 +211,8 @@ func TestProportionalTrustBundleSingleHome(t *testing.T) {
 	for _, want := range []string{
 		"update_progress",
 		"## Progress",
-		"Snapshot the running UI",
-		"Snapshot the terminal",
+		"did not run",
+		"Keep rejected work pending",
 	} {
 		if !strings.Contains(missingKick, want) {
 			t.Fatalf("progress-missing kick missing %q:\n%s", want, missingKick)

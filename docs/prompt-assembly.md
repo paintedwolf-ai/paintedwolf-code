@@ -99,7 +99,7 @@ Structured residues are bounded by total bytes, including nested bodies, not by 
 
 Git diff producers keep the full selected file page until secret screening, then fit hunk bytes, spilling the captured page first. An oversized file carries `diff_spill_path` and `diff_lines`; ordinary `read` offset/limit retrieves the original hunks even after the worktree changes, and `next_offset` continues files, not hunks. Later compaction keeps earlier spill references beside its new one so transcript retention and backups cover recovery bytes. Git status with `n:true` returns counts and directory groups without file entries; commit receipts keep outcome and hash while large path lists stay recoverable through the same projection.
 
-Browser operating procedures follow the schemas actually offered on each request, alongside runner and HTTP procedures. Deferral therefore postpones detailed browser instructions until the tools are available without dropping them; resumed page controls receive only the instructions for controls actually offered.
+Coordinator progress procedures follow the offered checklist, mutation, and dispatch schemas. They specify the checklist tool action and worker-result reconciliation once; mode prompts retain routing and verification policy. Browser operating procedures follow the schemas actually offered on each request, alongside runner and HTTP procedures. Deferral therefore postpones detailed browser instructions until the tools are available without dropping them; resumed page controls receive only the instructions for controls actually offered.
 
 The coordinator retains the cached session AGENTS.md index in every standing prefix, pinned against history trimming. Path-specific instruction chains remain outside that prefix.
 
