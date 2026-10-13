@@ -2147,10 +2147,10 @@
       "summary": "{{ tool }} was not granted read access to {{ paintedwolf.path }}."
     },
     "SANDBOX_REFUSAL_REPORT_SILENT": {
-      "branch_instruction": "Report the uncertainty; no refusal path was observed for this invocation",
+      "branch_instruction": "Diagnose the failed command; keep the current sandbox boundary",
       "category": "recoverable",
       "emit": "guard:sandbox",
-      "summary": "This confined invocation failed without a kernel refusal report."
+      "summary": "The command exited unsuccessfully; no kernel refusal was reported."
     },
     "SANDBOX_SOCKET_PATH_CHANGED": {
       "branch_instruction": "Branch on Code; re-request after the socket path is stable",
