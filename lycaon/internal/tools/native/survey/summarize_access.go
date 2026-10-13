@@ -2,6 +2,9 @@ package survey
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/summarize"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -48,4 +51,35 @@ func (a *summaryAccess) qualify(root projectroot.RootRef, abs string) string {
 		return abs
 	}
 	return projectroot.Qualify(a.primary, root, abs)
+}
+
+// Only a complete, exact source window can establish the same document basis
+// as read. Internal gathering and partial summaries cannot advance it.
+func rememberSummaryReads(ctx context.Context, reads *projectpaths.ReadSession, tctx tools.ToolContext, windows []summarize.PackWindow) {
+	for _, window := range windows {
+		if window.StartLine != 1 || window.Body == "" || window.Path == "inline" {
+			continue
+		}
+		resolved, err := reads.Resolve(ctx, window.Path)
+		if err != nil {
+			continue
+		}
+		documents, ok := sourceview.DocumentsFor(tctx, resolved)
+		if !ok {
+			continue
+		}
+		branch, err := tctx.SourceBranch(resolved.Root.ID)
+		if err != nil {
+			continue
+		}
+		doc, open, err := documents.OpenDocument(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, resolved.ScopeRel)
+		if err != nil || !open {
+			continue
+		}
+		lines := strings.Split(strings.TrimSuffix(doc.Text, "\n"), "\n")
+		if window.EndLine != len(lines) || window.Body != hostmarker.FormatNumberedLines(lines, 1) {
+			continue
+		}
+		documents.RememberAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, doc)
+	}
 }
