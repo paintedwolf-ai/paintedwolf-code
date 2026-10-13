@@ -45,7 +45,7 @@ def main() -> int:
                 f"{stem}.{row['updater_extension']}",
                 f"{stem}.{row['updater_extension']}.sig",
             )
-            for name in names:
+            for name in dict.fromkeys(names):
                 source = args.input / name
                 if not source.is_file() or source.is_symlink():
                     raise ValueError(f"public release artifact missing: {name}")

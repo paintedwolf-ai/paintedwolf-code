@@ -241,6 +241,50 @@ func TestReleasePublicationBoundaryExcludesCandidateBytes(t *testing.T) {
 	}
 }
 
+func TestReleasePublicationCollectsSharedInstallerUpdaterOnce(t *testing.T) {
+	root := contractcheck.RepoRoot(t)
+	for _, extension := range []string{"AppImage", "exe"} {
+		t.Run(extension, func(t *testing.T) {
+			dir := t.TempDir()
+			input, output := filepath.Join(dir, "input"), filepath.Join(dir, "output")
+			contractcheck.FailErr(t, "create audit input", os.MkdirAll(filepath.Join(input, "opengrep"), 0o755))
+			stem := "painted-wolf-code_v1.0.0_linux-x86_64"
+			for _, suffix := range []string{extension, extension + ".sha256", extension + ".sig"} {
+				contractcheck.FailErr(t, "write artifact", os.WriteFile(filepath.Join(input, stem + "." + suffix), []byte(suffix), 0o644))
+			}
+			contractcheck.FailErr(t, "write audit", os.WriteFile(filepath.Join(input, "opengrep", stem + ".json"), []byte(`{}`), 0o644))
+			catalog := filepath.Join(dir, "catalog.json")
+			row := map[string]string{"updater_key": "linux-x86_64", "publication": "public", "package_extension": extension, "updater_extension": extension}
+			writeCatalog := func(rows []map[string]string) {
+				t.Helper()
+				raw, err := json.Marshal(map[string]any{"schema_version": 1, "platforms": rows})
+				contractcheck.FailErr(t, "encode catalog", err)
+				contractcheck.FailErr(t, "write catalog", os.WriteFile(catalog, raw, 0o644))
+			}
+			writeCatalog([]map[string]string{row})
+			run := func(destination string, wantSuccess bool) {
+				t.Helper()
+				cmd := exec.Command("python3", filepath.Join(root, "scripts", "release-collect-public-artifacts.py"), "--catalog", catalog, "--input", input, "--output", destination, "--version", "1.0.0")
+				combined, err := cmd.CombinedOutput()
+				if (err == nil) != wantSuccess {
+					t.Fatalf("collector success=%v want %v: %v\n%s", err == nil, wantSuccess, err, combined)
+				}
+			}
+			run(output, true)
+			entries, err := os.ReadDir(output)
+			contractcheck.FailErr(t, "read shared artifact set", err)
+			if len(entries) != 4 {
+				t.Fatalf("shared artifact count=%d, want 4", len(entries))
+			}
+			writeCatalog([]map[string]string{row, row})
+			run(filepath.Join(dir, "repeated"), false)
+			writeCatalog([]map[string]string{row})
+			contractcheck.FailErr(t, "remove signature", os.Remove(filepath.Join(input, stem + "." + extension + ".sig")))
+			run(filepath.Join(dir, "unsigned"), false)
+		})
+	}
+}
+
 func TestReleaseChannelsHaveIndependentPointersAndPackageTokens(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)

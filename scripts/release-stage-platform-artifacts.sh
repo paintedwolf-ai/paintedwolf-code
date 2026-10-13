@@ -41,6 +41,10 @@ case "${ARCH}" in aarch64|x86_64) ;; *) usage ;; esac
 [[ "${PACKAGE_EXTENSION}" =~ ^[A-Za-z0-9.]+$ ]] || usage
 [[ "${UPDATER_EXTENSION}" =~ ^[A-Za-z0-9.]+$ ]] || usage
 [[ -n "${VERSION}" && -n "${OUTPUT}" ]] || usage
+if [[ "${GOOS}" != darwin && "${UPDATER_EXTENSION}" != "${PACKAGE_EXTENSION}" ]]; then
+  echo "error: ${GOOS} updater must be the native installer bundle" >&2
+  exit 2
+fi
 python3 "${ROOT}/scripts/semver-compare.py" eq "${VERSION}" "${VERSION}" >/dev/null
 eval "$(python3 "${ROOT}/scripts/release-metadata.py" --root "${ROOT}" --format shell)"
 [[ "${VERSION}" == "${PRODUCT_VERSION}" ]] || {
@@ -95,7 +99,7 @@ case "${GOOS}" in
     ;;
   linux)
     PACKAGE="$(find "${TARGET_ROOT}" -maxdepth 8 -path "*/release/bundle/appimage/*.${PACKAGE_EXTENSION}" ! -name '*.tar.gz' -print -quit)"
-    UPDATER="$(find "${TARGET_ROOT}" -maxdepth 8 -path "*/release/bundle/appimage/*.${UPDATER_EXTENSION}" -print -quit)"
+    UPDATER="${PACKAGE}"
     [[ -n "${PACKAGE}" && -n "${UPDATER}" ]] || {
       echo "error: incomplete Linux bundle output for ${PLATFORM}" >&2
       exit 1
@@ -172,8 +176,8 @@ case "${GOOS}" in
     done < <(find "${EXTRACT}/squashfs-root" -type f -print0)
     ;;
   windows)
-    PACKAGE="$(find "${TARGET_ROOT}" -maxdepth 8 -path "*/release/bundle/nsis/*.${PACKAGE_EXTENSION}" ! -name '*.nsis.zip' -print -quit)"
-    UPDATER="$(find "${TARGET_ROOT}" -maxdepth 8 -path "*/release/bundle/nsis/*.${UPDATER_EXTENSION}" -print -quit)"
+    PACKAGE="$(find "${TARGET_ROOT}" -maxdepth 8 -path "*/release/bundle/nsis/*.${PACKAGE_EXTENSION}" -print -quit)"
+    UPDATER="${PACKAGE}"
     [[ -n "${PACKAGE}" && -n "${UPDATER}" ]] || {
       echo "error: incomplete Windows bundle output for ${PLATFORM}" >&2
       exit 1
@@ -216,7 +220,7 @@ case "${GOOS}" in
       assert_native_arch "packaged executable payload" "${payload}"
     done < <(find "${ROOT}/lycaon-den/src-tauri/engine-root" -type f -iname '*.exe' -print0)
     pwsh -NoProfile -File "${ROOT}/scripts/release-verify-windows-signature.ps1" \
-      -Path "${PACKAGE}" -UpdaterArchive "${UPDATER}" -ApplicationPath "${APPLICATION}" \
+      -Path "${PACKAGE}" -UpdaterPath "${UPDATER}" -ApplicationPath "${APPLICATION}" \
       -SidecarPath "${SIDECAR}" -LogViewerPath "${LOG_VIEWER}" \
       -DocumentCorePath "${DOCUMENT_CORE}" -DecisionEnginePath "${DECIDE_ENGINE}" \
       -GitPath "${GIT_ENGINE}" -GitLFSPath "${GIT_LFS}" -OpenGrepPath "${OPENGREP}" -BrowserPath "${BROWSER}" \
@@ -228,7 +232,7 @@ esac
 SIGNATURE="${UPDATER}.sig"
 [[ -f "${SIGNATURE}" ]] || { echo "error: missing updater signature ${SIGNATURE}" >&2; exit 1; }
 python3 - "${ROOT}/packaging/update-limits.json" "${UPDATER}" "${VERSION}" "${PLATFORM}" <<'PYLIMITS'
-# Mirrors the client's archive limits; a looser check here would ship an artifact the client rejects.
+# Staging uses the client's download and expansion limits.
 import json, pathlib, sys, tarfile
 limits = json.loads(pathlib.Path(sys.argv[1]).read_text())
 artifact = pathlib.Path(sys.argv[2])
@@ -308,7 +312,9 @@ else
   shasum -a 256 "${OUTPUT}/${STEM}.${PACKAGE_EXTENSION}" | awk '{print $1}' \
     > "${OUTPUT}/${STEM}.${PACKAGE_EXTENSION}.sha256"
 fi
-cp "${UPDATER}" "${OUTPUT}/${STEM}.${UPDATER_EXTENSION}"
+if [[ "${PACKAGE_EXTENSION}" != "${UPDATER_EXTENSION}" ]]; then
+  cp "${UPDATER}" "${OUTPUT}/${STEM}.${UPDATER_EXTENSION}"
+fi
 cp "${SIGNATURE}" "${OUTPUT}/${STEM}.${UPDATER_EXTENSION}.sig"
 jq -n --arg platform "${PLATFORM}" \
   --argjson update_keys "$(python3 "${ROOT}/scripts/release-metadata.py" | jq '{signing_generation,embedded_generation,signing_key_fingerprint,embedded_key_fingerprint}')" \
