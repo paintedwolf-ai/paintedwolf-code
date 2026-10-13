@@ -77,6 +77,7 @@ func TestValidationGuidanceFollowsCompiledAvailability(t *testing.T) {
 							}
 							plan := toolsurface.Compile(offered, deferred)
 							vars := prompts.CoordinatorPolicyTemplateVars(plan.ImmediateNames(), plan.DeferredNames())
+							vars["has_file_tools"] = true // The fixture offers read/edit in an attached workspace.
 							if surface == "partials/agent-tool-surface.md" {
 								data := prompts.AgentToolSurfaceData{ToolProfile: "implement"}
 								for _, name := range plan.ImmediateNames() {
