@@ -1,4 +1,4 @@
-//! Desktop notification permissions, delivery, and dock badges.
+//! Desktop notification delivery, activation, and badges.
 
 #[cfg(target_os = "macos")]
 pub(crate) mod native;
