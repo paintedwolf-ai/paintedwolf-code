@@ -121,9 +121,16 @@ libc.workspace = true
 # The blocking picker preserves window-level presentation.
 # The dialog plugin builds rfd with gtk3; rfd refuses gtk3 and xdg-portal together.
 rfd = { version = "0.17", default-features = false, features = ["gtk3"] }
-arboard = "3"
 uuid = { version = "1", features = ["v4"] }
 wheel-glide = { path = "crates/wheel-glide" }
+
+# Linux clipboard commands go through the GTK display connection.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+
+# macOS and Windows use the OS pasteboard through arboard.
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+arboard = "3"
 
 # macOS posts through UserNotifications directly; other targets use the plugin.
 [target.'cfg(not(target_os = "macos"))'.dependencies]

@@ -20,6 +20,7 @@
     "allow-reveal-in-file-manager",
     "allow-read-clipboard-text",
     "allow-write-clipboard-text",
+    "allow-clipboard-status",
     "allow-paste-into-focused-view",
     "allow-path-kind",
     "allow-read-path-bytes",

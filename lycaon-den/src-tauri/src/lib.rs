@@ -81,6 +81,7 @@ pub fn run() {
             windows::system_appearance::system_appearance,
             clipboard::read_clipboard_text,
             clipboard::write_clipboard_text,
+            clipboard::clipboard_status,
             clipboard::paste_into_focused_view,
             files::reveal_in_file_manager::reveal_in_file_manager,
             files::reveal_in_file_manager::reveal_typed_path_in_file_manager,
@@ -149,6 +150,7 @@ pub fn run() {
             sidecar::setup_supervision(app.handle());
             webkit_features::create_main_window(app.handle())?;
             windows::window_appearance::setup(app.handle());
+            clipboard::setup(app.handle());
             update_service::startup::start(app.handle().clone());
             windows::accessibility_text_size::setup(app.handle().clone())
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
@@ -182,7 +184,7 @@ pub fn run() {
             } => windows::window_appearance::restore_main_workspace(app),
             RunEvent::Exit => {
                 if let Some(state) = app.try_state::<clipboard::ClipboardState>() {
-                    state.shutdown();
+                    state.shutdown(app);
                 }
                 if let Some(state) = app.try_state::<SidecarState>() {
                     // Record why the unlocks ended before the engine stops.
