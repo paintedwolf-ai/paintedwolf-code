@@ -15,7 +15,9 @@ Schemas define arguments, capabilities, and limits. Below are required fields.
 {% endfor %}
 {% endif %}
 
-{% include "partials/requestable-tools.md" %}{% set skills_heading = "###" %}{% include "partials/agent-skills.md" %}{% if agent_host_resources %}{% include "partials/host-resources.md" %}{% endif %}Branch on invocation facts and tool **`Code:`**, not error prose. `invoked:false` means the action did not run: keep its work pending and follow the authorized Code remedy. `invoked:true` alone does not prove success; inspect the result and any process exit. Heed `DOOM_LOOP_REPEAT*` before repeating unchanged calls.
+{% include "partials/requestable-tools.md" %}{% set skills_heading = "###" %}{% include "partials/agent-skills.md" %}{% if agent_host_resources %}{% include "partials/host-resources.md" %}{% endif %}{% include "partials/tool-outcomes.md" %}
+
+Identical repeated calls → heed `DOOM_LOOP_REPEAT*` and change approach.
 
 {% if write_globs %}
 ### Allowed write paths

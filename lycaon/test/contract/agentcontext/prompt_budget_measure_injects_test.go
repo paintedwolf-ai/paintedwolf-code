@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -51,9 +52,21 @@ func measureCoordinatorInjectBlock(
 	t.Helper()
 	ctx := context.Background()
 	switch spec.ID {
-	case "tool_procedures":
-		block, err := inject.RenderToolProceduresBlock(ctx, renderer, "sess-inject-test", "coordinator",
-			[]string{"command", "verify", "terminal_open", "http_request", "capture_page", "page_open", "page_snapshot", "page_act", "page_close", "measure_page", "render_view"}, nil)
+	case "tool_procedures", "worker_tool_procedures":
+		host, profile := promptunit.HostCoordinator, "coordinator"
+		if spec.ID == "worker_tool_procedures" {
+			host, profile = promptunit.HostWorker, "implementer"
+		}
+		catalog, err := renderer.UnitCatalog()
+		contractcheck.FailErr(t, "load procedure catalog", err)
+		var offered []string
+		for _, unit := range catalog.Units() {
+			if unit.Slot == promptunit.SlotProcedures && unit.HostsFor(host) {
+				offered = append(offered, unit.Attaches...)
+				offered = append(offered, unit.NeededWith...)
+			}
+		}
+		block, err := inject.RenderToolProceduresBlock(ctx, renderer, "sess-inject-test", profile, offered, nil)
 		contractcheck.FailErr(t, "render tool procedures", err)
 		return block
 	case "command_jobs", "worker_command_jobs":

@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/prompts/tool_profile_prompt_vars_test.go",
+  "kind": "test_suite",
+  "workstream": "coordinator-progress-execution",
+  "disposition": "retain",
+  "reason": "Retain the shared actual-profile fixture and offered-tool projection assertions together. They cover schema argument rows, capability flags, mutation authority and coordinator versus worker inventory. The added checklist flag uses the same boundary; no new fixture lifecycle or subsystem is introduced.",
+  "reviewed_commit": "8792d73f2642319cc76672de951b5025ff161314",
+  "ceiling": 420,
+  "boundaries": {
+    "lycaon/internal/prompts/tool_profile_prompt_vars_test.go": "3d6f0330049bac004d8f91d7eba8256de6dd5787b7367f60694ea31269351850"
+  }
+}

@@ -30,8 +30,10 @@ func TestCoordinationProtocolInCoordinatorCore(t *testing.T) {
 	}
 	rendered, err := engine.Render(context.Background(), "agents/coordinator-core.md", vars)
 	testutil.FailErr(t, "Render coordinator-core", err)
+	if strings.Contains(rendered, "update_progress") {
+		t.Fatal("coordinator core duplicates offered-tool progress guidance")
+	}
 	for _, want := range []string{
-		"update_progress",
 		"record_finding(summary, ref, body?)",
 		"host records worker lifecycle in the worklog",
 	} {

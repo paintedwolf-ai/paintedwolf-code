@@ -1,3 +1,3 @@
 [host:coordinator-progress-missing]
 
-Last turn ran **`{{ tool }}`** with no session **`## Progress`** checklist authored. Each checklist row is a commitment the workers and the final report turn rely on. Before more product edits or delegated work, call **`update_progress`** with a **`## Progress`** checklist — one **`- [ ]`** row per deliverable you will hand back (use **`- [>]`** for optional report-only rows). If the user will see a page/UI or interactive terminal change, also add `- [ ] Snapshot the running UI` (or `Snapshot the terminal`) after the deliverable — then continue the same arc.
+`{{ tool }}` did not run: the session has no progress checklist. Call `update_progress(content=…)` with a `## Progress` heading and one pending `- [ ]` row per deliverable, then retry the authorized action. Keep rejected work pending. For a user-visible page or terminal change, include a separate pending snapshot row and capture the running result before marking it done.

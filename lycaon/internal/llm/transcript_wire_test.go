@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	vertexexpressprovider "github.com/lycaon/lycaon/internal/llm/providers/vertexexpress"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -162,5 +164,52 @@ func TestApprovedCheckpointSurvivesNativeWire(t *testing.T) {
 	wire := ollamaprovider.ProjectMessages([]api.Message{projected}, ollamaprovider.MessageProjection{})
 	if len(wire) != 1 || wire[0].Content != projected.Content || wire[0].Role != "tool" {
 		t.Fatalf("approval receipt lost on native wire: %+v", wire)
+	}
+}
+
+func TestInvocationFactsSurviveContextAndProviderWire(t *testing.T) {
+	message := api.Message{Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Content: "The file was changed.", PromptCacheBreakpoint: api.PromptCacheTierHistory, ToolResult: &api.ToolResult{
+		Tool: "edit", ToolCallID: "edit-call", Outcome: api.ToolResultOutcomeRejected,
+		Invocation: &api.InvocationReceipt{ID: "receipt", Tool: "edit", ToolCallID: "edit-call", Status: api.InvocationStatusRejected, Invoked: false, Failure: &api.InvocationFailure{Code: "PROGRESS_MISSING"}},
+	}}
+	before, err := json.Marshal(message)
+	testutil.FailErr(t, "capture durable result", err)
+	messages := transcript.Project([]api.Message{
+		{Role: api.MessageRoleSystem, Content: "Standing guidance", PromptCacheBreakpoint: api.PromptCacheTierStanding},
+		{Role: api.MessageRoleUser, Content: "Fix the file."},
+		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "edit-call", Name: "edit", Args: map[string]any{}}}}, message,
+	})
+	round := compaction.ContextMessagesToAPI(compaction.ContextMessagesFromAPI(messages), messages)
+	messages = transcript.Project(round)
+	if messages[0].PromptCacheBreakpoint != api.PromptCacheTierStanding || messages[len(messages)-1].PromptCacheBreakpoint != api.PromptCacheTierHistory {
+		t.Fatal("invocation projection or context fitting moved the cache boundaries")
+	}
+	system, anthropic := anthropicprovider.ProjectMessages(messages, nil, false, "", "", "")
+	standing, err := json.Marshal(system)
+	testutil.FailErr(t, "encode standing prefix", err)
+	if strings.Contains(string(standing), "tool_feedback") || !strings.Contains(string(standing), "Standing guidance") {
+		t.Fatalf("invocation feedback changed the standing prefix: %s", standing)
+	}
+	_, vertex := vertexexpressprovider.ProjectMessages(messages, false, "")
+	for name, wire := range map[string]any{
+		"Ollama":            ollamaprovider.ProjectMessages(messages, ollamaprovider.MessageProjection{}),
+		"OpenAI compatible": openaicompat.ProjectMessages(messages, openaicompat.MessageProjection{}),
+		"Anthropic":         anthropic, "Vertex": vertex,
+	} {
+		raw, err := json.Marshal(wire)
+		testutil.FailErr(t, "encode provider wire", err)
+		for _, fact := range []string{`\"invoked\":false`, `\"status\":\"rejected\"`, `\"code\":\"PROGRESS_MISSING\"`} {
+			if strings.Count(string(raw), fact) != 1 {
+				t.Fatalf("%s lost or duplicated invocation fact %s: %s", name, fact, raw)
+			}
+		}
+		if !strings.Contains(string(raw), "⟦D:host:tool_feedback⟧") {
+			t.Fatalf("%s lost the host-data boundary: %s", name, raw)
+		}
+	}
+	after, err := json.Marshal(message)
+	testutil.FailErr(t, "capture retained result", err)
+	if string(before) != string(after) {
+		t.Fatal("provider projection changed durable invocation evidence")
 	}
 }

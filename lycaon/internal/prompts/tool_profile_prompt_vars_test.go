@@ -47,6 +47,9 @@ func TestCoordinatorTeachesSecretUseOnceSecretToolsLoad(t *testing.T) {
 	}
 	loaded := map[string]bool{"secret_generate": true, "secret_list": true, "secret_revoke": true, "write": true}
 	testutil.FailErr(t, "merge coordinator surface", prompts.MergeCoordinatorSurfacePathVars("implement_investigate", nil, vars, prompts.SurfaceTurn{Loaded: loaded}))
+	if vars["profile_has_update_progress"] != true {
+		t.Fatal("coordinator checklist guidance must follow its offered authoring tool")
+	}
 	sticky, err := prompts.LoadCoordinatorSurfaceFloor("implement_investigate")
 	testutil.FailErr(t, "resolve coordinator tools", err)
 	deferred, err := prompts.LoadCoordinatorSurfaceLoadable("implement_investigate")
@@ -151,6 +154,9 @@ func profileAgentForProfile(t *testing.T, profileID string) string {
 
 func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 	vars := loadProfileCapabilityVars(t, "implement")
+	if vars["profile_has_update_progress"] != false {
+		t.Fatal("worker must not be taught an unoffered checklist tool")
+	}
 	if vars["profile_has_command"] != true {
 		t.Fatalf("implement must have command: %#v", vars["profile_has_command"])
 	}

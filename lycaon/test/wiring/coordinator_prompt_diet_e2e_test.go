@@ -13,8 +13,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// TestCoordinatorPromptDietE2E asserts investigate system prompts from live
-// SessionMgr.Prompt assembly (not a render helper). SSOT: docs/coordination.md.
+// Records the production session prompt assembly.
 func TestCoordinatorPromptDietE2E(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{
@@ -87,8 +86,10 @@ func TestCoordinatorPromptDietE2E(t *testing.T) {
 				t.Errorf("investigate turn %d carried orchestrate/recovery copy %q — %s", i, marker, why)
 			}
 		}
-		if !strings.Contains(sp, "Author before mutate/dispatch") {
-			t.Errorf("investigate turn %d dropped the progress-authoring guidance", i)
+		for _, want := range []string{"Store the checklist with `update_progress(content=…)`", "Pending rows permit work.", "PROGRESS_ITEM_NOT_CLOSED"} {
+			if !strings.Contains(sp, want) {
+				t.Errorf("investigate turn %d missing progress procedure %q", i, want)
+			}
 		}
 		for _, want := range []string{"summarize(path=…, task=…)", `list_dir({"path":"."})`} {
 			if !strings.Contains(sp, want) {

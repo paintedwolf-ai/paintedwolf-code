@@ -9,5 +9,3 @@ Workers are in flight. Use the roster and each task result to track accepted wor
 - **`update_progress`** — keep the checklist aligned with accepted work and observed results.
 
 Use `wait(timeout_ms=300000, conditions=[{"kind":"next_worker_done"}])` when the next useful action depends on a worker result. Choose `all_workers_idle` only for a dependency on the whole set. Promote pending producer overlays to release their consumers. Replace consumers canceled by unusable producer output after repairing the prerequisites.
-
-{% include "partials/coordinator-progress-closure.md" %}

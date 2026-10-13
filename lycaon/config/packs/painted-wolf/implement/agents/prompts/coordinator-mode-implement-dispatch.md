@@ -11,7 +11,6 @@ Write legs run their own build/test/lint and any external-state shell the brief 
 
 {% include "partials/coordinator-worker-chain-baseline.md" %}
 
-{% include "partials/coordinator-progress-closure.md" %}
 
 {% include "partials/coordinator-parallel-fanout-dispatch.md" %}
 

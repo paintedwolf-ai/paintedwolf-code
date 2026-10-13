@@ -437,7 +437,7 @@ func profileHasRetrievalTool(enabled map[string]bool) bool {
 // Capability guidance follows the offered schemas.
 func mergeOfferedToolGuidance(offered []string, into map[string]any) {
 	set := toolNameSet(offered)
-	for _, name := range []string{"render_view", "capture_page", "measure_page", "page_open", "page_snapshot", "page_act", "page_close", "view_image", "view_video"} {
+	for _, name := range []string{"render_view", "capture_page", "measure_page", "page_open", "page_snapshot", "page_act", "page_close", "view_image", "view_video", "update_progress"} {
 		into["profile_has_"+name] = set[name]
 	}
 	into["profile_has_page_controls"] = set["page_open"] || set["page_snapshot"] || set["page_act"] || set["page_close"]

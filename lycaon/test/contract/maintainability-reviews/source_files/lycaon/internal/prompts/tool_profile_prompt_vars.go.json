@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/prompts/tool_profile_prompt_vars.go",
+  "kind": "projection",
+  "workstream": "coordinator-progress-execution",
+  "disposition": "retain",
+  "reason": "Keep the tool-profile projection cohesive: offered inventory determines capability flags, schema argument rows, concurrency and execution guidance. The checklist flag extends the existing offered-tool map without changing operation authority, dependencies or file size. Actual coordinator and worker profiles and visual prompt composition test the boundary.",
+  "reviewed_commit": "c0b11b80e907e5569b33caa573d033fdbf9c1392",
+  "ceiling": 401,
+  "boundaries": {
+    "lycaon/internal/prompts/tool_profile_prompt_vars_test.go": "3d6f0330049bac004d8f91d7eba8256de6dd5787b7367f60694ea31269351850",
+    "lycaon/internal/prompts/visual_partials_test.go": "d4af5e0537b3b64d90f07f2a508cb85cc63dde85ec2dbed809f7751941b671f7"
+  }
+}
