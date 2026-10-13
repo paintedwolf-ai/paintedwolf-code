@@ -18,16 +18,15 @@ import (
 func defaultAccountShell(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	uid := os.Getuid()
-	if uid < 0 {
-		return "", errors.New("account lookup requires a nonnegative uid")
-	}
-	return linuxAccountShell(ctx, "/usr/bin/getent", uint64(uid))
+	return linuxAccountShell(ctx, "/usr/bin/getent", os.Getuid())
 }
 
 // NSS resolves local and directory-backed accounts by uid.
-func linuxAccountShell(ctx context.Context, program string, uid uint64) (string, error) {
-	cmd, cleanup, err := execpkg.PrepareCommand(ctx, program, []string{"passwd", strconv.FormatUint(uid, 10)}, execpkg.ExecOpts{
+func linuxAccountShell(ctx context.Context, program string, uid int) (string, error) {
+	if uid < 0 {
+		return "", errors.New("account lookup requires a nonnegative uid")
+	}
+	cmd, cleanup, err := execpkg.PrepareCommand(ctx, program, []string{"passwd", strconv.Itoa(uid)}, execpkg.ExecOpts{
 		Launch: execpkg.HostLaunch("user_account_shell"), Env: []string{"LC_ALL=C", "PATH=/usr/bin:/bin"},
 	})
 	if err != nil {
@@ -46,7 +45,7 @@ func linuxAccountShell(ctx context.Context, program string, uid uint64) (string,
 	if output.overflow {
 		return "", errors.New("account lookup exceeded its capture limit")
 	}
-	return linuxAccountRecordShell(output.String(), uid)
+	return linuxAccountRecordShell(output.String(), uint64(uid))
 }
 
 func linuxAccountRecordShell(raw string, uid uint64) (string, error) {

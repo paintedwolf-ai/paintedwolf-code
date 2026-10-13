@@ -47,6 +47,9 @@ func TestLinuxAccountLookupRefusesMalformedAndMismatchedRecords(t *testing.T) {
 }
 
 func TestLinuxAccountLookupBoundsCaptureAndLifetime(t *testing.T) {
+	if _, err := linuxAccountShell(t.Context(), filepath.Join(t.TempDir(), "missing"), -1); err == nil {
+		t.Fatal("accepted a negative account uid")
+	}
 	oversized := accountLookupProgram(t, "printf '%s' '"+strings.Repeat("x", (64<<10)+1)+"'")
 	if _, err := linuxAccountShell(t.Context(), oversized, 42); err == nil {
 		t.Fatal("accepted oversized account lookup")
