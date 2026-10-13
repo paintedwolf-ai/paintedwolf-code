@@ -20,6 +20,20 @@ At rendering, [`oarcopy.FactsFromData`](../lycaon/internal/oarcopy/facts.go) pub
 
 On the wire, a tool result carries ordered `feedback` entries (`code`, typed `details`, optional `subject`), a producer-stated `dispatch` record for worker creation, and a producer-stated `completion` record for lifecycle work. `codes` is the compact ordered card-selection projection of `feedback`; it is never the only rejection data.
 
+## Source text in model requests
+
+Successful native content, symbol, and range reads retain their structured result
+for history and evidence. The shared transcript projection sends each source
+block as unescaped text, with its line range and read receipt in separate
+metadata. Indentation and blank lines remain source bytes; display line labels
+are not part of an edit string. Evidence handles and source coordinates remain
+available for citations.
+
+Projection accepts only complete host-written read blocks with consistent line
+coordinates. Unsupported or incomplete results keep their original presentation.
+Every projected source line remains non-authoritative tool data. Projection does
+not change retained messages, edit arguments, read prerequisites, or permissions.
+
 ## Feedback channels
 
 Lifecycle anchors determine when feedback is emitted. One anchor catalog drives immediate guards, queued guidance, completion banners, and workflow notices: host code emits an anchor envelope, bindings select the template. A new sentence in Go or an ad hoc dispatch id would create a second timing system and is forbidden.
