@@ -1,6 +1,10 @@
 package toolfeedback
 
 import (
+	"fmt"
+	"maps"
+	"strings"
+	"unicode"
 	"github.com/lycaon/lycaon/internal/tools"
 
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -97,4 +101,82 @@ func TestLocalFetchRecoveryOnlyOffersCurrentCaptureTools(t *testing.T) {
 			t.Fatalf("offered local recovery omitted for %v", offered)
 		}
 	}
+}
+
+// Exercise each intrinsic rejection's declared tool-availability dimensions,
+// including the short remedy that accompanies its detailed fix.
+func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
+	bp := stockBlockPlane(t)
+	cfg, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load recovery catalogue", err)
+	checked := 0
+	for code, entry := range cfg.HintCodes {
+		if entry.Anchor != oar.AnchorToolRejected || entry.When != "paintedwolf.rejection_code == \""+code+"\"" || entry.Requires == nil {
+			continue
+		}
+		var names []string
+		for _, fact := range entry.Requires.Facts {
+			if name, ok := strings.CutPrefix(fact, "paintedwolf.can_"); ok {
+				names = append(names, name)
+			}
+		}
+		if len(names) == 0 {
+			continue
+		}
+		if len(names) > 10 || len(entry.Scenarios) == 0 {
+			t.Fatalf("%s needs bounded recovery scenarios: %d dimensions, %d scenarios", code, len(names), len(entry.Scenarios))
+		}
+		checked++
+		for _, scenario := range entry.Scenarios {
+			for mask := 0; mask < 1<<len(names); mask++ {
+				t.Run(fmt.Sprintf("%s/%s/%d", code, scenario.ID, mask), func(t *testing.T) {
+					vars := guidance.ScenarioVars(entry, scenario)
+					tool, _ := vars["tool"].(string)
+					if tool == "" && len(entry.Tools) > 0 {
+						tool = entry.Tools[0]
+					}
+					if tool == "" {
+						tool = "read"
+					}
+					offered := []string{tool}
+					for bit, name := range names {
+						if mask&(1<<bit) != 0 && !slices.Contains(offered, name) {
+							offered = append(offered, name)
+						}
+					}
+					ctx := tools.WithRecoveryTools(t.Context(), offered)
+					var first map[string]string
+					for _, spoof := range []bool{false, true} {
+						data := maps.Clone(vars)
+						for _, name := range names {
+							data["can_"+name] = spoof
+						}
+						err := bp.RejectObservation(ctx, tool, "fixture", nil, &toolrejection.ToolReject{Code: code, Data: data})
+						refusal, ok := guidance.RefusalFromError(err)
+						if !ok || refusal.Code != code || len(refusal.Copy) == 0 {
+							t.Fatalf("missing evaluated %s recovery: %v", code, err)
+						}
+						if first != nil && !maps.Equal(first, refusal.Copy) {
+							t.Fatal("producer metadata overrode frozen recovery availability")
+						}
+						first = refusal.Copy
+					}
+					for _, field := range []string{"fix", "instead"} {
+						words := strings.FieldsFunc(first[field], func(r rune) bool {
+							return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_'
+						})
+						for _, name := range names {
+							if !slices.Contains(offered, name) && slices.Contains(words, name) {
+								t.Errorf("%s names unavailable %s with offered %v: %s", field, name, offered, first[field])
+							}
+						}
+					}
+				})
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no availability-aware intrinsic rejection was tested")
+	}
+	t.Logf("checked %d intrinsic rejection families", checked)
 }
