@@ -15,6 +15,7 @@ func TestSessionAddressesPreserveNativeSessionSelection(t *testing.T) {
 	}{
 		{"default runtime", "", "", []string{"/run/user/1234/bus"}},
 		{"custom runtime", "", "/custom/session", []string{"/custom/session/bus"}},
+		{"runtime alias", "", "/custom/link/../session", []string{"/custom/link/../session/bus"}},
 		{"explicit path", "unix:path=/session/one", "/other", []string{"/session/one"}},
 		{"escaped path and guid", "unix:path=/session/a%20b,guid=0123456789abcdef0123456789abcdef", "", []string{"/session/a b"}},
 		{"abstract socket", "unix:abstract=session%2Cone", "", []string{"\x00session,one"}},

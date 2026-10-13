@@ -73,11 +73,22 @@ func TestLinuxAgentDiscoveryReadsTheNativeUserManagerProperty(t *testing.T) {
 	if query[0] != "org.freedesktop.systemd1.Manager" || query[1] != "Environment" {
 		t.Fatalf("native property query = %v", query)
 	}
-	for _, address := range []string{"", "unix:path=" + filepath.Join(filepath.Dir(path), "missing") + ";unix:path=" + path} {
-		t.Setenv("DBUS_SESSION_BUS_ADDRESS", address)
-		t.Setenv("XDG_RUNTIME_DIR", filepath.Dir(path))
+	nested := filepath.Join(filepath.Dir(path), "nested")
+	if err := os.Mkdir(nested, 0700); err != nil {
+		t.Fatalf("create session directory fixture: %v", err)
+	}
+	alias := filepath.Join(agentFixtureDirectory(t), "alias")
+	if err := os.Symlink(nested, alias); err != nil {
+		t.Fatalf("create session directory alias: %v", err)
+	}
+	for _, tc := range []struct{ address, runtime string }{
+		{"", filepath.Dir(path)}, {"", alias + "/.."},
+		{"unix:path=" + filepath.Join(filepath.Dir(path), "missing") + ";unix:path=" + path, filepath.Dir(path)},
+	} {
+		t.Setenv("DBUS_SESSION_BUS_ADDRESS", tc.address)
+		t.Setenv("XDG_RUNTIME_DIR", tc.runtime)
 		if got := sessionAgentSocket(t.Context()); got != socket {
-			t.Fatalf("selected session %q supplied %q, want %q", address, got, socket)
+			t.Fatalf("selected session %q, %q supplied %q, want %q", tc.address, tc.runtime, got, socket)
 		}
 		<-fixture.queried
 	}

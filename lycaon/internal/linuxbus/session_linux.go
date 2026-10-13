@@ -45,7 +45,7 @@ func sessionSocketPaths(address, runtime string, uid int) ([]string, error) {
 		if !filepath.IsAbs(runtime) || strings.ContainsAny(runtime, "\x00\r\n") {
 			return nil, errors.New("invalid session runtime directory")
 		}
-		return []string{filepath.Join(runtime, "bus")}, nil
+		return []string{strings.TrimRight(runtime, "/") + "/bus"}, nil
 	}
 	if len(address) > 64<<10 {
 		return nil, errors.New("session bus address exceeds its limit")
