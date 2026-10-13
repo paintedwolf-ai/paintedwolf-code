@@ -36,7 +36,11 @@ func preflightUpgrade(ctx context.Context, opts CreateOpts, scratch uint64, capt
 		return err
 	}
 	if capture {
-		payload, metadata, err := recoveryPayloadEstimate(ctx, opts.ConfigDir, databaseBytes)
+		links, err := recoveryBodyLinksAvailable(opts.ConfigDir)
+		if err != nil {
+			return err
+		}
+		payload, metadata, err := recoveryPayloadEstimate(ctx, opts.ConfigDir, databaseBytes, links)
 		if err != nil {
 			return err
 		}
@@ -89,7 +93,7 @@ func preflightRestore(ctx context.Context, opts StageOpts, manifest Manifest, lo
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	livePayload, _, err := recoveryPayloadEstimate(ctx, opts.ConfigDir, liveDatabase)
+	livePayload, _, err := recoveryPayloadEstimate(ctx, opts.ConfigDir, liveDatabase, false)
 	if err != nil {
 		return err
 	}
@@ -145,7 +149,7 @@ func requireUpgradeSpace(needed, available uint64) error {
 	return nil
 }
 
-func recoveryPayloadEstimate(ctx context.Context, root string, databaseBytes uint64) (uint64, uint64, error) {
+func recoveryPayloadEstimate(ctx context.Context, root string, databaseBytes uint64, shareBodies bool) (uint64, uint64, error) {
 	files := map[string]archiveSource{}
 	branches := branchCapture{all: true, roots: map[string]bool{}}
 	for _, dir := range localdata.BackupRelDirs() {
@@ -178,7 +182,9 @@ func recoveryPayloadEstimate(ctx context.Context, root string, databaseBytes uin
 		if size < 0 {
 			return 0, 0, fmt.Errorf("invalid retained history size")
 		}
-		total, err = sumSpace(total, uint64(size))
+		if !shareBodies || !sharedRecoveryBodyOnVolume(root, file) {
+			total, err = sumSpace(total, uint64(size))
+		}
 		if err != nil {
 			return 0, 0, err
 		}
