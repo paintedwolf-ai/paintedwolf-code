@@ -123,7 +123,8 @@ repairs this text. Fenced examples, prose before JSON, unknown tools, and tool
 names inside argument values do not trigger recovery. Parsing is bounded to
 64 KiB and three container levels. Recovery uses the existing rejected-draft and
 bounded no-progress retry lifecycle. Tool schemas and permission checks apply
-to the subsequent native call.
+to the subsequent native call. Successful recovery under an existing provider-declared
+fallback grammar retains its existing behavior.
 
 Post-turn nudges carry OAR or grounding decisions that could not reject an already-finished generation. All matched advisories are retained in evaluation order; the envelope identifies the primary code.
 
