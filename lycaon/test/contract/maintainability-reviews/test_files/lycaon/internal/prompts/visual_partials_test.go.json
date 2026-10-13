@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/prompts/visual_partials_test.go",
+  "kind": "test_suite",
+  "workstream": "coordinator-progress-execution",
+  "disposition": "retain",
+  "reason": "Retain the rendered visual contract matrix together: model capability, offered capture tools, evidence rows and skill availability select the same visual guidance. Checklist instructions now use the actual offered tool flag. The shared fixture and omission assertions make this one presentation contract rather than independent product behaviors.",
+  "reviewed_commit": "8792d73f2642319cc76672de951b5025ff161314",
+  "ceiling": 530,
+  "boundaries": {
+    "lycaon/internal/prompts/visual_partials_test.go": "d4af5e0537b3b64d90f07f2a508cb85cc63dde85ec2dbed809f7751941b671f7"
+  }
+}
