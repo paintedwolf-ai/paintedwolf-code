@@ -73,10 +73,16 @@ impl Peer {
             .read_command()
             .output()
             .unwrap_or_else(|e| panic!("start clipboard peer reader for {self:?}: {e}"));
-        output
+        let text = output
             .status
             .success()
-            .then(|| String::from_utf8(output.stdout).expect("peer text is UTF-8"))
+            .then(|| String::from_utf8(output.stdout).expect("peer text is UTF-8"))?;
+        // GTK serves the `text/plain` MIME types in their CRLF canonical form,
+        // which GTK readers fold back; `wl-paste` shows the bytes as served.
+        Some(match self {
+            Self::Wayland => text.replace("\r\n", "\n"),
+            Self::X11 => text,
+        })
     }
 
     fn read_until(self, expected: Option<&str>) -> Option<String> {
