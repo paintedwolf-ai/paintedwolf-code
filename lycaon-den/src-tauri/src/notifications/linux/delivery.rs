@@ -1,7 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, rc::Rc, time::Instant};
 
 use gtk::{gio, glib, prelude::*};
-use tauri::{AppHandle, Emitter, Manager};
 
 use super::identity::Delivered;
 
@@ -19,7 +18,7 @@ pub(super) struct Delivery {
 impl Delivery {
     pub(super) fn new(
         connection: gio::DBusConnection,
-        app: &AppHandle,
+        activated: impl Fn(Option<String>, Option<String>) + 'static,
         deadline: Instant,
     ) -> Result<Self, String> {
         let owner = current_owner(&connection, deadline)?;
@@ -39,7 +38,6 @@ impl Delivery {
         let delivered = Rc::new(RefCell::new(Delivered::default()));
         let mut subscriptions = Vec::new();
         let entries = delivered.clone();
-        let app = app.clone();
         subscriptions.push(connection.signal_subscribe(
             Some(&owner),
             Some(SERVICE),
@@ -62,7 +60,7 @@ impl Delivery {
                     if let Some((id, action)) = parameters.get::<(u32, String)>() {
                         let activation = entries.borrow_mut().activate(id, &action);
                         if let Some((session_id, token)) = activation {
-                            activate(&app, session_id, token);
+                            activated(session_id, token);
                         }
                     }
                 }
@@ -251,30 +249,6 @@ fn notification_body(body: &str, capabilities: &[String]) -> String {
     }
 }
 
-fn activate(app: &AppHandle, session_id: Option<String>, token: Option<String>) {
-    #[derive(Clone, serde::Serialize)]
-    #[serde(rename_all = "camelCase")]
-    struct Activated {
-        session_id: Option<String>,
-    }
-    let target = app.clone();
-    let _ = app.run_on_main_thread(move || {
-        if let Some(window) = target.get_webview_window("main") {
-            if let Ok(native) = window.gtk_window() {
-                if let Some(token) = token {
-                    native.set_startup_id(&token);
-                }
-                native.present();
-            }
-            let _ = target.emit_to(
-                "main",
-                "notifications://activated",
-                Activated { session_id },
-            );
-        }
-    });
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -299,3 +273,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "delivery_tests.rs"]
+mod native_tests;
