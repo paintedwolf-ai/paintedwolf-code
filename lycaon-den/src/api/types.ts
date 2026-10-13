@@ -12092,6 +12092,8 @@ export interface components {
             policy_unwatched?: number;
             /** @description Directories a per-directory watcher could not register. */
             unwatched_directories: number;
+            /** @description The kernel refused the latest registration because the per-user watch limit is reached (`fs.inotify.max_user_watches` on Linux); unwatched directories recover once the limit is raised or watches free up. */
+            watch_limit_reached?: boolean;
         };
         SourceWorkspaceRoot: {
             /** @description Durable source branch for this root; omitted for the primary tree. Roots unaffected by a worktree binding retain their primary branch. */

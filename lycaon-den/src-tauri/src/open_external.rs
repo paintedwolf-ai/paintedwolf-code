@@ -50,9 +50,11 @@ pub async fn open_in_editor(
     .map_err(|error| error.to_string())?
 }
 
-/// Open `url` in the chosen browser preset.
+/// Open `url` in the chosen browser preset. The calling window parents any
+/// chooser the desktop shows.
 #[tauri::command]
 pub async fn open_in_browser(
+    window: tauri::WebviewWindow,
     url: String,
     preset: String,
     custom_template: Option<String>,
@@ -62,7 +64,7 @@ pub async fn open_in_browser(
         return Err("url scheme is not allowed".to_string());
     }
     let url = url.to_string();
-    tauri::async_runtime::spawn_blocking(move || spawn_browser(&url, &preset, custom_template))
+    tauri::async_runtime::spawn_blocking(move || spawn_browser(&url, &preset, custom_template, &window))
         .await
         .map_err(|error| error.to_string())?
 }
@@ -71,9 +73,10 @@ pub(crate) fn spawn_browser(
     url: &str,
     preset: &str,
     custom_template: Option<String>,
+    window: &tauri::WebviewWindow,
 ) -> Result<(), String> {
     match preset {
-        "system-default" => spawn_system_browser(url),
+        "system-default" => spawn_system_browser(url, window),
         "chrome" => spawn_named_browser("chrome", url),
         "firefox" => spawn_named_browser("firefox", url),
         "safari" => spawn_safari(url),
@@ -197,17 +200,23 @@ fn spawn_preset_editor(preset: &str, path: &str, line: &str) -> Result<(), Strin
     }
     #[cfg(target_os = "linux")]
     {
-        if !entry.linux_cli.is_empty() {
-            if which::which(entry.linux_cli).is_ok() {
-                return spawn_argv_owned(entry.linux_cli, &cli_args);
-            }
-            for candidate in entry.linux_candidate_paths {
-                if Path::new(candidate).exists() {
-                    return spawn_argv_owned(candidate, &cli_args);
-                }
-            }
+        use crate::detect_editors::linux_desktop;
+        if !entry.linux_cli.is_empty() && which::which(entry.linux_cli).is_ok() {
+            return spawn_argv_owned(entry.linux_cli, &cli_args);
         }
-        Err(format!("no {} command-line tool found", entry.display_name))
+        let desktop = linux_desktop::find_entry(
+            entry.linux_desktop_ids,
+            &linux_desktop::system_application_directories(),
+            &linux_desktop::program_runnable,
+        )
+        .ok_or_else(|| format!("{} is not installed", entry.display_name))?;
+        let (program, fixed) = desktop
+            .command
+            .split_first()
+            .ok_or_else(|| format!("{} has no launch command", entry.display_name))?;
+        let mut argv = fixed.to_vec();
+        argv.extend(cli_args);
+        spawn_argv_owned(program, &argv)
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
@@ -239,22 +248,25 @@ fn spawn_custom_editor(template: &str, path: &str, line: &str) -> Result<(), Str
     spawn_argv(prog, &args)
 }
 
-fn spawn_system_browser(url: &str) -> Result<(), String> {
+fn spawn_system_browser(url: &str, window: &tauri::WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
+        let _ = window;
         spawn_argv("open", &[url])
     }
     #[cfg(target_os = "linux")]
     {
-        spawn_argv("xdg-open", &[url])
+        use crate::files::linux_desktop_open::{open_uri, ParentWindow};
+        open_uri(&ParentWindow::of(window), url)
     }
     #[cfg(target_os = "windows")]
     {
+        let _ = window;
         crate::files::open_local_path::windows_open_associated(url)
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
-        let _ = url;
+        let _ = (url, window);
         Err("browser open is not supported on this platform".to_string())
     }
 }

@@ -7685,6 +7685,8 @@ type SourceWatchCoverage struct {
 	PolicyUnwatched int `json:"policy_unwatched,omitempty"`
 	// Directories a per-directory watcher could not register.
 	UnwatchedDirectories int `json:"unwatched_directories"`
+	// The kernel refused the latest registration because the per-user watch limit is reached (`fs.inotify.max_user_watches` on Linux); unwatched directories recover once the limit is raised or watches free up.
+	WatchLimitReached bool `json:"watch_limit_reached,omitempty"`
 }
 
 // SourceWorkspace

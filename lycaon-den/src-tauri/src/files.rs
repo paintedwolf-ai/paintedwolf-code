@@ -6,3 +6,5 @@ pub(crate) mod read_path_bytes;
 pub(crate) mod external_attachment_import;
 pub(crate) mod open_local_path;
 pub(crate) mod reveal_in_file_manager;
+#[cfg(target_os = "linux")]
+pub(crate) mod linux_desktop_open;

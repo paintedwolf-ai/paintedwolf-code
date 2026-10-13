@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -39,7 +40,7 @@ func platformMove(path string) (Receipt, error) {
 	if err != nil {
 		return Receipt{}, err
 	}
-	_, writeErr := fmt.Fprintf(info, "[Trash Info]\nPath=%s\nDeletionDate=%s\n", url.PathEscape(origin), time.Now().Format("2006-01-02T15:04:05"))
+	_, writeErr := fmt.Fprintf(info, "[Trash Info]\nPath=%s\nDeletionDate=%s\n", encodeTrashPath(origin), time.Now().Format("2006-01-02T15:04:05"))
 	if writeErr == nil {
 		writeErr = fssync.File(info)
 	}
@@ -66,6 +67,16 @@ func platformMove(path string) (Receipt, error) {
 	return receipt, nil
 }
 
+// File managers decode the recorded path as a URL, so every byte outside the
+// unreserved set is percent-encoded while the separators stay literal.
+func encodeTrashPath(path string) string {
+	segments := strings.Split(path, "/")
+	for i, segment := range segments {
+		segments[i] = url.PathEscape(segment)
+	}
+	return strings.Join(segments, "/")
+}
+
 // Trash stays on the selected volume; crossing devices must never turn deletion into a copy.
 func linuxTrashFor(path string) (string, string, error) {
 	home, err := resolveLinuxTrashDir()
@@ -82,26 +93,46 @@ func linuxTrashFor(path string) (string, string, error) {
 	if same {
 		return home, path, nil
 	}
-	top := filepath.Dir(path)
-	for {
-		parent := filepath.Dir(top)
-		if parent == top {
-			break
-		}
-		same, err := fspath.SameFilesystem(top, parent)
-		if err != nil {
-			return "", "", err
-		}
-		if !same {
-			break
-		}
-		top = parent
+	top, err := volumeTop(path)
+	if err != nil {
+		return "", "", err
 	}
 	relative, err := filepath.Rel(top, path)
 	if err != nil {
 		return "", "", err
 	}
-	return filepath.Join(top, fmt.Sprintf(".Trash-%d", os.Getuid())), relative, nil
+	return volumeTrashDir(top), relative, nil
+}
+
+// volumeTop walks up to the highest directory on the entry's filesystem.
+func volumeTop(path string) (string, error) {
+	top := filepath.Dir(path)
+	for {
+		parent := filepath.Dir(top)
+		if parent == top {
+			return top, nil
+		}
+		same, err := fspath.SameFilesystem(top, parent)
+		if err != nil {
+			return "", err
+		}
+		if !same {
+			return top, nil
+		}
+		top = parent
+	}
+}
+
+// An administrator-created sticky `.Trash` directory holds one subdirectory per
+// user; without one the user owns a `.Trash-<uid>` sibling.
+func volumeTrashDir(top string) string {
+	uid := os.Getuid()
+	shared := filepath.Join(top, ".Trash")
+	info, err := os.Lstat(shared)
+	if err == nil && info.IsDir() && info.Mode()&os.ModeSticky != 0 {
+		return filepath.Join(shared, fmt.Sprint(uid))
+	}
+	return filepath.Join(top, fmt.Sprintf(".Trash-%d", uid))
 }
 
 func privateTrashDirectory(path string) error {
