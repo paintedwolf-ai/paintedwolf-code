@@ -1,7 +1,13 @@
 //! Plain-text clipboard access for copy, cut, and paste actions.
 
 #[derive(Default)]
-pub struct ClipboardState(std::sync::Mutex<Option<arboard::Clipboard>>);
+pub struct ClipboardState(std::sync::Mutex<ClipboardOwner>);
+
+#[derive(Default)]
+struct ClipboardOwner {
+    board: Option<arboard::Clipboard>,
+    closed: bool,
+}
 
 impl ClipboardState {
     fn with_clipboard<T>(
@@ -12,10 +18,13 @@ impl ClipboardState {
             .0
             .lock()
             .map_err(|_| "Clipboard state is unavailable")?;
-        if owner.is_none() {
-            *owner = Some(arboard::Clipboard::new().map_err(|e| e.to_string())?);
+        if owner.closed {
+            return Err("Clipboard service has stopped".into());
         }
-        action(owner.as_mut().expect("clipboard initialized"))
+        if owner.board.is_none() {
+            owner.board = Some(arboard::Clipboard::new().map_err(|e| e.to_string())?);
+        }
+        action(owner.board.as_mut().expect("clipboard initialized"))
     }
 
     pub fn shutdown(&self) {
@@ -23,7 +32,8 @@ impl ClipboardState {
             .0
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        owner.take();
+        owner.closed = true;
+        owner.board.take();
     }
 }
 

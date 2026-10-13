@@ -105,6 +105,9 @@ fn clipboard_owner_child() {
     }
     owner.shutdown();
     owner.shutdown();
+    assert!(owner
+        .with_clipboard(|clipboard| clipboard.set_text("after exit").map_err(|e| e.to_string()))
+        .is_err());
     run_fixture(
         fixture_command("clipboard::tests_linux::clipboard_consumer_child")
             .env_remove("PW_CLIPBOARD_EXPECT_TEXT")
