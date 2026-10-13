@@ -8,6 +8,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod metadata;
+pub use metadata::product_version;
+
 pub fn bundle() -> Result<PathBuf, UpdateError> {
     let image = std::env::var_os("APPIMAGE").ok_or(Failure::UnsupportedInstallation)?;
     let image = fs::canonicalize(image)
@@ -20,13 +23,16 @@ pub fn bundle() -> Result<PathBuf, UpdateError> {
     if !running.starts_with(&appdir) || !appdir.is_dir() {
         return Err(Failure::UnsupportedInstallation.into());
     }
+    if image.extension().and_then(|s| s.to_str()) != Some("AppImage") {
+        return Err(Failure::UnsupportedInstallation.into());
+    }
     verify_image(&image, std::env::consts::ARCH)?;
     Ok(image)
 }
 
 pub fn verify_image(path: &Path, architecture: &str) -> Result<(), UpdateError> {
-    let metadata = fs::symlink_metadata(path)
-        .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
+    let metadata =
+        fs::symlink_metadata(path).map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
     if !metadata.is_file() || metadata.mode() & 0o111 == 0 || metadata.mode() & 0o6000 != 0 {
         return Err(Failure::VerificationFailed.into());
     }
@@ -51,10 +57,18 @@ pub fn verify_image(path: &Path, architecture: &str) -> Result<(), UpdateError> 
 }
 
 pub fn writable_installation(target: &Path) -> bool {
-    let Some(parent) = target.parent() else { return false };
-    let Ok(metadata) = fs::symlink_metadata(target) else { return false };
-    let Ok(parent_metadata) = fs::symlink_metadata(parent) else { return false };
-    let Ok(parent_path) = CString::new(parent.as_os_str().as_bytes()) else { return false };
+    let Some(parent) = target.parent() else {
+        return false;
+    };
+    let Ok(metadata) = fs::symlink_metadata(target) else {
+        return false;
+    };
+    let Ok(parent_metadata) = fs::symlink_metadata(parent) else {
+        return false;
+    };
+    let Ok(parent_path) = CString::new(parent.as_os_str().as_bytes()) else {
+        return false;
+    };
     let mut stat = std::mem::MaybeUninit::<libc::statvfs>::uninit();
     metadata.is_file()
         && metadata.uid() == super::current_uid()
@@ -77,12 +91,100 @@ pub fn exchange(left: &Path, right: &Path) -> Result<(), UpdateError> {
     let r = CString::new(right.as_os_str().as_bytes())
         .map_err(|e| UpdateError::new(Failure::ActivationFailed, e))?;
     if unsafe {
-        libc::renameat2(libc::AT_FDCWD, l.as_ptr(), libc::AT_FDCWD, r.as_ptr(), libc::RENAME_EXCHANGE)
-    } != 0 {
-        return Err(UpdateError::new(Failure::ActivationFailed, std::io::Error::last_os_error()));
+        libc::renameat2(
+            libc::AT_FDCWD,
+            l.as_ptr(),
+            libc::AT_FDCWD,
+            r.as_ptr(),
+            libc::RENAME_EXCHANGE,
+        )
+    } != 0
+    {
+        return Err(UpdateError::new(
+            Failure::ActivationFailed,
+            std::io::Error::last_os_error(),
+        ));
     }
-    fs::File::open(parent).and_then(|file| file.sync_all())
+    fs::File::open(parent)
+        .and_then(|file| file.sync_all())
         .map_err(|e| UpdateError::new(Failure::ActivationFailed, e))
+}
+
+pub fn prepare(
+    target: &Path,
+    candidate: &super::Candidate,
+    artifact: &mut fs::File,
+) -> Result<super::PreparedIdentity, UpdateError> {
+    use std::{
+        io::{Seek, SeekFrom},
+        os::unix::fs::{OpenOptionsExt, PermissionsExt},
+    };
+    let parent = target.parent().ok_or(Failure::UnsupportedInstallation)?;
+    if !writable_installation(target) || candidate.platform != super::super::feed::target() {
+        return Err(Failure::UnsupportedInstallation.into());
+    }
+    super::check_space(
+        parent,
+        artifact
+            .metadata()
+            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?
+            .len(),
+    )?;
+    let destination = super::prepared_path(target, candidate)?;
+    let temporary = parent.join(format!(
+        "{}preparing-{}",
+        super::prepared_prefix(target),
+        uuid::Uuid::new_v4()
+    ));
+    let result = (|| {
+        let mut copy = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(&temporary)
+            .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+        artifact
+            .seek(SeekFrom::Start(0))
+            .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+        std::io::copy(artifact, &mut copy)
+            .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+        copy.set_permissions(fs::Permissions::from_mode(
+            fs::metadata(target)
+                .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?
+                .mode()
+                & 0o777,
+        ))
+        .and_then(|_| copy.sync_all())
+        .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+        drop(copy);
+        let mut prepared = fs::File::open(&temporary)
+            .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
+        super::super::verification::verify_file(
+            &mut prepared,
+            &candidate.artifact_signature,
+            &super::super::feed::embedded_key().1,
+            &candidate.version,
+        )
+        .map_err(|e| UpdateError::new(Failure::VerificationFailed, e))?;
+        verify_image(&temporary, std::env::consts::ARCH)?;
+        if product_version(&temporary, Failure::VerificationFailed)? != candidate.version {
+            return Err(Failure::VerificationFailed.into());
+        }
+        let identity = super::PreparedIdentity {
+            executable_hash: super::hash(&temporary)?,
+            bundle_hash: super::bundle_hash(&temporary)?,
+        };
+        if destination.exists() && !super::current_user_installation(&destination) {
+            return Err(Failure::VerificationFailed.into());
+        }
+        crate::atomic_file::replace(&temporary, &destination, true)
+            .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+        Ok(identity)
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temporary);
+    }
+    result
 }
 
 #[cfg(test)]

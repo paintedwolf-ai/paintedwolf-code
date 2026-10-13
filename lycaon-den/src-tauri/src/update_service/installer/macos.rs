@@ -55,7 +55,7 @@ pub fn prepare(
         if name
             .strip_prefix(&preparing_prefix)
             .is_some_and(|id| uuid::Uuid::parse_str(id).is_ok())
-            && super::current_user_directory(&entry.path())
+            && super::current_user_installation(&entry.path())
         {
             fs::remove_dir_all(entry.path())
                 .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
@@ -90,7 +90,7 @@ pub fn prepare(
     };
     let destination = prepared_path(target, candidate)?;
     if destination.exists() {
-        if !super::current_user_directory(&destination) {
+        if !super::current_user_installation(&destination) {
             return Err(Failure::VerificationFailed.into());
         }
         fs::remove_dir_all(&destination)

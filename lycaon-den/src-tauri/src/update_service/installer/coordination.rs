@@ -1,4 +1,4 @@
-//! Installation leases bind directory inodes across accounts and survive directory exchange.
+//! Installation leases bind inodes across accounts and survive atomic exchange.
 use super::{Failure, UpdateError};
 use std::{
     fs,
@@ -51,7 +51,23 @@ pub fn acquire_lease(
     exclusive: bool,
     nonblocking: bool,
 ) -> Result<InstallationLease, UpdateError> {
-    lock(directory(target)?, exclusive, nonblocking)
+    #[cfg(target_os = "linux")]
+    let file = fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
+        .open(target)
+        .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
+    #[cfg(target_os = "macos")]
+    let file = directory(target)?;
+    if cfg!(target_os = "linux")
+        && !file
+            .metadata()
+            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?
+            .is_file()
+    {
+        return Err(Failure::UnsupportedInstallation.into());
+    }
+    lock(file, exclusive, nonblocking)
 }
 pub fn acquire_preparation() -> Result<InstallationLease, UpdateError> {
     let dir = super::super::persistence::update_dir()?;
@@ -78,8 +94,14 @@ pub fn downgrade(lease: &InstallationLease) -> Result<(), UpdateError> {
 fn matches(file: &fs::File, path: &Path) -> bool {
     file.metadata()
         .and_then(|a| {
-            fs::symlink_metadata(path)
-                .map(|b| b.is_dir() && a.dev() == b.dev() && a.ino() == b.ino())
+            fs::symlink_metadata(path).map(|b| {
+                (if cfg!(target_os = "linux") {
+                    b.is_file()
+                } else {
+                    b.is_dir()
+                }) && a.dev() == b.dev()
+                    && a.ino() == b.ino()
+            })
         })
         .unwrap_or(false)
 }
@@ -93,7 +115,10 @@ pub fn exchange_coordinated(
         return Err(Failure::CandidateChanged.into());
     }
     let next = acquire_lease(prepared, true, true)?;
+    #[cfg(target_os = "macos")]
     let result = super::macos::exchange(target, prepared);
+    #[cfg(target_os = "linux")]
+    let result = super::linux::exchange(target, prepared);
     // The exchange can succeed even if syncing the parent directory fails.
     if matches(&next.0, target) {
         *lease = next;
@@ -104,6 +129,13 @@ pub fn exchange_coordinated(
 #[cfg(test)]
 mod tests {
     use super::*;
+    fn seed_installation(path: &Path) {
+        if cfg!(target_os = "linux") {
+            fs::write(path, b"image").unwrap();
+        } else {
+            fs::create_dir(path).unwrap();
+        }
+    }
     #[test]
     fn process_contender() {
         let Some(path) = std::env::var_os("PW_TEST_INSTALLATION") else {
@@ -120,7 +152,7 @@ mod tests {
         use std::os::unix::fs::PermissionsExt;
         let root = crate::test_support::TempDir::new("update-process-lease");
         let app = root.join("App.app");
-        fs::create_dir(&app).unwrap();
+        seed_installation(&app);
         fs::set_permissions(&app, fs::Permissions::from_mode(0o555)).unwrap();
         let lease = acquire_lease(&app, false, true).unwrap();
         let status = std::process::Command::new(std::env::current_exe().unwrap())
@@ -146,7 +178,7 @@ mod tests {
     fn separate_handles_coordinate_without_a_profile_directory() {
         let root = crate::test_support::TempDir::new("update-directory-lease");
         let app = root.join("App.app");
-        fs::create_dir(&app).unwrap();
+        seed_installation(&app);
         let first = acquire_lease(&app, false, true).unwrap();
         let second = acquire_lease(&app, false, true).unwrap();
         assert!(try_activation(&app).unwrap().is_none());
@@ -165,8 +197,8 @@ mod tests {
         let root = crate::test_support::TempDir::new("update-exchange-admission");
         let app = root.join("App.app");
         let next = root.join("Next.app");
-        fs::create_dir(&app).unwrap();
-        fs::create_dir(&next).unwrap();
+        seed_installation(&app);
+        seed_installation(&next);
         let mut lease = try_activation(&app).unwrap().unwrap();
         exchange_coordinated(&mut lease, &app, &next).unwrap();
         assert!(acquire_lease(&app, false, true).is_err());

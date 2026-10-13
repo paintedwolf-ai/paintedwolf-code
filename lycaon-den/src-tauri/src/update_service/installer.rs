@@ -1,4 +1,4 @@
-//! Platform installation effects; candidate platforms never enter activation.
+//! Platform preparation, installation identity, and activation effects.
 use super::{staging, verification, Candidate, Failure, UpdateError};
 use std::{
     fs,
@@ -12,21 +12,25 @@ pub struct PreparedIdentity {
     pub executable_hash: String,
     pub bundle_hash: String,
 }
-#[cfg(target_os = "macos")]
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 mod coordination;
-#[cfg(target_os = "macos")]
-mod macos;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
+mod macos;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
 pub use coordination::{
     acquire_gate, acquire_lease, acquire_preparation, downgrade, exchange_coordinated,
     try_activation, InstallationLease,
 };
 
 pub const PRODUCT_VERSION_RESOURCE: &str = "Contents/Resources/release-version";
+#[cfg(not(target_os = "linux"))]
 const PRODUCT_VERSION_LIMIT: u64 = 128;
 
+#[cfg(target_os = "linux")]
+pub use linux::bundle;
+#[cfg(not(target_os = "linux"))]
 pub fn bundle() -> Result<PathBuf, UpdateError> {
     let exe = std::env::current_exe()
         .map_err(|e| UpdateError::new(Failure::UnsupportedInstallation, e))?;
@@ -45,11 +49,18 @@ pub fn supported() -> bool {
     {
         bundle().is_ok_and(|target| macos::writable_installation(&target))
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        bundle().is_ok_and(|target| linux::writable_installation(&target))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         false
     }
 }
+#[cfg(target_os = "linux")]
+pub use linux::product_version;
+#[cfg(not(target_os = "linux"))]
 pub fn product_version(bundle: &Path, failure: Failure) -> Result<String, UpdateError> {
     use std::io::Read;
     let file = fs::File::open(bundle.join(PRODUCT_VERSION_RESOURCE))
@@ -70,11 +81,16 @@ pub fn prepared_path(target: &Path, candidate: &Candidate) -> Result<PathBuf, Up
     if !candidate.valid_identity() {
         return Err(Failure::InvalidRelease.into());
     }
+    let extension = if candidate.platform.starts_with("linux-") {
+        "AppImage"
+    } else {
+        "app"
+    };
     Ok(target
         .parent()
         .ok_or(Failure::UnsupportedInstallation)?
         .join(format!(
-            "{}{}.app",
+            "{}{}.{extension}",
             prepared_prefix(target),
             candidate.release_id
         )))
@@ -112,12 +128,16 @@ pub fn valid_prepared_path(target: &Path, candidate: &Candidate, path: &Path) ->
         && (prepared_path(target, candidate).is_ok_and(|p| p == path)
             || legacy_prepared_path(target, candidate).is_ok_and(|p| p == path))
 }
-pub fn current_user_directory(path: &Path) -> bool {
+pub fn current_user_installation(path: &Path) -> bool {
     fs::symlink_metadata(path).is_ok_and(|metadata| {
         #[cfg(unix)]
         {
             use std::os::unix::fs::MetadataExt;
-            metadata.is_dir() && metadata.uid() == current_uid()
+            (if cfg!(target_os = "linux") {
+                metadata.is_file()
+            } else {
+                metadata.is_dir()
+            }) && metadata.uid() == current_uid()
         }
         #[cfg(not(unix))]
         {
@@ -125,24 +145,38 @@ pub fn current_user_directory(path: &Path) -> bool {
         }
     })
 }
+pub fn remove_installation(path: &Path) -> Result<(), UpdateError> {
+    let result = if cfg!(target_os = "linux") {
+        fs::remove_file(path)
+    } else {
+        fs::remove_dir_all(path)
+    };
+    match result {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(UpdateError::new(Failure::StateUnavailable, e)),
+    }
+}
 pub fn cleanup_prepared(target: &Path, keep: &[String]) -> Result<(), UpdateError> {
     let parent = target.parent().ok_or(Failure::UnsupportedInstallation)?;
     let prefix = prepared_prefix(target);
     for entry in fs::read_dir(parent).map_err(|e| UpdateError::new(Failure::StateUnavailable, e))? {
         let entry = entry.map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
         let name = entry.file_name().to_string_lossy().into_owned();
-        let Some(id) = name
-            .strip_prefix(&prefix)
-            .and_then(|name| name.strip_suffix(".app"))
-        else {
+        let Some(id) = name.strip_prefix(&prefix).and_then(|name| {
+            name.strip_suffix(if cfg!(target_os = "linux") {
+                ".AppImage"
+            } else {
+                ".app"
+            })
+        }) else {
             continue;
         };
         if super::persistence::hex_digest(id)
             && !keep.iter().any(|kept| kept == id)
-            && current_user_directory(&entry.path())
+            && current_user_installation(&entry.path())
         {
-            fs::remove_dir_all(entry.path())
-                .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
+            remove_installation(&entry.path())?;
         }
     }
     Ok(())
@@ -205,7 +239,11 @@ pub fn prepare_at(target: &Path, candidate: &Candidate) -> Result<PreparedIdenti
     {
         macos::prepare(target, candidate, &mut archive)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        linux::prepare(target, candidate, &mut archive)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = target;
         Err(Failure::UnsupportedInstallation.into())
@@ -251,7 +289,11 @@ pub fn verify_bundle(path: &Path) -> Result<(), UpdateError> {
         }
         Ok(())
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        linux::verify_image(path, std::env::consts::ARCH)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = path;
         Err(Failure::UnsupportedInstallation.into())
@@ -327,6 +369,7 @@ mod tests {
         assert_eq!(error.code, Failure::VerificationFailed);
         assert!(!path.exists());
     }
+    #[cfg(not(target_os = "linux"))]
     #[test]
     fn product_version_reads_are_bounded() {
         let root = crate::test_support::TempDir::new("update-product-version");
