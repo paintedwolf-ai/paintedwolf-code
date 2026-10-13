@@ -28,7 +28,10 @@ The Linux release uses the same host contracts and client stores. An OS adapter
 owns native effects and reports capability facts; feature code must not infer
 support from a platform name or treat a successful no-op as implementation.
 The release target catalog is [`packaging/release-platforms.json`](../packaging/release-platforms.json).
-Both Linux architectures are candidates, not qualified public releases.
+Both Linux architectures are candidates, not qualified public releases. Broad
+compatibility uses shared workflows and protocol-based native effects; a named
+adapter owns an environment-specific effect when standards or toolkit behavior
+do not preserve the required outcome.
 
 The table identifies current owners and required native evidence. “Shared” means
 the same implementation owns the workflow; it does not claim that an installed
@@ -62,12 +65,32 @@ remain open under [#444](https://github.com/paintedwolf-ai/paintedwolf-code/issu
 
 ### Native qualification matrix
 
-The qualification scope is Linux amd64 and arm64, Ubuntu 22.04 and 24.04,
-and a current KDE environment, covering GNOME/KDE and Wayland/X11 where the
-native environment supports them. Cases include standard and fractional display
-scaling, FUSE-mounted and extracted AppImages, writable user installations and
-read-only or system-managed locations. Passing on one environment does not
-qualify another architecture, desktop, display server, or installation mode.
+The qualification scope covers Linux amd64 and arm64 across maintained
+Red Hat/RPM-family, Debian/Ubuntu, and Arch-style environments. Runtime and
+protocol compatibility determine admission; distro and desktop names identify
+qualification environments, not runtime feature switches.
+
+Desktop evidence covers GNOME/Plasma, GTK/Xapp desktops such as
+Xfce/Cinnamon/MATE, LXQt, COSMIC, wlroots/Sway, Hyprland, and other commonly used
+portal/compositor families. Standalone X11 WMs include i3, Awesome, bspwm, and
+Openbox. New environments using the same native protocols should use existing
+adapters without feature-specific name registration. Required differences have
+named effect owners and qualification cases.
+
+Cases distinguish native Wayland, XWayland, and X11; service and portal versions;
+standard and fractional scaling; FUSE-mounted, extract-and-run, persistent
+extracted, and installer-managed modes; and writable user versus read-only
+locations. Passing on one environment does not qualify another architecture,
+desktop, display server, service provider, or installation mode.
+
+| Compatibility concern | Contract owner |
+|-----------------------|----------------|
+| Runtime ABI and dependency closure across distro families | [#731](https://github.com/paintedwolf-ai/paintedwolf-code/issues/731) |
+| Native capability facts and adapter selection | [#732](https://github.com/paintedwolf-ai/paintedwolf-code/issues/732) |
+| Session services and equivalent providers without a systemd requirement | [#733](https://github.com/paintedwolf-ai/paintedwolf-code/issues/733) |
+| Portal and compositor interoperability | [#734](https://github.com/paintedwolf-ai/paintedwolf-code/issues/734) |
+| FUSE-free installation and update ownership | [#735](https://github.com/paintedwolf-ai/paintedwolf-code/issues/735) |
+| Durable user-owned CLI and desktop launchers | [#736](https://github.com/paintedwolf-ai/paintedwolf-code/issues/736) |
 
 The current catalog selects Ubuntu 22.04 runners for both candidate architectures.
 It does not declare a supported kernel, libc, WebKitGTK, or CPU floor. Those floors
