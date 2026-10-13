@@ -60,3 +60,6 @@ pub fn read_clipboard_text(state: tauri::State<'_, ClipboardState>) -> Result<St
         Err(e) => Err(e.to_string()),
     })
 }
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests_linux;
