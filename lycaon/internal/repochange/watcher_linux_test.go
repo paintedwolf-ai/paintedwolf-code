@@ -71,16 +71,53 @@ func TestInotifyAtomicSaveReportsTheReplacedFile(t *testing.T) {
 	doc := filepath.Join(fixture.root, "doc.txt")
 	testutil.FailErr(t, "seed document", os.WriteFile(doc, []byte("v1"), 0o644))
 	fixture.waitFor("doc.txt", WorktreeChangeUnknown)
+	// The staging name is gone by the time its events are classified, so its
+	// kind is unknown; the replaced document arrives as a structural change.
 	temp := filepath.Join(fixture.root, ".doc.txt.swp-tmp")
 	testutil.FailErr(t, "write replacement", os.WriteFile(temp, []byte("v2"), 0o644))
 	testutil.FailErr(t, "rename replacement over document", os.Rename(temp, doc))
-	fixture.waitFor(".doc.txt.swp-tmp", WorktreeChangeStructural)
+	fixture.waitFor(".doc.txt.swp-tmp", WorktreeChangeUnknown)
 	fixture.mu.Lock()
 	fixture.changes = nil
 	fixture.mu.Unlock()
 	testutil.FailErr(t, "write second replacement", os.WriteFile(temp, []byte("v3"), 0o644))
 	testutil.FailErr(t, "rename second replacement", os.Rename(temp, doc))
-	fixture.waitFor("doc.txt", WorktreeChangeStructural)
+	fixture.waitFor("doc.txt", WorktreeChangeUnknown)
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	if !slices.ContainsFunc(fixture.changes, func(change WorktreeChange) bool {
+		return change.Path == "doc.txt" && change.Kind == WorktreeChangeStructural
+	}) {
+		t.Fatalf("replaced document was not reported structurally: %+v", fixture.changes)
+	}
+}
+
+// A burst wider than the kernel queue drops events; the stream reports the
+// overflow, one resync closes the window, and coverage ends complete. Run with
+// a lowered fs.inotify.max_queued_events to exercise the overflow path.
+func TestInotifyBurstKeepsCoverageComplete(t *testing.T) {
+	const files = 3000
+	fixture := newInotifyRoot(t, 64)
+	burst := filepath.Join(fixture.root, "burst")
+	testutil.FailErr(t, "mkdir burst", os.Mkdir(burst, 0o755))
+	fixture.waitFor("burst", WorktreeChangeUnknown)
+	for i := range files {
+		testutil.FailErr(t, "write burst file", os.WriteFile(filepath.Join(burst, fmt.Sprintf("f%04d", i)), []byte("x"), 0o644))
+	}
+	testutil.FailErr(t, "write marker", os.WriteFile(filepath.Join(fixture.root, "after-burst.txt"), []byte("x"), 0o644))
+	fixture.waitFor("after-burst.txt", WorktreeChangeUnknown)
+	testutil.WaitFor(t, 3*time.Second, func() bool { return fixture.registry.Coverage(fixture.root).Complete })
+	coverage := fixture.registry.Coverage(fixture.root)
+	t.Logf("burst of %d writes: overflows=%d watched=%d complete=%t", files, coverage.Overflows, coverage.Watched, coverage.Complete)
+	if coverage.Faulted || coverage.Truncated != 0 {
+		t.Fatalf("burst coverage = %+v", coverage)
+	}
+	fixture.mu.Lock()
+	defer fixture.mu.Unlock()
+	resynced := slices.ContainsFunc(fixture.changes, func(change WorktreeChange) bool { return change.Path == "." })
+	if coverage.Overflows > 0 && !resynced {
+		t.Fatal("overflow closed without a resync reaching observers")
+	}
 }
 
 func TestInotifyDistinguishesCaseSensitiveNames(t *testing.T) {
@@ -144,9 +181,10 @@ func TestInotifyCoversALargeSeededTreeCompletely(t *testing.T) {
 		testutil.FailErr(t, "write leaf", os.WriteFile(filepath.Join(directory.Path, "leaf.txt"), []byte("x"), 0o644))
 	}
 	fixture.registry.Seed(t.Context(), fixture.root, directories)
+	// The root and the repository's ref surfaces register beside the seeded tree.
 	coverage := fixture.registry.Coverage(fixture.root)
-	if !coverage.Complete || coverage.Truncated != 0 || coverage.WatchLimit || coverage.Watched != len(directories)+1 {
-		t.Fatalf("large tree coverage = %+v, want %d complete registrations", coverage, len(directories)+1)
+	if !coverage.Complete || coverage.Truncated != 0 || coverage.WatchLimit || coverage.Watched < len(directories)+1 {
+		t.Fatalf("large tree coverage = %+v, want at least %d complete registrations", coverage, len(directories)+1)
 	}
 	testutil.FailErr(t, "write in deepest directory", os.WriteFile(filepath.Join(deepest, "edit.txt"), []byte("x"), 0o644))
 	rel, err := filepath.Rel(fixture.root, filepath.Join(deepest, "edit.txt"))
