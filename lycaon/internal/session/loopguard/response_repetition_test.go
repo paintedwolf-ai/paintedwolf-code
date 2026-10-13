@@ -2,7 +2,6 @@ package loopguard
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/pkg/api"
 	"sync"
 	"testing"
 
@@ -19,7 +18,7 @@ func TestRejectedBatchCountsOneResponse(t *testing.T) {
 			go func() {
 				defer workers.Done()
 				args := map[string]any{"path": fmt.Sprintf("portrait-%d.svg", file)}
-				if err := g.RecordAttempt(t.Context(), "s", response, "view_image", args, &api.InvocationFailure{Code: "TOOL_NOT_OFFERED"}, false); err != nil {
+				if err := g.RecordAttempt(t.Context(), "s", response, "view_image", args, "TOOL_NOT_OFFERED", false); err != nil {
 					t.Errorf("record rejection: %v", err)
 				}
 			}()
@@ -37,15 +36,15 @@ func TestIdenticalBatchUsesPreviousResponseFeedback(t *testing.T) {
 	for round := 1; round <= DoomLoopMaxSameCodeRejects; round++ {
 		response := fmt.Sprint(round)
 		for range 8 {
-			allowed, count, code, err := g.Check(t.Context(), "s", response, "view_image", args, false, nil)
+			allowed, count, code, err := g.Check(t.Context(), "s", response, "view_image", args)
 			testutil.FailErr(t, "check batch", err)
 			if !allowed || count != round-1 || code != "" {
 				t.Fatalf("same-response feedback affected check: %v %d %s", allowed, count, code)
 			}
-			testutil.FailErr(t, "record batch", g.RecordAttempt(t.Context(), "s", response, "view_image", args, &api.InvocationFailure{Code: "TOOL_NOT_OFFERED"}, false))
+			testutil.FailErr(t, "record batch", g.RecordAttempt(t.Context(), "s", response, "view_image", args, "TOOL_NOT_OFFERED", false))
 		}
 	}
-	allowed, count, code, err := g.Check(t.Context(), "s", "next", "view_image", args, false, nil)
+	allowed, count, code, err := g.Check(t.Context(), "s", "next", "view_image", args)
 	testutil.FailErr(t, "check retry after feedback", err)
 	if allowed || count != DoomLoopMaxSameCodeRejects || code != "TOOL_NOT_OFFERED" {
 		t.Fatalf("retry after feedback escaped guard: %v %d %s", allowed, count, code)
@@ -58,15 +57,15 @@ func TestSuccessfulBatchCountsOneResponse(t *testing.T) {
 	for round := range DoomLoopMaxAttempts {
 		response := fmt.Sprint(round)
 		for range 12 {
-			allowed, count, _, err := g.Check(t.Context(), "s", response, "read", args, false, nil)
+			allowed, count, _, err := g.Check(t.Context(), "s", response, "read", args)
 			testutil.FailErr(t, "check read", err)
 			if !allowed || count != round {
 				t.Fatalf("batch count = %d, allowed = %v", count, allowed)
 			}
-			testutil.FailErr(t, "record read", g.RecordAttempt(t.Context(), "s", response, "read", args, nil, false))
+			testutil.FailErr(t, "record read", g.RecordAttempt(t.Context(), "s", response, "read", args, "", false))
 		}
 	}
-	allowed, count, _, err := g.Check(t.Context(), "s", "next", "read", args, false, nil)
+	allowed, count, _, err := g.Check(t.Context(), "s", "next", "read", args)
 	testutil.FailErr(t, "check repeated response", err)
 	if allowed || count != DoomLoopMaxAttempts {
 		t.Fatalf("repeated responses escaped guard: allowed=%v count=%d", allowed, count)
@@ -79,9 +78,10 @@ func TestResolvedConstraintReleasesIdenticalRetry(t *testing.T) {
 			g := NewMemoryDoomLoopGuard()
 			args := map[string]any{"path": "portrait.svg"}
 			for response := range DoomLoopMaxAttempts {
-				testutil.FailErr(t, "record rejected response", g.RecordAttempt(t.Context(), "s", fmt.Sprint(response), "view_image", args, &api.InvocationFailure{Code: code}, false))
+				testutil.FailErr(t, "record rejected response", g.RecordAttempt(t.Context(), "s", fmt.Sprint(response), "view_image", args, code, false))
 			}
-			allowed, count, _, err := g.Check(t.Context(), "s", "loaded", "view_image", args, true, nil)
+			testutil.FailErr(t, "resolve schema availability", g.ResolveRejection(t.Context(), "s", "view_image", args, "TOOL_NOT_OFFERED"))
+			allowed, count, _, err := g.Check(t.Context(), "s", "loaded", "view_image", args)
 			testutil.FailErr(t, "check recovered call", err)
 			if code == "TOOL_NOT_OFFERED" {
 				if !allowed || count != 0 {
@@ -100,7 +100,7 @@ func TestResolvedConstraintReleasesIdenticalRetry(t *testing.T) {
 func TestDelayedRejectionDoesNotCountResponseTwice(t *testing.T) {
 	g := NewMemoryDoomLoopGuard()
 	for _, response := range []string{"first", "second", "first"} {
-		testutil.FailErr(t, "record delayed rejection", g.RecordAttempt(t.Context(), "s", response, "read", map[string]any{"path": response}, &api.InvocationFailure{Code: "PATH_DENIED"}, false))
+		testutil.FailErr(t, "record delayed rejection", g.RecordAttempt(t.Context(), "s", response, "read", map[string]any{"path": response}, "PATH_DENIED", false))
 	}
 	if got := g.CodeRejectResponses("s", "read", "PATH_DENIED"); got != 2 {
 		t.Fatalf("responses = %d, want 2", got)
@@ -110,7 +110,7 @@ func TestDelayedRejectionDoesNotCountResponseTwice(t *testing.T) {
 func TestRejectedResponseTrackingIsBounded(t *testing.T) {
 	g := NewMemoryDoomLoopGuard()
 	for response := range 100 {
-		testutil.FailErr(t, "record rejection", g.RecordAttempt(t.Context(), "s", fmt.Sprint(response), "view_image", map[string]any{"path": "portrait.svg"}, &api.InvocationFailure{Code: "TOOL_NOT_OFFERED"}, false))
+		testutil.FailErr(t, "record rejection", g.RecordAttempt(t.Context(), "s", fmt.Sprint(response), "view_image", map[string]any{"path": "portrait.svg"}, "TOOL_NOT_OFFERED", false))
 	}
 	if got := g.CodeRejectResponses("s", "view_image", "TOOL_NOT_OFFERED"); got != DoomLoopMaxCodeRepeats {
 		t.Fatalf("bounded count = %d", got)

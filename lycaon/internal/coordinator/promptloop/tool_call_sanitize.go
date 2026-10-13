@@ -285,7 +285,7 @@ func (l *turnNudges) recordSearchOutcome(ctx context.Context, sessionID, tool st
 	_, _ = l.Deps.DoomLoop.RecordSearchOutcome(ctx, sessionID, tool, args, receipt.PathsTouched > 0)
 }
 
-func (l *turnNudges) checkDoomLoop(ctx context.Context, sessionID, responseID, tool string, args map[string]any, reads *tools.AgentReadBases, countOut *int) error {
+func (l *turnNudges) checkDoomLoop(ctx context.Context, sessionID, responseID, tool string, args map[string]any, countOut *int) error {
 	if l.Deps.DoomLoop == nil {
 		return nil
 	}
@@ -293,7 +293,12 @@ func (l *turnNudges) checkDoomLoop(ctx context.Context, sessionID, responseID, t
 	if strings.EqualFold(strings.TrimSpace(tool), "terminal_send") {
 		return nil
 	}
-	allowed, count, repeatedCode, err := l.Deps.DoomLoop.Check(ctx, sessionID, responseID, tool, args, tools.ToolOffered(ctx, tool), reads)
+	if tools.ToolOffered(ctx, tool) {
+		if err := l.Deps.DoomLoop.ResolveRejection(ctx, sessionID, tool, args, "TOOL_NOT_OFFERED"); err != nil {
+			return err
+		}
+	}
+	allowed, count, repeatedCode, err := l.Deps.DoomLoop.Check(ctx, sessionID, responseID, tool, args)
 	if err != nil {
 		return err
 	}
@@ -331,7 +336,7 @@ func (l *turnNudges) recordDoomLoopAttempt(
 	ctx context.Context,
 	sessionID, responseID, tool string,
 	args map[string]any,
-	failure *api.InvocationFailure,
+	rejectCode string,
 	mutated bool,
 ) error {
 	if l.Deps.DoomLoop == nil {
@@ -340,5 +345,5 @@ func (l *turnNudges) recordDoomLoopAttempt(
 	if strings.EqualFold(strings.TrimSpace(tool), "terminal_send") {
 		return nil
 	}
-	return l.Deps.DoomLoop.RecordAttempt(ctx, sessionID, responseID, tool, args, failure, mutated)
+	return l.Deps.DoomLoop.RecordAttempt(ctx, sessionID, responseID, tool, args, rejectCode, mutated)
 }

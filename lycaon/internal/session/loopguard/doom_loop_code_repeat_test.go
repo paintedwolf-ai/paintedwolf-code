@@ -2,7 +2,6 @@ package loopguard
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 
 	"github.com/google/uuid"
@@ -26,7 +25,7 @@ func TestPerCodeTotalSurvivesRewordingAndSuccess(t *testing.T) {
 	}
 	for i, command := range reworded {
 		args := map[string]any{"command": command}
-		testutil.FailErr(t, "RecordAttempt", g.RecordAttempt(ctx, sess, uuid.NewString(), "command", args, &api.InvocationFailure{Code: "COMMAND_NOT_ARGV"}, false))
+		testutil.FailErr(t, "RecordAttempt", g.RecordAttempt(ctx, sess, uuid.NewString(), "command", args, "COMMAND_NOT_ARGV", false))
 		if got := g.CodeRejectResponses(sess, "command", "COMMAND_NOT_ARGV"); got != i+1 {
 			t.Fatalf("after %d rejections total=%d — rewording the args must not reset the Code's count", i+1, got)
 		}
@@ -38,7 +37,7 @@ func TestPerCodeTotalSurvivesRewordingAndSuccess(t *testing.T) {
 
 	// The identical-args counter sees three buckets of one on the same arc.
 	for _, command := range reworded {
-		allowed, count, repeatedCode, err := g.Check(ctx, sess, uuid.NewString(), "command", map[string]any{"command": command}, false, nil)
+		allowed, count, repeatedCode, err := g.Check(ctx, sess, uuid.NewString(), "command", map[string]any{"command": command})
 		testutil.FailErr(t, "Check", err)
 		if !allowed || repeatedCode != "" {
 			t.Fatalf("identical-args guard blocked a reworded call (count=%d code=%q)", count, repeatedCode)
@@ -54,9 +53,9 @@ func TestPerCodeTotalIsScopedToToolAndCode(t *testing.T) {
 	const sess = "s1"
 	args := map[string]any{"command": "x"}
 
-	testutil.FailErr(t, "RecordAttempt pipeline", g.RecordAttempt(ctx, sess, uuid.NewString(), "command", args, &api.InvocationFailure{Code: "COMMAND_NOT_ARGV"}, false))
-	testutil.FailErr(t, "RecordAttempt missing command", g.RecordAttempt(ctx, sess, uuid.NewString(), "command", args, &api.InvocationFailure{Code: "COMMAND_NOT_FOUND"}, false))
-	testutil.FailErr(t, "RecordAttempt verify", g.RecordAttempt(ctx, sess, uuid.NewString(), "verify", args, &api.InvocationFailure{Code: "COMMAND_NOT_ARGV"}, false))
+	testutil.FailErr(t, "RecordAttempt pipeline", g.RecordAttempt(ctx, sess, uuid.NewString(), "command", args, "COMMAND_NOT_ARGV", false))
+	testutil.FailErr(t, "RecordAttempt missing command", g.RecordAttempt(ctx, sess, uuid.NewString(), "command", args, "COMMAND_NOT_FOUND", false))
+	testutil.FailErr(t, "RecordAttempt verify", g.RecordAttempt(ctx, sess, uuid.NewString(), "verify", args, "COMMAND_NOT_ARGV", false))
 
 	for _, tc := range []struct {
 		tool, code string
@@ -80,8 +79,8 @@ func TestPerCodeTotalIsPerSessionAndIgnoresCodelessRejections(t *testing.T) {
 	ctx := context.Background()
 	args := map[string]any{"command": "x"}
 
-	testutil.FailErr(t, "RecordAttempt coded", g.RecordAttempt(ctx, "s1", uuid.NewString(), "command", args, &api.InvocationFailure{Code: "COMMAND_NOT_ARGV"}, false))
-	testutil.FailErr(t, "RecordAttempt codeless", g.RecordAttempt(ctx, "s1", uuid.NewString(), "command", args, nil, false))
+	testutil.FailErr(t, "RecordAttempt coded", g.RecordAttempt(ctx, "s1", uuid.NewString(), "command", args, "COMMAND_NOT_ARGV", false))
+	testutil.FailErr(t, "RecordAttempt codeless", g.RecordAttempt(ctx, "s1", uuid.NewString(), "command", args, "", false))
 
 	if got := g.CodeRejectResponses("s1", "command", "COMMAND_NOT_ARGV"); got != 1 {
 		t.Errorf("s1 total=%d want 1 — a codeless rejection must not accrue to a Code", got)
