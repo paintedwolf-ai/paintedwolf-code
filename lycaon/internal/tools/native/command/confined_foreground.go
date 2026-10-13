@@ -49,7 +49,7 @@ func (c ConfinedForeground) Run(
 
 	if err := rejectCommandNotFound(res, args); err != nil {
 		outcome.IndexWatch.Release()
-		return nil, outcome, err
+		return nil, outcome, nameCatalogAlternates(err, tctx.Host.ExecutableAlternates)
 	}
 	if err := rejectCommandExecDenied(res, args); err != nil {
 		outcome.IndexWatch.Release()

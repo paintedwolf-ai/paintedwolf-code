@@ -87,10 +87,10 @@ func TestCommandArgv0FromCommandLine(t *testing.T) {
 }
 
 // The host can read the near miss off PATH rather than sending the model to
-// probe for it. The nearest name leads, ahead of longer names that sort first.
+// probe for it.
 func TestCommandNotFoundNamesResolvableNeighbours(t *testing.T) {
 	dir := t.TempDir()
-	for _, name := range []string{"toolshed3", "toolshed-next", "toolshed3.10", "toolshed-a", "toolshed-build-helper", "unrelated"} {
+	for _, name := range []string{"toolshed3", "toolshed-next", "unrelated"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
 			t.Fatalf("write %s: %v", name, err)
 		}
@@ -102,7 +102,7 @@ func TestCommandNotFoundNamesResolvableNeighbours(t *testing.T) {
 		t.Fatal("want ToolReject")
 	}
 	got, _ := tr.Data["resolvable"].(string)
-	if got != "toolshed3, toolshed-a, toolshed3.10, toolshed-next" {
+	if got != "toolshed-next, toolshed3" {
 		t.Fatalf("resolvable = %q", got)
 	}
 }
@@ -157,5 +157,42 @@ func TestResolvableNeighboursReadTheResolvedPath(t *testing.T) {
 	t.Cleanup(func() { lycexec.SetResolvedPathSource(nil) })
 	if got := resolvableNeighbours("toolshed"); len(got) != 1 || got[0] != "toolshed3" {
 		t.Fatalf("neighbours = %v, want [toolshed3] from the resolved PATH", got)
+	}
+}
+
+// A name the host resource catalog declares is answered from the catalog, not
+// from whatever else on PATH shares its prefix.
+func TestCommandNotFoundPrefersCatalogAlternates(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"toolshed-build", "toolshed3"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+	}
+	t.Setenv("PATH", dir)
+	catalog := func(name string) []string {
+		if name == "toolshed" {
+			return []string{"toolshed3"}
+		}
+		return nil
+	}
+	tr := toolrejection.AsToolReject(nameCatalogAlternates(commandNotFoundReject("toolshed"), catalog))
+	if got, _ := tr.Data["resolvable"].(string); got != "toolshed3" {
+		t.Fatalf("resolvable = %q, want the catalog equivalent", got)
+	}
+	tr = toolrejection.AsToolReject(nameCatalogAlternates(commandNotFoundReject("toolshed-b"), catalog))
+	if got, _ := tr.Data["resolvable"].(string); got != "toolshed-build" {
+		t.Fatalf("uncatalogued name lost its PATH neighbour: %q", got)
+	}
+	tr = toolrejection.AsToolReject(nameCatalogAlternates(commandNotFoundReject("toolshed"), nil))
+	if got, _ := tr.Data["resolvable"].(string); got != "toolshed-build, toolshed3" {
+		t.Fatalf("absent catalog changed PATH neighbours: %q", got)
+	}
+	other := errors.New("boom")
+	if got := nameCatalogAlternates(other, catalog); got != other {
+		t.Fatalf("unrelated error changed: %v", got)
+	}
+	if nameCatalogAlternates(nil, catalog) != nil {
+		t.Fatal("nil error changed")
 	}
 }

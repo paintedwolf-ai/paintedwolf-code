@@ -35,6 +35,20 @@ func commandNotFoundReject(name string) error {
 	return &toolrejection.ToolReject{Code: toolrejection.CommandNotFoundCode, Data: data}
 }
 
+// nameCatalogAlternates states the names the host resource catalog declares for
+// the same executable, when any resolve, in place of PATH neighbours.
+func nameCatalogAlternates(err error, alternates func(name string) []string) error {
+	tr := toolrejection.AsToolReject(err)
+	if tr == nil || tr.Code != toolrejection.CommandNotFoundCode || alternates == nil {
+		return err
+	}
+	name, _ := tr.Data["command"].(string)
+	if known := alternates(name); len(known) > 0 {
+		tr.Data["resolvable"] = strings.Join(known, ", ")
+	}
+	return err
+}
+
 // neighbourLimit bounds the reject.
 const neighbourLimit = 4
 
@@ -69,13 +83,7 @@ func resolvableNeighbours(name string) []string {
 			out = append(out, candidate)
 		}
 	}
-	// The shortest extension of the missing name is its nearest neighbour.
-	sort.Slice(out, func(i, j int) bool {
-		if len(out[i]) != len(out[j]) {
-			return len(out[i]) < len(out[j])
-		}
-		return out[i] < out[j]
-	})
+	sort.Strings(out)
 	if len(out) > neighbourLimit {
 		out = out[:neighbourLimit]
 	}

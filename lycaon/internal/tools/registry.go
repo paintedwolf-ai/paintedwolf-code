@@ -246,6 +246,8 @@ type InvocationHost struct {
 	HostResourceAsk []string
 	// HostResourcePathExtra appends helper directories to the child PATH.
 	HostResourcePathExtra []string
+	// ExecutableAlternates names the resolvable catalog equivalents of an executable.
+	ExecutableAlternates func(name string) []string
 	// RealizationWriteRoots extend this spawn's confinement overlay.
 	RealizationWriteRoots []string
 	// RealizationSockets are AF_UNIX targets from host resources.
