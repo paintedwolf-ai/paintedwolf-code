@@ -77,6 +77,8 @@ class WorkstreamTests(unittest.TestCase):
     def test_structural_grouping_grows_without_a_module_catalog(self):
         for path, expected in [('lycaon/internal/newmodule/nested/service.go', 'lycaon/internal'),
                                ('new-client/src/newarea/file.ts', 'new-client/src'),
+                               ('new-client/src/newarea/internal/file.ts', 'new-client/src'),
+                               ('lycaon/test/contract/internal/check/test.go', 'lycaon/test'),
                                ('lycaon/test/contract/new/test.go', 'lycaon/test'),
                                ('scripts/new/path.py', 'scripts'), ('client/src/App.tsx', 'client/src')]:
             self.assertEqual(self.groups.workstream(row(path)), expected)

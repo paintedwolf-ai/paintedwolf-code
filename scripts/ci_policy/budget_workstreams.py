@@ -18,9 +18,8 @@ SUPERSEDED = '<!-- paintedwolf-maintainability-superseded:'
 def module(row):
     """Use the source module boundary, independent of metrics and nested packages."""
     parts = row['id'].split('/')
-    for marker in ('internal', 'src', 'test'):
-        if marker in parts:
-            index = parts.index(marker)
+    for index, marker in enumerate(parts):
+        if marker in {'internal', 'src', 'test'}:
             # Test contracts form one review area; production modules own their tests.
             end = index + 1 if marker == 'test' else index + 2
             if end <= len(parts) and '.' not in parts[end - 1]:
@@ -31,9 +30,9 @@ def module(row):
 
 def workstream(row):
     parts = row['id'].split('/')
-    for marker in ('internal', 'src', 'test'):
-        if marker in parts:
-            return '/'.join(parts[:parts.index(marker) + 1])
+    for index, marker in enumerate(parts):
+        if marker in {'internal', 'src', 'test'}:
+            return '/'.join(parts[:index + 1])
     return parts[0] if len(parts) > 1 else 'repository'
 
 
