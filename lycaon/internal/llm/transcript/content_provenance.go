@@ -99,6 +99,7 @@ func Project(messages []api.Message) []api.Message {
 		if len(parts) == 0 && msg.Authority == api.ContentAuthorityNone {
 			parts = api.MessageTextParts(msg)
 		}
+		parts = projectSourceText(msg, parts)
 		if decision := checkpointDecisionParts(msg); len(decision) > 0 {
 			parts = append(append([]api.MessageContentPart(nil), parts...), decision...)
 		}
