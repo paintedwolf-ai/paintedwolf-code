@@ -61,7 +61,7 @@ func fixtureBus(t *testing.T) string {
 	return ""
 }
 
-func TestLogindLeaseTransfersDescriptorAndPreservesUserSuspend(t *testing.T) {
+func TestLogindLeaseTransfersDescriptorAndBlocksAutomaticSuspend(t *testing.T) {
 	path := fixtureBus(t)
 	server, err := connectLogindBus(path)
 	testutil.FailErr(t, "connect fixture service", err)
@@ -85,7 +85,7 @@ func TestLogindLeaseTransfersDescriptorAndPreservesUserSuspend(t *testing.T) {
 	fixture.mu.Lock()
 	args := append([]string(nil), fixture.arguments...)
 	fixture.mu.Unlock()
-	if len(args) != 4 || args[0] != "idle" || args[1] != "Painted Wolf Code" || args[3] != "block" {
+	if len(args) != 4 || args[0] != "idle:sleep" || args[1] != "Painted Wolf Code" || args[3] != "block" {
 		t.Fatalf("inhibitor arguments = %v", args)
 	}
 	flags, err := unix.FcntlInt(held.(*logindLease).file.Fd(), unix.F_GETFD, 0)

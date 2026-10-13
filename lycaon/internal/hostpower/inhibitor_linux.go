@@ -75,9 +75,9 @@ func acquireLogindLease(bus *dbus.Conn) (lease, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), logindDeadline)
 	defer cancel()
 	var descriptor dbus.UnixFD
-	// Idle inhibition leaves screen locking and explicit suspend available.
+	// Desktop power managers request sleep directly.
 	err := bus.Object(logindName, logindPath).CallWithContext(ctx, logindName+".Manager.Inhibit", 0,
-		"idle", "Painted Wolf Code", "Active work", "block").Store(&descriptor)
+		"idle:sleep", "Painted Wolf Code", "Active work", "block").Store(&descriptor)
 	if err != nil {
 		return nil, fmt.Errorf("acquire idle-sleep inhibitor: %w", err)
 	}

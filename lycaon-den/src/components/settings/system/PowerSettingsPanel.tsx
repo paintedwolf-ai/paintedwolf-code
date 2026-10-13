@@ -45,10 +45,11 @@ export function PowerSettingsPanel(props: Props) {
             <span class="den-settings-pref-label">{settingLabel("keep-awake")}</span>
             <p class="den-settings-hint">
               Prevents idle sleep while a session, worker, or security scan is active.
-              Screen locking, display sleep, explicit sleep, and lid-close sleep remain available.
+              Screen locking and display sleep remain available. The operating system may require
+              confirmation before sleeping while work is active.
             </p>
             <Show when={status() != null && !supported()}>
-              <p class="den-settings-hint">Idle-sleep inhibition is unavailable in this desktop session.</p>
+              <p class="den-settings-hint">Sleep inhibition is unavailable in this desktop session.</p>
             </Show>
             <Show when={status()?.inhibiting}>
               <p class="den-settings-hint" data-testid="power-active-status">
