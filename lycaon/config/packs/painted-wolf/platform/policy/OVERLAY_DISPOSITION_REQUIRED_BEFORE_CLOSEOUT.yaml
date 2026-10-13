@@ -1,0 +1,29 @@
+oar: '1.0'
+id: OVERLAY_DISPOSITION_REQUIRED_BEFORE_CLOSEOUT
+kind: invariant
+anchor: coordinator.closeout_check
+requires:
+  facts:
+    - paintedwolf.pending_overlay_promote
+    - paintedwolf.reject_observation
+    - paintedwolf.job_id
+when: paintedwolf.pending_overlay_promote && paintedwolf.reject_observation == "closeout_pending_overlays"
+effect: block
+copy:
+  what: 'Worker `{{ paintedwolf.job_id }}` finished, but its changes still await an overlay decision.'
+  cause: Worker completion does not apply its changes to the primary tree.
+  why: A completion report cannot settle an unpromoted overlay.
+  fix: 'Use `preview_overlay(overlay_id="{{ paintedwolf.job_id }}")` to inspect the changes if needed. Call `promote_overlay(overlay_id="{{ paintedwolf.job_id }}")` to land accepted work, or `reject_overlay` with this overlay ID and a reason if the work should be discarded. Resolve any promotion conflicts, then reconcile progress against the actual result.'
+  instead: 'Use native tool calls for the overlay decision. Do not repeat the completion claim, mark pending delivery done, or dispatch replacement work merely to close out. If a human decision is required, use the offered ask_user tool.'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: Worker overlay requires a decision before closeout
+x-paintedwolf-scenarios:
+  - id: pending_overlay
+    vars:
+      job_id: pending-worker
+    expect_contains:
+      - 'Code: OVERLAY_DISPOSITION_REQUIRED_BEFORE_CLOSEOUT'
+      - pending-worker
+      - promote_overlay
+      - reject_overlay

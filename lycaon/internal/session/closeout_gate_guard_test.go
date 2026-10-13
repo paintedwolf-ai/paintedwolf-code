@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // gatedCloseoutView reports a gated phase with the given open gate leaves.
@@ -114,5 +115,61 @@ func TestGatedCloseoutRejectsUnreadableState(t *testing.T) {
 	reject, block := mgr.Coordinator.Guards.OpenGates(t.Context(), sess, true, true)
 	if !block || !errors.Is(reject, guidance.ErrCloseoutStopped) || !errors.Is(reject, failure) {
 		t.Fatalf("closeout=%v block=%t", reject, block)
+	}
+}
+
+func TestPendingOverlayCloseoutUsesLedgerOnEveryTurnOrigin(t *testing.T) {
+	for _, origin := range []api.MessageOrigin{api.MessageOriginUser, api.MessageOriginHost} {
+		t.Run(string(origin), func(t *testing.T) {
+			mgr, sess := newSynthesisDelayManager(t)
+			mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{{
+				ID: "pending-worker", ParentSessionID: sess.ID, ProjectID: sess.ProjectID,
+				Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending,
+				WorkspaceRoot: t.TempDir(), Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite},
+			}}})
+			history := []api.Message{{Role: api.MessageRoleUser, Origin: origin, Content: "Continue"}}
+			if origin == api.MessageOriginHost {
+				history[0].Kind = api.MessageKindHostLoopWake
+			}
+			for _, invokeAllowed := range []bool{true, false} {
+				reject, blocked := mgr.Coordinator.Guards.BeforeFinish(t.Context(), sess, history, "", "Finished", "implement_overlay_promote", true, []string{"read"}, invokeAllowed)
+				if !blocked || reject == nil || reject.Code() != "OVERLAY_DISPOSITION_REQUIRED_BEFORE_CLOSEOUT" {
+					t.Fatalf("invoke=%t closeout=%v blocked=%t", invokeAllowed, reject, blocked)
+				}
+				if errors.Is(reject, guidance.ErrCloseoutStopped) == invokeAllowed {
+					t.Fatalf("invoke=%t stop=%v", invokeAllowed, reject)
+				}
+				if !strings.Contains(reject.Body, `promote_overlay(overlay_id="pending-worker")`) {
+					t.Fatalf("recovery omitted the actual overlay: %s", reject.Body)
+				}
+			}
+			if err := mgr.Coordinator.Guards.AssertCompletion(t.Context(), sess); !errors.Is(err, guidance.ErrCloseoutStopped) {
+				t.Fatalf("host-assembled completion bypassed pending delivery: %v", err)
+			}
+		})
+	}
+}
+
+func TestPendingOverlayCloseoutClearsOnlyAfterDisposition(t *testing.T) {
+	mgr, sess := newSynthesisDelayManager(t)
+	task := api.WorkerTask{ID: "worker", ParentSessionID: sess.ID, ProjectID: sess.ProjectID,
+		Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending,
+		WorkspaceRoot: t.TempDir(), Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}
+	mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{task}})
+	if _, blocked := mgr.Coordinator.Guards.PendingOverlays(t.Context(), sess, true); !blocked {
+		t.Fatal("pending overlay did not block")
+	}
+	for _, status := range []api.WorkerMergeStatus{api.WorkerMergeStatusMerged, api.WorkerMergeStatusRejected} {
+		task.MergeStatus = status
+		mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{task}})
+		if reject, blocked := mgr.Coordinator.Guards.PendingOverlays(t.Context(), sess, true); blocked {
+			t.Fatalf("settled %s overlay blocked: %v", status, reject)
+		}
+	}
+	task.MergeStatus = api.WorkerMergeStatusPending
+	task.Scope = &api.TaskScope{Mode: api.TaskScopeModeRead}
+	mgr.SetWorkerQueue(jobLister{tasks: []api.WorkerTask{task}})
+	if _, blocked := mgr.Coordinator.Guards.PendingOverlays(t.Context(), sess, true); blocked {
+		t.Fatal("read worker created an overlay obligation")
 	}
 }
