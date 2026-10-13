@@ -31,6 +31,10 @@ const (
 
 	AuthenticatorMacOS   = "macos_user_presence"
 	AuthenticatorWindows = "windows_user_presence"
+	AuthenticatorLinux   = "linux_user_presence"
+	// AuthenticatorLinuxAppPassword: the shell's native dialog re-verified
+	// the app password because no polkit agent could confirm the person.
+	AuthenticatorLinuxAppPassword = "linux_app_password"
 
 	protocol = "painted-wolf-presence-v1"
 
@@ -288,7 +292,11 @@ func randomNonce() (string, error) {
 // IsAuthenticator reports whether value names a supported native
 // user-presence authenticator.
 func IsAuthenticator(value string) bool {
-	return value == AuthenticatorMacOS || value == AuthenticatorWindows
+	switch value {
+	case AuthenticatorMacOS, AuthenticatorWindows, AuthenticatorLinux, AuthenticatorLinuxAppPassword:
+		return true
+	}
+	return false
 }
 
 // IsWindowLabel reports whether value is a usable native window label.
