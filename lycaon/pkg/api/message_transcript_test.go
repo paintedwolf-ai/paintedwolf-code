@@ -371,3 +371,11 @@ func TestPromptRecoveryRequiresHostIdentityAndPresentTarget(t *testing.T) {
 		t.Fatal("lossy history roundtrip lost recovery identity")
 	}
 }
+
+func TestPromptRecoveryDoesNotAnchorAnonymousHistory(t *testing.T) {
+	history := []Message{{Role: MessageRoleAssistant, Content: "answer"}, {Role: MessageRoleUser, Content: "next instruction"}}
+	got := FilterPromptHistory(history)
+	if got[0].Role != MessageRoleAssistant || got[1].Role != MessageRoleUser {
+		t.Fatal("anonymous history was reordered without a recovery reference")
+	}
+}

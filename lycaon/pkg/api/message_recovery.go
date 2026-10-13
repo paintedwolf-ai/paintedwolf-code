@@ -35,7 +35,7 @@ func draftRecoveryTarget(message Message) string {
 func orderDraftRecovery(messages []Message) []Message {
 	drafts := make(map[string]int)
 	for i, message := range messages {
-		if message.Role == MessageRoleAssistant {
+		if message.ID != "" && message.Role == MessageRoleAssistant {
 			drafts[message.ID] = i
 		}
 	}
