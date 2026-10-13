@@ -13,7 +13,7 @@ import (
 
 var coordinatorFamilyShellTopics = map[string][]string{
 	"coordinator-mode-shell-investigate.md": {
-		"coordinator-mode-investigate-progress.md",
+		"coordinator-trust-bundle-tiers.md",
 	},
 	"coordinator-mode-shell-orchestrate.md": {
 		"coordinator-mode-orchestrate-invariants-edits.md",
