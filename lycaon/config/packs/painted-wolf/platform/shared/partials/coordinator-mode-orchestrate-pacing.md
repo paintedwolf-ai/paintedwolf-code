@@ -1,7 +1,7 @@
 ## Pacing
 
 {% if pending_overlay_promote %}
-- **Integrate turn** — `pack_board` → `preview_overlay` / `promote_overlay` / `reject_overlay` for every pending overlay. Landing them is this turn's work. A new `task()` on paths those overlays do not own still dispatches; a write leg that would land on a pending overlay's paths is refused until that overlay clears (`task(child_session_id=…)` resume excepted).
+- **Integrate turn** — `pack_board` → `preview_overlay`. For unfinished work, resume the same child with `task(child_session_id=…, brief={…})`. Promote reviewed, wanted changes or reject unwanted changes. Pending overlays block new writes on their paths; resumes and independent paths remain available.
 {% else %}
 {% include "partials/coordinator-batch-dispatch.md" %}
 - **Single target or localized scope** — execute inline; multi-component, multi-theme, or rapid parallel buildout → 2+ concurrent write/read workers.
