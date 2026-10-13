@@ -189,7 +189,7 @@ func TestCommandNotFoundPrefersCatalogAlternates(t *testing.T) {
 		t.Fatalf("absent catalog changed PATH neighbours: %q", got)
 	}
 	other := errors.New("boom")
-	if got := nameCatalogAlternates(other, catalog); got != other {
+	if got := nameCatalogAlternates(other, catalog); !errors.Is(got, other) {
 		t.Fatalf("unrelated error changed: %v", got)
 	}
 	if nameCatalogAlternates(nil, catalog) != nil {
