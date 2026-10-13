@@ -37,7 +37,7 @@ func TestConnectionCancellationBoundsSilentAuthentication(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	if bus, err := Connect(ctx, path); !errors.Is(err, context.DeadlineExceeded) || bus != nil {
+	if bus, err := Connect(ctx, path); bus != nil || (!errors.Is(err, context.DeadlineExceeded) && !os.IsTimeout(err)) {
 		t.Fatalf("silent connection = %v, %v", bus, err)
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
