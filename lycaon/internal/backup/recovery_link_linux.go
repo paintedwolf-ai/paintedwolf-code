@@ -55,3 +55,20 @@ func sharedRecoveryBodyOnVolume(root string, source archiveSource) bool {
 	var volume, body unix.Stat_t
 	return unix.Stat(root, &volume) == nil && unix.Lstat(source.path, &body) == nil && volume.Dev == body.Dev
 }
+
+func recoveryBodyLinksAvailable(root string) (bool, error) {
+	probe, err := os.CreateTemp(root, ".recovery-link-probe-")
+	if err != nil {
+		return false, err
+	}
+	path := probe.Name()
+	defer func() { _ = os.Remove(path); _ = os.Remove(path + ".link") }()
+	if err := probe.Chmod(0o400); err != nil {
+		_ = probe.Close()
+		return false, err
+	}
+	if err := probe.Close(); err != nil {
+		return false, err
+	}
+	return linkSnapshotBody(archiveSource{path: path, mode: 0o400, shareBody: true}, path+".link")
+}

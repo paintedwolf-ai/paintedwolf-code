@@ -36,7 +36,11 @@ func preflightUpgrade(ctx context.Context, opts CreateOpts, scratch uint64, capt
 		return err
 	}
 	if capture {
-		payload, metadata, err := recoveryPayloadEstimate(ctx, opts.ConfigDir, databaseBytes, true)
+		links, err := recoveryBodyLinksAvailable(opts.ConfigDir)
+		if err != nil {
+			return err
+		}
+		payload, metadata, err := recoveryPayloadEstimate(ctx, opts.ConfigDir, databaseBytes, links)
 		if err != nil {
 			return err
 		}
@@ -44,10 +48,7 @@ func preflightUpgrade(ctx context.Context, opts CreateOpts, scratch uint64, capt
 		if err != nil {
 			return err
 		}
-		snapshotBytes, err := sumSpace(payload, metadata)
-		if err != nil {
-			return err
-		}
+		snapshotBytes := payload
 		if cloned {
 			snapshotBytes, err = sumSpace(databaseBytes, metadata)
 			if err != nil {

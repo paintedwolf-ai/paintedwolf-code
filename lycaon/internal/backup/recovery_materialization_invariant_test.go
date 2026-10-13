@@ -2,14 +2,14 @@ package backup
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/enginepaths"
-	"github.com/lycaon/lycaon/internal/sourceblob"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -170,7 +170,7 @@ func TestRecoverySpaceEstimateExcludesOnlySameVolumeSharedBodies(t *testing.T) {
 	if runtime.GOOS == "linux" {
 		want = 104
 	}
-	if full != 108 || shared != want || metadata != sharedMetadata || metadata == 0 {
+	if full != 108+metadata || shared != want+metadata || metadata != sharedMetadata || metadata == 0 {
 		t.Fatalf("recovery estimates: full=%d shared=%d metadata=%d sharedMetadata=%d", full, shared, metadata, sharedMetadata)
 	}
 }
