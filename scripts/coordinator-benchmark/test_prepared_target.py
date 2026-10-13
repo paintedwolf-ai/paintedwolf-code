@@ -121,6 +121,35 @@ class PreparedTargetTests(unittest.TestCase):
             save(original/'prepared.json',{**marker,'cases':['one','two','three']})
             with self.assertRaisesRegex(ValueError,'coverage'):prepare.verify_prepared(original)
 
+    def test_import_omits_compiler_cache_and_clones_isolated_verified_artifacts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            _, original, marker = self.fixture(root)
+            cache = original/'source/.bin/decide-target/release'
+            cache.mkdir(parents=True)
+            (cache/'compiler-output').write_bytes(b'regenerable compiler output')
+            fixture = original/'source/fixtures/decide-target'
+            fixture.mkdir(parents=True)
+            (fixture/'input').write_bytes(b'retained fixture')
+            (original/'source/runtime-link').symlink_to('.bin/lycaon-dev')
+            destination = root/'imported'
+            destination.mkdir()
+            with patch.object(prepare, 'clone_file', wraps=prepare.clone_file) as clone:
+                self.assertEqual(prepare.import_prepared(original, destination), marker)
+            copied = {pathlib.Path(call.args[0]) for call in clone.call_args_list}
+            self.assertIn(original/'source/.bin/lycaon-dev', copied)
+            self.assertIn(original/marker['preflight']['receipt'], copied)
+            self.assertFalse((destination/'source/.bin/decide-target').exists())
+            self.assertTrue((cache/'compiler-output').exists())
+            self.assertEqual((destination/'source/fixtures/decide-target/input').read_bytes(), b'retained fixture')
+            self.assertEqual((destination/'source/runtime-link').readlink(), pathlib.Path('.bin/lycaon-dev'))
+            self.assertEqual(prepare.verify_prepared(destination), marker)
+            engine = destination/'source/.bin/lycaon-dev'
+            self.assertEqual(engine.stat().st_mode & 0o777, 0o755)
+            self.assertFalse(engine.samefile(original/'source/.bin/lycaon-dev'))
+            engine.write_bytes(b'changed imported engine')
+            self.assertEqual(prepare.verify_prepared(original), marker)
+
     def test_interrupted_import_retries_only_its_owned_artifacts(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=pathlib.Path(temporary);_,original,marker=self.fixture(root)
