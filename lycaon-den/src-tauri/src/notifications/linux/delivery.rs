@@ -6,6 +6,7 @@ use super::identity::Delivered;
 
 const SERVICE: &str = "org.freedesktop.Notifications";
 const PATH: &str = "/org/freedesktop/Notifications";
+const APPLICATION_NAME: &str = "Painted Wolf Code";
 
 pub(super) struct Delivery {
     connection: gio::DBusConnection,
@@ -122,7 +123,7 @@ impl Delivery {
         self.delivered.borrow().admit(replacement)?;
         let body = notification_body(&body, &self.capabilities);
         let hints = HashMap::from([
-            ("desktop-entry", "dev.paintedwolf.code".to_variant()),
+            ("desktop-entry", APPLICATION_NAME.to_variant()),
             ("suppress-sound", true.to_variant()),
         ]);
         let actions = if self
@@ -135,7 +136,7 @@ impl Delivery {
             Vec::new()
         };
         let parameters = (
-            "Painted Wolf Code",
+            APPLICATION_NAME,
             replacement,
             "",
             title,

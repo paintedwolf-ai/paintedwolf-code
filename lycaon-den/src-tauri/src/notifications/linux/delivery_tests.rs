@@ -52,6 +52,9 @@ fn connect(context: &glib::MainContext, address: &str) -> gio::DBusConnection {
 
 impl Fixture {
     fn new(capabilities: Vec<String>) -> Self {
+        let config: serde_json::Value =
+            serde_json::from_str(include_str!("../../../tauri.conf.json")).unwrap();
+        let desktop_entry = config["productName"].as_str().unwrap().to_owned();
         let mut daemon = BusProcess(
             Command::new("dbus-daemon")
                 .args(["--session", "--nofork", "--print-address=1"])
@@ -100,6 +103,13 @@ impl Fixture {
                                 "GetCapabilities" => invocation
                                     .return_value(Some(&(capabilities.clone(),).to_variant())),
                                 "Notify" => {
+                                    let hints = parameters.child_value(6)
+                                        .get::<HashMap<String, glib::Variant>>()
+                                        .unwrap();
+                                    assert_eq!(
+                                        hints["desktop-entry"].get::<String>().as_deref(),
+                                        Some(desktop_entry.as_str())
+                                    );
                                     let replacement =
                                         parameters.child_value(1).get::<u32>().unwrap();
                                     let body = parameters.child_value(4).get::<String>().unwrap();
