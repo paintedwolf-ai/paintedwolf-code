@@ -3,8 +3,8 @@ package native
 import (
 	"context"
 	"errors"
- "strings"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -39,7 +39,7 @@ func loadAgentSourceText(ctx context.Context, tool string, tctx tools.ToolContex
 
 // landing reports where an edit's bytes ended up.
 type landing struct {
- change string
+	change string
 	// editor is true when the edit landed in the open document.
 	editor bool
 	// saved is true when the file on disk holds the edit.
@@ -56,7 +56,7 @@ type landing struct {
 // note is the receipt line stating the landing when it was not a plain file
 // write. An unsaved landing says the disk still holds other bytes.
 func (l landing) note() string {
- return strings.TrimSpace(l.change + "\n" + l.publicationNote())
+	return strings.TrimSpace(l.change + "\n" + l.publicationNote())
 }
 
 func (l landing) publicationNote() string {

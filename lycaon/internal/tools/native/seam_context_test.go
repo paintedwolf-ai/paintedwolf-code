@@ -82,15 +82,25 @@ func TestSeamContextTruncatesLongLines(t *testing.T) {
 }
 
 func TestMutationContextPreservesRemovedTextAndBounds(t *testing.T) {
- out := mutationContext("unchanged\ntest_existing\nend\n", "unchanged\ntest_new\nend\n")
- for _, want := range []string{"Before", "After", "2\ttest_existing", "2\ttest_new"} {
-  if !strings.Contains(out, want) { t.Fatalf("missing %q: %s", want, out) }
- }
- if strings.Contains(out, "1\tunchanged") || strings.Contains(out, "3\tend") { t.Fatal(out) }
- if got := mutationContext("same", "same"); got != "" { t.Fatal(got) }
- for _, pair := range [][2]string{{"old", ""}, {"", "new"}, {"a\n", "a"}} {
-  if got := mutationContext(pair[0], pair[1]); got == "" { t.Fatalf("missing change: %#v", pair) }
- }
- out = mutationContext(strings.Repeat(strings.Repeat("é", 200)+"\n", 100), "short\n")
- if len(out) > 4000 || !strings.Contains(out, "lines omitted") { t.Fatalf("unbounded preview: %d", len(out)) }
+	out := mutationContext("unchanged\ntest_existing\nend\n", "unchanged\ntest_new\nend\n")
+	for _, want := range []string{"Before", "After", "2\ttest_existing", "2\ttest_new"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q: %s", want, out)
+		}
+	}
+	if strings.Contains(out, "1\tunchanged") || strings.Contains(out, "3\tend") {
+		t.Fatal(out)
+	}
+	if got := mutationContext("same", "same"); got != "" {
+		t.Fatal(got)
+	}
+	for _, pair := range [][2]string{{"old", ""}, {"", "new"}, {"a\n", "a"}} {
+		if got := mutationContext(pair[0], pair[1]); got == "" {
+			t.Fatalf("missing change: %#v", pair)
+		}
+	}
+	out = mutationContext(strings.Repeat(strings.Repeat("é", 200)+"\n", 100), "short\n")
+	if len(out) > 4000 || !strings.Contains(out, "lines omitted") {
+		t.Fatalf("unbounded preview: %d", len(out))
+	}
 }
