@@ -4,11 +4,14 @@
   "kind": "algorithm",
   "workstream": "approval-intent-lifecycle",
   "disposition": "retain",
-  "reason": "Fingerprint, response, rejection-code, search, and effect counters form one repetition algorithm. Intent renewal and admission tokens reset its counters together and exclude late responses. Retain the algorithm while the resolver adapter stays separate from fingerprinting.",
-  "reviewed_commit": "395dcfab78ea0b667222c7cd67b7029fd908c891",
-  "ceiling": 393,
+  "reason": "One mutex binds prerequisite resolution, invocation and response counts, intent admission tokens, and committed effects. Resolution releases only the matching invocation while cross-argument rejection history stays bounded. Retain this 402-line repetition algorithm; the prompt-loop adapter supplies frozen read and offered-tool facts without bypassing handler validation.",
+  "reviewed_commit": "46d87a5d6ed1fe53c4cf707f18062a37ca65d7ed",
+  "ceiling": 402,
   "boundaries": {
-    "lycaon/internal/session/loopguard/review_intent_test.go": "ee600a29b6632eddb412ab4e4e8bfdbecec3f41dcb4230424328e33e4f2ce1d7",
-    "lycaon/internal/session/loopguard/response_repetition_test.go": "520b7036684fa54b26673df14a2e5151b80104cc71c8c5642b884b559e107499"
+    "lycaon/internal/session/loopguard/review_intent_test.go": "3ddcf96b05faacde27bc364f47e19ad03c4238d291fad9d2b01b9ba48d69b575",
+    "lycaon/internal/session/loopguard/response_repetition_test.go": "89e705c7fa37f4039e3d3ef2ee76b040a018ac7e1a251f796e8839eb4b1ef3bc",
+    "lycaon/internal/session/loopguard/read_prerequisite_test.go": "d109b7d8cd89c6ce4fcc691a338ed2a31c5160ec9059ed01e9028c05557b9fb5",
+    "lycaon/internal/app/editor_retry_recovery_test.go": "a0d0b1d7537ef9b99d87f592ef54d2e4d518046eb64b0e0b6731babc0c774ac6",
+    "lycaon/internal/coordinator/promptloop/response_repetition_test.go": "861ea3ab6dfb9f954a01f1a4bbbd40c73b04127293254a811c110de97d4f0b33"
   }
 }

@@ -2,6 +2,7 @@ package loopguard
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
 
 	"github.com/google/uuid"
@@ -22,10 +23,10 @@ func TestRebuildAfterEditIsNotARepeat(t *testing.T) {
 	g := NewMemoryDoomLoopGuard()
 
 	for round := range 6 {
-		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "edit", editArgs("main.go"), "", true); err != nil {
+		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "edit", editArgs("main.go"), nil, true); err != nil {
 			t.Fatalf("round %d record edit: %v", round, err)
 		}
-		allowed, count, _, err := g.Check(ctx, "sess", uuid.NewString(), "command", buildArgs())
+		allowed, count, _, err := g.Check(ctx, "sess", uuid.NewString(), "command", buildArgs(), false, nil)
 		if err != nil {
 			t.Fatalf("round %d check build: %v", round, err)
 		}
@@ -35,7 +36,7 @@ func TestRebuildAfterEditIsNotARepeat(t *testing.T) {
 		if count != 0 {
 			t.Fatalf("round %d rebuild counted as repeat %d", round, count)
 		}
-		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "command", buildArgs(), "", true); err != nil {
+		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "command", buildArgs(), nil, true); err != nil {
 			t.Fatalf("round %d record build: %v", round, err)
 		}
 	}
@@ -53,14 +54,14 @@ func TestBuildAndRestartAlternatingAreNotRepeats(t *testing.T) {
 			tool string
 			args map[string]any
 		}{{"command", buildArgs()}, {"command", run}} {
-			_, count, _, err := g.Check(ctx, "sess", uuid.NewString(), step.tool, step.args)
+			_, count, _, err := g.Check(ctx, "sess", uuid.NewString(), step.tool, step.args, false, nil)
 			if err != nil {
 				t.Fatalf("round %d check: %v", round, err)
 			}
 			if count != 0 {
 				t.Fatalf("round %d %v counted as repeat %d", round, step.args["command"], count)
 			}
-			if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), step.tool, step.args, "", true); err != nil {
+			if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), step.tool, step.args, nil, true); err != nil {
 				t.Fatalf("round %d record: %v", round, err)
 			}
 		}
@@ -73,7 +74,7 @@ func TestUninterruptedRepeatStillBlocks(t *testing.T) {
 	g := NewMemoryDoomLoopGuard()
 
 	for i := range DoomLoopMaxAttempts {
-		allowed, count, _, err := g.Check(ctx, "sess", uuid.NewString(), "command", buildArgs())
+		allowed, count, _, err := g.Check(ctx, "sess", uuid.NewString(), "command", buildArgs(), false, nil)
 		if err != nil {
 			t.Fatalf("attempt %d check: %v", i, err)
 		}
@@ -83,11 +84,11 @@ func TestUninterruptedRepeatStillBlocks(t *testing.T) {
 		if count != i {
 			t.Fatalf("attempt %d counted %d", i, count)
 		}
-		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "command", buildArgs(), "", true); err != nil {
+		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "command", buildArgs(), nil, true); err != nil {
 			t.Fatalf("attempt %d record: %v", i, err)
 		}
 	}
-	if allowed, count, _, _ := g.Check(ctx, "sess", uuid.NewString(), "command", buildArgs()); allowed {
+	if allowed, count, _, _ := g.Check(ctx, "sess", uuid.NewString(), "command", buildArgs(), false, nil); allowed {
 		t.Fatalf("identical call %d still allowed", count)
 	}
 }
@@ -100,14 +101,14 @@ func TestReadOnlyCallsDoNotClearTheCount(t *testing.T) {
 	write := map[string]any{"path": "main.go", "content": "package main"}
 
 	for i := range DoomLoopMaxAttempts {
-		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "write", write, "", true); err != nil {
+		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "write", write, nil, true); err != nil {
 			t.Fatalf("attempt %d record write: %v", i, err)
 		}
-		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "read", map[string]any{"path": "other.go"}, "", false); err != nil {
+		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "read", map[string]any{"path": "other.go"}, nil, false); err != nil {
 			t.Fatalf("attempt %d record read: %v", i, err)
 		}
 	}
-	if allowed, count, _, _ := g.Check(ctx, "sess", uuid.NewString(), "write", write); allowed {
+	if allowed, count, _, _ := g.Check(ctx, "sess", uuid.NewString(), "write", write, false, nil); allowed {
 		t.Fatalf("repeated write survived %d reads at count %d", DoomLoopMaxAttempts, count)
 	}
 }
@@ -119,14 +120,14 @@ func TestRejectedCallsDoNotClearAnotherBucket(t *testing.T) {
 	g := NewMemoryDoomLoopGuard()
 
 	for i := range DoomLoopMaxAttempts {
-		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "command", buildArgs(), "", true); err != nil {
+		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "command", buildArgs(), nil, true); err != nil {
 			t.Fatalf("attempt %d record build: %v", i, err)
 		}
-		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "edit", editArgs("missing.go"), "EDIT_NO_MATCH", false); err != nil {
+		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "edit", editArgs("missing.go"), &api.InvocationFailure{Code: "EDIT_NO_MATCH"}, false); err != nil {
 			t.Fatalf("attempt %d record failed edit: %v", i, err)
 		}
 	}
-	if allowed, count, _, _ := g.Check(ctx, "sess", uuid.NewString(), "command", buildArgs()); allowed {
+	if allowed, count, _, _ := g.Check(ctx, "sess", uuid.NewString(), "command", buildArgs(), false, nil); allowed {
 		t.Fatalf("repeated build laundered by failing edits at count %d", count)
 	}
 }
@@ -139,17 +140,17 @@ func TestSameCodeRunResetsAfterAnInterveningEffect(t *testing.T) {
 	call := map[string]any{"command": "go test ./...", "cwd": "."}
 
 	for i := range DoomLoopMaxSameCodeRejects {
-		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "command", call, "SANDBOX_TRY_WRITE_ROOT", false); err != nil {
+		if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "command", call, &api.InvocationFailure{Code: "SANDBOX_TRY_WRITE_ROOT"}, false); err != nil {
 			t.Fatalf("attempt %d: %v", i, err)
 		}
 	}
-	if allowed, _, code, _ := g.Check(ctx, "sess", uuid.NewString(), "command", call); allowed {
+	if allowed, _, code, _ := g.Check(ctx, "sess", uuid.NewString(), "command", call, false, nil); allowed {
 		t.Fatalf("same-Code run did not block, code %q", code)
 	}
-	if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "write", map[string]any{"path": "go.mod"}, "", true); err != nil {
+	if err := g.RecordAttempt(ctx, "sess", uuid.NewString(), "write", map[string]any{"path": "go.mod"}, nil, true); err != nil {
 		t.Fatalf("record intervening write: %v", err)
 	}
-	allowed, count, code, _ := g.Check(ctx, "sess", uuid.NewString(), "command", call)
+	allowed, count, code, _ := g.Check(ctx, "sess", uuid.NewString(), "command", call, false, nil)
 	if !allowed {
 		t.Fatalf("blocked after the inputs moved (count %d, code %q)", count, code)
 	}

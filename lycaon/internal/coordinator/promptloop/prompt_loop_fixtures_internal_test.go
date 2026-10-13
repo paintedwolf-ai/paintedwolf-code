@@ -218,11 +218,11 @@ type fakeDoomLoop struct {
 	count   int
 }
 
-func (f *fakeDoomLoop) Check(context.Context, string, string, string, map[string]any) (bool, int, string, error) {
+func (f *fakeDoomLoop) Check(context.Context, string, string, string, map[string]any, bool, *tools.AgentReadBases) (bool, int, string, error) {
 	return f.allowed, f.count, "", nil
 }
 
-func (f *fakeDoomLoop) RecordAttempt(context.Context, string, string, string, map[string]any, string, bool) error {
+func (f *fakeDoomLoop) RecordAttempt(context.Context, string, string, string, map[string]any, *api.InvocationFailure, bool) error {
 	return nil
 }
 
@@ -238,7 +238,7 @@ type memoryDoomLoopGuard struct {
 	counts map[string]map[string]int // sessionID -> key -> count
 }
 
-func (g *memoryDoomLoopGuard) Check(_ context.Context, sessionID, _, tool string, args map[string]any) (bool, int, string, error) {
+func (g *memoryDoomLoopGuard) Check(_ context.Context, sessionID, _, tool string, args map[string]any, _ bool, _ *tools.AgentReadBases) (bool, int, string, error) {
 	key, _ := stableKey(tool, args)
 	if g.counts[sessionID] == nil {
 		return true, 0, "", nil
@@ -247,7 +247,7 @@ func (g *memoryDoomLoopGuard) Check(_ context.Context, sessionID, _, tool string
 	return n < doomLoopMaxAttemptsTest, n, "", nil
 }
 
-func (g *memoryDoomLoopGuard) RecordAttempt(_ context.Context, sessionID, _, tool string, args map[string]any, _ string, _ bool) error {
+func (g *memoryDoomLoopGuard) RecordAttempt(_ context.Context, sessionID, _, tool string, args map[string]any, _ *api.InvocationFailure, _ bool) error {
 	key, _ := stableKey(tool, args)
 	if g.counts[sessionID] == nil {
 		g.counts[sessionID] = map[string]int{}
@@ -333,11 +333,4 @@ func refusalForTest(block string) *guidance.Refusal {
 		}
 	}
 	return guidance.NewRefusal(code, block)
-}
-
-func (*fakeDoomLoop) ResolveRejection(context.Context, string, string, map[string]any, string) error {
-	return nil
-}
-func (*memoryDoomLoopGuard) ResolveRejection(context.Context, string, string, map[string]any, string) error {
-	return nil
 }
