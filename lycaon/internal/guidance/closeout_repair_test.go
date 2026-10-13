@@ -2,6 +2,8 @@ package guidance
 
 import (
 	"encoding/json"
+	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -167,5 +169,50 @@ func TestExhaustedCitationRepairAttachesObservedSourcesWhenNoneRemain(t *testing
 	}
 	if len(grounding.Checks) == 0 || grounding.Checks[0].Status != "failed" {
 		t.Fatalf("fallback lost the rejected reference check: %+v", grounding.Checks)
+	}
+}
+
+func TestCitationRepairUnknownReferenceOffersBoundedCurrentChoices(t *testing.T) {
+	for count := 0; count <= citationRepairSampleCap+2; count++ {
+		for _, namespace := range []string{"", "worker"} {
+			t.Run(fmt.Sprintf("%d/%s", count, namespace), func(t *testing.T) {
+				records := []evidence.Record{{Handle: "read#1", Kind: "read", Path: "old.go", SupersededBy: "read#2"}}
+				for i := 0; i < count; i++ {
+					records = append(records, evidence.Record{Handle: fmt.Sprintf("read#%d", i+2), Kind: "read", SourceTool: "read", Path: fmt.Sprintf("file%d.go", i)})
+				}
+				records = append(records, evidence.Record{Handle: "gate#1", GateType: "review"})
+				ledger := evidence.AssembleLedger(records)
+				if namespace != "" {
+					ledger = evidence.NamespaceLedger(ledger, namespace)
+				}
+				before, err := json.Marshal(ledger)
+				testutil.FailErr(t, "snapshot ledger", err)
+				rejected := []CoordinatorCitedEvidence{{Evidence: "file.go:4"}, {Evidence: "unknown#1"}}
+				choices := citationRepairObservations(evidence.CitationRoots{}, ledger, rejected)
+				want := min(count, citationRepairSampleCap)
+				if len(choices) != want {
+					t.Fatalf("choices = %+v, want %d", choices, want)
+				}
+				seen := map[string]bool{}
+				for _, choice := range choices {
+					rec, ok := evidence.ResolveHandle(ledger, choice.Evidence)
+					if !ok || rec.IsGate() || rec.SupersededBy != "" || seen[choice.Evidence] || choice.Path != rec.Path || choice.Tool != rec.SourceTool {
+						t.Fatalf("invalid choice: %+v, record: %+v", choice, rec)
+					}
+					seen[choice.Evidence] = true
+				}
+				if again := citationRepairObservations(evidence.CitationRoots{}, ledger, rejected); !reflect.DeepEqual(choices, again) {
+					t.Fatalf("unstable choices: %+v then %+v", choices, again)
+				}
+				if choices := citationRepairObservations(evidence.CitationRoots{}, ledger, nil); len(choices) != 0 {
+					t.Fatalf("offered choices without a rejected citation: %+v", choices)
+				}
+				after, err := json.Marshal(ledger)
+				testutil.FailErr(t, "snapshot ledger after choices", err)
+				if string(before) != string(after) {
+					t.Fatal("repair choices mutated the evidence ledger")
+				}
+			})
+		}
 	}
 }

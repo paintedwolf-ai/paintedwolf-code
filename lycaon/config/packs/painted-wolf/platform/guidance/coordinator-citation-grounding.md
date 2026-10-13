@@ -10,7 +10,7 @@ URLs printed by commands are output, not observed web pages. Cite the command ha
 
 Keep accepted citations. Copy exact handles; do not construct a handle from a tool name or call count. An explicit handle cites the captured observation, even when `superseded_by` names newer file evidence. Use the newer observation for current file contents. Git and command receipts remain evidence of their recorded outcomes after files change.
 {% if repair_observations %}
-Relevant observations (choices, not inferred support for your report):
+Observed repair choices (not inferred support for your report):
 {{ repair_observations }}
 {% endif %}
 Tool calls are unavailable during this citation-only repair. Use the observations already provided; do not repeat an effect to obtain citations. For a file claim, include path, line, and excerpt from its observation. Remove citations you cannot support.
