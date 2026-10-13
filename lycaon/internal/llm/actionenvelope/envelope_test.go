@@ -11,6 +11,10 @@ func TestLeadingActions(t *testing.T) {
 		name, text string
 		want       []string
 	}{
+		{"dollar wrapper", `${"tool_calls":[{"name":"read","arguments":{}}]}`, []string{"read"}},
+		{"tag", `<tool_call>{"name":"read","arguments":{}}</tool_call>`, []string{"read"}},
+		{"marker", `[TOOL_CALLS][{"name":"read","arguments":{}}]`, []string{"read"}},
+		{"fenced tag", "```\n<tool_call>{\"name\":\"read\",\"arguments\":{}}</tool_call>\n```", nil},
 		{"observed", `{"tool_name":"read","tool_args":{"path":"x"}}`, []string{"read"}},
 		{"trailing explanation", ` {"name":"read","arguments":{}} Now I will inspect it.`, []string{"read"}},
 		{"parameters", `{"name":"read","parameters":"{}","id":"1"}`, []string{"read"}},

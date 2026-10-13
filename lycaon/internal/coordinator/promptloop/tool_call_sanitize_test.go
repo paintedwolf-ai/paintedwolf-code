@@ -218,16 +218,19 @@ func TestTextActionRecoveryThroughLoop(t *testing.T) {
 		native               bool
 		wantReject, wantExec int
 	}{
+		{"worker resubmit", `{"tool_name":"read","tool_args":{"path":"x"}}`, 1, false, 1, 1},
 		{"resubmit", `{"tool_name":"read","tool_args":{"path":"x"}}`, 1, false, 1, 1},
 		{"prefix resubmit", `{"name":"read","arguments":"bad"} Reading now.`, 1, false, 1, 1},
-		{"provider recovery unchanged", `{"name":"read","arguments":{"path":"x"}}`, 1, false, 0, 1},
+		{"name arguments repair", `{"name":"read","arguments":{"path":"x"}}`, 1, false, 1, 1},
 		{"native unchanged", `{"tool_name":"read","tool_args":{}}`, 1, true, 0, 1},
 		{"fenced example", "```json\n{\"tool_name\":\"read\",\"tool_args\":{}}\n```", 1, false, 0, 0},
+		{"fenced name arguments", "```json\n{\"name\":\"read\",\"arguments\":{\"path\":\"x\"}}\n```", 1, false, 0, 0},
+		{"explained tag", `Example: <tool_call>{"name":"read","arguments":{"path":"x"}}</tool_call>`, 1, false, 0, 0},
 		{"bounded retry", `{"tool":"read","args":{}}`, 20, false, BlockedLoopRejectCap + 1, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			pipeline := oar.NewGuardPipeline(rules, loader, oar.NewCounterStore())
-			pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
+			pipeline.EnableAnchor(oar.AnchorContentOutput)
 			reg := tools.NewStubRegistry()
 			executed, rejected, nudges := 0, 0, 0
 			testutil.FailErr(t, "register", reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
@@ -252,10 +255,22 @@ func TestTextActionRecoveryThroughLoop(t *testing.T) {
 					return h, nil
 				}},
 				Model: ModelDeps{LLM: &textActionClient{responses: responses}},
-				Closeout: CloseoutDeps{EvaluateCloseoutBlock: func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
+				Closeout: CloseoutDeps{EvaluateContentAnchor: func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, _ string, _ map[string]any) (*guidance.Refusal, bool, string, bool) {
+					if anchor != oar.AnchorContentOutput {
+						return nil, false, "", false
+					}
+					gc := oar.NewGuardContext()
 					gc.Session.SessionID = sess.ID
-					result, err := pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorCloseoutCheck, gc)
-					return result.Decision, err
+					gc.SetContentObservation(observation)
+					result, err := pipeline.EvaluateBlock(ctx, anchor, gc)
+					testutil.FailErr(t, "output policy", err)
+					if result.Decision == nil {
+						return nil, false, "", false
+					}
+					decision := result.Decision
+					body, err := guidance.RenderPolicyCopy(ctx, decision.Code, string(decision.Effect), decision.Copy)
+					testutil.FailErr(t, "render output policy", err)
+					return guidance.NewRefusal(decision.Code, body).WithPolicyCopy(decision.Copy).WithDetails(decision.Data, nil), true, "", false
 				}},
 				Projection: ProjectionDeps{
 					AppendDraftVersion: func(_ context.Context, _, _, body, code string) (int, error) {
@@ -282,6 +297,10 @@ func TestTextActionRecoveryThroughLoop(t *testing.T) {
 			}
 			loop := NewPromptLoopForTest(deps)
 			sess := &api.Session{ID: t.Name(), Posture: api.SessionPostureBuild}
+			if tc.name == "worker resubmit" {
+				sess.ParentSessionID = "parent"
+				sess.AgentType = "path-explorer"
+			}
 			_, err := loop.Run(t.Context(), PromptRunInput{SessionID: sess.ID, Session: sess, History: []api.Message{{Role: api.MessageRoleUser, Content: "Read x"}}, ProfileID: "explore_readonly", ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}})
 			testutil.FailErr(t, "run recovery", err)
 			if rejected != tc.wantReject || executed != tc.wantExec || (rejected > 0 && nudges == 0) {

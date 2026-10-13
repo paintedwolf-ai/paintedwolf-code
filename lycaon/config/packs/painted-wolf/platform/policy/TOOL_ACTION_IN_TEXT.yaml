@@ -1,7 +1,7 @@
 oar: '1.0'
 id: TOOL_ACTION_IN_TEXT
 kind: invariant
-anchor: coordinator.closeout_check
+anchor: content.output
 requires:
   facts:
     - paintedwolf.reject_observation
@@ -10,7 +10,7 @@ when: paintedwolf.reject_observation == "text_action_envelope"
 effect: block
 copy:
   what: 'No tool executed. The assistant response contained a text action envelope for {{ paintedwolf.offenders_sample }}.'
-  cause: A JSON action envelope at the start of assistant text is not a native tool call.
+  cause: An action envelope in assistant text is not a native tool call.
   why: The host does not execute this reserved text format or treat it as task completion.
   fix: Resubmit the intended action through the native tool channel using an offered tool and its schema. Do not repeat the JSON in assistant text.
   instead: If explaining tool syntax or logs, use a fenced code example with an explanation.

@@ -526,9 +526,9 @@ func (l *toolBatch) executeOneToolCall(
 	if ingestion.IsRetrievalTool(tc.Name) {
 		toolOrigin = api.MessageOriginRetrieval
 	}
-	if reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentToolResult, []oar.ContentSegment{
+	if reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentToolResult, oar.ContentObservation{Segments: []oar.ContentSegment{
 		oarContentSegment(run.content, api.MessageRoleTool, toolOrigin, api.ContentAuthorityNone, api.ContentTrustTierUntrusted, tc.Name),
-	}, tc.Name, tc.Args); blocked {
+	}}, tc.Name, tc.Args); blocked {
 		run.failure = rejectionFailure(reject.Code(), "content_policy_rejection", invocationFailureOwner(run.contract, run.captures), reject.Facts.FeedbackFor(reject.Code()).Details)
 		settled, settleErr := l.Tools.settleInvocation(ctx, run, api.InvocationStatusRejected, "content_policy", reject.Code(), run.captures.ownerRef)
 		if settleErr != nil {

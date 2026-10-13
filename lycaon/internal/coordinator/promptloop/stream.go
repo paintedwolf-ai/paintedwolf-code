@@ -337,11 +337,12 @@ func (l *modelTurn) completeStream(
 	// What the provider delivered, before the tool-call contract rewrites it.
 	delivered := completion
 
-	completion, err = l.resolveToolCallSupport(sess, req, completion, providerID, model)
+	response, err := llm.ClassifyToolResponse(l.providerProfile(providerID), req, completion, providerID, model)
 	if err != nil {
 		l.recordAbandonedTurnUsage(ctx, sess, llmCallID, providerID, model, req, delivered)
 		return nil, nil, err
 	}
+	completion = response.Completion
 	completion.SourceContext = sourceRequest.ForCompletion(completion)
 	if st != nil {
 		st.sourceContext = completion.SourceContext
@@ -351,10 +352,16 @@ func (l *modelTurn) completeStream(
 		slog.WarnContext(ctx, "record llm call usage", "call_id", llmCallID, "error", err)
 	}
 	outputGateStarted := time.Now()
-	reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oarModelOutputSegments(completion.Content), "", nil)
-	slog.InfoContext(ctx, "model output gate", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(outputGateStarted).Milliseconds(), "blocked", blocked)
+	reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{Segments: oarModelOutputSegments(completion.Content), TextActionTools: response.TextActionTools}, "", nil)
+	slog.InfoContext(ctx, "model output gate", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(outputGateStarted).Milliseconds(), "blocked", blocked, "selected_text_protocol", req.ToolProtocol, "text_action_tools", response.TextActionTools)
+	if st != nil {
+		st.outputRejection = nil
+	}
 	if blocked {
-		return nil, nil, reject
+		if st == nil || len(response.TextActionTools) == 0 || reject == nil || reject.Code() != "TOOL_ACTION_IN_TEXT" {
+			return nil, nil, reject
+		}
+		st.outputRejection = reject
 	} else if changed {
 		completion.Content = transformed
 		tokens = []string{transformed}
@@ -517,7 +524,7 @@ func (l *modelTurn) buildTurnRequest(
 	if err != nil {
 		return coordinatorTurnRequest{}, err
 	}
-	if reject, blocked, _, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentInput, oarContentSegments(messages), "", nil); blocked {
+	if reject, blocked, _, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentInput, oar.ContentObservation{Segments: oarContentSegments(messages)}, "", nil); blocked {
 		return coordinatorTurnRequest{}, reject
 	} else if changed {
 		return coordinatorTurnRequest{}, fmt.Errorf("[OAR-PROF-10] model.input transform cannot preserve message roles and provenance")

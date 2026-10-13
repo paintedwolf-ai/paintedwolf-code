@@ -15,6 +15,16 @@ func Names(content string, offered []string) []string {
 		return nil
 	}
 	content = strings.TrimSpace(content)
+	for _, prefix := range []string{"${", "[TOOL_CALLS]", "<tool_call>"} {
+		if strings.HasPrefix(content, prefix) {
+			if prefix == "${" {
+				content = content[1:]
+			} else {
+				content = strings.TrimSpace(content[len(prefix):])
+			}
+			break
+		}
+	}
 	if content == "" || (content[0] != '{' && content[0] != '[') {
 		return nil
 	}
