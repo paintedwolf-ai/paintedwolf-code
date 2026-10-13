@@ -3,20 +3,24 @@ import json
 import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 from smoke_boundaries import fixture, service_command_completed
 
 
 class ServiceCompletionTests(unittest.TestCase):
-    def test_permission_fixture_owns_and_removes_its_protected_input(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            project=pathlib.Path(tmp)
+    def test_permission_fixture_owns_and_removes_its_private_input(self):
+        with tempfile.TemporaryDirectory() as tmp, mock.patch('pathlib.Path.home',return_value=pathlib.Path(tmp)):
+            project=pathlib.Path(tmp)/'project'
+            project.mkdir()
             for kind in ['approve_read','deny_read']:
                 with fixture(project,kind) as owned:
                     path=pathlib.Path(owned['path'])
-                    self.assertEqual(path.name,'.env')
+                    self.assertEqual(path.name,'input.json')
+                    self.assertTrue(path.is_relative_to(pathlib.Path(tmp)/'Documents'))
                     self.assertFalse(path.is_relative_to(project))
                     self.assertEqual(json.loads(path.read_text()),{'receipt':owned['receipt']})
                 self.assertFalse(path.exists())
+                self.assertFalse((pathlib.Path(tmp)/'Documents').exists())
 
     def test_file_creation_does_not_imply_terminal_execution(self):
         with tempfile.TemporaryDirectory() as tmp:

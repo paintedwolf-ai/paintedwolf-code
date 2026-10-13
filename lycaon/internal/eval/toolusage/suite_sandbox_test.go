@@ -2,6 +2,7 @@ package toolusage
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -69,8 +70,9 @@ func TestSandboxLoopbackRecordsAnActualRequest(t *testing.T) {
 }
 
 func TestBenchmarkSuiteLoadsWithExplicitUnattendedSandboxCases(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	catalog, err := sensitivepath.Load(sensitivepath.Bundled())
-	testutil.FailErr(t, "load protected-read catalog", err)
+	testutil.FailErr(t, "load privacy-read catalog", err)
 	suite, err := LoadSuite("../../../test/fixtures/eval/coordinator-benchmark.json")
 	testutil.FailErr(t, "load benchmark suite", err)
 	if suite.Unattended == nil {
@@ -82,9 +84,9 @@ func TestBenchmarkSuiteLoadsWithExplicitUnattendedSandboxCases(t *testing.T) {
 			fallback := []byte("{\n  \"receipt\": \"supplied-fallback\"\n}\n")
 			testutil.FailErr(t, "write supplied fallback", os.WriteFile(filepath.Join(result.ProjectDir, "fallback.json"), fallback, 0o600))
 			testutil.FailErr(t, "prepare file fixture", prepareSuiteSandbox(t.Context(), &spec, &result, t.TempDir()))
-			match, protected := catalog.Match(result.Sandbox.Path, sensitivepath.ModeRead)
-			if !protected || !match.Protected {
-				t.Fatalf("permission fixture does not cross the read floor: %s", result.Sandbox.Path)
+			match, sensitive := catalog.Match(result.Sandbox.Path, sensitivepath.ModeRead)
+			if !sensitive || match.Protected || match.ID != "user-documents" {
+				t.Fatalf("permission fixture does not cross the Documents privacy boundary: %s", result.Sandbox.Path)
 			}
 			preserved, err := os.ReadFile(filepath.Join(result.ProjectDir, "fallback.json"))
 			testutil.FailErr(t, "read prepared fallback", err)
@@ -93,6 +95,10 @@ func TestBenchmarkSuiteLoadsWithExplicitUnattendedSandboxCases(t *testing.T) {
 			}
 			if filepath.Dir(result.Sandbox.Path) == result.ProjectDir {
 				t.Fatal("external input is inside the attached project")
+			}
+			result.Sandbox.close()
+			if _, err := os.Stat(result.Sandbox.Path); !errors.Is(err, os.ErrNotExist) {
+				t.Fatal("owned input survived cleanup")
 			}
 		}
 	}

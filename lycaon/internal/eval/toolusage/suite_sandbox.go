@@ -82,13 +82,32 @@ func prepareSuiteSandbox(ctx context.Context, spec *SuiteCase, result *CaseRepor
 		spec.Prompt = strings.ReplaceAll(spec.Prompt, "${sandbox_path}", evidence.Path)
 		return nil
 	}
-	outside, err := os.MkdirTemp(filepath.Dir(result.ProjectDir), "shared-input-")
+	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
-	// Exercise the protected-read floor, not ordinary outside-project readability.
-	evidence.Path = filepath.Join(outside, ".env")
-	if err := writeSandboxJSON(outside, ".env", map[string]string{"receipt": evidence.Receipt}); err != nil {
+	documents := filepath.Join(home, "Documents")
+	mkdirErr := os.Mkdir(documents, 0o700)
+	if mkdirErr != nil && !errors.Is(mkdirErr, os.ErrExist) {
+		return mkdirErr
+	}
+	outside, err := os.MkdirTemp(documents, "paintedwolf-input-")
+	if err != nil {
+		if mkdirErr == nil {
+			_ = os.Remove(documents)
+		}
+		return err
+	}
+	evidence.stop = func() {
+		_ = os.RemoveAll(outside)
+		if mkdirErr == nil {
+			_ = os.Remove(documents)
+		}
+	}
+	// The privacy boundary asks without redacting this synthetic receipt.
+	evidence.Path = filepath.Join(outside, "input.json")
+	if err := writeSandboxJSON(outside, "input.json", map[string]string{"receipt": evidence.Receipt}); err != nil {
+		evidence.close()
 		return err
 	}
 	spec.Prompt = strings.ReplaceAll(spec.Prompt, "${sandbox_path}", evidence.Path)
