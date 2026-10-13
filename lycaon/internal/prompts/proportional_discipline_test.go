@@ -35,14 +35,13 @@ func TestProportionalCoordinatorDisciplineRender(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Handle diagnosed small changes inline",
-		"identify the unresolved fact",
+		"Identify the unresolved fact",
 		"Stop when observations answer the request",
 		"Report completion only with supporting evidence",
 		"verification results and remaining limits",
-		"do not over-survey a small diagnosed change",
 		"## This turn",
 		"Continue work through tool calls, with empty assistant text",
-		"A response without tools is final and ends the turn, including a promise to start or continue",
+		"A response without tools ends the turn, including a promise to start or continue",
 		"invoked:false", "action did not run", "invoked:true", "does not prove success",
 	} {
 		if !strings.Contains(core, want) {

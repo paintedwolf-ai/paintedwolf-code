@@ -9,9 +9,9 @@ hosts: [coordinator]
 ---
 Store the checklist with `update_progress(content=…)`; checklist text in an assistant reply does not update it.
 
-Before `write`, `edit`, `replace_lines`, `restore_version`, `jq_edit`, `task`, `delegate_dispatch`, or `delegate_decompose`, call it with `## Progress` and one flat pending row per deliverable; one row is sufficient for a small task. Reads, deletion, and explanation-only work need no checklist.
+Before `write`, `edit`, `replace_lines`, `restore_version`, `jq_edit`, `task`, `delegate_dispatch`, or `delegate_decompose`, call it with `## Progress` and one flat pending row per deliverable; one row is sufficient for a small task. Reads, deletion, and explanations need none.
 
-Markers: `- [ ]` pending; `- [x]` completed; `- [~]` terminal will-not-pursue, never in-progress; `- [>]` note. Change rows only when scope or status changes. `unchanged` is successful storage of the same checklist; do not repeat it.
+Markers: `- [ ]` pending; `- [x]` completed; `- [~]` terminal will-not-pursue, never in-progress; `- [>]` note. Update changed scope/status only. `unchanged` means the same checklist was stored; do not repeat it.
 
 Pending rows permit work. A successful worker finish latches progress: reconcile its observed result with `update_progress` before dispatch, resume, or edit (`PROGRESS_ITEM_NOT_CLOSED`). Partial, failed, and held legs do not latch it. An unchanged checklist does not clear the latch.
 
