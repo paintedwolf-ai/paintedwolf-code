@@ -45,6 +45,24 @@ def commit(root, tag):
 
 
 class SnapshotTests(unittest.TestCase):
+    def test_vendored_source_is_pinned_to_the_application(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary); repo = root / 'repo'; repository(repo)
+            vendor = repo / 'third_party/parser/go.mod'
+            vendor.parent.mkdir(parents=True)
+            vendor.write_text('module original\n')
+            target = commit(repo, 'vendored-application')
+            vendor.write_text('module changed\n')
+            benchmark = commit(repo, 'new-evaluator')
+            destination = root / 'source'
+            application = freeze_sources(repo, destination, {'application': target, 'benchmark': benchmark})
+            retained = destination / 'third_party/parser/go.mod'
+            self.assertEqual(retained.read_text(), 'module original\n')
+            self.assertEqual(snapshot.read_source(destination), application)
+            retained.write_text('module tampered\n')
+            with self.assertRaisesRegex(ValueError, 'source'):
+                snapshot.read_source(destination)
+
     def test_file_boundaries_do_not_match_nested_product_directories(self):
         paths = ['lycaon/internal/api/harness_*.go', 'lycaon/internal/harnessfixture/']
         for name, expected in [
