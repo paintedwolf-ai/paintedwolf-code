@@ -194,7 +194,14 @@ func TestCitationRepairUnknownReferenceOffersBoundedCurrentChoices(t *testing.T)
 					t.Fatalf("choices = %+v, want %d", choices, want)
 				}
 				seen := map[string]bool{}
-				for _, choice := range choices {
+				for i, choice := range choices {
+					wantHandle := fmt.Sprintf("read#%d", count+1-i)
+					if namespace != "" {
+						wantHandle = namespace + ":" + wantHandle
+					}
+					if choice.Evidence != wantHandle {
+						t.Fatalf("choice %d = %q, want newest current observation %q", i, choice.Evidence, wantHandle)
+					}
 					rec, ok := evidence.ResolveHandle(ledger, choice.Evidence)
 					if !ok || rec.IsGate() || rec.SupersededBy != "" || seen[choice.Evidence] || choice.Path != rec.Path || choice.Tool != rec.SourceTool {
 						t.Fatalf("invalid choice: %+v, record: %+v", choice, rec)
