@@ -137,72 +137,22 @@ func (s *SQL) GetTranscriptPage(ctx context.Context, id string, q api.Transcript
 	if err != nil {
 		return api.SessionTranscriptPage{}, err
 	}
-	limit := int64(q.EffectiveLimit())
-	var listRows []db.ListSessionMessagesRow
-	switch {
-	case strings.TrimSpace(q.WorkerID) != "":
-		var hasBefore, hasAfter bool
+	if strings.TrimSpace(q.WorkerID) != "" {
 		var bounds db.GetWorkerJobMessageOrdBoundsRow
 		page.Messages, bounds, err = loadWorkerTranscriptPage(ctx, qtx, id, q)
 		if err != nil {
 			return api.SessionTranscriptPage{}, err
 		}
-		hasBefore, hasAfter = workerWindowHasMore(bounds.MinOrd, bounds.MaxOrd, page.Messages, q)
+		hasBefore, hasAfter := workerWindowHasMore(bounds.MinOrd, bounds.MaxOrd, page.Messages, q)
 		page.OrdBounds = transcriptOrdBounds(bounds.MinOrd, bounds.MaxOrd)
 		if err := SetTranscriptPageCursors(id, &page, hasBefore, hasAfter, q); err != nil {
 			return api.SessionTranscriptPage{}, err
 		}
 		return page, tx.Commit()
-	case q.Before != nil:
-		rows, qerr := qtx.ListSessionMessagesBeforeOrd(ctx, db.ListSessionMessagesBeforeOrdParams{
-			SessionID: id,
-			Ord:       *q.Before,
-			Limit:     limit,
-		})
-		if qerr != nil {
-			return api.SessionTranscriptPage{}, qerr
-		}
-		listRows = make([]db.ListSessionMessagesRow, len(rows))
-		for i, r := range rows {
-			listRows[i] = db.ListSessionMessagesRow(r)
-		}
-	case q.After != nil:
-		rows, qerr := qtx.ListSessionMessagesAfterOrd(ctx, db.ListSessionMessagesAfterOrdParams{
-			SessionID: id,
-			Ord:       *q.After,
-			Limit:     limit,
-		})
-		if qerr != nil {
-			return api.SessionTranscriptPage{}, qerr
-		}
-		listRows = make([]db.ListSessionMessagesRow, len(rows))
-		for i, r := range rows {
-			listRows[i] = db.ListSessionMessagesRow(r)
-		}
-	default:
-		rows, qerr := qtx.ListSessionMessagesTail(ctx, db.ListSessionMessagesTailParams{
-			SessionID: id,
-			Limit:     limit,
-		})
-		if qerr != nil {
-			return api.SessionTranscriptPage{}, qerr
-		}
-		listRows = make([]db.ListSessionMessagesRow, len(rows))
-		for i, r := range rows {
-			listRows[i] = db.ListSessionMessagesRow(r)
-		}
 	}
-	page.Messages = make([]api.Message, 0, len(listRows))
-	for _, r := range listRows {
-		msg, merr := messageFromRow(r)
-		if merr != nil {
-			return api.SessionTranscriptPage{}, merr
-		}
-		page.Messages = append(page.Messages, msg)
-	}
-	// Tail and before queries return DESC — reverse to ascending Ord.
-	if q.After == nil {
-		reverseMessages(page.Messages)
+	page.Messages, err = loadSessionTranscriptMessages(ctx, qtx, id, q)
+	if err != nil {
+		return api.SessionTranscriptPage{}, err
 	}
 	if n := len(page.Messages); n > 0 {
 		clocks, err := listTurnClocksForPage(ctx, qtx, id, page.Messages[0].Ord, page.Messages[n-1].Ord)
@@ -226,6 +176,63 @@ func (s *SQL) GetTranscriptPage(ctx context.Context, id string, q api.Transcript
 		return api.SessionTranscriptPage{}, err
 	}
 	return page, tx.Commit()
+}
+
+func loadSessionTranscriptMessages(
+	ctx context.Context,
+	qtx *db.Queries,
+	id string,
+	q api.TranscriptPageQuery,
+) ([]api.Message, error) {
+	limit := int64(q.EffectiveLimit())
+	var listRows []db.ListSessionMessagesRow
+	switch {
+	case q.Before != nil:
+		rows, err := qtx.ListSessionMessagesBeforeOrd(ctx, db.ListSessionMessagesBeforeOrdParams{
+			SessionID: id, Ord: *q.Before, Limit: limit,
+		})
+		if err != nil {
+			return nil, err
+		}
+		listRows = make([]db.ListSessionMessagesRow, len(rows))
+		for i, r := range rows {
+			listRows[i] = db.ListSessionMessagesRow(r)
+		}
+	case q.After != nil:
+		rows, err := qtx.ListSessionMessagesAfterOrd(ctx, db.ListSessionMessagesAfterOrdParams{
+			SessionID: id, Ord: *q.After, Limit: limit,
+		})
+		if err != nil {
+			return nil, err
+		}
+		listRows = make([]db.ListSessionMessagesRow, len(rows))
+		for i, r := range rows {
+			listRows[i] = db.ListSessionMessagesRow(r)
+		}
+	default:
+		rows, err := qtx.ListSessionMessagesTail(ctx, db.ListSessionMessagesTailParams{
+			SessionID: id, Limit: limit,
+		})
+		if err != nil {
+			return nil, err
+		}
+		listRows = make([]db.ListSessionMessagesRow, len(rows))
+		for i, r := range rows {
+			listRows[i] = db.ListSessionMessagesRow(r)
+		}
+	}
+	messages := make([]api.Message, 0, len(listRows))
+	for _, r := range listRows {
+		msg, err := messageFromRow(r)
+		if err != nil {
+			return nil, err
+		}
+		messages = append(messages, msg)
+	}
+	if q.After == nil {
+		reverseMessages(messages)
+	}
+	return messages, nil
 }
 
 func loadWorkerTranscriptPage(
