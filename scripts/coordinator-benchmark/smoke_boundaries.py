@@ -64,8 +64,8 @@ def resolve(application,session,call,kind):
         if kind not in {'deny_read','deny_loopback'}:
             options=payload['plan']['options']
             task_grant=kind in {'loopback','write_root'}
-            rung='task' if task_grant else 'once'
-            choices=[o for o in options if o['rung']==rung and o['decision_action']=='approve' and not o.get('disabled') and (o['kind']=='lease' and o.get('scope')=='task' if task_grant else o['kind']=='current_action')]
+            rung='chat' if task_grant else 'once'
+            choices=[o for o in options if o['rung']==rung and o['decision_action']=='approve' and not o.get('disabled') and (o['kind']=='lease' and o.get('scope')=='chat' if task_grant else o['kind']=='current_action')]
             if len(choices)!=1:
                 save(application.directory/'unexpected-approval.json',checkpoint)
                 raise RuntimeError('preparation has no unique host-authored authority option')
@@ -157,8 +157,8 @@ def write_root_trajectory(application,spec,kind):
                 payload=checkpoint.get('tool_approval',{})
                 if payload.get('tool_call_id')!=call: raise RuntimeError('write root reached an unexpected approval boundary')
                 if payload['plan']['subject']['kind']!='write_root_set': raise RuntimeError('write root card has subject '+payload['plan']['subject']['kind'])
-                choices=[o for o in payload['plan']['options'] if o['rung']=='task' and o['kind']=='lease' and o.get('scope')=='task' and o['decision_action']=='approve' and not o.get('disabled')]
-                if len(choices)!=1: raise RuntimeError('write root card has no unique task lease')
+                choices=[o for o in payload['plan']['options'] if o['rung']=='chat' and o['kind']=='lease' and o.get('scope')=='chat' and o['decision_action']=='approve' and not o.get('disabled')]
+                if len(choices)!=1: raise RuntimeError('write root card has no unique chat lease')
                 application.request(f"/v1/sessions/{session}/checkpoints/{checkpoint['id']}",{'kind':'tool_approval','action':'approve','option_id':choices[0]['id']})
             return command_receipt_completed(application.directory/'store.db',session,call) or None
         application.wait_for(granted,'write root grant and command',session)

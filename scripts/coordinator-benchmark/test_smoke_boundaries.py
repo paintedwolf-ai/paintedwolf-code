@@ -4,7 +4,7 @@ import sqlite3
 import tempfile
 import unittest
 from unittest import mock
-from smoke_boundaries import fixture, service_command_completed
+from smoke_boundaries import fixture, resolve, service_command_completed
 
 
 class ServiceCompletionTests(unittest.TestCase):
@@ -47,3 +47,26 @@ class ServiceCompletionTests(unittest.TestCase):
                 db.execute("UPDATE source_command_windows SET state='interrupted'")
             with self.assertRaisesRegex(RuntimeError,'interrupted'):
                 service_command_completed(database,'session','call')
+
+
+class ApprovalBoundaryTests(unittest.TestCase):
+    def test_service_selects_exact_chat_lease(self):
+        options = [
+            {'id':'once','rung':'once','kind':'current_action','decision_action':'approve'},
+            {'id':'day','rung':'day','kind':'lease','scope':'chat','decision_action':'approve'},
+            {'id':'chat','rung':'chat','kind':'lease','scope':'chat','decision_action':'approve'},
+            {'id':'project','rung':'project','kind':'lease','scope':'project','decision_action':'approve'},
+        ]
+        checkpoint={'id':'checkpoint','tool_approval':{'tool_call_id':'call','plan':{'options':options}}}
+        app=mock.Mock(approval_guidance='Declined.')
+        app.request.side_effect=[{'checkpoints':[checkpoint]},{}]
+        resolve(app,'session','call','loopback')
+        app.request.assert_called_with('/v1/sessions/session/checkpoints/checkpoint',
+            {'kind':'tool_approval','action':'approve','option_id':'chat'})
+        with tempfile.TemporaryDirectory() as tmp:
+            app.directory=pathlib.Path(tmp)
+            for altered in [dict(options[2],disabled=True),dict(options[2],scope='project'),dict(options[2],rung='day')]:
+                checkpoint['tool_approval']['plan']['options']=[options[0],altered]
+                app.request.side_effect=[{'checkpoints':[checkpoint]}]
+                with self.assertRaisesRegex(RuntimeError,'no unique host-authored authority option'):
+                    resolve(app,'session','call','loopback')
