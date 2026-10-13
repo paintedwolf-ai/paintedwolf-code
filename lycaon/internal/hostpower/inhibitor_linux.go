@@ -36,6 +36,10 @@ func connectLogindBus(path string) (*dbus.Conn, error) {
 		_ = socket.Close()
 		return nil, err
 	}
+	if err := socket.SetDeadline(time.Time{}); err != nil {
+		_ = bus.Close()
+		return nil, err
+	}
 	return bus, nil
 }
 
@@ -104,6 +108,7 @@ func (l *logindLease) Done() <-chan error { return l.done }
 func (l *logindLease) watch() {
 	defer close(l.stopped)
 	defer close(l.done)
+	defer func() { l.releaseError = l.file.Close() }()
 	for {
 		select {
 		case <-l.stop:
@@ -128,7 +133,6 @@ func (l *logindLease) Release() error {
 	l.once.Do(func() {
 		close(l.stop)
 		<-l.stopped
-		l.releaseError = l.file.Close()
 	})
 	return l.releaseError
 }
