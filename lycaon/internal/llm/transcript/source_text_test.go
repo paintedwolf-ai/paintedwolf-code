@@ -196,3 +196,38 @@ func summarizeMessage(body string) api.Message {
 	message.ToolResult.Tool = "summarize"
 	return message
 }
+
+func TestSourceProjectionPreservesFeedbackSuffix(t *testing.T) {
+	for _, tool := range []string{"read", "summarize"} {
+		t.Run(tool, func(t *testing.T) {
+			body := `{"mode":"content","offset":1,"end_line":1,"content":"     1: return \"quoted\"","receipt":{"tool":"read"}}`
+			if tool == "summarize" {
+				body = `{"pack":{"substance":[{"start_line":1,"end_line":1,"body":"     1: return \"quoted\""}]}}`
+			}
+			suffix := "\n>>> Tool feedback\nStop repeated reads.\nCode: DOOM_LOOP_REPEAT_WARN"
+			message := sourceReadMessage(body + suffix)
+			message.ToolResult.Tool = tool
+			before, err := json.Marshal(message)
+			testutil.FailErr(t, "capture input", err)
+			projected := transcript.Project([]api.Message{message})
+			got := projected[len(projected)-1].Content
+			for _, want := range []string{"⟦D:tool:source⟧", "⟦D⟧return \"quoted\"", "⟦D:tool:result_suffix⟧", "⟦D⟧Code: DOOM_LOOP_REPEAT_WARN"} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("missing %q in %s", want, got)
+				}
+			}
+			if strings.Contains(got, "     1: ") || strings.Count(got, "Code: DOOM_LOOP_REPEAT_WARN") != 1 {
+				t.Fatalf("source labels or duplicate feedback: %s", got)
+			}
+			again := transcript.Project(projected)
+			if again[len(again)-1].Content != got {
+				t.Fatal("projection is not idempotent")
+			}
+			after, err := json.Marshal(message)
+			testutil.FailErr(t, "capture retained input", err)
+			if string(before) != string(after) {
+				t.Fatal("projection changed retained message")
+			}
+		})
+	}
+}
