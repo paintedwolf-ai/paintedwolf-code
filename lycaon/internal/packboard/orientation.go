@@ -200,6 +200,7 @@ func FormatPromotePathStatusLine(rows []api.WorkerPromoteJobPathStatus) string {
 }
 
 func FormatWorkLine(tasks []api.WorkerTask, now time.Time) string {
+	outcomes := CountWorkerOutcomes(tasks)
 	inFlight := inFlightWorkerTasks(tasks)
 	if len(inFlight) > 0 {
 		line := fmt.Sprintf("Work: %d in flight", len(inFlight))
@@ -212,6 +213,9 @@ func FormatWorkLine(tasks []api.WorkerTask, now time.Time) string {
 		if len(chips) > 0 {
 			line += " · " + strings.Join(chips, " · ")
 		}
+		if labels := outcomes.Labels(); len(labels) > 0 {
+			line += " · " + strings.Join(labels, " · ")
+		}
 		oldest := oldestStartedAt(inFlight)
 		if oldest != nil {
 			if rel := FormatRelativeSince(now, *oldest); rel != "" {
@@ -220,17 +224,11 @@ func FormatWorkLine(tasks []api.WorkerTask, now time.Time) string {
 		}
 		return line
 	}
-	var done []api.WorkerTask
-	for _, t := range tasks {
-		if t.Status.IsTerminal() {
-			done = append(done, t)
-		}
-	}
-	if len(done) == 0 {
+	if outcomes.Total() == 0 {
 		return ""
 	}
-	line := fmt.Sprintf("Work: %d done", len(done))
-	last := latestCompletedAt(done)
+	line := "Work: " + strings.Join(outcomes.Labels(), " · ")
+	last := latestCompletedAt(tasks)
 	if last != nil {
 		if rel := FormatRelativeDuration(now, *last); rel != "" {
 			line += " · last " + rel
