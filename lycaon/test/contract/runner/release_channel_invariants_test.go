@@ -47,17 +47,17 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 		"linux-x86_64": {
 			UpdaterKey: "linux-x86_64", Runner: "ubuntu-22.04", ArtifactArch: "x86_64",
 			GOOS: "linux", GOARCH: "amd64", Publication: "candidate",
-			PackageExt: "AppImage", UpdaterExt: "AppImage.tar.gz",
+			PackageExt: "AppImage", UpdaterExt: "AppImage",
 		},
 		"linux-aarch64": {
 			UpdaterKey: "linux-aarch64", Runner: "ubuntu-22.04-arm", ArtifactArch: "aarch64",
 			GOOS: "linux", GOARCH: "arm64", Publication: "candidate",
-			PackageExt: "AppImage", UpdaterExt: "AppImage.tar.gz",
+			PackageExt: "AppImage", UpdaterExt: "AppImage",
 		},
 		"windows-x86_64": {
 			UpdaterKey: "windows-x86_64", Runner: "windows-2025", ArtifactArch: "x86_64",
 			GOOS: "windows", GOARCH: "amd64", Publication: "candidate",
-			PackageExt: "exe", UpdaterExt: "nsis.zip",
+			PackageExt: "exe", UpdaterExt: "exe",
 		},
 	}
 	if catalog.SchemaVersion != 1 || len(catalog.Platforms) != len(want) {
@@ -97,9 +97,9 @@ func TestUpdaterManifestAssemblerRequiresPublicBuildsAndExcludesCandidatePlatfor
 	catalogPath := filepath.Join(dir, "platforms.json")
 	catalog := `{"schema_version":1,"platforms":[` +
 		`{"updater_key":"darwin-aarch64","artifact_arch":"aarch64","publication":"public","updater_extension":"app.tar.gz"},` +
-		`{"updater_key":"linux-x86_64","artifact_arch":"x86_64","publication":"candidate","updater_extension":"AppImage.tar.gz"},` +
-		`{"updater_key":"linux-aarch64","artifact_arch":"aarch64","publication":"candidate","updater_extension":"AppImage.tar.gz"},` +
-		`{"updater_key":"windows-x86_64","artifact_arch":"x86_64","publication":"candidate","updater_extension":"nsis.zip"}]}`
+		`{"updater_key":"linux-x86_64","artifact_arch":"x86_64","publication":"candidate","updater_extension":"AppImage"},` +
+		`{"updater_key":"linux-aarch64","artifact_arch":"aarch64","publication":"candidate","updater_extension":"AppImage"},` +
+		`{"updater_key":"windows-x86_64","artifact_arch":"x86_64","publication":"candidate","updater_extension":"exe"}]}`
 	contractcheck.FailErr(t, "write platform catalog", os.WriteFile(catalogPath, []byte(catalog), 0o644))
 	notes := filepath.Join(dir, "notes.md")
 	contractcheck.FailErr(t, "write notes", os.WriteFile(notes, []byte("Ready to test.\n"), 0o644))
@@ -140,11 +140,11 @@ func TestUpdaterManifestAssemblerRequiresPublicBuildsAndExcludesCandidatePlatfor
 		}
 	}
 	run(true)
-	writeFragment("linux-x86_64", "AppImage.tar.gz")
+	writeFragment("linux-x86_64", "AppImage")
 	run(true)
-	writeFragment("linux-aarch64", "AppImage.tar.gz")
+	writeFragment("linux-aarch64", "AppImage")
 	run(true)
-	writeFragment("windows-x86_64", "nsis.zip")
+	writeFragment("windows-x86_64", "exe")
 	run(true)
 	var manifest struct {
 		Platforms map[string]json.RawMessage `json:"platforms"`
@@ -238,6 +238,50 @@ func TestReleasePublicationBoundaryExcludesCandidateBytes(t *testing.T) {
 	missing := exec.Command("python3", filepath.Join(root, "scripts", "release-collect-public-artifacts.py"), "--catalog", filepath.Join(root, "packaging", "release-platforms.json"), "--input", input, "--output", missingOutput, "--version", version)
 	if combined, err := missing.CombinedOutput(); err == nil {
 		t.Fatalf("missing engine audit accepted: %s", combined)
+	}
+}
+
+func TestReleasePublicationCollectsSharedInstallerUpdaterOnce(t *testing.T) {
+	root := contractcheck.RepoRoot(t)
+	for _, extension := range []string{"AppImage", "exe"} {
+		t.Run(extension, func(t *testing.T) {
+			dir := t.TempDir()
+			input, output := filepath.Join(dir, "input"), filepath.Join(dir, "output")
+			contractcheck.FailErr(t, "create audit input", os.MkdirAll(filepath.Join(input, "opengrep"), 0o755))
+			stem := "painted-wolf-code_v1.0.0_linux-x86_64"
+			for _, suffix := range []string{extension, extension + ".sha256", extension + ".sig"} {
+				contractcheck.FailErr(t, "write artifact", os.WriteFile(filepath.Join(input, stem+"."+suffix), []byte(suffix), 0o644))
+			}
+			contractcheck.FailErr(t, "write audit", os.WriteFile(filepath.Join(input, "opengrep", stem+".json"), []byte(`{}`), 0o644))
+			catalog := filepath.Join(dir, "catalog.json")
+			row := map[string]string{"updater_key": "linux-x86_64", "publication": "public", "package_extension": extension, "updater_extension": extension}
+			writeCatalog := func(rows []map[string]string) {
+				t.Helper()
+				raw, err := json.Marshal(map[string]any{"schema_version": 1, "platforms": rows})
+				contractcheck.FailErr(t, "encode catalog", err)
+				contractcheck.FailErr(t, "write catalog", os.WriteFile(catalog, raw, 0o644))
+			}
+			writeCatalog([]map[string]string{row})
+			run := func(destination string, wantSuccess bool) {
+				t.Helper()
+				cmd := exec.Command("python3", filepath.Join(root, "scripts", "release-collect-public-artifacts.py"), "--catalog", catalog, "--input", input, "--output", destination, "--version", "1.0.0")
+				combined, err := cmd.CombinedOutput()
+				if (err == nil) != wantSuccess {
+					t.Fatalf("collector success=%v want %v: %v\n%s", err == nil, wantSuccess, err, combined)
+				}
+			}
+			run(output, true)
+			entries, err := os.ReadDir(output)
+			contractcheck.FailErr(t, "read shared artifact set", err)
+			if len(entries) != 4 {
+				t.Fatalf("shared artifact count=%d, want 4", len(entries))
+			}
+			writeCatalog([]map[string]string{row, row})
+			run(filepath.Join(dir, "repeated"), false)
+			writeCatalog([]map[string]string{row})
+			contractcheck.FailErr(t, "remove signature", os.Remove(filepath.Join(input, stem+"."+extension+".sig")))
+			run(filepath.Join(dir, "unsigned"), false)
+		})
 	}
 }
 
