@@ -311,8 +311,8 @@ fn native_service_replaces_cancels_and_routes_only_owned_notifications() {
 }
 
 #[test]
-fn native_capability_admission_rejects_missing_actions_and_disconnected_services() {
-    for capabilities in [vec!["body".into()], vec!["actions".into(); 65]] {
+fn native_capability_admission_rejects_unbounded_and_disconnected_services() {
+    for capabilities in [vec!["actions".into(); 65], vec!["x".repeat(129)]] {
         let fixture = Fixture::new(capabilities);
         let context = glib::MainContext::new();
         context
@@ -351,6 +351,45 @@ fn native_capability_admission_rejects_missing_actions_and_disconnected_services
                 )
                 .unwrap();
             assert!(!delivery.current(Instant::now() + Duration::from_secs(2)));
+        })
+        .unwrap();
+}
+
+#[test]
+fn native_service_without_actions_preserves_delivery_and_clearing() {
+    let fixture = Fixture::new(vec!["body".into()]);
+    let context = glib::MainContext::new();
+    context
+        .with_thread_default(|| {
+            let activations = Rc::new(RefCell::new(0));
+            let routed = activations.clone();
+            let delivery = Delivery::new(
+                connect(&context, &fixture.address),
+                move |_, _| *routed.borrow_mut() += 1,
+                Instant::now() + Duration::from_secs(2),
+            )
+            .unwrap();
+            delivery
+                .send(
+                    "Title".into(),
+                    "Body".into(),
+                    Some("chat-a".into()),
+                    Instant::now() + Duration::from_secs(2),
+                )
+                .unwrap();
+            assert_eq!(*fixture.requests.lock().unwrap(), vec![(0, "Body".into())]);
+            fixture.signal("ActionInvoked", (1u32, "default").to_variant());
+            for _ in 0..100 {
+                while context.pending() {
+                    context.iteration(false);
+                }
+                thread::sleep(Duration::from_millis(2));
+            }
+            assert_eq!(*activations.borrow(), 0);
+            delivery
+                .cancel(&["chat-a".into()], Instant::now() + Duration::from_secs(2))
+                .unwrap();
+            assert_eq!(*fixture.closed.lock().unwrap(), vec![1]);
         })
         .unwrap();
 }
