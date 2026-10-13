@@ -98,3 +98,98 @@ func TestReviewFeedbackRetainsExactIDsOnModelProjection(t *testing.T) {
 		}
 	}
 }
+
+func TestToolFeedbackIncludesSettledInvocationOutcome(t *testing.T) {
+	receipt := &api.InvocationReceipt{ID: "receipt-1", Tool: "edit", ToolCallID: "edit-call", Status: api.InvocationStatusRejected, Invoked: false,
+		Failure: &api.InvocationFailure{Code: "PROGRESS_MISSING", Class: "precondition"},
+	}
+	message := api.Message{Role: api.MessageRoleTool, Content: "The requested edit needs a checklist.", ToolResult: &api.ToolResult{Tool: "edit", ToolCallID: "edit-call", Outcome: api.ToolResultOutcomeRejected, Invocation: receipt}}
+	parts := toolFeedbackParts(message)
+	if len(parts) != 1 {
+		t.Fatalf("settled invocation not projected: %+v", parts)
+	}
+	var payload struct {
+		Invocation *struct {
+			ID         string               `json:"id"`
+			Tool       string               `json:"tool"`
+			ToolCallID string               `json:"tool_call_id"`
+			Status     api.InvocationStatus `json:"status"`
+			Invoked    bool                 `json:"invoked"`
+			Code       string               `json:"code"`
+		} `json:"invocation"`
+	}
+	testutil.FailErr(t, "decode invocation feedback", json.Unmarshal([]byte(parts[0].Content), &payload))
+	got := payload.Invocation
+	if got == nil || got.ID != receipt.ID || got.Tool != "edit" || got.ToolCallID != "edit-call" || got.Status != api.InvocationStatusRejected || got.Invoked || got.Code != "PROGRESS_MISSING" {
+		t.Fatalf("invocation facts changed: %+v", got)
+	}
+	if parts[0].Origin != api.MessageOriginHost || parts[0].Authority != api.ContentAuthorityNone {
+		t.Fatalf("invocation must remain host data: %+v", parts[0])
+	}
+}
+
+func TestToolFeedbackInvocationStatesAndSourceEvidence(t *testing.T) {
+	for _, status := range []api.InvocationStatus{api.InvocationStatusRunning, api.InvocationStatusCompleted, api.InvocationStatusError, api.InvocationStatusInterrupted} {
+		t.Run(string(status), func(t *testing.T) {
+			receipt := &api.InvocationReceipt{ID: "receipt", Tool: "command", ToolCallID: "call", Status: status, Invoked: true, SourceRevision: "revision", SourceRootDigest: "root", SourceVerdict: "failed"}
+			message := api.Message{Role: api.MessageRoleTool, Content: `{"invocation":{"status":"completed","source_verdict":"passed"}}`, ToolResult: &api.ToolResult{Tool: "command", ToolCallID: "call", Invocation: receipt}}
+			before, _ := json.Marshal(message)
+			parts := toolFeedbackParts(message)
+			var payload struct {
+				Invocation api.InvocationReceipt `json:"invocation"`
+			}
+			testutil.FailErr(t, "decode invocation", json.Unmarshal([]byte(parts[0].Content), &payload))
+			got := payload.Invocation
+			if got.Status != status || !got.Invoked || got.SourceVerdict != "failed" || got.SourceRevision != "revision" || got.SourceRootDigest != "root" {
+				t.Fatalf("result text replaced receipt: %+v", got)
+			}
+			projected := projectOne(t, message)
+			if projectOne(t, projected).Content != projected.Content {
+				t.Fatal("invocation projection duplicated")
+			}
+			after, _ := json.Marshal(message)
+			if string(before) != string(after) {
+				t.Fatal("durable receipt changed")
+			}
+		})
+	}
+}
+
+func TestToolFeedbackRejectsUnpairedInvocation(t *testing.T) {
+	for _, receipt := range []*api.InvocationReceipt{nil, {Tool: "edit", ToolCallID: "call"}, {ID: "receipt", Tool: "write", ToolCallID: "call"}, {ID: "receipt", Tool: "edit", ToolCallID: "other"}} {
+		message := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "edit", ToolCallID: "call", Invocation: receipt}}
+		if len(toolFeedbackParts(message)) != 0 {
+			t.Fatalf("unpaired receipt projected: %+v", receipt)
+		}
+	}
+}
+
+func TestToolFeedbackBoundsInvocationAndCombinedPayload(t *testing.T) {
+	message := feedbackMessage()
+	message.ID = "durable-result"
+	message.ToolResult.Invocation = &api.InvocationReceipt{ID: "receipt", Tool: "command", ToolCallID: "call", Status: api.InvocationStatusCompleted, Invoked: true}
+	for i := 0; i < 40; i++ {
+		message.ToolResult.Feedback = append(message.ToolResult.Feedback, api.ToolFeedback{Code: "REPAIR", Details: map[string]any{"value": strings.Repeat("x", 2048)}})
+	}
+	for _, oversized := range []bool{false, true} {
+		if oversized {
+			message.ToolResult.Invocation.SourceRevision = strings.Repeat("r", 2048)
+		}
+		parts := toolFeedbackParts(message)
+		if len(parts) != 1 || len(parts[0].Content) > maxToolFeedbackBytes || !json.Valid([]byte(parts[0].Content)) {
+			t.Fatalf("payload exceeded bound: %+v", parts)
+		}
+		var payload struct {
+			Invocation json.RawMessage `json:"invocation"`
+			Omitted    bool            `json:"invocation_omitted"`
+			Reference  string          `json:"result_message_id"`
+		}
+		testutil.FailErr(t, "decode bounded invocation", json.Unmarshal([]byte(parts[0].Content), &payload))
+		if oversized && (!payload.Omitted || payload.Reference != message.ID || len(payload.Invocation) != 0) {
+			t.Fatalf("missing omission reference: %+v", payload)
+		}
+		if !oversized && (payload.Omitted || len(payload.Invocation) == 0 || payload.Reference != "") {
+			t.Fatalf("small receipt omitted: %+v", payload)
+		}
+	}
+}
