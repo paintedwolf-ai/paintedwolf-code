@@ -55,13 +55,13 @@ func (m *Service) repairModelOutputProjection(ctx context.Context, item store.Pe
 			return fmt.Errorf("decode model output tool calls %s: %w", output.ID, err)
 		}
 	}
+	message.ModelReasoning = nil
 	if strings.TrimSpace(output.ReasoningJSON) != "" && output.ReasoningJSON != "null" {
 		if err := json.Unmarshal([]byte(output.ReasoningJSON), &message.ModelReasoning); err != nil {
 			return fmt.Errorf("decode model output reasoning %s: %w", output.ID, err)
 		}
 	}
-	// The immutable output is replayed through the screened update door, so a
-	// recovered projection is screened exactly like the row it replaces.
+	// Recovery uses the same screened update door as settlement.
 	if err := m.Update(ctx, output.SessionID, output.MessageID, message); err != nil {
 		return fmt.Errorf("repair model output projection %s: %w", output.ID, err)
 	}

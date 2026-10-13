@@ -54,14 +54,32 @@ func HostConversationEvent(message api.Message) bool {
 	return message.Origin == api.MessageOriginHost && message.Visibility == api.MessageVisibilityInternal && message.Kind != ""
 }
 
-// ReasoningForModel returns traces to their originating provider and model only.
-func ReasoningForModel(m api.Message, providerID, model string) *api.ModelReasoning {
-	r := m.ModelReasoning
-	if r == nil || r.Text == "" && len(r.Details) == 0 {
-		return nil
+// ReasoningReplayScope describes the transport's accepted history.
+type ReasoningReplayScope uint8
+
+const (
+	ReasoningReplayNone ReasoningReplayScope = iota
+	ReasoningReplayHistory
+	ReasoningReplayCurrentToolLoop
+)
+
+// ProjectReasoning selects replay state without changing durable messages.
+func ProjectReasoning(messages []api.Message, providerID, model string, scope ReasoningReplayScope) []api.Message {
+	out := append([]api.Message(nil), messages...)
+	start := 0
+	if scope == ReasoningReplayCurrentToolLoop {
+		start = api.UserIntentBoundary(messages)
 	}
-	if providerID == "" || model == "" || r.ProviderID != providerID || r.Model != model {
-		return nil
+	for i := range out {
+		m := &out[i]
+		r := m.ModelReasoning
+		eligible := scope != ReasoningReplayNone && i >= start && m.Role == api.MessageRoleAssistant
+		if scope == ReasoningReplayCurrentToolLoop && len(m.ToolCalls) == 0 {
+			eligible = false
+		}
+		if !eligible || r == nil || r.Text == "" && len(r.Details) == 0 || providerID == "" || model == "" || r.ProviderID != providerID || r.Model != model {
+			m.ModelReasoning = nil
+		}
 	}
-	return r
+	return out
 }

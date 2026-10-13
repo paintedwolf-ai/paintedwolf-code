@@ -60,7 +60,7 @@ func TestProviderStandingPrefixExcludesChangingHostContext(t *testing.T) {
 			assertPartition(t, system, conversation)
 		})
 		t.Run("ollama", func(t *testing.T) {
-			projected := ollamaprovider.ProjectMessages(messages, false, "")
+			projected := ollamaprovider.ProjectMessages(messages, ollamaprovider.MessageProjection{})
 			assertPartition(t, projected[0], projected[1:])
 		})
 		for name, profile := range map[string]providerprofile.Profile{
@@ -102,7 +102,7 @@ func TestTemplateProvidersUseOneSystemSlot(t *testing.T) {
 			}
 		})
 	}
-	ollama := ollamaprovider.ProjectMessages(messages, false, "")
+	ollama := ollamaprovider.ProjectMessages(messages, ollamaprovider.MessageProjection{})
 	if len(ollama) != 4 || ollama[0].Role != "system" || ollama[0].Content != "First.\n\nSecond." || ollama[3].Role != "user" {
 		t.Fatalf("native template conversation = %+v", ollama)
 	}

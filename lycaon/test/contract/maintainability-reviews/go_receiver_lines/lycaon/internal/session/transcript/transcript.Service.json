@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/session/transcript/transcript.Service",
+  "kind": "runtime_service",
+  "workstream": "project-reasoning-retention",
+  "disposition": "retain",
+  "reason": "The service owns screened transcript mutation, event publication, and interrupted output projection recovery. Reasoning replacement uses the same update transaction and acknowledgement lifecycle. Keep this operation owner intact with phase files exposing its responsibilities.",
+  "reviewed_commit": "3eea863db8acb72e10e6766da8b55fce3ee992cd",
+  "ceiling": 628,
+  "boundaries": {
+    "lycaon/internal/session/message_patch_test.go": "4b8adbb037a35af69e1473b7be2e8868881b3bb3c572c8ace6fe9a90a1350f84",
+    "lycaon/internal/session/history/compaction_snapshot_test.go": "41df90d351deea137bffad849c3eb8526cba4f1315ecc970f2351e54359f83aa"
+  },
+  "reviewed_shape": "d06c8057c0d0df42d931e44bab415cda32918fda51f42af5fd37cea6bd7f2071"
+}

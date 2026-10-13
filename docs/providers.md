@@ -150,6 +150,96 @@ providers:
 
 Streaming and complete responses retain reasoning separately from visible assistant text. Replay is restricted to the exact provider instance and model that produced it; tool-call identities remain paired with their results. Reasoning control (`think_style`, effort mapping, thinking settings) is a separate axis from preserving the response history.
 
+### Reasoning storage and retention
+
+Reasoning belongs to the producing assistant output, with its exact provider
+instance and model identity. Retain both plaintext traces and
+structured provider blocks when returned, including outputs that finish without
+a tool call. They stay separate from visible assistant text and are excluded
+from transcript HTTP/SSE encoding. Reasoning prose has no authority over host
+control, completion, or tool admission.
+
+Settlement stores the screened output in the existing compressed,
+content-addressed model-output envelope and projects it into the message row.
+The immutable envelope supports interrupted-projection recovery; the row supports
+history loading. Both belong to the project through their originating chat.
+Deleting a chat deletes its reasoning and its child chats' reasoning in the same
+transaction as their history. Deleting the project deletes all its retained chats.
+Unreferenced envelopes enter the existing bounded blob reclaim queue; envelopes
+still referenced by another retained chat remain. Physical reclamation follows
+maintenance rather than blocking chat deletion. Recovery captures and backups
+retain their point-in-time history under the existing backup lifecycle; deleting
+a live chat does not rewrite older backups.
+Do not expire reasoning independently by age or delete it on a model switch:
+resuming, rewinding, or switching back can need the original continuation.
+Prompt compaction changes the request view rather than deleting durable history.
+No additional reasoning archive or diagnostic database is maintained.
+
+A message replacement replaces its reasoning too. Recovery restores the exact
+payload from the settled output, including absence of reasoning. Secret screening
+drops the entire trace if any plaintext or structured block matches; it never
+rewrites a signed block. A retained assistant's content and reasoning are not
+independently summarized or truncated. Whole old exchanges may leave the request
+through normal compaction, while retained tool exchanges keep their replay state.
+
+Adapters select replay without mutating the stored history:
+
+| Transport | Replay selection |
+| --- | --- |
+| Native Ollama | Tool-call assistant rows in the current user intent; host feedback preserves that boundary |
+| Native Anthropic | Matching assistant history, preserving thinking and redacted-thinking blocks |
+| Compatible chat | Matching assistant history in the configured `reasoning_wire` format; `none` omits it |
+| Google tool signatures | Existing signature metadata remains attached to its producing tool call |
+
+Every selection requires the exact originating provider/model pair. Host context
+estimates include retained plaintext, structured payloads, and opaque tool-call
+metadata conservatively;
+Ollama admission counts the actual projected thinking, messages, tool arguments,
+and callable schemas. Required replay state is never clipped to make a request
+fit: existing context admission or compaction must resolve excess.
+
+Storage grows with retained model outputs, independently of the prompt window.
+For `N` outputs averaging `R` bytes of encoded reasoning, the message projection
+adds roughly `N × R` bytes before SQLite overhead. The immutable envelope adds a
+compressed copy; plaintext and structured blocks may themselves contain duplicate
+text required by the transport. Use the working-year fixtures' 250 working days
+for planning. An assumed 20 requests per day with ten outputs per request,
+including worker and utility calls, yields 50,000 retained outputs per year.
+At 10 KiB per encoded trace, their message projections add about 488 MiB, plus
+compressed envelopes, backups, and temporary WAL growth. This request rate and
+trace size are planning assumptions, not a measured developer workload.
+Compression and content addressing do not impose a
+retention limit. Measure actual bytes and output counts before changing the
+session-wide retention policy; short benchmark sessions cannot establish a
+long-term storage distribution.
+
+Project retention already follows from this ownership: retained chats and their
+model-output envelopes belong to a project. User access and search do not require
+an archive with a separate lifetime. The recommended search design indexes
+screened readable text once at settlement, resolves the body from existing
+history, and removes entries with their chat. Keep opaque provider blocks private.
+Expose reasoning as a distinct channel with its originating output and model;
+it records generated reasoning, not verified execution. Search inclusion must be
+explicit so speculative traces do not displace ordinary messages or source hits.
+Search retention must not expand adapter replay or bypass context admission.
+This user-facing search surface is not currently implemented.
+
+A local diagnostic sample of 131 Gemma outputs contained 255,892 bytes of encoded
+reasoning and 243,784 bytes of readable text. A standalone contentless SQLite
+FTS5 index added 106,496 bytes after optimization, using 4 KiB pages. At that
+sample's averages, 100,000 outputs would add approximately 186 MiB of message
+projection data and 78 MiB of index data, excluding row overhead, WAL, backups,
+and the already retained compressed envelopes. These short E2B/E4B runs are a
+cost sample, not an upper bound or model-quality qualification. Large-model
+traces, structured duplication, index maintenance, and backup amplification need
+separate measurement before choosing a retention limit. Storage accounting
+should distinguish canonical envelopes, message projections, and derived indexes.
+
+Diagnostic captures normally retain reasoning byte counts. Failed empty or
+reasoning-truncated calls may include a redacted tail of at most 2,048 characters;
+if the complete screening buffer exceeds 512 KiB, omit that tail. Diagnostic log
+retention remains independent of the durable session history.
+
 ### Thinking overrides
 
 Settings → AI providers places optional **Thinking overrides** below the model assignments, hidden until **Override thinking** is checked. Turning it off clears the overrides at that scope. Each row belongs to an exact provider instance and model id; the same model served by another provider is a separate choice. Project configuration → AI providers has independent overrides: an unchecked row inherits the device setting, **Use application behavior** masks an inherited fixed setting, and clearing the project row restores inheritance. Assignment changes do not pin or clear thinking settings.

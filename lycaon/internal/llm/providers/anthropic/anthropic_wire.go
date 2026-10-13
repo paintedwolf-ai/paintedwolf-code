@@ -166,6 +166,7 @@ func NormalizeUsage(u *Usage) modelcall.TokenUsage {
 // whatever the role; tool results pair with preceding tool-use ids.
 // Vision-enabled requests convert user artifacts into image blocks.
 func ProjectMessages(msgs []api.Message, breakpoints []providerwire.PromptCacheBreakpoint, vision bool, sessionID, providerID, model string) (system []ContentBlock, out []anthropicMessage) {
+	msgs = providerwire.ProjectReasoning(msgs, providerID, model, providerwire.ReasoningReplayHistory)
 	pendingToolUseIDs := make(providerwire.ToolCallPairs)
 	marked := providerwire.PromptCacheBreakpointSet(breakpoints)
 	preambleEnd := providerwire.SystemPreambleEnd(msgs)
@@ -195,7 +196,7 @@ func ProjectMessages(msgs []api.Message, breakpoints []providerwire.PromptCacheB
 			}
 			system = append(system, block)
 		case api.MessageRoleAssistant:
-			if reasoning := providerwire.ReasoningForModel(m, providerID, model); reasoning != nil {
+			if reasoning := m.ModelReasoning; reasoning != nil {
 				for _, raw := range reasoning.Details {
 					var block ContentBlock
 					if json.Unmarshal(raw, &block) != nil || block.Type != "thinking" && block.Type != "redacted_thinking" {
