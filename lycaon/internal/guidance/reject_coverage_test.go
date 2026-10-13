@@ -226,27 +226,21 @@ func TestCapabilityRequestFieldsReachRejectCopy(t *testing.T) {
 	}
 }
 
-func TestTaskWorkIdentityRecoveryUsesHostArgumentFacts(t *testing.T) {
+func TestInapplicableArgumentRecoveryUsesHostFacts(t *testing.T) {
 	setupGuidanceRenderer(t)
 	cfg := loadValidatedHints(t)
 	entry := cfg.HintCodes["TOOL_ARGS_INVALID"]
-	for _, tc := range []struct {
-		field, reason string
-		omit          bool
-	}{
-		{"workflow_work_id", "not_a_planned_fanout_phase", true},
-		{"workflow_work_id", "workflow_phase_changed", false},
-		{"child_session_id", "not_a_planned_fanout_phase", false},
-	} {
+	for _, fields := range [][]string{nil, {"workflow_work_id"}, {"first", "second"}} {
 		block, err := guidance.RenderUnifiedRejectBlock(t.Context(), "TOOL_ARGS_INVALID", entry, map[string]any{
-			"tool": "task", "field": tc.field, "reason": tc.reason,
+			"tool": "task", "field": "workflow_work_id", "reason": "not_a_planned_fanout_phase",
+			"inapplicable_fields": fields,
 		})
-		testutil.FailErr(t, "render task argument recovery", err)
-		if !strings.Contains(block, "at `"+tc.field+"`") || strings.Contains(block, "Omit `workflow_work_id`") != tc.omit {
-			t.Fatalf("recovery for %+v: %s", tc, block)
+		testutil.FailErr(t, "render argument recovery", err)
+		if !strings.Contains(block, "at `workflow_work_id`") || strings.Contains(block, "Omit `") != (len(fields) > 0) {
+			t.Fatalf("recovery for %v: %s", fields, block)
 		}
-		if tc.omit && !strings.Contains(block, "keep its `child_session_id`") {
-			t.Fatal("resume recovery lost the worker identity")
+		if len(fields) > 0 && !strings.Contains(block, "Omit `"+strings.Join(fields, ", ")+"`") {
+			t.Fatalf("recovery lost the inapplicable fields: %s", block)
 		}
 	}
 }
