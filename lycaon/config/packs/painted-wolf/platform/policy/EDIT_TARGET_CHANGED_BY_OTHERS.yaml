@@ -28,13 +28,13 @@ copy:
   why: Read the current text before attributing the mismatch or recomputing an edit; the existence of a foreign
     change alone does not prove it caused this miss.
   fix: >-
-    {% if paintedwolf.replacement_matches %}The requested nonempty new_string already occurs
-    {{ paintedwolf.replacement_matches }} time(s) in the edit basis, first at line
-    {{ paintedwolf.replacement_line }}. This call made no change; this observation does not prove an earlier
-    edit succeeded. Read {{ paintedwolf.path }} to check whether the intended change is already satisfied
-    before attempting another mutation.{% else %}Read {{ paintedwolf.path }} again; use read_hint when present.
-    Check whether the intended change is still needed. If it is, copy a fresh verbatim substring into old_string,
-    without displayed line labels and preserving indentation.{% endif %}
+    {% if paintedwolf.replacement_matches %}The requested new_string is already present
+    {{ paintedwolf.replacement_matches }} time(s) in the edit basis, first at line {{ paintedwolf.replacement_line }}.
+    This call made no change; this does not prove an earlier edit succeeded. Read the current text there.
+    If it is the intended result, continue with the remaining task without applying this edit again.
+    Otherwise, compute a different edit from the fresh source while preserving the other actors' changes.
+    {% else %}Read {{ paintedwolf.path }} and check whether the intended change is still needed.
+    If needed, copy a fresh verbatim substring into old_string, without displayed line labels and preserving indentation.{% endif %}
   instead: Inspect source_history when attribution is needed. Do not repeat the same edit or replace the whole
     file merely to bypass a missing match.
 
@@ -65,6 +65,6 @@ x-paintedwolf-scenarios:
     replacement_matches: 1
     replacement_line: 7
   expect_contains:
-  - 'already occurs'
+  - 'already present'
   - 'This call made no change'
   - 'does not prove an earlier'
