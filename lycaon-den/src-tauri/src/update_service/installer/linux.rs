@@ -130,6 +130,18 @@ pub fn prepare(
             .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?
             .len(),
     )?;
+    let preparing_prefix = format!("{}preparing-", super::prepared_prefix(target));
+    for entry in fs::read_dir(parent).map_err(|e| UpdateError::new(Failure::StateUnavailable, e))? {
+        let entry = entry.map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name
+            .strip_prefix(&preparing_prefix)
+            .is_some_and(|id| uuid::Uuid::parse_str(id).is_ok())
+            && super::current_user_installation(&entry.path())
+        {
+            super::remove_installation(&entry.path())?;
+        }
+    }
     let destination = super::prepared_path(target, candidate)?;
     let temporary = parent.join(format!(
         "{}preparing-{}",
