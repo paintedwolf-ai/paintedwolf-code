@@ -46,7 +46,10 @@ def group_state(issue):
         raise ValueError('invalid workstream tracking block')
     match = re.match(r'\n<!-- state:(\{[^\n]*\}) -->\n', body[body.index(START) + len(START):])
     state = json.loads(match[1]) if match else {}
-    if not isinstance(state, dict) or not relative(state.get('workstream')) or not isinstance(state.get('inventory'), str):
+    if (not isinstance(state, dict) or not relative(state.get('workstream'))
+            or not isinstance(state.get('inventory'), str)
+            or not isinstance(state.get('evidence_digest'), str)
+            or not re.fullmatch('[0-9a-f]{64}', state['evidence_digest'])):
         raise ValueError('invalid workstream tracking state')
     try:
         decoder = zlib.decompressobj()
@@ -60,13 +63,12 @@ def group_state(issue):
         raise ValueError('invalid workstream artifacts')
     seen = set()
     for row in state['artifacts']:
-        if not isinstance(row, dict) or set(row) != {'category', 'id', 'evidence_digest'}:
+        if not isinstance(row, dict) or set(row) != {'category', 'id'}:
             raise ValueError('invalid workstream artifact')
         # Reuse the validated v1 artifact identity grammar inside the new envelope.
         encoded = json.dumps(dict(row, key=key(row['category'], row['id'])), separators=(',', ':')).replace('<', '\\u003c')
         parsed = tracked({**issue, 'body': LEGACY_START + '\n<!-- state:' + encoded + ' -->\n' + END})
-        if (set(row) != {'category', 'id', 'evidence_digest'}
-                or not re.fullmatch('[0-9a-f]{64}', row.get('evidence_digest', ''))
+        if (set(row) != {'category', 'id'}
                 or parsed['key'] in seen or workstream(row) != state['workstream']):
             raise ValueError('duplicate or misplaced workstream artifact')
         seen.add(parsed['key'])
@@ -79,9 +81,16 @@ def evidence(row):
             'evidence_digest': hashlib.sha256(json.dumps(full, sort_keys=True, separators=(',', ':')).encode()).hexdigest()}
 
 
+
+def area_digest(rows):
+    payload = [evidence(row) for row in sorted(rows, key=lambda r: (r['id'], r['category']))]
+    return hashlib.sha256(json.dumps(payload, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
 def block(identity, rows, observation):
-    inventory = json.dumps([evidence(row) for row in rows], sort_keys=True, separators=(',', ':')).encode()
-    state = {'workstream': identity, 'inventory': base64.b64encode(zlib.compress(inventory)).decode(), **observation}
+    identities = [{k: row[k] for k in ('category', 'id')} for row in sorted(rows, key=lambda r: (r['id'], r['category']))]
+    inventory = json.dumps(identities, sort_keys=True, separators=(',', ':')).encode()
+    state = {'workstream': identity, 'inventory': base64.b64encode(zlib.compress(inventory)).decode(),
+             'evidence_digest': area_digest(rows), **observation}
     encoded = json.dumps(state, sort_keys=True, separators=(',', ':')).replace('<', '\\u003c').replace('>', '\\u003e')
     modules = {}
     for row in rows:
@@ -92,11 +101,21 @@ def block(identity, rows, observation):
              'not separate refactor tasks. Preserve operation contracts; choose refactoring, consolidation, or bounded retention.', '',
              '| Module | Findings | Hard-limit breaches | Renewed reviews |',
              '| --- | ---: | ---: | ---: |']
-    for name, findings in sorted(modules.items()):
+    ranked = sorted(modules.items(), key=lambda item: (
+        -sum(r['measured'] > r['effective_cap'] for r in item[1]),
+        -sum(r.get('review', {}).get('state') in {'boundary_changed', 'shape_changed', 'ceiling_exceeded'} for r in item[1]),
+        -len(item[1]), item[0]))
+    visible = []
+    for name, findings in ranked:
         hard = sum(r['measured'] > r['limit'] for r in findings)
         renewed = sum(r.get('review', {}).get('state') in {'boundary_changed', 'shape_changed', 'ceiling_exceeded'} for r in findings)
-        lines.append(f"| `{html.escape(name)}` | {len(findings)} | {hard} | {renewed} |")
-    for name, findings in sorted(modules.items()):
+        summary = f"| `{html.escape(name)}` | {len(findings)} | {hard} | {renewed} |"
+        if len('\n'.join(lines).encode()) + len(summary.encode()) > 40000:
+            lines += ['', f'{len(modules) - len(visible)} additional modules are listed in the complete qualification report.']
+            break
+        lines.append(summary)
+        visible.append((name, findings))
+    for name, findings in visible:
         detail_start = len(lines)
         lines += ['', '<details>', f'<summary>{html.escape(name)} — {len(findings)} findings</summary>', '',
                   '| Artifact | Metric | Measured | Warn | Hard limit | Effective cap | Review |',
@@ -120,7 +139,7 @@ def block(identity, rows, observation):
             break
     lines += ['', f"[Measured main snapshot and complete report]({observation['run_url']}) at `{observation['source_sha']}`.", '',
               'The qualification report retains full source membership, exceptions, and review evidence. '
-              'Tracking fingerprints cover all those facts. This issue closes only when all admitted findings '
+              'The area fingerprint covers all those facts. This issue closes only when all admitted findings '
               'are removed, below threshold, or retained by valid bounded review.', END]
     return '\n'.join(lines)
 
@@ -135,11 +154,12 @@ def body_for(issue, managed):
 
 def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
     intake_keys = intake_keys if intake_keys is not None else {k for k, r in artifacts.items() if r['touched']}
-    groups, old, previous = {}, {}, {}
+    groups, old, previous, states = {}, {}, {}, {}
     for issue in sorted(issues, key=lambda i: (START not in (i.get('body') or ''), i['number'])):
         state = group_state(issue)
         if state:
             groups.setdefault(state['workstream'], []).append(issue)
+            states[issue['number']] = state
             for row in state['artifacts']:
                 previous.setdefault(key(row['category'], row['id']), (issue, row))
         elif SUPERSEDED not in (issue.get('body') or ''):
@@ -147,13 +167,22 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
             if row:
                 old.setdefault(workstream(row), []).append(issue)
                 previous.setdefault(row['key'], (issue, row))
+    dismissed_areas = set()
+    for number, state in states.items():
+        issue = next(i for i in issues if i['number'] == number)
+        members = {key(r['category'], r['id']) for r in state['artifacts']}
+        current = [artifacts[k] for k in members if k in artifacts and not retained(artifacts[k])]
+        if (issue['state'] == 'closed' and issue.get('state_reason') == 'not_planned'
+                and not members.intersection(intake_keys) and not any(r.get('review') for r in current)
+                and area_digest(current) == state['evidence_digest']):
+            dismissed_areas.add(number)
     active, suppressed = {}, 0
     for identity, row in sorted(artifacts.items()):
         prior = previous.get(identity)
-        if retained(row) or (prior and prior[0]['state'] == 'closed' and prior[0].get('state_reason') == 'not_planned'
-                            and identity not in intake_keys and not row.get('review')
-                            and (evidence(row) == prior[1] if 'evidence_digest' in prior[1]
-                                 else unchanged(row, prior[1]))):
+        legacy_dismissal = (prior and prior[0]['number'] not in states
+                            and prior[0]['state'] == 'closed' and prior[0].get('state_reason') == 'not_planned'
+                            and identity not in intake_keys and not row.get('review') and unchanged(row, prior[1]))
+        if retained(row) or legacy_dismissal or (prior and prior[0]['number'] in dismissed_areas):
             suppressed += 1
             continue
         renewed = row.get('review', {}).get('state') in {'boundary_changed', 'shape_changed', 'ceiling_exceeded'}
@@ -174,7 +203,7 @@ def plan(issues, artifacts, observation, backfill=False, intake_keys=None):
             continue
         state = group_state(canonical)
         desired = 'open' if rows else 'closed'
-        same = state and [evidence(r) for r in rows] == state['artifacts']
+        same = state and area_digest(rows) == state['evidence_digest']
         # A dismissal retains its comparison evidence until facts renew intake.
         if state and not rows and canonical['state'] == 'closed' and canonical.get('state_reason') == 'not_planned':
             same = True

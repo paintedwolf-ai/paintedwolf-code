@@ -185,3 +185,27 @@ class WorkstreamTests(unittest.TestCase):
         for changed in [{**entry, 'measured': 360}, {**entry, 'warn': 250}]:
             ops, _ = self.groups.plan([closed], self.artifacts(changed), observation(), intake_keys=set())
             self.assertEqual(ops[0]['action'], 'reopen')
+
+    def test_full_application_scale_uses_compact_identities_and_bounded_summaries(self):
+        entries = [row(f'app/internal/module{i}/service{i}.go') for i in range(2000)]
+        entries[-1]['measured'] = 901
+        ops, _ = self.groups.plan([], self.artifacts(*entries), observation(), backfill=True)
+        self.assertEqual(len(ops), 1)
+        body = ops[0]['body']['body']
+        self.assertLess(len(body.encode()), 60000)
+        state = self.groups.group_state(issue(body=body))
+        self.assertEqual(len(state['artifacts']), 2000)
+        self.assertEqual(len(state['evidence_digest']), 64)
+        self.assertTrue(all(set(r) == {'category', 'id'} for r in state['artifacts']))
+        self.assertIn('module1999', body)
+        self.assertIn('additional modules are listed in the complete qualification report', body)
+
+    def test_area_evidence_change_renews_the_shared_review(self):
+        first, second = row('pkg/a.go'), row('pkg/b.go')
+        ops, _ = self.groups.plan([], self.artifacts(first, second), observation())
+        closed = issue(state='closed', state_reason='not_planned', body=ops[0]['body']['body'])
+        self.assertEqual(self.groups.plan([closed], self.artifacts(first, second), observation(), intake_keys=set()), ([], 2))
+        changed = {**second, 'warn': 250}
+        ops, _ = self.groups.plan([closed], self.artifacts(first, changed), observation(), intake_keys=set())
+        self.assertEqual(ops[0]['action'], 'reopen')
+        self.assertEqual(len(self.groups.group_state(issue(body=ops[0]['body']['body']))['artifacts']), 2)

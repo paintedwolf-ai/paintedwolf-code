@@ -213,8 +213,10 @@ up new modules. These are cleanup planning areas, not runtime authority boundari
 Architectural review workstreams remain evidence on their individual findings.
 
 A version 2 machine-owned issue-body block retains every admitted artifact's
-identity, measurement in the rendered tables, thresholds, and fingerprint of full source membership,
-exceptions, structural shape, and review record. The compressed, bounded tracking inventory stores identities and fingerprints.
+identity, measurement in the rendered tables, and thresholds. One area fingerprint
+covers all measurements, full source membership, exceptions, structural shapes,
+and review records. The compressed, bounded tracking inventory stores admitted identities; it does
+not duplicate per-artifact hashes or full measurements.
 The linked qualification report
 retains the complete evidence. Module summaries distinguish hard-limit breaches
 and renewed reviews; expandable sections list individual measurements and source links.
@@ -223,7 +225,9 @@ without comments on each run. Unchanged findings produce no writes. An issue
 closes when every admitted finding disappears, drops below threshold, or has a
 valid retained review. Invalidated retention renews intake even without a source
 touch. Completed area issues reopen when actionable debt returns. Unchanged
-not-planned artifact dismissals remain suppressed until touched or changed.
+not-planned artifact dismissals remain suppressed until touched or changed. An area
+dismissal retains its admitted identities and comparison fingerprint. A touch or
+any changed evidence renews the area review.
 
 Migration adopts the oldest automatic artifact issue in each area, then closes
 other artifact issues as **not planned** with a link to the area issue. The
@@ -247,8 +251,9 @@ debt and establishes a fresh checkpoint after a successful apply. Review the
 retained `maintainability-issues.json` plan and category counts before applying a
 backfill. Each apply creates at most 25 new area issues, spaces mutations one second
 apart, and records applied/deferred counts. Deferred intake does not advance the
-checkpoint; later runs or another explicit backfill dispatch continue it. As details grow, module summaries stay in the issue and oversized detail sections
-link to the complete report. The 60,000-byte issue bound still fails closed before
+checkpoint; later runs or another explicit backfill dispatch continue it. As details grow, module summaries rank effective-cap breaches and renewed reviews
+first. Summary and detail sections have separate byte bounds; overflow links to the
+complete report without creating more issues. The 60,000-byte issue bound still fails closed before
 any write if even the summary and bounded inventory cannot fit. The workflow never runs downloaded code or changes admission limits.
 
 #### Architectural review decisions
