@@ -262,31 +262,3 @@ The benchmark aims to distinguish coarse capability gaps, roughly 15–20 percen
 The larger tasks in [`coordinator-calibration.json`](../lycaon/test/fixtures/eval/coordinator-calibration.json) challenge whether the operation scores predict sustained coordinator performance; their scores are separate measurements and are never relabeled as the operation bank or added to the public numerator after inspecting a model's outcome.
 
 The public status remains **calibrating**. A readiness recommendation needs agreement with larger held-out tasks across more configurations and repeated runs: freeze a proposed decision rule before testing it on new held-out tasks, and do not choose a cutoff to make a favored model pass.
-
-## Prompt and host investigations
-
-For exploratory model failures, first reconstruct the request the model actually
-received and the host outcomes of its calls. Treat the response as a reasonable
-interpretation of that request until a controlled experiment rules out a prompt,
-protocol, tool-result, or host-state explanation. Keep a model-capability
-explanation provisional while those alternatives remain untested.
-
-Freeze the application commit, catalog digest, provider version, model weight
-identity when available, sampling controls, and fixture baseline for each arm.
-Record unmerged changes explicitly and keep diagnostic compositions out of
-shipping integration PRs. Hydrate deduplicated request bodies before inspection;
-redacted debug schemas are evidence, not executable provider requests.
-
-Change one causal factor at a time. Prefer situation-specific procedures and
-feedback derived from typed host facts over additional standing instructions.
-Exercise the real application after a focused protocol experiment: a successful
-isolated response does not establish successful task delivery. Preserve rejected
-calls, invocation outcomes, delivered files, and independent oracle results.
-
-Compare promising changes with the same medium or large model reference on both
-arms. Include direct answers, ordinary JSON answers, source-based explanations,
-inline repair, and delegated work when the changed boundary serves those cases.
-Report complete deliverables separately from correct code, false completion,
-recovery cost, and incomplete execution. Keep approval, confinement, grounding,
-and verification requirements in the acceptance criteria. Exploratory counts
-remain diagnostic evidence until the benchmark's sampling protocol is met.
