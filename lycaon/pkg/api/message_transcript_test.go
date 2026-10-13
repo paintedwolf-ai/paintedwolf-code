@@ -307,3 +307,67 @@ func TestRehydrateReasoningRequiresUnchangedAssistant(t *testing.T) {
 		})
 	}
 }
+
+func TestPromptRecoveryPrecedesReusedDraftAndSuccessfulTools(t *testing.T) {
+	for _, tool := range []bool{false, true} {
+		draft := Message{ID: "draft", Role: MessageRoleAssistant, Content: "accepted", Ord: 2, DraftStatus: DraftStatusCommitted}
+		history := []Message{{ID: "user", Role: MessageRoleUser, Content: "do the work", Ord: 1}, draft}
+		if tool {
+			history[1].ToolCalls = []ToolCall{{ID: "call", Name: "promote_overlay"}}
+			history = append(history, Message{ID: "result", Role: MessageRoleTool, ToolResult: &ToolResult{ToolCallID: "call", Tool: "promote_overlay"}, Content: "merged", Ord: 3})
+		}
+		for _, code := range []string{"FIRST", "SECOND"} {
+			history = append(history, Message{ID: code, Role: MessageRoleUser, Origin: MessageOriginHost, Authority: ContentAuthoritySystem,
+				Visibility: MessageVisibilityInternal, Kind: MessageKindCoordinatorGuidance, HostSignalID: DraftRecoverySignal("draft", "guidance:"+code), Content: "retry"})
+		}
+		for pass := 0; pass < 2; pass++ {
+			got := FilterPromptHistory(history)
+			want := []string{"user", "FIRST", "SECOND", "draft"}
+			if tool {
+				want = append(want, "result")
+			}
+			if len(got) != len(want) {
+				t.Fatalf("tool=%v: length=%d", tool, len(got))
+			}
+			for i, id := range want {
+				if got[i].ID != id {
+					t.Fatalf("tool=%v pass=%d position=%d got=%s want=%s", tool, pass, i, got[i].ID, id)
+				}
+			}
+			if got[3].Ord != 2 {
+				t.Fatal("prompt ordering rewrote immutable transcript position")
+			}
+			if pass == 0 && history[1].ID != "draft" {
+				t.Fatal("projection mutated source history")
+			}
+			history = got
+		}
+	}
+}
+
+func TestPromptRecoveryRequiresHostIdentityAndPresentTarget(t *testing.T) {
+	valid := Message{ID: "recovery", Role: MessageRoleUser, Origin: MessageOriginHost, Authority: ContentAuthoritySystem,
+		Visibility: MessageVisibilityInternal, Kind: MessageKindCoordinatorGuidance, HostSignalID: DraftRecoverySignal("draft", "guidance:RETRY")}
+	for _, change := range []func(*Message){
+		func(m *Message) { m.Origin = MessageOriginUser },
+		func(m *Message) { m.Authority = ContentAuthorityNone },
+		func(m *Message) { m.Visibility = MessageVisibilityTranscript },
+		func(m *Message) { m.Kind = "" },
+		func(m *Message) { m.HostSignalID = DraftRecoverySignal("missing", "guidance:RETRY") },
+		func(m *Message) { m.HostSignalID = "draft-recovery:malformed" },
+	} {
+		recovery := valid
+		change(&recovery)
+		got := FilterPromptHistory([]Message{{ID: "draft", Role: MessageRoleAssistant, Content: "done"}, recovery})
+		if got[0].ID != "draft" || got[1].ID != "recovery" {
+			t.Fatal("unrelated or untrusted message changed history order")
+		}
+	}
+	if DraftRecoverySignal("", "signal") != "signal" || DraftRecoverySignal("bad:id", "signal") != "signal" {
+		t.Fatal("invalid draft identity was encoded")
+	}
+	projected := RehydrateTranscriptProjectionFields(Message{ID: valid.ID}, valid)
+	if projected.HostSignalID != valid.HostSignalID {
+		t.Fatal("lossy history roundtrip lost recovery identity")
+	}
+}
