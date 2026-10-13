@@ -1,10 +1,49 @@
 //! Plain-text clipboard access for copy, cut, and paste actions.
 
-/// Writes plain text to the OS clipboard.
+#[derive(Default)]
+pub struct ClipboardState(std::sync::Mutex<ClipboardOwner>);
+
+#[derive(Default)]
+struct ClipboardOwner {
+    board: Option<arboard::Clipboard>,
+    closed: bool,
+}
+
+impl ClipboardState {
+    fn with_clipboard<T>(
+        &self,
+        action: impl FnOnce(&mut arboard::Clipboard) -> Result<T, String>,
+    ) -> Result<T, String> {
+        let mut owner = self
+            .0
+            .lock()
+            .map_err(|_| "Clipboard state is unavailable")?;
+        if owner.closed {
+            return Err("Clipboard service has stopped".into());
+        }
+        if owner.board.is_none() {
+            owner.board = Some(arboard::Clipboard::new().map_err(|e| e.to_string())?);
+        }
+        action(owner.board.as_mut().expect("clipboard initialized"))
+    }
+
+    pub fn shutdown(&self) {
+        let mut owner = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        owner.closed = true;
+        owner.board.take();
+    }
+}
+
+// Linux serves selection contents for the lifetime of the native owner.
 #[tauri::command]
-pub fn write_clipboard_text(text: String) -> Result<(), String> {
-    let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
-    clipboard.set_text(text).map_err(|e| e.to_string())
+pub fn write_clipboard_text(
+    text: String,
+    state: tauri::State<'_, ClipboardState>,
+) -> Result<(), String> {
+    state.with_clipboard(|clipboard| clipboard.set_text(text).map_err(|e| e.to_string()))
 }
 
 /// Pastes into the focused web view through the system paste action, the
@@ -33,11 +72,13 @@ pub fn paste_into_focused_view(app: tauri::AppHandle) -> Result<(), String> {
 
 /// Empty when the board has no text.
 #[tauri::command]
-pub fn read_clipboard_text() -> Result<String, String> {
-    let mut clipboard = arboard::Clipboard::new().map_err(|e| e.to_string())?;
-    match clipboard.get_text() {
+pub fn read_clipboard_text(state: tauri::State<'_, ClipboardState>) -> Result<String, String> {
+    state.with_clipboard(|clipboard| match clipboard.get_text() {
         Ok(text) => Ok(text),
         Err(arboard::Error::ContentNotAvailable) => Ok(String::new()),
         Err(e) => Err(e.to_string()),
-    }
+    })
 }
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests_linux;

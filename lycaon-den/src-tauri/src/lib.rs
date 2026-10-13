@@ -53,6 +53,7 @@ pub fn run() {
     builder
         .plugin(webview_policy::init())
         .manage(SidecarState::new())
+        .manage(clipboard::ClipboardState::default())
         .manage(app_exit::ExitCoordinator::default())
         .manage(backup_transfer::BackupTransferState::default())
         .manage(update_service::UpdateService::new(
@@ -180,6 +181,9 @@ pub fn run() {
                 ..
             } => windows::window_appearance::restore_main_workspace(app),
             RunEvent::Exit => {
+                if let Some(state) = app.try_state::<clipboard::ClipboardState>() {
+                    state.shutdown();
+                }
                 if let Some(state) = app.try_state::<SidecarState>() {
                     // Record why the unlocks ended before the engine stops.
                     vault_lock::lock_now(&state, vault_lock::LockReason::AppQuit);
