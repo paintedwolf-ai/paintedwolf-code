@@ -26,7 +26,7 @@ func TestRecoveryMaterializationRefusesIncompleteSourcesWithoutPublishing(t *tes
 			case "missing source":
 				source = filepath.Join(root, "missing")
 			}
-			shared, err := copySnapshotRegular(ctx, source, filepath.Join(parent, "payload"), 0o600)
+			shared, err := copySnapshotRegular(ctx, archiveSource{path: source, mode: 0o600}, filepath.Join(parent, "payload"))
 			if err == nil || shared {
 				t.Fatalf("incomplete source reported successful materialization: shared=%v, err=%v", shared, err)
 			}

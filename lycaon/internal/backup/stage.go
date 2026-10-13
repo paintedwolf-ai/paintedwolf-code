@@ -624,7 +624,7 @@ func copyDurableRestoreFile(ctx context.Context, root, dest, src string) error {
 		}
 		return syncDirectoryTree(root, filepath.Dir(dest))
 	}
-	if _, err := copySnapshotRegular(ctx, src, dest, info.Mode().Perm()); err != nil {
+	if _, err := copySnapshotRegular(ctx, archiveSource{path: src, mode: info.Mode().Perm()}, dest); err != nil {
 		return err
 	}
 
