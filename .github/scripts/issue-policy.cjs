@@ -5,7 +5,7 @@ const exemptUsers = new Set([
 
 // Budget debt follows measured source state rather than report inactivity.
 const isBudgetDebt = (issue) => issue.user?.login === "github-actions[bot]" &&
-  issue.body?.includes("<!-- paintedwolf-maintainability:v1 -->");
+  /<!-- paintedwolf-maintainability:v[12] -->/.test(issue.body || "");
 const isExempt = (issue) => exemptUsers.has(issue.user?.login?.toLowerCase()) || isBudgetDebt(issue);
 
 async function markStale({ github, context, core }) {

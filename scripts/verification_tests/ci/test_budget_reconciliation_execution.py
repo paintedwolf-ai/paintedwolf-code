@@ -183,14 +183,19 @@ class ReconciliationTests(unittest.TestCase):
         writes = [call for call in calls.call_args_list if len(call.args) > 1]
         self.assertEqual(result['actions'], {'resolve': 1})
         self.assertEqual(writes[0].args[:2], ('repos/owner/repo/issues/1', 'PATCH'))
-        self.assertEqual(set(writes[0].args[2]), {'body', 'state', 'state_reason'})
+        self.assertEqual(set(writes[0].args[2]), {'title', 'body', 'state', 'state_reason'})
 
-    def test_large_intake_is_bounded_and_defers_checkpoint_until_complete(self):
-        result, calls, _ = self.invoke(snapshot=report([row(f'pkg/{index}.go') for index in range(27)]))
+    def test_many_metrics_in_one_module_create_one_issue(self):
+        result, calls, _ = self.invoke(snapshot=report([row(f'pkg/{index}.go') for index in range(141)]))
+        self.assertEqual(result['applied_operations'], 1)
+        self.assertEqual(result['deferred_creations'], 0)
+        self.assertIn('checkpoint', result)
+
+    def test_new_modules_are_bounded_per_apply_and_defer_checkpoint(self):
+        result, _, _ = self.invoke(snapshot=report([row(f'app{index}/internal/module/file.go') for index in range(27)]))
         self.assertEqual(result['applied_operations'], 25)
         self.assertEqual(result['deferred_creations'], 2)
         self.assertNotIn('checkpoint', result)
-        self.assertEqual(len([call for call in calls.call_args_list if len(call.args) > 1]), 25)
 
     def test_concurrent_issue_body_edit_stops_before_patch(self):
         current = issue()

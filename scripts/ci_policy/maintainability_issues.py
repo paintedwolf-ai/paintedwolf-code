@@ -1,4 +1,4 @@
-"""Reconcile one issue per maintainability artifact after a PR lands on main."""
+"""Reconcile bounded maintainability workstreams after a PR lands on main."""
 from collections import Counter
 import json
 import os
@@ -8,7 +8,8 @@ import zipfile
 from pathlib import Path
 
 from .budget_evidence import read_snapshot
-from .budget_issues import expected, plan
+from .budget_issues import expected
+from .budget_workstreams import plan
 from .budget_history import checkpoint, intake, merged_pulls
 from .github import api, pages, repository
 from .budget_snapshot import SHA
