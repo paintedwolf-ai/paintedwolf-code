@@ -69,7 +69,13 @@ func resolvableNeighbours(name string) []string {
 			out = append(out, candidate)
 		}
 	}
-	sort.Strings(out)
+	// The shortest extension of the missing name is its nearest neighbour.
+	sort.Slice(out, func(i, j int) bool {
+		if len(out[i]) != len(out[j]) {
+			return len(out[i]) < len(out[j])
+		}
+		return out[i] < out[j]
+	})
 	if len(out) > neighbourLimit {
 		out = out[:neighbourLimit]
 	}

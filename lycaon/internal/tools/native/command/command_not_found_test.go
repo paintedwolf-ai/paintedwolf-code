@@ -87,10 +87,10 @@ func TestCommandArgv0FromCommandLine(t *testing.T) {
 }
 
 // The host can read the near miss off PATH rather than sending the model to
-// probe for it.
+// probe for it. The nearest name leads, ahead of longer names that sort first.
 func TestCommandNotFoundNamesResolvableNeighbours(t *testing.T) {
 	dir := t.TempDir()
-	for _, name := range []string{"toolshed3", "toolshed-next", "unrelated"} {
+	for _, name := range []string{"toolshed3", "toolshed-next", "toolshed3.10", "toolshed-a", "toolshed-build-helper", "unrelated"} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
 			t.Fatalf("write %s: %v", name, err)
 		}
@@ -102,7 +102,7 @@ func TestCommandNotFoundNamesResolvableNeighbours(t *testing.T) {
 		t.Fatal("want ToolReject")
 	}
 	got, _ := tr.Data["resolvable"].(string)
-	if got != "toolshed-next, toolshed3" {
+	if got != "toolshed3, toolshed-a, toolshed3.10, toolshed-next" {
 		t.Fatalf("resolvable = %q", got)
 	}
 }
