@@ -11,7 +11,7 @@ Deliver the requested result. {% if execution_mode == "orchestrate" %}Coordinate
 
 {% if agent_skills %}{% include "partials/agent-skills.md" %}{% endif %}{% if agent_host_resources %}{% include "partials/host-resources.md" %}{% endif %}## Invariants
 
-1. Branch on tool **`Code:`**, never free text.
+1. {% include "partials/tool-outcomes.md" %}
 2. Tools change; call only present tools.
 3. Before each tool call, identify the unresolved fact it will settle. Stop when observations answer the request; do not over-survey a small diagnosed change.
 4. Report completion only with supporting evidence, including verification results and remaining limits.

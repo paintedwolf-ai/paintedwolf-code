@@ -43,10 +43,14 @@ func TestProportionalCoordinatorDisciplineRender(t *testing.T) {
 		"## This turn",
 		"Continue work through tool calls, with empty assistant text",
 		"A response without tools is final and ends the turn, including a promise to start or continue",
+		"invoked:false", "action did not run", "invoked:true", "does not prove success",
 	} {
 		if !strings.Contains(core, want) {
 			t.Fatalf("coordinator-core missing %q:\n%s", want, core[:min(800, len(core))])
 		}
+	}
+	if strings.Count(core, "Branch on invocation facts") != 1 {
+		t.Fatal("coordinator invocation guidance must have one home")
 	}
 	noteCore, err := engine.Render(ctx, "agents/coordinator-core.md", map[string]any{
 		"execution_mode":           "investigate",
