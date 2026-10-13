@@ -3,6 +3,6 @@
   "identifier": "notifications-plugin",
   "description": "Tauri notification plugin (Linux/Windows). macOS uses UN via den_notify_*.",
   "windows": ["main"],
-  "platforms": ["linux", "windows"],
+  "platforms": ["windows"],
   "permissions": ["notification:default"]
 }
