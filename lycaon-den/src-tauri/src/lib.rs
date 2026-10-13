@@ -1,6 +1,8 @@
 mod app_state;
 mod files;
 mod notifications;
+#[cfg(target_os = "linux")]
+mod linux_desktop;
 mod windows;
 mod app_exit;
 mod app_menu;
@@ -157,11 +159,8 @@ pub fn run() {
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             vault_lock::setup(app.handle().clone())
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
-            #[cfg(target_os = "macos")]
-            {
-                notifications::native::setup(app.handle().clone())
-                    .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
-            }
+            notifications::setup(app.handle().clone())
+                .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -180,6 +179,7 @@ pub fn run() {
                 ..
             } => windows::window_appearance::restore_main_workspace(app),
             RunEvent::Exit => {
+                notifications::shutdown(app);
                 if let Some(state) = app.try_state::<SidecarState>() {
                     // Record why the unlocks ended before the engine stops.
                     vault_lock::lock_now(&state, vault_lock::LockReason::AppQuit);

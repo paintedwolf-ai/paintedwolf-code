@@ -17,7 +17,7 @@ export const NOTIFICATION_ACTIVATED_EVENT = "notifications://activated";
 
 type PluginModule = typeof import("@tauri-apps/plugin-notification");
 
-type MacAuthState =
+type NativeAuthState =
   | "not_determined"
   | "denied"
   | "authorized"
@@ -25,11 +25,11 @@ type MacAuthState =
   | "ephemeral"
   | "unavailable";
 
-function usesMacNativeNotifications(): boolean {
-  return isTauriRuntime() && tauriPlatform() === "macos";
+function usesNativeNotifications(): boolean {
+  return isTauriRuntime() && (tauriPlatform() === "macos" || tauriPlatform() === "linux");
 }
 
-function macAuthAllowsDelivery(state: MacAuthState): boolean {
+function nativeAuthAllowsDelivery(state: NativeAuthState): boolean {
   return (
     state === "authorized" ||
     state === "provisional" ||
@@ -38,7 +38,7 @@ function macAuthAllowsDelivery(state: MacAuthState): boolean {
 }
 
 async function loadPlugin(): Promise<PluginModule | null> {
-  if (!isTauriRuntime() || usesMacNativeNotifications()) return null;
+  if (!isTauriRuntime() || usesNativeNotifications()) return null;
   try {
     return await import("@tauri-apps/plugin-notification");
   } catch (err) {
@@ -47,28 +47,28 @@ async function loadPlugin(): Promise<PluginModule | null> {
   }
 }
 
-async function macPermissionState(): Promise<MacAuthState> {
+async function nativePermissionState(): Promise<NativeAuthState> {
   const { invoke } = await import("@tauri-apps/api/core");
-  return await invoke<MacAuthState>("den_notify_permission_state");
+  return await invoke<NativeAuthState>("den_notify_permission_state");
 }
 
-async function macRequestPermission(): Promise<MacAuthState> {
+async function nativeRequestPermission(): Promise<NativeAuthState> {
   const { invoke } = await import("@tauri-apps/api/core");
-  return await invoke<MacAuthState>("den_notify_request_permission");
+  return await invoke<NativeAuthState>("den_notify_request_permission");
 }
 
 export async function ensureNotificationPermission(): Promise<EnsureNotificationPermissionResult> {
   if (!isTauriRuntime()) return "unavailable";
   try {
-    if (usesMacNativeNotifications()) {
-      const live = await macPermissionState();
+    if (usesNativeNotifications()) {
+      const live = await nativePermissionState();
       if (live === "unavailable") return "unavailable";
-      if (macAuthAllowsDelivery(live)) return "granted";
+      if (nativeAuthAllowsDelivery(live)) return "granted";
       if (live === "denied") return "denied";
-      const requested = await macRequestPermission();
+      const requested = await nativeRequestPermission();
       if (requested === "unavailable") return "unavailable";
       if (requested === "denied") return "denied";
-      return macAuthAllowsDelivery(requested) ? "granted" : "unavailable";
+      return nativeAuthAllowsDelivery(requested) ? "granted" : "unavailable";
     }
     const plugin = await loadPlugin();
     if (!plugin) return "unavailable";
@@ -81,12 +81,11 @@ export async function ensureNotificationPermission(): Promise<EnsureNotification
   }
 }
 
-// The desktop plugin cannot remove delivered notifications.
 export async function cancelNotificationsForSessions(
   sessionIds: readonly string[],
 ): Promise<void> {
   const ids = [...new Set(sessionIds.map((id) => id.trim()).filter(Boolean))];
-  if (ids.length === 0 || !usesMacNativeNotifications()) return;
+  if (ids.length === 0 || !usesNativeNotifications()) return;
   try {
     const { invoke } = await import("@tauri-apps/api/core");
     await invoke("den_notify_cancel_sessions", { sessionIds: ids });
@@ -98,9 +97,9 @@ export async function cancelNotificationsForSessions(
 export async function sendNotification(n: DenNotification): Promise<void> {
   if (!isTauriRuntime()) return;
   try {
-    if (usesMacNativeNotifications()) {
-      const live = await macPermissionState();
-      if (!macAuthAllowsDelivery(live)) return;
+    if (usesNativeNotifications()) {
+      const live = await nativePermissionState();
+      if (!nativeAuthAllowsDelivery(live)) return;
       const { invoke } = await import("@tauri-apps/api/core");
       await invoke("den_notify_send", {
         title: n.title,
@@ -118,11 +117,10 @@ export async function sendNotification(n: DenNotification): Promise<void> {
   }
 }
 
-// Only the native bridge delivers desktop activation events.
 export function onNotificationActivated(
   cb: (sessionId: string | undefined) => void,
 ): () => void {
-  if (!usesMacNativeNotifications()) return () => undefined;
+  if (!usesNativeNotifications()) return () => undefined;
 
   let unsubscribed = false;
   let unlistenEvent: (() => void) | null = null;

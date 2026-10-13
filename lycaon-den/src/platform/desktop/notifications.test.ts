@@ -72,7 +72,7 @@ describe("notifications wrapper (web / non-Tauri)", () => {
   });
 });
 
-describe("notifications wrapper (Tauri non-macOS plugin)", () => {
+describe("notifications wrapper (Windows plugin)", () => {
   beforeEach(() => {
     vi.resetModules();
     isPermissionGranted.mockReset();
@@ -83,7 +83,7 @@ describe("notifications wrapper (Tauri non-macOS plugin)", () => {
     requestPermission.mockResolvedValue("denied");
     vi.doMock("../runtime.ts", () => ({
       isTauriRuntime: () => true,
-      tauriPlatform: () => "linux" as const,
+      tauriPlatform: () => "windows" as const,
     }));
   });
 
@@ -154,7 +154,7 @@ describe("notifications wrapper (Tauri non-macOS plugin)", () => {
   });
 });
 
-describe("notifications wrapper (macOS UN bridge)", () => {
+describe.each(["macos", "linux"] as const)("notifications wrapper (%s native bridge)", (platform) => {
   beforeEach(() => {
     vi.resetModules();
     invoke.mockReset();
@@ -163,7 +163,7 @@ describe("notifications wrapper (macOS UN bridge)", () => {
     sendNotification.mockClear();
     vi.doMock("../runtime.ts", () => ({
       isTauriRuntime: () => true,
-      tauriPlatform: () => "macos" as const,
+      tauriPlatform: () => platform,
     }));
   });
 
