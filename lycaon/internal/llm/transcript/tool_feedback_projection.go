@@ -8,7 +8,7 @@ import (
 
 const maxToolFeedbackBytes = 32 << 10
 
-// Replacement calls and preconditions travel as structured host data.
+// Invocation outcomes and remedies travel as structured host data.
 func toolFeedbackParts(msg api.Message) []api.MessageContentPart {
 	if msg.Role != api.MessageRoleTool || msg.ToolResult == nil {
 		return nil
@@ -18,8 +18,9 @@ func toolFeedbackParts(msg api.Message) []api.MessageContentPart {
 		DetailsOmitted  bool   `json:"details_omitted,omitempty"`
 		ResultMessageID string `json:"result_message_id,omitempty"`
 	}
+	invocation, invocationOmitted := invocationFeedback(msg.ToolResult)
 	var entries []json.RawMessage
-	budget := maxToolFeedbackBytes - 128
+	budget := maxToolFeedbackBytes - 256 - len(invocation)
 	omitted := 0
 	for _, feedback := range msg.ToolResult.Feedback {
 		if len(feedback.Details) == 0 && feedback.Subject == nil {
@@ -43,13 +44,20 @@ func toolFeedbackParts(msg api.Message) []api.MessageContentPart {
 		entries = append(entries, raw)
 		budget -= len(raw) + 1
 	}
-	if len(entries) == 0 && omitted == 0 {
+	if len(entries) == 0 && omitted == 0 && len(invocation) == 0 && !invocationOmitted {
 		return nil
 	}
+	resultReference := ""
+	if invocationOmitted {
+		resultReference = msg.ID
+	}
 	body, err := json.Marshal(struct {
-		Feedback []json.RawMessage `json:"tool_feedback"`
-		Omitted  int               `json:"omitted,omitempty"`
-	}{entries, omitted})
+		Feedback          []json.RawMessage `json:"tool_feedback,omitempty"`
+		Omitted           int               `json:"omitted,omitempty"`
+		Invocation        json.RawMessage   `json:"invocation,omitempty"`
+		InvocationOmitted bool              `json:"invocation_omitted,omitempty"`
+		ResultMessageID   string            `json:"result_message_id,omitempty"`
+	}{entries, omitted, invocation, invocationOmitted, resultReference})
 	if err != nil {
 		return nil
 	}
@@ -104,4 +112,30 @@ func boundedVerdictDiagnostics(details map[string]any) map[string]any {
 func boundedVerdictDiagnosticsMap(value any) map[string]any {
 	details, _ := value.(map[string]any)
 	return boundedVerdictDiagnostics(details)
+}
+
+func invocationFeedback(result *api.ToolResult) (json.RawMessage, bool) {
+	receipt := result.Invocation
+	if receipt == nil || receipt.ID == "" || receipt.Tool != result.Tool || receipt.ToolCallID != result.ToolCallID {
+		return nil, false
+	}
+	code := ""
+	if receipt.Failure != nil {
+		code = receipt.Failure.Code
+	}
+	body, err := json.Marshal(struct {
+		ID               string               `json:"id"`
+		Tool             string               `json:"tool"`
+		ToolCallID       string               `json:"tool_call_id"`
+		Status           api.InvocationStatus `json:"status"`
+		Invoked          bool                 `json:"invoked"`
+		Code             string               `json:"code,omitempty"`
+		SourceRevision   string               `json:"source_revision,omitempty"`
+		SourceRootDigest string               `json:"source_root_digest,omitempty"`
+		SourceVerdict    string               `json:"source_verdict,omitempty"`
+	}{receipt.ID, receipt.Tool, receipt.ToolCallID, receipt.Status, receipt.Invoked, code, receipt.SourceRevision, receipt.SourceRootDigest, receipt.SourceVerdict})
+	if err != nil || len(body) > 2<<10 {
+		return nil, true
+	}
+	return body, false
 }
