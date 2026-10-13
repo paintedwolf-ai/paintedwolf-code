@@ -19,30 +19,28 @@ type toolchainDef struct {
 	binary   string
 	args     []string
 	language string
-	// label names the tool in the reported version, e.g. "python" for python3.
-	label string
 }
 
 var semverRegexp = regexp.MustCompile(`v?(\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?)`)
 
 // knownToolchains is ordered by report priority.
 var knownToolchains = []toolchainDef{
-	{binary: "bun", args: []string{"--version"}, language: "JavaScript", label: "bun"},
-	{binary: "node", args: []string{"--version"}, language: "JavaScript", label: "node"},
-	{binary: "pnpm", args: []string{"--version"}, language: "JavaScript", label: "pnpm"},
-	{binary: "yarn", args: []string{"--version"}, language: "JavaScript", label: "yarn"},
-	{binary: "deno", args: []string{"--version"}, language: "JavaScript", label: "deno"},
-	{binary: "python3", args: []string{"--version"}, language: "Python", label: "python"},
-	{binary: "uv", args: []string{"--version"}, language: "Python", label: "uv"},
-	{binary: "poetry", args: []string{"--version"}, language: "Python", label: "poetry"},
-	{binary: "go", args: []string{"version"}, language: "Go", label: "go"},
-	{binary: "rustc", args: []string{"--version"}, language: "Rust", label: "rustc"},
-	{binary: "cargo", args: []string{"--version"}, language: "Rust", label: "cargo"},
-	{binary: "ruby", args: []string{"--version"}, language: "Ruby", label: "ruby"},
-	{binary: "bundle", args: []string{"--version"}, language: "Ruby", label: "bundle"},
-	{binary: "java", args: []string{"-version"}, language: "Java", label: "java"},
-	{binary: "mvn", args: []string{"--version"}, language: "Java", label: "mvn"},
-	{binary: "gradle", args: []string{"--version"}, language: "Java", label: "gradle"},
+	{binary: "bun", args: []string{"--version"}, language: "JavaScript"},
+	{binary: "node", args: []string{"--version"}, language: "JavaScript"},
+	{binary: "pnpm", args: []string{"--version"}, language: "JavaScript"},
+	{binary: "yarn", args: []string{"--version"}, language: "JavaScript"},
+	{binary: "deno", args: []string{"--version"}, language: "JavaScript"},
+	{binary: "python3", args: []string{"--version"}, language: "Python"},
+	{binary: "uv", args: []string{"--version"}, language: "Python"},
+	{binary: "poetry", args: []string{"--version"}, language: "Python"},
+	{binary: "go", args: []string{"version"}, language: "Go"},
+	{binary: "rustc", args: []string{"--version"}, language: "Rust"},
+	{binary: "cargo", args: []string{"--version"}, language: "Rust"},
+	{binary: "ruby", args: []string{"--version"}, language: "Ruby"},
+	{binary: "bundle", args: []string{"--version"}, language: "Ruby"},
+	{binary: "java", args: []string{"-version"}, language: "Java"},
+	{binary: "mvn", args: []string{"--version"}, language: "Java"},
+	{binary: "gradle", args: []string{"--version"}, language: "Java"},
 }
 
 // parse extracts the reported version from a tool's version output.
@@ -56,7 +54,7 @@ func (tc toolchainDef) parse(out string) string {
 		}
 	}
 	if m := semverRegexp.FindString(out); m != "" {
-		return tc.label + " " + strings.TrimPrefix(m, "v")
+		return tc.binary + " " + strings.TrimPrefix(m, "v")
 	}
 	return ""
 }
