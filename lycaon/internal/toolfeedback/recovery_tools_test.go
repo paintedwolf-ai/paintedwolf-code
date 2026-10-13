@@ -3,18 +3,18 @@ package toolfeedback
 import (
 	"fmt"
 	"maps"
-	"strings"
-	"unicode"
-	"github.com/lycaon/lycaon/internal/tools"
-
-	"github.com/lycaon/lycaon/internal/toolrejection"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
+	"unicode"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 )
@@ -109,28 +109,43 @@ func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
 	bp := stockBlockPlane(t)
 	cfg, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load recovery catalogue", err)
+	boolFacts := map[string]bool{}
+	for _, fact := range oar.FactCatalogue() {
+		boolFacts[oar.PublishedFactName(fact.Name)] = fact.Type == "bool"
+	}
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join(testutil.CheckoutRoot(t), "lycaon/config/packs/painted-wolf/platform/tools/schemas"))
+	testutil.FailErr(t, "load recovery argument schemas", err)
 	checked := 0
-	for code, entry := range cfg.HintCodes {
-		if entry.Anchor != oar.AnchorToolRejected || entry.When != "paintedwolf.rejection_code == \""+code+"\"" || entry.Requires == nil {
+	for _, code := range slices.Sorted(maps.Keys(cfg.HintCodes)) {
+		entry := cfg.HintCodes[code]
+		if entry.Anchor != oar.AnchorToolRejected || entry.Requires == nil || !slices.Contains(entry.Requires.Facts, "paintedwolf.rejection_code") {
 			continue
 		}
-		var names []string
+		var names, states []string
 		for _, fact := range entry.Requires.Facts {
 			if name, ok := strings.CutPrefix(fact, "paintedwolf.can_"); ok {
 				names = append(names, name)
+			} else if boolFacts[fact] {
+				states = append(states, strings.TrimPrefix(fact, "paintedwolf."))
 			}
 		}
 		if len(names) == 0 {
 			continue
 		}
-		if len(names) > 10 || len(entry.Scenarios) == 0 {
-			t.Fatalf("%s needs bounded recovery scenarios: %d dimensions, %d scenarios", code, len(names), len(entry.Scenarios))
+		dimensions := len(names) + len(states)
+		if dimensions > 10 || len(entry.Scenarios) == 0 {
+			t.Fatalf("%s needs bounded recovery scenarios: %d dimensions, %d scenarios", code, dimensions, len(entry.Scenarios))
 		}
 		checked++
 		for _, scenario := range entry.Scenarios {
-			for mask := 0; mask < 1<<len(names); mask++ {
+			for mask := -1; mask < 1<<dimensions; mask++ {
 				t.Run(fmt.Sprintf("%s/%s/%d", code, scenario.ID, mask), func(t *testing.T) {
 					vars := guidance.ScenarioVars(entry, scenario)
+					for bit, state := range states {
+						if mask >= 0 {
+							vars[state] = mask&(1<<(len(names)+bit)) != 0
+						}
+					}
 					tool, _ := vars["tool"].(string)
 					if tool == "" && len(entry.Tools) > 0 {
 						tool = entry.Tools[0]
@@ -138,13 +153,19 @@ func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
 					if tool == "" {
 						tool = "read"
 					}
-					offered := []string{tool}
+					var offered []string
+					if mask >= 0 {
+						offered = []string{tool}
+					}
 					for bit, name := range names {
-						if mask&(1<<bit) != 0 && !slices.Contains(offered, name) {
+						if mask >= 0 && mask&(1<<bit) != 0 && !slices.Contains(offered, name) {
 							offered = append(offered, name)
 						}
 					}
-					ctx := tools.WithRecoveryTools(t.Context(), offered)
+					ctx := t.Context()
+					if mask >= 0 {
+						ctx = tools.WithRecoveryTools(ctx, offered)
+					}
 					var first map[string]string
 					for _, spoof := range []bool{false, true} {
 						data := maps.Clone(vars)
@@ -153,7 +174,7 @@ func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
 						}
 						err := bp.RejectObservation(ctx, tool, "fixture", nil, &toolrejection.ToolReject{Code: code, Data: data})
 						refusal, ok := guidance.RefusalFromError(err)
-						if !ok || refusal.Code != code || len(refusal.Copy) == 0 {
+						if !ok || refusal.Code() != code || len(refusal.Copy) == 0 {
 							t.Fatalf("missing evaluated %s recovery: %v", code, err)
 						}
 						if first != nil && !maps.Equal(first, refusal.Copy) {
@@ -162,7 +183,13 @@ func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
 						first = refusal.Copy
 					}
 					for _, field := range []string{"fix", "instead"} {
-						words := strings.FieldsFunc(first[field], func(r rune) bool {
+						text := first[field]
+						if meta, ok := schemas.ToolMeta(tool); ok {
+							for _, arg := range toolschema.ArgFieldPaths(meta.ArgsSchema) {
+								text = strings.ReplaceAll(text, "`"+arg+"` argument", "")
+							}
+						}
+						words := strings.FieldsFunc(text, func(r rune) bool {
 							return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_'
 						})
 						for _, name := range names {
@@ -179,4 +206,39 @@ func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
 		t.Fatal("no availability-aware intrinsic rejection was tested")
 	}
 	t.Logf("checked %d intrinsic rejection families", checked)
+}
+
+func TestRecoveryAvailabilityFactsMatchFrozenSchemas(t *testing.T) {
+	checked := 0
+	for _, fact := range oar.FactCatalogue() {
+		name, ok := strings.CutPrefix(fact.Name, "paintedwolf.can_")
+		if !ok {
+			continue
+		}
+		checked++
+		key := strings.TrimPrefix(fact.Name, "paintedwolf.")
+		for _, offered := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/%t", name, offered), func(t *testing.T) {
+				names := []string{"different_tool"}
+				if offered {
+					names[0] = name
+				}
+				ctx := tools.WithRecoveryTools(t.Context(), names)
+				names[0] = "later_tool"
+				gc := oar.NewGuardContext()
+				gc.ObservationData = map[string]any{key: !offered}
+				tools.RegisterRecoveryFacts(ctx, gc)
+				testutil.FailErr(t, "publish availability", gc.Ensure(oar.PublishedFactName(fact.Name)))
+				if gc.ObservationData[key] != offered {
+					t.Fatalf("%s did not follow its frozen schema membership", fact.Name)
+				}
+				if len(gc.ObservationData) != 1 {
+					t.Fatal("unrequested recovery facts were materialized")
+				}
+			})
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no declared recovery availability fact was tested")
+	}
 }
