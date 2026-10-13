@@ -155,7 +155,8 @@ func (c *Controller) Snapshot() Status {
 }
 
 func (c *Controller) reconcileLocked() {
-	want := c.enabled && len(c.active) > 0 && c.inhibitor != nil && c.inhibitor.Supported()
+	active := c.enabled && len(c.active) > 0 && c.inhibitor != nil
+	want := active && c.inhibitor.Supported()
 	if !want {
 		c.lastError = ""
 		if c.lease != nil {
@@ -164,6 +165,9 @@ func (c *Controller) reconcileLocked() {
 			if err := lease.Release(); err != nil {
 				c.lastError = err.Error()
 			}
+		}
+		if active {
+			c.scheduleRetryLocked()
 		}
 		return
 	}

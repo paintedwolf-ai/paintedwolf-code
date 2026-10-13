@@ -10,13 +10,18 @@ import (
 )
 
 type fakeInhibitor struct {
-	mu       sync.Mutex
-	acquires int
-	leases   []*fakeLease
-	nilLease bool
+	mu          sync.Mutex
+	acquires    int
+	leases      []*fakeLease
+	nilLease    bool
+	unsupported bool
 }
 
-func (*fakeInhibitor) Supported() bool { return true }
+func (f *fakeInhibitor) Supported() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return !f.unsupported
+}
 
 func (f *fakeInhibitor) Acquire() (lease, error) {
 	f.mu.Lock()
@@ -193,5 +198,32 @@ func TestControllerCloseIsTerminal(t *testing.T) {
 	controller.SetEnabled(true)
 	if got := inhibitor.acquireCount(); got != 1 {
 		t.Fatalf("acquires = %d, want 1", got)
+	}
+}
+
+func TestControllerReacquiresAfterPlatformServiceReturns(t *testing.T) {
+	platform := &fakeInhibitor{unsupported: true}
+	controller := newController(true, platform)
+	controller.retryDelay = time.Millisecond
+	defer func() { _ = controller.Close() }()
+	controller.SetActive("turn:one", true)
+	if got := controller.Snapshot(); got.Supported || got.Inhibiting || got.ActiveWorkCount != 1 {
+		t.Fatalf("unavailable platform status = %+v", got)
+	}
+	platform.mu.Lock()
+	platform.unsupported = false
+	platform.mu.Unlock()
+	deadline := time.After(time.Second)
+	for {
+		status := controller.Snapshot()
+		if status.Supported && status.Inhibiting {
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatalf("platform service return did not resume inhibition: %+v", status)
+		default:
+			time.Sleep(time.Millisecond)
+		}
 	}
 }
