@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/lycaon/lycaon/internal/linuxbus"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
 )
@@ -63,7 +64,7 @@ func fixtureBus(t *testing.T) string {
 
 func TestLogindLeaseTransfersDescriptorAndBlocksAutomaticSuspend(t *testing.T) {
 	path := fixtureBus(t)
-	server, err := connectLogindBus(path)
+	server, err := linuxbus.Connect(t.Context(), path)
 	testutil.FailErr(t, "connect fixture service", err)
 	defer func() { _ = server.Close() }()
 	reader, writer, err := os.Pipe()
@@ -76,7 +77,7 @@ func TestLogindLeaseTransfersDescriptorAndBlocksAutomaticSuspend(t *testing.T) {
 	if result != dbus.RequestNameReplyPrimaryOwner {
 		t.Fatal("fixture service name not owned")
 	}
-	client, err := connectLogindBus(path)
+	client, err := linuxbus.Connect(t.Context(), path)
 	testutil.FailErr(t, "connect inhibitor client", err)
 	defer func() { _ = client.Close() }()
 	held, err := acquireLogindLease(client)
@@ -154,7 +155,7 @@ func TestLogindLeaseRejectsAClosedDescriptor(t *testing.T) {
 }
 
 func TestMissingLogindDoesNotAdvertiseOrAcquireAnInhibitor(t *testing.T) {
-	client, err := connectLogindBus(fixtureBus(t))
+	client, err := linuxbus.Connect(t.Context(), fixtureBus(t))
 	testutil.FailErr(t, "connect bus without logind", err)
 	defer func() { _ = client.Close() }()
 	if logindAvailable(client) {
@@ -173,7 +174,7 @@ func TestLogindAuthenticationCannotHangHostStartup(t *testing.T) {
 	accepted := make(chan *net.UnixConn, 1)
 	go func() { connection, _ := listener.AcceptUnix(); accepted <- connection }()
 	started := time.Now()
-	if bus, err := connectLogindBus(path); bus != nil || err == nil {
+	if bus, err := linuxbus.Connect(t.Context(), path); bus != nil || err == nil {
 		t.Fatal("silent bus authenticated")
 	}
 	if time.Since(started) > 2*logindDeadline {
