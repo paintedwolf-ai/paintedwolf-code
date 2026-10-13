@@ -117,7 +117,8 @@ def block(identity, rows, observation):
         lines += notes + ['', '</details>']
         if len('\n'.join(lines).encode()) > 55000:
             del lines[detail_start:]
-            lines += ['', f'Details for `{html.escape(name)}` are in the linked complete qualification report.']
+            lines += ['', 'Additional module details are in the linked complete qualification report.']
+            break
     lines += ['', f"[Measured main snapshot and complete report]({observation['run_url']}) at `{observation['source_sha']}`.", '',
               'The qualification report retains full source membership, exceptions, and review evidence. '
               'Tracking fingerprints cover all those facts. This issue closes only when all admitted findings '
