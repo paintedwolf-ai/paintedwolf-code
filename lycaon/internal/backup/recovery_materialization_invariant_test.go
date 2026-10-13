@@ -202,7 +202,7 @@ func TestRecoveryBodyLinksPreserveModesAndFallBackAcrossVolumes(t *testing.T) {
 	if _, err := linkSnapshotBody(source, dest); !os.IsExist(err) {
 		t.Fatalf("occupied linked destination was overwritten: %v", err)
 	}
-	cross, err := os.MkdirTemp("/dev/shm", "paintedwolf-recovery-")
+	cross, err := os.MkdirTemp("/dev/shm", "paintedwolf-recovery-") //nolint:usetesting // The destination must be on a separate filesystem.
 	testutil.FailErr(t, "create separate-volume capture directory", err)
 	t.Cleanup(func() { _ = os.RemoveAll(cross) })
 	if sharedRecoveryBodyOnVolume(cross, source) {
