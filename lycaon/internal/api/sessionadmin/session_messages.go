@@ -17,7 +17,7 @@ var messageLimitBounds = httpio.MustPageLimit(100, 1, 500)
 
 func (s *Transcript) HandleListSessionMessages(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	q, ok := s.parseTranscriptPageQuery(w, r, id)
+	q, ok := parseTranscriptPageQuery(s, w, r, id)
 	if !ok {
 		return
 	}
@@ -43,7 +43,7 @@ var transcriptPositionParams = []string{
 	"before", "after", "before_message_id", "after_message_id", "before_ord", "after_ord", "from",
 }
 
-func (s *Transcript) parseTranscriptPageQuery(w http.ResponseWriter, r *http.Request, sessionID string) (wire.TranscriptPageQuery, bool) {
+func parseTranscriptPageQuery(s *Transcript, w http.ResponseWriter, r *http.Request, sessionID string) (wire.TranscriptPageQuery, bool) {
 	var q wire.TranscriptPageQuery
 	wq, err := httpio.ReadWindowQuery(r, messageLimitBounds)
 	if err != nil {
@@ -83,13 +83,13 @@ func (s *Transcript) parseTranscriptPageQuery(w http.ResponseWriter, r *http.Req
 		}
 		q.After = &pos.Ord
 	case position["before_message_id"] != "":
-		ord, ok := s.transcriptAnchorOrd(w, r, sessionID, "before_message_id", position["before_message_id"])
+		ord, ok := transcriptAnchorOrd(s, w, r, sessionID, "before_message_id", position["before_message_id"])
 		if !ok {
 			return q, false
 		}
 		q.Before = &ord
 	case position["after_message_id"] != "":
-		ord, ok := s.transcriptAnchorOrd(w, r, sessionID, "after_message_id", position["after_message_id"])
+		ord, ok := transcriptAnchorOrd(s, w, r, sessionID, "after_message_id", position["after_message_id"])
 		if !ok {
 			return q, false
 		}
@@ -127,7 +127,7 @@ func (s *Transcript) parseTranscriptPageQuery(w http.ResponseWriter, r *http.Req
 }
 
 // transcriptAnchorOrd places a window beside a message of this chat.
-func (s *Transcript) transcriptAnchorOrd(w http.ResponseWriter, r *http.Request, sessionID, param, messageID string) (int64, bool) {
+func transcriptAnchorOrd(s *Transcript, w http.ResponseWriter, r *http.Request, sessionID, param, messageID string) (int64, bool) {
 	if _, err := uuid.Parse(messageID); err != nil {
 		s.responses.InvalidQueryParam(w, param, "must be a UUID")
 		return 0, false
