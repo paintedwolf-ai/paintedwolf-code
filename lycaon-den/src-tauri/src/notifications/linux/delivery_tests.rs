@@ -1,6 +1,6 @@
 use super::*;
 use std::{
-    io::{BufRead, BufReader},
+    io::{BufRead, BufReader, Read},
     process::{Child, Command, Stdio},
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -60,11 +60,22 @@ impl Fixture {
                 .spawn()
                 .expect("start private session bus"),
         );
-        let mut address = String::new();
-        BufReader::new(daemon.0.stdout.take().unwrap())
-            .read_line(&mut address)
-            .unwrap();
-        let address = address.trim_end().to_string();
+        let output = daemon.0.stdout.take().unwrap();
+        let (address_ready, address_receive) = mpsc::sync_channel(1);
+        thread::spawn(move || {
+            let mut address = String::new();
+            let result = BufReader::new(output)
+                .take(4096)
+                .read_line(&mut address)
+                .map(|_| address);
+            let _ = address_ready.send(result);
+        });
+        let address = address_receive
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap()
+            .trim_end()
+            .to_string();
         let stopped = Arc::new(AtomicBool::new(false));
         let stop = stopped.clone();
         let requests = Arc::new(Mutex::new(Vec::new()));
