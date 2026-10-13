@@ -32,9 +32,17 @@ func (f *fixtureLogind) Inhibit(what, who, why, mode string) (dbus.UnixFD, *dbus
 	return dbus.UnixFD(f.writer.Fd()), nil
 }
 
+func fixtureSocketDirectory(t *testing.T) string {
+	t.Helper()
+	directory, err := os.MkdirTemp(os.TempDir(), "pwb-")
+	testutil.FailErr(t, "create short socket directory", err)
+	t.Cleanup(func() { _ = os.RemoveAll(directory) })
+	return directory
+}
+
 func fixtureBus(t *testing.T) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "bus")
+	path := filepath.Join(fixtureSocketDirectory(t), "bus")
 	cmd := exec.Command("dbus-daemon", "--session", "--nofork", "--address=unix:path="+path)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -138,7 +146,7 @@ func TestMissingLogindDoesNotAdvertiseOrAcquireAnInhibitor(t *testing.T) {
 }
 
 func TestLogindAuthenticationCannotHangHostStartup(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "silent-bus")
+	path := filepath.Join(fixtureSocketDirectory(t), "bus")
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: path, Net: "unix"})
 	testutil.FailErr(t, "listen as silent bus", err)
 	defer func() { _ = listener.Close() }()
