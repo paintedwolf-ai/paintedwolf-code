@@ -219,6 +219,7 @@ func FormatRequestToolsReject(deps RequestToolsDeps, profileID, need string, ava
 	data := map[string]any{"need": need, "available": available, "profile": profileID}
 	if discovery != nil {
 		delete(data, "available")
+		data["need"] = turnload.BoundUser(need, 900)
 		data["discovery"] = discovery
 		data["tool_discovery_status"] = discovery.Status
 		data["tool_discovery_has_more"] = discovery.NextNeed != ""

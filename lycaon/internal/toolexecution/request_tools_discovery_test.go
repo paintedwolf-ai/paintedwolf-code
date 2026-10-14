@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools"
 	"slices"
 	"strings"
 	"testing"
@@ -15,9 +14,13 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestRequestDiscoveryOutageToExactActivation(t *testing.T) {
@@ -281,4 +284,53 @@ func TestRequestNoMatchDiscoveryReachesDeferredTask(t *testing.T) {
 	if !activation.Active("no-match")["task"] || len(activation.Active("no-match")) != 1 || ranks != 1 {
 		t.Fatal("exact selection changed unrelated activation or reranked")
 	}
+}
+
+func TestRequestNoMatchLongNeedPreservesProviderDiscovery(t *testing.T) {
+	reg := tools.NewDefaultRegistry()
+	registerRequestFixtureTools(t, reg, "task")
+	need := strings.Repeat("界", 14000)
+	var resolvedNeed, recordedNeed, resultNeed string
+	formatter := guidance.NewStaticRejectFormatter(moduleHintConfig(t))
+	testutil.FailErr(t, "register request", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
+		Activation: tools.NewMemoryActivation(), Boundary: fakeRequestBoundary{},
+		RejectFmt: func() *guidance.StaticRejectFormatter { return formatter },
+		Resolve: func(_ context.Context, _ tools.ToolContext, input string, _ []turnload.ToolCard) turnload.RequestOutcome {
+			resolvedNeed = input
+			return turnload.RequestOutcome{Need: input}
+		},
+		Record: func(_ context.Context, _ tools.ToolContext, outcome turnload.RequestOutcome, result turnload.RequestToolsResult, _ time.Duration) {
+			recordedNeed, resultNeed = outcome.Need, result.Need
+		},
+	}))
+	args := map[string]any{"need": need}
+	_, err := reg.Run(t.Context(), "request_tools", args, tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "long-need", Agent: "coordinator"},
+		Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{"task"})},
+	})
+	reject := toolrejection.CompleteFailureMetadata(requireUnmatchedToolRequest(t, err), "request_tools", "turnload")
+	page, ok := reject.Data["discovery"].(*turnload.Discovery)
+	if !ok || page.NextNeed != "" || len(page.Entries) != 1 || page.Entries[0].Name != "task" {
+		t.Fatalf("missing last discovery page: %+v", reject.Data)
+	}
+	if args["need"] != need || resolvedNeed != need || recordedNeed != need || resultNeed != need {
+		t.Fatal("diagnostic bound changed the request or recorded selection input")
+	}
+	if reject.Data["need"] != turnload.BoundUser(need, 900) {
+		t.Fatal("diagnostic request was not bounded")
+	}
+	facts := guidance.ToolResultFacts{Outcome: api.ToolResultOutcomeRejected}.WithFeedback(reject.Code, reject.Data, nil)
+	result := guidance.ComposeToolResult(err.Error(), facts, nil)
+	result.Tool, result.ToolCallID = "request_tools", "call"
+	message := api.Message{Role: api.MessageRoleTool, Content: err.Error(), ToolResult: result}
+	for _, projected := range transcript.Project([]api.Message{message}) {
+		if projected.Role != api.MessageRoleTool {
+			continue
+		}
+		if strings.Contains(projected.Content, "details_omitted") || !strings.Contains(projected.Content, `"name":"task"`) || !strings.Contains(projected.Content, `"status":"no_match"`) || !strings.Contains(projected.Content, "discovery.entries") {
+			t.Fatalf("provider lost actionable recovery: %s", projected.Content)
+		}
+		return
+	}
+	t.Fatal("provider projection lost the tool result")
 }
