@@ -904,13 +904,13 @@
       "summary": "edit on {{ paintedwolf.path }} found {{ paintedwolf.occurrences }} matches for old_string — a single-occurrence edit needs a unique target."
     },
     "EDIT_OLD_STRING_NOT_FOUND": {
-      "branch_instruction": "Use a fresh verbatim substring. Do not replace the whole file merely to bypass a failed exact edit.",
+      "branch_instruction": "Inspect source_history only when attribution is needed. Do not replace the whole file to bypass a missing match.",
       "category": "recoverable",
       "emit": "guard:edit",
-      "summary": "edit on {{ paintedwolf.path }} could not find old_string ({{ paintedwolf.old_string_chars }} chars) in the current file ({{ paintedwolf.total_lines }} lines)."
+      "summary": "{% if paintedwolf.replacement_matches %}No edit was applied to {{ paintedwolf.path }}. The requested new_string is already present {{ paintedwolf.replacement_matches }} time(s), first at line {{ paintedwolf.replacement_line }}.{% else %}No edit was applied to {{ paintedwolf.path }}: old_string ({{ paintedwolf.old_string_chars }} chars) is absent from the edit basis ({{ paintedwolf.total_lines }} lines).{% endif %}"
     },
     "EDIT_TARGET_CHANGED_BY_OTHERS": {
-      "branch_instruction": "Branch on Code; never retry the same old_string without a fresh read",
+      "branch_instruction": "Inspect source_history when attribution is needed. Do not repeat the same edit or replace the whole file merely to bypass a missing match.",
       "category": "recoverable",
       "emit": "guard:edit",
       "summary": "edit on {{ paintedwolf.path }} could not find old_string ({{ paintedwolf.old_string_chars }} chars), and the ledger recorded {{ paintedwolf.change_count }} change(s) to this file by other actors during this session."

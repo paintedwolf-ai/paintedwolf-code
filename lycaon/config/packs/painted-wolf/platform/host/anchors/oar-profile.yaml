@@ -937,6 +937,10 @@ host_facts:
    type: string
  - name: paintedwolf.old_string_chars
    type: string
+ - name: paintedwolf.replacement_matches
+   type: int
+ - name: paintedwolf.replacement_line
+   type: int
  - name: paintedwolf.operator
    type: string
  - name: paintedwolf.opaque_overflow

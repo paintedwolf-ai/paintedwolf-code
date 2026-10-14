@@ -99,7 +99,7 @@ func TestInterruptedMutationReceiptRetainsCancellation(t *testing.T) {
 }
 
 func TestEditMissCountsUnicodeCharacters(t *testing.T) {
-	data := editMissData("file", "new text", "🚀éx")
+	data := editMissData("file", "new text", "🚀éx", "new")
 	if data["old_string_chars"] != 3 {
 		t.Fatalf("Unicode count = %v", data["old_string_chars"])
 	}
@@ -123,5 +123,32 @@ func TestCopyByteBudgetCannotOverflowToEmptySuccess(t *testing.T) {
 		if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 			t.Fatalf("budget %v accepted or misclassified: %v", invalid, err)
 		}
+	}
+}
+
+func TestEditMissReportsReplacementObservation(t *testing.T) {
+	for _, tc := range []struct {
+		name, content, next string
+		matches, line       int
+	}{
+		{"present", "head\nnew\nnew", "new", 2, 2},
+		{"absent", "head\nother", "new", 0, 0},
+		{"deletion", "head", "", 0, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			data := editMissData("f", tc.content, "old", tc.next)
+			if tc.next != "" && data["replacement_matches"] != tc.matches {
+				t.Fatal(data)
+			}
+			if tc.line != 0 && data["replacement_line"] != tc.line {
+				t.Fatal(data)
+			}
+			if tc.line == 0 && data["replacement_line"] != nil {
+				t.Fatal(data)
+			}
+			if tc.next == "" && data["replacement_matches"] != nil {
+				t.Fatal(data)
+			}
+		})
 	}
 }
