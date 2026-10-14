@@ -30,11 +30,8 @@ func (m *Service) BeforeTool(
 	}
 	var identity workeradmission.TaskIdentity
 	if tool == "task" && sess != nil && surface.IsCoordinatorParent(sess) {
-		projectDir, err := m.Workspace.ActivePath(ctx, sess)
-		if err != nil {
-			return "", false, err
-		}
-		identity, err = m.taskIdentities.Resolve(ctx, sess.ID, projectDir, args)
+		var err error
+		identity, err = m.resolveTaskIdentity(ctx, sess, args)
 		if err != nil {
 			return "", false, err
 		}

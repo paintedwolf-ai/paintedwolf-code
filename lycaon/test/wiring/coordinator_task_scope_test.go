@@ -2,8 +2,12 @@ package wiring
 
 import (
 	"context"
+	"encoding/json"
+	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -139,4 +143,96 @@ func resolveObservedTask(t *testing.T, args map[string]any) workeradmission.Task
 	identity, err := (workeradmission.TaskIdentityResolver{}).Resolve(t.Context(), "parent-1", "", args)
 	testutil.FailErr(t, "resolve observed task", err)
 	return identity
+}
+
+func TestTaskAdmissionUsesTheExecutedIdentity(t *testing.T) {
+	h := BuildForTest(t, WithoutCoordinatorLoop())
+	for _, tc := range []struct{ name, agent, mode, omitted string }{
+		{"explicit read", "repo-researcher", "read", ""},
+		{"explicit write", "implementer", "write", ""},
+		{"resume read", "repo-researcher", "read", "both"},
+		{"resume write", "implementer", "write", "both"},
+		{"resume omitted agent", "implementer", "write", "agent"},
+		{"resume omitted scope", "implementer", "write", "scope"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+			dir := h.ProjectDir(t, tc.name)
+			sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, dir)
+			testutil.FailErr(t, "create coordinator", err)
+			call := wiringToolContext(sess.ID, dir)
+			call.Identity.Agent, call.Identity.ProjectID, call.Identity.ToolCallID = "coordinator", sess.ProjectID, uuid.NewString()
+			call.Source.ActiveRootID, call.Source.Roots[0].ID = sess.WorkspaceRootID, sess.WorkspaceRootID
+			_, err = h.ToolRegistry.Run(ctx, "update_progress", map[string]any{"content": "## Progress\n- [ ] Complete assigned work"}, call)
+			testutil.FailErr(t, "record progress", err)
+			scope := api.TaskScope{Mode: api.TaskScopeMode(tc.mode), Paths: []string{"src/**"}}
+			args := map[string]any{"agent_type": tc.agent, "scope": map[string]any{"mode": tc.mode, "paths": []any{"src/**"}}, "brief": map[string]any{"goal": "Continue assigned work", "done_when": []any{"Return grounded results"}}}
+			if tc.omitted != "" {
+				child, err := h.Store.CreateChild(ctx, sess, api.SpawnChildRequest{AgentType: tc.agent, Prompt: "Assigned work"})
+				testutil.FailErr(t, "create recorded child", err)
+				_, err = h.Delegations.Queue.Enqueue(ctx, api.WorkerTask{ParentSessionID: sess.ID, ChildSessionID: child.ID, ProjectID: sess.ProjectID, WorkspaceRootID: sess.WorkspaceRootID, WorkspacePath: dir, AgentType: tc.agent, Scope: &scope, Prompt: "Assigned work", Brief: "Assigned work", Status: api.WorkerStatusComplete})
+				testutil.FailErr(t, "record prior job", err)
+				args["child_session_id"] = child.ID
+				if tc.omitted == "both" || tc.omitted == "agent" {
+					delete(args, "agent_type")
+				}
+				if tc.omitted == "both" || tc.omitted == "scope" {
+					delete(args, "scope")
+				}
+			}
+			before, err := json.Marshal(args)
+			testutil.FailErr(t, "capture original arguments", err)
+			_, blocked, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "task", args)
+			testutil.FailErr(t, "admit effective identity", err)
+			if blocked {
+				t.Fatal("task admission blocked")
+			}
+			call.Identity.ToolCallID = uuid.NewString()
+			_, err = h.ToolRegistry.Run(ctx, "task", args, call)
+			testutil.FailErr(t, "execute admitted task", err)
+			task, err := h.Delegations.Queue.TaskReceipt(ctx, sess.ID, call.Identity.ToolCallID)
+			testutil.FailErr(t, "read task receipt", err)
+			if task == nil || task.AgentType != tc.agent || !reflect.DeepEqual(task.EffectiveScope(), scope) {
+				t.Fatalf("executed identity = %+v, want %s %+v", task, tc.agent, scope)
+			}
+			after, err := json.Marshal(args)
+			testutil.FailErr(t, "capture retained arguments", err)
+			if string(before) != string(after) {
+				t.Fatal("admission changed original tool arguments")
+			}
+		})
+	}
+}
+
+func TestTaskAdmissionPreservesTypedResolutionFailure(t *testing.T) {
+	h := BuildForTest(t, WithoutCoordinatorLoop())
+	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, h.ProjectDir(t, "invalid-identity"))
+	testutil.FailErr(t, "create coordinator", err)
+	child, err := h.Store.CreateChild(t.Context(), sess, api.SpawnChildRequest{AgentType: "repo-researcher", Prompt: "Assigned work"})
+	testutil.FailErr(t, "create child for mismatch", err)
+	_, err = h.Delegations.Queue.Enqueue(t.Context(), api.WorkerTask{ParentSessionID: sess.ID, ChildSessionID: child.ID, ProjectID: sess.ProjectID, WorkspaceRootID: sess.WorkspaceRootID, WorkspacePath: sess.WorkspacePath, AgentType: "repo-researcher", Scope: &api.TaskScope{Mode: api.TaskScopeModeRead}, Prompt: "Assigned work", Brief: "Assigned work", Status: api.WorkerStatusComplete})
+	testutil.FailErr(t, "record child identity", err)
+	for _, tc := range []struct {
+		name string
+		args map[string]any
+		code string
+	}{
+		{"unknown profile", map[string]any{"agent_type": "missing-worker", "scope": map[string]any{"mode": "write"}}, "WORKER_TYPE_UNAVAILABLE"},
+		{"unknown child", map[string]any{"child_session_id": uuid.NewString()}, "WORKER_RESUME_CHILD_UNKNOWN"},
+		{"missing identity", map[string]any{}, "TOOL_ARGS_INVALID"},
+		{"agent mismatch", map[string]any{"child_session_id": child.ID, "agent_type": "implementer"}, "WORKER_RESUME_MISMATCH"},
+		{"scope mismatch", map[string]any{"child_session_id": child.ID, "scope": map[string]any{"mode": "write"}}, "WORKER_RESUME_MISMATCH"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, _, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(t.Context(), sess, nil, "", "task", tc.args)
+			reject := toolrejection.AsToolReject(err)
+			if reject == nil || reject.Code != tc.code {
+				t.Fatalf("rejection = %v, want typed %s", err, tc.code)
+			}
+			refusal, ok := guidance.RefusalFromError(err)
+			if !ok || refusal.Code() != tc.code || !strings.Contains(refusal.Error(), "Code: "+tc.code) {
+				t.Fatalf("resolution failure lost OAR recovery: %v", err)
+			}
+		})
+	}
 }

@@ -41,7 +41,13 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 			testutil.FailErr(t, "enter execution", err)
 			for i := 1; i <= 5; i++ {
 				call.Identity.ToolCallID = uuid.NewString()
-				_, err = h.ToolRegistry.Run(ctx, "task", map[string]any{"agent_type": "security-reviewer", "prompt": "Trace the assigned boundary and account for unexamined scope.", "workflow_work_id": fmt.Sprintf("leg-%d", i), "scope": map[string]any{"mode": "read"}}, call)
+				args := map[string]any{"workflow_work_id": fmt.Sprintf("leg-%d", i)}
+				_, blocked, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "task", args)
+				testutil.FailErr(t, "admit planned identity", err)
+				if blocked {
+					t.Fatal("planned task admission blocked")
+				}
+				_, err = h.ToolRegistry.Run(ctx, "task", args, call)
 				testutil.FailErr(t, "dispatch survey worker", err)
 			}
 			tasks, err := h.Delegations.Queue.ListByWorkflowRunID(ctx, run.ID)
