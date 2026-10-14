@@ -195,6 +195,6 @@ The [`summarize`](summarize.md) tool returns a structured context pack as a dura
 
 The host publishes a bounded deterministic history representation before requesting summary enrichment. Request assembly never waits for the summarizer. A pending, slow, failed, or absent summary leaves canonical recovery available and does not stop chat.
 
-Summary completions are accepted only for their captured source identity and coverage boundary. A stale completion cannot replace a newer projection. Concurrent requests share bounded synthesis work rather than creating an unbounded backlog.
+Summary completions are accepted only for their captured source identity and coverage boundary. A stale completion cannot replace a newer projection. Concurrent requests share bounded synthesis work rather than creating an unbounded backlog. On a local provider shared with the coordinator, foreground admission cancels background synthesis and takes the lane; late completion cannot release the foreground lease.
 
 Provider health distinguishes explicit failures from slow or pending work. Individual failures are quiet. A sustained sequence of provider failures can report that the summarizer is unavailable; chat continues using the deterministic representation. A successful response clears the outage state.
