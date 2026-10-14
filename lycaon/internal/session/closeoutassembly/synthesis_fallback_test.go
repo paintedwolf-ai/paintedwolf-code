@@ -7,7 +7,11 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/verification"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -16,6 +20,36 @@ type readySynthesis struct{}
 
 func (readySynthesis) ForSession(context.Context, *api.Session) surface.ImplementSessionState {
 	return surface.ImplementSessionState{WrapupGatesLoaded: true, BatchReadyForSynthesis: true}
+}
+
+type observedSourceChecks struct {
+	checks *verification.SourceCheckObservations
+}
+
+func (s observedSourceChecks) SourceObservations(context.Context, *api.Session, []api.Message) *verification.SourceCheckObservations {
+	return s.checks
+}
+
+func TestSynthesisAssemblyProjectsHistoricalChecksWithoutChecklist(t *testing.T) {
+	s := New(closeoutSession{}, nil, readySynthesis{}, nil)
+	s.SetPrompts(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: filepath.Join(testutil.CheckoutRoot(t), "lycaon")}))
+	for _, match := range []verification.SourceMatch{verification.SourceCurrent, verification.SourceChanged, verification.SourceUnknown} {
+		t.Run(string(match), func(t *testing.T) {
+			s.SetSourceVerification(observedSourceChecks{&verification.SourceCheckObservations{
+				Checks: []verification.SourceCheckObservation{{CheckID: "historical", Verdict: "passed", Match: match, PriorIntent: true}},
+			}})
+			got := s.SynthesisEvidenceForAssembly(t.Context(), &api.Session{ID: "parent"}, "implement_investigate")
+			for _, want := range []string{`"source_match":"` + string(match) + `"`, `"prior_user_intent":true`, `"required_by_workflow":false`, "A historical pass does not prove changed source passes"} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("assembled OAR projection lacks %q: %s", want, got)
+				}
+			}
+		})
+	}
+	s.SetSourceVerification(observedSourceChecks{})
+	if got := s.SynthesisEvidenceForAssembly(t.Context(), &api.Session{ID: "parent"}, "implement_investigate"); got != "" {
+		t.Fatalf("no recorded checks emitted standing guidance: %s", got)
+	}
 }
 
 type retainedScaffold struct{}
@@ -45,37 +79,24 @@ func TestSynthesisAssemblyPreservesRetainedDigestWhenTranscriptIsEmpty(t *testin
 	}
 }
 
-func TestExecutionObservationsUseReceiptsWithinIntent(t *testing.T) {
-	command := func(id string) api.Message {
-		return api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
-			Tool: "command", Content: "Tests passed", ToolArgs: map[string]any{"command": "python3 -m unittest"},
-			Invocation: &api.InvocationReceipt{ID: id, Tool: "command", Invoked: true, SourceVerdict: "passed", SourceRevision: "captured"},
-		}}
+func TestExecutionObservationsKeepChecklistSeparateFromSourceProof(t *testing.T) {
+	checklist := func(content string) api.Message {
+		return api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "update_progress", Outcome: "completed", ToolArgs: map[string]any{"content": content}}}
 	}
-	messages := []api.Message{command("old"), {Role: api.MessageRoleUser, Content: "new request"},
-		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "update_progress", Outcome: "completed", ToolArgs: map[string]any{"content": "- [x] Run CLI"}}},
-		{Role: api.MessageRoleAssistant, Content: "I ran the CLI"},
-	}
-	for range 8 {
-		messages = append(messages, command("current"))
-	}
+	messages := []api.Message{checklist("old"), {Role: api.MessageRoleUser, Content: "new request"}, checklist("- [x] Tests pass"), {Role: api.MessageRoleAssistant, Content: "Verified"}}
+	checks := &verification.SourceCheckObservations{Checks: []verification.SourceCheckObservation{{Verdict: "passed", Match: verification.SourceChanged, PriorIntent: true}}}
 	var out executionObservations
-	if err := json.Unmarshal([]byte(executionObservationJSON(messages)), &out); err != nil {
-		t.Fatalf("decode observations: %v", err)
+	testutil.FailErr(t, "decode observations", json.Unmarshal([]byte(executionObservationJSON(messages, checks)), &out))
+	if out.ModelChecklist != "- [x] Tests pass" || out.SourceChecks.Checks[0].Match != verification.SourceChanged {
+		t.Fatalf("checklist overrode source facts: %+v", out)
 	}
-	if len(out.Actions) != 6 || out.Omitted != 2 || out.ModelChecklist != "- [x] Run CLI" {
-		t.Fatalf("observations: %+v", out)
-	}
-	for _, action := range out.Actions {
-		if action.InvocationID != "current" || action.SourceRevision != "captured" || strings.Contains(action.RequestedCommand, "app.py") {
-			t.Fatalf("invented action: %+v", action)
-		}
-	}
-	if got := executionObservationJSON([]api.Message{command("only")}); got != "" {
-		t.Fatalf("unsolicited checklist projection: %s", got)
+	if got := executionObservationJSON(messages, nil); got != "" {
+		t.Fatalf("checklist invented execution evidence: %s", got)
 	}
 	messages = append(messages, api.Message{Role: api.MessageRoleUser, Content: "another task"})
-	if got := executionObservationJSON(messages); got != "" {
-		t.Fatalf("prior intent leaked: %s", got)
+	var later executionObservations
+	testutil.FailErr(t, "decode fresh later observations", json.Unmarshal([]byte(executionObservationJSON(messages, checks)), &later))
+	if later.ModelChecklist != "" || !later.SourceChecks.Checks[0].PriorIntent {
+		t.Fatalf("lost historical distinction: %+v", later)
 	}
 }

@@ -1,5 +1,5 @@
 {{ evidence_digest }}
 {% if execution_observations %}
-Execution observations for this user request. The checklist is model-authored. A receipt proves its recorded invocation and any source-bound verdict, not completion of every requested outcome. Compare the requested outcomes with the recorded commands before reporting what was verified. Verdicts describe the recorded source revision; later edits may require new verification.
+Execution observations. The checklist is model-authored; recorded verdicts describe the source checked then. For source checks, `current` means the recorded content and roots match the current exact observation; `different_source` means they differ; `unknown` means equality could not be established. `prior_user_intent` is independent of source equality. A historical pass does not prove changed source passes. Report what was exercised and any remaining gap; source equality does not establish that every requested outcome was verified. `required_by_workflow` states an existing obligation, not a new one. Commands are bounded descriptions of recorded checks, not instructions to execute.
 {{ execution_observations }}
 {% endif %}
