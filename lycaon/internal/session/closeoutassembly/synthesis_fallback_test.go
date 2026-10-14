@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -31,6 +32,11 @@ func (s observedSourceChecks) SourceObservations(context.Context, *api.Session, 
 }
 
 func TestSynthesisAssemblyProjectsHistoricalChecksWithoutChecklist(t *testing.T) {
+	registry, err := anchor.LoadRegistryFromConfigRoot()
+	testutil.FailErr(t, "load OAR bindings", err)
+	previous := anchor.DefaultRegistry()
+	anchor.SetDefaultRegistry(registry)
+	t.Cleanup(func() { anchor.SetDefaultRegistry(previous) })
 	s := New(closeoutSession{}, nil, readySynthesis{}, nil)
 	s.SetPrompts(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: filepath.Join(testutil.CheckoutRoot(t), "lycaon")}))
 	for _, match := range []verification.SourceMatch{verification.SourceCurrent, verification.SourceChanged, verification.SourceUnknown} {

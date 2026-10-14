@@ -52,7 +52,7 @@ func TestSourceObservationsTrackExactContentAcrossTime(t *testing.T) {
 	record := checkRecord("check", revision, root, when)
 	record.RunID = sess.ID
 	testutil.FailErr(t, "persist check", m.evidenceStore.Append(ctx, m.EvidenceRootFor(sess), record))
-	history := []api.Message{{Role: api.MessageRoleUser, CreatedAt: when.Add(-time.Second)}}
+	history := []api.Message{{Role: api.MessageRoleUser, Content: "Check the source", CreatedAt: when.Add(-time.Second)}}
 	assert := func(want SourceMatch, prior bool) {
 		t.Helper()
 		out := m.SourceObservations(ctx, sess, history)
@@ -67,7 +67,7 @@ func TestSourceObservationsTrackExactContentAcrossTime(t *testing.T) {
 	assert(SourceChanged, false)
 	write("initial")
 	assert(SourceCurrent, false)
-	history = append(history, api.Message{Role: api.MessageRoleUser, CreatedAt: when.Add(time.Second)})
+	history = append(history, api.Message{Role: api.MessageRoleUser, Content: "Change the source", CreatedAt: when.Add(time.Second)})
 	assert(SourceCurrent, true)
 	sess.WorkspacePath = t.TempDir()
 	path = filepath.Join(sess.WorkspacePath, "source.txt")
