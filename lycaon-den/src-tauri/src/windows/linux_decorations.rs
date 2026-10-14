@@ -167,6 +167,29 @@ mod tests {
     use super::*;
     use DecorationControl::*;
 
+    /// The drawn buttons, menu entries and resize zones call these window
+    /// operations from every window that draws its own chrome.
+    #[test]
+    fn window_capabilities_grant_the_drawn_chrome_operations() {
+        let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        for capability in ["capabilities/default.json", "capabilities/items.json"] {
+            let text = std::fs::read_to_string(manifest.join(capability)).expect("capability file");
+            for permission in [
+                "core:window:allow-minimize",
+                "core:window:allow-toggle-maximize",
+                "core:window:allow-close",
+                "core:window:allow-start-resize-dragging",
+                "core:window:allow-set-fullscreen",
+                "allow-linux-decoration-layout",
+            ] {
+                assert!(
+                    text.contains(&format!("\"{permission}\"")),
+                    "{capability} lacks {permission}"
+                );
+            }
+        }
+    }
+
     fn portal(left: &[DecorationControl], right: &[DecorationControl]) -> DecorationLayout {
         DecorationLayout {
             left: left.to_vec(),
