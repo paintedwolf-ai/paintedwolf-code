@@ -109,3 +109,24 @@ func TestHistoryRecoversRecordedToolBodiesAndHandles(t *testing.T) {
 		t.Fatal("recorded tool recovery lost its body or handle")
 	}
 }
+
+func TestHistoryDoesNotExposeInternalOrUncommittedRows(t *testing.T) {
+	f := newFixture(t)
+	for _, row := range []struct {
+		id, visibility, kind, status string
+		ord                          int
+	}{
+		{"internal", "internal", "normal", "", 1}, {"draft", "transcript", "draft", "draft", 2},
+	} {
+		_, err := f.db.ExecContext(t.Context(), `INSERT INTO messages (id,session_id,role,content,visibility,kind,draft_status,origin,authority,trust_tier,ord,seq,ts)
+		VALUES (?,?,'assistant','hidden',?,?,?,'model','none','trusted',?,?,'2026-10-14T00:00:00Z')`, row.id, coordinatorSession, row.visibility, row.kind, row.status, row.ord, row.ord)
+		testutil.FailErr(t, "seed hidden rows", err)
+	}
+	for _, id := range []string{"", "internal", "draft"} {
+		result, err := f.svc.Answer(t.Context(), recall.Request{Caller: coordinator(), History: &recall.HistoryRequest{ThroughOrd: 2, MessageID: id}})
+		testutil.FailErr(t, "recover visible transcript only", err)
+		if len(result.History.Entries) != 0 || result.Resolution != recall.ResolutionScopeEmpty {
+			t.Fatal("history exposed a row outside the transcript")
+		}
+	}
+}

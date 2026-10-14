@@ -18,6 +18,8 @@ type ErrHistoryCoordinates struct{ Reason string }
 
 func (e *ErrHistoryCoordinates) Error() string { return "recall: " + e.Reason }
 
+const historyVisible = `visibility = 'transcript' AND (kind != 'draft' OR draft_status = 'committed')`
+
 const historyText = `COALESCE(NULLIF(content,''),json_extract(NULLIF(tool_result_json,''),'$.content'),'')`
 
 // HistoryRequest addresses recorded rows in the caller's own session.
@@ -100,7 +102,7 @@ func (s *Service) history(ctx context.Context, req Request) (*Result, error) {
 	if len(page.Entries) == 0 {
 		out.Resolution = ResolutionNoMatchInScope
 		var present bool
-		if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM messages WHERE session_id = ? LIMIT 1)", req.Caller.SessionID).Scan(&present); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM messages WHERE session_id = ? AND "+historyVisible+" LIMIT 1)", req.Caller.SessionID).Scan(&present); err != nil {
 			return nil, err
 		}
 		if !present {
@@ -123,7 +125,7 @@ func historyIndex(ctx context.Context, tx *sql.Tx, session string, h *HistoryReq
 	}
 	limit = min(limit, MaxLimit)
 	rows, err := tx.QueryContext(ctx, `SELECT id, ord, role, substr(`+historyText+`,1,120), length(`+historyText+`), COALESCE(evidence_handles_json,'[]'), seq
-		FROM messages WHERE session_id = ? AND ord > ? AND ord <= ? ORDER BY ord LIMIT ?`, session, h.AfterOrd, h.ThroughOrd, limit+1)
+		FROM messages WHERE session_id = ? AND ord > ? AND ord <= ? AND `+historyVisible+` ORDER BY ord LIMIT ?`, session, h.AfterOrd, h.ThroughOrd, limit+1)
 	if err != nil {
 		return err
 	}
@@ -144,7 +146,7 @@ func historyIndex(ctx context.Context, tx *sql.Tx, session string, h *HistoryReq
 
 func historyBody(ctx context.Context, tx *sql.Tx, session string, h *HistoryRequest, page *HistoryPage) error {
 	row := tx.QueryRowContext(ctx, `SELECT id, ord, role, substr(`+historyText+`,?,?), length(`+historyText+`), COALESCE(evidence_handles_json,'[]'), seq
-		FROM messages WHERE session_id = ? AND id = ? AND ord > ? AND ord <= ?`, h.Offset+1, historyBodyRunes, session, h.MessageID, h.AfterOrd, h.ThroughOrd)
+		FROM messages WHERE session_id = ? AND id = ? AND ord > ? AND ord <= ? AND `+historyVisible, h.Offset+1, historyBodyRunes, session, h.MessageID, h.AfterOrd, h.ThroughOrd)
 	entry, err := scanHistoryEntry(row)
 	if err == sql.ErrNoRows {
 		return nil
