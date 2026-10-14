@@ -238,6 +238,7 @@ The intended policy is platform-independent; enforcement adapters differ. macOS 
 | Writes | `file-write*` to write roots, then layered denies and grants | Landlock grants every filesystem access the kernel's ABI knows, including rename and truncation, below each write root and exact grant; a denied path inside a grant is covered by a read-only copy of itself, and a grant beneath that is bound back |
 | Devices | Named device sinks | `/dev` is rebuilt: `null`, `zero`, `full`, `random`, `urandom`, `tty`, the host's `pts` and `ptmx`, a fresh `shm`, and the descriptor links; other devices are absent |
 | Network deny | `(deny default)` | A network namespace holding only loopback; a connection elsewhere fails with the network unreachable |
+| Unix-domain sockets | Path connects denied except exact grants, including sockets the program created itself; `socketpair` allowed | A network namespace does not isolate path sockets and seccomp cannot read a connect address, so creating any Unix-domain socket (stream, datagram, or seqpacket) fails with `EACCES`; `socketpair` is allowed; `io_uring` answers `ENOSYS`, since its operations bypass the filter |
 | Mediated, direct, loopback, listener, and socket grants | Rendered rules | Not expressed yet; a plan that needs one is refused with a typed reason and the launch fails closed |
 | Signals | Same-sandbox descendants, or any process with `process_control` | The PID namespace: a confined process can signal only processes inside it, with or without `process_control`; the host's processes are reached through the native `process_signal` tool |
 | Escape | Profile denies | seccomp kills a process that calls `unshare`, `setns`, `mount` or the mount API, `pivot_root`, `ptrace`, `process_vm_*`, `bpf`, `perf_event_open`, `kexec_*`, module loading, or the key-management syscalls, `ioctl` with `TIOCSTI` or `TIOCLINUX` (compared as the kernel does, on the request's low 32 bits), so an inherited terminal cannot be fed input, or `clone` with a namespace flag; `clone3` answers `ENOSYS` so libraries fall back to `clone`; no capability remains and privileges cannot grow |
@@ -248,7 +249,8 @@ The Linux floor is a kernel with Landlock ABI 3 (6.2) and unprivileged user name
 
 What the Linux adapter cannot express yet, and what it expresses differently, is bounded:
 
-- Mediated egress, direct IP, loopback-connect, listener, and Unix socket grants refuse the launch with a typed reason; network deny is complete.
+- Mediated egress, direct IP, loopback-connect, listener, and Unix socket grants refuse the launch with a typed reason. Network deny is complete, path sockets included: no Unix-domain socket can be created, so neither the desktop session's buses nor any other path socket is reachable.
+- Abstract Unix sockets, which macOS lacks, are refused with the rest; inside the network namespace they could reach only the command's own processes.
 - A write root or grant that does not exist at launch gets no Landlock rule, so a confined process cannot create it.
 - A protected-path write grant for a file that does not exist yet inside a read-only masked tree cannot be opened, because the mask covers its parent.
 - Loader files named at any depth (`AGENTS.md`) are masked read-only where they exist at launch, found by walking each root up to a bounded number of entries; creating a new one deeper in the tree is not refused.

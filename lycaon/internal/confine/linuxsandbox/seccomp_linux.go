@@ -25,6 +25,10 @@ const (
 // 32-bit value, so the filter does too.
 var terminalInjectionRequests = []uint32{unix.TIOCSTI, unix.TIOCLINUX}
 
+// ioUringSyscalls answer ENOSYS: io_uring operations run without passing the
+// filter, so a ring could create and connect the sockets refused below.
+var ioUringSyscalls = []uint32{unix.SYS_IO_URING_SETUP, unix.SYS_IO_URING_ENTER, unix.SYS_IO_URING_REGISTER}
+
 // escapeSyscalls would let a process leave or reshape the boundary the
 // namespaces, mounts, and Landlock built. Each one kills the process.
 var escapeSyscalls = []uint32{
@@ -44,9 +48,11 @@ const namespaceCloneFlags = unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_N
 	unix.CLONE_NEWUTS | unix.CLONE_NEWIPC | unix.CLONE_NEWCGROUP | unix.CLONE_NEWTIME
 
 // seccompProgram builds the filter: kill on an escape syscall, a terminal
-// injection ioctl, or a clone that asks for a namespace, answer clone3 with
-// ENOSYS so libraries fall back to clone (whose flags the filter can read),
-// and allow everything else.
+// injection ioctl, or a clone that asks for a namespace; refuse creating a
+// Unix-domain socket with EACCES, since a network namespace does not isolate
+// path sockets and the filter cannot read a connect address; answer io_uring
+// and clone3 with ENOSYS so libraries fall back to calls the filter can read;
+// allow everything else, socketpair included.
 func seccompProgram() ([]bpf.RawInstruction, error) {
 	kill := uint32(unix.SECCOMP_RET_KILL_PROCESS)
 	insts := []bpf.Instruction{
@@ -83,9 +89,29 @@ func seccompProgram() ([]bpf.RawInstruction, error) {
 		bpf.RetConstant{Val: kill},
 		bpf.RetConstant{Val: unix.SECCOMP_RET_ALLOW},
 	)
+	enosys := uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.ENOSYS)
+	u := len(ioUringSyscalls)
+	for i, nr := range ioUringSyscalls {
+		// A match skips the remaining compares to the ENOSYS return; the last
+		// miss skips that return.
+		var past uint8
+		if i == u-1 {
+			past = 1
+		}
+		insts = append(insts, bpf.JumpIf{Cond: bpf.JumpEqual, Val: nr, SkipTrue: uint8(u - 1 - i), SkipFalse: past})
+	}
+	insts = append(insts,
+		bpf.RetConstant{Val: enosys},
+		// socket: the domain is the first argument, an int compared on its low half.
+		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SYS_SOCKET, SkipFalse: 4},
+		bpf.LoadAbsolute{Off: seccompDataArg0, Size: 4},
+		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.AF_UNIX, SkipFalse: 1},
+		bpf.RetConstant{Val: uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EACCES)},
+		bpf.RetConstant{Val: unix.SECCOMP_RET_ALLOW},
+	)
 	insts = append(insts,
 		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SYS_CLONE3, SkipFalse: 1},
-		bpf.RetConstant{Val: uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.ENOSYS)},
+		bpf.RetConstant{Val: enosys},
 		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SYS_CLONE, SkipFalse: 3},
 		bpf.LoadAbsolute{Off: seccompDataArg0, Size: 4},
 		bpf.JumpIf{Cond: bpf.JumpBitsSet, Val: namespaceCloneFlags, SkipFalse: 1},

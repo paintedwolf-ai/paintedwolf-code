@@ -103,6 +103,7 @@ func TestSeccompProgramDecides(t *testing.T) {
 	kill := int(unix.SECCOMP_RET_KILL_PROCESS)
 	allow := int(unix.SECCOMP_RET_ALLOW)
 	enosys := int(uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.ENOSYS))
+	eacces := int(uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EACCES))
 	for _, tc := range []struct {
 		name string
 		data []byte
@@ -117,6 +118,15 @@ func TestSeccompProgramDecides(t *testing.T) {
 		{"clone into a user namespace", record(unix.SYS_CLONE, unix.CLONE_NEWUSER, 0, 0), kill},
 		{"plain clone", record(unix.SYS_CLONE, unix.CLONE_VM, 0, 0), allow},
 		{"clone3", record(unix.SYS_CLONE3, 0, 0, 0), enosys},
+		{"unix stream socket", record(unix.SYS_SOCKET, unix.AF_UNIX, unix.SOCK_STREAM, 0), eacces},
+		{"unix datagram socket", record(unix.SYS_SOCKET, unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0), eacces},
+		{"unix seqpacket socket", record(unix.SYS_SOCKET, unix.AF_UNIX, unix.SOCK_SEQPACKET, 0), eacces},
+		{"inet socket", record(unix.SYS_SOCKET, unix.AF_INET, unix.SOCK_STREAM, 0), allow},
+		{"inet6 socket", record(unix.SYS_SOCKET, unix.AF_INET6, unix.SOCK_DGRAM, 0), allow},
+		{"socketpair", record(unix.SYS_SOCKETPAIR, unix.AF_UNIX, unix.SOCK_STREAM, 0), allow},
+		{"io_uring_setup", record(unix.SYS_IO_URING_SETUP, 0, 0, 0), enosys},
+		{"io_uring_enter", record(unix.SYS_IO_URING_ENTER, 0, 0, 0), enosys},
+		{"io_uring_register", record(unix.SYS_IO_URING_REGISTER, 0, 0, 0), enosys},
 	} {
 		got, err := vm.Run(tc.data)
 		if err != nil {

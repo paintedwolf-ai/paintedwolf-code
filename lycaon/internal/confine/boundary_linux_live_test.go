@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -29,6 +30,25 @@ import (
 // linuxProbeEnv selects what TestLinuxSandboxProbeProcess does when a confined
 // launch runs this binary.
 const linuxProbeEnv = "PW_CONFINE_LINUX_PROBE"
+
+// linuxProbePathsEnv lists, one per line, the socket paths the unix probe tries.
+const linuxProbePathsEnv = "PW_CONFINE_LINUX_PROBE_PATHS"
+
+// errnoName prints a syscall error by its constant name, or "ok".
+func errnoName(err error) string {
+	var errno syscall.Errno
+	switch {
+	case err == nil:
+		return "ok"
+	case errors.As(err, &errno) && errno == 0:
+		return "ok"
+	case errors.Is(err, unix.EACCES):
+		return "EACCES"
+	case errors.Is(err, unix.ENOSYS):
+		return "ENOSYS"
+	}
+	return err.Error()
+}
 
 // TestLinuxSandboxProbeProcess is the body confined commands run; it does
 // nothing unless a test spawned it with a mode.
@@ -98,6 +118,34 @@ func runLinuxProbe(mode string) int {
 		_, _, errno := unix.Syscall(unix.SYS_IOCTL, 0, uintptr(request), uintptr(unsafe.Pointer(&input)))
 		fmt.Println(mode+":", errno)
 		return 4
+	case "unix":
+		for _, path := range strings.Split(os.Getenv(linuxProbePathsEnv), "\n") {
+			for _, typ := range []int{unix.SOCK_STREAM, unix.SOCK_DGRAM, unix.SOCK_SEQPACKET} {
+				fd, err := unix.Socket(unix.AF_UNIX, typ|unix.SOCK_CLOEXEC, 0)
+				if err == nil {
+					err = unix.Connect(fd, &unix.SockaddrUnix{Name: path})
+					_ = unix.Close(fd)
+				}
+				fmt.Printf("unix %d %s: %v\n", typ, path, errnoName(err))
+			}
+		}
+		return 0
+	case "socketpair":
+		fds, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_STREAM|unix.SOCK_CLOEXEC, 0)
+		if err != nil {
+			fmt.Println("socketpair:", err)
+			return 2
+		}
+		_, _ = unix.Write(fds[0], []byte("p"))
+		buf := make([]byte, 1)
+		n, err := unix.Read(fds[1], buf)
+		fmt.Println("socketpair:", n, string(buf[:n]), err)
+		return 0
+	case "iouring":
+		params := make([]byte, 120)
+		_, _, errno := unix.Syscall(unix.SYS_IO_URING_SETUP, 1, uintptr(unsafe.Pointer(&params[0])), 0)
+		fmt.Println("io_uring_setup:", errnoName(errno))
+		return 0
 	case "orphan":
 		daemon := child("sleep", true)
 		if err := daemon.Start(); err != nil {
@@ -335,6 +383,57 @@ func openPty(t *testing.T) (master, slave *os.File) {
 	slave, err = os.OpenFile("/dev/pts/"+strconv.FormatUint(uint64(n), 10), os.O_RDWR|unix.O_NOCTTY, 0)
 	testutil.FailErr(t, "open pty slave", err)
 	return master, slave
+}
+
+func TestLinuxUnixSocketsAreRefused(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	// A socket the test serves outside every root; the test reaches it itself,
+	// so the confined refusal is the boundary and not a missing listener.
+	own := filepath.Join(t.TempDir(), "own.sock")
+	ln, err := net.Listen("unix", own)
+	testutil.FailErr(t, "listen", err)
+	defer ln.Close()
+	paths := []string{own, "/run/dbus/system_bus_socket", filepath.Join("/run/user", strconv.Itoa(os.Getuid()), "bus")}
+	for _, p := range paths {
+		if _, err := os.Stat(p); err != nil {
+			continue
+		}
+		conn, err := net.Dial("unix", p)
+		testutil.FailErr(t, "unconfined dial "+p, err)
+		_ = conn.Close()
+	}
+	env := append(probeEnv("unix"), linuxProbePathsEnv+"="+strings.Join(paths, "\n"))
+	status, out := linuxConfinedRun(t, self, denyConfinement(t.TempDir()), env, self, probeTestFlag)
+	if status.ExitStatus() != 0 {
+		t.Fatalf("unix probe: exit %d: %s", status.ExitStatus(), out)
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	refused := 0
+	for _, line := range lines {
+		if !strings.HasPrefix(line, "unix ") {
+			continue
+		}
+		if !strings.HasSuffix(line, ": EACCES") {
+			t.Fatalf("unix socket not refused with EACCES: %s\n%s", line, out)
+		}
+		refused++
+	}
+	if refused != 3*len(paths) {
+		t.Fatalf("refused %d attempts, want %d:\n%s", refused, 3*len(paths), out)
+	}
+
+	status, out = linuxConfinedRun(t, self, denyConfinement(t.TempDir()), probeEnv("socketpair"), self, probeTestFlag)
+	if status.ExitStatus() != 0 || !strings.Contains(out, "socketpair: 1 p <nil>") {
+		t.Fatalf("socketpair: exit %d: %s", status.ExitStatus(), out)
+	}
+}
+
+func TestLinuxIoUringIsUnavailable(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	status, out := linuxConfinedRun(t, self, denyConfinement(t.TempDir()), probeEnv("iouring"), self, probeTestFlag)
+	if status.ExitStatus() != 0 || !strings.Contains(out, "io_uring_setup: ENOSYS") {
+		t.Fatalf("io_uring: exit %d: %s", status.ExitStatus(), out)
+	}
 }
 
 func TestLinuxDescendantsEndWithTheCommand(t *testing.T) {
