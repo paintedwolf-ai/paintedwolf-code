@@ -99,6 +99,7 @@ func (c TurnCloseoutCause) Text() string {
 
 // HostNudge carries rendered guidance and its anchor ID.
 type HostNudge struct {
+	DraftID  string
 	Content  string
 	SignalID string
 	Feedback *api.ToolFeedback
@@ -451,11 +452,16 @@ func (l *turnNudges) appendUserNudge(
 	return l.appendHostNudge(ctx, sessionID, history, HostNudge{Content: content}, "", st)
 }
 
-func newHostNudge(nudge HostNudge, kind api.MessageKind) api.Message {
+func hostNudgeSignalID(nudge HostNudge) string {
 	signalID := strings.TrimSpace(nudge.SignalID)
 	if nudge.Feedback != nil {
 		signalID = feedbackSignalID(*nudge.Feedback)
 	}
+	return api.DraftRecoverySignal(nudge.DraftID, signalID)
+}
+
+func newHostNudge(nudge HostNudge, kind api.MessageKind) api.Message {
+	signalID := hostNudgeSignalID(nudge)
 	return api.Message{
 		ID:        uuid.NewString(),
 		Role:      api.MessageRoleUser,
@@ -496,7 +502,7 @@ func (l *turnNudges) appendHostNudge(
 	}
 	nudge := newHostNudge(hostNudge, kind)
 	history = append(history, nudge)
-	if deferUserNudgeStore(st) {
+	if deferUserNudgeStore(st) && hostNudge.DraftID == "" {
 		st.deferredUserNudges = append(st.deferredUserNudges, nudge)
 		return history, nil
 	}
@@ -510,10 +516,7 @@ func (l *turnNudges) appendHostNudge(
 }
 
 func lastHostNudgeWithSignal(history []api.Message, nudge HostNudge) int {
-	signalID := strings.TrimSpace(nudge.SignalID)
-	if nudge.Feedback != nil {
-		signalID = feedbackSignalID(*nudge.Feedback)
-	}
+	signalID := hostNudgeSignalID(nudge)
 	if signalID == "" {
 		return -1
 	}

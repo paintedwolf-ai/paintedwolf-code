@@ -97,9 +97,10 @@ func (l *toolInvocations) rejectBlockedAssistantTurn(
 		return nil, err
 	}
 	return l.Nudges.appendHostNudge(ctx, sessionID, history, HostNudge{
+		DraftID:  draftSlotID,
 		Content:  reject.Body,
 		Feedback: &api.ToolFeedback{Code: reject.Code(), Details: reject.Facts.FeedbackFor(reject.Code()).Details},
-	}, "", st)
+	}, api.MessageKindCoordinatorGuidance, st)
 }
 
 func (l *toolInvocations) retractRejectedAssistantTurn(

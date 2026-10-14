@@ -173,3 +173,33 @@ func TestFilterPromptHistoryKeepsToolGroupContiguousForWire(t *testing.T) {
 		t.Fatalf("filtered order = %v want nudge after tools", []string{out[0].ID, out[1].ID, out[2].ID, out[3].ID})
 	}
 }
+
+func TestDraftRecoveryPersistsBeforeRetryAndScopesDeduplication(t *testing.T) {
+	var stored []api.Message
+	loop := NewPromptLoopForTest(PromptLoopDeps{Projection: ProjectionDeps{
+		AppendMessages: func(_ context.Context, _ string, messages ...api.Message) error {
+			stored = append(stored, messages...)
+			return nil
+		},
+		UpdateMessage: func(_ context.Context, _, _ string, _ api.Message) error { return nil },
+	}})
+	st := &promptLoopTurnState{draftSlotID: "draft", draftSlotAppended: true}
+	nudge := HostNudge{DraftID: "draft", Content: "retry", Feedback: &api.ToolFeedback{Code: "TEST_RECOVERY"}}
+	history, err := loop.Nudges.appendHostNudge(t.Context(), "session", nil, nudge, api.MessageKindCoordinatorGuidance, st)
+	testutil.FailErr(t, "persist recovery", err)
+	if len(stored) != 1 || len(st.deferredUserNudges) != 0 {
+		t.Fatal("recovery must survive interruption before the retry finishes")
+	}
+	nudge.Content = "revised recovery"
+	history, err = loop.Nudges.appendHostNudge(t.Context(), "session", history, nudge, api.MessageKindCoordinatorGuidance, st)
+	testutil.FailErr(t, "replace same draft recovery", err)
+	if len(history) != 1 || len(stored) != 1 {
+		t.Fatal("same draft and code must deduplicate")
+	}
+	nudge.DraftID = "later-draft"
+	history, err = loop.Nudges.appendHostNudge(t.Context(), "session", history, nudge, api.MessageKindCoordinatorGuidance, st)
+	testutil.FailErr(t, "append different draft recovery", err)
+	if len(history) != 2 || len(stored) != 2 {
+		t.Fatal("different drafts must retain separate recovery identities")
+	}
+}
