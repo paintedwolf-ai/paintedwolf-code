@@ -98,3 +98,23 @@ func containsStrategy(strategies []string, want string) bool {
 	}
 	return false
 }
+
+func TestAssemblePromptHistoryPreservesRecoveryOrderThroughContextRoundtrip(t *testing.T) {
+	original := []api.Message{
+		{ID: "draft", Role: api.MessageRoleAssistant, Content: "done", DraftStatus: api.DraftStatusCommitted},
+		{ID: "recovery", Role: api.MessageRoleUser, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem,
+			Visibility: api.MessageVisibilityInternal, Kind: api.MessageKindCoordinatorGuidance,
+			HostSignalID: api.DraftRecoverySignal("draft", "guidance:RETRY"), Content: "take the pending action"},
+	}
+	view := compaction.ContextMessagesToAPI(compaction.ContextMessagesFromAPI(original), original)
+	cfg := compaction.DefaultCompactionConfig()
+	cfg.Enabled = true
+	cfg.HardCeilingTokens = 8000
+	got, _ := promptassembly.Assemble(nil, view, promptassembly.Config{CompactionConfig: cfg})
+	if len(got) != 2 || got[0].ID != "recovery" || got[1].ID != "draft" {
+		t.Fatalf("recovery order lost in fitted history: %+v", got)
+	}
+	if got[0].HostSignalID != original[1].HostSignalID {
+		t.Fatal("context roundtrip discarded recovery identity")
+	}
+}

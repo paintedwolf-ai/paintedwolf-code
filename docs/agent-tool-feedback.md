@@ -89,14 +89,35 @@ A named **field** is reachable on the same terms as a named tool. In card copy, 
 
 An unreachable remedy is worse than none: the agent retries it, the schema refuses again, and the pair loops until the turn dies.
 
+Both `Fix` and `Instead` must respect the same current facts. A short summary
+cannot reintroduce a tool omitted by the detailed remedy. The production recovery
+catalog test varies every declared offered-tool dimension for intrinsic rejection
+scenarios, including absent request context, and checks both fields. Conflicting
+producer metadata must not change the frozen tool surface. These checks cover
+availability claims; permission, workflow, and evidence validity require their
+corresponding structured facts and contracts. An offered tool still crosses its
+normal admission checks. Advice about approval, workflow readiness, or evidence
+freshness must use those facts separately from schema availability.
+
 When a call names a tool whose schema is absent, the compiled tool plan determines
 recovery. A deferred tool with `request_tools` offered returns `TOOL_NOT_OFFERED`
 with `tool_loadable: true` and an exact `replacement_calls` entry that loads its
 schema. The model retries on the next call, after loading; the rejected action is
 never executed automatically. A name without that loading path receives an
-unavailable-capability explanation. Loading changes schema visibility, not access
+unavailable-name explanation. The rejection lists the exact tools offered on that
+request from the frozen recovery surface. When the current surface offers the loader and
+other deferred tools, recovery asks the agent to describe its needed capability
+to discover an allowed alternative, without retrying the unavailable name. With
+no discovery path, recovery names the capability limitation. Loading changes schema visibility, not access
 or approval. This guidance appears only on rejection, without expanding standing
 prompts.
+
+When tool ranking selects no additional schema, `TOOL_REQUEST_UNMATCHED` keeps its
+rejection identity and can carry a bounded `discovery` page with tool names and
+descriptions. Its `no_match` status distinguishes a completed ranking from an
+unavailable ranker. The agent can select an exact name or follow the page's
+continuation without ranking again. These observations do not establish that a
+healthy partial selection fulfilled the requested operation.
 
 Repetition admission evaluates resolved prerequisites and counters atomically.
 It releases an identical `TOOL_NOT_OFFERED` retry when that tool is offered, or an
@@ -128,6 +149,8 @@ Host lifecycle teaching (phase state, progress, roster, closeout) is not a nudge
 Asynchronous work emits typed completion facts: operation identity, terminal state, affected resource, and any result handle. Den projects those facts as an activity or transcript item. The next model turn receives a compact guidance block only when the completion changes what it can or must do.
 
 Success is never inferred from a friendly message. The producer states success or failure in the result envelope, and the host persists that state before rendering copy.
+
+Worker artifact checks and parent completion receipts share the same host inspection of the worker baseline. An unchanged worker baseline cannot borrow evidence from unrelated primary-workspace changes or reported file names. An unavailable baseline remains an explicit evidence limitation.
 
 ## Tool-output steering
 

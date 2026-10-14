@@ -28,7 +28,7 @@ func TestWorkerValidationEvidenceUnavailablePreservesDelivery(t *testing.T) {
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, "")
 	testutil.FailErr(t, "create session", err)
 	task := &api.WorkerTask{ChildSessionID: sess.ID}
-	proof := mgr.Workers.Summaries.Proof(t.Context(), task, nil, "")
+	proof, _ := mgr.Workers.Summaries.Proof(t.Context(), task, nil, "")
 	if !proof.Verification.Valid() || proof.Verification.Method != verification.Blocked {
 		t.Fatalf("unavailable validation not recorded: %+v", proof)
 	}

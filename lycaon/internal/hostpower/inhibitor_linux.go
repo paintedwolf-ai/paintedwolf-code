@@ -7,12 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"net"
 	"os"
 	"sync"
 	"time"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/lycaon/lycaon/internal/linuxbus"
 	"golang.org/x/sys/unix"
 )
 
@@ -22,28 +22,6 @@ const logindPath = dbus.ObjectPath("/org/freedesktop/login1")
 
 type platformInhibitor struct{}
 
-func connectLogindBus(path string) (*dbus.Conn, error) {
-	connection, err := (&net.Dialer{Timeout: logindDeadline}).DialContext(context.Background(), "unix", path)
-	if err != nil {
-		return nil, err
-	}
-	socket := connection.(*net.UnixConn)
-	if err := socket.SetDeadline(time.Now().Add(logindDeadline)); err != nil {
-		_ = socket.Close()
-		return nil, err
-	}
-	bus, err := dbus.ConnectUnix(socket)
-	if err != nil {
-		_ = socket.Close()
-		return nil, err
-	}
-	if err := socket.SetDeadline(time.Time{}); err != nil {
-		_ = bus.Close()
-		return nil, err
-	}
-	return bus, nil
-}
-
 func logindAvailable(bus *dbus.Conn) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), logindDeadline)
 	defer cancel()
@@ -52,7 +30,7 @@ func logindAvailable(bus *dbus.Conn) bool {
 }
 
 func (platformInhibitor) Supported() bool {
-	bus, err := connectLogindBus("/run/dbus/system_bus_socket")
+	bus, err := linuxbus.Connect(context.Background(), "/run/dbus/system_bus_socket")
 	if err != nil {
 		return false
 	}
@@ -61,7 +39,7 @@ func (platformInhibitor) Supported() bool {
 }
 
 func (platformInhibitor) Acquire() (lease, error) {
-	bus, err := connectLogindBus("/run/dbus/system_bus_socket")
+	bus, err := linuxbus.Connect(context.Background(), "/run/dbus/system_bus_socket")
 	if err != nil {
 		return nil, fmt.Errorf("connect to sleep inhibitor service: %w", err)
 	}
