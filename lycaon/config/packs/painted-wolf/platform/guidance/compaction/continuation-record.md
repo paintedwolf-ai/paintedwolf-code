@@ -18,7 +18,7 @@
 ### Reacquire before relying on compacted details
 {% if not recall_available %}Reacquire the needed evidence through available read tools.{% endif %}
 {% for line in reacquire %}- {{ line }}
-{% endfor %}{% for s in compacted_sources %}- {% if s.handles %}`{% for h in s.handles %}{{ h }}{% if not forloop.Last %}`, `{% endif %}{% endfor %}`{% if s.tool %} ({{ s.tool }}){% endif %}{% elif s.tool %}{{ s.tool }} result{% if s.message_id %}, message `{{ s.message_id }}`{% endif %}{% else %}message `{{ s.message_id }}`{% endif %}
+{% endfor %}{% for s in compacted_sources %}- {% if s.handles %}`{% for h in s.handles %}{{ h }}{% if not forloop.Last %}`, `{% endif %}{% endfor %}`{% if s.tool %} ({{ s.tool }}){% endif %}{% if s.message_id %}, message `{{ s.message_id }}`{% endif %}{% elif s.tool %}{{ s.tool }}{% if s.message_id %}, message `{{ s.message_id }}`{% endif %}{% else %}message `{{ s.message_id }}`{% endif %}
 {% endfor %}{% if constraints %}
 ### Constraints
 {% for line in constraints %}- {{ line }}

@@ -149,12 +149,17 @@ func RenderContinuation(ctx context.Context, record *messageview.Continuation, r
 			summary = compactionSummary{Level: level, ThroughOrd: record.ThroughOrd, ReferenceOnly: true}
 			limit = 0
 		}
-		var sources []CompactedSource
-		for _, source := range record.Sources[max(0, len(record.Sources)-limit):] {
-			sources = append(sources, CompactedSource{Handles: source.Handles[:min(4, len(source.Handles))], Tool: source.Tool, MessageID: source.MessageID})
+		sources := recoverySources(record.Sources)
+		seen := make(map[string]bool)
+		for _, source := range sources {
+			seen[source.MessageID] = true
 		}
-		if level == "references" {
-			sources = recoverySources(record.Sources)
+		for i := len(record.Sources) - 1; i >= 0 && len(sources) < limit; i-- {
+			source := record.Sources[i]
+			if !seen[source.MessageID] {
+				sources = append(sources, CompactedSource{Handles: source.Handles[:min(4, len(source.Handles))], Tool: source.Tool, MessageID: source.MessageID})
+				seen[source.MessageID] = true
+			}
 		}
 		text, err := renderContinuationRecord(ctx, summary, sources, recall)
 		if err != nil {
@@ -178,9 +183,11 @@ func RenderContinuation(ctx context.Context, record *messageview.Continuation, r
 func recoverySources(rows []messageview.ContinuationSource) []CompactedSource {
 	var out []CompactedSource
 	seen := make(map[string]bool)
-	for _, handles := range []bool{true, false} {
-		for _, row := range rows {
-			if seen[row.MessageID] || row.MessageID == "" || (len(row.Handles) > 0) != handles || !handles && row.Tool == "" {
+	for _, wantHandles := range []bool{true, false} {
+		for i := len(rows) - 1; i >= 0; i-- {
+			row := rows[i]
+			hasHandles := len(row.Handles) > 0
+			if seen[row.MessageID] || row.MessageID == "" || hasHandles != wantHandles || !hasHandles && row.Tool == "" {
 				continue
 			}
 			seen[row.MessageID] = true

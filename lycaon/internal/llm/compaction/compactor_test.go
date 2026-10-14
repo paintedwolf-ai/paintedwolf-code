@@ -399,12 +399,12 @@ func TestSummaryFailurePublishesRecoverableReferences(t *testing.T) {
 	if !report.SessionCompacted || report.Continuation == nil || report.Continuation.Reason != "references_only" {
 		t.Fatalf("failed summary did not preserve recoverable coverage: %+v", report)
 	}
-	if len(report.Continuation.Summary.Facts) != 0 || report.Continuation.ThroughOrd != 1 {
+	if len(report.Continuation.Summary.Facts) != 0 || report.Continuation.ThroughOrd != 2 {
 		t.Fatal("failed synthesis invented a summary or changed coverage")
 	}
 	recoverable := false
 	for _, row := range out {
-		recoverable = recoverable || strings.Contains(row.Content, `"through_ord":1`)
+		recoverable = recoverable || strings.Contains(row.Content, `"through_ord":2`)
 	}
 	if !recoverable || msgs[0].Content != strings.Repeat("old observation ", 200) {
 		t.Fatalf("fallback lost recovery coordinates or changed original content: %+v", out)

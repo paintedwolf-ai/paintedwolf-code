@@ -40,7 +40,7 @@ func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 		"### Reacquire before relying on compacted details",
 		"- config.toml (read#4) before editing the registry block",
 		"- `read#4` (read)",
-		"- command result, message `t2`",
+		"- command, message `t2`",
 		"### Constraints",
 		"- no pushes",
 	} {
