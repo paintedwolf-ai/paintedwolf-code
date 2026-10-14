@@ -98,27 +98,33 @@ func glibcVersionFromELF(path string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var best string
+	names := make([]string, 0, len(versions))
 	for _, v := range versions {
-		candidate, ok := strings.CutPrefix(v.Name, "GLIBC_")
+		names = append(names, v.Name)
+	}
+	best, ok := highestGlibcVersion(names)
+	if !ok {
+		return "", fmt.Errorf("%s defines no GLIBC_ symbol version", path)
+	}
+	return best, nil
+}
+
+// highestGlibcVersion picks the highest numeric GLIBC_x.y among version names.
+func highestGlibcVersion(names []string) (string, bool) {
+	var best string
+	for _, name := range names {
+		candidate, ok := strings.CutPrefix(name, "GLIBC_")
 		if !ok {
 			continue
 		}
 		if _, err := dotversion.Compare(candidate, candidate); err != nil {
 			continue
 		}
-		if best == "" {
-			best = candidate
-			continue
-		}
-		if cmp, _ := dotversion.Compare(candidate, best); cmp > 0 {
+		if cmp, _ := dotversion.Compare(candidate, best); best == "" || cmp > 0 {
 			best = candidate
 		}
 	}
-	if best == "" {
-		return "", fmt.Errorf("%s defines no GLIBC_ symbol version", path)
-	}
-	return best, nil
+	return best, best != ""
 }
 
 // ---------------------------------------------------------------------------

@@ -530,3 +530,13 @@ func TestDecisionEngineProbe(t *testing.T) {
 		})
 	}
 }
+
+func TestHighestGlibcVersionComparesNumerically(t *testing.T) {
+	got, ok := highestGlibcVersion([]string{"libc.so.6", "GLIBC_2.9", "GLIBC_PRIVATE", "GLIBC_2.35", "GLIBC_2.4", "GLIBC_ABI_DT_RELR"})
+	if !ok || got != "2.35" {
+		t.Fatalf("highestGlibcVersion = %q, %v; want 2.35", got, ok)
+	}
+	if got, ok := highestGlibcVersion([]string{"libc.so.6", "GLIBC_PRIVATE"}); ok {
+		t.Fatalf("highestGlibcVersion without numeric versions = %q, want none", got)
+	}
+}
