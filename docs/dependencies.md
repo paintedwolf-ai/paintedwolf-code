@@ -58,19 +58,19 @@ On Linux the visual screen reads image text with a **pinned** static Tesseract e
 
 | Item | Detail |
 |------|--------|
-| **Artifacts** | `ocr/bin/tesseract` (Tesseract 5.5.3 with Leptonica 1.87.0, statically linked against musl, no image codecs) plus `ocr/tessdata/eng.traineddata` and `osd.traineddata` from `tessdata_fast`, upstream license texts, and a `provenance.json` naming every input |
-| **Pin** | [`lycaon/config/ocrengine/pin.yaml`](../lycaon/config/ocrengine/pin.yaml): engine version, source tarball digests, trained-data digests and sizes, build image digest, and each platform's archive URL, digest, size, and executable digest |
-| **Build** | `scripts/ocrengine-build.sh` runs [`scripts/ocrengine/Dockerfile`](../scripts/ocrengine/Dockerfile) for linux/amd64 and linux/arm64: every input is fetched by pinned digest inside a pinned Alpine image, the link is `-all-static`, and the archive is written with fixed ownership and timestamps. The host never compiles the engine; a pin change needs a published archive |
-| **Fetch** | `scripts/ocrengine-fetch.sh [--target TRIPLE] [--archive FILE]` downloads the pinned archive (or imports a local one), checks its digest and size, checks every payload digest, and places the tree at `lycaon-den/src-tauri/engine-root/ocr/`. `scripts/stage-engine.sh` runs it on Linux; `./task setup-dev` runs it on a Linux checkout |
+| **Artifacts** | `ocr/bin/tesseract` (Tesseract 5.5.3 with Leptonica 1.87.0, statically linked against musl, no image codecs) plus `ocr/tessdata/eng.traineddata` and `osd.traineddata` from `tessdata_fast`, upstream license texts and notices, the producer's source lock, and a `provenance.json` naming every input |
+| **Pin** | [`lycaon/config/ocrengine/pin.yaml`](../lycaon/config/ocrengine/pin.yaml): engine version, producer repository and release tag, trained-data digests and sizes, and each platform's release archive URL, digest, size, and executable digest |
+| **Build** | The [Painted Wolf Tesseract](https://github.com/paintedwolf-ai/paintedwolf-tesseract) producer owns the build recipe, its digest-pinned inputs, and the notices. Its release workflow builds and runs both architectures on GitHub-hosted runners and publishes immutable, attested releases. This repository never compiles the engine; a pin change needs a published release |
+| **Fetch** | `scripts/ocrengine-fetch.sh [--target TRIPLE] [--archive FILE]` downloads the pinned release archive (or imports a local one, such as a producer qualification build), checks its digest and size, checks every payload digest, and places the tree at `lycaon-den/src-tauri/engine-root/ocr/`. `scripts/stage-engine.sh` runs it on Linux; `./task setup-dev` runs it on a Linux checkout |
 | **Resolution** | `LYCAON_OCR_ROOT`, else `ocr/` under the launcher-provided `LYCAON_ENGINE_ROOT`, else `ocr/` beside the engine executable. Every root is verified against the pin (executable and trained-data digests and sizes) once per process; a present but altered payload is refused rather than skipped. No `PATH` lookup and no system-tesseract fallback. Preflight reports `OCR_ENGINE_UNAVAILABLE` with `reason` `missing`, `digest_mismatch`, or `unsupported_platform` |
 | **Run** | The host decodes the raster itself and hands the engine an 8-bit PGM on stdin (small rasters enlarged by a whole factor first), so the C side carries no image parser. One process per image through the host process seam: a private scratch directory as its only write root, no egress, reduced environment, `--psm 1` orientation detection with `min_orientation_margin` lowered from 7 to 1 so a capture of a few lines turned upside down is turned back, TSV on stdout, a 30 s deadline, and 8 MiB of output. Word rows are grouped into line spans with normalized boxes and mean confidence, the same shape the macOS recognizer returns |
 | **Verify** | `pw diagnostics ocr-engine` resolves the installed engine, reads a rendered fixture, and fails unless the words come back. Tests gate on `ocrtest.SkipIfNoEngine`; `LYCAON_OCR_REQUIRED=1` turns the skip into a failure |
 
 ### Bump procedure
 
-1. Edit the sources and `engine_version` in `lycaon/config/ocrengine/pin.yaml`, clearing the platform digests.
-2. Run `scripts/ocrengine-build.sh` on a Docker host with arm64 emulation registered and record each platform's archive digest, size, and executable digest from the printed digests and `provenance.json`.
-3. Publish the archives at the pinned URLs, then run `scripts/ocrengine-fetch.sh` and the recognizer suite (`./task test:digest -- ./internal/visualscreen/...`) on Linux.
+1. Change the inputs in the producer repository and publish a new release there (its README has the release steps).
+2. Set `engine_version` and `producer.tag` in `lycaon/config/ocrengine/pin.yaml`, and copy the trained-data digests and each platform's archive URL, digest, size, and executable digest from the release's `release.json`.
+3. Run `scripts/ocrengine-fetch.sh` and the engine-required recognizer suite (`LYCAON_OCR_REQUIRED=1 ./task test:digest -- ./internal/ocrengine/... ./internal/visualscreen/...`) on Linux.
 
 ## Managed headless browser
 

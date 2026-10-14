@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
-# Fetch and verify the pinned OCR engine into engine-root/ocr.
+# Fetch the pinned paintedwolf-tesseract release archive and verify it into
+# engine-root/ocr.
 #
 #   scripts/ocrengine-fetch.sh [--target TRIPLE] [--archive FILE]
 #
-# --archive imports a local release archive; it must match the pin exactly.
+# --archive imports a local archive, such as a producer qualification build;
+# it must match the pin exactly.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -96,6 +98,12 @@ if [[ -z "${ARCHIVE_SHA}" || "${ARCHIVE_BYTES}" == "0" || -z "${BINARY_SHA}" ]];
   exit 1
 fi
 URL="${URL_TMPL//\{engine_version\}/${ENGINE_VERSION}}"
+PRODUCER_REPOSITORY="$(read_section producer repository)"
+PRODUCER_TAG="$(read_section producer tag)"
+if [[ "${PRODUCER_TAG}" != "v${ENGINE_VERSION}" || "${URL}" != "https://github.com/${PRODUCER_REPOSITORY}/releases/download/${PRODUCER_TAG}/"* ]]; then
+  echo "error: ${PIN} must fetch ${PLATFORM_KEY} from the ${PRODUCER_REPOSITORY} release ${PRODUCER_TAG}" >&2
+  exit 1
+fi
 
 # verify_payload checks one file's size and digest against the pin.
 verify_payload() {

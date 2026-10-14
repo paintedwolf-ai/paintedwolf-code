@@ -8,26 +8,23 @@ import (
 	"github.com/lycaon/lycaon/config"
 )
 
-// Pin is the committed engine descriptor: the sources the archive was built
-// from and the exact payload the host accepts on each platform.
+// Pin is the committed engine descriptor: the producer release it selects and
+// the exact payload the host accepts on each platform.
 type Pin struct {
-	EngineVersion   string                 `yaml:"engine_version"`
-	BuildImage      string                 `yaml:"build_image"`
-	SourceDateEpoch int64                  `yaml:"source_date_epoch"`
-	Sources         map[string]pinSource   `yaml:"sources"`
-	Platforms       map[string]PlatformPin `yaml:"platforms"`
+	EngineVersion string                 `yaml:"engine_version"`
+	Producer      pinProducer            `yaml:"producer"`
+	TrainedData   map[string]pinPayload  `yaml:"trained_data"`
+	Platforms     map[string]PlatformPin `yaml:"platforms"`
 }
 
-type pinSource struct {
-	Version      string `yaml:"version"`
-	URL          string `yaml:"url"`
-	SHA256       string `yaml:"sha256"`
-	Bytes        int64  `yaml:"bytes"`
-	Commit       string `yaml:"commit"`
-	License      string `yaml:"license"`
-	CopyrightSHA string `yaml:"copyright_sha256"`
-	GPL3SHA      string `yaml:"gpl3_sha256"`
-	ExceptionSHA string `yaml:"exception_sha256"`
+type pinProducer struct {
+	Repository string `yaml:"repository"`
+	Tag        string `yaml:"tag"`
+}
+
+type pinPayload struct {
+	SHA256 string `yaml:"sha256"`
+	Bytes  int64  `yaml:"bytes"`
 }
 
 // PlatformPin is one platform's archive and the executable inside it.
@@ -85,9 +82,12 @@ func (p *Pin) validate() error {
 	if strings.TrimSpace(p.EngineVersion) == "" {
 		return fmt.Errorf("ocrengine: pin.yaml missing engine_version")
 	}
+	if strings.TrimSpace(p.Producer.Repository) == "" || p.Producer.Tag != "v"+p.EngineVersion {
+		return fmt.Errorf("ocrengine: pin.yaml must name the producer repository and the tag v%s", p.EngineVersion)
+	}
 	for _, name := range []string{"eng_traineddata", "osd_traineddata"} {
-		src, ok := p.Sources[name]
-		if !ok || !validDigest(src.SHA256) || src.Bytes <= 0 {
+		data, ok := p.TrainedData[name]
+		if !ok || !validDigest(data.SHA256) || data.Bytes <= 0 {
 			return fmt.Errorf("ocrengine: pin.yaml needs a digest and size for %s", name)
 		}
 	}
@@ -107,7 +107,7 @@ func (p *Pin) Platform(goos, goarch string) (PlatformPin, bool) {
 
 // Payloads lists the files the host verifies for one platform.
 func (p *Pin) Payloads(plat PlatformPin) []Payload {
-	eng, osd := p.Sources["eng_traineddata"], p.Sources["osd_traineddata"]
+	eng, osd := p.TrainedData["eng_traineddata"], p.TrainedData["osd_traineddata"]
 	return []Payload{
 		{Rel: binaryRel, SHA256: plat.BinarySHA256, Bytes: plat.BinaryBytes},
 		{Rel: englishTrainedDataRel, SHA256: eng.SHA256, Bytes: eng.Bytes},

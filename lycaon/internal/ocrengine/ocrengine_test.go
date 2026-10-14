@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -23,12 +24,39 @@ func TestLoadPinDescribesEveryShippedPlatform(t *testing.T) {
 			t.Fatalf("pin lacks %s: %+v", key, plat)
 		}
 	}
+	prefix := "https://github.com/" + pin.Producer.Repository + "/releases/download/v{engine_version}/"
+	for key, plat := range pin.Platforms {
+		if !strings.HasPrefix(plat.URL, prefix) {
+			t.Fatalf("%s archive %q is not the producer release %s", key, plat.URL, pin.Producer.Tag)
+		}
+	}
 	if _, ok := pin.Platform("darwin", "arm64"); ok {
 		t.Fatal("macOS recognizes text in-process and must not pin an engine")
 	}
 	for _, p := range pin.Payloads(PlatformPin{BinarySHA256: "ab", BinaryBytes: 1}) {
 		if p.Rel == "" || (p.Rel != binaryRel && (!validDigest(p.SHA256) || p.Bytes <= 0)) {
 			t.Fatalf("payload %+v is not pinned", p)
+		}
+	}
+}
+
+func TestPinValidationRequiresProducerTagAndTrainedData(t *testing.T) {
+	data := pinPayload{SHA256: strings.Repeat("a", 64), Bytes: 1}
+	valid := Pin{
+		EngineVersion: "5.5.3+paintedwolf.1",
+		Producer:      pinProducer{Repository: "paintedwolf-ai/paintedwolf-tesseract", Tag: "v5.5.3+paintedwolf.1"},
+		TrainedData:   map[string]pinPayload{"eng_traineddata": data, "osd_traineddata": data},
+	}
+	if err := valid.validate(); err != nil {
+		testutil.FailErr(t, "valid pin", err)
+	}
+	otherTag := valid
+	otherTag.Producer.Tag = "v5.5.3+paintedwolf.2"
+	noData := valid
+	noData.TrainedData = map[string]pinPayload{"eng_traineddata": data}
+	for name, pin := range map[string]Pin{"tag": otherTag, "trained data": noData, "version": {}} {
+		if err := pin.validate(); err == nil {
+			t.Fatalf("%s: invalid pin accepted", name)
 		}
 	}
 }
@@ -56,7 +84,7 @@ func stagedPin(t *testing.T) (string, *Pin, PlatformPin) {
 	osd := writePayload(t, root, osdTrainedDataRel, []byte("osd"), 0o644)
 	pin := &Pin{
 		EngineVersion: "test",
-		Sources: map[string]pinSource{
+		TrainedData: map[string]pinPayload{
 			"eng_traineddata": {SHA256: eng.SHA256, Bytes: eng.Bytes},
 			"osd_traineddata": {SHA256: osd.SHA256, Bytes: osd.Bytes},
 		},

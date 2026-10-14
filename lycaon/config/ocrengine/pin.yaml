@@ -1,39 +1,18 @@
-# Pinned OCR engine for Linux: a static Tesseract executable plus its trained
-# data, built by scripts/ocrengine-build.sh from the sources below and fetched
-# into engine-root/ocr by scripts/ocrengine-fetch.sh. The host verifies every
-# payload digest before it runs the engine.
+# Pinned OCR engine for Linux: a static Tesseract executable and its trained
+# data, released by the producer below and fetched into engine-root/ocr by
+# scripts/ocrengine-fetch.sh. The host verifies every payload digest before it
+# runs the engine. Build inputs and notices live in the producer repository.
 engine_version: "5.5.3+paintedwolf.1"
-build_image: "alpine:3.22@sha256:5291449c3df73caf6ed85e649dec1b9e818b39a5d8c871e97afc13e9cd5e8fa8"
-source_date_epoch: 1704067200
-sources:
-  tesseract:
-    version: "5.5.3"
-    url: "https://github.com/tesseract-ocr/tesseract/archive/refs/tags/5.5.3.tar.gz"
-    sha256: "9218e62793116d42a9f6d14cd9348518b27f382096eea3d0f2d1a24616bb5884"
-    license: Apache-2.0
-  leptonica:
-    version: "1.87.0"
-    url: "https://github.com/DanBloomberg/leptonica/releases/download/1.87.0/leptonica-1.87.0.tar.gz"
-    sha256: "c73363397f96eb1295602bf44d708a994ad42046c791bf03ea0505d829bdb6a7"
-    license: BSD-2-Clause
-  tessdata_fast:
-    commit: "87416418657359cb625c412a48b6e1d6d41c29bd"
-    license: Apache-2.0
+producer:
+  repository: "paintedwolf-ai/paintedwolf-tesseract"
+  tag: "v5.5.3+paintedwolf.1"
+trained_data:
   eng_traineddata:
     sha256: "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"
     bytes: 4113088
   osd_traineddata:
     sha256: "9cf5d576fcc47564f11265841e5ca839001e7e6f38ff7f7aacf46d15a96b00ff"
     bytes: 10562727
-  musl:
-    version: "1.2.5"
-    copyright_sha256: "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af"
-    license: MIT
-  gcc_runtime:
-    version: "14.2.0"
-    gpl3_sha256: "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
-    exception_sha256: "9d6b43ce4d8de0c878bf16b54d8e7a10d9bd42b75178153e3af6a815bdc90f74"
-    license: GPL-3.0-or-later WITH GCC-exception-3.1
 platforms:
   linux-amd64:
     url: "https://github.com/paintedwolf-ai/paintedwolf-tesseract/releases/download/v{engine_version}/paintedwolf-tesseract-{engine_version}-linux-amd64.tar.gz"
