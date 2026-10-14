@@ -1,6 +1,7 @@
 import json
 import unittest
 import structure
+from ledger import checkpoints
 from test_orchestration_evidence import LedgerCase
 
 
@@ -10,7 +11,7 @@ class StructureTests(LedgerCase):
         self.message(2, [{'name': 'wait', 'args': {}}])
         self.message(3, [{'name': 'promote_overlay', 'args': {}}])
         self.result(4,'command','cmd',outcome='rejected',codes=['COMMAND_NOT_ARGV'])
-        self.session['checkpoints'].append({'checkpoint_id':'c','kind':'tool_approval','status':'approved',
+        self.session['checkpoints'].append({'id':'c','kind':'tool_approval','status':'approved',
             'issued_at':'2026-09-09T10:00:00Z','tool_approval':{'tool_call_id':'cmd','plan':{'subject':{'kind':'local_listen'}}}})
         self.job('a', 'c1', 'write', ['a.py'])
         case = {'session_id': 'root',
@@ -26,3 +27,10 @@ class StructureTests(LedgerCase):
         self.assertEqual(summary['tool_calls'], 3)
         self.assertEqual(summary['trials'], 2)
         self.assertIsNone(structure.summarize([]))
+
+    def test_checkpoint_projection_uses_the_exported_wire_identity(self):
+        self.session['checkpoints'].append({'id':'approved-card','session_id':'root','kind':'tool_approval','status':'approved',
+            'issued_at':'2026-10-13T19:49:50Z','tool_approval':{'tool_call_id':'input-read','plan':{'subject':{'kind':'action'}}}})
+        cards=checkpoints(self.facts,['root'])
+        self.assertEqual(cards,[{'id':'approved-card','session_id':'root','status':'approved',
+            'created_at':'2026-10-13T19:49:50Z','tool_call_id':'input-read','subject':'action'}])

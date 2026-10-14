@@ -3,7 +3,12 @@ package sourceview
 import (
 	"bytes"
 	"errors"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	attachmentformat "github.com/lycaon/lycaon/internal/promptattach/format"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -63,5 +68,24 @@ func TestAccessBudgets(t *testing.T) {
 	}
 	if _, measured := toolrejection.AsToolReject(AccessRead.SizeReject("read", "a.txt", 0, 1)).Data["size"]; measured {
 		t.Fatal("an unmeasured size must be omitted, not reported as zero")
+	}
+}
+
+func TestBinaryReadRecoveryUsesWorkspaceViewerFormats(t *testing.T) {
+	root := t.TempDir()
+	exts := append(attachmentformat.WorkspaceImageExtensions(), ".PNG", ".ico", ".bmp", ".tiff", ".txt", "")
+	for _, ext := range exts {
+		name := "asset" + ext
+		testutil.FailErr(t, "write binary fixture", os.WriteFile(filepath.Join(root, name), []byte{0, 1, 2, 0xff}, 0600))
+		resolved := projectpaths.Resolved{Root: projectroot.RootRef{Path: root}, ScopeRel: name, DisplayPath: name}
+		_, err := ReadTextDocument("read", AccessRead, resolved, 0)
+		reject := toolrejection.AsToolReject(err)
+		if reject == nil || reject.Code != "READ_BINARY_DENIED" {
+			t.Fatalf("%s reject = %v", name, err)
+		}
+		_, want := attachmentformat.WorkspaceImageMIME(ext)
+		if reject.Data["workspace_image_supported"] != want {
+			t.Fatalf("%s viewer eligibility = %v, want %v", name, reject.Data, want)
+		}
 	}
 }
