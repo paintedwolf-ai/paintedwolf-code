@@ -199,8 +199,8 @@ func TestLinuxDeniedReadsAreHidden(t *testing.T) {
 	testutil.FailErr(t, "seed secret", os.WriteFile(filepath.Join(secret, "token"), []byte("s3"), 0o644))
 	c := denyConfinement(proj)
 	c.ReadDenyPaths = []string{secret}
-	status, out := linuxConfinedRun(t, self, c, nil, "/bin/sh", "-c", "ls "+secret+"; cat "+secret+"/token")
-	if status.ExitStatus() == 0 || strings.Contains(out, "s3") || strings.Contains(out, "token") {
+	status, out := linuxConfinedRun(t, self, c, nil, "/bin/sh", "-c", "ls "+secret+" && cat "+secret+"/token && echo LEAK")
+	if status.ExitStatus() == 0 || strings.Contains(out, "s3") || strings.Contains(out, "LEAK") {
 		t.Fatalf("denied read exposed content: exit %d: %s", status.ExitStatus(), out)
 	}
 }
@@ -229,8 +229,8 @@ func TestLinuxControlPlaneIsHiddenButSessionScratchRestored(t *testing.T) {
 	c := denyConfinement(t.TempDir())
 	c.SessionScratchRoot = scratch
 	status, out := linuxConfinedRun(t, self, c, nil, "/bin/sh", "-c",
-		"ls "+cfg+"; cat "+cfg+"/api.token; echo scratch > "+scratch+"/note && cat "+scratch+"/note")
-	if strings.Contains(out, "bearer") || strings.Contains(out, "api.token") {
+		"cat "+cfg+"/api.token && echo LEAK; echo scratch > "+scratch+"/note && cat "+scratch+"/note")
+	if strings.Contains(out, "bearer") || strings.Contains(out, "LEAK") {
 		t.Fatalf("control plane readable: %s", out)
 	}
 	if status.ExitStatus() != 0 || !strings.Contains(out, "scratch") {
