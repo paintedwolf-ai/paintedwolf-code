@@ -1,17 +1,13 @@
 package promptloop
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -40,17 +36,29 @@ func sanitizeToolCallsForExecution(calls []api.ToolCall) []api.ToolCall {
 		}
 	}
 
-	seen := make(map[string]struct{}, len(filtered))
+	seenIDs := make(map[string]struct{}, len(filtered))
+	seenArgs := make(map[string]struct{}, len(filtered))
 	deduped := make([]api.ToolCall, 0, len(filtered))
 	for _, tc := range filtered {
-		key := toolCallDedupeKey(tc.Name, tc.Args)
-		if _, ok := seen[key]; ok {
-			if sig := toolCallThoughtSignature(tc); sig != "" {
-				orphanedSignatures = append(orphanedSignatures, sig)
+		if id := strings.TrimSpace(tc.ID); id != "" {
+			if _, ok := seenIDs[id]; ok {
+				if sig := toolCallThoughtSignature(tc); sig != "" {
+					orphanedSignatures = append(orphanedSignatures, sig)
+				}
+				continue
 			}
-			continue
+			seenIDs[id] = struct{}{}
 		}
-		seen[key] = struct{}{}
+		if !toolCallRepeatableStateful(tc) {
+			key := toolCallDedupeKey(tc.Name, tc.Args)
+			if _, ok := seenArgs[key]; ok {
+				if sig := toolCallThoughtSignature(tc); sig != "" {
+					orphanedSignatures = append(orphanedSignatures, sig)
+				}
+				continue
+			}
+			seenArgs[key] = struct{}{}
+		}
 		deduped = append(deduped, tc)
 	}
 
@@ -58,6 +66,18 @@ func sanitizeToolCallsForExecution(calls []api.ToolCall) []api.ToolCall {
 		attachThoughtSignature(&deduped[0], orphanedSignatures[0])
 	}
 	return deduped
+}
+
+func toolCallRepeatableStateful(tc api.ToolCall) bool {
+	switch normalizeToolName(tc.Name) {
+	case "terminal_send", "page_act":
+		return strings.TrimSpace(tc.ID) != ""
+	case "write":
+		app, _ := tc.Args["append"].(bool)
+		return app && strings.TrimSpace(tc.ID) != ""
+	default:
+		return false
+	}
 }
 
 func toolCallHasExecutableSibling(calls []api.ToolCall, idx int) bool {
@@ -271,74 +291,4 @@ func attachThoughtSignature(tc *api.ToolCall, sig string) {
 		tc.ExtraContent["google"] = google
 	}
 	google["thought_signature"] = sig
-}
-
-// recordSearchOutcome records survey material from structured receipts.
-func (l *turnNudges) recordSearchOutcome(ctx context.Context, sessionID, tool string, args map[string]any, output string) {
-	if l.Deps.DoomLoop == nil {
-		return
-	}
-	receipt, ok := surveyreceipt.Parse(output)
-	if !ok {
-		return
-	}
-	_, _ = l.Deps.DoomLoop.RecordSearchOutcome(ctx, sessionID, tool, args, receipt.PathsTouched > 0)
-}
-
-func (l *turnNudges) checkDoomLoop(ctx context.Context, sessionID, responseID, tool string, args map[string]any, reads *tools.AgentReadBases, countOut *int) error {
-	if l.Deps.DoomLoop == nil {
-		return nil
-	}
-	// Repeated terminal keystrokes are valid interactive input.
-	if strings.EqualFold(strings.TrimSpace(tool), "terminal_send") {
-		return nil
-	}
-	allowed, count, repeatedCode, err := l.Deps.DoomLoop.Check(ctx, sessionID, responseID, tool, args, tools.ToolOffered(ctx, tool), reads)
-	if err != nil {
-		return err
-	}
-	if countOut != nil {
-		*countOut = count
-	}
-	if allowed {
-		return nil
-	}
-	if l.Deps.FormatDoomLoopReject != nil {
-		reject, fmtErr := l.Deps.FormatDoomLoopReject(ctx, sessionID, tool, args, count, repeatedCode)
-		if fmtErr != nil {
-			return fmtErr
-		}
-		if reject != nil && strings.TrimSpace(reject.Body) != "" {
-			return reject
-		}
-	}
-	// Missing enforcement decisions block execution.
-	return errors.New("doom loop blocked")
-}
-
-// escalateRepeatedCode returns escalation for a repeated rejection code.
-func (l *turnNudges) escalateRepeatedCode(ctx context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal {
-	if l.Deps.EscalateRepeatedCode == nil || original == nil || original.Code() == "" {
-		return nil
-	}
-	if strings.EqualFold(strings.TrimSpace(tool), "terminal_send") {
-		return nil
-	}
-	return l.Deps.EscalateRepeatedCode(ctx, sessionID, tool, original)
-}
-
-func (l *turnNudges) recordDoomLoopAttempt(
-	ctx context.Context,
-	sessionID, responseID, tool string,
-	args map[string]any,
-	failure *api.InvocationFailure,
-	mutated bool,
-) error {
-	if l.Deps.DoomLoop == nil {
-		return nil
-	}
-	if strings.EqualFold(strings.TrimSpace(tool), "terminal_send") {
-		return nil
-	}
-	return l.Deps.DoomLoop.RecordAttempt(ctx, sessionID, responseID, tool, args, failure, mutated)
 }
