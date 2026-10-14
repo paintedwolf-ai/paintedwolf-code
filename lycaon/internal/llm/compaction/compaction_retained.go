@@ -1,5 +1,15 @@
 package compaction
 
+func recentCompactionCount(cfg CompactionConfig, messages []ContextMessage, budget int) int {
+	recent := max(1, cfg.KeepRecentMessages)
+	if cfg.ModelContextWindow > 0 {
+		for recent > 1 && EstimateMessagesTokens(messages[recentCompactionStart(messages, recent):]) > max(1, budget/2) {
+			recent--
+		}
+	}
+	return recent
+}
+
 // retainedCompactionMessages keeps pinned instructions and complete tool exchanges
 // at the recent-history boundary, in their original order.
 func retainedCompactionMessages(messages []ContextMessage, keepRecent int) []ContextMessage {

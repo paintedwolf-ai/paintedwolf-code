@@ -225,6 +225,67 @@ func TestContinuationCarriesEarlierSummaryThroughFailedSynthesis(t *testing.T) {
 	}
 }
 
+func TestRepeatedContinuationKeepsBoundedEvidenceAddresses(t *testing.T) {
+	record := &messageview.Continuation{Format: 1, ThroughOrd: 2,
+		Summary: messageview.ContinuationSummary{Facts: []string{"Recorded checksum"}},
+		Sources: []messageview.ContinuationSource{
+			{MessageID: "original-call", Ord: 1, Tool: "read"},
+			{MessageID: "original-result", Ord: 2, Tool: "read", Handles: []string{"read#1"}},
+		}}
+	for generation := 0; generation < 500; generation++ {
+		var removed []ContextMessage
+		var sources []messageview.ContinuationSource
+		for i := 0; i < 3; i++ {
+			ord := int64(generation*3 + i + 3)
+			id := fmt.Sprintf("ack-%d", ord)
+			removed = append(removed, ContextMessage{ID: id, Ord: ord, Role: "assistant", Content: "Ready"})
+			sources = append(sources, messageview.ContinuationSource{MessageID: id, Ord: ord, Disposition: "reference"})
+		}
+		record = continuationFor(SessionInfo{PriorContinuation: record}, removed, priorSummary(record), sources, nil)
+		if len(record.Sources) > maxContinuationSources || record.ThroughOrd != removed[2].Ord {
+			t.Fatal("repeated continuation grew its index or lost canonical coverage")
+		}
+	}
+	found := map[string]bool{}
+	for _, source := range record.Sources {
+		found[source.MessageID] = true
+	}
+	if !found["original-call"] || !found["original-result"] || record.Summary.Facts[0] != "Recorded checksum" {
+		t.Fatal("later acknowledgments displaced retained facts or their evidence addresses")
+	}
+	updated := mergeContinuationSources(record, []messageview.ContinuationSource{{MessageID: "original-result", Ord: 2, Tool: "read", Disposition: "summary_and_reference"}})
+	for _, source := range updated {
+		if source.MessageID == "original-result" && source.Disposition != "summary_and_reference" {
+			t.Fatal("retention kept a superseded source disposition")
+		}
+	}
+}
+
+func TestDurableCompactionScalesRecentTailToReceiverBudget(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	cfg := testCompactionConfig()
+	cfg.ModelContextWindow, cfg.KeepRecentMessages = 8192, 16
+	rows := []ContextMessage{
+		{ID: "old-request", Ord: 1, Role: "user", Content: "Read observations"},
+		{ID: "call", Ord: 2, Role: "assistant", ToolCalls: []api.ToolCall{{ID: "read", Name: "read"}}},
+		{ID: "result", Ord: 3, Role: "tool", ToolName: "read", ToolCallID: "read", EvidenceHandles: []string{"read#1"}, Content: strings.Repeat("Recorded observation. ", 1500)},
+		{ID: "answer", Ord: 4, Role: "assistant", Content: "Read complete"},
+		{ID: "current", Ord: 5, Role: "user", Content: "Continue", ContextPinned: true},
+	}
+	out, record, _, _, err := NewSimpleCompactor(cfg, nil).compactSession(t.Context(), SessionInfo{RecallAvailable: true}, rows, 1000)
+	testutil.FailErr(t, "compact receiver-sized recent tail", err)
+	if len(out) == 0 || record == nil || record.ThroughOrd < 3 {
+		t.Fatal("fixed recent-message retention prevented recoverable compaction")
+	}
+	found := false
+	for _, source := range record.Sources {
+		found = found || source.MessageID == "result" && len(source.Handles) == 1 && source.Handles[0] == "read#1"
+	}
+	if !found || out[len(out)-1].ID != "current" {
+		t.Fatal("durable reduction lost evidence recovery or the current instruction")
+	}
+}
+
 func TestContinuationRepresentationScalesWithReceiver(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	for _, tc := range []struct {

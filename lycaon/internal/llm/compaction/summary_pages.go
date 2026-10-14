@@ -117,8 +117,12 @@ func continuationSegments(rows []ContextMessage, tokens int) ([]messageview.Cont
 			continue
 		}
 		content, _, _, _ := projectCompactionMessage(row)
+		tool := row.ToolName
+		if tool == "" && len(row.ToolCalls) == 1 {
+			tool = row.ToolCalls[0].Name
+		}
 		sources = append(sources, messageview.ContinuationSource{MessageID: row.ID, Ord: row.Ord,
-			Tool: row.ToolName, Handles: append([]string(nil), row.EvidenceHandles...),
+			Tool: tool, Handles: append([]string(nil), row.EvidenceHandles...),
 			Disposition: "reference", Tokens: tokenest.EstimateDefault(content)})
 		runes := []rune(content)
 		for start := 0; start < len(runes); start += width {

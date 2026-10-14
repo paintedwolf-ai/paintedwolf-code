@@ -10,7 +10,7 @@ import (
 
 // compactSession replaces a bounded oldest prefix and retains its unprocessed suffix.
 func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, messages []ContextMessage, target int) ([]ContextMessage, *messageview.Continuation, string, bool, error) {
-	retained := retainedCompactionMessages(messages, c.cfg.KeepRecentMessages)
+	retained := retainedCompactionMessages(messages, recentCompactionCount(c.cfg, messages, target))
 	removed := removedCompactionMessages(messages, retained)
 	if len(removed) == 0 {
 		return nil, nil, "protected_history", false, nil
@@ -89,7 +89,7 @@ func remainingCompactionRows(rows []ContextMessage, removed map[string]struct{})
 }
 
 func continuationFor(info SessionInfo, removed []ContextMessage, summary compactionSummary, sources []messageview.ContinuationSource, summaryErr error) *messageview.Continuation {
-	record := &messageview.Continuation{Format: messageview.ContinuationFormat, Sources: sources,
+	record := &messageview.Continuation{Format: messageview.ContinuationFormat, Sources: mergeContinuationSources(info.PriorContinuation, sources),
 		Receiver: info.Model, Reason: "summarized"}
 	if info.PriorContinuation != nil {
 		record.ThroughOrd = info.PriorContinuation.ThroughOrd
