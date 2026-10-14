@@ -15,6 +15,7 @@ import {
   bindFindableView,
 } from "../../find/use-findable-view.ts";
 import { useTranscriptViewport } from "../../chat/stream/transcript-viewport.tsx";
+import { announceThroughHost } from "../../platform/desktop/host-announcement.ts";
 
 type Props = {
   blocks: ChatSpanBlock[];
@@ -69,7 +70,10 @@ export function ChatSpanBlocks(props: Props) {
     const epoch = ++announcementEpoch;
     setAnnouncement("");
     queueMicrotask(() => {
-      if (epoch === announcementEpoch) setAnnouncement(next.announcement ?? "");
+      if (epoch !== announcementEpoch) return;
+      const text = next.announcement ?? "";
+      setAnnouncement(text);
+      if (props.surfaceActive?.() ?? true) void announceThroughHost(text);
     });
   });
   onCleanup(() => {

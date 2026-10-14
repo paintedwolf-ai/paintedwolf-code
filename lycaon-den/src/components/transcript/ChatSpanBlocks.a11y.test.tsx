@@ -1,6 +1,15 @@
 import { createSignal } from "solid-js";
 import { render } from "@solidjs/testing-library";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const announceMock = vi.hoisted(() => vi.fn(async (_text: string) => undefined));
+vi.mock("../../platform/desktop/host-announcement.ts", () => ({
+  announceThroughHost: (text: string) => announceMock(text),
+}));
+
+afterEach(() => {
+  announceMock.mockClear();
+});
 import type { Message } from "../../api/types.ts";
 import type { ChatSpanBlock } from "../../chat/workflow/workflow-spans.ts";
 import type { RawTranscriptItem } from "../../chat/transcript/projection/transcript-item-model.ts";
@@ -81,6 +90,7 @@ describe("ChatSpanBlocks live log", () => {
     setMessages([user("u1", "Hi"), assistant("a1", "Part", "streaming")]);
     await Promise.resolve();
     expect(getByTestId("transcript-live-announcement").textContent).toBe("");
+    expect(announceMock).not.toHaveBeenCalled();
 
     setMessages([
       user("u1", "Hi"),
@@ -90,5 +100,29 @@ describe("ChatSpanBlocks live log", () => {
     expect(getByTestId("transcript-live-announcement").textContent).toBe(
       "Assistant: Complete answer",
     );
+    // The host speaks the same completed turn once, for readers live regions miss.
+    expect(announceMock).toHaveBeenCalledTimes(1);
+    expect(announceMock).toHaveBeenCalledWith("Assistant: Complete answer");
+  });
+
+  it("leaves host announcements to the active surface", async () => {
+    const [messages, setMessages] = createSignal<Message[]>([user("u1", "Hi")]);
+    const { getByTestId } = render(() => (
+      <ChatSpanBlocks
+        blocks={blocks(messages())}
+        messages={messages()}
+        sessionId="s1"
+        workers={[]}
+        visibleTurnActive={false}
+        surfaceActive={() => false}
+      />
+    ));
+
+    setMessages([user("u1", "Hi"), assistant("a1", "Part", "streaming")]);
+    await Promise.resolve();
+    setMessages([user("u1", "Hi"), assistant("a1", "Done", "complete")]);
+    await Promise.resolve();
+    expect(getByTestId("transcript-live-announcement").textContent).toBe("Assistant: Done");
+    expect(announceMock).not.toHaveBeenCalled();
   });
 });
