@@ -33,19 +33,19 @@ copy:
   why: >-
     Repeating the command without the declaration is refused again.
   fix: >-
-    {% if paintedwolf.process_running %}If the job cannot finish without the refused
-    operation, {% if paintedwolf.can_command_stop %}request termination with `command_stop`.
-    {% else %}Report that the running job must be stopped; this response offers no job-stop tool.
-    {% endif %}{% if paintedwolf.can_command_output %}Inspect `command_output` for that same
-    handle until `running` is false.{% else %}Wait for an observed exit of that same job.{% endif %}
-    A stop request alone does not establish exit. Do not reissue while the job is running.
-    After it exits, {% else %}If the task still needs the refused operation, {% endif %}prefer an offered reviewed process tool when it expresses the operation.
+    {% if paintedwolf.process_running %}If this job needs the refused operation,
+    {% if paintedwolf.can_command_stop %}request `command_stop` once.{% else %}Report the
+    need to stop this job; no stop tool is offered.{% endif %}
+    {% if paintedwolf.can_command_output %}Use `command_output` on its handle to observe
+    exit.{% else %}Wait for its observed exit.{% endif %} A stop request alone does not
+    establish exit. Do not reissue while the job is running. After it exits, review the outcome.
+    {% endif %}Preserve completed effects. If the task still needs the refused operation, prefer an offered reviewed process tool when it expresses the operation.
     Otherwise reissue the same command with `capability_request.process_control`;
     the person reviews it before it runs.
   instead: >-
     {% if paintedwolf.process_running %}Resolve the running job before retrying;
-    a stop request alone does not establish exit.{% else %}Declare capability_request.process_control — a retry without it is
-    refused again{% endif %}
+    a stop request alone does not establish exit.{% else %}Preserve completed effects;
+    retry with the required capability only if the operation is still needed.{% endif %}
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
 x-paintedwolf-message: the sandbox refused a signal to a process outside the boundary

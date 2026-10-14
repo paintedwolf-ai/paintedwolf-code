@@ -36,20 +36,20 @@ copy:
   why: >-
     Repeating the command without the declaration is refused again.
   fix: >-
-    {% if paintedwolf.process_running %}If the job cannot finish without the refused
-    operation, {% if paintedwolf.can_command_stop %}request termination with `command_stop`.
-    {% else %}Report that the running job must be stopped; this response offers no job-stop tool.
-    {% endif %}{% if paintedwolf.can_command_output %}Inspect `command_output` for that same
-    handle until `running` is false.{% else %}Wait for an observed exit of that same job.{% endif %}
-    A stop request alone does not establish exit. Do not reissue while the job is running.
-    After it exits, {% else %}If the task still needs the refused operation, {% endif %}reissue
+    {% if paintedwolf.process_running %}If this job needs the refused operation,
+    {% if paintedwolf.can_command_stop %}request `command_stop` once.{% else %}Report the
+    need to stop this job; no stop tool is offered.{% endif %}
+    {% if paintedwolf.can_command_output %}Use `command_output` on its handle to observe
+    exit.{% else %}Wait for its observed exit.{% endif %} A stop request alone does not
+    establish exit. Do not reissue while the job is running. After it exits, review the outcome.
+    {% endif %}Preserve completed effects. If the task still needs the refused operation, reissue
     the same command with `capability_request.write_root` set to the matching
     entry of {{ paintedwolf.refused_write_grants }}; approval follows the
     project posture before it runs. Declare one path per invocation.
   instead: >-
     {% if paintedwolf.process_running %}Resolve the running job before retrying;
-    a stop request alone does not establish exit.{% else %}Reissue with capability_request.write_root naming the refused path's
-    grant — do not relocate the write to scratch or /tmp{% endif %}
+    a stop request alone does not establish exit.{% else %}Preserve completed effects;
+    retry with the required capability only if the operation is still needed.{% endif %}
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
 x-paintedwolf-message: the sandbox refused a write this invocation needed

@@ -179,10 +179,16 @@ func TestSandboxRecoveryPreservesRunningJobDependency(t *testing.T) {
 								t.Errorf("control %s offered=%v: %s", control.name, want, out)
 							}
 						}
+						if !strings.Contains(out, "Preserve completed effects") || !strings.Contains(out, "If the task still needs the refused operation") {
+							t.Errorf("retry lost the remaining-work condition: %s", out)
+						}
 						if state != "running" {
+							if !strings.Contains(out, "only if the operation is still needed") {
+								t.Errorf("summary lost remaining-work condition: %s", out)
+							}
 							return
 						}
-						for _, phrase := range []string{"Do not reissue while the job is running", "After it exits", "Instead: Resolve the running job before retrying", "a stop request alone does not establish exit"} {
+						for _, phrase := range []string{"Do not reissue while the job is running", "After it exits", "Next: Resolve the running job before retrying", "a stop request alone does not establish exit"} {
 							if !strings.Contains(out, phrase) {
 								t.Errorf("running-job dependency missing %q: %s", phrase, out)
 							}
