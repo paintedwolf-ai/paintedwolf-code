@@ -231,8 +231,27 @@ func TestReleaseSourceValidationAcceptsRootCommitAndRequiresIncreasingBuild(t *t
 	run("bash", script, "v1.0.0", sha, "refs/heads/main")
 	run("git", "tag", "v1.0.0")
 
-	contractcheck.FailErr(t, "write VERSION", os.WriteFile(filepath.Join(repo, "VERSION"), []byte("1.0.1-rc.1\n"), 0o644))
+	// Advancing the checkout must not change the metadata of the selected source.
+	contractcheck.FailErr(t, "advance VERSION", os.WriteFile(filepath.Join(repo, "VERSION"), []byte("1.0.1\n"), 0o644))
+	contractcheck.FailErr(t, "advance RELEASE_BUILD", os.WriteFile(filepath.Join(repo, "RELEASE_BUILD"), []byte("3\n"), 0o644))
+	run("git", "add", "VERSION", "RELEASE_BUILD")
+	run("git", "commit", "-m", "Later main work")
+	run("bash", script, "v1.0.0", sha, "refs/heads/main")
+	run("git", "checkout", "-b", "unlanded")
+	contractcheck.FailErr(t, "write unlanded VERSION", os.WriteFile(filepath.Join(repo, "VERSION"), []byte("1.9.0\n"), 0o644))
 	run("git", "add", "VERSION")
+	run("git", "commit", "-m", "Unlanded source")
+	unlanded := run("git", "rev-parse", "HEAD")
+	run("git", "checkout", "main")
+	unlandedCmd := exec.Command("bash", script, "v1.9.0", unlanded, "refs/heads/main")
+	unlandedCmd.Dir = repo
+	if output, err := unlandedCmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "has not landed") {
+		t.Fatalf("unlanded source was accepted: %v\n%s", err, output)
+	}
+	contractcheck.FailErr(t, "restore stale build fixture", os.WriteFile(filepath.Join(repo, "RELEASE_BUILD"), []byte("2\n"), 0o644))
+
+	contractcheck.FailErr(t, "write VERSION", os.WriteFile(filepath.Join(repo, "VERSION"), []byte("1.0.1-rc.1\n"), 0o644))
+	run("git", "add", "VERSION", "RELEASE_BUILD")
 	run("git", "commit", "-m", "Candidate with stale build number")
 	sha = run("git", "rev-parse", "HEAD")
 	cmd := exec.Command("bash", script, "v1.0.1-rc.1", sha, "refs/heads/main")
@@ -305,7 +324,7 @@ func TestReleaseWorkflowValidatesTagAgainstVERSION(t *testing.T) {
 	signingAt := strings.Index(body, "name: Import signing certificate")
 	publishAt := strings.Index(body, "name: Publish immutable release objects")
 	if provenanceAt > gateAt || gateAt > publishAt {
-		t.Fatal("release.yml must prove exact-main provenance and pass the full gate before publishing")
+		t.Fatal("release.yml must prove landed-source provenance and pass the full gate before publishing")
 	}
 	aggregateAt := strings.Index(body, "aggregate-release:")
 	activateAt := strings.Index(body, "activate-updater:")

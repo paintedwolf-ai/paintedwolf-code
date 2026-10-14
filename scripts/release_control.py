@@ -1,4 +1,4 @@
-"""Release event admission and published upgrade-source selection."""
+"""Published upgrade-source selection."""
 from __future__ import annotations
 
 import argparse
@@ -16,14 +16,6 @@ from release_semver import compare, parse
 FIRST_RELEASE = parse("1.0.0")
 
 ROOT = Path(__file__).resolve().parent.parent
-
-
-def publishes(event: str, ref_type: str) -> bool:
-    if event == "workflow_dispatch":
-        return False
-    if event == "push" and ref_type == "tag":
-        return True
-    raise ValueError("release requires a manual rehearsal or a tag push")
 
 
 def read_public(url: str) -> dict | None:
@@ -78,16 +70,12 @@ def resolve_prior(base: str, candidate: str, generation: int) -> list[str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("classify")
     prior = commands.add_parser("prior")
     prior.add_argument("--base-url", required=True)
     prior.add_argument("--candidate", required=True)
     prior.add_argument("--generation", type=int, required=True)
     args = parser.parse_args()
-    if args.command == "classify":
-        print(str(publishes(os.environ["GITHUB_EVENT_NAME"], os.environ["GITHUB_REF_TYPE"])).lower())
-    else:
-        print("\n".join("v" + version for version in resolve_prior(args.base_url, args.candidate, args.generation)))
+    print("\n".join("v" + version for version in resolve_prior(args.base_url, args.candidate, args.generation)))
 
 
 if __name__ == "__main__":

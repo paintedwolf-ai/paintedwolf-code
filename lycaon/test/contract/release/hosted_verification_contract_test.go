@@ -138,8 +138,10 @@ func TestReleaseGatesPrecedePublication(t *testing.T) {
 	}
 	verified := false
 	for _, step := range jobs["classify"].Steps {
-		verified = verified || step.Run == `python3 scripts/ci_verification.py verified "${GITHUB_SHA}"` &&
-			step.If == "${{ github.ref_type == 'tag' }}"
+		qualification := strings.Index(step.Run, `python3 scripts/ci_verification.py verified "${source_sha}"`)
+		publication := strings.Index(step.Run, "publish=true")
+		verified = verified || qualification >= 0 && publication > qualification &&
+			step.Env["GH_TOKEN"] == "${{ github.token }}"
 	}
 	if !verified {
 		t.Error("a tagged release must prove its commit passed the full tier")

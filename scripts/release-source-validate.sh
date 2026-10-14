@@ -11,9 +11,8 @@ if [[ -z "${TAG}" || -z "${SHA}" ]]; then
   exit 2
 fi
 
-ROOT="$(git rev-parse --show-toplevel)"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-VERSION="$(tr -d '[:space:]' < "${ROOT}/VERSION")"
+VERSION="$(git show "${SHA}:VERSION" | tr -d '[:space:]')"
 WANT="v${VERSION}"
 
 if [[ "${TAG}" != v* ]] || ! python3 "${SCRIPT_DIR}/semver-compare.py" eq "${TAG#v}" "${TAG#v}" >/dev/null 2>&1; then
@@ -26,14 +25,16 @@ if [[ "${TAG}" != "${WANT}" ]]; then
 fi
 
 MAIN_SHA="$(git rev-parse "${MAIN_REF}^{commit}")"
-if [[ "${SHA}" != "${MAIN_SHA}" ]]; then
-  echo "error: tag ${TAG} points at ${SHA}, but current ${MAIN_REF} is ${MAIN_SHA}" >&2
-  echo "       Release only the exact reviewed main tip." >&2
+if ! git merge-base --is-ancestor "${SHA}" "${MAIN_SHA}"; then
+  echo "error: tag ${TAG} points at ${SHA}, which has not landed on ${MAIN_REF}" >&2
   exit 1
 fi
 
-CURRENT_BUILD="$(tr -d '[:space:]' < "${ROOT}/RELEASE_BUILD")"
-python3 "${SCRIPT_DIR}/release-metadata.py" --root "${ROOT}" >/dev/null
+CURRENT_BUILD="$(git show "${SHA}:RELEASE_BUILD" | tr -d '[:space:]')"
+[[ "${CURRENT_BUILD}" =~ ^[1-9][0-9]*$ ]] || {
+  echo "error: source has no valid RELEASE_BUILD" >&2
+  exit 1
+}
 MAX_PRIOR_BUILD=0
 PARENT="$(git rev-parse --verify "${SHA}^" 2>/dev/null || true)"
 if [[ -n "${PARENT}" ]]; then
