@@ -1,5 +1,8 @@
 import { createSignal } from "solid-js";
-import type { EnsureNotificationPermissionResult } from "../../platform/desktop/notifications.ts";
+import type {
+  EnsureNotificationPermissionResult,
+  NotificationDeliveryOutcome,
+} from "../../platform/desktop/notifications.ts";
 import type { DenNotificationPrefs } from "../../../shared/app-state-types.ts";
 import {
   getAppStateSnapshot,
@@ -13,6 +16,7 @@ const [finished, setFinished] = createSignal(DEFAULT_ON);
 const [needsYou, setNeedsYou] = createSignal(DEFAULT_ON);
 const [needsApproval, setNeedsApproval] = createSignal(DEFAULT_ON);
 const [permissionResult, setPermissionResult] = createSignal<EnsureNotificationPermissionResult | null>(null);
+const [deliveryOutcome, setDeliveryOutcome] = createSignal<NotificationDeliveryOutcome | null>(null);
 
 export function notificationsEnabledPref(): boolean {
   return enabled();
@@ -36,6 +40,15 @@ export function notificationPermissionResult(): EnsureNotificationPermissionResu
 
 export function recordNotificationPermission(result: EnsureNotificationPermissionResult | null): void {
   setPermissionResult(result);
+}
+
+/** Outcome of the most recent test notification. */
+export function notificationDeliveryOutcome(): NotificationDeliveryOutcome | null {
+  return deliveryOutcome();
+}
+
+export function recordNotificationDelivery(outcome: NotificationDeliveryOutcome | null): void {
+  setDeliveryOutcome(outcome);
 }
 
 function resolveNotificationsEnabled(

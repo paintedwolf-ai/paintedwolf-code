@@ -11,7 +11,7 @@ when: paintedwolf.rejection_code == "EDITOR_DOCUMENT_READ_REQUIRED"
 effect: block
 copy:
   what: 'Read `{{ paintedwolf.path }}` before editing its shared document.'
-  cause: 'No read result for this file was available before this response. summarize and grep do not establish an edit base. Your own successful write permits further edits in the same response.'
+  cause: 'No eligible source observation for this file was available before this response. Partial summaries and grep do not establish an edit base. Your own successful write permits further edits in the same response.'
   why: A write must be based on text you have seen so concurrent changes can be preserved.
   fix: Call `read` for `{{ paintedwolf.path }}`. After its result, recompute the edit using source text without displayed line labels.
   instead: Read this file now; retry the mutation in your next response.

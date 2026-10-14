@@ -304,10 +304,10 @@ func TestOps8ToolResultPolicyControlsEveryDeliveredCapture(t *testing.T) {
 					Tools: reg,
 				},
 				Closeout: CloseoutDeps{
-					EvaluateContentAnchor: func(_ context.Context, _ *api.Session, anchor string, segments []oar.ContentSegment, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
+					EvaluateContentAnchor: func(_ context.Context, _ *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
 						seen++
-						if anchor != oar.AnchorContentToolResult || tool != "surface_note" || args["summary"] != "observed-input" || len(segments) != 1 || !strings.Contains(segments[0].Content, "unreviewed-secret") {
-							t.Fatalf("[OAR-FACT-21] incomplete result occurrence: anchor=%s tool=%s args=%v segments=%v", anchor, tool, args, segments)
+						if anchor != oar.AnchorContentToolResult || tool != "surface_note" || args["summary"] != "observed-input" || len(observation.Segments) != 1 || !strings.Contains(observation.Segments[0].Content, "unreviewed-secret") {
+							t.Fatalf("[OAR-FACT-21] incomplete result occurrence: anchor=%s tool=%s args=%v segments=%v", anchor, tool, args, observation.Segments)
 						}
 						if block {
 							return guidance.NewRefusal("RESULT_POLICY", "Result withheld"), true, "", false

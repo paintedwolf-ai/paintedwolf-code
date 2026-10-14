@@ -107,6 +107,34 @@ func TestLocalFetchRecoveryOnlyOffersCurrentCaptureTools(t *testing.T) {
 	}
 }
 
+func TestUnmatchedToolDiscoveryUsesCurrentPageFacts(t *testing.T) {
+	bp := stockBlockPlane(t)
+	for _, state := range []struct {
+		name, status string
+		more         bool
+	}{
+		{"legacy", "", false}, {"last page", "no_match", false}, {"more pages", "no_match", true},
+	} {
+		t.Run(state.name, func(t *testing.T) {
+			ctx := tools.WithRecoveryTools(t.Context(), []string{"request_tools"})
+			err := bp.RejectObservation(ctx, "request_tools", "fixture", nil, &toolrejection.ToolReject{
+				Code: "TOOL_REQUEST_UNMATCHED", Data: map[string]any{"need": "dispatch a worker", "available": []string{"task"}, "tool_discovery_status": state.status, "tool_discovery_has_more": state.more},
+			})
+			refusal, ok := guidance.RefusalFromError(err)
+			if !ok || refusal.Code() != "TOOL_REQUEST_UNMATCHED" || len(refusal.Copy) == 0 {
+				t.Fatalf("missing OAR recovery: %v", err)
+			}
+			fix := refusal.Copy["fix"]
+			if strings.Contains(fix, "discovery.entries") != (state.status != "") || strings.Contains(fix, "discovery.next_need") != state.more {
+				t.Fatalf("page facts changed remedy: %s", fix)
+			}
+			if strings.Contains(refusal.Copy["instead"], "next_need") != state.more {
+				t.Fatalf("summary invents continuation: %s", refusal.Copy["instead"])
+			}
+		})
+	}
+}
+
 // Exercise each intrinsic rejection's declared tool-availability dimensions,
 // including the short remedy that accompanies its detailed fix.
 func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
@@ -255,4 +283,39 @@ func recoveryHostFacts(t *testing.T) []oar.HostFactDecl {
 	doc, err := oar.LoadCapabilityDocument(filepath.Join(testutil.CheckoutRoot(t), "lycaon/config/packs/painted-wolf/platform/host/anchors/oar-profile.yaml"))
 	testutil.FailErr(t, "load published recovery facts", err)
 	return doc.HostFacts
+}
+
+func TestBinaryReadRecoveryRequiresOfferedViewerAndSupportedFormat(t *testing.T) {
+	bp := stockBlockPlane(t)
+	for _, supported := range []bool{false, true} {
+		for _, offered := range [][]string{nil, {}, {"view_image"}, {"stat"}, {"view_image", "stat"}} {
+			for _, image := range []bool{false, true} {
+				t.Run(fmt.Sprintf("supported=%v/offered=%v/image=%v", supported, offered, image), func(t *testing.T) {
+					ctx := t.Context()
+					if offered != nil {
+						ctx = tools.WithRecoveryTools(ctx, offered)
+					}
+					err := bp.RejectObservation(ctx, "read", "fixture", nil, &toolrejection.ToolReject{Code: "READ_BINARY_DENIED", Data: map[string]any{
+						"path": "asset", "bytes": 4, "reason": "binary", "is_image": image, "workspace_image_supported": supported,
+						"can_view_image": true, "can_stat": true,
+					}})
+					refusal, ok := guidance.RefusalFromError(err)
+					if !ok || refusal.Copy == nil {
+						t.Fatalf("missing OAR recovery: %v", err)
+					}
+					fix := refusal.Copy["fix"]
+					viewer := supported && slices.Contains(offered, "view_image")
+					if strings.Contains(fix, "Use view_image") != viewer {
+						t.Fatalf("incorrect viewer remedy: %s", fix)
+					}
+					if strings.Contains(fix, "Use stat") != (!viewer && slices.Contains(offered, "stat")) {
+						t.Fatalf("incorrect metadata remedy: %s", fix)
+					}
+					if strings.Contains(fix, "perceive") || !strings.Contains(fix, "unresolved content requirement") {
+						t.Fatalf("recovery overclaimed evidence: %s", fix)
+					}
+				})
+			}
+		}
+	}
 }

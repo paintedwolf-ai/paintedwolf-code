@@ -26,3 +26,9 @@ checkpoint_rejection: >-
   A person denied this proposed operation. Do not retry the denied operation
   through another tool or route. Continue other authorized work; a later explicit
   change from the person is required to perform the denied operation.
+
+# An access decision settles one invocation while the original task continues.
+checkpoint_approval: >-
+  The approval resolves this tool invocation's access decision. Continue the
+  original task from the tool result, checking any remaining deliverables and
+  verification before reporting completion.

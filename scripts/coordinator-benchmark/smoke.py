@@ -23,7 +23,8 @@ from runtime_checks import project_scans, project_baseline, requested_full_pass
 from progress import save
 from snapshot import ROOT
 sys.path.append(str(ROOT / 'scripts'))
-from artifact_paths import artifact_root, build_dir
+from artifact_paths import artifact_root
+from built_runtime import engine_path
 from focused_evidence import preparation_checks
 from application_ledger import checkpoint_closed_store
 from application_http import open_request
@@ -60,7 +61,7 @@ class Application:
              'LYCAON_DEV':'1','LYCAON_HARNESS':'1','LYCAON_LOG_LEVEL':'debug',
              'LYCAON_LLM_MOCK':'1' if self.manual else '0','LYCAON_LLM_MANUAL':'1' if self.manual else '0'})
         if rate_state is not None: env['LYCAON_LLM_RATE_STATE_DIR']=str(rate_state)
-        self.process=subprocess.Popen([str(build_dir(ROOT)/'lycaon-dev'),'serve','--db',str(directory/'store.db')],
+        self.process=subprocess.Popen([str(engine_path(ROOT)),'serve','--db',str(directory/'store.db')],
                                       cwd=ROOT,env=env,stdout=self.log,stderr=subprocess.STDOUT)
         save(directory/'ownership.json',{'pid':self.process.pid,'port':self.port})
 

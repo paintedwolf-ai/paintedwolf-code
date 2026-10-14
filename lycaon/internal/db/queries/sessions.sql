@@ -256,6 +256,12 @@ SELECT EXISTS(
   SELECT 1 FROM messages WHERE session_id = ? AND ord <= ?
 ) AS has_more;
 
+-- name: GetSessionMessageOrdBounds :one
+SELECT CAST(COALESCE(MIN(ord), 0) AS INTEGER) AS min_ord,
+       CAST(COALESCE(MAX(ord), 0) AS INTEGER) AS max_ord
+FROM messages
+WHERE session_id = ?;
+
 -- name: InsertMessage :exec
 INSERT INTO messages (
     id, entry_id, session_id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,

@@ -2,10 +2,13 @@ package tooloutput
 
 import (
 	"encoding/json"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 func TestClassifyEmitRejectAllowsStructuredTruncatedReceipt(t *testing.T) {
@@ -132,5 +135,61 @@ func TestClassifyEmitRejectDoesNotReadReceiptFromOpaqueText(t *testing.T) {
 	content := strings.Repeat("a", 2048) + `{"truncated":true}`
 	if code, _ := ClassifyEmitReject("command", nil, content, 1024); code != ToolResultTooLargeCode {
 		t.Fatalf("opaque output reject=%q want %q", code, ToolResultTooLargeCode)
+	}
+}
+
+func TestEmitRecoveryFieldsBelongToReceivingSchema(t *testing.T) {
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join(testutil.CheckoutRoot(t), "lycaon/config/packs/painted-wolf/platform/tools/schemas"))
+	testutil.FailErr(t, "load receiving tool schemas", err)
+	raw, err := json.Marshal(map[string]any{"matches": []any{map[string]any{"content": strings.Repeat("x", 2048)}}})
+	testutil.FailErr(t, "marshal oversized survey", err)
+	checked := 0
+	for tool := range schemas.Tools {
+		code, data := ClassifyEmitReject(tool, nil, string(raw), 1024)
+		missing, _ := data["missing_args"].(string)
+		if missing == "" {
+			continue
+		}
+		checked++
+		t.Run(tool, func(t *testing.T) {
+			if code != ToolResultTooLargeCode {
+				t.Fatalf("recovery fields accompanied unexpected rejection %q", code)
+			}
+			meta, ok := schemas.ToolMeta(tool)
+			if !ok {
+				t.Fatalf("missing receiving schema for %s", tool)
+			}
+			accepted := toolschema.ArgFieldPaths(meta.ArgsSchema)
+			for _, field := range strings.Split(missing, ", ") {
+				if !slices.Contains(accepted, field) {
+					t.Errorf("recovery recommends %s, absent from %s schema", field, tool)
+				}
+			}
+		})
+	}
+	if checked == 0 {
+		t.Fatal("no schema-bound recovery fields were checked")
+	}
+}
+
+func TestListingRecoveryUsesItsOwnPaginationFields(t *testing.T) {
+	for _, tc := range []struct {
+		tool, limit, foreign string
+	}{
+		{"list_dir", "max_entries", "max_results"},
+		{"find", "max_results", "max_entries"},
+	} {
+		t.Run(tc.tool, func(t *testing.T) {
+			for _, args := range []map[string]any{nil, {tc.foreign: 1}} {
+				if got := unpaginatedMissingArgs(tc.tool, args); !slices.Equal(got, []string{"offset", tc.limit}) {
+					t.Fatalf("pagination recovery = %v", got)
+				}
+			}
+			for _, field := range []string{"offset", tc.limit} {
+				if got := unpaginatedMissingArgs(tc.tool, map[string]any{field: 1}); len(got) != 0 {
+					t.Fatalf("already bounded by %s but recommends %v", field, got)
+				}
+			}
+		})
 	}
 }

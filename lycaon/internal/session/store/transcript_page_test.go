@@ -15,6 +15,12 @@ func TestTranscriptPageTailAndCursors(t *testing.T) {
 	sess, err := mem.Create(ctx, api.CreateSessionRequest{ProjectID: "p1", Posture: api.SessionPostureBuild}, "p1")
 	testutil.FailErr(t, "create session", err)
 
+	empty, err := mem.GetTranscriptPage(ctx, sess.ID, api.TranscriptPageQuery{Limit: 5})
+	testutil.FailErr(t, "empty page", err)
+	if empty.OrdBounds != nil {
+		t.Fatalf("empty ord_bounds = %+v, want nil", empty.OrdBounds)
+	}
+
 	msgs := make([]api.Message, 0, 12)
 	for i := 0; i < 12; i++ {
 		msgs = append(msgs, api.Message{Role: api.MessageRoleUser, Content: "m"})
@@ -25,6 +31,9 @@ func TestTranscriptPageTailAndCursors(t *testing.T) {
 	testutil.FailErr(t, "tail page", err)
 	if len(tail.Messages) != 5 {
 		t.Fatalf("tail len = %d, want 5", len(tail.Messages))
+	}
+	if tail.OrdBounds == nil || tail.OrdBounds.FirstOrd != 1 || tail.OrdBounds.LastOrd != 12 {
+		t.Fatalf("tail ord_bounds = %+v, want {1 12}", tail.OrdBounds)
 	}
 	if tail.BeforeCursor == "" || tail.AfterCursor != "" {
 		t.Fatalf("tail cursors: before=%v after=%v", tail.BeforeCursor, tail.AfterCursor)
