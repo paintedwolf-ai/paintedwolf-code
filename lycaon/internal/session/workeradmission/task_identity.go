@@ -1,12 +1,12 @@
-package worker
+package workeradmission
 
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -15,20 +15,41 @@ const (
 	workerResumeChildUnknownCode = "WORKER_RESUME_CHILD_UNKNOWN"
 )
 
-// taskIdentity is a task call with the fields a resumed child or planned leg supplies.
-type taskIdentity struct {
-	AgentType      string
-	Scope          api.TaskScope
-	WorkflowWorkID string
-	MaxToolLoops   int
+// TaskIdentity is a task call with the fields a resumed child or planned leg supplies.
+type TaskIdentity struct {
+	MutationCapable bool
+	AgentType       string
+	Scope           api.TaskScope
+	WorkflowWorkID  string
+	MaxToolLoops    int
 	// Prior is the resumed child's latest job.
 	Prior   *api.WorkerTask
 	Charter *api.WorkerTaskCharter
 }
 
-// Resumed children retain their recorded identity and pending budget request.
-func resolveTaskIdentity(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, args map[string]any, requestedMax int, budget spawn.WorkerToolBudget) (taskIdentity, error) {
-	id := taskIdentity{MaxToolLoops: requestedMax}
+// TaskIdentityResolver resolves the identity supplied by an existing child or workflow leg.
+type TaskIdentityResolver struct {
+	Children interface {
+		GetLatestByChildSessionID(context.Context, string) (*api.WorkerTask, bool)
+	}
+	WorkflowWork func(context.Context, string, string) (spawn.WorkflowWork, bool, error)
+	ToolBudget   func(string) spawn.WorkerToolBudget
+}
+
+func (r TaskIdentityResolver) Resolve(ctx context.Context, sessionID, projectDir string, args map[string]any) (TaskIdentity, error) {
+	requestedMax, err := ParseTaskMaxToolLoopsFromArgs(args)
+	if err != nil {
+		return TaskIdentity{}, err
+	}
+	budget := spawn.DefaultWorkerToolBudget()
+	if r.ToolBudget != nil {
+		budget = r.ToolBudget(projectDir)
+	}
+	if code := ValidateTaskMaxToolLoopsCode(requestedMax, budget); code != "" {
+		return TaskIdentity{}, &toolrejection.ToolReject{Code: code, Data: map[string]any{"max_tool_loops": requestedMax, "min_required": budget.Min, "host_max": budget.Max}}
+	}
+
+	id := TaskIdentity{MaxToolLoops: requestedMax}
 	id.AgentType, _ = args["agent_type"].(string)
 	id.AgentType = strings.TrimSpace(id.AgentType)
 	id.WorkflowWorkID, _ = args["workflow_work_id"].(string)
@@ -43,7 +64,11 @@ func resolveTaskIdentity(ctx context.Context, deps TaskToolDeps, tctx tools.Tool
 	workIDGiven := id.WorkflowWorkID != ""
 	childSessionID, _ := args["child_session_id"].(string)
 	if childSessionID = strings.TrimSpace(childSessionID); childSessionID != "" {
-		prior, ok := deps.Queue.GetLatestByChildSessionID(ctx, childSessionID)
+		var prior *api.WorkerTask
+		var ok bool
+		if r.Children != nil {
+			prior, ok = r.Children.GetLatestByChildSessionID(ctx, childSessionID)
+		}
 		if !ok || prior == nil {
 			return id, &toolrejection.ToolReject{Code: workerResumeChildUnknownCode, Data: map[string]any{"child_session_id": childSessionID}}
 		}
@@ -53,7 +78,7 @@ func resolveTaskIdentity(ctx context.Context, deps TaskToolDeps, tctx tools.Tool
 		}
 	}
 
-	leg, planned, err := id.workflowWork(ctx, deps, tctx, id.Prior != nil && !workIDGiven)
+	leg, planned, err := id.workflowWork(ctx, r, sessionID, id.Prior != nil && !workIDGiven)
 	if err != nil {
 		return id, err
 	}
@@ -77,11 +102,16 @@ func resolveTaskIdentity(ctx context.Context, deps TaskToolDeps, tctx tools.Tool
 			Data: map[string]any{"reason": "missing_agent_type", "field": "agent_type", "tool": "task"},
 		}
 	}
+	capable, known := prompts.AgentMutationCapable(id.AgentType)
+	if !known {
+		return id, &toolrejection.ToolReject{Code: "WORKER_TYPE_UNAVAILABLE", Data: map[string]any{"agent_type": id.AgentType, "reason": "profile_unavailable"}}
+	}
+	id.MutationCapable = capable
 	id.MaxToolLoops = budget.Effective(id.MaxToolLoops)
 	return id, nil
 }
 
-func (id *taskIdentity) inheritFrom(prior *api.WorkerTask, scopeGiven bool, childSessionID string, budget spawn.WorkerToolBudget) error {
+func (id *TaskIdentity) inheritFrom(prior *api.WorkerTask, scopeGiven bool, childSessionID string, budget spawn.WorkerToolBudget) error {
 	recordedScope := prior.EffectiveScope()
 	switch {
 	case id.AgentType != "" && id.AgentType != prior.AgentType:
@@ -106,11 +136,11 @@ func (id *taskIdentity) inheritFrom(prior *api.WorkerTask, scopeGiven bool, chil
 }
 
 // Resumed work retains its assignment only within its active run and phase.
-func (id *taskIdentity) workflowWork(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, inherited bool) (spawn.WorkflowWork, bool, error) {
-	if id.WorkflowWorkID == "" || deps.WorkflowWork == nil {
+func (id *TaskIdentity) workflowWork(ctx context.Context, r TaskIdentityResolver, sessionID string, inherited bool) (spawn.WorkflowWork, bool, error) {
+	if id.WorkflowWorkID == "" || r.WorkflowWork == nil {
 		return spawn.WorkflowWork{}, false, nil
 	}
-	leg, ok, err := deps.WorkflowWork(ctx, tctx.Identity.SessionID, id.WorkflowWorkID)
+	leg, ok, err := r.WorkflowWork(ctx, sessionID, id.WorkflowWorkID)
 	if err != nil {
 		return spawn.WorkflowWork{}, false, err
 	}

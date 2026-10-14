@@ -122,7 +122,7 @@ Pins protect rows whose removal would make the turn unsafe or incoherent: the re
 
 Recent-history retention counts conversation rows, not appended system injects. If its boundary falls inside a parallel tool batch, retention extends back to the producing assistant call, and fitting cannot peel that exchange away to satisfy an otherwise impossible budget.
 
-Surface-specific diet may promote relevant overlay or review state, but it consumes typed surface identity. It does not scan the conversation to guess whether the user is reviewing or implementing.
+Surface-specific diet may compact repeated overlay assessments and board snapshots using typed identities. Entering overlay review does not make source reads stale: those observations remain available for delivery review and use the shared context-budget pipeline. The host does not scan conversation prose to infer the active task.
 
 ## Deterministic fit
 

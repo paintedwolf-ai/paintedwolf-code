@@ -124,9 +124,12 @@ rfd = { version = "0.17", default-features = false, features = ["gtk3"] }
 uuid = { version = "1", features = ["v4"] }
 wheel-glide = { path = "crates/wheel-glide" }
 
-# Linux clipboard commands go through the GTK display connection.
+# Clipboard, desktop portals, the file manager bus interface and window identity
+# use the GTK display connection the shell already runs on.
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
+gdkx11 = "0.18"
+gdkwayland-sys = "0.18"
 
 # macOS and Windows use the OS pasteboard through arboard.
 [target.'cfg(not(target_os = "linux"))'.dependencies]
