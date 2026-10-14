@@ -293,7 +293,7 @@ export function ActivitySpanCard(props: Props) {
               revealTool(entry.part.toolCallId, match);
             }}>
             {(entry) => (
-              <div class="den-activity-span-item">
+              <div class="den-activity-span-item" data-activity-entry-key={entryLeadKey(entry())}>
                 <ActivitySpanEntryRow
                   entry={entry}
                   layout={props.layout}

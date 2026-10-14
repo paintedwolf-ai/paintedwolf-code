@@ -4,6 +4,7 @@ import { waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Message } from "../../api/types.ts";
 import { createTranscriptViewportController, TranscriptViewportProvider } from "../../chat/stream/transcript-viewport.tsx";
+import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
 import { bindScrollportMotion, unbindScrollportMotion } from "../../platform/scrolling/scrollport-motion.ts";
 import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
 import type { ResidentPresence } from "../../ui/resident-surfaces.ts";
@@ -117,6 +118,45 @@ describe("retained transcript attachment", () => {
         expect(resident.querySelector('[data-msg-id="row-0"]')).not.toBeNull();
         expect(resident.querySelector('[data-msg-id="row-79"]')).toBeNull();
       });
+    } finally {
+      dispose();
+      viewport.attachStream(null);
+      unbindScrollportMotion(host);
+      host.remove();
+    }
+  });
+
+  it("transfers open activity-span disclosures when older history regroups the span lead", async () => {
+    const callPair = (ord: number, id: string): Message[] => [
+      {
+        id: `a-${id}`, role: "assistant", origin: "model", authority: "none", trust_tier: "trusted",
+        content: "", ord, created_at: "2026-09-12T00:00:00Z", workflow_run_id: "run-1",
+        tool_calls: [{ id, name: "read", args: { path: `${id}.ts` } }],
+      },
+      {
+        id: `t-${id}`, role: "tool", origin: "host", authority: "none", trust_tier: "trusted",
+        content: "ok", ord: ord + 1, created_at: "2026-09-12T00:00:00Z", workflow_run_id: "run-1",
+        tool_result: { tool_call_id: id, assistant_message_id: `a-${id}`, tool: "read", content: "ok" },
+      },
+    ];
+    const host = document.createElement("div");
+    host.className = "den-chat-stream";
+    document.body.appendChild(host);
+    const viewport = createTranscriptViewportController({ sessionId: () => "regroup-span" });
+    bindScrollportMotion(host, host, host);
+    viewport.attachStream(host);
+    const [messages, setMessages] = createSignal<Message[]>([...callPair(3, "call-1"), ...callPair(5, "call-2")]);
+    const dispose = render(() => (
+      <TranscriptViewportProvider value={viewport}>
+        <SessionTranscript layout="chat" sessionId="regroup-span" messages={messages()} />
+      </TranscriptViewportProvider>
+    ), host);
+    try {
+      await Promise.resolve();
+      viewport.disclosures.setUserOpen(transcriptDisclosureKey.activitySpan("a-call-1:call-1"), true);
+      setMessages([...callPair(1, "call-0"), ...callPair(3, "call-1"), ...callPair(5, "call-2")]);
+      await Promise.resolve();
+      expect(viewport.disclosures.isOpen(transcriptDisclosureKey.activitySpan("a-call-0:call-0"))).toBe(true);
     } finally {
       dispose();
       viewport.attachStream(null);

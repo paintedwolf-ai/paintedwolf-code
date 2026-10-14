@@ -133,7 +133,7 @@ function activityCandidate(
   };
 }
 
-function entryKey(entry: ActivitySpanEntry): string {
+export function activitySpanEntryKey(entry: ActivitySpanEntry): string {
   return entry.kind === "tool" ? entry.part.id : entry.key;
 }
 
@@ -291,7 +291,7 @@ function emitActivitySpan(run: readonly ActivityCandidate[]): ActivitySpanItem {
   const entries = run.map((candidate) => candidate.entry);
   return {
     kind: "activity_span",
-    key: entryKey(entries[0]!),
+    key: activitySpanEntryKey(entries[0]!),
     label: activityHeadline(run),
     entries,
   };

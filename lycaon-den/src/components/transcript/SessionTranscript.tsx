@@ -63,6 +63,7 @@ import { ArtifactDedupProvider } from "../../chat/visual/artifact-dedup-context.
 import type { ChatBlueprintState } from "../blueprint/chat-blueprint-state.ts";
 import type { CitationExploreContext } from "../citation/CitationGroundingPanel.tsx";
 import {
+  bindTranscriptSpanAnchors,
   transcriptItemContainsMessage,
   transcriptItemToolCallIds,
 } from "../../chat/transcript/projection/transcript-item-anchors.ts";
@@ -467,6 +468,10 @@ export function SessionTranscript(props: Props) {
     return scope && key ? transcriptRowHeightForScope(scope, key) : undefined;
   };
 
+  const resolveLostAnchor = bindTranscriptSpanAnchors({
+    items, isOpen: disclosureOpen, rename: (from, to) => viewport?.disclosures.rename(from, to), root: scrollHostEl,
+  });
+
   const virtualizer = createTranscriptVirtualizer({
     items: () => (layout() === "chat" ? items() : []),
     scrollElement: scrollHostEl,
@@ -488,6 +493,7 @@ export function SessionTranscript(props: Props) {
     estimateBasis: rowGeometry,
     placementBasis: rowInsetsByItemKey,
     contentRevision: transcriptRowContentRevision,
+    resolveLostAnchor,
     originPx: geometry.origin,
     onRowMeasured: ({ element, index, size, width }) => {
       if (!(element instanceof HTMLElement)) return;
@@ -625,7 +631,7 @@ export function SessionTranscript(props: Props) {
           return !!item && !isTranscriptTimeItem(item) && item.kind !== "pending_user";
         }, currentScrollOffset()),
       offsetForPosition: (position) =>
-        transcriptOffsetForPosition(virtualizer, position),
+        transcriptOffsetForPosition(virtualizer, position, resolveLostAnchor),
       scrollToIndex: (index, opts) => {
         virtualizer.scrollToIndex(index, opts);
       },
@@ -656,7 +662,7 @@ export function SessionTranscript(props: Props) {
         const client = getLycaonClient();
         if (!client) return;
         await loadTranscriptHistoryUntil(client, appStore, sessionId, () =>
-          items().some((item) => item.key === rowKey),
+          items().some((item) => item.key === rowKey) || Boolean(resolveLostAnchor(rowKey)),
         );
       },
     });
