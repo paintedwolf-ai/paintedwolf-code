@@ -119,7 +119,7 @@ fn identify_on_main_thread(window: &tauri::WebviewWindow, sender: mpsc::Sender<S
 fn export_wayland_handle(surface: &gdk::Window, sender: mpsc::Sender<String>) -> bool {
     use glib::translate::ToGlibPtr;
     unsafe extern "C" fn exported(
-        _window: *mut gdkwayland_sys::GdkWaylandWindow,
+        _window: *mut gdk_wayland_sys::GdkWaylandWindow,
         handle: *const std::os::raw::c_char,
         user_data: *mut libc::c_void,
     ) {
@@ -133,8 +133,8 @@ fn export_wayland_handle(surface: &gdk::Window, sender: mpsc::Sender<String>) ->
     let user_data = Box::into_raw(Box::new(sender)) as *mut libc::c_void;
     let window: *mut gdk::ffi::GdkWindow = surface.to_glib_none().0;
     let started = unsafe {
-        gdkwayland_sys::gdk_wayland_window_export_handle(
-            window as *mut gdkwayland_sys::GdkWaylandWindow,
+        gdk_wayland_sys::gdk_wayland_window_export_handle(
+            window as *mut gdk_wayland_sys::GdkWaylandWindow,
             Some(exported),
             user_data,
             Some(release),
@@ -157,8 +157,8 @@ fn unexport_on_main_thread(window: &tauri::WebviewWindow) {
     }
     let window: *mut gdk::ffi::GdkWindow = surface.to_glib_none().0;
     unsafe {
-        gdkwayland_sys::gdk_wayland_window_unexport_handle(
-            window as *mut gdkwayland_sys::GdkWaylandWindow,
+        gdk_wayland_sys::gdk_wayland_window_unexport_handle(
+            window as *mut gdk_wayland_sys::GdkWaylandWindow,
         );
     }
 }
@@ -217,7 +217,7 @@ fn portal_open_uri(bus: &gio::DBusConnection, parent: &str, uri: &str) -> Result
 fn portal_open_fd(bus: &gio::DBusConnection, method: &str, parent: &str, path: &Path) -> Result<(), String> {
     let file = std::fs::File::open(path).map_err(|error| format!("{}: {error}", path.display()))?;
     let fd_list = gio::UnixFDList::new();
-    let index = fd_list.append(&file).map_err(|error| error.to_string())?;
+    let index = fd_list.append(file).map_err(|error| error.to_string())?;
     bus.call_with_unix_fd_list_sync(
         Some(PORTAL_BUS_NAME),
         PORTAL_OBJECT_PATH,
