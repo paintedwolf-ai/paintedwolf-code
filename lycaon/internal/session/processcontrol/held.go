@@ -46,7 +46,7 @@ func (m *Service) HandleSubject(sessionID, handle string) string {
 		return ""
 	}
 	if m.Background != nil {
-		if cmd, ok := m.Background.CommandLine(sessionID, handle); ok && cmd != "" {
+		if cmd, err := m.Background.CommandLine(sessionID, handle); err == nil && cmd != "" {
 			return cmd
 		}
 	}
