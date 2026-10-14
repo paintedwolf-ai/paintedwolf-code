@@ -59,6 +59,38 @@ func TestDelayedSynthesisPreservesNewerCoverage(t *testing.T) {
 	}
 }
 
+func TestDelayedSynthesisRejectsChangedCanonicalSource(t *testing.T) {
+	mem := store.NewMemory()
+	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "append source", mem.AppendMessages(t.Context(), sess.ID,
+		api.Message{ID: "source", Role: api.MessageRoleAssistant, Content: "original fact"}))
+	rows, err := mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "read source", err)
+	source := rows[0]
+	snapshot := store.CompactionView{Generation: 1, CoveredThroughOrd: source.Ord,
+		CoveredThroughID: source.ID, SourceSeq: source.Seq,
+		Continuation: &messageview.Continuation{ThroughOrd: source.Ord}}
+	testutil.FailErr(t, "publish baseline", mem.PutCompactionView(t.Context(), sess.ID, snapshot))
+	source.Content = "corrected fact"
+	_, err = mem.UpdateMessage(t.Context(), sess.ID, source.ID, source)
+	testutil.FailErr(t, "correct source", err)
+	enriched := &messageview.Continuation{ThroughOrd: source.Ord, SummaryThroughOrd: source.Ord,
+		Summary: messageview.ContinuationSummary{Facts: []string{"original fact"}}}
+	testutil.FailErr(t, "reject stale synthesis", (&Service{store: mem}).publishSynthesis(t.Context(),
+		compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
+	current, err := mem.Get(t.Context(), sess.ID)
+	testutil.FailErr(t, "read generation", err)
+	if current.CompactionGeneration != 1 {
+		t.Fatal("stale synthesis published after canonical correction")
+	}
+	canonical, err := mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "read correction", err)
+	if canonical[0].Content != "corrected fact" {
+		t.Fatal("synthesis replaced the canonical correction")
+	}
+}
+
 type compactionInterleavedStore struct {
 	Store
 	beforeSuffix func()
