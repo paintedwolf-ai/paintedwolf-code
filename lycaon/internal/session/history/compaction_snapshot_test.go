@@ -16,6 +16,22 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+func TestSynthesisKeepsRecoveryAddressesOutsideItsCapturedPage(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	record := &messageview.Continuation{Format: 1, ThroughOrd: 11, SummaryThroughOrd: 1,
+		Sources: []messageview.ContinuationSource{
+			{MessageID: "original-result", Ord: 1, Tool: "read", Handles: []string{"read#1"}, Disposition: "summary_and_reference"},
+			{MessageID: "new-observation", Ord: 11, Disposition: "reference"},
+		}}
+	sc := compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), compaction.MockSummarizer{Text: "New observation"})
+	enriched, err := sc.EnrichContinuation(t.Context(), compaction.SessionInfo{PriorContinuation: record},
+		[]api.Message{{ID: "new-observation", Ord: 11, Role: api.MessageRoleAssistant, Content: "New observation"}}, record)
+	testutil.FailErr(t, "enrich captured page", err)
+	if len(enriched.Sources) != 2 || enriched.Sources[0].MessageID != "original-result" || len(enriched.Sources[0].Handles) != 1 || enriched.SummaryThroughOrd != 11 {
+		t.Fatal("summary enrichment displaced an earlier canonical recovery address")
+	}
+}
+
 func TestDelayedSynthesisPreservesNewerCoverage(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	for _, newerSummary := range []bool{false, true} {

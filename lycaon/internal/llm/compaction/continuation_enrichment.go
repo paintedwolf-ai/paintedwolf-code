@@ -34,7 +34,7 @@ func (c *SimpleCompactor) EnrichContinuation(ctx context.Context, info SessionIn
 	}
 	enriched := *record
 	enriched.Summary = summaryRecord(summary)
-	enriched.Sources = sources
+	enriched.Sources = mergeContinuationSources(record, sources)
 	enriched.Reason = "summarized"
 	if err != nil {
 		enriched.Reason = "references_only"
