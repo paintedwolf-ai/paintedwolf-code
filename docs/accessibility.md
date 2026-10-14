@@ -107,6 +107,18 @@ At the maximum text-size category (or the harness inject) and the Tauri minimum 
 
 Naming uses wire and catalog fields (session title, tool id, worker agent type), never markdown substring classification ([AGENTS.md](../AGENTS.md) § No heuristics).
 
+## Linux screen readers (WebKitGTK)
+
+WebKitGTK aborts its web process while answering AT-SPI `Text.GetAttributeRun` for some content, and an Orca user loses the whole window. Den avoids the shapes that trigger it rather than recovering from the crash:
+
+| Trigger | Contract |
+|------|----------|
+| Content that ends in a `display: none` subtree | No list item (`li` or `role="listitem"`) holds a CSS-hidden subtree. Content hidden until hover, focus or expansion is conditionally rendered; a responsive swap keeps a box (visually hidden, or out of flow and invisible). [`list-item-accessibility-shape.test.ts`](../lycaon-den/src/platform/list-item-accessibility-shape.test.ts) holds the shape in source |
+| A list item laid out as a grid with an actions column | Grid layout goes on a wrapper inside the item, held by the same test |
+| Text that cannot be selected (WebKitGTK 2.50) | The shell reads `org.a11y.Status` `ScreenReaderEnabled` on the session's accessibility bus and follows its changes ([`screen_reader.rs`](../lycaon-den/src-tauri/src/windows/screen_reader.rs)); the `accessibility_screen_reader()` command and `accessibility://screen-reader-changed` event return `{ active, revision }`. While it is true, [`screen-reader.ts`](../lycaon-den/src/platform/desktop/screen-reader.ts) stamps `data-den-screen-reader="active"` on the root and one rule in `ui-chrome.css` makes all text selectable. Sighted users see no change |
+
+`./task den:webkit:atspi` asks every text object in the window for its attributes on each supported WebKitGTK release ([dev tasks](dev-tasks.md)).
+
 ## macOS Spoken Content (Speak selection / Speak under pointer)
 
 Speak selection and VoiceOver read the selectable transcript; there is no in-app `SpeechSynthesis`. Selectable text is required in user message bubbles, rendered assistant markdown (`AssistantProseBody` / `.markdown-body`), and code blocks.

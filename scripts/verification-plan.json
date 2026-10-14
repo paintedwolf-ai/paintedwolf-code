@@ -364,7 +364,8 @@
     "den:harness:test": "playwright",
     "lint:fast": "passthrough",
     "lint:full": "passthrough",
-    "oar:conformance": "passthrough"
+    "oar:conformance": "passthrough",
+    "den:webkit:atspi": "passthrough"
   },
   "resources": {
     "den:harness:test": {
