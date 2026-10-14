@@ -307,7 +307,9 @@
   align-items: center;
   color: var(--den-text-muted);
 }
+/* Selectable label text keeps WebKitGTK answering text attributes for the row; chrome text it cannot select makes its attribute run overflow. */
 .project-folders__path {
+  user-select: text;
   grid-column: 2;
   flex: 1;
   min-width: 0;

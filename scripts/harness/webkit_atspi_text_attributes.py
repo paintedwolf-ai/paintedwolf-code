@@ -153,15 +153,20 @@ def run_scan(url: str) -> int:
         for node in objects:
             text = node.get_text_iface()
             label = describe(node)
+            call = "GetDefaultAttributes"
             try:
                 count = Atspi.Text.get_character_count(text)
+                content = Atspi.Text.get_text(text, 0, -1)
+                label = f"{label} text={content!r}"
                 for offset in range(0, count + 1):
                     for defaults in (True, False):
+                        call = f"GetAttributeRun({offset}, include_defaults={defaults})"
                         Atspi.Text.get_attribute_run(text, offset, defaults)
                         calls += 1
+                call = "GetDefaultAttributes"
                 Atspi.Text.get_default_attributes(text)
             except Exception as error:  # noqa: BLE001
-                print(f"failed: {label} after {calls} calls: {error}", file=sys.stderr)
+                print(f"failed: {call} on {label}: {error}", file=sys.stderr)
                 return 1
         if page.poll() is not None:
             print("failed: the page exited during the scan", file=sys.stderr)
