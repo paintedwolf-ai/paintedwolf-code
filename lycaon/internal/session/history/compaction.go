@@ -17,7 +17,7 @@ import (
 
 const UncompactedLimit = 256
 
-// Load rejects suffixes too large to assemble without gaps.
+// Load uses a bounded tail when a projection cannot cover the live suffix.
 func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, error) {
 	if m == nil || m.store == nil || sess == nil {
 		return nil, fmt.Errorf("session store and session are required")
@@ -55,9 +55,14 @@ func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *a
 	if len(history) == 0 || history[0].Ord <= 1 {
 		return history, nil
 	}
+	firstTailOrd := history[0].Ord
+	history, err = m.withCurrentRequest(ctx, sess, history)
+	if err != nil {
+		return nil, err
+	}
 	m.Schedule(ctx, sess)
 	text, err := guidance.RenderGuidance(ctx, guidance.CompactionContinuationRecordRef, map[string]any{
-		"through_ord": history[0].Ord - 1, "reference_only": true,
+		"through_ord": firstTailOrd - 1, "reference_only": true,
 		"recall_available": m.recallAvailable != nil && m.recallAvailable(ctx, sess),
 	})
 	if err != nil {
@@ -140,7 +145,7 @@ func (m *Service) runBackgroundCompaction(ctx context.Context, sessionID string)
 	if !ok {
 		return
 	}
-	for ctx.Err() == nil {
+	for pass := 0; pass < 8 && ctx.Err() == nil; pass++ {
 		hasMore, wrote := m.runBackgroundCompactionPage(ctx, sessionID, sc)
 		if !hasMore || !wrote {
 			return
@@ -226,7 +231,15 @@ func (m *Service) loadCompactionPage(ctx context.Context, sess *api.Session) ([]
 			sourceSeq = view.SourceSeq
 		}
 	}
-	suffix, err := m.store.GetMessagesAfterOrd(ctx, sess.ID, coveredThroughOrd, UncompactedLimit+1)
+	var suffix []api.Message
+	if len(base) == 0 {
+		suffix, err = m.store.GetMessagesTail(ctx, sess.ID, UncompactedLimit)
+		if err == nil {
+			suffix, err = m.withCurrentRequest(ctx, sess, suffix)
+		}
+	} else {
+		suffix, err = m.store.GetMessagesAfterOrd(ctx, sess.ID, coveredThroughOrd, UncompactedLimit+1)
+	}
 	if err != nil {
 		return nil, 0, "", 0, false, err
 	}
@@ -466,4 +479,19 @@ func (m *Service) compactionConfig(ctx context.Context, sess *api.Session) compa
 		cfg = compaction.WorkerChildCompactionConfig(cfg)
 	}
 	return cfg
+}
+
+// withCurrentRequest restores the active human opener when it predates the tail.
+func (m *Service) withCurrentRequest(ctx context.Context, sess *api.Session, tail []api.Message) ([]api.Message, error) {
+	if sess.CurrentTurn <= 0 || len(tail) == 0 || int64(sess.CurrentTurn) >= tail[0].Ord {
+		return tail, nil
+	}
+	rows, err := m.store.GetMessagesAfterOrd(ctx, sess.ID, int64(sess.CurrentTurn)-1, 1)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 || rows[0].Ord != int64(sess.CurrentTurn) {
+		return tail, nil
+	}
+	return append(rows, tail...), nil
 }
