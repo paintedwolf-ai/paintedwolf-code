@@ -9,7 +9,6 @@ import { createFilesEditorViewport } from "./files-editor-viewport.ts";
 import { filesBufferText } from "../documents/project-files-buffers.ts";
 import { createEditorToolbarMenus, FilesEditorToolbar, FilesEditorStatus } from "./FilesEditorChrome.tsx";
 import { openFind } from "../../find/find-controller.ts";
-import { findBarDisclosure, gotoLineBarDisclosure } from "../../find/command-bar-disclosure.ts";
 import { contextAction } from "../../components/context-actions.ts";
 import type { SourceReaderHandle } from "../../components/source/reader/SourceReader.tsx";
 
@@ -609,7 +608,7 @@ export function FilesEditor(props: FilesEditorProps) {
   const dirtyOpenCount = () =>
     filesState().order.filter((k) => filesState().byKey[k]?.dirty).length;
 
-  const { copiedPath, onCopy, findMenuBind, gotoMenuBind, copyMenuBind, toolbarMenuItems } = createEditorToolbarMenus({
+  const { copiedPath, onCopy, findMenuBind, gotoMenuBind, copyMenuBind, toolbarMenuItems, findBarDisclosure, gotoLineBarDisclosure } = createEditorToolbarMenus({
     setToolbarMenu, roots: () => props.roots, buffer: () => props.buffer, activeReaderHandle, activeEditorView,
   });
 

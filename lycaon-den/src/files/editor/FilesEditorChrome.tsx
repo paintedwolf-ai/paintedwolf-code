@@ -9,6 +9,7 @@ import { copyPathMenuItems } from "../../components/copy-path-menu-items.ts";
 import type { SourceReaderHandle } from "../../components/source/reader/SourceReader.tsx";
 import { openEditorFind, openEditorGotoLine, openEditorReplace } from "../../components/source/editor/codemirror-theme.ts";
 import { openFind } from "../../find/find-controller.ts";
+import { findBarDisclosure, gotoLineBarDisclosure } from "../../find/command-bar-disclosure.ts";
 import { invokeCommand } from "../../shortcuts/dispatcher.ts";
 import { copyTextToClipboard } from "../../utils/clipboard.ts";
 import { absolutePathForBuffer } from "../components/project-files-model.ts";
@@ -71,7 +72,7 @@ export function FilesEditorStatus(props: FilesEditorStatusProps) {
   </div>;
 }
 
-/** The toolbar's find, go-to, and copy menus, and the copy button's path copy. */
+/** The toolbar's find, go-to, and copy menus, their buttons' command bar disclosures, and the copy button's path copy. */
 export function createEditorToolbarMenus(options: {
   setToolbarMenu: (menu: { kind: FilesEditorToolbarMenuKind; anchor: ContextMenuAnchor }) => void;
   roots: () => readonly ProjectRoot[];
@@ -180,5 +181,5 @@ export function createEditorToolbarMenus(options: {
     }
   };
 
-  return { copiedPath, onCopy, findMenuBind, gotoMenuBind, copyMenuBind, toolbarMenuItems };
+  return { copiedPath, onCopy, findMenuBind, gotoMenuBind, copyMenuBind, toolbarMenuItems, findBarDisclosure, gotoLineBarDisclosure };
 }
