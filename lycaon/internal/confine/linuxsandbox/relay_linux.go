@@ -109,13 +109,18 @@ func readReport(report io.Reader, ready chan<- struct{}) syscall.Signal {
 // the target exists, so none is lost or handled by the runtime meanwhile.
 var heldSignals chan os.Signal
 
+// reportFile is the inner helper's report pipe, opened once: a second *os.File
+// for the descriptor would close it when the first is collected.
+var reportFile *os.File
+
 // HoldSignals takes the forwarded signals in the inner helper and tells the
 // outer helper it may now forward them. Until then the outer helper keeps
 // them: Go's own handler would end PID 1 with exit 2, not by the signal.
 func HoldSignals() {
 	heldSignals = notifyForwarded()
-	if f := reportPipe(); f != nil {
-		_, _ = f.Write([]byte{reportReady})
+	reportFile = reportPipe()
+	if reportFile != nil {
+		_, _ = reportFile.Write([]byte{reportReady})
 	}
 }
 
@@ -123,8 +128,8 @@ func HoldSignals() {
 // The inner helper is PID 1 of its PID namespace, which the kernel never lets
 // die by a signal it sends itself, so the outer helper dies by it instead.
 func ReportSignal(sig syscall.Signal) {
-	if f := reportPipe(); f != nil {
-		_, _ = f.Write([]byte{byte(sig)})
+	if reportFile != nil {
+		_, _ = reportFile.Write([]byte{byte(sig)})
 	}
 }
 
