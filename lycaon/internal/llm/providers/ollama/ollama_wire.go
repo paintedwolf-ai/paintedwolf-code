@@ -179,8 +179,48 @@ func ollamaToolCallsToAPI(calls []ollamaToolCall) []api.ToolCall {
 	return out
 }
 
+// ollamaErrorToolCall converts server-side Ollama tool-call parser errors into
+// synthetic tool calls so the host's TOOL_NOT_OFFERED and TOOL_ARGS_MALFORMED
+// rejection handlers recover in-turn instead of aborting the prompt run.
+func ollamaErrorToolCall(errText string, callable []ollamaTool) (api.ToolCall, bool) {
+	trimmed := strings.TrimSpace(errText)
+	if name, ok := parseOllamaMissingToolError(trimmed); ok {
+		return api.ToolCall{
+			ID:   providerwire.NewToolCallID(),
+			Name: name,
+			Args: map[string]any{},
+		}, true
+	}
+	if len(callable) > 0 && isOllamaToolJSONSyntaxError(trimmed) {
+		return api.ToolCall{
+			ID:            providerwire.NewToolCallID(),
+			Name:          callable[0].Function.Name,
+			ArgsMalformed: true,
+		}, true
+	}
+	return api.ToolCall{}, false
+}
+
+func parseOllamaMissingToolError(errText string) (string, bool) {
+	const (
+		prefix = "tool '"
+		suffix = "' not found"
+	)
+	if strings.HasPrefix(errText, prefix) && strings.HasSuffix(errText, suffix) {
+		if name := strings.TrimSpace(errText[len(prefix) : len(errText)-len(suffix)]); name != "" {
+			return name, true
+		}
+	}
+	return "", false
+}
+
+func isOllamaToolJSONSyntaxError(errText string) bool {
+	return strings.HasPrefix(errText, "invalid character ") ||
+		strings.HasPrefix(errText, "unexpected end of JSON input")
+}
+
 // Tool calls accumulate across events and join usage on the terminal chunk.
-func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model string, contextTokens int, onDone func(promptTokens int, promptEvalDuration int64)) <-chan modelcall.StreamChunk {
+func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model string, contextTokens int, onDone func(promptTokens int, promptEvalDuration int64), callable ...ollamaTool) <-chan modelcall.StreamChunk {
 	ch := make(chan modelcall.StreamChunk)
 	go func() {
 		defer close(ch)
@@ -205,6 +245,11 @@ func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model s
 				return
 			}
 			if resp.Error != "" {
+				if tc, ok := ollamaErrorToolCall(resp.Error, callable); ok {
+					calls := append(ollamaToolCallsToAPI(rawToolCalls), tc)
+					modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{ToolCalls: calls, Usage: usage, Done: true})
+					return
+				}
 				modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: fmt.Errorf("ollama: %s", resp.Error), Done: true})
 				return
 			}

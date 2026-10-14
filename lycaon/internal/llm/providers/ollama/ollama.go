@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const ollamaProbeTimeout = 3 * time.Second
@@ -307,8 +308,13 @@ func (p *Provider) Complete(ctx context.Context, req modelcall.CompletionRequest
 	if err := json.Unmarshal(raw, &decoded); err != nil {
 		return nil, fmt.Errorf("ollama: decode response: %w", err)
 	}
+	var recoveredCalls []api.ToolCall
 	if decoded.Error != "" {
-		return nil, fmt.Errorf("ollama: %s", decoded.Error)
+		tc, ok := ollamaErrorToolCall(decoded.Error, ollamaCallableForErrorRecovery(payload))
+		if !ok {
+			return nil, fmt.Errorf("ollama: %s", decoded.Error)
+		}
+		recoveredCalls = append(recoveredCalls, tc)
 	}
 	p.warnIfTruncated(payload, promptEst, decoded.PromptEvalCount)
 	p.observePromptTokens(payload.Model, promptEst, decoded.PromptEvalCount)
@@ -316,7 +322,7 @@ func (p *Provider) Complete(ctx context.Context, req modelcall.CompletionRequest
 	out := &modelcall.Completion{
 		Content:   decoded.Message.Content,
 		Reasoning: decoded.Message.Thinking,
-		ToolCalls: ollamaToolCallsToAPI(decoded.Message.ToolCalls),
+		ToolCalls: append(ollamaToolCallsToAPI(decoded.Message.ToolCalls), recoveredCalls...),
 		Usage:     modelcall.TokenUsage{PromptTokens: decoded.PromptEvalCount, CompletionTokens: decoded.EvalCount},
 	}
 	if decoded.DoneReason == "length" {
@@ -348,7 +354,7 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 		p.warnIfTruncated(payload, promptEst, promptTokens)
 		p.observePromptTokens(payload.Model, promptEst, promptTokens)
 		providerwire.NoteOllamaPromptEvalDuration(providerwire.PromptCacheScope(p.id, payload.Model, req.Debug), promptEvalDuration)
-	})
+	}, ollamaCallableForErrorRecovery(payload)...)
 	out := make(chan modelcall.StreamChunk)
 	go func() {
 		defer close(out)
@@ -438,4 +444,11 @@ func ollamaCallableTools(req modelcall.CompletionRequest) []ollamaTool {
 		return nil
 	}
 	return toolsToOllama(req.Tools)
+}
+
+func ollamaCallableForErrorRecovery(payload Request) []ollamaTool {
+	if len(payload.Format) > 0 {
+		return nil
+	}
+	return payload.Tools
 }

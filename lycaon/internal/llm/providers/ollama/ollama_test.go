@@ -441,6 +441,89 @@ func TestDecodeOllamaStreamRejectsMissingDone(t *testing.T) {
 	}
 }
 
+func TestOllamaStreamAndCompleteRecoverToolParserErrors(t *testing.T) {
+	var respErr string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload Request
+		_ = json.NewDecoder(r.Body).Decode(&payload)
+		if payload.Stream {
+			w.Header().Set("Content-Type", "application/x-ndjson")
+			_, _ = io.WriteString(w, `{"message":{"role":"assistant","content":"Let's write the file."},"done":false}`+"\n")
+			_ = json.NewEncoder(w).Encode(map[string]any{"error": respErr})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"message": map[string]any{"role": "assistant", "content": "Let's write the file."},
+			"error":   respErr,
+		})
+	}))
+	defer srv.Close()
+
+	p := New("desktop", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "ministral-3:3b", ContextLength: 32768}})
+	offered := []tools.ToolMeta{
+		{Name: "request_tools", ArgsSchema: map[string]any{"type": "object"}},
+		{Name: "command", ArgsSchema: map[string]any{"type": "object"}},
+	}
+
+	t.Run("unoffered tool error becomes synthetic tool call", func(t *testing.T) {
+		respErr = "tool 'write' not found"
+		req := modelcall.CompletionRequest{
+			Model:    "ministral-3:3b",
+			Messages: []api.Message{{Role: api.MessageRoleUser, Content: "build game"}},
+			Tools:    offered,
+		}
+		streamed, _, err := modelcall.CollectStream(mustStream(t, p, req))
+		testutil.FailErr(t, "collect stream", err)
+		if len(streamed.ToolCalls) != 1 || streamed.ToolCalls[0].Name != "write" || streamed.ToolCalls[0].ArgsMalformed {
+			t.Fatalf("streamed tool calls = %+v, want synthetic write call", streamed.ToolCalls)
+		}
+		completed, err := p.Complete(t.Context(), req)
+		testutil.FailErr(t, "complete", err)
+		if len(completed.ToolCalls) != 1 || completed.ToolCalls[0].Name != "write" || completed.ToolCalls[0].ArgsMalformed {
+			t.Fatalf("completed tool calls = %+v, want synthetic write call", completed.ToolCalls)
+		}
+	})
+
+	t.Run("malformed tool JSON error becomes ArgsMalformed tool call when tools offered", func(t *testing.T) {
+		respErr = `invalid character '\'' in string escape code`
+		req := modelcall.CompletionRequest{
+			Model:    "ministral-3:3b",
+			Messages: []api.Message{{Role: api.MessageRoleUser, Content: "build game"}},
+			Tools:    offered,
+		}
+		streamed, _, err := modelcall.CollectStream(mustStream(t, p, req))
+		testutil.FailErr(t, "collect stream", err)
+		if len(streamed.ToolCalls) != 1 || streamed.ToolCalls[0].Name != "request_tools" || !streamed.ToolCalls[0].ArgsMalformed {
+			t.Fatalf("streamed tool calls = %+v, want malformed request_tools call", streamed.ToolCalls)
+		}
+		completed, err := p.Complete(t.Context(), req)
+		testutil.FailErr(t, "complete", err)
+		if len(completed.ToolCalls) != 1 || completed.ToolCalls[0].Name != "request_tools" || !completed.ToolCalls[0].ArgsMalformed {
+			t.Fatalf("completed tool calls = %+v, want malformed request_tools call", completed.ToolCalls)
+		}
+	})
+
+	t.Run("non-tool errors and structured format errors still fail", func(t *testing.T) {
+		respErr = "model 'ministral-3:3b' not found"
+		req := modelcall.CompletionRequest{
+			Model:    "ministral-3:3b",
+			Messages: []api.Message{{Role: api.MessageRoleUser, Content: "build game"}},
+			Tools:    offered,
+		}
+		if _, _, err := modelcall.CollectStream(mustStream(t, p, req)); err == nil {
+			t.Fatal("expected stream error for model not found")
+		}
+		if _, err := p.Complete(t.Context(), req); err == nil {
+			t.Fatal("expected complete error for model not found")
+		}
+		respErr = "unexpected end of JSON input"
+		req.ResponseFormat = &modelcall.ResponseFormat{Type: "json_object"}
+		if _, err := p.Complete(t.Context(), req); err == nil {
+			t.Fatal("expected complete error when ResponseFormat is set")
+		}
+	})
+}
+
 func mustStream(t *testing.T, p *Provider, req modelcall.CompletionRequest) <-chan modelcall.StreamChunk {
 	t.Helper()
 	ch, err := p.Stream(context.Background(), req)
