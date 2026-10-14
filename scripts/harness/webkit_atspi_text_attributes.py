@@ -90,7 +90,9 @@ def run_page(url: str) -> int:
 def describe(node) -> str:
     try:
         attrs = node.get_attributes() or {}
-        return f"{node.get_role_name()} {node.get_name()!r} <{attrs.get('tag', '?')}>"
+        children = [f"{c.get_role_name()} {c.get_name()!r}" for c in
+                    (node.get_child_at_index(i) for i in range(min(node.get_child_count(), 4))) if c is not None]
+        return f"{node.get_role_name()} {node.get_name()!r} <{attrs.get('tag', '?')}> children={children}"
     except Exception as error:  # noqa: BLE001
         return f"<unreadable: {error}>"
 
