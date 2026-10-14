@@ -73,10 +73,10 @@ webE2e.describe("citation source opens in-app", () => {
 
       const chicklet = page.getByTestId("citation-evidence-chicklet");
       await expect(chicklet).toBeVisible({ timeout: 30_000 });
-      const summary = chicklet.locator("summary");
+      const summary = chicklet.locator(".den-transcript-disclosure-header");
       const geometry = await chicklet.evaluate((element) => {
         const stream = element.closest(".den-chat-transcript-visual")!;
-        const header = element.querySelector("summary")!;
+        const header = element.querySelector(".den-transcript-disclosure-header")!;
         const row = header.firstElementChild!;
         const caret = header.querySelector(".den-tool-chicklet-caret")!;
         return {

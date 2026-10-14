@@ -502,9 +502,7 @@ export function SessionTranscript(props: Props) {
       for (const disclosure of element.querySelectorAll<HTMLElement>("[data-disclosure-key]")) {
         const key = parseTranscriptDisclosureKey(disclosure.dataset.disclosureKey);
         if (!key) continue;
-        const isOpen = disclosure instanceof HTMLDetailsElement
-          ? disclosure.open
-          : disclosure.dataset.expanded === "true";
+        const isOpen = disclosure.dataset.expanded === "true";
         if (isOpen !== disclosureOpen(key)) return;
       }
       const item = items()[index];

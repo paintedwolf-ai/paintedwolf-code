@@ -1,5 +1,6 @@
 import { activitySpanToolParts } from "../../tool/activity-span-model.ts";
 import type { TranscriptItem } from "./transcript-item-model.ts";
+import { isTranscriptDisclosureOpen, isTranscriptDisclosureShell } from "../presentation/transcript-disclosure-shell.ts";
 
 export function transcriptItemToolCallIds(
   item: TranscriptItem,
@@ -78,8 +79,8 @@ export function visibleTranscriptToolTarget(
   if (!command) return null;
   let target = command;
   for (let parent = command.parentElement; parent && parent !== root; parent = parent.parentElement) {
-    if (parent instanceof HTMLDetailsElement && (
-      !parent.open || parent.hasAttribute("data-closing") || parent.dataset.animating === "true"
+    if (isTranscriptDisclosureShell(parent) && (
+      !isTranscriptDisclosureOpen(parent) || parent.hasAttribute("data-closing") || parent.dataset.animating === "true"
     )) target = parent;
   }
   return target;

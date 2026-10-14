@@ -5,24 +5,24 @@ import { transcriptItemContainsMessage, transcriptToolTarget, visibleTranscriptT
 describe("visibleTranscriptToolTarget", () => {
   it("follows nested disclosures down to the selected command as they open", () => {
     const root = document.createElement("div");
-    root.innerHTML = '<details id="outer"><summary>Activity</summary><details id="inner"><summary>Task</summary><details class="den-tool-part" data-tool-call-id="chosen"><summary>Command</summary></details></details></details>';
-    const outer = root.querySelector<HTMLDetailsElement>("#outer")!;
-    const inner = root.querySelector<HTMLDetailsElement>("#inner")!;
+    root.innerHTML = '<div id="outer" data-transcript-disclosure><button>Activity</button><div id="inner" data-transcript-disclosure><button>Task</button><div class="den-tool-part" data-transcript-disclosure data-tool-call-id="chosen"><button>Command</button></div></div></div>';
+    const outer = root.querySelector<HTMLElement>("#outer")!;
+    const inner = root.querySelector<HTMLElement>("#inner")!;
     const command = root.querySelector<HTMLElement>("[data-tool-call-id]")!;
     expect(visibleTranscriptToolTarget(root, "chosen")).toBe(outer);
-    outer.open = true;
+    outer.setAttribute("data-expanded", String(true));
     expect(visibleTranscriptToolTarget(root, "chosen")).toBe(inner);
-    inner.open = true;
+    inner.setAttribute("data-expanded", String(true));
     expect(visibleTranscriptToolTarget(root, "chosen")).toBe(command);
-    outer.open = false;
+    outer.setAttribute("data-expanded", String(false));
     expect(visibleTranscriptToolTarget(root, "chosen")).toBe(outer);
   });
 
   it("keeps the containing card selected while its body is animating", () => {
     const root = document.createElement("div");
-    root.innerHTML = '<details open data-animating="true"><summary>Activity</summary><div class="den-tool-part" data-tool-call-id="chosen"></div></details>';
-    expect(visibleTranscriptToolTarget(root, "chosen")).toBe(root.querySelector("details"));
-    root.querySelector("details")!.removeAttribute("data-animating");
+    root.innerHTML = '<div id="card" data-transcript-disclosure data-expanded="true" data-animating="true"><button>Activity</button><div class="den-tool-part" data-tool-call-id="chosen"></div></div>';
+    expect(visibleTranscriptToolTarget(root, "chosen")).toBe(root.querySelector("#card"));
+    root.querySelector("#card")!.removeAttribute("data-animating");
     expect(visibleTranscriptToolTarget(root, "chosen")).toBe(root.querySelector("[data-tool-call-id]"));
   });
 });
@@ -30,8 +30,8 @@ describe("visibleTranscriptToolTarget", () => {
 describe("transcriptToolTarget", () => {
   it("finds a folded diff through its row's tool-call identities", () => {
     const root = document.createElement("div");
-    root.innerHTML = '<div data-tool-call-ids="first second"><details class="den-diff-group den-transcript-disclosure-card"><summary>1 file changed</summary></details></div>';
-    expect(transcriptToolTarget(root, "second")).toBe(root.querySelector("details"));
+    root.innerHTML = '<div data-tool-call-ids="first second"><div class="den-diff-group den-transcript-disclosure-card" data-transcript-disclosure><button>1 file changed</button></div></div>';
+    expect(transcriptToolTarget(root, "second")).toBe(root.querySelector(".den-diff-group"));
     expect(transcriptToolTarget(root, "sec")).toBeNull();
   });
   it("returns the visible card around a nested tool marker", () => {
@@ -49,7 +49,7 @@ describe("transcriptToolTarget", () => {
 
   it("matches tool IDs without building a selector from them", () => {
     const root = document.createElement("div");
-    const card = document.createElement("details");
+    const card = document.createElement("div");
     card.className = "den-tool-part";
     card.dataset.toolCallId = 'call"1';
     root.append(card);

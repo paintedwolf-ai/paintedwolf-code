@@ -137,7 +137,7 @@ webE2e(`transcript disclosures animate without moving the viewport${expandedSpac
   );
 
   const activity = page.getByTestId("activity-span-card").last();
-  const summary = activity.locator(":scope > summary");
+  const summary = activity.locator(":scope > .den-transcript-disclosure-header");
   const caret = summary.locator(".den-tool-chicklet-caret");
   const stream = page
     .locator(
@@ -170,7 +170,7 @@ webE2e(`transcript disclosures animate without moving the viewport${expandedSpac
 
   await startDisclosureScrollTrace(summary);
   await clickDisclosureWithoutReveal(summary);
-  await expect(activity).toHaveAttribute("open", "");
+  await expect(activity).toHaveAttribute("data-expanded", "true");
   await expect(activity).not.toHaveAttribute("data-animating", "true", {
     timeout: 2_000,
   });
@@ -196,7 +196,7 @@ webE2e(`transcript disclosures animate without moving the viewport${expandedSpac
   ).toBeLessThanOrEqual(1.5);
   expectStableScrollTrace(openingTrace);
 
-  const nested = activity.locator(".den-tool-part > summary");
+  const nested = activity.locator(".den-tool-part > .den-transcript-disclosure-header");
   await expect(nested).toHaveCount(3);
   const firstNested = nested.first();
   const firstNestedShell = firstNested.locator("..");
@@ -206,7 +206,7 @@ webE2e(`transcript disclosures animate without moving the viewport${expandedSpac
     firstNestedShell,
     stream,
   );
-  await expect(firstNestedShell).toHaveAttribute("open", "");
+  await expect(firstNestedShell).toHaveAttribute("data-expanded", "true");
 
   const lastNested = nested.last();
   const lastNestedShell = lastNested.locator("..");
@@ -214,16 +214,16 @@ webE2e(`transcript disclosures animate without moving the viewport${expandedSpac
   await toggleAndExpectControlled(lastNested, lastNestedShell, stream, {
     geometryAboveChanges: true,
   });
-  await expect(firstNestedShell).not.toHaveAttribute("open", "");
-  await expect(lastNestedShell).toHaveAttribute("open", "");
+  await expect(firstNestedShell).not.toHaveAttribute("data-expanded", "true");
+  await expect(lastNestedShell).toHaveAttribute("data-expanded", "true");
 
   await toggleAndExpectControlled(lastNested, lastNestedShell, stream);
-  await expect(lastNestedShell).not.toHaveAttribute("open", "");
+  await expect(lastNestedShell).not.toHaveAttribute("data-expanded", "true");
 
   const beforeParentClose = await disclosureViewportState(summary);
   await startDisclosureScrollTrace(summary);
   await clickDisclosureWithoutReveal(summary);
-  await expect(activity).not.toHaveAttribute("open", "");
+  await expect(activity).not.toHaveAttribute("data-expanded", "true");
   await expect(activity).not.toHaveAttribute("data-animating", "true", {
     timeout: 2_000,
   });
@@ -245,7 +245,7 @@ webE2e(`transcript disclosures animate without moving the viewport${expandedSpac
   await positionDisclosure(page, summary, "bottom");
   await startTailBoundaryTrace(page);
   await clickDisclosureWithoutReveal(summary);
-  await expect(activity).toHaveAttribute("open", "");
+  await expect(activity).toHaveAttribute("data-expanded", "true");
   await page.mouse.wheel(0, 2_400);
   await expect(activity).not.toHaveAttribute("data-animating", "true", {
     timeout: 2_000,
@@ -350,15 +350,15 @@ webE2e(`expanding a tall row at the tail preserves the reading position${expande
   await expect(activity).toBeVisible({ timeout: 30_000 });
   await page.waitForTimeout(300);
 
-  await clickDisclosureWithoutReveal(activity.locator(":scope > summary"));
-  await expect(activity).toHaveAttribute("open", "");
+  await clickDisclosureWithoutReveal(activity.locator(":scope > .den-transcript-disclosure-header"));
+  await expect(activity).toHaveAttribute("data-expanded", "true");
   await expect(activity).not.toHaveAttribute("data-animating", "true", {
     timeout: 2_000,
   });
 
-  const nested = activity.locator(".den-tool-part > summary").last();
+  const nested = activity.locator(".den-tool-part > .den-transcript-disclosure-header").last();
   const nestedShell = nested.locator("..");
-  await expect(nestedShell).not.toHaveAttribute("open", "");
+  await expect(nestedShell).not.toHaveAttribute("data-expanded", "true");
   await page.waitForTimeout(300);
 
   // Returning to the bottom re-arms the scrollport tail pin.
@@ -378,7 +378,7 @@ webE2e(`expanding a tall row at the tail preserves the reading position${expande
 
   await startDisclosureScrollTrace(nested);
   await clickDisclosureWithoutReveal(nested);
-  await expect(nestedShell).toHaveAttribute("open", "");
+  await expect(nestedShell).toHaveAttribute("data-expanded", "true");
   await expect(nestedShell).not.toHaveAttribute("data-animating", "true", {
     timeout: 2_000,
   });
