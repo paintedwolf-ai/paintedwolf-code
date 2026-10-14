@@ -30730,6 +30730,10 @@ components:
           type: integer
           minimum: 0
           description: Directories a per-directory watcher could not register.
+        watch_limit_reached:
+          type: boolean
+          description: |
+            The kernel refused the latest registration because the per-user watch limit is reached (`fs.inotify.max_user_watches` on Linux); unwatched directories recover once the limit is raised or watches free up.
     SourceWorkspaceRoot:
       x-go-generate: true
       type: object
