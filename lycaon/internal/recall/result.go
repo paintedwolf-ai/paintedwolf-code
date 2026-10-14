@@ -5,7 +5,8 @@ import "github.com/lycaon/lycaon/pkg/api"
 // Result is what one recall call states. An empty Hits list means whatever
 // Resolution says it means.
 type Result struct {
-	Resolution Resolution `json:"resolution"`
+	History    *HistoryPage `json:"history,omitempty"`
+	Resolution Resolution   `json:"resolution"`
 	// ScopeStated echoes the reach the host actually applied.
 	ScopeStated string `json:"scope_stated"`
 	// QueryStated echoes the compiler's reading of the query.

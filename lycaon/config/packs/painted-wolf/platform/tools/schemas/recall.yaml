@@ -29,6 +29,21 @@ schema:
         agent:scout, leg:<id>, session:<id>, tool:read, after:2026-08-01 before
         free text. Also available — kind:evidence, path:src/*.go, url:<url>,
         untrusted:true, verified:false, run:<id>.
+    history:
+      type: object
+      description: >-
+        Recover your own canonical transcript after compaction. Supply the continuation's
+        through_ord, page with after_ord, then supply an indexed message_id to read its
+        recorded body. offset pages a long body in Unicode characters. This is recorded
+        history, not current file contents. Cannot be combined with query or widen.
+      properties:
+        after_ord: {type: integer, minimum: 0}
+        through_ord: {type: integer, minimum: 1}
+        source_seq: {type: integer, minimum: 0}
+        message_id: {type: string, minLength: 1}
+        offset: {type: integer, minimum: 0}
+      required: [through_ord]
+      additionalProperties: false
     widen:
       type: string
       enum: [subtree, project, all]
@@ -44,5 +59,7 @@ schema:
       description: >-
         Maximum rows to return (default 20). A broad answer returns snippets and
         facets instead of bodies; narrow the query to get bodies back.
-  required: [query]
+  oneOf:
+    - required: [query]
+    - required: [history]
   additionalProperties: false

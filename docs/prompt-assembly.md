@@ -137,11 +137,9 @@ Every provider call has a hard ceiling. The synchronous path fits or exposes an 
 
 The same facts, frame, limits, and compaction revision produce the same fit. Latency never depends on an emergency summarizer call.
 
-## Continuation retention contract
+## Canonical history recovery
 
-The host preserves original user instructions and worker assignments, and renders operational state from its owning subsystems. Supporting narrative may be summarized, but a model summary never establishes permissions, verification, or workflow completion. A follow-up request does not release earlier instructions. Essential history that exceeds the receiving model's budget remains an explicit capacity failure.
-
-Compaction covers the exchanges removed from the prompt. Each source range remains represented by retained text, source-linked summary entries, or a recoverable index. The prior continuation is an input to every subsequent generation. Coordinator and summarizer budgets are resolved independently; changing the receiving model rebuilds its projection from canonical history. Optional local ranking affects supporting detail only, and unavailable or untrained ranking retains the deterministic baseline.
+Compaction changes the model's view; canonical transcript rows remain addressable. A narrow `recall` query recovers an evidence handle. The `history` argument pages the caller's own transcript by immutable ordinal, then reads one indexed message body in Unicode windows. A source watermark reports corrections to the covered transcript. Recovery never widens a worker's scope and recorded source contents never claim to be the current working tree.
 
 ## Asynchronous compaction
 
@@ -196,3 +194,5 @@ The [`summarize`](summarize.md) tool returns a structured context pack as a dura
 - Background compaction has one writer and never blocks normal turns.
 - Compaction splices use indexed ordinal and mutation watermarks; a mismatch fails closed to canonical facts.
 - Templates explain typed facts; prose does not become host fact.
+
+The recovery watermark describes corrections to the returned rows. Recovery reads use ordinal seeks and bounded body windows; they do not scan the covered transcript to compute a global correction count.
