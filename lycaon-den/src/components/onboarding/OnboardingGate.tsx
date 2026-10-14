@@ -15,6 +15,7 @@ import { showAllModelsPref } from "../../settings/appearance/display-prefs.ts";
 import { CLIENT_NOTICES } from "../../notices/client-notices.generated.ts";
 import { completeFirstRunSetup } from "../../settings/system/onboarding-prefs.ts";
 import { ChromeDragSurface } from "../shell/ChromeDragSurface.tsx";
+import { soleWindowControls } from "../shell/WindowControls.tsx";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 import { ProvidersSettingsPanel } from "../settings/providers/ProvidersSettingsPanel.tsx";
 import { ProvidersPanel } from "../settings/providers/ProvidersPanel.tsx";
@@ -263,6 +264,7 @@ export function OnboardingGate(props: Props) {
         />
       </Show>
       <ChromeDragSurface class="onboarding-gate__chrome-drag" />
+      <div class="onboarding-gate__window-controls">{soleWindowControls()}</div>
       <main class="onboarding-gate__inner">
         <BrandLockup class="onboarding-gate__brand" />
         <div class="onboarding-gate__stack">

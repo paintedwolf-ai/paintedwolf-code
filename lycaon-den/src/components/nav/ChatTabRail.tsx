@@ -25,7 +25,6 @@ import {
 import { ContextPaneToggle } from "./ContextPaneToggle.tsx";
 import { ConversationCollapseButton } from "./ConversationToggle.tsx";
 import { SplitFitRestoreButton } from "./SplitFitRestore.tsx";
-import { tabBarTrailingControls } from "../shell/WindowControls.tsx";
 import { ProgressStrip } from "../ProgressStrip.tsx";
 import { WorkflowsTab } from "../workflow/WorkflowsTab.tsx";
 import { GitStrip } from "../GitStrip.tsx";
@@ -128,8 +127,6 @@ export function ChatTabRail(props: ChatTabRailProps) {
     if (!client) return;
     void exportSessionTranscript(client, props.sessionId, format);
   };
-
-  const windowTrailing = () => tabBarTrailingControls();
 
   const progressPanel = () => (
     <ProgressStrip
@@ -364,7 +361,6 @@ export function ChatTabRail(props: ChatTabRailProps) {
           <Show when={!seamAt("trailing")}>{exportMenu()}</Show>
           <Show when={seamAt("trailing")}>{seamControls()}</Show>
           <Show when={props.navCollapsed && navOnRight()}>{navExpand()}</Show>
-          {windowTrailing()}
         </>
       }
       tabs={tabs()}
