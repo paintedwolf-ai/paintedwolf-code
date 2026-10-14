@@ -17,6 +17,22 @@ it("keeps disclosure intent through virtual row removal and restoration", () => 
  setVisible(false); expect(view.container.querySelector("details")).toBeNull();
  setVisible(true); expect(view.container.querySelector("details")?.open).toBe(true);
 });
+it("keeps open state and leases when a surface's key changes", () => {
+ const before=transcriptDisclosureKey.activitySpan("call-b");
+ const after=transcriptDisclosureKey.activitySpan("call-a");
+ const store=createTranscriptDisclosureStore();
+ store.setUserOpen(before,true);
+ store.rename(before,after);
+ expect(store.isOpen(before)).toBe(false);
+ expect(store.isOpen(after)).toBe(true);
+ expect(store.userOpenKeys()).toEqual([after]);
+ const release=store.acquire(before);
+ store.setUserOpen(after,false);
+ store.rename(before,after);
+ expect(store.isOpen(after)).toBe(true);
+ release();
+ expect(store.isOpen(after)).toBe(false);
+});
 it("releases a Find expansion while retaining an explicit user choice", () => {
  const store=createTranscriptDisclosureStore();
  const release=store.acquire(CARD);

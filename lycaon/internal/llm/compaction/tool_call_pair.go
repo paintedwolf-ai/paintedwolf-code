@@ -1,10 +1,6 @@
 package compaction
 
-import (
-	"strings"
-
-	"github.com/lycaon/lycaon/pkg/api"
-)
+import "github.com/lycaon/lycaon/pkg/api"
 
 // pairToolResultsToCalls maps each tool-result index to its originating call
 // using FIFO assistant→tool pairing.
@@ -27,15 +23,6 @@ func pairToolResultsToCalls(messages []api.Message) map[int]api.ToolCall {
 		}
 	}
 	return out
-}
-
-func normalizeReadPath(v any) string {
-	s, _ := v.(string)
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return ""
-	}
-	return strings.TrimPrefix(s, "./")
 }
 
 func asString(v any) string {
