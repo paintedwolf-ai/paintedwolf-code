@@ -144,7 +144,10 @@ export function transcriptRowPresentationEstimate(
       : estimate + item.folds.length * 38 + (item.folds.some(fold => isOpen(transcriptDisclosureKey.diffFile(fold.key))) ? 360 : 0);
   }
   if (item.kind === "worker_group") {
-    return 30 + item.parts.length * 53;
+    const openChildren = item.parts.filter((part) =>
+      isOpen(transcriptDisclosureKey.tool(part.id)),
+    ).length;
+    return 30 + item.parts.length * 53 + openChildren * 360;
   }
   if (presentation === TRANSCRIPT_ROW_COLLAPSED_PRESENTATION) return undefined;
   if (

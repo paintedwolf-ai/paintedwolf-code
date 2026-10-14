@@ -574,6 +574,7 @@ export function bindScrollportNativeInput(motion: ScrollportMotion): () => void 
     if (event instanceof WheelEvent && wheelPassesThroughScrollport(motion.viewport, event)) return;
     if (claimedInputEvents.has(event)) return;
     claimedInputEvents.set(event, motion);
+    if (event instanceof WheelEvent && motion.extent.refusesWheelPastTail(event)) return;
     motion.input.noteNativeInput(event.type === "touchmove" ? "touch" : "wheel");
   };
   motion.host.addEventListener("wheel", onInput, { passive: true });
