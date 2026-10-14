@@ -19,7 +19,7 @@ func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, e
 	if err != nil {
 		return nil, err
 	}
-	if !ok || view.Generation != sess.CompactionGeneration {
+	if !ok || view.Generation < sess.CompactionGeneration {
 		return m.loadBoundedCanonicalPromptHistory(ctx, sess)
 	}
 	current, err := m.store.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq)
@@ -30,6 +30,8 @@ func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, e
 		m.Schedule(ctx, sess)
 		return m.loadBoundedCanonicalPromptHistory(ctx, sess)
 	}
+	// Background publication may advance the caller's session snapshot.
+	sess.CompactionGeneration = view.Generation
 	suffix, err := m.store.GetMessagesAfterOrd(ctx, sess.ID, view.CoveredThroughOrd, UncompactedLimit+1)
 	if err != nil {
 		return nil, err
@@ -100,13 +102,14 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 		return history
 	}
 	view, ok, err := m.store.GetCompactionView(ctx, sess.ID)
-	if err != nil || !ok || view.Generation != sess.CompactionGeneration {
+	if err != nil || !ok || view.Generation < sess.CompactionGeneration {
 		return history
 	}
 	current, currentErr := m.store.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq)
 	if currentErr != nil || !current {
 		return history
 	}
+	sess.CompactionGeneration = view.Generation
 	continuationText := ""
 	if view.Continuation != nil {
 		record := messageview.CloneContinuation(view.Continuation)
