@@ -136,35 +136,35 @@ def write_deb(root: Path, staged: Path, workdir: Path, version: str, arch: str, 
     return target
 
 
-def is_shared_library(path: Path) -> bool:
-    """An ELF shared object without a program interpreter (PIE executables carry one)."""
+def runs_as_program(path: Path) -> bool:
+    """An ELF executable (a shared object only with a program interpreter) or a #! script."""
     with path.open("rb") as handle:
         header = handle.read(64)
+        if header[:2] == b"#!":
+            return True
         if len(header) < 64 or header[:4] != b"\x7fELF" or header[4] != 2:
             return False
         order = "little" if header[5] == 1 else "big"
-        if int.from_bytes(header[16:18], order) != 3:  # ET_DYN
+        kind = int.from_bytes(header[16:18], order)
+        if kind == 2:  # ET_EXEC
+            return True
+        if kind != 3:  # ET_DYN: a PIE executable carries PT_INTERP, a shared library does not
             return False
         phoff = int.from_bytes(header[32:40], order)
         phentsize = int.from_bytes(header[54:56], order)
         phnum = int.from_bytes(header[56:58], order)
         handle.seek(phoff)
-        for _ in range(phnum):
-            if int.from_bytes(handle.read(phentsize)[:4], order) == 3:  # PT_INTERP
-                return False
-    return True
+        return any(int.from_bytes(handle.read(phentsize)[:4], order) == 3 for _ in range(phnum))
 
 
 def normalise_modes(data: Path) -> None:
-    """Directories 0755, executables 0755, everything else (shared libraries included) 0644."""
+    """Directories and programs 0755; data, documents and shared libraries 0644."""
     for dirpath, dirnames, filenames in os.walk(data):
         Path(dirpath).chmod(0o755)
         for name in filenames:
             path = Path(dirpath) / name
-            if path.is_symlink():
-                continue
-            executable = path.stat().st_mode & 0o111 and not is_shared_library(path)
-            path.chmod(0o755 if executable else 0o644)
+            if not path.is_symlink():
+                path.chmod(0o755 if runs_as_program(path) else 0o644)
 
 
 def rpm_quote(relative: str) -> str:
@@ -223,6 +223,8 @@ def rpm_spec(root: Path, tree: Path, version: str, zstd_level: int) -> str:
         f"License: {meta['license']}",
         f"URL: {meta['homepage']}",
         f"Vendor: {meta['publisher']}",
+        f"Packager: {meta['publisher']}",
+        "Group: Development/Tools",
         # Dependencies are declared from the measured floor, never scanned from bundled ELF files.
         "AutoReqProv: no",
         *(f"Requires: {row}" for row in dependencies["depends"]),

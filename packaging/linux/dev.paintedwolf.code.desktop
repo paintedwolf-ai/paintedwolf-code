@@ -1,6 +1,6 @@
 [Desktop Entry]
 Type=Application
-Version=1.5
+Version=1.4
 Name=Painted Wolf Code
 Comment=Agentic coding assistant with a local security engine
 Exec=painted-wolf-code %U

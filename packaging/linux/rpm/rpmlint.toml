@@ -13,4 +13,11 @@ Filters = [
     "shared-library-not-executable",
     "arch-dependent-file-in-usr-share",
     "unexpanded-macro",
+    # Repository publication signs the package; staging checks structure.
+    "no-signature",
+    # Requirements are declared from the measured floor with AutoReqProv off.
+    "explicit-lib-dependency",
+    # The bundled browser ships identical locale and hyphenation files.
+    "files-duplicated-waste",
+    "files-duplicate",
 ]
