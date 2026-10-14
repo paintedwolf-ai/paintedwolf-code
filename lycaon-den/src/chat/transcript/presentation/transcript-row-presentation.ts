@@ -109,6 +109,7 @@ export function transcriptRowPresentation(
 }
 
 const ACTIVITY_SPAN_BASE_ESTIMATE_PX = 64;
+export const ACTIVITY_SPAN_ENTRY_ESTIMATE_PX = 42;
 const COLLAPSED_DIFF_ESTIMATE_PX = 38;
 
 function diffRowEstimate(foldCount: number): number {
@@ -133,7 +134,7 @@ export function transcriptRowPresentationEstimate(
     );
     return (
       ACTIVITY_SPAN_BASE_ESTIMATE_PX +
-      item.entries.length * 42 +
+      item.entries.length * ACTIVITY_SPAN_ENTRY_ESTIMATE_PX +
       (openChild ? 360 : 0)
     );
   }
