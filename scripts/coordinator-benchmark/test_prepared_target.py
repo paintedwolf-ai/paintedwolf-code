@@ -128,10 +128,10 @@ class PreparedTargetTests(unittest.TestCase):
             cache = original/'source/.bin/decide-target/release'
             cache.mkdir(parents=True)
             (cache/'compiler-output').write_bytes(b'regenerable compiler output')
-            fixture = original/'source/fixtures/decide-target'
+            fixture = original/'source/.bin/fixtures/decide-target'
             fixture.mkdir(parents=True)
             (fixture/'input').write_bytes(b'retained fixture')
-            (original/'source/runtime-link').symlink_to('.bin/lycaon-dev')
+            (original/'source/.bin/runtime-link').symlink_to('lycaon-dev')
             destination = root/'imported'
             destination.mkdir()
             with patch.object(prepare, 'clone_file', wraps=prepare.clone_file) as clone:
@@ -141,8 +141,8 @@ class PreparedTargetTests(unittest.TestCase):
             self.assertIn(original/marker['preflight']['receipt'], copied)
             self.assertFalse((destination/'source/.bin/decide-target').exists())
             self.assertTrue((cache/'compiler-output').exists())
-            self.assertEqual((destination/'source/fixtures/decide-target/input').read_bytes(), b'retained fixture')
-            self.assertEqual((destination/'source/runtime-link').readlink(), pathlib.Path('.bin/lycaon-dev'))
+            self.assertEqual((destination/'source/.bin/fixtures/decide-target/input').read_bytes(), b'retained fixture')
+            self.assertEqual((destination/'source/.bin/runtime-link').readlink(), pathlib.Path('lycaon-dev'))
             self.assertEqual(prepare.verify_prepared(destination), marker)
             engine = destination/'source/.bin/lycaon-dev'
             self.assertEqual(engine.stat().st_mode & 0o777, 0o755)
