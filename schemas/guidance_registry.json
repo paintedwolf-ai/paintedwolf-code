@@ -2997,7 +2997,7 @@
       "summary": "This tool cannot run during closeout"
     },
     "TOOL_NOT_OFFERED": {
-      "branch_instruction": "{% if paintedwolf.tool_loadable %}Load `{{ tool }}` with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.tool_discovery_available %}Describe the operation and target to `request_tools` to discover an allowed alternative{% else %}Use an available capability or report the constraint{% endif %}{% endif %}",
+      "branch_instruction": "{% if paintedwolf.tool_loadable %}Load `{{ tool }}` with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.tool_discovery_available %}Use a suitable offered tool, or describe the missing operation and target to `request_tools`{% else %}Use an available capability or report the constraint{% endif %}{% endif %}",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "{% if paintedwolf.tool_loadable %}`{{ tool }}` is available but its schema is not loaded{% else %}`{{ tool }}` is unavailable on this model call{% endif %}"
