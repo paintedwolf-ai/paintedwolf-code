@@ -8,7 +8,7 @@
 
 use std::path::Path;
 use std::process::Command;
-use std::sync::mpsc;
+use std::sync::{mpsc, Mutex, PoisonError};
 use std::time::Duration;
 
 use gtk::glib;
@@ -163,11 +163,19 @@ fn unexport_on_main_thread(window: &tauri::WebviewWindow) {
     }
 }
 
-/// A private context keeps the connection handshake from dispatching the
-/// shell's main loop when a command runs on the main thread.
+/// One connection serves every request; its bounded handshake runs on a
+/// private context so a command on the main thread never dispatches the
+/// shell's loop, and a closed connection is replaced on the next request.
 fn session_bus() -> Result<gio::DBusConnection, String> {
-    crate::linux_desktop::session_bus::connect(&glib::MainContext::new())
-        .map_err(|error| format!("The desktop session bus is unavailable: {error}"))
+    static BUS: Mutex<Option<gio::DBusConnection>> = Mutex::new(None);
+    let mut bus = BUS.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(open) = bus.as_ref().filter(|connection| !connection.is_closed()) {
+        return Ok(open.clone());
+    }
+    let connection = crate::linux_desktop::session_bus::connect(&glib::MainContext::new())
+        .map_err(|error| format!("The desktop session bus is unavailable: {error}"))?;
+    *bus = Some(connection.clone());
+    Ok(connection)
 }
 
 /// Whether a portal service currently owns its bus name on this session.
