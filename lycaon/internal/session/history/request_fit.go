@@ -24,6 +24,10 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 	} else {
 		model = req.Model
 	}
+	projection := projectRequest(req.Messages, history)
+	projected := m.ApplyView(ctx, sess, projection.history)
+	req.Messages = projection.replace(projected)
+	projection = projectRequest(req.Messages, projected)
 	measure := func(candidate modelcall.CompletionRequest) modelcall.RequestBudget {
 		budget := modelcall.RequestBudget{Window: cfg.ModelContextWindow, Input: modelcall.EstimateRequestInput(candidate), Output: modelcall.OrchestrationMaxTokens, Headroom: 1024}
 		if budgets != nil {
@@ -46,7 +50,6 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 		}
 	}
 	ceiling := budget.Window - budget.Headroom - reserve
-	projection := projectRequest(req.Messages, history)
 	frame := req
 	frame.Messages = projection.frame
 	frameBudget := measure(frame)

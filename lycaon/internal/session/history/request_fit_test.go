@@ -161,3 +161,29 @@ func TestRequestFittingUsesRemainingOutputAfterHistoryIsMinimal(t *testing.T) {
 		t.Fatalf("explicit output allocation must remain required: %v", err)
 	}
 }
+
+func TestEveryRequestAdoptsPublishedHistoryProjection(t *testing.T) {
+	mem := store.NewMemory()
+	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "append original history", mem.AppendMessages(t.Context(), sess.ID,
+		api.Message{ID: "old", Role: api.MessageRoleAssistant, Content: "Original detail"},
+		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Continue"}))
+	canonical, err := mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "read original history", err)
+	summary := api.Message{ID: "summary", Role: api.MessageRoleAssistant, Content: "Recorded continuation",
+		ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: "Recorded continuation"}}}
+	testutil.FailErr(t, "publish projection", mem.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
+		Generation: 1, CoveredThroughOrd: canonical[0].Ord, CoveredThroughID: canonical[0].ID, SourceSeq: canonical[1].Seq,
+		Messages: []api.Message{summary}}))
+	history := &Service{store: mem}
+	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "large", ContextLength: 1_000_000}})}
+	for range 2 {
+		req := modelcall.CompletionRequest{Model: "large", Messages: canonical}
+		fitted, err := history.FitRequest(t.Context(), sess, canonical, req, budgets)
+		testutil.FailErr(t, "fit refreshed request", err)
+		if len(fitted.Messages) != 2 || fitted.Messages[0].ID != summary.ID || fitted.Messages[1].ID != "current" || sess.CompactionGeneration != 1 {
+			t.Fatal("request lost its published continuation after canonical history refresh")
+		}
+	}
+}
