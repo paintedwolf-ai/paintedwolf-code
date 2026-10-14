@@ -2,6 +2,7 @@ package toolusage
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -68,6 +70,9 @@ func TestSandboxLoopbackRecordsAnActualRequest(t *testing.T) {
 }
 
 func TestBenchmarkSuiteLoadsWithExplicitUnattendedSandboxCases(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	catalog, err := sensitivepath.Load(sensitivepath.Bundled())
+	testutil.FailErr(t, "load privacy-read catalog", err)
 	suite, err := LoadSuite("../../../test/fixtures/eval/coordinator-benchmark.json")
 	testutil.FailErr(t, "load benchmark suite", err)
 	if suite.Unattended == nil {
@@ -79,6 +84,10 @@ func TestBenchmarkSuiteLoadsWithExplicitUnattendedSandboxCases(t *testing.T) {
 			fallback := []byte("{\n  \"receipt\": \"supplied-fallback\"\n}\n")
 			testutil.FailErr(t, "write supplied fallback", os.WriteFile(filepath.Join(result.ProjectDir, "fallback.json"), fallback, 0o600))
 			testutil.FailErr(t, "prepare file fixture", prepareSuiteSandbox(t.Context(), &spec, &result, t.TempDir()))
+			match, sensitive := catalog.Match(result.Sandbox.Path, sensitivepath.ModeRead)
+			if !sensitive || match.Protected || match.ID != "user-documents" {
+				t.Fatalf("permission fixture does not cross the Documents privacy boundary: %s", result.Sandbox.Path)
+			}
 			preserved, err := os.ReadFile(filepath.Join(result.ProjectDir, "fallback.json"))
 			testutil.FailErr(t, "read prepared fallback", err)
 			if string(preserved) != string(fallback) || (spec.Sandbox == "deny_read" && result.Sandbox.Receipt != "supplied-fallback") {
@@ -86,6 +95,10 @@ func TestBenchmarkSuiteLoadsWithExplicitUnattendedSandboxCases(t *testing.T) {
 			}
 			if filepath.Dir(result.Sandbox.Path) == result.ProjectDir {
 				t.Fatal("external input is inside the attached project")
+			}
+			result.Sandbox.close()
+			if _, err := os.Stat(result.Sandbox.Path); !errors.Is(err, os.ErrNotExist) {
+				t.Fatal("owned input survived cleanup")
 			}
 		}
 	}
@@ -185,3 +198,32 @@ func TestWriteRootSandboxProvidesAnOutsideDirectoryWithoutAPreparedCall(t *testi
 		t.Fatal("write root sandbox grants nothing by itself")
 	}
 }
+
+func TestSandboxPreparationCleansUpOnFailure(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	fixture := t.TempDir()
+	testutil.FailErr(t, "write empty fallback", os.WriteFile(filepath.Join(fixture, "fallback.json"), []byte(`{}`), 0o600))
+	opts := SuiteOptions{LiveOptions: LiveOptions{CaptureDir: t.TempDir()}, Suite: &Suite{root: fixture}}
+	spec := SuiteCase{CorpusTask: CorpusTask{ID: "case"}, Project: ".", Sandbox: "deny_read"}
+	result := runSuiteCase(t.Context(), newLiveClient("http://127.0.0.1:1", "fixture"), opts, spec, t.TempDir(), 1, nil)
+	if result.Status != "error" {
+		t.Fatalf("accepted invalid fallback receipt: %+v", result)
+	}
+	if _, err := os.Stat(filepath.Join(home, "Documents")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("failed sandbox preparation left Documents behind: %v", err)
+	}
+
+	testutil.FailErr(t, "occupy Documents path", os.WriteFile(filepath.Join(home, "Documents"), []byte("file"), 0o600))
+	if err := prepareSuiteSandbox(t.Context(), &SuiteCase{Sandbox: "approve_read"}, &CaseReport{ProjectDir: t.TempDir()}, ""); err == nil {
+		t.Fatal("created input directory inside a regular file")
+	}
+
+	fileHome := filepath.Join(t.TempDir(), "home-file")
+	testutil.FailErr(t, "create file home", os.WriteFile(fileHome, []byte("file"), 0o600))
+	t.Setenv("HOME", fileHome)
+	if err := prepareSuiteSandbox(t.Context(), &SuiteCase{Sandbox: "approve_read"}, &CaseReport{ProjectDir: t.TempDir()}, ""); err == nil {
+		t.Fatal("created Documents under a non-directory home")
+	}
+}
+
