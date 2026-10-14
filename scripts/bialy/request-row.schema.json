@@ -6,27 +6,126 @@
   "required": [
     "schema",
     "session",
+    "root_session",
+    "opening_message_id",
     "host",
     "surface",
-    "partial",
+    "project",
+    "model",
+    "receipt",
     "request_index",
     "calls",
-    "prompt_tokens",
+    "tool_calls",
     "recall_calls",
     "repeated_calls",
-    "retention",
-    "usage_available"
+    "provider_calls",
+    "prompt_tokens",
+    "completion_tokens",
+    "cache_read_tokens",
+    "unavailable_usage_calls",
+    "partial",
+    "usage_available",
+    "retention"
   ],
   "properties": {
     "schema": {
       "const": "pw-request-row/1"
     },
-    "usage_available": {
-      "type": "boolean"
+    "session": {
+      "type": "string"
+    },
+    "root_session": {
+      "type": "string"
+    },
+    "opening_message_id": {
+      "type": "string"
+    },
+    "host": {
+      "type": "string"
+    },
+    "surface": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "receipt": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "request_index": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "calls": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tool_calls": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "recall_calls": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "repeated_calls": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "provider_calls": {
+      "type": "integer",
+      "minimum": 0
     },
     "prompt_tokens": {
       "type": "integer",
       "minimum": 0
+    },
+    "completion_tokens": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "cache_read_tokens": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "unavailable_usage_calls": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "partial": {
+      "type": "boolean"
+    },
+    "usage_available": {
+      "type": "boolean"
+    },
+    "retention": {
+      "type": "object",
+      "required": [
+        "recorded",
+        "asked",
+        "dropped"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "recorded": {
+          "type": "boolean"
+        },
+        "asked": {
+          "type": "boolean"
+        },
+        "dropped": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "meta": {
+      "type": "object"
     }
-  }
+  },
+  "additionalProperties": false
 }

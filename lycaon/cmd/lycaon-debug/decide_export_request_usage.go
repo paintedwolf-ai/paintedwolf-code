@@ -66,7 +66,7 @@ func (e *rowExporter) exportRequestUsage(ctx context.Context, r db.ListTurnRecei
 			return err
 		}
 	}
-	var reported int
+	var reported, unavailable int
 	var prompt, completion, cache int64
 	for _, call := range providerCalls {
 		at, err := time.Parse(time.RFC3339Nano, call.StartedAt)
@@ -76,12 +76,17 @@ func (e *rowExporter) exportRequestUsage(ctx context.Context, r db.ListTurnRecei
 		if at.Before(from) || (!until.IsZero() && !at.Before(until)) {
 			continue
 		}
+		if call.UsageSource != "provider" {
+			unavailable++
+			continue
+		}
 		reported++
 		prompt += call.PromptTokens
 		completion += call.CompletionTokens
 		cache += call.CacheReadTokens
 	}
 	row["provider_calls"], row["prompt_tokens"], row["completion_tokens"], row["cache_read_tokens"] = reported, prompt, completion, cache
-	row["usage_available"] = reported > 0
+	row["usage_available"] = reported > 0 && unavailable == 0
+	row["unavailable_usage_calls"] = unavailable
 	return e.requests.Encode(row)
 }

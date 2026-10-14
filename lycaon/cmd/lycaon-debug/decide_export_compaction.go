@@ -79,7 +79,7 @@ func (e *rowExporter) exportCompactionObservations(ctx context.Context, r db.Lis
 		row := retentionRow{Schema: retentionRowSchema, Receipt: r.ID, Session: r.SessionID, RootSession: root, OpeningMessageID: r.OpeningMessageID.String,
 			Host: state.Host, Surface: r.SurfaceID, CatalogRevision: r.CatalogRevision, Project: r.ProjectName, Model: r.Model, Partial: r.TurnStatus != "complete", Lang: guessLang(state.User),
 			Tokens: tokens, Reconstructed: true, Engine: map[string]any{"state": "abstained", "reason": "observations_only", "dropped": []string{}}, State: json.RawMessage(r.StateJson), Candidates: candidates,
-			Labels: canonicalRecoveryLabels(msgs, start, end, candidates)}
+			Labels: canonicalRecoveryLabels(r.SessionID, msgs, start, end, candidates)}
 		if err := e.retention.Encode(row); err != nil {
 			return err
 		}

@@ -8,7 +8,7 @@ import (
 )
 
 // canonicalRecoveryLabels leaves absence unknown and records successful body recovery.
-func canonicalRecoveryLabels(msgs []db.ListSessionMessagesRow, start, end int, candidates []retentionCandidate) retentionLabels {
+func canonicalRecoveryLabels(sessionID string, msgs []db.ListSessionMessagesRow, start, end int, candidates []retentionCandidate) retentionLabels {
 	labels := retentionLabels{Needed: map[string]*bool{}, Later: map[string]*bool{}, By: map[string][]string{}, Provenance: map[string]string{}}
 	handles := map[string]string{}
 	candidateIDs := map[string]bool{}
@@ -17,7 +17,7 @@ func canonicalRecoveryLabels(msgs []db.ListSessionMessagesRow, start, end int, c
 		labels.Later[candidate.ID] = nil
 		candidateIDs[candidate.ID] = true
 		for _, handle := range candidate.Handles {
-			handles[handle] = candidate.ID
+			handles[sessionID+"\x00"+handle] = candidate.ID
 		}
 	}
 	calls := map[string]api.ToolCall{}
@@ -38,8 +38,9 @@ func canonicalRecoveryLabels(msgs []db.ListSessionMessagesRow, start, end int, c
 		var recovered struct {
 			Resolution string `json:"resolution"`
 			Hits       []struct {
-				Handle string   `json:"handle"`
-				Body   []string `json:"body"`
+				Handle    string   `json:"handle"`
+				SessionID string   `json:"session_id"`
+				Body      []string `json:"body"`
 			} `json:"hits"`
 			History *struct {
 				Entries []struct {
@@ -57,7 +58,7 @@ func canonicalRecoveryLabels(msgs []db.ListSessionMessagesRow, start, end int, c
 		}
 		ids := map[string]bool{}
 		for _, hit := range recovered.Hits {
-			if id := handles[hit.Handle]; id != "" && len(hit.Body) > 0 {
+			if id := handles[hit.SessionID+"\x00"+hit.Handle]; hit.SessionID != "" && id != "" && len(hit.Body) > 0 {
 				ids[id] = true
 			}
 		}
