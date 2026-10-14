@@ -49,3 +49,38 @@ func TestBuildOverlayMergePlanPromoteSequenceFromBlockedBy(t *testing.T) {
 		t.Fatalf("alias should promote last: %v", seq)
 	}
 }
+
+func TestBuildOverlayMergePlanExcludesUnfinishedLegsFromPromoteSequence(t *testing.T) {
+	tasks := []api.WorkerTask{
+		{
+			ID: "job-partial", ParentSessionID: "sess-1", Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending,
+			Result: &api.WorkerResult{
+				Status:           api.WorkerSummaryStatusPartial,
+				CompletionReport: &api.WorkerCompletionReport{LegStatus: "partial"},
+				ChangeReport:     &api.WorkerChangeReport{ChangedPaths: []string{"status.py"}},
+			},
+			WorkspaceRoot: "/tmp/o-partial",
+		},
+		{
+			ID: "job-blocked", ParentSessionID: "sess-1", Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending,
+			Result: &api.WorkerResult{
+				Status:       api.WorkerSummaryStatusBlocked,
+				ChangeReport: &api.WorkerChangeReport{ChangedPaths: []string{"status.py"}},
+			},
+			WorkspaceRoot: "/tmp/o-blocked",
+		},
+	}
+	plan := overlayplan.Build("sess-1", tasks, func(string, string) (overlayplan.PreviewSnapshot, bool) {
+		return overlayplan.PreviewSnapshot{PromoteOrder: api.WorkerPromoteOrderIndependent}, true
+	})
+	if plan.PendingCount != 2 {
+		t.Fatalf("pending_count = %d, want 2", plan.PendingCount)
+	}
+	if len(plan.PromoteSequence) != 0 {
+		t.Fatalf("promote_sequence = %v, want empty for unfinished legs", plan.PromoteSequence)
+	}
+	if len(plan.SharedPaths) != 1 || plan.SharedPaths[0].Path != "status.py" {
+		t.Fatalf("shared_paths = %v, want status.py", plan.SharedPaths)
+	}
+}
+
