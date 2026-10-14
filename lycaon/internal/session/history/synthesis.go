@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -14,14 +15,32 @@ func (m *Service) scheduleSynthesis(ctx context.Context, sc *compaction.SimpleCo
 	if snapshot.Continuation == nil || len(snapshot.Continuation.Sources) == 0 {
 		return
 	}
-	m.Runner.Synthesis.Start(ctx, info.ID, func(workCtx context.Context) {
-		enriched, err := sc.EnrichContinuation(workCtx, info, originals, snapshot.Continuation)
-		if err != nil || workCtx.Err() != nil {
-			return
+	if ctx.Err() != nil {
+		return
+	}
+	token, err := m.Gate.Capture(ctx, info.ID)
+	if err != nil {
+		return
+	}
+	_ = m.Gate.WithSessionTreeAdmission(ctx, info.ID, func() error {
+		if !m.Gate.MayDrain(token) {
+			return lifecycle.ErrStopping
 		}
-		_ = m.Runner.Execute(workCtx, info.ID, func(publishCtx context.Context) error {
-			return m.publishSynthesis(publishCtx, info, snapshot, enriched)
+		m.Runner.Synthesis.Start(ctx, info.ID, func(workCtx context.Context) {
+			enriched, err := sc.EnrichContinuation(workCtx, info, originals, snapshot.Continuation)
+			if err != nil || workCtx.Err() != nil {
+				return
+			}
+			_ = m.Runner.Execute(workCtx, info.ID, func(publishCtx context.Context) error {
+				return m.Gate.WithSessionTreeAdmission(publishCtx, info.ID, func() error {
+					if !m.Gate.MayDrain(token) {
+						return lifecycle.ErrStopping
+					}
+					return m.publishSynthesis(publishCtx, info, snapshot, enriched)
+				})
+			})
 		})
+		return nil
 	})
 }
 
