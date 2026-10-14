@@ -22,6 +22,7 @@ import importlib.util
 import io
 import json
 import os
+import resource
 from pathlib import Path
 import shutil
 import subprocess
@@ -291,7 +292,8 @@ def assemble(args: argparse.Namespace) -> int:
         rpm = write_rpm(root, staged, args.version, args.arch, rpm_dir, args.zstd_level)
         print(
             f"linux-package-assemble: {rpm} ({rpm.stat().st_size} bytes, zstd {args.zstd_level}) "
-            f"in {time.monotonic() - started:.1f}s",
+            f"in {time.monotonic() - started:.1f}s, rpmbuild peak RSS "
+            f"{resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss // 1024} MiB",
             file=sys.stderr,
         )
     except (OSError, ValueError, KeyError, json.JSONDecodeError, subprocess.CalledProcessError) as exc:
