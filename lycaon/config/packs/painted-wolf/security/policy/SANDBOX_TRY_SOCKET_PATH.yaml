@@ -15,6 +15,8 @@ requires:
     - paintedwolf.confine_applied
     - paintedwolf.failed_stages
     - paintedwolf.process_running
+    - paintedwolf.can_command_stop
+    - paintedwolf.can_command_output
     - paintedwolf.refused_socket_paths
 when: >-
   paintedwolf.confine_applied
@@ -32,13 +34,20 @@ copy:
     The daemon behind a socket acts with its own authority, so the person
     reviews each socket before a command reaches it.
   fix: >-
-    {% if paintedwolf.process_running %}If the job cannot finish without the
-    connection, stop it with `command_stop`, then reissue{% else %}Reissue{% endif %}
+    {% if paintedwolf.process_running %}If the job cannot finish without the refused
+    operation, {% if paintedwolf.can_command_stop %}request termination with `command_stop`.
+    {% else %}Report that the running job must be stopped; this response offers no job-stop tool.
+    {% endif %}{% if paintedwolf.can_command_output %}Inspect `command_output` for that same
+    handle until `running` is false.{% else %}Wait for an observed exit of that same job.{% endif %}
+    A stop request alone does not establish exit. Do not reissue while the job is running.
+    After it exits, {% else %}If the task still needs the refused operation, {% endif %}reissue
     the same command with `capability_request.socket_paths` naming the socket,
     or with `capability_request.host_resources` naming the listed host
     resource whose route is that socket.
-  instead: Declare the socket in capability_request — a retry without it is
-    refused again
+  instead: >-
+    {% if paintedwolf.process_running %}Resolve the running job before retrying;
+    a stop request alone does not establish exit.{% else %}Declare the socket in capability_request — a retry without it is
+    refused again{% endif %}
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
 x-paintedwolf-message: the sandbox refused a local socket connection this invocation needed

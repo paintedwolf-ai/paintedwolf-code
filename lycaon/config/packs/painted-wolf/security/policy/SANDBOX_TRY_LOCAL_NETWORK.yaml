@@ -15,6 +15,8 @@ requires:
     - paintedwolf.confine_applied
     - paintedwolf.failed_stages
     - paintedwolf.process_running
+    - paintedwolf.can_command_stop
+    - paintedwolf.can_command_output
     - paintedwolf.refused_connect_ports
     - paintedwolf.refused_listen_ports
 when: >-
@@ -35,16 +37,23 @@ copy:
   why: >-
     Repeating the command without the declaration is refused again.
   fix: >-
-    {% if paintedwolf.process_running %}If the job cannot finish without it,
-    stop it with `command_stop`, then reissue{% else %}Reissue{% endif %} the
+    {% if paintedwolf.process_running %}If the job cannot finish without the refused
+    operation, {% if paintedwolf.can_command_stop %}request termination with `command_stop`.
+    {% else %}Report that the running job must be stopped; this response offers no job-stop tool.
+    {% endif %}{% if paintedwolf.can_command_output %}Inspect `command_output` for that same
+    handle until `running` is false.{% else %}Wait for an observed exit of that same job.{% endif %}
+    A stop request alone does not establish exit. Do not reissue while the job is running.
+    After it exits, {% else %}If the task still needs the refused operation, {% endif %}reissue the
     same command with the capability that fits:{% if paintedwolf.refused_listen_ports %}
     `capability_request.local_listen` with the port for a listener;{% endif %}{%
     if paintedwolf.refused_connect_ports %} `capability_request.loopback_connect`
     with the port for a service on this machine, or `capability_request.direct_ip`
     for a host elsewhere that the program cannot reach through the proxy in
     its environment{% endif %}.
-  instead: Declare the listener or connection in capability_request — a retry
-    without it is refused again
+  instead: >-
+    {% if paintedwolf.process_running %}Resolve the running job before retrying;
+    a stop request alone does not establish exit.{% else %}Declare the listener or connection in capability_request — a retry
+    without it is refused again{% endif %}
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
 x-paintedwolf-message: the sandbox refused a listener or direct connection this invocation needed
@@ -63,6 +72,8 @@ x-paintedwolf-scenarios:
     vars:
       tool: command
       process_running: true
+      can_command_stop: true
+      can_command_output: true
       refused_listen_ports: ['8080']
     expect_contains:
       - 'Code: SANDBOX_TRY_LOCAL_NETWORK'

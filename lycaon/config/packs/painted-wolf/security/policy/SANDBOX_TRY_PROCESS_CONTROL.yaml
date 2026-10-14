@@ -15,6 +15,8 @@ requires:
     - paintedwolf.confine_applied
     - paintedwolf.failed_stages
     - paintedwolf.process_running
+    - paintedwolf.can_command_stop
+    - paintedwolf.can_command_output
     - paintedwolf.refused_signals
 when: >-
   paintedwolf.confine_applied
@@ -31,11 +33,19 @@ copy:
   why: >-
     Repeating the command without the declaration is refused again.
   fix: >-
-    Prefer the host's reviewed process tools when they express the operation.
+    {% if paintedwolf.process_running %}If the job cannot finish without the refused
+    operation, {% if paintedwolf.can_command_stop %}request termination with `command_stop`.
+    {% else %}Report that the running job must be stopped; this response offers no job-stop tool.
+    {% endif %}{% if paintedwolf.can_command_output %}Inspect `command_output` for that same
+    handle until `running` is false.{% else %}Wait for an observed exit of that same job.{% endif %}
+    A stop request alone does not establish exit. Do not reissue while the job is running.
+    After it exits, {% else %}If the task still needs the refused operation, {% endif %}prefer an offered reviewed process tool when it expresses the operation.
     Otherwise reissue the same command with `capability_request.process_control`;
     the person reviews it before it runs.
-  instead: Declare capability_request.process_control — a retry without it is
-    refused again
+  instead: >-
+    {% if paintedwolf.process_running %}Resolve the running job before retrying;
+    a stop request alone does not establish exit.{% else %}Declare capability_request.process_control — a retry without it is
+    refused again{% endif %}
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
 x-paintedwolf-message: the sandbox refused a signal to a process outside the boundary
