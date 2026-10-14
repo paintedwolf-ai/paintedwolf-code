@@ -154,10 +154,10 @@ export function CheckpointCards(props: Props) {
   const focusReturn = createResolvedFocusReturn(() => props.onFocusReturn?.());
   createEffect(() => {
     expandedRows();
-    retired();
-    queueMicrotask(focusReturn.settle);
+    const done = retired();
+    queueMicrotask(() => focusReturn.settle(done));
   });
-  onCleanup(focusReturn.settle);
+  onCleanup(() => focusReturn.settle(true));
 
   // Composer Send targets the visible card.
   createEffect(() => {

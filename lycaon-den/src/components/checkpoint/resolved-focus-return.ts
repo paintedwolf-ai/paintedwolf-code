@@ -1,26 +1,40 @@
-/** Hands focus back when a resolved card retires or unmounts with the control that resolved it. */
+/**
+ * Hands focus back to the composer when resolving a card strands it: on the
+ * document, inside the retiring card, or on a control that went away. Focus the
+ * person moved somewhere usable is left alone.
+ */
 export function createResolvedFocusReturn(returnFocus: () => void) {
+  let armed = false;
   let held: HTMLElement | null = null;
   let heldCard: string | null = null;
   const usable = (el: Element) => el.isConnected && !el.closest("[inert]");
   return {
-    /** Records the control resolving the card `cardId`; a menu that closes hands focus back into that card. */
+    /** Records the control resolving card `cardId`; resolutions made without focus are ignored. */
     note(cardId?: string): void {
       const active = document.activeElement;
       held = active instanceof HTMLElement && active !== document.body ? active : null;
       heldCard = cardId ?? null;
+      armed = held !== null;
     },
-    settle(): void {
-      const el = held;
-      if (!el || usable(el)) return;
+    /** Re-checks focus; `retired` once the card has left or stopped taking input. */
+    settle(retired = false): void {
+      if (!armed) return;
       const active = document.activeElement;
-      const card = heldCard && active instanceof Element ? active.closest("[data-checkpoint-id]") : null;
+      const onDocument = !(active instanceof HTMLElement) || active === document.body;
+      const stranded = onDocument || !usable(active);
+      const card = !onDocument && heldCard ? active.closest("[data-checkpoint-id]") : null;
       const inResolvingCard = card?.getAttribute("data-checkpoint-id") === heldCard;
-      if (inResolvingCard && usable(card!)) return;
-      held = null;
-      if (active instanceof HTMLElement && active !== document.body && usable(active) && !inResolvingCard) return;
-      if (active instanceof HTMLElement && active !== document.body) active.blur();
+      if (!stranded && !inResolvingCard) {
+        // A menu or the resolving control may still hold focus while the request is in flight.
+        if (held && usable(held) && active === held) return;
+        if (!retired && held && usable(held)) return;
+        armed = false;
+        return;
+      }
+      if (!stranded && !retired) return;
+      if (!onDocument) (active as HTMLElement).blur();
       returnFocus();
+      if (retired) armed = false;
     },
   };
 }
