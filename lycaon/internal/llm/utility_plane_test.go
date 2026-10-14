@@ -504,3 +504,38 @@ func TestOverlayLaneWaitDefaultHolds(t *testing.T) {
 		t.Fatalf("default overlay wait = %v want %v", got, OverlayLaneWait)
 	}
 }
+
+func TestCompactionHealthRequiresRepeatedEndpointFailures(t *testing.T) {
+	plane := NewUtilityPlane()
+	var changes []SlotState
+	plane.SetOnChange(func(s SlotSnapshot) { changes = append(changes, s.State) })
+	fault := &failure.ProviderUnreachableError{ProviderID: "p", Model: "m", Attempts: 1, Cause: syscall.ECONNREFUSED}
+	for range 2 {
+		plane.noteCompactionOutcome("p", fault)
+	}
+	if plane.Snapshot().State != SlotReady || len(changes) != 0 {
+		t.Fatal("isolated failures reported an outage")
+	}
+	plane.noteCompactionOutcome("p", nil)
+	for range 2 {
+		plane.noteCompactionOutcome("p", fault)
+	}
+	if plane.Snapshot().State != SlotReady {
+		t.Fatal("success did not clear the failure streak")
+	}
+	plane.noteCompactionOutcome("p", fault)
+	if plane.Snapshot().State != SlotUnavailable || len(changes) != 1 {
+		t.Fatal("sustained failures did not report an outage")
+	}
+	plane.noteCompactionOutcome("p", nil)
+	if plane.Snapshot().State != SlotReady || len(changes) != 2 {
+		t.Fatal("recovery did not clear the outage")
+	}
+	for range 10 {
+		plane.noteCompactionOutcome("p", silentLite())
+		plane.noteCompactionOutcome("p", context.DeadlineExceeded)
+	}
+	if plane.Snapshot().State != SlotReady || len(changes) != 2 {
+		t.Fatal("latency reported an outage")
+	}
+}
