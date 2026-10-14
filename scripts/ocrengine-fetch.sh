@@ -9,7 +9,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PIN="${ROOT}/lycaon/config/ocrengine/pin.yaml"
+PIN="${ROOT}/lycaon/config/runtime/ocrengine/pin.yaml"
 DEST="${OCRENGINE_DEST:-${ROOT}/lycaon-den/src-tauri/engine-root/ocr}"
 TARGET=""
 ARCHIVE="${OCRENGINE_ARCHIVE:-}"

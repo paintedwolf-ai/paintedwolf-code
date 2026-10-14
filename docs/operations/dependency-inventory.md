@@ -24,7 +24,7 @@ Critical- and high-urgency entries whose pinned version trails the upstream snap
 * **Chrome headless shell (Chrome for Testing)** (critical): `154.0.8037.92` → `155.0.8059.39`
 * **Dugite Git and Git LFS** (critical): `2.53.0` → `2.56.0`; `3.7.1` → `3.8.0`
 * **`isomorphic-dompurify`** (critical): `4.4.0` → `4.5.0`
-* **Opengrep** (high): `1.30.0+paintedwolf.39` → `1.30.1`
+* **Opengrep** (high): `1.30.0+paintedwolf.40` → `1.30.1`
 * **Document core** (high): `0.27.4` → `0.28.0`
 * **`marked`** (high): `18.0.14` → `18.1.0`
 * **`yjs`** (high): `13.6.32` → `13.6.33`
@@ -73,7 +73,7 @@ An entry counts as high urgency when rated Critical or High, and as high frictio
 | Quadrant | Stance | Entries |
 |---|---|---|
 | **High urgency, high friction** | Planned precision updates. Watch upstream advisories continuously. Run each update as an isolated task with full cross-platform regression testing. | 7 |
-| **High urgency, low or moderate friction** | Fast-follow. The nightly `lint:vuln:fresh` run, Dependabot, and the behind-upstream list surface these; take patches promptly. | 42 |
+| **High urgency, low or moderate friction** | Fast-follow. The nightly `lint:vuln:fresh` run, Dependabot, and the behind-upstream list surface these; take patches promptly. | 43 |
 | **Low or moderate urgency, high friction** | Deliberate upgrades only. Do not chase releases. Upgrade when a defect, required feature, or security fix calls for it. | 15 |
 | **Low or moderate urgency, low or moderate friction** | Opportunistic maintenance during routine windows. | 62 |
 
@@ -87,7 +87,7 @@ Held packages, restricted update policies, and high-friction upgrades, even when
 |---|---|---|---|---|---|---|
 | Chrome headless shell (Chrome for Testing) | `154.0.8037.92` | Stable `155.0.8059.39` | **Critical** | **High** | — | **Urgency:** Renders adversarial web content. `internal/browser` launches it with `NoSandbox` because host confinement replaces Chrome's own sandbox, so V8 and Blink fixes matter directly.<br>**Friction:** Update the version and the per-platform SHA-256 values in `chrome_pin.go`. Provision with `./task browser:ensure` and check that `go-rod` still drives the new CDP protocol. Re-verify confinement with `./task test:seatbelt` and the CI `confinement` job. The macOS bundle Developer ID–signs the tree. |
 | Dugite Git and Git LFS | Git `2.53.0`<br>LFS `3.7.1`<br>dugite build `f49d009` | Git `2.56.0`<br>LFS `3.8.0`<br>dugite `2.53.0-4` | **Critical** | **High** | — | **Urgency:** Git runs against untrusted repositories and remotes on the workstation.<br>**Friction:** Pinned per platform in `lycaon/config/gitengine/pin.yaml`. Dugite trails upstream Git, so a newer Git is usable only once a dugite release ships it. Follow the [bump procedure](../dependencies.md#bump-procedure), including the parity suite. The fetch fails closed on a hash mismatch, prunes to a 40 MB Unix and 140 MB Windows budget, and the macOS bundle signs every Mach-O with Developer ID and hardened runtime. |
-| Opengrep | `1.30.0+paintedwolf.39` | Opengrep `1.30.1`<br>fork current | **High** | **High** | — | **Urgency:** SAST engine for secret screening and code policy.<br>**Friction:** Downstream fork in `paintedwolf-ai/paintedwolf-opengrep`, recorded in `bundled-manifest.yaml`, which ships a darwin-arm64 artifact only. Authenticate a release with `./task scan:opengrep:select -- --tag <tag> --expected-commit <sha> <release.json>`, then run `./task test:scanners` so first-party and vendored rules still load. |
+| Opengrep | `1.30.0+paintedwolf.40` | Opengrep `1.30.1`<br>fork `1.30.0+paintedwolf.39` | **High** | **High** | — | **Urgency:** SAST engine for secret screening and code policy.<br>**Friction:** Downstream fork in `paintedwolf-ai/paintedwolf-opengrep`, recorded in `bundled-manifest.yaml`, which ships a darwin-arm64 artifact only. Authenticate a release with `./task scan:opengrep:select -- --tag <tag> --expected-commit <sha> <release.json>`, then run `./task test:scanners` so first-party and vendored rules still load. |
 | Document core | yrs `0.27.4` | yrs `0.28.0` | **High** | **High** | — | **Urgency:** Divergence in CRDT state loses user edits.<br>**Friction:** Built by `scripts/build-document-core.sh` into the native `pw-document-core`, which the host runs confined beside itself and every release signs and probes. Den binds CodeMirror to Yjs text and the host applies Yrs updates, so a bump must stay update-compatible with Den's `yjs`. Treat a 0.x minor bump as breaking. |
 | `third_party/gotreesitter` | `v0.52.0` | `v0.55.1` | **Moderate** | **High** | — | **Urgency:** Parses repository source into symbols and outlines.<br>**Friction:** `third_party/gotreesitter.patch` covers Swift optional-binding recovery, comment-only PowerShell programs, and TypeScript/TSX finalization inside the parse timeout. The rationale and update procedure are in [`third_party/README.md`](../../third_party/README.md). |
 | `@codemirror/view` | `6.43.6` + local patch | `6.43.13` | **Low** | **High** | Held | **Urgency:** Text rendering only; no HTML evaluation.<br>**Friction:** The patch adds a measure-timing facet, line-padding measurement, and scroll and wrapped-line height changes, duplicated across `dist/index.cjs` and `dist/index.js`. |
@@ -116,12 +116,12 @@ Policy files retain every declared entry, package rating, rationale, and verific
 | Area | Entries | Policy | Manifest and lockfile |
 |---|---|---|---|
 | Languages, runtimes, and platform floor | 6 | [Policy](../../dependencies/sections/runtimes.yaml) | Declared pin sources in policy |
-| Bundled engines and hermetic binaries | 4 | [Policy](../../dependencies/sections/engines.yaml) | Declared pin sources in policy |
+| Bundled engines and hermetic binaries | 5 | [Policy](../../dependencies/sections/engines.yaml) | Declared pin sources in policy |
 | Development, build, and verification tools | 7 | [Policy](../../dependencies/sections/tools.yaml) | Declared pin sources in policy |
 | Vendored catalogs, datasets, and specifications | 5 | [Policy](../../dependencies/sections/vendored.yaml) | Declared pin sources in policy |
 | Frontend packages (`lycaon-den`) | 67 | [Policy](../../dependencies/sections/frontend.yaml) | [Manifest](../../lycaon-den/package.json) · [Lockfile](../../lycaon-den/bun.lock) |
-| Backend Go modules (`lycaon`) | 72 | [Policy](../../dependencies/sections/backend-go.yaml) | [Manifest](../../lycaon/go.mod) |
-| Tauri shell crates (`lycaon-den/src-tauri`) | 36 | [Policy](../../dependencies/sections/tauri.yaml) | [Manifest](../../lycaon-den/src-tauri/Cargo.toml) · [Lockfile](../../lycaon-den/src-tauri/Cargo.lock) |
+| Backend Go modules (`lycaon`) | 73 | [Policy](../../dependencies/sections/backend-go.yaml) | [Manifest](../../lycaon/go.mod) |
+| Tauri shell crates (`lycaon-den/src-tauri`) | 39 | [Policy](../../dependencies/sections/tauri.yaml) | [Manifest](../../lycaon-den/src-tauri/Cargo.toml) · [Lockfile](../../lycaon-den/src-tauri/Cargo.lock) |
 | Bialy decision engine crates (`lycaon/internal/decide/native`) | 9 | [Policy](../../dependencies/sections/decision-engine.yaml) | [Manifest](../../lycaon/internal/decide/native/Cargo.toml) · [Lockfile](../../lycaon/internal/decide/native/Cargo.lock) |
 | Document core crates (`lycaon/internal/documentcore/native`) | 4 | [Policy](../../dependencies/sections/document-core.yaml) | [Manifest](../../lycaon/internal/documentcore/native/Cargo.toml) · [Lockfile](../../lycaon/internal/documentcore/native/Cargo.lock) |
 | Comment linter module (`scripts/commentlint`) | 1 | [Policy](../../dependencies/sections/commentlint.yaml) | [Manifest](../../scripts/commentlint/go.mod) |

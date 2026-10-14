@@ -20,7 +20,7 @@ import (
 
 // Reserved underscore-prefixed entries are embedded explicitly.
 //
-//go:embed packs fixtures/mock_llm.yaml runtime gitengine ocrengine
+//go:embed packs fixtures/mock_llm.yaml runtime gitengine
 //go:embed packs/painted-wolf/implement/agents/prompts/_persona-contract.yaml
 //go:embed packs/painted-wolf/plan/agents/prompts/_persona-contract.yaml
 //go:embed packs/painted-wolf/platform/agents/prompts/_persona-contract.yaml

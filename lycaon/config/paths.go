@@ -154,7 +154,7 @@ const (
 	GitEnginePin Rel = "gitengine/pin.yaml"
 
 	// OCREnginePin is the pinned Linux text recognition engine descriptor.
-	OCREnginePin Rel = "ocrengine/pin.yaml"
+	OCREnginePin Rel = "runtime/ocrengine/pin.yaml"
 
 	// Names, not paths — joined onto a discovered directory.
 	PackManifestName     = "extension.yaml"

@@ -69,6 +69,26 @@ rows:
       with `./task scan:opengrep:select -- --tag <tag> --expected-commit <sha> <release.json>`,
       then run `./task test:scanners` so first-party and vendored rules still load.
 
+  - id: ocr-engine
+    name: Tesseract OCR engine (Linux)
+    pins:
+      - yaml lycaon/config/runtime/ocrengine/pin.yaml engine_version
+    upstream:
+      - label: Tesseract
+        from: github-release tesseract-ocr/tesseract
+      - label: producer
+        from: github-release paintedwolf-ai/paintedwolf-tesseract
+    urgency: high
+    urgency_reason: |
+      Reads untrusted screen captures so the redaction gate can locate credentials before an
+      image reaches a model.
+    friction: moderate
+    friction_reason: |
+      Built statically by `paintedwolf-ai/paintedwolf-tesseract` and pinned in
+      `lycaon/config/runtime/ocrengine/pin.yaml`. Follow the
+      [OCR engine bump procedure](../dependencies.md#bundled-ocr-engine), then run the
+      engine-required Linux digest.
+
   - id: document-core
     name: Document core
     pins:

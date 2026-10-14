@@ -40,7 +40,7 @@ binaries:
 
   # Linux text recognition engine staged into engine-root/ocr by
   # scripts/ocrengine-fetch.sh from the archive pinned in
-  # lycaon/config/ocrengine/pin.yaml; the paintedwolf-tesseract producer builds
+  # lycaon/config/runtime/ocrengine/pin.yaml; the paintedwolf-tesseract producer builds
   # it statically from these sources, so no dependency manifest sees them.
   - name: tesseract
     version: "5.5.3"
