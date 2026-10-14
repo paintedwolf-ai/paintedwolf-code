@@ -137,6 +137,11 @@ func networkPlan(c Confinement) linuxsandbox.Network {
 	for _, g := range c.SocketGrants {
 		n.SocketPaths = append(n.SocketPaths, g.ResolvedPath)
 	}
+	if c.Network == NetworkDirectIP {
+		if conf, err := os.ReadFile("/etc/resolv.conf"); err == nil {
+			n.Resolvers = linuxsandbox.HostResolvers(string(conf))
+		}
+	}
 	return n
 }
 

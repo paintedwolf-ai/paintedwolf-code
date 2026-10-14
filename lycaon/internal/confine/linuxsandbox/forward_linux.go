@@ -232,6 +232,34 @@ func (s *supervisor) accept(h handoff, fd int) {
 			defer s.wg.Done()
 			forwardListener(ln, ap)
 		}()
+	case handoffResolverUDP:
+		upstream, ok := s.resolver()
+		f := os.NewFile(uintptr(fd), "sandbox-resolver")
+		pc, err := net.FilePacketConn(f)
+		_ = f.Close()
+		if err != nil || !ok {
+			return
+		}
+		s.track(pc)
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			relayResolverDatagrams(pc, upstream)
+		}()
+	case handoffResolverTCP:
+		upstream, ok := s.resolver()
+		f := os.NewFile(uintptr(fd), "sandbox-resolver")
+		ln, err := net.FileListener(f)
+		_ = f.Close()
+		if err != nil || !ok {
+			return
+		}
+		s.track(ln)
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			forwardListener(ln, upstream)
+		}()
 	case handoffNotify:
 		s.wg.Add(1)
 		go func() {
@@ -241,6 +269,16 @@ func (s *supervisor) accept(h handoff, fd int) {
 	default:
 		_ = unix.Close(fd)
 	}
+}
+
+// resolver is the first resolver the plan names, the one the stub relays to.
+func (s *supervisor) resolver() (netip.AddrPort, bool) {
+	for _, raw := range s.network.Resolvers {
+		if ap, err := netip.ParseAddrPort(raw); err == nil {
+			return ap, true
+		}
+	}
+	return netip.AddrPort{}, false
 }
 
 func (s *supervisor) track(c io.Closer) {

@@ -148,7 +148,7 @@ func runLinuxProbe(mode string) int {
 		return 0
 	case "proxyget":
 		return proxyGetProbe()
-	case "tcpconnect", "unixconnect", "serve":
+	case "tcpconnect", "unixconnect", "serve", "resolve":
 		return networkProbe(mode)
 	case "orphan":
 		daemon := child("sleep", true)

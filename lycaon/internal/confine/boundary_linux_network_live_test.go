@@ -3,19 +3,25 @@
 package confine_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
+	"golang.org/x/net/dns/dnsmessage"
+
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -137,6 +143,12 @@ func networkProbe(mode string) int {
 			_ = conn.Close()
 			fmt.Printf("connect %s: ok %s\n", path, greeting)
 		}
+	case "resolve":
+		resolver := &net.Resolver{PreferGo: true}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		addrs, err := resolver.LookupHost(ctx, targets[0])
+		fmt.Println("resolve:", addrs, err)
 	case "serve":
 		ln, err := net.Listen("tcp", targets[0])
 		if err != nil {
@@ -314,4 +326,95 @@ func freePort(t *testing.T) uint16 {
 	testutil.FailErr(t, "free port", err)
 	defer ln.Close()
 	return portOfListener(ln)
+}
+
+// fakeResolver answers every A question with 192.0.2.7 until the test ends.
+func fakeResolver(t *testing.T) string {
+	t.Helper()
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	testutil.FailErr(t, "resolver listen", err)
+	t.Cleanup(func() { _ = pc.Close() })
+	go func() {
+		buf := make([]byte, 1500)
+		for {
+			n, from, err := pc.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			var p dnsmessage.Parser
+			header, err := p.Start(buf[:n])
+			if err != nil {
+				continue
+			}
+			q, err := p.Question()
+			if err != nil {
+				continue
+			}
+			b := dnsmessage.NewBuilder(nil, dnsmessage.Header{ID: header.ID, Response: true, Authoritative: true})
+			_ = b.StartQuestions()
+			_ = b.Question(q)
+			_ = b.StartAnswers()
+			if q.Type == dnsmessage.TypeA {
+				_ = b.AResource(dnsmessage.ResourceHeader{Name: q.Name, Class: dnsmessage.ClassINET, TTL: 60}, dnsmessage.AResource{A: [4]byte{192, 0, 2, 7}})
+			}
+			reply, err := b.Finish()
+			if err == nil {
+				_, _ = pc.WriteTo(reply, from)
+			}
+		}
+	}()
+	return pc.LocalAddr().String()
+}
+
+// Direct IP reaches names through the stub the supervisor relays to the
+// host's resolver, and reaches a loopback listener on the host.
+func TestLinuxDirectIPResolvesThroughTheHostResolver(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	plan := linuxsandbox.Plan{
+		Version: linuxsandbox.PlanVersion,
+		Attest:  linuxsandbox.Attest{HostNamespaces: linuxsandbox.HostNamespaces()},
+		Network: linuxsandbox.Network{
+			Mode: linuxsandbox.NetworkDirectIP, Resolvers: []string{fakeResolver(t)},
+			DirectIPPermits: []linuxsandbox.DirectIPPermit{{Protocol: "tcp", Port: 443}},
+		},
+	}
+	env := append(probeEnv("resolve"), linuxProbePathsEnv+"=probe.example")
+	status, out := rawHelperRun(t, self, plan, env, self, probeTestFlag)
+	if status.ExitStatus() != 0 || !strings.Contains(out, "resolve: [192.0.2.7] <nil>") {
+		t.Fatalf("direct IP name resolution: exit %d: %s", status.ExitStatus(), out)
+	}
+	host := greeter(t, "tcp", "127.0.0.1:0")
+	env = append(probeEnv("tcpconnect"), linuxProbePathsEnv+"="+host.Addr().String())
+	status, out = rawHelperRun(t, self, plan, env, self, probeTestFlag)
+	if status.ExitStatus() != 0 || !strings.Contains(out, "connect "+host.Addr().String()+": ok host") {
+		t.Fatalf("direct IP loopback connect: exit %d: %s", status.ExitStatus(), out)
+	}
+}
+
+// rawHelperRun runs the helper on a hand-built plan with env and returns the
+// wait status and combined output.
+func rawHelperRun(t *testing.T, self string, plan linuxsandbox.Plan, env []string, target ...string) (syscall.WaitStatus, string) {
+	t.Helper()
+	raw, err := plan.Encode()
+	testutil.FailErr(t, "encode plan", err)
+	pr, pw, err := os.Pipe()
+	testutil.FailErr(t, "pipe", err)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	args := append([]string{"__confine-exec", "--profile-fd", "3", "--"}, target...)
+	cmd := exec.CommandContext(ctx, self, args...)
+	cmd.ExtraFiles = []*os.File{pr}
+	cmd.Env = env
+	var out bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &out
+	go func() {
+		defer func() { _ = pw.Close() }()
+		_, _ = pw.Write(raw)
+	}()
+	_ = cmd.Run()
+	_ = pr.Close()
+	if cmd.ProcessState == nil {
+		t.Fatalf("helper did not start: %s", out.String())
+	}
+	return cmd.ProcessState.Sys().(syscall.WaitStatus), out.String()
 }

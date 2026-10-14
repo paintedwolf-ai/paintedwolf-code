@@ -49,6 +49,11 @@ func Enter(plan Plan) error {
 			return err
 		}
 	}
+	if plan.Network.Mode == NetworkDirectIP && len(plan.Network.Resolvers) > 0 {
+		if err := handOffResolver(); err != nil {
+			return err
+		}
+	}
 	probe, err := newLandlockProbe()
 	if err != nil {
 		return err

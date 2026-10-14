@@ -96,6 +96,9 @@ type Network struct {
 	DirectIPPermits      []DirectIPPermit `json:"direct_ip_permits,omitempty"`
 	// SocketPaths are exact AF_UNIX connect grants.
 	SocketPaths []string `json:"socket_paths,omitempty"`
+	// Resolvers are the host's resolvers, in order, that direct IP reaches
+	// names through.
+	Resolvers []string `json:"resolvers,omitempty"`
 	Browser     bool     `json:"browser,omitempty"`
 }
 
