@@ -7,6 +7,7 @@ import {
   createModalFocusTrap,
   shellChromeInertTargets,
 } from "../../platform/interaction/modal-focus-trap.ts";
+import { focusRegion } from "../../shortcuts/focus-region.ts";
 
 type Props = {
   open: boolean;
@@ -36,6 +37,7 @@ export function MoveToProjectDialog(props: Props) {
         if (!props.busy) props.onClose();
       },
       inertTarget: () => shellChromeInertTargets(),
+      fallbackFocus: () => focusRegion("composer"),
     },
   );
 

@@ -578,7 +578,8 @@ export function Shell(props: ShellProps) {
               projectLifecycle={{ toggleStar, renameProject, openMoveDialog }}
               peerWindows={{ openFileInNewWindow, openFileWindow, beginFileWindowDrag, detachStageToWindow }}
               workspaceContext={{ backFor, stageBack }} providerGap={providerGap}
-              showConversation={showConversation} startOpenFolder={startOpenFolder} openCloneDialog={openCloneDialog}
+              showConversation={showConversation} focusComposer={() => setPendingRegionFocus("composer")}
+              startOpenFolder={startOpenFolder} openCloneDialog={openCloneDialog}
               deleteProject={deleteProject} setFoldersPanelProjectId={setFoldersPanelProjectId}
               settingsProjectDir={settingsProjectDir} setSecurityScannersFeature={setSecurityScannersFeature}
               selectContextSection={selectContextSection} openProjectTrustSettings={openProjectTrustSettings}
