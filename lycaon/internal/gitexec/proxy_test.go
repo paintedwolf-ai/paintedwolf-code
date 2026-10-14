@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -205,7 +207,12 @@ func TestPolicyOutsideTheSharedGrammarKeepsThePerRemoteDecision(t *testing.T) {
 }
 
 func TestGitLFSReachesItsOwnHostThroughTheProxyWhenTheRemoteIsExcepted(t *testing.T) {
-	useBundledGit(t)
+	git := useBundledGit(t)
+	lfs := filepath.Join(filepath.Dir(git), "git-lfs")
+	if _, err := os.Stat(lfs); err != nil {
+		t.Skip("bundled git-lfs missing — run ./task gitengine:fetch")
+	}
+	lfsPathFn = func() (string, error) { return lfs, nil }
 	var mu sync.Mutex
 	var hosts []string
 	seen := func() []string {
@@ -234,9 +241,22 @@ func TestGitLFSReachesItsOwnHostThroughTheProxyWhenTheRemoteIsExcepted(t *testin
 	if slices.Contains(seen(), "git.invalid") {
 		t.Fatalf("the excepted remote went through the proxy: %q", seen())
 	}
-	output, _, err := Run(t.Context(), dir, []string{"lfs", "locks"}, opts)
+
+	// A committed pointer whose object is absent makes the injected smudge
+	// filter fetch it from the LFS endpoint on checkout.
+	pointer := "version https://git-lfs.github.com/spec/v1\noid sha256:" + strings.Repeat("ab", 32) + "\nsize 5\n"
+	testutil.FailErr(t, "write attributes", os.WriteFile(filepath.Join(dir, ".gitattributes"), []byte("*.bin filter=lfs diff=lfs merge=lfs -text\n"), 0o600))
+	testutil.FailErr(t, "write pointer", os.WriteFile(filepath.Join(dir, "object.bin"), []byte(pointer), 0o600))
+	commit := Opts{Identity: &Identity{Name: "t", Email: "t@example.com"}}
+	for _, args := range [][]string{{"add", "--", ".gitattributes", "object.bin"}, {"commit", "-q", "-m", "pointer"}} {
+		if output, code, err := Run(t.Context(), dir, args, commit); err != nil || code != 0 {
+			t.Fatalf("%v: code=%d err=%v %s", args, code, err, output)
+		}
+	}
+	testutil.FailErr(t, "remove worktree file", os.Remove(filepath.Join(dir, "object.bin")))
+	output, _, err := Run(t.Context(), dir, []string{"checkout", "--", "object.bin"}, opts)
 	if err != nil {
-		t.Fatalf("lfs locks: %v", err)
+		t.Fatalf("checkout: %v", err)
 	}
 	if !slices.Contains(seen(), "lfs.invalid") {
 		t.Fatalf("Git LFS did not use the proxy for its own host: %q\n%s", seen(), output)
