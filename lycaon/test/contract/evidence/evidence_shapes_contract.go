@@ -20,6 +20,7 @@ var expectedEvidenceKindShapes = map[string]string{
 	"web":              evidence.ShapeURL,
 	"command":          evidence.ShapeCommand,
 	"git_receipt":      evidence.ShapeCommand,
+	"overlay_receipt":  evidence.ShapeCommand,
 	"git":              evidence.ShapeCommand,
 	"scan":             evidence.ShapeArtifact,
 	"survey":           evidence.ShapeFileRegion,
