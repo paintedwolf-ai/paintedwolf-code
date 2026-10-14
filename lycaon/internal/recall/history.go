@@ -18,7 +18,7 @@ type ErrHistoryCoordinates struct{ Reason string }
 
 func (e *ErrHistoryCoordinates) Error() string { return "recall: " + e.Reason }
 
-const historyText = `COALESCE(NULLIF(content,''),json_extract(tool_result_json,'$.content'),'')`
+const historyText = `COALESCE(NULLIF(content,''),json_extract(NULLIF(tool_result_json,''),'$.content'),'')`
 
 // HistoryRequest addresses recorded rows in the caller's own session.
 type HistoryRequest struct {
