@@ -553,8 +553,9 @@ export function GrantMenu(p: {
                           }
                           disabled={p.disabled || itemRow.item.disabled}
                           onClick={() => {
-                            close(false);
+                            // The pick sees the item still focused, so a resolution can hand focus on.
                             p.onPick(itemRow.item.id);
+                            close(false);
                           }}
                         >
                           <Show when={itemRow.item.slot} keyed>
