@@ -7,8 +7,10 @@ import "sync"
 // the vault opens unattended.
 var linuxCustody = sync.OnceValue(func() custody { return probeCustody(newServiceClient()) })
 
-// unattendedIdentity: the vault opens without a human secret only when the
-// identity service released the identity to this verified engine.
+// unattendedIdentity: the identity service verified this engine, so the
+// identity it holds opens the vault without a human secret. A vault still
+// wrapped by the app password on such a host is treated the same way: the
+// launcher's key is then accepted only through the service's verification.
 func unattendedIdentity() bool { return linuxCustody().mode == custodyService }
 
 // verifiedLauncherPID is the desktop app the identity service verified as

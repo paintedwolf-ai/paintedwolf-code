@@ -19,8 +19,8 @@ func VerifyIdentityProtection() (err error) {
 	case custodyPassword:
 		return fmt.Errorf("credential protection verification requires the vault identity service; this host is on the app-password path")
 	}
-	a := custody.provider("protection-probe/" + uuid.NewString()).(*itemsIdentityProvider)
-	b := custody.provider("protection-probe/" + uuid.NewString()).(*itemsIdentityProvider)
+	a := custody.serviceHost("protection-probe/" + uuid.NewString()).service
+	b := custody.serviceHost("protection-probe/" + uuid.NewString()).service
 	defer func() { err = errors.Join(err, a.Purge(), b.Purge()) }()
 	return verifyDisposableIdentities(a, b)
 }

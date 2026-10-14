@@ -80,7 +80,7 @@ func TestServiceCustodyOpensTheVaultUnattended(t *testing.T) {
 	if c.mode != custodyService || c.launcherPID != 42 {
 		t.Fatalf("custody = %+v", c)
 	}
-	p := c.provider("/cfg/credential-vault.age").(*itemsIdentityProvider)
+	p := c.provider("/cfg/credential-vault.age").(*serviceHostProvider)
 	created, err := p.LoadOrCreate(false)
 	testutil.FailErr(t, "create identity", err)
 	loaded, err := p.LoadOrCreate(true)
@@ -88,7 +88,7 @@ func TestServiceCustodyOpensTheVaultUnattended(t *testing.T) {
 	if created != loaded || len(svc.values) != 1 {
 		t.Fatal("the service did not keep one identity")
 	}
-	other := c.provider("/other/credential-vault.age").(*itemsIdentityProvider)
+	other := c.provider("/other/credential-vault.age").(*serviceHostProvider)
 	if _, err := other.LoadOrCreate(true); !errors.Is(err, ErrVaultCorrupt) {
 		t.Fatalf("another root's missing identity: %v", err)
 	}

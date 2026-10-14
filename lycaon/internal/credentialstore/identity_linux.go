@@ -7,10 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/vaultidentity"
 )
 
-// ErrLauncherRefused: the identity service holds this user's identities but
-// refused this engine, so the vault cannot open on either path.
-var ErrLauncherRefused = errors.New("the vault identity service refused this engine")
-
 type custodyMode int
 
 const (
@@ -58,14 +54,15 @@ func probeCustody(client *vaultidentity.Client) custody {
 func (c custody) provider(path string) identityProvider {
 	switch c.mode {
 	case custodyService:
-		return &itemsIdentityProvider{
-			account: identityAccount(path), description: "identity held by the Painted Wolf Code vault identity service",
-			items: serviceItems{client: c.client},
-		}
+		return c.serviceHost(path)
 	case custodyRefused:
 		return refusedIdentityProvider{refusal: c.refusal}
 	default:
-		return newPassphraseIdentityProvider(path)
+		return &passphraseIdentityProvider{
+			path: identityPath(path),
+			missingGuidance: "; if it was moved into the Painted Wolf Code vault identity service, " +
+				"enable the paintedwolf-vault-identity socket unit",
+		}
 	}
 }
 

@@ -15,12 +15,20 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 )
 
-const recoveryUsage = `usage: pw credentials {where|purge|verify-protection} [--yes]
+const recoveryUsage = `usage: pw credentials {where|custody|purge|move-to-service|move-to-app-password|verify-protection} [--yes]
 
 Inspect and reset every private credential namespace:
   where   name the backend holding each credential set
+  custody   print, as JSON, who holds the vault identity
   purge   remove every stored credential; requires --yes
+  move-to-service   move an app-password-wrapped identity into the vault
+                    identity service; requires --yes
+  move-to-app-password   wrap the identity with a new app password and remove
+                         it from the vault identity service; requires --yes
   verify-protection   verify the native identity custodian using disposable identities
+
+Moves read the app password framed on stdin and run only as a child of the
+installed desktop app, which the vault identity service verifies.
 
 Purging is refused while an engine is running, because a running engine holds
 the decrypted identity and credential values in memory until it exits.
@@ -49,9 +57,17 @@ func runCredentials(args []string) error {
 	if err != nil {
 		return err
 	}
+	if move, ok := custodyMoves[args[0]]; ok {
+		return moveCustody(args[0], args[1:], os.Stdin, os.Stdout, slots[0].Path, move)
+	}
 	switch args[0] {
 	case "where":
 		return describeCredentials(slots)
+	case "custody":
+		if len(args) != 1 {
+			return fmt.Errorf("custody takes no arguments")
+		}
+		return describeCustody(os.Stdout, slots[0].Path)
 	case "purge":
 		return purgeCredentials(args[1:], slots)
 	default:

@@ -13,3 +13,11 @@ func selectIdentityProvider(path string, isolated, release bool) identityProvide
 	}
 	return newPassphraseIdentityProvider(path)
 }
+
+func describeCustody(string) (CustodyReport, error) {
+	return CustodyReport{Mode: CustodyAppPassword}, nil
+}
+
+func moveToService(string) error { return ErrCustodyUnsupported }
+
+func moveToAppPassword(string) error { return ErrCustodyUnsupported }
