@@ -1,5 +1,10 @@
 package format
 
+import (
+	"sort"
+	"strings"
+)
+
 // Host-defined format policy.
 
 var rasterMIME = map[string]struct{}{
@@ -79,4 +84,30 @@ var textFamilyExtMIME = map[string]string{
 	".markdown": "text/markdown",
 	".html":     "text/html",
 	".htm":      "text/html",
+}
+
+// WorkspaceImageMIME reports path-format support for the screened workspace viewer.
+// It does not admit bytes or expand the stricter prompt-image intake policy.
+func WorkspaceImageMIME(extension string) (string, bool) {
+	mime, ok := workspaceImageMIME[strings.ToLower(extension)]
+	return mime, ok
+}
+
+// WorkspaceImageExtensions returns a fresh list of the viewer's supported suffixes.
+func WorkspaceImageExtensions() []string {
+	out := make([]string, 0, len(workspaceImageMIME))
+	for ext := range workspaceImageMIME {
+		out = append(out, ext)
+	}
+	sort.Strings(out)
+	return out
+}
+
+var workspaceImageMIME = map[string]string{
+	".svg":  "image/svg+xml",
+	".png":  "image/png",
+	".jpg":  "image/jpeg",
+	".jpeg": "image/jpeg",
+	".webp": "image/webp",
+	".gif":  "image/gif",
 }

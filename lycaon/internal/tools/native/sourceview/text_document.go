@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	attachmentformat "github.com/lycaon/lycaon/internal/promptattach/format"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -33,6 +34,7 @@ func ReadTextDocument(tool string, access Access, resolved projectpaths.Resolved
 	}
 	data := map[string]any{"path": resolved.DisplayPath, "bytes": len(raw), "reason": err.Error()}
 	ext := strings.ToLower(filepath.Ext(resolved.DisplayPath))
+	_, data["workspace_image_supported"] = attachmentformat.WorkspaceImageMIME(ext)
 	switch ext {
 	case ".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg", ".ico", ".bmp", ".tiff":
 		data["is_image"] = true

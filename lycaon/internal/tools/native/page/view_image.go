@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/browser/renderhandle"
+	attachmentformat "github.com/lycaon/lycaon/internal/promptattach/format"
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -23,19 +24,6 @@ import (
 )
 
 const ViewImageToolName = "view_image"
-
-var supportedImageExts = map[string]string{
-	".svg":  "image/svg+xml",
-	".png":  "image/png",
-	".jpg":  "image/jpeg",
-	".jpeg": "image/jpeg",
-	".webp": "image/webp",
-	".gif":  "image/gif",
-}
-
-func supportedExtensionsList() []string {
-	return []string{".svg", ".png", ".jpg", ".jpeg", ".webp", ".gif"}
-}
 
 // ViewImageDeps provides runtime services for visual image inspection.
 type ViewImageDeps struct {
@@ -117,7 +105,7 @@ func handleViewImageByHandle(ctx context.Context, deps ViewImageDeps, tctx tools
 	raw := res.Bytes()
 	if !visual.IsRasterMime(meta.Mime) {
 		return "", &toolrejection.ToolReject{Code: "IMAGE_FORMAT_UNSUPPORTED", Data: map[string]any{
-			"path": in.Handle, "handle": in.Handle, "extension": meta.Mime, "supported_formats": strings.Join(supportedExtensionsList(), ", "),
+			"path": in.Handle, "handle": in.Handle, "extension": meta.Mime, "supported_formats": strings.Join(attachmentformat.WorkspaceImageExtensions(), ", "),
 		}}
 	}
 	view := screened{bytes: raw, mime: meta.Mime, perception: visualscreen.PerceptionOriginal}
@@ -201,14 +189,14 @@ func handleViewImageByPath(ctx context.Context, deps ViewImageDeps, tctx tools.T
 		return "", err
 	}
 	ext := strings.ToLower(filepath.Ext(resolved.DisplayPath))
-	declared, ok := supportedImageExts[ext]
+	declared, ok := attachmentformat.WorkspaceImageMIME(ext)
 	if !ok {
 		return "", &toolrejection.ToolReject{
 			Code: "IMAGE_FORMAT_UNSUPPORTED",
 			Data: map[string]any{
 				"path":              in.Path,
 				"extension":         ext,
-				"supported_formats": strings.Join(supportedExtensionsList(), ", "),
+				"supported_formats": strings.Join(attachmentformat.WorkspaceImageExtensions(), ", "),
 			},
 		}
 	}

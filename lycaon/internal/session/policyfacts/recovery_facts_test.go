@@ -13,7 +13,7 @@ import (
 
 func TestSessionOccurrencesPreserveOfferedRecoverySnapshot(t *testing.T) {
 	manager := New(nil)
-	for _, name := range []string{"ask_user", "secret_generate", "terminal_read", "command_stop"} {
+	for _, name := range []string{"ask_user", "secret_generate", "terminal_read", "command_stop", "view_image"} {
 		for _, offered := range []bool{false, true} {
 			names := []string{}
 			if offered {
