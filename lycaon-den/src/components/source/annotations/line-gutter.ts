@@ -274,7 +274,11 @@ class NumberMarker extends GutterMarker implements LineGutterControl {
   }
 }
 
-/** Reserves a stable minimum width before source labels arrive. */
+/**
+ * Reserves a stable minimum width before source labels arrive. The spacer cell is
+ * `visibility: hidden`; it holds no text because WebKitGTK aborts its web process
+ * answering a screen reader's text query over an editor holding unrendered text.
+ */
 class SpacerMarker extends GutterMarker {
   eq(): boolean {
     return true;
@@ -284,7 +288,6 @@ class SpacerMarker extends GutterMarker {
     const span = document.createElement("span");
     span.className = `${CELL}__number ${CELL}__number--spacer`;
     span.setAttribute("aria-hidden", "true");
-    span.textContent = "88888";
     return span;
   }
 }

@@ -692,4 +692,15 @@ describe("line gutter — numbers off", () => {
     );
     expect(number?.textContent).toBe("");
   });
+
+  it("leaves no text in a gutter cell CodeMirror hides", () => {
+    view = mount("a\nb\n");
+    const hidden = [...view.dom.querySelectorAll<HTMLElement>(".cm-gutterElement")].filter(
+      (cell) => cell.style.visibility === "hidden",
+    );
+    expect(hidden.length).toBeGreaterThan(0);
+    // WebKitGTK aborts a screen reader's text query over an editor holding unrendered text.
+    expect(hidden.map((cell) => cell.textContent)).toEqual(hidden.map(() => ""));
+    expect(view.dom.querySelector(".files-line-gutter__number--spacer")?.getAttribute("aria-hidden")).toBe("true");
+  });
 });
