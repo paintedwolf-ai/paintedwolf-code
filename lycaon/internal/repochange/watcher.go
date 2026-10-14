@@ -16,11 +16,10 @@ import (
 )
 
 type worktreeWatcher struct {
-	root         string
-	physicalRoot string
-	watcher      platformWatcher
-	budget       *watchfd.Budget
-	maxDirs      int
+	root    string
+	watcher platformWatcher
+	budget  *watchfd.Budget
+	maxDirs int
 	// Recursive coverage comes from the root registration.
 	recursive bool
 	done      chan struct{}
@@ -61,20 +60,20 @@ func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *w
 		physicalRoot = root
 	}
 	w := &worktreeWatcher{
-		physicalRoot: physicalRoot,
-		scope:        sourcescope.New(root, sourcescope.Options{Plane: cfg.Catalog}),
-		root:         root,
-		watcher:      fw,
-		budget:       budget,
-		maxDirs:      maxDirs,
-		recursive:    watchfd.Recursive,
-		done:         make(chan struct{}),
-		watched:      map[string]int{},
+		scope:     sourcescope.New(root, sourcescope.Options{Plane: cfg.Catalog}),
+		root:      root,
+		watcher:   fw,
+		budget:    budget,
+		maxDirs:   maxDirs,
+		recursive: watchfd.Recursive,
+		done:      make(chan struct{}),
+		watched:   map[string]int{},
+		refs:      refObserver{root: root, physicalRoot: physicalRoot},
 	}
 	if w.addMeasuredDir(root) != addRegistered {
 		w.setTruncated(1)
 	}
-	w.refs.arm(w.root, w.addMeasuredDir)
+	w.refs.arm(w.addMeasuredDir)
 	return w, nil
 }
 
@@ -312,13 +311,9 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 				}
 			}
 			if w.refs.contains(ev.Name) {
-				w.refs.observe(ctx, w.root, ev, w.addMeasuredDir)
+				w.refs.observe(ctx, ev, w.addMeasuredDir)
 			}
 			rel, err := filepath.Rel(w.root, ev.Name)
-			if err == nil && (rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator))) && w.physicalRoot != "" {
-				// Ref streams may report the physical alias of the logical root.
-				rel, err = filepath.Rel(w.physicalRoot, ev.Name)
-			}
 			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
 				continue
 			}
@@ -339,7 +334,7 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 			if ev.Op&fsnotify.Create != 0 && isDir && relSlash == ".git" {
 				// A repository appeared under a watched root; start watching
 				// its ref surfaces.
-				w.refs.arm(w.root, w.addMeasuredDir)
+				w.refs.arm(w.addMeasuredDir)
 			}
 			if ev.Op&fsnotify.Create != 0 && isDir && !w.recursive && w.scope.BoundaryDir(relSlash) == "" {
 				if w.addMeasuredDir(ev.Name) != addRegistered {
