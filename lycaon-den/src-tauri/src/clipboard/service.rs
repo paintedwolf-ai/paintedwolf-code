@@ -24,6 +24,7 @@ pub enum ClipboardError {
     /// The display did not answer within the operation bound.
     Timeout,
     /// The platform reported a fault.
+    #[cfg(not(target_os = "linux"))]
     Backend(String),
 }
 
@@ -33,6 +34,7 @@ impl fmt::Display for ClipboardError {
             Self::Stopped => f.write_str("Clipboard service has stopped"),
             Self::DisplayUnavailable => f.write_str("Clipboard display is unavailable"),
             Self::Timeout => f.write_str("Clipboard did not respond in time"),
+            #[cfg(not(target_os = "linux"))]
             Self::Backend(message) => f.write_str(message),
         }
     }
@@ -41,20 +43,28 @@ impl fmt::Display for ClipboardError {
 /// The display protocol the clipboard adapter is attached to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisplayProtocol {
+    #[cfg(target_os = "linux")]
     Wayland,
+    #[cfg(target_os = "linux")]
     X11,
     /// Another GDK backend, such as Broadway.
+    #[cfg(target_os = "linux")]
     Gdk,
     /// The operating system pasteboard on macOS and Windows.
+    #[cfg(not(target_os = "linux"))]
     System,
 }
 
 impl DisplayProtocol {
     pub fn as_str(self) -> &'static str {
         match self {
+            #[cfg(target_os = "linux")]
             Self::Wayland => "wayland",
+            #[cfg(target_os = "linux")]
             Self::X11 => "x11",
+            #[cfg(target_os = "linux")]
             Self::Gdk => "gdk",
+            #[cfg(not(target_os = "linux"))]
             Self::System => "system",
         }
     }
@@ -402,19 +412,23 @@ mod tests {
             serde_json::to_value(ClipboardError::DisplayUnavailable).unwrap(),
             serde_json::json!({ "code": "display_unavailable" })
         );
-        assert_eq!(
-            serde_json::to_value(ClipboardError::Backend("fault".into())).unwrap(),
-            serde_json::json!({ "code": "backend", "message": "fault" })
-        );
+        #[cfg(not(target_os = "linux"))]
+        {
+            assert_eq!(
+                serde_json::to_value(ClipboardError::Backend("fault".into())).unwrap(),
+                serde_json::json!({ "code": "backend", "message": "fault" })
+            );
+            assert_eq!(DisplayProtocol::System.as_str(), "system");
+        }
+        #[cfg(target_os = "linux")]
         assert_eq!(
             [
                 DisplayProtocol::Wayland,
                 DisplayProtocol::X11,
                 DisplayProtocol::Gdk,
-                DisplayProtocol::System,
             ]
             .map(DisplayProtocol::as_str),
-            ["wayland", "x11", "gdk", "system"]
+            ["wayland", "x11", "gdk"]
         );
         assert_eq!(
             ClipboardError::Timeout.to_string(),

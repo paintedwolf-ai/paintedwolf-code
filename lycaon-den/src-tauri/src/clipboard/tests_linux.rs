@@ -104,10 +104,7 @@ impl Peer {
                 command.args(["-selection", "clipboard", "-i"]);
                 command
             }
-            Self::Wayland => {
-                let mut command = Command::new("wl-copy");
-                command
-            }
+            Self::Wayland => Command::new("wl-copy"),
         };
         // The peer forks a server for the selection; only the parent is awaited.
         let mut child = command
