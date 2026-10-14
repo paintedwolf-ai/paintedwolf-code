@@ -133,8 +133,8 @@ mod portal {
 
     /// Reads the raw `button-layout` string through `Settings.Read`.
     pub(super) fn read_button_layout() -> Result<String, String> {
-        let connection = gio::bus_get_sync(gio::BusType::Session, gio::Cancellable::NONE)
-            .map_err(|error| error.to_string())?;
+        // A private context: this runs on a blocking worker, not the GTK main thread.
+        let connection = crate::linux_desktop::session_bus::connect(&glib::MainContext::new())?;
         let reply = connection
             .call_sync(
                 Some(PORTAL_NAME),
