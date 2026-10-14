@@ -26,15 +26,16 @@ func SummaryFormatRequested(ctx context.Context) bool {
 }
 
 type compactionSummary struct {
-	Level         string             `json:"-"`
-	SourceContext *api.SourceContext `json:"-"`
-	ThroughOrd    int64              `json:"-"`
-	ReferenceOnly bool               `json:"-"`
-	Facts         []string           `json:"facts"`
-	Completed     []string           `json:"completed"`
-	Pending       []string           `json:"pending"`
-	Reacquire     []string           `json:"reacquire"`
-	Constraints   []string           `json:"constraints"`
+	Level             string             `json:"-"`
+	SourceContext     *api.SourceContext `json:"-"`
+	SummaryThroughOrd int64              `json:"-"`
+	ThroughOrd        int64              `json:"-"`
+	ReferenceOnly     bool               `json:"-"`
+	Facts             []string           `json:"facts"`
+	Completed         []string           `json:"completed"`
+	Pending           []string           `json:"pending"`
+	Reacquire         []string           `json:"reacquire"`
+	Constraints       []string           `json:"constraints"`
 }
 
 // parseCompactionSummary decodes one complete continuation record.
@@ -137,16 +138,17 @@ func renderContinuationRecord(ctx context.Context, summary compactionSummary, so
 		rows = append(rows, s.templateVars())
 	}
 	out, err := guidance.RenderGuidance(ctx, guidance.CompactionContinuationRecordRef, map[string]any{
-		"level":             summary.Level,
-		"through_ord":       summary.ThroughOrd,
-		"reference_only":    summary.ReferenceOnly,
-		"facts":             summary.Facts,
-		"completed":         summary.Completed,
-		"pending":           summary.Pending,
-		"reacquire":         summary.Reacquire,
-		"constraints":       summary.Constraints,
-		"compacted_sources": rows,
-		"recall_available":  recallAvailable,
+		"level":               summary.Level,
+		"summary_through_ord": summary.SummaryThroughOrd,
+		"through_ord":         summary.ThroughOrd,
+		"reference_only":      summary.ReferenceOnly,
+		"facts":               summary.Facts,
+		"completed":           summary.Completed,
+		"pending":             summary.Pending,
+		"reacquire":           summary.Reacquire,
+		"constraints":         summary.Constraints,
+		"compacted_sources":   rows,
+		"recall_available":    recallAvailable,
 	})
 	if err != nil {
 		return "", err

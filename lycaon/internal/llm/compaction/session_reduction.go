@@ -94,6 +94,7 @@ func continuationFor(info SessionInfo, removed []ContextMessage, summary compact
 	if info.PriorContinuation != nil {
 		record.ThroughOrd = info.PriorContinuation.ThroughOrd
 		record.RemovedRows = info.PriorContinuation.RemovedRows
+		record.SummaryThroughOrd = info.PriorContinuation.SummaryThroughOrd
 	}
 	for _, row := range removed {
 		if row.Ord > record.ThroughOrd {
@@ -105,6 +106,11 @@ func continuationFor(info SessionInfo, removed []ContextMessage, summary compact
 	}
 	if summaryErr != nil {
 		record.Reason = "references_only"
+	}
+	for _, source := range sources {
+		if source.Disposition != "reference" && source.Ord > record.SummaryThroughOrd {
+			record.SummaryThroughOrd = source.Ord
+		}
 	}
 	record.Summary = messageview.ContinuationSummary{Facts: summary.Facts, Completed: summary.Completed,
 		Pending: summary.Pending, Reacquire: summary.Reacquire, Constraints: summary.Constraints}
@@ -123,6 +129,7 @@ func renderCoveredContinuation(ctx context.Context, record *messageview.Continua
 		}
 		summary := priorSummary(record)
 		summary.ThroughOrd = record.ThroughOrd
+		summary.SummaryThroughOrd = record.SummaryThroughOrd
 		summary.ReferenceOnly = record.Reason == "references_only"
 		summary.Level = level
 		limit := 16

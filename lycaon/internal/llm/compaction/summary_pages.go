@@ -79,8 +79,11 @@ func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo,
 			for _, segment := range segments[position : position+input.Consumed] {
 				remaining[segment.ID]--
 				for i := range sources {
-					if sources[i].MessageID == segment.ID && remaining[segment.ID] == 0 {
-						sources[i].Disposition = "summary_and_reference"
+					if sources[i].MessageID == segment.ID {
+						sources[i].Disposition = "partial_summary_and_reference"
+						if remaining[segment.ID] == 0 {
+							sources[i].Disposition = "summary_and_reference"
+						}
 					}
 				}
 			}
