@@ -5,6 +5,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 )
 
@@ -83,11 +84,11 @@ func (t *datagramFlows) replies(key any, f *datagramFlow, deliver func([]byte)) 
 			if time.Since(time.Unix(0, f.last.Load())) >= datagramFlowIdle {
 				return
 			}
-		case errors.Is(err, net.ErrClosed):
+		case errors.Is(err, syscall.ECONNREFUSED):
+			// The peer's host refused one datagram; the next may be served.
+		default:
 			return
 		}
-		// Anything else, such as a refusal the peer's host reported, leaves
-		// the flow open for the next datagram.
 	}
 }
 
