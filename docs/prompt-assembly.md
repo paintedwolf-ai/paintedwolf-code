@@ -190,3 +190,11 @@ The [`summarize`](summarize.md) tool returns a structured context pack as a dura
 - Background compaction has one writer and never blocks normal turns.
 - Compaction splices use indexed ordinal and mutation watermarks; a mismatch fails closed to canonical facts.
 - Templates explain typed facts; prose does not become host fact.
+
+## Asynchronous continuation synthesis
+
+The host publishes a bounded deterministic history representation before requesting summary enrichment. Request assembly never waits for the summarizer. A pending, slow, failed, or absent summary leaves canonical recovery available and does not stop chat.
+
+Summary completions are accepted only for their captured source identity and coverage boundary. A stale completion cannot replace a newer projection. Concurrent requests share bounded synthesis work rather than creating an unbounded backlog.
+
+Provider health distinguishes explicit failures from slow or pending work. Individual failures are quiet. A sustained sequence of provider failures can report that the summarizer is unavailable; chat continues using the deterministic representation. A successful response clears the outage state.
