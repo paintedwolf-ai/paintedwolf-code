@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/ocrengine"
 	"github.com/lycaon/lycaon/internal/userpath"
 )
 
@@ -185,7 +186,7 @@ func Default() *Registry {
 		scannerEngineProbe{},
 		browserEngineProbe{},
 		decisionEngineProbe{},
-		ocrEngineProbe{},
+		ocrEngineProbe{available: ocrengine.Available},
 		providerConfiguredProbe{},
 		liteSlotProbe{},
 	)

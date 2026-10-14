@@ -447,7 +447,7 @@ func TestDecisionEngineProbe(t *testing.T) {
 func TestOCREngineProbe(t *testing.T) {
 	t.Setenv(ocrengine.EnvRoot, t.TempDir())
 	t.Setenv("LYCAON_ENGINE_ROOT", t.TempDir())
-	got := run(t, ocrEngineProbe{}, Env{})
+	got := run(t, ocrEngineProbe{available: ocrengine.Available}, Env{})
 	switch runtime.GOOS {
 	case "darwin":
 		if got.Status != StatusOK || got.Code != "" {
@@ -461,5 +461,35 @@ func TestOCREngineProbe(t *testing.T) {
 		if got.Status != StatusDegraded || got.Detail["reason"] != ocrengine.ReasonUnsupportedPlatform {
 			t.Fatalf("got %q/%q/%v, want degraded/unsupported_platform", got.Status, got.Code, got.Detail)
 		}
+	}
+}
+
+func TestOCREngineProbeReportsTheUnavailableReason(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err    error
+		status Status
+		detail map[string]string
+	}{
+		"available": {nil, StatusOK, nil},
+		"altered payload": {
+			fmt.Errorf("resolve: %w", &ocrengine.UnavailableError{Reason: ocrengine.ReasonDigestMismatch, Path: "/opt/painted-wolf-code/ocr/tessdata/osd.traineddata"}),
+			StatusDegraded, map[string]string{"reason": ocrengine.ReasonDigestMismatch, "payload": "osd.traineddata"},
+		},
+		"unsupported platform": {
+			&ocrengine.UnavailableError{Reason: ocrengine.ReasonUnsupportedPlatform},
+			StatusDegraded, map[string]string{"reason": ocrengine.ReasonUnsupportedPlatform},
+		},
+		"unreadable pin": {errors.New("ocrengine: parse pin"), StatusDegraded, map[string]string{"reason": ocrengine.ReasonMissing}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := tc.err
+			got := run(t, ocrEngineProbe{available: func() error { return err }}, Env{})
+			if got.Status != tc.status || fmt.Sprint(got.Detail) != fmt.Sprint(tc.detail) {
+				t.Fatalf("got %q %v, want %q %v", got.Status, got.Detail, tc.status, tc.detail)
+			}
+			if tc.status == StatusDegraded && got.Code != CodeOCREngineUnavailable {
+				t.Fatalf("code = %q", got.Code)
+			}
+		})
 	}
 }

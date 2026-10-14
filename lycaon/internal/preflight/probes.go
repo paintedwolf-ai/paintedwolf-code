@@ -276,15 +276,18 @@ func (decisionEngineProbe) Run(ctx context.Context, env Env) Result {
 // ocr_engine
 // ---------------------------------------------------------------------------
 
-type ocrEngineProbe struct{}
+// ocrEngineProbe asks available whether this device can recognize text.
+type ocrEngineProbe struct {
+	available func() error
+}
 
 func (ocrEngineProbe) ID() string { return "ocr_engine" }
 
 // Run reports whether images can be read for credentials before a model sees
 // them. Without a recognizer every raster asks before it is sent, so the app
 // works; the probe degrades rather than blocks.
-func (ocrEngineProbe) Run(context.Context, Env) Result {
-	err := ocrengine.Available()
+func (p ocrEngineProbe) Run(context.Context, Env) Result {
+	err := p.available()
 	if err == nil {
 		return Result{Status: StatusOK}
 	}
