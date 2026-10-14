@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/modelfeed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -81,7 +82,9 @@ func TestRegistryRequestBudgetUsesNativeAdapter(t *testing.T) {
 	r := &Registry{}
 	r.snapshot.Store(&providerRegistrySnapshot{providers: map[string]modelcall.Provider{"local": p}})
 	req := modelcall.CompletionRequest{Model: "model", Messages: []api.Message{{Role: api.MessageRoleUser, Content: strings.Repeat("detail ", 2000)}}}
-	want := p.RequestBudget(t.Context(), req)
+	projected := req
+	projected.Messages = transcript.Project(req.Messages)
+	want := p.RequestBudget(t.Context(), projected)
 	if got := r.RequestBudget(t.Context(), "local", req); got != want {
 		t.Fatalf("registry budget = %+v, adapter = %+v", got, want)
 	}

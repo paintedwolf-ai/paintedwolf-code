@@ -57,7 +57,13 @@ func TestCompleteRequestFitsColdOllamaWindowWithoutChangingFrame(t *testing.T) {
 	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, Content: strings.Repeat("Standing instructions. ", 850),
 		ContextPinned: true, PromptCacheBreakpoint: api.PromptCacheTierStanding}
 	volatile := api.Message{ID: "volatile", Role: api.MessageRoleSystem, Content: "Live host state", ContextPinned: true}
-	messages := append([]api.Message{standing}, rows...)
+	projected := []api.Message{
+		standing,
+		{ID: "checkpoint", Role: api.MessageRoleUser, CompactionCheckpoint: true, Origin: api.MessageOriginHost},
+		{ID: "continuation", Role: api.MessageRoleAssistant, Content: strings.Repeat("Detailed continuation. ", 300),
+			ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: strings.Repeat("Detailed continuation. ", 300)}}},
+	}
+	messages := append(projected, rows...)
 	messages = append(messages, volatile)
 	req := modelcall.CompletionRequest{Model: sess.Model, Messages: messages, Tools: []tools.ToolMeta{{Name: "read",
 		ArgsSchema: map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{
@@ -147,7 +153,7 @@ func TestRequestFittingUsesRemainingOutputAfterHistoryIsMinimal(t *testing.T) {
 	history := &Service{}
 	fitted, err := history.FitRequest(t.Context(), &api.Session{ID: "session", ProviderID: "local", Model: "small"}, []api.Message{current}, req, nativeRequestBudgets{provider})
 	testutil.FailErr(t, "fit minimal history", err)
-	if fitted.MaxTokens != available || !reflect.DeepEqual(req.Messages, fitted.Messages) {
+	if fitted.MaxTokens != available || len(fitted.Messages) != 2 || !reflect.DeepEqual(req.Messages[0], fitted.Messages[0]) || fitted.Messages[1].Content != current.Content {
 		t.Fatalf("minimal history fit changed input or output allocation: %d, want %d", fitted.MaxTokens, available)
 	}
 	req.MaxTokens = 512

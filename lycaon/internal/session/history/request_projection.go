@@ -20,6 +20,9 @@ func projectRequest(messages, history []api.Message) requestProjection {
 		}
 	}
 	for _, row := range messages {
+		if row.CompactionCheckpoint || row.ID == "host-history-coverage" || row.ID == "host-context-trim-notice" || len(row.ContentParts) == 1 && row.ContentParts[0].Source == "compaction_summary" {
+			p.ids[row.ID] = true
+		}
 		if p.ids[row.ID] {
 			p.history = append(p.history, row)
 		} else {
