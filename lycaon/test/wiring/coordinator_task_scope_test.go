@@ -162,8 +162,9 @@ func TestTaskAdmissionUsesTheExecutedIdentity(t *testing.T) {
 			testutil.FailErr(t, "create coordinator", err)
 			call := wiringToolContext(sess.ID, dir)
 			call.Identity.Agent, call.Identity.ProjectID, call.Identity.ToolCallID = "coordinator", sess.ProjectID, uuid.NewString()
-			testutil.FailErr(t, "resolve project root", h.DB.QueryRowContext(ctx, "SELECT id FROM project_roots WHERE project_id = ? AND is_primary = 1", sess.ProjectID).Scan(&call.Source.ActiveRootID))
+			testutil.FailErr(t, "resolve project root", h.DB.QueryRowContext(ctx, "SELECT id FROM project_roots WHERE project_id = ? AND path = ?", sess.ProjectID, dir).Scan(&call.Source.ActiveRootID))
 			call.Source.Roots[0].ID = call.Source.ActiveRootID
+			sess.WorkspaceRootID = call.Source.ActiveRootID
 			_, err = h.ToolRegistry.Run(ctx, "update_progress", map[string]any{"content": "## Progress\n- [ ] Complete assigned work"}, call)
 			testutil.FailErr(t, "record progress", err)
 			scope := api.TaskScope{Mode: api.TaskScopeMode(tc.mode), Paths: []string{"src/**"}}
