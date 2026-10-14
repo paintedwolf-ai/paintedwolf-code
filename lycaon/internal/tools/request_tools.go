@@ -101,9 +101,6 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 		result = t.activationResult(ctx, tctx, profileID, plan, constrained, outcome)
 	}
 	if !browsing && len(result.Loaded)+len(result.AlreadyLoaded) == 0 && (outcome.Failure == "" || len(cards) == 0) {
-		if t.deps.Record != nil {
-			t.deps.Record(ctx, tctx, outcome, result, time.Since(started))
-		}
 		available := make([]string, 0, len(requestable))
 		for _, meta := range requestable {
 			available = append(available, meta.Name)
@@ -116,8 +113,12 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 			}
 			discovery, err = DiscoveryPage(tctx, "request_tools", need, "", "no_match", "", entries)
 			if err != nil {
-				return "", err
+				discovery = nil
 			}
+		}
+		result.Discovery = discovery
+		if t.deps.Record != nil {
+			t.deps.Record(ctx, tctx, outcome, result, time.Since(started))
 		}
 		return "", FormatRequestToolsReject(t.deps, profileID, need, available, discovery)
 	}

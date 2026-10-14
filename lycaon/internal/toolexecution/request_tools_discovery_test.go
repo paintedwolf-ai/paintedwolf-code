@@ -6,12 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/tools"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -164,7 +167,7 @@ func TestRequestDiscoveryCursorSurvivesPartialActivation(t *testing.T) {
 	}
 }
 
-func TestRequestHealthyRankingHasNoDiscovery(t *testing.T) {
+func TestRequestHealthyRankingOnlyDiscoversOnNoMatch(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		score    float64
@@ -197,8 +200,8 @@ func TestRequestHealthyRankingHasNoDiscovery(t *testing.T) {
 				}
 			} else {
 				reject := requireUnmatchedToolRequest(t, err)
-				available, ok := reject.Data["available"].([]string)
-				if !ok || len(available) != 1 || available[0] != "read" || raw != "" || len(activation.Active("healthy")) != 0 {
+				discovery, ok := reject.Data["discovery"].(*turnload.Discovery)
+				if !ok || discovery.Status != "no_match" || discovery.Failure != "" || len(discovery.Entries) != 1 || discovery.Entries[0].Name != "read" || raw != "" || len(activation.Active("healthy")) != 0 {
 					t.Fatalf("no match output=%q rejection=%+v", raw, reject)
 				}
 			}
@@ -206,5 +209,76 @@ func TestRequestHealthyRankingHasNoDiscovery(t *testing.T) {
 				t.Fatalf("rank calls=%d", len(d.Ranks))
 			}
 		})
+	}
+}
+
+func TestRequestNoMatchDiscoveryReachesDeferredTask(t *testing.T) {
+	reg := tools.NewDefaultRegistry()
+	activation := tools.NewMemoryActivation()
+	var names []string
+	for i := 0; i < 22; i++ {
+		names = append(names, fmt.Sprintf("mcp_fixture_%02d", i))
+	}
+	names = append(names, "task")
+	registerRequestFixtureTools(t, reg, append(names, "write")...)
+	taskContract, ok := toolcontract.Lookup("task")
+	if !ok {
+		t.Fatal("task contract missing")
+	}
+	testutil.FailErr(t, "register described task", reg.RegisterDefinition(tools.Definition{
+		Meta:     tools.ToolMeta{Name: "task", Description: "Start a background worker with a scoped assignment", ArgsSchema: map[string]any{"type": "object"}},
+		Contract: taskContract, Handler: func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil },
+	}))
+	formatter := guidance.NewStaticRejectFormatter(moduleHintConfig(t))
+	ranks := 0
+	testutil.FailErr(t, "register request", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
+		Activation: activation, Boundary: fakeRequestBoundary{}, RejectFmt: func() *guidance.StaticRejectFormatter { return formatter },
+		Resolve: func(_ context.Context, _ tools.ToolContext, need string, cards []turnload.ToolCard) turnload.RequestOutcome {
+			ranks++
+			return turnload.RequestOutcome{Need: need}
+		},
+	}))
+	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "no-match", Agent: "coordinator"}, Turn: tools.InvocationTurn{
+		TurnSurfaceID: "fixture", TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, names),
+	}}
+	_, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "Dispatch a worker to repair and review the change"}, tctx)
+	reject := requireUnmatchedToolRequest(t, err)
+	page, ok := reject.Data["discovery"].(*turnload.Discovery)
+	if !ok || page.Total != len(names) || page.NextNeed == "" || page.Failure != "" || page.Status != "no_match" {
+		t.Fatalf("missing no-match catalog: %+v", reject.Data)
+	}
+	if !strings.Contains(err.Error(), "discovery.entries") || !strings.Contains(err.Error(), "discovery.next_need") || strings.Contains(err.Error(), "ranking_unavailable") {
+		t.Fatalf("recovery: %v", err)
+	}
+	if len(activation.Active("no-match")) != 0 {
+		t.Fatal("discovery activated schemas")
+	}
+	var seen []string
+	for {
+		for _, entry := range page.Entries {
+			seen = append(seen, entry.Name)
+			if entry.Name == "task" && !strings.Contains(entry.Description, "background worker") {
+				t.Fatal("discovery lost the selection description")
+			}
+		}
+		if page.NextNeed == "" {
+			break
+		}
+		raw, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": page.NextNeed}, tctx)
+		testutil.FailErr(t, "browse remaining catalog", err)
+		var result turnload.RequestToolsResult
+		testutil.FailErr(t, "decode page", json.Unmarshal([]byte(raw), &result))
+		page = result.Discovery
+		if page == nil {
+			t.Fatal("continuation lost catalog")
+		}
+	}
+	if !slices.Equal(seen, names) || ranks != 1 {
+		t.Fatalf("catalog = %v, ranks = %d", seen, ranks)
+	}
+	_, err = reg.Run(t.Context(), "request_tools", map[string]any{"need": "task"}, tctx)
+	testutil.FailErr(t, "load task by exact identity", err)
+	if !activation.Active("no-match")["task"] || len(activation.Active("no-match")) != 1 || ranks != 1 {
+		t.Fatal("exact selection changed unrelated activation or reranked")
 	}
 }

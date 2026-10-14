@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -96,5 +97,33 @@ func TestLocalFetchRecoveryOnlyOffersCurrentCaptureTools(t *testing.T) {
 		if len(offered) > 0 && len(calls) == 0 {
 			t.Fatalf("offered local recovery omitted for %v", offered)
 		}
+	}
+}
+
+func TestUnmatchedToolDiscoveryUsesCurrentPageFacts(t *testing.T) {
+	bp := stockBlockPlane(t)
+	for _, state := range []struct {
+		name, status string
+		more         bool
+	}{
+		{"legacy", "", false}, {"last page", "no_match", false}, {"more pages", "no_match", true},
+	} {
+		t.Run(state.name, func(t *testing.T) {
+			ctx := tools.WithRecoveryTools(t.Context(), []string{"request_tools"})
+			err := bp.RejectObservation(ctx, "request_tools", "fixture", nil, &toolrejection.ToolReject{
+				Code: "TOOL_REQUEST_UNMATCHED", Data: map[string]any{"need": "dispatch a worker", "available": []string{"task"}, "tool_discovery_status": state.status, "tool_discovery_has_more": state.more},
+			})
+			refusal, ok := guidance.RefusalFromError(err)
+			if !ok || refusal.Code() != "TOOL_REQUEST_UNMATCHED" || len(refusal.Copy) == 0 {
+				t.Fatalf("missing OAR recovery: %v", err)
+			}
+			fix := refusal.Copy["fix"]
+			if strings.Contains(fix, "discovery.entries") != (state.status != "") || strings.Contains(fix, "discovery.next_need") != state.more {
+				t.Fatalf("page facts changed remedy: %s", fix)
+			}
+			if strings.Contains(refusal.Copy["instead"], "next_need") != state.more {
+				t.Fatalf("summary invents continuation: %s", refusal.Copy["instead"])
+			}
+		})
 	}
 }

@@ -98,6 +98,13 @@ unavailable-capability explanation. Loading changes schema visibility, not acces
 or approval. This guidance appears only on rejection, without expanding standing
 prompts.
 
+When tool ranking selects no additional schema, `TOOL_REQUEST_UNMATCHED` keeps its
+rejection identity and can carry a bounded `discovery` page with tool names and
+descriptions. Its `no_match` status distinguishes a completed ranking from an
+unavailable ranker. The agent can select an exact name or follow the page's
+continuation without ranking again. These observations do not establish that a
+healthy partial selection fulfilled the requested operation.
+
 Repetition admission evaluates resolved prerequisites and counters atomically.
 It releases an identical `TOOL_NOT_OFFERED` retry when that tool is offered, or an
 `EDITOR_DOCUMENT_READ_REQUIRED` retry when the response's frozen read basis names
