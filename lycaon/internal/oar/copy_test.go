@@ -75,7 +75,7 @@ func TestOccurrenceFactDeclsPublishedInActivation(t *testing.T) {
 	}
 	gc := NewGuardContext()
 	gc.Invocation.Tool = "command"
-	gc.Session.WorkerLeg = "leg-1"
+	gc.Session.WorkerLeg = true
 	act := activation(gc)
 	fields, ok := act["paintedwolf.capability_request_fields"].([]string)
 	if !ok || len(fields) == 0 {
@@ -84,8 +84,8 @@ func TestOccurrenceFactDeclsPublishedInActivation(t *testing.T) {
 	if act["paintedwolf.supports_local_listen"] != true || act["paintedwolf.supports_loopback_connect"] != true {
 		t.Fatalf("listen/connect occurrence facts = (%v, %v), want (true, true)", act["paintedwolf.supports_local_listen"], act["paintedwolf.supports_loopback_connect"])
 	}
-	if act["paintedwolf.worker_leg"] != "leg-1" {
-		t.Fatalf("paintedwolf.worker_leg = %v, want leg-1", act["paintedwolf.worker_leg"])
+	if act["paintedwolf.worker_leg"] != true {
+		t.Fatalf("paintedwolf.worker_leg = %v, want true", act["paintedwolf.worker_leg"])
 	}
 }
 
