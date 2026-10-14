@@ -18,7 +18,7 @@ import (
 )
 
 // signalReportFD is where the inner helper finds its report pipe to the
-// outer helper. The plan is on 3 and the marker on 4.
+// outer helper. The plan is on 3, the marker on 4, and the control socket on 6.
 const signalReportFD = 5
 
 // reportReady is the report byte that says the inner helper has its signal
@@ -27,9 +27,11 @@ const reportReady = 0xff
 
 // Relaunch runs the helper again as PID 1 of fresh user, mount, PID, and
 // network namespaces, hands it the plan over an inherited pipe and the lineage
-// marker when there is one, and relays signals and exit status until it ends.
-// The returned signal, when set, killed the target and should end this
-// process the same way.
+// marker when there is one, serves what it hands back over the control
+// socket, and relays signals and exit status until it ends. This process keeps
+// the marker, so the broker attributes the connections it forwards to the
+// action. The returned signal, when set, killed the target and should end
+// this process the same way.
 func Relaunch(self string, args []string, plan []byte, marker *os.File) (code int, sig syscall.Signal, err error) {
 	// The parent-death signal is tied to the thread that forks.
 	runtime.LockOSThread()
@@ -45,24 +47,33 @@ func Relaunch(self string, args []string, plan []byte, marker *os.File) (code in
 		return 0, 0, fmt.Errorf("signal report pipe: %w", err)
 	}
 	defer func() { _ = report.Close() }()
+	pair, err := unix.Socketpair(unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		_ = read.Close()
+		_ = write.Close()
+		_ = reportWrite.Close()
+		return 0, 0, fmt.Errorf("control socket: %w", err)
+	}
+	control, controlChild := os.NewFile(uintptr(pair[0]), "control"), os.NewFile(uintptr(pair[1]), "control-child")
+	sup := newSupervisor(control)
+	defer sup.close()
 	cmd := exec.Command(self, args...)
 	// The standard descriptors are the command's streams, handed through as is.
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.NewFile(0, "stdin"), os.NewFile(1, "stdout"), os.NewFile(2, "stderr")
 	// A nil marker leaves its descriptor closed in the child.
-	cmd.ExtraFiles = []*os.File{read, marker, reportWrite}
+	cmd.ExtraFiles = []*os.File{read, marker, reportWrite, controlChild}
 	cmd.SysProcAttr = namespaceAttr()
 	events := notifyForwarded()
 	defer signal.Stop(events)
 	err = cmd.Start()
 	_ = read.Close()
 	_ = reportWrite.Close()
+	_ = controlChild.Close()
 	if err != nil {
 		_ = write.Close()
 		return 0, 0, classifyLaunch(err)
 	}
-	if marker != nil {
-		_ = marker.Close()
-	}
+	go sup.serve()
 	go func() {
 		defer func() { _ = write.Close() }()
 		_, _ = io.Copy(write, bytes.NewReader(plan))
@@ -163,8 +174,9 @@ func namespaceAttr() *syscall.SysProcAttr {
 // target exists. The returned error is the raw exec failure, for the caller to
 // classify.
 func Supervise(path string, argv, env []string, afterStart func()) (code int, sig syscall.Signal, err error) {
-	// The target must not inherit the outer helper's signal report.
+	// The target must not inherit the outer helper's report pipe or control socket.
 	syscall.CloseOnExec(signalReportFD)
+	syscall.CloseOnExec(controlFD)
 	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0); err != nil {
 		return 0, 0, fmt.Errorf("child subreaper: %w", err)
 	}

@@ -44,6 +44,11 @@ func Enter(plan Plan) error {
 	if err := loopbackUp(); err != nil {
 		return err
 	}
+	if plan.Network.Mode == NetworkProxyOnly {
+		if err := handOffProxyListeners(plan.Network); err != nil {
+			return err
+		}
+	}
 	probe, err := newLandlockProbe()
 	if err != nil {
 		return err

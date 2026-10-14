@@ -78,9 +78,10 @@ const (
 	NetworkDirectIP  = "direct_ip"
 )
 
-// Network is the egress expression. The helper realises NetworkDeny as a
-// network namespace holding one loopback interface. The other fields are
-// carried so the helper refuses, with a typed reason, what it cannot express.
+// Network is the egress expression. Every mode runs in a network namespace
+// holding one loopback interface. ProxyOnly adds the mediated endpoints there,
+// served from the host by the outer helper. The other fields are carried so
+// the helper refuses, with a typed reason, what it cannot express.
 type Network struct {
 	Mode                 string           `json:"mode"`
 	LoopbackConnect      bool             `json:"loopback_connect,omitempty"`
@@ -148,7 +149,13 @@ func (p Plan) Validate() error {
 		return &Unsupported{Code: UnsupportedPlanVersion, Detail: fmt.Sprintf("version %d, helper reads %d", p.Version, PlanVersion)}
 	}
 	n := p.Network
-	if n.Mode != NetworkDeny {
+	switch n.Mode {
+	case NetworkDeny:
+	case NetworkProxyOnly:
+		if n.ProxyAddr == "" && n.SocksProxyAddr == "" {
+			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "proxy_only without a mediated endpoint"}
+		}
+	default:
 		return &Unsupported{Code: UnsupportedNetworkMode, Detail: n.Mode}
 	}
 	if n.Browser {

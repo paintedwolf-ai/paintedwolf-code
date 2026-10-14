@@ -56,7 +56,8 @@ func TestValidateNamesWhatTheHelperCannotExpress(t *testing.T) {
 		net  Network
 		code string
 	}{
-		{"proxy", Network{Mode: NetworkProxyOnly, ProxyAddr: "127.0.0.1:1"}, UnsupportedNetworkMode},
+		{"unknown mode", Network{Mode: "tunnel"}, UnsupportedNetworkMode},
+		{"proxy without endpoint", Network{Mode: NetworkProxyOnly}, UnsupportedNetworkGrant},
 		{"direct", Network{Mode: NetworkDirectIP}, UnsupportedNetworkMode},
 		{"browser", Network{Mode: NetworkDeny, Browser: true, LoopbackConnect: true}, UnsupportedBrowser},
 		{"loopback", Network{Mode: NetworkDeny, LoopbackConnect: true}, UnsupportedNetworkGrant},
@@ -75,6 +76,9 @@ func TestValidateNamesWhatTheHelperCannotExpress(t *testing.T) {
 	}
 	if err := (Plan{Version: PlanVersion, Network: Network{Mode: NetworkDeny}}).Validate(); err != nil {
 		t.Fatalf("deny plan refused: %v", err)
+	}
+	if err := (Plan{Version: PlanVersion, Network: Network{Mode: NetworkProxyOnly, ProxyAddr: "127.0.0.1:1"}}).Validate(); err != nil {
+		t.Fatalf("proxy plan refused: %v", err)
 	}
 	if err := (Plan{Version: 0, Network: Network{Mode: NetworkDeny}}).Validate(); err == nil {
 		t.Fatal("version 0 validated")

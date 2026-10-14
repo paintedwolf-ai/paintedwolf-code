@@ -126,11 +126,14 @@ func TestRenderProfileBuildsADenyPlanAndRefusesMediatedEgress(t *testing.T) {
 		t.Fatalf("network mode %q", plan.Network.Mode)
 	}
 
-	_, err = renderProfile(Confinement{Roots: []string{proj}, Network: NetworkProxyOnly, ProxyAddr: "127.0.0.1:1"})
-	var unsupported *linuxsandbox.Unsupported
-	if !errors.As(err, &unsupported) || unsupported.Code != linuxsandbox.UnsupportedNetworkMode {
-		t.Fatalf("proxy-only plan: %v", err)
+	raw, err = renderProfile(Confinement{Roots: []string{proj}, Network: NetworkProxyOnly, ProxyAddr: "127.0.0.1:1"})
+	testutil.FailErr(t, "proxy-only plan", err)
+	proxied, err := linuxsandbox.DecodePlan([]byte(raw))
+	testutil.FailErr(t, "decode proxy-only plan", err)
+	if proxied.Network.Mode != linuxsandbox.NetworkProxyOnly || proxied.Network.ProxyAddr != "127.0.0.1:1" {
+		t.Fatalf("proxy-only plan network %+v", proxied.Network)
 	}
+	var unsupported *linuxsandbox.Unsupported
 	_, err = renderProfile(Confinement{Roots: []string{proj}, Network: NetworkDeny, Browser: true, LoopbackConnect: true})
 	if !errors.As(err, &unsupported) || unsupported.Code != linuxsandbox.UnsupportedBrowser {
 		t.Fatalf("browser plan: %v", err)
