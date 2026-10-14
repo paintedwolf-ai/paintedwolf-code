@@ -22,6 +22,7 @@ func TestUserContinuationKeepsCurrentTurnInMemoryAndSQL(t *testing.T) {
 			Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
 			AppendMessages(ctx context.Context, id string, msgs ...api.Message) error
 			UserTurnOrdinal(ctx context.Context, sessionID string) (int, error)
+			GetUserTurnOpener(context.Context, string, int) (api.Message, error)
 		}
 	}{
 		{name: "memory", store: NewMemory()},
@@ -39,6 +40,14 @@ func TestUserContinuationKeepsCurrentTurnInMemoryAndSQL(t *testing.T) {
 			testutil.FailErr(t, "read user turn ordinal", err)
 			if turn != 1 {
 				t.Fatalf("user turn ordinal = %d want 1", turn)
+			}
+			testutil.FailErr(t, "append assistant observation", test.store.AppendMessages(ctx, sess.ID,
+				api.Message{ID: uuid.NewString(), Role: api.MessageRoleAssistant, Content: "observed"},
+				api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Content: "second instruction"}))
+			opener, err := test.store.GetUserTurnOpener(ctx, sess.ID, 2)
+			testutil.FailErr(t, "resolve source turn opener", err)
+			if opener.Content != "second instruction" || opener.Ord != 4 {
+				t.Fatal("source turn identity was treated as a transcript ordinal")
 			}
 		})
 	}

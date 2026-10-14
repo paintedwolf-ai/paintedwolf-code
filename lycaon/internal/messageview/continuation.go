@@ -6,6 +6,9 @@ const ContinuationFormat = 1
 // MaxCompactionRevisionLag bounds source validation before a projection is rebuilt.
 const MaxCompactionRevisionLag int64 = 4096
 
+// MaxCompactionRows bounds persisted projections independently of transcript length.
+const MaxCompactionRows = 4096
+
 // Continuation covers canonical observations independently of summary quality.
 type Continuation struct {
 	Level             string               `json:"level"`

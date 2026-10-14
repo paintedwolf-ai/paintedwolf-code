@@ -117,6 +117,9 @@ func (m *Service) ResolveRoots(projectDirs []string) (compaction.CompactionConfi
 		policySource, lookup, fallbackConfig = m.policy, m.windows, m.fallback
 		m.mu.RUnlock()
 	}
+	if policySource == nil {
+		return fallbackBudget(fallbackConfig)
+	}
 	var policy llm.ModelPolicy
 	if policySource != nil {
 		var err error

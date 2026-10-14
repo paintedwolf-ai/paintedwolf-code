@@ -56,7 +56,14 @@ func renderCompactionUserPrompt(ctx context.Context, info SessionInfo, rows []ma
 		}
 		prior = string(raw)
 	}
+	current := ""
+	if info.CurrentRequest != nil {
+		rows := ContextMessagesFromAPI([]api.Message{*info.CurrentRequest})
+		content, _, _, _ := projectCompactionMessage(rows[0])
+		current = content
+	}
 	data := map[string]any{
+		"current_request":    current,
 		"prior_continuation": prior,
 		"recent_messages":    rows,
 	}
@@ -121,16 +128,4 @@ func projectCompactionMessage(msg ContextMessage) (string, string, string, strin
 		}
 	}
 	return transcript.ProjectContentParts(canonical.Role, canonical.ContentParts), origin, authority, trustTier
-}
-
-// SliceMessages returns the last n messages.
-func SliceMessages(messages []ContextMessage, n int) []ContextMessage {
-	if n <= 0 || len(messages) <= n {
-		out := make([]ContextMessage, len(messages))
-		copy(out, messages)
-		return out
-	}
-	out := make([]ContextMessage, n)
-	copy(out, messages[len(messages)-n:])
-	return out
 }

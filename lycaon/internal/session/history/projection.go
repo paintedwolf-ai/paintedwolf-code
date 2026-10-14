@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -54,7 +55,7 @@ func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *a
 	}
 	m.Schedule(ctx, sess)
 	text, err := guidance.RenderGuidance(ctx, guidance.CompactionContinuationRecordRef, map[string]any{
-		"through_ord": firstTailOrd - 1, "reference_only": true,
+		"level": "references", "through_ord": firstTailOrd - 1, "reference_only": true,
 		"recall_available": m.recallAvailable != nil && m.recallAvailable(ctx, sess),
 	})
 	if err != nil {
@@ -94,6 +95,18 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 	if currentErr != nil || !current {
 		return history
 	}
+	continuationText := ""
+	if view.Continuation != nil {
+		record := messageview.CloneContinuation(view.Continuation)
+		record.Window = m.compactionConfig(ctx, sess).ModelContextWindow
+		record.Receiver = sess.Model
+		recall := m.recallAvailable != nil && m.recallAvailable(ctx, sess)
+		text, renderErr := compaction.RenderContinuation(ctx, record, recall)
+		if renderErr != nil {
+			return history
+		}
+		continuationText = text
+	}
 	byID := make(map[string]api.Message, len(history))
 	for _, msg := range history {
 		byID[msg.ID] = msg
@@ -103,6 +116,11 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 		if canonical, ok := byID[msg.ID]; ok {
 			// Canonical rows restore fields excluded from prompt projections.
 			msg = api.RehydrateTranscriptProjectionFields(msg, canonical)
+		}
+		if continuationText != "" && len(msg.ContentParts) == 1 && msg.ContentParts[0].Source == "compaction_summary" {
+			msg.Content = continuationText
+			msg.ContentParts = append([]api.MessageContentPart(nil), msg.ContentParts...)
+			msg.ContentParts[0].Content = continuationText
 		}
 		out = append(out, msg)
 	}
@@ -117,15 +135,15 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 
 // withCurrentRequest restores the active human opener when it predates the tail.
 func (m *Service) withCurrentRequest(ctx context.Context, sess *api.Session, tail []api.Message) ([]api.Message, error) {
-	if sess.CurrentTurn <= 0 || len(tail) == 0 || int64(sess.CurrentTurn) >= tail[0].Ord {
+	if sess.CurrentTurn <= 0 || len(tail) == 0 {
 		return tail, nil
 	}
-	rows, err := m.store.GetMessagesAfterOrd(ctx, sess.ID, int64(sess.CurrentTurn)-1, 1)
+	opener, err := m.store.GetUserTurnOpener(ctx, sess.ID, sess.CurrentTurn)
 	if err != nil {
 		return nil, err
 	}
-	if len(rows) == 0 || rows[0].Ord != int64(sess.CurrentTurn) {
+	if opener.ID == "" || opener.Ord >= tail[0].Ord {
 		return tail, nil
 	}
-	return append(rows, tail...), nil
+	return append([]api.Message{opener}, tail...), nil
 }

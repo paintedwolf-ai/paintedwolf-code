@@ -3,13 +3,13 @@ package compaction
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -45,6 +45,7 @@ func (s *scriptedCompactionSummarizer) Summarize(_ context.Context, _, userPromp
 func TestCompactionRetriesMalformedOutputWithSmallerPrompt(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	cfg := testCompactionConfig()
+	cfg.ChunkMaxPerPass = 2
 	cfg.SummaryInputTokens = 1024
 	cfg.SummaryRetryInputTokens = 512
 	cfg.SummaryMessageTokens = 64
@@ -57,12 +58,14 @@ func TestCompactionRetriesMalformedOutputWithSmallerPrompt(t *testing.T) {
 	messages := make([]ContextMessage, 0, 40)
 	for i := 0; i < 40; i++ {
 		messages = append(messages, ContextMessage{
-			Role: string(api.MessageRoleUser), Content: strings.Repeat("history ", 10),
+			ID: fmt.Sprintf("source-%d", i), Ord: int64(i + 1), Role: string(api.MessageRoleUser), Content: strings.Repeat("history ", 10),
 		})
 	}
 
-	got, err := compactor.summarizeSession(t.Context(), SessionInfo{ID: "s1"}, messages)
-	testutil.FailErr(t, "summarize with retry", err)
+	got, _, err := compactor.summarizePrefix(t.Context(), SessionInfo{ID: "s1"}, messages)
+	if err == nil {
+		t.Fatal("partial summary omitted its remaining source coverage")
+	}
 	if len(summary.prompts) != 2 {
 		t.Fatalf("attempts = %d want 2", len(summary.prompts))
 	}

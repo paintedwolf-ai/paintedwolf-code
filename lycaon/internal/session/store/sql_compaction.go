@@ -20,6 +20,9 @@ type compactionProjection struct {
 
 // PutCompactionView atomically publishes a fresh view and its next generation.
 func (s *SQL) PutCompactionView(ctx context.Context, sessionID string, view CompactionView) error {
+	if len(view.Messages) > messageview.MaxCompactionRows {
+		return fmt.Errorf("compaction projection exceeds its row budget")
+	}
 	viewJSON, err := json.Marshal(compactionProjection{Format: 1, Messages: view.Messages, Continuation: view.Continuation})
 	if err != nil {
 		return err

@@ -4,13 +4,11 @@ package compaction
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/curationctx"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/sourceref"
@@ -51,8 +49,8 @@ type SessionInfo struct {
 	Model                string
 	ProviderID           string
 	LatestUserRequestID  string
+	CurrentRequest       *api.Message
 	Attempts             messageview.CompactionAttemptStore
-	ProgressMarkdown     string
 	// RecallAvailable permits recall instructions in the continuation record.
 	RecallAvailable  bool
 	ChunkProjections messageview.ChunkProjectionStore
@@ -139,11 +137,11 @@ func compactionReplacement(info SessionInfo, out, tail []ContextMessage, structu
 	checkpoint := ContextMessage{
 		ID:                   uuid.NewString(),
 		Role:                 string(api.MessageRoleUser),
-		Content:              compactionCheckpointContent(info),
+		Content:              compactionCheckpointContent(),
 		Origin:               api.MessageOriginHost,
 		Authority:            api.ContentAuthorityNone,
 		TrustTier:            api.ContentTrustTierTrusted,
-		ContentParts:         compactionCheckpointParts(info),
+		ContentParts:         compactionCheckpointParts(),
 		CompactionCheckpoint: true,
 		HostSecretRedaction:  compactedHostSecretRedaction(out, tail),
 	}
@@ -199,34 +197,13 @@ func compactedHostSecretRedaction(all, tail []ContextMessage) *api.HostSecretRed
 	return api.NewHostSecretRedactionMeta(spans)
 }
 
-func compactionCheckpointContent(info SessionInfo) string {
-	var b strings.Builder
-	b.WriteString("Prior conversation compacted. Continuation context follows.")
-	if progress := strings.TrimSpace(info.ProgressMarkdown); progress != "" {
-		b.WriteString("\n\n## Current progress checklist\n")
-		b.WriteString(info.ProgressMarkdown)
-	}
-	return b.String()
+func compactionCheckpointContent() string {
+	return "Prior conversation compacted. Continuation context follows."
 }
 
-func compactionCheckpointParts(info SessionInfo) []api.MessageContentPart {
-	parts := []api.MessageContentPart{{
-		Content:   "Prior conversation compacted. Continuation context follows.",
-		Origin:    api.MessageOriginHost,
-		Authority: api.ContentAuthorityNone,
-		TrustTier: api.ContentTrustTierTrusted,
-		Source:    "compaction",
-	}}
-	if progress := strings.TrimSpace(info.ProgressMarkdown); progress != "" {
-		parts = append(parts, api.MessageContentPart{
-			Content:   progress,
-			Origin:    api.MessageOriginHost,
-			Authority: api.ContentAuthorityNone,
-			TrustTier: api.ContentTrustTierTrusted,
-			Source:    "progress",
-		})
-	}
-	return parts
+func compactionCheckpointParts() []api.MessageContentPart {
+	return []api.MessageContentPart{{Content: compactionCheckpointContent(), Origin: api.MessageOriginHost,
+		Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted, Source: "compaction"}}
 }
 
 func withCompactionSession(ctx context.Context, info SessionInfo) context.Context {
@@ -282,41 +259,6 @@ func (c *SimpleCompactor) CompactOversizedChunksOnly(ctx context.Context, info S
 	ctx = withCompactionSession(ctx, info)
 	out := append([]ContextMessage(nil), messages...)
 	return c.compactOversizedChunks(ctx, info, out, -1)
-}
-
-func (c *SimpleCompactor) summarizeSession(ctx context.Context, info SessionInfo, sliced []ContextMessage) (compactionSummary, error) {
-	if c.summary == nil {
-		return compactionSummary{}, fmt.Errorf("summarizer not configured")
-	}
-	systemPrompt, err := guidance.RenderCompactionSystemPrompt(ctx, guidance.CompactionSessionSummarySystemRef)
-	if err != nil {
-		return compactionSummary{}, err
-	}
-	budgets := []int{c.cfg.SummaryInputTokens, c.cfg.SummaryRetryInputTokens}
-	var lastErr error
-	for attempt, inputTokens := range budgets {
-		input, buildErr := BuildCompactionInput(ctx, info, sliced, inputTokens, c.cfg.SummaryMessageTokens)
-		if buildErr != nil {
-			return compactionSummary{}, buildErr
-		}
-		raw, summarizeErr := c.summary.Summarize(
-			WithSummaryFormat(ctx), systemPrompt, input.Text, c.cfg.SummaryOutputTokens)
-		if summarizeErr != nil {
-			lastErr = summarizeErr
-			if attempt == 0 && retryCompactionProviderError(summarizeErr) {
-				continue
-			}
-			return compactionSummary{}, summarizeErr
-		}
-		structured, parseErr := parseCompactionSummary(raw)
-		if parseErr != nil {
-			lastErr = parseErr
-			continue
-		}
-		structured.SourceContext = sourceref.ForResponse(input.Messages, raw)
-		return structured, nil
-	}
-	return compactionSummary{}, lastErr
 }
 
 func retryCompactionProviderError(err error) bool {

@@ -578,6 +578,9 @@ func (s *Memory) AppendMessages(ctx context.Context, id string, msgs ...api.Mess
 
 // PutCompactionView atomically publishes a fresh view and its next generation.
 func (s *Memory) PutCompactionView(ctx context.Context, sessionID string, view CompactionView) error {
+	if len(view.Messages) > messageview.MaxCompactionRows {
+		return fmt.Errorf("compaction projection exceeds its row budget")
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}

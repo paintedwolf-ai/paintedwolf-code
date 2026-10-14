@@ -43,7 +43,7 @@ func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, 
 	record := continuationFor(info, prefix, summary, sources, summaryErr)
 	record.Window = c.cfg.ModelContextWindow
 	c.rankContinuation(ctx, info, record)
-	text, err := renderCoveredContinuation(ctx, record, info.RecallAvailable)
+	text, err := RenderContinuation(ctx, record, info.RecallAvailable)
 	if err != nil {
 		return nil, nil, "failed", false, err
 	}
@@ -121,7 +121,8 @@ func isContinuationSummary(row ContextMessage) bool {
 	return len(row.ContentParts) == 1 && row.ContentParts[0].Source == "compaction_summary"
 }
 
-func renderCoveredContinuation(ctx context.Context, record *messageview.Continuation, recall bool) (string, error) {
+// RenderContinuation selects one receiver-sized representation of accepted observations.
+func RenderContinuation(ctx context.Context, record *messageview.Continuation, recall bool) (string, error) {
 	budget := min(4096, max(192, record.Window/8))
 	for _, level := range []string{"detailed", "compact", "references"} {
 		if level == "detailed" && record.Window > 0 && record.Window < 16384 {

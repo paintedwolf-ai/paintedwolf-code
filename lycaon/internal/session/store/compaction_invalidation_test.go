@@ -34,6 +34,9 @@ func TestCompactionRevisionLagRebuildsWithoutChangingHistory(t *testing.T) {
 			}
 			sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
+			if err := st.PutCompactionView(t.Context(), sess.ID, CompactionView{Generation: 1, Messages: make([]api.Message, messageview.MaxCompactionRows+1)}); err == nil {
+				t.Fatal("published an unbounded projection")
+			}
 			testutil.FailErr(t, "append boundary", st.AppendMessages(t.Context(), sess.ID, api.Message{ID: "boundary", Role: api.MessageRoleAssistant, Content: "recorded"}))
 			rows, err := st.GetMessages(t.Context(), sess.ID)
 			testutil.FailErr(t, "read boundary", err)

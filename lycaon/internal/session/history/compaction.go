@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/promptassembly"
 	"github.com/lycaon/lycaon/internal/session/store"
-	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -266,19 +265,6 @@ func (m *Service) forceCompact(ctx context.Context, sessionID string) (compactio
 	return report, nil
 }
 
-func messageWatermarks(messages []api.Message) (coveredThroughOrd int64, coveredThroughID string, sourceSeq int64) {
-	for _, msg := range messages {
-		if msg.Ord > coveredThroughOrd {
-			coveredThroughOrd = msg.Ord
-			coveredThroughID = msg.ID
-		}
-		if msg.Seq > sourceSeq {
-			sourceSeq = msg.Seq
-		}
-	}
-	return coveredThroughOrd, coveredThroughID, sourceSeq
-}
-
 func (m *Service) sessionInfo(ctx context.Context, sess *api.Session, originals []api.Message) compaction.SessionInfo {
 	projectDir, _ := m.Workspace.ActivePath(ctx, sess)
 	info := compaction.SessionInfo{
@@ -305,14 +291,9 @@ func (m *Service) sessionInfo(ctx context.Context, sess *api.Session, originals 
 		}
 	}
 	if boundary := api.UserIntentBoundary(originals); boundary > 0 {
-		info.LatestUserRequestID = originals[boundary-1].ID //nolint:gosec // UserIntentBoundary returns zero or an index within originals.
-	}
-	if m.progress != nil {
-		rootID := sess.ID
-		if sess.IsWorkerChild() {
-			rootID = sessiontree.RootID(ctx, m.store, sess.ID)
-		}
-		info.ProgressMarkdown = m.progress.Get(ctx, rootID)
+		request := originals[boundary-1] //nolint:gosec // UserIntentBoundary returns an index within originals.
+		info.CurrentRequest = &request
+		info.LatestUserRequestID = request.ID
 	}
 	return info
 }

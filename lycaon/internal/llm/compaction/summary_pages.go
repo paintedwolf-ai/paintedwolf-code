@@ -66,6 +66,9 @@ func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo,
 			if ctx.Err() != nil {
 				return summary, sources, ctx.Err()
 			}
+			if callErr != nil && !retryCompactionProviderError(callErr) {
+				return summary, sources, callErr
+			}
 			var next compactionSummary
 			if callErr == nil {
 				next, callErr = parseCompactionSummary(raw)

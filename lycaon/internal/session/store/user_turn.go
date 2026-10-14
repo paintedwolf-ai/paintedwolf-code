@@ -74,3 +74,34 @@ func (s *Memory) UserIntentBefore(ctx context.Context, sessionID string, before 
 	}
 	return before, nil
 }
+
+// GetUserTurnOpener resolves a source-turn identity to its canonical message.
+func (s *SQL) GetUserTurnOpener(ctx context.Context, sessionID string, turn int) (api.Message, error) {
+	id, err := s.queries.GetUserTurnOpeningMessageID(ctx, db.GetUserTurnOpeningMessageIDParams{SessionID: sessionID, Turn: int64(turn)})
+	if db.IsNoRows(err) {
+		return api.Message{}, nil
+	}
+	if err != nil {
+		return api.Message{}, err
+	}
+	return s.GetMessage(ctx, sessionID, id)
+}
+
+func (s *Memory) GetUserTurnOpener(ctx context.Context, sessionID string, turn int) (api.Message, error) {
+	if err := ctx.Err(); err != nil {
+		return api.Message{}, err
+	}
+	s.mu.RLock()
+	id := ""
+	for candidate, ordinal := range s.userTurns[sessionID] {
+		if ordinal == turn {
+			id = candidate
+			break
+		}
+	}
+	s.mu.RUnlock()
+	if id == "" {
+		return api.Message{}, nil
+	}
+	return s.GetMessage(ctx, sessionID, id)
+}

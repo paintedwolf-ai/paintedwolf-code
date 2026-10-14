@@ -411,20 +411,6 @@ func TestSummaryFailurePublishesRecoverableReferences(t *testing.T) {
 	}
 }
 
-func TestMessageSlice(t *testing.T) {
-	msgs := make([]ContextMessage, 200)
-	for i := range msgs {
-		msgs[i] = ContextMessage{ID: "m", Content: "x"}
-	}
-	sliced := SliceMessages(msgs, 80)
-	if len(sliced) != 80 {
-		t.Fatalf("slice len = %d, want 80", len(sliced))
-	}
-	if sliced[0].ID != msgs[120].ID {
-		t.Fatal("expected last 80 messages")
-	}
-}
-
 var _ ContextCompactor = NewSimpleCompactor(DefaultCompactionConfig(), MockSummarizer{})
 
 type failSessionSummarizer struct{}
@@ -478,12 +464,11 @@ func TestDeterministicFitPreservesCheckpoint(t *testing.T) {
 	}
 }
 
-func TestCompactionCheckpointCarriesHostProgressOnly(t *testing.T) {
+func TestCompactionCheckpointKeepsCurrentRequestCanonical(t *testing.T) {
 	info := SessionInfo{
 		LatestUserRequestID: "request-1",
-		ProgressMarkdown:    "## Progress\n- [x] inspect\n- [ ] report",
 	}
-	got := compactionCheckpointContent(info)
+	got := compactionCheckpointContent()
 	if strings.Contains(got, "## Current user request") {
 		t.Fatalf("checkpoint duplicated the pinned user request: %q", got)
 	}
@@ -493,11 +478,8 @@ func TestCompactionCheckpointCarriesHostProgressOnly(t *testing.T) {
 	if len(compacted) != 1 || !compacted[0].ContextPinned || compacted[0].Content != messages[0].Content || messages[0].ContextPinned {
 		t.Fatalf("request pin changed transcript content or input: %+v / %+v", compacted, messages)
 	}
-	if !strings.Contains(got, "## Current progress checklist\n## Progress\n- [x] inspect\n- [ ] report") {
-		t.Fatalf("checkpoint missing progress: %q", got)
-	}
-	parts := compactionCheckpointParts(info)
-	if len(parts) != 2 || parts[0].Authority != api.ContentAuthorityNone || parts[1].Authority != api.ContentAuthorityNone {
+	parts := compactionCheckpointParts()
+	if len(parts) != 1 || parts[0].Authority != api.ContentAuthorityNone {
 		t.Fatalf("checkpoint parts = %+v", parts)
 	}
 }

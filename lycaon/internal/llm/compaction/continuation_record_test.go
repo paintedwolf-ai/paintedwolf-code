@@ -38,10 +38,9 @@ func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 		"### Completed",
 		"### Pending",
 		"### Reacquire before relying on compacted details",
-		`recall(query="handle:<handle>")`,
 		"- config.toml (read#4) before editing the registry block",
 		"- `read#4` (read)",
-		"- command result, message `t2` — no handle; re-run it",
+		"- command result, message `t2`",
 		"### Constraints",
 		"- no pushes",
 	} {
@@ -55,7 +54,7 @@ func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 	if strings.Contains(withoutRecall, "recall") {
 		t.Fatalf("a profile without recall must not be told to call it:\n%s", withoutRecall)
 	}
-	if !strings.Contains(withoutRecall, "Re-run or re-read each source below") || !strings.Contains(withoutRecall, "- `read#4` (read)") {
+	if !strings.Contains(withoutRecall, "Reacquire the needed evidence through available read tools") || !strings.Contains(withoutRecall, "- `read#4` (read)") {
 		t.Fatalf("continuation record without recall must still list the sources:\n%s", withoutRecall)
 	}
 }
@@ -63,6 +62,7 @@ func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 func TestSessionCompactionRecordCarriesRemovedHandles(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	cfg := testCompactionConfig()
+	cfg.ModelContextWindow = 32768
 	cfg.KeepRecentMessages = 1
 	cfg.ChunkTokenThreshold = 1_000_000
 	msgs := []ContextMessage{
@@ -71,6 +71,9 @@ func TestSessionCompactionRecordCarriesRemovedHandles(t *testing.T) {
 		{ID: "t1", Role: string(api.MessageRoleTool), ToolName: "read", Content: "registry = local", EvidenceHandles: []string{"read#7"}},
 		{ID: "a2", Role: string(api.MessageRoleAssistant), Content: strings.Repeat("anchored output\n", 3000)},
 		{ID: "u2", Role: string(api.MessageRoleUser), Content: "continue"},
+	}
+	for i := range msgs {
+		msgs[i].Ord = int64(i + 1)
 	}
 	c := NewSimpleCompactor(cfg, MockSummarizer{Text: "compacted context"})
 	out, report, err := c.Compact(context.Background(), SessionInfo{ID: "s1", RecallAvailable: true}, msgs, 100)
@@ -87,7 +90,7 @@ func TestSessionCompactionRecordCarriesRemovedHandles(t *testing.T) {
 	if record == "" {
 		t.Fatalf("no compaction summary row in %d messages", len(out))
 	}
-	if !strings.Contains(record, "`read#7` (read)") || !strings.Contains(record, `recall(query="handle:<handle>")`) {
+	if !strings.Contains(record, "`read#7` (read)") || !strings.Contains(record, `recall(history=`) {
 		t.Fatalf("record must name the removed row's handle and the way back to it:\n%s", record)
 	}
 }
@@ -206,7 +209,7 @@ func TestContinuationRepresentationScalesWithReceiver(t *testing.T) {
 		for range 5 {
 			record.Summary.Pending = append(record.Summary.Pending, strings.Repeat("pending ", 18))
 		}
-		text, err := renderCoveredContinuation(t.Context(), record, true)
+		text, err := RenderContinuation(t.Context(), record, true)
 		testutil.FailErr(t, "render receiver representation", err)
 		if record.Level != tc.level {
 			t.Fatalf("window %d selected %s, want %s", tc.window, record.Level, tc.level)
