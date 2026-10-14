@@ -17,6 +17,9 @@ func (p *Provider) RequestBudget(ctx context.Context, req modelcall.CompletionRe
 	req.Messages = providerwire.PrepareMessagesForVision(req.Messages, vision, req.Debug.SessionID)
 	messages := ProjectMessages(req.Messages, MessageProjection{Vision: vision, SessionID: req.Debug.SessionID, ProviderID: p.id, Model: model})
 	_, output := p.resolveControls(req, model)
+	if output <= 0 {
+		output = ollamaDefaultCompletionReserve
+	}
 	return modelcall.RequestBudget{
 		Window: p.ContextLimit(ctx, model),
 		Input:  p.projectPromptTokens(model, estimatePromptTokens(messages, ollamaCallableTools(req))),

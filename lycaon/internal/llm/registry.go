@@ -265,3 +265,21 @@ func (r *Registry) StreamWithSelection(ctx context.Context, sel *ModelSelection,
 }
 
 var _ modelcall.ProviderRegistry = (*Registry)(nil)
+
+func (r *Registry) RequestBudget(ctx context.Context, providerID string, req modelcall.CompletionRequest) modelcall.RequestBudget {
+	req.Messages = transcript.Project(req.Messages)
+	budget := modelcall.RequestBudget{Input: modelcall.EstimateRequestInput(req), Output: modelcall.CompletionTokenLimit(req, 0, modelcall.OrchestrationMaxTokens, req.Think, false), Headroom: 1024}
+	if r == nil {
+		return budget
+	}
+	// Planning reads the adapter without dispatch middleware.
+	if snapshot := r.snapshot.Load(); snapshot != nil {
+		if reporter, ok := snapshot.providers[providerID].(modelcall.RequestBudgetReporter); ok {
+			budget = reporter.RequestBudget(ctx, req)
+		}
+	}
+	if budget.Window <= 0 {
+		budget.Window = r.ContextLength(providerID, req.Model)
+	}
+	return budget
+}

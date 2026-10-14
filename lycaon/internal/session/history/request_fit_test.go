@@ -121,3 +121,37 @@ func TestRequestFittingKeepsUnchangedHistoryCacheBoundary(t *testing.T) {
 		t.Fatal("an admitted frame changed its cache boundary or history")
 	}
 }
+
+func TestRequestFittingUsesRemainingOutputAfterHistoryIsMinimal(t *testing.T) {
+	provider := ollama.New("local", "http://unused.invalid", "", []modelinfo.Entry{{ID: "small", ContextLength: 16384, MaxTokens: 24576}})
+	current := api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Continue"}
+	req := modelcall.CompletionRequest{Model: "small", Messages: []api.Message{{ID: "standing", Role: api.MessageRoleSystem}, current}}
+	low, high := 1, 70000
+	for low < high {
+		mid := (low + high) / 2
+		req.Messages[0].Content = strings.Repeat("a", mid)
+		budget := provider.RequestBudget(t.Context(), req)
+		available := budget.Window - budget.Headroom - budget.Input
+		if available >= 256 {
+			low = mid + 1
+			continue
+		}
+		high = mid
+	}
+	req.Messages[0].Content = strings.Repeat("a", low)
+	budget := provider.RequestBudget(t.Context(), req)
+	available := budget.Window - budget.Headroom - budget.Input
+	if available < 128 {
+		t.Fatalf("fixture skipped usable output allocation: %d", available)
+	}
+	history := &Service{}
+	fitted, err := history.FitRequest(t.Context(), &api.Session{ID: "session", ProviderID: "local", Model: "small"}, []api.Message{current}, req, nativeRequestBudgets{provider})
+	testutil.FailErr(t, "fit minimal history", err)
+	if fitted.MaxTokens != available || !reflect.DeepEqual(req.Messages, fitted.Messages) {
+		t.Fatalf("minimal history fit changed input or output allocation: %d, want %d", fitted.MaxTokens, available)
+	}
+	req.MaxTokens = 512
+	if _, err := history.FitRequest(t.Context(), &api.Session{ID: "session", ProviderID: "local", Model: "small"}, []api.Message{current}, req, nativeRequestBudgets{provider}); !errors.Is(err, failure.ErrProviderContextTooSmall) {
+		t.Fatalf("explicit output allocation must remain required: %v", err)
+	}
+}

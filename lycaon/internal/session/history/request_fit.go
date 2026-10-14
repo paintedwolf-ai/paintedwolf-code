@@ -71,6 +71,11 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 			return candidate, nil
 		}
 		if capacity <= 1 {
+			available := budget.Window - budget.Headroom - budget.Input
+			if req.MaxTokens <= 0 && available >= 128 {
+				candidate.MaxTokens = available
+				return candidate, nil
+			}
 			break
 		}
 		capacity = max(1, min(capacity-1, capacity*3/4))
