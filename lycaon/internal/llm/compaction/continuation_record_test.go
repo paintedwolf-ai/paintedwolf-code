@@ -71,6 +71,21 @@ func TestContinuationExplicitQuotaKeepsCanonicalRecovery(t *testing.T) {
 	if len(record.Summary.Facts) != 1 {
 		t.Fatal("presentation quota changed retained summary data")
 	}
+	record.Sources = []messageview.ContinuationSource{
+		{MessageID: "original-call", Tool: "read"},
+		{MessageID: "original-result", Tool: "read", Handles: []string{"read#1"}},
+		{MessageID: "later-acknowledgment"},
+	}
+	text, err = RenderContinuation(t.Context(), record, true, 192)
+	testutil.FailErr(t, "render useful recovery addresses", err)
+	for _, want := range []string{"original-call", "original-result", "read#1", `format="record"`} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("references lost %s: %s", want, text)
+		}
+	}
+	if strings.Contains(text, "later-acknowledgment") {
+		t.Fatal("recovery addresses displaced evidence with a later acknowledgment")
+	}
 }
 
 func TestSessionCompactionRecordCarriesRemovedHandles(t *testing.T) {

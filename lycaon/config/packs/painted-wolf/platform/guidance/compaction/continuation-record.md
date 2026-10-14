@@ -1,5 +1,7 @@
 {% if level == "references" %}[host:compacted history through ordinal {{ through_ord }}]
-{% if recall_available %}Recover recorded details with `recall(history={"after_ord":0,"through_ord":{{ through_ord }}})`. Use `search` to find recorded instructions or observations, `message_id` for a body, and `next_offset` for further pages.{% else %}Reacquire omitted observations before relying on them.{% endif %}
+{% if recall_available %}Recover recorded details with `recall(history={"after_ord":0,"through_ord":{{ through_ord }}})`. Use `search` for an index, `message_id` for a body, `format="record"` for original tool arguments, and `next_offset` for further pages.{% else %}Reacquire omitted observations before relying on them.{% endif %}
+{% for s in compacted_sources %}{% if s.handles %}{% for h in s.handles %}`{{ h }}` {% endfor %}{% elif s.tool %}{{ s.tool }} {% endif %}message_id `{{ s.message_id }}`
+{% endfor %}
 {% else %}## Compacted continuation record
 {% if summary_through_ord %}Latest summarized observation: ordinal {{ summary_through_ord }}. This is a selective summary.{% if summary_through_ord < through_ord %} Newer covered observations remain references.{% endif %}
 {% endif %}

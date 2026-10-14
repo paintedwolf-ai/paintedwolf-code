@@ -153,9 +153,18 @@ func RenderContinuation(ctx context.Context, record *messageview.Continuation, r
 		for _, source := range record.Sources[max(0, len(record.Sources)-limit):] {
 			sources = append(sources, CompactedSource{Handles: source.Handles[:min(4, len(source.Handles))], Tool: source.Tool, MessageID: source.MessageID})
 		}
+		if level == "references" {
+			sources = recoverySources(record.Sources)
+		}
 		text, err := renderContinuationRecord(ctx, summary, sources, recall)
 		if err != nil {
 			return "", err
+		}
+		if level == "references" && len(sources) > 0 && tokenest.EstimateDefault(text) > budget {
+			text, err = renderContinuationRecord(ctx, summary, nil, recall)
+			if err != nil {
+				return "", err
+			}
 		}
 		if tokenest.EstimateDefault(text) <= budget || level == "references" {
 			record.Level = level
@@ -163,4 +172,23 @@ func RenderContinuation(ctx context.Context, record *messageview.Continuation, r
 		}
 	}
 	panic("unreachable continuation level")
+}
+
+// recoverySources keeps a bounded set of evidence and original-call addresses.
+func recoverySources(rows []messageview.ContinuationSource) []CompactedSource {
+	var out []CompactedSource
+	seen := make(map[string]bool)
+	for _, handles := range []bool{true, false} {
+		for _, row := range rows {
+			if seen[row.MessageID] || row.MessageID == "" || (len(row.Handles) > 0) != handles || !handles && row.Tool == "" {
+				continue
+			}
+			seen[row.MessageID] = true
+			out = append(out, CompactedSource{Handles: row.Handles[:min(2, len(row.Handles))], Tool: row.Tool, MessageID: row.MessageID})
+			if len(out) == 2 {
+				return out
+			}
+		}
+	}
+	return out
 }
