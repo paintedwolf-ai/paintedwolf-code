@@ -151,9 +151,11 @@ export interface paths {
          *     tail), or from=oldest for the first page. Pass a page's before_cursor as
          *     before for the older window, or its after_cursor as after for the newer
          *     one; before_message_id and after_message_id open the window beside a
-         *     message the client already holds. A request names at most one of these
-         *     positions. worker_id restricts a reused child session to one immutable
-         *     worker run before pagination is applied.
+         *     message the client already holds; before_ord and after_ord open it
+         *     beside an ordinal the client computed from the transcript's ord_bounds,
+         *     so a reader can land anywhere in unloaded history. A request names at
+         *     most one of these positions. worker_id restricts a reused child session
+         *     to one immutable worker run before pagination is applied.
          */
         get: operations["listSessionMessages"];
         put?: never;
@@ -10803,6 +10805,13 @@ export interface components {
             /** Format: double */
             score: number;
         };
+        /** @description Oldest and newest message ordinals a transcript holds at read time */
+        TranscriptOrdBounds: {
+            /** Format: int64 */
+            first_ord: number;
+            /** Format: int64 */
+            last_ord: number;
+        };
         SessionTranscriptPage: {
             /** @description One contiguous Ord window in ascending order (default = newest page / live tail) */
             messages: components["schemas"]["Message"][];
@@ -10823,6 +10832,8 @@ export interface components {
             before_cursor?: string;
             /** @description Opaque pagination cursor to fetch the next (newer) window of messages. Omitted when no newer messages exist. */
             after_cursor?: string;
+            /** @description Ord span of the whole transcript this window belongs to (the chat, or one worker run when worker_id was given), read in the same transaction as the rows. Den sizes unloaded history from it so the scroll range covers the whole conversation before every page is resident. Omitted while the transcript has no rows. */
+            ord_bounds?: components["schemas"]["TranscriptOrdBounds"];
         };
         WorkflowRequestState: {
             /** @enum {string} */
@@ -17073,6 +17084,10 @@ export interface operations {
                 before_message_id?: string;
                 /** @description Return the window of messages newer than this message of the chat */
                 after_message_id?: string;
+                /** @description Return the window of messages whose ord is below this ordinal */
+                before_ord?: number;
+                /** @description Return the window of messages whose ord is above this ordinal; 0 is the transcript start */
+                after_ord?: number;
                 /** @description Which end of the transcript an unpositioned window starts from */
                 from?: "newest" | "oldest";
                 /** @description Restrict messages to the associated worker run */
@@ -29807,6 +29822,7 @@ export type NavigationReference = components["schemas"]["NavigationReference"];
 export type MessageVisibility = components["schemas"]["MessageVisibility"];
 export type PromptCacheTier = components["schemas"]["PromptCacheTier"];
 export type TurnLoadSkill = components["schemas"]["TurnLoadSkill"];
+export type TranscriptOrdBounds = components["schemas"]["TranscriptOrdBounds"];
 export type SessionTranscriptPage = components["schemas"]["SessionTranscriptPage"];
 export type WorkflowRequestState = components["schemas"]["WorkflowRequestState"];
 export type CoordinatorBatchPhase = components["schemas"]["CoordinatorBatchPhase"];

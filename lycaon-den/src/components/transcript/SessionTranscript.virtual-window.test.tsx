@@ -11,6 +11,7 @@ import { SessionTranscript } from "./transcript-viewport-test-harness.tsx";
 import { transcriptScrollHostElement } from "./SessionTranscript.tsx";
 import type { RawTranscriptItem } from "../../chat/transcript/projection/transcript-item-model.ts";
 import type { Message } from "../../api/types.ts";
+import { finalizeTranscriptItems, messagesToTranscriptItems } from "../../chat/transcript/projection/transcript-items.ts";
 import {
   clearTranscriptEntryMemory,
   hasTranscriptEntryMemory,
@@ -21,6 +22,7 @@ import { requireScrollportMotionForViewport } from "../../platform/scrolling/scr
 import {
   clearTranscriptRowHeightsForTests,
   seedTranscriptRowHeightsForTests as seedHeights,
+  transcriptRowContentRevision,
   transcriptRowHeightForScope as readHeight,
 } from "../../chat/transcript/layout/transcript-row-heights-persist.ts";
 
@@ -37,12 +39,25 @@ function heightKey(presentation: string): string {
     uiFont: fontSelection("ui"), monoFont: fontSelection("mono"), scale: effectiveTextScale(), revision: transcriptLayoutRevision(),
   })}:${presentation}`;
 }
-function seedTranscriptRowHeightsForTests(scope: Parameters<typeof seedHeights>[0], rows: Parameters<typeof seedHeights>[1]): void {
-  seedHeights(scope, Object.fromEntries(Object.entries(rows).map(([key, presentations]) => [key,
-    Object.fromEntries(Object.entries(presentations).map(([presentation, value]) => [heightKey(presentation), value]))])));
+/** Content revisions of the rows the transcript projects from these messages. */
+function revisionsOf(messages: readonly Message[]): Record<string, string> {
+  const items = finalizeTranscriptItems(messagesToTranscriptItems(messages, { layout: "chat" }), { layout: "chat" });
+  return Object.fromEntries(items.map((item) => [item.key, transcriptRowContentRevision(item)]));
 }
+function seedTranscriptRowHeightsForTests(
+  scope: Parameters<typeof seedHeights>[0],
+  revisions: Record<string, string>,
+  rows: Record<string, Record<string, number>>,
+): void {
+  seedHeights(scope, Object.fromEntries(Object.entries(rows).map(([key, presentations]) => [key, {
+    revision: revisions[key] ?? "",
+    heights: Object.fromEntries(Object.entries(presentations).map(([presentation, value]) => [heightKey(presentation), value])),
+  }])));
+}
+/** The remembered height for a rendered row, under the revision it renders. */
 function transcriptRowHeightForScope(scope: Parameters<typeof readHeight>[0], key: string, presentation: string): number | undefined {
-  return readHeight(scope, key, heightKey(presentation));
+  const row = [...document.querySelectorAll<HTMLElement>(".transcript-viewport-row")].find((element) => element.dataset.msgId === key);
+  return readHeight(scope, { itemKey: key, revision: row?.dataset.rowRevision ?? "", variant: heightKey(presentation) });
 }
 
 function mockTranscriptRowHeight(
@@ -265,7 +280,11 @@ describe("SessionTranscript virtual window", () => {
     geometry.width = 700;
     clearTranscriptRowHeightsForTests();
     const scope = { projectId: "p-reload", sessionId: "s-reload" };
-    seedTranscriptRowHeightsForTests(scope, {
+    const messages: Message[] = [
+      { id: "visual", role: "user", origin: "user" as const, authority: "user" as const, trust_tier: "trusted" as const, content: "visual", created_at: "t", ord: 1 },
+      { id: "summary", role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const, content: "summary", created_at: "t", ord: 2 },
+    ];
+    seedTranscriptRowHeightsForTests(scope, revisionsOf(messages), {
       visual: { collapsed: 353 },
       summary: { collapsed: 240 },
     });
@@ -274,10 +293,7 @@ describe("SessionTranscript virtual window", () => {
         layout="chat"
         projectId={scope.projectId}
         sessionId={scope.sessionId}
-        messages={[
-          { id: "visual", role: "user", origin: "user" as const, authority: "user" as const, trust_tier: "trusted" as const, content: "visual", created_at: "t", ord: 1 },
-          { id: "summary", role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const, content: "summary", created_at: "t", ord: 2 },
-        ]}
+        messages={messages}
       />
     ));
     const rows = [
@@ -441,9 +457,12 @@ describe("SessionTranscript virtual window", () => {
       { kind: "progress_complete", key: `progress-${turn}`, steps: [] },
       { kind: "assistant", key: `assistant-${turn}`, text: `Completed request ${turn}` },
     ];
-    seedTranscriptRowHeightsForTests(scope, Object.fromEntries(
-      Array.from({ length: 12 }, (_, turn) => [`progress-${turn}`, { collapsed: 2800 }]),
-    ));
+    const progressKeys = Array.from({ length: 12 }, (_, turn) => `progress-${turn}`);
+    seedTranscriptRowHeightsForTests(
+      scope,
+      Object.fromEntries(progressKeys.map((key) => [key, transcriptRowContentRevision({ kind: "progress_complete", key, steps: [] })])),
+      Object.fromEntries(progressKeys.map((key) => [key, { collapsed: 2800 }])),
+    );
     const [items, setItems] = createSignal<RawTranscriptItem[]>([]);
     try {
       const { container } = render(() => (
@@ -745,7 +764,17 @@ describe("SessionTranscript virtual window", () => {
   it("replaces a stale persisted hint once and yields to the event loop", async () => {
     clearTranscriptRowHeightsForTests();
     const scope = { projectId: "p-shrink", sessionId: "s-shrink" };
-    seedTranscriptRowHeightsForTests(scope, {
+    const messages: Message[] = [{
+      id: "summary",
+      role: "assistant",
+      origin: "model",
+      authority: "none",
+      trust_tier: "trusted",
+      content: "plan summary",
+      created_at: "t",
+      ord: 1,
+    }];
+    seedTranscriptRowHeightsForTests(scope, revisionsOf(messages), {
       summary: { collapsed: 800 },
     });
     let heightReads = 0;
@@ -759,18 +788,7 @@ describe("SessionTranscript virtual window", () => {
           layout="chat"
           projectId={scope.projectId}
           sessionId={scope.sessionId}
-          messages={[
-            {
-              id: "summary",
-              role: "assistant",
-              origin: "model",
-              authority: "none",
-              trust_tier: "trusted",
-              content: "plan summary",
-              created_at: "t",
-              ord: 1,
-            },
-          ]}
+          messages={messages}
         />
       ));
       await Promise.resolve();

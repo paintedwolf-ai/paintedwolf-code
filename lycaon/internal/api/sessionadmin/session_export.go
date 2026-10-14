@@ -87,6 +87,7 @@ func (s *Transcript) loadFullTranscriptPage(ctx context.Context, id string) (wir
 		TurnClocks: page.TurnClocks,
 		TurnLoads:  page.TurnLoads,
 		Watermark:  page.Watermark,
+		OrdBounds:  page.OrdBounds,
 	}
 	for page.BeforeCursor != "" {
 		pos, err := store.MessagePages.Decode(page.BeforeCursor, pagecursor.Scope(id))

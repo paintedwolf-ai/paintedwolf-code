@@ -415,12 +415,16 @@ export type CachedProject = {
   created_at: string;
 };
 
-/** Last observed row sizes used only as reload estimates. */
+/**
+ * Last observed row sizes used only as reload estimates. Each row records the content revision
+ * it measured and one height per layout variant. A rebuildable cache: rows in another shape are
+ * dropped on read.
+ */
 export type TranscriptRowHeightsSession = {
   projectId: string;
   sessionId: string;
   touchedAt: number;
-  rows: Record<string, Record<string, number>>;
+  rows: Record<string, { revision: string; heights: Record<string, number> }>;
 };
 
 export type DenFilesHotExitBuffer = {
@@ -586,4 +590,7 @@ export const NAV_WIDTH_MAX_PX = 480;
 export const RECENTS_CAP = 20;
 export const CACHED_PROJECTS_CAP = 24;
 export const TRANSCRIPT_ROW_HEIGHTS_SESSION_CAP = 8;
-export const TRANSCRIPT_ROW_HEIGHTS_PER_SESSION_CAP = 800;
+/** Rows remembered per session; a long chat's whole transcript fits so scrollback never cold-starts. */
+export const TRANSCRIPT_ROW_HEIGHTS_PER_SESSION_CAP = 1_500;
+/** Layout variants (width, fonts, disclosure) remembered per row; a resize cycles variants, never rows. */
+export const TRANSCRIPT_ROW_HEIGHT_VARIANT_CAP = 4;

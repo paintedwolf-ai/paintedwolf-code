@@ -6197,6 +6197,8 @@ type SessionTranscriptPage struct {
 	BeforeCursor string `json:"before_cursor,omitempty"`
 	// Opaque pagination cursor to fetch the next (newer) window of messages. Omitted when no newer messages exist.
 	AfterCursor string `json:"after_cursor,omitempty"`
+	// Ord span of the whole transcript this window belongs to (the chat, or one worker run when worker_id was given), read in the same transaction as the rows. Den sizes unloaded history from it so the scroll range covers the whole conversation before every page is resident. Omitted while the transcript has no rows.
+	OrdBounds *TranscriptOrdBounds `json:"ord_bounds,omitempty"`
 }
 
 // SessionUiState
@@ -7971,6 +7973,12 @@ type ToolResult struct {
 	Process *ToolProcessHandle `json:"process,omitempty"`
 	// Set when submit_verdict recorded a review_loop verdict. The card renders these stated facts, never the result prose.
 	Verdict *VerdictOutcome `json:"verdict,omitempty"`
+}
+
+// TranscriptOrdBounds Oldest and newest message ordinals a transcript holds at read time
+type TranscriptOrdBounds struct {
+	FirstOrd int64 `json:"first_ord"`
+	LastOrd  int64 `json:"last_ord"`
 }
 
 // TrustFileChange
