@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -55,6 +56,17 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 			if len(tasks) != 5 {
 				t.Fatalf("workers=%d, want five", len(tasks))
 			}
+			for _, task := range tasks {
+				if task.AgentType != "security-reviewer" || task.EffectiveScope().Mode != api.TaskScopeModeRead {
+					t.Fatalf("planned identity = %+v", task)
+				}
+			}
+			changed := tasks[0]
+			changed.ID, changed.SourceToolCallID, changed.AgentType = uuid.NewString(), uuid.NewString(), "implementer"
+			reject := toolrejection.AsToolReject(h.Delegations.Queue.PrepareEnqueue(ctx, sess.ProjectID, &changed))
+			if reject == nil || reject.Data["reason"] != "planned_agent_mismatch" {
+				t.Fatalf("queue accepted changed planned agent: %v", reject)
+			}
 			for range tasks {
 				task, err := h.Delegations.Queue.ClaimNext(ctx, worker.ClaimRequest{ProjectID: sess.ProjectID, ClaimedBy: "fixture", ExecutionTarget: api.ExecutionTargetLocal})
 				testutil.FailErr(t, "claim worker", err)
@@ -88,6 +100,12 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 				t.Cleanup(stop)
 			}
 			waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "claims")
+			stale := tasks[0]
+			stale.ID, stale.SourceToolCallID = uuid.NewString(), uuid.NewString()
+			reject = toolrejection.AsToolReject(h.Delegations.Queue.PrepareEnqueue(ctx, sess.ProjectID, &stale))
+			if reject == nil || reject.Data["reason"] != "workflow_phase_changed" {
+				t.Fatalf("queue accepted stale workflow phase: %v", reject)
+			}
 			testutil.WaitFor(t, 5*time.Second, func() bool {
 				pending, err := h.Delegations.Queue.ListPendingOutcomes(ctx)
 				return err == nil && len(pending) == 0

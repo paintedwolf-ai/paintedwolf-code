@@ -162,7 +162,8 @@ func TestTaskAdmissionUsesTheExecutedIdentity(t *testing.T) {
 			testutil.FailErr(t, "create coordinator", err)
 			call := wiringToolContext(sess.ID, dir)
 			call.Identity.Agent, call.Identity.ProjectID, call.Identity.ToolCallID = "coordinator", sess.ProjectID, uuid.NewString()
-			call.Source.ActiveRootID, call.Source.Roots[0].ID = sess.WorkspaceRootID, sess.WorkspaceRootID
+			testutil.FailErr(t, "resolve project root", h.DB.QueryRowContext(ctx, "SELECT id FROM project_roots WHERE project_id = ? AND is_primary = 1", sess.ProjectID).Scan(&call.Source.ActiveRootID))
+			call.Source.Roots[0].ID = call.Source.ActiveRootID
 			_, err = h.ToolRegistry.Run(ctx, "update_progress", map[string]any{"content": "## Progress\n- [ ] Complete assigned work"}, call)
 			testutil.FailErr(t, "record progress", err)
 			scope := api.TaskScope{Mode: api.TaskScopeMode(tc.mode), Paths: []string{"src/**"}}
@@ -170,7 +171,7 @@ func TestTaskAdmissionUsesTheExecutedIdentity(t *testing.T) {
 			if tc.omitted != "" {
 				child, err := h.Store.CreateChild(ctx, sess, api.SpawnChildRequest{AgentType: tc.agent, Prompt: "Assigned work"})
 				testutil.FailErr(t, "create recorded child", err)
-				_, err = h.Delegations.Queue.Enqueue(ctx, api.WorkerTask{ParentSessionID: sess.ID, ChildSessionID: child.ID, ProjectID: sess.ProjectID, WorkspaceRootID: sess.WorkspaceRootID, WorkspacePath: dir, AgentType: tc.agent, Scope: &scope, Prompt: "Assigned work", Brief: "Assigned work", Status: api.WorkerStatusComplete})
+				_, err = h.Delegations.Queue.Enqueue(ctx, api.WorkerTask{ParentSessionID: sess.ID, ChildSessionID: child.ID, ProjectID: sess.ProjectID, WorkspaceRootID: call.Source.ActiveRootID, WorkspacePath: dir, AgentType: tc.agent, Scope: &scope, Prompt: "Assigned work", Brief: "Assigned work", Status: api.WorkerStatusComplete})
 				testutil.FailErr(t, "record prior job", err)
 				args["child_session_id"] = child.ID
 				if tc.omitted == "both" || tc.omitted == "agent" {
