@@ -6,7 +6,8 @@ focus or the braille line reaches the object. This loads the harness Den in a
 WebKitGTK view with the screen reader fact set, walks it through a chat with a
 transcript and an approval, the Files view with an open file, Settings and
 Home, and on each calls `GetAttributeRun` at every caret offset, with and
-without defaults, and `GetDefaultAttributes` on every text object in the window.
+without defaults, `GetDefaultAttributes` and `GetNSelections` on every text
+object in the window.
 
 usage: webkit_atspi_text_attributes.py <harness URL>
 exit: 0 every call answered; 1 a call aborted the web process or failed;
@@ -295,6 +296,8 @@ def run_scan(url: str) -> int:
                             totals["calls"] += 1
                     call = "GetDefaultAttributes"
                     Atspi.Text.get_default_attributes(text)
+                    call = "GetNSelections"
+                    Atspi.Text.get_n_selections(text)
                 except Exception as error:  # noqa: BLE001
                     ended = web_process_ended()
                     if ended is None:
