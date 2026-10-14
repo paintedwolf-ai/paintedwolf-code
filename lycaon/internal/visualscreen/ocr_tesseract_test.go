@@ -147,8 +147,9 @@ func TestTesseractOCRReportsUnavailableEngine(t *testing.T) {
 func TestTesseractOCRReadsEngineOutput(t *testing.T) {
 	engine := scriptEngine(t, `
 [ "$1" = stdin ] && [ "$2" = stdout ] || exit 3
-[ "$TESSDATA_PREFIX" = "`+filepath.Join("$0", "..")+`/tessdata" ] || [ -n "$TESSDATA_PREFIX" ] || exit 4
+[ -n "$TESSDATA_PREFIX" ] || exit 4
 head -c 2 | grep -q P5 || exit 5
+cat >/dev/null
 printf 'level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n'
 printf '5\t1\t1\t1\t1\t1\t0\t0\t16\t8\t90\thello\n'
 `)
