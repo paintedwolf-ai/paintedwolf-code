@@ -4,11 +4,11 @@
   "kind": "runtime_service",
   "workstream": "tool-prerequisite-recovery",
   "disposition": "retain",
-  "reason": "Invocation staging and settlement keep the frozen definition, typed failure, and receipt identity together. The helper records stated outcomes; handlers still determine operation results. Retain the existing settlement seam with ledger and fault-classification contracts.",
-  "reviewed_commit": "46d87a5d6ed1fe53c4cf707f18062a37ca65d7ed",
-  "ceiling": 730,
+  "reason": "Invocation admission and settlement own the frozen tool plan, typed failure, and receipt identity. The added recovery facts are projections of that same snapshot, not a new operation owner. Retain this seam at 732 lines with production refusal and settlement contracts.",
+  "reviewed_commit": "18a2ef0918372e12630e6e0766c68b65958e7bb1",
+  "ceiling": 732,
   "boundaries": {
-    "lycaon/internal/coordinator/promptloop/doom_loop_fault_test.go": "e7c61616e8cc217464304dba274b3e41f23f584dfa9f974c67a7fb3fd901dbbe",
+    "lycaon/internal/coordinator/promptloop/prompt_loop_tool_execution_internal_test.go": "68891b28381ab0ed63cc6051b72830ecc8cb7f742f181d554ac1ae10404677c9",
     "lycaon/internal/coordinator/promptloop/host_answered_receipt_test.go": "232b19eb8e5b04ad28f5a87a5fee606a891dcfa505e714629f85bc202d20b532"
   },
   "reviewed_shape": "f34c7e1f42ca5387c0d6126d87ba8bcbcd6343b3d86dbc8bb4f266ed2652c0f7"

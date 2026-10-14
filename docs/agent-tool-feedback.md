@@ -104,7 +104,11 @@ recovery. A deferred tool with `request_tools` offered returns `TOOL_NOT_OFFERED
 with `tool_loadable: true` and an exact `replacement_calls` entry that loads its
 schema. The model retries on the next call, after loading; the rejected action is
 never executed automatically. A name without that loading path receives an
-unavailable-capability explanation. Loading changes schema visibility, not access
+unavailable-name explanation. The rejection lists the exact tools offered on that
+request from the frozen recovery surface. When the current surface offers the loader and
+other deferred tools, recovery asks the agent to describe its needed capability
+to discover an allowed alternative, without retrying the unavailable name. With
+no discovery path, recovery names the capability limitation. Loading changes schema visibility, not access
 or approval. This guidance appears only on rejection, without expanding standing
 prompts.
 

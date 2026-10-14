@@ -75,6 +75,10 @@ func TestRecoveryFactsAreLazyAndKeepTheirRequestSnapshot(t *testing.T) {
 	if gc.ObservationData["can_list_dir"] != true {
 		t.Fatal("recovery used a later tool list")
 	}
+	testutil.FailErr(t, "publish offered inventory", gc.Ensure("paintedwolf.offered_tools"))
+	if got, _ := gc.ObservationData["offered_tools"].([]string); !slices.Equal(got, []string{"read", "list_dir"}) {
+		t.Fatalf("offered inventory lost frozen names: %v", got)
+	}
 	if _, exists := gc.ObservationData["can_read"]; exists {
 		t.Fatal("unreferenced recovery fact was materialized")
 	}
