@@ -272,142 +272,145 @@ export function FocusedSessionList(props: Props) {
 
   const renderRow = (row: () => SidebarChatRow, index: () => number, rowGroup: Group) => (
     <li
-      class="den-list-row--nav den-list-row"
+      class="focused-session-list__item"
       classList={{ "is-dragging": drag()?.sessionId === row().sessionId }}
       style={rowGroup === "pinned" ? dragStyle(row(), index()) : undefined}
       {...navRow(index())}
       {...travelKey(row().sessionId)}
     >
-      <Show
-        when={renamingId() !== row().sessionId}
-        fallback={
-          <InlineRenameInput
-            class="focused-session-list__rename"
-            testId="session-rename-input"
-            initialValue={row().title}
-            maxLength={SESSION_TITLE_MAX}
-            ariaLabel="Rename chat"
-            onCommit={(next) => {
-              setRenamingId(null);
-              void props.onRenameSession(row(), next);
-            }}
-            onCancel={() => setRenamingId(null)}
-          />
-        }
-      >
-        <button
-          type="button"
-          class="focused-session-list__row den-shell-nav-sub-link"
-          data-project-id={row().projectId}
-          data-session-id={row().sessionId}
-          aria-current={isSelected(row()) ? "true" : undefined}
-          classList={{
-            "den-shell-nav-sub-link-active": isSelected(row()),
-            "focused-session-list__row--active": isSelected(row()),
-          }}
-          onClick={() => {
-            props.onSelectSession(row());
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "ArrowDown") {
-              e.preventDefault();
-              const container = e.currentTarget.closest(".focused-session-list");
-              const rows = Array.from(container?.querySelectorAll<HTMLButtonElement>(".focused-session-list__row") ?? []);
-              const idx = rows.indexOf(e.currentTarget);
-              if (idx >= 0 && idx + 1 < rows.length) {
-                rows[idx + 1]?.focus();
-              }
-            } else if (e.key === "ArrowUp") {
-              e.preventDefault();
-              const container = e.currentTarget.closest(".focused-session-list");
-              const rows = Array.from(container?.querySelectorAll<HTMLButtonElement>(".focused-session-list__row") ?? []);
-              const idx = rows.indexOf(e.currentTarget);
-              if (idx > 0) {
-                rows[idx - 1]?.focus();
-              }
-            } else if (e.key === "Enter") {
-              e.preventDefault();
-              props.onSelectSession(row());
-              focusRegion("composer");
-            } else if (e.key === "Escape") {
-              e.preventDefault();
-              focusRegion("composer");
-            }
-          }}
-          onDblClick={(e) => {
-            e.preventDefault();
-            setRenamingId(row().sessionId);
-          }}
-          onContextMenu={(e) => openMenu(e, row(), rowGroup)}
-          onPointerDown={(e) => startRowGesture(row(), rowGroup, e)}
+      {/* WebKitGTK aborts answering text attributes on a list item laid out as this grid, so the grid is an inner wrapper. */}
+      <div class="den-list-row--nav den-list-row">
+        <Show
+          when={renamingId() !== row().sessionId}
+          fallback={
+            <InlineRenameInput
+              class="focused-session-list__rename"
+              testId="session-rename-input"
+              initialValue={row().title}
+              maxLength={SESSION_TITLE_MAX}
+              ariaLabel="Rename chat"
+              onCommit={(next) => {
+                setRenamingId(null);
+                void props.onRenameSession(row(), next);
+              }}
+              onCancel={() => setRenamingId(null)}
+            />
+          }
         >
-          <span class="focused-session-list__title">{row().title}</span>
-          <Show when={isSelected(row())}>
-            <span class="sr-only">
-              {isActive(row())
-                ? "Selected chat, visible."
-                : "Selected chat. Activate to show the conversation."}
-            </span>
-          </Show>
-          <Show when={!isSelected(row()) && noticeCountFor(row()) > 0}>
-            <span
-              class="focused-session-list__notices"
-              data-testid="session-notice-count"
-              data-tip={`${noticeCountFor(row())} unresolved in this chat`}
-            >
-              {countLabel(noticeCountFor(row()))}
-            </span>
-          </Show>
-          <Show
-            when={!isSelected(row()) && attentionFor(row())}
-            keyed
-            fallback={
-              <Show when={row().activityAtMs > 0 && !isSelected(row())}>
-                <span class="focused-session-list__time" aria-hidden="true">
-                  {formatRelativeTime(row().activityAtMs, now())}
-                </span>
-              </Show>
-            }
-          >
-            {(att) => (
-              <span
-                class="focused-session-list__status"
-                data-attention-class={att.class}
-                data-tip={attentionReasonLabel(att)}
-              >
-                {ATTENTION_CLASS_LABEL[att.class]}
-              </span>
-            )}
-          </Show>
-        </button>
-        <Show when={hasWindowView(row())}>
           <button
             type="button"
-            class="focused-session-list__window den-inset-icon-btn"
-            aria-label={`${windowViewCount(row())} open window view${windowViewCount(row()) === 1 ? "" : "s"}`}
-            data-tip={`${windowViewCount(row())} open window view${windowViewCount(row()) === 1 ? "" : "s"}`}
-            data-testid="session-window-glyph"
-            onClick={() => raiseWindowView(row())}
+            class="focused-session-list__row den-shell-nav-sub-link"
+            data-project-id={row().projectId}
+            data-session-id={row().sessionId}
+            aria-current={isSelected(row()) ? "true" : undefined}
+            classList={{
+              "den-shell-nav-sub-link-active": isSelected(row()),
+              "focused-session-list__row--active": isSelected(row()),
+            }}
+            onClick={() => {
+              props.onSelectSession(row());
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                const container = e.currentTarget.closest(".focused-session-list");
+                const rows = Array.from(container?.querySelectorAll<HTMLButtonElement>(".focused-session-list__row") ?? []);
+                const idx = rows.indexOf(e.currentTarget);
+                if (idx >= 0 && idx + 1 < rows.length) {
+                  rows[idx + 1]?.focus();
+                }
+              } else if (e.key === "ArrowUp") {
+                e.preventDefault();
+                const container = e.currentTarget.closest(".focused-session-list");
+                const rows = Array.from(container?.querySelectorAll<HTMLButtonElement>(".focused-session-list__row") ?? []);
+                const idx = rows.indexOf(e.currentTarget);
+                if (idx > 0) {
+                  rows[idx - 1]?.focus();
+                }
+              } else if (e.key === "Enter") {
+                e.preventDefault();
+                props.onSelectSession(row());
+                focusRegion("composer");
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                focusRegion("composer");
+              }
+            }}
+            onDblClick={(e) => {
+              e.preventDefault();
+              setRenamingId(row().sessionId);
+            }}
+            onContextMenu={(e) => openMenu(e, row(), rowGroup)}
+            onPointerDown={(e) => startRowGesture(row(), rowGroup, e)}
           >
-            ↗
-            <Show when={windowViewCount(row()) > 1}>
-              <span aria-hidden="true">{windowViewCount(row())}</span>
+            <span class="focused-session-list__title">{row().title}</span>
+            <Show when={isSelected(row())}>
+              <span class="sr-only">
+                {isActive(row())
+                  ? "Selected chat, visible."
+                  : "Selected chat. Activate to show the conversation."}
+              </span>
+            </Show>
+            <Show when={!isSelected(row()) && noticeCountFor(row()) > 0}>
+              <span
+                class="focused-session-list__notices"
+                data-testid="session-notice-count"
+                data-tip={`${noticeCountFor(row())} unresolved in this chat`}
+              >
+                {countLabel(noticeCountFor(row()))}
+              </span>
+            </Show>
+            <Show
+              when={!isSelected(row()) && attentionFor(row())}
+              keyed
+              fallback={
+                <Show when={row().activityAtMs > 0 && !isSelected(row())}>
+                  <span class="focused-session-list__time" aria-hidden="true">
+                    {formatRelativeTime(row().activityAtMs, now())}
+                  </span>
+                </Show>
+              }
+            >
+              {(att) => (
+                <span
+                  class="focused-session-list__status"
+                  data-attention-class={att.class}
+                  data-tip={attentionReasonLabel(att)}
+                >
+                  {ATTENTION_CLASS_LABEL[att.class]}
+                </span>
+              )}
             </Show>
           </button>
+          <Show when={hasWindowView(row())}>
+            <button
+              type="button"
+              class="focused-session-list__window den-inset-icon-btn"
+              aria-label={`${windowViewCount(row())} open window view${windowViewCount(row()) === 1 ? "" : "s"}`}
+              data-tip={`${windowViewCount(row())} open window view${windowViewCount(row()) === 1 ? "" : "s"}`}
+              data-testid="session-window-glyph"
+              onClick={() => raiseWindowView(row())}
+            >
+              ↗
+              <Show when={windowViewCount(row()) > 1}>
+                <span aria-hidden="true">{windowViewCount(row())}</span>
+              </Show>
+            </button>
+          </Show>
+          <div class="den-list-row__actions">
+            <RowPinButton
+              pinned={row().pinRank != null}
+              testId="session-pin-action"
+              onToggle={() => togglePin(row())}
+            />
+            <RowRenameButton
+              label="Rename chat"
+              testId="session-rename-action"
+              onRename={() => setRenamingId(row().sessionId)}
+            />
+          </div>
         </Show>
-        <div class="den-list-row__actions">
-          <RowPinButton
-            pinned={row().pinRank != null}
-            testId="session-pin-action"
-            onToggle={() => togglePin(row())}
-          />
-          <RowRenameButton
-            label="Rename chat"
-            testId="session-rename-action"
-            onRename={() => setRenamingId(row().sessionId)}
-          />
-        </div>
-      </Show>
+      </div>
     </li>
   );
 

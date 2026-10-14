@@ -221,6 +221,10 @@
   text-align: center;
 }
 
+.focused-session-list__item {
+  display: block;
+  position: relative;
+}
 /* Reveals the rename action without shifting the row highlight. */
 .focused-session-list .den-list-row--nav {
   position: relative;
@@ -239,14 +243,14 @@
   color: var(--den-accent-text);
 }
 /* Dragging within Pinned: the others step aside, the dragged row lifts. */
-.focused-session-list__list--dragging > .den-list-row--nav {
+.focused-session-list__list--dragging > .focused-session-list__item {
   transition: transform var(--den-duration) var(--den-ease);
 }
-.focused-session-list__list--dragging > .den-list-row--nav.is-dragging {
+.focused-session-list__list--dragging > .focused-session-list__item.is-dragging {
   z-index: 2;
   transition: none;
 }
-.focused-session-list__list--dragging > .den-list-row--nav.is-dragging > .focused-session-list__row {
+.focused-session-list__list--dragging > .focused-session-list__item.is-dragging .focused-session-list__row {
   background: var(--den-background);
   box-shadow: var(--den-shadow-lg);
   cursor: grabbing;
@@ -255,7 +259,7 @@
   visibility: hidden;
 }
 @media (prefers-reduced-motion: reduce) {
-  .focused-session-list__list--dragging > .den-list-row--nav {
+  .focused-session-list__list--dragging > .focused-session-list__item {
     transition: none;
   }
 }
