@@ -213,25 +213,33 @@ fn portal_open_uri(bus: &gio::DBusConnection, parent: &str, uri: &str) -> Result
 }
 
 /// `OpenFile` and `OpenDirectory` take the entry as a file descriptor, so the
-/// portal opens exactly the entry this process could open.
+/// portal opens exactly the entry this process could open. The request goes
+/// out as a message because the reply carries no descriptors back.
 fn portal_open_fd(bus: &gio::DBusConnection, method: &str, parent: &str, path: &Path) -> Result<(), String> {
     let file = std::fs::File::open(path).map_err(|error| format!("{}: {error}", path.display()))?;
     let fd_list = gio::UnixFDList::new();
     let index = fd_list.append(file).map_err(|error| error.to_string())?;
-    bus.call_with_unix_fd_list_sync(
+    let message = gio::DBusMessage::new_method_call(
         Some(PORTAL_BUS_NAME),
         PORTAL_OBJECT_PATH,
-        OPEN_URI_INTERFACE,
+        Some(OPEN_URI_INTERFACE),
         method,
-        Some(&glib::Variant::tuple_from_iter([parent.to_variant(), Handle(index).to_variant(), portal_options()])),
-        Some(glib::VariantTy::new("(o)").expect("static signature")),
-        gio::DBusCallFlags::NONE,
-        CALL_TIMEOUT_MS,
-        Some(&fd_list),
-        gio::Cancellable::NONE,
-    )
-    .map(|_| ())
-    .map_err(|error| error.to_string())
+    );
+    message.set_body(&glib::Variant::tuple_from_iter([
+        parent.to_variant(),
+        Handle(index).to_variant(),
+        portal_options(),
+    ]));
+    message.set_unix_fd_list(Some(&fd_list));
+    let (reply, _serial) = bus
+        .send_message_with_reply_sync(
+            &message,
+            gio::DBusSendMessageFlags::NONE,
+            CALL_TIMEOUT_MS,
+            gio::Cancellable::NONE,
+        )
+        .map_err(|error| error.to_string())?;
+    reply.to_gerror().map_err(|error| error.to_string())
 }
 
 fn launch_default_handler(uri: &str) -> Result<(), String> {
