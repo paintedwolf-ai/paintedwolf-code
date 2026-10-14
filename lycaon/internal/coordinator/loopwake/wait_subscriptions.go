@@ -195,21 +195,6 @@ func (l *WaitSubscriptions) processCycleOpen(sessionID string, handles []string)
 	}
 	return deps.ProcessRunning(sessionID, handles)
 }
-func (l *WaitSubscriptions) processDisplaySubject(sessionID string, handles []string) string {
-	if l == nil {
-		return ""
-	}
-	deps := l.loopDeps()
-	if deps.ProcessSubject == nil {
-		return ""
-	}
-	for _, handle := range handles {
-		if subject := strings.TrimSpace(deps.ProcessSubject(sessionID, handle)); subject != "" {
-			return subject
-		}
-	}
-	return ""
-}
 func (l *WaitSubscriptions) overlayPromoteDue(ctx context.Context, sessionID string, env anchor.Envelope) bool {
 	if env.HasPendingOverlayPromote() {
 		return true

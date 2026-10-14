@@ -111,7 +111,7 @@ func TestHandleSubjectResolvesHeldAndUnknownHandles(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)
 	outcome, err := held.Run(t.Context(), heldcall.Spec{
-		SessionID: "s", Tool: "fetch_url", CallID: "c1", Foreground: 10 * time.Millisecond, DisplayTitle: "fetch url · https://example.com",
+		SessionID: "s", Tool: "fetch_url", ToolCallID: "c1", Budget: 10 * time.Millisecond, DisplayTitle: "fetch url · https://example.com",
 	}, func(ctx context.Context) heldcall.Settled {
 		<-release
 		return heldcall.Settled{Outcome: api.ToolResultOutcomeCompleted}
@@ -123,7 +123,7 @@ func TestHandleSubjectResolvesHeldAndUnknownHandles(t *testing.T) {
 		t.Fatalf("held subject = %q", got)
 	}
 	fallbackOut, err := held.Run(t.Context(), heldcall.Spec{
-		SessionID: "s", Tool: "survey_repo", CallID: "c2", Foreground: 10 * time.Millisecond,
+		SessionID: "s", Tool: "survey_repo", ToolCallID: "c2", Budget: 10 * time.Millisecond,
 	}, func(ctx context.Context) heldcall.Settled {
 		<-release
 		return heldcall.Settled{Outcome: api.ToolResultOutcomeCompleted}

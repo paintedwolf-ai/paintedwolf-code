@@ -70,7 +70,7 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 		if err != nil {
 			return "", err
 		}
-		if subject := loop.processDisplaySubject(tctx.Identity.SessionID, request.ProcessHandles); subject != "" {
+		if subject := processDisplaySubject(loop, tctx.Identity.SessionID, request.ProcessHandles); subject != "" {
 			tctx.SetDisplaySubject(subject)
 		}
 		if request.UntilComplete {
