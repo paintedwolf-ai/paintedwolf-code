@@ -1,7 +1,8 @@
 name: Platform verification
 
-# The merge queue's platform gates: the retained upgrade corpus and macOS
-# confinement, browser-boundary, and Git engine checks.
+# The merge queue's platform gates: the retained upgrade corpus, macOS
+# confinement, browser-boundary, and Git engine checks, and Linux applied
+# confinement on both architectures.
 # The free plan runs five macOS jobs at once, so only what needs macOS runs there.
 on:
   workflow_call:
@@ -41,6 +42,49 @@ jobs:
         timeout-minutes: 5
         with:
           name: upgrade-corpus-${{ github.run_attempt }}
+          status: ${{ job.status }}
+
+  # Applied Linux boundaries on both architectures: the confine live suites
+  # (namespaces, mounts, Landlock, seccomp, the supervisor's network grants and
+  # refusal reports, toolchains) and the managed browser inside the boundary.
+  # The live tests fail rather than skip when the host cannot confine; Ubuntu
+  # runners restrict user namespaces, so setup-verification loads the profile
+  # that lets test binaries create them.
+  linux-confinement:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    env:
+      PW_TEST_HOST: dedicated
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-verification
+
+      - name: Applied Linux confinement
+        timeout-minutes: 45
+        run: ./task test:digest -- ./internal/confine/... -count=1
+
+      - name: Confined browser
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        env:
+          # The pinned browser is provisioned here, and a missing one fails.
+          LYCAON_BROWSER_INTEGRATION: '1'
+          LYCAON_BROWSER_REQUIRED: '1'
+        run: >
+          ./task test:digest -- ./internal/browser
+          -run '^(TestHeadlessLauncherPinsSubprocessPath|TestHeadlessLauncherKeepsItsSandboxWithoutTheBoundary|TestLaunchHeadlessUnderBrowserConfinement|TestProbeUsabilityUnderBrowserConfinement|TestPoolNewPageUnderBrowserConfinement|TestConfinedBrowserFloorReachesHostLoopback|TestConfinedBrowserCannotReadDeniedFiles|TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt|TestLaunchHeadlessRefusesUnsafeCacheDir)$'
+          -count=1
+
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        timeout-minutes: 5
+        with:
+          name: linux-confinement-${{ matrix.runner }}-${{ github.run_attempt }}
           status: ${{ job.status }}
 
   # Applied Seatbelt profiles, the managed browser under Seatbelt, and the owned
