@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sourcebranch"
+	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -540,5 +541,39 @@ func TestRewritePreviewDoesNotRequireOrAuthorizeAnAgentRead(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EDITOR_DOCUMENT_READ_REQUIRED" {
 		t.Fatalf("preview authorized an unseen full snapshot: %v", err)
+	}
+}
+
+func TestCompleteSummarySourceEstablishesReadBasis(t *testing.T) {
+	const source = "def rank(rows):\n    return sorted(rows)\n"
+	for _, tc := range []struct {
+		name, disk, draft string
+		admitted          bool
+	}{
+		{"complete", source, source, true},
+		{"newer draft", source, source + "# unseen\n", false},
+		{"partial source", "# header not in function window\n" + source, "# header not in function window\n" + source, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(dir, "ranking.py"), []byte(tc.disk), 0o644))
+			docs := &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{"r1/ranking.py": openDoc("ranking", tc.draft, tc.draft != tc.disk)}}
+			tctx := editorCtx(dir, docs)
+			clear(docs.reads)
+			tctx.Source.EditorReadBases = tools.NewAgentReadBases(nil)
+			summary := &surveytools.SummarizeTool{Boundary: nativefixture.Boundary(t), Caps: summarize.DefaultCaps()}
+			raw, err := summary.Run(t.Context(), map[string]any{"path": "ranking.py"}, tctx)
+			testutil.FailErr(t, "summarize source", err)
+			_, err = docs.AgentReadBase(t.Context(), "p1", tctx.Identity.SessionID, "ranking", nil)
+			if (err == nil) != tc.admitted {
+				t.Fatalf("basis: %v, output: %s", err, raw)
+			}
+			if tc.admitted {
+				_, err = docs.AgentReadBase(t.Context(), "p1", tctx.Identity.SessionID, "ranking", tctx.Source.EditorReadBases)
+				if !errors.Is(err, tools.ErrEditorReadRequired) {
+					t.Fatalf("summary advanced response's frozen bases: %v", err)
+				}
+			}
+		})
 	}
 }
