@@ -11,23 +11,27 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+type claimBook struct {
+	c *Service
+}
+
 // Claim all full-pass members together so they read one generation.
-func (c *Service) claimDueSeries(ctx context.Context, canonical string) ([]scanbase.SeriesRow, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, retired := c.retiredRoots[canonical]; retired {
+func (b claimBook) claimDueSeries(ctx context.Context, canonical string) ([]scanbase.SeriesRow, error) {
+	b.c.mu.Lock()
+	defer b.c.mu.Unlock()
+	if b.c.roots.isRetired(canonical) {
 		return nil, nil
 	}
-	rows, err := c.Store.ListSeriesForPath(ctx, canonical)
+	rows, err := b.c.Store.ListSeriesForPath(ctx, canonical)
 	if err != nil {
 		return nil, err
 	}
-	selected := scanbase.ListSelectedScanners(ctx, c.Registry, canonical)
+	selected := scanbase.ListSelectedScanners(ctx, b.c.Registry, canonical)
 	selectedIDs := make(map[string]struct{}, len(selected))
 	for _, scanner := range selected {
 		selectedIDs[scanner.ID] = struct{}{}
 	}
-	open, err := c.Store.OpenScansForPath(ctx, canonical)
+	open, err := b.c.Store.OpenScansForPath(ctx, canonical)
 	if err != nil {
 		return nil, err
 	}
@@ -37,14 +41,15 @@ func (c *Service) claimDueSeries(ctx context.Context, canonical string) ([]scanb
 			openByScanner[scan.ScannerID] = scan
 		}
 	}
-	now := c.now()
+	now := nowUTC(b.c)
+	planner := seriesPlanner{c: b.c}
 	candidates := make([]*scanbase.SeriesRow, 0, len(rows))
 	owed := make(map[string]int)
 	free := make(map[string]int)
 	for i := range rows {
 		row := &rows[i]
 		if _, ok := selectedIDs[row.ScannerID]; !ok {
-			if err := c.retireSeriesLocked(ctx, row, now); err != nil {
+			if err := planner.retireLocked(ctx, row, now); err != nil {
 				return nil, err
 			}
 			continue
@@ -53,7 +58,7 @@ func (c *Service) claimDueSeries(ctx context.Context, canonical string) ([]scanb
 			slog.WarnContext(ctx, "scan dispatch claim recovered", "component", "scan_cadence",
 				"path", canonical, "scanner_id", row.ScannerID, "last_heartbeat_at", row.ClaimHeartbeatAt)
 			restoreFrozenDispatch(row, now)
-			if err := c.Store.UpsertSeries(ctx, *row); err != nil {
+			if err := b.c.Store.UpsertSeries(ctx, *row); err != nil {
 				return nil, err
 			}
 		}
@@ -67,7 +72,7 @@ func (c *Service) claimDueSeries(ctx context.Context, canonical string) ([]scanb
 			if row.ActiveScanID == "" && proactiveTrigger(active.Trigger) {
 				row.ActiveScanID = active.ID
 				row.UpdatedAt = now
-				if err := c.Store.UpsertSeries(ctx, *row); err != nil {
+				if err := b.c.Store.UpsertSeries(ctx, *row); err != nil {
 					return nil, err
 				}
 			}
@@ -95,7 +100,7 @@ func (c *Service) claimDueSeries(ctx context.Context, canonical string) ([]scanb
 		row.DueAt = time.Time{}
 		row.MaxDueAt = time.Time{}
 		row.UpdatedAt = now
-		if err := c.Store.UpsertSeries(ctx, *row); err != nil {
+		if err := b.c.Store.UpsertSeries(ctx, *row); err != nil {
 			return claimed, err
 		}
 		claimed = append(claimed, *row)
@@ -103,15 +108,33 @@ func (c *Service) claimDueSeries(ctx context.Context, canonical string) ([]scanb
 	return claimed, nil
 }
 
-// retireSeriesLocked drops a deselected scanner's series, or its pending work
-// while its last generation is still running. A pass it owed goes on without it.
-func (c *Service) retireSeriesLocked(ctx context.Context, row *scanbase.SeriesRow, now time.Time) error {
-	if row.ActiveScanID == "" {
-		return c.Store.DeleteSeries(ctx, row.CanonicalPath, row.ScannerID)
+func (b claimBook) heartbeatClaims(ctx context.Context, claimed []scanbase.SeriesRow) func() {
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		ticker := time.NewTicker(dispatchHeartbeatEvery)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				now := nowUTC(b.c)
+				for _, row := range claimed {
+					if err := b.c.Store.HeartbeatClaim(ctx, row, now); err != nil {
+						slog.WarnContext(ctx, "heartbeat scan dispatch claim", "scanner_id", row.ScannerID, "error", err)
+					}
+				}
+			}
+		}
+	}()
+	return func() {
+		close(done)
+		<-stopped
 	}
-	clearSeriesDemand(row)
-	row.UpdatedAt = now
-	return c.Store.UpsertSeries(ctx, *row)
 }
 
 func releaseClaim(row *scanbase.SeriesRow) {
@@ -122,8 +145,7 @@ func releaseClaim(row *scanbase.SeriesRow) {
 	row.DispatchTrigger = ""
 }
 
-// holdDispatchedDesire returns a released claim's work to pending desire.
-// A pass it was dispatching stays owed unless a newer pass already claims it.
+// holdDispatchedDesire restores released claim work unless superseded by a newer pass.
 func holdDispatchedDesire(row *scanbase.SeriesRow) {
 	if row.DesiredPassID == "" {
 		row.DesiredPassID = row.DispatchPassID
@@ -145,61 +167,75 @@ func restoreFrozenDispatch(row *scanbase.SeriesRow, now time.Time) {
 	row.UpdatedAt = now
 }
 
-func (c *Service) finishDispatch(ctx context.Context, claimed scanbase.SeriesRow, record *api.CodeScan) error {
+func (b claimBook) finishDispatch(ctx context.Context, claimed scanbase.SeriesRow, record *api.CodeScan) error {
 	if record == nil {
 		return fmt.Errorf("scanner %s enqueue returned no scan", claimed.ScannerID)
 	}
-	c.mu.Lock()
-	row, err := c.Store.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
+	planner := seriesPlanner{c: b.c}
+	b.c.mu.Lock()
+	row, err := b.c.Store.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
 	if err != nil || row == nil {
-		c.mu.Unlock()
+		b.c.mu.Unlock()
 		return err
 	}
 	if row.DispatchToken != claimed.DispatchToken {
-		c.mu.Unlock()
+		b.c.mu.Unlock()
 		return fmt.Errorf("scanner %s dispatch token changed", claimed.ScannerID)
 	}
+	now := nowUTC(b.c)
 	releaseClaim(row)
-	row.LastStartedAt = c.now()
+	row.LastStartedAt = now
 	row.ActiveScanID = record.ID
-	c.rearmHeldDesireLocked(row)
-	row.UpdatedAt = c.now()
-	err = c.Store.UpsertSeries(ctx, *row)
-	c.mu.Unlock()
+	planner.rearmHeldDesireLocked(row)
+	row.UpdatedAt = now
+	err = b.c.Store.UpsertSeries(ctx, *row)
+	b.c.mu.Unlock()
 	if err != nil {
 		return err
 	}
 
-	latest, err := c.Store.Get(ctx, record.ID)
+	latest, err := b.c.Store.Get(ctx, record.ID)
 	if err != nil {
 		return err
 	}
 	if latest != nil && scanbase.StatusTerminal(latest.Status) {
-		return c.settleTerminal(ctx, *latest)
+		return planner.settleTerminal(ctx, *latest)
 	}
 	return nil
 }
 
+// Retry changed-file work; release members from a pass that started without them.
+func (b claimBook) releaseUndispatched(ctx context.Context, canonical string, row scanbase.SeriesRow, cause error) {
+	dispatcher := rootDispatcher{c: b.c}
+	if row.DispatchPassID == "" {
+		dispatcher.logDispatch(ctx, "requeued", canonical, []scanbase.SeriesRow{row}, cause)
+		b.requeueDispatch(ctx, row)
+		return
+	}
+	dispatcher.logDispatch(ctx, "left_pass", canonical, []scanbase.SeriesRow{row}, cause, "pass_id", row.DispatchPassID)
+	b.leavePass(ctx, row)
+}
+
 // Cleanup must outlive a canceled request but never an unavailable store.
-func (c *Service) cleanupDispatches(ctx context.Context, claimed []scanbase.SeriesRow) {
+func (b claimBook) cleanupDispatches(ctx context.Context, claimed []scanbase.SeriesRow) {
 	if len(claimed) == 0 {
 		return
 	}
 	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), dispatchCleanupTimeout)
 	defer cancel()
-	c.requeueDispatches(cleanup, claimed)
+	b.requeueDispatches(cleanup, claimed)
 }
 
-func (c *Service) requeueDispatches(ctx context.Context, rows []scanbase.SeriesRow) {
+func (b claimBook) requeueDispatches(ctx context.Context, rows []scanbase.SeriesRow) {
 	for _, row := range rows {
-		c.requeueDispatch(ctx, row)
+		b.requeueDispatch(ctx, row)
 	}
 }
 
-func (c *Service) requeueDispatch(ctx context.Context, claimed scanbase.SeriesRow) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	row, err := c.Store.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
+func (b claimBook) requeueDispatch(ctx context.Context, claimed scanbase.SeriesRow) {
+	b.c.mu.Lock()
+	defer b.c.mu.Unlock()
+	row, err := b.c.Store.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
 	if err != nil {
 		slog.WarnContext(ctx, "read scan dispatch for requeue", "scanner_id", claimed.ScannerID, "error", err)
 		return
@@ -207,32 +243,33 @@ func (c *Service) requeueDispatch(ctx context.Context, claimed scanbase.SeriesRo
 	if row == nil || row.DispatchToken != claimed.DispatchToken {
 		return
 	}
+	now := nowUTC(b.c)
+	cfg := cadenceCfg(b.c)
 	holdDispatchedDesire(row)
 	releaseClaim(row)
 	if row.DirtySinceAt.IsZero() {
-		row.DirtySinceAt = c.now()
+		row.DirtySinceAt = now
 	}
-	row.DueAt = c.now().Add(c.cadenceCfg().WriteBurstSettle())
-	row.MaxDueAt = row.DirtySinceAt.Add(c.cadenceCfg().MaxDefer())
-	row.UpdatedAt = c.now()
-	if err := c.Store.UpsertSeries(ctx, *row); err != nil {
+	row.DueAt = now.Add(cfg.WriteBurstSettle())
+	row.MaxDueAt = row.DirtySinceAt.Add(cfg.MaxDefer())
+	row.UpdatedAt = now
+	if err := b.c.Store.UpsertSeries(ctx, *row); err != nil {
 		slog.WarnContext(ctx, "requeue scan series dispatch", "scanner_id", row.ScannerID, "error", err)
 	}
 }
 
-// leavePass releases a pass member that cannot be dispatched into its pass.
-// The member reads as not started; work that arrived meanwhile stays owed.
-func (c *Service) leavePass(ctx context.Context, claimed scanbase.SeriesRow) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	row, err := c.Store.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
+// leavePass releases an undispatchable pass member while preserving newer demand.
+func (b claimBook) leavePass(ctx context.Context, claimed scanbase.SeriesRow) {
+	b.c.mu.Lock()
+	defer b.c.mu.Unlock()
+	row, err := b.c.Store.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
 	if err != nil || row == nil || row.DispatchToken != claimed.DispatchToken {
 		return
 	}
 	releaseClaim(row)
-	c.rearmHeldDesireLocked(row)
-	row.UpdatedAt = c.now()
-	if err := c.Store.UpsertSeries(ctx, *row); err != nil {
+	(seriesPlanner{c: b.c}).rearmHeldDesireLocked(row)
+	row.UpdatedAt = nowUTC(b.c)
+	if err := b.c.Store.UpsertSeries(ctx, *row); err != nil {
 		slog.WarnContext(ctx, "release full pass member", "scanner_id", row.ScannerID, "error", err)
 	}
 }

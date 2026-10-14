@@ -11,13 +11,16 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// An unnamed request includes every available selected scanner. Join a covering
-// unfinished pass or widen one that has not started; dispatch waits for all members.
+type fullPassAdmission struct {
+	c *Service
+}
+
+// RequestFull joins a covering pass or widens an unstarted one; unnamed requests select all available scanners.
 func (c *Service) RequestFull(ctx context.Context, projectDir string, scannerIDs []string, trigger api.ScanTrigger, bind scanbase.FullScanContext) (scanbase.FullPass, error) {
-	if !c.configured() {
+	if !configured(c) {
 		return scanbase.FullPass{}, fmt.Errorf("scan cadence not configured")
 	}
-	if !c.securityOn() {
+	if !securityOn(c) {
 		return scanbase.FullPass{}, scanbase.ErrSecurityScannersOff
 	}
 	if !fullScanTrigger(trigger) {
@@ -27,8 +30,9 @@ func (c *Service) RequestFull(ctx context.Context, projectDir string, scannerIDs
 	if err != nil {
 		return scanbase.FullPass{}, err
 	}
+	admission := fullPassAdmission{c: c}
 	c.mu.Lock()
-	passID, err := c.admitFullPassLocked(ctx, canonical, scannerIDs, trigger)
+	passID, err := admission.admitLocked(ctx, canonical, scannerIDs, trigger)
 	if err == nil {
 		// Bound before dispatch can start the pass, so its scans carry the binding.
 		err = c.Store.BindFullPassRequester(ctx, passID, bind)
@@ -37,8 +41,8 @@ func (c *Service) RequestFull(ctx context.Context, projectDir string, scannerIDs
 	if err != nil {
 		return scanbase.FullPass{}, err
 	}
-	c.preemptPathScans(ctx, canonical, passID)
-	c.dispatchRoot(ctx, canonical)
+	admission.preemptPathScans(ctx, canonical, passID)
+	(rootDispatcher{c: c}).dispatchRoot(ctx, canonical)
 	pass, err := c.Store.FullPass(ctx, passID)
 	if err != nil {
 		return scanbase.FullPass{}, err
@@ -49,27 +53,27 @@ func (c *Service) RequestFull(ctx context.Context, projectDir string, scannerIDs
 	return *pass, nil
 }
 
-func (c *Service) admitFullPassLocked(ctx context.Context, canonical string, scannerIDs []string, trigger api.ScanTrigger) (string, error) {
-	series, err := c.syncSeriesLocked(ctx, canonical)
+func (f fullPassAdmission) admitLocked(ctx context.Context, canonical string, scannerIDs []string, trigger api.ScanTrigger) (string, error) {
+	series, err := (seriesPlanner{c: f.c}).syncLocked(ctx, canonical)
 	if err != nil {
 		return "", err
 	}
-	members, err := c.fullPassMembers(ctx, canonical, series, scannerIDs)
+	members, err := f.members(ctx, canonical, series, scannerIDs)
 	if err != nil {
 		return "", err
 	}
-	passes, err := c.Store.FullPassesForPath(ctx, canonical)
+	passes, err := f.c.Store.FullPassesForPath(ctx, canonical)
 	if err != nil {
 		return "", err
 	}
 	if open := newestUnfinishedPass(passes); open != nil {
 		if !passStarting(*open, series) {
-			widened, err := c.Store.WidenFullPass(ctx, open.ID, unionSorted(open.ScannerIDs(), members))
+			widened, err := f.c.Store.WidenFullPass(ctx, open.ID, unionSorted(open.ScannerIDs(), members))
 			if err != nil {
 				return "", err
 			}
 			if widened {
-				return open.ID, c.oweFullPassLocked(ctx, series, members, open.ID, trigger)
+				return open.ID, f.oweLocked(ctx, series, members, open.ID, trigger)
 			}
 		}
 		if open.Covers(members) {
@@ -77,17 +81,16 @@ func (c *Service) admitFullPassLocked(ctx context.Context, canonical string, sca
 		}
 	}
 	id := uuid.NewString()
-	if err := c.Store.InsertFullPass(ctx, scanbase.FullPassDraft{
-		ID: id, CanonicalPath: canonical, Scanners: members, Trigger: trigger, RequestedAt: c.now(),
+	if err := f.c.Store.InsertFullPass(ctx, scanbase.FullPassDraft{
+		ID: id, CanonicalPath: canonical, Scanners: members, Trigger: trigger, RequestedAt: nowUTC(f.c),
 	}); err != nil {
 		return "", err
 	}
-	return id, c.oweFullPassLocked(ctx, series, members, id, trigger)
+	return id, f.oweLocked(ctx, series, members, id, trigger)
 }
 
-// fullPassMembers resolves the scanners a request names. A named scanner must
-// be selected and able to run; an unnamed request takes every one that can.
-func (c *Service) fullPassMembers(ctx context.Context, canonical string, series []scanbase.SeriesRow, scannerIDs []string) ([]string, error) {
+// members validates named scanners or selects all runnable scanners when unnamed.
+func (f fullPassAdmission) members(ctx context.Context, canonical string, series []scanbase.SeriesRow, scannerIDs []string) ([]string, error) {
 	bySeries := make(map[string]scanbase.SeriesRow, len(series))
 	for _, row := range series {
 		bySeries[row.ScannerID] = row
@@ -99,7 +102,7 @@ func (c *Service) fullPassMembers(ctx context.Context, canonical string, series 
 			if !selected {
 				return nil, &scancatalog.ErrInvalidScanEngineSelection{ScannerID: id, Reason: "not selected for this project"}
 			}
-			if _, err := c.resolveExecution(ctx, canonical, row); err != nil {
+			if _, err := f.resolveExecution(ctx, canonical, row); err != nil {
 				return nil, &scancatalog.ErrInvalidScanEngineSelection{ScannerID: id, Reason: err.Error()}
 			}
 		}
@@ -107,7 +110,7 @@ func (c *Service) fullPassMembers(ctx context.Context, canonical string, series 
 	}
 	members := make([]string, 0, len(series))
 	for _, row := range series {
-		if _, err := c.resolveExecution(ctx, canonical, row); err == nil {
+		if _, err := f.resolveExecution(ctx, canonical, row); err == nil {
 			members = append(members, row.ScannerID)
 		}
 	}
@@ -117,18 +120,31 @@ func (c *Service) fullPassMembers(ctx context.Context, canonical string, series 
 	return scanbase.UniqueSortedStrings(members), nil
 }
 
-func (c *Service) oweFullPassLocked(ctx context.Context, series []scanbase.SeriesRow, members []string, passID string, trigger api.ScanTrigger) error {
+func (f fullPassAdmission) oweLocked(ctx context.Context, series []scanbase.SeriesRow, members []string, passID string, trigger api.ScanTrigger) error {
 	bySeries := make(map[string]scanbase.SeriesRow, len(series))
 	for _, row := range series {
 		bySeries[row.ScannerID] = row
 	}
+	planner := seriesPlanner{c: f.c}
 	for _, id := range members {
 		row := bySeries[id]
-		if err := c.requestFullLocked(ctx, &row, passID, trigger); err != nil {
+		if err := planner.requestFullLocked(ctx, &row, passID, trigger); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (f fullPassAdmission) resolveExecution(ctx context.Context, canonical string, row scanbase.SeriesRow) (dispatchExecution, error) {
+	contract, err := scanbase.SelectedScannerContract(ctx, f.c.Registry, canonical, row.ScannerID, row.Categories...)
+	if err != nil {
+		return dispatchExecution{}, err
+	}
+	manifest, fingerprint, err := scancatalog.ExecutionManifest(contract)
+	if err != nil {
+		return dispatchExecution{}, err
+	}
+	return dispatchExecution{Manifest: manifest, Fingerprint: fingerprint}, nil
 }
 
 func newestUnfinishedPass(passes []scanbase.FullPass) *scanbase.FullPass {
@@ -162,14 +178,12 @@ func fullScanTrigger(trigger api.ScanTrigger) bool {
 	return false
 }
 
-// preemptPathScans stops the cadence's own path-scoped rescans that a pass's
-// scanners still have open, since pass members start together and the pass
-// covers their work. Scans another consumer asked for always finish.
-func (c *Service) preemptPathScans(ctx context.Context, canonical, passID string) {
-	if c.Preempt == nil {
+// preemptPathScans stops proactive path-scoped scans superseded by the pass.
+func (f fullPassAdmission) preemptPathScans(ctx context.Context, canonical, passID string) {
+	if f.c.Preempt == nil {
 		return
 	}
-	pass, err := c.Store.FullPass(ctx, passID)
+	pass, err := f.c.Store.FullPass(ctx, passID)
 	if err != nil || pass == nil || !pass.StartedAt.IsZero() {
 		return
 	}
@@ -177,14 +191,14 @@ func (c *Service) preemptPathScans(ctx context.Context, canonical, passID string
 	for _, m := range pass.Members {
 		members[m.ScannerID] = true
 	}
-	open, err := c.Store.OpenScansForPath(ctx, canonical)
+	open, err := f.c.Store.OpenScansForPath(ctx, canonical)
 	if err != nil {
 		slog.WarnContext(ctx, "list open scans for preemption", "path", canonical, "error", err)
 		return
 	}
 	for _, s := range open {
 		if members[s.ScannerID] && s.TargetKind == api.ScanTargetPaths && proactiveTrigger(s.Trigger) {
-			c.Preempt(ctx, s.ID, "superseded by a full pass")
+			f.c.Preempt(ctx, s.ID, "superseded by a full pass")
 		}
 	}
 }
