@@ -62,10 +62,18 @@ func (m *Service) publishSynthesis(ctx context.Context, info compaction.SessionI
 		return err
 	}
 	// Newer projections retain their own coverage and recovery coordinates.
-	if view.Continuation.ThroughOrd != enriched.ThroughOrd {
+	if view.Continuation.ThroughOrd < enriched.ThroughOrd ||
+		view.Continuation.SummaryThroughOrd >= enriched.SummaryThroughOrd {
 		return nil
 	}
-	text, err := compaction.RenderContinuation(ctx, enriched, info.RecallAvailable)
+	accepted := *view.Continuation
+	accepted.Summary = enriched.Summary
+	accepted.SummaryThroughOrd = enriched.SummaryThroughOrd
+	accepted.Reason = enriched.Reason
+	if accepted.SummaryThroughOrd < accepted.ThroughOrd {
+		accepted.Reason = "references_only"
+	}
+	text, err := compaction.RenderContinuation(ctx, &accepted, info.RecallAvailable)
 	if err != nil {
 		return err
 	}
@@ -85,7 +93,7 @@ func (m *Service) publishSynthesis(ctx context.Context, info compaction.SessionI
 		return nil
 	}
 	view.Messages = messages
-	view.Continuation = enriched
+	view.Continuation = &accepted
 	view.Generation = sess.CompactionGeneration + 1
 	view.TokensAfter = compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(messages))
 	return m.store.PutCompactionView(ctx, info.ID, *view)

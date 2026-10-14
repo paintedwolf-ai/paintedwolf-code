@@ -25,13 +25,25 @@ func (c *SimpleCompactor) EnrichContinuation(ctx context.Context, info SessionIn
 		}
 	}
 	summary, sources, err := c.summarizePrefix(ctx, info, prefix)
-	if err != nil {
+	accepted := false
+	for _, source := range sources {
+		accepted = accepted || source.Disposition != "reference"
+	}
+	if err != nil && !accepted {
 		return nil, err
 	}
 	enriched := *record
 	enriched.Summary = summaryRecord(summary)
 	enriched.Sources = sources
 	enriched.Reason = "summarized"
+	if err != nil {
+		enriched.Reason = "references_only"
+	}
+	for _, source := range sources {
+		if source.Disposition != "reference" {
+			enriched.SummaryThroughOrd = max(enriched.SummaryThroughOrd, source.Ord)
+		}
+	}
 	c.rankContinuation(ctx, info, &enriched)
 	return &enriched, nil
 }
