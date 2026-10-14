@@ -15,13 +15,28 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// requireBrowserBoundary admits a platform whose host boundary confines the
+// browser. Linux fails rather than skips when it cannot confine: the
+// capability report is the finding.
+func requireBrowserBoundary(t *testing.T) {
+	t.Helper()
+	switch runtime.GOOS {
+	case "darwin":
+		if !confine.Available() {
+			t.Skip("seatbelt unavailable")
+		}
+	case "linux":
+		if !confine.Available() {
+			caps, _ := confine.LinuxCapabilities()
+			t.Fatalf("linux confinement unavailable on this host: %+v", caps)
+		}
+	default:
+		t.Skip("no host boundary confines the browser on this platform")
+	}
+}
+
 func TestLaunchHeadlessUnderBrowserConfinement(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Seatbelt is darwin-only")
-	}
-	if !confine.Available() {
-		t.Skip("seatbelt unavailable")
-	}
+	requireBrowserBoundary(t)
 	confine.TestingSetAutoConfine(t)
 
 	browsertest.SkipIfNoBrowser(t)
@@ -44,7 +59,7 @@ func TestLaunchHeadlessUnderBrowserConfinement(t *testing.T) {
 	testutil.FailErr(t, "wait for screenshot page", page.Context(ctx).WaitLoad())
 	raw, err := page.Context(ctx).Screenshot(false, nil)
 	if err != nil {
-		t.Fatalf("screenshot under Seatbelt: %v", err)
+		t.Fatalf("screenshot under the host boundary: %v", err)
 	}
 	if len(raw) == 0 {
 		t.Fatal("empty screenshot")
@@ -53,12 +68,7 @@ func TestLaunchHeadlessUnderBrowserConfinement(t *testing.T) {
 
 // Browser confinement permits local traffic and denies public egress.
 func TestConfinedBrowserFloorReachesHostLoopback(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Seatbelt is darwin-only")
-	}
-	if !confine.Available() {
-		t.Skip("seatbelt unavailable")
-	}
+	requireBrowserBoundary(t)
 	confine.TestingSetAutoConfine(t)
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -92,12 +102,7 @@ func TestConfinedBrowserFloorReachesHostLoopback(t *testing.T) {
 }
 
 func TestProbeUsabilityUnderBrowserConfinement(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Seatbelt is darwin-only")
-	}
-	if !confine.Available() {
-		t.Skip("seatbelt unavailable")
-	}
+	requireBrowserBoundary(t)
 	confine.TestingSetAutoConfine(t)
 
 	browsertest.SkipIfNoBrowser(t)
@@ -108,12 +113,7 @@ func TestProbeUsabilityUnderBrowserConfinement(t *testing.T) {
 }
 
 func TestPoolNewPageUnderBrowserConfinement(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("Seatbelt is darwin-only")
-	}
-	if !confine.Available() {
-		t.Skip("seatbelt unavailable")
-	}
+	requireBrowserBoundary(t)
 	confine.TestingSetAutoConfine(t)
 
 	browsertest.SkipIfNoBrowser(t)

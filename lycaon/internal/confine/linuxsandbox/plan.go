@@ -171,9 +171,6 @@ func (p Plan) Validate() error {
 	default:
 		return &Unsupported{Code: UnsupportedNetworkMode, Detail: n.Mode}
 	}
-	if n.Browser {
-		return &Unsupported{Code: UnsupportedBrowser}
-	}
 	for _, path := range n.SocketPaths {
 		if !filepath.IsAbs(path) {
 			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "socket path " + path + " is not absolute"}
