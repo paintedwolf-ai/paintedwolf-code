@@ -27,14 +27,20 @@ func runHelperIfInvoked() {
 		if errors.As(err, &unavailable) {
 			// The typed reason lets the host say what the kernel lacks.
 			fmt.Fprint(os.Stderr, HelperStderrPrefix+linuxsandbox.UnavailableMarker+unavailable.UnavailableJSON()+"\n")
-			os.Exit(HelperUnavailableExit)
+			exitHelper(HelperUnavailableExit)
 		}
 		fmt.Fprint(os.Stderr, HelperStderrPrefix+err.Error()+"\n")
 		if IsCommandNotFound(err) {
-			os.Exit(CommandNotFoundExit)
+			exitHelper(CommandNotFoundExit)
 		}
-		os.Exit(HelperFailureExit)
+		exitHelper(HelperFailureExit)
 	}
+}
+
+// exitHelper ends a helper process with code.
+func exitHelper(code int) {
+	linuxsandbox.FlushCoverage()
+	os.Exit(code)
 }
 
 // runHelper applies an inherited profile before replacing the process.

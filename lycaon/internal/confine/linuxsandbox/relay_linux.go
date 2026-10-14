@@ -304,6 +304,7 @@ func exitOf(err error) (int, syscall.Signal) {
 // ExitWithSignal ends this process by the signal that ended the child, so the
 // host sees the same wait status. It falls back to 128 plus the signal number.
 func ExitWithSignal(sig syscall.Signal) {
+	FlushCoverage()
 	runtime.LockOSThread()
 	action := struct {
 		handler, flags, restorer uintptr
