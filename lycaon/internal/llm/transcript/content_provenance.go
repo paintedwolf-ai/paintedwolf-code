@@ -23,6 +23,12 @@ func CheckpointRejectionNotice() string {
 	return checkpointRejectionNotice
 }
 
+// CheckpointApprovalNotice scopes continuation to the original task and actual result.
+func CheckpointApprovalNotice() string {
+	loadContentAuthority()
+	return checkpointApprovalNotice
+}
+
 // CheckpointGuidanceNotice loads the denial-guidance frame, panicking if unavailable.
 func CheckpointGuidanceNotice() string {
 	loadContentAuthority()
@@ -39,6 +45,7 @@ func loadContentAuthority() {
 		var doc struct {
 			Notice              string `yaml:"notice"`
 			CheckpointGuidance  string `yaml:"checkpoint_guidance"`
+			CheckpointApproval  string `yaml:"checkpoint_approval"`
 			CheckpointRejection string `yaml:"checkpoint_rejection"`
 		}
 		if err := config.DecodeYAML(data, &doc); err != nil {
@@ -51,6 +58,10 @@ func loadContentAuthority() {
 		}
 		if checkpointRejectionNotice = strings.TrimSpace(doc.CheckpointRejection); checkpointRejectionNotice == "" {
 			contentAuthorityErr = fmt.Errorf("content-authority.yaml declares no checkpoint_rejection")
+			return
+		}
+		if checkpointApprovalNotice = strings.TrimSpace(doc.CheckpointApproval); checkpointApprovalNotice == "" {
+			contentAuthorityErr = fmt.Errorf("content-authority.yaml declares no checkpoint_approval")
 			return
 		}
 		if checkpointGuidanceNotice = strings.TrimSpace(doc.CheckpointGuidance); checkpointGuidanceNotice == "" {
@@ -66,6 +77,7 @@ var (
 	contentAuthorityOnce      sync.Once
 	contentAuthorityNotice    string
 	checkpointGuidanceNotice  string
+	checkpointApprovalNotice  string
 	checkpointRejectionNotice string
 	contentAuthorityErr       error
 )
@@ -75,6 +87,7 @@ const (
 	checkpointDenialSource       = "checkpoint_denial"
 	checkpointGuidanceSource     = "checkpoint_guidance"
 	checkpointDecisionSource     = "checkpoint_decision"
+	checkpointApprovalSource     = "checkpoint_approval"
 )
 
 // Project returns detached, model-ready messages with one authority notice.
@@ -168,7 +181,15 @@ func checkpointDecisionParts(msg api.Message) []api.MessageContentPart {
 	}
 	decision := msg.ToolResult.CheckpointDecision
 	if decision != nil && decision.Status == api.CheckpointStatusApproved {
-		return checkpointReceiptParts(*decision)
+		parts := checkpointReceiptParts(*decision)
+		if decision.Kind == api.CheckpointKindToolApproval {
+			parts = append(parts, api.MessageContentPart{
+				Content: CheckpointApprovalNotice(), Origin: api.MessageOriginHost,
+				Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted,
+				Source: checkpointApprovalSource,
+			})
+		}
+		return parts
 	}
 	if decision == nil || decision.Status != api.CheckpointStatusRejected {
 		return nil
