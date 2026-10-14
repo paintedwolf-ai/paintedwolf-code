@@ -65,3 +65,27 @@ func TestCopyDoesNotChangeDecisionCode(t *testing.T) {
 		t.Fatal("rendered copy should differ when the member differs")
 	}
 }
+
+func TestOccurrenceFactDeclsPublishedInActivation(t *testing.T) {
+	tiers := factTiers()
+	for _, d := range occurrenceFactDecls {
+		if got := tiers[d.name]; got != d.tier {
+			t.Fatalf("factTiers()[%q] = %q, want %q", d.name, got, d.tier)
+		}
+	}
+	gc := NewGuardContext()
+	gc.Invocation.Tool = "command"
+	gc.Session.WorkerLeg = true
+	act := activation(gc)
+	fields, ok := act["paintedwolf.capability_request_fields"].([]string)
+	if !ok || len(fields) == 0 {
+		t.Fatalf("paintedwolf.capability_request_fields = %#v, want non-empty []string", act["paintedwolf.capability_request_fields"])
+	}
+	if act["paintedwolf.supports_local_listen"] != true || act["paintedwolf.supports_loopback_connect"] != true {
+		t.Fatalf("listen/connect occurrence facts = (%v, %v), want (true, true)", act["paintedwolf.supports_local_listen"], act["paintedwolf.supports_loopback_connect"])
+	}
+	if act["paintedwolf.worker_leg"] != true {
+		t.Fatalf("paintedwolf.worker_leg = %v, want true", act["paintedwolf.worker_leg"])
+	}
+}
+

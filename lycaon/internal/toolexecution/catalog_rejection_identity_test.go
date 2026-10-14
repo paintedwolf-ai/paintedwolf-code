@@ -121,6 +121,24 @@ func TestCatalogCapabilityRecoveryUsesInvocationContract(t *testing.T) {
 			t.Fatalf("wrong client capability recovery: %s", text)
 		}
 	}
+
+	_, parseReject := capabilityrequest.ParseCapabilityRequest(map[string]any{
+		"capability_request": map[string]any{"write_root": "receipt.json"},
+	})
+	if parseReject == nil {
+		t.Fatal("relative write_root accepted")
+	}
+	err := bp.RejectFromObservation(t.Context(), oar.AnchorToolRejected, "command", "implement", nil, parseReject)
+	if err == nil {
+		t.Fatal("missing capability refusal for relative write_root")
+	}
+	text := err.Error()
+	if strings.Contains(text, "accepts no execution capability request") {
+		t.Fatalf("command capability rejection falsely claimed no capabilities are accepted: %s", text)
+	}
+	if !strings.Contains(text, "Omit capability_request for ordinary project-tree reads and writes") || !strings.Contains(text, "write_root") {
+		t.Fatalf("command capability rejection missing fields or ordinary project-tree guidance: %s", text)
+	}
 }
 
 func TestCatalogMCPHostRefusalsAreNotServerFailures(t *testing.T) {
