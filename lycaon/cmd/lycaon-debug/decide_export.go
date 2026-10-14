@@ -94,6 +94,8 @@ func runDecideExport(args []string) error {
 	dbPath := fs.String("db", "", "path to the sidecar store.db (required)")
 	outPath := fs.String("out", "", "output file (default stdout)")
 	after := fs.Int64("after", 0, "export receipts with an id greater than this")
+	retentionPath := fs.String("retention", "", "write compaction observation rows to this file")
+	requestsPath := fs.String("requests", "", "write conversation usage rows to this file")
 	rootsPath := fs.String("roots", "", "file of root session ids, one per line: export only those sessions and their workers")
 	if err := fs.Parse(args); err != nil {
 		return exitCodeError{code: 2, err: err}
@@ -122,6 +124,20 @@ func runDecideExport(args []string) error {
 		out = f
 	}
 	exporter := rowExporter{queries: queries, units: units, roots: roots, messages: map[string][]db.ListSessionMessagesRow{}, enc: json.NewEncoder(out)}
+	for _, target := range []struct {
+		path    string
+		encoder **json.Encoder
+	}{{*retentionPath, &exporter.retention}, {*requestsPath, &exporter.requests}} {
+		if target.path == "" {
+			continue
+		}
+		f, err := openDecideOutput(target.path, false)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = f.Close() }()
+		*target.encoder = json.NewEncoder(f)
+	}
 	if err := exporter.run(ctx, *after); err != nil {
 		return err
 	}
@@ -166,11 +182,13 @@ func loadUnitCatalog() (map[string]promptunit.Unit, error) {
 }
 
 type rowExporter struct {
-	queries  *db.Queries
-	units    map[string]promptunit.Unit
-	roots    map[string]bool
-	messages map[string][]db.ListSessionMessagesRow
-	enc      *json.Encoder
+	queries   *db.Queries
+	units     map[string]promptunit.Unit
+	roots     map[string]bool
+	messages  map[string][]db.ListSessionMessagesRow
+	enc       *json.Encoder
+	retention *json.Encoder
+	requests  *json.Encoder
 
 	exported, partial, noCandidates, outside, noOpening int
 }
@@ -206,6 +224,15 @@ func (e *rowExporter) export(ctx context.Context, r db.ListTurnReceiptContextsRo
 	var decisions receiptDecisions
 	if err := json.Unmarshal([]byte(r.DecisionsJson), &decisions); err != nil {
 		return fmt.Errorf("decode receipt %d decisions: %w", r.ID, err)
+	}
+	if e.retention != nil || e.requests != nil {
+		msgs, err := e.sessionMessages(ctx, r.SessionID)
+		if err != nil {
+			return err
+		}
+		if err := e.exportCompactionObservations(ctx, r, root, msgs); err != nil {
+			return err
+		}
 	}
 	if decisions.Candidates == nil {
 		e.noCandidates++

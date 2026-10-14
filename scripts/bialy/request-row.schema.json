@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://paintedwolf.ai/schemas/pw-request-row/1",
+  "title": "pw-request-row/1",
+  "type": "object",
+  "required": [
+    "schema",
+    "session",
+    "host",
+    "surface",
+    "partial",
+    "request_index",
+    "calls",
+    "prompt_tokens",
+    "recall_calls",
+    "repeated_calls",
+    "retention",
+    "usage_available"
+  ],
+  "properties": {
+    "schema": {
+      "const": "pw-request-row/1"
+    },
+    "usage_available": {
+      "type": "boolean"
+    },
+    "prompt_tokens": {
+      "type": "integer",
+      "minimum": 0
+    }
+  }
+}
