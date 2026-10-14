@@ -72,6 +72,7 @@ main() {
   done
   # shellcheck source=scripts/artifact-paths.sh
   source "$PWD/scripts/artifact-paths.sh"
+  source "$PWD/scripts/sha256.sh"
   if [[ -z "$EVAL_ENGINE" ]]; then
     ./task build:lycaon-dev
     EVAL_ENGINE="${PW_BUILD_DIR}/lycaon-dev"
@@ -113,7 +114,7 @@ main() {
   done
   python3 scripts/coordinator-benchmark/capture_storage.py --engine "$EVAL_ENGINE" \
     --catalog "${EVAL_MODULE:-$PWD/lycaon}/config" --capture "$EVAL_RUN_DIR"
-  shasum -a 256 "$EVAL_RUN_DIR/engine" >"$EVAL_RUN_DIR/engine.sha256"
+  sha256 "$EVAL_RUN_DIR/engine" >"$EVAL_RUN_DIR/engine.sha256"
   # Recall pressure belongs only to its isolated stress run.
   if [[ "$EVAL_RECALL_STRESS" == true ]]; then
     node - "$EVAL_RUN_DIR/module/config/packs/painted-wolf/platform/host/compaction.yaml" <<'NODE'

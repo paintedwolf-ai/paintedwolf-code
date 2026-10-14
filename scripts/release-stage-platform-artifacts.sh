@@ -8,6 +8,7 @@ if [[ -n "${LYCAON_OPENGREP_CANDIDATE:-}" ]]; then
 fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "${ROOT}/scripts/sha256.sh"
 PLATFORM=""
 GOOS=""
 ARCH=""
@@ -444,11 +445,7 @@ OPENGREP_ARTIFACT="$(bash "${ROOT}/scripts/resolve-opengrep.sh" --artifact-dir-o
 stage_package() {
   local source="$1" extension="$2"
   cp "${source}" "${OUTPUT}/${STEM}.${extension}"
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "${OUTPUT}/${STEM}.${extension}" | awk '{print $1}' > "${OUTPUT}/${STEM}.${extension}.sha256"
-  else
-    shasum -a 256 "${OUTPUT}/${STEM}.${extension}" | awk '{print $1}' > "${OUTPUT}/${STEM}.${extension}.sha256"
-  fi
+  sha256_hex "${OUTPUT}/${STEM}.${extension}" > "${OUTPUT}/${STEM}.${extension}.sha256"
 }
 stage_package "${PACKAGE}" "${PACKAGE_EXTENSION}"
 if [[ "${GOOS}" == linux ]]; then
