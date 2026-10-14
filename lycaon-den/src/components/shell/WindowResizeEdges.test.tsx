@@ -42,6 +42,15 @@ describe("WindowResizeEdges", () => {
     expect(startResizeDragging).toHaveBeenCalledWith("East");
   });
 
+  it("survives a compositor that refuses the resize gesture", async () => {
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => undefined);
+    startResizeDragging.mockRejectedValueOnce(new Error("no seat"));
+    render(() => <WindowResizeEdges />);
+    fireEvent.pointerDown(screen.getByTestId("window-resize-edges").querySelector("[data-direction='South']")!, { button: 0 });
+    await vi.waitFor(() => expect(debug).toHaveBeenCalledWith("[window-chrome] resize drag refused", expect.any(Error)));
+    debug.mockRestore();
+  });
+
   it("stands down while the window is maximized or fullscreen", () => {
     render(() => <WindowResizeEdges />);
     setWindowMaximizedForTests(true);

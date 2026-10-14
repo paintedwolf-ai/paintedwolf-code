@@ -2,10 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@solidjs/testing-library";
 import type { ContextMenuItem } from "../../components/ContextMenu.tsx";
 
+let tauri = true;
 vi.mock("../runtime.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../runtime.ts")>()),
   tauriPlatform: () => "linux" as const,
-  isTauriRuntime: () => true,
+  isTauriRuntime: () => tauri,
+}));
+
+const copyTextToClipboard = vi.fn(async (_text: string) => undefined);
+vi.mock("../../utils/clipboard.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../utils/clipboard.ts")>()),
+  copyTextToClipboard: (text: string) => copyTextToClipboard(text),
 }));
 
 const minimize = vi.fn(async () => undefined);
@@ -23,6 +30,9 @@ const { setShortcutPlatformForTests } = await import("../../shortcuts/platform.t
 const { registerCommandHandler, resetDispatcherForTests } = await import("../../shortcuts/dispatcher.ts");
 const { setWindowFullscreenForTests, setWindowMaximizedForTests } = await import("../windows/window-maximized.ts");
 const { AppMenuButton } = await import("../../components/shell/AppMenuButton.tsx");
+const { EditorState } = await import("@codemirror/state");
+const { EditorView } = await import("@codemirror/view");
+const { history } = await import("@codemirror/commands");
 
 type Section = ContextMenuItem & { submenu: readonly ContextMenuItem[] };
 
@@ -46,6 +56,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  tauri = true;
+  document.body.replaceChildren();
   cleanup();
   resetDispatcherForTests();
   resetContributionStoreForTest();
@@ -106,6 +118,53 @@ describe("inWindowAppMenuItems", () => {
     expect(focused.submenu.find((item) => item.label === "Copy")?.disabled).toBe(false);
     expect(focused.submenu.find((item) => item.label === "Paste")?.disabled).toBe(false);
     textarea.remove();
+  });
+
+  it("runs the edit entries against the editable focused when chosen", async () => {
+    const execCommand = vi.fn(() => true);
+    Object.defineProperty(document, "execCommand", { value: execCommand, configurable: true });
+    copyTextToClipboard.mockClear();
+    const textarea = document.createElement("textarea");
+    textarea.value = "draft";
+    document.body.append(textarea);
+    textarea.focus();
+    textarea.setSelectionRange(0, 5);
+    const edit = section(inWindowAppMenuItems(), "Edit");
+    edit.submenu.find((item) => item.label === "Undo")?.onSelect?.();
+    edit.submenu.find((item) => item.label === "Redo")?.onSelect?.();
+    expect(execCommand.mock.calls).toEqual([["undo"], ["redo"]]);
+    edit.submenu.find((item) => item.label === "Copy")?.onSelect?.();
+    await vi.waitFor(() => expect(copyTextToClipboard).toHaveBeenCalledWith("draft"));
+
+    // Focus left every editable before the choice: the entry does nothing.
+    textarea.blur();
+    copyTextToClipboard.mockClear();
+    edit.submenu.find((item) => item.label === "Copy")?.onSelect?.();
+    edit.submenu.find((item) => item.label === "Undo")?.onSelect?.();
+    expect(copyTextToClipboard).not.toHaveBeenCalled();
+    expect(execCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it("steps a focused code editor through its own history", () => {
+    const parent = document.createElement("div");
+    document.body.append(parent);
+    const view = new EditorView({ state: EditorState.create({ doc: "one", extensions: [history()] }), parent });
+    view.dispatch({ changes: { from: 3, insert: " two" } });
+    view.contentDOM.focus();
+    const edit = section(inWindowAppMenuItems(), "Edit");
+    edit.submenu.find((item) => item.label === "Undo")?.onSelect?.();
+    expect(view.state.doc.toString()).toBe("one");
+    edit.submenu.find((item) => item.label === "Redo")?.onSelect?.();
+    expect(view.state.doc.toString()).toBe("one two");
+    view.destroy();
+  });
+
+  it("leaves window entries and empty sections out outside the desktop app", () => {
+    tauri = false;
+    resetContributionStoreForTest();
+    const items = inWindowAppMenuItems();
+    expect(items.map((item) => item.label)).toEqual(["Painted Wolf Code", "Edit", "Window"]);
+    expect(labels(section(items, "Window").submenu)).toEqual(["Close window"]);
   });
 
   it("drives the window from the Window and View menus", async () => {

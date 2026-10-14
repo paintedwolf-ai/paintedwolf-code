@@ -60,7 +60,6 @@ function joinGroups(groups: ContextMenuEntry[][]): ContextMenuEntry[] {
 
 /** The editable the menu acts on: the one holding focus. */
 function focusedEditable(): EditableSnapshot | null {
-  if (typeof document === "undefined") return null;
   const el = findTextEditable(document.activeElement);
   return el ? snapshotEditable(el) : null;
 }
