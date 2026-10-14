@@ -47,6 +47,11 @@ const { claimShortcutBoundary } = await import("../../shortcuts/dispatcher.ts");
 const specA = [{ menu: "file", title: "File", groups: [] }];
 const specB = [{ menu: "file", title: "Fichier", groups: [] }];
 
+// The native menu bar is the default surface; tests that need the in-window
+// surface set Linux themselves. Pinning it keeps the host's user agent out.
+beforeEach(() => setShortcutPlatformForTests("macos"));
+afterEach(() => setShortcutPlatformForTests(null));
+
 describe("syncAppMenu", () => {
   beforeEach(() => {
     isTauriRuntime.mockReturnValue(true);
