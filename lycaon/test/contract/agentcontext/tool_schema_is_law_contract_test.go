@@ -38,7 +38,10 @@ func TestSchemaRejectsMissingRequiredFields(t *testing.T) {
 	for _, tc := range cases {
 		_, err := exec.Invoke(context.Background(), tc.tool, tc.args, tools.ToolContext{
 			Identity: tools.InvocationIdentity{Agent: "coordinator"},
-			Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"write", "edit", "code_rewrite"}, nil)},
+			Turn: tools.InvocationTurn{
+				TurnOfferedToolNames: []string{"write", "edit", "code_rewrite"},
+				TurnToolPlan:         toolsurface.Compile([]string{"write", "edit", "code_rewrite"}, nil),
+			},
 		})
 		if err == nil {
 			t.Fatalf("%s: expected schema reject", tc.tool)
@@ -60,7 +63,10 @@ func TestEditSchemaRejectNamesWriteSibling(t *testing.T) {
 
 	_, err = exec.Invoke(context.Background(), "edit", map[string]any{"path": "ntp_check.py", "symbol": "query_server"}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{Agent: "implementer"},
-		Turn:     tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"write", "edit"}, nil)},
+		Turn: tools.InvocationTurn{
+			TurnOfferedToolNames: []string{"write", "edit"},
+			TurnToolPlan:         toolsurface.Compile([]string{"write", "edit"}, nil),
+		},
 	})
 	if err == nil {
 		t.Fatal("expected edit schema reject")
