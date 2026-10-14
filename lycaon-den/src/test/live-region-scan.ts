@@ -40,7 +40,7 @@ function isLive(kind: LiveDeclaration["kind"], values: readonly string[]): boole
   return values.some((value) => value.split(/\s+/).some((token) => LIVE_ROLES.has(token)));
 }
 
-/** Every `role`/`aria-live` attribute, property and `setAttribute` call, and `<output>`, that declares a live region. */
+/** Every `role`/`aria-live` attribute, property, `setAttribute` call and `<output>` declaring a live region. */
 export function scanLiveDeclarations(): LiveDeclaration[] {
   const corpus = loadTypeScriptCorpus(denSourceRoot, { excludeTests: true });
   const out: LiveDeclaration[] = [];

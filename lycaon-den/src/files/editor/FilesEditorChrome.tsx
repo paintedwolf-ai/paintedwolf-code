@@ -72,7 +72,7 @@ export function FilesEditorStatus(props: FilesEditorStatusProps) {
   </div>;
 }
 
-/** The toolbar's find, go-to, and copy menus, their buttons' command bar disclosures, and the copy button's path copy. */
+/** The toolbar's find, go-to and copy menus, their buttons' command bar disclosures, and path copy. */
 export function createEditorToolbarMenus(options: {
   setToolbarMenu: (menu: { kind: FilesEditorToolbarMenuKind; anchor: ContextMenuAnchor }) => void;
   roots: () => readonly ProjectRoot[];
