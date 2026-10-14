@@ -166,7 +166,7 @@ func TestExecutorCapabilityParseRejectIncludesContractFields(t *testing.T) {
 	}
 	executor := NewExecutor(nil, reg, "implement")
 	_, err := executor.Invoke(t.Context(), "command", map[string]any{
-		"command":            []any{"python3", "-c", "pass"},
+		"argv":               []any{"python3", "-c", "pass"},
 		"capability_request": map[string]any{"write_root": "receipt.json"},
 	}, fixtureToolContext(t.TempDir()))
 	reject := toolrejection.AsToolReject(err)
