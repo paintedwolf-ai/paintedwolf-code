@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-app-quit
+command: painted-wolf/platform:app-quit
+scope: "global"
+allow_in_input: true
+bindings:
+  macos:
+    - "Mod+Q"
+  windows:
+    - "Alt+F4"
+  linux:
+    - "Mod+Q"

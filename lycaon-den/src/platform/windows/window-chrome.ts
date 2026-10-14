@@ -2,6 +2,8 @@ import { createSignal } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { reconcileOsColorScheme, osColorSchemeIsDark } from "../../theme.ts";
 import { isTauriRuntime, tauriPlatform } from "../runtime.ts";
+import { drawsWindowControls, loadWindowChromeLayout } from "./window-chrome-layout.ts";
+import { trackWindowMaximized } from "./window-maximized.ts";
 
 function tauriThemeIsDark(theme: string | null | undefined): boolean {
   if (theme === "dark") return true;
@@ -143,11 +145,18 @@ async function growWindowBy(deltaPx: number): Promise<WidenOutcome> {
 export async function setupWindowChrome(): Promise<void> {
   if (!isTauriRuntime()) return;
   tagTauriPlatformClasses();
+  if (drawsWindowControls()) {
+    // Drawn controls need the desktop's layout and the maximized state.
+    void loadWindowChromeLayout();
+    void trackWindowMaximized();
+  }
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   const win = getCurrentWindow();
 
-  // A null theme follows system appearance.
-  await win.setTheme(null);
+  // A null theme follows system appearance. On Linux the window already
+  // reports the Settings portal's color scheme, and setting a theme resets
+  // GTK's dark preference, which flashes a light frame.
+  if (tauriPlatform() !== "linux") await win.setTheme(null);
 
   const initial = await win.theme();
   reconcileOsColorScheme(tauriThemeIsDark(initial));

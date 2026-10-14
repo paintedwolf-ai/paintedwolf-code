@@ -1,7 +1,7 @@
 import { type Nav, type ShellNavigation } from "./shell-navigation-state.ts";
 import { type ShellScope } from "./shell-scope.ts";
 import { createProjectLifecycle } from "./project-lifecycle.ts";
-import { Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { type ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { type Project } from "../../api/types.ts";
 import { moveSessionPin, setSessionPinned } from "../../chat/session/session-retirement.ts";
@@ -50,6 +50,7 @@ import { type SessionNavigation } from "./session-navigation.ts";
 import { type ShellPeerWindows } from "./shell-peer-windows.ts";
 import { type ShellSearchState } from "./shell-search-state.ts";
 import { type ShellStagePlacement } from "./shell-stage-placement.ts";
+import { WindowControls } from "./WindowControls.tsx";
 
 /** Entering the sidebar lands on the current chat, then any chat, then any rail control. */
 const SIDEBAR_ENTRY_PRIORITY = [
@@ -97,6 +98,7 @@ type Props = Pick<
     | "toggleConversation"
     | "contextHidden"
     | "toggleContext"
+    | "windowEdgeClaims"
   > &
   Pick<
     SessionNavigation,
@@ -186,6 +188,7 @@ export function WorkspaceSidebar(props: Props) {
     toggleConversation,
     contextHidden,
     toggleContext,
+    windowEdgeClaims,
     goHome,
     startNewChat,
     selectSidebarSession,
@@ -268,6 +271,9 @@ export function WorkspaceSidebar(props: Props) {
         <div class="den-shell-aside-main">
           <div class="den-shell-aside-titlebar">
             <ChromeDragSurface />
+            <For each={windowEdgeClaims("nav")}>
+              {(claim) => <WindowControls {...claim} />}
+            </For>
             <NavSidebarCollapseButton
               side={
                 workspaceOrientationPref() === "mirrored" ? "right" : "left"

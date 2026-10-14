@@ -45,6 +45,10 @@ var iconSlots = []IconSlot{
 	{ID: "all-projects", Group: "shell", Description: "The full project list.", Paint: PaintStroke, Weight: weightRegular},
 	{ID: "sidebar-collapse", Group: "shell", Description: "Collapse the nav rail.", Paint: PaintStroke, Weight: weightRegular},
 	{ID: "sidebar-expand", Group: "shell", Description: "Expand the nav rail.", Paint: PaintStroke, Weight: weightRegular},
+	{ID: "app-menu", Group: "shell", Description: "Open the app menu from a drawn title bar.", Paint: PaintStroke, Weight: weightRegular},
+	{ID: "window-minimize", Group: "shell", Description: "Minimize a window with drawn decorations.", Paint: PaintStroke, Weight: weightRegular},
+	{ID: "window-maximize", Group: "shell", Description: "Maximize a window with drawn decorations.", Paint: PaintStroke, Weight: weightRegular},
+	{ID: "window-restore", Group: "shell", Description: "Restore a maximized window with drawn decorations.", Paint: PaintStroke, Weight: weightRegular},
 
 	{ID: "back", Group: "shell", Description: "Return to the previous list.", Paint: PaintStroke, Weight: weightRegular},
 	{ID: "project-folder", Group: "shell", Description: "A project's folder.", Paint: PaintStroke, Weight: weightHairline},

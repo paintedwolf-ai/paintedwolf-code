@@ -141,6 +141,8 @@ pub fn run() {
             windows::window_appearance::den_set_window_bounds,
             windows::window_backdrop::den_set_window_backdrop,
             app_menu::set_app_menu,
+            app_menu::request_quit,
+            windows::linux_decorations::linux_decoration_layout,
         ])
         .on_menu_event(|app, event| {
             app_menu::on_menu_event(app, event.id().as_ref());

@@ -6,12 +6,14 @@ import {
 } from "../nav/StageEdgeControls.tsx";
 import { ChromeDragSurface } from "./ChromeDragSurface.tsx";
 import { StageBackChip, type StageBack } from "./StageBackChip.tsx";
-import { WindowControls } from "./WindowControls.tsx";
+import { WindowControls, type WindowEdgeClaim } from "./WindowControls.tsx";
 
 type Props = {
   back?: StageBack | null;
   /** Panes that reopen from this title bar's window edges. */
   edges?: StageEdgePanes;
+  /** Window edges whose drawn controls this title bar carries. */
+  windowEdges?: readonly WindowEdgeClaim[];
 };
 
 /** Stage title bar for routes without chat tabs. */
@@ -25,9 +27,14 @@ export function ShellHeaderTitlebar(props: Props) {
       {(back) => <StageBackChip back={back()} />}
     </ShowLatest>
   );
+  const windowEdge = (side: "left" | "right") =>
+    props.windowEdges?.find((claim) => claim.side === side);
   return (
     <div class="den-shell-header-titlebar">
       <ChromeDragSurface />
+      <ShowLatest when={windowEdge("left")}>
+        {(claim) => <WindowControls {...claim()} />}
+      </ShowLatest>
       <ShowLatest when={panesAtEdge("left")} fallback={backChip()}>
         {(panes) => (
           <div class="den-shell-header-titlebar__edge" data-edge="left">
@@ -56,9 +63,9 @@ export function ShellHeaderTitlebar(props: Props) {
           </div>
         )}
       </ShowLatest>
-      <div class="den-shell-header-drawers">
-        <WindowControls />
-      </div>
+      <ShowLatest when={windowEdge("right")}>
+        {(claim) => <WindowControls {...claim()} />}
+      </ShowLatest>
     </div>
   );
 }

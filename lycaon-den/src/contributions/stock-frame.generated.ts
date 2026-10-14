@@ -6,6 +6,35 @@ export const STOCK_FRAME: ContributionFrameResponse = {
   "frame_revision": "35982e2d61b6b8f03dd793e6b3ddcf1dd905c1466efbe21782f32f6f9710f8d6",
   "commands": [
     {
+      "id": "painted-wolf/platform:app-menu-open",
+      "provider": "painted-wolf/platform",
+      "title": "Open app menu",
+      "scope": "global",
+      "icon": "play",
+      "palette": false,
+      "executor": "den",
+      "invocation": "den",
+      "action_kind": "native_ui",
+      "handler_id": "appMenu.open",
+      "result_treatment": "effect"
+    },
+    {
+      "id": "painted-wolf/platform:app-quit",
+      "provider": "painted-wolf/platform",
+      "title": "Quit Painted Wolf Code",
+      "scope": "global",
+      "keywords": [
+        "exit",
+        "quit"
+      ],
+      "icon": "surface",
+      "executor": "den",
+      "invocation": "den",
+      "action_kind": "native_ui",
+      "handler_id": "app.quit",
+      "result_treatment": "effect"
+    },
+    {
       "id": "painted-wolf/platform:chat-first-message",
       "provider": "painted-wolf/platform",
       "title": "Go to first message",
@@ -4521,6 +4550,37 @@ export const STOCK_FRAME: ContributionFrameResponse = {
   ],
   "keybindings": [
     {
+      "id": "painted-wolf/platform:key-app-menu-open",
+      "command": "painted-wolf/platform:app-menu-open",
+      "scope": "global",
+      "allow_in_input": true,
+      "bindings": {
+        "linux": [
+          "F10"
+        ],
+        "windows": [
+          "F10"
+        ]
+      }
+    },
+    {
+      "id": "painted-wolf/platform:key-app-quit",
+      "command": "painted-wolf/platform:app-quit",
+      "scope": "global",
+      "allow_in_input": true,
+      "bindings": {
+        "linux": [
+          "Mod+Q"
+        ],
+        "macos": [
+          "Mod+Q"
+        ],
+        "windows": [
+          "Alt+F4"
+        ]
+      }
+    },
+    {
       "id": "painted-wolf/platform:key-chat-last-message",
       "command": "painted-wolf/platform:chat-last-message",
       "scope": "global",
@@ -4969,7 +5029,7 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "allow_in_input": true,
       "bindings": {
         "linux": [
-          "Alt+F8"
+          "Mod+F8"
         ],
         "macos": [
           "Alt+F8"
@@ -5003,7 +5063,7 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "allow_in_input": true,
       "bindings": {
         "linux": [
-          "Alt+Shift+F8"
+          "Mod+Shift+F8"
         ],
         "macos": [
           "Alt+Shift+F8"
@@ -5462,7 +5522,7 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "allow_in_input": true,
       "bindings": {
         "linux": [
-          "Mod+Alt+ArrowRight"
+          "Mod+Alt+."
         ],
         "macos": [
           "Mod+Alt+ArrowRight"
@@ -5479,7 +5539,7 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "allow_in_input": true,
       "bindings": {
         "linux": [
-          "Mod+Alt+ArrowLeft"
+          "Mod+Alt+,"
         ],
         "macos": [
           "Mod+Alt+ArrowLeft"
@@ -5512,7 +5572,7 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "scope": "files",
       "bindings": {
         "linux": [
-          "Mod+Alt+ArrowDown"
+          "Mod+Alt+PageDown"
         ],
         "macos": [
           "Mod+Alt+ArrowDown"
@@ -5528,7 +5588,7 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "scope": "files",
       "bindings": {
         "linux": [
-          "Mod+Alt+ArrowUp"
+          "Mod+Alt+PageUp"
         ],
         "macos": [
           "Mod+Alt+ArrowUp"
@@ -7259,10 +7319,19 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "linux",
       "scope": "files",
-      "chord": "Alt+F8",
-      "active": "painted-wolf/platform:key-editor-next-change",
+      "chord": "Mod+Alt+,",
+      "active": "painted-wolf/platform:key-files-comparison-prev",
       "candidates": [
-        "painted-wolf/platform:key-editor-next-change"
+        "painted-wolf/platform:key-files-comparison-prev"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "files",
+      "chord": "Mod+Alt+.",
+      "active": "painted-wolf/platform:key-files-comparison-next",
+      "candidates": [
+        "painted-wolf/platform:key-files-comparison-next"
       ]
     },
     {
@@ -7304,42 +7373,6 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "linux",
       "scope": "files",
-      "chord": "Mod+Alt+ArrowDown",
-      "active": "painted-wolf/platform:key-files-diff-next-file",
-      "candidates": [
-        "painted-wolf/platform:key-files-diff-next-file"
-      ]
-    },
-    {
-      "platform": "linux",
-      "scope": "files",
-      "chord": "Mod+Alt+ArrowLeft",
-      "active": "painted-wolf/platform:key-files-comparison-prev",
-      "candidates": [
-        "painted-wolf/platform:key-files-comparison-prev"
-      ]
-    },
-    {
-      "platform": "linux",
-      "scope": "files",
-      "chord": "Mod+Alt+ArrowRight",
-      "active": "painted-wolf/platform:key-files-comparison-next",
-      "candidates": [
-        "painted-wolf/platform:key-files-comparison-next"
-      ]
-    },
-    {
-      "platform": "linux",
-      "scope": "files",
-      "chord": "Mod+Alt+ArrowUp",
-      "active": "painted-wolf/platform:key-files-diff-prev-file",
-      "candidates": [
-        "painted-wolf/platform:key-files-diff-prev-file"
-      ]
-    },
-    {
-      "platform": "linux",
-      "scope": "files",
       "chord": "Mod+Alt+C",
       "active": "painted-wolf/platform:key-files-choose-comparison",
       "candidates": [
@@ -7353,6 +7386,24 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-files-open-version-history",
       "candidates": [
         "painted-wolf/platform:key-files-open-version-history"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "files",
+      "chord": "Mod+Alt+PageDown",
+      "active": "painted-wolf/platform:key-files-diff-next-file",
+      "candidates": [
+        "painted-wolf/platform:key-files-diff-next-file"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "files",
+      "chord": "Mod+Alt+PageUp",
+      "active": "painted-wolf/platform:key-files-diff-prev-file",
+      "candidates": [
+        "painted-wolf/platform:key-files-diff-prev-file"
       ]
     },
     {
@@ -7479,15 +7530,6 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-files-toggle-deleted-lines",
       "candidates": [
         "painted-wolf/platform:key-files-toggle-deleted-lines"
-      ]
-    },
-    {
-      "platform": "linux",
-      "scope": "files",
-      "chord": "Alt+Shift+F8",
-      "active": "painted-wolf/platform:key-editor-previous-change",
-      "candidates": [
-        "painted-wolf/platform:key-editor-previous-change"
       ]
     },
     {
@@ -7664,6 +7706,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "linux",
       "scope": "files",
+      "chord": "Mod+F8",
+      "active": "painted-wolf/platform:key-editor-next-change",
+      "candidates": [
+        "painted-wolf/platform:key-editor-next-change"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "files",
       "chord": "Mod+H",
       "active": "painted-wolf/platform:key-find-replace",
       "candidates": [
@@ -7776,6 +7827,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-find-select-all-matches",
       "candidates": [
         "painted-wolf/platform:key-find-select-all-matches"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "files",
+      "chord": "Mod+Shift+F8",
+      "active": "painted-wolf/platform:key-editor-previous-change",
+      "candidates": [
+        "painted-wolf/platform:key-editor-previous-change"
       ]
     },
     {
@@ -7983,6 +8043,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-overlay-dismiss",
       "candidates": [
         "painted-wolf/platform:key-overlay-dismiss"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "global",
+      "chord": "F10",
+      "active": "painted-wolf/platform:key-app-menu-open",
+      "candidates": [
+        "painted-wolf/platform:key-app-menu-open"
       ]
     },
     {
@@ -8307,6 +8376,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-launcher-open",
       "candidates": [
         "painted-wolf/platform:key-launcher-open"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "global",
+      "chord": "Mod+Q",
+      "active": "painted-wolf/platform:key-app-quit",
+      "candidates": [
+        "painted-wolf/platform:key-app-quit"
       ]
     },
     {
@@ -9797,6 +9875,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "macos",
       "scope": "global",
+      "chord": "Mod+Q",
+      "active": "painted-wolf/platform:key-app-quit",
+      "candidates": [
+        "painted-wolf/platform:key-app-quit"
+      ]
+    },
+    {
+      "platform": "macos",
+      "scope": "global",
       "chord": "Mod+Shift+0",
       "active": "painted-wolf/platform:key-layout-reset-split-size",
       "candidates": [
@@ -10814,6 +10901,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "windows",
       "scope": "global",
+      "chord": "Alt+F4",
+      "active": "painted-wolf/platform:key-app-quit",
+      "candidates": [
+        "painted-wolf/platform:key-app-quit"
+      ]
+    },
+    {
+      "platform": "windows",
+      "scope": "global",
       "chord": "Alt+PageDown",
       "active": "painted-wolf/platform:key-chat-next-message",
       "candidates": [
@@ -10836,6 +10932,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-overlay-dismiss",
       "candidates": [
         "painted-wolf/platform:key-overlay-dismiss"
+      ]
+    },
+    {
+      "platform": "windows",
+      "scope": "global",
+      "chord": "F10",
+      "active": "painted-wolf/platform:key-app-menu-open",
+      "candidates": [
+        "painted-wolf/platform:key-app-menu-open"
       ]
     },
     {

@@ -267,6 +267,9 @@ function resolved(): ResolvedKeymap {
   return liveResolvedKeymap(activePlatform(), overrides);
 }
 
+/** `keyCode` an input method reports while composing. */
+const IME_COMPOSITION_KEY_CODE = 229;
+
 /** A control whose bare Enter/Space keydown becomes a native click. */
 function isNativeActivationTarget(target: EventTarget | null): boolean {
   if (target == null || typeof target !== "object") return false;
@@ -480,12 +483,15 @@ export function dispatchKeyboardEvent(
     target?: EventTarget | null;
     repeat?: boolean;
     isComposing?: boolean;
+    keyCode?: number;
   },
 ): DispatchResult {
   if (captureActive) {
     return { commandId: null, chord: null, handled: false };
   }
-  if (event.isComposing) {
+  // Composition keys never become commands; some input methods report the
+  // commit key with the legacy composition key code instead of `isComposing`.
+  if (event.isComposing || event.keyCode === IME_COMPOSITION_KEY_CODE) {
     return { commandId: null, chord: null, handled: false };
   }
   if (shortcutBoundaryClaims.size > 0) {

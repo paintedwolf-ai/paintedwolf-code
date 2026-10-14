@@ -8,4 +8,4 @@ bindings:
   windows:
     - "Alt+F8"
   linux:
-    - "Alt+F8"
+    - "Mod+F8"

@@ -7,4 +7,4 @@ bindings:
   windows:
     - "Mod+Alt+ArrowDown"
   linux:
-    - "Mod+Alt+ArrowDown"
+    - "Mod+Alt+PageDown"

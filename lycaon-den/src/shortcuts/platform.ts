@@ -51,6 +51,7 @@ export const reservedChords: Record<TauriPlatform, readonly string[]> = {
   linux: [
     "Mod+Alt+*",
     "Alt+F4",
+    "Mod+Q",
   ],
 };
 

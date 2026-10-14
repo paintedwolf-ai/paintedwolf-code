@@ -1,7 +1,7 @@
 import type { JSX } from "solid-js";
 import { ChromeDragSurface } from "./ChromeDragSurface.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";
-import { tabBarTrailingControls } from "./WindowControls.tsx";
+import { soleWindowControls } from "./WindowControls.tsx";
 
 type Props = {
   testId: string;
@@ -14,7 +14,7 @@ export function WindowHost(props: Props) {
   return (
     <Scrollport class="den-window-host" contentClass="den-window-host__surface" data-testid={props.testId}>
       <ChromeDragSurface class="den-window-host__chrome-drag" />
-      <div class="den-window-host__controls">{tabBarTrailingControls()}</div>
+      <div class="den-window-host__controls">{soleWindowControls()}</div>
       {props.children}
     </Scrollport>
   );

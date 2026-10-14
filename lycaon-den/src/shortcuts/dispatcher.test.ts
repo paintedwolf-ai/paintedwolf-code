@@ -59,6 +59,21 @@ function evt(
   };
 }
 
+describe("composition keys", () => {
+  it("ignores a keydown an input method reports with the composition key code", () => {
+    setDispatcherPlatformForTests("linux");
+    const handler = vi.fn();
+    const release = registerCommandHandler("composer.send", handler);
+    setComposerFocused(true, {});
+    const result = dispatchKeyboardEvent({
+      key: "Enter", code: "Enter", metaKey: false, ctrlKey: false, altKey: false, shiftKey: false, keyCode: 229,
+    });
+    expect(result.handled).toBe(false);
+    expect(handler).not.toHaveBeenCalled();
+    release();
+  });
+});
+
 describe("invokeCommand", () => {
   it("runs a registered handler", () => {
     const spy = vi.fn();

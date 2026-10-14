@@ -1,0 +1,10 @@
+id: painted-wolf/platform:app-quit
+title: "Quit Painted Wolf Code"
+icon: surface
+scope: "global"
+keywords:
+  - "exit"
+  - "quit"
+action:
+  kind: native_ui
+  handler: "app.quit"

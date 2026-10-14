@@ -52,7 +52,7 @@ type ContextMenuHeader = ContextMenuFields & {
   submenu?: never;
 };
 
-type ContextMenuEntry =
+export type ContextMenuEntry =
   | ContextMenuAction
   | ContextMenuDisabledItem
   | ContextMenuSeparator
