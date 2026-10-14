@@ -135,13 +135,14 @@ func TestProbeGitRemoteRunsThroughTheBundledToolchain(t *testing.T) {
 	if err := probeGitRemote(t.Context(), "ext::sh -c touch%20/tmp/pwned", &out); err == nil {
 		t.Fatal("remote-helper transport was accepted")
 	}
-	t.Setenv("LYCAON_ENGINE_ROOT", t.TempDir())
-	if err := probeGitRemote(t.Context(), "https://example.com/repo.git", &out); err == nil {
-		t.Fatal("missing bundled git did not fail the probe")
-	}
+	// The bundled git resolves once per process, so one branch runs per test binary.
 	engineRoot := filepath.Join(testutil.CheckoutRoot(t), "lycaon-den", "src-tauri", "engine-root")
 	if _, err := os.Stat(filepath.Join(engineRoot, "gitengine", "bin", "git")); err != nil {
-		t.Skip("bundled git missing — run ./task gitengine:fetch")
+		t.Setenv("LYCAON_ENGINE_ROOT", t.TempDir())
+		if err := probeGitRemote(t.Context(), "https://example.com/repo.git", &out); err == nil {
+			t.Fatal("missing bundled git did not fail the probe")
+		}
+		return
 	}
 	t.Setenv("LYCAON_ENGINE_ROOT", engineRoot)
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
