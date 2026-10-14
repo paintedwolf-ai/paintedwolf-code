@@ -191,14 +191,14 @@ describe("parseAppState layout", () => {
           projectId: "p1",
           sessionId: "s1",
           touchedAt: 100,
-          rows: { "tool-1": { collapsed: 240, '["tool-1"]': 420 } },
+          rows: { "tool-1": { revision: "r1", heights: { collapsed: 240, '["tool-1"]': 420 } } },
         },
       ],
     });
-    expect(state.transcriptRowHeights?.[0]?.rows["tool-1"]?.collapsed).toBe(240);
-    expect(state.transcriptRowHeights?.[0]?.rows["tool-1"]?.['["tool-1"]']).toBe(
-      420,
-    );
+    expect(state.transcriptRowHeights?.[0]?.rows["tool-1"]).toEqual({
+      revision: "r1",
+      heights: { collapsed: 240, '["tool-1"]': 420 },
+    });
   });
 
   it("preserves composer drafts keyed by session id", () => {

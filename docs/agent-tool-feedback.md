@@ -89,12 +89,26 @@ A named **field** is reachable on the same terms as a named tool. In card copy, 
 
 An unreachable remedy is worse than none: the agent retries it, the schema refuses again, and the pair loops until the turn dies.
 
+Both `Fix` and `Instead` must respect the same current facts. A short summary
+cannot reintroduce a tool omitted by the detailed remedy. The production recovery
+catalog test varies every declared offered-tool dimension for intrinsic rejection
+scenarios, including absent request context, and checks both fields. Conflicting
+producer metadata must not change the frozen tool surface. These checks cover
+availability claims; permission, workflow, and evidence validity require their
+corresponding structured facts and contracts. An offered tool still crosses its
+normal admission checks. Advice about approval, workflow readiness, or evidence
+freshness must use those facts separately from schema availability.
+
 When a call names a tool whose schema is absent, the compiled tool plan determines
 recovery. A deferred tool with `request_tools` offered returns `TOOL_NOT_OFFERED`
 with `tool_loadable: true` and an exact `replacement_calls` entry that loads its
 schema. The model retries on the next call, after loading; the rejected action is
 never executed automatically. A name without that loading path receives an
-unavailable-capability explanation. Loading changes schema visibility, not access
+unavailable-name explanation. The rejection lists the exact tools offered on that
+request from the frozen recovery surface. When the current surface offers the loader and
+other deferred tools, recovery asks the agent to describe its needed capability
+to discover an allowed alternative, without retrying the unavailable name. With
+no discovery path, recovery names the capability limitation. Loading changes schema visibility, not access
 or approval. This guidance appears only on rejection, without expanding standing
 prompts.
 

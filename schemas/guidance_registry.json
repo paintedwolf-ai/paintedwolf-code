@@ -1416,7 +1416,7 @@
       "summary": "`list_dir` received a cursor that is not valid for this scope and source generation."
     },
     "LIST_DIR_NOT_DIRECTORY": {
-      "branch_instruction": "Branch on Code; use read for a file or choose a directory",
+      "branch_instruction": "Choose a directory to list, or use an offered file reader",
       "category": "recoverable",
       "emit": "guard:list_dir",
       "summary": "list_dir path {{ paintedwolf.path }} is not a directory."
@@ -1809,13 +1809,13 @@
       "summary": "read offset {{ paintedwolf.offset }} exceeds file length ({{ paintedwolf.total_lines }} lines) for {{ paintedwolf.path }}."
     },
     "READ_PATH_NOT_FOUND": {
-      "branch_instruction": "Branch on Code; fix path or use list_dir to discover the correct name",
+      "branch_instruction": "Correct the path from observed evidence, or report the missing input",
       "category": "recoverable",
       "emit": "guard:read",
       "summary": "{{ tool }} could not open {{ paintedwolf.path }} — path does not exist under the attached project roots."
     },
     "RECALL_LIVE_CODE_NOT_IN_SCOPE": {
-      "branch_instruction": "Branch on Code RECALL_LIVE_CODE_NOT_IN_SCOPE; use grep or find for the current tree",
+      "branch_instruction": "Use an offered current-source tool, or report the missing evidence",
       "category": "recoverable",
       "emit": "guard:recall",
       "summary": "recall reads the record, not the working tree."
@@ -2997,7 +2997,7 @@
       "summary": "This tool cannot run during closeout"
     },
     "TOOL_NOT_OFFERED": {
-      "branch_instruction": "{% if paintedwolf.tool_loadable %}Load `{{ tool }}` with `request_tools`, then retry on the next model call{% else %}Use an available capability or report the constraint{% endif %}",
+      "branch_instruction": "{% if paintedwolf.tool_loadable %}Load `{{ tool }}` with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.tool_discovery_available %}Use a suitable offered tool, or describe the missing operation and target to `request_tools`{% else %}Use an available capability or report the constraint{% endif %}{% endif %}",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "{% if paintedwolf.tool_loadable %}`{{ tool }}` is available but its schema is not loaded{% else %}`{{ tool }}` is unavailable on this model call{% endif %}"
@@ -3181,7 +3181,7 @@
       "summary": "`verify()` was called with no command and this project has no declared verify command"
     },
     "VERIFY_DECLARED_COMMAND_OVERRIDE": {
-      "branch_instruction": "Drop the command argument and let verify run `{{ paintedwolf.declared }}`",
+      "branch_instruction": "Drop the `command` argument and let verify run `{{ paintedwolf.declared }}`",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "this project declares its verify command as `{{ paintedwolf.declared }}`, and verify() was given `{{ paintedwolf.requested }}` instead."

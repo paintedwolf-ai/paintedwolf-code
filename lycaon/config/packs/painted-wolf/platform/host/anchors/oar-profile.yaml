@@ -731,6 +731,10 @@ host_facts:
    type: bool
  - name: paintedwolf.tool_loadable
    type: bool
+ - name: paintedwolf.tool_discovery_available
+   type: bool
+ - name: paintedwolf.offered_tools
+   type: list<string>
  - name: paintedwolf.can_task
    type: bool
  - name: paintedwolf.can_complete_leg
