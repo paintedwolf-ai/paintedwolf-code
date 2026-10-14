@@ -129,7 +129,7 @@ func run(ctx context.Context, projectDir string, args []string, opts Opts, stdou
 	if err := auditRepoConfig(ctx, cwd); err != nil {
 		return nil, -1, err
 	}
-	argv, served, err := buildArgv(ctx, cwd, opts, args)
+	argv, network, err := buildArgv(ctx, cwd, opts, args)
 	if err != nil {
 		return nil, -1, err
 	}
@@ -137,7 +137,12 @@ func run(ctx context.Context, projectDir string, args []string, opts Opts, stdou
 	if err != nil {
 		return nil, -1, err
 	}
-	if served == hostHelperVault {
+	proxy, err := proxyEnv(network.remote)
+	if err != nil {
+		return nil, -1, err
+	}
+	env = append(env, proxy...)
+	if network.helper == hostHelperVault {
 		socket, stop, err := credentialServiceFn(ctx, bin)
 		if err != nil {
 			return nil, -1, fmt.Errorf("gitexec: start credential service: %w", err)
@@ -203,11 +208,18 @@ func validateProjectDir(projectDir string) (string, error) {
 	return root, nil
 }
 
-// buildArgv also reports which host helper, if any, the invocation needs served.
-func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]string, hostHelper, error) {
+// networkFacts are what a network invocation needs beyond its argv.
+type networkFacts struct {
+	// remote is the URL the invocation contacts, when it can be determined.
+	remote string
+	helper hostHelper
+}
+
+func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]string, networkFacts, error) {
+	var network networkFacts
 	prefix, err := neutralizeArgs(resolveSSHCommand(ctx))
 	if err != nil {
-		return nil, hostHelperNone, err
+		return nil, network, err
 	}
 	// Override order is security-sensitive.
 	out := append([]string{}, prefix...)
@@ -219,24 +231,23 @@ func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]str
 		}
 		out = append(out, "-c", kv)
 	}
-	served := hostHelperNone
 	if opts.Profile == ProfileNetwork {
+		network.remote = strings.TrimSpace(opts.RemoteURL)
+		if network.remote == "" {
+			network.remote = remoteURLFor(ctx, cwd, args)
+		}
 		if h := getHostConfig(); h != nil {
-			remote := strings.TrimSpace(opts.RemoteURL)
-			if remote == "" {
-				remote = remoteURLFor(ctx, cwd, args)
-			}
-			resolved, selected, err := resolveCredentialHelper(h.HelperFor(ctx, remote))
+			resolved, selected, err := resolveCredentialHelper(h.HelperFor(ctx, network.remote))
 			if err != nil {
-				return nil, hostHelperNone, err
+				return nil, networkFacts{}, err
 			}
 			if resolved != "" {
 				out = append(out, "-c", "credential.helper="+resolved)
-				served = selected
+				network.helper = selected
 			}
 		}
 	}
-	return append(out, diffDriverFlagArgs(args)...), served, nil
+	return append(out, diffDriverFlagArgs(args)...), network, nil
 }
 
 func gitExecPath(bin string) string {

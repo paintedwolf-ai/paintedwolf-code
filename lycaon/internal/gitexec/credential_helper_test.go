@@ -50,11 +50,11 @@ func TestNetworkInvocationServesTheVaultHelperOnLinux(t *testing.T) {
 	useBundledGit(t)
 	SetHostConfig(stubHostConfig{helper: ""})
 	executablePath = func() (string, error) { return "/opt/painted-wolf-code/pw", nil }
-	argv, served, err := buildArgv(t.Context(), t.TempDir(), Opts{Profile: ProfileNetwork, RemoteURL: "https://example.com/r.git"}, []string{"fetch"})
+	argv, network, err := buildArgv(t.Context(), t.TempDir(), Opts{Profile: ProfileNetwork, RemoteURL: "https://example.com/r.git"}, []string{"fetch"})
 	testutil.FailErr(t, "buildArgv", err)
 	wantVault := strings.Contains(strings.Join(argv, "\x00"), "credential.helper=!'/opt/painted-wolf-code/pw' git-credential-vault")
-	if (served == hostHelperVault) != wantVault {
-		t.Fatalf("served %q with argv %q", served, argv)
+	if (network.helper == hostHelperVault) != wantVault || network.remote != "https://example.com/r.git" {
+		t.Fatalf("network facts %+v with argv %q", network, argv)
 	}
 	started, stopped := 0, 0
 	previous := credentialServiceFn
