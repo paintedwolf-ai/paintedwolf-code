@@ -143,6 +143,7 @@ pub fn run() {
             app_menu::set_app_menu,
             app_menu::request_quit,
             windows::linux_decorations::linux_decoration_layout,
+            windows::linux_frame::linux_window_frame,
         ])
         .on_menu_event(|app, event| {
             app_menu::on_menu_event(app, event.id().as_ref());
@@ -154,6 +155,7 @@ pub fn run() {
             sidecar::setup_supervision(app.handle());
             webkit_features::create_main_window(app.handle())?;
             windows::window_appearance::setup(app.handle());
+            windows::linux_decorations::setup(app.handle().clone());
             clipboard::setup();
             update_service::startup::start(app.handle().clone());
             windows::accessibility_text_size::setup(app.handle().clone())

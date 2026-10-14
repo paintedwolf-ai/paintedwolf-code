@@ -9,7 +9,6 @@ import { createCriticalStop } from "./components/CriticalStopStage.tsx";
 import { ConfirmDestructiveHost } from "./components/ConfirmDestructiveDialog.tsx";
 import { HostFolderDialog } from "./components/HostFolderDialog.tsx";
 import { TextEditContextMenuHost } from "./components/TextEditContextMenuHost.tsx";
-import { WindowResizeEdges } from "./components/shell/WindowResizeEdges.tsx";
 import {
   bindAppConnection,
   connectAppBackend,
@@ -173,7 +172,6 @@ function App() {
       <ConfirmDestructiveHost />
       <HostFolderDialog />
       <TextEditContextMenuHost />
-      <WindowResizeEdges />
     </>
   );
 }

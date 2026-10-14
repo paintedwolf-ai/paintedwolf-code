@@ -22,3 +22,8 @@ commands.allow = ["den_set_badge_count"]
 identifier = "allow-linux-decoration-layout"
 description = "Read which window buttons the desktop places in a client-side title bar, and on which side."
 commands.allow = ["linux_decoration_layout"]
+
+[[permission]]
+identifier = "allow-linux-window-frame"
+description = "Read whether a Linux window floats with its frame's corners and shadow, and its content size."
+commands.allow = ["linux_window_frame"]

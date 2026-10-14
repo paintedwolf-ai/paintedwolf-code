@@ -107,20 +107,26 @@
   pointer-events: auto;
 }
 
-/* Drawn window controls share the strip with the reopen controls. */
+/* Drawn window controls share the strip with the reopen controls, at the
+   same distance from the window edge as every other host places them. */
 .den-custom-chrome .den-shell-header-titlebar > .den-shell-window-controls {
   position: relative;
   z-index: 1;
   align-self: flex-start;
   margin-top: calc(
-    var(--den-pane-control-center) - var(--den-titlebar-edge-control) / 2 -
+    var(--den-pane-control-center) - var(--den-window-control-size) / 2 -
       var(--den-titlebar-pad-top, 0px)
   );
   pointer-events: auto;
 }
 
+.den-shell-header-titlebar > .den-shell-window-controls[data-side="left"] {
+  margin-left: calc(var(--den-window-controls-inset) - var(--den-chat-gutter-x));
+}
+
 .den-shell-header-titlebar > .den-shell-window-controls[data-side="right"] {
   margin-left: auto;
+  margin-right: calc(var(--den-window-controls-inset) - var(--den-chat-gutter-x));
 }
 
 /* A trailing reopen control already claims the free space. */
@@ -128,20 +134,37 @@
   margin-left: 0;
 }
 
-/* The chat header and lone surfaces hold their clusters in the strip. */
-.den-custom-chrome .den-shell-header-chat > .den-shell-window-controls,
+/* The chat header's clusters take their own place in its row, so the tab
+   rail ends before them instead of running under them. */
+.den-custom-chrome .den-shell-header-chat > .den-shell-window-controls {
+  align-self: flex-start;
+  margin-top: calc(
+    var(--den-pane-control-center) - var(--den-window-control-size) / 2 -
+      var(--den-chat-chrome-top, 0px)
+  );
+}
+
+.den-custom-chrome .den-shell-header-chat > .den-shell-window-controls[data-side="left"] {
+  order: -1;
+  margin-left: var(--den-window-controls-inset);
+}
+
+.den-custom-chrome .den-shell-header-chat > .den-shell-window-controls[data-side="right"] {
+  order: 1;
+  margin-right: var(--den-window-controls-inset);
+}
+
+/* A lone surface has nothing else in its strip. */
 .den-custom-chrome .den-window-host__controls > .den-shell-window-controls {
   position: absolute;
-  top: calc(var(--den-pane-control-center) - var(--den-titlebar-edge-control) / 2);
+  top: calc(var(--den-pane-control-center) - var(--den-window-control-size) / 2);
   z-index: 1;
 }
 
-.den-custom-chrome .den-shell-header-chat > .den-shell-window-controls[data-side="left"],
 .den-custom-chrome .den-window-host__controls > .den-shell-window-controls[data-side="left"] {
   left: var(--den-window-controls-inset);
 }
 
-.den-custom-chrome .den-shell-header-chat > .den-shell-window-controls[data-side="right"],
 .den-custom-chrome .den-window-host__controls > .den-shell-window-controls[data-side="right"] {
   right: var(--den-window-controls-inset);
 }
@@ -161,78 +184,6 @@
   .den-shell-window-controls[data-narrow-hidden] {
   display: none;
 }
-
-/* Resize zones along the edges of a window that draws its own decorations. */
-.den-window-resize-edges {
-  position: fixed;
-  inset: 0;
-  z-index: var(--den-z-anchored-surface);
-  pointer-events: none;
-}
-
-.den-window-resize-edge {
-  position: absolute;
-  pointer-events: auto;
-}
-
-.den-window-resize-edge[data-direction="North"],
-.den-window-resize-edge[data-direction="South"] {
-  left: var(--den-window-resize-corner);
-  right: var(--den-window-resize-corner);
-  height: var(--den-window-resize-edge);
-  cursor: ns-resize;
-}
-
-.den-window-resize-edge[data-direction="East"],
-.den-window-resize-edge[data-direction="West"] {
-  top: var(--den-window-resize-corner);
-  bottom: var(--den-window-resize-corner);
-  width: var(--den-window-resize-edge);
-  cursor: ew-resize;
-}
-
-.den-window-resize-edge[data-direction="North"],
-.den-window-resize-edge[data-direction="NorthWest"],
-.den-window-resize-edge[data-direction="NorthEast"] {
-  top: 0;
-}
-
-.den-window-resize-edge[data-direction="South"],
-.den-window-resize-edge[data-direction="SouthWest"],
-.den-window-resize-edge[data-direction="SouthEast"] {
-  bottom: 0;
-}
-
-.den-window-resize-edge[data-direction="West"],
-.den-window-resize-edge[data-direction="NorthWest"],
-.den-window-resize-edge[data-direction="SouthWest"] {
-  left: 0;
-}
-
-.den-window-resize-edge[data-direction="East"],
-.den-window-resize-edge[data-direction="NorthEast"],
-.den-window-resize-edge[data-direction="SouthEast"] {
-  right: 0;
-}
-
-.den-window-resize-edge[data-direction="NorthWest"],
-.den-window-resize-edge[data-direction="NorthEast"],
-.den-window-resize-edge[data-direction="SouthWest"],
-.den-window-resize-edge[data-direction="SouthEast"] {
-  width: var(--den-window-resize-corner);
-  height: var(--den-window-resize-corner);
-}
-
-.den-window-resize-edge[data-direction="NorthWest"],
-.den-window-resize-edge[data-direction="SouthEast"] {
-  cursor: nwse-resize;
-}
-
-.den-window-resize-edge[data-direction="NorthEast"],
-.den-window-resize-edge[data-direction="SouthWest"] {
-  cursor: nesw-resize;
-}
-
 
 .den-custom-chrome .den-shell-stage--pane[data-stage="files"]
   > .den-shell-header :is(button, [role="button"]) {

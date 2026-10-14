@@ -95,6 +95,9 @@ pub fn parse_button_layout(raw: &str) -> Option<DecorationLayout> {
     })
 }
 
+/// Event carrying the desktop's layout after `button-layout` changes.
+pub const LAYOUT_CHANGED_EVENT: &str = "linux-decoration-layout-changed";
+
 /// The desktop's layout when the Settings portal exposes one, else the default.
 #[tauri::command]
 pub async fn linux_decoration_layout() -> DecorationLayout {
@@ -103,10 +106,15 @@ pub async fn linux_decoration_layout() -> DecorationLayout {
         .unwrap_or_else(|_| DecorationLayout::default_layout())
 }
 
+/// A layout from a raw `button-layout`; a value naming no control falls back to the default.
+fn layout_from_raw(raw: &str) -> DecorationLayout {
+    parse_button_layout(raw).unwrap_or_else(DecorationLayout::default_layout)
+}
+
 #[cfg(target_os = "linux")]
 fn current_layout() -> DecorationLayout {
     match portal::read_button_layout() {
-        Ok(raw) => parse_button_layout(&raw).unwrap_or_else(DecorationLayout::default_layout),
+        Ok(raw) => layout_from_raw(&raw),
         Err(reason) => {
             eprintln!("window button layout unavailable: {reason}; drawing the default");
             DecorationLayout::default_layout()
@@ -119,56 +127,40 @@ fn current_layout() -> DecorationLayout {
     DecorationLayout::default_layout()
 }
 
+/// Follows `button-layout` through the portal's `SettingChanged` signal.
 #[cfg(target_os = "linux")]
-mod portal {
-    use gtk::glib::{self, ToVariant, VariantTy};
-    use gtk::gio;
-
-    const PORTAL_NAME: &str = "org.freedesktop.portal.Desktop";
-    const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";
-    const SETTINGS_INTERFACE: &str = "org.freedesktop.portal.Settings";
-    const NAMESPACE: &str = "org.gnome.desktop.wm.preferences";
-    const KEY: &str = "button-layout";
-    const TIMEOUT_MS: i32 = 500;
-
-    /// Reads the raw `button-layout` string through `Settings.Read`.
-    pub(super) fn read_button_layout() -> Result<String, String> {
-        // A private context: this runs on a blocking worker, not the GTK main thread.
-        let connection = crate::linux_desktop::session_bus::connect(&glib::MainContext::new())?;
-        let reply = connection
-            .call_sync(
-                Some(PORTAL_NAME),
-                PORTAL_PATH,
-                SETTINGS_INTERFACE,
-                "Read",
-                Some(&(NAMESPACE, KEY).to_variant()),
-                Some(VariantTy::new("(v)").map_err(|error| error.to_string())?),
-                gio::DBusCallFlags::NONE,
-                TIMEOUT_MS,
-                gio::Cancellable::NONE,
-            )
-            .map_err(|error| error.to_string())?;
-        // The portal wraps the setting's own variant in a second variant.
-        let mut value: glib::Variant = reply.child_value(0);
-        while value.is_type(VariantTy::VARIANT) {
-            value = value
-                .as_variant()
-                .ok_or_else(|| "empty settings variant".to_string())?;
-        }
-        value
-            .str()
-            .map(str::to_owned)
-            .ok_or_else(|| format!("button-layout is not a string: {}", value.type_()))
+pub fn setup(app: tauri::AppHandle) {
+    use tauri::Emitter;
+    let spawned = std::thread::Builder::new()
+        .name("decoration-layout".into())
+        .spawn(move || {
+            let outcome = portal::watch_button_layout(move |raw| {
+                if let Err(err) = app.emit(LAYOUT_CHANGED_EVENT, layout_from_raw(raw)) {
+                    eprintln!("window button layout: emit: {err}");
+                }
+            });
+            if let Err(reason) = outcome {
+                eprintln!("window button layout changes unavailable: {reason}");
+            }
+        });
+    if let Err(err) = spawned {
+        eprintln!("window button layout: watch thread: {err}");
     }
 }
+
+#[cfg(not(target_os = "linux"))]
+pub fn setup(_app: tauri::AppHandle) {}
+
+#[cfg(target_os = "linux")]
+mod portal;
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use DecorationControl::*;
 
-    /// The drawn buttons, menu entries and resize zones call these window
-    /// operations from every window that draws its own chrome.
+    /// The drawn buttons and menu entries call these window operations from
+    /// every window that draws its own chrome.
     #[test]
     fn window_capabilities_grant_the_drawn_chrome_operations() {
         let manifest = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -178,9 +170,9 @@ mod tests {
                 "core:window:allow-minimize",
                 "core:window:allow-toggle-maximize",
                 "core:window:allow-close",
-                "core:window:allow-start-resize-dragging",
                 "core:window:allow-set-fullscreen",
                 "allow-linux-decoration-layout",
+                "allow-linux-window-frame",
             ] {
                 assert!(
                     text.contains(&format!("\"{permission}\"")),
@@ -247,6 +239,12 @@ mod tests {
         assert!(layout.left.is_empty());
         assert_eq!(layout.right, vec![Minimize, Maximize, Close]);
         assert_eq!(layout.source, DecorationLayoutSource::Default);
+    }
+
+    #[test]
+    fn a_changed_value_naming_no_control_draws_the_default() {
+        assert_eq!(layout_from_raw("icon:"), DecorationLayout::default_layout());
+        assert_eq!(layout_from_raw("close:"), portal(&[Close], &[]));
     }
 
     #[test]
