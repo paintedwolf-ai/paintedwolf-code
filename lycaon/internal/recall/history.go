@@ -48,14 +48,15 @@ type HistoryPage struct {
 
 // HistoryEntry retains observation coordinates without promoting their authority.
 type HistoryEntry struct {
-	MessageID string   `json:"message_id"`
-	Ord       int64    `json:"ord"`
-	Role      string   `json:"role"`
-	Handles   []string `json:"handles,omitempty"`
-	Content   string   `json:"content"`
-	Runes     int      `json:"runes"`
-	Offset    int      `json:"offset,omitempty"`
-	Seq       int64    `json:"seq"`
+	Record    *HistoryRequest `json:"record_request,omitempty"`
+	MessageID string          `json:"message_id"`
+	Ord       int64           `json:"ord"`
+	Role      string          `json:"role"`
+	Handles   []string        `json:"handles,omitempty"`
+	Content   string          `json:"content"`
+	Runes     int             `json:"runes"`
+	Offset    int             `json:"offset,omitempty"`
+	Seq       int64           `json:"seq"`
 }
 
 func (s *Service) history(ctx context.Context, req Request) (*Result, error) {
@@ -131,6 +132,7 @@ func (s *Service) history(ctx context.Context, req Request) (*Result, error) {
 }
 
 func historyIndex(ctx context.Context, tx *sql.Tx, session string, h *HistoryRequest, limit int, page *HistoryPage) error {
+	page.Format = "index"
 	if limit <= 0 {
 		limit = DefaultLimit
 	}
@@ -161,6 +163,8 @@ func historyIndex(ctx context.Context, tx *sql.Tx, session string, h *HistoryReq
 		if err != nil {
 			return err
 		}
+		entry.Record = &HistoryRequest{Format: "record", ThroughOrd: h.ThroughOrd, MessageID: entry.MessageID,
+			SourceSeq: entry.Seq, BodyRunes: h.BodyRunes}
 		page.Entries = append(page.Entries, entry)
 	}
 	return rows.Err()

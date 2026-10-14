@@ -19,7 +19,12 @@ func TestHistoryRecordPreservesArgumentsAndPartsWithoutPrivateReplay(t *testing.
 		`[{"id":"original-call","name":"read","args":{"path":"original.go"},"wire_id":"private-id","extra_content":{"reasoning":"private replay"}}]`,
 		`[{"content":"recorded λ plan","origin":"model","authority":"none","trust_tier":"untrusted"}]`)
 	testutil.FailErr(t, "seed original call", err)
-	history := &recall.HistoryRequest{ThroughOrd: 1, MessageID: "call", Format: "record", BodyRunes: 32}
+	index, err := f.svc.Answer(t.Context(), recall.Request{Caller: coordinator(), History: &recall.HistoryRequest{ThroughOrd: 1, BodyRunes: 32}})
+	testutil.FailErr(t, "discover original call", err)
+	if index.History.Format != "index" || len(index.History.Entries) != 1 || index.History.Entries[0].Record == nil {
+		t.Fatal("index did not distinguish previews and provide a record request")
+	}
+	history := index.History.Entries[0].Record
 	var record strings.Builder
 	for {
 		result, err := f.svc.Answer(t.Context(), recall.Request{Caller: coordinator(), History: history})
