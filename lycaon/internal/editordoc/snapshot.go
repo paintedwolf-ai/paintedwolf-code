@@ -12,7 +12,8 @@ import (
 
 // Pin freezes a bounded read against an exact accepted CRDT state. Later edits
 // cannot change either its text or the filesystem precondition it observed.
-func (s *Service) Pin(ctx context.Context, projectID, id string, expected int64) (*Document, error) {
+func (c *SnapshotService) Pin(ctx context.Context, projectID, id string, expected int64) (*Document, error) {
+	s := c.s
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	unlock := s.docLocks.lock(documentLockKey(id))
@@ -27,7 +28,8 @@ func (s *Service) Pin(ctx context.Context, projectID, id string, expected int64)
 	return s.pinCurrent(ctx, d, nil)
 }
 
-func (s *Service) pinCurrent(ctx context.Context, d *Document, pin *savePin) (*Document, error) {
+func (c savePublisher) pinCurrent(ctx context.Context, d *Document, pin *savePin) (*Document, error) {
+	s := c.s
 	s.replicas.mu.Lock()
 	defer s.replicas.mu.Unlock()
 	entry, err := s.loadReplica(ctx, d)
@@ -48,7 +50,8 @@ func (s *Service) pinCurrent(ctx context.Context, d *Document, pin *savePin) (*D
 	return s.withParticipants(d), nil
 }
 
-func (s *Service) pinnedDocument(ctx context.Context, current *Document, revision int64) (*Document, error) {
+func (c savePublisher) pinnedDocument(ctx context.Context, current *Document, revision int64) (*Document, error) {
+	s := c.s
 	var payload []byte
 	err := s.store.db.QueryRowContext(ctx, `SELECT payload FROM editor_document_snapshots WHERE document_id=? AND revision=?`, current.ID, revision).Scan(&payload)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -69,7 +72,8 @@ func (s *Service) pinnedDocument(ctx context.Context, current *Document, revisio
 }
 
 // PinSave reserves the exact draft for one save, independently of subsequent typing.
-func (s *Service) PinSave(ctx context.Context, projectID, id, clientID, operationID string) (*Document, error) {
+func (c *SnapshotService) PinSave(ctx context.Context, projectID, id, clientID, operationID string) (*Document, error) {
+	s := c.s
 	if _, err := uuid.Parse(operationID); err != nil {
 		return nil, ErrOperationConflict
 	}

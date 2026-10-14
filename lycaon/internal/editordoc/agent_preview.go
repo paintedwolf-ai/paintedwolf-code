@@ -16,7 +16,8 @@ type AgentPreview struct {
 
 // PreviewAgentEdits resolves the complete edit set against one accepted head per
 // document. Acceptance fences these revisions after prepared-content review.
-func (s *Service) PreviewAgentEdits(ctx context.Context, inputs []AgentEdit) ([]AgentPreview, error) {
+func (a *AgentService) PreviewAgentEdits(ctx context.Context, inputs []AgentEdit) ([]AgentPreview, error) {
+	s := a.s
 	keys, err := agentBatchKeys(inputs)
 	if err != nil {
 		return nil, err
