@@ -72,7 +72,7 @@ webE2e(
     await expect(card.getByTestId("approval-approve-primary")).toContainText(
       "Allow for this chat",
     );
-    await card.getByRole("button", { name: "Allow with a grant", exact: true }).click();
+    await card.getByRole("button", { name: "Other choices", exact: true }).click();
     await expect(page.getByRole("menuitem", { name: /Allow once/ })).toBeVisible();
     await page.keyboard.press("Escape");
     const no = card.getByTestId("approval-no");

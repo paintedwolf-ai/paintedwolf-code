@@ -622,7 +622,7 @@ The host persists this state across projects and windows; Den only reads and upd
 
 ### Type
 
-**Text size** is a device preference that multiplies the operating-system accessibility text scale rather than overriding it, so a reader who has already set the system slider keeps it and can still ask this one app for more. Interface and code fonts are chosen per role. Layout primitives use relative units and reflow rather than clipping fixed-height text. Contract: [Accessibility](accessibility.md#macos-text-size-signal).
+**Text size** is a device preference that multiplies the operating-system accessibility text scale rather than overriding it, so a reader who has already set the system slider keeps it and can still ask this one app for more. The hint beside it states what the host adds: the macOS accessibility text size, a Linux desktop's text scaling factor (applied by the web view), or nothing when the desktop reports no preference. Interface and code fonts are chosen per role. Layout primitives use relative units and reflow rather than clipping fixed-height text. Contract: [Accessibility](accessibility.md#macos-text-size-signal).
 
 ### Settings → General → Updates
 

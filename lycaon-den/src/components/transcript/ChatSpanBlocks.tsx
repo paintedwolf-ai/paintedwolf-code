@@ -69,7 +69,8 @@ export function ChatSpanBlocks(props: Props) {
     const epoch = ++announcementEpoch;
     setAnnouncement("");
     queueMicrotask(() => {
-      if (epoch === announcementEpoch) setAnnouncement(next.announcement ?? "");
+      if (epoch !== announcementEpoch) return;
+      setAnnouncement(next.announcement ?? "");
     });
   });
   onCleanup(() => {
@@ -91,7 +92,7 @@ export function ChatSpanBlocks(props: Props) {
     <section
       class="den-chat-transcript-log"
       role="log"
-      aria-live="polite"
+      aria-live={(props.surfaceActive?.() ?? true) ? "polite" : "off"}
       aria-relevant="additions"
       aria-atomic="false"
       aria-label="Conversation"

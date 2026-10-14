@@ -6,3 +6,6 @@ pub(crate) mod window_appearance;
 pub(crate) mod window_backdrop;
 pub(crate) mod system_appearance;
 pub(crate) mod accessibility_text_size;
+pub(crate) mod accessibility_announce;
+#[cfg(any(target_os = "linux", test))]
+pub(crate) mod linux_desktop_settings;
