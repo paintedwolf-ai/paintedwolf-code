@@ -1,11 +1,14 @@
 //! Reveal a path in the platform file manager.
 
 use std::path::{Component, Path, PathBuf};
+#[cfg(not(target_os = "linux"))]
 use std::process::Command;
 
 /// Reveal `absolute_path` in the platform file manager after root validation.
+/// The desktop call waits on the session bus, so it runs off the main thread.
 #[tauri::command]
-pub fn reveal_in_file_manager(
+pub async fn reveal_in_file_manager(
+    window: tauri::WebviewWindow,
     absolute_path: String,
     project_roots: Vec<String>,
 ) -> Result<(), String> {
@@ -20,16 +23,23 @@ pub fn reveal_in_file_manager(
     if !path_under_roots(&path, &project_roots) {
         return Err("path is outside attached project roots".to_string());
     }
-    spawn_reveal(&path)
+    tauri::async_runtime::spawn_blocking(move || spawn_reveal(&path, &window))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 /// Reveal an existing absolute path the person typed or pasted into search, wherever it lives.
 /// Revealing only selects the item in the file manager, so it needs no root jail; opening a
 /// path with an application stays jailed to project roots.
 #[tauri::command]
-pub fn reveal_typed_path_in_file_manager(absolute_path: String) -> Result<(), String> {
+pub async fn reveal_typed_path_in_file_manager(
+    window: tauri::WebviewWindow,
+    absolute_path: String,
+) -> Result<(), String> {
     let path = typed_reveal_target(&absolute_path)?;
-    spawn_reveal(&path)
+    tauri::async_runtime::spawn_blocking(move || spawn_reveal(&path, &window))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 fn typed_reveal_target(absolute_path: &str) -> Result<PathBuf, String> {
@@ -121,9 +131,10 @@ fn paths_equal(a: &Path, b: &Path) -> bool {
     }
 }
 
-fn spawn_reveal(path: &Path) -> Result<(), String> {
+fn spawn_reveal(path: &Path, window: &tauri::WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
+        let _ = window;
         let status = Command::new("open")
             .arg("-R")
             .arg(path)
@@ -138,6 +149,7 @@ fn spawn_reveal(path: &Path) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
+        let _ = window;
         // The selector argument has no space after the comma.
         let arg = format!("/select,{}", path.display());
         let status = Command::new("explorer")
@@ -151,70 +163,15 @@ fn spawn_reveal(path: &Path) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     {
-        if try_linux_show_items(path).is_ok() {
-            return Ok(());
-        }
-        let parent = path.parent().unwrap_or(path);
-        let status = Command::new("xdg-open")
-            .arg(parent)
-            .status()
-            .map_err(|e| e.to_string())?;
-        if status.success() {
-            Ok(())
-        } else {
-            Err(format!("xdg-open exited with {status}"))
-        }
+        use crate::files::linux_desktop_open::{show_item, ParentWindow};
+        show_item(&ParentWindow::of(window), path).map(|_| ())
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
-        let _ = path;
+        let _ = (path, window);
         Err("reveal is not supported on this platform".to_string())
     }
-}
-
-#[cfg(target_os = "linux")]
-fn try_linux_show_items(path: &Path) -> Result<(), String> {
-    let uri = path_to_file_uri(path)?;
-    let status = Command::new("dbus-send")
-        .args([
-            "--session",
-            "--dest=org.freedesktop.FileManager1",
-            "--type=method_call",
-            "/org/freedesktop/FileManager1",
-            "org.freedesktop.FileManager1.ShowItems",
-        ])
-        .arg(format!("array:string:{uri}"))
-        .arg("string:")
-        .status()
-        .map_err(|e| e.to_string())?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("ShowItems exited with {status}"))
-    }
-}
-
-#[cfg(target_os = "linux")]
-fn path_to_file_uri(path: &Path) -> Result<String, String> {
-    use std::fmt::Write as _;
-
-    let abs = path
-        .to_str()
-        .ok_or_else(|| "path is not valid UTF-8".to_string())?;
-    // Preserve separators and percent-encode other bytes.
-    let mut encoded = String::with_capacity(abs.len());
-    for byte in abs.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' | b'/' => {
-                encoded.push(byte as char);
-            }
-            _ => {
-                write!(&mut encoded, "%{byte:02X}").expect("writing to String cannot fail");
-            }
-        }
-    }
-    Ok(format!("file://{encoded}"))
 }
 
 #[cfg(test)]
@@ -259,14 +216,5 @@ mod tests {
     fn lexical_normalize_drops_dot_dot() {
         let n = lexical_normalize(Path::new("/proj/./src/../src/a.go"));
         assert_eq!(n, PathBuf::from("/proj/src/a.go"));
-    }
-
-    #[cfg(target_os = "linux")]
-    #[test]
-    fn linux_file_uri_encodes_reserved_and_unicode_bytes() {
-        assert_eq!(
-            path_to_file_uri(Path::new("/repo/a #?%é.txt")).unwrap(),
-            "file:///repo/a%20%23%3F%25%C3%A9.txt",
-        );
     }
 }

@@ -36,6 +36,9 @@ const EDITOR_PRESETS = new Set<string>([
   "rider",
   "macvim",
   "neovide",
+  "kate",
+  "gnome-text-editor",
+  "neovim-qt",
   "custom",
 ]);
 const BROWSER_PRESETS = new Set<string>([
@@ -71,6 +74,9 @@ export const EDITOR_LABELS: Record<ExternalEditorPreset, string> = {
   rider: "Rider",
   macvim: "MacVim",
   neovide: "Neovide",
+  kate: "Kate",
+  "gnome-text-editor": "GNOME Text Editor",
+  "neovim-qt": "Neovim Qt",
   custom: "Custom",
 };
 

@@ -5,13 +5,14 @@ package desktoptrash
 import (
 	"context"
 	"errors"
-	"net/url"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -42,7 +43,7 @@ func TestLinuxTrashMetadataAndRecovery(t *testing.T) {
 	if err != nil {
 		testutil.FailErr(t, "read native Trash metadata", err)
 	}
-	if !strings.Contains(string(metadata), "Path="+url.PathEscape(path)+"\n") {
+	if !strings.Contains(string(metadata), "Path="+encodeTrashPath(path)+"\n") {
 		t.Fatalf("incorrect metadata: %q", metadata)
 	}
 	destination := fseffect.Location{Root: root, Rel: name}
@@ -86,6 +87,17 @@ func TestLinuxTrashMetadataAndRecovery(t *testing.T) {
 	}
 }
 
+func TestLinuxTrashPathEncodingKeepsSeparators(t *testing.T) {
+	got := encodeTrashPath("/home/user/My Docs/ünïcode #1%/plan?.txt")
+	want := "/home/user/My%20Docs/%C3%BCn%C3%AFcode%20%231%25/plan%3F.txt"
+	if got != want {
+		t.Fatalf("encoded path = %q, want %q", got, want)
+	}
+	if got := encodeTrashPath("relative/dir name/file"); got != "relative/dir%20name/file" {
+		t.Fatalf("relative path encoding = %q", got)
+	}
+}
+
 func TestLinuxTrashRejectsUnsafeDirectories(t *testing.T) {
 	for _, mode := range []string{"symlink", "public"} {
 		t.Run(mode, func(t *testing.T) {
@@ -116,6 +128,134 @@ func TestLinuxTrashRejectsUnsafeDirectories(t *testing.T) {
 				t.Fatalf("source changed: %q, %v", body, err)
 			}
 		})
+	}
+}
+
+func TestLinuxTrashReportsPermissionFailureWithoutMoving(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Fatal("permission fixtures require an unprivileged user")
+	}
+	root := t.TempDir()
+	locked := filepath.Join(root, "locked")
+	testutil.FailErr(t, "create read-only data home", os.Mkdir(locked, 0500))
+	t.Cleanup(func() { _ = os.Chmod(locked, 0700) })
+	t.Setenv("XDG_DATA_HOME", locked)
+	path := filepath.Join(root, "original")
+	testutil.FailErr(t, "seed original file", os.WriteFile(path, []byte("kept"), 0600))
+	receipt, err := Move(t.Context(), path)
+	if !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("read-only Trash home = %v, want a permission error", err)
+	}
+	if receipt.Path != "" {
+		t.Fatalf("failed move returned a recovery location: %+v", receipt)
+	}
+	if body, err := os.ReadFile(path); err != nil || string(body) != "kept" {
+		t.Fatalf("failed move changed source: %q, %v", body, err)
+	}
+	if entries, err := os.ReadDir(locked); err != nil || len(entries) != 0 {
+		t.Fatalf("failed move wrote into the read-only home: %v, %v", entries, err)
+	}
+}
+
+func TestLinuxVolumeTrashDirectoryFollowsStickyAdministration(t *testing.T) {
+	top := t.TempDir()
+	uid := fmt.Sprint(os.Getuid())
+	if got := volumeTrashDir(top); got != filepath.Join(top, ".Trash-"+uid) {
+		t.Fatalf("missing shared Trash selected %q", got)
+	}
+	shared := filepath.Join(top, ".Trash")
+	testutil.FailErr(t, "create plain shared directory", os.Mkdir(shared, 0777))
+	if got := volumeTrashDir(top); got != filepath.Join(top, ".Trash-"+uid) {
+		t.Fatalf("non-sticky shared Trash selected %q", got)
+	}
+	testutil.FailErr(t, "mark shared directory sticky", os.Chmod(shared, 0777|os.ModeSticky))
+	if got := volumeTrashDir(top); got != filepath.Join(shared, uid) {
+		t.Fatalf("sticky shared Trash selected %q", got)
+	}
+	testutil.FailErr(t, "replace shared directory with a symlink", os.RemoveAll(shared))
+	testutil.FailErr(t, "create symlink fixture", os.Symlink(t.TempDir(), shared))
+	if got := volumeTrashDir(top); got != filepath.Join(top, ".Trash-"+uid) {
+		t.Fatalf("symlinked shared Trash selected %q", got)
+	}
+}
+
+func TestLinuxVolumeTrashFallsBackWhenSharedTrashIsUnusable(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Fatal("permission fixtures require an unprivileged user")
+	}
+	uid := fmt.Sprint(os.Getuid())
+	top := t.TempDir()
+	shared := filepath.Join(top, ".Trash")
+	testutil.FailErr(t, "create read-only sticky shared directory", os.Mkdir(shared, 0755))
+	testutil.FailErr(t, "mark shared directory read-only and sticky", os.Chmod(shared, 0555|os.ModeSticky))
+	t.Cleanup(func() { _ = os.Chmod(shared, 0755) })
+	if got := volumeTrashDir(top); got != filepath.Join(top, ".Trash-"+uid) {
+		t.Fatalf("unwritable shared Trash selected %q", got)
+	}
+	if _, err := os.Lstat(filepath.Join(shared, uid)); !os.IsNotExist(err) {
+		t.Fatalf("unwritable shared Trash gained a per-user directory: %v", err)
+	}
+
+	other := t.TempDir()
+	shared = filepath.Join(other, ".Trash")
+	testutil.FailErr(t, "create sticky shared directory", os.Mkdir(shared, 0777))
+	testutil.FailErr(t, "mark shared directory sticky", os.Chmod(shared, 0777|os.ModeSticky))
+	testutil.FailErr(t, "create exposed per-user directory", os.Mkdir(filepath.Join(shared, uid), 0700))
+	testutil.FailErr(t, "expose per-user directory", os.Chmod(filepath.Join(shared, uid), 0755))
+	if got := volumeTrashDir(other); got != filepath.Join(other, ".Trash-"+uid) {
+		t.Fatalf("unsafe per-user directory selected %q", got)
+	}
+}
+
+// Entries on another filesystem than the data home stay on their own volume
+// with a relative recorded path, and recovery moves them back without copying.
+func TestLinuxTrashKeepsOtherVolumesInPlace(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", home)
+	volume, err := os.MkdirTemp("/dev/shm", "paintedwolf-trash-") //nolint:usetesting // The entry must be on a separate filesystem.
+	testutil.FailErr(t, "create separate-volume fixture", err)
+	t.Cleanup(func() { _ = os.RemoveAll(volume) })
+	if same, err := fspath.SameFilesystem(volume, home); err != nil || same {
+		t.Fatalf("fixture is not on a separate filesystem: same=%t err=%v", same, err)
+	}
+	top, err := volumeTop(filepath.Join(volume, "entry"))
+	testutil.FailErr(t, "resolve volume top", err)
+	trash := volumeTrashDir(top)
+	if _, err := os.Lstat(trash); os.IsNotExist(err) {
+		t.Cleanup(func() { _ = os.RemoveAll(trash) })
+	}
+	path := filepath.Join(volume, "nested dir", "entry ü.txt")
+	testutil.FailErr(t, "create nested directory", os.MkdirAll(filepath.Dir(path), 0700))
+	testutil.FailErr(t, "seed volume entry", os.WriteFile(path, []byte("kept"), 0600))
+	before, err := fspath.EntryIdentity(path)
+	testutil.FailErr(t, "record entry identity", err)
+	receipt, err := Move(t.Context(), path)
+	testutil.FailErr(t, "trash entry on another volume", err)
+	t.Cleanup(func() { _ = os.Remove(receipt.Path); _ = os.Remove(receipt.Metadata) })
+	if filepath.Dir(receipt.Path) != filepath.Join(trash, "files") {
+		t.Fatalf("entry left its volume: %q", receipt.Path)
+	}
+	if receipt.Identity != before {
+		t.Fatalf("trash copied instead of moving: %q != %q", receipt.Identity, before)
+	}
+	metadata, err := os.ReadFile(receipt.Metadata)
+	testutil.FailErr(t, "read volume metadata", err)
+	relative, err := filepath.Rel(top, path)
+	testutil.FailErr(t, "compute relative origin", err)
+	if !strings.Contains(string(metadata), "Path="+encodeTrashPath(relative)+"\n") {
+		t.Fatalf("volume metadata = %q, want relative path %q", metadata, relative)
+	}
+	if _, err := os.Stat(filepath.Join(home, "Trash")); !os.IsNotExist(err) {
+		t.Fatalf("home Trash was created for another volume: %v", err)
+	}
+	testutil.FailErr(t, "restore volume entry", Restore(t.Context(), receipt, fseffect.Location{Root: volume, Rel: filepath.Join("nested dir", "entry ü.txt")}))
+	after, err := fspath.EntryIdentity(path)
+	testutil.FailErr(t, "inspect restored entry", err)
+	if after != before {
+		t.Fatal("restoration replaced the entry instead of moving it back")
+	}
+	if _, err := os.Stat(receipt.Metadata); !os.IsNotExist(err) {
+		t.Fatalf("volume metadata remains after restoration: %v", err)
 	}
 }
 

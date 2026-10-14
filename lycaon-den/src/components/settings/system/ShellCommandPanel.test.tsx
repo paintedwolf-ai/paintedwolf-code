@@ -16,6 +16,8 @@ import { ShellCommandPanel } from "./ShellCommandPanel.tsx";
 
 const baseStatus = {
   installed: false,
+  installation_mode: "bundle" as const,
+  managed_by_package: false,
   bin_dir: "/usr/local/bin",
   pw_link: "/usr/local/bin/pw",
   pw_logs_link: "/usr/local/bin/pw-logs",
@@ -51,6 +53,35 @@ describe("ShellCommandPanel", () => {
       );
     });
     expect(invokeMock).toHaveBeenCalledWith("install_shell_command");
+  });
+
+  it("reports a package-managed installation without offering to write entry points", async () => {
+    invokeMock.mockImplementation(async (cmd: string) => {
+      if (cmd === "shell_command_status") {
+        return {
+          ...baseStatus,
+          installed: true,
+          installation_mode: "package",
+          managed_by_package: true,
+          bin_dir: "/usr/bin",
+          pw_link: "/usr/bin/pw",
+          pw_logs_link: "/usr/bin/pw-logs",
+          pw_target: "/opt/painted-wolf-code/bin/pw",
+          pw_logs_target: "/opt/painted-wolf-code/bin/pw-logs",
+        };
+      }
+      throw new Error(`unexpected ${cmd}`);
+    });
+    render(() => <ShellCommandPanel />);
+    await waitFor(() => {
+      expect(screen.getByTestId("shell-command-status").textContent).toContain(
+        "Installed — /usr/bin/pw",
+      );
+    });
+    expect(screen.getByTestId("shell-command-managed").textContent).toMatch(/system package/);
+    expect(screen.queryByTestId("shell-command-install")).toBeNull();
+    expect(screen.queryByTestId("shell-command-uninstall")).toBeNull();
+    expect(invokeMock).toHaveBeenCalledTimes(1);
   });
 
   it("describes the desktop capability without invoking Tauri in browser mode", async () => {

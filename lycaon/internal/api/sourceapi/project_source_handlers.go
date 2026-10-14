@@ -165,6 +165,7 @@ func SourceWorkspaceDTO(p *project.Project, sessionScoped bool, inventory wire.S
 func SourceWatchCoverageDTO(coverage repochange.WatchCoverage) wire.SourceWatchCoverage {
 	out := wire.SourceWatchCoverage{
 		State: wire.SourceWatchLive, Recursive: coverage.Recursive, UnwatchedDirectories: coverage.Truncated, PolicyUnwatched: coverage.PolicyUnwatched,
+		WatchLimitReached: coverage.WatchLimit,
 	}
 	switch {
 	case !coverage.Watching:

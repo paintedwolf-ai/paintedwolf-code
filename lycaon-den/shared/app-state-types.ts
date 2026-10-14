@@ -232,6 +232,9 @@ export type ExternalEditorPreset =
   | "rider"
   | "macvim"
   | "neovide"
+  | "kate"
+  | "gnome-text-editor"
+  | "neovim-qt"
   | "custom";
 export type BrowserPreset =
   | "system-default"

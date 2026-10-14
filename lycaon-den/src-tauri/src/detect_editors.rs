@@ -7,6 +7,8 @@ use std::path::PathBuf;
 use which::which;
 
 pub(crate) mod catalog;
+#[cfg(any(target_os = "linux", test))]
+pub(crate) mod linux_desktop;
 #[cfg(test)]
 mod tests;
 
@@ -94,12 +96,22 @@ impl EditorCatalogEntry {
         }
         #[cfg(target_os = "linux")]
         {
-            let candidates: Vec<String> = self
-                .linux_candidate_paths
-                .iter()
-                .map(|s| s.to_string())
-                .collect();
-            find_among(probe, self.linux_cli, &candidates)
+            if let Some(cli) = find_among(probe, self.linux_cli, &[]) {
+                return Some(cli);
+            }
+            let runnable = |program: &str| {
+                if program.contains('/') {
+                    probe.path_exists(program)
+                } else {
+                    probe.cli_on_path(program)
+                }
+            };
+            linux_desktop::find_entry(
+                self.linux_desktop_ids,
+                &linux_desktop::system_application_directories(),
+                &runnable,
+            )
+            .map(|entry| format!("desktop:{}", entry.path.display()))
         }
         #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
         {

@@ -1,5 +1,6 @@
 //! Device-local file destinations. Web URLs use the separate URL opener.
 use std::path::{Path, PathBuf};
+#[cfg(not(target_os = "linux"))]
 use std::process::Command;
 
 #[derive(serde::Deserialize)]
@@ -11,6 +12,7 @@ pub enum Destination {
 
 #[tauri::command]
 pub async fn open_local_path(
+    window: tauri::WebviewWindow,
     absolute_path: String,
     project_roots: Vec<String>,
     destination: Destination,
@@ -20,7 +22,7 @@ pub async fn open_local_path(
     tauri::async_runtime::spawn_blocking(move || {
         let path = validate_file(&absolute_path, &project_roots)?;
         match destination {
-            Destination::DefaultApplication => open_default_application(&path),
+            Destination::DefaultApplication => open_default_application(&path, &window),
             Destination::Browser => {
                 if !browser_can_open_path(&path) {
                     return Err("This file format cannot be opened in a browser.".into());
@@ -30,7 +32,7 @@ pub async fn open_local_path(
                 if browser == "system-default" {
                     open_default_browser(url.as_str())
                 } else {
-                    crate::open_external::spawn_browser(url.as_str(), &browser, custom_browser_command)
+                    crate::open_external::spawn_browser(url.as_str(), &browser, custom_browser_command, &window)
                 }
             }
         }
@@ -57,21 +59,29 @@ fn browser_can_open_path(path: &Path) -> bool {
     formats.browser.contains(&extension)
 }
 
+#[cfg(not(target_os = "linux"))]
 fn run(program: &str, args: &[&str]) -> Result<(), String> {
     let status = Command::new(program).args(args).status().map_err(|error| error.to_string())?;
     if status.success() { Ok(()) } else { Err(format!("{program} exited with {status}")) }
 }
 
-fn open_default_application(path: &Path) -> Result<(), String> {
-    let path = path.to_str().ok_or("The file path is not valid UTF-8.")?;
-    #[cfg(target_os = "macos")]
-    { run("open", &[path]) }
+fn open_default_application(path: &Path, window: &tauri::WebviewWindow) -> Result<(), String> {
     #[cfg(target_os = "linux")]
-    { run("xdg-open", &[path]) }
-    #[cfg(target_os = "windows")]
-    { windows_open_associated(path) }
-    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
-    { let _ = path; Err("Opening files is unavailable on this platform.".into()) }
+    {
+        use crate::files::linux_desktop_open::{open_file, ParentWindow};
+        return open_file(&ParentWindow::of(window), path).map(|_| ());
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = window;
+        let path = path.to_str().ok_or("The file path is not valid UTF-8.")?;
+        #[cfg(target_os = "macos")]
+        { run("open", &[path]) }
+        #[cfg(target_os = "windows")]
+        { windows_open_associated(path) }
+        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+        { let _ = path; Err("Opening files is unavailable on this platform.".into()) }
+    }
 }
 
 fn open_default_browser(url: &str) -> Result<(), String> {
@@ -87,15 +97,7 @@ fn open_default_browser(url: &str) -> Result<(), String> {
         run("open", &["-a", &application.to_string(), url])
     }
     #[cfg(target_os = "linux")]
-    {
-        let output = Command::new("xdg-settings").args(["get", "default-web-browser"])
-            .output().map_err(|error| error.to_string())?;
-        if !output.status.success() { return Err("Could not resolve the default browser.".into()); }
-        let desktop = String::from_utf8(output.stdout).map_err(|error| error.to_string())?;
-        let desktop = desktop.trim();
-        if desktop.is_empty() || desktop.starts_with('-') { return Err("No default browser is configured.".into()); }
-        run("gtk-launch", &[desktop, url])
-    }
+    { crate::files::linux_desktop_open::open_in_default_browser(url) }
     #[cfg(target_os = "windows")]
     { run(&windows_default_browser()?, &[url]) }
     #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]

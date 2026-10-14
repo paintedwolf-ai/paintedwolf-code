@@ -2,6 +2,9 @@ import { isTauriRuntime } from "../runtime.ts";
 
 export type ShellCommandStatus = {
   installed: boolean;
+  installation_mode: "package" | "bundle" | "developer";
+  /** The system package owns the entry points; the app never writes them. */
+  managed_by_package: boolean;
   bin_dir: string;
   pw_link: string;
   pw_logs_link: string;
@@ -15,6 +18,8 @@ const DESKTOP_ONLY_REASON = "The command-line tool is available in the desktop a
 function unavailableStatus(): ShellCommandStatus {
   return {
     installed: false,
+    installation_mode: "developer",
+    managed_by_package: false,
     bin_dir: "",
     pw_link: "",
     pw_logs_link: "",
