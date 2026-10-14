@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/recall"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -16,8 +17,9 @@ func TestHistoryPagesCanonicalRowsWithoutAnIndex(t *testing.T) {
 		id, session, content string
 		ord                  int
 	}{{"old", coordinatorSession, "earlier decision", 1}, {"large", coordinatorSession, body, 2}, {"tail", coordinatorSession, "latest", 3}, {"peer", workerSession, "worker secret", 1}} {
-		_, err := f.db.ExecContext(t.Context(), `INSERT INTO messages (id,session_id,role,content,origin,authority,trust_tier,ord,seq,ts)
-			VALUES (?,?,'assistant',?,'model','none','trusted',?,?,'2026-10-14T00:00:00Z')`, row.id, row.session, row.content, row.ord, row.ord)
+		testdbseed.InsertSessionEntry(t, f.db, row.id, row.session, "model_output", row.id, int64(row.ord))
+		_, err := f.db.ExecContext(t.Context(), `INSERT INTO messages (entry_id,id,session_id,role,content,origin,authority,trust_tier,ord,seq,ts)
+			VALUES (?,?,?,'assistant',?,'model','none','trusted',?,?,'2026-10-14T00:00:00Z')`, row.id, row.id, row.session, row.content, row.ord, row.ord)
 		testutil.FailErr(t, "seed canonical history", err)
 	}
 	req := recall.Request{Caller: coordinator(), Limit: 1, History: &recall.HistoryRequest{ThroughOrd: 3, SourceSeq: 3}}
@@ -99,8 +101,9 @@ func TestHistoryValidatesCoordinatesAndCanonicalScope(t *testing.T) {
 
 func TestHistoryRecoversRecordedToolBodiesAndHandles(t *testing.T) {
 	f := newFixture(t)
-	_, err := f.db.ExecContext(t.Context(), `INSERT INTO messages (id,session_id,role,content,tool_result_json,evidence_handles_json,origin,authority,trust_tier,ord,seq,ts)
-	VALUES ('tool',?,'tool','',?,?,'tool','none','untrusted',1,1,'2026-10-14T00:00:00Z')`, coordinatorSession, `{"tool":"read","content":"recorded bytes"}`, `["read#3"]`)
+	testdbseed.InsertSessionEntry(t, f.db, "tool", coordinatorSession, "tool_receipt", "tool", 1)
+	_, err := f.db.ExecContext(t.Context(), `INSERT INTO messages (entry_id,id,session_id,role,content,tool_result_json,evidence_handles_json,origin,authority,trust_tier,ord,seq,ts)
+	VALUES ('tool','tool',?,'tool','',?,?,'tool','none','untrusted',1,1,'2026-10-14T00:00:00Z')`, coordinatorSession, `{"tool":"read","content":"recorded bytes"}`, `["read#3"]`)
 	testutil.FailErr(t, "seed tool body", err)
 	result, err := f.svc.Answer(t.Context(), recall.Request{Caller: coordinator(), History: &recall.HistoryRequest{ThroughOrd: 1, MessageID: "tool"}})
 	testutil.FailErr(t, "recover tool body", err)
@@ -118,8 +121,9 @@ func TestHistoryDoesNotExposeInternalOrUncommittedRows(t *testing.T) {
 	}{
 		{"internal", "internal", "normal", "", 1}, {"draft", "transcript", "draft", "draft", 2},
 	} {
-		_, err := f.db.ExecContext(t.Context(), `INSERT INTO messages (id,session_id,role,content,visibility,kind,draft_status,origin,authority,trust_tier,ord,seq,ts)
-		VALUES (?,?,'assistant','hidden',?,?,?,'model','none','trusted',?,?,'2026-10-14T00:00:00Z')`, row.id, coordinatorSession, row.visibility, row.kind, row.status, row.ord, row.ord)
+		testdbseed.InsertSessionEntry(t, f.db, row.id, coordinatorSession, "model_output", row.id, int64(row.ord))
+		_, err := f.db.ExecContext(t.Context(), `INSERT INTO messages (entry_id,id,session_id,role,content,visibility,kind,draft_status,origin,authority,trust_tier,ord,seq,ts)
+		VALUES (?,?,?,'assistant','hidden',?,?,?,'model','none','trusted',?,?,'2026-10-14T00:00:00Z')`, row.id, row.id, coordinatorSession, row.visibility, row.kind, row.status, row.ord, row.ord)
 		testutil.FailErr(t, "seed hidden rows", err)
 	}
 	for _, id := range []string{"", "internal", "draft"} {
