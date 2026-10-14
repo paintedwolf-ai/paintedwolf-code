@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/userpath"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"syscall"
@@ -54,12 +55,10 @@ func TestOSVersionProbe(t *testing.T) {
 		want     Status
 		wantCode string
 	}{
-		{name: "at the floor", version: platformfloor.MacOSMin(), want: StatusOK},
-		{name: "above the floor", version: "15.5", want: StatusOK},
-		{name: "far above the floor", version: "26.1", want: StatusOK},
-		{name: "below the floor", version: "13.9", want: StatusBlocked, wantCode: CodeOSBelowFloor},
-		{name: "single digit major", version: "9.0", want: StatusBlocked, wantCode: CodeOSBelowFloor},
-		{name: "sysctl unreadable", err: errors.New("sysctl failed"), want: StatusDegraded, wantCode: CodeOSBelowFloor},
+		{name: "at the floor", version: platformfloor.HostOSMin(), want: StatusOK},
+		{name: "far above the floor", version: "9999.1", want: StatusOK},
+		{name: "below the floor", version: "1.9", want: StatusBlocked, wantCode: CodeOSBelowFloor},
+		{name: "version unreadable", err: errors.New("uname failed"), want: StatusDegraded, wantCode: CodeOSBelowFloor},
 	}
 
 	for _, tc := range cases {
@@ -73,7 +72,97 @@ func TestOSVersionProbe(t *testing.T) {
 			if got.Code != tc.wantCode {
 				t.Fatalf("code = %q, want %q", got.Code, tc.wantCode)
 			}
+			if tc.want != StatusOK && got.Detail["component"] != osComponent {
+				t.Fatalf("detail = %v, want component %s", got.Detail, osComponent)
+			}
 		})
+	}
+}
+
+func TestOSVersionProbeComparesGlibcAfterTheOS(t *testing.T) {
+	osOK := func() (string, error) { return platformfloor.HostOSMin(), nil }
+	t.Run("at the glibc floor", func(t *testing.T) {
+		got := run(t, osVersionProbe{}, Env{
+			OSProductVer: osOK,
+			LibcVersion:  func() (string, error) { return platformfloor.LinuxGlibcMin(), nil },
+		})
+		if got.Status != StatusOK {
+			t.Fatalf("status = %q, want ok (%v)", got.Status, got.Detail)
+		}
+	})
+	t.Run("below the glibc floor", func(t *testing.T) {
+		got := run(t, osVersionProbe{}, Env{
+			OSProductVer: osOK,
+			LibcVersion:  func() (string, error) { return "2.17", nil },
+		})
+		if got.Status != StatusBlocked || got.Code != CodeOSBelowFloor {
+			t.Fatalf("got %q/%q, want blocked/%s", got.Status, got.Code, CodeOSBelowFloor)
+		}
+		want := map[string]string{"reason": ReasonOSBelowFloor, "component": "glibc", "want": platformfloor.LinuxGlibcMin(), "got": "2.17"}
+		if !maps.Equal(got.Detail, want) {
+			t.Fatalf("detail = %v, want %v", got.Detail, want)
+		}
+	})
+	t.Run("glibc unreadable", func(t *testing.T) {
+		got := run(t, osVersionProbe{}, Env{
+			OSProductVer: osOK,
+			LibcVersion:  func() (string, error) { return "", errors.New("no libc") },
+		})
+		if got.Status != StatusDegraded || got.Code != CodeOSBelowFloor {
+			t.Fatalf("got %q/%q, want degraded/%s", got.Status, got.Code, CodeOSBelowFloor)
+		}
+		want := map[string]string{"reason": ReasonOSUnreadable, "component": "glibc"}
+		if !maps.Equal(got.Detail, want) {
+			t.Fatalf("detail = %v, want %v", got.Detail, want)
+		}
+	})
+	t.Run("os verdict wins over glibc", func(t *testing.T) {
+		got := run(t, osVersionProbe{}, Env{
+			OSProductVer: func() (string, error) { return "1.0", nil },
+			LibcVersion:  func() (string, error) { return "2.17", nil },
+		})
+		if got.Status != StatusBlocked || got.Detail["component"] != osComponent {
+			t.Fatalf("got %q with detail %v, want the os verdict first", got.Status, got.Detail)
+		}
+	})
+	t.Run("no os reader still compares glibc", func(t *testing.T) {
+		got := run(t, osVersionProbe{}, Env{LibcVersion: func() (string, error) { return "2.17", nil }})
+		if got.Status != StatusBlocked || got.Detail["component"] != "glibc" {
+			t.Fatalf("got %q with detail %v, want a glibc verdict", got.Status, got.Detail)
+		}
+	})
+}
+
+func TestKernelReleaseKeepsLeadingNumericFields(t *testing.T) {
+	cases := map[string]string{
+		"6.2.0-39-generic":        "6.2.0",
+		"7.2.7-arch1-1":           "7.2.7",
+		"6.17.9-76061709-generic": "6.17.9",
+		" 5.15.0 ":                "5.15.0",
+		"6.1":                     "6.1",
+	}
+	for raw, want := range cases {
+		got, err := kernelRelease(raw)
+		testutil.FailErr(t, "normalise "+raw, err)
+		if got != want {
+			t.Fatalf("kernelRelease(%q) = %q, want %q", raw, got, want)
+		}
+	}
+	for _, raw := range []string{"garbage", "", "-generic", "."} {
+		if got, err := kernelRelease(raw); err == nil {
+			t.Fatalf("kernelRelease(%q) = %q, want an error", raw, got)
+		}
+	}
+}
+
+func TestGlibcVersionFromELFRejectsNonELFAndMissingFiles(t *testing.T) {
+	plain := filepath.Join(t.TempDir(), "libc.so.6")
+	testutil.FailErr(t, "write non-ELF fixture", os.WriteFile(plain, []byte("not an elf"), 0o644))
+	if got, err := glibcVersionFromELF(plain); err == nil {
+		t.Fatalf("glibcVersionFromELF(non-ELF) = %q, want an error", got)
+	}
+	if got, err := glibcVersionFromELF(filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Fatalf("glibcVersionFromELF(missing) = %q, want an error", got)
 	}
 }
 
@@ -340,7 +429,7 @@ func TestRegistryOverallIsWorstStatus(t *testing.T) {
 	env := Env{
 		ConfigDir:            filepath.Join(t.TempDir(), "lycaon"),
 		FreeBytes:            func(string) (uint64, error) { return 50 << 30, nil },
-		OSProductVer:         func() (string, error) { return "15.5", nil },
+		OSProductVer:         func() (string, error) { return platformfloor.HostOSMin(), nil },
 		ProviderCount:        func() int { return 0 },
 		MissingRoleProviders: func() map[string]string { return nil },
 		ResolveScanner:       func() (string, string, error) { return "/opt/opengrep", "", nil },
@@ -355,7 +444,7 @@ func TestRegistryOverallIsWorstStatus(t *testing.T) {
 	}
 
 	// A blocked probe must dominate a degraded one.
-	env.OSProductVer = func() (string, error) { return "12.0", nil }
+	env.OSProductVer = func() (string, error) { return "1.0", nil }
 	if _, overall = reg.Run(context.Background(), env); overall != StatusBlocked {
 		t.Fatalf("overall = %q, want blocked", overall)
 	}
@@ -381,7 +470,7 @@ func TestOKResultsCarryNoCode(t *testing.T) {
 	results, _ := Default().Run(context.Background(), Env{
 		ConfigDir:            filepath.Join(t.TempDir(), "lycaon"),
 		FreeBytes:            func(string) (uint64, error) { return 50 << 30, nil },
-		OSProductVer:         func() (string, error) { return "15.5", nil },
+		OSProductVer:         func() (string, error) { return platformfloor.HostOSMin(), nil },
 		ProviderCount:        func() int { return 2 },
 		MissingRoleProviders: func() map[string]string { return nil },
 		ResolveScanner:       func() (string, string, error) { return "/opt/opengrep", "", nil },

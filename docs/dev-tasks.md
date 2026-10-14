@@ -891,7 +891,7 @@ Linux ships as native packages only: a `.deb` for Debian and Ubuntu families and
 | `/usr/bin/pw`, `/usr/bin/pw-logs` | package-owned entry points that `exec` the binaries under the install root |
 | `/opt/painted-wolf-code/bin/` | `pw`, `pw-logs`, `pw-document-core`, `bialy` |
 | `/opt/painted-wolf-code/engine-root/` | schemas, scanner, Git toolchain, browser, decision heads |
-| `/opt/painted-wolf-code/manifest.json` | SHA-256 and size of every executable the package installs ([schema](../packaging/linux/manifest/manifest.schema.json), reader `lycaon/internal/nativemanifest`) |
+| `/opt/painted-wolf-code/manifest.json` | SHA-256 and size of every executable the package installs ([schema](../packaging/linux/manifest/manifest.schema.json), reader `lycaon/internal/pkgmanifest`) |
 | `/opt/painted-wolf-code/release-version`, `THIRD-PARTY-NOTICES.md` | release resources |
 | `/usr/share/applications/`, `/usr/share/icons/hicolor/` | desktop entry (`StartupWMClass=dev.paintedwolf.code`, the GTK application id) and icons |
 
