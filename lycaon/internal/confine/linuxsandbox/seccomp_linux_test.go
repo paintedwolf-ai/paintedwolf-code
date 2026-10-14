@@ -3,6 +3,7 @@
 package linuxsandbox
 
 import (
+	"encoding/binary"
 	"testing"
 
 	"golang.org/x/net/bpf"
@@ -70,5 +71,64 @@ func TestHandledAccessesGrowWithTheABI(t *testing.T) {
 	}
 	if byPath["/etc/x"]&unix.LANDLOCK_ACCESS_FS_MAKE_REG != 0 || byPath["/etc/x"]&unix.LANDLOCK_ACCESS_FS_WRITE_FILE == 0 {
 		t.Fatalf("file grant %#x must carry file accesses only", byPath["/etc/x"])
+	}
+}
+
+// TestSeccompProgramDecides runs the filter over seccomp_data records. The
+// test VM loads words big-endian, so the records are written that way; the
+// offsets are the kernel's.
+func TestSeccompProgramDecides(t *testing.T) {
+	t.Parallel()
+	raw, err := seccompProgram()
+	if err != nil {
+		t.Fatalf("seccompProgram: %v", err)
+	}
+	insts, ok := bpf.Disassemble(raw)
+	if !ok {
+		t.Fatal("program did not disassemble completely")
+	}
+	vm, err := bpf.NewVM(insts)
+	if err != nil {
+		t.Fatalf("NewVM: %v", err)
+	}
+	record := func(nr uint32, arg0, arg1Low, arg1High uint32) []byte {
+		b := make([]byte, 64)
+		binary.BigEndian.PutUint32(b[seccompDataNr:], nr)
+		binary.BigEndian.PutUint32(b[seccompDataArch:], nativeAuditArch)
+		binary.BigEndian.PutUint32(b[seccompDataArg0:], arg0)
+		binary.BigEndian.PutUint32(b[seccompDataArg1Low:], arg1Low)
+		binary.BigEndian.PutUint32(b[seccompDataArg1Low+4:], arg1High)
+		return b
+	}
+	kill := int(unix.SECCOMP_RET_KILL_PROCESS)
+	allow := int(unix.SECCOMP_RET_ALLOW)
+	enosys := int(uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.ENOSYS))
+	for _, tc := range []struct {
+		name string
+		data []byte
+		want int
+	}{
+		{"ioctl TIOCSTI", record(unix.SYS_IOCTL, 0, unix.TIOCSTI, 0), kill},
+		{"ioctl TIOCLINUX", record(unix.SYS_IOCTL, 0, unix.TIOCLINUX, 0), kill},
+		{"ioctl TIOCSTI with high bits set", record(unix.SYS_IOCTL, 0, unix.TIOCSTI, 0xffffffff), kill},
+		{"ioctl TCGETS", record(unix.SYS_IOCTL, 0, unix.TCGETS, 0), allow},
+		{"read with a TIOCSTI-valued argument", record(unix.SYS_READ, 0, unix.TIOCSTI, 0), allow},
+		{"ptrace", record(unix.SYS_PTRACE, 0, 0, 0), kill},
+		{"clone into a user namespace", record(unix.SYS_CLONE, unix.CLONE_NEWUSER, 0, 0), kill},
+		{"plain clone", record(unix.SYS_CLONE, unix.CLONE_VM, 0, 0), allow},
+		{"clone3", record(unix.SYS_CLONE3, 0, 0, 0), enosys},
+	} {
+		got, err := vm.Run(tc.data)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if got != tc.want {
+			t.Fatalf("%s: filter returned %#x, want %#x", tc.name, got, tc.want)
+		}
+	}
+	foreign := record(unix.SYS_READ, 0, 0, 0)
+	binary.BigEndian.PutUint32(foreign[seccompDataArch:], nativeAuditArch^1)
+	if got, _ := vm.Run(foreign); got != kill {
+		t.Fatalf("foreign architecture: filter returned %#x, want kill", got)
 	}
 }

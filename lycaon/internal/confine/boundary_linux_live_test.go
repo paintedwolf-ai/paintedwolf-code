@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"testing"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 
@@ -77,6 +78,25 @@ func runLinuxProbe(mode string) int {
 		return 4
 	case "unshare":
 		fmt.Println("unshare:", unix.Unshare(unix.CLONE_NEWNS))
+		return 4
+	case "tiocsti", "tioclinux":
+		// Take the inherited terminal as the controlling one, as a shell would,
+		// so only the filter stands between the request and the terminal.
+		if _, err := unix.Setsid(); err != nil {
+			fmt.Println("setsid:", err)
+			return 2
+		}
+		if err := unix.IoctlSetInt(0, unix.TIOCSCTTY, 0); err != nil {
+			fmt.Println("controlling terminal:", err)
+			return 2
+		}
+		input := byte('x')
+		request := uint(unix.TIOCSTI)
+		if mode == "tioclinux" {
+			request = unix.TIOCLINUX
+		}
+		_, _, errno := unix.Syscall(unix.SYS_IOCTL, 0, uintptr(request), uintptr(unsafe.Pointer(&input)))
+		fmt.Println(mode+":", errno)
 		return 4
 	case "orphan":
 		daemon := child("sleep", true)
@@ -272,6 +292,49 @@ func TestLinuxEscapeSyscallsKillTheProcess(t *testing.T) {
 			t.Fatalf("%s: want death by SIGSYS, got %v: %s", mode, status, out)
 		}
 	}
+}
+
+func TestLinuxTerminalInjectionKillsTheProcess(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	for _, mode := range []string{"tiocsti", "tioclinux"} {
+		master, slave := openPty(t)
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		cmd, cleanup, err := confine.Command(ctx, self, self, []string{probeTestFlag}, denyConfinement(t.TempDir()))
+		testutil.FailErr(t, "confine.Command", err)
+		cmd.Env = probeEnv(mode)
+		var out bytes.Buffer
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, &out, &out
+		_ = cmd.Run()
+		cleanup()
+		cancel()
+		if cmd.ProcessState == nil {
+			t.Fatalf("%s: did not start: %s", mode, out.String())
+		}
+		status := cmd.ProcessState.Sys().(syscall.WaitStatus)
+		if !status.Signaled() || status.Signal() != unix.SIGSYS {
+			t.Fatalf("%s: want death by SIGSYS, got %v: %s", mode, status, out.String())
+		}
+		// Nothing reached the terminal's input queue.
+		if queued, err := unix.IoctlGetInt(int(slave.Fd()), unix.TIOCINQ); err != nil || queued != 0 {
+			t.Fatalf("%s: terminal input queue holds %d bytes (%v)", mode, queued, err)
+		}
+		_ = slave.Close()
+		_ = master.Close()
+	}
+}
+
+// openPty opens a pseudo-terminal pair that is no session's controlling terminal.
+func openPty(t *testing.T) (master, slave *os.File) {
+	t.Helper()
+	fd, err := unix.Open("/dev/ptmx", unix.O_RDWR|unix.O_NOCTTY|unix.O_CLOEXEC, 0)
+	testutil.FailErr(t, "open /dev/ptmx", err)
+	master = os.NewFile(uintptr(fd), "ptmx")
+	testutil.FailErr(t, "unlock pty", unix.IoctlSetPointerInt(fd, unix.TIOCSPTLCK, 0))
+	n, err := unix.IoctlGetUint32(fd, unix.TIOCGPTN)
+	testutil.FailErr(t, "pty number", err)
+	slave, err = os.OpenFile("/dev/pts/"+strconv.FormatUint(uint64(n), 10), os.O_RDWR|unix.O_NOCTTY, 0)
+	testutil.FailErr(t, "open pty slave", err)
+	return master, slave
 }
 
 func TestLinuxDescendantsEndWithTheCommand(t *testing.T) {

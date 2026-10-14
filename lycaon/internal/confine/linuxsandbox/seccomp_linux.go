@@ -15,7 +15,15 @@ const (
 	seccompDataNr   = 0
 	seccompDataArch = 4
 	seccompDataArg0 = 16
+	// seccompDataArg1Low is the low half of the second argument on the
+	// little-endian architectures the helper builds for.
+	seccompDataArg1Low = 24
 )
+
+// terminalInjectionRequests are the ioctl requests that push input into a
+// terminal or drive the console. The kernel compares an ioctl request as a
+// 32-bit value, so the filter does too.
+var terminalInjectionRequests = []uint32{unix.TIOCSTI, unix.TIOCLINUX}
 
 // escapeSyscalls would let a process leave or reshape the boundary the
 // namespaces, mounts, and Landlock built. Each one kills the process.
@@ -35,9 +43,10 @@ var escapeSyscalls = []uint32{
 const namespaceCloneFlags = unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWNET |
 	unix.CLONE_NEWUTS | unix.CLONE_NEWIPC | unix.CLONE_NEWCGROUP | unix.CLONE_NEWTIME
 
-// seccompProgram builds the filter: kill on an escape syscall or a clone that
-// asks for a namespace, answer clone3 with ENOSYS so libraries fall back to
-// clone (whose flags the filter can read), and allow everything else.
+// seccompProgram builds the filter: kill on an escape syscall, a terminal
+// injection ioctl, or a clone that asks for a namespace, answer clone3 with
+// ENOSYS so libraries fall back to clone (whose flags the filter can read),
+// and allow everything else.
 func seccompProgram() ([]bpf.RawInstruction, error) {
 	kill := uint32(unix.SECCOMP_RET_KILL_PROCESS)
 	insts := []bpf.Instruction{
@@ -58,6 +67,22 @@ func seccompProgram() ([]bpf.RawInstruction, error) {
 			bpf.RetConstant{Val: kill},
 		)
 	}
+	// ioctl: load the request, compare it with each injection request, and
+	// either reach the kill or jump over it to allow. Any other syscall skips
+	// the whole block with the syscall number still loaded.
+	n := len(terminalInjectionRequests)
+	insts = append(insts,
+		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SYS_IOCTL, SkipFalse: uint8(n + 4)},
+		bpf.LoadAbsolute{Off: seccompDataArg1Low, Size: 4},
+	)
+	for i, req := range terminalInjectionRequests {
+		insts = append(insts, bpf.JumpIf{Cond: bpf.JumpEqual, Val: req, SkipTrue: uint8(n - i)})
+	}
+	insts = append(insts,
+		bpf.Jump{Skip: 1},
+		bpf.RetConstant{Val: kill},
+		bpf.RetConstant{Val: unix.SECCOMP_RET_ALLOW},
+	)
 	insts = append(insts,
 		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SYS_CLONE3, SkipFalse: 1},
 		bpf.RetConstant{Val: uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.ENOSYS)},
