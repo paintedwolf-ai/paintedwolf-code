@@ -27,6 +27,27 @@ func checkRecord(id, revision, root string, at time.Time) evidence.Record {
 			"command": "test runner", "cwd": ".", "source_revision": revision, "source_root_digest": root}}
 }
 
+func TestSourceObservationsIntentBoundaryUsesUserTimestamp(t *testing.T) {
+	when := time.Now().UTC()
+	history := []api.Message{{Role: api.MessageRoleUser, CreatedAt: when}}
+	for _, next := range []api.Message{
+		{Role: api.MessageRoleTool, CreatedAt: when.Add(time.Second)},
+		{Role: api.MessageRoleUser, Visibility: api.MessageVisibilityInternal, CreatedAt: when.Add(2 * time.Second)},
+		{Role: api.MessageRoleUser, Kind: api.MessageKindUserContinuation, CreatedAt: when.Add(3 * time.Second)},
+	} {
+		if got := boundaryTime(history); !got.Equal(when) {
+			t.Fatalf("intent boundary=%v, want %v", got, when)
+		}
+		history = append(history, next)
+	}
+	if got := boundaryTime(history); !got.Equal(when) {
+		t.Fatalf("host continuation moved intent boundary: %v", got)
+	}
+	if got := boundaryTime(nil); !got.IsZero() {
+		t.Fatalf("absent intent acquired timestamp: %v", got)
+	}
+}
+
 func TestSourceObservationsTrackExactContentAcrossTime(t *testing.T) {
 	ctx := t.Context()
 	sessions := store.NewMemory()
