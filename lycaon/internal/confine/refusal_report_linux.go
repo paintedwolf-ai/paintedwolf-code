@@ -38,7 +38,7 @@ func refusalReport(c Confinement) (*os.File, func()) {
 		scanner := bufio.NewScanner(read)
 		for scanner.Scan() {
 			var r linuxsandbox.Refusal
-			if json.Unmarshal(scanner.Bytes(), &r) != nil || r.Operation == "" {
+			if json.Unmarshal(scanner.Bytes(), &r) != nil || r.Unexamined || r.Operation == "" {
 				feed.degrade(WitnessIncomplete)
 				continue
 			}

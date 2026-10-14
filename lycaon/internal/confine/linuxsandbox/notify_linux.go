@@ -67,7 +67,10 @@ func (s *supervisor) serveNotifications(listener int) {
 // answer performs one notified call and replies with its result. Any failure
 // to read the call refuses it: a call is never run unexamined.
 func (s *supervisor) answer(listener int, n seccompNotif) {
-	result, errno := s.perform(listener, n)
+	result, errno, examined := s.perform(listener, n)
+	if !examined {
+		s.report(Refusal{Unexamined: true})
+	}
 	resp := seccompNotifResp{ID: n.ID, Val: result}
 	if errno != 0 {
 		resp = seccompNotifResp{ID: n.ID, Error: -int32(errno)}
@@ -75,23 +78,31 @@ func (s *supervisor) answer(listener int, n seccompNotif) {
 	_ = ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_SEND, unsafe.Pointer(&resp))
 }
 
-// perform returns the call's result or the errno to answer with.
-func (s *supervisor) perform(listener int, n seccompNotif) (int64, unix.Errno) {
+// perform returns the call's result or the errno to answer with, and whether
+// the supervisor could examine the call at all. A call that ended before it
+// was examined is not reported.
+func (s *supervisor) perform(listener int, n seccompNotif) (int64, unix.Errno, bool) {
 	target, err := openTarget(listener, n)
 	if err != nil {
-		return 0, unix.EACCES
+		return 0, unix.EACCES, errors.Is(err, unix.ESRCH)
 	}
 	defer target.close()
 	fd := int(int32(n.Args[0]))
 	sock, err := unix.PidfdGetfd(target.pidfd, fd, 0)
 	if err != nil {
-		return 0, errnoOf(err, unix.EBADF)
+		// A descriptor that is not open is the caller's own error.
+		return 0, errnoOf(err, unix.EBADF), errors.Is(err, unix.EBADF)
 	}
 	defer func() { _ = unix.Close(sock) }()
 	info, err := describeSocket(sock)
 	if err != nil {
-		return 0, errnoOf(err, unix.ENOTSOCK)
+		return 0, errnoOf(err, unix.ENOTSOCK), true
 	}
+	result, errno := s.decideAndPerform(target, n, fd, sock, info)
+	return result, errno, true
+}
+
+func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd, sock int, info socketInfo) (int64, unix.Errno) {
 	req := SocketRequest{Stream: info.typ == unix.SOCK_STREAM}
 	cookie, _ := unix.GetsockoptUint64(sock, unix.SOL_SOCKET, unix.SO_COOKIE)
 	req.HostSocket, req.HostListener = s.hostSocket(cookie)
