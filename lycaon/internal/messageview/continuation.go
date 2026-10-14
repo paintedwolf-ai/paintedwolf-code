@@ -5,6 +5,7 @@ const ContinuationFormat = 1
 
 // Continuation covers canonical observations independently of summary quality.
 type Continuation struct {
+	Level       string               `json:"level"`
 	Format      int                  `json:"format"`
 	ThroughOrd  int64                `json:"through_ord"`
 	RemovedRows int                  `json:"removed_rows"`

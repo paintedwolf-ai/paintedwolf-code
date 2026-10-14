@@ -382,3 +382,24 @@ func ReadMessages(ctx context.Context, q *db.Queries, sessionID string) ([]api.M
 	}
 	return out, nil
 }
+
+// GetMessagesTail seeks the latest bounded canonical window.
+func (s *SQL) GetMessagesTail(ctx context.Context, sessionID string, limit int) ([]api.Message, error) {
+	if limit <= 0 {
+		return []api.Message{}, nil
+	}
+	rows, err := s.queries.ListSessionMessagesTail(ctx, db.ListSessionMessagesTailParams{SessionID: sessionID, Limit: int64(limit)})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]api.Message, 0, len(rows))
+	for _, row := range rows {
+		message, err := messageFromRow(db.ListSessionMessagesRow(row))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, message)
+	}
+	reverseMessages(out)
+	return out, nil
+}

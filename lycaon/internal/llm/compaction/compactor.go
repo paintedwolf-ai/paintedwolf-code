@@ -20,6 +20,7 @@ import (
 
 // CompactionReport describes what compaction changed.
 type CompactionReport struct {
+	Continuation         *messageview.Continuation
 	TokensBefore         int
 	TokensAfter          int
 	ChunksCompacted      int
@@ -36,7 +37,8 @@ type CompactionReport struct {
 
 // SessionInfo supplies session metadata for compaction snapshots.
 type SessionInfo struct {
-	ID string
+	ID                string
+	PriorContinuation *messageview.Continuation
 	// AgentType and ParentSessionID attribute worker summaries to their chat.
 	AgentType            string
 	ParentSessionID      string
@@ -121,7 +123,7 @@ func (c *SimpleCompactor) Compact(ctx context.Context, info SessionInfo, message
 		return
 	}
 	var compact []ContextMessage
-	compact, report.Reason, report.CacheHit, err = c.compactSession(ctx, info, out, maxTokens)
+	compact, report.Continuation, report.Reason, report.CacheHit, err = c.compactSession(ctx, info, out, maxTokens)
 	if err != nil {
 		return
 	}
@@ -130,60 +132,6 @@ func (c *SimpleCompactor) Compact(ctx context.Context, info SessionInfo, message
 		report.SessionCompacted = true
 	}
 	return
-}
-
-func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, messages []ContextMessage, maxTokens int) ([]ContextMessage, string, bool, error) {
-	tail := retainedCompactionMessages(messages, c.cfg.KeepRecentMessages)
-	if len(tail) == len(messages) {
-		return nil, "protected_history", false, nil
-	}
-	// Even an empty summary cannot recover enough space from protected history.
-	possible, err := c.usefulCompaction(info, messages, compactionReplacement(info, messages, tail, compactionSummary{}, ""), c.cfg.SessionMinSavingsTokens)
-	if err != nil {
-		return nil, "failed", false, err
-	}
-	if !possible {
-		return nil, "insufficient_reclaimable_space", false, nil
-	}
-	revision, err := c.sessionRevision(ctx, info, messages, maxTokens)
-	if err != nil {
-		return nil, "failed", false, err
-	}
-	if info.Attempts != nil {
-		prior, found, readErr := info.Attempts.GetCompactionAttempt(ctx, info.ID)
-		if readErr != nil {
-			return nil, "failed", false, readErr
-		}
-		if found && prior.Revision == revision {
-			return nil, prior.Reason, true, nil
-		}
-	}
-	structured, err := c.summarizeSession(ctx, info, SliceMessages(messages, c.cfg.MessageSlice))
-	if err != nil {
-		return nil, "failed", false, err
-	}
-	summary, err := renderContinuationRecord(ctx, structured, compactedSources(messages, tail), info.RecallAvailable)
-	if err != nil {
-		return nil, "failed", false, err
-	}
-	candidate := compactionReplacement(info, messages, tail, structured, summary)
-	useful, err := c.usefulCompaction(info, messages, candidate, c.cfg.SessionMinSavingsTokens)
-	if err != nil {
-		return nil, "failed", false, err
-	}
-	if !useful {
-		if info.Attempts != nil {
-			if err := info.Attempts.PutCompactionAttempt(ctx, info.ID, messageview.CompactionAttempt{Revision: revision, Reason: "insufficient_savings"}); err != nil {
-				return nil, "failed", false, err
-			}
-		}
-		return nil, "insufficient_savings", false, nil
-	}
-	reason := "partial_reduction"
-	if EstimateMessagesTokens(candidate) <= maxTokens {
-		reason = "target_reached"
-	}
-	return candidate, reason, false, nil
 }
 
 func compactionReplacement(info SessionInfo, out, tail []ContextMessage, structured compactionSummary, summary string) []ContextMessage {
@@ -512,4 +460,9 @@ type ContextCompactor interface {
 	EstimateTokens(ctx context.Context, text string) (int, error)
 	BudgetRemaining(ctx context.Context, sessionID string, used int) (int, error)
 	Config() CompactionConfig
+}
+
+// WithConfig binds one attempt to the receiving session's budget.
+func (c *SimpleCompactor) WithConfig(cfg CompactionConfig) *SimpleCompactor {
+	return NewSimpleCompactor(cfg, c.summary)
 }

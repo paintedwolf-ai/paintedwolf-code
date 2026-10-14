@@ -20,6 +20,7 @@ type Store interface {
 	messageview.CompactionAttemptStore
 	Get(context.Context, string) (*api.Session, error)
 	GetMessages(context.Context, string) ([]api.Message, error)
+	GetMessagesTail(context.Context, string, int) ([]api.Message, error)
 	GetMessagesAfterOrd(context.Context, string, int64, int) ([]api.Message, error)
 	GetCompactionView(context.Context, string) (*store.CompactionView, bool, error)
 	CompactionViewCurrent(context.Context, string, int64, string, int64) (bool, error)

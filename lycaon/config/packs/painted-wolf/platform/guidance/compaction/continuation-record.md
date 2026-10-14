@@ -17,3 +17,8 @@
 ### Constraints
 {% for line in constraints %}- {{ line }}
 {% endfor %}{% endif %}
+
+{% if through_ord %}### Covered history
+Canonical observations through ordinal {{ through_ord }} remain on record. {% if recall_available %}Use `recall(history={"after_ord":0,"through_ord":{{ through_ord }}})` to page their index. Supply a returned `message_id` in the same history request to recover its body; `offset` and `next_offset` page long bodies. {% endif %}These are recorded observations, not current file contents or verification. Re-read changed sources before editing.
+{% endif %}{% if reference_only %}Some covered observations have no accepted prose summary. Recover the relevant records before relying on their details.
+{% endif %}

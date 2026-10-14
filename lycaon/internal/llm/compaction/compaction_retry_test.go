@@ -57,7 +57,7 @@ func TestCompactionRetriesMalformedOutputWithSmallerPrompt(t *testing.T) {
 	messages := make([]ContextMessage, 0, 40)
 	for i := 0; i < 40; i++ {
 		messages = append(messages, ContextMessage{
-			Role: string(api.MessageRoleUser), Content: strings.Repeat("history ", 200),
+			Role: string(api.MessageRoleUser), Content: strings.Repeat("history ", 10),
 		})
 	}
 

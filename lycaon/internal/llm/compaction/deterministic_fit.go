@@ -29,6 +29,16 @@ func DeterministicFit(cfg CompactionConfig, messages []ContextMessage, maxTokens
 	keepFloor := len(body) - recentCompactionStart(body, max(1, cfg.KeepRecentMessages))
 	// Over budget here, so a notice is certain; reserve its cost before sizing.
 	budget := maxTokens - EstimateMessagesTokens(head) - EstimateMessagesTokens([]ContextMessage{contextTrimNotice()})
+	// A receiver window bounds its recent exchange floor by tokens.
+	if cfg.ModelContextWindow > 0 {
+		for keepFloor > 1 && EstimateMessagesTokens(body[len(body)-keepFloor:]) > max(1, budget/2) {
+			next := len(body) - recentCompactionStart(body, keepFloor-1)
+			if next >= keepFloor {
+				break
+			}
+			keepFloor = next
+		}
+	}
 	drop := fitFrontDropCount(body, keepFloor, budget)
 
 	pinned := pinnedRows(body[:drop])

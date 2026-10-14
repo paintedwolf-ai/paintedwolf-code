@@ -2,11 +2,13 @@ package compaction
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -134,5 +136,82 @@ func TestChunkPassForwardsRowHandlesToBanner(t *testing.T) {
 	}
 	if !strings.Contains(out[2].Content, "recall handle:command#12") {
 		t.Fatalf("shrunk row must carry its handle: %q", out[2].Content[:minInt(200, len(out[2].Content))])
+	}
+}
+
+func TestContinuationWithoutSummarizerKeepsInstructionsAndRecovery(t *testing.T) {
+	cfg := testCompactionConfig()
+	cfg.ChunkTokenThreshold = 1000000
+	cfg.KeepRecentMessages = 2
+	cfg.MessageSlice = 12
+	messages := []ContextMessage{{ID: "constraint", Ord: 1, Role: "user", Content: "Preserve column order", ContextPinned: true}}
+	for i := 2; i < 24; i++ {
+		messages = append(messages, ContextMessage{ID: fmt.Sprintf("source-%d", i), Ord: int64(i), Role: "assistant", Content: strings.Repeat("observation ", 400)})
+	}
+	messages = append(messages, ContextMessage{ID: "continue", Ord: 24, Role: "user", Content: "Continue", ContextPinned: true})
+	out, report, err := NewSimpleCompactor(cfg, nil).Compact(t.Context(), SessionInfo{ID: "session", RecallAvailable: true}, messages, 100)
+	testutil.FailErr(t, "compact without synthesis", err)
+	if !report.SessionCompacted || report.Continuation == nil || report.Continuation.Reason != "references_only" {
+		t.Fatalf("missing recoverable fallback: %+v", report)
+	}
+	if report.Continuation.ThroughOrd != 13 || len(report.Continuation.Sources) != 12 {
+		t.Fatalf("incorrect covered prefix: %+v", report.Continuation)
+	}
+	ids := retainedMessageIDs(out)
+	for _, id := range []string{"constraint", "continue", "source-14", "source-23"} {
+		if _, ok := ids[id]; !ok {
+			t.Fatalf("lost retained row %s", id)
+		}
+	}
+	if !strings.Contains(out[1].Content, `recall(history={"after_ord":0,"through_ord":13})`) {
+		t.Fatal("fallback does not explain canonical recovery")
+	}
+}
+
+func TestContinuationSegmentsCoverWholeUnicodeObservation(t *testing.T) {
+	body := strings.Repeat("αβγ\n", 700)
+	sources, segments := continuationSegments([]ContextMessage{{ID: "read", Ord: 7, Role: "tool", Content: body, ToolName: "read"}}, 64)
+	var recovered strings.Builder
+	for _, segment := range segments {
+		recovered.WriteString(segment.Content)
+	}
+	projected, _, _, _ := projectCompactionMessage(ContextMessage{ID: "read", Ord: 7, Role: "tool", Content: body, ToolName: "read"})
+	if recovered.String() != projected || len(sources) != 1 || sources[0].Disposition != "reference" {
+		t.Fatal("segmentation omitted source material")
+	}
+}
+
+func TestContinuationCarriesEarlierSummaryThroughFailedSynthesis(t *testing.T) {
+	cfg := testCompactionConfig()
+	prior := &messageview.Continuation{Format: 1, ThroughOrd: 10, RemovedRows: 8,
+		Summary: messageview.ContinuationSummary{Facts: []string{"sorting is descending"}, Pending: []string{"CLI still needs verification"}}}
+	summary, sources, err := NewSimpleCompactor(cfg, nil).summarizePrefix(t.Context(), SessionInfo{PriorContinuation: prior},
+		[]ContextMessage{{ID: "source", Ord: 11, Role: "assistant", Content: "new observation"}})
+	if err == nil || len(sources) != 1 || summary.Facts[0] != "sorting is descending" || summary.Pending[0] != "CLI still needs verification" {
+		t.Fatal("failed synthesis lost the earlier continuation")
+	}
+}
+
+func TestContinuationRepresentationScalesWithReceiver(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	for _, tc := range []struct {
+		window int
+		level  string
+	}{{2048, "references"}, {8192, "compact"}, {131072, "detailed"}} {
+		record := &messageview.Continuation{ThroughOrd: 500, Window: tc.window, Reason: "summarized"}
+		for range 8 {
+			record.Summary.Facts = append(record.Summary.Facts, strings.Repeat("detail ", 20))
+		}
+		for range 5 {
+			record.Summary.Pending = append(record.Summary.Pending, strings.Repeat("pending ", 18))
+		}
+		text, err := renderCoveredContinuation(t.Context(), record, true)
+		testutil.FailErr(t, "render receiver representation", err)
+		if record.Level != tc.level {
+			t.Fatalf("window %d selected %s, want %s", tc.window, record.Level, tc.level)
+		}
+		if !strings.Contains(text, `"through_ord":500`) {
+			t.Fatal("representation omitted its recovery coordinates")
+		}
 	}
 }

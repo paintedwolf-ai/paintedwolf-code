@@ -264,20 +264,11 @@ func TestCompactionRecentMessagesTotalBudget(t *testing.T) {
 	}
 	msgs[len(msgs)-1].Content = "newest-marker " + msgs[len(msgs)-1].Content
 	const messageTokens = 64
-	rows, _ := compactionRecentMessages(msgs, messageTokens)
-	for _, row := range rows {
-		if got := len([]rune(row["content"].(string))); got > messageTokens*tokenest.DefaultDivisor {
-			t.Fatalf("message excerpt = %d runes", got)
-		}
-	}
-	input, err := BuildCompactionInput(context.Background(), SessionInfo{ID: "s1"}, msgs, 512, messageTokens)
-	testutil.FailErr(t, "build bounded prompt", err)
-	prompt := input.Text
-	if got := tokenest.EstimateDefault(prompt); got > 512 {
-		t.Fatalf("rendered prompt = %d tokens, want <= 512", got)
-	}
-	if !strings.Contains(prompt, "newest-marker") {
-		t.Fatal("recency-first fit dropped the newest message")
+	_, segments := continuationSegments(msgs, messageTokens)
+	input, err := BuildCompactionInput(context.Background(), SessionInfo{ID: "s1"}, segments, 1024, messageTokens)
+	testutil.FailErr(t, "build bounded source page", err)
+	if tokenest.EstimateDefault(input.Text) > 1024 || input.Consumed <= 0 || input.Messages[0].Content != segments[0].Content {
+		t.Fatal("source page lost its bounded oldest-prefix coverage")
 	}
 }
 

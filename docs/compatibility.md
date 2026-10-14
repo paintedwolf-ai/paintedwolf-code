@@ -57,6 +57,8 @@ Durable identity and disposable bytes should be separate when content can be rea
 | Source snapshot | durable manifest while referenced | rebuildable objects protected only while referenced |
 | Search | authoritative source records | rebuildable index projection |
 
+Compaction views are ephemeral prompt projections over retained canonical messages. Their versioned envelope may be rebuilt on format mismatch without modifying the transcript. Canonical recovery coordinates, source identities, and user records retain their durable meaning; projection invalidation does not delete them.
+
 Deleting bytes must produce an explainable unavailable state, not make a durable id look as though it never existed.
 
 ## Workflow definitions

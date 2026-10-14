@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonfence"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -28,6 +27,8 @@ func SummaryFormatRequested(ctx context.Context) bool {
 
 type compactionSummary struct {
 	SourceContext *api.SourceContext `json:"-"`
+	ThroughOrd    int64              `json:"-"`
+	ReferenceOnly bool               `json:"-"`
 	Facts         []string           `json:"facts"`
 	Completed     []string           `json:"completed"`
 	Pending       []string           `json:"pending"`
@@ -81,26 +82,26 @@ func strictDecodeCompactionSummary(trimmed string) (compactionSummary, error) {
 	if out.Facts == nil || out.Completed == nil || out.Pending == nil || out.Reacquire == nil || out.Constraints == nil {
 		return compactionSummary{}, fmt.Errorf("list fields must be arrays")
 	}
-	out.Facts = boundedSummaryLines(out.Facts, 8)
-	out.Completed = boundedSummaryLines(out.Completed, 5)
-	out.Pending = boundedSummaryLines(out.Pending, 5)
-	out.Reacquire = boundedSummaryLines(out.Reacquire, 8)
-	out.Constraints = boundedSummaryLines(out.Constraints, 5)
+	for _, field := range []struct {
+		name  string
+		lines *[]string
+		limit int
+	}{{"facts", &out.Facts, 8}, {"completed", &out.Completed, 5}, {"pending", &out.Pending, 5}, {"reacquire", &out.Reacquire, 8}, {"constraints", &out.Constraints, 5}} {
+		lines := cleanSummaryLines(*field.lines)
+		if len(lines) > field.limit {
+			return compactionSummary{}, fmt.Errorf("%s exceeds %d items", field.name, field.limit)
+		}
+		for _, line := range lines {
+			if len([]rune(line)) > 160 {
+				return compactionSummary{}, fmt.Errorf("%s item exceeds 160 characters", field.name)
+			}
+		}
+		*field.lines = lines
+	}
 	if len(out.Facts) == 0 {
 		return compactionSummary{}, fmt.Errorf("facts must contain at least one item")
 	}
 	return out, nil
-}
-
-func boundedSummaryLines(lines []string, maxItems int) []string {
-	out := cleanSummaryLines(lines)
-	if len(out) > maxItems {
-		out = out[:maxItems]
-	}
-	for i := range out {
-		out[i] = runeclamp.Fit(out[i], 160)
-	}
-	return out
 }
 
 func cleanSummaryLines(lines []string) []string {
@@ -135,6 +136,8 @@ func renderContinuationRecord(ctx context.Context, summary compactionSummary, so
 		rows = append(rows, s.templateVars())
 	}
 	out, err := guidance.RenderGuidance(ctx, guidance.CompactionContinuationRecordRef, map[string]any{
+		"through_ord":       summary.ThroughOrd,
+		"reference_only":    summary.ReferenceOnly,
 		"facts":             summary.Facts,
 		"completed":         summary.Completed,
 		"pending":           summary.Pending,

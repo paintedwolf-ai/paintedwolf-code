@@ -850,3 +850,21 @@ func (s *Memory) HasActiveProjectSessions(ctx context.Context, projectID string,
 	}
 	return false, nil
 }
+
+// GetMessagesTail returns a bounded canonical window in creation order.
+func (s *Memory) GetMessagesTail(ctx context.Context, sessionID string, limit int) ([]api.Message, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if _, ok := s.sessions[sessionID]; !ok {
+		return nil, ErrSessionNotFound
+	}
+	if limit <= 0 {
+		return []api.Message{}, nil
+	}
+	rows := s.messages[sessionID]
+	start := max(0, len(rows)-limit)
+	return append([]api.Message(nil), rows[start:]...), nil
+}

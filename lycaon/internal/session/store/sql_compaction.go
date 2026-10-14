@@ -8,12 +8,19 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+type compactionProjection struct {
+	Format       int                       `json:"format"`
+	Messages     []api.Message             `json:"messages"`
+	Continuation *messageview.Continuation `json:"continuation,omitempty"`
+}
+
 // PutCompactionView atomically publishes a fresh view and its next generation.
 func (s *SQL) PutCompactionView(ctx context.Context, sessionID string, view CompactionView) error {
-	viewJSON, err := json.Marshal(view.Messages)
+	viewJSON, err := json.Marshal(compactionProjection{Format: 1, Messages: view.Messages, Continuation: view.Continuation})
 	if err != nil {
 		return err
 	}
@@ -107,9 +114,18 @@ func (s *SQL) GetCompactionView(ctx context.Context, sessionID string) (*Compact
 		TokensBefore:      int(row.TokensBefore),
 		TokensAfter:       int(row.TokensAfter),
 	}
-	if err := json.Unmarshal([]byte(row.ViewJson), &view.Messages); err != nil {
+	var projection compactionProjection
+	if len(row.ViewJson) > 0 && row.ViewJson[0] == '[' {
+		// Canonical history rebuilds projections without a continuation contract.
+		return nil, false, nil
+	}
+	if err := json.Unmarshal([]byte(row.ViewJson), &projection); err != nil {
 		return nil, false, err
 	}
+	if projection.Format != 1 {
+		return nil, false, nil
+	}
+	view.Messages, view.Continuation = projection.Messages, projection.Continuation
 	if t, perr := db.ParseTime(row.CreatedAt); perr == nil {
 		view.CreatedAt = t
 	}
