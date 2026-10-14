@@ -19,6 +19,13 @@ func TestHistoryRecordPreservesArgumentsAndPartsWithoutPrivateReplay(t *testing.
 		`[{"id":"original-call","name":"read","args":{"path":"original.go"},"wire_id":"private-id","extra_content":{"reasoning":"private replay"}}]`,
 		`[{"content":"recorded λ plan","origin":"model","authority":"none","trust_tier":"untrusted"}]`)
 	testutil.FailErr(t, "seed original call", err)
+	row := evidenceRow("original-call", coordinatorSession, "read#1", "original.go", "original read arguments")
+	row.MessageID = "call"
+	f.seed(t, row)
+	matched := f.answer(t, coordinator(), "handle:read#1", recall.WidenDefault)
+	if len(matched.Hits) != 1 || matched.Hits[0].Record == nil || matched.Hits[0].Record.MessageID != "call" || matched.Hits[0].Record.Format != "record" {
+		t.Fatal("own-session search omitted canonical record recovery")
+	}
 	index, err := f.svc.Answer(t.Context(), recall.Request{Caller: coordinator(), History: &recall.HistoryRequest{ThroughOrd: 1, BodyRunes: 32}})
 	testutil.FailErr(t, "discover original call", err)
 	if index.History.Format != "index" || len(index.History.Entries) != 1 || index.History.Entries[0].Record == nil {

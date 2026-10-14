@@ -17,6 +17,7 @@ import (
 func (s *Service) decorate(ctx context.Context, caller Caller, scope Scope, hits []search.Hit) ([]Hit, []string) {
 	out := make([]Hit, 0, len(hits))
 	inline := len(hits) <= BodyInlineMaxHits
+	var issues []string
 	for _, h := range hits {
 		out = append(out, Hit{
 			Handle:    h.Handle,
@@ -37,10 +38,19 @@ func (s *Service) decorate(ctx context.Context, caller Caller, scope Scope, hits
 			Verified:  h.Verified,
 			Currency:  CurrencyUnknown,
 		})
+		if h.MessageID != "" && h.SessionID == caller.SessionID {
+			var ord, seq int64
+			err := s.db.QueryRowContext(ctx, `SELECT ord, seq FROM messages WHERE session_id = ? AND id = ? AND `+historyVisible,
+				caller.SessionID, h.MessageID).Scan(&ord, &seq)
+			if err == nil && ord > 0 {
+				out[len(out)-1].Record = &HistoryRequest{ThroughOrd: ord, MessageID: h.MessageID, SourceSeq: seq, Format: "record"}
+			} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				issues = append(issues, fmt.Sprintf("%s: load canonical coordinates: %v", h.MessageID, err))
+			}
+		}
 	}
-	var issues []string
 	if inline {
-		issues = s.attachBodies(ctx, out)
+		issues = append(issues, s.attachBodies(ctx, out)...)
 	}
 	s.attachSourceContexts(ctx, hits, out)
 	s.attachCurrency(ctx, scope, out)
