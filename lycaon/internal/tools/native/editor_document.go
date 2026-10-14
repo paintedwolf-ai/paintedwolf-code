@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -38,6 +39,7 @@ func loadAgentSourceText(ctx context.Context, tool string, tctx tools.ToolContex
 
 // landing reports where an edit's bytes ended up.
 type landing struct {
+	change string
 	// editor is true when the edit landed in the open document.
 	editor bool
 	// saved is true when the file on disk holds the edit.
@@ -54,6 +56,10 @@ type landing struct {
 // note is the receipt line stating the landing when it was not a plain file
 // write. An unsaved landing says the disk still holds other bytes.
 func (l landing) note() string {
+	return strings.TrimSpace(l.change + "\n" + l.publicationNote())
+}
+
+func (l landing) publicationNote() string {
 	switch {
 	case !l.editor:
 		return ""
@@ -106,7 +112,7 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 				}
 			}
 		}
-		return landing{}, nil
+		return landing{change: mutationContext(st.Content, newContent)}, nil
 	}
 	documents, ok := sourceview.DocumentsFor(tctx, resolved)
 	if !ok {
@@ -133,7 +139,7 @@ func landEditedText(ctx context.Context, tctx tools.ToolContext, tool string, re
 	tctx.RecordModelAuthoredCredentials(ctx, resolved.Abs, []byte(newContent))
 	reportLanded(tctx, applied.Document)
 	reportLandedEditorConfig(ctx, tctx, resolved, st, newContent)
-	return landing{editor: true, saved: applied.Saved, recreated: st.Editor.Absent && applied.Saved,
+	return landing{change: mutationContext(preview.Before.Text, applied.Document.Text), editor: true, saved: applied.Saved, recreated: st.Editor.Absent && applied.Saved,
 		heldVersionID: applied.HeldVersionID, publicationError: applied.PublicationError}, nil
 }
 

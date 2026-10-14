@@ -25,6 +25,9 @@ func TestEditToolStringReplaceEchoesSeam(t *testing.T) {
 	if !strings.Contains(out, "Seam context (after edit):") {
 		t.Fatalf("edit receipt missing seam context: %q", out)
 	}
+	if !strings.Contains(out, "3\tgamma") {
+		t.Fatalf("receipt omits removed text: %s", out)
+	}
 	if !strings.Contains(out, "3\tGAMMA") {
 		t.Fatalf("seam should show the numbered edited line: %q", out)
 	}
