@@ -33,6 +33,7 @@ type sessionLease struct {
 	name         string
 	release      func(context.Context) error
 	responses    chan *dbus.Signal
+	request      dbus.ObjectPath
 	done         chan error
 	stop         chan struct{}
 	stopped      chan struct{}
@@ -40,8 +41,8 @@ type sessionLease struct {
 	releaseError error
 }
 
-func newSessionLease(bus *dbus.Conn, name string, release func(context.Context) error, responses chan *dbus.Signal) *sessionLease {
-	held := &sessionLease{bus: bus, name: name, release: release, responses: responses, done: make(chan error, 1), stop: make(chan struct{}), stopped: make(chan struct{})}
+func newSessionLease(bus *dbus.Conn, name string, release func(context.Context) error, responses chan *dbus.Signal, request dbus.ObjectPath) *sessionLease {
+	held := &sessionLease{bus: bus, name: name, release: release, responses: responses, request: request, done: make(chan error, 1), stop: make(chan struct{}), stopped: make(chan struct{})}
 	go held.watch()
 	return held
 }
@@ -53,20 +54,30 @@ func (l *sessionLease) Provider() string { return l.name }
 func (l *sessionLease) watch() {
 	defer close(l.stopped)
 	defer close(l.done)
-	select {
-	case <-l.stop:
-	case <-l.bus.Context().Done():
-		l.done <- errors.New("sleep inhibitor service disconnected")
-	case response, ok := <-l.responses:
-		if !ok {
+	for {
+		select {
+		case <-l.stop:
+			return
+		case <-l.bus.Context().Done():
 			l.done <- errors.New("sleep inhibitor service disconnected")
 			return
+		case response, ok := <-l.responses:
+			if !ok {
+				l.done <- errors.New("sleep inhibitor service disconnected")
+				return
+			}
+			// Every signal on the connection arrives here; only the request's
+			// own Response ends the lease.
+			if response.Path != l.request || response.Name != portalRequest+".Response" {
+				continue
+			}
+			code := uint32(0)
+			if len(response.Body) > 0 {
+				code, _ = response.Body[0].(uint32)
+			}
+			l.done <- fmt.Errorf("sleep inhibitor ended by the desktop portal (response %d)", code)
+			return
 		}
-		code := uint32(0)
-		if len(response.Body) > 0 {
-			code, _ = response.Body[0].(uint32)
-		}
-		l.done <- fmt.Errorf("sleep inhibitor ended by the desktop portal (response %d)", code)
 	}
 }
 
@@ -127,7 +138,7 @@ func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
 		}
 		return nil
 	}
-	return newSessionLease(bus, p.Name(), release, responses), nil
+	return newSessionLease(bus, p.Name(), release, responses, request), nil
 }
 
 func requestToken() (string, error) {
@@ -166,7 +177,7 @@ func (p powerManagementProvider) Acquire(ctx context.Context) (lease, error) {
 		}
 		return nil
 	}
-	return newSessionLease(bus, p.Name(), release, nil), nil
+	return newSessionLease(bus, p.Name(), release, nil, ""), nil
 }
 
 func nameServed(ctx context.Context, connect busConnector, name string) bool {
