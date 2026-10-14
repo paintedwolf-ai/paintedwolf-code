@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -65,14 +64,26 @@ func runGitCredentials(args []string, in io.Reader, out io.Writer) error {
 	}
 }
 
+// setGitCredential accepts the remote and --username in either order.
 func setGitCredential(args []string, store gitCredentialBackend, in io.Reader) error {
-	fs := flag.NewFlagSet("credentials git set", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	username := fs.String("username", "", "account name the token belongs to")
-	if err := fs.Parse(args); err != nil || fs.NArg() != 1 || strings.TrimSpace(*username) == "" {
+	remote, username := "", ""
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--username" && i+1 < len(args):
+			i++
+			username = strings.TrimSpace(args[i])
+		case strings.HasPrefix(args[i], "--username="):
+			username = strings.TrimSpace(strings.TrimPrefix(args[i], "--username="))
+		case remote == "" && !strings.HasPrefix(args[i], "-"):
+			remote = args[i]
+		default:
+			return errors.New(gitCredentialsUsage)
+		}
+	}
+	if remote == "" || username == "" {
 		return errors.New(gitCredentialsUsage)
 	}
-	credential, err := gitcredential.CredentialForRemote(fs.Arg(0))
+	credential, err := gitcredential.CredentialForRemote(remote)
 	if err != nil {
 		return err
 	}
@@ -90,7 +101,7 @@ func setGitCredential(args []string, store gitCredentialBackend, in io.Reader) e
 	if token == "" {
 		return errors.New("a token is required on the first line of stdin")
 	}
-	credential.Username = strings.TrimSpace(*username)
+	credential.Username = username
 	credential.Password = token
 	return store.Store(credential)
 }

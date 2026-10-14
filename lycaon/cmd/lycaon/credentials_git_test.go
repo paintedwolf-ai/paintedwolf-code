@@ -54,6 +54,8 @@ func TestGitCredentialsCLIStoresListsAndRemoves(t *testing.T) {
 		"no command":       {},
 		"unknown":          {"forget"},
 		"set without user": {"set", "https://github.com"},
+		"set two remotes":  {"set", "https://github.com", "https://other.example", "--username", "a"},
+		"set stray flag":   {"set", "https://github.com", "--token", "x", "--username", "a"},
 		"set bad remote":   {"set", "github.com", "--username", "a"},
 		"set ssh remote":   {"set", "ssh://github.com", "--username", "a"},
 		"remove arity":     {"remove"},
@@ -68,7 +70,7 @@ func TestGitCredentialsCLIStoresListsAndRemoves(t *testing.T) {
 	}
 	t.Setenv("LYCAON_CREDENTIAL_UNLOCK_STDIN", "1")
 	frame := append([]byte{0, 0, 0, 8}, []byte("password")...)
-	testutil.FailErr(t, "set with unlock frame", runGitCredentials([]string{"set", "https://example.com", "--username", "bob"}, bytes.NewReader(append(frame, []byte("tok\n")...)), &out))
+	testutil.FailErr(t, "set with unlock frame", runGitCredentials([]string{"set", "--username=bob", "https://example.com"}, bytes.NewReader(append(frame, []byte("tok\n")...)), &out))
 	if memory.entries["https://example.com"].Password != "tok" {
 		t.Fatalf("framed set stored %+v", memory.entries["https://example.com"])
 	}
