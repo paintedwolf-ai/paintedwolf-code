@@ -85,8 +85,8 @@ pub fn paint_backdrop(window: &WebviewWindow, color: Color) -> Result<(), String
             Err(err) => eprintln!("window frame: {err}"),
         })
         .map_err(|err| format!("window frame: {err}"))?;
-    window
-        .as_ref()
+    let webview: &tauri::Webview = window.as_ref();
+    webview
         .set_background_color(Some(Color(0, 0, 0, 0)))
         .map_err(|err| format!("webview backdrop: {err}"))
 }
