@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -198,19 +199,56 @@ func TestBundledToolPathsByOperatingSystem(t *testing.T) {
 func TestBundledRuntimeEnvironmentByOperatingSystem(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join("root", "engine")
-	linux := bundledRuntimeEnvForOS(filepath.Join(root, "bin", "git"), "linux", "/host/bin")
-	wantLinux := []string{
-		"PREFIX=" + root,
-		"GIT_SSL_CAINFO=" + filepath.Join(root, "ssl", "cacert.pem"),
-	}
-	if strings.Join(linux, "\x00") != strings.Join(wantLinux, "\x00") {
-		t.Fatalf("Linux bundled runtime env = %q, want %q", linux, wantLinux)
+	for _, goos := range []string{"linux", "darwin"} {
+		if env := bundledRuntimeEnvForOS(filepath.Join(root, "bin", "git"), goos, "/host/bin"); len(env) != 0 {
+			t.Fatalf("%s bundled runtime env = %q, want none", goos, env)
+		}
 	}
 	windows := bundledRuntimeEnvForOS(filepath.Join(root, "cmd", "git.exe"), "windows", `C:\Windows\System32`)
 	wantWindows := "PATH=" + filepath.Join(root, "mingw64", "bin") + ";" +
 		filepath.Join(root, "usr", "bin") + `;C:\Windows\System32`
 	if len(windows) != 1 || windows[0] != wantWindows {
 		t.Fatalf("Windows bundled runtime env = %q, want %q", windows, wantWindows)
+	}
+}
+
+func TestLinuxGitTrustsTheFirstReadableHostCABundle(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	missing := filepath.Join(dir, "missing.crt")
+	directory := filepath.Join(dir, "certs")
+	testutil.FailErr(t, "mkdir", os.Mkdir(directory, 0o755))
+	unreadable := filepath.Join(dir, "unreadable.crt")
+	testutil.FailErr(t, "write", os.WriteFile(unreadable, []byte("x"), 0o000))
+	bundle := filepath.Join(dir, "tls-ca-bundle.pem")
+	testutil.FailErr(t, "write", os.WriteFile(bundle, []byte("x"), 0o644))
+	later := filepath.Join(dir, "cert.pem")
+	testutil.FailErr(t, "write", os.WriteFile(later, []byte("x"), 0o644))
+
+	candidates := []string{missing, directory, bundle, later}
+	if os.Geteuid() != 0 {
+		candidates = []string{missing, directory, unreadable, bundle, later}
+	}
+	for _, profile := range []Profile{ProfileNetwork, ProfileHermetic} {
+		env, err := hostTrustEnvFrom("linux", profile, candidates)
+		if err != nil || len(env) != 1 || env[0] != "GIT_SSL_CAINFO="+bundle {
+			t.Fatalf("profile %v trust env = %q, %v; want %s", profile, env, err, bundle)
+		}
+	}
+
+	none := []string{missing, directory}
+	var unavailable *CABundleUnavailableError
+	if _, err := hostTrustEnvFrom("linux", ProfileNetwork, none); !errors.As(err, &unavailable) || !slices.Equal(unavailable.Searched, none) {
+		t.Fatalf("network invocation without a bundle = %v", err)
+	}
+	if env, err := hostTrustEnvFrom("linux", ProfileHermetic, none); err != nil || len(env) != 0 {
+		t.Fatalf("local invocation without a bundle = %q, %v", env, err)
+	}
+	if env, err := hostTrustEnvFrom("darwin", ProfileNetwork, none); err != nil || len(env) != 0 {
+		t.Fatalf("macOS trust env = %q, %v; the bundled toolchain uses its own", env, err)
+	}
+	if !slices.Equal(hostCABundles[:2], []string{"/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt"}) || len(hostCABundles) != 6 {
+		t.Fatalf("host CA search order = %q", hostCABundles)
 	}
 }
 
