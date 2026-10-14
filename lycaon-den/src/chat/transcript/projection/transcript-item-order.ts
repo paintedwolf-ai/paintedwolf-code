@@ -139,6 +139,15 @@ function transcriptItemOrdKey(
   }
 }
 
+/** The message ordinal a presented row sits at; undefined while the row has no durable ordinal. */
+export function transcriptItemOrd(
+  item: TranscriptItem,
+  ordById: ReadonlyMap<string, number>,
+): number | undefined {
+  const { ord } = transcriptItemOrdKey(item, ordById as Map<string, number>, new Map());
+  return ord > 0 && ord < Number.MAX_SAFE_INTEGER ? ord : undefined;
+}
+
 /** Canonical (ord, sub) for rendered transcript order checks. */
 
 export function transcriptItemOrdSortKey(

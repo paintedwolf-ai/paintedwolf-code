@@ -12,7 +12,8 @@ import { pendingFromEvent } from "../chat/checkpoint/checkpoint-model.ts";
 import { clearTranscriptEntryMemory, noteTranscriptEntryBaseline, transcriptEntryKeysFromMessages } from "../chat/transcript/presentation/transcript-entry.ts";
 import { clearVisualArtifactSessionMemory, noteVisualArtifactIntroBaseline } from "../chat/visual/visual-artifact-reveal.ts";
 import { mergeTranscriptBaseline } from "../chat/transcript/projection/transcript-baseline-merge.ts";
-import { appendToTail, applyTranscriptPage, copyTranscriptWindow, emptyTranscriptWindow, installTailWindow, materializeTranscriptWindow, mergeIntoTail, patchRowInWindow, precedesLiveTail, refreshTailWindow, resetOlderPages, transcriptWindowPage } from "../chat/transcript/layout/transcript-window.ts";
+import { transcriptReaderReach } from "../chat/transcript/history/transcript-reader-reach.ts";
+import { TRANSCRIPT_PAGE_BUDGET, appendToTail, applyTranscriptPage, copyTranscriptWindow, emptyTranscriptWindow, installTailWindow, materializeTranscriptWindow, mergeIntoTail, patchRowInWindow, precedesLiveTail, refreshTailWindow, resetOlderPages, transcriptWindowPage, trimOldestPages } from "../chat/transcript/layout/transcript-window.ts";
 import { clearDraftVersionCache } from "../chat/draft/draft-version-cache.ts";
 import { clearChatContentCache } from "../chat/transcript/content/chat-content-reader.ts";
 import { messagesEqual } from "../chat/transcript/projection/messages-equal.ts";
@@ -81,6 +82,10 @@ export function createAppStore(
   const trimWorkerTranscripts = (workerId: string) => {
     const evicted = workerRetention.evictions(state.workerTranscripts, workerId);
     if (evicted.length) setState("workerTranscripts", produce(cache => { for (const id of evicted) delete cache[id]; }));
+  };
+  const residencyPolicy = (sessionId: string | undefined) => {
+    const keepOrds = sessionId ? transcriptReaderReach(sessionId) : undefined;
+    return keepOrds ? { keepOrds } : undefined;
   };
   const actions: AppStoreActions = {
     ...createSessionActivityActions(state, setState),
@@ -275,6 +280,7 @@ export function createAppStore(
         messages,
         hasMoreBefore: baseline?.hasMoreBefore ?? false,
         hasMoreAfter: baseline?.hasMoreAfter ?? false,
+        bounds: baseline?.bounds,
       };
       const merged = mergeTranscriptBaseline(sessionId, messages, watermark, {
         transcriptSessionId: state.transcriptSessionId,
@@ -298,7 +304,10 @@ export function createAppStore(
         messagesEqual(state.messages, merged.messages) &&
         nextWatermark === state.transcriptWatermark &&
         nextTurnClocks === state.turnClocks &&
-        nextTurnLoads === state.turnLoads
+        nextTurnLoads === state.turnLoads &&
+        (!page.bounds ||
+          (state.transcript.bounds?.firstOrd === page.bounds.firstOrd &&
+            state.transcript.bounds?.lastOrd === page.bounds.lastOrd))
       ) {
         return;
       }
@@ -338,7 +347,12 @@ export function createAppStore(
       let applied = false;
       setState(
         produce((draft) => {
-          const next = applyTranscriptPage(draft.transcript, request, transcriptWindowPage(page));
+          const next = applyTranscriptPage(
+            draft.transcript,
+            request,
+            transcriptWindowPage(page),
+            residencyPolicy(sessionId),
+          );
           if (!next) return;
           draft.transcript = next;
           draft.messages = materializeTranscriptWindow(next);
@@ -355,6 +369,18 @@ export function createAppStore(
         );
       }
       return applied;
+    },
+    trimTranscriptPages() {
+      const sessionId = state.transcriptSessionId?.trim();
+      if (Object.keys(state.transcript.pages).length <= TRANSCRIPT_PAGE_BUDGET) return;
+      setState(
+        produce((draft) => {
+          const next = trimOldestPages(draft.transcript, residencyPolicy(sessionId));
+          if (next === draft.transcript) return;
+          draft.transcript = next;
+          draft.messages = materializeTranscriptWindow(next);
+        }),
+      );
     },
     resetOlderTranscriptPages() {
       setState(
@@ -400,7 +426,8 @@ export function createAppStore(
           if (seq > 0 && seq <= watermarkBeforeUpsert) return;
           // Unknown older rows return with their paged transcript window.
           if (precedesLiveTail(draft.transcript, message)) return;
-          draft.transcript = appendToTail(draft.transcript, message);
+          const sessionId = draft.transcriptSessionId?.trim();
+          draft.transcript = appendToTail(draft.transcript, message, residencyPolicy(sessionId));
           draft.messages = materializeTranscriptWindow(draft.transcript);
           applied = true;
         }),

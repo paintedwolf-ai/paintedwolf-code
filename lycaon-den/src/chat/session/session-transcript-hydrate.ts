@@ -8,6 +8,7 @@ import {
   fetchWorkflowState,
   mergeWorkflowRunsFromMessages,
 } from "../workflow/workflow-actions.ts";
+import { spanFromWireBounds } from "../transcript/layout/transcript-window.ts";
 
 /** Install a transcript and its workflow state atomically. */
 export async function applySessionTranscriptSnapshot(
@@ -61,6 +62,7 @@ export async function applySessionTranscriptSnapshot(
       {
         hasMoreBefore: Boolean(transcript.before_cursor),
         hasMoreAfter: Boolean(transcript.after_cursor),
+        bounds: spanFromWireBounds(transcript.ord_bounds),
         turnClocks: Object.values(transcript.turn_clocks),
         turnLoads: Object.values(transcript.turn_loads).flat(),
       },

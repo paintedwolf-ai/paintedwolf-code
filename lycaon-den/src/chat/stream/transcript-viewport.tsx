@@ -352,6 +352,7 @@ export function createTranscriptViewportController(opts: {
         client: runtime.client,
         appStore: runtime.appStore,
         sessionId: runtime.sessionId,
+        geometry: () => virtualWindow?.historyGeometry?.() ?? null,
       });
       const stops = [
         watchStreamScrollFade(target),
