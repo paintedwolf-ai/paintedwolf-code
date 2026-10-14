@@ -1,7 +1,6 @@
 package credentialstore
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/vaultidentity"
