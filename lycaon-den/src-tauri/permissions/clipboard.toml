@@ -9,11 +9,6 @@ description = "Write plain text to the OS clipboard for copy and cut actions."
 commands.allow = ["write_clipboard_text"]
 
 [[permission]]
-identifier = "allow-clipboard-status"
-description = "Read the display protocol and capabilities the clipboard commands run against."
-commands.allow = ["clipboard_status"]
-
-[[permission]]
 identifier = "allow-paste-into-focused-view"
 description = "Run the system Paste action in the focused web view for context-menu Paste on macOS."
 commands.allow = ["paste_into_focused_view"]

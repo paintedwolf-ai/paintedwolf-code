@@ -39,8 +39,7 @@ impl fmt::Display for ClipboardError {
 }
 
 /// The display protocol the clipboard adapter is attached to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisplayProtocol {
     Wayland,
     X11,
@@ -50,8 +49,19 @@ pub enum DisplayProtocol {
     System,
 }
 
+impl DisplayProtocol {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Wayland => "wayland",
+            Self::X11 => "x11",
+            Self::Gdk => "gdk",
+            Self::System => "system",
+        }
+    }
+}
+
 /// Observed clipboard capabilities of the current display connection.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClipboardFacts {
     pub protocol: DisplayProtocol,
     /// Copied text outlives this process; false without a clipboard manager.
@@ -76,7 +86,6 @@ pub(crate) type Reply<T> = oneshot::Receiver<Result<T, ClipboardError>>;
 pub(crate) trait ClipboardAdapter: Default + Send {
     fn write_text(&mut self, main: &dyn MainThread, text: String) -> Reply<()>;
     fn read_text(&mut self, main: &dyn MainThread) -> Reply<String>;
-    fn facts(&mut self, main: &dyn MainThread) -> Reply<ClipboardFacts>;
     /// Hands the selection to the platform before the owner goes away.
     fn release(&mut self, main: &dyn MainThread);
 }
@@ -115,13 +124,6 @@ impl<A: ClipboardAdapter> ClipboardService<A> {
 
     pub(crate) async fn read(&self, main: &dyn MainThread) -> Result<String, ClipboardError> {
         self.run(main, |adapter, main| adapter.read_text(main)).await
-    }
-
-    pub(crate) async fn facts(
-        &self,
-        main: &dyn MainThread,
-    ) -> Result<ClipboardFacts, ClipboardError> {
-        self.run(main, |adapter, main| adapter.facts(main)).await
     }
 
     async fn run<T>(
@@ -249,14 +251,6 @@ mod tests {
             }
         }
 
-        fn facts(&mut self, _main: &dyn MainThread) -> Reply<ClipboardFacts> {
-            self.state().calls.push("facts".into());
-            settled(Ok(ClipboardFacts {
-                protocol: DisplayProtocol::Wayland,
-                persistence: false,
-            }))
-        }
-
         fn release(&mut self, _main: &dyn MainThread) {
             let mut state = self.state();
             state.calls.push("release".into());
@@ -277,17 +271,14 @@ mod tests {
     }
 
     #[test]
-    fn writes_reads_and_facts_pass_through_the_adapter() {
+    fn writes_and_reads_pass_through_the_adapter() {
         let fake = Fake::default();
         let service = service(&fake, OPERATION_TIMEOUT);
         block_on(async {
             service.write(&Inline, "copied λ text".into()).await.unwrap();
             assert_eq!(service.read(&Inline).await.unwrap(), "copied λ text");
-            let facts = service.facts(&Inline).await.unwrap();
-            assert_eq!(facts.protocol, DisplayProtocol::Wayland);
-            assert!(!facts.persistence);
         });
-        assert_eq!(fake.calls(), ["write copied λ text", "read", "facts"]);
+        assert_eq!(fake.calls(), ["write copied λ text", "read"]);
         assert_eq!(fake.state().released, 0);
     }
 
@@ -371,7 +362,6 @@ mod tests {
                 Err(ClipboardError::Stopped)
             );
             assert_eq!(service.read(&Inline).await, Err(ClipboardError::Stopped));
-            assert_eq!(service.facts(&Inline).await, Err(ClipboardError::Stopped));
         });
         assert_eq!(fake.calls(), ["release"]);
     }
@@ -403,7 +393,7 @@ mod tests {
     }
 
     #[test]
-    fn errors_and_facts_serialize_as_structured_values() {
+    fn errors_serialize_as_structured_values_and_protocols_name_themselves() {
         assert_eq!(
             serde_json::to_value(ClipboardError::Stopped).unwrap(),
             serde_json::json!({ "code": "stopped" })
@@ -417,12 +407,14 @@ mod tests {
             serde_json::json!({ "code": "backend", "message": "fault" })
         );
         assert_eq!(
-            serde_json::to_value(ClipboardFacts {
-                protocol: DisplayProtocol::X11,
-                persistence: true,
-            })
-            .unwrap(),
-            serde_json::json!({ "protocol": "x11", "persistence": true })
+            [
+                DisplayProtocol::Wayland,
+                DisplayProtocol::X11,
+                DisplayProtocol::Gdk,
+                DisplayProtocol::System,
+            ]
+            .map(DisplayProtocol::as_str),
+            ["wayland", "x11", "gdk", "system"]
         );
         assert_eq!(
             ClipboardError::Timeout.to_string(),

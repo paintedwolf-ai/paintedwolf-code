@@ -72,12 +72,6 @@ impl ClipboardAdapter for NativeClipboard {
         })
     }
 
-    fn facts(&mut self, main: &dyn MainThread) -> Reply<ClipboardFacts> {
-        on_main_thread(main, |reply| {
-            let _ = reply.send(startup_facts());
-        })
-    }
-
     fn release(&mut self, main: &dyn MainThread) {
         // Hands the text to a clipboard manager when the display has one;
         // otherwise ownership ends with the process, as for any GTK window.

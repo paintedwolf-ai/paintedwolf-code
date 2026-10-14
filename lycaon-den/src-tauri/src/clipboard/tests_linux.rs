@@ -5,8 +5,8 @@
 //! The owner runs in a child process so a private display never touches the
 //! developer's session clipboard. Missing fixtures fail; they never skip.
 
-use super::linux::{GlibMainThread, NativeClipboard};
-use super::service::{ClipboardError, ClipboardService, DisplayProtocol};
+use super::linux::{startup_facts, GlibMainThread, NativeClipboard};
+use super::service::{ClipboardError, ClipboardService, DisplayProtocol, MainThread};
 use crate::test_support::TempDir;
 use gtk::prelude::*;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -339,7 +339,12 @@ fn exercise_adapter(peer: Peer) {
     let main = GlibMainThread;
     let service = ClipboardService::<NativeClipboard>::default();
     tauri::async_runtime::block_on(async {
-        let facts = service.facts(&main).await.unwrap();
+        let (reply, facts) = tokio::sync::oneshot::channel();
+        main.dispatch(Box::new(move || {
+            let _ = reply.send(startup_facts());
+        }))
+        .unwrap();
+        let facts = facts.await.unwrap().unwrap();
         assert_eq!(facts.protocol, peer.protocol());
         assert!(!facts.persistence, "private displays have no clipboard manager");
         // A fresh private display has no selection to read.

@@ -14,15 +14,12 @@ mod system;
 #[cfg(not(target_os = "linux"))]
 use system::{startup_facts, NativeClipboard};
 
-pub use service::{ClipboardError, ClipboardFacts};
+pub use service::ClipboardError;
 use service::ClipboardService;
-use std::sync::OnceLock;
-use tauri::Manager;
 
 #[derive(Default)]
 pub struct ClipboardState {
     service: ClipboardService<NativeClipboard>,
-    facts: OnceLock<ClipboardFacts>,
 }
 
 impl ClipboardState {
@@ -31,20 +28,14 @@ impl ClipboardState {
     }
 }
 
-/// Records the display facts once the toolkit is ready; runs on the main thread.
-pub fn setup(app: &tauri::AppHandle) {
+/// Logs the display facts once the toolkit is ready; runs on the main thread.
+pub fn setup() {
     match startup_facts() {
-        Ok(facts) => {
-            eprintln!(
-                "Clipboard: protocol={} persistence={}",
-                serde_json::to_value(facts.protocol)
-                    .ok()
-                    .and_then(|value| value.as_str().map(str::to_owned))
-                    .unwrap_or_default(),
-                facts.persistence
-            );
-            let _ = app.state::<ClipboardState>().facts.set(facts);
-        }
+        Ok(facts) => eprintln!(
+            "Clipboard: protocol={} persistence={}",
+            facts.protocol.as_str(),
+            facts.persistence
+        ),
         Err(error) => eprintln!("Clipboard: {error}"),
     }
 }
@@ -65,18 +56,6 @@ pub async fn read_clipboard_text(
     state: tauri::State<'_, ClipboardState>,
 ) -> Result<String, ClipboardError> {
     state.service.read(&app).await
-}
-
-/// The display protocol and capabilities the clipboard commands run against.
-#[tauri::command]
-pub async fn clipboard_status(
-    app: tauri::AppHandle,
-    state: tauri::State<'_, ClipboardState>,
-) -> Result<ClipboardFacts, ClipboardError> {
-    if let Some(facts) = state.facts.get() {
-        return Ok(facts.clone());
-    }
-    state.service.facts(&app).await
 }
 
 /// Pastes into the focused web view through the system paste action, the

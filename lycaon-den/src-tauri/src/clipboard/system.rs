@@ -53,10 +53,6 @@ impl ClipboardAdapter for NativeClipboard {
         }))
     }
 
-    fn facts(&mut self, _main: &dyn MainThread) -> Reply<ClipboardFacts> {
-        settled(startup_facts())
-    }
-
     fn release(&mut self, _main: &dyn MainThread) {
         self.board.take();
     }

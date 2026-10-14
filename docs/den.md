@@ -43,9 +43,9 @@ Clipboard commands ([`src-tauri/src/clipboard/`](../lycaon-den/src-tauri/src/cli
 run through one serialized service per shell with bounded operations and a
 terminal shutdown. Linux uses the GTK display connection the shell already
 holds, so copy and paste work on native Wayland and X11 without XWayland or
-compositor extensions; macOS and Windows use the OS pasteboard. `clipboard_status`
-reports the observed display protocol and whether copied text persists beyond the
-process. Private Xvfb and headless sway fixtures drive the adapter against
+compositor extensions; macOS and Windows use the OS pasteboard. Startup logs the
+observed display protocol and whether copied text persists beyond the process.
+Private Xvfb and headless sway fixtures drive the adapter against
 `xclip` and `wl-clipboard` peers in `den:test:rust`.
 
 | User outcome | Shared owner and native boundary | Linux release evidence and tracking |
