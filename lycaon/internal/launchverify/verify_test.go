@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -13,10 +14,19 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// fakeProc builds a synthetic process filesystem.
+// fakeProc builds a synthetic process filesystem. Each process maps its
+// image from a root-owned installed path that the fake filesystem knows.
 type fakeProc struct {
-	t    *testing.T
-	root string
+	t     *testing.T
+	root  string
+	files map[string]fileFacts
+}
+
+func (f fakeProc) stat(path string) (fileFacts, error) {
+	if facts, ok := f.files[path]; ok {
+		return facts, nil
+	}
+	return fileFacts{}, os.ErrNotExist
 }
 
 type fakeProcess struct {
@@ -36,6 +46,20 @@ func (f fakeProc) add(p fakeProcess) {
 	testutil.FailErr(f.t, "create image dir", os.MkdirAll(filepath.Dir(image), 0o755))
 	testutil.FailErr(f.t, "write image", os.WriteFile(image, p.image, 0o755))
 	testutil.FailErr(f.t, "link exe", os.Symlink(image, filepath.Join(dir, "exe")))
+	installed := fmt.Sprintf("/opt/painted-wolf-code/image-%d", p.pid)
+	f.files[installed] = fileFacts{inode: uint64(p.pid), mode: 0o755}
+	maps := fmt.Sprintf("00400000-00500000 r-xp 00000000 fd:01 %d %s\n"+
+		"00600000-00700000 rw-p 00000000 00:00 0 \n"+
+		"7f0000000000-7f0000001000 r-xp 00000000 00:00 0 \n"+
+		"7fff00000000-7fff00002000 r-xp 00000000 00:00 0                          [vdso]\n", p.pid, installed)
+	testutil.FailErr(f.t, "write maps", os.WriteFile(filepath.Join(dir, "maps"), []byte(maps), 0o644))
+}
+
+func (f fakeProc) appendMaps(pid int, lines string) {
+	path := filepath.Join(f.root, strconv.Itoa(pid), "maps")
+	raw, err := os.ReadFile(path)
+	testutil.FailErr(f.t, "read maps", err)
+	testutil.FailErr(f.t, "append maps", os.WriteFile(path, append(raw, lines...), 0o644))
 }
 
 func digestOf(image []byte) string {
@@ -59,7 +83,12 @@ func installedManifest() Manifest {
 func newFixture(t *testing.T) (fakeProc, Verifier) {
 	t.Helper()
 	root := t.TempDir()
-	return fakeProc{t: t, root: root}, Verifier{ProcRoot: root, Manifest: installedManifest()}
+	proc := fakeProc{t: t, root: root, files: map[string]fileFacts{
+		"/":                      {mode: fs.ModeDir | 0o755},
+		"/opt":                   {mode: fs.ModeDir | 0o755},
+		"/opt/painted-wolf-code": {mode: fs.ModeDir | 0o755},
+	}}
+	return proc, Verifier{ProcRoot: root, Manifest: installedManifest(), statFile: proc.stat}
 }
 
 func TestVerifyChainAcceptsTheInstalledEngineUnderTheInstalledApp(t *testing.T) {

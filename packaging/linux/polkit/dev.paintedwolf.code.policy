@@ -6,7 +6,7 @@
   <vendor>Painted Wolf Code</vendor>
   <vendor_url>https://paintedwolf.ai</vendor_url>
 
-  <action id="ai.paintedwolf.code.confirm-presence">
+  <action id="dev.paintedwolf.code.confirm-presence">
     <description>Confirm that you are at this computer</description>
     <message>Painted Wolf Code needs to confirm it is you: $(reason)</message>
     <defaults>

@@ -536,7 +536,8 @@ fn verify_user_presence(
     window: &tauri::Window,
     prompt: &str,
 ) -> Result<&'static str, PresenceCommandError> {
-    match linux::confirm_with_polkit(prompt) {
+    let identifier = window.app_handle().config().identifier.clone();
+    match linux::confirm_with_polkit(&identifier, prompt) {
         Ok(()) => Ok(linux::AUTHENTICATOR_POLKIT),
         Err(linux::PolkitRefusal::Denied(message)) => Err(PresenceCommandError::denied(message)),
         Err(linux::PolkitRefusal::Failed(message)) => Err(PresenceCommandError::failed(message)),

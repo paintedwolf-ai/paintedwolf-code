@@ -19,8 +19,11 @@ use crate::sidecar::SidecarState;
 pub(super) const AUTHENTICATOR_POLKIT: &str = "linux_user_presence";
 pub(super) const AUTHENTICATOR_APP_PASSWORD: &str = "linux_app_password";
 
-/// The packaged polkit action; its defaults are `auth_self`.
-pub(super) const ACTION_ID: &str = "ai.paintedwolf.code.confirm-presence";
+/// The packaged polkit action for an application identifier; its defaults
+/// are `auth_self`.
+pub(super) fn action_id(identifier: &str) -> String {
+    format!("{identifier}.confirm-presence")
+}
 const AUTHORITY_NAME: &str = "org.freedesktop.PolicyKit1";
 const AUTHORITY_PATH: &str = "/org/freedesktop/PolicyKit1/Authority";
 const AUTHORITY_INTERFACE: &str = "org.freedesktop.PolicyKit1.Authority";
@@ -76,24 +79,25 @@ pub(super) fn authorization_flags(reply: &glib::Variant) -> Option<(bool, bool)>
     Some((result.child_value(0).get::<bool>()?, result.child_value(1).get::<bool>()?))
 }
 
-pub(super) fn confirm_with_polkit(prompt: &str) -> Result<(), PolkitRefusal> {
+pub(super) fn confirm_with_polkit(identifier: &str, prompt: &str) -> Result<(), PolkitRefusal> {
+    let action = action_id(identifier);
     let context = glib::MainContext::new();
     context
-        .with_thread_default(|| confirm_on(&context, prompt))
+        .with_thread_default(|| confirm_on(&context, &action, prompt))
         .map_err(|_| PolkitRefusal::Failed("the bus context is in use".into()))?
 }
 
-fn confirm_on(context: &glib::MainContext, prompt: &str) -> Result<(), PolkitRefusal> {
+fn confirm_on(context: &glib::MainContext, action: &str, prompt: &str) -> Result<(), PolkitRefusal> {
     let bus = linux_bus::connect(context, linux_bus::SYSTEM_BUS_ADDRESS)
         .map_err(|error| PolkitRefusal::Unavailable(format!("The system bus is unavailable: {error}")))?;
-    let owner = authority_owner(context, &bus)?;
+    let owner = authority_owner(context, &bus, action)?;
     let subject = own_subject()?;
     let cancellation_id = uuid::Uuid::new_v4().to_string();
     let mut details = HashMap::new();
     details.insert("reason".to_string(), prompt.to_string());
     let parameters = (
         ("unix-process".to_string(), subject),
-        ACTION_ID.to_string(),
+        action.to_string(),
         details,
         ALLOW_USER_INTERACTION,
         cancellation_id.clone(),
@@ -135,7 +139,11 @@ fn confirm_on(context: &glib::MainContext, prompt: &str) -> Result<(), PolkitRef
 /// Resolves the authority's unique connection name, confirms the system owns
 /// it, and confirms the packaged action is registered. Later calls address
 /// the unique name, so a name that changes hands mid-flight is not followed.
-fn authority_owner(context: &glib::MainContext, bus: &gio::DBusConnection) -> Result<String, PolkitRefusal> {
+fn authority_owner(
+    context: &glib::MainContext,
+    bus: &gio::DBusConnection,
+    action: &str,
+) -> Result<String, PolkitRefusal> {
     let owner = linux_bus::call(
         context, bus, Some(BUS_NAME), BUS_PATH, BUS_NAME, "GetNameOwner",
         Some(&(AUTHORITY_NAME.to_string(),).to_variant()), BUS_CALL_TIMEOUT,
@@ -162,7 +170,7 @@ fn authority_owner(context: &glib::MainContext, bus: &gio::DBusConnection) -> Re
         Some(&(String::new(),).to_variant()), BUS_CALL_TIMEOUT,
     )
     .map_err(|error| PolkitRefusal::Failed(format!("The authority could not list its actions: {error}")))?;
-    if !lists_action(&actions.child_value(0), ACTION_ID) {
+    if !lists_action(&actions.child_value(0), action) {
         return Err(PolkitRefusal::Unavailable(
             "The Painted Wolf Code presence action is not installed.".into(),
         ));
@@ -316,15 +324,26 @@ mod tests {
         };
         let listing = glib::Variant::array_from_iter_with_type(
             glib::VariantTy::new("(ssssssuuua{ss})").unwrap(),
-            [action("org.example.other"), action(ACTION_ID)],
+            [action("org.example.other"), action("dev.paintedwolf.code.confirm-presence")],
         );
-        assert!(lists_action(&listing, ACTION_ID));
+        assert!(lists_action(&listing, "dev.paintedwolf.code.confirm-presence"));
         assert!(!lists_action(&listing, "org.example.absent"));
         let empty = glib::Variant::array_from_iter_with_type(
             glib::VariantTy::new("(ssssssuuua{ss})").unwrap(),
             std::iter::empty::<glib::Variant>(),
         );
-        assert!(!lists_action(&empty, ACTION_ID));
+        assert!(!lists_action(&empty, "dev.paintedwolf.code.confirm-presence"));
+    }
+
+    #[test]
+    fn the_packaged_action_is_named_for_the_app_identifier() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let conf: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(root.join("tauri.conf.json")).unwrap()).unwrap();
+        let identifier = conf["identifier"].as_str().unwrap();
+        let policy_path = root.join(format!("../../packaging/linux/polkit/{identifier}.policy"));
+        let policy = std::fs::read_to_string(&policy_path).unwrap();
+        assert!(policy.contains(&format!(r#"<action id="{}">"#, action_id(identifier))));
     }
 
     #[test]

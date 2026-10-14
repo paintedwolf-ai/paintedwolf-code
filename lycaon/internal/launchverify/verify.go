@@ -63,6 +63,8 @@ func CodeOf(err error) Code {
 type Verifier struct {
 	ProcRoot string
 	Manifest Manifest
+	// statFile replaces the filesystem in tests of the mapping check.
+	statFile func(string) (fileFacts, error)
 }
 
 // Chain is a verified engine and the desktop app that started it.
@@ -96,6 +98,12 @@ func (v Verifier) VerifyChain(pid, uid int) (Chain, error) {
 		return Chain{}, err
 	}
 	if err := v.VerifyExecutable(launcher.PID, RoleDesktopApp); err != nil {
+		return Chain{}, err
+	}
+	if err := v.VerifyMappings(pid, RoleEngine); err != nil {
+		return Chain{}, err
+	}
+	if err := v.VerifyMappings(launcher.PID, RoleDesktopApp); err != nil {
 		return Chain{}, err
 	}
 	chain := Chain{Engine: engine, Launcher: launcher}
