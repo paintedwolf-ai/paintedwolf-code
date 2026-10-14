@@ -41,7 +41,7 @@ func TestProxyEnvironmentFollowsHostResolutionForHTTPRemotes(t *testing.T) {
 			t.Fatalf("proxyEnv(%q) = %q, %v; want %q", tc.remote, got, err, tc.want)
 		}
 	}
-	want := []string{"https://github.com/o/r.git", "HTTP://git.example/r.git", "https://direct.example/r.git"}
+	want := []string{"https://github.com/o/r.git", "http://git.example/r.git", "https://direct.example/r.git"}
 	if !slices.Equal(asked, want) {
 		t.Fatalf("resolved %q, want only HTTP remotes %q", asked, want)
 	}
