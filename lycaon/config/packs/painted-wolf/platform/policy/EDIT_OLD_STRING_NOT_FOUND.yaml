@@ -14,17 +14,31 @@ requires:
   - paintedwolf.old_string_chars
   - paintedwolf.path
   - paintedwolf.total_lines
+  - paintedwolf.replacement_matches
+  - paintedwolf.replacement_line
 when: paintedwolf.rejection_code == "EDIT_OLD_STRING_NOT_FOUND"
 effect: block
 copy:
-  what: edit on {{ paintedwolf.path }} could not find old_string ({{ paintedwolf.old_string_chars }} chars)
-    in the current file ({{ paintedwolf.total_lines }} lines).
-  cause: old_string must match the file text exactly. Stale content, copied line-number prefixes, or literal
-    backslash-escape text can cause misses; valid JSON Unicode escapes are decoded before matching.
-  why: The replacement must match exact source bytes.
-  fix: Call read for {{ paintedwolf.path }} again; use read_hint when present. Copy the source substring into
-    old_string without displayed line labels, preserving indentation.
-  instead: Use a fresh verbatim substring. Do not replace the whole file merely to bypass a failed exact edit.
+  what: >-
+    {% if paintedwolf.replacement_matches %}No edit was applied to {{ paintedwolf.path }}.
+    The requested new_string is already present {{ paintedwolf.replacement_matches }} time(s),
+    first at line {{ paintedwolf.replacement_line }}.{% else %}No edit was applied to {{ paintedwolf.path }}:
+    old_string ({{ paintedwolf.old_string_chars }} chars) is absent from the edit basis
+    ({{ paintedwolf.total_lines }} lines).{% endif %}
+  cause: >-
+    {% if paintedwolf.replacement_matches %}The edit basis contains the replacement text but not old_string.
+    This does not prove an earlier edit succeeded.{% else %}old_string must match source text exactly.
+    Stale text, displayed line labels, indentation changes, or literal backslash escapes can prevent a match.
+    Valid JSON Unicode escapes are decoded before matching.{% endif %}
+  why: This rejected call made no change. Repeating the same old_string and new_string cannot resolve this miss.
+  fix: >-
+    {% if paintedwolf.replacement_matches %}Read {{ paintedwolf.path }} around line {{ paintedwolf.replacement_line }}
+    and compare the existing replacement with the intended result. If it is the intended result,
+    continue with the remaining task without applying this edit again. Otherwise, compute a different edit
+    from the fresh source.{% else %}Read {{ paintedwolf.path }} and check whether the intended change is still needed.
+    If needed, copy a fresh verbatim substring into old_string, without displayed line labels and preserving indentation.{% endif %}
+  instead: Inspect source_history only when attribution is needed. Do not replace the whole file to bypass a missing match.
+
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:edit
 x-paintedwolf-message: edit old_string not found in file
@@ -39,3 +53,19 @@ x-paintedwolf-scenarios:
   expect_contains:
   - 'Rejected:'
   - 'Code: EDIT_OLD_STRING_NOT_FOUND'
+
+- id: replacement_present
+  vars:
+    change_count: 2
+    old_string_chars: 42
+    path: internal/foo.go
+    profile: implement
+    tool: edit
+    total_lines: 120
+    replacement_matches: 1
+    replacement_line: 7
+  expect_contains:
+  - 'already present'
+  - 'This rejected call made no change'
+  - 'does not prove an earlier'
+  - 'continue with the remaining task'

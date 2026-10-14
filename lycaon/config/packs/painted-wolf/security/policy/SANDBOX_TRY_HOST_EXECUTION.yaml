@@ -15,6 +15,8 @@ requires:
     - paintedwolf.confine_applied
     - paintedwolf.failed_stages
     - paintedwolf.process_running
+    - paintedwolf.can_command_stop
+    - paintedwolf.can_command_output
     - paintedwolf.unsandboxed_refusals
 when: >-
   paintedwolf.confine_applied
@@ -32,13 +34,20 @@ copy:
     A retry with another capability_request field, or with a longer timeout,
     is refused the same way.
   fix: >-
-    If the task needs the operation, {% if paintedwolf.process_running %}stop
-    the job with `command_stop`, then {% endif %}reissue the same command with
+    {% if paintedwolf.process_running %}If this job needs the refused operation,
+    {% if paintedwolf.can_command_stop %}request `command_stop` once.{% else %}Report the
+    need to stop this job; no stop tool is offered.{% endif %}
+    {% if paintedwolf.can_command_output %}Use `command_output` on its handle to observe
+    exit.{% else %}Wait for its observed exit.{% endif %} A stop request alone does not
+    establish exit. Do not reissue while the job is running. After it exits, review the outcome.
+    {% endif %}Preserve completed effects. If the task still needs the refused operation, reissue the same command with
     `capability_request.host_execution` requested alone; the person reviews it
     before it runs outside the sandbox. If the operation was optional, keep
     the result.
-  instead: Request capability_request.host_execution for the command, or leave
-    the operation out — do not wait on it
+  instead: >-
+    {% if paintedwolf.process_running %}Resolve the running job before retrying;
+    a stop request alone does not establish exit.{% else %}Preserve completed effects;
+    retry with the required capability only if the operation is still needed.{% endif %}
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
 x-paintedwolf-message: the sandbox refused an operation no sandbox capability admits
@@ -47,6 +56,8 @@ x-paintedwolf-scenarios:
     vars:
       tool: command
       process_running: true
+      can_command_stop: true
+      can_command_output: true
       unsandboxed_refusals:
         - network-bind /Users/person/.colima/_lima/_networks/user-v2/user-v2_fd.sock (limactl)
     expect_contains:

@@ -20,6 +20,7 @@ evidence_kinds:
   command:    { shape: command }
   git:     { shape: command, survey: true }
   git_receipt: { shape: command }
+  overlay_receipt: { shape: command }
   scan:    { shape: artifact, transcript_diet: spill_pointer }
   survey:  { shape: file_region, survey: true }
   summarize: { shape: file_region, transcript_diet: anchor_residue }
@@ -61,6 +62,10 @@ tools:
       variants:
         - when_arg_present: terminal_capture
           kind: tui
+  verify:        { produces_evidence: { kind: command } }
+  preview_overlay: { produces_evidence: { kind: overlay_receipt } }
+  promote_overlay: { produces_evidence: { kind: overlay_receipt } }
+  reject_overlay: { produces_evidence: { kind: overlay_receipt } }
   diff:          { produces_evidence: { kind: diff } }
   git_commit:    { produces_evidence: { kind: git_receipt } }
   git_restore:   { produces_evidence: { kind: git_receipt } }
