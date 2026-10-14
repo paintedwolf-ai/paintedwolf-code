@@ -162,6 +162,7 @@ func applyAndExec(profile []byte, resolved string, target []string) error {
 		}
 		os.Exit(code)
 	}
+	linuxsandbox.HoldSignals()
 	if err := linuxsandbox.Enter(plan); err != nil {
 		return err
 	}

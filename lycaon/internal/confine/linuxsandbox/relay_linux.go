@@ -17,9 +17,13 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-// signalReportFD is where the inner helper finds the pipe that names the
-// signal which killed the target. The plan is on 3 and the marker on 4.
+// signalReportFD is where the inner helper finds its report pipe to the
+// outer helper. The plan is on 3 and the marker on 4.
 const signalReportFD = 5
+
+// reportReady is the report byte that says the inner helper has its signal
+// handlers; any other byte names the signal that killed the target.
+const reportReady = 0xff
 
 // Relaunch runs the helper again as PID 1 of fresh user, mount, PID, and
 // network namespaces, hands it the plan over an inherited pipe and the lineage
@@ -47,6 +51,8 @@ func Relaunch(self string, args []string, plan []byte, marker *os.File) (code in
 	// A nil marker leaves its descriptor closed in the child.
 	cmd.ExtraFiles = []*os.File{read, marker, reportWrite}
 	cmd.SysProcAttr = namespaceAttr()
+	events := notifyForwarded()
+	defer signal.Stop(events)
 	err = cmd.Start()
 	_ = read.Close()
 	_ = reportWrite.Close()
@@ -61,30 +67,75 @@ func Relaunch(self string, args []string, plan []byte, marker *os.File) (code in
 		defer func() { _ = write.Close() }()
 		_, _ = io.Copy(write, bytes.NewReader(plan))
 	}()
-	code, sig = relay(cmd.Process.Pid, cmd.Wait)
-	if reported := readSignalReport(report); reported != 0 {
-		sig = reported
+	ready := make(chan struct{})
+	reported := make(chan syscall.Signal, 1)
+	go func() { reported <- readReport(report, ready) }()
+	code, sig, held := relay(cmd.Process.Pid, cmd.Wait, events, ready)
+	switch r := <-reported; {
+	case r != 0:
+		sig = r
+	case len(held) > 0:
+		// The inner helper ended before it could take the signal it was sent.
+		sig = held[0]
 	}
 	return code, sig, nil
 }
 
-// readSignalReport reads the signal the inner helper named. The inner helper
-// has exited, so the pipe is at end-of-file after at most one byte.
-func readSignalReport(report *os.File) syscall.Signal {
-	var b [1]byte
-	if n, _ := report.Read(b[:]); n == 1 && b[0] != 0 && b[0] < 65 {
-		return syscall.Signal(b[0])
+// readReport reads the inner helper's report pipe until it closes, closing
+// ready when the helper says its handlers are in place, and returns the
+// signal it named, if any.
+func readReport(report io.Reader, ready chan<- struct{}) syscall.Signal {
+	var sig syscall.Signal
+	readyClosed := false
+	buf := make([]byte, 8)
+	for {
+		n, err := report.Read(buf)
+		for _, b := range buf[:n] {
+			switch {
+			case b == reportReady && !readyClosed:
+				close(ready)
+				readyClosed = true
+			case b != 0 && b < 65:
+				sig = syscall.Signal(b)
+			}
+		}
+		if err != nil {
+			return sig
+		}
 	}
-	return 0
+}
+
+// heldSignals receives the forwarded signals in the inner helper from before
+// the target exists, so none is lost or handled by the runtime meanwhile.
+var heldSignals chan os.Signal
+
+// HoldSignals takes the forwarded signals in the inner helper and tells the
+// outer helper it may now forward them. Until then the outer helper keeps
+// them: Go's own handler would end PID 1 with exit 2, not by the signal.
+func HoldSignals() {
+	heldSignals = notifyForwarded()
+	if f := reportPipe(); f != nil {
+		_, _ = f.Write([]byte{reportReady})
+	}
 }
 
 // ReportSignal names the signal that killed the target to the outer helper.
 // The inner helper is PID 1 of its PID namespace, which the kernel never lets
 // die by a signal it sends itself, so the outer helper dies by it instead.
 func ReportSignal(sig syscall.Signal) {
-	f := os.NewFile(signalReportFD, "signal-report")
-	_, _ = f.Write([]byte{byte(sig)})
-	_ = f.Close()
+	if f := reportPipe(); f != nil {
+		_, _ = f.Write([]byte{byte(sig)})
+	}
+}
+
+// reportPipe is the inherited report pipe, or nil when this helper was not
+// started by Relaunch and the descriptor is something else or nothing.
+func reportPipe() *os.File {
+	var st unix.Stat_t
+	if unix.Fstat(signalReportFD, &st) != nil || st.Mode&unix.S_IFMT != unix.S_IFIFO {
+		return nil
+	}
+	return os.NewFile(signalReportFD, "signal-report")
 }
 
 // namespaceAttr creates the namespaces, maps this one uid and gid onto
@@ -119,7 +170,12 @@ func Supervise(path string, argv, env []string, afterStart func()) (code int, si
 	if afterStart != nil {
 		afterStart()
 	}
-	code, sig = relay(pid, func() error { return reapUntil(pid) })
+	events := heldSignals
+	if events == nil {
+		events = notifyForwarded()
+	}
+	defer signal.Stop(events)
+	code, sig, _ = relay(pid, func() error { return reapUntil(pid) }, events, nil)
 	return code, sig, nil
 }
 
@@ -150,22 +206,44 @@ type exitStatusError struct{ status syscall.WaitStatus }
 func (e *exitStatusError) Error() string { return "target exited" }
 func (e *exitStatusError) Sys() any      { return e.status }
 
-// relay forwards the host's signals to the child until wait returns, then maps
-// the child's status to an exit code and the signal that killed it.
-func relay(child int, wait func() error) (int, syscall.Signal) {
+func notifyForwarded() chan os.Signal {
 	events := make(chan os.Signal, 8)
 	signal.Notify(events, forwardedSignals()...)
-	defer signal.Stop(events)
+	return events
+}
+
+// relay forwards events to the child until wait returns, then maps the
+// child's status to an exit code and the signal that killed it. With a ready
+// channel, signals are held until it closes; held returns those never sent.
+func relay(child int, wait func() error, events <-chan os.Signal, ready <-chan struct{}) (code int, sig syscall.Signal, held []syscall.Signal) {
 	finished := make(chan error, 1)
 	go func() { finished <- wait() }()
+	if ready == nil {
+		open := make(chan struct{})
+		close(open)
+		ready = open
+	}
+	isReady := false
 	for {
 		select {
-		case sig := <-events:
-			if s, ok := sig.(syscall.Signal); ok {
+		case <-ready:
+			ready, isReady = nil, true
+			for _, s := range held {
 				_ = syscall.Kill(child, s)
 			}
+			held = nil
+		case ev := <-events:
+			s, ok := ev.(syscall.Signal)
+			switch {
+			case !ok:
+			case isReady:
+				_ = syscall.Kill(child, s)
+			default:
+				held = append(held, s)
+			}
 		case err := <-finished:
-			return exitOf(err)
+			code, sig = exitOf(err)
+			return code, sig, held
 		}
 	}
 }
