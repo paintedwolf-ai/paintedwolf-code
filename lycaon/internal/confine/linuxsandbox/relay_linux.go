@@ -181,10 +181,17 @@ func Supervise(path string, argv, env []string, afterStart func()) (code int, si
 	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0); err != nil {
 		return 0, 0, fmt.Errorf("child subreaper: %w", err)
 	}
+	// A process that could read this one's memory or take its descriptors
+	// could speak for it on the control socket. The target's own dumpable
+	// flag is reset when it executes.
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+		return 0, 0, fmt.Errorf("dumpable: %w", err)
+	}
 	pid, err := syscall.ForkExec(path, argv, &syscall.ProcAttr{Env: env, Files: []uintptr{0, 1, 2}})
 	if err != nil {
 		return 0, 0, err
 	}
+	go serveSocketRequests()
 	if afterStart != nil {
 		afterStart()
 	}

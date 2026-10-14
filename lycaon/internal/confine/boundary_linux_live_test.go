@@ -141,6 +141,8 @@ func runLinuxProbe(mode string) int {
 		buf := make([]byte, 1)
 		n, err := unix.Read(fds[1], buf)
 		fmt.Println("socketpair:", n, string(buf[:n]), err)
+		_, err = unix.Socketpair(unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0)
+		fmt.Println("datagram socketpair:", errnoName(err))
 		return 0
 	case "iouring":
 		params := make([]byte, 120)
@@ -151,6 +153,8 @@ func runLinuxProbe(mode string) int {
 		return proxyGetProbe()
 	case "tcpconnect", "unixconnect", "serve", "resolve":
 		return networkProbe(mode)
+	case "udpsend", "udpserve":
+		return datagramProbe(mode)
 	case "orphan":
 		daemon := child("sleep", true)
 		if err := daemon.Start(); err != nil {
@@ -477,7 +481,7 @@ func TestLinuxUnixSocketsAreRefused(t *testing.T) {
 	}
 
 	status, out = linuxConfinedRun(t, self, denyConfinement(t.TempDir()), probeEnv("socketpair"), self, probeTestFlag)
-	if status.ExitStatus() != 0 || !strings.Contains(out, "socketpair: 1 p <nil>") {
+	if status.ExitStatus() != 0 || !strings.Contains(out, "socketpair: 1 p <nil>") || !strings.Contains(out, "datagram socketpair: EACCES") {
 		t.Fatalf("socketpair: exit %d: %s", status.ExitStatus(), out)
 	}
 }

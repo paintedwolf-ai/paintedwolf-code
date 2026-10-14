@@ -77,6 +77,9 @@ const (
 	UnavailableMount                     = "mount_failed"
 	UnavailableHelper                    = "helper_failed"
 	UnavailableSupervisor                = "supervisor_unavailable"
+	// UnavailableDatagramGateway is a plan whose datagrams may reach other
+	// hosts on a kernel that cannot create the gateway interface.
+	UnavailableDatagramGateway = "datagram_gateway_unavailable"
 )
 
 func (u *Unavailability) Error() string {

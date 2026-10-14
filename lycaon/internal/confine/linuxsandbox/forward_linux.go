@@ -117,38 +117,24 @@ func sendHandoff(h handoff, fd int) error {
 type supervisor struct {
 	control *os.File
 	network Network
+	factory *socketFactory
+	relays  *datagramRelays
+	host    *hostSockets
 	wg      sync.WaitGroup
 	mu      sync.Mutex
 	closers []io.Closer
-	// host holds the cookies of the sockets the supervisor put in the host's
-	// namespace, true for granted listeners.
-	host map[uint64]bool
+	// setupDone is set once the seccomp listener arrives, the last thing the
+	// inner helper hands over before the target can run. Later handoffs are
+	// refused: only a process that took over the inner helper could send one.
+	setupDone bool
 }
 
 func newSupervisor(control *os.File, network Network) *supervisor {
-	return &supervisor{control: control, network: network, host: map[uint64]bool{}}
-}
-
-func (s *supervisor) hostSocket(cookie uint64) (host, listener bool) {
-	if cookie == 0 {
-		return false, false
+	factory := newSocketFactory(control)
+	return &supervisor{
+		control: control, network: network, factory: factory,
+		relays: newDatagramRelays(network, factory), host: newHostSockets(),
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	listener, host = s.host[cookie]
-	return host, listener
-}
-
-func (s *supervisor) markHost(cookie uint64, listener bool) {
-	s.mu.Lock()
-	s.host[cookie] = listener
-	s.mu.Unlock()
-}
-
-func (s *supervisor) forgetHost(cookie uint64) {
-	s.mu.Lock()
-	delete(s.host, cookie)
-	s.mu.Unlock()
 }
 
 // serve reads handoffs until the inner helper closes its end.
@@ -166,16 +152,20 @@ func (s *supervisor) serve() {
 		if n == 0 && oobn == 0 {
 			return
 		}
-		fd, ok := receivedFD(oob[:oobn])
-		if !ok {
-			continue
-		}
 		var h handoff
-		if json.Unmarshal(header[:n], &h) != nil {
+		decoded := json.Unmarshal(header[:n], &h) == nil
+		fd, ok := receivedFD(oob[:oobn])
+		switch {
+		case decoded && h.Kind == handoffNoSocket:
+			s.factory.deliver(-1)
+		case !ok:
+		case !decoded:
 			_ = unix.Close(fd)
-			continue
+		case h.Kind == handoffSocket:
+			s.factory.deliver(fd)
+		default:
+			s.accept(h, fd)
 		}
-		s.accept(h, fd)
 	}
 }
 
@@ -195,6 +185,10 @@ func receivedFD(oob []byte) (int, bool) {
 }
 
 func (s *supervisor) accept(h handoff, fd int) {
+	if s.setupDone {
+		_ = unix.Close(fd)
+		return
+	}
 	switch h.Kind {
 	case handoffProxy:
 		ap, err := netip.ParseAddrPort(h.Addr)
@@ -242,11 +236,27 @@ func (s *supervisor) accept(h handoff, fd int) {
 			defer s.wg.Done()
 			forwardListener(ln, upstream)
 		}()
+	case handoffGateway:
+		_ = unix.SetNonblock(fd, true)
+		tun := os.NewFile(uintptr(fd), "sandbox-gateway")
+		s.track(tun)
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			serveGateway(tun, s.network)
+		}()
 	case handoffNotify:
+		s.setupDone = true
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
 			s.serveNotifications(fd)
+		}()
+		// The inner helper answers socket requests until it is told the
+		// launch relays are in place, and starts the target only then.
+		go func() {
+			s.relays.openLaunchRelays()
+			s.factory.ready()
 		}()
 	default:
 		_ = unix.Close(fd)
@@ -278,6 +288,7 @@ func (s *supervisor) close() {
 	for _, c := range closers {
 		_ = c.Close()
 	}
+	s.relays.close()
 	_ = s.control.Close()
 }
 

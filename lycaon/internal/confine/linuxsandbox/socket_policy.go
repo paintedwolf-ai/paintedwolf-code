@@ -63,6 +63,12 @@ type Decision struct {
 	Action Action
 	// Bind is the host address a granted listener binds.
 	Bind netip.AddrPort
+	// Relay asks for a relay inside the sandbox to the host's loopback service
+	// at the destination before a datagram connect is performed.
+	Relay bool
+	// Expose is the host loopback address a granted datagram listener is
+	// relayed from; it is bound before the sandbox's bind is performed.
+	Expose netip.AddrPort
 	// Refusal is set when the operation will not reach its destination.
 	Refusal *Refusal
 }
@@ -122,9 +128,16 @@ func (n Network) decideOutbound(r SocketRequest) Decision {
 		return Decision{Action: HostSocket}
 	case r.HostSocket:
 		return refuse("network-outbound", target)
+	case admitted && ip.IsLoopback():
+		return Decision{Action: Perform, Relay: true}
+	case admitted:
+		// The gateway carries the socket's datagrams and decides each one.
+		return Decision{Action: Perform}
+	case !ip.IsLoopback() && n.DatagramGateway():
+		// The gateway's route would take the call; refuse it here instead.
+		return refuse("network-outbound", target)
 	default:
-		// The namespace has no route or listener for it and answers itself; a
-		// datagram socket never leaves the sandbox.
+		// The namespace has no route or listener for it and answers itself.
 		return Decision{Action: Perform, Refusal: &Refusal{Operation: "network-outbound", Target: target}}
 	}
 }
@@ -135,7 +148,7 @@ func (n Network) decideBind(r SocketRequest) Decision {
 	if r.HostSocket {
 		return refuse("network-bind", local)
 	}
-	if (!ip.IsLoopback() && !ip.IsUnspecified()) || !r.Stream || !n.listenAllowed(r.IP.Port()) {
+	if (!ip.IsLoopback() && !ip.IsUnspecified()) || !n.listenAllowed(r.IP.Port()) {
 		// The listener stays inside the sandbox, where only the command's own
 		// processes reach it.
 		return Decision{Action: Perform}
@@ -144,6 +157,13 @@ func (n Network) decideBind(r SocketRequest) Decision {
 	bind := netip.AddrPortFrom(ip, r.IP.Port())
 	if ip.IsUnspecified() {
 		bind = netip.AddrPortFrom(loopbackOf(r.IP.Addr()), r.IP.Port())
+	}
+	if !r.Stream {
+		if r.IP.Port() == 0 {
+			// An ephemeral datagram bind is how a client picks its source port.
+			return Decision{Action: Perform}
+		}
+		return Decision{Action: Perform, Expose: bind}
 	}
 	return Decision{Action: HostSocket, Bind: bind}
 }

@@ -35,6 +35,12 @@ func Enter(plan Plan) error {
 	if err := makeRootPrivate(); err != nil {
 		return err
 	}
+	// The gateway's device is reachable only until /dev is rebuilt.
+	if plan.Network.DatagramGateway() {
+		if err := handOffGateway(); err != nil {
+			return err
+		}
+	}
 	if err := applyFilesystem(plan.Filesystem); err != nil {
 		return err
 	}
@@ -78,6 +84,9 @@ func Enter(plan Plan) error {
 		_ = unix.Close(listener)
 		if err != nil {
 			return fmt.Errorf("hand off seccomp notifications: %w", err)
+		}
+		if err := awaitSetup(); err != nil {
+			return err
 		}
 	}
 	if err := dropCapabilities(); err != nil {

@@ -144,6 +144,8 @@ func TestSeccompProgramDecides(t *testing.T) {
 		{"inet socket", record(unix.SYS_SOCKET, unix.AF_INET, unix.SOCK_STREAM, 0), allow},
 		{"inet6 socket", record(unix.SYS_SOCKET, unix.AF_INET6, unix.SOCK_DGRAM, 0), allow},
 		{"socketpair", record(unix.SYS_SOCKETPAIR, unix.AF_UNIX, unix.SOCK_STREAM, 0), allow},
+		{"seqpacket socketpair", record(unix.SYS_SOCKETPAIR, unix.AF_UNIX, unix.SOCK_SEQPACKET|unix.SOCK_CLOEXEC, 0), allow},
+		{"datagram socketpair", record(unix.SYS_SOCKETPAIR, unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0), eacces},
 		{"io_uring_setup", record(unix.SYS_IO_URING_SETUP, 0, 0, 0), enosys},
 		{"io_uring_enter", record(unix.SYS_IO_URING_ENTER, 0, 0, 0), enosys},
 		{"io_uring_register", record(unix.SYS_IO_URING_REGISTER, 0, 0, 0), enosys},

@@ -84,7 +84,10 @@ const (
 // served from the host by the outer helper. The supervisor admits the other
 // grants call by call: loopback connects, listeners, direct IP, and exact
 // Unix-socket paths reach the host only through sockets it creates or
-// connects itself.
+// connects itself. Datagrams never leave the namespace on a socket the
+// process holds: the outer helper relays them to the host's loopback services
+// and carries them to other hosts through a gateway interface, deciding each
+// datagram itself.
 type Network struct {
 	Mode                 string           `json:"mode"`
 	LoopbackConnect      bool             `json:"loopback_connect,omitempty"`
@@ -106,6 +109,29 @@ type Network struct {
 type DirectIPPermit struct {
 	Protocol string `json:"protocol"`
 	Port     uint16 `json:"port"`
+}
+
+// DatagramGateway reports whether datagrams may leave for other hosts, which
+// they do only through the gateway the outer helper serves.
+func (n Network) DatagramGateway() bool {
+	if n.Mode != NetworkDirectIP {
+		return false
+	}
+	if len(n.DirectIPPermits) == 0 {
+		return true
+	}
+	for _, p := range n.DirectIPPermits {
+		if p.Protocol == "udp" {
+			return true
+		}
+	}
+	return false
+}
+
+// LoopbackDatagrams reports whether datagrams may reach the host's loopback
+// services, which they do through relays the outer helper serves.
+func (n Network) LoopbackDatagrams() bool {
+	return n.Mode == NetworkDirectIP || n.LoopbackConnect
 }
 
 // Unsupported is a plan this helper cannot express. The launch fails closed
@@ -162,8 +188,7 @@ func (p Plan) Validate() error {
 		}
 	case NetworkDirectIP:
 		for _, permit := range n.DirectIPPermits {
-			// Datagram sockets never leave the sandbox's namespace.
-			if permit.Protocol != "tcp" {
+			if permit.Protocol != "tcp" && permit.Protocol != "udp" {
 				return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "direct_ip " + permit.Protocol + " permit"}
 			}
 		}
