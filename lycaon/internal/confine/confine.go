@@ -23,11 +23,6 @@ import (
 // helperFlag marks the confined re-exec path.
 const helperFlag = "__confine-exec"
 
-func init() {
-	// Helper argv is handled here, before main.
-	runHelperIfInvoked()
-}
-
 // helperProfileFD receives the inherited profile stream.
 const (
 	profileFDFlag   = "--profile-fd"

@@ -210,8 +210,8 @@ func helperBinary(t *testing.T, self string) string {
 		// Children inherit it; go test's own directory is never merged.
 		helperBuild.err = os.Setenv("GOCOVERDIR", dir)
 		helperBuild.path = filepath.Join(os.TempDir(), "pw-confine-helper-"+strconv.Itoa(os.Getpid()))
-		build := exec.Command("go", "build", "-cover", "-coverpkg=github.com/lycaon/lycaon/internal/confine/...",
-			"-o", helperBuild.path, "./testdata/helpermain")
+		build := exec.Command("go", "build", "-cover", "-tags", "confinehelpermain",
+			"-coverpkg=github.com/lycaon/lycaon/internal/confine/...", "-o", helperBuild.path, "./testdata/helpermain")
 		if out, err := build.CombinedOutput(); err != nil && helperBuild.err == nil {
 			helperBuild.err = fmt.Errorf("build coverage helper: %w: %s", err, out)
 		}
