@@ -113,13 +113,22 @@ async function fetchTranscriptRequest(
 ): Promise<boolean> {
   if (appStore.state.transcriptSessionId !== sessionId) return false;
   const epoch = appStore.state.sessionViewEpoch;
+  const prevSpan = presentedOrdSpan(appStore.state.transcript);
   const page = await client.listSessionMessages(sessionId, {
     limit: DEFAULT_TRANSCRIPT_PAGE_LIMIT,
     ...transcriptPageQuery(request),
   });
   if (appStore.state.transcriptSessionId !== sessionId || appStore.state.sessionViewEpoch !== epoch) return false;
   if (!appStore.actions.loadTranscriptPage(request, page) || page.messages.length === 0) return false;
-  if (request.edge === "seek") return true;
+  if (request.edge === "seek") {
+    const nextSpan = presentedOrdSpan(appStore.state.transcript);
+    return Boolean(
+      nextSpan &&
+        (!prevSpan ||
+          nextSpan.firstOrd !== prevSpan.firstOrd ||
+          nextSpan.lastOrd !== prevSpan.lastOrd),
+    );
+  }
   const next = transcriptPageRequest(appStore.state.transcript, request.edge);
   return !next || transcriptPageRequestKey(next) !== transcriptPageRequestKey(request);
 }

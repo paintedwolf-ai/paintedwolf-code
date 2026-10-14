@@ -496,7 +496,7 @@ describe("createTranscriptPaging", () => {
     }
   });
 
-  it("protects older pages in the reader's reach during live appends and reclaims them after scrolling away", () => {
+  it("protects older pages in the reader's reach during live appends and reclaims them after scrolling away", async () => {
     const appStore = createAppStore();
     const rows = (from: number, to: number) =>
       Array.from({ length: to - from + 1 }, (_, i) => older(from + i - 1));
@@ -507,7 +507,13 @@ describe("createTranscriptPaging", () => {
     for (let from = 401; from >= 1; from -= 100) {
       appStore.actions.loadTranscriptPage(
         { edge: "older", beforeMessageId: older(from + 99).id },
-        { messages: rows(from, from + 99), watermark: 700, turn_clocks: {}, turn_loads: {} },
+        {
+          messages: rows(from, from + 99),
+          ...(from > 1 ? { before_cursor: "older" } : {}),
+          watermark: 700,
+          turn_clocks: {},
+          turn_loads: {},
+        },
       );
     }
     let scrollTop = 0;
@@ -535,6 +541,7 @@ describe("createTranscriptPaging", () => {
     });
     try {
       el.dispatchEvent(new Event("scroll"));
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
       appStore.actions.upsertMessage({
         ...older(700),
         id: "live-701",
@@ -546,7 +553,9 @@ describe("createTranscriptPaging", () => {
 
       scrollTop = 45_000;
       el.dispatchEvent(new Event("scroll"));
-      expect(appStore.state.transcript.pages["1:100"]).toBeUndefined();
+      await vi.waitFor(() => {
+        expect(appStore.state.transcript.pages["1:100"]).toBeUndefined();
+      });
       expect(Object.keys(appStore.state.transcript.pages).length).toBe(5);
     } finally {
       stop.dispose();

@@ -356,42 +356,56 @@ export function refreshTailWindow(
   return rollTailOverflowIntoPages(installed);
 }
 
-/** Find the older page nearest the live tail, skipping pages in `keepOrds` unless over the hard cap. */
+/** Find the older page nearest the live tail, deferring eviction while it overlaps `keepOrds` under the hard cap. */
 function tailAdjacentEvictablePageKey(
   pages: Record<string, Message[]>,
   policy?: TranscriptResidencyPolicy,
 ): string | undefined {
   const entries = Object.entries(pages);
-  const respectReach = entries.length <= TRANSCRIPT_PAGE_HARD_CAP && policy?.keepOrds !== undefined;
   let bestKey: string | undefined;
+  let bestRows: Message[] | undefined;
   let bestOrd = -Infinity;
   for (const [key, rows] of entries) {
-    if (respectReach && pageTouchesSpan(rows, policy?.keepOrds)) continue;
     const ord = rows[0]?.ord ?? 0;
     if (ord > bestOrd) {
       bestOrd = ord;
       bestKey = key;
+      bestRows = rows;
     }
+  }
+  if (
+    bestRows &&
+    entries.length <= TRANSCRIPT_PAGE_HARD_CAP &&
+    pageTouchesSpan(bestRows, policy?.keepOrds)
+  ) {
+    return undefined;
   }
   return bestKey;
 }
 
-/** Find the page furthest from the live tail, skipping pages in `keepOrds` unless over the hard cap. */
+/** Find the page furthest from the live tail, deferring eviction while it overlaps `keepOrds` under the hard cap. */
 function oldestEvictablePageKey(
   pages: Record<string, Message[]>,
   policy?: TranscriptResidencyPolicy,
 ): string | undefined {
   const entries = Object.entries(pages);
-  const respectReach = entries.length <= TRANSCRIPT_PAGE_HARD_CAP && policy?.keepOrds !== undefined;
   let bestKey: string | undefined;
+  let bestRows: Message[] | undefined;
   let bestOrd = Infinity;
   for (const [key, rows] of entries) {
-    if (respectReach && pageTouchesSpan(rows, policy?.keepOrds)) continue;
     const ord = rows[0]?.ord ?? 0;
     if (ord < bestOrd) {
       bestOrd = ord;
       bestKey = key;
+      bestRows = rows;
     }
+  }
+  if (
+    bestRows &&
+    entries.length <= TRANSCRIPT_PAGE_HARD_CAP &&
+    pageTouchesSpan(bestRows, policy?.keepOrds)
+  ) {
+    return undefined;
   }
   return bestKey;
 }
@@ -547,9 +561,14 @@ export function transcriptSeekRequest(
   limit = DEFAULT_TRANSCRIPT_PAGE_LIMIT,
 ): Extract<TranscriptPageRequest, { edge: "seek" }> | undefined {
   if (!Number.isFinite(targetOrd) || targetOrd < 1) return undefined;
+  const rounded = Math.round(targetOrd);
+  const resident = presentedOrdSpan(tw);
+  if (resident && rounded >= resident.firstOrd && rounded <= resident.lastOrd) {
+    return undefined;
+  }
   const firstOrd = tw.bounds?.firstOrd ?? 1;
   const half = Math.floor(limit / 2);
-  const startOrd = Math.max(firstOrd, Math.round(targetOrd) - half);
+  const startOrd = Math.max(firstOrd, rounded - half);
   return { edge: "seek", afterOrd: Math.max(0, startOrd - 1) };
 }
 
