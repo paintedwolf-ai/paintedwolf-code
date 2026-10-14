@@ -160,6 +160,11 @@ func TestRequestFittingUsesRemainingOutputAfterHistoryIsMinimal(t *testing.T) {
 	if _, err := history.FitRequest(t.Context(), &api.Session{ID: "session", ProviderID: "local", Model: "small"}, []api.Message{current}, req, nativeRequestBudgets{provider}); !errors.Is(err, failure.ErrProviderContextTooSmall) {
 		t.Fatalf("explicit output allocation must remain required: %v", err)
 	}
+	req.MaxTokens = 0
+	req.ThinkingOverride = &modelcall.ThinkingOverride{BudgetTokens: new(1024)}
+	if _, err := history.FitRequest(t.Context(), &api.Session{ID: "session", ProviderID: "local", Model: "small"}, []api.Message{current}, req, nativeRequestBudgets{provider}); !errors.Is(err, failure.ErrProviderContextTooSmall) {
+		t.Fatalf("human thinking allocation must remain required: %v", err)
+	}
 }
 
 func TestEveryRequestAdoptsPublishedHistoryProjection(t *testing.T) {

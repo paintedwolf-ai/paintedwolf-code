@@ -91,4 +91,9 @@ func TestRegistryRequestBudgetUsesNativeAdapter(t *testing.T) {
 	if want.Input <= modelcall.EstimateRequestInput(req) {
 		t.Fatal("fixture must exercise native cold calibration")
 	}
+	r.snapshot.Store(&providerRegistrySnapshot{providers: map[string]modelcall.Provider{"local": p},
+		entries: map[string]CatalogEntry{"local": {Kind: "ollama", Models: []modelinfo.Entry{{ID: "model", ContextLength: 8192}}}}})
+	if got := r.RequestBudget(t.Context(), "local", req); got.Window != 8192 || got.Input != want.Input {
+		t.Fatalf("configured request cap did not constrain adapter metadata: %+v", got)
+	}
 }

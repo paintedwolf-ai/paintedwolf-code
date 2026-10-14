@@ -21,8 +21,9 @@ func (p *Provider) RequestBudget(ctx context.Context, req modelcall.CompletionRe
 		output = ollamaDefaultCompletionReserve
 	}
 	return modelcall.RequestBudget{
-		Window: p.ContextLimit(ctx, model),
-		Input:  p.projectPromptTokens(model, estimatePromptTokens(messages, ollamaCallableTools(req))),
-		Output: output, Headroom: ollamaContextHeadroom,
+		MinimumOutput: modelcall.MinimumCompletionOutput(req),
+		Window:        p.ContextLimit(ctx, model),
+		Input:         p.projectPromptTokens(model, estimatePromptTokens(messages, ollamaCallableTools(req))),
+		Output:        output, Headroom: ollamaContextHeadroom,
 	}
 }

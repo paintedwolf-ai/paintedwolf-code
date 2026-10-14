@@ -10,10 +10,18 @@ import (
 
 // RequestBudget describes the complete input and transport reservation.
 type RequestBudget struct {
-	Window   int
-	Input    int
-	Output   int
-	Headroom int
+	Window        int
+	Input         int
+	Output        int
+	Headroom      int
+	MinimumOutput int
+}
+
+func MinimumCompletionOutput(req CompletionRequest) int {
+	if req.ThinkingOverride != nil && req.ThinkingOverride.BudgetTokens != nil {
+		return max(128, *req.ThinkingOverride.BudgetTokens+1)
+	}
+	return 0
 }
 
 type RequestBudgetReporter interface {
@@ -24,7 +32,8 @@ type RequestBudgetReporter interface {
 func (c Catalog) RequestBudget(_ context.Context, req CompletionRequest) RequestBudget {
 	entry, _ := c.ModelEntry(c.ResolveModel(req))
 	return RequestBudget{
-		Window: entry.ContextLength, Input: EstimateRequestInput(req), Headroom: 1024,
+		MinimumOutput: MinimumCompletionOutput(req),
+		Window:        entry.ContextLength, Input: EstimateRequestInput(req), Headroom: 1024,
 		Output: CompletionTokenLimit(req, entry.MaxTokens, OrchestrationMaxTokens, req.Think,
 			modelinfo.Supported(entry.EffectiveCapabilities().Reasoning)),
 	}

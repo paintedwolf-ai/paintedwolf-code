@@ -137,7 +137,7 @@ Every provider call has a hard ceiling. The synchronous path fits or exposes an 
 
 The same facts, frame, limits, and compaction revision produce the same fit. Latency never depends on an emergency summarizer call.
 
-The final request fitter preserves frame order and cache tiers, and reduces only the history projection. Continuation detail scales down to recovery references when necessary. Automatic output allocation may shrink to fit the model window; an explicit output cap remains a caller requirement. Requests that already fit retain their original messages and output controls. If the required instructions, current request, recovery references, and requested output cannot fit, the host reports the irreducible context limit.
+The final request fitter preserves frame order and cache tiers, and reduces only the history projection. Continuation detail scales down to recovery references when necessary. Automatic output allocation may shrink to fit the model window; explicit output caps and fixed thinking budgets remain caller requirements. Requests that already fit retain their original messages and output controls. If the required instructions, current request, recovery references, and requested output cannot fit, the host reports the irreducible context limit.
 
 When an active tool exchange still exceeds the window, a recorded result can use a bounded structured projection or a canonical record request. The original arguments, call/result pairing, outcome, trust floor, and canonical bytes remain intact. This fallback requires recall and performs no summarizer work.
 

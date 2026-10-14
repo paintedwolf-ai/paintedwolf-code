@@ -44,10 +44,11 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 	}
 	reserve := req.MaxTokens
 	if reserve <= 0 {
-		reserve = max(128, min(4096, budget.Window/32))
+		reserve = max(128, min(4096, budget.Window/8))
 		if budget.Output > 0 {
 			reserve = min(reserve, budget.Output)
 		}
+		reserve = max(reserve, budget.MinimumOutput)
 	}
 	ceiling := budget.Window - budget.Headroom - reserve
 	frame := req
@@ -75,7 +76,7 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 		}
 		if capacity <= 1 {
 			available := budget.Window - budget.Headroom - budget.Input
-			if req.MaxTokens <= 0 && available >= 128 {
+			if req.MaxTokens <= 0 && available >= max(128, budget.MinimumOutput) {
 				candidate.MaxTokens = available
 				return candidate, nil
 			}
