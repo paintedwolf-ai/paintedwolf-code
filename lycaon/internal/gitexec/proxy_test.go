@@ -234,11 +234,12 @@ func TestGitLFSReachesItsOwnHostThroughTheProxyWhenTheRemoteIsExcepted(t *testin
 	if slices.Contains(seen(), "git.invalid") {
 		t.Fatalf("the excepted remote went through the proxy: %q", seen())
 	}
-	if _, _, err := Run(t.Context(), dir, []string{"lfs", "locks"}, opts); err != nil {
+	output, _, err := Run(t.Context(), dir, []string{"lfs", "locks"}, opts)
+	if err != nil {
 		t.Fatalf("lfs locks: %v", err)
 	}
 	if !slices.Contains(seen(), "lfs.invalid") {
-		t.Fatalf("Git LFS did not use the proxy for its own host: %q", seen())
+		t.Fatalf("Git LFS did not use the proxy for its own host: %q\n%s", seen(), output)
 	}
 }
 
