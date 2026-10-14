@@ -34,6 +34,8 @@ var occurrenceFactDecls = []factDecl{
 	{"scan_new_status", oarcore.TypeString, FactTierHost, ""},
 
 	{"can_stat", oarcore.TypeBool, FactTierHost, ""},
+	{"can_view_image", oarcore.TypeBool, FactTierHost, ""},
+	{"workspace_image_supported", oarcore.TypeBool, FactTierHost, ""},
 	{"recall_widen_invalid", oarcore.TypeBool, FactTierHost, ""},
 	{"recall_allowed_fields", oarcore.TypeListString, FactTierHost, ""},
 	{"render_total_exceeded", oarcore.TypeBool, FactTierHost, ""},
