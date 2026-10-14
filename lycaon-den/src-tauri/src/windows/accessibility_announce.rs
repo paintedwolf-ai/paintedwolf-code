@@ -4,7 +4,17 @@
 //! presents live regions only from those events, so on Linux the host speaks
 //! the announcement as an ATK notification on the window.
 
+use serde::Deserialize;
 use tauri::WebviewWindow;
+
+/// ARIA politeness of the region the announcement came from.
+#[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum Politeness {
+    #[default]
+    Polite,
+    Assertive,
+}
 
 /// Longest announcement forwarded; a reply longer than this is cut at a char boundary.
 const MAX_ANNOUNCEMENT_BYTES: usize = 16 << 10;
@@ -23,17 +33,22 @@ fn announcement_text(text: &str) -> Option<String> {
 }
 
 #[tauri::command]
-pub fn den_announce(window: WebviewWindow, text: String) -> Result<(), String> {
+pub fn den_announce(
+    window: WebviewWindow,
+    text: String,
+    politeness: Option<Politeness>,
+) -> Result<(), String> {
     let Some(text) = announcement_text(&text) else {
         return Ok(());
     };
+    let politeness = politeness.unwrap_or_default();
     #[cfg(target_os = "linux")]
     {
-        linux::announce(window, text)
+        linux::announce(window, text, politeness)
     }
     #[cfg(not(target_os = "linux"))]
     {
-        let _ = (window, text);
+        let _ = (window, text, politeness);
         Ok(())
     }
 }
@@ -45,10 +60,22 @@ mod linux {
     use gtk::prelude::*;
     use tauri::WebviewWindow;
 
-    /// `ATK_LIVE_POLITE`.
-    const LIVE_POLITE: i32 = 1;
+    use super::Politeness;
 
-    pub(super) fn announce(window: WebviewWindow, text: String) -> Result<(), String> {
+    /// `AtkLive` value for the politeness.
+    fn atk_live(politeness: Politeness) -> i32 {
+        match politeness {
+            Politeness::Polite => 1,
+            Politeness::Assertive => 2,
+        }
+    }
+
+    pub(super) fn announce(
+        window: WebviewWindow,
+        text: String,
+        politeness: Politeness,
+    ) -> Result<(), String> {
+        let live = atk_live(politeness);
         let target = window.clone();
         window
             .run_on_main_thread(move || {
@@ -59,7 +86,7 @@ mod linux {
                 if SignalId::lookup("notification", accessible.type_()).is_none() {
                     return;
                 }
-                accessible.emit_by_name::<()>("notification", &[&text, &LIVE_POLITE]);
+                accessible.emit_by_name::<()>("notification", &[&text, &live]);
             })
             .map_err(|err| err.to_string())
     }
@@ -68,6 +95,16 @@ mod linux {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn politeness_reads_the_aria_values_and_defaults_to_polite() {
+        let polite: Politeness = serde_json::from_str("\"polite\"").expect("polite");
+        let assertive: Politeness = serde_json::from_str("\"assertive\"").expect("assertive");
+        assert_eq!(polite, Politeness::Polite);
+        assert_eq!(assertive, Politeness::Assertive);
+        assert_eq!(Politeness::default(), Politeness::Polite);
+        assert!(serde_json::from_str::<Politeness>("\"off\"").is_err());
+    }
 
     #[test]
     fn blank_text_is_not_announced() {

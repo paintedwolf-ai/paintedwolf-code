@@ -39,7 +39,9 @@ describe("announceThroughHost", () => {
   it("asks the Linux host to speak the text", async () => {
     invokeMock.mockResolvedValue(undefined);
     await announceThroughHost("Assistant: done");
-    expect(invokeMock).toHaveBeenCalledWith("den_announce", { text: "Assistant: done" });
+    expect(invokeMock).toHaveBeenCalledWith("den_announce", { text: "Assistant: done", politeness: "polite" });
+    await announceThroughHost("Could not save", "assertive");
+    expect(invokeMock).toHaveBeenLastCalledWith("den_announce", { text: "Could not save", politeness: "assertive" });
   });
 
   it("leaves macOS and other platforms to the live region", async () => {

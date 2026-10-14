@@ -15,10 +15,6 @@ import {
   bindFindableView,
 } from "../../find/use-findable-view.ts";
 import { useTranscriptViewport } from "../../chat/stream/transcript-viewport.tsx";
-import {
-  announceThroughHost,
-  hostSpeaksAnnouncements,
-} from "../../platform/desktop/host-announcement.ts";
 
 type Props = {
   blocks: ChatSpanBlock[];
@@ -74,12 +70,7 @@ export function ChatSpanBlocks(props: Props) {
     setAnnouncement("");
     queueMicrotask(() => {
       if (epoch !== announcementEpoch) return;
-      const text = next.announcement ?? "";
-      if (!hostSpeaksAnnouncements()) {
-        setAnnouncement(text);
-        return;
-      }
-      if (props.surfaceActive?.() ?? true) void announceThroughHost(text);
+      setAnnouncement(next.announcement ?? "");
     });
   });
   onCleanup(() => {
@@ -101,7 +92,7 @@ export function ChatSpanBlocks(props: Props) {
     <section
       class="den-chat-transcript-log"
       role="log"
-      aria-live="polite"
+      aria-live={(props.surfaceActive?.() ?? true) ? "polite" : "off"}
       aria-relevant="additions"
       aria-atomic="false"
       aria-label="Conversation"
