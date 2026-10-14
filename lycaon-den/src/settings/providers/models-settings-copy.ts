@@ -6,11 +6,6 @@ const REFRESH_MODELS_LABEL = "Refresh models";
 const CONTINUE_LABEL = "Continue";
 const UNSET_MODEL_LABEL = "---";
 
-/** Word joiners keep a label's characters on one line where the prose wraps. */
-function unbroken(label: string): string {
-  return [...label].join("\u2060");
-}
-
 export const MODELS_SETTINGS_COPY = {
   providersIntro: "Connect AI providers.",
   addProvider: "Add AI provider",
@@ -183,7 +178,9 @@ export const MODELS_SETTINGS_COPY = {
   coordinatorSlotHint:
     "Must be tool-calling capable or Painted Wolf Code cannot run. We recommend GLM 5.3 Flash, Gemini 3.5 Flash, Claude Sonnet, or a similar class model — this is the hard part, so use your strongest model.",
   liteSlotLabel: "Summarizer",
-  summarizerModelHint: `Optional override for compaction, context diet, and web search seeding. ${unbroken(UNSET_MODEL_LABEL)} inherits the default model and tracks when it changes.`,
+  /** Wraps the unset label: the hint names it as the picker shows it. */
+  summarizerModelHintLead: "Optional override for compaction, context diet, and web search seeding.",
+  summarizerModelHintTail: "inherits the default model and tracks when it changes.",
   modelPolicyEmpty:
     "Configure at least one provider in Settings → AI providers, then choose models here.",
   workerSectionTitle: "Workers",

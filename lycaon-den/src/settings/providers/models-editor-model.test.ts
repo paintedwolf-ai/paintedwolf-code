@@ -1066,14 +1066,8 @@ describe("--- inherit / unset slots", () => {
   });
 
   it("copy describes summarizer inherit behavior", () => {
-    expect(MODELS_SETTINGS_COPY.summarizerModelHint).toContain("inherits");
-    expect(MODELS_SETTINGS_COPY.summarizerModelHint).toContain("tracks");
-  });
-
-  it("keeps the unset label on one line inside the summarizer hint", () => {
-    const hint = MODELS_SETTINGS_COPY.summarizerModelHint;
-    expect(hint).toContain("-\u2060-\u2060- inherits");
-    expect(hint.replaceAll("\u2060", "")).toContain(`${MODELS_SETTINGS_COPY.unsetModel} inherits`);
+    expect(MODELS_SETTINGS_COPY.summarizerModelHintTail).toContain("inherits");
+    expect(MODELS_SETTINGS_COPY.summarizerModelHintTail).toContain("tracks");
   });
 
   it("empty project-style policy has no assignments", () => {
