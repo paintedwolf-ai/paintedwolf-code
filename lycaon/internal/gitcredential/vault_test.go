@@ -82,3 +82,23 @@ func mustParse(t *testing.T, request string) Credential {
 	testutil.FailErr(t, "parse request", err)
 	return credential
 }
+
+func TestVaultListAndRemoteSubjects(t *testing.T) {
+	store := developmentVault(t)
+	testutil.FailErr(t, "store", store.Store(Credential{Protocol: "https", Host: "github.com", Username: "alice", Password: "secret"}))
+	entries, err := store.List()
+	testutil.FailErr(t, "list", err)
+	if len(entries) != 1 || entries[0].Key != "https://github.com" || entries[0].Username != "alice" {
+		t.Fatalf("entries = %+v", entries)
+	}
+	credential, err := CredentialForRemote("HTTPS://GitHub.com/org/repo.git/")
+	testutil.FailErr(t, "remote subject", err)
+	if credential.Protocol != "https" || credential.Host != "GitHub.com" || credential.Path != "org/repo.git" {
+		t.Fatalf("subject = %+v", credential)
+	}
+	for _, remote := range []string{"", "github.com", "ssh://git@github.com/x", "git@github.com:org/repo.git", "https://"} {
+		if _, err := CredentialForRemote(remote); err == nil {
+			t.Fatalf("%q was accepted", remote)
+		}
+	}
+}

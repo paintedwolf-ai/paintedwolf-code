@@ -16,12 +16,13 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 )
 
-const recoveryUsage = `usage: pw credentials {where|purge|verify-protection} [--yes]
+const recoveryUsage = `usage: pw credentials {where|purge|verify-protection|git ...} [--yes]
 
 Inspect and reset every private credential namespace:
   where   name the backend holding each credential set
   purge   remove every stored credential; requires --yes
   verify-protection   verify native Keychain protection using disposable identities
+  git     list, store or remove Git HTTPS credentials the host serves
 
 Purging is refused while an engine is running, because a running engine holds
 the decrypted identity and credential values in memory until it exits.
@@ -33,6 +34,9 @@ with the app password. Development builds use a private local identity file.`
 func runCredentials(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("%s", recoveryUsage)
+	}
+	if args[0] == "git" {
+		return runGitCredentials(args[1:], os.Stdin, os.Stdout)
 	}
 	if args[0] == "verify-protection" {
 		if len(args) != 1 {
