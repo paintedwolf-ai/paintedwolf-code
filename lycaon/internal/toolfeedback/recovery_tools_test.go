@@ -3,8 +3,10 @@ package toolfeedback
 import (
 	"github.com/lycaon/lycaon/internal/tools"
 
+	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -95,6 +97,41 @@ func TestLocalFetchRecoveryOnlyOffersCurrentCaptureTools(t *testing.T) {
 		}
 		if len(offered) > 0 && len(calls) == 0 {
 			t.Fatalf("offered local recovery omitted for %v", offered)
+		}
+	}
+}
+
+func TestBinaryReadRecoveryRequiresOfferedViewerAndSupportedFormat(t *testing.T) {
+	bp := stockBlockPlane(t)
+	for _, supported := range []bool{false, true} {
+		for _, offered := range [][]string{nil, {}, {"view_image"}, {"stat"}, {"view_image", "stat"}} {
+			for _, image := range []bool{false, true} {
+				t.Run(fmt.Sprintf("supported=%v/offered=%v/image=%v", supported, offered, image), func(t *testing.T) {
+					ctx := t.Context()
+					if offered != nil {
+						ctx = tools.WithRecoveryTools(ctx, offered)
+					}
+					err := bp.RejectObservation(ctx, "read", "fixture", nil, &toolrejection.ToolReject{Code: "READ_BINARY_DENIED", Data: map[string]any{
+						"path": "asset", "bytes": 4, "reason": "binary", "is_image": image, "workspace_image_supported": supported,
+						"can_view_image": true, "can_stat": true,
+					}})
+					refusal, ok := guidance.RefusalFromError(err)
+					if !ok || refusal.Copy == nil {
+						t.Fatalf("missing OAR recovery: %v", err)
+					}
+					fix := refusal.Copy["fix"]
+					viewer := supported && slices.Contains(offered, "view_image")
+					if strings.Contains(fix, "Use view_image") != viewer {
+						t.Fatalf("incorrect viewer remedy: %s", fix)
+					}
+					if strings.Contains(fix, "Use stat") != (!viewer && slices.Contains(offered, "stat")) {
+						t.Fatalf("incorrect metadata remedy: %s", fix)
+					}
+					if strings.Contains(fix, "perceive") || !strings.Contains(fix, "unresolved content requirement") {
+						t.Fatalf("recovery overclaimed evidence: %s", fix)
+					}
+				})
+			}
 		}
 	}
 }
