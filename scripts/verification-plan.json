@@ -335,6 +335,9 @@
     "den:webkit:scroll": [
       "den:webkit:scroll"
     ],
+    "den:webkit:atspi": [
+      "den:webkit:atspi"
+    ],
     "decide:test": [
       "decide:test"
     ],
@@ -642,6 +645,12 @@
       ],
       "workers": 1
     },
+    "den:webkit:atspi": {
+      "locks": [
+        "harness"
+      ],
+      "workers": 1
+    },
     "build:decide": {
       "locks": [
         "rust"
@@ -871,6 +880,18 @@
       "suite": "e2e",
       "setup": "harness",
       "runner": "macos-15"
+    },
+    "webkit-gtk": {
+      "targets": [
+        "den:webkit:atspi"
+      ],
+      "minutes": 30,
+      "profiles": [
+        "nightly",
+        "release"
+      ],
+      "suite": "e2e",
+      "setup": "harness"
     },
     "race": {
       "targets": [
