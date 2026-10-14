@@ -137,6 +137,12 @@ Every provider call has a hard ceiling. The synchronous path fits or exposes an 
 
 The same facts, frame, limits, and compaction revision produce the same fit. Latency never depends on an emergency summarizer call.
 
+## Continuation retention contract
+
+The host preserves original user instructions and worker assignments, and renders operational state from its owning subsystems. Supporting narrative may be summarized, but a model summary never establishes permissions, verification, or workflow completion. A follow-up request does not release earlier instructions. Essential history that exceeds the receiving model's budget remains an explicit capacity failure.
+
+Compaction covers the exchanges removed from the prompt. Each source range remains represented by retained text, source-linked summary entries, or a recoverable index. The prior continuation is an input to every subsequent generation. Coordinator and summarizer budgets are resolved independently; changing the receiving model rebuilds its projection from canonical history. Optional local ranking affects supporting detail only, and unavailable or untrained ranking retains the deterministic baseline.
+
 ## Asynchronous compaction
 
 High-quality summarization runs outside the coordinator critical path.
