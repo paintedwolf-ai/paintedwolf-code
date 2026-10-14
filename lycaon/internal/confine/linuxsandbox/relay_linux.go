@@ -184,6 +184,8 @@ func ExitWithSignal(sig syscall.Signal) {
 	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGACTION, uintptr(sig), uintptr(unsafe.Pointer(&action)), 0, 8, 0, 0) //nolint:gosec // G103 — zeroed kernel sigaction (SIG_DFL), 8-byte sigset
 	mask := uint64(1) << (uint(sig) - 1)
 	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGPROCMASK, unix.SIG_UNBLOCK, uintptr(unsafe.Pointer(&mask)), 0, 8, 0, 0) //nolint:gosec // G103 — 8-byte kernel sigset for one signal
-	_ = syscall.Kill(os.Getpid(), sig)
+	// Aimed at this thread, the signal lands before the syscall returns; a
+	// process-wide kill would race the exit below.
+	_ = unix.Tgkill(os.Getpid(), unix.Gettid(), sig)
 	os.Exit(128 + int(sig))
 }

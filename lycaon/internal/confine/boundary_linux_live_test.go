@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -154,9 +155,11 @@ func TestLinuxCapabilitiesReportAnAppliedBoundary(t *testing.T) {
 func TestLinuxWritesStayInsideWriteRoots(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	proj := t.TempDir()
-	home, err := os.UserHomeDir()
-	testutil.FailErr(t, "home", err)
-	outside, err := os.MkdirTemp(home, ".pwc-confine-test-")
+	// The account's real home lies outside every write root; $HOME may not,
+	// since the test harness relocates it under the temporary root.
+	account, err := user.Current()
+	testutil.FailErr(t, "current user", err)
+	outside, err := os.MkdirTemp(account.HomeDir, ".pwc-confine-test-")
 	testutil.FailErr(t, "outside dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(outside) })
 	c := denyConfinement(proj)

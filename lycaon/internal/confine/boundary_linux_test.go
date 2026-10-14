@@ -65,7 +65,7 @@ func TestCompileFilesystemPlanLiftsMaskForLaterGrant(t *testing.T) {
 	if len(fs.ReadOnly) != 0 || len(fs.Restored) != 0 {
 		t.Fatalf("lifted mask left mounts: %+v", fs)
 	}
-	if got := sortedPlan(fs).WriteRoots; !reflect.DeepEqual(got, []string{inner, proj}) {
+	if got := sortedPlan(fs).WriteRoots; !reflect.DeepEqual(got, []string{proj, inner}) {
 		t.Fatalf("write roots = %v", got)
 	}
 }

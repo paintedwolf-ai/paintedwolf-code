@@ -38,6 +38,10 @@ func Available() bool { return linuxCapabilities().Available() }
 // why confinement is unavailable.
 func LinuxCapabilities() (linuxsandbox.Capabilities, bool) { return linuxCapabilities(), true }
 
+// browserBoundarySupported is false until the plan can express the browser's
+// local network reach.
+func browserBoundarySupported() bool { return false }
+
 func linuxCapabilities() linuxsandbox.Capabilities {
 	linuxHost.once.Do(func() {
 		caps := linuxsandbox.Facts()

@@ -95,7 +95,7 @@ func applyFilesystem(fs Filesystem) error {
 				err = hideDirectory(op.path)
 			} else {
 				if hiddenFile < 0 {
-					hiddenFile, err = newTmpfs("0555")
+					hiddenFile, err = newTmpfs("0755")
 				}
 				if err == nil {
 					err = hideFile(hiddenFile, op.path)
@@ -127,9 +127,11 @@ func mountFailure(what string, err error) error {
 	return &Unavailability{Code: UnavailableMount, Detail: what + ": " + err.Error()}
 }
 
-// hideDirectory replaces a directory with an empty tmpfs.
+// hideDirectory replaces a directory with an empty tmpfs. The placeholder is
+// writable only until anything restored beneath it has its mountpoint; the
+// final read-only pass seals it.
 func hideDirectory(path string) error {
-	fd, err := newTmpfs("0555")
+	fd, err := newTmpfs("0755")
 	if err != nil {
 		return err
 	}
@@ -181,11 +183,11 @@ func restore(clone int, path string) error {
 	}
 	if _, err := os.Lstat(path); errors.Is(err, os.ErrNotExist) {
 		if st.Mode&unix.S_IFMT == unix.S_IFDIR {
-			if err := os.MkdirAll(path, 0o555); err != nil {
+			if err := os.MkdirAll(path, 0o755); err != nil {
 				return err
 			}
 		} else {
-			if err := os.MkdirAll(filepath.Dir(path), 0o555); err != nil {
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				return err
 			}
 			if err := createPlaceholder(path, 0o444); err != nil {

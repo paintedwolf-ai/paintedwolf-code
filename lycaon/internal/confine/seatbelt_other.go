@@ -7,6 +7,8 @@ import "fmt"
 // Available reports whether per-command confinement is enforced.
 func Available() bool { return false }
 
+func browserBoundarySupported() bool { return false }
+
 func renderProfile(Confinement) (string, error) {
 	return "", fmt.Errorf("per-command sandbox not implemented on this platform")
 }

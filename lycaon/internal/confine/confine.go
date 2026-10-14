@@ -16,6 +16,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/lineage"
 )
@@ -281,6 +282,10 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 // BrowserConfinement permits local connections within the requested port scope.
 // Public TCP/IP is denied; an empty port list permits every local port.
 func BrowserConfinement(req Request) (*Confinement, bool) {
+	if !browserBoundarySupported() {
+		logConfinementPrepareError(&linuxsandbox.Unsupported{Code: linuxsandbox.UnsupportedBrowser})
+		return nil, false
+	}
 	c, ok := DefaultConfinement(req)
 	if !ok || c == nil {
 		return nil, false

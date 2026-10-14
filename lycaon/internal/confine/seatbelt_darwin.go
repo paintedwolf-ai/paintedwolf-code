@@ -34,6 +34,9 @@ func Available() bool { return true }
 // renderProfile is the Seatbelt profile on this platform.
 func renderProfile(c Confinement) (string, error) { return renderSeatbeltProfile(c) }
 
+// browserBoundarySupported reports that the profile can confine the managed browser.
+func browserBoundarySupported() bool { return true }
+
 // applyAndExec applies the profile to this process, confirms kernel membership,
 // and replaces the process with the target.
 func applyAndExec(profile []byte, resolved string, target []string) error {
