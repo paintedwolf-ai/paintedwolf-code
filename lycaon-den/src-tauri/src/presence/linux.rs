@@ -13,7 +13,7 @@ use gtk::{gio, glib};
 use tauri::Manager;
 
 use super::PresenceCommandError;
-use crate::linux_bus;
+use crate::linux_desktop::bus as linux_bus;
 use crate::sidecar::SidecarState;
 
 pub(super) const AUTHENTICATOR_POLKIT: &str = "linux_user_presence";
@@ -32,6 +32,7 @@ const BUS_PATH: &str = "/org/freedesktop/DBus";
 const ALLOW_USER_INTERACTION: u32 = 1;
 const PROMPT_TIMEOUT: Duration = Duration::from_secs(120);
 const BUS_CALL_TIMEOUT: Duration = Duration::from_secs(10);
+const BUS_CONNECT_TIMEOUT: Duration = Duration::from_millis(1500);
 
 /// Why polkit did not confirm the person.
 #[derive(Debug, PartialEq, Eq)]
@@ -88,7 +89,7 @@ pub(super) fn confirm_with_polkit(identifier: &str, prompt: &str) -> Result<(), 
 }
 
 fn confirm_on(context: &glib::MainContext, action: &str, prompt: &str) -> Result<(), PolkitRefusal> {
-    let bus = linux_bus::connect(context, linux_bus::SYSTEM_BUS_ADDRESS)
+    let bus = linux_bus::connect(context, linux_bus::SYSTEM_BUS_ADDRESS, BUS_CONNECT_TIMEOUT)
         .map_err(|error| PolkitRefusal::Unavailable(format!("The system bus is unavailable: {error}")))?;
     let owner = authority_owner(context, &bus, action)?;
     let subject = own_subject()?;

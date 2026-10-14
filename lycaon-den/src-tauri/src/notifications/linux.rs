@@ -20,6 +20,7 @@ use tauri::{AppHandle, Manager};
 use delivery::Delivery;
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(2);
+const SESSION_CONNECT_TIMEOUT: Duration = Duration::from_millis(500);
 
 enum Command {
     Permission,
@@ -178,7 +179,7 @@ impl Worker {
         if self.delivery.is_none() {
             let target = self.app.clone();
             let context = glib::MainContext::ref_thread_default();
-            self.delivery = crate::linux_desktop::session_bus::connect(&context)
+            self.delivery = crate::linux_desktop::bus::connect_session(&context, SESSION_CONNECT_TIMEOUT)
                 .and_then(|connection| {
                     Delivery::new(
                         connection,

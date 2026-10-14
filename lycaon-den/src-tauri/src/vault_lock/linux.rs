@@ -9,7 +9,7 @@ use gtk::{gio, glib};
 use tauri::AppHandle;
 
 use super::{lock_in_background, lock_reason_for_signal};
-use crate::linux_bus;
+use crate::linux_desktop::bus as linux_bus;
 
 const LOGIND_NAME: &str = "org.freedesktop.login1";
 const LOGIND_PATH: &str = "/org/freedesktop/login1";
@@ -17,6 +17,7 @@ const LOGIND_MANAGER: &str = "org.freedesktop.login1.Manager";
 const LOGIND_SESSION: &str = "org.freedesktop.login1.Session";
 const SCREENSAVER: &str = "org.freedesktop.ScreenSaver";
 const CALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+const BUS_CONNECT_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(1500);
 
 thread_local! {
     // Subscriptions live as long as their connections; the main thread owns both.
@@ -35,7 +36,7 @@ struct Observed {
 pub(super) fn setup_linux(app: AppHandle) -> Result<(), String> {
     let context = glib::MainContext::default();
     let mut observed = Observed::default();
-    match linux_bus::connect(&context, linux_bus::SYSTEM_BUS_ADDRESS) {
+    match linux_bus::connect(&context, linux_bus::SYSTEM_BUS_ADDRESS, BUS_CONNECT_TIMEOUT) {
         Ok(system) => {
             observed.sleep = subscribe(&system, &app, Some(LOGIND_NAME), LOGIND_MANAGER, "PrepareForSleep", Some(LOGIND_PATH));
             match own_session_path(&context, &system) {
@@ -48,7 +49,7 @@ pub(super) fn setup_linux(app: AppHandle) -> Result<(), String> {
         }
         Err(error) => eprintln!("Stored values are not locked by sleep or session lock: {error}"),
     }
-    match linux_bus::session_address().and_then(|address| linux_bus::connect(&context, &address)) {
+    match linux_bus::connect_session(&context, BUS_CONNECT_TIMEOUT) {
         Ok(session) => {
             observed.screensaver = subscribe(&session, &app, None, SCREENSAVER, "ActiveChanged", None);
             CONNECTIONS.with(|connections| connections.borrow_mut().push(session));

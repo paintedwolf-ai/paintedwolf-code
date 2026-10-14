@@ -12,8 +12,6 @@ mod clipboard;
 mod config_dir;
 mod detect_editors;
 mod http_transport;
-#[cfg(target_os = "linux")]
-mod linux_bus;
 mod open_external;
 mod open_third_party_notices;
 mod presence;

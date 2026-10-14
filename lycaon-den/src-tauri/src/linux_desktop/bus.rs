@@ -5,7 +5,6 @@
 
 use std::time::Duration;
 
-use futures_util::future::{select, Either};
 use gtk::{gio, glib};
 
 /// The system bus socket every distribution installs. The environment's
@@ -13,29 +12,37 @@ use gtk::{gio, glib};
 /// answer presence checks and lock signals with whatever it liked.
 pub(crate) const SYSTEM_BUS_ADDRESS: &str = "unix:path=/run/dbus/system_bus_socket";
 
-const CONNECT_TIMEOUT: Duration = Duration::from_millis(1500);
-
 /// Connects to a bus. The connection's asynchronous work completes on
 /// `context`, which must be the thread-default context of the caller.
 pub(crate) fn connect(
     context: &glib::MainContext,
     address: &str,
+    timeout: Duration,
 ) -> Result<gio::DBusConnection, String> {
-    context.block_on(async {
-        let connect = gio::DBusConnection::for_address_future(
-            address,
-            gio::DBusConnectionFlags::AUTHENTICATION_CLIENT
-                | gio::DBusConnectionFlags::MESSAGE_BUS_CONNECTION,
-            None,
-        );
-        match select(connect, glib::timeout_future(CONNECT_TIMEOUT)).await {
-            Either::Left((result, _)) => result.map_err(|error| error.to_string()),
-            Either::Right(_) => Err("the bus connection timed out".to_string()),
-        }
-    })
+    context
+        .block_on(glib::future_with_timeout(
+            timeout,
+            gio::DBusConnection::for_address_future(
+                address,
+                gio::DBusConnectionFlags::AUTHENTICATION_CLIENT
+                    | gio::DBusConnectionFlags::MESSAGE_BUS_CONNECTION,
+                None,
+            ),
+        ))
+        .map_err(|_| "The bus connection timed out".to_string())?
+        .map_err(|error| error.to_string())
+}
+
+/// Connects to the person's session bus.
+pub(crate) fn connect_session(
+    context: &glib::MainContext,
+    timeout: Duration,
+) -> Result<gio::DBusConnection, String> {
+    connect(context, &session_address()?, timeout)
 }
 
 /// Calls one method and waits for its reply on `context`.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn call(
     context: &glib::MainContext,
     connection: &gio::DBusConnection,
@@ -61,7 +68,7 @@ pub(crate) fn call(
 
 /// The session bus address: the environment's Unix-only address, or the
 /// runtime directory's bus socket.
-pub(crate) fn session_address() -> Result<String, String> {
+fn session_address() -> Result<String, String> {
     session_address_from(
         std::env::var("DBUS_SESSION_BUS_ADDRESS").ok().as_deref(),
         std::env::var("XDG_RUNTIME_DIR").ok().as_deref(),
@@ -118,7 +125,7 @@ pub(crate) fn own_start_time() -> Result<u64, String> {
 }
 
 /// Field 22 of a stat line, after the parenthesized command name.
-pub(crate) fn start_time_from_stat(stat: &str) -> Option<u64> {
+fn start_time_from_stat(stat: &str) -> Option<u64> {
     let rest = &stat[stat.rfind(')')? + 1..];
     rest.split_whitespace().nth(19)?.parse().ok()
 }
@@ -135,8 +142,12 @@ mod tests {
     #[test]
     fn session_selection_preserves_explicit_and_native_runtime_identity() {
         assert_eq!(
-            session_address_from(Some("unix:abstract=chosen;unix:path=/other"), Some("/ignored"), 42)
-                .unwrap(),
+            session_address_from(
+                Some("unix:abstract=chosen;unix:path=/other"),
+                Some("/ignored"),
+                42
+            )
+            .unwrap(),
             "unix:abstract=chosen;unix:path=/other"
         );
         assert_eq!(
@@ -147,10 +158,14 @@ mod tests {
             session_address_from(None, Some("/runtime/alias/../person /"), 42).unwrap(),
             "unix:path=/runtime/alias/../person%20/bus"
         );
+        assert_eq!(
+            session_address_from(None, Some("/"), 42).unwrap(),
+            "unix:path=/bus"
+        );
     }
 
     #[test]
-    fn session_selection_rejects_remote_and_invalid_addresses() {
+    fn session_selection_rejects_remote_unbounded_and_invalid_addresses() {
         for address in [
             "tcp:host=localhost,port=1",
             "autolaunch:",
@@ -159,7 +174,10 @@ mod tests {
         ] {
             assert!(session_address_from(Some(address), None, 42).is_err());
         }
-        assert!(session_address_from(Some(&vec!["unix:path=/a"; 17].join(";")), None, 42).is_err());
+        assert!(session_address_from(Some(&"x".repeat((64 << 10) + 1)), None, 42).is_err());
+        assert!(
+            session_address_from(Some(&vec!["unix:path=/a"; 17].join(";")), None, 42).is_err()
+        );
         for runtime in ["relative", "/a\0b", "/a\rb"] {
             assert!(session_address_from(None, Some(runtime), 42).is_err());
         }
