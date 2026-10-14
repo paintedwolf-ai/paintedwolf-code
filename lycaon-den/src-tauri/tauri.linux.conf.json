@@ -43,6 +43,7 @@
       },
       "rpm": {
         "release": "1",
+        "compression": { "type": "zstd", "level": 3 },
         "desktopTemplate": "../../packaging/linux/painted-wolf-code.desktop.hbs",
         "preInstallScript": "../../packaging/linux/rpm/pre",
         "postInstallScript": "../../packaging/linux/rpm/post",

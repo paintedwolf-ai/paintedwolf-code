@@ -215,6 +215,8 @@ echo "den:bundle — tauri build (--bundles ${BUNDLE_KIND}, target ${TARGET})" >
     export PATH="${ROOT}/scripts/macos-build-tools:${PATH}"
   fi
   if [[ "${HOST_KIND}" == "linux" ]]; then
+    # Package files keep the staged modes, so every helper must be world-readable.
+    chmod 0755 "${SIDECAR_BIN}" "${LOG_VIEWER_BIN}" "${DOCUMENT_CORE_BIN}" "${DECIDE_BIN}"
     # The package manifest digests the compiled shell, so compile first and bundle second.
     bun run tauri build --no-bundle --target "${TARGET}" "${BUILD_CONFIG[@]}"
     LINUX_MANIFEST="${TAURI_DIR}/target/${TARGET}/release/linux-package/manifest.json"
