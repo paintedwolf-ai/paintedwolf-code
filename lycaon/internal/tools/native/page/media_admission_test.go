@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	attachmentformat "github.com/lycaon/lycaon/internal/promptattach/format"
 	"image"
 	"image/png"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/browser"
@@ -175,5 +177,26 @@ func TestVideoSheetProjectionKeepsFrameCoordinatesAndRefusesCorruptPixels(t *tes
 	}
 	if _, exists := original.Data["path"]; exists {
 		t.Fatal("mapping mutated decoder facts")
+	}
+}
+
+func TestWorkspaceImageAdmissionUsesSharedFormatPolicy(t *testing.T) {
+	root := t.TempDir()
+	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}}}}
+	exts := append(attachmentformat.WorkspaceImageExtensions(), ".PNG", ".ico", ".bmp", ".tiff", ".txt", "")
+	for _, ext := range exts {
+		_, supported := attachmentformat.WorkspaceImageMIME(ext)
+		_, err := ViewImageHandler(ViewImageDeps{})(t.Context(), map[string]any{"path": "missing" + ext}, tc)
+		reject := toolrejection.AsToolReject(err)
+		want := "IMAGE_FORMAT_UNSUPPORTED"
+		if supported {
+			want = "IMAGE_NOT_FOUND"
+		}
+		if reject == nil || reject.Code != want {
+			t.Fatalf("%s admission = %v, want %s", ext, err, want)
+		}
+		if !supported && reject.Data["supported_formats"] != strings.Join(attachmentformat.WorkspaceImageExtensions(), ", ") {
+			t.Fatalf("viewer advertised different formats: %v", reject.Data)
+		}
 	}
 }

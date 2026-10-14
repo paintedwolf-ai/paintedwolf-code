@@ -22,7 +22,7 @@ copy:
   fix: '{% if paintedwolf.can_read %}Use read for the selected file’s content.{% else %}File content requires
     a reader offered on the current surface.{% endif %} For directory membership, list the intended parent
     directory instead.'
-  instead: Branch on Code; use read for a file or choose a directory
+  instead: Choose a directory to list, or use an offered file reader
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:list_dir
 x-paintedwolf-message: list_dir path is not a directory

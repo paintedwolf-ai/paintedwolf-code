@@ -246,11 +246,16 @@ export class ScrollportExtent {
     this.notifyExtentChanged();
   }
 
-  private refuseInputPastTail = (event: WheelEvent): void => {
-    if (event.ctrlKey || event.deltaY <= 0 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+  refusesWheelPastTail(event: WheelEvent): boolean {
+    if (this.extentHoldAppliedPx <= 0) return false;
+    if (event.ctrlKey || event.deltaY <= 0 || Math.abs(event.deltaX) > Math.abs(event.deltaY)) return false;
     // An inner scrollport that claimed the wheel scrolls itself.
-    if (!this.ports.claimsInput(event)) return;
-    if (this.viewport.scrollTop >= this.tailOffsetY() - SCROLL_EPSILON_PX) event.preventDefault();
+    if (!this.ports.claimsInput(event)) return false;
+    return this.viewport.scrollTop >= this.tailOffsetY() - SCROLL_EPSILON_PX;
+  }
+
+  private refuseInputPastTail = (event: WheelEvent): void => {
+    if (this.refusesWheelPastTail(event)) event.preventDefault();
   };
 
   private notifyExtentChanged(): void {

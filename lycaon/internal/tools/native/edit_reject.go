@@ -11,10 +11,10 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
 )
 
-func editOldStringNotFound(path, fileContent, oldString string) error {
+func editOldStringNotFound(path, fileContent, oldString, newString string) error {
 	return &toolrejection.ToolReject{
 		Code: "EDIT_OLD_STRING_NOT_FOUND",
-		Data: editMissData(path, fileContent, oldString),
+		Data: editMissData(path, fileContent, oldString, newString),
 	}
 }
 
@@ -22,11 +22,11 @@ func editOldStringNotFound(path, fileContent, oldString string) error {
 // file changed during this session, and not by this session. The provenance
 // rows are recorded facts; the miss itself may still also involve a misquote.
 func editTargetChangedByOthers(
-	path, fileContent, oldString string,
+	path, fileContent, oldString, newString string,
 	changes []*surveyreceipt.SourceChange,
 	totalChanges int,
 ) error {
-	data := editMissData(path, fileContent, oldString)
+	data := editMissData(path, fileContent, oldString, newString)
 	rows := make([]map[string]any, 0, len(changes))
 	for _, change := range changes {
 		row := map[string]any{"actor": change.Actor, "op": change.Op, "at": change.At}
@@ -40,11 +40,17 @@ func editTargetChangedByOthers(
 	return &toolrejection.ToolReject{Code: "EDIT_TARGET_CHANGED_BY_OTHERS", Data: data}
 }
 
-func editMissData(path, fileContent, oldString string) map[string]any {
+func editMissData(path, fileContent, oldString, newString string) map[string]any {
 	data := map[string]any{
 		"path":             path,
 		"old_string_chars": utf8.RuneCountInString(oldString),
 		"total_lines":      toolkit.CountLines(fileContent),
+	}
+	if newString != "" {
+		data["replacement_matches"] = strings.Count(fileContent, newString)
+		if at := strings.Index(fileContent, newString); at >= 0 {
+			data["replacement_line"] = strings.Count(fileContent[:at], "\n") + 1
+		}
 	}
 	if nearLine, ok := editNearLine(fileContent, oldString); ok {
 		data["near_line"] = nearLine

@@ -4,11 +4,11 @@
   "kind": "test_suite",
   "workstream": "tool-prerequisite-recovery",
   "disposition": "retain",
-  "reason": "This test suite exercises admitted calls, refusals, and typed settlement with shared turn fixtures. Recovery cases are consolidated into the existing response-repetition suite. Retain the focused fixture and contract structure.",
-  "reviewed_commit": "46d87a5d6ed1fe53c4cf707f18062a37ca65d7ed",
-  "ceiling": 379,
+  "reason": "The shared turn fixture verifies admitted calls, refusals, and typed settlement. Extending its existing rejection matrix tests offered, deferred, unavailable, and absent-loader surfaces through the production OAR path. Retain the cohesive suite at 385 measured lines.",
+  "reviewed_commit": "18a2ef0918372e12630e6e0766c68b65958e7bb1",
+  "ceiling": 385,
   "boundaries": {
-    "lycaon/internal/coordinator/promptloop/response_repetition_test.go": "861ea3ab6dfb9f954a01f1a4bbbd40c73b04127293254a811c110de97d4f0b33",
-    "lycaon/internal/coordinator/promptloop/doom_loop_fault_test.go": "e7c61616e8cc217464304dba274b3e41f23f584dfa9f974c67a7fb3fd901dbbe"
+    "lycaon/internal/coordinator/promptloop/prompt_loop_tool_execution_internal_test.go": "68891b28381ab0ed63cc6051b72830ecc8cb7f742f181d554ac1ae10404677c9",
+    "lycaon/internal/toolfeedback/recovery_tools_test.go": "d1316e9e6510a090d3ff910cbabf6250dacb6a42c9b1ec27bfc166c7c7ed5e78"
   }
 }
