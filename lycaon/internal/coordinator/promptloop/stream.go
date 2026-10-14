@@ -295,10 +295,8 @@ func (l *modelTurn) completeStream(
 				CallID:   llmCallID,
 				Provider: callProvider,
 				Model:    callModel,
-				Status:   api.LLMCallStatusError,
-				CoordinatorLoop: coordinatorLLMLoopProgress(
-					profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish,
-				),
+				Status:          api.LLMCallStatusError,
+				CoordinatorLoop: coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish),
 			})
 		}()
 	}
@@ -309,24 +307,21 @@ func (l *modelTurn) completeStream(
 			return
 		}
 		l.Projection.Deps.Events.PublishLLM(ctx, sessionProjectKey(sess), sessionID, api.LLMCallEvent{
-			CallID:      llmCallID,
-			Provider:    callProvider,
-			Model:       callModel,
-			Status:      api.LLMCallStatusActive,
-			Attempt:     a.Attempt,
-			MaxAttempts: a.MaxAttempts,
-			RetryWaitMs: a.Wait.Milliseconds(),
-			RetryReason: api.LLMRetryReason(a.Reason),
-			SilenceMs:   a.Silence.Milliseconds(),
-			CoordinatorLoop: coordinatorLLMLoopProgress(
-				profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish,
-			),
+			CallID:          llmCallID,
+			Provider:        callProvider,
+			Model:           callModel,
+			Status:          api.LLMCallStatusActive,
+			Attempt:         a.Attempt,
+			MaxAttempts:     a.MaxAttempts,
+			RetryWaitMs:     a.Wait.Milliseconds(),
+			RetryReason:     api.LLMRetryReason(a.Reason),
+			SilenceMs:       a.Silence.Milliseconds(),
+			CoordinatorLoop: coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish),
 		})
 	})
 
 	req, sourceRequest := modelcall.CaptureSourceRequest(req)
-	collected, collectErr := l.collectPromptStream(
-		ctx, sess, client, req, onProgress, llmCallID, callProvider, callModel)
+	collected, collectErr := l.collectPromptStream(ctx, sess, client, req, onProgress, llmCallID, callProvider, callModel)
 	callProvider, callModel = collected.providerID, collected.model
 	if collectErr != nil {
 		err = collectErr
