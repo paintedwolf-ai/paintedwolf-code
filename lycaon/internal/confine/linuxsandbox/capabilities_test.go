@@ -60,8 +60,8 @@ func TestUnavailabilityIsAnError(t *testing.T) {
 	if _, ok := AsUnavailable(errors.New("other")); ok {
 		t.Fatal("plain error classified as unavailability")
 	}
-	unsupported := error(&Unsupported{Code: UnsupportedBrowser})
-	if unsupported.Error() != "linux sandbox cannot express this boundary: browser" {
+	unsupported := error(&Unsupported{Code: UnsupportedNetworkMode, Detail: "tunnel"})
+	if unsupported.Error() != "linux sandbox cannot express this boundary: network_mode: tunnel" {
 		t.Fatalf("Unsupported message: %q", unsupported.Error())
 	}
 }

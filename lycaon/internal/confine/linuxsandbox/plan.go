@@ -120,7 +120,6 @@ const (
 	UnsupportedPlanVersion    = "plan_version"
 	UnsupportedNetworkMode    = "network_mode"
 	UnsupportedNetworkGrant   = "network_grant"
-	UnsupportedBrowser        = "browser"
 	UnsupportedFilesystemRule = "filesystem_rule"
 )
 

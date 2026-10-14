@@ -59,7 +59,6 @@ func TestValidateNamesWhatTheHelperCannotExpress(t *testing.T) {
 		{"unknown mode", Network{Mode: "tunnel"}, UnsupportedNetworkMode},
 		{"proxy without endpoint", Network{Mode: NetworkProxyOnly}, UnsupportedNetworkGrant},
 		{"direct udp", Network{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "udp", Port: 53}}}, UnsupportedNetworkGrant},
-		{"browser", Network{Mode: NetworkDeny, Browser: true, LoopbackConnect: true}, UnsupportedBrowser},
 		{"relative socket", Network{Mode: NetworkDeny, SocketPaths: []string{"run/x.sock"}}, UnsupportedNetworkGrant},
 	}
 	for _, tc := range cases {

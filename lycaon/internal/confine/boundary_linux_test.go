@@ -107,7 +107,7 @@ func TestCompileFilesystemPlanNamesLoaderFilesAtAnyDepth(t *testing.T) {
 
 // The rendered plan carries the engine's namespaces and refuses modes the
 // helper cannot express.
-func TestRenderProfileBuildsADenyPlanAndRefusesMediatedEgress(t *testing.T) {
+func TestRenderProfileBuildsDenyProxyAndBrowserPlans(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	proj := t.TempDir()
 	raw, err := renderProfile(Confinement{Roots: []string{proj}, Network: NetworkDeny, EgressOff: EgressOffOverride})
@@ -133,10 +133,12 @@ func TestRenderProfileBuildsADenyPlanAndRefusesMediatedEgress(t *testing.T) {
 	if proxied.Network.Mode != linuxsandbox.NetworkProxyOnly || proxied.Network.ProxyAddr != "127.0.0.1:1" {
 		t.Fatalf("proxy-only plan network %+v", proxied.Network)
 	}
-	var unsupported *linuxsandbox.Unsupported
-	_, err = renderProfile(Confinement{Roots: []string{proj}, Network: NetworkDeny, Browser: true, LoopbackConnect: true})
-	if !errors.As(err, &unsupported) || unsupported.Code != linuxsandbox.UnsupportedBrowser {
-		t.Fatalf("browser plan: %v", err)
+	raw, err = renderProfile(Confinement{Roots: []string{proj}, Network: NetworkDeny, Browser: true, LoopbackConnect: true})
+	testutil.FailErr(t, "browser plan", err)
+	browser, err := linuxsandbox.DecodePlan([]byte(raw))
+	testutil.FailErr(t, "decode browser plan", err)
+	if !browser.Network.Browser || !browser.Network.Listen || !browser.Network.LoopbackConnect {
+		t.Fatalf("browser plan network %+v", browser.Network)
 	}
 }
 
