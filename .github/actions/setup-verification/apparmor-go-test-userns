@@ -1,0 +1,10 @@
+# Lets Go test binaries under the verification scratch root create user
+# namespaces on hosts that restrict them to profiled programs, so the Linux
+# confinement tests exercise the sandbox instead of failing on the host policy.
+abi <abi/4.0>,
+
+include <tunables/global>
+
+profile paintedwolf-go-test /tmp/paintedwolf-test-runs-*/**/*.test flags=(unconfined) {
+  userns,
+}
