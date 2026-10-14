@@ -80,13 +80,13 @@ func ValidateToolArgs(schema map[string]any, args map[string]any) error {
 	return nil
 }
 
-func mutationRecoveryTool(tool string, addressable []string) string {
+func mutationRecoveryTool(tool string, offered []string) string {
 	switch strings.TrimSpace(tool) {
 	case "edit", "replace_lines", "code_rewrite":
 	default:
 		return ""
 	}
-	for _, name := range addressable {
+	for _, name := range offered {
 		if name == "write" {
 			return "write"
 		}
@@ -120,7 +120,7 @@ func ValidateCallArguments(qualifiedName string, args, schema map[string]any, tc
 			}
 			diag.AddFacts(data)
 			data["schema_issues"] = argdiag.SchemaIssues(invalid)
-			if sibling := mutationRecoveryTool(qualifiedName, tc.Turn.TurnToolPlan.AddressableNames()); sibling != "" {
+			if sibling := mutationRecoveryTool(qualifiedName, tc.Turn.TurnOfferedToolNames); sibling != "" {
 				data["suggested_tool"] = sibling
 			}
 			return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", data)
