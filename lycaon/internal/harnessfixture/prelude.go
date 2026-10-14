@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -313,7 +314,8 @@ func matchPreludeResult(step PreludeStep, result *api.ToolResult) error {
 	}
 	if len(step.JSON) != 0 {
 		var actual map[string]any
-		if err := json.Unmarshal([]byte(result.Content), &actual); err != nil {
+		_, body := hostmarker.SplitEvidenceHandleTag(result.Content)
+		if err := json.Unmarshal([]byte(body), &actual); err != nil {
 			return fmt.Errorf("preparation step %s did not return its declared JSON envelope", step.ID)
 		}
 		for key, expected := range step.JSON {

@@ -174,3 +174,34 @@ func TestVerifyURLObservedIgnoresFetchBodyLinks(t *testing.T) {
 		}
 	}
 }
+
+func TestVerificationAndOverlayOutcomesProduceCitableReceipts(t *testing.T) {
+	for _, tc := range []struct{ tool, handle, body string }{
+		{"verify", "command#1", `{"outcome":"passed","command":"python3 -m unittest","exit_code":0}`},
+		{"verify", "command#1", `{"outcome":"failed","command":"python3 -m unittest","exit_code":1}`},
+		{"preview_overlay", "overlay_receipt#1", `{"job_id":"job","mode":"preview","merge_status":"pending","paths":["status.py"]}`},
+		{"promote_overlay", "overlay_receipt#1", `[host:overlay-promote-event] {"job_id":"job","mode":"merge","merge_status":"merged","applied":["status.py"]}`},
+		{"reject_overlay", "overlay_receipt#1", `{"job_id":"job","merge_status":"rejected"}`},
+	} {
+		t.Run(tc.tool+tc.body, func(t *testing.T) {
+			ev := ledgertest.BuildFromMessages("", []api.Message{
+				{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{Name: tc.tool, ID: "call", Args: map[string]any{}}}},
+				{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Outcome: api.ToolResultOutcomeCompleted, Content: tc.body}},
+			})
+			rec, ok := evidence.ResolveHandle(ev, tc.handle)
+			if !ok || rec.Shape != evidence.ShapeCommand || rec.SourceTool != tc.tool || rec.IsGate() {
+				t.Fatalf("outcome receipt = %+v, found=%v", rec, ok)
+			}
+			if !evidence.ExcerptMatchesHandle(ev, tc.handle, "", 0, tc.body) {
+				t.Fatal("receipt lost the recorded outcome")
+			}
+			if evidence.PathObserved(ev, "status.py") {
+				t.Fatal("operation receipt invented a file observation")
+			}
+			child := evidence.NamespaceLedger(ev, "worker")
+			if _, ok := evidence.ResolveHandle(child, "worker:"+tc.handle); !ok {
+				t.Fatal("worker outcome lost its scoped citation handle")
+			}
+		})
+	}
+}

@@ -65,9 +65,11 @@ func TestPreludeUsesDurableToolIdentityAndSurvivesRestart(t *testing.T) {
 
 func TestPreludeRejectsWrongBoundaryFacts(t *testing.T) {
 	step := PreludeStep{ID: "check", Outcome: api.ToolResultOutcomeCompleted, JSON: map[string]any{"outcome": "passed"}}
+	testutil.FailErr(t, "citable verification receipt", matchPreludeResult(step, &api.ToolResult{Outcome: api.ToolResultOutcomeCompleted, Content: "[command#1]\n{\"outcome\":\"passed\"}"}))
 	for _, result := range []api.ToolResult{
 		{Outcome: api.ToolResultOutcomeRejected, Content: `{"outcome":"passed"}`},
 		{Outcome: api.ToolResultOutcomeCompleted, Content: `{"outcome":"failed"}`},
+		{Outcome: api.ToolResultOutcomeCompleted, Content: "[command#1]\n{\"outcome\":\"failed\"}"},
 		{Outcome: api.ToolResultOutcomeCompleted, Content: `This check passed`},
 		{Outcome: api.ToolResultOutcomeCompleted, Content: `{"outcome":true}`},
 	} {

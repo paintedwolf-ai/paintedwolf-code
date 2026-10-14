@@ -22,7 +22,7 @@ type citationRepairTrailer struct {
 	CitedURLs     []string                   `json:"cited_urls"`
 }
 
-// CloseoutRepairHintData pairs accepted citations with repair candidates by path or tool identity.
+// CloseoutRepairHintData preserves accepted citations and offers observed repair choices.
 func CloseoutRepairHintData(roots evidence.CitationRoots, surface string, report CoordinatorCompletionReport, ev CloseoutEvidence, offenders []string) map[string]any {
 	data := GroundingHintData(offenders, ev.Ledger)
 	retained := citationRepairTrailer{CitedEvidence: []CoordinatorCitedEvidence{}, CitedURLs: []string{}}
@@ -75,6 +75,14 @@ func citationRepairObservations(roots evidence.CitationRoots, ev evidence.Ledger
 				continue
 			}
 			if (kind != "" && (rec.Kind == kind || rec.SourceTool == kind)) || (path != "" && rec.Path == path) {
+				add(rec)
+			}
+		}
+	}
+	if len(rejected) > 0 && len(out) == 0 {
+		for i := len(handles) - 1; i >= 0; i-- {
+			rec := ev.Handles[handles[i]]
+			if rec.SupersededBy == "" {
 				add(rec)
 			}
 		}

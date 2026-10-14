@@ -16,6 +16,9 @@ func TestFailedEffectEvidenceRetainsOutcomeWithoutInventingFileProof(t *testing.
 		want                  bool
 	}{
 		{"command", true, false, api.InvocationStatusError, true},
+		{"verify", true, false, api.InvocationStatusError, true},
+		{"verify", false, false, api.InvocationStatusError, false},
+		{"verify", true, true, api.InvocationStatusError, false},
 		{"git_commit", true, false, api.InvocationStatusError, true},
 		{"git_merge", true, false, api.InvocationStatusError, true},
 		{"write", true, false, api.InvocationStatusError, false},
