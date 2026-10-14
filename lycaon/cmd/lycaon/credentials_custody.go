@@ -11,12 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/credentialstore"
 )
 
-// custodyOutcome is the one JSON line a move prints for the desktop app.
-type custodyOutcome struct {
-	Code    string `json:"code"`
-	Message string `json:"message,omitempty"`
-}
-
 // custodyMoves maps each move command to its operation.
 var custodyMoves = map[string]func(string) error{
 	"move-to-service":      credentialstore.MoveIdentityToService,
@@ -52,7 +46,7 @@ func moveCustody(name string, args []string, stdin io.Reader, stdout io.Writer, 
 		defer credentialstore.ClearUnlockSecret()
 	}
 	moveErr := move(vaultPath)
-	outcome := custodyOutcome{Code: credentialstore.CustodyErrorCode(moveErr)}
+	outcome := credentialstore.CustodyOutcome{Code: credentialstore.CustodyErrorCode(moveErr)}
 	if moveErr != nil {
 		outcome.Message = moveErr.Error()
 	}

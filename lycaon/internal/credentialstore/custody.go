@@ -27,6 +27,13 @@ type CustodyReport struct {
 	Detail          string `json:"detail,omitempty"`
 }
 
+// CustodyOutcome is the one line a custody move prints for the desktop app.
+type CustodyOutcome struct {
+	// Code is CustodyErrorCode of the move's error.
+	Code    string `json:"code"`
+	Message string `json:"message,omitempty"`
+}
+
 var (
 	// ErrLauncherRefused: the identity service holds this user's identities
 	// but refused this engine, so the vault cannot open on either path.

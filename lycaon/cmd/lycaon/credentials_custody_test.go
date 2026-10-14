@@ -49,7 +49,7 @@ func TestCustodyMovesNeedConfirmationAndReportStableCodes(t *testing.T) {
 
 	var out bytes.Buffer
 	testutil.FailErr(t, "confirmed move", moveCustody("move-to-service", []string{"--yes"}, framed("correct horse battery"), &out, path, ok))
-	var outcome custodyOutcome
+	var outcome credentialstore.CustodyOutcome
 	testutil.FailErr(t, "decode outcome", json.Unmarshal(out.Bytes(), &outcome))
 	if moved != path || outcome.Code != "ok" {
 		t.Fatalf("moved %q, outcome %+v", moved, outcome)
