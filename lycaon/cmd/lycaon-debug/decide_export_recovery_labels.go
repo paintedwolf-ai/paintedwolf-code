@@ -44,7 +44,7 @@ func canonicalRecoveryLabels(sessionID string, msgs []db.ListSessionMessagesRow,
 			} `json:"hits"`
 			History *struct {
 				Entries []struct {
-					ID      string `json:"id"`
+					ID      string `json:"message_id"`
 					Content string `json:"content"`
 				} `json:"entries"`
 			} `json:"history"`

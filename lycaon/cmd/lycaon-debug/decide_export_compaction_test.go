@@ -77,7 +77,7 @@ func TestCompactionLabelsRequireSuccessfulRecoveryAndKeepAbsenceUnknown(t *testi
 		compactionFixtureMessage(t, "old", "tool", "old bytes", &api.ToolResult{Tool: "read"}, nil),
 		compactionFixtureMessage(t, "request", "user", "continue", nil, nil),
 		compactionFixtureMessage(t, "call", "assistant", "", nil, []api.ToolCall{{ID: "recover", Name: "recall", Args: map[string]any{"history": map[string]any{"through_ord": 1, "message_id": "old"}}}}),
-		compactionFixtureMessage(t, "body", "tool", "", &api.ToolResult{Tool: "recall", ToolCallID: "recover", Content: `{"resolution":"matched","history":{"entries":[{"id":"old","content":"old bytes"}]}}`}, nil),
+		compactionFixtureMessage(t, "body", "tool", "", &api.ToolResult{Tool: "recall", ToolCallID: "recover", Content: `{"resolution":"matched","history":{"entries":[{"message_id":"old","content":"old bytes"}]}}`}, nil),
 	}
 	labels := canonicalRecoveryLabels("session", messages, 1, len(messages), candidates)
 	if labels.Needed["old"] == nil || !*labels.Needed["old"] || labels.Provenance["old"] != "canonical_recovery" {
@@ -86,7 +86,7 @@ func TestCompactionLabelsRequireSuccessfulRecoveryAndKeepAbsenceUnknown(t *testi
 	if labels.Needed["unused"] != nil || labels.Later["unused"] != nil {
 		t.Fatal("absence became an automatic negative label")
 	}
-	messages[3] = compactionFixtureMessage(t, "body", "tool", "", &api.ToolResult{Tool: "recall", ToolCallID: "recover", Content: `{"resolution":"no_match_in_scope","history":{"entries":[{"id":"old","content":"old bytes"}]}}`}, nil)
+	messages[3] = compactionFixtureMessage(t, "body", "tool", "", &api.ToolResult{Tool: "recall", ToolCallID: "recover", Content: `{"resolution":"no_match_in_scope","history":{"entries":[{"message_id":"old","content":"old bytes"}]}}`}, nil)
 	if labels = canonicalRecoveryLabels("session", messages, 1, len(messages), candidates); labels.Needed["old"] != nil {
 		t.Fatal("failed recovery established need")
 	}
