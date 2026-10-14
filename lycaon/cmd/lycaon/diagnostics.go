@@ -141,10 +141,22 @@ func probeGitRemote(ctx context.Context, remote string, out io.Writer) error {
 	return err
 }
 
-// describeProxyPlan names how Git receives the proxy policy, with the facts
-// that kept it per remote. Proxy credentials never appear.
+// describeProxyPlan names how Git receives the proxy policy, the variables
+// it sets, and the facts that kept it per remote. Proxy credentials never appear.
 func describeProxyPlan(plan gitexec.ProxyPlan) string {
 	line := "proxy_plan=" + string(plan.Mode)
+	for _, variable := range plan.Environment() {
+		name, value, _ := strings.Cut(variable, "=")
+		if name != strings.ToLower(name) || name == "all_proxy" {
+			continue
+		}
+		if name != "no_proxy" && value != "" {
+			if proxy, err := url.Parse(value); err == nil {
+				value = systemproxy.Redact(proxy)
+			}
+		}
+		line += fmt.Sprintf(" %s=%q", name, value)
+	}
 	for _, reason := range plan.Reasons {
 		line += fmt.Sprintf(" %s=%q", reason.Kind, reason.Detail)
 	}

@@ -165,7 +165,18 @@ func TestProbeGitRemoteRunsThroughTheBundledToolchain(t *testing.T) {
 
 func TestDescribeProxyPlanNamesTheModeAndItsReasons(t *testing.T) {
 	if got := describeProxyPlan(gitexec.ProxyPlan{Mode: gitexec.ProxyPlanPerHost}); got != "proxy_plan=per-host" {
-		t.Fatalf("per-host plan = %q", got)
+		t.Fatalf("empty plan = %q", got)
+	}
+	for _, name := range []string{"NO_PROXY", "no_proxy", "REQUEST_METHOD"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("HTTP_PROXY", "http://alice:secret@proxy.example:3128")
+	t.Setenv("HTTPS_PROXY", "http://alice:secret@proxy.example:3128")
+	explicit, err := gitexec.NetworkProxyPlan("https://example.com/r.git")
+	testutil.FailErr(t, "plan", err)
+	want := `proxy_plan=per-host http_proxy="http://redacted@proxy.example:3128" https_proxy="http://redacted@proxy.example:3128" no_proxy="localhost,127.0.0.0/8,::1"`
+	if got := describeProxyPlan(explicit); got != want {
+		t.Fatalf("explicit plan = %q, want %q", got, want)
 	}
 	plan := gitexec.ProxyPlan{Mode: gitexec.ProxyPlanPerRemote, Reasons: []gitexec.ProxyPlanReason{
 		{Kind: gitexec.ProxyReasonException, Detail: "build-*.example"},
