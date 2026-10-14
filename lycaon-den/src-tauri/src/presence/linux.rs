@@ -83,19 +83,15 @@ pub(super) fn authorization_flags(reply: &glib::Variant) -> Option<(bool, bool)>
     ))
 }
 
-pub(super) fn confirm_with_polkit(identifier: &str, prompt: &str) -> Result<(), PolkitRefusal> {
+pub(super) fn confirm_with_polkit(identifier: &str) -> Result<(), PolkitRefusal> {
     let action = action_id(identifier);
     let context = glib::MainContext::new();
     context
-        .with_thread_default(|| confirm_on(&context, &action, prompt))
+        .with_thread_default(|| confirm_on(&context, &action))
         .map_err(|_| PolkitRefusal::Failed("the bus context is in use".into()))?
 }
 
-fn confirm_on(
-    context: &glib::MainContext,
-    action: &str,
-    prompt: &str,
-) -> Result<(), PolkitRefusal> {
+fn confirm_on(context: &glib::MainContext, action: &str) -> Result<(), PolkitRefusal> {
     let bus = linux_bus::connect(context, linux_bus::SYSTEM_BUS_ADDRESS, BUS_CONNECT_TIMEOUT)
         .map_err(|error| {
             PolkitRefusal::Unavailable(format!("The system bus is unavailable: {error}"))
@@ -103,16 +99,7 @@ fn confirm_on(
     let owner = authority_owner(context, &bus, action)?;
     let subject = own_subject()?;
     let cancellation_id = uuid::Uuid::new_v4().to_string();
-    let mut details = HashMap::new();
-    details.insert("reason".to_string(), prompt.to_string());
-    let parameters = (
-        ("unix-process".to_string(), subject),
-        action.to_string(),
-        details,
-        ALLOW_USER_INTERACTION,
-        cancellation_id.clone(),
-    )
-        .to_variant();
+    let parameters = check_parameters(subject, action, &cancellation_id);
     let reply = linux_bus::call(
         context,
         &bus,
@@ -149,6 +136,24 @@ fn confirm_on(
             "The authority refused the check: {error}"
         ))),
     }
+}
+
+/// `CheckAuthorization` arguments. polkit refuses details from a caller that
+/// is neither root nor the action's owner, so the agent shows the packaged
+/// action's own message.
+fn check_parameters(
+    subject: HashMap<String, glib::Variant>,
+    action: &str,
+    cancellation_id: &str,
+) -> glib::Variant {
+    (
+        ("unix-process".to_string(), subject),
+        action.to_string(),
+        HashMap::<String, String>::new(),
+        ALLOW_USER_INTERACTION,
+        cancellation_id.to_string(),
+    )
+        .to_variant()
 }
 
 /// Resolves the authority's unique connection name, confirms the system owns
@@ -420,6 +425,19 @@ mod tests {
         let policy_path = root.join(format!("../../packaging/linux/polkit/{identifier}.policy"));
         let policy = std::fs::read_to_string(&policy_path).unwrap();
         assert!(policy.contains(&format!(r#"<action id="{}">"#, action_id(identifier))));
+        // The shell passes no details, so nothing in the message can be substituted.
+        assert!(!policy.contains("$("));
+    }
+
+    #[test]
+    fn the_check_carries_no_details() {
+        let mut subject = HashMap::new();
+        subject.insert("pid".to_string(), 42u32.to_variant());
+        let parameters = check_parameters(subject, "dev.paintedwolf.code.confirm-presence", "c1");
+        assert!(parameters.is_type(glib::VariantTy::new("((sa{sv})sa{ss}us)").unwrap()));
+        assert_eq!(parameters.child_value(2).n_children(), 0);
+        assert_eq!(parameters.child_value(3).get::<u32>(), Some(ALLOW_USER_INTERACTION));
+        assert_eq!(parameters.child_value(4).str(), Some("c1"));
     }
 
     #[test]

@@ -8,7 +8,7 @@
 
   <action id="dev.paintedwolf.code.confirm-presence">
     <description>Confirm that you are at this computer</description>
-    <message>Painted Wolf Code needs to confirm it is you: $(reason)</message>
+    <message>Painted Wolf Code needs to confirm it is you</message>
     <defaults>
       <allow_any>auth_self</allow_any>
       <allow_inactive>auth_self</allow_inactive>

@@ -540,7 +540,7 @@ fn verify_user_presence(
     prompt: &str,
 ) -> Result<&'static str, PresenceCommandError> {
     let identifier = window.app_handle().config().identifier.clone();
-    match linux::confirm_with_polkit(&identifier, prompt) {
+    match linux::confirm_with_polkit(&identifier) {
         Ok(()) => Ok(linux::AUTHENTICATOR_POLKIT),
         Err(linux::PolkitRefusal::Denied(message)) => Err(PresenceCommandError::denied(message)),
         Err(linux::PolkitRefusal::Failed(message)) => Err(PresenceCommandError::failed(message)),
