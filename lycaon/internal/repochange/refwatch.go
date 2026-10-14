@@ -24,6 +24,11 @@ type refFileState struct {
 
 // refObserver tracks repository metadata independently of watch coverage.
 type refObserver struct {
+	// root names every registration; physicalRoot is the resolved alias that
+	// repository discovery reports.
+	root         string
+	physicalRoot string
+
 	mu     sync.Mutex
 	dirs   map[string]struct{}
 	states map[string]refFileState
@@ -32,8 +37,8 @@ type refObserver struct {
 }
 
 // Roots without a repository re-arm when a .git entry appears.
-func (w *refObserver) arm(root string, register func(string) addOutcome) {
-	repo, ok := gitrepo.Discover(root)
+func (w *refObserver) arm(register func(string) addOutcome) {
+	repo, ok := w.discover()
 	if !ok || repo.GitDir == "" || repo.CommonDir == "" {
 		return
 	}
@@ -68,6 +73,32 @@ func (w *refObserver) arm(root string, register func(string) addOutcome) {
 	w.seedRefState(repo)
 }
 
+// discover reports the repository in the root's namespace, so ref
+// registrations carry the names the root's own events use.
+func (w *refObserver) discover() (gitrepo.Repo, bool) {
+	repo, ok := gitrepo.Discover(w.root)
+	if !ok {
+		return repo, false
+	}
+	repo.Root = w.logical(repo.Root)
+	repo.GitDir = w.logical(repo.GitDir)
+	repo.CommonDir = w.logical(repo.CommonDir)
+	return repo, true
+}
+
+// Paths outside the physical root, such as a linked worktree's common
+// directory, have no logical alias and keep their resolved form.
+func (w *refObserver) logical(path string) string {
+	if path == "" {
+		return path
+	}
+	rel, err := filepath.Rel(w.physicalRoot, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+		return path
+	}
+	return filepath.Join(w.root, rel)
+}
+
 func (w *refObserver) contains(name string) bool {
 	dir := filepath.Dir(name)
 	w.mu.Lock()
@@ -89,11 +120,11 @@ func (w *refObserver) contains(name string) bool {
 }
 
 // Index changes and committed-history movement emit distinct events.
-func (w *refObserver) observe(ctx context.Context, root string, ev fsnotify.Event, register func(string) addOutcome) {
+func (w *refObserver) observe(ctx context.Context, ev fsnotify.Event, register func(string) addOutcome) {
 	if filepath.Base(ev.Name) == "index" {
-		if repo, ok := gitrepo.Discover(root); ok && ev.Name == filepath.Join(repo.GitDir, "index") {
+		if repo, ok := w.discover(); ok && ev.Name == filepath.Join(repo.GitDir, "index") {
 			if w.refChanged(ev.Name) {
-				Notify(ctx, Event{ProjectDir: root, Kind: IndexChanged, Source: SourceWatcher})
+				Notify(ctx, Event{ProjectDir: w.root, Kind: IndexChanged, Source: SourceWatcher})
 			}
 			return
 		}
@@ -120,7 +151,7 @@ func (w *refObserver) observe(ctx context.Context, root string, ev fsnotify.Even
 	if !w.refChanged(ev.Name) {
 		return
 	}
-	w.schedule(ctx, root)
+	w.schedule(ctx)
 }
 
 func (w *refObserver) seedRefState(repo gitrepo.Repo) {
@@ -171,7 +202,7 @@ func readRefFileState(path string) refFileState {
 	return refFileState{digest: sha256.Sum256(raw), exists: true}
 }
 
-func (w *refObserver) schedule(ctx context.Context, root string) {
+func (w *refObserver) schedule(ctx context.Context) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.closed {
@@ -189,7 +220,7 @@ func (w *refObserver) schedule(ctx context.Context, root string) {
 		if closed {
 			return
 		}
-		Notify(ctx, Event{ProjectDir: root, Kind: HeadMoved, Source: SourceWatcher})
+		Notify(ctx, Event{ProjectDir: w.root, Kind: HeadMoved, Source: SourceWatcher})
 	})
 }
 
