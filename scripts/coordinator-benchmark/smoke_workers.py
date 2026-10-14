@@ -26,7 +26,7 @@ def respond(application, session, calls):
         if 'request_tools' not in request['tools']:
             raise RuntimeError('coordinator surface does not offer: ' + ','.join(missing))
         load = str(uuid.uuid4())
-        application.request('/harness/llm/respond', {'id': request['id'], 'tool_calls': [{'id': load, 'name': 'request_tools', 'args': {'requests': missing}}]})
+        application.request('/harness/llm/respond', {'id': request['id'], 'tool_calls': [{'id': load, 'name': 'request_tools', 'args': {'need': ', '.join(missing)}}]})
         terminal(application, session, load)
         request = application.wait_for(lambda: pending(application, session), 'loaded coordinator tools', session)
         if any(name not in request['tools'] for name in tools):

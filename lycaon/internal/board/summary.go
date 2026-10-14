@@ -13,19 +13,12 @@ func BuildBoardSummary(snap api.BoardSnapshot) string {
 	tasks := packboard.WorkerTasksFromSnapshot(snap)
 	promotePaths := packboard.PromotePathsFromSnapshot(snap)
 
-	var inFlight, complete, failed int
+	outcomes := packboard.CountWorkerOutcomes(tasks)
+	inFlight := len(tasks) - outcomes.Total()
 	var pendingMerge, merged, rebasing, orphaned, rejected int
 	var conflicts int
 
 	for _, t := range tasks {
-		switch t.Status {
-		case api.WorkerStatusComplete:
-			complete++
-		case api.WorkerStatusFailed, api.WorkerStatusCanceled:
-			failed++
-		default:
-			inFlight++
-		}
 		switch t.MergeStatus {
 		case api.WorkerMergeStatusPending, api.WorkerMergeStatusApplying:
 			pendingMerge++
@@ -54,19 +47,12 @@ func BuildBoardSummary(snap api.BoardSnapshot) string {
 		parts = append(parts, fmt.Sprintf("%d worker(s) in flight", inFlight))
 	case len(tasks) == 0:
 		parts = append(parts, "No workers")
-	case failed > 0 && complete == 0:
-		parts = append(parts, fmt.Sprintf("%d worker(s) failed", failed))
-	case complete == len(tasks):
+	case outcomes["complete"] == len(tasks):
 		parts = append(parts, "All workers complete")
 	default:
-		parts = append(parts, "Workers finished")
+		parts = append(parts, "Workers returned")
 	}
-	if complete > 0 && inFlight == 0 {
-		parts = append(parts, fmt.Sprintf("%d complete", complete))
-	}
-	if failed > 0 && (inFlight > 0 || complete > 0) {
-		parts = append(parts, fmt.Sprintf("%d failed", failed))
-	}
+	parts = append(parts, outcomes.Labels()...)
 	if merged > 0 {
 		parts = append(parts, fmt.Sprintf("%d overlay(s) merged", merged))
 	}

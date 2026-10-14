@@ -12,6 +12,9 @@ import (
 // DiscoveryPageSize bounds each catalog response independently of catalog size.
 const DiscoveryPageSize = 20
 
+// DiscoveryPageBytes leaves room for its refusal and invocation envelope.
+const DiscoveryPageBytes = 16 << 10
+
 // DiscoveryEntry describes an available identifier without loading it.
 type DiscoveryEntry struct {
 	Name        string `json:"name"`
@@ -63,13 +66,27 @@ func Discover(scope, need, cursor, status string, failure RankingFailure, entrie
 		offset = next.Offset
 	}
 	end := min(offset+DiscoveryPageSize, len(entries))
-	out := &Discovery{Status: status, Failure: failure, Entries: entries[offset:end], Total: len(entries), Instruction: "Select a relevant entry by calling this tool with its exact name as need. To see more entries, pass next_need unchanged as need. To restart discovery, repeat the original description."}
-	if end < len(entries) {
-		raw, err := json.Marshal(discoveryCursor{Need: need, Digest: digest, Offset: end})
+	out := &Discovery{Status: status, Failure: failure, Total: len(entries), Instruction: "Select a relevant entry by calling this tool with its exact name as need. To see more entries, pass next_need unchanged as need. To restart discovery, repeat the original description."}
+	for {
+		out.Entries, out.NextNeed = entries[offset:end], ""
+		if end < len(entries) {
+			raw, err := json.Marshal(discoveryCursor{Need: need, Digest: digest, Offset: end})
+			if err != nil {
+				return nil, err
+			}
+			out.NextNeed = "discovery:" + base64.RawURLEncoding.EncodeToString(raw)
+		}
+		raw, err := json.Marshal(out)
 		if err != nil {
 			return nil, err
 		}
-		out.NextNeed = "discovery:" + base64.RawURLEncoding.EncodeToString(raw)
+		if len(raw) <= DiscoveryPageBytes {
+			break
+		}
+		if end <= offset+1 {
+			return nil, fmt.Errorf("discovery page cannot fit its entry and continuation within %d bytes", DiscoveryPageBytes)
+		}
+		end--
 	}
 	return out, nil
 }

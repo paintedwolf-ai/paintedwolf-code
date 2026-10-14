@@ -306,7 +306,7 @@ func (l *turnInbox) takeUserSend(
 	}
 	st.lastAssistantID = ""
 	st.lastAssistantContent = ""
-	st.lastOutputID = ""
+	st.output.id = ""
 	st.proseFinish = false
 	st.clearBlockedStreak()
 	return true, nil

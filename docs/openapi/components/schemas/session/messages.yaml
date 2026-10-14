@@ -381,6 +381,30 @@ components:
         after_cursor:
           type: string
           description: Opaque pagination cursor to fetch the next (newer) window of messages. Omitted when no newer messages exist.
+        ord_bounds:
+          x-go-pointer: true
+          $ref: "#/components/schemas/TranscriptOrdBounds"
+          description: >-
+            Ord span of the whole transcript this window belongs to (the chat,
+            or one worker run when worker_id was given), read in the same
+            transaction as the rows. Den sizes unloaded history from it so the
+            scroll range covers the whole conversation before every page is
+            resident. Omitted while the transcript has no rows.
+    TranscriptOrdBounds:
+      x-go-generate: true
+      type: object
+      required:
+      - first_ord
+      - last_ord
+      additionalProperties: false
+      description: Oldest and newest message ordinals a transcript holds at read time
+      properties:
+        first_ord:
+          type: integer
+          format: int64
+        last_ord:
+          type: integer
+          format: int64
     MessageVisibility:
       type: string
       enum:

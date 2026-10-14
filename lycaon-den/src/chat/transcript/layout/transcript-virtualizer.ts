@@ -353,6 +353,8 @@ export type CreateTranscriptVirtualizerOptions<
   estimateBasis?: () => unknown;
   /** Placement changes refresh unmeasured estimates without discarding measured interiors. */
   placementBasis?: () => unknown;
+  /** Content revision per row; unmounted rows re-estimate when their content changes. */
+  contentRevision?: (item: T) => string;
   originPx?: () => number;
   minimumBufferRows?: number;
   bufferViewports?: number;
@@ -634,18 +636,36 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
    * their measurement until the remeasure lands, so the reader moves once, by the real delta,
    * instead of by the estimate error and back.
    */
-  const reestimateUnmountedRows = () => {
+  const reestimateUnmountedRows = (only?: ReadonlySet<string>) => {
     const mounted = measurements.mountedKeys();
     const { count, getItemKey } = virtualizer.options;
     const sizes: RowSize[] = [];
     for (let index = 0; index < count; index += 1) {
       const key = getItemKey(index);
       if (mounted.has(String(key))) continue;
+      if (only && !only.has(String(key))) continue;
       const estimate = estimatedSize(index);
       if (virtualizer.itemSizeCache.get(key) !== estimate) sizes.push({ index, size: estimate });
     }
     virtualizer.resizeItems(sizes);
   };
+  // A row whose content changed while unmounted is estimated afresh instead of keeping its old size.
+  let revisionsByKey = new Map<string, string>();
+  const collectRevisionChanges = (): ReadonlySet<string> | undefined => {
+    const revision = opts.contentRevision;
+    if (!revision) return undefined;
+    const next = new Map<string, string>();
+    const changed = new Set<string>();
+    for (const item of opts.items()) {
+      const value = revision(item);
+      next.set(item.key, value);
+      const previous = revisionsByKey.get(item.key);
+      if (previous !== undefined && previous !== value) changed.add(item.key);
+    }
+    revisionsByKey = next;
+    return changed;
+  };
+  untrack(collectRevisionChanges);
   const carryRowChanges = (anchor: ReadingAnchor | null, countBefore: number, originBefore: number) => {
     if (!anchor) return;
     // Carry changes within the transcript; outer chrome moves the origin separately.
@@ -676,9 +696,11 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
     const basis = untrack(() => opts.estimateBasis?.());
     const geometryChanged = basis !== measuredBasis;
     measuredBasis = basis;
+    const changedRevisions = untrack(collectRevisionChanges);
     setOptions(next);
     carryRowChanges(anchor, countBefore, originBefore);
     if (geometryChanged) reestimateUnmountedRows();
+    else if (changedRevisions && changedRevisions.size > 0) reestimateUnmountedRows(changedRevisions);
   };
   return virtualizer;
 }

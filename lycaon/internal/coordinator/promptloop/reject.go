@@ -54,8 +54,9 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 	assistantMessageID string,
 	st *promptLoopTurnState,
 	invokeAllowed bool,
+	outputRejection *guidance.Refusal,
 ) (hist []api.Message, reject *guidance.Refusal, blocked bool, err error) {
-	if l.Closeout.Deps.BeforeFinishNoToolTurn == nil {
+	if l.Closeout.Deps.BeforeFinishNoToolTurn == nil && outputRejection == nil {
 		return history, nil, false, nil
 	}
 	workersIdle := true
@@ -63,7 +64,14 @@ func (l *toolInvocations) tryRejectNoToolTurn(
 		state := l.Context.Deps.ImplementSessionState(ctx, sess)
 		workersIdle = state.WorkersInFlight == 0
 	}
-	reject, block := l.Closeout.Deps.BeforeFinishNoToolTurn(ctx, sess, history, userPrompt, lastAssistantContent, surfaceID, workersIdle, turnTools, invokeAllowed)
+	if invokeAllowed {
+		reject = outputRejection
+	}
+
+	block := reject != nil
+	if !block && l.Closeout.Deps.BeforeFinishNoToolTurn != nil {
+		reject, block = l.Closeout.Deps.BeforeFinishNoToolTurn(ctx, sess, history, userPrompt, lastAssistantContent, surfaceID, workersIdle, turnTools, invokeAllowed)
+	}
 	if !block {
 		return history, nil, false, nil
 	}
@@ -97,9 +105,10 @@ func (l *toolInvocations) rejectBlockedAssistantTurn(
 		return nil, err
 	}
 	return l.Nudges.appendHostNudge(ctx, sessionID, history, HostNudge{
+		DraftID:  draftSlotID,
 		Content:  reject.Body,
 		Feedback: &api.ToolFeedback{Code: reject.Code(), Details: reject.Facts.FeedbackFor(reject.Code()).Details},
-	}, "", st)
+	}, api.MessageKindCoordinatorGuidance, st)
 }
 
 func (l *toolInvocations) retractRejectedAssistantTurn(
@@ -177,6 +186,8 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 	if code == "TOOL_NOT_OFFERED" {
 		loadable := toolCtx.Turn.TurnToolPlan.Deferred(tc.Name) && tools.ToolOffered(ctx, "request_tools")
 		data["tool_loadable"] = loadable
+		data["offered_tools"] = append([]string(nil), toolCtx.Turn.TurnOfferedToolNames...)
+		data["tool_discovery_available"] = tools.ToolOffered(ctx, "request_tools") && len(toolCtx.Turn.TurnToolPlan.DeferredNames()) > 0
 		if loadable {
 			data["replacement_calls"] = []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": tc.Name}}}
 		}

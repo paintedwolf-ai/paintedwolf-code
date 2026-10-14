@@ -31,20 +31,30 @@ func TestAssemblePromptHistory_idempotent(t *testing.T) {
 	}
 }
 
-func TestAssemblePromptHistory_overlayPromoteSurfaceDiet(t *testing.T) {
-	msgs := []api.Message{
-		{Role: api.MessageRoleUser, Content: "go"},
-		{Role: api.MessageRoleTool, Content: "product read body", ToolResult: &api.ToolResult{Tool: "read"}},
+func TestAssemblePromptHistoryOverlayReviewKeepsSourceEvidence(t *testing.T) {
+	messages := []api.Message{{ID: "user", Role: api.MessageRoleUser, Content: "Finish the returned worker change."}}
+	for _, call := range []api.ToolCall{
+		{ID: "read-before", Name: "read", Args: map[string]any{"path": "README.md"}},
+		{ID: "preview", Name: "preview_overlay", Args: map[string]any{"overlay_id": "worker"}},
+		{ID: "read-after", Name: "read", Args: map[string]any{"path": "test_status.py"}},
+	} {
+		messages = append(messages,
+			api.Message{ID: "assistant-" + call.ID, Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{call}},
+			api.Message{ID: call.ID, Role: api.MessageRoleTool, Content: "evidence-" + call.ID,
+				ToolResult: &api.ToolResult{Tool: call.Name, ToolCallID: call.ID, Content: "evidence-" + call.ID}},
+		)
 	}
-	deps := promptassembly.Config{
-		SurfaceID:        surface.SurfaceImplementOverlayPromote,
-		CompactionConfig: compaction.DefaultCompactionConfig(),
+	cfg := compaction.DefaultCompactionConfig()
+	cfg.Enabled, cfg.HardCeilingTokens = true, 8000
+	out, _ := promptassembly.Assemble(nil, messages, promptassembly.Config{
+		SurfaceID: surface.SurfaceImplementOverlayPromote, CompactionConfig: cfg,
+	})
+	if len(out) != len(messages) {
+		t.Fatalf("small review exchange lost rows: got %d want %d", len(out), len(messages))
 	}
-	out, report := promptassembly.Assemble(nil, msgs, deps)
-	if len(out) == len(msgs) && out[1].Content == msgs[1].Content {
-		// When the diet keeps the product read, the surface strategy is still recorded.
-		if !containsStrategy(report.Strategies, "surface:overlay_promote") {
-			t.Fatalf("strategies=%v", report.Strategies)
+	for i, msg := range out {
+		if msg.Content != messages[i].Content {
+			t.Fatalf("review evidence %s rewritten: %q", msg.ID, msg.Content)
 		}
 	}
 }
@@ -87,4 +97,24 @@ func containsStrategy(strategies []string, want string) bool {
 		}
 	}
 	return false
+}
+
+func TestAssemblePromptHistoryPreservesRecoveryOrderThroughContextRoundtrip(t *testing.T) {
+	original := []api.Message{
+		{ID: "draft", Role: api.MessageRoleAssistant, Content: "done", DraftStatus: api.DraftStatusCommitted},
+		{ID: "recovery", Role: api.MessageRoleUser, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem,
+			Visibility: api.MessageVisibilityInternal, Kind: api.MessageKindCoordinatorGuidance,
+			HostSignalID: api.DraftRecoverySignal("draft", "guidance:RETRY"), Content: "take the pending action"},
+	}
+	view := compaction.ContextMessagesToAPI(compaction.ContextMessagesFromAPI(original), original)
+	cfg := compaction.DefaultCompactionConfig()
+	cfg.Enabled = true
+	cfg.HardCeilingTokens = 8000
+	got, _ := promptassembly.Assemble(nil, view, promptassembly.Config{CompactionConfig: cfg})
+	if len(got) != 2 || got[0].ID != "recovery" || got[1].ID != "draft" {
+		t.Fatalf("recovery order lost in fitted history: %+v", got)
+	}
+	if got[0].HostSignalID != original[1].HostSignalID {
+		t.Fatal("context roundtrip discarded recovery identity")
+	}
 }
