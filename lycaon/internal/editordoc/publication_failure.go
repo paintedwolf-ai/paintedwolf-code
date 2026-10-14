@@ -14,7 +14,8 @@ type publicationSettlement struct {
 	ledger Ledger
 }
 
-func (s *Service) settlePublicationFailure(ctx context.Context, d *Document, m *Mutation, status string, cause error) error {
+func (c savePublisher) settlePublicationFailure(ctx context.Context, d *Document, m *Mutation, status string, cause error) error {
+	s := c.s
 	changed, err := (publicationSettlement{store: s.store, ledger: s.ledger}).settle(ctx, d, m, status, cause)
 	if err != nil {
 		return err
