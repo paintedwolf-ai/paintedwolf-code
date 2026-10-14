@@ -56,6 +56,14 @@ describe("transcript row presentation", () => {
     open.add(disclosure.tool("tool-1"));
     expect(transcriptRowPresentation(item, isOpen)).toBe(JSON.stringify([disclosure.tool("tool-1")]));
     expect(transcriptRowPresentationEstimate(item, isOpen)).toBe(420);
+
+    const group: Extract<TranscriptItem, { kind: "worker_group" }> = {
+      kind: "worker_group",
+      key: "wg-1",
+      parts: [item.part],
+    };
+    expect(transcriptRowPresentationEstimate(group, () => false)).toBe(83);
+    expect(transcriptRowPresentationEstimate(group, isOpen)).toBe(443);
   });
 
   it("ignores a remembered child while its activity span is collapsed", () => {
