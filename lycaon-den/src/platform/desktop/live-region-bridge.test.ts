@@ -146,6 +146,23 @@ describe("installLiveRegionBridge", () => {
     expect(announce).toHaveBeenLastCalledWith("One Muted Changed", "assertive");
   });
 
+  it("ignores changes outside regions, drops a region whose role goes away, and skips hidden or comment content", async () => {
+    const { announce, get } = mount(`
+      <p id="plain">Plain</p>
+      <p role="status" id="former">Was a status</p>
+      <div role="status" id="atomic">Saved<!-- note --><span hidden>secret</span></div>`);
+    get("#plain").textContent = "Changed";
+    get("#former").removeAttribute("role");
+    await settle();
+    get("#former").textContent = "No longer live";
+    await settle();
+    expect(announce).not.toHaveBeenCalled();
+
+    get("#atomic").append(Object.assign(document.createElement("b"), { textContent: "now" }));
+    await settle();
+    expect(announce.mock.calls).toEqual([["Saved now", "polite"]]);
+  });
+
   it("stops forwarding once disposed", async () => {
     const root = document.createElement("div");
     root.innerHTML = '<p role="status">A</p>';
