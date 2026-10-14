@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -126,5 +128,29 @@ func TestPoolNewPageUnderBrowserConfinement(t *testing.T) {
 			t.Fatalf("pool NewPage #%d: %v", i, err)
 		}
 		_ = page.Close()
+	}
+}
+
+// A path the read floor denies stays unreadable to the confined browser.
+func TestConfinedBrowserCannotReadDeniedFiles(t *testing.T) {
+	requireBrowserBoundary(t)
+	confine.TestingSetAutoConfine(t)
+	denied := t.TempDir()
+	secret := filepath.Join(denied, "secret.html")
+	testutil.FailErr(t, "write secret", os.WriteFile(secret, []byte(`<!doctype html><title>SECRET-CONTENT</title>`), 0o600))
+	t.Setenv("LYCAON_SANDBOX_DENY_READ", denied)
+
+	browsertest.SkipIfNoBrowser(t)
+	b, cleanup, err := browser.LaunchHeadless(context.Background(), browser.LaunchOptions{})
+	testutil.FailErr(t, "launch confined headless", err)
+	defer cleanup()
+	page, err := b.Page(proto.TargetCreateTarget{URL: "about:blank"})
+	testutil.FailErr(t, "NewPage", err)
+	defer func() { _ = page.Close() }()
+	_ = page.Navigate("file://" + secret)
+	_ = page.WaitLoad()
+	html, _ := page.HTML()
+	if strings.Contains(html, "SECRET-CONTENT") {
+		t.Fatalf("confined browser read a denied file: %s", html)
 	}
 }
