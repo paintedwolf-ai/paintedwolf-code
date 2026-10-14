@@ -69,7 +69,8 @@ export function ThemeIcon(props: Props) {
         props.class ? `den-theme-icon ${props.class}` : "den-theme-icon"
       }
       style={{ "--den-icon-slot-weight": String(frame().weight) }}
-      // An image role gives WebKitGTK a text position for the icon; without one, a screen reader's text query on a wrapper holding only an icon button aborts its web process.
+      // An image role gives WebKitGTK a text position for the icon; without one, a screen
+      // reader's text query on a wrapper holding only an icon button aborts its web process.
       role="img"
       aria-hidden="true"
       data-testid={props["data-testid"]}

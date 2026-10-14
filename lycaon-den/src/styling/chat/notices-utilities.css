@@ -138,7 +138,8 @@ display: inline-flex;
   }
 }
 
-/* Out of flow and invisible, never display: none: WebKitGTK aborts a screen reader's text query on a list item ending in content without a box. */
+/* Out of flow and invisible, never display: none: WebKitGTK aborts a screen reader's
+   text query on a list item ending in content without a box. */
 @utility den-notice-toggle-glyph {
   position: absolute;
   visibility: hidden;
