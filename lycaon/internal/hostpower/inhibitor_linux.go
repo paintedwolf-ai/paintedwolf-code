@@ -34,7 +34,7 @@ type busConnector func(context.Context) (*dbus.Conn, error)
 // its session-level inhibition protocols.
 var linuxProviders = []provider{
 	login1Provider{connect: linuxbus.ConnectSystem},
-	portalProvider{connect: linuxbus.ConnectSession, appID: version.BundleID, scoped: inApplicationUnit},
+	portalProvider{connect: linuxbus.ConnectSession, appID: version.BundleID, unitAppID: ownUnitAppID},
 	powerManagementProvider{connect: linuxbus.ConnectSession},
 }
 

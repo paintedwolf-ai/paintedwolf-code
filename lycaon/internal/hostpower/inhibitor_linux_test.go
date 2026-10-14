@@ -184,7 +184,7 @@ func TestMissingServicesAdvertiseNoProviderAndAcquireNothing(t *testing.T) {
 	path := fixtureBus(t)
 	providers := []provider{
 		login1Provider{connect: connectTo(path)},
-		portalProvider{connect: connectTo(path), scoped: alwaysScoped},
+		portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: inOwnUnit},
 		powerManagementProvider{connect: connectTo(path)},
 	}
 	var unavailable *UnavailableError
@@ -209,7 +209,7 @@ func TestMissingServicesAdvertiseNoProviderAndAcquireNothing(t *testing.T) {
 		t.Fatalf("missing login manager lease=%v error=%v", held, err)
 	}
 	unreachable := connectTo(filepath.Join(t.TempDir(), "missing"))
-	for _, candidate := range []provider{login1Provider{connect: unreachable}, portalProvider{connect: unreachable}, powerManagementProvider{connect: unreachable}} {
+	for _, candidate := range []provider{login1Provider{connect: unreachable}, portalProvider{connect: unreachable, appID: testAppID}, powerManagementProvider{connect: unreachable}} {
 		if reason := reasonFor(candidate, candidate.Check(t.Context())); reason.Code != ReasonBusUnreachable {
 			t.Fatalf("%s without a bus = %+v", candidate.Name(), reason)
 		}
@@ -282,11 +282,26 @@ func (f *fixturePortal) Close() *dbus.Error {
 
 func servePortal(t *testing.T, path string, deny bool) *fixturePortal {
 	t.Helper()
+	return servePortalWith(t, path, deny, nil)
+}
+
+// servePortalWith serves the portal with an introspection document naming the
+// interfaces it implements, as real portals do; a nil registry is an older
+// portal without the host registry.
+func servePortalWith(t *testing.T, path string, deny bool, registry *fixtureRegistry) *fixturePortal {
+	t.Helper()
 	server, err := linuxbus.Connect(t.Context(), path)
 	testutil.FailErr(t, "connect portal fixture", err)
 	t.Cleanup(func() { _ = server.Close() })
 	fixture := &fixturePortal{server: server, deny: deny, closed: make(chan struct{})}
 	testutil.FailErr(t, "export portal fixture", server.Export(fixture, portalPath, portalInhibit))
+	interfaces := []introspect.Interface{{Name: portalInhibit}}
+	if registry != nil {
+		testutil.FailErr(t, "export registry fixture", server.Export(registry, portalPath, portalRegistry))
+		interfaces = append(interfaces, introspect.Interface{Name: portalRegistry})
+	}
+	node := &introspect.Node{Name: string(portalPath), Interfaces: append(interfaces, introspect.IntrospectData)}
+	testutil.FailErr(t, "export introspection", server.Export(introspect.NewIntrospectable(node), portalPath, "org.freedesktop.DBus.Introspectable"))
 	ownName(t, server, portalName)
 	return fixture
 }
@@ -294,7 +309,7 @@ func servePortal(t *testing.T, path string, deny bool) *fixturePortal {
 func TestPortalInhibitorRequestsSuspendAndIdleAndClosesOnRelease(t *testing.T) {
 	path := fixtureBus(t)
 	fixture := servePortal(t, path, false)
-	subject := portalProvider{connect: connectTo(path), scoped: alwaysScoped}
+	subject := portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: inOwnUnit}
 	if err := subject.Check(t.Context()); err != nil {
 		t.Fatalf("served portal was not advertised: %v", err)
 	}
@@ -329,7 +344,7 @@ func TestPortalInhibitorRequestsSuspendAndIdleAndClosesOnRelease(t *testing.T) {
 func TestPortalDenialAndResponseEndTheLease(t *testing.T) {
 	path := fixtureBus(t)
 	fixture := servePortal(t, path, true)
-	subject := portalProvider{connect: connectTo(path), scoped: alwaysScoped}
+	subject := portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: inOwnUnit}
 	if held, err := subject.Acquire(t.Context()); held != nil || err == nil || !strings.Contains(err.Error(), "inhibit denied") {
 		t.Fatalf("denied portal lease=%v error=%v", held, err)
 	}
@@ -356,7 +371,7 @@ func TestPortalDenialAndResponseEndTheLease(t *testing.T) {
 func TestSessionLeaseReportsBusDisconnection(t *testing.T) {
 	daemon := startFixtureBus(t)
 	servePortal(t, daemon.path, false)
-	held, err := portalProvider{connect: connectTo(daemon.path), scoped: alwaysScoped}.Acquire(t.Context())
+	held, err := portalProvider{connect: connectTo(daemon.path), appID: testAppID, unitAppID: inOwnUnit}.Acquire(t.Context())
 	testutil.FailErr(t, "acquire portal inhibitor", err)
 	daemon.stop()
 	select {
@@ -436,20 +451,30 @@ type staticInhibitor struct{ held lease }
 func (staticInhibitor) Availability() error        { return nil }
 func (s *staticInhibitor) Acquire() (lease, error) { return s.held, nil }
 
-func alwaysScoped() bool { return true }
+const testAppID = "dev.paintedwolf.code"
 
-func TestApplicationUnitComesFromTheUnifiedCgroup(t *testing.T) {
-	for cgroup, want := range map[string]bool{
-		"0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-gnome-dev.paintedwolf.code-4242.scope\n": true,
-		"0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-dev.paintedwolf.code@a1b2.service":       true,
-		"0::/user.slice/user-1000.slice/user@1000.service/app.slice/vte-spawn-1234.scope":                        false,
-		"0::/user.slice/user-1000.slice/session-3.scope":                                                         false,
-		"1:name=systemd:/app-gnome-x-1.scope\n0::/user.slice/session-3.scope":                                    false,
-		"12:cpu:/app-legacy-1.scope": false,
-		"":                           false,
+func inOwnUnit() string { return testAppID }
+
+func outsideAnyUnit() string { return "" }
+
+func TestUnitAppIDFollowsTheDesktopEnvironmentUnitConventions(t *testing.T) {
+	const manager = "0::/user.slice/user-1000.slice/user@1000.service/"
+	for cgroup, want := range map[string]string{
+		manager + "app.slice/app-gnome-dev.paintedwolf.code-4242.scope\n":        "dev.paintedwolf.code",
+		manager + "app.slice/app-dev.paintedwolf.code-4242.scope":                "dev.paintedwolf.code",
+		manager + "app.slice/app-dev.paintedwolf.code@a1b2.service":              "dev.paintedwolf.code",
+		manager + "app.slice/app-gnome-dev.paintedwolf.code-4242.scope/subgroup": "dev.paintedwolf.code",
+		manager + "app.slice/app-gnome-org.gnome.Evolution\\x2dalarm-7.scope":    "org.gnome.Evolution-alarm",
+		manager + "app.slice/app-gnome-org.gnome.Evolution\\x2-7.scope":          "",
+		manager + "app.slice/app-gnome-com.visualstudio.code-99.scope":           "com.visualstudio.code",
+		manager + "app.slice/app-org.gnome.Terminal.slice/vte-spawn-1234.scope":  "",
+		"0::/user.slice/user-1000.slice/session-3.scope":                         "",
+		"1:name=systemd:/app-gnome-x-1.scope\n0::/user.slice/session-3.scope":    "",
+		"12:cpu:/app-legacy-1.scope":                                             "",
+		"":                                                                       "",
 	} {
-		if got := applicationUnit(cgroup); got != want {
-			t.Fatalf("applicationUnit(%q) = %t, want %t", cgroup, got, want)
+		if got := unitAppID(userUnit(cgroup)); got != want {
+			t.Fatalf("unit app id of %q = %q, want %q", cgroup, got, want)
 		}
 	}
 }
@@ -470,41 +495,35 @@ func (f *fixtureRegistry) Register(appID string, _ map[string]dbus.Variant) *dbu
 	return nil
 }
 
-// servePortalDocument serves the portal with an introspection document naming
-// the interfaces it implements, as real portals do.
-func servePortalDocument(t *testing.T, path string, registry *fixtureRegistry) *fixturePortal {
-	t.Helper()
-	fixture := servePortal(t, path, false)
-	interfaces := []introspect.Interface{{Name: portalInhibit}}
-	if registry != nil {
-		testutil.FailErr(t, "export registry fixture", fixture.server.Export(registry, portalPath, portalRegistry))
-		interfaces = append(interfaces, introspect.Interface{Name: portalRegistry})
-	}
-	node := &introspect.Node{Name: string(portalPath), Interfaces: append(interfaces, introspect.IntrospectData)}
-	testutil.FailErr(t, "export introspection", fixture.server.Export(introspect.NewIntrospectable(node), portalPath, "org.freedesktop.DBus.Introspectable"))
-	return fixture
-}
-
-func TestPortalRefusesAnUnattributableCallerAsNoApplicationID(t *testing.T) {
+func TestPortalWithoutRegistryAttributesOnlyThroughTheApplicationsOwnUnit(t *testing.T) {
 	path := fixtureBus(t)
-	servePortalDocument(t, path, nil)
-	subject := portalProvider{connect: connectTo(path), appID: "dev.paintedwolf.code", scoped: func() bool { return false }}
-	err := availabilityOf([]provider{subject})
-	var unavailableErr *UnavailableError
-	if !errors.As(err, &unavailableErr) || len(unavailableErr.Reasons) != 1 || unavailableErr.Reasons[0].Code != ReasonNoApplicationID {
-		t.Fatalf("unattributable portal caller = %v", err)
+	servePortal(t, path, false)
+	for name, unit := range map[string]func() string{"outside any unit": outsideAnyUnit, "another application's unit": func() string { return "com.visualstudio.code" }} {
+		subject := portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: unit}
+		err := availabilityOf([]provider{subject})
+		var unavailableErr *UnavailableError
+		if !errors.As(err, &unavailableErr) || len(unavailableErr.Reasons) != 1 || unavailableErr.Reasons[0].Code != ReasonNoApplicationID {
+			t.Fatalf("%s: availability = %v", name, err)
+		}
+		if held, err := subject.Acquire(t.Context()); held != nil || reasonFor(subject, err).Code != ReasonNoApplicationID {
+			t.Fatalf("%s: acquired %v, %v", name, held, err)
+		}
 	}
-	if err := (portalProvider{connect: connectTo(path), scoped: alwaysScoped}).Check(t.Context()); err != nil {
-		t.Fatalf("a caller in an application unit was refused: %v", err)
+	if err := (portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: inOwnUnit}).Check(t.Context()); err != nil {
+		t.Fatalf("a caller in its own application unit was refused: %v", err)
+	}
+	if err := (portalProvider{connect: connectTo(path), unitAppID: inOwnUnit}).Check(t.Context()); reasonFor(portalProvider{}, err).Code != ReasonNoApplicationID {
+		t.Fatalf("a provider without an application id = %v", err)
 	}
 }
 
-func TestPortalRegistersTheApplicationBeforeInhibiting(t *testing.T) {
+func TestPortalRegistersTheApplicationOnEveryConnection(t *testing.T) {
 	path := fixtureBus(t)
 	var events []string
 	registry := &fixtureRegistry{events: &events}
-	fixture := servePortalDocument(t, path, registry)
-	subject := portalProvider{connect: connectTo(path), appID: "dev.paintedwolf.code", scoped: func() bool { return false }}
+	fixture := servePortalWith(t, path, false, registry)
+	// Registration decides even inside another application's unit.
+	subject := portalProvider{connect: connectTo(path), appID: testAppID, unitAppID: func() string { return "com.visualstudio.code" }}
 	testutil.FailErr(t, "check registered portal", subject.Check(t.Context()))
 	held, err := subject.Acquire(t.Context())
 	testutil.FailErr(t, "acquire registered portal inhibitor", err)
@@ -514,7 +533,7 @@ func TestPortalRegistersTheApplicationBeforeInhibiting(t *testing.T) {
 	registry.mu.Lock()
 	registered := slices.Clone(events)
 	registry.mu.Unlock()
-	if !inhibited || !slices.Equal(registered, []string{"register dev.paintedwolf.code"}) {
+	if !inhibited || !slices.Equal(registered, []string{"register " + testAppID, "register " + testAppID}) {
 		t.Fatalf("registration %q, inhibited %t", registered, inhibited)
 	}
 	testutil.FailErr(t, "release", held.Release())
@@ -522,6 +541,11 @@ func TestPortalRegistersTheApplicationBeforeInhibiting(t *testing.T) {
 	registry.mu.Lock()
 	registry.deny = true
 	registry.mu.Unlock()
+	err = availabilityOf([]provider{subject})
+	var unavailableErr *UnavailableError
+	if !errors.As(err, &unavailableErr) || len(unavailableErr.Reasons) != 1 || unavailableErr.Reasons[0].Code != ReasonNoApplicationID {
+		t.Fatalf("refused registration availability = %v", err)
+	}
 	held, err = subject.Acquire(t.Context())
 	if held != nil || reasonFor(subject, err).Code != ReasonNoApplicationID {
 		t.Fatalf("refused registration = %v, %v", held, err)

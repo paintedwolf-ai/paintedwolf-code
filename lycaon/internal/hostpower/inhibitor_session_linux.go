@@ -6,15 +6,11 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/xml"
 	"errors"
 	"fmt"
-	"os"
-	"strings"
 	"sync"
 
 	"github.com/godbus/dbus/v5"
-	"github.com/godbus/dbus/v5/introspect"
 )
 
 const (
@@ -22,7 +18,6 @@ const (
 	portalPath        = dbus.ObjectPath("/org/freedesktop/portal/desktop")
 	portalInhibit     = "org.freedesktop.portal.Inhibit"
 	portalRequest     = "org.freedesktop.portal.Request"
-	portalRegistry    = "org.freedesktop.host.portal.Registry"
 	portalFlagSuspend = uint32(4)
 	portalFlagIdle    = uint32(8)
 
@@ -100,15 +95,13 @@ func (l *sessionLease) Release() error {
 }
 
 // portalProvider inhibits through the desktop portal; the request object the
-// portal returns is closed to release. Portal backends refuse callers they
-// cannot attribute to an application: an unsandboxed process is attributed by
-// its systemd application unit, which a desktop-entry launch provides and the
-// engine inherits, or by registering its application id on the connection.
+// portal returns is closed to release. The portal must attribute the caller to
+// appID before inhibiting (see portalAttribution).
 type portalProvider struct {
 	connect busConnector
 	appID   string
-	// scoped reports whether this process runs in a systemd application unit.
-	scoped func() bool
+	// unitAppID is the application id this process's systemd unit names.
+	unitAppID func() string
 }
 
 func (portalProvider) Name() string { return "portal" }
@@ -122,32 +115,17 @@ func (p portalProvider) Check(ctx context.Context) error {
 	if err := nameOwnedOn(ctx, bus, portalName); err != nil {
 		return err
 	}
-	if p.applicationScoped() {
-		return nil
-	}
-	registry, err := portalHasRegistry(ctx, bus)
-	if err != nil {
-		return unavailable(ReasonQueryFailed, "inspect the desktop portal: %w", err)
-	}
-	if !registry || p.appID == "" {
-		return unavailable(ReasonNoApplicationID, "the desktop portal cannot attribute this process to an application: it runs outside an application unit and the portal offers no host registry")
-	}
-	return nil
+	return p.attribute(ctx, bus)
 }
-
-func (p portalProvider) applicationScoped() bool { return p.scoped != nil && p.scoped() }
 
 func (p portalProvider) Acquire(ctx context.Context) (lease, error) {
 	bus, err := p.connect(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("connect to desktop portal: %w", err)
 	}
-	if !p.applicationScoped() {
-		// Registration must precede every other portal call on the connection.
-		if err := bus.Object(portalName, portalPath).CallWithContext(ctx, portalRegistry+".Register", 0, p.appID, map[string]dbus.Variant{}).Err; err != nil {
-			_ = bus.Close()
-			return nil, unavailable(ReasonNoApplicationID, "register %s with the desktop portal: %w", p.appID, err)
-		}
+	if err := p.attribute(ctx, bus); err != nil {
+		_ = bus.Close()
+		return nil, err
 	}
 	token, err := requestToken()
 	if err != nil {
@@ -217,45 +195,6 @@ func (p powerManagementProvider) Acquire(ctx context.Context) (lease, error) {
 		return nil
 	}
 	return newSessionLease(bus, p.Name(), release, nil, ""), nil
-}
-
-// portalHasRegistry reports whether the portal object implements the host registry.
-func portalHasRegistry(ctx context.Context, bus *dbus.Conn) (bool, error) {
-	var document string
-	if err := bus.Object(portalName, portalPath).CallWithContext(ctx, "org.freedesktop.DBus.Introspectable.Introspect", 0).Store(&document); err != nil {
-		return false, err
-	}
-	var node introspect.Node
-	if err := xml.Unmarshal([]byte(document), &node); err != nil {
-		return false, err
-	}
-	for _, iface := range node.Interfaces {
-		if iface.Name == portalRegistry {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
-// inApplicationUnit reports whether this process's cgroup is a systemd
-// application unit (`app-*.scope` or `app-*.service`), from which portals
-// derive the application id.
-func inApplicationUnit() bool {
-	raw, err := os.ReadFile("/proc/self/cgroup")
-	return err == nil && applicationUnit(string(raw))
-}
-
-func applicationUnit(cgroup string) bool {
-	for _, line := range strings.Split(strings.TrimSpace(cgroup), "\n") {
-		// The unified hierarchy is the `0::` entry.
-		path, ok := strings.CutPrefix(line, "0::")
-		if !ok {
-			continue
-		}
-		unit := path[strings.LastIndexByte(path, '/')+1:]
-		return strings.HasPrefix(unit, "app-") && (strings.HasSuffix(unit, ".scope") || strings.HasSuffix(unit, ".service"))
-	}
-	return false
 }
 
 func nameServed(ctx context.Context, connect busConnector, name string) error {
