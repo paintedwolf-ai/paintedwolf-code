@@ -24,23 +24,28 @@ const FILE_MANAGER_OBJECT_PATH: &str = "/org/freedesktop/FileManager1";
 const CALL_TIMEOUT_MS: i32 = 5_000;
 const IDENTITY_TIMEOUT: Duration = Duration::from_secs(2);
 
-/// Errors meaning nothing on the bus implements the request: no owner for the
-/// name, no such object, interface or method, or a backend that exited before
-/// replying. Only these let a request continue through another service.
-const NOT_IMPLEMENTED_ERRORS: [&str; 6] = [
+/// Errors meaning no service answered the request: no owner for the name, no
+/// such object, interface or method, a backend that exited before replying, or
+/// one that did not reply in time. The portal methods return a request handle
+/// before any chooser appears and `ShowItems` only activates the file manager,
+/// so none of these is a person's decision. Only these let a request continue
+/// through another service.
+const UNAVAILABLE_ERRORS: [&str; 8] = [
     "org.freedesktop.DBus.Error.ServiceUnknown",
     "org.freedesktop.DBus.Error.NameHasNoOwner",
     "org.freedesktop.DBus.Error.UnknownObject",
     "org.freedesktop.DBus.Error.UnknownInterface",
     "org.freedesktop.DBus.Error.UnknownMethod",
     "org.freedesktop.DBus.Error.NoReply",
+    "org.freedesktop.DBus.Error.Timeout",
+    "org.freedesktop.DBus.Error.TimedOut",
 ];
 
 /// Why a desktop service did not complete a request.
 #[derive(Debug, PartialEq, Eq)]
 enum ServiceError {
-    /// No service implements the request; another path may handle it.
-    NotImplemented,
+    /// No service answered the request; another path may handle it.
+    Unavailable,
     /// The service refused or failed; no other path may bypass it.
     Failed(String),
 }
@@ -48,14 +53,18 @@ enum ServiceError {
 impl ServiceError {
     fn from_error_name(name: Option<&str>, detail: impl Into<String>) -> Self {
         match name {
-            Some(name) if NOT_IMPLEMENTED_ERRORS.contains(&name) => Self::NotImplemented,
+            Some(name) if UNAVAILABLE_ERRORS.contains(&name) => Self::Unavailable,
             Some(name) => Self::Failed(format!("{name}: {}", detail.into())),
             None => Self::Failed(detail.into()),
         }
     }
 
     fn from_call(error: &glib::Error) -> Self {
-        Self::from_error_name(remote_error_name(error).as_deref(), error.message())
+        let name = remote_error_name(error);
+        if name.is_none() && error.matches(gio::IOErrorEnum::TimedOut) {
+            return Self::Unavailable;
+        }
+        Self::from_error_name(name.as_deref(), error.message())
     }
 }
 
@@ -413,7 +422,7 @@ fn settled(
 ) -> Option<Result<Via, String>> {
     match result {
         Ok(()) => Some(Ok(via)),
-        Err(ServiceError::NotImplemented) => None,
+        Err(ServiceError::Unavailable) => None,
         Err(ServiceError::Failed(reason)) => {
             Some(Err(format!("{service} did not open the item: {reason}")))
         }
@@ -490,10 +499,10 @@ mod tests {
     }
 
     #[test]
-    fn only_unimplemented_services_continue_to_another_path() {
-        for name in NOT_IMPLEMENTED_ERRORS {
+    fn only_unanswered_requests_continue_to_another_path() {
+        for name in UNAVAILABLE_ERRORS {
             let error = ServiceError::from_error_name(Some(name), "absent");
-            assert_eq!(error, ServiceError::NotImplemented, "{name}");
+            assert_eq!(error, ServiceError::Unavailable, "{name}");
             assert_eq!(
                 settled(Err(error), Via::Portal, "The desktop portal"),
                 None,
@@ -537,15 +546,21 @@ mod tests {
         };
         assert_eq!(
             ServiceError::from_call(&remote("org.freedesktop.DBus.Error.UnknownMethod")),
-            ServiceError::NotImplemented
+            ServiceError::Unavailable
+        );
+        assert_eq!(
+            ServiceError::from_call(&remote("org.freedesktop.DBus.Error.Timeout")),
+            ServiceError::Unavailable
         );
         assert!(matches!(
             ServiceError::from_call(&remote("org.freedesktop.portal.Error.NotAllowed")),
             ServiceError::Failed(reason) if reason.starts_with("org.freedesktop.portal.Error.NotAllowed")
         ));
-        let local = glib::Error::new(gio::IOErrorEnum::TimedOut, "timed out");
+        let timeout = glib::Error::new(gio::IOErrorEnum::TimedOut, "timed out");
+        assert_eq!(ServiceError::from_call(&timeout), ServiceError::Unavailable);
+        let closed = glib::Error::new(gio::IOErrorEnum::Closed, "closed");
         assert!(matches!(
-            ServiceError::from_call(&local),
+            ServiceError::from_call(&closed),
             ServiceError::Failed(_)
         ));
     }
