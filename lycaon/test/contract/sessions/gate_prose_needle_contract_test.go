@@ -90,6 +90,7 @@ var matcherNeedleArgs = map[string][]int{
 	"IndexAny":     {1},
 	"LastIndex":    {1},
 	"Split":        {1},
+	"SplitAfter":   {1},
 	"SplitN":       {1},
 	"Trim":         {1},
 	"TrimLeft":     {1},
