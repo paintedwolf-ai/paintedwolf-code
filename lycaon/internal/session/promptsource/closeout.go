@@ -37,8 +37,8 @@ func (m *Closeout) Build() promptloop.CloseoutDeps {
 	deps := promptloop.CloseoutDeps{
 		RejectFmt:  m.Rejects,
 		HintConfig: m.Hints,
-		EvaluateContentAnchor: func(ctx context.Context, sess *api.Session, anchor string, segments []oar.ContentSegment, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
-			reject, blocked, content, transformed, err := m.Policy.ContentBlock(ctx, sess, anchor, segments, tool, args)
+		EvaluateContentAnchor: func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
+			reject, blocked, content, transformed, err := m.Policy.ContentBlock(ctx, sess, anchor, observation, tool, args)
 			if err != nil {
 				return guidance.NewRefusal("", err.Error()), true, "", false
 			}

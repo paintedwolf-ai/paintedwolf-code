@@ -276,12 +276,12 @@ func TestOps8StreamDecisionPrecedesEveryContentDelivery(t *testing.T) {
 					},
 				},
 				Closeout: CloseoutDeps{
-					EvaluateContentAnchor: func(_ context.Context, _ *api.Session, anchor string, segments []oar.ContentSegment, _ string, _ map[string]any) (*guidance.Refusal, bool, string, bool) {
+					EvaluateContentAnchor: func(_ context.Context, _ *api.Session, anchor string, observation oar.ContentObservation, _ string, _ map[string]any) (*guidance.Refusal, bool, string, bool) {
 						if anchor != oar.AnchorContentOutput {
 							return nil, false, "", false
 						}
-						if len(segments) != 1 || !strings.Contains(segments[0].Content, "final answer") {
-							t.Fatalf("[OAR-OPS-8] incomplete buffer: %#v", segments)
+						if len(observation.Segments) != 1 || !strings.Contains(observation.Segments[0].Content, "final answer") {
+							t.Fatalf("[OAR-OPS-8] incomplete buffer: %#v", observation.Segments)
 						}
 						reviewed = true
 						if blocked {

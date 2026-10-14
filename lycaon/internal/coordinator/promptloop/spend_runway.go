@@ -76,7 +76,7 @@ func (l *turnNudges) applySpendCeiling(
 	st.history = closedHistory
 	out.Finished = &PromptRunResult{
 		LastAssistantID:      aid,
-		LastOutputID:         st.lastOutputID,
+		LastOutputID:         st.output.id,
 		LastAssistantContent: content,
 		TurnTools:            st.turnTools,
 		TasksDispatchedCount: st.tasksDispatchedCount,

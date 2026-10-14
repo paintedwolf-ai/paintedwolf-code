@@ -120,9 +120,9 @@ func (l *promptContext) overlayRootPaths(ctx context.Context, sess *api.Session)
 	return l.Deps.OverlayRootPaths(ctx, sess)
 }
 
-func (l *turnCloseout) evaluateContentAnchor(ctx context.Context, sess *api.Session, anchor string, segments []oar.ContentSegment, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
+func (l *turnCloseout) evaluateContentAnchor(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
 	if l == nil || l.Deps.EvaluateContentAnchor == nil {
 		return nil, false, "", false
 	}
-	return l.Deps.EvaluateContentAnchor(ctx, sess, anchor, segments, tool, args)
+	return l.Deps.EvaluateContentAnchor(ctx, sess, anchor, observation, tool, args)
 }

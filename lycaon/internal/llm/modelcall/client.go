@@ -43,8 +43,19 @@ const (
 	CompositionHostUtility RequestComposition = "host_utility"
 )
 
+// ToolCallProtocol selects the action grammar for one request. The default is
+// native structured calls; a provider capability alone never selects a fallback.
+type ToolCallProtocol string
+
+const (
+	ToolProtocolNative   ToolCallProtocol = ""
+	ToolProtocolEnvelope ToolCallProtocol = "envelope"
+	ToolProtocolHarmony  ToolCallProtocol = "harmony"
+)
+
 // CompletionRequest is a chat completion request to a provider.
 type CompletionRequest struct {
+	ToolProtocol          ToolCallProtocol       `json:"-" yaml:"-"`
 	StrictBudget          bool                   `json:"-" yaml:"-"`
 	AttemptBudget         *CompletionBudget      `json:"-" yaml:"-"`
 	ThinkingOverride      *ThinkingOverride      `json:"-" yaml:"-"`
@@ -55,8 +66,8 @@ type CompletionRequest struct {
 	Messages              []api.Message
 	Tools                 []tools.ToolMeta
 	// ToolUse says whether the model may call Tools in this request.
-	ToolUse               ToolUse
-	Debug                 RequestDebug
+	ToolUse ToolUse
+	Debug   RequestDebug
 	// Composition says who composed this request. The zero value is the
 	// coordinator conversation; utility calls stamp their own at one funnel.
 	Composition RequestComposition
