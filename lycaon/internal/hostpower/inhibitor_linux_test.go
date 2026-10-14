@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/godbus/dbus/v5"
+	"github.com/godbus/dbus/v5/introspect"
 	"github.com/lycaon/lycaon/internal/linuxbus"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
@@ -183,7 +184,7 @@ func TestMissingServicesAdvertiseNoProviderAndAcquireNothing(t *testing.T) {
 	path := fixtureBus(t)
 	providers := []provider{
 		login1Provider{connect: connectTo(path)},
-		portalProvider{connect: connectTo(path)},
+		portalProvider{connect: connectTo(path), scoped: alwaysScoped},
 		powerManagementProvider{connect: connectTo(path)},
 	}
 	var unavailable *UnavailableError
@@ -191,9 +192,9 @@ func TestMissingServicesAdvertiseNoProviderAndAcquireNothing(t *testing.T) {
 		t.Fatalf("missing services availability = %v", err)
 	}
 	want := []ProviderReason{
-		{Provider: "login1", Reason: "org.freedesktop.login1 is not served"},
-		{Provider: "portal", Reason: "org.freedesktop.portal.Desktop is not served"},
-		{Provider: "power-management", Reason: "org.freedesktop.PowerManagement is not served"},
+		{Provider: "login1", Code: ReasonNotServed, Reason: "org.freedesktop.login1 is not served"},
+		{Provider: "portal", Code: ReasonNotServed, Reason: "org.freedesktop.portal.Desktop is not served"},
+		{Provider: "power-management", Code: ReasonNotServed, Reason: "org.freedesktop.PowerManagement is not served"},
 	}
 	if !slices.Equal(unavailable.Reasons, want) {
 		t.Fatalf("missing service reasons = %+v, want %+v", unavailable.Reasons, want)
@@ -209,8 +210,8 @@ func TestMissingServicesAdvertiseNoProviderAndAcquireNothing(t *testing.T) {
 	}
 	unreachable := connectTo(filepath.Join(t.TempDir(), "missing"))
 	for _, candidate := range []provider{login1Provider{connect: unreachable}, portalProvider{connect: unreachable}, powerManagementProvider{connect: unreachable}} {
-		if err := candidate.Check(t.Context()); err == nil || !strings.Contains(err.Error(), "bus unreachable") {
-			t.Fatalf("%s without a bus = %v", candidate.Name(), err)
+		if reason := reasonFor(candidate, candidate.Check(t.Context())); reason.Code != ReasonBusUnreachable {
+			t.Fatalf("%s without a bus = %+v", candidate.Name(), reason)
 		}
 		if held, err := candidate.Acquire(t.Context()); held != nil || err == nil {
 			t.Fatalf("%s acquired without a bus: %v, %v", candidate.Name(), held, err)
@@ -293,7 +294,7 @@ func servePortal(t *testing.T, path string, deny bool) *fixturePortal {
 func TestPortalInhibitorRequestsSuspendAndIdleAndClosesOnRelease(t *testing.T) {
 	path := fixtureBus(t)
 	fixture := servePortal(t, path, false)
-	subject := portalProvider{connect: connectTo(path)}
+	subject := portalProvider{connect: connectTo(path), scoped: alwaysScoped}
 	if err := subject.Check(t.Context()); err != nil {
 		t.Fatalf("served portal was not advertised: %v", err)
 	}
@@ -328,7 +329,7 @@ func TestPortalInhibitorRequestsSuspendAndIdleAndClosesOnRelease(t *testing.T) {
 func TestPortalDenialAndResponseEndTheLease(t *testing.T) {
 	path := fixtureBus(t)
 	fixture := servePortal(t, path, true)
-	subject := portalProvider{connect: connectTo(path)}
+	subject := portalProvider{connect: connectTo(path), scoped: alwaysScoped}
 	if held, err := subject.Acquire(t.Context()); held != nil || err == nil || !strings.Contains(err.Error(), "inhibit denied") {
 		t.Fatalf("denied portal lease=%v error=%v", held, err)
 	}
@@ -355,7 +356,7 @@ func TestPortalDenialAndResponseEndTheLease(t *testing.T) {
 func TestSessionLeaseReportsBusDisconnection(t *testing.T) {
 	daemon := startFixtureBus(t)
 	servePortal(t, daemon.path, false)
-	held, err := portalProvider{connect: connectTo(daemon.path)}.Acquire(t.Context())
+	held, err := portalProvider{connect: connectTo(daemon.path), scoped: alwaysScoped}.Acquire(t.Context())
 	testutil.FailErr(t, "acquire portal inhibitor", err)
 	daemon.stop()
 	select {
@@ -434,3 +435,95 @@ type staticInhibitor struct{ held lease }
 
 func (staticInhibitor) Availability() error        { return nil }
 func (s *staticInhibitor) Acquire() (lease, error) { return s.held, nil }
+
+func alwaysScoped() bool { return true }
+
+func TestApplicationUnitComesFromTheUnifiedCgroup(t *testing.T) {
+	for cgroup, want := range map[string]bool{
+		"0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-gnome-dev.paintedwolf.code-4242.scope\n": true,
+		"0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-dev.paintedwolf.code@a1b2.service":       true,
+		"0::/user.slice/user-1000.slice/user@1000.service/app.slice/vte-spawn-1234.scope":                        false,
+		"0::/user.slice/user-1000.slice/session-3.scope":                                                         false,
+		"1:name=systemd:/app-gnome-x-1.scope\n0::/user.slice/session-3.scope":                                    false,
+		"12:cpu:/app-legacy-1.scope": false,
+		"":                           false,
+	} {
+		if got := applicationUnit(cgroup); got != want {
+			t.Fatalf("applicationUnit(%q) = %t, want %t", cgroup, got, want)
+		}
+	}
+}
+
+type fixtureRegistry struct {
+	mu     sync.Mutex
+	deny   bool
+	events *[]string
+}
+
+func (f *fixtureRegistry) Register(appID string, _ map[string]dbus.Variant) *dbus.Error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.deny {
+		return dbus.NewError("org.freedesktop.portal.Error.Failed", []any{"connection already associated"})
+	}
+	*f.events = append(*f.events, "register "+appID)
+	return nil
+}
+
+// servePortalDocument serves the portal with an introspection document naming
+// the interfaces it implements, as real portals do.
+func servePortalDocument(t *testing.T, path string, registry *fixtureRegistry) *fixturePortal {
+	t.Helper()
+	fixture := servePortal(t, path, false)
+	interfaces := []introspect.Interface{{Name: portalInhibit}}
+	if registry != nil {
+		testutil.FailErr(t, "export registry fixture", fixture.server.Export(registry, portalPath, portalRegistry))
+		interfaces = append(interfaces, introspect.Interface{Name: portalRegistry})
+	}
+	node := &introspect.Node{Name: string(portalPath), Interfaces: append(interfaces, introspect.IntrospectData)}
+	testutil.FailErr(t, "export introspection", fixture.server.Export(introspect.NewIntrospectable(node), portalPath, "org.freedesktop.DBus.Introspectable"))
+	return fixture
+}
+
+func TestPortalRefusesAnUnattributableCallerAsNoApplicationID(t *testing.T) {
+	path := fixtureBus(t)
+	servePortalDocument(t, path, nil)
+	subject := portalProvider{connect: connectTo(path), appID: "dev.paintedwolf.code", scoped: func() bool { return false }}
+	err := availabilityOf([]provider{subject})
+	var unavailableErr *UnavailableError
+	if !errors.As(err, &unavailableErr) || len(unavailableErr.Reasons) != 1 || unavailableErr.Reasons[0].Code != ReasonNoApplicationID {
+		t.Fatalf("unattributable portal caller = %v", err)
+	}
+	if err := (portalProvider{connect: connectTo(path), scoped: alwaysScoped}).Check(t.Context()); err != nil {
+		t.Fatalf("a caller in an application unit was refused: %v", err)
+	}
+}
+
+func TestPortalRegistersTheApplicationBeforeInhibiting(t *testing.T) {
+	path := fixtureBus(t)
+	var events []string
+	registry := &fixtureRegistry{events: &events}
+	fixture := servePortalDocument(t, path, registry)
+	subject := portalProvider{connect: connectTo(path), appID: "dev.paintedwolf.code", scoped: func() bool { return false }}
+	testutil.FailErr(t, "check registered portal", subject.Check(t.Context()))
+	held, err := subject.Acquire(t.Context())
+	testutil.FailErr(t, "acquire registered portal inhibitor", err)
+	fixture.mu.Lock()
+	inhibited := fixture.request != ""
+	fixture.mu.Unlock()
+	registry.mu.Lock()
+	registered := slices.Clone(events)
+	registry.mu.Unlock()
+	if !inhibited || !slices.Equal(registered, []string{"register dev.paintedwolf.code"}) {
+		t.Fatalf("registration %q, inhibited %t", registered, inhibited)
+	}
+	testutil.FailErr(t, "release", held.Release())
+
+	registry.mu.Lock()
+	registry.deny = true
+	registry.mu.Unlock()
+	held, err = subject.Acquire(t.Context())
+	if held != nil || reasonFor(subject, err).Code != ReasonNoApplicationID {
+		t.Fatalf("refused registration = %v, %v", held, err)
+	}
+}

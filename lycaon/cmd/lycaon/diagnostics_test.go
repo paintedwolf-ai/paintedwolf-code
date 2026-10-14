@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -114,6 +115,13 @@ func TestDescribeSystemProxyReportsTheHostDecision(t *testing.T) {
 }
 
 func TestHoldPowerInhibitorReportsProviderOrUnavailability(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		// Tests never reach the desktop session the test host is running.
+		missing := filepath.Join(t.TempDir(), "missing")
+		t.Setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path="+missing)
+		t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path="+missing)
+		t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	}
 	var out bytes.Buffer
 	err := holdPowerInhibitor(t.Context(), hostpower.New(true), 0, &out)
 	line := out.String()
@@ -123,8 +131,8 @@ func TestHoldPowerInhibitorReportsProviderOrUnavailability(t *testing.T) {
 	if strings.Contains(line, "inhibiting=true") != (err == nil) {
 		t.Fatalf("status %q with error %v", line, err)
 	}
-	if err != nil && strings.HasSuffix(strings.TrimSpace(err.Error()), ":") {
-		t.Fatalf("unavailable inhibition gave no reason: %v", err)
+	if runtime.GOOS == "linux" && (err == nil || !strings.Contains(err.Error(), "login1: system bus unreachable") || !strings.Contains(err.Error(), "portal: session bus unreachable")) {
+		t.Fatalf("unreachable buses = %v", err)
 	}
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()

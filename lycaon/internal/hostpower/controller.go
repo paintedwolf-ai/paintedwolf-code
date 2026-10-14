@@ -27,9 +27,29 @@ type inhibitor interface {
 	Acquire() (lease, error)
 }
 
+// ProviderReasonCode classifies why an inhibition protocol cannot be used.
+type ProviderReasonCode string
+
+const (
+	// ReasonBusUnreachable is a bus the protocol lives on that cannot be reached.
+	ReasonBusUnreachable ProviderReasonCode = "bus_unreachable"
+	// ReasonNotServed is a protocol whose bus name has no owner.
+	ReasonNotServed ProviderReasonCode = "not_served"
+	// ReasonQueryFailed is a bus query that failed.
+	ReasonQueryFailed ProviderReasonCode = "query_failed"
+	// ReasonNoDescriptorPassing is a connection that cannot carry the lease descriptor.
+	ReasonNoDescriptorPassing ProviderReasonCode = "no_descriptor_passing"
+	// ReasonNoApplicationID is a provider that refuses callers it cannot
+	// attribute to an application.
+	ReasonNoApplicationID ProviderReasonCode = "no_application_id"
+	// ReasonPlatform is a platform without an inhibition protocol.
+	ReasonPlatform ProviderReasonCode = "platform_unsupported"
+)
+
 // ProviderReason is why one inhibition protocol cannot be used.
 type ProviderReason struct {
 	Provider string
+	Code     ProviderReasonCode
 	Reason   string
 }
 

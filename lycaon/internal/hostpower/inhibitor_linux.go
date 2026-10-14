@@ -13,6 +13,7 @@ import (
 
 	"github.com/godbus/dbus/v5"
 	"github.com/lycaon/lycaon/internal/linuxbus"
+	"github.com/lycaon/lycaon/internal/version"
 	"golang.org/x/sys/unix"
 )
 
@@ -33,7 +34,7 @@ type busConnector func(context.Context) (*dbus.Conn, error)
 // its session-level inhibition protocols.
 var linuxProviders = []provider{
 	login1Provider{connect: linuxbus.ConnectSystem},
-	portalProvider{connect: linuxbus.ConnectSession},
+	portalProvider{connect: linuxbus.ConnectSession, appID: version.BundleID, scoped: inApplicationUnit},
 	powerManagementProvider{connect: linuxbus.ConnectSession},
 }
 
@@ -52,9 +53,32 @@ func availabilityOf(providers []provider) error {
 		if err == nil {
 			return nil
 		}
-		unavailable.Reasons = append(unavailable.Reasons, ProviderReason{Provider: candidate.Name(), Reason: err.Error()})
+		unavailable.Reasons = append(unavailable.Reasons, reasonFor(candidate, err))
 	}
 	return unavailable
+}
+
+// unavailableProvider is a protocol that cannot be used, with its classified cause.
+type unavailableProvider struct {
+	code ProviderReasonCode
+	err  error
+}
+
+func (u *unavailableProvider) Error() string { return u.err.Error() }
+
+func (u *unavailableProvider) Unwrap() error { return u.err }
+
+func unavailable(code ProviderReasonCode, format string, args ...any) error {
+	return &unavailableProvider{code: code, err: fmt.Errorf(format, args...)}
+}
+
+func reasonFor(candidate provider, err error) ProviderReason {
+	code := ReasonQueryFailed
+	var classified *unavailableProvider
+	if errors.As(err, &classified) {
+		code = classified.code
+	}
+	return ProviderReason{Provider: candidate.Name(), Code: code, Reason: err.Error()}
 }
 
 // acquireFrom returns the first provider that grants a lease; refusals from
@@ -66,7 +90,7 @@ func acquireFrom(providers []provider) (lease, error) {
 	unavailable := &UnavailableError{}
 	for _, candidate := range providers {
 		if err := candidate.Check(ctx); err != nil {
-			unavailable.Reasons = append(unavailable.Reasons, ProviderReason{Provider: candidate.Name(), Reason: err.Error()})
+			unavailable.Reasons = append(unavailable.Reasons, reasonFor(candidate, err))
 			continue
 		}
 		held, err := candidate.Acquire(ctx)
@@ -90,7 +114,7 @@ func (login1Provider) Name() string { return "login1" }
 func (p login1Provider) Check(ctx context.Context) error {
 	bus, err := p.connect(ctx)
 	if err != nil {
-		return fmt.Errorf("system bus unreachable: %w", err)
+		return unavailable(ReasonBusUnreachable, "system bus unreachable: %w", err)
 	}
 	defer func() { _ = bus.Close() }()
 	return logindAvailability(ctx, bus)
@@ -107,7 +131,7 @@ func (p login1Provider) Acquire(ctx context.Context) (lease, error) {
 
 func logindAvailability(ctx context.Context, bus *dbus.Conn) error {
 	if !bus.SupportsUnixFDs() {
-		return errors.New("the system bus connection cannot pass file descriptors")
+		return unavailable(ReasonNoDescriptorPassing, "the system bus connection cannot pass file descriptors")
 	}
 	return nameOwnedOn(ctx, bus, linuxbus.Login1Name)
 }
@@ -117,10 +141,10 @@ func logindAvailability(ctx context.Context, bus *dbus.Conn) error {
 func nameOwnedOn(ctx context.Context, bus *dbus.Conn, name string) error {
 	owned, err := linuxbus.NameOwned(ctx, bus, name)
 	if err != nil {
-		return fmt.Errorf("query %s: %w", name, err)
+		return unavailable(ReasonQueryFailed, "query %s: %w", name, err)
 	}
 	if !owned {
-		return fmt.Errorf("%s is not served", name)
+		return unavailable(ReasonNotServed, "%s is not served", name)
 	}
 	return nil
 }
