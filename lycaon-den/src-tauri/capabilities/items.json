@@ -42,6 +42,7 @@
     "allow-den-set-window-backdrop",
     "allow-set-app-menu",
     "allow-accessibility-preferred-text-size",
+    "allow-accessibility-screen-reader",
     "allow-system-appearance"
   ]
 }

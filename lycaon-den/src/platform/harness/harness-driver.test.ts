@@ -67,4 +67,11 @@ describe("harness prompt admission", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     expect(await result).toMatchObject({ ok: true, state: { sessionId: "new-session" } });
   });
+
+  it("stands in for the host screen reader fact", () => {
+    expect(window.__harness!.setScreenReader()).toEqual({ ok: true, active: true });
+    expect(document.documentElement.getAttribute("data-den-screen-reader")).toBe("active");
+    expect(window.__harness!.setScreenReader(false)).toEqual({ ok: true, active: false });
+    expect(document.documentElement.hasAttribute("data-den-screen-reader")).toBe(false);
+  });
 });

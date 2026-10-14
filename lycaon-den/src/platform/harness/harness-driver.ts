@@ -13,6 +13,7 @@ import {
   waitUntil,
 } from "../semantic-driver/core.ts";
 import { MAX_TEXT_SCALE, applyTextScale } from "../desktop/accessibility-text-size.ts";
+import { SCREEN_READER_ATTRIBUTE, setScreenReaderActive } from "../desktop/screen-reader.ts";
 import {
   CHAT_STAGE_SELECTOR,
   LIVE_CHAT_STAGE_SELECTOR,
@@ -77,6 +78,8 @@ export interface HarnessApi {
   clickText(text: string): Promise<Json>;
   /** Inject OS text scale. Omit scale to use locked AccessibilityXXXL max. */
   setTextScale(scale?: number): Json;
+  /** Harness-only: stand in for the host screen reader fact. */
+  setScreenReader(active?: boolean): Json;
   /** Harness-only: push a user notice into the app store (e.g. spend-ceiling card). */
   publishNotice(input: NoticeInput, scope?: NoticeScope): Json;
   /** Harness-only: apply a preview SSE-shaped event into the live preview store. */
@@ -274,6 +277,7 @@ const HELP: Json = {
   a11y: [
     "setTextScale()                 // inject locked max AccessibilityXXXL scale",
     "setTextScale(1)                // restore Den baseline",
+    "setScreenReader(active?)       // stand in for the host screen reader fact",
     "resize(720, 480)               // best-effort; dispatch resize epoch",
   ],
   playBothSides: {
@@ -490,6 +494,10 @@ export function installHarnessDriver(): void {
       return { ok: true, state: readState() };
     },
 
+    setScreenReader(active = true) {
+      setScreenReaderActive(active);
+      return { ok: true, active: document.documentElement.hasAttribute(SCREEN_READER_ATTRIBUTE) };
+    },
     setTextScale(scale) {
       const next = typeof scale === "number" && Number.isFinite(scale) ? scale : MAX_TEXT_SCALE;
       applyTextScale(next);

@@ -81,6 +81,7 @@ pub fn run() {
             notifications::den_notify_cancel_sessions,
             notifications::den_set_badge_count,
             windows::accessibility_text_size::accessibility_preferred_text_size,
+            windows::screen_reader::accessibility_screen_reader,
             windows::system_appearance::system_appearance,
             clipboard::read_clipboard_text,
             clipboard::write_clipboard_text,
@@ -154,6 +155,8 @@ pub fn run() {
             windows::window_appearance::setup(app.handle());
             update_service::startup::start(app.handle().clone());
             windows::accessibility_text_size::setup(app.handle().clone())
+                .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
+            windows::screen_reader::setup(app.handle().clone())
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             windows::system_appearance::setup(app.handle().clone())
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;

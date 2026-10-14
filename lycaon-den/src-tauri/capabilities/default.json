@@ -78,6 +78,7 @@
     "allow-den-set-badge-count",
     "allow-set-app-menu",
     "allow-accessibility-preferred-text-size",
+    "allow-accessibility-screen-reader",
     "allow-system-appearance",
     "allow-update-service",
     "allow-shell-command-status",
