@@ -1,7 +1,7 @@
 ## Dispatch turn
 
 {% if has_file_tools %}
-{% if profile_has_verify or profile_has_command %}{% include "partials/coordinator-verify-before-close.md" %}{% endif %}
+{% if profile_has_verify or profile_has_command or profile_can_request.verify or profile_can_request.command %}{% include "partials/coordinator-verify-before-close.md" %}{% endif %}
 
 Read implementer batch idle (scouts may still run) — **dispatch write legs** only; no user reply unless blocked. Mutation-capable profiles need **`scope.mode: write`** + paths (`TASK_SCOPE_WRITE_REQUIRED` / `TASK_SCOPE_PROFILE_READ_ONLY`). Read gaps → a read-only-profile `task(…, scope.mode: read)` — never mutation-capable+read or read-only+write.
 

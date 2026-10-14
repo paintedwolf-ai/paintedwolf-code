@@ -203,6 +203,7 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"profile_has_task":                enabled["task"],
 		"profile_has_wait":                enabled["wait"],
 		"profile_has_verify":              enabled["verify"],
+		"profile_can_request":             requestableToolSet(toolViewNames(data.Tools), requestableToolNames(data.Requestable)),
 		"has_find_tool":                   enabled["find"],
 		"profile_has_git_commit":          enabled["git_commit"],
 		"profile_has_grep":                enabled["grep"],
