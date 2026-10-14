@@ -479,14 +479,8 @@ func (l *turnCloseout) maybeNotifyGroundedSynthesisAccepted(
 }
 
 func (l *PromptLoop) finalizePromptLoopRun(
-	ctx context.Context,
-	sess *api.Session,
-	sessionID, profileID, userPrompt string,
-	maxIter int,
-	closeoutNudgeSent bool,
-	loopExit loopExitKind,
-	in PromptRunInput,
-	st *promptLoopTurnState,
+	ctx context.Context, sess *api.Session, sessionID, profileID, userPrompt string,
+	maxIter int, closeoutNudgeSent bool, loopExit loopExitKind, in PromptRunInput, st *promptLoopTurnState,
 ) (*PromptRunResult, error) {
 	if sess.IsWorkerChild() {
 		l.Nudges.publishWorkerProgress(ctx, sess, st.workerJobID, st.progress().Current(), true)
@@ -543,6 +537,9 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		return nil, err
 	}
 	if err := l.Nudges.flushDeferredUserNudges(ctx, sessionID, st); err != nil {
+		return nil, err
+	}
+	if err := l.Inbox.takePolicyFeedback(ctx, sessionID, st); err != nil {
 		return nil, err
 	}
 	if st.lastAssistantID == "" {

@@ -54,3 +54,40 @@ func TestBlockedLoopParksLiveCommandInsteadOfForcingCloseout(t *testing.T) {
 		t.Fatal("parked blocked turn must end as a handled guidance rejection")
 	}
 }
+
+func TestFinalizePromptLoopRunFlushesCloseoutPolicyFeedback(t *testing.T) {
+	t.Parallel()
+	taken := 0
+	loop := NewPromptLoopForTest(PromptLoopDeps{
+		Inbox: InboxDeps{
+			TakePolicyFeedback: func(_ context.Context, sessionID string) ([]api.Message, error) {
+				if sessionID != "session-closeout" {
+					t.Fatalf("unexpected sessionID %q", sessionID)
+				}
+				taken++
+				return []api.Message{{ID: "pf-1", Role: api.MessageRoleUser, HostSignalID: "policy_feedback", Content: "Code: COMPLETION_REPORT_UNGROUNDED"}}, nil
+			},
+		},
+	})
+	st := &promptLoopTurnState{
+		lastAssistantID:      "assistant-1",
+		lastAssistantContent: "done",
+		turnsRanThisRun:      1,
+	}
+	res, err := loop.finalizePromptLoopRun(
+		context.Background(),
+		&api.Session{ID: "session-closeout"},
+		"session-closeout", "coordinator", "ship it", 16, false,
+		loopExitCompleted, PromptRunInput{}, st,
+	)
+	testutil.FailErr(t, "finalize completed loop", err)
+	if taken != 1 {
+		t.Fatalf("TakePolicyFeedback calls = %d, want 1", taken)
+	}
+	if len(st.history) != 1 || st.history[0].ID != "pf-1" {
+		t.Fatalf("expected policy feedback appended to closeout history, got %+v", st.history)
+	}
+	if res.LastAssistantID != "assistant-1" {
+		t.Fatalf("unexpected result: %+v", res)
+	}
+}
