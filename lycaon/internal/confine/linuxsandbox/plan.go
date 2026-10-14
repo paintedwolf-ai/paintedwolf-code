@@ -6,6 +6,7 @@ package linuxsandbox
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 )
 
@@ -80,8 +81,10 @@ const (
 
 // Network is the egress expression. Every mode runs in a network namespace
 // holding one loopback interface. ProxyOnly adds the mediated endpoints there,
-// served from the host by the outer helper. The other fields are carried so
-// the helper refuses, with a typed reason, what it cannot express.
+// served from the host by the outer helper. The supervisor admits the other
+// grants call by call: loopback connects, listeners, direct IP, and exact
+// Unix-socket paths reach the host only through sockets it creates or
+// connects itself.
 type Network struct {
 	Mode                 string           `json:"mode"`
 	LoopbackConnect      bool             `json:"loopback_connect,omitempty"`
@@ -155,19 +158,23 @@ func (p Plan) Validate() error {
 		if n.ProxyAddr == "" && n.SocksProxyAddr == "" {
 			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "proxy_only without a mediated endpoint"}
 		}
+	case NetworkDirectIP:
+		for _, permit := range n.DirectIPPermits {
+			// Datagram sockets never leave the sandbox's namespace.
+			if permit.Protocol != "tcp" {
+				return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "direct_ip " + permit.Protocol + " permit"}
+			}
+		}
 	default:
 		return &Unsupported{Code: UnsupportedNetworkMode, Detail: n.Mode}
 	}
 	if n.Browser {
 		return &Unsupported{Code: UnsupportedBrowser}
 	}
-	switch {
-	case n.LoopbackConnect:
-		return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "loopback_connect"}
-	case n.Listen:
-		return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "local_listen"}
-	case len(n.SocketPaths) > 0:
-		return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "socket_paths"}
+	for _, path := range n.SocketPaths {
+		if !filepath.IsAbs(path) {
+			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "socket path " + path + " is not absolute"}
+		}
 	}
 	return nil
 }

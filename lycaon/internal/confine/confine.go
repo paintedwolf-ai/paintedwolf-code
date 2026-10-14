@@ -37,6 +37,10 @@ const (
 	// before exec.
 	lineageFDFlag   = "--lineage-fd"
 	helperLineageFD = 4
+	// refusalFDFlag names the pipe a supervising helper reports refused
+	// calls on, one JSON line each.
+	refusalFDFlag   = "--refusal-fd"
+	helperRefusalFD = 5
 )
 
 // NetworkMode is the egress policy for a confined command.
@@ -361,6 +365,15 @@ func Command(
 		helperArgs = append(helperArgs, lineageFDFlag, strconv.Itoa(helperLineageFD))
 		extra = append(extra, marker)
 	}
+	reports, closeReports := refusalReport(c)
+	if reports != nil {
+		// A nil entry leaves the marker's descriptor closed when there is none.
+		for len(extra) < helperRefusalFD-helperProfileFD {
+			extra = append(extra, nil)
+		}
+		extra = append(extra, reports)
+		helperArgs = append(helperArgs, refusalFDFlag, strconv.Itoa(helperRefusalFD))
+	}
 	helperArgs = append(append(helperArgs, "--", name), args...)
 	cmd := exec.CommandContext(ctx, self, helperArgs...)
 	cmd.ExtraFiles = extra
@@ -372,6 +385,7 @@ func Command(
 	// last descendant exits.
 	cleanup := func() {
 		_ = pr.Close()
+		closeReports()
 		c.lineage.Started()
 	}
 	return cmd, cleanup, nil

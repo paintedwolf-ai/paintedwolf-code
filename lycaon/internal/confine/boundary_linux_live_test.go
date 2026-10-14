@@ -148,6 +148,8 @@ func runLinuxProbe(mode string) int {
 		return 0
 	case "proxyget":
 		return proxyGetProbe()
+	case "tcpconnect", "unixconnect", "serve":
+		return networkProbe(mode)
 	case "orphan":
 		daemon := child("sleep", true)
 		if err := daemon.Start(); err != nil {

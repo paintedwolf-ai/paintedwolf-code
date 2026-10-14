@@ -153,7 +153,7 @@ func applyAndExec(profile []byte, resolved string, target []string) error {
 		if err != nil {
 			return err
 		}
-		code, sig, err := linuxsandbox.Relaunch(self, os.Args[1:], profile, lineageMarkerFile())
+		code, sig, err := linuxsandbox.Relaunch(self, os.Args[1:], profile, plan.Network, lineageMarkerFile(), helperRefusalFile())
 		if err != nil {
 			return err
 		}

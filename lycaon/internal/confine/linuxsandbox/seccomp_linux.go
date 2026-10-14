@@ -47,12 +47,27 @@ var escapeSyscalls = []uint32{
 const namespaceCloneFlags = unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWNET |
 	unix.CLONE_NEWUTS | unix.CLONE_NEWIPC | unix.CLONE_NEWCGROUP | unix.CLONE_NEWTIME
 
+// notifiedSyscalls go to the supervisor, which performs each one itself on its
+// own descriptor for the socket with its own copy of the address.
+var notifiedSyscalls = []uint32{unix.SYS_CONNECT, unix.SYS_BIND, unix.SYS_LISTEN}
+
+// fastOpenSends are the send calls that could start a connection through
+// TCP Fast Open, by syscall number and the argument holding their flags.
+var fastOpenSends = []struct{ nr, flagsArg uint32 }{
+	{unix.SYS_SENDTO, 3}, {unix.SYS_SENDMSG, 2}, {unix.SYS_SENDMMSG, 3},
+}
+
+// seccompArgLow is the offset of the low half of syscall argument n.
+func seccompArgLow(n uint32) uint32 { return seccompDataArg0 + 8*n }
+
 // seccompProgram builds the filter: kill on an escape syscall, a terminal
-// injection ioctl, or a clone that asks for a namespace; refuse creating a
-// Unix-domain socket with EACCES, since a network namespace does not isolate
-// path sockets and the filter cannot read a connect address; answer io_uring
-// and clone3 with ENOSYS so libraries fall back to calls the filter can read;
-// allow everything else, socketpair included.
+// injection ioctl, or a clone that asks for a namespace; hand connect, bind,
+// and listen to the supervisor, since a network namespace does not isolate
+// path sockets and the filter cannot read an address; refuse a Unix-domain
+// datagram socket, whose sends name a path the supervisor never sees, and any
+// send that would open a connection by Fast Open; answer io_uring and clone3
+// with ENOSYS so libraries fall back to calls the filter can read; allow
+// everything else.
 func seccompProgram() ([]bpf.RawInstruction, error) {
 	kill := uint32(unix.SECCOMP_RET_KILL_PROCESS)
 	insts := []bpf.Instruction{
@@ -100,15 +115,37 @@ func seccompProgram() ([]bpf.RawInstruction, error) {
 		}
 		insts = append(insts, bpf.JumpIf{Cond: bpf.JumpEqual, Val: nr, SkipTrue: uint8(u - 1 - i), SkipFalse: past})
 	}
+	eacces := uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EACCES)
 	insts = append(insts,
 		bpf.RetConstant{Val: enosys},
-		// socket: the domain is the first argument, an int compared on its low half.
-		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SYS_SOCKET, SkipFalse: 4},
+		// socket: the domain and type are ints compared on their low halves.
+		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SYS_SOCKET, SkipFalse: 7},
 		bpf.LoadAbsolute{Off: seccompDataArg0, Size: 4},
-		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.AF_UNIX, SkipFalse: 1},
-		bpf.RetConstant{Val: uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EACCES)},
+		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.AF_UNIX, SkipFalse: 4},
+		bpf.LoadAbsolute{Off: seccompArgLow(1), Size: 4},
+		bpf.ALUOpConstant{Op: bpf.ALUOpAnd, Val: socketTypeMask},
+		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SOCK_DGRAM, SkipFalse: 1},
+		bpf.RetConstant{Val: eacces},
 		bpf.RetConstant{Val: unix.SECCOMP_RET_ALLOW},
 	)
+	m := len(notifiedSyscalls)
+	for i, nr := range notifiedSyscalls {
+		var past uint8
+		if i == m-1 {
+			past = 1
+		}
+		insts = append(insts, bpf.JumpIf{Cond: bpf.JumpEqual, Val: nr, SkipTrue: uint8(m - 1 - i), SkipFalse: past})
+	}
+	insts = append(insts, bpf.RetConstant{Val: unix.SECCOMP_RET_USER_NOTIF})
+	for _, send := range fastOpenSends {
+		insts = append(insts,
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: send.nr, SkipFalse: 4},
+			bpf.LoadAbsolute{Off: seccompArgLow(send.flagsArg), Size: 4},
+			bpf.JumpIf{Cond: bpf.JumpBitsSet, Val: unix.MSG_FASTOPEN, SkipFalse: 1},
+			bpf.RetConstant{Val: eacces},
+			bpf.RetConstant{Val: unix.SECCOMP_RET_ALLOW},
+		)
+	}
 	insts = append(insts,
 		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SYS_CLONE3, SkipFalse: 1},
 		bpf.RetConstant{Val: enosys},
@@ -121,25 +158,27 @@ func seccompProgram() ([]bpf.RawInstruction, error) {
 	return bpf.Assemble(insts)
 }
 
-// applySeccomp installs the filter on every thread of the process.
-func applySeccomp() error {
+// socketTypeMask isolates the socket type from the flags socket() accepts.
+const socketTypeMask = 0xf
+
+// applySeccomp installs the filter on every thread of the process and returns
+// the descriptor its notifications arrive on.
+func applySeccomp() (int, error) {
 	raw, err := seccompProgram()
 	if err != nil {
-		return fmt.Errorf("seccomp assemble: %w", err)
+		return -1, fmt.Errorf("seccomp assemble: %w", err)
 	}
 	filter := make([]unix.SockFilter, len(raw))
 	for i, inst := range raw {
 		filter[i] = unix.SockFilter{Code: inst.Op, Jt: inst.Jt, Jf: inst.Jf, K: inst.K}
 	}
 	prog := unix.SockFprog{Len: uint16(len(filter)), Filter: &filter[0]}
-	r1, _, errno := unix.Syscall(unix.SYS_SECCOMP, unix.SECCOMP_SET_MODE_FILTER, unix.SECCOMP_FILTER_FLAG_TSYNC, uintptr(unsafe.Pointer(&prog)))
+	flags := unix.SECCOMP_FILTER_FLAG_TSYNC | unix.SECCOMP_FILTER_FLAG_TSYNC_ESRCH | unix.SECCOMP_FILTER_FLAG_NEW_LISTENER
+	listener, _, errno := unix.Syscall(unix.SYS_SECCOMP, unix.SECCOMP_SET_MODE_FILTER, uintptr(flags), uintptr(unsafe.Pointer(&prog)))
 	if errno != 0 {
-		return fmt.Errorf("seccomp filter: %w", errno)
+		return -1, fmt.Errorf("seccomp filter: %w", errno)
 	}
-	if r1 != 0 {
-		return fmt.Errorf("seccomp filter: thread %d could not synchronize", r1)
-	}
-	return nil
+	return int(listener), nil
 }
 
 // seccompMode is the process's seccomp mode: 2 once a filter is installed.

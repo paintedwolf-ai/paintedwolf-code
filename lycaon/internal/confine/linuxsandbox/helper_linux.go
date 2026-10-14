@@ -63,8 +63,16 @@ func Enter(plan Plan) error {
 		}
 	}
 	if plan.Attest.Omit != OmitSeccomp {
-		if err := applySeccomp(); err != nil {
+		listener, err := applySeccomp()
+		if err != nil {
 			return err
+		}
+		// The supervisor answers every notified call from here on; without it
+		// those calls fail rather than run unmediated.
+		err = sendHandoff(handoff{Kind: handoffNotify}, listener)
+		_ = unix.Close(listener)
+		if err != nil {
+			return fmt.Errorf("hand off seccomp notifications: %w", err)
 		}
 	}
 	if err := dropCapabilities(); err != nil {

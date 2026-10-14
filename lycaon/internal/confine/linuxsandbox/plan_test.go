@@ -58,11 +58,9 @@ func TestValidateNamesWhatTheHelperCannotExpress(t *testing.T) {
 	}{
 		{"unknown mode", Network{Mode: "tunnel"}, UnsupportedNetworkMode},
 		{"proxy without endpoint", Network{Mode: NetworkProxyOnly}, UnsupportedNetworkGrant},
-		{"direct", Network{Mode: NetworkDirectIP}, UnsupportedNetworkMode},
+		{"direct udp", Network{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "udp", Port: 53}}}, UnsupportedNetworkGrant},
 		{"browser", Network{Mode: NetworkDeny, Browser: true, LoopbackConnect: true}, UnsupportedBrowser},
-		{"loopback", Network{Mode: NetworkDeny, LoopbackConnect: true}, UnsupportedNetworkGrant},
-		{"listen", Network{Mode: NetworkDeny, Listen: true}, UnsupportedNetworkGrant},
-		{"socket", Network{Mode: NetworkDeny, SocketPaths: []string{"/run/x.sock"}}, UnsupportedNetworkGrant},
+		{"relative socket", Network{Mode: NetworkDeny, SocketPaths: []string{"run/x.sock"}}, UnsupportedNetworkGrant},
 	}
 	for _, tc := range cases {
 		err := Plan{Version: PlanVersion, Network: tc.net}.Validate()
@@ -77,8 +75,15 @@ func TestValidateNamesWhatTheHelperCannotExpress(t *testing.T) {
 	if err := (Plan{Version: PlanVersion, Network: Network{Mode: NetworkDeny}}).Validate(); err != nil {
 		t.Fatalf("deny plan refused: %v", err)
 	}
-	if err := (Plan{Version: PlanVersion, Network: Network{Mode: NetworkProxyOnly, ProxyAddr: "127.0.0.1:1"}}).Validate(); err != nil {
-		t.Fatalf("proxy plan refused: %v", err)
+	for _, n := range []Network{
+		{Mode: NetworkProxyOnly, ProxyAddr: "127.0.0.1:1", LoopbackConnect: true, LoopbackConnectPorts: []uint16{5432}},
+		{Mode: NetworkDeny, Listen: true, ListenPorts: []uint16{3000}, SocketPaths: []string{"/run/x.sock"}},
+		{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "tcp", Port: 443}}},
+		{Mode: NetworkDirectIP},
+	} {
+		if err := (Plan{Version: PlanVersion, Network: n}).Validate(); err != nil {
+			t.Fatalf("plan %+v refused: %v", n, err)
+		}
 	}
 	if err := (Plan{Version: 0, Network: Network{Mode: NetworkDeny}}).Validate(); err == nil {
 		t.Fatal("version 0 validated")

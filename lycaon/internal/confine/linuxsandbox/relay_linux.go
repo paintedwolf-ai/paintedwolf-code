@@ -30,9 +30,10 @@ const reportReady = 0xff
 // marker when there is one, serves what it hands back over the control
 // socket, and relays signals and exit status until it ends. This process keeps
 // the marker, so the broker attributes the connections it forwards to the
-// action. The returned signal, when set, killed the target and should end
-// this process the same way.
-func Relaunch(self string, args []string, plan []byte, marker *os.File) (code int, sig syscall.Signal, err error) {
+// action, and reports each refused socket call to refusals when it is set. The
+// returned signal, when set, killed the target and should end this process
+// the same way.
+func Relaunch(self string, args []string, plan []byte, network Network, marker, refusals *os.File) (code int, sig syscall.Signal, err error) {
 	// The parent-death signal is tied to the thread that forks.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -55,7 +56,11 @@ func Relaunch(self string, args []string, plan []byte, marker *os.File) (code in
 		return 0, 0, fmt.Errorf("control socket: %w", err)
 	}
 	control, controlChild := os.NewFile(uintptr(pair[0]), "control"), os.NewFile(uintptr(pair[1]), "control-child")
-	sup := newSupervisor(control)
+	var refusalLines io.Writer
+	if refusals != nil {
+		refusalLines = refusals
+	}
+	sup := newSupervisor(control, network, refusalLines)
 	defer sup.close()
 	cmd := exec.Command(self, args...)
 	// The standard descriptors are the command's streams, handed through as is.

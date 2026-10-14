@@ -30,7 +30,8 @@ type handoff struct {
 
 // Handoff kinds.
 const (
-	handoffProxy = "proxy"
+	handoffProxy  = "proxy"
+	handoffNotify = "notify"
 )
 
 // maxHandoff bounds one control message's header.
@@ -111,16 +112,61 @@ func sendHandoff(h handoff, fd int) error {
 }
 
 // supervisor is the outer helper's side of the sandbox: it serves what the
-// inner helper hands it from the host's network namespace.
+// inner helper hands it from the host's network namespace and decides the
+// sandbox's socket calls.
 type supervisor struct {
 	control *os.File
+	network Network
 	wg      sync.WaitGroup
 	mu      sync.Mutex
 	closers []io.Closer
+	// host holds the cookies of the sockets the supervisor put in the host's
+	// namespace, true for granted listeners.
+	host map[uint64]bool
+	// refusals receives one JSON line per refusal; nil when the action has no
+	// refusal feed.
+	refusals io.Writer
 }
 
-func newSupervisor(control *os.File) *supervisor {
-	return &supervisor{control: control}
+func newSupervisor(control *os.File, network Network, refusals io.Writer) *supervisor {
+	return &supervisor{control: control, network: network, host: map[uint64]bool{}, refusals: refusals}
+}
+
+func (s *supervisor) hostSocket(cookie uint64) (host, listener bool) {
+	if cookie == 0 {
+		return false, false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	listener, host = s.host[cookie]
+	return host, listener
+}
+
+func (s *supervisor) markHost(cookie uint64, listener bool) {
+	s.mu.Lock()
+	s.host[cookie] = listener
+	s.mu.Unlock()
+}
+
+func (s *supervisor) forgetHost(cookie uint64) {
+	s.mu.Lock()
+	delete(s.host, cookie)
+	s.mu.Unlock()
+}
+
+// report writes one refusal line; a lost line degrades the record, never the
+// decision.
+func (s *supervisor) report(r Refusal) {
+	if s.refusals == nil {
+		return
+	}
+	line, err := json.Marshal(r)
+	if err != nil {
+		return
+	}
+	s.mu.Lock()
+	_, _ = s.refusals.Write(append(line, '\n'))
+	s.mu.Unlock()
 }
 
 // serve reads handoffs until the inner helper closes its end.
@@ -185,6 +231,12 @@ func (s *supervisor) accept(h handoff, fd int) {
 		go func() {
 			defer s.wg.Done()
 			forwardListener(ln, ap)
+		}()
+	case handoffNotify:
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.serveNotifications(fd)
 		}()
 	default:
 		_ = unix.Close(fd)

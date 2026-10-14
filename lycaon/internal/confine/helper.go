@@ -37,13 +37,17 @@ func runHelperIfInvoked() {
 	}
 }
 
+// helperRefusalFDArg is the refusal pipe this helper was given, or -1.
+var helperRefusalFDArg = -1
+
 // runHelper applies an inherited profile before replacing the process.
 func runHelper(args []string) error {
 	profileFD, lineageFD := -1, -1
+	helperRefusalFDArg = -1
 	var target []string
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case profileFDFlag, lineageFDFlag:
+		case profileFDFlag, lineageFDFlag, refusalFDFlag:
 			flag := args[i]
 			if i+1 >= len(args) {
 				return fmt.Errorf("%s requires a file descriptor", flag)
@@ -52,10 +56,13 @@ func runHelper(args []string) error {
 			if err != nil || fd < 0 {
 				return fmt.Errorf("%s requires a file descriptor, got %q", flag, args[i+1])
 			}
-			if flag == profileFDFlag {
+			switch flag {
+			case profileFDFlag:
 				profileFD = fd
-			} else {
+			case lineageFDFlag:
 				lineageFD = fd
+			default:
+				helperRefusalFDArg = fd
 			}
 			i++
 		case "--":
