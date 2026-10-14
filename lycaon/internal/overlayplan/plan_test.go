@@ -55,7 +55,7 @@ func TestBuildOverlayMergePlanExcludesUnfinishedLegsFromPromoteSequence(t *testi
 		{
 			ID: "job-partial", ParentSessionID: "sess-1", Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending,
 			Result: &api.WorkerResult{
-				Status:           api.WorkerSummaryStatusPartial,
+				Status:           "partial",
 				CompletionReport: &api.WorkerCompletionReport{LegStatus: "partial"},
 				ChangeReport:     &api.WorkerChangeReport{ChangedPaths: []string{"status.py"}},
 			},
@@ -64,7 +64,7 @@ func TestBuildOverlayMergePlanExcludesUnfinishedLegsFromPromoteSequence(t *testi
 		{
 			ID: "job-blocked", ParentSessionID: "sess-1", Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending,
 			Result: &api.WorkerResult{
-				Status:       api.WorkerSummaryStatusBlocked,
+				Status:       "blocked",
 				ChangeReport: &api.WorkerChangeReport{ChangedPaths: []string{"status.py"}},
 			},
 			WorkspaceRoot: "/tmp/o-blocked",

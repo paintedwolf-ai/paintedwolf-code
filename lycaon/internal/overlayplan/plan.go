@@ -103,12 +103,12 @@ func Build(
 
 func unfinishedOverlayLeg(task api.WorkerTask) bool {
 	switch api.WorkerTaskLegStatus(task) {
-	case string(api.WorkerSummaryStatusPartial), string(api.WorkerSummaryStatusBlocked):
+	case "partial", "blocked":
 		return true
 	}
 	if task.Result != nil {
-		switch task.Result.Status {
-		case api.WorkerSummaryStatusPartial, api.WorkerSummaryStatusBlocked:
+		switch strings.TrimSpace(task.Result.Status) {
+		case "partial", "blocked", "needs_decision":
 			return true
 		}
 	}
