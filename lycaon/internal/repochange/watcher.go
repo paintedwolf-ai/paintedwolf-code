@@ -2,11 +2,13 @@ package repochange
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/lycaon/lycaon/internal/sourcescope"
@@ -34,7 +36,15 @@ type worktreeWatcher struct {
 	scope           *sourcescope.Scope
 	reported        bool
 	faulted         bool
-	refs            refObserver
+	// overflowed holds between a dropped event window and the resync that
+	// closes it; overflows counts the windows for diagnostics.
+	overflowed bool
+	overflows  int
+	// watchLimit records that the kernel refused the last registration for
+	// lack of per-user watch capacity, until a later registration succeeds.
+	watchLimit    bool
+	limitReported bool
+	refs          refObserver
 }
 
 func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *watchfd.Budget) (*worktreeWatcher, error) {
@@ -113,11 +123,28 @@ func (w *worktreeWatcher) addDir(path string, cost int) addOutcome {
 	}
 	if err := w.watcher.Add(path); err != nil {
 		w.budget.Give(cost)
+		w.noteRegistrationFailureLocked(path, err)
 		return addFailed
 	}
+	w.watchLimit = false
 	w.watched[path] = cost
 	w.spent += cost
 	return addRegistered
+}
+
+// ENOSPC from a watch registration is the per-user watch limit, not disk
+// space; the shortfall heals only when the limit is raised or watches free up.
+func (w *worktreeWatcher) noteRegistrationFailureLocked(path string, err error) {
+	if !errors.Is(err, syscall.ENOSPC) {
+		return
+	}
+	w.watchLimit = true
+	if w.limitReported {
+		return
+	}
+	w.limitReported = true
+	slog.Warn("worktree watch registration refused: the per-user watch limit is reached; outside edits in unwatched directories surface on the next inventory pass",
+		"root", w.root, "directory", path, "watched_dirs", len(w.watched), "recovery", "raise fs.inotify.max_user_watches")
 }
 
 // repriceDir keeps the budget aligned with kqueue as entries appear and
@@ -236,8 +263,8 @@ func (w *worktreeWatcher) coveredByRootLocked(path string) bool {
 func (w *worktreeWatcher) coverageLocked() WatchCoverage {
 	return WatchCoverage{
 		Root: w.root, Watching: true, Watched: len(w.watched),
-		Truncated: w.truncated, PolicyUnwatched: w.policyUnwatched, Complete: w.truncated == 0 && !w.faulted,
-		Recursive: w.recursive, Faulted: w.faulted,
+		Truncated: w.truncated, PolicyUnwatched: w.policyUnwatched, Complete: w.truncated == 0 && !w.faulted && !w.overflowed,
+		Recursive: w.recursive, Faulted: w.faulted, Overflows: w.overflows, WatchLimit: w.watchLimit,
 	}
 }
 
@@ -305,7 +332,9 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 			if w.scope.BoundaryPath(relSlash, false) != "" {
 				continue
 			}
-			info, statErr := os.Stat(ev.Name)
+			// A symlink is an entry of its parent; the tree it points at is
+			// outside the watched geometry, as it is for the catalog.
+			info, statErr := os.Lstat(ev.Name)
 			isDir := statErr == nil && info.IsDir()
 			if ev.Op&fsnotify.Create != 0 && isDir && relSlash == ".git" {
 				// A repository appeared under a watched root; start watching
@@ -322,6 +351,10 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 			if !ok {
 				return
 			}
+			if errors.Is(err, fsnotify.ErrEventOverflow) {
+				w.recoverOverflow(ctx)
+				continue
+			}
 			w.mu.Lock()
 			w.faulted = true
 			w.mu.Unlock()
@@ -334,6 +367,23 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 			NotifyWorktreeChangesDebounced(ctx, w.root, []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, SourceWatcher)
 		}
 	}
+}
+
+// recoverOverflow closes a dropped-event window. The stream itself stays
+// valid after the kernel reports an overflow, so one synchronous resync
+// advances the epoch past the lost events and every observer rescans; the
+// window counts as incomplete only until that delivery returns.
+func (w *worktreeWatcher) recoverOverflow(ctx context.Context) {
+	w.mu.Lock()
+	w.overflowed = true
+	w.overflows++
+	count := w.overflows
+	w.mu.Unlock()
+	slog.WarnContext(ctx, "worktree watcher event queue overflowed; rescanning the root", "root", w.root, "overflows", count)
+	Notify(ctx, Event{ProjectDir: w.root, Kind: WorktreeChanged, Changes: []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, Source: SourceWatcher})
+	w.mu.Lock()
+	w.overflowed = false
+	w.mu.Unlock()
 }
 
 func classifyWatcherChange(op fsnotify.Op, isDir bool, statErr error) WorktreeChangeKind {

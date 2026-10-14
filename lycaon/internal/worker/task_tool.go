@@ -37,6 +37,11 @@ type TaskToolDeps struct {
 	TaskReceipt  func(context.Context, string, string) (*api.WorkerTask, error)
 }
 
+// IdentityResolver supplies the same child, plan, and budget sources to task admission and execution.
+func (d TaskToolDeps) IdentityResolver() workeradmission.TaskIdentityResolver {
+	return workeradmission.TaskIdentityResolver{Children: d.Queue, WorkflowWork: d.WorkflowWork, ToolBudget: d.ToolBudget}
+}
+
 var taskToolLog = observability.LazyComponent("task_tool")
 
 // overlayDiscarded reports whether a write overlay was removed.
@@ -54,6 +59,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 	if reg == nil || deps.Queue == nil || deps.Agents == nil {
 		return fmt.Errorf("registry, sessions, queue, and agents required")
 	}
+	identityResolver := deps.IdentityResolver()
 	return reg.Register("task", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		sourceDigest, err := taskToolArgsDigest(args, tctx)
 		if err != nil {
@@ -72,18 +78,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 				return taskEnqueueOutput(tctx, scope, *prior)
 			}
 		}
-		maxToolLoops, err := workeradmission.ParseTaskMaxToolLoopsFromArgs(args)
-		if err != nil {
-			return "", err
-		}
-		budget := spawn.DefaultWorkerToolBudget()
-		if deps.ToolBudget != nil {
-			budget = deps.ToolBudget(tctx.ActiveRootPath())
-		}
-		if code := workeradmission.ValidateTaskMaxToolLoopsCode(maxToolLoops, budget); code != "" {
-			return "", &toolrejection.ToolReject{Code: code, Data: map[string]any{"max_tool_loops": maxToolLoops, "min_required": budget.Min, "host_max": budget.Max}}
-		}
-		identity, err := resolveTaskIdentity(ctx, deps, tctx, args, maxToolLoops, budget)
+		identity, err := identityResolver.Resolve(ctx, tctx.Identity.SessionID, tctx.ActiveRootPath(), args)
 		if err != nil {
 			return "", err
 		}
