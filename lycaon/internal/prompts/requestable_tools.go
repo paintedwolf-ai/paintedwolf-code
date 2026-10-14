@@ -4,6 +4,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/toolpresentation"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
 // RequestableToolView is a loadable tool that is not on this call. The prompt
@@ -81,4 +82,24 @@ func requestableToolVars(rows []RequestableToolView) []map[string]any {
 		out = append(out, map[string]any{"name": row.Name, "summary": row.Summary})
 	}
 	return out
+}
+
+// requestableToolSet exposes loading reachability without teaching unloaded schemas.
+func requestableToolSet(offered, requestable []string) map[string]bool {
+	plan := toolsurface.Compile(offered, requestable)
+	out := map[string]bool{}
+	if plan.Immediate("request_tools") {
+		for _, name := range plan.DeferredNames() {
+			out[name] = true
+		}
+	}
+	return out
+}
+
+func requestableToolNames(rows []RequestableToolView) []string {
+	names := make([]string, 0, len(rows))
+	for _, row := range rows {
+		names = append(names, row.Name)
+	}
+	return names
 }

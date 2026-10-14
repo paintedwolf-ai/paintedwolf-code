@@ -54,13 +54,13 @@ recon_reconcile:
   exit: none
   floor: [recall, read, grep, jq, list_dir, summarize, pack_board, workflow_transition, ask_user, surface_note]
 
-# Pending overlays block new dispatch.
+# Pending overlays block new overlapping writes.
 implement_overlay_promote:
   activity_label: Combining results
   mode_ref: implement-overlay-promote
   card:
     label: integrate
-    rule: Land or reject pending overlays before new dispatch.
+    rule: Review pending overlays; resume unfinished workers.
   exit: none
   # skills_read resolves a described need and opens one procedure.
   floor: [recall, promote_overlay, reject_overlay, preview_overlay, worker_cancel, answer_decision, extend_worker_budget, decline_worker_budget, update_progress, task, pack_board, read, grep, jq, list_dir, survey_repo, summarize, skills_read, web_search, fetch_url, http_request, process_list, process_signal, command, verify, secret_generate, secret_list, secret_revoke, wait, scan_query, scan_summary, scan_list, terminal_open, terminal_send, terminal_read, terminal_snapshot, terminal_close, ask_user, surface_note, request_tools]

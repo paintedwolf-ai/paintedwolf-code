@@ -80,6 +80,7 @@ func CoordinatorPolicyTemplateVars(offered, requestable []string) map[string]any
 	// set after the spawn merge so the worker default does not win.
 	out["recall_may_widen"] = true
 	out["more_tools_loadable"] = len(requestable) > 0
+	out["profile_can_request"] = requestableToolSet(offered, requestable)
 	MergeHTTPActionVars(offered, out)
 	return out
 }
