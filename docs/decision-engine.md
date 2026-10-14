@@ -101,13 +101,18 @@ keep their own ranking threshold and result limit.
 A request containing only one exact tool name bypasses ranking; an unambiguous
 skill identifier does too. Described needs use the local ranker. When it is
 unavailable, disabled, late, or faulted, the result includes `discovery` with
-`status: ranking_unavailable` and a structured `failure`. A completed ranking
-that selects nothing retains its normal rejection without a catalog. Discovery
-never loads a tool or reads a skill body. A mixed tool request can load its
+`status: ranking_unavailable` and a structured `failure`. A completed tool ranking
+that selects nothing retains `TOOL_REQUEST_UNMATCHED` and includes a bounded
+`discovery` catalog with `status: no_match` in its structured feedback when
+requestable tools remain. OAR recovery directs exact-name selection or paging;
+a ranking miss does not establish that the capability is unavailable. Skill
+lookups keep their existing no-match behavior. Discovery never loads a tool or
+reads a skill body. A mixed tool request can load its
 explicit names and return discovery for the unanswered portion.
 
 Each page contains up to 20 available names and bounded descriptions, in name
-order. The model selects an entry by retrying its exact name. Passing
+order, within a 16 KiB serialized-page budget. Byte-limited pages continue after
+the last entry actually returned. The model selects an entry by retrying its exact name. Passing
 `discovery.next_need` unchanged as `need` retrieves another fallback page without
 ranking. These continuation values and selection instructions appear only in
 fallback results; standing prompts and tool schemas carry no discovery overhead.

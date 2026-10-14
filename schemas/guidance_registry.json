@@ -3041,7 +3041,7 @@
       "summary": "{{ tool }} is not permitted for the active agent profile."
     },
     "TOOL_REQUEST_UNMATCHED": {
-      "branch_instruction": "Do not repeat the same request unchanged. If the missing capability blocks the task, explain that limit rather than claiming completion",
+      "branch_instruction": "{% if paintedwolf.tool_discovery_status %}Choose an exact tool from the catalog{% if paintedwolf.tool_discovery_has_more %}, or continue browsing with next_need{% endif %}; do not repeat the unchanged description. {% else %}Do not repeat the same request unchanged. If the missing capability blocks the task, explain that limit rather than claiming completion{% endif %}",
       "category": "recoverable",
       "emit": "guard:request_tools",
       "summary": "No schema loaded for the request \"{{ paintedwolf.need }}\" in profile {{ paintedwolf.profile }}"

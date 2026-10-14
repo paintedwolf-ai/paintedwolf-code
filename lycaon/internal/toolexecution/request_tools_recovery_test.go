@@ -22,7 +22,7 @@ import (
 
 func TestRequestToolsRenderedRejectionKeepsClassification(t *testing.T) {
 	formatter := guidance.NewStaticRejectFormatter(moduleHintConfig(t))
-	err := tools.FormatRequestToolsReject(tools.RequestToolsDeps{RejectFmt: func() *guidance.StaticRejectFormatter { return formatter }}, "coordinator", "deliver the report", []string{"read"})
+	err := tools.FormatRequestToolsReject(tools.RequestToolsDeps{RejectFmt: func() *guidance.StaticRejectFormatter { return formatter }}, "coordinator", "deliver the report", []string{"read"}, nil)
 	reject := requireUnmatchedToolRequest(t, err)
 	if reject.Data["need"] != "deliver the report" || !reflect.DeepEqual(reject.Data["available"], []string{"read"}) {
 		t.Fatalf("request rejection lost recovery data: %+v", reject.Data)

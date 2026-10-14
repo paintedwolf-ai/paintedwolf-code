@@ -2,6 +2,7 @@ package turnload
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -26,7 +27,9 @@ func TestDiscoveryPaginationAndScope(t *testing.T) {
 	for {
 		page, err := Discover("tools/session", "inspect", cursor, "catalog", "", entries)
 		testutil.FailErr(t, "page catalog", err)
-		if len(page.Entries) > DiscoveryPageSize || page.Total != len(entries) {
+		encoded, err := json.Marshal(page)
+		testutil.FailErr(t, "encode page", err)
+		if len(encoded) > DiscoveryPageBytes || len(page.Entries) > DiscoveryPageSize || page.Total != len(entries) {
 			t.Fatalf("page = %+v", page)
 		}
 		for _, entry := range page.Entries {
@@ -139,5 +142,16 @@ func TestDiscoveryNeedParsing(t *testing.T) {
 		if _, _, err := ParseDiscoveryNeed(invalid); err == nil {
 			t.Fatal("invalid continuation accepted")
 		}
+	}
+}
+
+func TestDiscoveryRejectsAnUnpageableContinuation(t *testing.T) {
+	entries := make([]DiscoveryEntry, DiscoveryPageSize+1)
+	for i := range entries {
+		entries[i].Name = fmt.Sprintf("tool_%02d", i)
+	}
+	_, err := Discover("tools/session", strings.Repeat("x", DiscoveryPageBytes), "", "no_match", "", entries)
+	if err == nil || !strings.Contains(err.Error(), "cannot fit") {
+		t.Fatalf("unbounded discovery accepted: %v", err)
 	}
 }
