@@ -42,12 +42,20 @@ func TestSynthesisAssemblyProjectsHistoricalChecksWithoutChecklist(t *testing.T)
 	for _, match := range []verification.SourceMatch{verification.SourceCurrent, verification.SourceChanged, verification.SourceUnknown} {
 		t.Run(string(match), func(t *testing.T) {
 			s.SetSourceVerification(observedSourceChecks{&verification.SourceCheckObservations{
-				Checks: []verification.SourceCheckObservation{{CheckID: "historical", Verdict: "passed", Match: match, PriorIntent: true}},
+				Checks: []verification.SourceCheckObservation{{
+					CheckID: "internal-check-id", SourceRevision: "internal-source-hash", RootDigest: "internal-root-hash",
+					Command: "go test ./parser", Cwd: "module", Verdict: "passed", Match: match, PriorIntent: true,
+				}},
 			}})
 			got := s.SynthesisEvidenceForAssembly(t.Context(), &api.Session{ID: "parent"}, "implement_investigate")
-			for _, want := range []string{`"source_match":"` + string(match) + `"`, `"prior_user_intent":true`, `"required_by_workflow":false`, "A historical pass does not prove changed source passes"} {
+			for _, want := range []string{`"command":"go test ./parser"`, `"cwd":"module"`, `"recorded_verdict":"passed"`, `"source_match":"` + string(match) + `"`, `"prior_user_intent":true`, `"required_by_workflow":false`, "A historical pass does not prove changed source passes"} {
 				if !strings.Contains(got, want) {
 					t.Fatalf("assembled OAR projection lacks %q: %s", want, got)
+				}
+			}
+			for _, hidden := range []string{"internal-check-id", "internal-source-hash", "internal-root-hash", `"check_id"`, `"recorded_source_revision"`, `"recorded_root_digest"`} {
+				if strings.Contains(got, hidden) {
+					t.Fatalf("assembled OAR projection exposed internal identity %q: %s", hidden, got)
 				}
 			}
 		})

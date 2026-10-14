@@ -20,12 +20,12 @@ const (
 
 // SourceCheckObservation describes recorded evidence, not task completion.
 type SourceCheckObservation struct {
-	CheckID        string      `json:"check_id"`
+	CheckID        string      `json:"-"`
 	Command        string      `json:"command"`
 	Cwd            string      `json:"cwd"`
 	Verdict        string      `json:"recorded_verdict"`
-	SourceRevision string      `json:"recorded_source_revision"`
-	RootDigest     string      `json:"recorded_root_digest"`
+	SourceRevision string      `json:"-"`
+	RootDigest     string      `json:"-"`
 	Match          SourceMatch `json:"source_match"`
 	PriorIntent    bool        `json:"prior_user_intent"`
 }
