@@ -8,7 +8,9 @@ import (
 )
 
 // Baseline uses deterministic projections without making provider calls.
-func (c *SimpleCompactor) Baseline() *SimpleCompactor { return NewSimpleCompactor(c.cfg, nil) }
+func (c *SimpleCompactor) Baseline() *SimpleCompactor {
+	return NewSimpleCompactor(c.cfg, nil).WithContinuationRanker(c.ranker)
+}
 
 // EnrichContinuation synthesizes a captured source page without publishing it.
 func (c *SimpleCompactor) EnrichContinuation(ctx context.Context, info SessionInfo, rows []api.Message, record *messageview.Continuation) (*messageview.Continuation, error) {
@@ -30,6 +32,7 @@ func (c *SimpleCompactor) EnrichContinuation(ctx context.Context, info SessionIn
 	enriched.Summary = summaryRecord(summary)
 	enriched.Sources = sources
 	enriched.Reason = "summarized"
+	c.rankContinuation(ctx, info, &enriched)
 	return &enriched, nil
 }
 
