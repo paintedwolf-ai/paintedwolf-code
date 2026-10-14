@@ -32,4 +32,15 @@ fi
 rm -f "${LOCKDIR}/pid"
 rmdir "${LOCKDIR}"
 
+# A lock without an owner yet is left alone while fresh and reclaimed once old.
+mkdir "${LOCKDIR}"
+[[ "$(digest_lock_mtime "${LOCKDIR}")" =~ ^[0-9]+$ ]]
+if digest_try_reclaim_stale "${LOCKDIR}" 2>/dev/null; then
+  echo "expected a fresh ownerless lock to be kept" >&2
+  exit 1
+fi
+touch -t 200001010000 "${LOCKDIR}"
+digest_try_reclaim_stale "${LOCKDIR}" 2>/dev/null
+[[ ! -d "${LOCKDIR}" ]]
+
 echo "lock smoke OK"

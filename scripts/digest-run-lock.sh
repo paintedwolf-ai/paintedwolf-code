@@ -11,6 +11,15 @@ digest_lock_holder_alive() {
   kill -0 "${pid}" 2>/dev/null
 }
 
+# GNU `stat -f` succeeds with filesystem text, so the GNU form is probed first;
+# BSD `stat` rejects `-c`.
+digest_lock_mtime() {
+  local mtime
+  mtime="$(stat -c %Y "$1" 2>/dev/null)" || mtime="$(stat -f %m "$1" 2>/dev/null)" || return 1
+  [[ "${mtime}" =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "${mtime}"
+}
+
 digest_try_reclaim_stale() {
   local lockdir="$1"
   [[ -d "${lockdir}" ]] || return 1
@@ -19,9 +28,9 @@ digest_try_reclaim_stale() {
   fi
   # A new lock may not have published its owner yet.
   if [[ ! -f "${lockdir}/pid" ]]; then
-    local age=0
-    if stat_mtime="$(stat -f %m "${lockdir}" 2>/dev/null || stat -c %Y "${lockdir}" 2>/dev/null)"; then
-      age=$(( $(date +%s) - stat_mtime ))
+    local age=0 mtime
+    if mtime="$(digest_lock_mtime "${lockdir}")"; then
+      age=$(( $(date +%s) - mtime ))
     fi
     if (( age < 5 )); then
       return 1
