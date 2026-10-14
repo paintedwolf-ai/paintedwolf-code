@@ -439,12 +439,15 @@ func TestLinuxConcurrentActionsKeepTheirOwnRefusals(t *testing.T) {
 		})
 		r := &run{lease: lease, target: net.JoinHostPort("127.0.0.1", strconv.Itoa(int(freePort(t))))}
 		runs[i] = r
+		// The connection is made by a grandchild of the helper.
+		cmd, cleanup, err := confine.Command(t.Context(), self, "/bin/sh", []string{"-c", self + " " + probeTestFlag}, *c)
+		testutil.FailErr(t, "confine.Command", err)
+		cmd.Env = append(probeEnv("tcpconnect"), linuxProbePathsEnv+"="+r.target)
 		go func() {
 			defer func() { done <- struct{}{} }()
-			// The connection is made by a grandchild of the helper.
-			script := self + " " + probeTestFlag
-			env := append(probeEnv("tcpconnect"), linuxProbePathsEnv+"="+r.target)
-			_, r.out = linuxConfinedRun(t, self, *c, env, "/bin/sh", "-c", script)
+			defer cleanup()
+			out, _ := cmd.CombinedOutput()
+			r.out = string(out)
 		}()
 	}
 	for range runs {
