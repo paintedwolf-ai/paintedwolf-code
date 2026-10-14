@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
@@ -26,6 +27,17 @@ func (m *Service) BeforeTool(
 			return "", false, reject
 		}
 		return "", blocked, err
+	}
+	var identity workeradmission.TaskIdentity
+	if tool == "task" && sess != nil && surface.IsCoordinatorParent(sess) {
+		projectDir, err := m.Workspace.ActivePath(ctx, sess)
+		if err != nil {
+			return "", false, err
+		}
+		identity, err = m.taskIdentities.Resolve(ctx, sess.ID, projectDir, args)
+		if err != nil {
+			return "", false, err
+		}
 	}
 	implState := m.state.ForSession(ctx, sess)
 	surfaceID := m.surface.PromptTurnSurfaceID(sess.ID)
@@ -51,7 +63,7 @@ func (m *Service) BeforeTool(
 		guard.ObserveCoordinatorSynthesisWrapupTool(surfaceID, tool, tools.ToolOffered(ctx, tool), gc)
 		guard.ObserveVerifyCommandUndeclared(tool, declaredVerify, args, gc)
 		guard.ObserveProgressReconcileOnSynthesis(surfaceID, currentProgress, args, gc)
-		return workeradmission.ObserveCoordinatorTaskInFlight(ctx, guardDeps, sess, tool, args, gc)
+		return workeradmission.ObserveCoordinatorTaskInFlight(ctx, guardDeps, sess, tool, identity, gc)
 	}); skip || err != nil {
 		if reject != nil {
 			return "", false, reject

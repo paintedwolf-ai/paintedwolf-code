@@ -86,14 +86,14 @@ func TestCoordinatorTaskScopeDispatchReadFanOutParallelWriteAllowed(t *testing.T
 	testutil.FailErr(t, "enqueue write worker", err)
 
 	gc = oar.NewGuardContext()
-	testutil.FailErr(t, "Observe overlapping write", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", map[string]any{
+	testutil.FailErr(t, "Observe overlapping write", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", resolveObservedTask(t, map[string]any{
 		"agent_type": "implementer",
 		"brief":      map[string]any{"goal": "parallel write same area", "done_when": []any{"Return grounded results."}},
 		"scope": map[string]any{
 			"mode":  "write",
 			"paths": []any{"internal/auth/x.go"},
 		},
-	}, gc))
+	}), gc))
 	if len(gc.Invocation.ArgValidationErrors) > 0 {
 		t.Fatalf("expected overlapping write scope allowed: %v", gc.Invocation.ArgValidationErrors)
 	}
@@ -132,4 +132,11 @@ func TestWorkerPromptIncludesManifestTouchPaths(t *testing.T) {
 	if !strings.HasSuffix(strings.TrimSpace(prompt), "Implement login fix") {
 		t.Fatalf("prompt = %q", prompt)
 	}
+}
+
+func resolveObservedTask(t *testing.T, args map[string]any) workeradmission.TaskIdentity {
+	t.Helper()
+	identity, err := (workeradmission.TaskIdentityResolver{}).Resolve(t.Context(), "parent-1", "", args)
+	testutil.FailErr(t, "resolve observed task", err)
+	return identity
 }

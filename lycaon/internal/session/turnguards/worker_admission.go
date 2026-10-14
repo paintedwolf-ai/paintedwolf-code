@@ -43,3 +43,7 @@ func (m *Service) WorkerAdmission() workeradmission.WorkerCycleGuardDeps {
 		},
 	}
 }
+
+func (m *Service) SetTaskIdentityResolver(resolver workeradmission.TaskIdentityResolver) {
+	m.taskIdentities = resolver
+}

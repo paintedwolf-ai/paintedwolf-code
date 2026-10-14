@@ -66,9 +66,7 @@ func TestTaskObservationBlocksPendingPhaseObligation(t *testing.T) {
 			Phase: "ingest", PhaseObligationPending: true, PendingObligationKinds: []string{"scan"},
 		}
 	}}
-	if err := workeradmission.ObserveCoordinatorTaskInFlight(context.Background(), deps, sess, "task", map[string]any{
-		"agent_type": "security-reviewer",
-	}, gc); err != nil {
+	if err := workeradmission.ObserveCoordinatorTaskInFlight(context.Background(), deps, sess, "task", workeradmission.TaskIdentity{}, gc); err != nil {
 		t.Fatalf("workeradmission.ObserveCoordinatorTaskInFlight: %v", err)
 	}
 	if !gc.Workflow.PhaseObligationPending || gc.Workflow.PhaseObligationKinds != "scan" {
@@ -90,7 +88,7 @@ func TestTaskPolicyRejectsPendingPhaseObligation(t *testing.T) {
 		context.Background(), oar.AnchorCoordinatorPreInvoke, sess, "task",
 		map[string]any{"agent_type": "security-reviewer"},
 		func(gc *oar.GuardContext) error {
-			return workeradmission.ObserveCoordinatorTaskInFlight(context.Background(), deps, sess, "task", nil, gc)
+			return workeradmission.ObserveCoordinatorTaskInFlight(context.Background(), deps, sess, "task", workeradmission.TaskIdentity{}, gc)
 		},
 	)
 	if err != nil {
