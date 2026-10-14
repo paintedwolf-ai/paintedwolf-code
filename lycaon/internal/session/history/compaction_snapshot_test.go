@@ -74,7 +74,10 @@ func TestPersistedCompactionViewRestoresRetainedReasoning(t *testing.T) {
 	}
 	sess, err = st.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "reload generation", err)
-	out := (&Service{store: st}).ApplyView(t.Context(), sess, canonical)
+	history := &Service{store: st}
+	loaded, err := history.Load(t.Context(), sess)
+	testutil.FailErr(t, "load retained canonical replay", err)
+	out := history.ApplyView(t.Context(), sess, loaded)
 	if len(out) != 2 || out[0].ModelReasoning == nil || out[0].ModelReasoning.Text != "private" {
 		t.Fatal("request view lost canonical continuation")
 	}

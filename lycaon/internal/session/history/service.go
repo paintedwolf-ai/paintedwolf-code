@@ -19,6 +19,7 @@ type Store interface {
 	messageview.CompactionAttemptStore
 	Get(context.Context, string) (*api.Session, error)
 	GetMessages(context.Context, string) ([]api.Message, error)
+	GetMessage(context.Context, string, string) (api.Message, error)
 	GetUserTurnOpener(context.Context, string, int) (api.Message, error)
 	GetMessagesTail(context.Context, string, int) ([]api.Message, error)
 	GetMessagesAfterOrd(context.Context, string, int64, int) ([]api.Message, error)

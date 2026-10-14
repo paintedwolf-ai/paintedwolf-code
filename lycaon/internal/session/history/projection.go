@@ -37,7 +37,19 @@ func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, e
 	if len(suffix) > UncompactedLimit {
 		return m.loadBoundedCanonicalPromptHistory(ctx, sess)
 	}
-	return suffix, nil
+	// Replay fields stay canonical rather than being duplicated in projections.
+	retained := make([]api.Message, 0, len(view.Messages)+len(suffix))
+	for _, row := range view.Messages {
+		if row.Ord <= 0 || row.Role != api.MessageRoleAssistant || row.CompactedChunk != nil {
+			continue
+		}
+		canonical, err := m.store.GetMessage(ctx, sess.ID, row.ID)
+		if err != nil {
+			return nil, err
+		}
+		retained = append(retained, canonical)
+	}
+	return append(retained, suffix...), nil
 }
 
 func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *api.Session) ([]api.Message, error) {
