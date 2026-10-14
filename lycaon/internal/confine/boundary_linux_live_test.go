@@ -389,7 +389,11 @@ func TestLinuxUnixSocketsAreRefused(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	// A socket the test serves outside every root; the test reaches it itself,
 	// so the confined refusal is the boundary and not a missing listener.
-	own := filepath.Join(t.TempDir(), "own.sock")
+	// The test's own temporary directory is too deep for a socket path.
+	short, err := os.MkdirTemp("/tmp", "pw-unix-")
+	testutil.FailErr(t, "socket directory", err)
+	t.Cleanup(func() { _ = os.RemoveAll(short) })
+	own := filepath.Join(short, "own.sock")
 	ln, err := net.Listen("unix", own)
 	testutil.FailErr(t, "listen", err)
 	defer ln.Close()
