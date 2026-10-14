@@ -75,3 +75,17 @@ func TestOllamaContextCapSurvivesRuntimeRefresh(t *testing.T) {
 		}
 	}
 }
+
+func TestRegistryRequestBudgetUsesNativeAdapter(t *testing.T) {
+	p := ollamaprovider.New("local", "http://unused.invalid", "", []modelinfo.Entry{{ID: "model", ContextLength: 16384}})
+	r := &Registry{}
+	r.snapshot.Store(&providerRegistrySnapshot{providers: map[string]modelcall.Provider{"local": p}})
+	req := modelcall.CompletionRequest{Model: "model", Messages: []api.Message{{Role: api.MessageRoleUser, Content: strings.Repeat("detail ", 2000)}}}
+	want := p.RequestBudget(t.Context(), req)
+	if got := r.RequestBudget(t.Context(), "local", req); got != want {
+		t.Fatalf("registry budget = %+v, adapter = %+v", got, want)
+	}
+	if want.Input <= modelcall.EstimateRequestInput(req) {
+		t.Fatal("fixture must exercise native cold calibration")
+	}
+}

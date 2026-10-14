@@ -11,9 +11,9 @@ func (r *Registry) RequestBudget(ctx context.Context, providerID string, req mod
 	if r == nil {
 		return budget
 	}
-	provider, err := r.Get(providerID)
-	if err == nil {
-		if reporter, ok := provider.(modelcall.RequestBudgetReporter); ok {
+	// Planning reads the adapter without dispatch middleware.
+	if snapshot := r.snapshot.Load(); snapshot != nil {
+		if reporter, ok := snapshot.providers[providerID].(modelcall.RequestBudgetReporter); ok {
 			budget = reporter.RequestBudget(ctx, req)
 		}
 	}
