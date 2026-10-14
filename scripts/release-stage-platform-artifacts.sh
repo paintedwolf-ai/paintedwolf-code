@@ -301,12 +301,8 @@ case "${GOOS}" in
     else
       echo "::warning title=rpmlint::rpmlint is not installed; the .rpm policy check did not run"
     fi
-    # Both families must install the same executables.
-    diff <(cd "${DEB_TREE}" && find opt usr/bin -type f -perm -u+x | sort) \
-         <(cd "${RPM_TREE}" && find opt usr/bin -type f -perm -u+x | sort) || {
-      echo "error: .deb and .rpm install different executable sets" >&2
-      exit 1
-    }
+    # Both families install the same tree apart from the fragments only one ships.
+    python3 "${ROOT}/scripts/linux-package-assemble.py" compare --root "${ROOT}" --deb-tree "${DEB_TREE}" --rpm-tree "${RPM_TREE}"
     ENGINE="${DEB_TREE}/${LINUX_INSTALL_ROOT}/bin/pw"
     LYCAON_DOCUMENT_CORE_BINARY="${DEB_TREE}/${LINUX_INSTALL_ROOT}/bin/pw-document-core" \
       LYCAON_ENGINE_ROOT="${DEB_TREE}/${LINUX_INSTALL_ROOT}/engine-root" "${ENGINE}" diagnostics document-core

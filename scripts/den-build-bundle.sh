@@ -136,8 +136,9 @@ fi
 BUNDLE_KIND="dmg"
 BUILD_CONFIG=(--config "$(python3 "${ROOT}/scripts/update_keys.py")")
 if [[ "${HOST_KIND}" == "linux" ]]; then
-  # Linux ships native packages; the package manager owns updates, so no updater artifact.
-  BUNDLE_KIND="deb,rpm"
+  # Tauri stages the package tree through its .deb target; linux-package-assemble.py
+  # finishes the .deb and .rpm from that tree. No updater artifact.
+  BUNDLE_KIND="deb"
 elif [[ "${HOST_KIND}" == "windows" ]]; then
   BUNDLE_KIND="nsis"
   if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
@@ -223,7 +224,10 @@ echo "den:bundle — tauri build (--bundles ${BUNDLE_KIND}, target ${TARGET})" >
     python3 "${ROOT}/scripts/linux-package-manifest.py" generate \
       --root "${ROOT}" --target "${TARGET}" --version "${PRODUCT_VERSION}" --output "${LINUX_MANIFEST}"
     LINUX_CONFIG="$(python3 "${ROOT}/scripts/linux-package-config.py" --root "${ROOT}" --target "${TARGET}" --manifest "${LINUX_MANIFEST}")"
+    rm -rf "${TAURI_DIR}/target/${TARGET}/release/bundle/deb" "${TAURI_DIR}/target/${TARGET}/release/bundle/rpm"
     bun run tauri bundle --bundles "${BUNDLE_KIND}" --target "${TARGET}" "${BUILD_CONFIG[@]}" --config "${LINUX_CONFIG}"
+    python3 "${ROOT}/scripts/linux-package-assemble.py" assemble --root "${ROOT}" \
+      --bundle-dir "${TAURI_DIR}/target/${TARGET}/release/bundle" --arch "${TARGET%%-*}" --version "${LINUX_PACKAGE_VERSION}"
   elif (( ${#BUILD_CONFIG[@]} > 0 )); then
     bun run tauri build --bundles "${BUNDLE_KIND}" --target "${TARGET}" "${BUILD_CONFIG[@]}"
   else

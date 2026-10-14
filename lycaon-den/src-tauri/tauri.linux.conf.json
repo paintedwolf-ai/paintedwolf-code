@@ -18,7 +18,7 @@
     ]
   },
   "bundle": {
-    "targets": ["deb", "rpm"],
+    "targets": ["deb"],
     "createUpdaterArtifacts": false,
     "externalBin": [],
     "resources": {
@@ -41,15 +41,6 @@
         "postInstallScript": "../../packaging/linux/deb/postinst",
         "preRemoveScript": "../../packaging/linux/deb/prerm",
         "postRemoveScript": "../../packaging/linux/deb/postrm"
-      },
-      "rpm": {
-        "release": "1",
-        "compression": { "type": "none" },
-        "desktopTemplate": "../../packaging/linux/painted-wolf-code.desktop.hbs",
-        "preInstallScript": "../../packaging/linux/rpm/pre",
-        "postInstallScript": "../../packaging/linux/rpm/post",
-        "preRemoveScript": "../../packaging/linux/rpm/preun",
-        "postRemoveScript": "../../packaging/linux/rpm/postun"
       }
     }
   }

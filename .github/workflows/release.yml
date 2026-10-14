@@ -428,6 +428,7 @@ jobs:
             arm64) [[ "$(rustc --print host-tuple)" == aarch64-unknown-linux-gnu ]] ;;
           esac
 
+      # rpm provides rpmbuild, which assembles the .rpm from the staged tree.
       - name: Install Linux bundle and audit dependencies
         run: |
           sudo apt-get update

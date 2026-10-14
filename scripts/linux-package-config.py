@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Emit the Tauri bundle config fragment for the Linux .deb and .rpm packages.
+"""Emit the Tauri bundle config fragment that stages the Linux package tree.
 
 The fragment carries what cannot live in the static Tauri config: dependency
 constraints rendered from the measured Linux floor, and the `files` map that
 places the engine payload under the package install root and wires the
 optional packaging fragments other subsystems ship (polkit, systemd, AppArmor,
-SELinux). Missing optional directories are tolerated; required
-payloads are not.
+SELinux). Tauri stages that tree through its .deb target; linux-package-assemble.py
+finishes both families from it. Missing optional directories are tolerated;
+required payloads are not.
 """
 
 from __future__ import annotations
@@ -105,10 +106,27 @@ def optional_files(root: Path, family: str) -> dict[str, Path]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
-    parser.add_argument("--target", required=True, help="Rust target triple of the build")
-    parser.add_argument("--manifest", type=Path, required=True, help="generated manifest.json")
+    parser.add_argument("--target", help="Rust target triple of the build")
+    parser.add_argument("--manifest", type=Path, help="generated manifest.json")
+    parser.add_argument(
+        "--family-only",
+        choices=("deb", "rpm"),
+        help="print the installed paths only this package family ships, one per line",
+    )
     args = parser.parse_args()
     root = args.root.resolve()
+    if args.family_only:
+        other = "rpm" if args.family_only == "deb" else "deb"
+        try:
+            paths = optional_files(root, args.family_only).keys() - optional_files(root, other).keys()
+        except (OSError, ValueError) as exc:
+            print(f"error: {exc}", file=sys.stderr)
+            return 1
+        for path in sorted(paths):
+            print(path)
+        return 0
+    if args.target is None or args.manifest is None:
+        parser.error("--target and --manifest are required to emit the Tauri fragment")
     tauri_dir = root / "lycaon-den" / "src-tauri"
     try:
         floors = floor_values(root / "lycaon" / "internal" / "platformfloor" / "linux_floor.txt")
@@ -116,13 +134,13 @@ def main() -> int:
         if catalog.get("format_version") != 1:
             raise ValueError("packaging/linux/dependencies.json has an unsupported format")
         required = required_files(root, tauri_dir, args.target, args.manifest.resolve())
-        linux: dict[str, dict] = {}
-        for family in ("deb", "rpm"):
-            files = {**required, **optional_files(root, family)}
-            linux[family] = {
-                **render_dependencies(catalog, family, floors),
+        files = {**required, **optional_files(root, "deb")}
+        linux = {
+            "deb": {
+                **render_dependencies(catalog, "deb", floors),
                 "files": {destination: str(source) for destination, source in sorted(files.items())},
             }
+        }
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
