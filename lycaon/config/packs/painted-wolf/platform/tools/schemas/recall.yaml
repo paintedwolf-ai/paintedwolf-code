@@ -1,10 +1,6 @@
 description: >-
-  Recover recorded observations by handle, search, or canonical history coordinates.
-  Use read or grep for current files. Branch on resolution: no_match_in_scope means
-  records exist but none matched; scope_empty means no observations exist;
-  record_deleted means a record was removed; executor_degraded does not establish
-  absence. Follow next_action. Hits include observed_at and currency: changed means
-  the source has moved on. Correct filters or terms to recover missed matches.
+  Recover recorded observations or original messages. Use query or own-session
+  history coordinates. Branch on resolution and next_action; check source currency.
 
 schema:
   type: object
@@ -26,6 +22,8 @@ schema:
         search finds recorded instructions or observations. Cannot combine with query or widen.
       properties:
         search: {type: string, minLength: 1, maxLength: 256, description: "Up to eight literal terms, all required."}
+        format: {type: string, enum: [text, record], description: "Body format. record includes original parts and arguments; concatenate pages before parsing."}
+        body_runes: {type: integer, minimum: 1, maximum: 4096}
         after_ord: {type: integer, minimum: 0}
         through_ord: {type: integer, minimum: 1}
         source_seq: {type: integer, minimum: 0}

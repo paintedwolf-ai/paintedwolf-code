@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"unicode/utf8"
 
@@ -24,6 +25,8 @@ const historyText = `COALESCE(NULLIF(content,''),json_extract(NULLIF(tool_result
 
 // HistoryRequest addresses recorded rows in the caller's own session.
 type HistoryRequest struct {
+	Format     string `json:"format,omitempty"`
+	BodyRunes  int    `json:"body_runes,omitempty"`
 	Search     string `json:"search,omitempty"`
 	AfterOrd   int64  `json:"after_ord"`
 	ThroughOrd int64  `json:"through_ord"`
@@ -34,6 +37,7 @@ type HistoryRequest struct {
 
 // HistoryPage is an ordinal index or a bounded recorded body.
 type HistoryPage struct {
+	Format        string         `json:"format,omitempty"`
 	Entries       []HistoryEntry `json:"entries"`
 	NextAfterOrd  int64          `json:"next_after_ord,omitempty"`
 	NextOffset    *int           `json:"next_offset,omitempty"`
@@ -44,18 +48,21 @@ type HistoryPage struct {
 
 // HistoryEntry retains observation coordinates without promoting their authority.
 type HistoryEntry struct {
-	ID      string   `json:"id"`
-	Ord     int64    `json:"ord"`
-	Role    string   `json:"role"`
-	Handles []string `json:"handles,omitempty"`
-	Content string   `json:"content"`
-	Runes   int      `json:"runes"`
-	Offset  int      `json:"offset,omitempty"`
-	Seq     int64    `json:"seq"`
+	MessageID string   `json:"message_id"`
+	Ord       int64    `json:"ord"`
+	Role      string   `json:"role"`
+	Handles   []string `json:"handles,omitempty"`
+	Content   string   `json:"content"`
+	Runes     int      `json:"runes"`
+	Offset    int      `json:"offset,omitempty"`
+	Seq       int64    `json:"seq"`
 }
 
 func (s *Service) history(ctx context.Context, req Request) (*Result, error) {
 	h := req.History
+	if (h.Format != "" && h.Format != "text" && h.Format != "record") || (h.Format == "record" && h.MessageID == "") || h.BodyRunes < 0 || h.BodyRunes > historyBodyRunes || h.Offset == math.MaxInt {
+		return nil, &ErrHistoryCoordinates{Reason: "invalid history body format or window"}
+	}
 	if len([]rune(h.Search)) > 256 || len(strings.Fields(h.Search)) > 8 || (h.MessageID != "" && strings.TrimSpace(h.Search) != "") {
 		return nil, &ErrHistoryCoordinates{Reason: "history search must be bounded and separate from a body request"}
 	}
@@ -160,8 +167,17 @@ func historyIndex(ctx context.Context, tx *sql.Tx, session string, h *HistoryReq
 }
 
 func historyBody(ctx context.Context, tx *sql.Tx, session string, h *HistoryRequest, page *HistoryPage) error {
-	row := tx.QueryRowContext(ctx, `SELECT id, ord, role, substr(`+historyText+`,?,?), length(`+historyText+`), COALESCE(evidence_handles_json,'[]'), seq
-		FROM messages WHERE session_id = ? AND id = ? AND ord > ? AND ord <= ? AND `+historyVisible, h.Offset+1, historyBodyRunes, session, h.MessageID, h.AfterOrd, h.ThroughOrd)
+	text := historyText
+	page.Format = "text"
+	if h.Format == "record" {
+		text, page.Format = historyRecord, "record"
+	}
+	width := historyBodyRunes
+	if h.BodyRunes > 0 {
+		width = h.BodyRunes
+	}
+	row := tx.QueryRowContext(ctx, `SELECT id, ord, role, substr(`+text+`,?,?), length(`+text+`), COALESCE(evidence_handles_json,'[]'), seq
+  FROM messages WHERE session_id = ? AND id = ? AND ord > ? AND ord <= ? AND `+historyVisible, h.Offset+1, width, session, h.MessageID, h.AfterOrd, h.ThroughOrd)
 	entry, err := scanHistoryEntry(row)
 	if err == sql.ErrNoRows {
 		return nil
@@ -180,7 +196,7 @@ func historyBody(ctx context.Context, tx *sql.Tx, session string, h *HistoryRequ
 func scanHistoryEntry(row interface{ Scan(...any) error }) (HistoryEntry, error) {
 	var entry HistoryEntry
 	var handles string
-	if err := row.Scan(&entry.ID, &entry.Ord, &entry.Role, &entry.Content, &entry.Runes, &handles, &entry.Seq); err != nil {
+	if err := row.Scan(&entry.MessageID, &entry.Ord, &entry.Role, &entry.Content, &entry.Runes, &handles, &entry.Seq); err != nil {
 		return entry, err
 	}
 	if err := json.Unmarshal([]byte(handles), &entry.Handles); err != nil {

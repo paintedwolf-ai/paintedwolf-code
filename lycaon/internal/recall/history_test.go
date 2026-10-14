@@ -1,6 +1,7 @@
 package recall_test
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -9,6 +10,40 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
+
+func TestHistoryRecordPreservesArgumentsAndPartsWithoutPrivateReplay(t *testing.T) {
+	f := newFixture(t)
+	testdbseed.InsertSessionEntry(t, f.db, "call", coordinatorSession, "model_output", "call", 1)
+	_, err := f.db.ExecContext(t.Context(), `INSERT INTO messages (entry_id,id,session_id,role,content,tool_calls_json,content_parts_json,origin,authority,trust_tier,ord,seq,ts)
+	VALUES ('call','call',?,'assistant','',?,?,'model','none','untrusted',1,1,'2026-10-14T00:00:00Z')`, coordinatorSession,
+		`[{"id":"original-call","name":"read","args":{"path":"original.go"},"wire_id":"private-id","extra_content":{"reasoning":"private replay"}}]`,
+		`[{"content":"recorded λ plan","origin":"model","authority":"none","trust_tier":"untrusted"}]`)
+	testutil.FailErr(t, "seed original call", err)
+	history := &recall.HistoryRequest{ThroughOrd: 1, MessageID: "call", Format: "record", BodyRunes: 32}
+	var record strings.Builder
+	for {
+		result, err := f.svc.Answer(t.Context(), recall.Request{Caller: coordinator(), History: history})
+		testutil.FailErr(t, "recover record page", err)
+		if result.History.Format != "record" {
+			t.Fatal("record page lost its format")
+		}
+		record.WriteString(result.History.Entries[0].Content)
+		if result.History.NextOffset == nil {
+			break
+		}
+		history.Offset = *result.History.NextOffset
+	}
+	var body struct {
+		ToolCalls []struct {
+			Args map[string]string `json:"args"`
+		} `json:"tool_calls"`
+		Parts []struct{ Content string } `json:"content_parts"`
+	}
+	testutil.FailErr(t, "decode original record", json.Unmarshal([]byte(record.String()), &body))
+	if body.ToolCalls[0].Args["path"] != "original.go" || body.Parts[0].Content != "recorded λ plan" || strings.Contains(record.String(), "private") {
+		t.Fatal("record recovery lost public fields or disclosed private replay")
+	}
+}
 
 func TestHistoryPagesCanonicalRowsWithoutAnIndex(t *testing.T) {
 	f := newFixture(t)
@@ -25,13 +60,13 @@ func TestHistoryPagesCanonicalRowsWithoutAnIndex(t *testing.T) {
 	req := recall.Request{Caller: coordinator(), Limit: 1, History: &recall.HistoryRequest{ThroughOrd: 3, SourceSeq: 3}}
 	first, err := f.svc.Answer(t.Context(), req)
 	testutil.FailErr(t, "read index", err)
-	if first.History.NextAfterOrd != 1 || first.History.Entries[0].ID != "old" {
+	if first.History.NextAfterOrd != 1 || first.History.Entries[0].MessageID != "old" {
 		t.Fatalf("wrong first page: %+v", first)
 	}
 	req.History.AfterOrd = first.History.NextAfterOrd
 	next, err := f.svc.Answer(t.Context(), req)
 	testutil.FailErr(t, "continue index", err)
-	if next.History.Entries[0].ID != "large" || next.History.NextAfterOrd != 2 {
+	if next.History.Entries[0].MessageID != "large" || next.History.NextAfterOrd != 2 {
 		t.Fatal("ordinal seek skipped a row")
 	}
 	req.History.AfterOrd = 0
@@ -113,7 +148,7 @@ func TestHistorySearchFindsOriginalInstructionsWithinCallerScope(t *testing.T) {
 	req := recall.Request{Caller: coordinator(), History: &recall.HistoryRequest{ThroughOrd: 1, Search: "golden otter"}}
 	result, err := f.svc.Answer(t.Context(), req)
 	testutil.FailErr(t, "search recorded instructions", err)
-	if len(result.History.Entries) != 1 || result.History.Entries[0].ID != "instruction" {
+	if len(result.History.Entries) != 1 || result.History.Entries[0].MessageID != "instruction" {
 		t.Fatal("history search lost the original instruction or widened scope")
 	}
 	for _, search := range []string{strings.Repeat("x", 257), "a b c d e f g h i"} {

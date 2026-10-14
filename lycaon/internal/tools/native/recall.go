@@ -42,7 +42,7 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 
 	var history *recall.HistoryRequest
 	if fields, ok := args["history"].(map[string]any); ok {
-		history = &recall.HistoryRequest{Search: stringArgOrEmpty(fields, "search"), AfterOrd: int64(intArgOrZero(fields, "after_ord")),
+		history = &recall.HistoryRequest{Format: stringArgOrEmpty(fields, "format"), BodyRunes: intArgOrZero(fields, "body_runes"), Search: stringArgOrEmpty(fields, "search"), AfterOrd: int64(intArgOrZero(fields, "after_ord")),
 			ThroughOrd: int64(intArgOrZero(fields, "through_ord")), SourceSeq: int64(intArgOrZero(fields, "source_seq")),
 			MessageID: stringArgOrEmpty(fields, "message_id"), Offset: intArgOrZero(fields, "offset")}
 	}
