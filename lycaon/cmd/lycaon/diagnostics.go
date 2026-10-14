@@ -84,11 +84,15 @@ func holdPowerInhibitor(ctx context.Context, controller *hostpower.Controller, h
 	defer func() { _ = controller.Close() }()
 	controller.SetActive("diagnostics", true)
 	status := controller.Snapshot()
-	if _, err := fmt.Fprintf(out, "supported=%t inhibiting=%t provider=%q error=%q\n", status.Supported, status.Inhibiting, status.Provider, status.LastError); err != nil {
+	if _, err := fmt.Fprintf(out, "supported=%t inhibiting=%t provider=%q error=%q unavailable=%q\n", status.Supported, status.Inhibiting, status.Provider, status.LastError, status.Unavailable); err != nil {
 		return err
 	}
 	if !status.Inhibiting {
-		return fmt.Errorf("sleep inhibition is unavailable on this host")
+		reason := status.Unavailable
+		if reason == "" {
+			reason = status.LastError
+		}
+		return fmt.Errorf("sleep inhibition is unavailable on this host: %s", reason)
 	}
 	timer := time.NewTimer(hold)
 	defer timer.Stop()

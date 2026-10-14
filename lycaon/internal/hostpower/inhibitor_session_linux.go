@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/godbus/dbus/v5"
-	"github.com/lycaon/lycaon/internal/linuxbus"
 )
 
 const (
@@ -101,7 +100,7 @@ type portalProvider struct{ connect busConnector }
 
 func (portalProvider) Name() string { return "portal" }
 
-func (p portalProvider) Available(ctx context.Context) bool {
+func (p portalProvider) Check(ctx context.Context) error {
 	return nameServed(ctx, p.connect, portalName)
 }
 
@@ -156,7 +155,7 @@ type powerManagementProvider struct{ connect busConnector }
 
 func (powerManagementProvider) Name() string { return "power-management" }
 
-func (p powerManagementProvider) Available(ctx context.Context) bool {
+func (p powerManagementProvider) Check(ctx context.Context) error {
 	return nameServed(ctx, p.connect, powerManagementName)
 }
 
@@ -180,12 +179,11 @@ func (p powerManagementProvider) Acquire(ctx context.Context) (lease, error) {
 	return newSessionLease(bus, p.Name(), release, nil, ""), nil
 }
 
-func nameServed(ctx context.Context, connect busConnector, name string) bool {
+func nameServed(ctx context.Context, connect busConnector, name string) error {
 	bus, err := connect(ctx)
 	if err != nil {
-		return false
+		return fmt.Errorf("session bus unreachable: %w", err)
 	}
 	defer func() { _ = bus.Close() }()
-	owned, err := linuxbus.NameOwned(ctx, bus, name)
-	return err == nil && owned
+	return nameOwnedOn(ctx, bus, name)
 }

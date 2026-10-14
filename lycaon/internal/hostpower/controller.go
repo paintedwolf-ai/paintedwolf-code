@@ -22,8 +22,32 @@ type lease interface {
 }
 
 type inhibitor interface {
-	Supported() bool
+	// Availability is nil when an assertion can be requested, otherwise the reason it cannot.
+	Availability() error
 	Acquire() (lease, error)
+}
+
+// ProviderReason is why one inhibition protocol cannot be used.
+type ProviderReason struct {
+	Provider string
+	Reason   string
+}
+
+// UnavailableError reports that no inhibition protocol can be used, with each
+// protocol's own reason.
+type UnavailableError struct {
+	Reasons []ProviderReason
+}
+
+func (e *UnavailableError) Error() string {
+	if len(e.Reasons) == 0 {
+		return "sleep inhibition is unavailable on this platform"
+	}
+	parts := make([]string, 0, len(e.Reasons))
+	for _, reason := range e.Reasons {
+		parts = append(parts, reason.Provider+": "+reason.Reason)
+	}
+	return "no sleep inhibition provider is available (" + strings.Join(parts, "; ") + ")"
 }
 
 // Status is the live state shown in Settings.
@@ -35,6 +59,8 @@ type Status struct {
 	LastError       string
 	// Provider is the protocol behind the held assertion; empty when none is held.
 	Provider string
+	// Unavailable is why no assertion can be requested; empty when Supported.
+	Unavailable string
 }
 
 // Controller holds one assertion while work is active.
@@ -148,13 +174,16 @@ func (c *Controller) Snapshot() Status {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	supported := c.inhibitor != nil && c.inhibitor.Supported()
+	unavailable := c.availabilityLocked()
 	status := Status{
 		Enabled:         c.enabled,
-		Supported:       supported,
+		Supported:       unavailable == nil,
 		Inhibiting:      c.lease != nil,
 		ActiveWorkCount: len(c.active),
 		LastError:       c.lastError,
+	}
+	if unavailable != nil {
+		status.Unavailable = unavailable.Error()
 	}
 	if c.lease != nil {
 		status.Provider = c.lease.Provider()
@@ -162,9 +191,16 @@ func (c *Controller) Snapshot() Status {
 	return status
 }
 
+func (c *Controller) availabilityLocked() error {
+	if c.inhibitor == nil {
+		return &UnavailableError{}
+	}
+	return c.inhibitor.Availability()
+}
+
 func (c *Controller) reconcileLocked() {
 	active := c.enabled && len(c.active) > 0 && c.inhibitor != nil
-	want := active && c.inhibitor.Supported()
+	want := active && c.inhibitor.Availability() == nil
 	if !want {
 		c.lastError = ""
 		if c.lease != nil {

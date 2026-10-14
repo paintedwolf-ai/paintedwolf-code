@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -98,8 +99,8 @@ func TestLogindLeaseTransfersDescriptorAndBlocksAutomaticSuspend(t *testing.T) {
 	testutil.FailErr(t, "export fixture service", server.Export(fixture, linuxbus.Login1Path, linuxbus.Login1Name+".Manager"))
 	ownName(t, server, linuxbus.Login1Name)
 	subject := login1Provider{connect: connectTo(path)}
-	if !subject.Available(t.Context()) {
-		t.Fatal("served login manager was not advertised")
+	if err := subject.Check(t.Context()); err != nil {
+		t.Fatalf("served login manager was not advertised: %v", err)
 	}
 	held, err := subject.Acquire(t.Context())
 	testutil.FailErr(t, "acquire native descriptor lease", err)
@@ -185,10 +186,19 @@ func TestMissingServicesAdvertiseNoProviderAndAcquireNothing(t *testing.T) {
 		portalProvider{connect: connectTo(path)},
 		powerManagementProvider{connect: connectTo(path)},
 	}
-	if supportedBy(providers) {
-		t.Fatal("missing services advertised support")
+	var unavailable *UnavailableError
+	if err := availabilityOf(providers); !errors.As(err, &unavailable) || len(unavailable.Reasons) != 3 {
+		t.Fatalf("missing services availability = %v", err)
 	}
-	if held, err := acquireFrom(providers); held != nil || err == nil {
+	want := []ProviderReason{
+		{Provider: "login1", Reason: "org.freedesktop.login1 is not served"},
+		{Provider: "portal", Reason: "org.freedesktop.portal.Desktop is not served"},
+		{Provider: "power-management", Reason: "org.freedesktop.PowerManagement is not served"},
+	}
+	if !slices.Equal(unavailable.Reasons, want) {
+		t.Fatalf("missing service reasons = %+v, want %+v", unavailable.Reasons, want)
+	}
+	if held, err := acquireFrom(providers); held != nil || !errors.As(err, &unavailable) || len(unavailable.Reasons) != 3 {
 		t.Fatalf("missing services lease=%v error=%v", held, err)
 	}
 	client, err := linuxbus.Connect(t.Context(), path)
@@ -199,8 +209,8 @@ func TestMissingServicesAdvertiseNoProviderAndAcquireNothing(t *testing.T) {
 	}
 	unreachable := connectTo(filepath.Join(t.TempDir(), "missing"))
 	for _, candidate := range []provider{login1Provider{connect: unreachable}, portalProvider{connect: unreachable}, powerManagementProvider{connect: unreachable}} {
-		if candidate.Available(t.Context()) {
-			t.Fatalf("%s advertised support without a bus", candidate.Name())
+		if err := candidate.Check(t.Context()); err == nil || !strings.Contains(err.Error(), "bus unreachable") {
+			t.Fatalf("%s without a bus = %v", candidate.Name(), err)
 		}
 		if held, err := candidate.Acquire(t.Context()); held != nil || err == nil {
 			t.Fatalf("%s acquired without a bus: %v, %v", candidate.Name(), held, err)
@@ -284,8 +294,8 @@ func TestPortalInhibitorRequestsSuspendAndIdleAndClosesOnRelease(t *testing.T) {
 	path := fixtureBus(t)
 	fixture := servePortal(t, path, false)
 	subject := portalProvider{connect: connectTo(path)}
-	if !subject.Available(t.Context()) {
-		t.Fatal("served portal was not advertised")
+	if err := subject.Check(t.Context()); err != nil {
+		t.Fatalf("served portal was not advertised: %v", err)
 	}
 	held, err := subject.Acquire(t.Context())
 	testutil.FailErr(t, "acquire portal inhibitor", err)
@@ -393,8 +403,8 @@ func TestPowerManagementInhibitorReleasesItsCookie(t *testing.T) {
 	testutil.FailErr(t, "export power management fixture", server.Export(fixture, powerManagementPath, powerManagementInhibit))
 	ownName(t, server, powerManagementName)
 	subject := powerManagementProvider{connect: connectTo(path)}
-	if !subject.Available(t.Context()) {
-		t.Fatal("served power management was not advertised")
+	if err := subject.Check(t.Context()); err != nil {
+		t.Fatalf("served power management was not advertised: %v", err)
 	}
 	if held, err := subject.Acquire(t.Context()); held != nil || err == nil {
 		t.Fatalf("refused power management lease=%v error=%v", held, err)
@@ -422,5 +432,5 @@ func TestPowerManagementInhibitorReleasesItsCookie(t *testing.T) {
 
 type staticInhibitor struct{ held lease }
 
-func (staticInhibitor) Supported() bool            { return true }
+func (staticInhibitor) Availability() error        { return nil }
 func (s *staticInhibitor) Acquire() (lease, error) { return s.held, nil }

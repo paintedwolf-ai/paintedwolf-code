@@ -116,11 +116,14 @@ func TestHoldPowerInhibitorReportsProviderOrUnavailability(t *testing.T) {
 	var out bytes.Buffer
 	err := holdPowerInhibitor(t.Context(), hostpower.New(true), 0, &out)
 	line := out.String()
-	if !strings.HasPrefix(line, "supported=") || !strings.Contains(line, "provider=") {
+	if !strings.HasPrefix(line, "supported=") || !strings.Contains(line, "provider=") || !strings.Contains(line, "unavailable=") {
 		t.Fatalf("status line = %q", line)
 	}
 	if strings.Contains(line, "inhibiting=true") != (err == nil) {
 		t.Fatalf("status %q with error %v", line, err)
+	}
+	if err != nil && strings.HasSuffix(strings.TrimSpace(err.Error()), ":") {
+		t.Fatalf("unavailable inhibition gave no reason: %v", err)
 	}
 	canceled, cancel := context.WithCancel(t.Context())
 	cancel()

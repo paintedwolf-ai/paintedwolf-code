@@ -22,7 +22,8 @@ const busDeadline = 500 * time.Millisecond
 // name being served; which program serves it is never inspected.
 type provider interface {
 	Name() string
-	Available(ctx context.Context) bool
+	// Check is nil when the protocol is served, otherwise why it cannot be used.
+	Check(ctx context.Context) error
 	Acquire(ctx context.Context) (lease, error)
 }
 
@@ -38,19 +39,22 @@ var linuxProviders = []provider{
 
 type platformInhibitor struct{}
 
-func (platformInhibitor) Supported() bool { return supportedBy(linuxProviders) }
+func (platformInhibitor) Availability() error { return availabilityOf(linuxProviders) }
 
 func (platformInhibitor) Acquire() (lease, error) { return acquireFrom(linuxProviders) }
 
-func supportedBy(providers []provider) bool {
+func availabilityOf(providers []provider) error {
 	ctx, cancel := context.WithTimeout(context.Background(), busDeadline)
 	defer cancel()
+	unavailable := &UnavailableError{}
 	for _, candidate := range providers {
-		if candidate.Available(ctx) {
-			return true
+		err := candidate.Check(ctx)
+		if err == nil {
+			return nil
 		}
+		unavailable.Reasons = append(unavailable.Reasons, ProviderReason{Provider: candidate.Name(), Reason: err.Error()})
 	}
-	return false
+	return unavailable
 }
 
 // acquireFrom returns the first provider that grants a lease; refusals from
@@ -59,8 +63,10 @@ func acquireFrom(providers []provider) (lease, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*busDeadline)
 	defer cancel()
 	var failures []error
+	unavailable := &UnavailableError{}
 	for _, candidate := range providers {
-		if !candidate.Available(ctx) {
+		if err := candidate.Check(ctx); err != nil {
+			unavailable.Reasons = append(unavailable.Reasons, ProviderReason{Provider: candidate.Name(), Reason: err.Error()})
 			continue
 		}
 		held, err := candidate.Acquire(ctx)
@@ -70,7 +76,7 @@ func acquireFrom(providers []provider) (lease, error) {
 		failures = append(failures, fmt.Errorf("%s: %w", candidate.Name(), err))
 	}
 	if len(failures) == 0 {
-		return nil, errors.New("idle-sleep inhibition is unavailable")
+		return nil, unavailable
 	}
 	return nil, errors.Join(failures...)
 }
@@ -81,13 +87,13 @@ type login1Provider struct{ connect busConnector }
 
 func (login1Provider) Name() string { return "login1" }
 
-func (p login1Provider) Available(ctx context.Context) bool {
+func (p login1Provider) Check(ctx context.Context) error {
 	bus, err := p.connect(ctx)
 	if err != nil {
-		return false
+		return fmt.Errorf("system bus unreachable: %w", err)
 	}
 	defer func() { _ = bus.Close() }()
-	return logindAvailable(ctx, bus)
+	return logindAvailability(ctx, bus)
 }
 
 func (p login1Provider) Acquire(ctx context.Context) (lease, error) {
@@ -99,14 +105,29 @@ func (p login1Provider) Acquire(ctx context.Context) (lease, error) {
 	return acquireLogindLease(ctx, bus)
 }
 
-func logindAvailable(ctx context.Context, bus *dbus.Conn) bool {
-	owned, err := linuxbus.NameOwned(ctx, bus, linuxbus.Login1Name)
-	return bus.SupportsUnixFDs() && err == nil && owned
+func logindAvailability(ctx context.Context, bus *dbus.Conn) error {
+	if !bus.SupportsUnixFDs() {
+		return errors.New("the system bus connection cannot pass file descriptors")
+	}
+	return nameOwnedOn(ctx, bus, linuxbus.Login1Name)
+}
+
+// nameOwnedOn is nil when name has an owner on bus; an activatable name that
+// is not running is not served.
+func nameOwnedOn(ctx context.Context, bus *dbus.Conn, name string) error {
+	owned, err := linuxbus.NameOwned(ctx, bus, name)
+	if err != nil {
+		return fmt.Errorf("query %s: %w", name, err)
+	}
+	if !owned {
+		return fmt.Errorf("%s is not served", name)
+	}
+	return nil
 }
 
 func acquireLogindLease(ctx context.Context, bus *dbus.Conn) (lease, error) {
-	if !logindAvailable(ctx, bus) {
-		return nil, errors.New("login manager is unavailable")
+	if err := logindAvailability(ctx, bus); err != nil {
+		return nil, fmt.Errorf("login manager is unavailable: %w", err)
 	}
 	var descriptor dbus.UnixFD
 	// Desktop power managers request sleep directly, so idle alone is not enough.
