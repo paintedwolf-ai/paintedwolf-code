@@ -38,7 +38,9 @@ import { sameWireValue } from "../../chat/transcript/projection/wire-equal.ts";
 import { type DisplayTranscriptItem, type RawTranscriptItem } from "../../chat/transcript/projection/transcript-item-model.ts";
 import {
   recordTranscriptRowHeight,
+  transcriptRowContentRevision,
   transcriptRowHeightForScope,
+  type TranscriptRowHeightKey,
 } from "../../chat/transcript/layout/transcript-row-heights-persist.ts";
 import {
   transcriptRowPresentationEstimate,
@@ -450,13 +452,19 @@ export function SessionTranscript(props: Props) {
       : presentation;
   };
 
+  /** A remembered height is reused only for the same content, geometry, and presentation. */
+  const rowHeightKey = (item: DisplayTranscriptItem): TranscriptRowHeightKey | undefined => {
+    const geometry = rowGeometry();
+    return geometry
+      ? { itemKey: item.key, revision: transcriptRowContentRevision(item), variant: `${geometry}:${rowPresentation(item)}` }
+      : undefined;
+  };
+
   const restoredRowEstimate = (item: DisplayTranscriptItem): number | undefined => {
     if (item.kind === "pending_user") return undefined;
     const scope = rowHeightScope();
-    if (!scope) return undefined;
-    const geometry = rowGeometry();
-    if (!geometry) return undefined;
-    return transcriptRowHeightForScope(scope, item.key, `${geometry}:${rowPresentation(item)}`);
+    const key = rowHeightKey(item);
+    return scope && key ? transcriptRowHeightForScope(scope, key) : undefined;
   };
 
   const virtualizer = createTranscriptVirtualizer({
@@ -479,6 +487,7 @@ export function SessionTranscript(props: Props) {
     // Column measurements refine estimates for unmounted rows.
     estimateBasis: rowGeometry,
     placementBasis: rowInsetsByItemKey,
+    contentRevision: transcriptRowContentRevision,
     originPx: geometry.origin,
     onRowMeasured: ({ element, index, size, width }) => {
       if (!(element instanceof HTMLElement)) return;
@@ -501,14 +510,9 @@ export function SessionTranscript(props: Props) {
       const item = items()[index];
       if (!item || element.dataset.msgId !== item.key || item.kind === "pending_user") return;
       const scope = rowHeightScope();
-      const geometry = rowGeometry();
-      if (!scope || !geometry) return;
-      recordTranscriptRowHeight(
-        scope,
-        item.key,
-        `${geometry}:${rowPresentation(item)}`,
-        Math.max(0, size - rowInsetPx(item.key)),
-      );
+      const key = rowHeightKey(item);
+      if (!scope || !key) return;
+      recordTranscriptRowHeight(scope, key, Math.max(0, size - rowInsetPx(item.key)));
     },
   });
 
@@ -802,7 +806,8 @@ export function SessionTranscript(props: Props) {
                                 data-msg-id={isTranscriptTimeItem(item()) ? undefined : item().key}
                                 data-time-row={isTranscriptTimeItem(item()) ? item().key : undefined}
                                 data-virtual-start={virtualStart()}
-                                data-row-height-key={rowGeometry() ? `${rowGeometry()}:${rowPresentation(item())}` : undefined}
+                                data-row-height-key={rowHeightKey(item())?.variant}
+                                data-row-revision={transcriptRowContentRevision(item())}
                                 data-seam={seamForItem(item().key)}
                                 data-tool-call-ids={transcriptItemToolCallIds(item())}
                                 ref={(el) => {
