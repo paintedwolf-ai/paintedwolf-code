@@ -24,7 +24,7 @@ No consumer treats another consumer's lossy view as canonical state. Model conte
 
 Completion assembly captures one immutable host wiring snapshot per request. `coordinator/assembly` keeps the engine's turn lifecycle and cache separate from `promptSurface`, which resolves catalogs, capabilities, profiles, and stable rendering, and `turnContextAssembler`, which projects guidance, source briefs, worker context, boards, and workflow orientation around history. The composition root projects that snapshot into separate typed dependencies. Turn context uses a narrow catalog/profile/roster port and its own guidance, board, and worker sources; neither domain retains the engine or its full wiring record. Both use explicit turn scratch state, and a dependency update applies to the next completion.
 
-Initial fitting runs over history alone. History assembly (compaction view, surface diet, deterministic fit) returns fitted history; completion assembly then appends the system prompt, current turn frame, and tail injects. A final provider-boundary pass adds procedures for the tools actually offered and refits the assembled messages. The rendered system instructions and current user request stay pinned through both passes.
+Initial fitting runs over history alone. History assembly (compaction view, surface diet, deterministic fit) returns fitted history; completion assembly then appends the system prompt, current turn frame, and tail injects. The final pass measures that complete request, including the offered tool schemas, through the provider adapter's budget calculator. It reserves the standing frame and output before fitting history into the remaining input allowance. The rendered system instructions and current user request stay pinned through both passes.
 
 ```mermaid
 flowchart LR
@@ -136,6 +136,8 @@ Every provider call has a hard ceiling. The synchronous path fits or exposes an 
 - fail visibly if the irreducible prompt itself exceeds the provider limit.
 
 The same facts, frame, limits, and compaction revision produce the same fit. Latency never depends on an emergency summarizer call.
+
+The final request fitter preserves frame order and cache tiers, and reduces only the history projection. Continuation detail scales down to recovery references when necessary. Automatic output allocation may shrink to fit the model window; an explicit output cap remains a caller requirement. Requests that already fit retain their original messages and output controls. If the required instructions, current request, recovery references, and requested output cannot fit, the host reports the irreducible context limit.
 
 ## Asynchronous compaction
 
