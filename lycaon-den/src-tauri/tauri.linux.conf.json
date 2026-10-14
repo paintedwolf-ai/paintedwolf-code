@@ -1,5 +1,6 @@
 {
   "app": {
+    "enableGTKAppId": true,
     "windows": [
       {
         "label": "main",
@@ -43,7 +44,7 @@
       },
       "rpm": {
         "release": "1",
-        "compression": { "type": "zstd", "level": 3 },
+        "compression": { "type": "none" },
         "desktopTemplate": "../../packaging/linux/painted-wolf-code.desktop.hbs",
         "preInstallScript": "../../packaging/linux/rpm/pre",
         "postInstallScript": "../../packaging/linux/rpm/post",

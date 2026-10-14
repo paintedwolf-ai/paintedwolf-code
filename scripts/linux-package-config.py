@@ -4,8 +4,8 @@
 The fragment carries what cannot live in the static Tauri config: dependency
 constraints rendered from the measured Linux floor, and the `files` map that
 places the engine payload under the package install root and wires the
-optional packaging fragments other subsystems ship (polkit, systemd, sysusers,
-AppArmor, SELinux). Missing optional directories are tolerated; required
+optional packaging fragments other subsystems ship (polkit, systemd, AppArmor,
+SELinux). Missing optional directories are tolerated; required
 payloads are not.
 """
 
@@ -18,8 +18,10 @@ import sys
 
 INSTALL_ROOT = "/opt/painted-wolf-code"
 PACKAGE_NAME = "painted-wolf-code"
-APP_ID = "ai.paintedwolf.code"
+APP_ID = "dev.paintedwolf.code"
 HELPERS = ("pw", "pw-logs", "pw-document-core", "bialy")
+# Shipped when the build stages it; staging requires it once a unit runs it.
+OPTIONAL_HELPERS = ("pw-vault-identity",)
 ENTRY_POINTS = ("pw", "pw-logs")
 
 # Optional packaging fragments: repository directory -> (destination directory,
@@ -27,7 +29,6 @@ ENTRY_POINTS = ("pw", "pw-logs")
 OPTIONAL_FRAGMENTS = {
     "polkit": ("/usr/share/polkit-1/actions", (".policy",), ("deb", "rpm")),
     "systemd": ("/usr/lib/systemd/system", (".service", ".socket", ".timer"), ("deb", "rpm")),
-    "sysusers": ("/usr/lib/sysusers.d", (".conf",), ("deb", "rpm")),
     "apparmor": ("/etc/apparmor.d", ("",), ("deb",)),
     "selinux": ("/usr/share/selinux/packages", (".pp",), ("rpm",)),
 }
@@ -65,6 +66,10 @@ def required_files(root: Path, tauri_dir: Path, target: str, manifest: Path) -> 
     files: dict[str, Path] = {}
     for helper in HELPERS:
         files[f"{INSTALL_ROOT}/bin/{helper}"] = tauri_dir / "binaries" / f"{helper}-{target}"
+    for helper in OPTIONAL_HELPERS:
+        source = tauri_dir / "binaries" / f"{helper}-{target}"
+        if source.exists():
+            files[f"{INSTALL_ROOT}/bin/{helper}"] = source
     files[f"{INSTALL_ROOT}/engine-root"] = tauri_dir / "engine-root"
     files[f"{INSTALL_ROOT}/release-version"] = root / "VERSION"
     files[f"{INSTALL_ROOT}/THIRD-PARTY-NOTICES.md"] = tauri_dir / "THIRD-PARTY-NOTICES.md"

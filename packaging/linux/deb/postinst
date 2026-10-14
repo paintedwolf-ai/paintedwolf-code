@@ -1,13 +1,15 @@
 #!/bin/sh
 set -e
 # Register the package-authored units and refresh desktop caches; nothing else.
-SOCKET_UNIT=painted-wolf-code-identity.socket
+SOCKET_UNIT=paintedwolf-vault-identity.socket
+SERVICE_UNIT=paintedwolf-vault-identity.service
 if [ -f "/usr/lib/systemd/system/${SOCKET_UNIT}" ] && [ -d /run/systemd/system ]; then
   systemctl daemon-reload || true
-  if [ -f /usr/lib/sysusers.d/painted-wolf-code.conf ] && command -v systemd-sysusers >/dev/null 2>&1; then
-    systemd-sysusers painted-wolf-code.conf || true
-  fi
   systemctl enable --now "${SOCKET_UNIT}" || true
+  # An upgrade replaces the service binary; a running instance restarts on it.
+  if [ "$1" = "configure" ] && [ -n "$2" ]; then
+    systemctl try-restart "${SERVICE_UNIT}" || true
+  fi
 fi
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database -q /usr/share/applications || true

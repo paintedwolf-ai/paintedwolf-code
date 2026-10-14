@@ -1,12 +1,13 @@
 #!/bin/sh
 set -e
-# Stop the identity socket on removal; upgrades keep it running for the new unit.
-SOCKET_UNIT=painted-wolf-code-identity.socket
+# Stop the vault identity units on removal; upgrades keep the socket listening.
+SOCKET_UNIT=paintedwolf-vault-identity.socket
+SERVICE_UNIT=paintedwolf-vault-identity.service
 case "$1" in
   remove|deconfigure)
     if [ -d /run/systemd/system ] && [ -f "/usr/lib/systemd/system/${SOCKET_UNIT}" ]; then
       systemctl disable --now "${SOCKET_UNIT}" || true
-      systemctl stop painted-wolf-code-identity.service || true
+      systemctl stop "${SERVICE_UNIT}" || true
     fi
     ;;
 esac

@@ -166,16 +166,39 @@ case "${GOOS}" in
         exit 1
       }
       [[ -s "${root}/THIRD-PARTY-NOTICES.md" ]] || { echo "error: ${PLATFORM} ${label} has no third-party notices" >&2; exit 1; }
-      DESKTOP_ENTRY="${tree}/usr/share/applications/ai.paintedwolf.code.desktop"
-      [[ -f "${DESKTOP_ENTRY}" ]] || { echo "error: ${PLATFORM} ${label} has no ai.paintedwolf.code desktop entry" >&2; exit 1; }
-      grep -Fq "StartupWMClass=painted-wolf-code" "${DESKTOP_ENTRY}" && grep -Fq "Exec=painted-wolf-code %U" "${DESKTOP_ENTRY}" || {
+      # The application id is the bundle identifier; the GTK application sets it as the
+      # Wayland app id and the X11 window class.
+      APP_ID="$(jq -r .identifier "${ROOT}/lycaon-den/src-tauri/tauri.conf.json")"
+      DESKTOP_ENTRY="${tree}/usr/share/applications/${APP_ID}.desktop"
+      [[ -f "${DESKTOP_ENTRY}" ]] || { echo "error: ${PLATFORM} ${label} has no ${APP_ID} desktop entry" >&2; exit 1; }
+      grep -Fxq "StartupWMClass=${APP_ID}" "${DESKTOP_ENTRY}" && grep -Fxq "Exec=painted-wolf-code %U" "${DESKTOP_ENTRY}" || {
         echo "error: ${PLATFORM} ${label} desktop entry lacks the window class or exec line" >&2
         exit 1
       }
-      # The bundler's own product-named entry must stay out of launchers.
+      [[ "$(jq -r .app.enableGTKAppId "${ROOT}/lycaon-den/src-tauri/tauri.linux.conf.json")" == true ]] || {
+        echo "error: the Linux shell does not set its GTK application id" >&2
+        exit 1
+      }
+      # The bundler's own product-named entry must stay out of launchers and claim no window.
       for generated in "${tree}"/usr/share/applications/*.desktop; do
         [[ "${generated}" == "${DESKTOP_ENTRY}" ]] && continue
-        grep -Fq "NoDisplay=true" "${generated}" || { echo "error: ${PLATFORM} ${label} ships a second visible desktop entry $(basename "${generated}")" >&2; exit 1; }
+        grep -Fxq "NoDisplay=true" "${generated}" && ! grep -q "^StartupWMClass=" "${generated}" || {
+          echo "error: ${PLATFORM} ${label} ships a second desktop entry that is visible or claims a window: $(basename "${generated}")" >&2
+          exit 1
+        }
+      done
+      # Every packaged service runs an executable the package installs and the manifest lists.
+      for unit in "${tree}"/usr/lib/systemd/system/*.service; do
+        [[ -e "${unit}" ]] || continue
+        exec_start="$(sed -n 's/^ExecStart=//p' "${unit}")"
+        [[ "${exec_start}" == /opt/painted-wolf-code/bin/* && -x "${tree}${exec_start%% *}" ]] || {
+          echo "error: ${PLATFORM} ${label} $(basename "${unit}") runs ${exec_start:-nothing}, not a packaged helper" >&2
+          exit 1
+        }
+        jq -e --arg path "${exec_start%% *}" 'any(.executables[]; .path == $path)' "${root}/manifest.json" >/dev/null || {
+          echo "error: ${PLATFORM} ${label} manifest omits ${exec_start%% *}" >&2
+          exit 1
+        }
       done
       # GTK, WebKitGTK and the C library come from the distribution, never from the package.
       [[ -z "$(find "${tree}" -type f \( -name 'libgtk-3*.so*' -o -name 'libgdk-3*.so*' -o -name 'libwebkit2gtk*.so*' -o -name 'libjavascriptcoregtk*.so*' -o -name 'libc.so*' -o -name 'libsoup-3*.so*' \) -print -quit)" ]] || {
@@ -210,6 +233,18 @@ case "${GOOS}" in
       }
     }
 
+    # Maintainer scripts name the socket units they enable; a renamed unit would ship disabled.
+    assert_sockets_enabled() {
+      local label="$1" tree="$2" scripts="$3" socket
+      for socket in "${tree}"/usr/lib/systemd/system/*.socket; do
+        [[ -e "${socket}" ]] || continue
+        [[ "${scripts}" == *"$(basename "${socket}")"* ]] || {
+          echo "error: ${PLATFORM} ${label} maintainer scripts do not enable $(basename "${socket}")" >&2
+          exit 1
+        }
+      done
+    }
+
     echo "release-stage: auditing ${DEB_PACKAGE}" >&2
     DEB_TREE="${EXTRACT}/deb"
     mkdir -p "${DEB_TREE}"
@@ -229,6 +264,7 @@ case "${GOOS}" in
       [[ -x "${EXTRACT}/deb-control/${script}" ]] || { echo "error: .deb has no ${script} maintainer script" >&2; exit 1; }
     done
     audit_linux_tree ".deb" "${DEB_TREE}"
+    assert_sockets_enabled ".deb" "${DEB_TREE}" "$(cat "${EXTRACT}/deb-control/postinst")"
     if command -v lintian >/dev/null 2>&1; then
       lintian --fail-on error --no-tag-display-limit --suppress-tags-from-file "${ROOT}/packaging/linux/deb/lintian-suppress" "${DEB_PACKAGE}" || {
         echo "error: lintian reported errors for ${DEB_PACKAGE}" >&2
@@ -256,6 +292,7 @@ case "${GOOS}" in
       [[ "${RPM_SCRIPTS}" == *"${script} scriptlet"* ]] || { echo "error: .rpm has no ${script} scriptlet" >&2; exit 1; }
     done
     audit_linux_tree ".rpm" "${RPM_TREE}"
+    assert_sockets_enabled ".rpm" "${RPM_TREE}" "${RPM_SCRIPTS}"
     if command -v rpmlint >/dev/null 2>&1; then
       rpmlint --config "${ROOT}/packaging/linux/rpm/rpmlint.toml" "${RPM_PACKAGE}" || {
         echo "error: rpmlint reported errors for ${RPM_PACKAGE}" >&2

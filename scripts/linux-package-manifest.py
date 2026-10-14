@@ -24,8 +24,8 @@ PACKAGE_NAME = "painted-wolf-code"
 INSTALL_ROOT = "/opt/painted-wolf-code"
 SHELL_EXECUTABLE = "/usr/bin/painted-wolf-code"
 HELPERS = ("pw", "pw-logs", "pw-document-core", "bialy")
+OPTIONAL_HELPERS = ("pw-vault-identity",)
 ENTRY_POINTS = ("pw", "pw-logs")
-APP_ID = "ai.paintedwolf.code"
 ARCHITECTURES = {"x86_64-unknown-linux-gnu": "x86_64", "aarch64-unknown-linux-gnu": "aarch64"}
 HEX_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 
@@ -61,6 +61,10 @@ def generate(args: argparse.Namespace) -> int:
     executables = [entry(SHELL_EXECUTABLE, tauri_dir / "target" / args.target / "release" / PACKAGE_NAME)]
     for helper in HELPERS:
         executables.append(entry(f"{INSTALL_ROOT}/bin/{helper}", tauri_dir / "binaries" / f"{helper}-{args.target}"))
+    for helper in OPTIONAL_HELPERS:
+        source = tauri_dir / "binaries" / f"{helper}-{args.target}"
+        if source.exists():
+            executables.append(entry(f"{INSTALL_ROOT}/bin/{helper}", source))
     for name in ENTRY_POINTS:
         executables.append(entry(f"/usr/bin/{name}", root / "packaging" / "linux" / "bin" / name))
     engine_root = tauri_dir / "engine-root"

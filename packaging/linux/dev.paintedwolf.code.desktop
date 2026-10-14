@@ -10,4 +10,4 @@ Terminal=false
 Categories=Development;IDE;
 Keywords=code;agent;review;security;
 StartupNotify=true
-StartupWMClass=painted-wolf-code
+StartupWMClass=dev.paintedwolf.code
