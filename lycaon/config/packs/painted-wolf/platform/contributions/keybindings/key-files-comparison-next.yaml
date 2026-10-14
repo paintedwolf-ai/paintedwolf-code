@@ -8,4 +8,4 @@ bindings:
   windows:
     - "Mod+Alt+ArrowRight"
   linux:
-    - "Mod+Alt+ArrowRight"
+    - "Mod+Alt+."

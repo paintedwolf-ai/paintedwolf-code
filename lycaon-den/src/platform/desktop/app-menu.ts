@@ -1,5 +1,6 @@
 import { isTauriRuntime } from "../runtime.ts";
 import { buildAppMenuSpec, type AppMenuSpec } from "../../shortcuts/app-menu-model.ts";
+import { appMenuSurface } from "./app-menu-surface.ts";
 import {
   contributionCommand,
   contributionCommandAvailable,
@@ -14,6 +15,8 @@ const MENU_COMMAND_EVENT = "menu://command";
 
 let lastPushed: string | null = null;
 let appliedSections: AppMenuSpec[] = [];
+/** The shell's activation surface, shared by native and in-window menus. */
+let activateCommand: ((commandId: string) => void) | null = null;
 
 type HostAppMenuSpec = {
   menu: string;
@@ -44,6 +47,7 @@ export function resetAppMenuForTests(): void {
   appliedSections = [];
   queued = null;
   pushing = null;
+  activateCommand = null;
 }
 
 /** Forces the focused window to publish its menu. */
@@ -71,7 +75,8 @@ function hostMenuSections(sections: AppMenuSpec[]): HostAppMenuSpec[] {
 export async function syncAppMenu(
   overrides: Record<string, string> | null,
 ): Promise<void> {
-  if (!isTauriRuntime()) return;
+  // An in-window menu reads the spec when it opens; nothing is pushed to the host.
+  if (!isTauriRuntime() || appMenuSurface() !== "native") return;
   let sections: AppMenuSpec[];
   try {
     sections = buildAppMenuSpec({ overrides });
@@ -118,9 +123,36 @@ async function drainAppMenu(): Promise<void> {
   }
 }
 
+/**
+ * Runs a chosen menu command through the same gate as its shortcut: known,
+ * available, not suspended, and with its projected accelerator still live.
+ */
+export function activateAppMenuCommand(id: string): boolean {
+  if (!activateCommand || !contributionCommand(id)) return false;
+  if (shortcutCommandsSuspended()) return false;
+  if (!contributionCommandAvailable(id)) return false;
+  const item = appliedSections
+    .flatMap((section) => section.groups.flat())
+    .find((row) => row.id === id);
+  if (
+    item?.accelerator &&
+    (!item.bindingId ||
+      !item.binding ||
+      !shortcutBindingAvailable(item.bindingId, item.binding))
+  ) {
+    return false;
+  }
+  activateCommand(id);
+  return true;
+}
+
 /** Routes menu commands through the Shell's shared activation surface. */
 export function attachAppMenuCommands(activate: (commandId: string) => void): () => void {
-  if (!isTauriRuntime()) return () => undefined;
+  activateCommand = activate;
+  const detach = () => {
+    if (activateCommand === activate) activateCommand = null;
+  };
+  if (!isTauriRuntime() || appMenuSurface() !== "native") return detach;
 
   let unlisten: (() => void) | null = null;
   let cancelled = false;
@@ -129,21 +161,8 @@ export function attachAppMenuCommands(activate: (commandId: string) => void): ()
     try {
       const stop = await listenHostEvent<string>(MENU_COMMAND_EVENT, (event) => {
         const id = event.payload;
-        if (typeof id !== "string" || !contributionCommand(id)) return;
-        if (shortcutCommandsSuspended()) return;
-        if (!contributionCommandAvailable(id)) return;
-        const item = appliedSections
-          .flatMap((section) => section.groups.flat())
-          .find((row) => row.id === id);
-        if (
-          item?.accelerator &&
-          (!item.bindingId ||
-            !item.binding ||
-            !shortcutBindingAvailable(item.bindingId, item.binding))
-        ) {
-          return;
-        }
-        activate(id);
+        if (typeof id !== "string") return;
+        activateAppMenuCommand(id);
       });
       if (cancelled) stop();
       else unlisten = stop;
@@ -153,6 +172,7 @@ export function attachAppMenuCommands(activate: (commandId: string) => void): ()
   })();
 
   return () => {
+    detach();
     cancelled = true;
     if (unlisten) unlisten();
     unlisten = null;

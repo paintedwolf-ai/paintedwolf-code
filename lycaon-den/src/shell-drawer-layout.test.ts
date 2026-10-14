@@ -117,7 +117,7 @@ describe("den-shell drawer layout contract", () => {
       /\.den-shell-header-chat \.tabs__chip[\s\S]*pointer-events:\s*auto/,
     );
     expect(shellCss).toMatch(
-      /\.den-custom-chrome \.den-shell-header-titlebar \.den-shell-window-controls[\s\S]*pointer-events:\s*auto/,
+      /\.den-custom-chrome \.den-shell-header-titlebar > \.den-shell-window-controls\s*\{[\s\S]*?pointer-events:\s*auto/,
     );
     expect(shellStyles).toMatch(
       /\.den-shell-header-chat\s+:is\(\.tabs__rail-leading, \.tabs__rail-trailing\)\s+:is\(\.den-shell-nav-sidebar-btn-expand, \.den-pane-toggle\)\s*\{[\s\S]*?width:\s*var\(--den-unified-chrome-row\)/,
@@ -132,7 +132,7 @@ describe("den-shell drawer layout contract", () => {
       /\.den-custom-chrome\s+\.den-shell-aside-titlebar\s+\.den-shell-nav-sidebar-btn-collapse\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?width:\s*var\(--den-titlebar-edge-control\)/,
     );
     expect(shellCss).toMatch(
-      /\.den-tauri-macos\.den-custom-chrome\s+\.den-shell-aside-titlebar\s+\.den-shell-nav-sidebar-btn-collapse\s*\{[\s\S]*?top:\s*calc\(\s*var\(--den-pane-control-center\) - var\(--den-titlebar-edge-control\) \/ 2\s*\)/,
+      /\.den-custom-chrome\s+\.den-shell-aside-titlebar\s+\.den-shell-nav-sidebar-btn-collapse\s*\{[^}]*?top:\s*calc\(\s*var\(--den-pane-control-center\) - var\(--den-titlebar-edge-control\) \/ 2\s*\)/,
     );
     expect(shellCss).toMatch(/right:\s*8px/);
   });
@@ -433,7 +433,7 @@ describe("den-shell drawer layout contract", () => {
     expect(readSourceText(join(root, "components/shell/shell-pane-visibility.ts"), "utf8")).toMatch(/navCollapsedPref\(\)/);
     // Hidden panes reopen from the stage title bar, which keeps its height.
     expect(shell).toMatch(/<ShellStageColumn[\s\S]*?back=\{titlebarBack\(\)\}\s+edges=\{stageEdges\(/);
-    expect(columns).toMatch(/<ShellHeaderTitlebar back=\{props\.back\} edges=\{props\.edges\} \/>/);
+    expect(columns).toMatch(/<ShellHeaderTitlebar back=\{props\.back\} edges=\{props\.edges\} windowEdges=\{props\.windowEdges\} \/>/);
     expect(titlebar).toMatch(/StageEdgeControls/);
     // ChatView mounts within the chat-stage provider.
     const stageColumnStart = columns.indexOf('aria-label="Stage"');
@@ -452,7 +452,11 @@ describe("den-shell drawer layout contract", () => {
     expect(chat).toMatch(/useChatTabChrome/);
     expect(chat).toMatch(/setChatTabRailBindings/);
     const tabRail = readSourceText(join(root, "components/nav/ChatTabRail.tsx"), "utf8");
-    expect(tabRail).toMatch(/tabBarTrailingControls/);
+    // The chat header strip, not the tab rail, draws the window edge it owns.
+    expect(tabRail).not.toMatch(/WindowControls/);
+    expect(readSourceText(join(root, "components/shell/ChatWorkspace.tsx"), "utf8")).toMatch(
+      /<For each=\{windowEdgeClaims\("chat"\)\}>[\s\S]*?<WindowControls \{\.\.\.claim\} \/>/,
+    );
     expect(tabRail).toMatch(
       /<BrowseOverflowMenu[\s\S]*?disabled=\{!canExportConversation\(\)\}/,
     );
