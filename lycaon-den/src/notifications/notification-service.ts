@@ -24,7 +24,8 @@ export interface NotificationServiceDeps {
   sessionTitle: (sessionId: string) => string | undefined;
   /** Finished transitionKey discriminator (ord / watermark). */
   runOrdinal: (sessionId: string) => string | number | undefined;
-  send: (n: DenNotification) => Promise<void>;
+  /** The outcome is the adapter's fact; the service does not retry on it. */
+  send: (n: DenNotification) => Promise<unknown>;
   ensurePermission: () => Promise<EnsureNotificationPermissionResult>;
   onPermissionResult: (result: EnsureNotificationPermissionResult) => void;
 }

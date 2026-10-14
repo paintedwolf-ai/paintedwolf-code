@@ -4,6 +4,7 @@ import { withoutReadFinish } from "../../attention/attention-model.ts";
 import { createSeenMarker } from "../../attention/seen-marker.ts";
 import { captureUnreadBoundary } from "../../attention/unread-boundary.ts";
 import { buildMruEntries, createMruTracker } from "../../chat/session/mru-switcher-model.ts";
+import { clearNotificationsOnRead } from "../../notifications/clear-on-read.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { windowFocused } from "../../platform/windows/window-chrome.ts";
 import { type ActiveChat } from "../../shell/stage-scope.ts";
@@ -66,10 +67,10 @@ export function createShellAttention(props: Dependencies) {
       // Status and transcript changes refresh the visible chat's seen stamp.
       revision: () =>
         `${props.appStore.state.currentSession?.status ?? ""}:${props.appStore.state.messages.length}`,
-      mark: async (sessionId) => {
+      mark: clearNotificationsOnRead(async (sessionId) => {
         const session = await getLycaonClient()?.markSessionSeen(sessionId);
         if (session) props.appStore.actions.noteSessionSeen(session);
-      },
+      }),
       // Capture the previous seen stamp before this visit's stamp posts.
       onReadable: (sessionId) => {
         const current = props.appStore.state.currentSession;

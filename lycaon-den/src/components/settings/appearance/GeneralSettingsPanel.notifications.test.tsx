@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-li
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { GeneralSettingsPanel } from "./GeneralSettingsPanel.tsx";
 import {
+  recordNotificationDelivery,
   recordNotificationPermission,
   syncNotificationPrefsFromSnapshot,
 } from "../../../settings/chat/notification-prefs.ts";
@@ -14,13 +15,14 @@ import {
 } from "../../../store/app-state-snapshot.ts";
 import { resetFileSummariesSetting } from "../../../settings/editor/file-summary-settings.ts";
 
-const { ensurePermission } = vi.hoisted(() => ({
+const { ensurePermission, sendTest } = vi.hoisted(() => ({
   ensurePermission: vi.fn<() => Promise<"granted" | "denied" | "unavailable">>(),
+  sendTest: vi.fn<() => Promise<"delivered" | "inhibited" | "skipped">>(),
 }));
 
 vi.mock("../../../platform/desktop/notifications.ts", () => ({
   ensureNotificationPermission: ensurePermission,
-  sendNotification: vi.fn(async () => undefined),
+  sendNotification: sendTest,
 }));
 
 vi.mock("../../../store/app-state-snapshot.ts", async (importOriginal) => {
@@ -36,7 +38,9 @@ describe("GeneralSettingsPanel notifications tab", () => {
   afterEach(() => {
     cleanup();
     recordNotificationPermission(null);
+    recordNotificationDelivery(null);
     ensurePermission.mockReset();
+    sendTest.mockReset();
     resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1 });
     syncNotificationPrefsFromSnapshot();
     syncFirstTimeTipsFromSnapshot();
@@ -69,6 +73,7 @@ describe("GeneralSettingsPanel notifications tab", () => {
     render(() => <GeneralSettingsPanel initialTab="notifications" version="0.0.0-test" />);
     const button = await screen.findByTestId("notifications-send-test");
     await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    sendTest.mockResolvedValue("delivered");
     for (const result of ["unavailable", "denied", "granted"] as const) {
       ensurePermission.mockResolvedValueOnce(result);
       fireEvent.click(button);
@@ -77,6 +82,26 @@ describe("GeneralSettingsPanel notifications tab", () => {
         expect(screen.queryByTestId("notifications-approval-denied") != null).toBe(result === "denied");
       });
     }
+    expect(sendTest).toHaveBeenCalledOnce();
+  });
+
+  it("explains a test notification the desktop is withholding", async () => {
+    render(() => <GeneralSettingsPanel initialTab="notifications" version="0.0.0-test" />);
+    const button = await screen.findByTestId("notifications-send-test");
+    await waitFor(() => expect((button as HTMLButtonElement).disabled).toBe(false));
+    ensurePermission.mockResolvedValue("granted");
+    sendTest.mockResolvedValueOnce("inhibited");
+    fireEvent.click(button);
+    const hint = await screen.findByTestId("notifications-inhibited");
+    expect(hint.textContent).toContain("Do not disturb");
+    sendTest.mockResolvedValueOnce("delivered");
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.queryByTestId("notifications-inhibited")).toBeNull());
+    ensurePermission.mockResolvedValueOnce("unavailable");
+    sendTest.mockResolvedValueOnce("inhibited");
+    fireEvent.click(button);
+    await waitFor(() => expect(screen.queryByTestId("notifications-shell-unavailable")).not.toBeNull());
+    expect(screen.queryByTestId("notifications-inhibited")).toBeNull();
   });
 
   it("locks the notification kinds under the main switch", async () => {
