@@ -9,7 +9,7 @@ hosts: [coordinator]
 ---
 Store the checklist with `update_progress(content=…)`; checklist text in an assistant reply does not update it.
 
-Before `write`, `edit`, `replace_lines`, `restore_version`, `jq_edit`, `task`, `delegate_dispatch`, or `delegate_decompose`, call it with `## Progress` and one flat pending row per deliverable; one row is sufficient for a small task. Reads, deletion, and explanations need none.
+Before `write`, `edit`, `replace_lines`, `restore_version`, `jq_edit`,{% if profile_has_delegate_dispatch %} `task`,{% if profile_has_delegate_decompose %} `delegate_dispatch`, or `delegate_decompose`{% else %} or `delegate_dispatch`{% endif %}{% elif profile_has_delegate_decompose %} `task`, or `delegate_decompose`{% else %} or `task`{% endif %}, call it with `## Progress` and one flat pending row per deliverable; one row is sufficient for a small task. Reads, deletion, and explanations need none.
 
 Markers: `- [ ]` pending; `- [x]` completed; `- [~]` terminal will-not-pursue, never in-progress; `- [>]` note. Update changed scope/status only. `unchanged` means the same checklist was stored; do not repeat it.
 

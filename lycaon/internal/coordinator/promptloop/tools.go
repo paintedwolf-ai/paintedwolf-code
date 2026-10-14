@@ -246,11 +246,11 @@ func (l *toolInvocations) executeToolCall(
 	toolCtx.Effects.ArgsMalformed = tc.ArgsMalformed
 	toolCtx.Identity.ToolCallID = tc.ID
 	if toolCtx.Turn.TurnOfferedToolNames != nil && !slices.Contains(toolCtx.Turn.TurnOfferedToolNames, tc.Name) {
-		return refusedInvocation(l.rejectToolOccurrence(ctx, sess, tc, toolCtx, "TOOL_NOT_OFFERED", nil))
+		return refusedInvocation(l.rejectToolOccurrence(ctx, sess, tc, toolCtx, unofferedToolCode(tc.Name, toolCtx.Turn.TurnSurfaceID), nil))
 	}
 	// The active turn compile determines whether the definition is reachable.
 	if !surfaceAllowsTool(toolCtx.Turn.TurnToolPlan, toolCtx.Turn.TurnSurfaceID, tc.Name) {
-		return refusedInvocation(l.rejectToolOccurrence(ctx, sess, tc, toolCtx, offSurfaceCode(tc.Name), nil))
+		return refusedInvocation(l.rejectToolOccurrence(ctx, sess, tc, toolCtx, offSurfaceCode(tc.Name, toolCtx.Turn.TurnSurfaceID), nil))
 	}
 	if l.Context.Deps.Tools == nil {
 		out := failedInvocation("", toolCaptures{})
