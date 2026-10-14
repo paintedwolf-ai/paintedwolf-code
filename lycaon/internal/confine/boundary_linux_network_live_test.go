@@ -265,7 +265,7 @@ func TestLinuxLocalListenGrantIsReachableFromTheHost(t *testing.T) {
 		}
 		addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(int(port)))
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		cmd, cleanup, err := confine.Command(ctx, self, self, []string{probeTestFlag}, c)
+		cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{probeTestFlag}, c)
 		testutil.FailErr(t, "confine.Command", err)
 		cmd.Env = append(probeEnv("serve"), linuxProbePathsEnv+"="+addr)
 		var out strings.Builder
@@ -379,7 +379,7 @@ func rawHelperRun(t *testing.T, self string, plan linuxsandbox.Plan, env []strin
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	args := append([]string{"__confine-exec", "--profile-fd", "3", "--"}, target...)
-	cmd := exec.CommandContext(ctx, self, args...)
+	cmd := exec.CommandContext(ctx, helperBinary(t, self), args...)
 	cmd.ExtraFiles = []*os.File{pr}
 	cmd.Env = env
 	var out bytes.Buffer
@@ -402,7 +402,7 @@ func TestLinuxSupervisorLossEndsTheSandbox(t *testing.T) {
 	c, lease := boundConfinement(t, confine.Confinement{
 		Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
 	})
-	cmd, cleanup, err := confine.Command(t.Context(), self, "/bin/sh", []string{"-c", "sleep 30 & sleep 30"}, *c)
+	cmd, cleanup, err := confine.Command(t.Context(), helperBinary(t, self), "/bin/sh", []string{"-c", "sleep 30 & sleep 30"}, *c)
 	testutil.FailErr(t, "confine.Command", err)
 	testutil.FailErr(t, "start", cmd.Start())
 	cleanup()

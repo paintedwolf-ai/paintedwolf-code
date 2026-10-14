@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -183,6 +184,33 @@ func requireLinuxSandbox(t *testing.T) string {
 	return self
 }
 
+// helperBuild is the coverage build of the helper, made once per test binary.
+var helperBuild struct {
+	once sync.Once
+	path string
+	err  error
+}
+
+// helperBinary is what confined launches run as their helper: the test binary
+// itself, or in a coverage run a coverage build of the helper alone, since a
+// test binary records nothing it runs as a child of itself.
+func helperBinary(t *testing.T, self string) string {
+	t.Helper()
+	if os.Getenv("GOCOVERDIR") == "" {
+		return self
+	}
+	helperBuild.once.Do(func() {
+		helperBuild.path = filepath.Join(os.TempDir(), "pw-confine-helper-"+strconv.Itoa(os.Getpid()))
+		build := exec.Command("go", "build", "-cover", "-coverpkg=github.com/lycaon/lycaon/internal/confine/...",
+			"-o", helperBuild.path, "./testdata/helpermain")
+		if out, err := build.CombinedOutput(); err != nil {
+			helperBuild.err = fmt.Errorf("build coverage helper: %w: %s", err, out)
+		}
+	})
+	testutil.FailErr(t, "coverage helper", helperBuild.err)
+	return helperBuild.path
+}
+
 func denyConfinement(roots ...string) confine.Confinement {
 	return confine.Confinement{Roots: sandboxRoots(roots...), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
 }
@@ -201,7 +229,7 @@ func linuxConfinedRun(t *testing.T, self string, c confine.Confinement, env []st
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd, cleanup, err := confine.Command(ctx, self, name, args, c)
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), name, args, c)
 	testutil.FailErr(t, "confine.Command", err)
 	defer cleanup()
 	if env != nil {
@@ -360,7 +388,7 @@ func TestLinuxTerminalInjectionKillsTheProcess(t *testing.T) {
 	for _, mode := range []string{"tiocsti", "tioclinux"} {
 		master, slave := openPty(t)
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		cmd, cleanup, err := confine.Command(ctx, self, self, []string{probeTestFlag}, denyConfinement(t.TempDir()))
+		cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{probeTestFlag}, denyConfinement(t.TempDir()))
 		testutil.FailErr(t, "confine.Command", err)
 		cmd.Env = probeEnv(mode)
 		var out bytes.Buffer
@@ -484,7 +512,7 @@ func TestLinuxExitStatusAndSignalsAreMirrored(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd, cleanup, err := confine.Command(ctx, self, "/bin/sleep", []string{"30"}, c)
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), "/bin/sleep", []string{"30"}, c)
 	testutil.FailErr(t, "confine.Command", err)
 	defer cleanup()
 	testutil.FailErr(t, "start sleep", cmd.Start())
@@ -507,7 +535,7 @@ func TestLinuxIdentityAndWorkingDirectorySurvive(t *testing.T) {
 	proj := t.TempDir()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd, cleanup, err := confine.Command(ctx, self, self, []string{probeTestFlag}, denyConfinement(proj))
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{probeTestFlag}, denyConfinement(proj))
 	testutil.FailErr(t, "confine.Command", err)
 	defer cleanup()
 	cmd.Env = probeEnv("identity")
@@ -554,7 +582,7 @@ func rawHelper(t *testing.T, self string, plan linuxsandbox.Plan, target ...stri
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	args := append([]string{"__confine-exec", "--profile-fd", strconv.Itoa(3), "--"}, target...)
-	cmd := exec.CommandContext(ctx, self, args...)
+	cmd := exec.CommandContext(ctx, helperBinary(t, self), args...)
 	cmd.ExtraFiles = []*os.File{pr}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
