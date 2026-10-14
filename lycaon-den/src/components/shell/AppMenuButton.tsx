@@ -22,6 +22,10 @@ export function AppMenuButton(props: { side: WindowChromeSide }) {
   };
   const toggle = () => (items() ? close() : open());
   const binding = bindChromeContextMenu(open);
+  const menu = () => {
+    const entries = items();
+    return trigger && entries ? { anchor: trigger, entries } : null;
+  };
   createEffect(on(appMenuOpenRequests, toggle, { defer: true }));
 
   return (
@@ -29,6 +33,7 @@ export function AppMenuButton(props: { side: WindowChromeSide }) {
       <button
         type="button"
         class="den-shell-window-control den-shell-app-menu-trigger"
+        tabindex="-1"
         aria-label="App menu"
         aria-haspopup="menu"
         aria-expanded={items() !== null}
@@ -44,7 +49,7 @@ export function AppMenuButton(props: { side: WindowChromeSide }) {
           <path d="M1 2.5h8M1 5h8M1 7.5h8" />
         </svg>
       </button>
-      <Show when={trigger && items() ? { anchor: trigger, entries: items() } : null} keyed>
+      <Show when={menu()} keyed>
         {(menu) => (
           <ContextMenu
             anchor={menu.anchor}

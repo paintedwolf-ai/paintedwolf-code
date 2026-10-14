@@ -64,9 +64,10 @@ vi.mock("@tauri-apps/api/window", () => ({
   currentMonitor: () => currentMonitor(),
 }));
 
+let platform: "macos" | "linux" = "macos";
 vi.mock("../runtime.ts", () => ({
   isTauriRuntime: () => true,
-  tauriPlatform: () => "macos" as const,
+  tauriPlatform: () => platform,
 }));
 
 describe("setupWindowChrome", () => {
@@ -105,6 +106,22 @@ describe("setupWindowChrome", () => {
     onThemeChangedHandler?.({ payload: "light" });
     expect(osColorSchemeIsDark()).toBe(false);
     expect(document.documentElement.style.colorScheme).toBe("");
+  });
+
+  it("leaves the toolkit theme preference alone on Linux and still follows the window's scheme", async () => {
+    platform = "linux";
+    try {
+      const { setupWindowChrome } = await import("./window-chrome.ts");
+      const { osColorSchemeIsDark, resetOsColorSchemeWatchForTests } = await import("../../theme.ts");
+      resetOsColorSchemeWatchForTests();
+      await setupWindowChrome();
+      expect(setTheme).not.toHaveBeenCalled();
+      expect(osColorSchemeIsDark()).toBe(true);
+      onThemeChangedHandler?.({ payload: "light" });
+      expect(osColorSchemeIsDark()).toBe(false);
+    } finally {
+      platform = "macos";
+    }
   });
 
   it("seeds windowFocused from isFocused and updates on onFocusChanged", async () => {

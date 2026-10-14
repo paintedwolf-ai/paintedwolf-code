@@ -38,6 +38,8 @@ const closeGlyph = () => glyph(<path d="M1.5 1.5l7 7M8.5 1.5l-7 7" />);
 /**
  * Drawn window controls for one window edge. Linux lays them out as the
  * desktop asks; macOS and Windows keep native buttons, so nothing renders.
+ * Like native decorations they are pointer targets with accessible names,
+ * never Tab stops.
  */
 export function WindowControls(props: WindowEdgeClaim) {
   if (!drawsWindowControls()) return null;
@@ -61,6 +63,7 @@ export function WindowControls(props: WindowEdgeClaim) {
                 <button
                   type="button"
                   class="den-shell-window-control"
+                  tabindex="-1"
                   aria-label="Minimize window"
                   data-testid="window-minimize"
                   onClick={() => void currentWindow().then((win) => win.minimize())}
@@ -72,6 +75,7 @@ export function WindowControls(props: WindowEdgeClaim) {
                 <button
                   type="button"
                   class="den-shell-window-control"
+                  tabindex="-1"
                   aria-label={windowMaximized() ? "Restore window" : "Maximize window"}
                   data-testid="window-maximize"
                   data-maximized={windowMaximized() ? "" : undefined}
@@ -84,6 +88,7 @@ export function WindowControls(props: WindowEdgeClaim) {
                 <button
                   type="button"
                   class="den-shell-window-control den-shell-window-control-close"
+                  tabindex="-1"
                   aria-label="Close window"
                   data-testid="window-close"
                   onClick={() => void currentWindow().then((win) => win.close())}

@@ -16,7 +16,7 @@ vi.mock("../../platform/windows/current-window.ts", () => ({
 }));
 
 vi.mock("./AppMenuButton.tsx", () => ({
-  AppMenuButton: (props: { side: string }) => <button type="button" data-testid="window-app-menu" data-side={props.side} />,
+  AppMenuButton: (props: { side: string }) => <button type="button" tabindex="-1" data-testid="window-app-menu" data-side={props.side} />,
 }));
 
 const { WindowControls, soleWindowControls } = await import("./WindowControls.tsx");
@@ -45,6 +45,8 @@ describe("WindowControls", () => {
       [...cluster.querySelectorAll("button")].map((button) => button.getAttribute("aria-label") ?? button.dataset.testid),
     ).toEqual(["window-app-menu", "Minimize window", "Maximize window", "Close window"]);
     expect(screen.queryByTestId("window-controls-left")).toBeNull();
+    // Native decorations are never Tab stops.
+    for (const button of cluster.querySelectorAll("button")) expect(button.getAttribute("tabindex")).toBe("-1");
   });
 
   it("follows the desktop's layout for each side", () => {
