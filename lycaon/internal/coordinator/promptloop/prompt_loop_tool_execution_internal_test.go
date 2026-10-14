@@ -395,3 +395,16 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 		})
 	}
 }
+
+func TestDelegateDispatchOnImplementSurfaceRedirectsToTask(t *testing.T) {
+	if got := unofferedToolCode("delegate_dispatch", "implement_dispatch"); got != "COORDINATOR_DELEGATE_DISPATCH_USE_TASK" {
+		t.Fatalf("unofferedToolCode(delegate_dispatch, implement_dispatch) = %q, want COORDINATOR_DELEGATE_DISPATCH_USE_TASK", got)
+	}
+	if got := offSurfaceCode("delegate_dispatch", "implement_routing"); got != "COORDINATOR_DELEGATE_DISPATCH_USE_TASK" {
+		t.Fatalf("offSurfaceCode(delegate_dispatch, implement_routing) = %q, want COORDINATOR_DELEGATE_DISPATCH_USE_TASK", got)
+	}
+	if got := unofferedToolCode("delegate_dispatch", "plan_execute"); got != "TOOL_NOT_OFFERED" {
+		t.Fatalf("unofferedToolCode(delegate_dispatch, plan_execute) = %q, want TOOL_NOT_OFFERED", got)
+	}
+}
+

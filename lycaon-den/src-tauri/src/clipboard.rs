@@ -1,49 +1,61 @@
 //! Plain-text clipboard access for copy, cut, and paste actions.
+//!
+//! Every window shares one serialized service over the platform adapter:
+//! GTK on Linux, the OS pasteboard elsewhere. Shutdown is terminal.
+
+mod service;
+
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+use linux::{startup_facts, NativeClipboard};
+#[cfg(not(target_os = "linux"))]
+mod system;
+#[cfg(not(target_os = "linux"))]
+use system::{startup_facts, NativeClipboard};
+
+pub use service::ClipboardError;
+use service::ClipboardService;
 
 #[derive(Default)]
-pub struct ClipboardState(std::sync::Mutex<ClipboardOwner>);
-
-#[derive(Default)]
-struct ClipboardOwner {
-    board: Option<arboard::Clipboard>,
-    closed: bool,
+pub struct ClipboardState {
+    service: ClipboardService<NativeClipboard>,
 }
 
 impl ClipboardState {
-    fn with_clipboard<T>(
-        &self,
-        action: impl FnOnce(&mut arboard::Clipboard) -> Result<T, String>,
-    ) -> Result<T, String> {
-        let mut owner = self
-            .0
-            .lock()
-            .map_err(|_| "Clipboard state is unavailable")?;
-        if owner.closed {
-            return Err("Clipboard service has stopped".into());
-        }
-        if owner.board.is_none() {
-            owner.board = Some(arboard::Clipboard::new().map_err(|e| e.to_string())?);
-        }
-        action(owner.board.as_mut().expect("clipboard initialized"))
-    }
-
-    pub fn shutdown(&self) {
-        let mut owner = self
-            .0
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        owner.closed = true;
-        owner.board.take();
+    pub fn shutdown(&self, app: &tauri::AppHandle) {
+        self.service.shutdown(app);
     }
 }
 
-// Linux serves selection contents for the lifetime of the native owner.
+/// Logs the display facts once the toolkit is ready; runs on the main thread.
+pub fn setup() {
+    match startup_facts() {
+        Ok(facts) => eprintln!(
+            "Clipboard: protocol={} persistence={}",
+            facts.protocol.as_str(),
+            facts.persistence
+        ),
+        Err(error) => eprintln!("Clipboard: {error}"),
+    }
+}
+
 #[tauri::command]
-pub fn write_clipboard_text(
+pub async fn write_clipboard_text(
     text: String,
+    app: tauri::AppHandle,
     state: tauri::State<'_, ClipboardState>,
-) -> Result<(), String> {
-    state.with_clipboard(|clipboard| clipboard.set_text(text).map_err(|e| e.to_string()))
+) -> Result<(), ClipboardError> {
+    state.service.write(&app, text).await
+}
+
+/// Empty when the board has no text.
+#[tauri::command]
+pub async fn read_clipboard_text(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, ClipboardState>,
+) -> Result<String, ClipboardError> {
+    state.service.read(&app).await
 }
 
 /// Pastes into the focused web view through the system paste action, the
@@ -68,16 +80,6 @@ pub fn paste_into_focused_view(app: tauri::AppHandle) -> Result<(), String> {
         let _ = app;
         Err("system paste is available on macOS only".to_string())
     }
-}
-
-/// Empty when the board has no text.
-#[tauri::command]
-pub fn read_clipboard_text(state: tauri::State<'_, ClipboardState>) -> Result<String, String> {
-    state.with_clipboard(|clipboard| match clipboard.get_text() {
-        Ok(text) => Ok(text),
-        Err(arboard::Error::ContentNotAvailable) => Ok(String::new()),
-        Err(e) => Err(e.to_string()),
-    })
 }
 
 #[cfg(all(test, target_os = "linux"))]
