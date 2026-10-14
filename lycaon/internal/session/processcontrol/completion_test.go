@@ -5,6 +5,7 @@ import (
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
@@ -78,5 +79,31 @@ func TestBackgroundPreviewPreservesUTF8AndMostRecentOutput(t *testing.T) {
 	capBackgroundOutput(output, 3)
 	if !output.Truncated || len(output.Chunks) != 1 || output.Chunks[0].Text != "éz" {
 		t.Fatalf("bounded screened output=%+v", output)
+	}
+}
+
+func TestHandleSubjectResolvesHeldAndUnknownHandles(t *testing.T) {
+	var nilSvc *Service
+	if got := nilSvc.HandleSubject("s", "h"); got != "" {
+		t.Fatalf("nil service = %q", got)
+	}
+	held := heldcall.New(nil, nil)
+	svc := &Service{Held: held}
+	release := make(chan struct{})
+	defer close(release)
+	outcome, err := held.Run(t.Context(), heldcall.Spec{
+		SessionID: "s", Tool: "fetch_url", CallID: "c1", Foreground: 10 * time.Millisecond, DisplayTitle: "fetch url · https://example.com",
+	}, func(ctx context.Context) heldcall.Settled {
+		<-release
+		return heldcall.Settled{Outcome: api.ToolResultOutcomeCompleted}
+	})
+	if err != nil || outcome.Handle == "" {
+		t.Fatalf("start held call: %v %+v", err, outcome)
+	}
+	if got := svc.HandleSubject("s", outcome.Handle); got != "fetch url · https://example.com" {
+		t.Fatalf("held subject = %q", got)
+	}
+	if got := svc.HandleSubject("other", outcome.Handle); got != "" {
+		t.Fatalf("foreign session subject = %q", got)
 	}
 }

@@ -33,10 +33,58 @@ func completionWaitFixture(t *testing.T) (*LoopEngine, *awaitstore.Store, *tools
 	deps.ProcessState = func(sessionID, handle string) (bool, bool) {
 		return sessionID == "s1" && handle == "command-1", true
 	}
+	deps.ProcessSubject = func(sessionID, handle string) string {
+		if sessionID == "s1" && handle == "command-1" {
+			return "node @scratch/ai-test.js"
+		}
+		return ""
+	}
 	loop.SetDeps(deps)
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register completion wait", RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
 	return loop, store, reg
+}
+
+func TestCompletionWaitSetsDisplaySubjectFromProcessHandle(t *testing.T) {
+	_, _, reg := completionWaitFixture(t)
+	captured := &tools.ToolInvocationOut{}
+	_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID},
+		Effects:  tools.InvocationEffects{Out: captured},
+	})
+	testutil.FailErr(t, "park completion wait", err)
+	if captured.DisplaySubject != "node @scratch/ai-test.js" {
+		t.Fatalf("DisplaySubject = %q, want %q", captured.DisplaySubject, "node @scratch/ai-test.js")
+	}
+}
+
+func TestCompletionWaitTimerBackstopSettlesHungProcess(t *testing.T) {
+	loop, store, _ := completionWaitFixture(t)
+	deps := loopDepsSnapshotForTest(loop)
+	var timedOut atomic.Int32
+	deps.RunWaitResume = func(_ context.Context, _ string, delivery WaitDelivery) (*promptresult.Result, error) {
+		if delivery.Condition.Kind != "timer" || delivery.Condition.Outcome != "timed_out" {
+			t.Errorf("unexpected timer backstop delivery: %+v", delivery.Condition)
+		}
+		if err := delivery.Admitted(); err != nil {
+			return nil, err
+		}
+		timedOut.Add(1)
+		return &promptresult.Result{}, nil
+	}
+	loop.SetDeps(deps)
+	_, err := store.Arm(t.Context(), awaitstore.Lease{
+		SessionID: "s1", ProjectID: testdbseed.DefaultProjectID, UntilComplete: true,
+		Deadline:   time.Now().UTC().Add(15 * time.Millisecond),
+		Conditions: []awaitstore.Condition{{Kind: "process_done", Handles: []string{"command-1"}}},
+	})
+	testutil.FailErr(t, "arm completion wait with short deadline", err)
+	testutil.FailErr(t, "recover completion wait", RecoverWaitLeases(t.Context(), loop.Subscriptions, store))
+	testutil.WaitFor(t, time.Second, func() bool { return timedOut.Load() == 1 })
+	loop.Turns.WaitForAsyncTurns(testutil.BoundedContext(t, time.Second))
+	if loop.Waits.IsSleeping("s1") {
+		t.Fatal("timer backstop left hung completion wait sleeping")
+	}
 }
 
 func TestCompletionWaitRejectsUnownedOrUnboundedConditions(t *testing.T) {

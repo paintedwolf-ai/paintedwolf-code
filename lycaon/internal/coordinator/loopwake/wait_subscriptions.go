@@ -17,6 +17,7 @@ type WaitSubscriptionsDeps struct {
 	ProcessReport             func(sessionID, handle string) (report string, published bool)
 	ProcessRunning            func(sessionID string, handles []string) bool
 	ProcessState              func(sessionID, handle string) (known, running bool)
+	ProcessSubject            func(sessionID, handle string) string
 	ScanCycleOpen             func(ctx context.Context, sessionID string) bool
 	WorkerCycleIdle           WorkerCycleIdle
 }
@@ -193,6 +194,21 @@ func (l *WaitSubscriptions) processCycleOpen(sessionID string, handles []string)
 		return false
 	}
 	return deps.ProcessRunning(sessionID, handles)
+}
+func (l *WaitSubscriptions) processDisplaySubject(sessionID string, handles []string) string {
+	if l == nil {
+		return ""
+	}
+	deps := l.loopDeps()
+	if deps.ProcessSubject == nil {
+		return ""
+	}
+	for _, handle := range handles {
+		if subject := strings.TrimSpace(deps.ProcessSubject(sessionID, handle)); subject != "" {
+			return subject
+		}
+	}
+	return ""
 }
 func (l *WaitSubscriptions) overlayPromoteDue(ctx context.Context, sessionID string, env anchor.Envelope) bool {
 	if env.HasPendingOverlayPromote() {

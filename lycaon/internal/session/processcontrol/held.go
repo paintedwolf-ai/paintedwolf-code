@@ -40,6 +40,27 @@ func (m *Service) HandleState(sessionID, handle string) (known, running bool) {
 	return m.Held.State(sessionID, handle)
 }
 
+// HandleSubject returns the readable command or tool target for a handle.
+func (m *Service) HandleSubject(sessionID, handle string) string {
+	if m == nil {
+		return ""
+	}
+	if m.Background != nil {
+		if cmd, ok := m.Background.CommandLine(sessionID, handle); ok && cmd != "" {
+			return cmd
+		}
+	}
+	if m.Held != nil {
+		if status, err := m.Held.Status(sessionID, handle); err == nil {
+			if status.DisplayTitle != "" {
+				return status.DisplayTitle
+			}
+			return strings.ReplaceAll(status.Tool, "_", " ")
+		}
+	}
+	return ""
+}
+
 // HandlesRunning reports whether a listed handle of either kind still runs.
 func (m *Service) HandlesRunning(sessionID string, handles []string) bool {
 	if m == nil {

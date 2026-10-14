@@ -70,6 +70,9 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 		if err != nil {
 			return "", err
 		}
+		if subject := loop.processDisplaySubject(tctx.Identity.SessionID, request.ProcessHandles); subject != "" {
+			tctx.SetDisplaySubject(subject)
+		}
 		if request.UntilComplete {
 			winner, ready := loop.processConditionOutcome(tctx.Identity.SessionID, awaitstore.Condition{
 				Kind: "process_done", Handles: request.ProcessHandles,
