@@ -27,8 +27,45 @@ func TestDatagramPacketsRoundTrip(t *testing.T) {
 			t.Fatalf("IPv4 header checksum does not verify")
 		}
 		udp := packet[len(packet)-udpHeaderLen-len(d.payload):]
-		if checksum(udp, pseudoHeaderSum(d.src.Addr(), d.dst.Addr(), len(udp))) != 0 {
+		if checksum(udp, pseudoHeaderSum(d.src.Addr(), d.dst.Addr(), protocolUDP, len(udp))) != 0 {
 			t.Fatalf("%v: UDP checksum does not verify", d.src)
+		}
+	}
+}
+
+// The report comes from the closed port's host, quotes the datagram's headers,
+// and carries valid checksums.
+func TestPortUnreachableQuotesTheDatagram(t *testing.T) {
+	t.Parallel()
+	for _, d := range []datagram{
+		{src: ap("192.0.0.8:40000"), dst: ap("9.9.9.9:53"), payload: []byte("query")},
+		{src: ap("[fd70:7700:636f:6465::8]:40000"), dst: ap("[2001:db8::53]:53"), payload: []byte("query")},
+	} {
+		packet := buildPortUnreachable(d)
+		var icmp []byte
+		if d.src.Addr().Is4() {
+			if packet[9] != protocolICMP || checksum(packet[:ipv4HeaderLen], 0) != 0 {
+				t.Fatalf("%v: bad IPv4 header", d.src)
+			}
+			if netip.AddrFrom4([4]byte(packet[12:16])) != d.dst.Addr() || netip.AddrFrom4([4]byte(packet[16:20])) != d.src.Addr() {
+				t.Fatalf("%v: report not from the destination host to the sender", d.src)
+			}
+			icmp = packet[ipv4HeaderLen:]
+			if icmp[0] != 3 || icmp[1] != 3 || checksum(icmp, 0) != 0 {
+				t.Fatalf("%v: bad ICMP message % x", d.src, icmp[:4])
+			}
+		} else {
+			if packet[6] != protocolICMP6 {
+				t.Fatalf("%v: bad IPv6 header", d.src)
+			}
+			icmp = packet[ipv6HeaderLen:]
+			if icmp[0] != 1 || icmp[1] != 4 || checksum(icmp, pseudoHeaderSum(d.dst.Addr(), d.src.Addr(), protocolICMP6, len(icmp))) != 0 {
+				t.Fatalf("%v: bad ICMPv6 message % x", d.src, icmp[:4])
+			}
+		}
+		quoted, ok := parseDatagram(icmp[icmpHeaderLen:])
+		if !ok || quoted.src != d.src || quoted.dst != d.dst {
+			t.Fatalf("%v: quoted %+v, %v", d.src, quoted, ok)
 		}
 	}
 }
@@ -162,14 +199,14 @@ func TestDatagramFlowsStopAtTheirBound(t *testing.T) {
 		return a, nil
 	}
 	for i := 0; i < maxDatagramFlows+5; i++ {
-		flows.send(i, []byte("x"), dial, func([]byte) {})
+		flows.send(i, []byte("x"), dial, flowPeer{deliver: func([]byte) {}})
 	}
-	flows.send(0, []byte("x"), dial, func([]byte) {})
+	flows.send(0, []byte("x"), dial, flowPeer{deliver: func([]byte) {}})
 	if dials != maxDatagramFlows {
 		t.Fatalf("opened %d flows, want %d", dials, maxDatagramFlows)
 	}
 	_ = flows.Close()
-	flows.send(maxDatagramFlows+10, []byte("x"), dial, func([]byte) {})
+	flows.send(maxDatagramFlows+10, []byte("x"), dial, flowPeer{deliver: func([]byte) {}})
 	if dials != maxDatagramFlows {
 		t.Fatal("a closed table opened a flow")
 	}

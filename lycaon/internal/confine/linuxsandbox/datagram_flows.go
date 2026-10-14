@@ -35,10 +35,17 @@ func newDatagramFlows() *datagramFlows {
 	return &datagramFlows{flows: map[any]*datagramFlow{}}
 }
 
-// send writes payload on key's flow, opening it with dial and delivering its
-// replies to deliver when it is new.
-func (t *datagramFlows) send(key any, payload []byte, dial func() (net.Conn, error), deliver func([]byte)) {
-	f := t.flow(key, dial, deliver)
+// flowPeer is where a flow's replies go: deliver takes each datagram, and
+// refused, when set, hears that the far end reported its port closed.
+type flowPeer struct {
+	deliver func([]byte)
+	refused func()
+}
+
+// send writes payload on key's flow, opening it with dial and returning its
+// replies to peer when it is new.
+func (t *datagramFlows) send(key any, payload []byte, dial func() (net.Conn, error), peer flowPeer) {
+	f := t.flow(key, dial, peer)
 	if f == nil {
 		return
 	}
@@ -46,7 +53,7 @@ func (t *datagramFlows) send(key any, payload []byte, dial func() (net.Conn, err
 	_, _ = f.conn.Write(payload)
 }
 
-func (t *datagramFlows) flow(key any, dial func() (net.Conn, error), deliver func([]byte)) *datagramFlow {
+func (t *datagramFlows) flow(key any, dial func() (net.Conn, error), peer flowPeer) *datagramFlow {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if f, ok := t.flows[key]; ok {
@@ -61,13 +68,13 @@ func (t *datagramFlows) flow(key any, dial func() (net.Conn, error), deliver fun
 	}
 	f := &datagramFlow{conn: conn}
 	t.flows[key] = f
-	go t.replies(key, f, deliver)
+	go t.replies(key, f, peer)
 	return f
 }
 
 // replies delivers what the flow's socket receives until the flow idles out
 // or the table closes.
-func (t *datagramFlows) replies(key any, f *datagramFlow, deliver func([]byte)) {
+func (t *datagramFlows) replies(key any, f *datagramFlow, peer flowPeer) {
 	defer t.drop(key, f)
 	buf := make([]byte, maxDatagram)
 	for {
@@ -75,7 +82,7 @@ func (t *datagramFlows) replies(key any, f *datagramFlow, deliver func([]byte)) 
 		n, err := f.conn.Read(buf)
 		if err == nil {
 			f.last.Store(time.Now().UnixNano())
-			deliver(buf[:n])
+			peer.deliver(buf[:n])
 			continue
 		}
 		var ne net.Error
@@ -85,7 +92,10 @@ func (t *datagramFlows) replies(key any, f *datagramFlow, deliver func([]byte)) 
 				return
 			}
 		case errors.Is(err, syscall.ECONNREFUSED):
-			// The peer's host refused one datagram; the next may be served.
+			// The far end refused one datagram; the next may be served.
+			if peer.refused != nil {
+				peer.refused()
+			}
 		default:
 			return
 		}
@@ -126,6 +136,6 @@ func relayDatagrams(listen net.PacketConn, dial func() (net.Conn, error)) {
 			return
 		}
 		key := from.String()
-		flows.send(key, buf[:n], dial, func(reply []byte) { _, _ = listen.WriteTo(reply, from) })
+		flows.send(key, buf[:n], dial, flowPeer{deliver: func(reply []byte) { _, _ = listen.WriteTo(reply, from) }})
 	}
 }

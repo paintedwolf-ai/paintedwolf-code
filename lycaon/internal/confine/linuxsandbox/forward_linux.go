@@ -196,62 +196,29 @@ func (s *supervisor) accept(h handoff, fd int) {
 			_ = unix.Close(fd)
 			return
 		}
-		f := os.NewFile(uintptr(fd), "sandbox-listener")
-		ln, err := net.FileListener(f)
-		_ = f.Close()
-		if err != nil {
-			return
+		if ln, err := listenerOf(fd); err == nil {
+			s.run(ln, func() { forwardListener(ln, ap) })
 		}
-		s.track(ln)
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
-			forwardListener(ln, ap)
-		}()
-	case handoffResolverUDP:
+	case handoffResolverUDP, handoffResolverTCP:
 		upstream, ok := s.resolver()
-		f := os.NewFile(uintptr(fd), "sandbox-resolver")
-		pc, err := net.FilePacketConn(f)
-		_ = f.Close()
-		if err != nil || !ok {
+		if !ok {
+			_ = unix.Close(fd)
 			return
 		}
-		s.track(pc)
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
-			relayResolverDatagrams(pc, upstream)
-		}()
-	case handoffResolverTCP:
-		upstream, ok := s.resolver()
-		f := os.NewFile(uintptr(fd), "sandbox-resolver")
-		ln, err := net.FileListener(f)
-		_ = f.Close()
-		if err != nil || !ok {
-			return
+		if h.Kind == handoffResolverTCP {
+			if ln, err := listenerOf(fd); err == nil {
+				s.run(ln, func() { forwardListener(ln, upstream) })
+			}
+		} else if pc, err := packetConnOf(fd); err == nil {
+			s.run(pc, func() { relayResolverDatagrams(pc, upstream) })
 		}
-		s.track(ln)
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
-			forwardListener(ln, upstream)
-		}()
 	case handoffGateway:
 		_ = unix.SetNonblock(fd, true)
 		tun := os.NewFile(uintptr(fd), "sandbox-gateway")
-		s.track(tun)
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
-			serveGateway(tun, s.network)
-		}()
+		s.run(tun, func() { serveGateway(tun, s.network) })
 	case handoffNotify:
 		s.setupDone = true
-		s.wg.Add(1)
-		go func() {
-			defer s.wg.Done()
-			s.serveNotifications(fd)
-		}()
+		s.run(nil, func() { s.serveNotifications(fd) })
 		// The inner helper answers socket requests until it is told the
 		// launch relays are in place, and starts the target only then.
 		go func() {
@@ -261,6 +228,24 @@ func (s *supervisor) accept(h handoff, fd int) {
 	default:
 		_ = unix.Close(fd)
 	}
+}
+
+// run serves fn until it returns; c, when set, closes with the supervisor.
+func (s *supervisor) run(c io.Closer, fn func()) {
+	if c != nil {
+		s.track(c)
+	}
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		fn()
+	}()
+}
+
+func listenerOf(fd int) (net.Listener, error) {
+	f := os.NewFile(uintptr(fd), "sandbox-listener")
+	defer func() { _ = f.Close() }()
+	return net.FileListener(f)
 }
 
 // resolver is the first resolver the plan names, the one the stub relays to.

@@ -193,10 +193,15 @@ func serveGateway(tun *os.File, network Network) {
 		}
 		src, dst := d.src, d.dst
 		dial := func() (net.Conn, error) { return net.DialUDP("udp", nil, net.UDPAddrFromAddrPort(dst)) }
-		deliver := func(reply []byte) {
-			_, _ = tun.Write(buildDatagram(datagram{src: dst, dst: src, payload: reply}))
+		peer := flowPeer{
+			deliver: func(reply []byte) {
+				_, _ = tun.Write(buildDatagram(datagram{src: dst, dst: src, payload: reply}))
+			},
+			// A closed port on the far host is reported to the sending socket
+			// as that host reports it.
+			refused: func() { _, _ = tun.Write(buildPortUnreachable(datagram{src: src, dst: dst})) },
 		}
-		flows.send([2]netip.AddrPort{src, dst}, d.payload, dial, deliver)
+		flows.send([2]netip.AddrPort{src, dst}, d.payload, dial, peer)
 	}
 }
 

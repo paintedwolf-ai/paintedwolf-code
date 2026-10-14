@@ -209,19 +209,26 @@ func hostAddress(t *testing.T) netip.Addr {
 }
 
 // A udp permit carries datagrams to its port through the gateway however the
-// process sends, and a datagram to any other port reaches nothing: a connect
-// to it is refused, and an unconnected send is dropped.
+// process sends, and a closed port there is reported as the far host reports
+// it. A datagram to any other port reaches nothing: a connect to it is
+// refused, and an unconnected send is dropped.
 func TestLinuxDirectIPDatagramsCrossTheGateway(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	host := hostAddress(t)
 	permitted := datagramEcho(t, netip.AddrPortFrom(host, 0).String())
 	other := datagramEcho(t, netip.AddrPortFrom(host, 0).String())
+	closed := closedDatagramPort(t, host)
 	plan := networkPlan(linuxsandbox.Network{
-		Mode:            linuxsandbox.NetworkDirectIP,
-		DirectIPPermits: []linuxsandbox.DirectIPPermit{{Protocol: "tcp", Port: 443}, {Protocol: "udp", Port: permitted.Port()}},
+		Mode: linuxsandbox.NetworkDirectIP,
+		DirectIPPermits: []linuxsandbox.DirectIPPermit{
+			{Protocol: "tcp", Port: 443}, {Protocol: "udp", Port: permitted.Port()}, {Protocol: "udp", Port: closed.Port()},
+		},
 	})
-	out := probeDatagrams(t, self, plan, permitted, other)
+	out := probeDatagrams(t, self, plan, permitted, other, closed)
 	requireDatagrams(t, out, permitted, "ok host")
+	if !strings.Contains(probeLine(out, fmt.Sprintf("udp connected %s: ", closed)), "connection refused") {
+		t.Fatalf("a closed permitted port was not reported refused:\n%s", out)
+	}
 	if !strings.Contains(out, fmt.Sprintf("udp connected %s: EACCES\n", other)) {
 		t.Fatalf("a connect to a port no permit covers was not refused:\n%s", out)
 	}
@@ -236,6 +243,26 @@ func TestLinuxDirectIPDatagramsCrossTheGateway(t *testing.T) {
 	if strings.Contains(out, ": ok") {
 		t.Fatalf("a datagram left the sandbox without a udp permit:\n%s", out)
 	}
+}
+
+// probeLine is the probe's output line that starts with prefix.
+func probeLine(out, prefix string) string {
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, prefix) {
+			return line
+		}
+	}
+	return ""
+}
+
+// closedDatagramPort is a port on addr nothing serves datagrams on.
+func closedDatagramPort(t *testing.T, addr netip.Addr) netip.AddrPort {
+	t.Helper()
+	conn, err := net.ListenPacket("udp", netip.AddrPortFrom(addr, 0).String())
+	testutil.FailErr(t, "reserve a port", err)
+	port := conn.LocalAddr().(*net.UDPAddr).AddrPort()
+	_ = conn.Close()
+	return port
 }
 
 // A granted datagram listener is reachable from the host on loopback; an

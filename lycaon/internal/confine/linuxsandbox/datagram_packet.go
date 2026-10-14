@@ -13,7 +13,10 @@ const (
 	ipv4HeaderLen = 20
 	ipv6HeaderLen = 40
 	udpHeaderLen  = 8
+	icmpHeaderLen = 8
+	protocolICMP  = 1
 	protocolUDP   = 17
+	protocolICMP6 = 58
 	// packetTTL is the hop limit of the replies the gateway writes.
 	packetTTL = 64
 )
@@ -109,7 +112,7 @@ func buildDatagram(d datagram) []byte {
 	binary.BigEndian.PutUint16(udp[2:4], d.dst.Port())
 	binary.BigEndian.PutUint16(udp[4:6], uint16(udpLen))
 	copy(udp[udpHeaderLen:], d.payload)
-	sum := checksum(udp, pseudoHeaderSum(d.src.Addr(), d.dst.Addr(), udpLen))
+	sum := checksum(udp, pseudoHeaderSum(d.src.Addr(), d.dst.Addr(), protocolUDP, udpLen))
 	if sum == 0 {
 		// Zero means no checksum; its ones'-complement twin carries it.
 		sum = 0xffff
@@ -118,8 +121,44 @@ func buildDatagram(d datagram) []byte {
 	return packet
 }
 
-// pseudoHeaderSum is the unfolded sum of the UDP pseudo-header.
-func pseudoHeaderSum(src, dst netip.Addr, length int) uint32 {
+// buildPortUnreachable renders the ICMP report that d's destination port is
+// closed, as d's destination host would send it to d's source. It quotes d's
+// IP and UDP headers, which is what the kernel matches to the sending socket.
+func buildPortUnreachable(d datagram) []byte {
+	quoted := buildDatagram(datagram{src: d.src, dst: d.dst})
+	msg := make([]byte, icmpHeaderLen+len(quoted))
+	copy(msg[icmpHeaderLen:], quoted)
+	from, to := d.dst.Addr(), d.src.Addr()
+	if from.Is4() {
+		// Destination unreachable, port unreachable.
+		msg[0], msg[1] = 3, 3
+		binary.BigEndian.PutUint16(msg[2:4], checksum(msg, 0))
+		packet := make([]byte, ipv4HeaderLen, ipv4HeaderLen+len(msg))
+		packet[0] = 0x45
+		binary.BigEndian.PutUint16(packet[2:4], uint16(ipv4HeaderLen+len(msg)))
+		packet[8] = packetTTL
+		packet[9] = protocolICMP
+		src, dst := from.As4(), to.As4()
+		copy(packet[12:16], src[:])
+		copy(packet[16:20], dst[:])
+		binary.BigEndian.PutUint16(packet[10:12], checksum(packet, 0))
+		return append(packet, msg...)
+	}
+	msg[0], msg[1] = 1, 4
+	binary.BigEndian.PutUint16(msg[2:4], checksum(msg, pseudoHeaderSum(from, to, protocolICMP6, len(msg))))
+	packet := make([]byte, ipv6HeaderLen, ipv6HeaderLen+len(msg))
+	packet[0] = 0x60
+	binary.BigEndian.PutUint16(packet[4:6], uint16(len(msg)))
+	packet[6] = protocolICMP6
+	packet[7] = packetTTL
+	src, dst := from.As16(), to.As16()
+	copy(packet[8:24], src[:])
+	copy(packet[24:40], dst[:])
+	return append(packet, msg...)
+}
+
+// pseudoHeaderSum is the unfolded sum of an upper-layer pseudo-header.
+func pseudoHeaderSum(src, dst netip.Addr, protocol uint8, length int) uint32 {
 	var sum uint32
 	add := func(b []byte) {
 		for i := 0; i+1 < len(b); i += 2 {
@@ -135,7 +174,7 @@ func pseudoHeaderSum(src, dst netip.Addr, length int) uint32 {
 		add(s[:])
 		add(d[:])
 	}
-	return sum + protocolUDP + uint32(length)
+	return sum + uint32(protocol) + uint32(length)
 }
 
 // checksum is the Internet checksum of b, starting from an unfolded sum.
