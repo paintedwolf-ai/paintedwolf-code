@@ -56,14 +56,19 @@ func handOffGateway() error {
 	if err := addGatewayRoute(index, gatewayAddr4, 32); err != nil {
 		return gatewayUnavailable("route IPv4 through "+gatewayInterface, err)
 	}
-	// A kernel without IPv6 leaves the gateway to IPv4.
-	if err := addGatewayRoute(index, gatewayAddr6, 128); err != nil && !errors.Is(err, unix.EAFNOSUPPORT) && !errors.Is(err, unix.EOPNOTSUPP) {
+	// A kernel without IPv6, or with it disabled on new interfaces, leaves the
+	// gateway to IPv4.
+	if err := addGatewayRoute(index, gatewayAddr6, 128); err != nil && !ipv6Absent(err) {
 		return gatewayUnavailable("route IPv6 through "+gatewayInterface, err)
 	}
 	if err := sendHandoff(handoff{Kind: handoffGateway}, tun); err != nil {
 		return fmt.Errorf("hand off gateway: %w", err)
 	}
 	return nil
+}
+
+func ipv6Absent(err error) bool {
+	return errors.Is(err, unix.EAFNOSUPPORT) || errors.Is(err, unix.EOPNOTSUPP) || errors.Is(err, unix.EACCES)
 }
 
 func gatewayUnavailable(step string, err error) *Unavailability {
@@ -197,7 +202,7 @@ func serveGateway(tun *os.File, network Network) {
 
 // gatewayCarries reports whether a datagram to dst may leave the sandbox.
 func gatewayCarries(n Network, dst netip.AddrPort) bool {
-	a := dst.Addr()
+	a := dst.Addr().Unmap()
 	if !a.IsValid() || a.IsLoopback() || a.IsUnspecified() || a.IsMulticast() || a == netip.AddrFrom4([4]byte{255, 255, 255, 255}) {
 		return false
 	}
