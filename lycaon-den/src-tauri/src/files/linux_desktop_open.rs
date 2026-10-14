@@ -239,7 +239,14 @@ fn portal_open_fd(bus: &gio::DBusConnection, method: &str, parent: &str, path: &
             gio::Cancellable::NONE,
         )
         .map_err(|error| error.to_string())?;
-    reply.to_gerror().map_err(|error| error.to_string())
+    // A method return has nothing to convert; only an error reply names a cause.
+    if reply.message_type() == gio::DBusMessageType::Error {
+        return Err(reply
+            .error_name()
+            .map(|name| name.to_string())
+            .unwrap_or_else(|| "the portal refused the request".to_string()));
+    }
+    Ok(())
 }
 
 fn launch_default_handler(uri: &str) -> Result<(), String> {
