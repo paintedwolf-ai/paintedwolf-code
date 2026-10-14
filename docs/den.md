@@ -39,6 +39,15 @@ Linux artifact has passed the desktop matrix. Linked issues own unresolved
 implementation and qualification. The support contract and complete inventory
 remain open under [#444](https://github.com/paintedwolf-ai/paintedwolf-code/issues/444).
 
+Clipboard commands ([`src-tauri/src/clipboard/`](../lycaon-den/src-tauri/src/clipboard.rs))
+run through one serialized service per shell with bounded operations and a
+terminal shutdown. Linux uses the GTK display connection the shell already
+holds, so copy and paste work on native Wayland and X11 without XWayland or
+compositor extensions; macOS and Windows use the OS pasteboard. Startup logs the
+observed display protocol and whether copied text persists beyond the process.
+Private Xvfb and headless sway fixtures drive the adapter against
+`xclip` and `wl-clipboard` peers in `den:test:rust`.
+
 | User outcome | Shared owner and native boundary | Linux release evidence and tracking |
 |--------------|----------------------------------|-------------------------------------|
 | Chats, workflows, approvals, provider setup, and MCP | Host `internal/session`, `internal/workflow`, `internal/llm`, `internal/mcp`; Den stores and feature surfaces consume the same API | Shared workflows require installed WebKitGTK journeys, including reconnect, cancellation, tool refusal, and provider authentication: [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456) |
