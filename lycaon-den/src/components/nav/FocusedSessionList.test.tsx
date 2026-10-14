@@ -563,4 +563,59 @@ describe("FocusedSessionList", () => {
     ));
     expect(screen.queryByTestId("focused-session-list-empty")).toBeNull();
   });
+
+  it("replaces a row's time with its actions only while the pointer or focus is on it", () => {
+    render(() => (
+      <FocusedSessionList
+        {...baseProps()}
+        sections={chats(row({ sessionId: "s1", activityAtMs: Date.now() - 60_000 }))}
+      />
+    ));
+    const wrapper = document.querySelector<HTMLElement>(".focused-session-list__item > .den-list-row--nav")!;
+    const time = () => document.querySelector(".focused-session-list__time");
+    expect(time()).toBeTruthy();
+
+    fireEvent.pointerEnter(wrapper);
+    expect(time()).toBeNull();
+    fireEvent.pointerLeave(wrapper);
+    expect(time()).toBeTruthy();
+
+    const rename = screen.getByTestId("session-rename-action");
+    rename.focus();
+    expect(time()).toBeNull();
+    fireEvent.pointerLeave(wrapper);
+    expect(time()).toBeNull();
+    rename.blur();
+    expect(time()).toBeTruthy();
+  });
+
+  it("moves between rows with the arrow keys and leaves for the composer", () => {
+    const props = baseProps();
+    render(() => (
+      <FocusedSessionList
+        {...props}
+        sections={chats(row({ sessionId: "s1", title: "First" }), row({ sessionId: "s2", title: "Second" }))}
+        activeChat={{ projectId: "p1", sessionId: "s1" }}
+        noticeIndex={() => new Map([["session:s2", [{ scope: { kind: "session", sessionId: "s2" } }]]]) as never}
+      />
+    ));
+    const first = screen.getByText("First").closest("button")!;
+    const second = screen.getByText("Second").closest("button")!;
+    expect(first.querySelector(".sr-only")?.textContent).toBeTruthy();
+    expect(screen.getByTestId("session-notice-count").textContent).toBe("1");
+
+    first.focus();
+    fireEvent.keyDown(first, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(second);
+    fireEvent.keyDown(second, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(second);
+    fireEvent.keyDown(second, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(first);
+    fireEvent.keyDown(first, { key: "ArrowUp" });
+    expect(document.activeElement).toBe(first);
+
+    fireEvent.keyDown(second, { key: "Enter" });
+    expect(props.onSelectSession).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "s2" }));
+    fireEvent.keyDown(second, { key: "Escape" });
+  });
 });

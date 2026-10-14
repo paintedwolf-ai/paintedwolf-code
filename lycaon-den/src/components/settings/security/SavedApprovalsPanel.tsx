@@ -403,10 +403,7 @@ export function SavedApprovalsPanel(props: Props) {
       data-grant-id={grant.id}
       data-grant-category={grant.category}
     >
-      <div
-        class="den-saved-approvals-row"
-        classList={{ "den-saved-approvals-row--expired": grant.expired === true }}
-      >
+      <div class="den-saved-approvals-row" classList={{ "den-saved-approvals-row--expired": grant.expired === true }}>
         <span class="den-saved-approvals-kind">
           {GRANT_KIND_LABELS[grant.category]}
         </span>

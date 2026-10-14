@@ -72,4 +72,35 @@ describe("WorkflowFeedbackCard", () => {
     expect(queryByTestId("workflow-feedback-open-marker")).toBeNull();
     expect(getByTestId("workflow-feedback-chicklet")).toBeTruthy();
   });
+
+  it("mounts the chicklet body only while it is open", async () => {
+    const meta: WorkflowFeedbackMeta = {
+      phase_id: "pick",
+      prompt: "Pick one",
+      response_type: "single_choice",
+      options: ["red", "blue"],
+      answer: "blue",
+    };
+    const { getByTestId, queryByTestId } = render(() => (
+      <WorkflowFeedbackCard meta={meta} client={client()} {...base} />
+    ));
+    expect(queryByTestId("workflow-feedback-chicklet-body")).toBeNull();
+    getByTestId("workflow-feedback-chicklet").querySelector("summary")!.click();
+    await vi.waitFor(() => expect(getByTestId("workflow-feedback-chicklet-body")).toBeTruthy());
+    expect(getByTestId("workflow-feedback-chicklet-prompt").textContent).toBe("Pick one");
+    expect(getByTestId("workflow-feedback-answer").textContent).toContain("blue");
+  });
+
+  it("explains a closed ask once opened", async () => {
+    const meta: WorkflowFeedbackMeta = {
+      phase_id: "old",
+      prompt: "Old?",
+      response_type: "text",
+    };
+    const { getByTestId } = render(() => (
+      <WorkflowFeedbackCard meta={meta} client={client()} {...base} activePendingPhaseId="new" />
+    ));
+    getByTestId("workflow-feedback-chicklet").querySelector("summary")!.click();
+    await vi.waitFor(() => expect(getByTestId("workflow-feedback-closed-hint").textContent).toBeTruthy());
+  });
 });
