@@ -21,11 +21,22 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 	// call: the field, where it was written, and where it belongs.
 	cases := []struct {
 		name      string
+		tool      string
 		data      map[string]any
 		wantWhat  string
 		wantCause string
 		wantFix   string
 	}{
+		{
+			name: "inapplicable workflow field", tool: "task",
+			data:     map[string]any{"field": "workflow_work_id", "reason": "not_a_planned_fanout_phase", "inapplicable_fields": []string{"workflow_work_id"}},
+			wantWhat: "workflow_work_id", wantCause: "not_a_planned_fanout_phase", wantFix: "Omit `workflow_work_id`",
+		},
+		{
+			name: "inapplicable fields on another tool", tool: "command",
+			data:     map[string]any{"field": "pipeline", "inapplicable_fields": []string{"pipeline", "stdin"}},
+			wantWhat: "pipeline", wantCause: "pipeline", wantFix: "Omit `pipeline, stdin`",
+		},
 		{
 			name: "misplaced at the top level",
 			data: map[string]any{
@@ -112,7 +123,10 @@ func TestEvaluateBlockToolArgsInvalidCopyBranches(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			gc := NewGuardContext()
-			gc.Invocation.Tool = "command"
+			gc.Invocation.Tool = tc.tool
+			if gc.Invocation.Tool == "" {
+				gc.Invocation.Tool = "command"
+			}
 			gc.ObservedRejectCode = "TOOL_ARGS_INVALID"
 			gc.Invocation.ArgValidationErrors = []string{"TOOL_ARGS_INVALID"}
 			gc.PutRejectData("TOOL_ARGS_INVALID", tc.data)
