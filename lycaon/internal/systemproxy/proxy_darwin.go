@@ -178,6 +178,63 @@ static int pw_pac_script_proxy(const char *script, const char *target,
 	CFRelease(targetURL);
 	return result;
 }
+
+typedef struct {
+	int http_enabled, http_port, https_enabled, https_port, socks_enabled, socks_port;
+	int pac_enabled, discovery_enabled, exclude_simple;
+	char *http_host, *https_host, *socks_host, *pac_url, *exceptions;
+} pw_proxy_settings;
+
+static int pw_number(CFDictionaryRef settings, CFStringRef key) {
+	CFNumberRef value = (CFNumberRef)CFDictionaryGetValue(settings, key);
+	int out = 0;
+	if (value != NULL && CFGetTypeID(value) == CFNumberGetTypeID()) CFNumberGetValue(value, kCFNumberIntType, &out);
+	return out;
+}
+
+static char *pw_string(CFDictionaryRef settings, CFStringRef key) {
+	CFStringRef value = (CFStringRef)CFDictionaryGetValue(settings, key);
+	if (value == NULL || CFGetTypeID(value) != CFStringGetTypeID()) return NULL;
+	return pw_copy_cfstring(value);
+}
+
+// Exceptions are joined with newlines, which no entry contains.
+static char *pw_exceptions(CFDictionaryRef settings) {
+	CFArrayRef list = (CFArrayRef)CFDictionaryGetValue(settings, CFSTR("ExceptionsList"));
+	if (list == NULL || CFGetTypeID(list) != CFArrayGetTypeID()) return NULL;
+	CFMutableStringRef joined = CFStringCreateMutable(kCFAllocatorDefault, 0);
+	if (joined == NULL) return NULL;
+	for (CFIndex i = 0; i < CFArrayGetCount(list); i++) {
+		CFStringRef entry = (CFStringRef)CFArrayGetValueAtIndex(list, i);
+		if (entry == NULL || CFGetTypeID(entry) != CFStringGetTypeID()) continue;
+		if (CFStringGetLength(joined) > 0) CFStringAppend(joined, CFSTR("\n"));
+		CFStringAppend(joined, entry);
+	}
+	char *out = pw_copy_cfstring(joined);
+	CFRelease(joined);
+	return out;
+}
+
+static int pw_read_proxy_settings(pw_proxy_settings *out) {
+	CFDictionaryRef settings = CFNetworkCopySystemProxySettings();
+	if (settings == NULL) return 0;
+	out->http_enabled = pw_number(settings, CFSTR("HTTPEnable"));
+	out->http_host = pw_string(settings, CFSTR("HTTPProxy"));
+	out->http_port = pw_number(settings, CFSTR("HTTPPort"));
+	out->https_enabled = pw_number(settings, CFSTR("HTTPSEnable"));
+	out->https_host = pw_string(settings, CFSTR("HTTPSProxy"));
+	out->https_port = pw_number(settings, CFSTR("HTTPSPort"));
+	out->socks_enabled = pw_number(settings, CFSTR("SOCKSEnable"));
+	out->socks_host = pw_string(settings, CFSTR("SOCKSProxy"));
+	out->socks_port = pw_number(settings, CFSTR("SOCKSPort"));
+	out->pac_enabled = pw_number(settings, CFSTR("ProxyAutoConfigEnable"));
+	out->pac_url = pw_string(settings, CFSTR("ProxyAutoConfigURLString"));
+	out->discovery_enabled = pw_number(settings, CFSTR("ProxyAutoDiscoveryEnable"));
+	out->exclude_simple = pw_number(settings, CFSTR("ExcludeSimpleHostnames"));
+	out->exceptions = pw_exceptions(settings);
+	CFRelease(settings);
+	return 1;
+}
 */
 import "C"
 
@@ -187,17 +244,61 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"strings"
 	"time"
 	"unsafe"
 )
 
 const pacResolutionTimeout = 5 * time.Second
 
+// Current returns the macOS system proxy configuration.
+func Current() (Configuration, error) {
+	var raw C.pw_proxy_settings
+	if C.pw_read_proxy_settings(&raw) == 0 {
+		return Configuration{Source: SourceMacOS, Mode: ModeNone}, nil
+	}
+	defer func() {
+		for _, value := range []*C.char{raw.http_host, raw.https_host, raw.socks_host, raw.pac_url, raw.exceptions} {
+			if value != nil {
+				C.free(unsafe.Pointer(value))
+			}
+		}
+	}()
+	settings := macSettings{
+		HTTPEnabled: raw.http_enabled != 0, HTTPHost: goString(raw.http_host), HTTPPort: int(raw.http_port),
+		HTTPSEnabled: raw.https_enabled != 0, HTTPSHost: goString(raw.https_host), HTTPSPort: int(raw.https_port),
+		SOCKSEnabled: raw.socks_enabled != 0, SOCKSHost: goString(raw.socks_host), SOCKSPort: int(raw.socks_port),
+		AutoConfigEnabled: raw.pac_enabled != 0, AutoConfigURL: goString(raw.pac_url),
+		AutoDiscoveryEnabled:   raw.discovery_enabled != 0,
+		ExcludeSimpleHostnames: raw.exclude_simple != 0,
+	}
+	if exceptions := goString(raw.exceptions); exceptions != "" {
+		settings.Exceptions = strings.Split(exceptions, "\n")
+	}
+	return configurationFromMacSettings(settings), nil
+}
+
+func goString(value *C.char) string {
+	if value == nil {
+		return ""
+	}
+	return C.GoString(value)
+}
+
 // Lookup resolves system proxy settings for target.
 func Lookup(target *url.URL) (*url.URL, error) {
 	if target == nil {
 		return nil, errors.New("system proxy target is required")
 	}
+	config, err := Current()
+	if err != nil {
+		return nil, err
+	}
+	return config.ProxyFor(target)
+}
+
+// evaluateMacOSAutomatic lets CFNetwork run the configured auto-configuration for target.
+func evaluateMacOSAutomatic(target *url.URL) (*url.URL, error) {
 	return lookupWith(func(fields *cProxyFields) C.int {
 		raw := C.CString(target.String())
 		defer C.free(unsafe.Pointer(raw))

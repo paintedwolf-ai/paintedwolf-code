@@ -15,34 +15,34 @@ import (
 func resetCache(t *testing.T) {
 	t.Helper()
 	cache.mu.Lock()
-	cache.at, cache.config, cache.err = time.Time{}, desktopConfiguration{}, nil
+	cache.at, cache.config, cache.err = time.Time{}, Configuration{}, nil
 	cache.mu.Unlock()
 	t.Cleanup(func() {
 		cache.mu.Lock()
-		cache.at, cache.config, cache.err = time.Time{}, desktopConfiguration{}, nil
+		cache.at, cache.config, cache.err = time.Time{}, Configuration{}, nil
 		cache.mu.Unlock()
 	})
 }
 
 func TestDesktopSourcesAreConsultedInOrderUntilOneDeclaresAMode(t *testing.T) {
 	calls := []string{}
-	sources := []func(context.Context) (desktopConfiguration, bool, error){
-		func(context.Context) (desktopConfiguration, bool, error) {
+	sources := []func(context.Context) (Configuration, bool, error){
+		func(context.Context) (Configuration, bool, error) {
 			calls = append(calls, "absent")
-			return desktopConfiguration{}, false, nil
+			return Configuration{}, false, nil
 		},
-		func(context.Context) (desktopConfiguration, bool, error) {
+		func(context.Context) (Configuration, bool, error) {
 			calls = append(calls, "none")
-			return desktopConfiguration{Source: SourceGSettings, Mode: modeNone}, true, nil
+			return Configuration{Source: SourceGSettings, Mode: ModeNone}, true, nil
 		},
-		func(context.Context) (desktopConfiguration, bool, error) {
+		func(context.Context) (Configuration, bool, error) {
 			calls = append(calls, "manual")
 			proxy, _ := url.Parse("http://proxy.example:3128")
-			return desktopConfiguration{Source: SourceKIO, Mode: modeManual, HTTP: proxy, SameProxy: true}, true, nil
+			return Configuration{Source: SourceKIO, Mode: ModeManual, HTTP: proxy, HTTPS: proxy}, true, nil
 		},
-		func(context.Context) (desktopConfiguration, bool, error) {
+		func(context.Context) (Configuration, bool, error) {
 			t.Fatal("a later source was consulted after a declared mode")
-			return desktopConfiguration{}, false, nil
+			return Configuration{}, false, nil
 		},
 	}
 	config, err := resolveDesktopConfiguration(t.Context(), sources)
@@ -52,13 +52,13 @@ func TestDesktopSourcesAreConsultedInOrderUntilOneDeclaresAMode(t *testing.T) {
 	}
 	config, err = resolveDesktopConfiguration(t.Context(), sources[:2])
 	testutil.FailErr(t, "resolve without declared mode", err)
-	if config.Source != SourceNone || config.Mode != modeNone {
+	if config.Source != SourceNone || config.Mode != ModeNone {
 		t.Fatalf("undeclared configuration = %+v", config)
 	}
 	failure := errors.New("settings unavailable")
-	if _, err := resolveDesktopConfiguration(t.Context(), []func(context.Context) (desktopConfiguration, bool, error){
-		func(context.Context) (desktopConfiguration, bool, error) {
-			return desktopConfiguration{}, false, failure
+	if _, err := resolveDesktopConfiguration(t.Context(), []func(context.Context) (Configuration, bool, error){
+		func(context.Context) (Configuration, bool, error) {
+			return Configuration{}, false, failure
 		},
 	}); !errors.Is(err, failure) {
 		t.Fatalf("source failure = %v", err)
@@ -70,8 +70,8 @@ func TestLookupCachesTheDesktopConfiguration(t *testing.T) {
 	previous := desktopSources
 	t.Cleanup(func() { desktopSources = previous })
 	reads := 0
-	desktopSources = []func(context.Context) (desktopConfiguration, bool, error){
-		func(context.Context) (desktopConfiguration, bool, error) {
+	desktopSources = []func(context.Context) (Configuration, bool, error){
+		func(context.Context) (Configuration, bool, error) {
 			reads++
 			config, err := parseGSettingsDump([]byte(gnomeManualDump))
 			return config, err == nil, err
@@ -109,7 +109,7 @@ func TestGSettingsToolOutcomesMapToConfigurationFacts(t *testing.T) {
 	}
 	runGSettings = func(context.Context, string) ([]byte, int, error) { return []byte(gnomeManualDump), 0, nil }
 	config, ok, err := gsettingsConfiguration(t.Context())
-	if err != nil || !ok || config.Mode != modeManual {
+	if err != nil || !ok || config.Mode != ModeManual {
 		t.Fatalf("manual configuration = %+v, %v, %v", config, ok, err)
 	}
 }

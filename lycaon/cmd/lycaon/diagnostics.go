@@ -112,6 +112,13 @@ func probeGitRemote(ctx context.Context, remote string, out io.Writer) error {
 		return err
 	}
 	gitexec.SetHostConfig(gitexec.HostConfigResolver())
+	plan, err := gitexec.NetworkProxyPlan(remote)
+	if err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintln(out, describeProxyPlan(plan)); err != nil {
+		return err
+	}
 	dir, err := os.MkdirTemp("", "pw-git-remote-*")
 	if err != nil {
 		return err
@@ -132,6 +139,16 @@ func probeGitRemote(ctx context.Context, remote string, out io.Writer) error {
 	}
 	_, err = fmt.Fprintf(out, "refs=%d\n", refs)
 	return err
+}
+
+// describeProxyPlan names how Git receives the proxy policy, with the facts
+// that kept it per remote. Proxy credentials never appear.
+func describeProxyPlan(plan gitexec.ProxyPlan) string {
+	line := "proxy_plan=" + string(plan.Mode)
+	for _, reason := range plan.Reasons {
+		line += fmt.Sprintf(" %s=%q", reason.Kind, reason.Detail)
+	}
+	return line
 }
 
 // verifyDocumentCore proves the installed document core runs from this

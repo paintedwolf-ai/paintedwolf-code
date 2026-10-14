@@ -40,59 +40,59 @@ func kioConfigurationPath(lookupEnv func(string) (string, bool)) string {
 
 // readKIOConfiguration reports whether a proxy group exists in the user's
 // kioslaverc. Credentials for KDE proxies live in the wallet and are not read.
-func readKIOConfiguration(lookupEnv func(string) (string, bool)) (desktopConfiguration, bool, error) {
+func readKIOConfiguration(lookupEnv func(string) (string, bool)) (Configuration, bool, error) {
 	path := kioConfigurationPath(lookupEnv)
 	if path == "" {
-		return desktopConfiguration{}, false, nil
+		return Configuration{}, false, nil
 	}
 	file, err := os.Open(path) //nolint:gosec // G304 — fixed basename under the user's configuration directory
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return desktopConfiguration{}, false, nil
+			return Configuration{}, false, nil
 		}
-		return desktopConfiguration{}, false, fmt.Errorf("read KDE proxy configuration: %w", err)
+		return Configuration{}, false, fmt.Errorf("read KDE proxy configuration: %w", err)
 	}
 	defer func() { _ = file.Close() }()
 	var raw bytes.Buffer
 	if _, err := raw.ReadFrom(bufio.NewReader(&boundedReader{reader: file, remaining: maxKIOBytes + 1})); err != nil {
-		return desktopConfiguration{}, false, fmt.Errorf("read KDE proxy configuration: %w", err)
+		return Configuration{}, false, fmt.Errorf("read KDE proxy configuration: %w", err)
 	}
 	if raw.Len() > maxKIOBytes {
-		return desktopConfiguration{}, false, errors.New("KDE proxy configuration exceeds its size limit")
+		return Configuration{}, false, errors.New("KDE proxy configuration exceeds its size limit")
 	}
 	group, ok := iniGroup(raw.String(), kioProxyGroup)
 	if !ok {
-		return desktopConfiguration{}, false, nil
+		return Configuration{}, false, nil
 	}
 	config, err := parseKIOProxyGroup(group, lookupEnv)
 	return config, err == nil, err
 }
 
-func parseKIOProxyGroup(group map[string]string, lookupEnv func(string) (string, bool)) (desktopConfiguration, error) {
-	config := desktopConfiguration{Source: SourceKIO}
+func parseKIOProxyGroup(group map[string]string, lookupEnv func(string) (string, bool)) (Configuration, error) {
+	config := Configuration{Source: SourceKIO}
 	proxyType := kioProxyNone
 	if raw, ok := group["ProxyType"]; ok {
 		parsed, err := strconv.Atoi(strings.TrimSpace(raw))
 		if err != nil {
-			return desktopConfiguration{}, fmt.Errorf("KDE proxy type %q is not a number", raw)
+			return Configuration{}, fmt.Errorf("KDE proxy type %q is not a number", raw)
 		}
 		proxyType = parsed
 	}
 	switch proxyType {
 	case kioProxyNone:
-		config.Mode = modeNone
+		config.Mode = ModeNone
 		return config, nil
 	case kioProxyScript:
-		config.Mode, config.Script = modeAuto, strings.TrimSpace(group["Proxy Config Script"])
+		config.Mode, config.Script = ModeAuto, strings.TrimSpace(group["Proxy Config Script"])
 		return config, nil
 	case kioProxyDiscovery:
-		config.Mode = modeAuto
+		config.Mode = ModeAuto
 		return config, nil
 	case kioProxyManual, kioProxyEnvironment:
 	default:
-		return desktopConfiguration{}, fmt.Errorf("KDE proxy type %d is unknown", proxyType)
+		return Configuration{}, fmt.Errorf("KDE proxy type %d is unknown", proxyType)
 	}
-	config.Mode = modeManual
+	config.Mode = ModeManual
 	value := func(key string) string {
 		raw := strings.TrimSpace(group[key])
 		if proxyType != kioProxyEnvironment || raw == "" {
@@ -103,22 +103,18 @@ func parseKIOProxyGroup(group map[string]string, lookupEnv func(string) (string,
 	}
 	var err error
 	if config.HTTP, err = kioProxyURL(value("httpProxy"), "http"); err != nil {
-		return desktopConfiguration{}, err
+		return Configuration{}, err
 	}
 	if config.HTTPS, err = kioProxyURL(value("httpsProxy"), "http"); err != nil {
-		return desktopConfiguration{}, err
+		return Configuration{}, err
 	}
 	if config.SOCKS, err = kioProxyURL(value("socksProxy"), "socks5"); err != nil {
-		return desktopConfiguration{}, err
+		return Configuration{}, err
 	}
 	if exceptions := value("NoProxyFor"); exceptions != "" {
-		for _, entry := range strings.Split(exceptions, ",") {
-			if entry = strings.TrimSpace(entry); entry != "" {
-				config.Bypass = append(config.Bypass, entry)
-			}
-		}
+		config.Exceptions = desktopExceptions(strings.Split(exceptions, ","))
 	}
-	config.BypassInverted = strings.EqualFold(strings.TrimSpace(group["ReversedException"]), "true")
+	config.ExceptionsInverted = strings.EqualFold(strings.TrimSpace(group["ReversedException"]), "true")
 	return config, nil
 }
 

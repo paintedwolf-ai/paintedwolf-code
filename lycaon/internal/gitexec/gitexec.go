@@ -137,11 +137,13 @@ func run(ctx context.Context, projectDir string, args []string, opts Opts, stdou
 	if err != nil {
 		return nil, -1, err
 	}
-	proxy, err := proxyEnv(network.remote)
-	if err != nil {
-		return nil, -1, err
+	if opts.Profile == ProfileNetwork {
+		plan, err := NetworkProxyPlan(network.remote)
+		if err != nil {
+			return nil, -1, err
+		}
+		env = append(env, plan.Environment()...)
 	}
-	env = append(env, proxy...)
 	if network.helper == hostHelperVault {
 		socket, stop, err := credentialServiceFn(ctx, bin)
 		if err != nil {

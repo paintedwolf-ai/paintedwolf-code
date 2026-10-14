@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -17,6 +16,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/httpclient"
+	"github.com/lycaon/lycaon/internal/systemproxy"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -28,9 +28,11 @@ func useBundledGit(t *testing.T) string {
 	t.Helper()
 	bin := bundledGitBinary(t)
 	binaryPathFn = func() (string, error) { return bin, nil }
-	proxyResolverFn = func(*url.URL) (*url.URL, error) { return nil, nil }
+	proxyConfigurationFn = func() httpclient.ProxyConfiguration {
+		return httpclient.ProxyConfiguration{System: systemproxy.Configuration{Source: systemproxy.SourceNone, Mode: systemproxy.ModeNone}}
+	}
 	t.Cleanup(func() {
-		proxyResolverFn = httpclient.ResolveProxy
+		proxyConfigurationFn = httpclient.CurrentProxyConfiguration
 		binaryPathFn = gitengine.BinaryPath
 		emptyHooksDirFn = gitengine.EmptyHooksDir
 		lfsPathFn = resolveLFSPath

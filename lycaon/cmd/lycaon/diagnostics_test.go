@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/hostpower"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -154,10 +155,23 @@ func TestProbeGitRemoteRunsThroughTheBundledToolchain(t *testing.T) {
 		t.Fatalf("init bare remote: %v: %s", err, output)
 	}
 	testutil.FailErr(t, "probe local remote", probeGitRemote(t.Context(), "file://"+remote, &out))
-	if out.String() != "refs=0\n" {
+	if lines := strings.Split(strings.TrimSpace(out.String()), "\n"); len(lines) != 2 || !strings.HasPrefix(lines[0], "proxy_plan=") || lines[1] != "refs=0" {
 		t.Fatalf("empty remote probe = %q", out.String())
 	}
 	if err := probeGitRemote(t.Context(), "file://"+filepath.Join(t.TempDir(), "absent.git"), &out); err == nil || !strings.Contains(err.Error(), "exited") {
 		t.Fatalf("absent remote = %v", err)
+	}
+}
+
+func TestDescribeProxyPlanNamesTheModeAndItsReasons(t *testing.T) {
+	if got := describeProxyPlan(gitexec.ProxyPlan{Mode: gitexec.ProxyPlanPerHost}); got != "proxy_plan=per-host" {
+		t.Fatalf("per-host plan = %q", got)
+	}
+	plan := gitexec.ProxyPlan{Mode: gitexec.ProxyPlanPerRemote, Reasons: []gitexec.ProxyPlanReason{
+		{Kind: gitexec.ProxyReasonException, Detail: "build-*.example"},
+		{Kind: gitexec.ProxyReasonInverted, Detail: "kioslaverc"},
+	}}
+	if got := describeProxyPlan(plan); got != `proxy_plan=per-remote exception_not_expressible="build-*.example" exceptions_inverted="kioslaverc"` {
+		t.Fatalf("per-remote plan = %q", got)
 	}
 }

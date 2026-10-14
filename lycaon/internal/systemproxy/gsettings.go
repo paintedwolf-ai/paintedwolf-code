@@ -25,14 +25,14 @@ type gsettingsValue struct {
 
 // parseGSettingsDump reads `gsettings list-recursively` output for the proxy
 // schema and its children into a desktop configuration.
-func parseGSettingsDump(raw []byte) (desktopConfiguration, error) {
+func parseGSettingsDump(raw []byte) (Configuration, error) {
 	if len(raw) > maxGSettingsBytes {
-		return desktopConfiguration{}, errors.New("desktop proxy settings exceed their size limit")
+		return Configuration{}, errors.New("desktop proxy settings exceed their size limit")
 	}
 	values := make(map[string]gsettingsValue, 32)
 	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
 	if len(lines) > maxGSettingsLines {
-		return desktopConfiguration{}, errors.New("desktop proxy settings exceed their line limit")
+		return Configuration{}, errors.New("desktop proxy settings exceed their line limit")
 	}
 	for _, line := range lines {
 		if strings.TrimSpace(line) == "" {
@@ -40,30 +40,29 @@ func parseGSettingsDump(raw []byte) (desktopConfiguration, error) {
 		}
 		fields := strings.SplitN(line, " ", 3)
 		if len(fields) != 3 || !strings.HasPrefix(fields[0], gsettingsSchema) {
-			return desktopConfiguration{}, fmt.Errorf("desktop proxy settings line is not a schema entry: %q", line)
+			return Configuration{}, fmt.Errorf("desktop proxy settings line is not a schema entry: %q", line)
 		}
 		value, err := parseGVariant(fields[2])
 		if err != nil {
-			return desktopConfiguration{}, fmt.Errorf("desktop proxy setting %s %s: %w", fields[0], fields[1], err)
+			return Configuration{}, fmt.Errorf("desktop proxy setting %s %s: %w", fields[0], fields[1], err)
 		}
 		values[strings.TrimPrefix(fields[0], gsettingsSchema)+" "+fields[1]] = value
 	}
-	config := desktopConfiguration{Source: SourceGSettings}
+	config := Configuration{Source: SourceGSettings}
 	switch mode := values[" mode"].text; mode {
 	case "none", "":
-		config.Mode = modeNone
+		config.Mode = ModeNone
 		return config, nil
 	case "manual":
-		config.Mode = modeManual
+		config.Mode = ModeManual
 	case "auto":
-		config.Mode = modeAuto
+		config.Mode = ModeAuto
 		config.Script = values[" autoconfig-url"].text
 		return config, nil
 	default:
-		return desktopConfiguration{}, fmt.Errorf("desktop proxy mode %q is unknown", mode)
+		return Configuration{}, fmt.Errorf("desktop proxy mode %q is unknown", mode)
 	}
-	config.SameProxy = values[" use-same-proxy"].boolean
-	config.Bypass = values[" ignore-hosts"].list
+	config.Exceptions = desktopExceptions(values[" ignore-hosts"].list)
 	var user *url.Userinfo
 	if values[".http use-authentication"].boolean {
 		name := values[".http authentication-user"].text
@@ -76,6 +75,9 @@ func parseGSettingsDump(raw []byte) (desktopConfiguration, error) {
 	config.HTTP = manualProxy("http", values[".http host"].text, values[".http port"].number, user)
 	config.HTTPS = manualProxy("http", values[".https host"].text, values[".https port"].number, nil)
 	config.SOCKS = manualProxy("socks5", values[".socks host"].text, values[".socks port"].number, nil)
+	if config.HTTPS == nil && values[" use-same-proxy"].boolean {
+		config.HTTPS = config.HTTP
+	}
 	return config, nil
 }
 

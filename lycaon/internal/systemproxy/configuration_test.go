@@ -40,7 +40,7 @@ func mustTarget(t *testing.T, raw string) *url.URL {
 func TestGNOMEManualProxyAppliesAuthenticationSharingAndExceptions(t *testing.T) {
 	config, err := parseGSettingsDump([]byte(gnomeManualDump))
 	testutil.FailErr(t, "parse GNOME dump", err)
-	if config.Source != SourceGSettings || config.Mode != modeManual || !config.SameProxy {
+	if config.Source != SourceGSettings || config.Mode != ModeManual || config.HTTPS != config.HTTP {
 		t.Fatalf("configuration = %+v", config)
 	}
 	for target, want := range map[string]string{
@@ -54,7 +54,7 @@ func TestGNOMEManualProxyAppliesAuthenticationSharingAndExceptions(t *testing.T)
 		"https://[::1]:8787/":         "",
 		"https://notcorp.example/":    "http://alice:p%27w%5Cd@proxy.example:3128",
 	} {
-		proxy, err := config.proxyFor(mustTarget(t, target))
+		proxy, err := config.ProxyFor(mustTarget(t, target))
 		testutil.FailErr(t, "resolve "+target, err)
 		got := ""
 		if proxy != nil {
@@ -64,7 +64,7 @@ func TestGNOMEManualProxyAppliesAuthenticationSharingAndExceptions(t *testing.T)
 			t.Fatalf("%s proxy = %q, want %q", target, got, want)
 		}
 	}
-	proxy, err := config.proxyFor(mustTarget(t, "https://api.example/"))
+	proxy, err := config.ProxyFor(mustTarget(t, "https://api.example/"))
 	testutil.FailErr(t, "resolve authenticated proxy", err)
 	if redacted := Redact(proxy); strings.Contains(redacted, "alice") || strings.Contains(redacted, "p%27") || redacted != "http://redacted@proxy.example:3128" {
 		t.Fatalf("redacted proxy = %q", redacted)
@@ -81,12 +81,12 @@ func TestGNOMESeparateProxiesFallBackToSOCKS(t *testing.T) {
 	).Replace(gnomeManualDump)
 	config, err := parseGSettingsDump([]byte(dump))
 	testutil.FailErr(t, "parse GNOME dump", err)
-	proxy, err := config.proxyFor(mustTarget(t, "https://api.example/"))
+	proxy, err := config.ProxyFor(mustTarget(t, "https://api.example/"))
 	testutil.FailErr(t, "resolve https", err)
 	if proxy == nil || proxy.String() != "socks5://socks.example:1080" {
 		t.Fatalf("https proxy = %v", proxy)
 	}
-	proxy, err = config.proxyFor(mustTarget(t, "http://api.example/"))
+	proxy, err = config.ProxyFor(mustTarget(t, "http://api.example/"))
 	testutil.FailErr(t, "resolve http", err)
 	if proxy == nil || proxy.String() != "http://proxy.example:3128" {
 		t.Fatalf("http proxy = %v, want unauthenticated http proxy", proxy)
@@ -96,13 +96,13 @@ func TestGNOMESeparateProxiesFallBackToSOCKS(t *testing.T) {
 func TestGNOMEModesNoneAndAuto(t *testing.T) {
 	config, err := parseGSettingsDump([]byte(strings.Replace(gnomeManualDump, "mode 'manual'", "mode 'none'", 1)))
 	testutil.FailErr(t, "parse none", err)
-	if proxy, err := config.proxyFor(mustTarget(t, "https://api.example/")); proxy != nil || err != nil {
+	if proxy, err := config.ProxyFor(mustTarget(t, "https://api.example/")); proxy != nil || err != nil {
 		t.Fatalf("none mode = %v, %v", proxy, err)
 	}
 	auto := strings.NewReplacer("mode 'manual'", "mode 'auto'", "autoconfig-url ''", "autoconfig-url 'http://wpad.example/proxy.pac'").Replace(gnomeManualDump)
 	config, err = parseGSettingsDump([]byte(auto))
 	testutil.FailErr(t, "parse auto", err)
-	proxy, err := config.proxyFor(mustTarget(t, "https://api.example/"))
+	proxy, err := config.ProxyFor(mustTarget(t, "https://api.example/"))
 	var unsupported *Unsupported
 	if proxy != nil || !errors.As(err, &unsupported) {
 		t.Fatalf("auto mode = %v, %v", proxy, err)
@@ -115,7 +115,7 @@ func TestGNOMEModesNoneAndAuto(t *testing.T) {
 	}
 	config, err = parseGSettingsDump([]byte(strings.Replace(gnomeManualDump, "mode 'manual'", "mode 'auto'", 1)))
 	testutil.FailErr(t, "parse discovery", err)
-	if _, err := config.proxyFor(mustTarget(t, "https://api.example/")); !errors.As(err, &unsupported) || unsupported.Mechanism != "proxy auto-discovery" {
+	if _, err := config.ProxyFor(mustTarget(t, "https://api.example/")); !errors.As(err, &unsupported) || unsupported.Mechanism != "proxy auto-discovery" {
 		t.Fatalf("discovery = %v", err)
 	}
 }
@@ -183,7 +183,7 @@ func TestKDEManualProxyParsesSpacedPortsAndExceptions(t *testing.T) {
 	lookup := writeKIO(t, "[General]\nx=1\n\n[Proxy Settings]\nProxyType=1\nhttpProxy=http://proxy.example 3128\nhttpsProxy=secure.example:3129\nsocksProxy=socks://socks.example:1080\nNoProxyFor=localhost,.corp.example, 10.0.0.0/8\nReversedException=false\nAuthMode[$i]=0\n")
 	config, ok, err := readKIOConfiguration(lookup)
 	testutil.FailErr(t, "read kioslaverc", err)
-	if !ok || config.Source != SourceKIO || config.Mode != modeManual {
+	if !ok || config.Source != SourceKIO || config.Mode != ModeManual {
 		t.Fatalf("configuration = %+v, %v", config, ok)
 	}
 	for target, want := range map[string]string{
@@ -193,7 +193,7 @@ func TestKDEManualProxyParsesSpacedPortsAndExceptions(t *testing.T) {
 		"https://10.2.3.4/":       "",
 		"ftp://files.example/":    "socks5://socks.example:1080",
 	} {
-		proxy, err := config.proxyFor(mustTarget(t, target))
+		proxy, err := config.ProxyFor(mustTarget(t, target))
 		testutil.FailErr(t, "resolve "+target, err)
 		got := ""
 		if proxy != nil {
@@ -209,10 +209,10 @@ func TestKDEReversedExceptionProxiesOnlyListedHosts(t *testing.T) {
 	lookup := writeKIO(t, "[Proxy Settings]\nProxyType=1\nhttpsProxy=proxy.example:3128\nNoProxyFor=api.example\nReversedException=true\n")
 	config, _, err := readKIOConfiguration(lookup)
 	testutil.FailErr(t, "read kioslaverc", err)
-	if proxy, err := config.proxyFor(mustTarget(t, "https://api.example/")); err != nil || proxy == nil {
+	if proxy, err := config.ProxyFor(mustTarget(t, "https://api.example/")); err != nil || proxy == nil {
 		t.Fatalf("listed host proxy = %v, %v", proxy, err)
 	}
-	if proxy, err := config.proxyFor(mustTarget(t, "https://other.example/")); err != nil || proxy != nil {
+	if proxy, err := config.ProxyFor(mustTarget(t, "https://other.example/")); err != nil || proxy != nil {
 		t.Fatalf("unlisted host proxy = %v, %v", proxy, err)
 	}
 }
@@ -230,12 +230,12 @@ func TestKDEScriptAndDiscoveryAreUnsupported(t *testing.T) {
 	config, _, err := readKIOConfiguration(writeKIO(t, "[Proxy Settings]\nProxyType=2\nProxy Config Script=file:///etc/proxy.pac\n"))
 	testutil.FailErr(t, "read script type", err)
 	var unsupported *Unsupported
-	if _, err := config.proxyFor(mustTarget(t, "https://api.example/")); !errors.As(err, &unsupported) || unsupported.Source != SourceKIO || unsupported.Reference != "file:///etc/proxy.pac" {
+	if _, err := config.ProxyFor(mustTarget(t, "https://api.example/")); !errors.As(err, &unsupported) || unsupported.Source != SourceKIO || unsupported.Reference != "file:///etc/proxy.pac" {
 		t.Fatalf("script type = %v", err)
 	}
 	config, _, err = readKIOConfiguration(writeKIO(t, "[Proxy Settings]\nProxyType=3\n"))
 	testutil.FailErr(t, "read discovery type", err)
-	if _, err := config.proxyFor(mustTarget(t, "https://api.example/")); !errors.As(err, &unsupported) || unsupported.Mechanism != "proxy auto-discovery" {
+	if _, err := config.ProxyFor(mustTarget(t, "https://api.example/")); !errors.As(err, &unsupported) || unsupported.Mechanism != "proxy auto-discovery" {
 		t.Fatalf("discovery type = %v", err)
 	}
 }
