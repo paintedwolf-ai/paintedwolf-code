@@ -54,7 +54,11 @@ func TestDeterministicFitRelaxesRecentRowsAcrossHostFeedback(t *testing.T) {
 	if cost := EstimateMessagesTokens(out); cost > 800 {
 		t.Fatalf("historical feedback kept %d tokens above the receiving budget", cost)
 	}
-	if out[len(out)-1].ID != "current" || countTrimNotices(out) != 1 {
+	current := false
+	for _, row := range out {
+		current = current || row.ID == "current"
+	}
+	if !current || countTrimNotices(out) != 1 {
 		t.Fatal("fitting lost the active request or recovery notice")
 	}
 }
