@@ -77,7 +77,10 @@ pub(super) fn authorization_flags(reply: &glib::Variant) -> Option<(bool, bool)>
     if result.n_children() < 2 {
         return None;
     }
-    Some((result.child_value(0).get::<bool>()?, result.child_value(1).get::<bool>()?))
+    Some((
+        result.child_value(0).get::<bool>()?,
+        result.child_value(1).get::<bool>()?,
+    ))
 }
 
 pub(super) fn confirm_with_polkit(identifier: &str, prompt: &str) -> Result<(), PolkitRefusal> {
@@ -88,9 +91,15 @@ pub(super) fn confirm_with_polkit(identifier: &str, prompt: &str) -> Result<(), 
         .map_err(|_| PolkitRefusal::Failed("the bus context is in use".into()))?
 }
 
-fn confirm_on(context: &glib::MainContext, action: &str, prompt: &str) -> Result<(), PolkitRefusal> {
+fn confirm_on(
+    context: &glib::MainContext,
+    action: &str,
+    prompt: &str,
+) -> Result<(), PolkitRefusal> {
     let bus = linux_bus::connect(context, linux_bus::SYSTEM_BUS_ADDRESS, BUS_CONNECT_TIMEOUT)
-        .map_err(|error| PolkitRefusal::Unavailable(format!("The system bus is unavailable: {error}")))?;
+        .map_err(|error| {
+            PolkitRefusal::Unavailable(format!("The system bus is unavailable: {error}"))
+        })?;
     let owner = authority_owner(context, &bus, action)?;
     let subject = own_subject()?;
     let cancellation_id = uuid::Uuid::new_v4().to_string();
@@ -116,8 +125,9 @@ fn confirm_on(context: &glib::MainContext, action: &str, prompt: &str) -> Result
     );
     match reply {
         Ok(reply) => {
-            let (authorized, challenge) = authorization_flags(&reply)
-                .ok_or_else(|| PolkitRefusal::Failed("the authority answered in an unknown shape".into()))?;
+            let (authorized, challenge) = authorization_flags(&reply).ok_or_else(|| {
+                PolkitRefusal::Failed("the authority answered in an unknown shape".into())
+            })?;
             outcome(authorized, challenge)
         }
         Err(error) if error.matches(gio::IOErrorEnum::TimedOut) => {
@@ -131,9 +141,13 @@ fn confirm_on(context: &glib::MainContext, action: &str, prompt: &str) -> Result
                 Some(&(cancellation_id,).to_variant()),
                 BUS_CALL_TIMEOUT,
             );
-            Err(PolkitRefusal::Denied("Authentication did not finish in time.".into()))
+            Err(PolkitRefusal::Denied(
+                "Authentication did not finish in time.".into(),
+            ))
         }
-        Err(error) => Err(PolkitRefusal::Failed(format!("The authority refused the check: {error}"))),
+        Err(error) => Err(PolkitRefusal::Failed(format!(
+            "The authority refused the check: {error}"
+        ))),
     }
 }
 
@@ -146,8 +160,14 @@ fn authority_owner(
     action: &str,
 ) -> Result<String, PolkitRefusal> {
     let owner = linux_bus::call(
-        context, bus, Some(BUS_NAME), BUS_PATH, BUS_NAME, "GetNameOwner",
-        Some(&(AUTHORITY_NAME.to_string(),).to_variant()), BUS_CALL_TIMEOUT,
+        context,
+        bus,
+        Some(BUS_NAME),
+        BUS_PATH,
+        BUS_NAME,
+        "GetNameOwner",
+        Some(&(AUTHORITY_NAME.to_string(),).to_variant()),
+        BUS_CALL_TIMEOUT,
     )
     .map_err(|_| PolkitRefusal::Unavailable("The polkit authority is not running.".into()))?
     .child_value(0)
@@ -155,8 +175,14 @@ fn authority_owner(
     .map(str::to_owned)
     .ok_or_else(|| PolkitRefusal::Failed("the bus named no authority owner".into()))?;
     let owner_uid = linux_bus::call(
-        context, bus, Some(BUS_NAME), BUS_PATH, BUS_NAME, "GetConnectionUnixUser",
-        Some(&(owner.clone(),).to_variant()), BUS_CALL_TIMEOUT,
+        context,
+        bus,
+        Some(BUS_NAME),
+        BUS_PATH,
+        BUS_NAME,
+        "GetConnectionUnixUser",
+        Some(&(owner.clone(),).to_variant()),
+        BUS_CALL_TIMEOUT,
     )
     .ok()
     .and_then(|reply| reply.child_value(0).get::<u32>())
@@ -167,10 +193,18 @@ fn authority_owner(
         ));
     }
     let actions = linux_bus::call(
-        context, bus, Some(&owner), AUTHORITY_PATH, AUTHORITY_INTERFACE, "EnumerateActions",
-        Some(&(String::new(),).to_variant()), BUS_CALL_TIMEOUT,
+        context,
+        bus,
+        Some(&owner),
+        AUTHORITY_PATH,
+        AUTHORITY_INTERFACE,
+        "EnumerateActions",
+        Some(&(String::new(),).to_variant()),
+        BUS_CALL_TIMEOUT,
     )
-    .map_err(|error| PolkitRefusal::Failed(format!("The authority could not list its actions: {error}")))?;
+    .map_err(|error| {
+        PolkitRefusal::Failed(format!("The authority could not list its actions: {error}"))
+    })?;
     if !lists_action(&actions.child_value(0), action) {
         return Err(PolkitRefusal::Unavailable(
             "The Painted Wolf Code presence action is not installed.".into(),
@@ -186,7 +220,10 @@ fn own_subject() -> Result<HashMap<String, glib::Variant>, PolkitRefusal> {
     subject.insert("pid".to_string(), std::process::id().to_variant());
     subject.insert("start-time".to_string(), start.to_variant());
     // SAFETY: getuid has no preconditions and cannot fail.
-    subject.insert("uid".to_string(), (unsafe { libc::getuid() } as i32).to_variant());
+    subject.insert(
+        "uid".to_string(),
+        (unsafe { libc::getuid() } as i32).to_variant(),
+    );
     Ok(subject)
 }
 
@@ -239,18 +276,24 @@ pub(super) fn confirm_app_password(
             let parent = owner.gtk_window().ok();
             let _ = tx.send(ask_password(parent.as_ref(), &prompt));
         })
-        .map_err(|error| PresenceCommandError::failed(format!("the password dialog could not open: {error}")))?;
+        .map_err(|error| {
+            PresenceCommandError::failed(format!("the password dialog could not open: {error}"))
+        })?;
     let entered = rx
         .recv_timeout(PROMPT_TIMEOUT)
         .map_err(|_| PresenceCommandError::denied("Authentication did not finish in time."))?;
     let Some(mut entered) = entered else {
-        return Err(PresenceCommandError::denied("The password dialog was canceled."));
+        return Err(PresenceCommandError::denied(
+            "The password dialog was canceled.",
+        ));
     };
     let verified = state.verify_vault_password(&entered);
     entered.fill(0);
     match verified {
         Some(true) => Ok(()),
-        Some(false) => Err(PresenceCommandError::denied("The app password was incorrect.")),
+        Some(false) => Err(PresenceCommandError::denied(
+            "The app password was incorrect.",
+        )),
         None => Err(PresenceCommandError::unavailable(
             "The vault is no longer on the app-password path.",
         )),
@@ -264,7 +307,10 @@ fn ask_password(parent: Option<&gtk::ApplicationWindow>, prompt: &str) -> Option
         Some("Confirm it's you"),
         parent,
         gtk::DialogFlags::MODAL | gtk::DialogFlags::DESTROY_WITH_PARENT,
-        &[("Cancel", gtk::ResponseType::Cancel), ("Confirm", gtk::ResponseType::Ok)],
+        &[
+            ("Cancel", gtk::ResponseType::Cancel),
+            ("Confirm", gtk::ResponseType::Ok),
+        ],
     );
     dialog.set_default_response(gtk::ResponseType::Ok);
     let content = dialog.content_area();
@@ -277,7 +323,9 @@ fn ask_password(parent: Option<&gtk::ApplicationWindow>, prompt: &str) -> Option
     reason.set_line_wrap(true);
     reason.set_max_width_chars(60);
     reason.set_xalign(0.0);
-    let instruction = gtk::Label::new(Some("Enter your Painted Wolf Code app password to continue."));
+    let instruction = gtk::Label::new(Some(
+        "Enter your Painted Wolf Code app password to continue.",
+    ));
     instruction.set_xalign(0.0);
     let entry = gtk::Entry::new();
     entry.set_visibility(false);
@@ -289,8 +337,8 @@ fn ask_password(parent: Option<&gtk::ApplicationWindow>, prompt: &str) -> Option
     dialog.show_all();
     let response = dialog.run();
     let text = entry.text();
-    let value = (response == gtk::ResponseType::Ok && !text.is_empty())
-        .then(|| text.as_bytes().to_vec());
+    let value =
+        (response == gtk::ResponseType::Ok && !text.is_empty()).then(|| text.as_bytes().to_vec());
     entry.set_text("");
     dialog.close();
     value
@@ -304,8 +352,14 @@ mod tests {
     fn polkit_outcomes_map_to_presence_results() {
         assert_eq!(outcome(true, false), Ok(()));
         assert_eq!(outcome(true, true), Ok(()));
-        assert!(matches!(outcome(false, true), Err(PolkitRefusal::Unavailable(_))));
-        assert!(matches!(outcome(false, false), Err(PolkitRefusal::Denied(_))));
+        assert!(matches!(
+            outcome(false, true),
+            Err(PolkitRefusal::Unavailable(_))
+        ));
+        assert!(matches!(
+            outcome(false, false),
+            Err(PolkitRefusal::Denied(_))
+        ));
     }
 
     #[test]
@@ -320,27 +374,48 @@ mod tests {
     fn the_action_listing_is_searched_by_id() {
         let action = |id: &str| {
             let empty: HashMap<String, String> = HashMap::new();
-            (id.to_string(), String::new(), String::new(), String::new(), String::new(), String::new(), 0u32, 0u32, 0u32, empty)
+            (
+                id.to_string(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                String::new(),
+                0u32,
+                0u32,
+                0u32,
+                empty,
+            )
                 .to_variant()
         };
         let listing = glib::Variant::array_from_iter_with_type(
             glib::VariantTy::new("(ssssssuuua{ss})").unwrap(),
-            [action("org.example.other"), action("dev.paintedwolf.code.confirm-presence")],
+            [
+                action("org.example.other"),
+                action("dev.paintedwolf.code.confirm-presence"),
+            ],
         );
-        assert!(lists_action(&listing, "dev.paintedwolf.code.confirm-presence"));
+        assert!(lists_action(
+            &listing,
+            "dev.paintedwolf.code.confirm-presence"
+        ));
         assert!(!lists_action(&listing, "org.example.absent"));
         let empty = glib::Variant::array_from_iter_with_type(
             glib::VariantTy::new("(ssssssuuua{ss})").unwrap(),
             std::iter::empty::<glib::Variant>(),
         );
-        assert!(!lists_action(&empty, "dev.paintedwolf.code.confirm-presence"));
+        assert!(!lists_action(
+            &empty,
+            "dev.paintedwolf.code.confirm-presence"
+        ));
     }
 
     #[test]
     fn the_packaged_action_is_named_for_the_app_identifier() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let conf: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(root.join("tauri.conf.json")).unwrap()).unwrap();
+            serde_json::from_str(&std::fs::read_to_string(root.join("tauri.conf.json")).unwrap())
+                .unwrap();
         let identifier = conf["identifier"].as_str().unwrap();
         let policy_path = root.join(format!("../../packaging/linux/polkit/{identifier}.policy"));
         let policy = std::fs::read_to_string(&policy_path).unwrap();

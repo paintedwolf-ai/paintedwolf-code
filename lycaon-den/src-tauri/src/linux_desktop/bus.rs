@@ -175,9 +175,7 @@ mod tests {
             assert!(session_address_from(Some(address), None, 42).is_err());
         }
         assert!(session_address_from(Some(&"x".repeat((64 << 10) + 1)), None, 42).is_err());
-        assert!(
-            session_address_from(Some(&vec!["unix:path=/a"; 17].join(";")), None, 42).is_err()
-        );
+        assert!(session_address_from(Some(&vec!["unix:path=/a"; 17].join(";")), None, 42).is_err());
         for runtime in ["relative", "/a\0b", "/a\rb"] {
             assert!(session_address_from(None, Some(runtime), 42).is_err());
         }

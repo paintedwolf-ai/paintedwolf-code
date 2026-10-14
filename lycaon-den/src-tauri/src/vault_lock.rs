@@ -214,10 +214,22 @@ mod tests {
         );
         // Waking and unlocking request nothing; `Lock` carries no argument
         // and is announced as active.
-        assert_eq!(lock_reason_for_signal("org.freedesktop.login1.Manager", "PrepareForSleep", false), None);
-        assert_eq!(lock_reason_for_signal("org.freedesktop.ScreenSaver", "ActiveChanged", false), None);
-        assert_eq!(lock_reason_for_signal("org.freedesktop.login1.Session", "Unlock", true), None);
-        assert_eq!(lock_reason_for_signal("org.example.Other", "Lock", true), None);
+        assert_eq!(
+            lock_reason_for_signal("org.freedesktop.login1.Manager", "PrepareForSleep", false),
+            None
+        );
+        assert_eq!(
+            lock_reason_for_signal("org.freedesktop.ScreenSaver", "ActiveChanged", false),
+            None
+        );
+        assert_eq!(
+            lock_reason_for_signal("org.freedesktop.login1.Session", "Unlock", true),
+            None
+        );
+        assert_eq!(
+            lock_reason_for_signal("org.example.Other", "Lock", true),
+            None
+        );
     }
 
     #[test]

@@ -19,6 +19,7 @@ use std::sync::{mpsc, Mutex};
 use std::time::Instant;
 
 pub(crate) mod commands;
+pub(crate) mod custody;
 pub(crate) mod daemon;
 mod diagnostics;
 pub(crate) mod layout;

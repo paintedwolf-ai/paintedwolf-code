@@ -204,7 +204,10 @@ fn reveal_managed_secret(
         serde_json::json!({"window_label": window.label()}),
         Expectation {
             purpose: "reveal",
-            subject: &[("project_id", project_id.as_str()), ("secret_id", secret_id.as_str())],
+            subject: &[
+                ("project_id", project_id.as_str()),
+                ("secret_id", secret_id.as_str()),
+            ],
         },
         |challenge, authenticator, signature| {
             (
@@ -326,11 +329,8 @@ where
         .lock()
         .map_err(|_| PresenceCommandError::failed("confirmation lock is unavailable"))?;
     require_active_window(window)?;
-    let challenge: Challenge = send_json(
-        engine.agent.post(begin_url),
-        &engine.api_token,
-        begin_body,
-    )?;
+    let challenge: Challenge =
+        send_json(engine.agent.post(begin_url), &engine.api_token, begin_body)?;
     check_payload(&challenge.proof_payload, window.label(), &expect)?;
     let authenticator = verify_user_presence(window, &challenge.prompt)?;
     // Closing the native prompt can delay focus returning to this window.
@@ -352,7 +352,8 @@ fn check_payload(
     window_label: &str,
     expect: &Expectation<'_>,
 ) -> Result<(), PresenceCommandError> {
-    let invalid = || PresenceCommandError::failed("the engine issued a challenge this app will not sign");
+    let invalid =
+        || PresenceCommandError::failed("the engine issued a challenge this app will not sign");
     let raw = URL_SAFE_NO_PAD.decode(encoded).map_err(|_| invalid())?;
     let payload: SignedPayload = serde_json::from_slice(&raw).map_err(|_| invalid())?;
     if payload.protocol != "painted-wolf-presence-v1"
@@ -397,7 +398,9 @@ fn parse_option_id(raw: &str) -> Result<String, PresenceCommandError> {
     if valid {
         Ok(raw.to_string())
     } else {
-        Err(PresenceCommandError::failed("the approval option is invalid"))
+        Err(PresenceCommandError::failed(
+            "the approval option is invalid",
+        ))
     }
 }
 
@@ -553,12 +556,12 @@ fn verify_user_presence(
     _window: &tauri::Window,
     _prompt: &str,
 ) -> Result<&'static str, PresenceCommandError> {
-    Err(PresenceCommandError::unavailable(
-        "This operating system cannot confirm you.",
+    Err(
+        PresenceCommandError::unavailable("This operating system cannot confirm you.")
+            .with_suggested_action(
+                "Use the installed desktop app for values you gave Painted Wolf Code.",
+            ),
     )
-    .with_suggested_action(
-        "Use the installed desktop app for values you gave Painted Wolf Code.",
-    ))
 }
 
 #[cfg(test)]

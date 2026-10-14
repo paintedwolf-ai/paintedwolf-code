@@ -38,12 +38,28 @@ pub(super) fn setup_linux(app: AppHandle) -> Result<(), String> {
     let mut observed = Observed::default();
     match linux_bus::connect(&context, linux_bus::SYSTEM_BUS_ADDRESS, BUS_CONNECT_TIMEOUT) {
         Ok(system) => {
-            observed.sleep = subscribe(&system, &app, Some(LOGIND_NAME), LOGIND_MANAGER, "PrepareForSleep", Some(LOGIND_PATH));
+            observed.sleep = subscribe(
+                &system,
+                &app,
+                Some(LOGIND_NAME),
+                LOGIND_MANAGER,
+                "PrepareForSleep",
+                Some(LOGIND_PATH),
+            );
             match own_session_path(&context, &system) {
                 Ok(path) => {
-                    observed.session_lock = subscribe(&system, &app, Some(LOGIND_NAME), LOGIND_SESSION, "Lock", Some(&path));
+                    observed.session_lock = subscribe(
+                        &system,
+                        &app,
+                        Some(LOGIND_NAME),
+                        LOGIND_SESSION,
+                        "Lock",
+                        Some(&path),
+                    );
                 }
-                Err(error) => eprintln!("Stored values are not locked by this session's lock signal: {error}"),
+                Err(error) => {
+                    eprintln!("Stored values are not locked by this session's lock signal: {error}")
+                }
             }
             CONNECTIONS.with(|connections| connections.borrow_mut().push(system));
         }
@@ -51,7 +67,8 @@ pub(super) fn setup_linux(app: AppHandle) -> Result<(), String> {
     }
     match linux_bus::connect_session(&context, BUS_CONNECT_TIMEOUT) {
         Ok(session) => {
-            observed.screensaver = subscribe(&session, &app, None, SCREENSAVER, "ActiveChanged", None);
+            observed.screensaver =
+                subscribe(&session, &app, None, SCREENSAVER, "ActiveChanged", None);
             CONNECTIONS.with(|connections| connections.borrow_mut().push(session));
         }
         Err(error) => eprintln!("Stored values are not locked by the screensaver signal: {error}"),
@@ -96,7 +113,10 @@ fn subscribe(
 }
 
 /// The logind session this shell runs in.
-fn own_session_path(context: &glib::MainContext, system: &gio::DBusConnection) -> Result<String, String> {
+fn own_session_path(
+    context: &glib::MainContext,
+    system: &gio::DBusConnection,
+) -> Result<String, String> {
     let reply = linux_bus::call(
         context,
         system,

@@ -179,16 +179,17 @@ impl Worker {
         if self.delivery.is_none() {
             let target = self.app.clone();
             let context = glib::MainContext::ref_thread_default();
-            self.delivery = crate::linux_desktop::bus::connect_session(&context, SESSION_CONNECT_TIMEOUT)
-                .and_then(|connection| {
-                    Delivery::new(
-                        connection,
-                        self.app.config().identifier.clone(),
-                        move |session, token| activation::activate(&target, session, token),
-                        deadline,
-                    )
-                })
-                .ok();
+            self.delivery =
+                crate::linux_desktop::bus::connect_session(&context, SESSION_CONNECT_TIMEOUT)
+                    .and_then(|connection| {
+                        Delivery::new(
+                            connection,
+                            self.app.config().identifier.clone(),
+                            move |session, token| activation::activate(&target, session, token),
+                            deadline,
+                        )
+                    })
+                    .ok();
         }
         match (command, &self.delivery) {
             (Command::Permission, Some(_)) => Ok("authorized".into()),

@@ -131,6 +131,8 @@ pub fn run() {
             sidecar::commands::ipc_export_startup_diagnostics,
             sidecar::commands::ipc_restart_sidecar,
             sidecar::commands::ipc_reset_credential_vault,
+            sidecar::custody::ipc_vault_custody,
+            sidecar::custody::ipc_move_vault_custody,
             sidecar::commands::ipc_cancel_sidecar_start,
             sidecar::commands::ipc_attach_existing_daemon,
             sidecar::commands::ipc_sidecar_info,
