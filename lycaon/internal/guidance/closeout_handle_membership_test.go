@@ -90,6 +90,20 @@ func TestCloseoutHandleMembership(t *testing.T) {
 			cite: guidance.CoordinatorCitedEvidence{Evidence: "read#1"},
 		},
 		{
+			name: "handle minted in this session grounds with its observed path",
+			cite: guidance.CoordinatorCitedEvidence{Evidence: "read#1", Path: "src/a.go"},
+		},
+		{
+			name:     "handle minted in this session rejects a mismatched path",
+			cite:     guidance.CoordinatorCitedEvidence{Evidence: "read#1", Path: "src/other.go"},
+			wantCode: guidance.SynthCitationUnverifiableCode,
+		},
+		{
+			name:     "invented handle with observed path stays unobserved",
+			cite:     guidance.CoordinatorCitedEvidence{Evidence: "command#12", Path: "src/a.go"},
+			wantCode: guidance.SynthHandleNotInLegsCode,
+		},
+		{
 			name: "handle minted in this session grounds with a line",
 			cite: guidance.CoordinatorCitedEvidence{Evidence: "read#1", Line: 1},
 		},
@@ -146,6 +160,22 @@ func TestCloseoutHandleMembership(t *testing.T) {
 			}
 			if got := eval.BindAdvisoryCount > 0; got != tc.wantBound {
 				t.Fatalf("host-bound = %v want %v (tokens %v)", got, tc.wantBound, eval.BindAdvisoryTokens)
+			}
+			if tc.wantCode == "" && !tc.wantBound {
+				wire := guidance.ResolveCitedEvidenceForWire(evidence.CitationRoots{}, ev.Ledger, report.CitedEvidence)
+				if len(wire) != 1 || wire[0].Handle != "read#1" || wire[0].Path != "src/a.go" {
+					t.Fatalf("wire cited evidence = %+v", wire)
+				}
+			}
+			workerFinding := guidance.WorkerFindingInput{
+				Evidence: tc.cite.Evidence,
+				Path:     tc.cite.Path,
+				Line:     tc.cite.Line,
+				Excerpt:  tc.cite.Excerpt,
+			}
+			workerEval := guidance.EvaluateWorkerCitations(evidence.CitationRoots{}, []guidance.WorkerFindingInput{workerFinding}, nil, guidance.WorkerNarrativeInput{}, ev.Ledger)
+			if (workerEval.Code != "") != (tc.wantCode != "") {
+				t.Fatalf("worker eval code = %q, closeout code = %q", workerEval.Code, tc.wantCode)
 			}
 		})
 	}

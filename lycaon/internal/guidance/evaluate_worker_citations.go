@@ -186,7 +186,7 @@ func resolveWorkerFindingCitations(
 		}
 		line := finding.Line
 		excerpt := strings.TrimSpace(finding.Excerpt)
-		if path != "" && line <= 0 && excerpt == "" {
+		if handle == "" && path != "" && line <= 0 && excerpt == "" {
 			// Survey-grade citations are advisory.
 			if citationResolvesToSurveyRecord(roots, finding, ev) {
 				addOffender(&surveyAdvisories, surveySeen, path)
@@ -199,10 +199,10 @@ func resolveWorkerFindingCitations(
 		}
 		// Bare handles still require ledger membership.
 		if line <= 0 && excerpt == "" {
-			res, found := resolveBareHandleCitation(ev, handle)
+			res, found := resolveBareHandleCitation(roots, ev, handle, path)
 			resolved[i] = res
 			if !found {
-				addOffender(&unverifiable, seen, handle)
+				addOffender(&unverifiable, seen, FormatResolutionOffender(res, finding))
 			} else if citationResolvesToSurveyRecord(roots, finding, ev) {
 				addOffender(&surveyAdvisories, surveySeen, handle)
 			}
@@ -292,7 +292,7 @@ func resolveCloseoutFindingCitations(
 		}
 		line := finding.Line
 		excerpt := strings.TrimSpace(finding.Excerpt)
-		if path != "" && line <= 0 && excerpt == "" {
+		if handle == "" && path != "" && line <= 0 && excerpt == "" {
 			if citationResolvesToSurveyRecord(roots, finding, ev) {
 				addOffender(&surveyAdvisories, surveySeen, path)
 				continue
@@ -306,10 +306,15 @@ func resolveCloseoutFindingCitations(
 		}
 		// Bare handles still require ledger membership.
 		if line <= 0 && excerpt == "" {
-			res, found := resolveBareHandleCitation(ev, handle)
+			res, found := resolveBareHandleCitation(roots, ev, handle, path)
 			resolved = append(resolved, res)
 			if !found {
-				addOffender(&notObserved, seenNotObserved, handle)
+				offender := FormatResolutionOffender(res, finding)
+				if _, ok := evidence.ResolveHandle(ev, handle); ok {
+					addOffender(&unverifiable, seenUnverifiable, offender)
+				} else {
+					addOffender(&notObserved, seenNotObserved, offender)
+				}
 			} else if citationResolvesToSurveyRecord(roots, finding, ev) {
 				addOffender(&surveyAdvisories, surveySeen, handle)
 			}
@@ -418,6 +423,10 @@ func resolveWorkerFindingCitationExact(
 	excerpt := strings.TrimSpace(finding.Excerpt)
 
 	if _, known := evidence.ResolveHandle(ev, handle); known {
+		if line <= 0 && excerpt == "" {
+			res, _ := resolveBareHandleCitation(roots, ev, handle, path)
+			return res
+		}
 		return evidence.ResolveObservation(roots, ev, handle, evidence.Triple{Path: path, Line: line, Excerpt: excerpt})
 	}
 	if path != "" {
@@ -464,15 +473,27 @@ func resolveWorkerFindingCitationExact(
 	return res
 }
 
-// resolveBareHandleCitation checks direct handle membership.
-func resolveBareHandleCitation(ev evidence.Ledger, handle string) (evidence.Resolution, bool) {
+// resolveBareHandleCitation checks direct handle membership and any supplied path.
+func resolveBareHandleCitation(roots evidence.CitationRoots, ev evidence.Ledger, handle, path string) (evidence.Resolution, bool) {
 	rec, ok := evidence.ResolveHandle(ev, handle)
 	if !ok {
-		return evidence.Resolution{Handle: handle, Verdict: evidence.VerdictUnverifiable}, false
+		return evidence.Resolution{Handle: handle, Path: path, Verdict: evidence.VerdictUnverifiable}, false
+	}
+	resolvedPath := strings.TrimSpace(rec.Path)
+	if path != "" {
+		paths := make(map[string][]string)
+		for _, p := range evidence.IndexedPathsForRecord(rec) {
+			paths[p] = []string{handle}
+		}
+		matched := evidence.LedgerPathKey(roots, path, paths)
+		if matched == "" {
+			return evidence.Resolution{Handle: handle, Path: evidence.NormalizeResolvePath(roots.ProjectDir, path), Verdict: evidence.VerdictUnverifiable}, false
+		}
+		resolvedPath = matched
 	}
 	return evidence.Resolution{
 		Handle:  handle,
-		Path:    strings.TrimSpace(rec.Path),
+		Path:    resolvedPath,
 		Verdict: evidence.VerdictTraced,
 	}, true
 }
@@ -639,7 +660,7 @@ func ResolveFindingsForWire(
 		}
 		line := finding.Line
 		excerpt := strings.TrimSpace(finding.Excerpt)
-		if path != "" && line <= 0 && excerpt == "" {
+		if handle == "" && path != "" && line <= 0 && excerpt == "" {
 			continue
 		}
 		res := resolveWorkerFindingCitation(roots, finding, ev)
