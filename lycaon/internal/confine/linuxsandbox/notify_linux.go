@@ -364,7 +364,13 @@ type targetProcess struct {
 }
 
 func openTarget(listener int, n seccompNotif) (*targetProcess, error) {
-	t := &targetProcess{listener: listener, id: n.ID, pid: int(n.PID), pidfd: -1}
+	// The notification names the calling thread; descriptors and memory
+	// belong to its thread group.
+	tgid, err := threadGroup(int(n.PID))
+	if err != nil {
+		return nil, err
+	}
+	t := &targetProcess{listener: listener, id: n.ID, pid: tgid, pidfd: -1}
 	fd, err := unix.PidfdOpen(t.pid, 0)
 	if err != nil {
 		return nil, err
@@ -383,6 +389,20 @@ func openTarget(listener int, n seccompNotif) (*targetProcess, error) {
 		return nil, unix.ESRCH
 	}
 	return t, nil
+}
+
+// threadGroup reads the thread group a thread belongs to.
+func threadGroup(tid int) (int, error) {
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(tid) + "/status")
+	if err != nil {
+		return 0, err
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		if value, ok := strings.CutPrefix(line, "Tgid:"); ok {
+			return strconv.Atoi(strings.TrimSpace(value))
+		}
+	}
+	return 0, unix.ESRCH
 }
 
 func (t *targetProcess) valid() bool {
