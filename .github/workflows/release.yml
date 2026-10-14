@@ -373,12 +373,14 @@ jobs:
   # Linux candidates exercise the production packaging path without publication:
   # no signing environment, no feed, no distribution state. Both package
   # families per architecture are built, audited, and retained with checksums.
+  # They follow the gates and the macOS build so the release holds its declared
+  # runners, and run whatever those jobs concluded so their own result stays visible.
   linux-candidates:
-    needs: [classify]
+    needs: [classify, ship-gates, aggregate-release]
+    if: ${{ !cancelled() }}
     strategy:
       fail-fast: false
-      # One runner per architecture; both hosted Linux runners are plentiful.
-      max-parallel: 2
+      max-parallel: 1
       matrix:
         include:
           - updater_key: linux-x86_64
@@ -401,6 +403,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.classify.outputs.source_sha }}
           fetch-depth: 0
           persist-credentials: false
 
