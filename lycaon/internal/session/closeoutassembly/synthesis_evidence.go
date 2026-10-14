@@ -125,14 +125,15 @@ func (m *Service) SynthesisEvidenceForAssembly(ctx context.Context, sess *api.Se
 		return ""
 	}
 	digest := m.synthesisEvidenceDigest(ctx, sess.ID, surfaceID)
-	if digest == "" {
+	observations := m.executionObservations(ctx, sess.ID)
+	if digest == "" && observations == "" {
 		return ""
 	}
 	if m.prompts == nil {
-		return digest
+		return strings.TrimSpace(digest + "\n" + observations)
 	}
 	inj := prompts.NewInjectRenderer(m.prompts)
-	block, err := anchor.RenderInform(ctx, anchor.InjectSynthesisEvidence, anchor.MatchContext{Surface: "coordinator", SessionID: sess.ID}, inj, map[string]any{"evidence_digest": digest})
+	block, err := anchor.RenderInform(ctx, anchor.InjectSynthesisEvidence, anchor.MatchContext{Surface: "coordinator", SessionID: sess.ID}, inj, map[string]any{"evidence_digest": digest, "execution_observations": observations})
 	if err != nil {
 		return ""
 	}

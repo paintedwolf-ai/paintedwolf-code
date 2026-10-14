@@ -215,6 +215,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	m.Workers.Harness = workerharness.New(store, m.Profiles, m.ToolContext, m.Workers.Workspaces, m.Workspace, registry, m.Verification, OverlaySourceProof)
 	m.Admission.Bind(m.Runner, turnSettlement, m.Submissions)
 	m.Coordinator.Closeout = closeoutassembly.New(store, m.Workspace, workerState, m.Verification.Evidence)
+	m.Coordinator.Closeout.SetSourceVerification(m.Verification)
 	m.ProjectControl = projectcontrol.New(store, m.Stops, turnStatus, m.Admission, m.Coordinator.Batch, turnInstructions, turnTranscript)
 	m.Coordinator.Guards = turnguards.New(store, m.ToolPolicy, m.Verification, m.Coordinator.Feedback, workerState, m.Workers, m.Workspace, m.Coordinator.Batch, m.Coordinator.ProgressClosure, turnCloseouts, m.Profiles, m.Limits)
 	m.Coordinator.Loading.SetPolicy(m.Coordinator.Guards.Policy)

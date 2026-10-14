@@ -45,14 +45,15 @@ type Delegations interface {
 	ListLegs(context.Context, string) ([]api.Leg, error)
 }
 type Service struct {
-	store            Sessions
-	workspace        Workspace
-	state            State
-	evidence         Evidence
-	workflows        *WorkflowDomains
-	delegations      Delegations
-	synthesisCurator llm.Curator
-	prompts          prompts.PromptTemplateEngine
+	store              Sessions
+	workspace          Workspace
+	state              State
+	evidence           Evidence
+	workflows          *WorkflowDomains
+	delegations        Delegations
+	synthesisCurator   llm.Curator
+	prompts            prompts.PromptTemplateEngine
+	sourceVerification SourceVerification
 }
 
 func New(store Sessions, workspace Workspace, state State, evidence Evidence) *Service {
