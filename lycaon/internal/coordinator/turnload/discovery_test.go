@@ -146,7 +146,10 @@ func TestDiscoveryNeedParsing(t *testing.T) {
 }
 
 func TestDiscoveryRejectsAnUnpageableContinuation(t *testing.T) {
-	entries := []DiscoveryEntry{{Name: "first"}, {Name: "second"}}
+	entries := make([]DiscoveryEntry, DiscoveryPageSize+1)
+	for i := range entries {
+		entries[i].Name = fmt.Sprintf("tool_%02d", i)
+	}
 	_, err := Discover("tools/session", strings.Repeat("x", DiscoveryPageBytes), "", "no_match", "", entries)
 	if err == nil || !strings.Contains(err.Error(), "cannot fit") {
 		t.Fatalf("unbounded discovery accepted: %v", err)
