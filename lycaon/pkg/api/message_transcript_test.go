@@ -1,6 +1,12 @@
 package api
 
-import "testing"
+import (
+	"fmt"
+	"math/rand"
+	"reflect"
+	"slices"
+	"testing"
+)
 
 func TestFilterPromptHistoryDropsBoundariesKeepsInternalUserKicks(t *testing.T) {
 	in := []Message{
@@ -303,6 +309,152 @@ func TestRehydrateReasoningRequiresUnchangedAssistant(t *testing.T) {
 			got := RehydrateTranscriptProjectionFields(projected, source)
 			if (got.ModelReasoning != nil) != (change == "unchanged") {
 				t.Fatalf("%s reasoning eligibility incorrect", change)
+			}
+		})
+	}
+}
+
+func TestPromptRecoveryPrecedesReusedDraftAndSuccessfulTools(t *testing.T) {
+	for _, tool := range []bool{false, true} {
+		draft := Message{ID: "draft", Role: MessageRoleAssistant, Content: "accepted", Ord: 2, DraftStatus: DraftStatusCommitted}
+		history := []Message{{ID: "user", Role: MessageRoleUser, Content: "do the work", Ord: 1}, draft}
+		if tool {
+			history[1].ToolCalls = []ToolCall{{ID: "call", Name: "promote_overlay"}}
+			history = append(history, Message{ID: "result", Role: MessageRoleTool, ToolResult: &ToolResult{ToolCallID: "call", Tool: "promote_overlay"}, Content: "merged", Ord: 3})
+		}
+		for _, code := range []string{"FIRST", "SECOND"} {
+			history = append(history, Message{ID: code, Role: MessageRoleUser, Origin: MessageOriginHost, Authority: ContentAuthoritySystem,
+				Visibility: MessageVisibilityInternal, Kind: MessageKindCoordinatorGuidance, HostSignalID: DraftRecoverySignal("draft", "guidance:"+code), Content: "retry"})
+		}
+		for pass := 0; pass < 2; pass++ {
+			got := FilterPromptHistory(history)
+			want := []string{"user", "FIRST", "SECOND", "draft"}
+			if tool {
+				want = append(want, "result")
+			}
+			if len(got) != len(want) {
+				t.Fatalf("tool=%v: length=%d", tool, len(got))
+			}
+			for i, id := range want {
+				if got[i].ID != id {
+					t.Fatalf("tool=%v pass=%d position=%d got=%s want=%s", tool, pass, i, got[i].ID, id)
+				}
+			}
+			if got[3].Ord != 2 {
+				t.Fatal("prompt ordering rewrote immutable transcript position")
+			}
+			if pass == 0 && history[1].ID != "draft" {
+				t.Fatal("projection mutated source history")
+			}
+			history = got
+		}
+	}
+}
+
+func TestPromptRecoveryRequiresHostIdentityAndPresentTarget(t *testing.T) {
+	valid := Message{ID: "recovery", Role: MessageRoleUser, Origin: MessageOriginHost, Authority: ContentAuthoritySystem,
+		Visibility: MessageVisibilityInternal, Kind: MessageKindCoordinatorGuidance, HostSignalID: DraftRecoverySignal("draft", "guidance:RETRY")}
+	for _, change := range []func(*Message){
+		func(m *Message) { m.Origin = MessageOriginUser },
+		func(m *Message) { m.Authority = ContentAuthorityNone },
+		func(m *Message) { m.Visibility = MessageVisibilityTranscript },
+		func(m *Message) { m.Kind = "" },
+		func(m *Message) { m.HostSignalID = DraftRecoverySignal("missing", "guidance:RETRY") },
+		func(m *Message) { m.HostSignalID = "draft-recovery:malformed" },
+	} {
+		recovery := valid
+		change(&recovery)
+		got := FilterPromptHistory([]Message{{ID: "draft", Role: MessageRoleAssistant, Content: "done"}, recovery})
+		if got[0].ID != "draft" || got[1].ID != "recovery" {
+			t.Fatal("unrelated or untrusted message changed history order")
+		}
+	}
+	if DraftRecoverySignal("", "signal") != "signal" || DraftRecoverySignal("bad:id", "signal") != "signal" {
+		t.Fatal("invalid draft identity was encoded")
+	}
+	projected := RehydrateTranscriptProjectionFields(Message{ID: valid.ID}, valid)
+	if projected.HostSignalID != valid.HostSignalID {
+		t.Fatal("lossy history roundtrip lost recovery identity")
+	}
+}
+
+func TestPromptRecoveryDoesNotAnchorAnonymousHistory(t *testing.T) {
+	history := []Message{{Role: MessageRoleAssistant, Content: "answer"}, {Role: MessageRoleUser, Content: "next instruction"}}
+	got := FilterPromptHistory(history)
+	if got[0].Role != MessageRoleAssistant || got[1].Role != MessageRoleUser {
+		t.Fatal("anonymous history was reordered without a recovery reference")
+	}
+}
+
+func TestPromptRecoveryConservesInterleavedConversation(t *testing.T) {
+	for seed := int64(0); seed < 32; seed++ {
+		t.Run(fmt.Sprint(seed), func(t *testing.T) {
+			var history, recoveries []Message
+			for turn := 0; turn < 3; turn++ {
+				id := fmt.Sprint(turn)
+				history = append(history,
+					Message{ID: "user-" + id, Role: MessageRoleUser, Content: "continue"},
+					Message{ID: "draft-" + id, Role: MessageRoleAssistant, DraftStatus: DraftStatusCommitted,
+						ToolCalls: []ToolCall{{ID: "call-" + id, Name: "read", Args: map[string]any{"path": id}}}},
+					Message{ID: "result-" + id, Role: MessageRoleTool, Content: "body-" + id,
+						ToolResult: &ToolResult{ToolCallID: "call-" + id, Tool: "read"}})
+				for retry := 0; retry <= turn; retry++ {
+					recoveries = append(recoveries, Message{ID: fmt.Sprintf("recovery-%d-%d", turn, retry),
+						Role: MessageRoleUser, Origin: MessageOriginHost, Authority: ContentAuthoritySystem,
+						Visibility: MessageVisibilityInternal, Kind: MessageKindCoordinatorGuidance,
+						HostSignalID: DraftRecoverySignal("draft-"+id, fmt.Sprint(retry)), Content: "repair"})
+				}
+			}
+			rng := rand.New(rand.NewSource(seed))
+			rng.Shuffle(len(recoveries), func(i, j int) { recoveries[i], recoveries[j] = recoveries[j], recoveries[i] })
+			history = append(history, recoveries...)
+			original := slices.Clone(history)
+			projected := FilterPromptHistory(history)
+			if !reflect.DeepEqual(history, original) {
+				t.Fatal("projection mutated transcript")
+			}
+			if !reflect.DeepEqual(FilterPromptHistory(projected), projected) {
+				t.Fatal("projection is not idempotent")
+			}
+			positions := map[string]int{}
+			rows := map[string]Message{}
+			for i, row := range projected {
+				if _, found := rows[row.ID]; found {
+					t.Fatalf("duplicated row %s", row.ID)
+				}
+				rows[row.ID], positions[row.ID] = row, i
+			}
+			if len(projected) != len(history) {
+				t.Fatal("projection lost or invented rows")
+			}
+			lastOrdinary := -1
+			lastRecovery := map[string]int{}
+			for _, row := range history {
+				if !reflect.DeepEqual(rows[row.ID], row) {
+					t.Fatalf("row %s was altered", row.ID)
+				}
+				target := draftRecoveryTarget(row)
+				pos := positions[row.ID]
+				if target == "" {
+					if pos <= lastOrdinary {
+						t.Fatal("unrelated conversation order changed")
+					}
+					lastOrdinary = pos
+					continue
+				}
+				if pos >= positions[target] {
+					t.Fatalf("recovery %s follows its replacement", row.ID)
+				}
+				if previous, found := lastRecovery[target]; found && pos <= previous {
+					t.Fatal("retry order changed within a draft")
+				}
+				lastRecovery[target] = pos
+			}
+			for turn := 0; turn < 3; turn++ {
+				id := fmt.Sprint(turn)
+				if positions["draft-"+id] >= positions["result-"+id] {
+					t.Fatal("tool result precedes its invocation")
+				}
 			}
 		})
 	}

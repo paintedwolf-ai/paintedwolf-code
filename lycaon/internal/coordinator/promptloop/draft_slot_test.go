@@ -50,6 +50,7 @@ func TestCloseDraftSlotIgnoresNonCurrentID(t *testing.T) {
 
 func TestRejectEmitsNoDeleteForCoordinatorDraftSlot(t *testing.T) {
 	var snapshotted int
+	var recovered []api.Message
 	st := &promptLoopTurnState{}
 	st.draftSlotID = "slot-1"
 	st.draftSlotAppended = true
@@ -67,6 +68,7 @@ func TestRejectEmitsNoDeleteForCoordinatorDraftSlot(t *testing.T) {
 			},
 			UpdateMessage: func(_ context.Context, _, _ string, _ api.Message) error { return nil },
 			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				recovered = append(recovered, msgs...)
 				return nil
 			},
 		},
@@ -78,9 +80,12 @@ func TestRejectEmitsNoDeleteForCoordinatorDraftSlot(t *testing.T) {
 	_, err := loop.Tools.rejectBlockedAssistantTurn(
 		context.Background(), "s1", history, "slot-1", "slot-1",
 		refusalForTest("Rejected: test\nCode: SYNTH_HANDLE_NOT_IN_LEGS"),
-		nil,
+		st,
 	)
 	testutil.FailErr(t, "rejectBlockedAssistantTurn", err)
+	if len(recovered) != 1 || recovered[0].Kind != api.MessageKindCoordinatorGuidance || recovered[0].HostSignalID != api.DraftRecoverySignal("slot-1", "guidance:SYNTH_HANDLE_NOT_IN_LEGS") {
+		t.Fatalf("recovery lost its draft identity: %+v", recovered)
+	}
 	if snapshotted != 1 {
 		t.Fatalf("snapshotted = %d want 1", snapshotted)
 	}
