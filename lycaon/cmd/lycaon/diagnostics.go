@@ -7,12 +7,15 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/diagnostics"
 	"github.com/lycaon/lycaon/internal/documentcore"
+	"github.com/lycaon/lycaon/internal/gitargv"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/hostpower"
 	"github.com/lycaon/lycaon/internal/httpclient"
 	"github.com/lycaon/lycaon/internal/systemproxy"
@@ -46,8 +49,11 @@ func runDiagnostics(ctx context.Context, args []string) error {
 		}
 		return holdPowerInhibitor(ctx, hostpower.New(true), hold, os.Stdout)
 	}
+	if len(args) == 2 && args[0] == "git-remote" {
+		return probeGitRemote(ctx, args[1], os.Stdout)
+	}
 	if len(args) != 1 || args[0] != "startup-diagnostics" {
-		return fmt.Errorf("usage: pw diagnostics startup-diagnostics | document-core | system-proxy <url> | power-inhibit <duration> | schema-baseline | store-baseline <store.db> | upgrade-fixture-verify <config-dir> <manifest.json>")
+		return fmt.Errorf("usage: pw diagnostics startup-diagnostics | document-core | system-proxy <url> | power-inhibit <duration> | git-remote <url> | schema-baseline | store-baseline <store.db> | upgrade-fixture-verify <config-dir> <manifest.json>")
 	}
 	dir, err := configdir.UserConfigDir()
 	if err != nil {
@@ -92,6 +98,36 @@ func holdPowerInhibitor(ctx context.Context, controller *hostpower.Controller, h
 	case <-timer.C:
 		return nil
 	}
+}
+
+// probeGitRemote lists a remote's refs through the bundled Git exactly as a
+// network operation would run it: hermetic configuration, the discovered SSH
+// agent, and the host credential helper. Output is the ref count or the error.
+func probeGitRemote(ctx context.Context, remote string, out io.Writer) error {
+	if err := gitargv.ValidateCloneURL(remote); err != nil {
+		return err
+	}
+	gitexec.SetHostConfig(gitexec.HostConfigResolver())
+	dir, err := os.MkdirTemp("", "pw-git-remote-*")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.RemoveAll(dir) }()
+	output, code, err := gitexec.Run(ctx, dir, []string{"ls-remote", "--", remote}, gitexec.Opts{Profile: gitexec.ProfileNetwork, RemoteURL: remote})
+	if err != nil {
+		return err
+	}
+	if code != 0 {
+		return fmt.Errorf("git ls-remote exited %d: %s", code, strings.TrimSpace(string(output)))
+	}
+	refs := 0
+	for _, line := range strings.Split(string(output), "\n") {
+		if strings.TrimSpace(line) != "" {
+			refs++
+		}
+	}
+	_, err = fmt.Fprintf(out, "refs=%d\n", refs)
+	return err
 }
 
 // verifyDocumentCore proves the installed document core runs from this

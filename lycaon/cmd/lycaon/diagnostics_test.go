@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -126,5 +127,33 @@ func TestHoldPowerInhibitorReportsProviderOrUnavailability(t *testing.T) {
 	out.Reset()
 	if err := holdPowerInhibitor(canceled, hostpower.New(true), time.Hour, &out); err == nil || (!strings.Contains(out.String(), "inhibiting=false") && !errors.Is(err, context.Canceled)) {
 		t.Fatalf("canceled hold = %v with %q", err, out.String())
+	}
+}
+
+func TestProbeGitRemoteRunsThroughTheBundledToolchain(t *testing.T) {
+	var out bytes.Buffer
+	if err := probeGitRemote(t.Context(), "ext::sh -c touch%20/tmp/pwned", &out); err == nil {
+		t.Fatal("remote-helper transport was accepted")
+	}
+	t.Setenv("LYCAON_ENGINE_ROOT", t.TempDir())
+	if err := probeGitRemote(t.Context(), "https://example.com/repo.git", &out); err == nil {
+		t.Fatal("missing bundled git did not fail the probe")
+	}
+	engineRoot := filepath.Join(testutil.CheckoutRoot(t), "lycaon-den", "src-tauri", "engine-root")
+	if _, err := os.Stat(filepath.Join(engineRoot, "gitengine", "bin", "git")); err != nil {
+		t.Skip("bundled git missing — run ./task gitengine:fetch")
+	}
+	t.Setenv("LYCAON_ENGINE_ROOT", engineRoot)
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	if output, err := exec.Command(filepath.Join(engineRoot, "gitengine", "bin", "git"), "init", "--bare", "--initial-branch=main", remote).CombinedOutput(); err != nil {
+		t.Fatalf("init bare remote: %v: %s", err, output)
+	}
+	testutil.FailErr(t, "probe local remote", probeGitRemote(t.Context(), "file://"+remote, &out))
+	if out.String() != "refs=0\n" {
+		t.Fatalf("empty remote probe = %q", out.String())
+	}
+	if err := probeGitRemote(t.Context(), "file://"+filepath.Join(t.TempDir(), "absent.git"), &out); err == nil || !strings.Contains(err.Error(), "exited") {
+		t.Fatalf("absent remote = %v", err)
 	}
 }
