@@ -163,8 +163,10 @@ fn unexport_on_main_thread(window: &tauri::WebviewWindow) {
     }
 }
 
+/// A private context keeps the connection handshake from dispatching the
+/// shell's main loop when a command runs on the main thread.
 fn session_bus() -> Result<gio::DBusConnection, String> {
-    gio::bus_get_sync(gio::BusType::Session, gio::Cancellable::NONE)
+    crate::linux_desktop::session_bus::connect(&glib::MainContext::new())
         .map_err(|error| format!("The desktop session bus is unavailable: {error}"))
 }
 
