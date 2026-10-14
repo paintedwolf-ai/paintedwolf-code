@@ -1,18 +1,11 @@
 description: >-
-  Look up what was already observed instead of observing it again. Reach for
-  it when a finished worker leg's envelope omits a detail the leg saw, when a
-  continuation record or a `[compacted …]` banner names a handle whose body is
-  gone from context, or — from a root session — when an earlier session on
-  this project may already have looked (`widen`). It reads the recorded index,
-  not the working tree: use grep or read for files as they are now. Branch on
-  the result's `resolution`, never on the row count: `no_match_in_scope` means
-  this scope contains records, but none matched this query; `scope_empty` means nothing here
-  has been observed yet (dispatch or observe it yourself; do not search again),
-  `record_deleted` means it existed and is gone, `executor_degraded` is never
-  evidence of absence. Do what `next_action` says. Each hit states
-  `observed_at` and `currency` — a `changed` hit describes the file as it was,
-  not as it is. An unchanged query searches the same recorded scope; fewer
-  terms or corrected filters can recover missed matches.
+  Recover recorded observations by handle, search, or canonical history coordinates.
+  Use read or grep for current files. Branch on resolution: no_match_in_scope means
+  records exist but none matched; scope_empty means no observations exist;
+  record_deleted means a record was removed; executor_degraded does not establish
+  absence. Follow next_action. Hits include observed_at and currency: changed means
+  the source has moved on. Correct filters or terms to recover missed matches.
+
 schema:
   type: object
   properties:
@@ -20,22 +13,17 @@ schema:
       type: string
       minLength: 1
       description: >-
-        Search terms plus optional filters. Adjacent terms are ANDed;
-        AND / OR / NOT and parentheses are supported.
-        Addressing beats searching: handle:read#3 returns that one
-        observation, which is the surest lookup when a leg, a continuation
-        record, or a compaction banner named its handle. handle: matches an
-        exact identifier; use tool:find for find results. Otherwise narrow with
-        agent:scout, leg:<id>, session:<id>, tool:read, after:2026-08-01 before
-        free text. Also available — kind:evidence, path:src/*.go, url:<url>,
-        untrusted:true, verified:false, run:<id>.
+        Exact handle lookup: handle:read#3. Free terms are ANDed; AND, OR, NOT and
+        parentheses are supported. Filters: agent:scout, leg:<id>, session:<id>,
+        tool:read, after:2026-08-01, before:2026-08-02, kind:evidence, path:src/*.go,
+        url:<url>, untrusted:true, verified:false, run:<id>.
     history:
       type: object
       description: >-
-        Recover your own canonical transcript after compaction. Supply the continuation's
-        through_ord, page with after_ord, then supply an indexed message_id to read its
-        recorded body. offset pages a long body in Unicode characters. This is recorded
-        history, not current file contents. Cannot be combined with query or widen.
+        Recover your recorded transcript through through_ord. Page the index with
+        after_ord; supply a returned message_id for its body. offset and next_offset
+        page Unicode characters. source_seq detects corrections to returned rows.
+        Cannot combine with query or widen.
       properties:
         after_ord: {type: integer, minimum: 0}
         through_ord: {type: integer, minimum: 1}
@@ -48,10 +36,9 @@ schema:
       type: string
       enum: [subtree, project, all]
       description: >-
-        Scope beyond the default. Omit for the default — your own session and
-        its worker legs. project searches every session in this project, which
-        is how an earlier session's observations are reached; all searches
-        every attached project. Worker legs may not widen.
+        Default: your session and worker legs. subtree keeps that scope; project
+        searches this project's sessions; all searches attached projects. Workers
+        cannot widen. History recovery always stays in your own session.
     limit:
       type: integer
       minimum: 1
