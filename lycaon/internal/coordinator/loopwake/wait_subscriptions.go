@@ -17,6 +17,7 @@ type WaitSubscriptionsDeps struct {
 	ProcessReport             func(sessionID, handle string) (report string, published bool)
 	ProcessRunning            func(sessionID string, handles []string) bool
 	ProcessState              func(sessionID, handle string) (known, running bool)
+	ProcessSubject            func(sessionID, handle string) string
 	ScanCycleOpen             func(ctx context.Context, sessionID string) bool
 	WorkerCycleIdle           WorkerCycleIdle
 }

@@ -13,6 +13,9 @@ func SubjectTitle(tool string, args map[string]any, subject string) string {
 	if subject == "" {
 		return detail
 	}
+	if tool == "wait" {
+		detail = waitReason(args)
+	}
 	if tool == "answer_decision" || detail == titleFallbacks[tool] || detail == subject {
 		return shortLine(subject)
 	}

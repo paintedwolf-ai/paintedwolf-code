@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"fmt"
+	"strings"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 )
@@ -27,4 +28,15 @@ func validateCompletionWait(loop *WaitSubscriptions, sessionID string, condition
 	return nil
 }
 
-// State reconciliation waits for the published completion digest before settling.
+func processDisplaySubject(loop *WaitSubscriptions, sessionID string, handles []string) string {
+	subject := loop.loopDeps().ProcessSubject
+	if subject == nil {
+		return ""
+	}
+	for _, handle := range handles {
+		if line := strings.TrimSpace(subject(sessionID, handle)); line != "" {
+			return line
+		}
+	}
+	return ""
+}

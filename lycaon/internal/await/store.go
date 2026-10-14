@@ -41,7 +41,7 @@ type Lease struct {
 	ProfileID     string
 	Status        string
 	Deadline      time.Time
-	// UntilComplete ends the wait only on its conditions; Deadline, when set, is its backstop.
+	// UntilComplete waits for process completion or refusal up to Deadline.
 	UntilComplete bool
 	Conditions    []Condition
 	Winner        Condition

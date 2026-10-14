@@ -3,6 +3,7 @@ package loopwake
 import (
 	"context"
 	"strings"
+	"time"
 
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -20,7 +21,9 @@ func restoreWaitRequest(ctx context.Context, loop *WaitSubscriptions, store *awa
 			}
 			if !request.ExplicitMode {
 				request.UntilComplete = subscription.UntilComplete
-				request.ResumeBounded = subscription.Bounded
+				if subscription.UntilComplete {
+					request.TimeoutMS = MaxWaitSeconds * 1000
+				}
 			}
 			return nil
 		}
@@ -30,9 +33,11 @@ func restoreWaitRequest(ctx context.Context, loop *WaitSubscriptions, store *awa
 		return err
 	}
 	if !request.ExplicitMode {
-		request.ResumeDeadline = lease.Deadline
-		request.ResumeBounded = !lease.Deadline.IsZero()
 		request.UntilComplete = lease.UntilComplete
+		request.ResumeDeadline = lease.Deadline
+		if lease.UntilComplete {
+			request.TimeoutMS = MaxWaitSeconds * 1000
+		}
 	}
 	if !request.ExplicitConditions {
 		request.Conditions = append([]awaitstore.Condition(nil), lease.Conditions...)
@@ -60,11 +65,14 @@ func RecoverWaitLeases(ctx context.Context, loop *WaitSubscriptions, store *awai
 				handles = append(handles, condition.Handles...)
 			}
 		}
-		if lease.Deadline.IsZero() || strings.TrimSpace(lease.WorkerJobID) != "" {
+		until := lease.Deadline
+		if strings.TrimSpace(lease.WorkerJobID) != "" {
 			triggers = removeWaitTrigger(triggers, WaitTriggerTimer)
+		} else if until.IsZero() {
+			until = time.Now().UTC().Add(loop.Facts.capSleepDuration(ctx, lease.SessionID, MaxWaitSeconds*time.Second))
 		}
 		loop.Waits.enterSleep(ctx, lease.SessionID, sleepArm{
-			until: lease.Deadline, untilComplete: lease.UntilComplete, reason: lease.Reason,
+			until: until, untilComplete: lease.UntilComplete, reason: lease.Reason,
 			triggers: triggers, processHandles: handles, workerHandles: workerHandlesFromConditions(lease.Conditions), mover: SleepMoverHost,
 		})
 		startConditionMonitor(ctx, loop, store, lease)

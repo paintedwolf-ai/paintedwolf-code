@@ -58,6 +58,7 @@ func loopDepsSnapshotForTest(l *LoopEngine) LoopDeps {
 	deps.ProcessReport = l.Subscriptions.loopDeps().ProcessReport
 	deps.ProcessRunning = l.Subscriptions.loopDeps().ProcessRunning
 	deps.ProcessState = l.Subscriptions.loopDeps().ProcessState
+	deps.ProcessSubject = l.Subscriptions.loopDeps().ProcessSubject
 	deps.ScanCycleOpen = l.Subscriptions.loopDeps().ScanCycleOpen
 	deps.WorkerCycleIdle = l.Subscriptions.loopDeps().WorkerCycleIdle
 	deps.RunWaitResume = l.Deliveries.loopDeps().RunWaitResume

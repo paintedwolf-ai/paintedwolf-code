@@ -77,7 +77,7 @@ func (l *LoopEngine) SetDeps(deps LoopDeps) {
 	if l == nil {
 		return
 	}
-	l.Subscriptions.setDeps(WaitSubscriptionsDeps{GetSession: deps.GetSession, HostWakeOverlayPromoteDue: deps.HostWakeOverlayPromoteDue, ProcessReport: deps.ProcessReport, ProcessRunning: deps.ProcessRunning, ProcessState: deps.ProcessState, ScanCycleOpen: deps.ScanCycleOpen, WorkerCycleIdle: deps.WorkerCycleIdle})
+	l.Subscriptions.setDeps(WaitSubscriptionsDeps{GetSession: deps.GetSession, HostWakeOverlayPromoteDue: deps.HostWakeOverlayPromoteDue, ProcessReport: deps.ProcessReport, ProcessRunning: deps.ProcessRunning, ProcessState: deps.ProcessState, ProcessSubject: deps.ProcessSubject, ScanCycleOpen: deps.ScanCycleOpen, WorkerCycleIdle: deps.WorkerCycleIdle})
 	l.Deliveries.setDeps(WaitDeliveriesDeps{RunWaitResume: deps.RunWaitResume})
 	l.Policy.setDeps(HostWakePolicyDeps{DropPendingKicksBeforeBatchSeq: deps.DropPendingKicksBeforeBatchSeq, DropPendingKicksForBatchSeq: deps.DropPendingKicksForBatchSeq, HostWakeActionable: deps.HostWakeActionable, WorkflowSource: deps.WorkflowSource})
 	l.Facts.setDeps(SessionFactsDeps{GetSession: deps.GetSession, Limits: deps.Limits, WorkflowObligationsOpen: deps.WorkflowObligationsOpen, WorkflowSource: deps.WorkflowSource})
