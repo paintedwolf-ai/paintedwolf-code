@@ -93,9 +93,13 @@ func unpaginatedMissingArgs(tool string, args map[string]any) []string {
 		if !hasNumericArg(args, "offset") && !hasNumericArg(args, "max_matches") {
 			return []string{"offset", "max_matches"}
 		}
-	case "find", "list_dir":
-		if !hasNumericArg(args, "offset") && !hasNumericArg(args, "max_results") && !hasNumericArg(args, "max_entries") {
+	case "find":
+		if !hasNumericArg(args, "offset") && !hasNumericArg(args, "max_results") {
 			return []string{"offset", "max_results"}
+		}
+	case "list_dir":
+		if !hasNumericArg(args, "offset") && !hasNumericArg(args, "max_entries") {
+			return []string{"offset", "max_entries"}
 		}
 	case "read":
 		if stringArg(args, "symbol") == "" && !hasNumericArg(args, "offset") && !hasNumericArg(args, "limit") && !hasRangesArg(args) {

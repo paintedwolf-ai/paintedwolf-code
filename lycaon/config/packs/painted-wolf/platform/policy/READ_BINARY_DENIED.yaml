@@ -11,7 +11,8 @@ requires:
   - paintedwolf.path
   - paintedwolf.binary_denied
   - paintedwolf.can_stat
-  - paintedwolf.is_image
+  - paintedwolf.can_view_image
+  - paintedwolf.workspace_image_supported
   - paintedwolf.rejection_reason
 when: paintedwolf.rejection_code == "READ_BINARY_DENIED"
 effect: block
@@ -20,9 +21,7 @@ copy:
     text.'
   cause: 'The text reader reported: {{ paintedwolf.rejection_reason }}.'
   why: Binary content, unsupported encoding, or a decoding bound cannot be treated as readable source text.
-  fix: '{% if paintedwolf.is_image %}Use view_image to inspect and perceive this image.{% else %}{% if paintedwolf.can_stat %}Use stat if metadata answers the question.{% else %}Use an offered metadata
-    inspector if metadata answers the question.{% endif %}{% endif %} A different text file cannot substitute for required
-    evidence from this asset. Preserve the unresolved content requirement.'
+  fix: '{% if paintedwolf.workspace_image_supported %}{% if paintedwolf.can_view_image %}Use view_image to inspect this asset, then assess the returned evidence.{% else %}{% if paintedwolf.can_stat %}Use stat if metadata answers the question.{% endif %}{% endif %}{% else %}{% if paintedwolf.can_stat %}Use stat if metadata answers the question.{% endif %}{% endif %} A different text file cannot substitute for required evidence from this asset. Preserve any unresolved content requirement.'
   instead: Diagnose the text-decoding failure; do not invent replacement evidence
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:read
@@ -40,11 +39,12 @@ x-paintedwolf-scenarios:
 - id: image_file
   vars:
     bytes: 4096
-    is_image: true
+    workspace_image_supported: true
+    can_view_image: true
     path: assets/logo.png
     profile: coordinator
     tool: read
   expect_contains:
   - 'Rejected:'
   - 'Code: READ_BINARY_DENIED'
-  - 'Use view_image to inspect and perceive this image.'
+  - 'Use view_image to inspect this asset, then assess the returned evidence.'

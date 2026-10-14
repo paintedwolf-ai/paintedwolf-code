@@ -11,9 +11,11 @@ paths:
         tail), or from=oldest for the first page. Pass a page's before_cursor as
         before for the older window, or its after_cursor as after for the newer
         one; before_message_id and after_message_id open the window beside a
-        message the client already holds. A request names at most one of these
-        positions. worker_id restricts a reused child session to one immutable
-        worker run before pagination is applied.
+        message the client already holds; before_ord and after_ord open it
+        beside an ordinal the client computed from the transcript's ord_bounds,
+        so a reader can land anywhere in unloaded history. A request names at
+        most one of these positions. worker_id restricts a reused child session
+        to one immutable worker run before pagination is applied.
       parameters:
       - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
       - name: limit
@@ -51,6 +53,22 @@ paths:
           type: string
           format: uuid
         description: Return the window of messages newer than this message of the chat
+      - name: before_ord
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+        description: Return the window of messages whose ord is below this ordinal
+      - name: after_ord
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+        description: Return the window of messages whose ord is above this ordinal; 0 is the transcript start
       - name: from
         in: query
         required: false
