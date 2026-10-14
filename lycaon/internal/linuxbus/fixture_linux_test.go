@@ -52,6 +52,12 @@ func (f *fixtureLoginManager) GetSessionByPID(uint32) (dbus.ObjectPath, *dbus.Er
 	return f.sessionPath, nil
 }
 
+// seatRecord marshals as the login manager's (so) seat property.
+type seatRecord struct {
+	ID   string
+	Path dbus.ObjectPath
+}
+
 type fixtureLoginSession struct {
 	properties map[string]dbus.Variant
 }
@@ -76,7 +82,7 @@ func TestCurrentLoginSessionReadsTheSessionOwningThisProcess(t *testing.T) {
 		"Type":   dbus.MakeVariant("wayland"),
 		"Class":  dbus.MakeVariant("user"),
 		"Active": dbus.MakeVariant(true),
-		"Seat":   dbus.MakeVariant([]any{"seat0", dbus.ObjectPath("/org/freedesktop/login1/seat/seat0")}),
+		"Seat":   dbus.MakeVariant(seatRecord{ID: "seat0", Path: "/org/freedesktop/login1/seat/seat0"}),
 	}}
 	if err := server.Export(session, manager.sessionPath, "org.freedesktop.DBus.Properties"); err != nil {
 		t.Fatalf("export session: %v", err)

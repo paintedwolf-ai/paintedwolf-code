@@ -47,7 +47,11 @@ func CurrentLoginSession(ctx context.Context, bus *dbus.Conn) (LoginSession, err
 	session.Type, _ = properties["Type"].Value().(string)
 	session.Class, _ = properties["Class"].Value().(string)
 	session.Active, _ = properties["Active"].Value().(bool)
+	// Seat is a (so) struct: the seat id and its object path.
 	if seat, ok := properties["Seat"].Value().([]any); ok && len(seat) == 2 {
+		if variant, wrapped := seat[0].(dbus.Variant); wrapped {
+			seat[0] = variant.Value()
+		}
 		session.Seat, _ = seat[0].(string)
 	}
 	if session.ID == "" {
