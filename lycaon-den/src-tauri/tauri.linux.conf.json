@@ -1,6 +1,5 @@
 {
   "app": {
-    "enableGTKAppId": true,
     "windows": [
       {
         "label": "main",

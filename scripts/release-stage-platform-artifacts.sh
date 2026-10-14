@@ -166,12 +166,20 @@ case "${GOOS}" in
         exit 1
       }
       [[ -s "${root}/THIRD-PARTY-NOTICES.md" ]] || { echo "error: ${PLATFORM} ${label} has no third-party notices" >&2; exit 1; }
-      [[ -n "$(find "${tree}/usr/share/applications" -maxdepth 1 -name '*.desktop' -print -quit 2>/dev/null)" ]] || {
-        echo "error: ${PLATFORM} ${label} has no desktop entry" >&2
+      DESKTOP_ENTRY="${tree}/usr/share/applications/ai.paintedwolf.code.desktop"
+      [[ -f "${DESKTOP_ENTRY}" ]] || { echo "error: ${PLATFORM} ${label} has no ai.paintedwolf.code desktop entry" >&2; exit 1; }
+      grep -Fq "StartupWMClass=painted-wolf-code" "${DESKTOP_ENTRY}" && grep -Fq "Exec=painted-wolf-code %U" "${DESKTOP_ENTRY}" || {
+        echo "error: ${PLATFORM} ${label} desktop entry lacks the window class or exec line" >&2
         exit 1
       }
-      grep -Fq "StartupWMClass=dev.paintedwolf.code" "${tree}"/usr/share/applications/*.desktop || {
-        echo "error: ${PLATFORM} ${label} desktop entry lacks the stable application id" >&2
+      # The bundler's own product-named entry must stay out of launchers.
+      for generated in "${tree}"/usr/share/applications/*.desktop; do
+        [[ "${generated}" == "${DESKTOP_ENTRY}" ]] && continue
+        grep -Fq "NoDisplay=true" "${generated}" || { echo "error: ${PLATFORM} ${label} ships a second visible desktop entry $(basename "${generated}")" >&2; exit 1; }
+      done
+      # GTK, WebKitGTK and the C library come from the distribution, never from the package.
+      [[ -z "$(find "${tree}" -type f \( -name 'libgtk-3*.so*' -o -name 'libgdk-3*.so*' -o -name 'libwebkit2gtk*.so*' -o -name 'libjavascriptcoregtk*.so*' -o -name 'libc.so*' -o -name 'libsoup-3*.so*' \) -print -quit)" ]] || {
+        echo "error: ${PLATFORM} ${label} bundles a desktop toolkit or C library the distribution provides" >&2
         exit 1
       }
       [[ -n "$(find "${tree}/usr/share/icons/hicolor" -type f -name "${LINUX_PACKAGE_NAME}.png" -print -quit 2>/dev/null)" ]] || {

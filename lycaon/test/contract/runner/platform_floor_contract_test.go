@@ -145,6 +145,7 @@ func TestLinuxFloorFeedsPackagingAndCatalog(t *testing.T) {
 		"kernel":    platformfloor.LinuxKernelMin(),
 		"glibc":     platformfloor.LinuxGlibcMin(),
 		"webkitgtk": platformfloor.LinuxWebKitGTKMin(),
+		"gtk3":      platformfloor.LinuxGTK3Min(),
 	} {
 		if value == "" {
 			t.Fatalf("Linux %s floor is empty: lycaon/internal/platformfloor/linux_floor.txt must declare it", name)
@@ -166,7 +167,7 @@ func TestLinuxFloorFeedsPackagingAndCatalog(t *testing.T) {
 	}
 	for family, depends := range map[string][]string{"deb": catalog.Deb.Depends, "rpm": catalog.Rpm.Depends} {
 		joined := strings.Join(depends, "\n")
-		for _, placeholder := range []string{"{glibc}", "{webkitgtk}"} {
+		for _, placeholder := range []string{"{glibc}", "{webkitgtk}", "{gtk3}"} {
 			if !strings.Contains(joined, placeholder) {
 				t.Fatalf("%s dependencies never render the %s floor; constraints must come from linux_floor.txt, not literals", family, placeholder)
 			}

@@ -25,6 +25,7 @@ INSTALL_ROOT = "/opt/painted-wolf-code"
 SHELL_EXECUTABLE = "/usr/bin/painted-wolf-code"
 HELPERS = ("pw", "pw-logs", "pw-document-core", "bialy")
 ENTRY_POINTS = ("pw", "pw-logs")
+APP_ID = "ai.paintedwolf.code"
 ARCHITECTURES = {"x86_64-unknown-linux-gnu": "x86_64", "aarch64-unknown-linux-gnu": "aarch64"}
 HEX_DIGEST = re.compile(r"^[0-9a-f]{64}$")
 

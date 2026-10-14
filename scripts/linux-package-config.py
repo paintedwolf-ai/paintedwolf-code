@@ -18,6 +18,7 @@ import sys
 
 INSTALL_ROOT = "/opt/painted-wolf-code"
 PACKAGE_NAME = "painted-wolf-code"
+APP_ID = "ai.paintedwolf.code"
 HELPERS = ("pw", "pw-logs", "pw-document-core", "bialy")
 ENTRY_POINTS = ("pw", "pw-logs")
 
@@ -42,7 +43,7 @@ def floor_values(path: Path) -> dict[str, str]:
         if not key or not value.strip():
             raise ValueError(f"malformed floor line in {path}: {line!r}")
         values[key] = value.strip()
-    for required in ("kernel", "glibc", "webkitgtk"):
+    for required in ("kernel", "glibc", "webkitgtk", "gtk3"):
         if required not in values:
             raise ValueError(f"{path} lacks the {required} floor")
     return values
@@ -70,6 +71,7 @@ def required_files(root: Path, tauri_dir: Path, target: str, manifest: Path) -> 
     files[f"{INSTALL_ROOT}/manifest.json"] = manifest
     for entry in ENTRY_POINTS:
         files[f"/usr/bin/{entry}"] = root / "packaging" / "linux" / "bin" / entry
+    files[f"/usr/share/applications/{APP_ID}.desktop"] = root / "packaging" / "linux" / f"{APP_ID}.desktop"
     for destination, source in files.items():
         if not source.exists():
             raise ValueError(f"missing package payload for {destination}: {source}")

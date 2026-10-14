@@ -6,7 +6,7 @@
       "libc6 (>= {glibc})",
       "libwebkit2gtk-4.1-0 (>= {webkitgtk})",
       "libjavascriptcoregtk-4.1-0 (>= {webkitgtk})",
-      "libgtk-3-0t64 | libgtk-3-0",
+      "libgtk-3-0t64 (>= {gtk3}) | libgtk-3-0 (>= {gtk3})",
       "libsoup-3.0-0",
       "libssl3t64 | libssl3",
       "ca-certificates",
@@ -25,7 +25,7 @@
     "depends": [
       "glibc >= {glibc}",
       "webkit2gtk4.1 >= {webkitgtk}",
-      "gtk3",
+      "gtk3 >= {gtk3}",
       "libsoup3",
       "openssl-libs",
       "ca-certificates",

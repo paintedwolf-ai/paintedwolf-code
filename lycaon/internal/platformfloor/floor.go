@@ -86,6 +86,9 @@ func LinuxGlibcMin() string { return linuxFloor["glibc"] }
 // LinuxWebKitGTKMin is the oldest WebKitGTK the desktop shell renders in.
 func LinuxWebKitGTKMin() string { return linuxFloor["webkitgtk"] }
 
+// LinuxGTK3Min is the oldest GTK 3 with Wayland activation (xdg_activation_v1).
+func LinuxGTK3Min() string { return linuxFloor["gtk3"] }
+
 // linuxArches lists the shipped Linux executables.
 var linuxArches = []string{"amd64", "arm64"}
 

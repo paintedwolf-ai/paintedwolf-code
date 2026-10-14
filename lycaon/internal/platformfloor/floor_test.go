@@ -81,6 +81,7 @@ func TestLinuxFloorValuesAreBareDottedVersions(t *testing.T) {
 		"kernel":    platformfloor.LinuxKernelMin(),
 		"glibc":     platformfloor.LinuxGlibcMin(),
 		"webkitgtk": platformfloor.LinuxWebKitGTKMin(),
+		"gtk3":      platformfloor.LinuxGTK3Min(),
 	}
 	for key, got := range cases {
 		if got == "" {
