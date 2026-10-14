@@ -184,6 +184,8 @@ func portOfListener(ln net.Listener) uint16 {
 // boundConfinement binds c to a fresh action so its refusals reach a feed.
 func boundConfinement(t *testing.T, c confine.Confinement) (*confine.Confinement, *confine.ActionLease) {
 	t.Helper()
+	confine.StartRefusalWatch(context.Background(), t.TempDir())
+	t.Cleanup(confine.StopRefusalWatch)
 	lease, err := confine.BindAction(&c, confine.EgressCommand{ToolCallID: "call-" + t.Name(), ToolName: "command", CommandLine: "probe"})
 	testutil.FailErr(t, "bind action", err)
 	t.Cleanup(func() { lease.Close(context.Background()) })
