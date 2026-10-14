@@ -133,6 +133,8 @@ The coordinator sees every fact that waited for it. Guidance about a job, leg, s
 
 A partial report and its unknowns remain valid output. Resuming the child continues the same assignment: the resume keeps the child's agent, scope mode, and planned leg, and its ceiling defaults to the one it had, raised to any request the coordinator left unanswered. A resume that restates a different agent or scope mode is refused, because that would be different work wearing the same transcript.
 
+Task admission and execution share the resolver for explicit arguments, resumed children, and planned workflow legs. Coordinator OAR scope and capacity facts describe that effective identity; omitted inherited fields do not become a new read-only assignment. Resolution failures retain their typed rejection through OAR recovery. The original tool arguments remain the invocation and replay identity, and workflow binding and queue admission still validate the current workflow before enqueue.
+
 ### Worker scope coordination
 
 Path reservations are informational. They make intended scope visible and reduce accidental overlap, but the overlay operation remains responsible for detecting actual conflicts and deciding whether promotion is safe. Read-only work may overlap freely. Write legs should own coherent outputs rather than arbitrary file fragments. A dependency on another worker's integrated result should be declared, not approximated by polling.

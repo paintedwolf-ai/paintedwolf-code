@@ -18,7 +18,7 @@ import (
 func observeTaskInFlight(t *testing.T, ctx context.Context, deps workeradmission.WorkerCycleGuardDeps, sess *api.Session, args map[string]any) *oar.GuardContext {
 	t.Helper()
 	gc := oar.NewGuardContext()
-	testutil.FailErr(t, "workeradmission.ObserveCoordinatorTaskInFlight", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", args, gc))
+	testutil.FailErr(t, "workeradmission.ObserveCoordinatorTaskInFlight", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", resolveObservedTask(t, args), gc))
 	return gc
 }
 
@@ -431,4 +431,11 @@ func TestObserveCoordinatorTaskAllowsMissingSuggestedPath(t *testing.T) {
 	if evaluateHasCode(t, gc, workeradmission.TaskScopeWriteRequiredCode) || evaluateHasCode(t, gc, workeradmission.TaskScopeProfileReadOnlyCode) {
 		t.Fatal("missing suggested paths must not block dispatch")
 	}
+}
+
+func resolveObservedTask(t *testing.T, args map[string]any) workeradmission.TaskIdentity {
+	t.Helper()
+	identity, err := (workeradmission.TaskIdentityResolver{}).Resolve(t.Context(), "parent-1", "", args)
+	testutil.FailErr(t, "resolve observed task", err)
+	return identity
 }

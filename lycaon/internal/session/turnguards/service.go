@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/progressclosure"
 	sessionverification "github.com/lycaon/lycaon/internal/session/verification"
+	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
@@ -97,6 +98,7 @@ type Service struct {
 	Rejects             *guidance.StaticRejectFormatter
 	coordinatorFrame    inject.CoordinatorTurnFrameSource
 	workerQueue         workeroutcomes.CycleLedger
+	taskIdentities      workeradmission.TaskIdentityResolver
 }
 
 func New(store Sessions, policy *policyfacts.Service, verification *sessionverification.Service, feedback *policyfeedback.Service, state State, decisions Decisions, workspace Workspace, batch *batchcontrol.Service, closure *progressclosure.Service, closeouts *closeouts.Service, profiles *profiles.Service, limits *sessionlimits.Service) *Service {

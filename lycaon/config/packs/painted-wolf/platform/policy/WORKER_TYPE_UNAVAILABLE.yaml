@@ -11,7 +11,7 @@ when: paintedwolf.rejection_code == "WORKER_TYPE_UNAVAILABLE"
 effect: block
 copy:
   what: The requested worker type is not available on this host.
-  cause: The task target is not registered in the active worker catalog.
+  cause: The worker type or its tool profile could not be resolved on this host.
   why: Dispatching an unavailable type cannot create a worker or a durable task record.
   fix: Choose an agent type exposed on the current coordinator tool surface.
   instead: Branch on the code and select an available worker type

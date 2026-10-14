@@ -132,7 +132,7 @@ func TestObserveCoordinatorTaskInFlightParallelCap(t *testing.T) {
 		testutil.FailErr(t, "Enqueue job", err)
 
 		gc := oar.NewGuardContext()
-		testutil.FailErr(t, "Observe after enqueue", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", readScoutArgs, gc))
+		testutil.FailErr(t, "Observe after enqueue", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", resolveObservedTask(t, readScoutArgs), gc))
 		blocked := evaluateHasCode(t, gc, workeradmission.CoordinatorWorkerInFlightCode)
 		if i < cap-1 {
 			if blocked || gc.Workers.WorkerSpawnBlocked {
@@ -165,10 +165,10 @@ func TestObserveCoordinatorTaskInFlight(t *testing.T) {
 	}
 
 	gc := oar.NewGuardContext()
-	testutil.FailErr(t, "Observe empty", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", map[string]any{
+	testutil.FailErr(t, "Observe empty", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", resolveObservedTask(t, map[string]any{
 		"agent_type": "path-explorer",
 		"brief":      testTaskBrief("scout"),
-	}, gc))
+	}), gc))
 	if evaluateHasCode(t, gc, workeradmission.CoordinatorWorkerInFlightCode) {
 		t.Fatal("expected allow with no in-flight jobs")
 	}
@@ -185,14 +185,14 @@ func TestObserveCoordinatorTaskInFlight(t *testing.T) {
 	}
 
 	gc = oar.NewGuardContext()
-	testutil.FailErr(t, "Observe at cap", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", map[string]any{
+	testutil.FailErr(t, "Observe at cap", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", resolveObservedTask(t, map[string]any{
 		"agent_type": "implementer",
 		"brief":      testTaskBrief("write leg at cap"),
 		"scope": map[string]any{
 			"mode":  "write",
 			"paths": []any{"internal/auth/**"},
 		},
-	}, gc))
+	}), gc))
 	if !evaluateHasCode(t, gc, workeradmission.CoordinatorWorkerInFlightCode) {
 		t.Fatal("expected COORDINATOR_WORKER_IN_FLIGHT")
 	}
@@ -226,9 +226,9 @@ func TestObserveCoordinatorTaskInFlightAllowsUnderCap(t *testing.T) {
 	testutil.FailErr(t, "Enqueue", err)
 
 	gc := oar.NewGuardContext()
-	testutil.FailErr(t, "Observe under cap", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", map[string]any{
+	testutil.FailErr(t, "Observe under cap", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", resolveObservedTask(t, map[string]any{
 		"agent_type": "path-explorer",
-	}, gc))
+	}), gc))
 	if evaluateHasCode(t, gc, workeradmission.CoordinatorWorkerInFlightCode) {
 		t.Fatal("expected allow with one in-flight job under cap")
 	}

@@ -58,10 +58,10 @@ func TestCoordinatorParallelTaskCapMixedAgents(t *testing.T) {
 func observeReadScoutSpawn(t *testing.T, ctx context.Context, deps workeradmission.WorkerCycleGuardDeps, sess *api.Session, paths []any) *oar.GuardContext {
 	t.Helper()
 	gc := oar.NewGuardContext()
-	testutil.FailErr(t, "ObserveCoordinatorTaskInFlight", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", map[string]any{
+	testutil.FailErr(t, "ObserveCoordinatorTaskInFlight", workeradmission.ObserveCoordinatorTaskInFlight(ctx, deps, sess, "task", resolveObservedTask(t, map[string]any{
 		"agent_type": "path-explorer",
 		"brief":      map[string]any{"goal": "read scout", "done_when": []any{"Return grounded results."}},
 		"scope":      map[string]any{"mode": "read", "paths": paths},
-	}, gc))
+	}), gc))
 	return gc
 }

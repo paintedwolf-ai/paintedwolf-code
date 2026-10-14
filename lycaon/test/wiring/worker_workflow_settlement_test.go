@@ -2,11 +2,14 @@ package wiring
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -17,6 +20,7 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 			h := BuildForTest(t, WithoutCoordinatorLoop())
 			ctx := t.Context()
 			dir := h.ProjectDir(t, "survey")
+			testutil.FailErr(t, "seed survey source", os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644))
 			sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
 			testutil.FailErr(t, "create survey", err)
 			run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.0"})
@@ -41,13 +45,30 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 			testutil.FailErr(t, "enter execution", err)
 			for i := 1; i <= 5; i++ {
 				call.Identity.ToolCallID = uuid.NewString()
-				_, err = h.ToolRegistry.Run(ctx, "task", map[string]any{"agent_type": "security-reviewer", "prompt": "Trace the assigned boundary and account for unexamined scope.", "workflow_work_id": fmt.Sprintf("leg-%d", i), "scope": map[string]any{"mode": "read"}}, call)
+				args := map[string]any{"workflow_work_id": fmt.Sprintf("leg-%d", i)}
+				_, blocked, err := h.Sessions.Manager.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "task", args)
+				testutil.FailErr(t, "admit planned identity", err)
+				if blocked {
+					t.Fatal("planned task admission blocked")
+				}
+				_, err = h.ToolRegistry.Run(ctx, "task", args, call)
 				testutil.FailErr(t, "dispatch survey worker", err)
 			}
 			tasks, err := h.Delegations.Queue.ListByWorkflowRunID(ctx, run.ID)
 			testutil.FailErr(t, "load dispatched workers", err)
 			if len(tasks) != 5 {
 				t.Fatalf("workers=%d, want five", len(tasks))
+			}
+			for _, task := range tasks {
+				if task.AgentType != "security-reviewer" || task.EffectiveScope().Mode != api.TaskScopeModeRead {
+					t.Fatalf("planned identity = %+v", task)
+				}
+			}
+			changed := tasks[0]
+			changed.ID, changed.SourceToolCallID, changed.AgentType = uuid.NewString(), uuid.NewString(), "implementer"
+			reject := toolrejection.AsToolReject(h.Delegations.Queue.PrepareEnqueue(ctx, sess.ProjectID, &changed))
+			if reject == nil || reject.Data["reason"] != "planned_agent_mismatch" {
+				t.Fatalf("queue accepted changed planned agent: %v", reject)
 			}
 			for range tasks {
 				task, err := h.Delegations.Queue.ClaimNext(ctx, worker.ClaimRequest{ProjectID: sess.ProjectID, ClaimedBy: "fixture", ExecutionTarget: api.ExecutionTargetLocal})
@@ -82,6 +103,12 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 				t.Cleanup(stop)
 			}
 			waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "claims")
+			stale := tasks[0]
+			stale.ID, stale.SourceToolCallID = uuid.NewString(), uuid.NewString()
+			reject = toolrejection.AsToolReject(h.Delegations.Queue.PrepareEnqueue(ctx, sess.ProjectID, &stale))
+			if reject == nil || reject.Data["reason"] != "workflow_phase_changed" {
+				t.Fatalf("queue accepted stale workflow phase: %v", reject)
+			}
 			testutil.WaitFor(t, 5*time.Second, func() bool {
 				pending, err := h.Delegations.Queue.ListPendingOutcomes(ctx)
 				return err == nil && len(pending) == 0
