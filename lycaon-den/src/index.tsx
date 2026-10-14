@@ -36,7 +36,6 @@ import { setupWheelGlideDiagnostics } from "./platform/scrolling/wheel-glide-dia
 import { setupScrollActivity } from "./platform/scrolling/scroll-activity.ts";
 import { TooltipHost } from "./components/primitives/TooltipHost.tsx";
 import { HelpMenuHost } from "./help/HelpMenuHost.tsx";
-import { WindowResizeEdges } from "./components/shell/WindowResizeEdges.tsx";
 
 installTranscriptSpacing(document.documentElement);
 syncOsColorScheme();
@@ -69,7 +68,6 @@ try {
         <App />
         <TooltipHost />
         <HelpMenuHost />
-        <WindowResizeEdges />
       </>
     ),
     root,
