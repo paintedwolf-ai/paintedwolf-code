@@ -201,6 +201,9 @@ func boundConfinement(t *testing.T, c confine.Confinement) (*confine.Confinement
 	lease, err := confine.BindAction(&c, confine.EgressCommand{ToolCallID: "call-" + t.Name(), ToolName: "command", CommandLine: "probe"})
 	testutil.FailErr(t, "bind action", err)
 	t.Cleanup(func() { lease.Close(context.Background()) })
+	if w := lease.Refusals().Witness; w != confine.WitnessIncomplete {
+		t.Fatalf("bound action has refusal witness %q, want a live supervised feed", w)
+	}
 	return &c, lease
 }
 
@@ -271,9 +274,9 @@ func TestLinuxUnixSocketGrantConnectsOnlyItsPath(t *testing.T) {
 	if !strings.Contains(out, "connect "+other.Addr().String()+": EACCES") {
 		t.Fatalf("ungranted socket was not refused with EACCES:\n%s", out)
 	}
-	refusals := refusalTargets(lease.SettledRefusals(context.Background()))
-	if refusals["network-outbound "+other.Addr().String()] != confine.RecoverSocketPath {
-		t.Fatalf("refusals = %v, want the ungranted path routed to %s", refusals, confine.RecoverSocketPath)
+	settled := lease.SettledRefusals(context.Background())
+	if refusalTargets(settled)["network-outbound "+other.Addr().String()] != confine.RecoverSocketPath {
+		t.Fatalf("refusals = %+v, want the ungranted path routed to %s\n%s", settled, confine.RecoverSocketPath, out)
 	}
 }
 
