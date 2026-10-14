@@ -139,7 +139,10 @@ func (s *Server) serveConn(conn net.Conn) {
 			s.answer(conn, refusal(err))
 			return
 		}
-		if !s.answer(conn, s.handle(caller, req)) {
+		resp := s.handle(caller, req)
+		// Accounts are configuration-root digests, never secrets.
+		s.Log.Info("vault identity request", "op", req.Op, "account", req.Account, "status", resp.Status, "uid", peer.UID, "pid", peer.PID)
+		if !s.answer(conn, resp) {
 			return
 		}
 	}

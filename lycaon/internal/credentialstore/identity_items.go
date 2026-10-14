@@ -48,7 +48,7 @@ func (p *itemsIdentityProvider) LoadOrCreate(vaultExists bool) (identityDocument
 		return identityDocument{}, fmt.Errorf("read credential vault identity: %w", err)
 	}
 	if vaultExists {
-		return identityDocument{}, fmt.Errorf("%w: the %s identity is missing", ErrVaultCorrupt, p.description)
+		return identityDocument{}, fmt.Errorf("%w: the %s is missing", ErrVaultCorrupt, p.description)
 	}
 	doc, err := generateIdentityDocument()
 	if err != nil {
