@@ -19,9 +19,7 @@
           "id": "load-preparation-tool",
           "tool": "request_tools",
           "args": {
-            "requests": [
-              "verify"
-            ]
+            "need": "verify"
           },
           "outcome": "completed"
         },
@@ -227,9 +225,7 @@
           "id": "load-preparation-tool",
           "tool": "request_tools",
           "args": {
-            "requests": [
-              "verify"
-            ]
+            "need": "verify"
           },
           "outcome": "completed"
         },
@@ -266,9 +262,7 @@
           "id": "load-preparation-tool",
           "tool": "request_tools",
           "args": {
-            "requests": [
-              "command"
-            ]
+            "need": "command"
           },
           "outcome": "completed"
         },
@@ -348,9 +342,7 @@
           "id": "load-preparation-tool",
           "tool": "request_tools",
           "args": {
-            "requests": [
-              "verify"
-            ]
+            "need": "verify"
           },
           "outcome": "completed"
         },
@@ -490,9 +482,7 @@
           "id": "load-preparation-tool",
           "tool": "request_tools",
           "args": {
-            "requests": [
-              "verify"
-            ]
+            "need": "verify"
           },
           "outcome": "completed"
         },
@@ -529,9 +519,7 @@
           "id": "load-preparation-tool",
           "tool": "request_tools",
           "args": {
-            "requests": [
-              "command"
-            ]
+            "need": "command"
           },
           "outcome": "completed"
         },
@@ -914,9 +902,7 @@
           "id": "load-local-check",
           "tool": "request_tools",
           "args": {
-            "requests": [
-              "verify"
-            ]
+            "need": "verify"
           },
           "outcome": "completed"
         },

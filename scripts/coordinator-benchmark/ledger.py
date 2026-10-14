@@ -63,7 +63,7 @@ def tool_results(facts, session_ids):
 
 
 def checkpoints(facts, session_ids):
-    return [{'id':card['checkpoint_id'],'session_id':session['id'],'status':card['status'],
+    return [{'id':card['id'],'session_id':session['id'],'status':card['status'],
              'created_at':card['issued_at'],'tool_call_id':card['tool_approval']['tool_call_id'],
              'subject':card['tool_approval']['plan']['subject']['kind']}
             for session in facts['sessions'] if session['id'] in session_ids

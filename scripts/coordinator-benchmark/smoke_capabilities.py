@@ -9,7 +9,7 @@ CASES = {'capability-background-service'}
 
 
 def invoke(application, session, spec, tool, args, expected_outcome='completed'):
-    smoke_workers.invoke(application, session, 'request_tools', {'requests': [tool]})
+    smoke_workers.invoke(application, session, 'request_tools', {'need': tool})
     request = application.wait_for(lambda: smoke_workers.pending(application, session), 'capability command request', session)
     call = str(uuid.uuid4())
     application.request('/harness/llm/respond', {'id': request['id'], 'tool_calls': [{'id': call, 'name': tool, 'args': args}]})
@@ -25,9 +25,10 @@ def invoke(application, session, spec, tool, args, expected_outcome='completed')
                 application.request(f"/v1/sessions/{session}/checkpoints/{checkpoint['id']}",
                                     {'kind':'tool_approval','action':'reject','guidance':application.approval_guidance})
                 continue
-            options = [o for o in plan['options'] if o['rung'] == rule['rung'] and o['decision_action'] == rule['decision'] and not o.get('disabled') and o['kind'] == 'lease' and o.get('scope') == 'task']
+            rung = 'chat' if rule['rung'] == 'task' else rule['rung']
+            options = [o for o in plan['options'] if o['rung'] == rung and o['decision_action'] == rule['decision'] and not o.get('disabled') and o['kind'] == 'lease' and o.get('scope') == 'chat']
             if len(options) != 1:
-                raise RuntimeError('capability control requires one declared task lease')
+                raise RuntimeError('capability control requires one declared chat lease')
             application.request(f"/v1/sessions/{session}/checkpoints/{checkpoint['id']}", {'kind': 'tool_approval', 'action': 'approve', 'option_id': options[0]['id']})
         with contextlib.closing(sqlite3.connect(application.directory/'store.db')) as db:
             row = db.execute('SELECT tool_result_json FROM messages WHERE session_id=? AND tool_result_call_id=?', (session, call)).fetchone()

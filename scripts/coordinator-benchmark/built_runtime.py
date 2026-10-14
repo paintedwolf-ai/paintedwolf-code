@@ -8,6 +8,15 @@ RUNTIME = 'lycaon-den/src-tauri/engine-root'
 EXECUTABLES = ('.bin/lycaon-dev', '.bin/lycaon-debug', *('.bin/' + name for name in RUNTIME_EXECUTABLES))
 
 
+def engine_path(source):
+    if (source / 'application.json').exists():
+        return source / '.bin/lycaon-dev'
+    import sys
+    sys.path.append(str(source / 'scripts'))
+    from artifact_paths import build_dir
+    return build_dir(source) / 'lycaon-dev'
+
+
 def build_manifest(source):
     runtime = source / RUNTIME
     if runtime.is_symlink() or not runtime.is_dir():

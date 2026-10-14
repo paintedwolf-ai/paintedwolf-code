@@ -218,6 +218,9 @@ func runSuiteCase(ctx context.Context, client *liveClient, opts SuiteOptions, sp
 		}
 	}
 	if err := prepareSuiteSandbox(ctx, &spec, &result, outsideRoot); err != nil {
+		if result.Sandbox != nil {
+			result.Sandbox.close()
+		}
 		return fail(err)
 	}
 	if result.Sandbox != nil {
