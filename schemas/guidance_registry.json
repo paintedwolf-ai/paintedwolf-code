@@ -2207,13 +2207,13 @@
       "summary": "The sandbox refused terminal paths. Reads {{ paintedwolf.refused_terminal_read_paths }}; writes {{ paintedwolf.refused_terminal_write_paths }}."
     },
     "SANDBOX_TRY_HOST_EXECUTION": {
-      "branch_instruction": "Request capability_request.host_execution for the command, or leave the operation out — do not wait on it",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused {{ paintedwolf.unsandboxed_refusals }}{% if paintedwolf.process_running %}, and the job is still running{% endif %}."
     },
     "SANDBOX_TRY_LOCAL_NETWORK": {
-      "branch_instruction": "Declare the listener or connection in capability_request — a retry without it is refused again",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused{% if paintedwolf.refused_listen_ports %} a listener on port {{ paintedwolf.refused_listen_ports }}{% if paintedwolf.refused_connect_ports %} and{% endif %}{% endif %}{% if paintedwolf.refused_connect_ports %} a direct connection to port {{ paintedwolf.refused_connect_ports }}{% endif %}."
@@ -2225,25 +2225,25 @@
       "summary": "`{{ tool }}` requires access to a local service{% if paintedwolf.port %} on port {{ paintedwolf.port }}{% endif %}."
     },
     "SANDBOX_TRY_PROCESS_CONTROL": {
-      "branch_instruction": "Declare capability_request.process_control — a retry without it is refused again",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused signals to processes outside the command's boundary: {{ paintedwolf.refused_signals }}."
     },
     "SANDBOX_TRY_READ_PATH": {
-      "branch_instruction": "Reissue with capability_request.read_path naming the refused path — do not retry the bare read",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused reads of protected paths {{ paintedwolf.refused_read_paths }}{% if paintedwolf.process_running %} while the job runs{% else %}, and {{ paintedwolf.failed_stages }} failed{% endif %}."
     },
     "SANDBOX_TRY_SOCKET_PATH": {
-      "branch_instruction": "Declare the socket in capability_request — a retry without it is refused again",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused connections to the local sockets {{ paintedwolf.refused_socket_paths }}."
     },
     "SANDBOX_TRY_WRITE_ROOT": {
-      "branch_instruction": "Reissue with capability_request.write_root naming the refused path's grant — do not relocate the write to scratch or /tmp",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused writes to {{ paintedwolf.refused_write_paths }}{% if paintedwolf.process_running %} while the job runs{% else %}, and {{ paintedwolf.failed_stages }} failed{% endif %}."
