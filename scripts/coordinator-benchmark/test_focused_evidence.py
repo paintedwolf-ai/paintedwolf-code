@@ -2,8 +2,9 @@ import json
 import pathlib
 import tempfile
 import unittest
+import uuid
 from test_episode_support import EvidenceCase
-from focused_evidence import prepared_case, sandbox_checks, returned_worker_checks
+from focused_evidence import preparation_checks, prepared_case, sandbox_checks, returned_worker_checks
 
 
 class FocusedEvidenceControls(EvidenceCase):
@@ -32,7 +33,7 @@ class FocusedEvidenceControls(EvidenceCase):
 
     def card(self,id_,session,kind,status,payload):
         call=json.loads(payload)['tool_call_id']
-        self.session['checkpoints'].append({'checkpoint_id':id_,'kind':kind,'status':status,'issued_at':'2026-09-12T00:00:00Z',
+        self.session['checkpoints'].append({'id':id_,'kind':kind,'status':status,'issued_at':'2026-09-12T00:00:00Z',
             'tool_approval':{'tool_call_id':call,'plan':{'subject':{'kind':'direct_ip'}}}})
         self.save()
 
@@ -206,3 +207,21 @@ class FocusedEvidenceControls(EvidenceCase):
         overlays[1]['label'] = 'First'
         with self.assertRaisesRegex(ValueError, 'unique declared labels'):
             returned_worker_checks(self.root, case, spec)
+
+    def test_preparation_checks_accept_handle_tagged_json_envelopes(self):
+        operation = uuid.uuid4()
+        call = str(uuid.uuid5(operation, 'baseline-verification'))
+        self.session['messages'].append({'ord': 1, 'tool_result': {
+            'tool_call_id': call, 'outcome': 'completed',
+            'content': '[command#1]\n{"outcome":"passed","exit_code":0}'}})
+        self.session['invocations'].append({
+            'tool_call_id': call, 'invoked': 1, 'status': 'completed',
+            'source_verdict': 'passed', 'source_revision': 'rev-1'})
+        self.save()
+        case = {'session_id': 'root', 'preparation': {
+            'session_id': 'root', 'operation_id': str(operation),
+            'entry_at': '2026-10-13T21:00:00Z', 'tool_call_ids': [call]}}
+        spec = {'prelude': [{'id': 'baseline-verification', 'tool': 'verify',
+                             'outcome': 'completed', 'json': {'outcome': 'passed'}}]}
+        self.assertEqual(preparation_checks(self.root, case, spec), [])
+

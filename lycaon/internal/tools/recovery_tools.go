@@ -24,7 +24,14 @@ func ToolOffered(ctx context.Context, name string) bool {
 // RegisterRecoveryFacts publishes the frozen offered-tool snapshot lazily.
 func RegisterRecoveryFacts(ctx context.Context, gc *oar.GuardContext) {
 	names, _ := ctx.Value(recoveryToolsKey{}).([]string)
-	for _, tool := range []string{"read", "list_dir", "find", "grep", "request_tools", "task", "complete_leg", "terminal_open", "terminal_close", "terminal_read", "command_stop", "command_output", "secret_generate", "ask_user", "capture_page", "measure_page", "page_act", "page_snapshot", "page_close", "stat", "command"} {
+	gc.RegisterProvider("paintedwolf.offered_tools", func(target *oar.GuardContext) error {
+		if target.ObservationData == nil {
+			target.ObservationData = map[string]any{}
+		}
+		target.ObservationData["offered_tools"] = slices.Clone(names)
+		return nil
+	})
+	for _, tool := range []string{"read", "list_dir", "find", "grep", "request_tools", "task", "complete_leg", "terminal_open", "terminal_close", "terminal_read", "command_stop", "command_output", "secret_generate", "ask_user", "capture_page", "measure_page", "page_act", "page_snapshot", "page_close", "stat", "view_image", "command"} {
 		fact := "can_" + tool
 		gc.RegisterProvider("paintedwolf."+fact, func(target *oar.GuardContext) error {
 			if target.ObservationData == nil {

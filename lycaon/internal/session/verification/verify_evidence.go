@@ -317,9 +317,8 @@ func (m *Service) Revision(ctx context.Context, root string) (string, string) {
 
 // boundaryTime is the current user-intent boundary; older evidence does not count.
 func boundaryTime(history []api.Message) time.Time {
-	since := api.UserIntentBoundary(history)
-	if since >= 0 && since < len(history) {
-		return history[since].CreatedAt
+	if message, ok := api.LastUserIntentMessage(history); ok {
+		return message.CreatedAt
 	}
 	return time.Time{}
 }
