@@ -44,7 +44,7 @@ func TestPinValidationRequiresProducerTagAndTrainedData(t *testing.T) {
 	data := pinPayload{SHA256: strings.Repeat("a", 64), Bytes: 1}
 	valid := Pin{
 		EngineVersion: "5.5.3+paintedwolf.1",
-		Producer:      pinProducer{Repository: "paintedwolf-ai/paintedwolf-tesseract", Tag: "v5.5.3+paintedwolf.1"},
+		Producer:      pinProducer{Repository: "paintedwolf-ai/paintedwolf-tesseract", Tag: "v5.5.3+paintedwolf.1", Commit: strings.Repeat("b", 40)},
 		TrainedData:   map[string]pinPayload{"eng_traineddata": data, "osd_traineddata": data},
 	}
 	if err := valid.validate(); err != nil {
@@ -52,9 +52,11 @@ func TestPinValidationRequiresProducerTagAndTrainedData(t *testing.T) {
 	}
 	otherTag := valid
 	otherTag.Producer.Tag = "v5.5.3+paintedwolf.2"
+	noCommit := valid
+	noCommit.Producer.Commit = "2636845"
 	noData := valid
 	noData.TrainedData = map[string]pinPayload{"eng_traineddata": data}
-	for name, pin := range map[string]Pin{"tag": otherTag, "trained data": noData, "version": {}} {
+	for name, pin := range map[string]Pin{"tag": otherTag, "commit": noCommit, "trained data": noData, "version": {}} {
 		if err := pin.validate(); err == nil {
 			t.Fatalf("%s: invalid pin accepted", name)
 		}

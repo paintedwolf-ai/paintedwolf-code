@@ -20,6 +20,7 @@ type Pin struct {
 type pinProducer struct {
 	Repository string `yaml:"repository"`
 	Tag        string `yaml:"tag"`
+	Commit     string `yaml:"commit"`
 }
 
 type pinPayload struct {
@@ -82,8 +83,8 @@ func (p *Pin) validate() error {
 	if strings.TrimSpace(p.EngineVersion) == "" {
 		return fmt.Errorf("ocrengine: pin.yaml missing engine_version")
 	}
-	if strings.TrimSpace(p.Producer.Repository) == "" || p.Producer.Tag != "v"+p.EngineVersion {
-		return fmt.Errorf("ocrengine: pin.yaml must name the producer repository and the tag v%s", p.EngineVersion)
+	if strings.TrimSpace(p.Producer.Repository) == "" || p.Producer.Tag != "v"+p.EngineVersion || !validCommit(p.Producer.Commit) {
+		return fmt.Errorf("ocrengine: pin.yaml must name the producer repository, its commit, and the tag v%s", p.EngineVersion)
 	}
 	for _, name := range []string{"eng_traineddata", "osd_traineddata"} {
 		data, ok := p.TrainedData[name]
@@ -116,9 +117,14 @@ func (p *Pin) Payloads(plat PlatformPin) []Payload {
 }
 
 func validDigest(s string) bool {
-	if len(s) != 64 {
-		return false
-	}
+	return len(s) == 64 && lowerHex(s)
+}
+
+func validCommit(s string) bool {
+	return len(s) == 40 && lowerHex(s)
+}
+
+func lowerHex(s string) bool {
 	for _, c := range s {
 		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 			return false
