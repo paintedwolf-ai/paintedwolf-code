@@ -2,41 +2,11 @@ package store
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// UserTurnOrdinal returns the newest live opener's permanent source identity.
-func (s *Memory) UserTurnOrdinal(ctx context.Context, sessionID string) (int, error) {
-	if err := ctx.Err(); err != nil {
-		return 0, err
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return 0, nil
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.currentUserTurnLocked(sessionID), nil
-}
-
-func (s *SQL) UserTurnOrdinal(ctx context.Context, sessionID string) (int, error) {
-	if err := ctx.Err(); err != nil {
-		return 0, err
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return 0, nil
-	}
-	n, err := s.queries.GetSessionUserTurnOrdinal(ctx, sessionID)
-	if err != nil {
-		return 0, err
-	}
-	return int(n), nil
-}
 
 func (s *Memory) currentUserTurnLocked(sessionID string) int {
 	for i := len(s.messages[sessionID]) - 1; i >= 0; i-- {
@@ -73,35 +43,4 @@ func (s *Memory) UserIntentBefore(ctx context.Context, sessionID string, before 
 		}
 	}
 	return before, nil
-}
-
-// GetUserTurnOpener resolves a source-turn identity to its canonical message.
-func (s *SQL) GetUserTurnOpener(ctx context.Context, sessionID string, turn int) (api.Message, error) {
-	id, err := s.queries.GetUserTurnOpeningMessageID(ctx, db.GetUserTurnOpeningMessageIDParams{SessionID: sessionID, Turn: int64(turn)})
-	if db.IsNoRows(err) {
-		return api.Message{}, nil
-	}
-	if err != nil {
-		return api.Message{}, err
-	}
-	return s.GetMessage(ctx, sessionID, id)
-}
-
-func (s *Memory) GetUserTurnOpener(ctx context.Context, sessionID string, turn int) (api.Message, error) {
-	if err := ctx.Err(); err != nil {
-		return api.Message{}, err
-	}
-	s.mu.RLock()
-	id := ""
-	for candidate, ordinal := range s.userTurns[sessionID] {
-		if ordinal == turn {
-			id = candidate
-			break
-		}
-	}
-	s.mu.RUnlock()
-	if id == "" {
-		return api.Message{}, nil
-	}
-	return s.GetMessage(ctx, sessionID, id)
 }

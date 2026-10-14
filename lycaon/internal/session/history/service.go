@@ -20,9 +20,8 @@ type Store interface {
 	Get(context.Context, string) (*api.Session, error)
 	GetMessages(context.Context, string) ([]api.Message, error)
 	GetMessage(context.Context, string, string) (api.Message, error)
-	GetUserTurnOpener(context.Context, string, int) (api.Message, error)
-	GetMessagesTail(context.Context, string, int) ([]api.Message, error)
-	GetMessagesAfterOrd(context.Context, string, int64, int) ([]api.Message, error)
+	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
+	ReadMessageWindow(context.Context, string, messageview.MessageWindow) ([]api.Message, error)
 	GetCompactionView(context.Context, string) (*store.CompactionView, bool, error)
 	CompactionViewCurrent(context.Context, string, int64, string, int64) (bool, error)
 	PutCompactionView(context.Context, string, store.CompactionView) error

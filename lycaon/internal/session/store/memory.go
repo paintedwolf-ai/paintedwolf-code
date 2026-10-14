@@ -419,32 +419,6 @@ func (s *Memory) GetMessage(ctx context.Context, sessionID, messageID string) (a
 	return api.Message{}, ErrMessageNotFound
 }
 
-// GetMessagesAfterOrd seeks through the immutable transcript order.
-func (s *Memory) GetMessagesAfterOrd(ctx context.Context, sessionID string, afterOrd int64, limit int) ([]api.Message, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if limit <= 0 {
-		return []api.Message{}, nil
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if _, ok := s.sessions[sessionID]; !ok {
-		return nil, ErrSessionNotFound
-	}
-	out := make([]api.Message, 0, limit)
-	for _, message := range s.messages[sessionID] {
-		if message.Ord <= afterOrd {
-			continue
-		}
-		out = append(out, message)
-		if len(out) == limit {
-			break
-		}
-	}
-	return out, nil
-}
-
 // GetTranscriptPage returns one Ord window plus the session's transcript watermark.
 func (s *Memory) GetTranscriptPage(ctx context.Context, id string, q api.TranscriptPageQuery) (api.SessionTranscriptPage, error) {
 	if err := ctx.Err(); err != nil {
@@ -862,22 +836,4 @@ func (s *Memory) HasActiveProjectSessions(ctx context.Context, projectID string,
 		}
 	}
 	return false, nil
-}
-
-// GetMessagesTail returns a bounded canonical window in creation order.
-func (s *Memory) GetMessagesTail(ctx context.Context, sessionID string, limit int) ([]api.Message, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if _, ok := s.sessions[sessionID]; !ok {
-		return nil, ErrSessionNotFound
-	}
-	if limit <= 0 {
-		return []api.Message{}, nil
-	}
-	rows := s.messages[sessionID]
-	start := max(0, len(rows)-limit)
-	return append([]api.Message(nil), rows[start:]...), nil
 }

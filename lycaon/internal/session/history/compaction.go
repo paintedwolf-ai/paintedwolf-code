@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"log/slog"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -125,12 +126,12 @@ func (m *Service) loadCompactionPage(ctx context.Context, sess *api.Session) ([]
 	}
 	var suffix []api.Message
 	if len(base) == 0 {
-		suffix, err = m.store.GetMessagesTail(ctx, sess.ID, UncompactedLimit)
+		suffix, err = m.store.ReadMessageWindow(ctx, sess.ID, messageview.MessageWindow{Limit: UncompactedLimit})
 		if err == nil {
 			suffix, err = m.withCurrentRequest(ctx, sess, suffix)
 		}
 	} else {
-		suffix, err = m.store.GetMessagesAfterOrd(ctx, sess.ID, coveredThroughOrd, UncompactedLimit+1)
+		suffix, err = m.store.ReadMessageWindow(ctx, sess.ID, messageview.MessageWindow{After: true, AfterOrd: coveredThroughOrd, Limit: UncompactedLimit + 1})
 	}
 	if err != nil {
 		return nil, 0, "", 0, false, err

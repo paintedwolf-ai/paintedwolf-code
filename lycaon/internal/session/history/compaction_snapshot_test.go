@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -16,9 +17,9 @@ type compactionInterleavedStore struct {
 	beforeSuffix func()
 }
 
-func (s *compactionInterleavedStore) GetMessagesAfterOrd(ctx context.Context, id string, after int64, limit int) ([]api.Message, error) {
+func (s *compactionInterleavedStore) ReadMessageWindow(ctx context.Context, id string, window messageview.MessageWindow) ([]api.Message, error) {
 	s.beforeSuffix()
-	return s.Store.GetMessagesAfterOrd(ctx, id, after, limit)
+	return s.Store.ReadMessageWindow(ctx, id, window)
 }
 
 func TestCompactionSuffixCannotMaskConcurrentPrefixEdit(t *testing.T) {

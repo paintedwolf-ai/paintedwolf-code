@@ -27,17 +27,15 @@ type QueryStore interface {
 	ListProjectSummaries(ctx context.Context, q store.SummaryQuery) (store.SummaryPage, error)
 	GetMessages(ctx context.Context, id string) ([]api.Message, error)
 	GetWorkerJobMessages(ctx context.Context, sessionID, workerJobID string) ([]api.Message, error)
-	GetUserTurnOpener(ctx context.Context, sessionID string, turn int) (api.Message, error)
-	GetMessagesTail(ctx context.Context, sessionID string, limit int) ([]api.Message, error)
-	GetMessagesAfterOrd(ctx context.Context, sessionID string, afterOrd int64, limit int) ([]api.Message, error)
+	ReadMessageWindow(context.Context, string, messageview.MessageWindow) ([]api.Message, error)
 	GetMessage(ctx context.Context, sessionID, messageID string) (api.Message, error)
 	// LastAssistantMessageContent and LastTurnMessageContent read one row from
 	// the transcript tail; "" when no such row exists.
 	LastAssistantMessageContent(ctx context.Context, sessionID string) (string, error)
 	LastTurnMessageContent(ctx context.Context, sessionID string) (string, error)
 	ListBusySessionIDs(ctx context.Context, limit int) ([]string, error)
-	// UserTurnOrdinal returns the newest ordinal used for source stamps.
-	UserTurnOrdinal(ctx context.Context, sessionID string) (int, error)
+	// Source turns retain their identities when transcript rows are removed.
+	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
 	UserIntentBefore(ctx context.Context, sessionID string, before time.Time) (time.Time, error)
 	// PutTurnSourceBrief records the source-change brief a turn opened with;
 	// TurnSourceBriefs returns them keyed by each turn's opening message.

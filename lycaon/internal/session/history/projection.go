@@ -32,7 +32,7 @@ func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, e
 	}
 	// Background publication may advance the caller's session snapshot.
 	sess.CompactionGeneration = view.Generation
-	suffix, err := m.store.GetMessagesAfterOrd(ctx, sess.ID, view.CoveredThroughOrd, UncompactedLimit+1)
+	suffix, err := m.store.ReadMessageWindow(ctx, sess.ID, messageview.MessageWindow{After: true, AfterOrd: view.CoveredThroughOrd, Limit: UncompactedLimit + 1})
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, e
 }
 
 func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *api.Session) ([]api.Message, error) {
-	history, err := m.store.GetMessagesTail(ctx, sess.ID, UncompactedLimit)
+	history, err := m.store.ReadMessageWindow(ctx, sess.ID, messageview.MessageWindow{Limit: UncompactedLimit})
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +153,14 @@ func (m *Service) withCurrentRequest(ctx context.Context, sess *api.Session, tai
 	if sess.CurrentTurn <= 0 || len(tail) == 0 {
 		return tail, nil
 	}
-	opener, err := m.store.GetUserTurnOpener(ctx, sess.ID, sess.CurrentTurn)
+	turn, err := m.store.ReadSourceTurn(ctx, sess.ID, sess.CurrentTurn)
+	if err != nil {
+		return nil, err
+	}
+	if turn.OpeningMessageID == "" {
+		return tail, nil
+	}
+	opener, err := m.store.GetMessage(ctx, sess.ID, turn.OpeningMessageID)
 	if err != nil {
 		return nil, err
 	}
