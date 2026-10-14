@@ -165,3 +165,29 @@ func TestObserveImplementerFinishRejectsOnlyOnDeterminedAbsence(t *testing.T) {
 		t.Fatal("a probe that ran and found a clean workspace must still reject")
 	}
 }
+
+func TestWorkerArtifactUsesObservedBaselineInsteadOfPrimaryDirt(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		changes workercompletion.WorkspaceChangeObservation
+		want    api.CitationGroundingCheckStatus
+		code    string
+	}{
+		{"changed worker", workercompletion.WorkspaceChangeObservation{Paths: []string{"material.txt"}}, api.CitationGroundingCheckStatusPassed, ""},
+		{"unchanged worker", workercompletion.WorkspaceChangeObservation{}, api.CitationGroundingCheckStatusFailed, "WORKER_SUMMARY_NO_ARTIFACT"},
+		{"unavailable baseline", workercompletion.WorkspaceChangeObservation{Err: errors.New("baseline unavailable")}, api.CitationGroundingCheckStatusAdvisory, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			eval, err := workercompletion.EvaluateWorkerSummary(t.Context(), workerSummaryEval(t, workercompletion.WorkerSummaryEvalInput{
+				AgentType:     orchestration.ProfileImplementer,
+				Report:        workercompletion.WorkerCompletionReport{LegStatus: "complete", Brief: "Finished the change.", FilesModified: []string{"claimed.txt"}},
+				ChildMessages: commandRanMessages(), ProjectDir: t.TempDir(),
+				WorkspaceCheck: stubWorkspaceChecker{changed: true}, WorkspaceChanges: &tc.changes,
+			}))
+			testutil.FailErr(t, "evaluate worker baseline", err)
+			if check := artifactCheck(t, eval.Grounding); check.Status != tc.want || eval.HintCode != tc.code {
+				t.Fatalf("artifact check=%+v code=%s, want %s/%s", check, eval.HintCode, tc.want, tc.code)
+			}
+		})
+	}
+}

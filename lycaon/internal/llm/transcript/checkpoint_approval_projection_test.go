@@ -17,8 +17,11 @@ func TestApprovedCheckpointReachesModelAsData(t *testing.T) {
 	}
 	msg := toolResultWithDecision(&decision)
 	parts := checkpointDecisionParts(msg)
-	if len(parts) != 1 || parts[0].Authority != api.ContentAuthorityNone || parts[0].Origin != api.MessageOriginHost {
+	if len(parts) != 2 || parts[0].Authority != api.ContentAuthorityNone || parts[0].Origin != api.MessageOriginHost {
 		t.Fatalf("approval must be host data, not permission: %+v", parts)
+	}
+	if parts[1].Authority != api.ContentAuthoritySystem || parts[1].Source != checkpointApprovalSource || parts[1].Content != CheckpointApprovalNotice() {
+		t.Fatalf("approval continuation lost its host frame: %+v", parts)
 	}
 	var receipt struct {
 		Decision api.CheckpointDecisionMeta `json:"human_checkpoint"`
@@ -30,6 +33,9 @@ func TestApprovedCheckpointReachesModelAsData(t *testing.T) {
 	projected := projectOne(t, msg)
 	if !strings.Contains(projected.Content, "⟦D⟧"+parts[0].Content) {
 		t.Fatalf("approval receipt missing from data-marked wire: %q", projected.Content)
+	}
+	if !strings.Contains(projected.Content, CheckpointApprovalNotice()) || strings.Contains(projected.Content, "⟦D⟧"+CheckpointApprovalNotice()) {
+		t.Fatal("approval continuation must be host guidance outside data marking")
 	}
 	if strings.Contains(projected.Content, decision.Guidance) || msg.ToolResult.CheckpointDecision.Guidance != decision.Guidance {
 		t.Fatal("approval leaked direction or mutated the durable decision")
@@ -48,5 +54,17 @@ func TestApprovalMetadataCannotProjectFromAssistantText(t *testing.T) {
 	msg.Origin = api.MessageOriginModel
 	if parts := checkpointDecisionParts(msg); len(parts) != 0 {
 		t.Fatal("non-tool message projected approval authority")
+	}
+}
+
+func TestApprovalContinuationIsSpecificToApprovedToolCheckpoints(t *testing.T) {
+	for _, decision := range []*api.CheckpointDecisionMeta{
+		nil,
+		{Status: api.CheckpointStatusRejected, Kind: api.CheckpointKindToolApproval},
+		{Status: api.CheckpointStatusApproved},
+	} {
+		if strings.Contains(projectOne(t, toolResultWithDecision(decision)).Content, CheckpointApprovalNotice()) {
+			t.Fatal("approval continuation leaked into a different tool outcome")
+		}
 	}
 }

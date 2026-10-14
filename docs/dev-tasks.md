@@ -959,7 +959,9 @@ A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan
 
 ### Release dry run
 
-Run `./task release:preflight -- --require-corpus` first, then run the `release` workflow from the Actions tab via `workflow_dispatch`. Manual dispatch validates production updater configuration, builds and signs every public platform, notarizes and staples macOS, and uploads the resulting release artifacts for review — and publishes **nothing**. Only pushing a real `v*` tag publishes, and only public-platform artifacts enter that workflow.
+Run `./task release:preflight -- --require-corpus` first, then run the `release` workflow from the Actions tab via `workflow_dispatch`. Manual dispatch with an empty `release_tag` validates production updater configuration, builds and signs every public platform, notarizes and staples macOS, and uploads review artifacts without publishing. To publish an existing tag using the current release controller, dispatch from `main` with `release_tag=v<version>`. Admission resolves the tag once, requires that commit to have landed on main and passed full exact-commit Qualification, and pins every build and publication checkout to that SHA. Later main merges do not change the selected source. Tag pushes also publish. Only public-platform artifacts enter either publication path.
+
+The protected `release-signing` environment must allow `main` for the trusted manual controller, alongside release tags `v*`; `release-publication` uses the same ref policy. Feature branches cannot dispatch selected-tag publication. Admission, upgrade rehearsal, signing, notarization, artifact verification, credential checks, and monotonic feed promotion remain mandatory. Historical tags whose embedded workflow predates this path can be published by the current controller without changing their tag or source.
 
 ### Clean-Mac validation
 
@@ -1000,12 +1002,14 @@ Every release tag clears the same gate:
 3. `./task upgrade:corpus:prepare` has produced the versioned fixture and both corpus
    boot modes pass.
 4. `./task release:preflight -- --require-corpus` and passing CI checks (`check`, `e2e`) on the exact,
-   clean `main` tip.
+   clean source commit that landed on `main`.
 5. Automated CI build, code-signing, notarization, and `bundle:verify` pass during the release run, and `bundle:smoke` passes on a real Mac (it only warns on hosted runners).
 6. The updater public key is real, the private key is available to Actions, and
    both closed channel endpoints match the egress inventory.
-7. Tag only the exact current `origin/main` commit — the workflow rejects an ancestor or
-   side-branch tag.
+7. Tag the selected fully qualified commit that landed on `main`. Main may advance
+   afterward; unlanded source or qualification for another commit is refused.
+   To publish an existing historical tag, dispatch the release workflow from
+   `main` with that exact `release_tag`. Keep published tags immutable.
 
 ### Coordinator benchmark
 

@@ -35,10 +35,11 @@ type WorkerSummaryEvalInput struct {
 	ChildMessages  []api.Message
 	ProjectDir     string
 	// ProjectRoots are the session's folder roots for @label citation keys.
-	ProjectRoots   []projectroot.RootRef
-	ActiveRootID   string
-	WorkspaceCheck WorkspaceChangeChecker
-	Ledger         guidance.EvidenceLedgerReader
+	ProjectRoots     []projectroot.RootRef
+	ActiveRootID     string
+	WorkspaceChanges *WorkspaceChangeObservation
+	WorkspaceCheck   WorkspaceChangeChecker
+	Ledger           guidance.EvidenceLedgerReader
 	// Hints is the loaded guidance registry. The audit reads evidence metadata
 	// (UI label / check id) from it; nil falls back to a humanized code.
 	Hints *guidance.HintConfig
@@ -158,7 +159,7 @@ func EvaluateWorkerSummary(ctx context.Context, in WorkerSummaryEvalInput) (Work
 	}
 
 	if isImplementerAgent(in.AgentType) {
-		proof := childHadImplementerArtifact(ctx, in.ProjectDir, in.ChildMessages, in.WorkspaceCheck)
+		proof := childHadImplementerArtifact(ctx, in.ProjectDir, in.ChildMessages, in.WorkspaceCheck, in.WorkspaceChanges)
 		if !audit.recordImplementerArtifactCheck(proof) {
 			obs.NoArtifact = true
 			obs.RejectDataCodes = append(obs.RejectDataCodes, WorkerSummaryNoArtifactCode)

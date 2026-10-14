@@ -28,7 +28,7 @@ Identical repeated calls → heed `DOOM_LOOP_REPEAT*` and change approach.
 Use **`write`** to create new files; use **`edit`** or **`replace_lines`** on paths that already exist. Use **`restore_version`** to revert a file to a prior retained ledger version. On `Code: WRITE_SCOPE_DENIED`, pick a path matching a glob above.
 {% endif %}
 
-{% if profile_has_write_tools and profile_has_verify %}
+{% if profile_has_write_tools and (profile_has_verify or profile_has_command or profile_can_request.verify or profile_can_request.command) %}
 {% include "partials/worker-write-leg-verify.md" %}
 {% endif %}
 

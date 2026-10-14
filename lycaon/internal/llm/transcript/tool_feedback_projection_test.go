@@ -2,9 +2,11 @@ package transcript
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -191,5 +193,40 @@ func TestToolFeedbackBoundsInvocationAndCombinedPayload(t *testing.T) {
 		if !oversized && (payload.Omitted || len(payload.Invocation) == 0 || payload.Reference != "") {
 			t.Fatalf("small receipt omitted: %+v", payload)
 		}
+	}
+}
+
+func TestToolFeedbackPreservesBoundedDiscoveryPage(t *testing.T) {
+	var entries []turnload.DiscoveryEntry
+	for i := 0; i < 40; i++ {
+		entries = append(entries, turnload.DiscoveryEntry{Name: fmt.Sprintf("mcp_fixture_%02d", i), Description: strings.Repeat("界", 500)})
+	}
+	need := "Find the operation that dispatches a worker"
+	page, err := turnload.Discover("request_tools/session", need, "", "no_match", "", entries)
+	testutil.FailErr(t, "create bounded recovery page", err)
+	msg := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
+		Tool: "request_tools", ToolCallID: "call", Outcome: api.ToolResultOutcomeRejected,
+		Feedback: []api.ToolFeedback{{Code: "TOOL_REQUEST_UNMATCHED", Details: map[string]any{
+			"discovery": page, "need": need, "profile": "coordinator", "tool_discovery_status": "no_match", "tool_discovery_has_more": true,
+		}}},
+	}}
+	parts := toolFeedbackParts(msg)
+	if len(parts) != 1 || strings.Contains(parts[0].Content, "details_omitted") {
+		t.Fatalf("discovery lost to feedback budget: %+v", parts)
+	}
+	var payload struct {
+		Feedback []struct {
+			Details struct {
+				Discovery turnload.Discovery `json:"discovery"`
+			} `json:"details"`
+		} `json:"tool_feedback"`
+	}
+	testutil.FailErr(t, "decode provider feedback", json.Unmarshal([]byte(parts[0].Content), &payload))
+	if len(payload.Feedback) != 1 {
+		t.Fatalf("feedback count: %+v", payload)
+	}
+	got := payload.Feedback[0].Details.Discovery
+	if got.Status != "no_match" || got.NextNeed != page.NextNeed || len(got.Entries) != len(page.Entries) || len(got.Entries) == 0 {
+		t.Fatalf("provider discovery changed: %+v", got)
 	}
 }

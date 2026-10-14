@@ -95,6 +95,9 @@ func (m *Service) BeforeFinish(
 			return nil
 		})
 	}
+	if reject, block := m.PendingOverlays(ctx, sess, invokeAllowed); block {
+		return reject, true
+	}
 	implState := m.state.ForSession(ctx, sess)
 	batchTurn := m.Batch.TurnGuard(sess.ID)
 	if reject, block := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {

@@ -904,13 +904,13 @@
       "summary": "edit on {{ paintedwolf.path }} found {{ paintedwolf.occurrences }} matches for old_string — a single-occurrence edit needs a unique target."
     },
     "EDIT_OLD_STRING_NOT_FOUND": {
-      "branch_instruction": "Use a fresh verbatim substring. Do not replace the whole file merely to bypass a failed exact edit.",
+      "branch_instruction": "Inspect source_history only when attribution is needed. Do not replace the whole file to bypass a missing match.",
       "category": "recoverable",
       "emit": "guard:edit",
-      "summary": "edit on {{ paintedwolf.path }} could not find old_string ({{ paintedwolf.old_string_chars }} chars) in the current file ({{ paintedwolf.total_lines }} lines)."
+      "summary": "{% if paintedwolf.replacement_matches %}No edit was applied to {{ paintedwolf.path }}. The requested new_string is already present {{ paintedwolf.replacement_matches }} time(s), first at line {{ paintedwolf.replacement_line }}.{% else %}No edit was applied to {{ paintedwolf.path }}: old_string ({{ paintedwolf.old_string_chars }} chars) is absent from the edit basis ({{ paintedwolf.total_lines }} lines).{% endif %}"
     },
     "EDIT_TARGET_CHANGED_BY_OTHERS": {
-      "branch_instruction": "Branch on Code; never retry the same old_string without a fresh read",
+      "branch_instruction": "Inspect source_history when attribution is needed. Do not repeat the same edit or replace the whole file merely to bypass a missing match.",
       "category": "recoverable",
       "emit": "guard:edit",
       "summary": "edit on {{ paintedwolf.path }} could not find old_string ({{ paintedwolf.old_string_chars }} chars), and the ledger recorded {{ paintedwolf.change_count }} change(s) to this file by other actors during this session."
@@ -1416,7 +1416,7 @@
       "summary": "`list_dir` received a cursor that is not valid for this scope and source generation."
     },
     "LIST_DIR_NOT_DIRECTORY": {
-      "branch_instruction": "Branch on Code; use read for a file or choose a directory",
+      "branch_instruction": "Choose a directory to list, or use an offered file reader",
       "category": "recoverable",
       "emit": "guard:list_dir",
       "summary": "list_dir path {{ paintedwolf.path }} is not a directory."
@@ -1588,6 +1588,12 @@
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "`task()` base_overlay_id {{ paintedwolf.base_overlay_id }} is {{ paintedwolf.merge_status }} — cannot stack on it{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %}"
+    },
+    "OVERLAY_DISPOSITION_REQUIRED_BEFORE_CLOSEOUT": {
+      "branch_instruction": "Use native tool calls for the overlay decision. Do not repeat the completion claim, mark pending delivery done, or dispatch replacement work merely to close out. If a human decision is required, use the offered ask_user tool.",
+      "category": "recoverable",
+      "emit": "guard:coordinator",
+      "summary": "Worker `{{ paintedwolf.job_id }}` finished, but its changes still await an overlay decision."
     },
     "OVERLAY_PARENT_REJECTED": {
       "branch_instruction": "Account for the orphaned child and re-dispatch only work still required",
@@ -1803,13 +1809,13 @@
       "summary": "read offset {{ paintedwolf.offset }} exceeds file length ({{ paintedwolf.total_lines }} lines) for {{ paintedwolf.path }}."
     },
     "READ_PATH_NOT_FOUND": {
-      "branch_instruction": "Branch on Code; fix path or use list_dir to discover the correct name",
+      "branch_instruction": "Correct the path from observed evidence, or report the missing input",
       "category": "recoverable",
       "emit": "guard:read",
       "summary": "{{ tool }} could not open {{ paintedwolf.path }} — path does not exist under the attached project roots."
     },
     "RECALL_LIVE_CODE_NOT_IN_SCOPE": {
-      "branch_instruction": "Branch on Code RECALL_LIVE_CODE_NOT_IN_SCOPE; use grep or find for the current tree",
+      "branch_instruction": "Use an offered current-source tool, or report the missing evidence",
       "category": "recoverable",
       "emit": "guard:recall",
       "summary": "recall reads the record, not the working tree."
@@ -2141,10 +2147,10 @@
       "summary": "{{ tool }} was not granted read access to {{ paintedwolf.path }}."
     },
     "SANDBOX_REFUSAL_REPORT_SILENT": {
-      "branch_instruction": "Report the uncertainty; no refusal path was observed for this invocation",
+      "branch_instruction": "Diagnose the failed command; keep the current sandbox boundary",
       "category": "recoverable",
       "emit": "guard:sandbox",
-      "summary": "This confined invocation failed without a kernel refusal report."
+      "summary": "The command exited unsuccessfully; no kernel refusal was reported."
     },
     "SANDBOX_SOCKET_PATH_CHANGED": {
       "branch_instruction": "Branch on Code; re-request after the socket path is stable",
@@ -2201,13 +2207,13 @@
       "summary": "The sandbox refused terminal paths. Reads {{ paintedwolf.refused_terminal_read_paths }}; writes {{ paintedwolf.refused_terminal_write_paths }}."
     },
     "SANDBOX_TRY_HOST_EXECUTION": {
-      "branch_instruction": "Request capability_request.host_execution for the command, or leave the operation out — do not wait on it",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused {{ paintedwolf.unsandboxed_refusals }}{% if paintedwolf.process_running %}, and the job is still running{% endif %}."
     },
     "SANDBOX_TRY_LOCAL_NETWORK": {
-      "branch_instruction": "Declare the listener or connection in capability_request — a retry without it is refused again",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused{% if paintedwolf.refused_listen_ports %} a listener on port {{ paintedwolf.refused_listen_ports }}{% if paintedwolf.refused_connect_ports %} and{% endif %}{% endif %}{% if paintedwolf.refused_connect_ports %} a direct connection to port {{ paintedwolf.refused_connect_ports }}{% endif %}."
@@ -2219,25 +2225,25 @@
       "summary": "`{{ tool }}` requires access to a local service{% if paintedwolf.port %} on port {{ paintedwolf.port }}{% endif %}."
     },
     "SANDBOX_TRY_PROCESS_CONTROL": {
-      "branch_instruction": "Declare capability_request.process_control — a retry without it is refused again",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused signals to processes outside the command's boundary: {{ paintedwolf.refused_signals }}."
     },
     "SANDBOX_TRY_READ_PATH": {
-      "branch_instruction": "Reissue with capability_request.read_path naming the refused path — do not retry the bare read",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused reads of protected paths {{ paintedwolf.refused_read_paths }}{% if paintedwolf.process_running %} while the job runs{% else %}, and {{ paintedwolf.failed_stages }} failed{% endif %}."
     },
     "SANDBOX_TRY_SOCKET_PATH": {
-      "branch_instruction": "Declare the socket in capability_request — a retry without it is refused again",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused connections to the local sockets {{ paintedwolf.refused_socket_paths }}."
     },
     "SANDBOX_TRY_WRITE_ROOT": {
-      "branch_instruction": "Reissue with capability_request.write_root naming the refused path's grant — do not relocate the write to scratch or /tmp",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused writes to {{ paintedwolf.refused_write_paths }}{% if paintedwolf.process_running %} while the job runs{% else %}, and {{ paintedwolf.failed_stages }} failed{% endif %}."
@@ -2959,6 +2965,12 @@
       "emit": "guard:text_write_base",
       "summary": "{% if paintedwolf.text_base_changed %}{{ paintedwolf.path }} no longer matches the validated write base.{% else %}The host could not confirm the current write base for {{ paintedwolf.path }}.{% endif %}"
     },
+    "TOOL_ACTION_IN_TEXT": {
+      "branch_instruction": "If explaining tool syntax or logs, use a fenced code example with an explanation.",
+      "category": "recoverable",
+      "emit": "guard:coordinator",
+      "summary": "No tool executed. The assistant response contained a text action envelope for {{ paintedwolf.offenders_sample }}."
+    },
     "TOOL_ARGS_INVALID": {
       "branch_instruction": "{% if paintedwolf.suggested_tool %}Fix the argument object, or switch to `{{ paintedwolf.suggested_tool }}`.{% else %}Repair the rejected argument object and retry.{% endif %}",
       "category": "recoverable",
@@ -2991,7 +3003,7 @@
       "summary": "This tool cannot run during closeout"
     },
     "TOOL_NOT_OFFERED": {
-      "branch_instruction": "{% if paintedwolf.tool_loadable %}Load `{{ tool }}` with `request_tools`, then retry on the next model call{% else %}Use an available capability or report the constraint{% endif %}",
+      "branch_instruction": "{% if paintedwolf.tool_loadable %}Load `{{ tool }}` with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.tool_discovery_available %}Use a suitable offered tool, or describe the missing operation and target to `request_tools`{% else %}Use an available capability or report the constraint{% endif %}{% endif %}",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "{% if paintedwolf.tool_loadable %}`{{ tool }}` is available but its schema is not loaded{% else %}`{{ tool }}` is unavailable on this model call{% endif %}"
@@ -3035,7 +3047,7 @@
       "summary": "{{ tool }} is not permitted for the active agent profile."
     },
     "TOOL_REQUEST_UNMATCHED": {
-      "branch_instruction": "Do not repeat the same request unchanged. If the missing capability blocks the task, explain that limit rather than claiming completion",
+      "branch_instruction": "{% if paintedwolf.tool_discovery_status %}Choose an exact tool from the catalog{% if paintedwolf.tool_discovery_has_more %}, or continue browsing with next_need{% endif %}; do not repeat the unchanged description. {% else %}Do not repeat the same request unchanged. If the missing capability blocks the task, explain that limit rather than claiming completion{% endif %}",
       "category": "recoverable",
       "emit": "guard:request_tools",
       "summary": "No schema loaded for the request \"{{ paintedwolf.need }}\" in profile {{ paintedwolf.profile }}"
@@ -3175,7 +3187,7 @@
       "summary": "`verify()` was called with no command and this project has no declared verify command"
     },
     "VERIFY_DECLARED_COMMAND_OVERRIDE": {
-      "branch_instruction": "Drop the command argument and let verify run `{{ paintedwolf.declared }}`",
+      "branch_instruction": "Drop the `command` argument and let verify run `{{ paintedwolf.declared }}`",
       "category": "recoverable",
       "emit": "guard:command_composition_redirect",
       "summary": "this project declares its verify command as `{{ paintedwolf.declared }}`, and verify() was given `{{ paintedwolf.requested }}` instead."

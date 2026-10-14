@@ -291,7 +291,7 @@ func FilterPromptHistory(messages []Message) []Message {
 			out = append(out, msg)
 		}
 	}
-	return EnsureToolCallGroupContiguityForPrompt(CloseToolCallGroupsForPrompt(out))
+	return EnsureToolCallGroupContiguityForPrompt(CloseToolCallGroupsForPrompt(orderDraftRecovery(out)))
 }
 
 // RehydrateTranscriptProjectionFields restores transcript projection fields that
@@ -306,6 +306,7 @@ func RehydrateTranscriptProjectionFields(projected, canonical Message) Message {
 		projected.ModelReasoning = canonical.ModelReasoning
 	}
 	projected.Kind = canonical.Kind
+	projected.HostSignalID = canonical.HostSignalID
 	projected.WorkflowRunID = canonical.WorkflowRunID
 	projected.Visibility = canonical.Visibility
 	projected.Ord = canonical.Ord

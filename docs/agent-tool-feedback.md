@@ -89,14 +89,35 @@ A named **field** is reachable on the same terms as a named tool. In card copy, 
 
 An unreachable remedy is worse than none: the agent retries it, the schema refuses again, and the pair loops until the turn dies.
 
+Both `Fix` and `Instead` must respect the same current facts. A short summary
+cannot reintroduce a tool omitted by the detailed remedy. The production recovery
+catalog test varies every declared offered-tool dimension for intrinsic rejection
+scenarios, including absent request context, and checks both fields. Conflicting
+producer metadata must not change the frozen tool surface. These checks cover
+availability claims; permission, workflow, and evidence validity require their
+corresponding structured facts and contracts. An offered tool still crosses its
+normal admission checks. Advice about approval, workflow readiness, or evidence
+freshness must use those facts separately from schema availability.
+
 When a call names a tool whose schema is absent, the compiled tool plan determines
 recovery. A deferred tool with `request_tools` offered returns `TOOL_NOT_OFFERED`
 with `tool_loadable: true` and an exact `replacement_calls` entry that loads its
 schema. The model retries on the next call, after loading; the rejected action is
 never executed automatically. A name without that loading path receives an
-unavailable-capability explanation. Loading changes schema visibility, not access
+unavailable-name explanation. The rejection lists the exact tools offered on that
+request from the frozen recovery surface. When the current surface offers the loader and
+other deferred tools, recovery asks the agent to describe its needed capability
+to discover an allowed alternative, without retrying the unavailable name. With
+no discovery path, recovery names the capability limitation. Loading changes schema visibility, not access
 or approval. This guidance appears only on rejection, without expanding standing
 prompts.
+
+When tool ranking selects no additional schema, `TOOL_REQUEST_UNMATCHED` keeps its
+rejection identity and can carry a bounded `discovery` page with tool names and
+descriptions. Its `no_match` status distinguishes a completed ranking from an
+unavailable ranker. The agent can select an exact name or follow the page's
+continuation without ranking again. These observations do not establish that a
+healthy partial selection fulfilled the requested operation.
 
 Repetition admission evaluates resolved prerequisites and counters atomically.
 It releases an identical `TOOL_NOT_OFFERED` retry when that tool is offered, or an
@@ -110,6 +131,34 @@ the handler still validates source state, scope, and authorization before effect
 Native Go and confined MCP tools expose structured rejection codes through the shared envelope. MCP codes are read from registered typed error fields, never scraped from error prose. The same observation populates OAR facts (tool identity, call success, structured error code) so policy composes facts without a provider-specific string matcher. Unregistered external tools remain opaque results; the host does not invent a code by classifying their text.
 
 An already rejected operation pins its original typed code in the policy context. OAR evaluates all selected rules using the declared anchor, selector, and condition; the renderer retains the original code and details when a different policy decision fires or its presentation is unavailable. Declared external MCP errors map to `MCP_CALL_FAILED` with the external code preserved as a detail and typed cause.
+
+## Model response repair
+
+One response boundary classifies provider output before persistence or tool
+execution. Native calls follow the existing validation and authorization path. A provider's fallback capability does not select a protocol:
+`CompletionRequest.ToolProtocol` must explicitly select a supported alternate
+grammar. Ordinary conversation requests select native calls by default.
+Alternate envelope recovery requires a complete envelope; fenced examples and
+surrounding explanation remain content even when that protocol is selected.
+
+For native requests, leading JSON action objects or arrays naming an offered
+tool produce a non-executable observation. Recognized field pairs are
+`tool_name`/`tool_args`, `name`/`arguments`, `name`/`parameters`, `name`/`args`, and
+`tool`/`args`, including `tool_calls` and `function` containers. The recognizer
+also accepts leading `${`, `[TOOL_CALLS]`, and `<tool_call>` markers. Leading
+whitespace and trailing explanation are allowed. Parsing is bounded to 64 KiB
+and three container levels. Argument validity is left to native resubmission.
+Fenced examples, prose before an envelope, unknown tools, and tool names inside
+argument values do not trigger repair. Requests forbidding tools do not request
+resubmission. Native calls accompanying text take precedence over recognition.
+
+The structured observation enters the existing `content.output` OAR occurrence
+for coordinators and workers. `TOOL_ACTION_IN_TEXT` requests native-channel repair;
+the existing rejected-draft and bounded no-progress lifecycle preserves the
+attempt and delivers feedback. OAR never reparses or executes the text. This
+recovery adds no standing instruction or Bialy instruction unit. A requested raw
+JSON answer with the reserved action shape can also trigger repair; use a fenced
+example to present that shape as content.
 
 ## Coordinator nudges
 
@@ -128,6 +177,8 @@ Host lifecycle teaching (phase state, progress, roster, closeout) is not a nudge
 Asynchronous work emits typed completion facts: operation identity, terminal state, affected resource, and any result handle. Den projects those facts as an activity or transcript item. The next model turn receives a compact guidance block only when the completion changes what it can or must do.
 
 Success is never inferred from a friendly message. The producer states success or failure in the result envelope, and the host persists that state before rendering copy.
+
+Worker artifact checks and parent completion receipts share the same host inspection of the worker baseline. An unchanged worker baseline cannot borrow evidence from unrelated primary-workspace changes or reported file names. An unavailable baseline remains an explicit evidence limitation.
 
 ## Tool-output steering
 

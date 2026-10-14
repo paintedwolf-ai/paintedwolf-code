@@ -30,6 +30,7 @@ var approvedHostLaunches = map[string]string{
 	"release attestation verification": "runs GitHub CLI attestation verifier for signed releases",
 	"library scanner worker":           "resident tree-sitter AST worker process for crash and leak containment",
 	"user_path_probe":                  "probes interactive login shell to recover user PATH on GUI launch",
+	"user_account_shell":               "resolves the Linux account shell through configured NSS providers with bounded getent execution",
 	"loopback_listener_probe":          "probes system listening ports and TCP socket process owners via lsof",
 	"toolchain_version_probe":          "probes installed compilers and runtimes for version detection",
 }
