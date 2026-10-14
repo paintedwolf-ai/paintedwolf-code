@@ -7,6 +7,7 @@ import { stubClient } from "../../test/client-fixture.ts";
 import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
 import { selectProjectNoticeGroups } from "../../notices/notice-select.ts";
 import { findController, resetFindControllerForTests, setFindQuery } from "../../find/find-controller.ts";
+import { FIND_BAR_ID } from "../../find/command-bar-disclosure.ts";
 
 afterEach(resetFindControllerForTests);
 
@@ -88,7 +89,12 @@ describe("chat content Files pane", () => {
       <ChatContentPage projectId="project" client={null} document={first} />
       <ChatContentPage projectId="project" client={null} document={second()} />
     </>);
-    fireEvent.click(view.getAllByRole("button", { name: "Find in file" })[0]!);
+    const find = view.getAllByRole("button", { name: "Find in file" })[0]!;
+    expect(find.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(find);
+    expect(find.getAttribute("aria-expanded")).toBe("true");
+    expect(find.getAttribute("aria-controls")).toBe(FIND_BAR_ID);
+    expect(view.getAllByRole("button", { name: "Go to line" })[0]!.getAttribute("aria-expanded")).toBe("false");
     setFindQuery("NEEDLE");
     expect(findController.cmCount().total).toBe(0);
     setSecond({ ...second(), find: { query: "NEEDLE", caseSensitive: true, offset: 12 } });

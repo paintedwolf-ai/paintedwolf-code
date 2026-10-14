@@ -9,6 +9,7 @@ import { createFilesEditorViewport } from "./files-editor-viewport.ts";
 import { filesBufferText } from "../documents/project-files-buffers.ts";
 import { createEditorToolbarMenus, FilesEditorToolbar, FilesEditorStatus } from "./FilesEditorChrome.tsx";
 import { openFind } from "../../find/find-controller.ts";
+import { findBarDisclosure, gotoLineBarDisclosure } from "../../find/command-bar-disclosure.ts";
 import { contextAction } from "../../components/context-actions.ts";
 import type { SourceReaderHandle } from "../../components/source/reader/SourceReader.tsx";
 
@@ -776,8 +777,8 @@ export function FilesEditor(props: FilesEditorProps) {
             data-tip={`Find (${bindingForHandler("find.inView")})`}
             data-tip-pos="below"
             aria-label="Find in file"
-            aria-haspopup="menu"
-            aria-expanded={toolbarMenu()?.kind === "find"}
+            aria-expanded={findBarDisclosure().expanded}
+            aria-controls={findBarDisclosure().controls}
             disabled={
               props.buffer.loading || previewActive() || (!activeEditorView() && !activeReaderHandle())
             }
@@ -798,8 +799,8 @@ export function FilesEditor(props: FilesEditorProps) {
             data-tip={`Go to line (${bindingForHandler("editor.goToLine")})`}
             data-tip-pos="below"
             aria-label="Go to line"
-            aria-haspopup="menu"
-            aria-expanded={toolbarMenu()?.kind === "goto"}
+            aria-expanded={gotoLineBarDisclosure().expanded}
+            aria-controls={gotoLineBarDisclosure().controls}
             disabled={
               props.buffer.loading || previewActive() || (!activeEditorView() && !activeReaderHandle())
             }
@@ -821,8 +822,6 @@ export function FilesEditor(props: FilesEditorProps) {
             data-tip="Copy path"
             data-tip-pos="below"
             aria-label="Copy path"
-            aria-haspopup="menu"
-            aria-expanded={toolbarMenu()?.kind === "copy"}
             onClick={onCopy}
             onContextMenu={copyMenuBind.onContextMenu}
             onKeyDown={copyMenuBind.onKeyDown}
