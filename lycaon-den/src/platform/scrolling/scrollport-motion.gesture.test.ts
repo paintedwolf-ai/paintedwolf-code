@@ -248,17 +248,26 @@ describe("ScrollportMotion direct input past the tail", () => {
     return { fixture, stop, settleFrames };
   }
 
-  it("refuses a wheel that would carry the reader further past the newest content", () => {
-    const { fixture, stop } = heldPastTail();
-    const down = wheel({ deltaY: 40 });
-    fixture.viewport.dispatchEvent(down);
-    expect(down.defaultPrevented).toBe(true);
-    // Reading back toward the content is always free.
-    const up = wheel({ deltaY: -40 });
-    fixture.viewport.dispatchEvent(up);
-    expect(up.defaultPrevented).toBe(false);
-    stop();
-    unbindScrollportMotion(fixture.host);
+  it("refuses a wheel that would carry the reader further past the newest content without extending the input hold", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    try {
+      const { fixture, stop } = heldPastTail();
+      const deadlineBefore = fixture.motion.input.inputDeadline();
+      vi.advanceTimersByTime(200);
+      const down = wheel({ deltaY: 40 });
+      fixture.viewport.dispatchEvent(down);
+      expect(down.defaultPrevented).toBe(true);
+      expect(fixture.motion.input.inputDeadline()).toBe(deadlineBefore);
+      // Reading back toward the content is always free.
+      const up = wheel({ deltaY: -40 });
+      fixture.viewport.dispatchEvent(up);
+      expect(up.defaultPrevented).toBe(false);
+      expect(fixture.motion.input.inputDeadline()).toBeGreaterThan(deadlineBefore);
+      stop();
+      unbindScrollportMotion(fixture.host);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("never grows range past the tail from the reader's own motion", () => {

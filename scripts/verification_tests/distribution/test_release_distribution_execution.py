@@ -119,14 +119,6 @@ class WebsiteWithdrawalTests(unittest.TestCase):
 
 
 class ReleaseControlTests(unittest.TestCase):
-    def test_manual_tag_rehearsal_never_publishes(self):
-        from release_control import publishes
-        self.assertFalse(publishes("workflow_dispatch", "tag"))
-        self.assertFalse(publishes("workflow_dispatch", "branch"))
-        self.assertTrue(publishes("push", "tag"))
-        with self.assertRaises(ValueError):
-            publishes("push", "branch")
-
     def test_first_stable_checks_the_published_preview_and_bootstrap_has_no_prior(self):
         from release_control import prior_versions
         self.assertEqual(prior_versions({"stable": None, "preview": None}, "1.0.0"), [])

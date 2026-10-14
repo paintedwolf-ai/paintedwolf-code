@@ -24,7 +24,14 @@ test("republishes settled transcript geometry across resize and restoration", as
       const seamPx = (element: HTMLElement) => element.dataset.seam ? Number.parseFloat(getComputedStyle(element).paddingTop) : 0;
       return [...host.querySelectorAll<HTMLElement>(".transcript-viewport-row[data-msg-id]")].map(element => ({
         id: element.dataset.msgId!, key: element.dataset.rowHeightKey, measured: element.getBoundingClientRect().height - seamPx(element),
-        cached: heights.transcriptRowHeightForScope({ projectId, sessionId }, element.dataset.msgId!, element.dataset.rowHeightKey ?? ""),
+        cached: heights.transcriptRowHeightForScope(
+          { projectId, sessionId },
+          {
+            itemKey: element.dataset.msgId!,
+            revision: element.dataset.rowRevision ?? "",
+            variant: element.dataset.rowHeightKey ?? "",
+          },
+        ),
       }));
     }, { projectId: project.id, sessionId });
     expect(rows.length).toBeGreaterThan(0);
