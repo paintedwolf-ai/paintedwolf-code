@@ -41,6 +41,18 @@ function evt(partial: Partial<KeyboardEventLike> & Pick<KeyboardEventLike, "key"
   };
 }
 
+describe("linux desktop conventions", () => {
+  it("keeps quit and close for the desktop and the window manager's chords out of reach", () => {
+    expect(reservedReason("Mod+Q", "linux")).toBe("system");
+    expect(reservedReason("Alt+F4", "linux")).toBe("system");
+    for (const chord of ["Mod+Alt+ArrowUp", "Mod+Alt+ArrowLeft", "Alt+F8", "Alt+F10", "Alt+Space", "Super+L"]) {
+      expect(reservedReason(chord, "linux")).toBe("os");
+    }
+    expect(reservedReason("F10", "linux")).toBeNull();
+    expect(reservedReason("Mod+F8", "linux")).toBeNull();
+  });
+});
+
 describe("platform tables exhaustive", () => {
   it("reservedChords keys === every TauriPlatform", () => {
     expect(Object.keys(reservedChords).sort()).toEqual(

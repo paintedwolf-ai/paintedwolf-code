@@ -155,3 +155,24 @@ func TestDiscoveryRejectsAnUnpageableContinuation(t *testing.T) {
 		t.Fatalf("unbounded discovery accepted: %v", err)
 	}
 }
+
+func TestDiscoveryPreservesRankedOrderAcrossPages(t *testing.T) {
+	entries := make([]DiscoveryEntry, 25)
+	for i := range entries {
+		entries[i] = DiscoveryEntry{Name: fmt.Sprintf("tool_%02d", i), Description: fmt.Sprintf("Tool %d", i)}
+	}
+	order := []string{"tool_24", "tool_24", "tool_22"}
+	page1, err := Discover("tools/session", "create files", "", "no_match", "", entries, order...)
+	testutil.FailErr(t, "page 1", err)
+	if len(page1.Entries) != DiscoveryPageSize || page1.Entries[0].Name != "tool_24" || page1.Entries[1].Name != "tool_22" || page1.Entries[2].Name != "tool_00" {
+		t.Fatalf("page 1 did not place ranked entries first: %+v", page1.Entries[:3])
+	}
+	need, cursor, err := ParseDiscoveryNeed(page1.NextNeed)
+	testutil.FailErr(t, "parse cursor", err)
+	page2, err := Discover("tools/session", need, cursor, "catalog", "", entries)
+	testutil.FailErr(t, "page 2", err)
+	if len(page2.Entries) != 5 || page2.Entries[len(page2.Entries)-1].Name != "tool_23" {
+		t.Fatalf("page 2 lost rank order: %+v", page2.Entries)
+	}
+}
+

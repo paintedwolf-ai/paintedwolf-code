@@ -17,6 +17,7 @@ import { ResidentSurface } from "./ResidentSurface.tsx";
 import { ShellHeaderTitlebar } from "./ShellHeaderTitlebar.tsx";
 import { StageBackChip, type StageBack } from "./StageBackChip.tsx";
 import { StageErrorBoundary } from "./StageErrorBoundary.tsx";
+import type { WindowEdgeClaim } from "./WindowControls.tsx";
 
 /** Entering a stage lands in its editor, then the files tree, then its first control. */
 const STAGE_ENTRY_PRIORITY = [
@@ -36,6 +37,7 @@ export function ShellStageColumn(props: {
   headerLeadsWindow: boolean;
   back: StageBack | null;
   edges: StageEdgePanes;
+  windowEdges: readonly WindowEdgeClaim[];
   notifications: JSX.Element | null;
   waitingVisible: boolean;
   preparation: Preparation | undefined;
@@ -75,7 +77,7 @@ export function ShellStageColumn(props: {
           {...tauriDragRegionProps()}
         >
           {/* Title-bar restore controls preserve the stage position. */}
-          <ShellHeaderTitlebar back={props.back} edges={props.edges} />
+          <ShellHeaderTitlebar back={props.back} edges={props.edges} windowEdges={props.windowEdges} />
         </header>
         <main class="den-shell-main" aria-label="Stage">
           {props.notifications}
