@@ -179,7 +179,6 @@ export function ProjectFolderZone(props: Props) {
                     data-testid={`project-folder-row-${root.id}`}
                     onContextMenu={(e) => openMenu(e, root)}
                   >
-                    {/* WebKitGTK aborts answering text attributes on a list item laid out as this grid, so the grid is an inner wrapper. */}
                     <div class="project-folders__row den-list-row--nav den-list-row">
                       <span class="project-folders__icon" aria-hidden="true">
                         <FolderIcon />

@@ -79,35 +79,37 @@ export function WorkflowFeedbackChicklet(props: Props) {
         />
         <span class="den-tool-chicklet-caret" aria-hidden="true" />
       </summary>
-      <div
-        class="den-checkpoint-decision-chicklet__body"
-        data-testid="workflow-feedback-chicklet-body"
-      >
-        <Show when={(props.meta.prompt ?? "").trim()}>
-          {(prompt) => (
-            <p class="den-workflow-feedback-chicklet__prompt" data-testid="workflow-feedback-chicklet-prompt">
-              {prompt()}
-            </p>
-          )}
-        </Show>
-        <Show when={props.answer.trim()}>
-          {(answer) => (
-            <p class="den-workflow-feedback-chicklet__answer" data-testid="workflow-feedback-answer">
-              <span class="den-workflow-feedback-chicklet__answer-label">
-                Your answer
-              </span>
-              {answer()}
-            </p>
-          )}
-        </Show>
-        <Show when={hint()}>
-          {(h) => (
-            <p class="den-workflow-feedback-chicklet__hint" data-testid="workflow-feedback-closed-hint">
-              {h()}
-            </p>
-          )}
-        </Show>
-      </div>
+      <Show when={open()}>
+        <div
+          class="den-checkpoint-decision-chicklet__body"
+          data-testid="workflow-feedback-chicklet-body"
+        >
+          <Show when={(props.meta.prompt ?? "").trim()}>
+            {(prompt) => (
+              <p class="den-workflow-feedback-chicklet__prompt" data-testid="workflow-feedback-chicklet-prompt">
+                {prompt()}
+              </p>
+            )}
+          </Show>
+          <Show when={props.answer.trim()}>
+            {(answer) => (
+              <p class="den-workflow-feedback-chicklet__answer" data-testid="workflow-feedback-answer">
+                <span class="den-workflow-feedback-chicklet__answer-label">
+                  Your answer
+                </span>
+                {answer()}
+              </p>
+            )}
+          </Show>
+          <Show when={hint()}>
+            {(h) => (
+              <p class="den-workflow-feedback-chicklet__hint" data-testid="workflow-feedback-closed-hint">
+                {h()}
+              </p>
+            )}
+          </Show>
+        </div>
+      </Show>
     </details>
   );
 }

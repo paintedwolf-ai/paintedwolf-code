@@ -91,9 +91,16 @@
   border-color: color-mix(in srgb, var(--den-accent-signal) 45%, var(--den-line));
 }
 
+/* A narrow stage keeps the kind for assistive tech and shows only its glyph. */
 :where(.den-browse-stage[data-browse-band~="max-620"]) {
   .den-search-row__kind-label {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 

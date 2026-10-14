@@ -287,114 +287,116 @@ export function CheckpointDecisionChicklet(props: Props) {
           </Show>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
         </summary>
-        <div class="den-checkpoint-decision-chicklet__body" data-testid="checkpoint-decision-body">
-          <div class="den-tool-part-card-section">
-            <dl class="den-tool-part-card-facts">
-              <div>
-                <dt>{status() === "pending" ? "Status" : "Decision"}</dt>
-                <dd data-testid="checkpoint-decision-body-status">{decisionLabel(props.meta)}</dd>
-              </div>
-              <Show when={tool()}>
-                {(t) => (
-                  <div>
-                    <dt>Tool</dt>
-                    <dd data-testid="checkpoint-decision-body-tool">
-                      <code>{t()}</code>
-                    </dd>
-                  </div>
-                )}
+        <Show when={open()}>
+          <div class="den-checkpoint-decision-chicklet__body" data-testid="checkpoint-decision-body">
+            <div class="den-tool-part-card-section">
+              <dl class="den-tool-part-card-facts">
+                <div>
+                  <dt>{status() === "pending" ? "Status" : "Decision"}</dt>
+                  <dd data-testid="checkpoint-decision-body-status">{decisionLabel(props.meta)}</dd>
+                </div>
+                <Show when={tool()}>
+                  {(t) => (
+                    <div>
+                      <dt>Tool</dt>
+                      <dd data-testid="checkpoint-decision-body-tool">
+                        <code>{t()}</code>
+                      </dd>
+                    </div>
+                  )}
+                </Show>
+                <Show when={subject()}>
+                  {(s) => (
+                    <div class="den-tool-part-card-facts--wide">
+                      <dt>Action</dt>
+                      <dd data-testid="checkpoint-decision-body-action">
+                        <code>{s()}</code>
+                      </dd>
+                    </div>
+                  )}
+                </Show>
+                <Show when={location()}>
+                  {(loc) => (
+                    <div class="den-tool-part-card-facts--wide">
+                      <dt>Location</dt>
+                      <dd data-testid="checkpoint-decision-body-location">
+                        <code>{loc()}</code>
+                      </dd>
+                    </div>
+                  )}
+                </Show>
+                <Show when={causing()}>
+                  {(c) => (
+                    <div class="den-tool-part-card-facts--wide">
+                      <dt>{APPROVALS_COPY.card.causedByLabel}</dt>
+                      <dd data-testid="checkpoint-decision-body-causing">
+                        <code>{c()}</code>
+                      </dd>
+                    </div>
+                  )}
+                </Show>
+                <Show when={grant()}>
+                  {(g) => (
+                    <div class="den-tool-part-card-facts--wide">
+                      <dt>Permission</dt>
+                      <dd data-testid="checkpoint-decision-body-grant">{g()}</dd>
+                    </div>
+                  )}
+                </Show>
+                <Show when={guidance()}>
+                  {(dir) => (
+                    <div class="den-tool-part-card-facts--wide">
+                      <dt>{APPROVALS_COPY.card.rejectGuidance.directionLabel}</dt>
+                      <dd data-testid="checkpoint-decision-body-guidance">{dir()}</dd>
+                    </div>
+                  )}
+                </Show>
+              </dl>
+            </div>
+            <div class="den-checkpoint-decision-chicklet__actions">
+              <Show when={status() === "pending" && props.sessionId}>
+                <button
+                  type="button"
+                  class="den-checkpoint-decision-chicklet__review-btn"
+                  data-testid="checkpoint-decision-review-dock"
+                  onClick={() => {
+                    if (props.sessionId) {
+                      reviewPendingApproval({
+                        sessionId: props.sessionId,
+                        checkpointId: props.meta.checkpoint_id,
+                      });
+                    }
+                  }}
+                >
+                  Review in composer
+                </button>
               </Show>
-              <Show when={subject()}>
-                {(s) => (
-                  <div class="den-tool-part-card-facts--wide">
-                    <dt>Action</dt>
-                    <dd data-testid="checkpoint-decision-body-action">
-                      <code>{s()}</code>
-                    </dd>
-                  </div>
-                )}
-              </Show>
-              <Show when={location()}>
-                {(loc) => (
-                  <div class="den-tool-part-card-facts--wide">
-                    <dt>Location</dt>
-                    <dd data-testid="checkpoint-decision-body-location">
-                      <code>{loc()}</code>
-                    </dd>
-                  </div>
-                )}
-              </Show>
-              <Show when={causing()}>
-                {(c) => (
-                  <div class="den-tool-part-card-facts--wide">
-                    <dt>{APPROVALS_COPY.card.causedByLabel}</dt>
-                    <dd data-testid="checkpoint-decision-body-causing">
-                      <code>{c()}</code>
-                    </dd>
-                  </div>
-                )}
-              </Show>
-              <Show when={grant()}>
-                {(g) => (
-                  <div class="den-tool-part-card-facts--wide">
-                    <dt>Permission</dt>
-                    <dd data-testid="checkpoint-decision-body-grant">{g()}</dd>
-                  </div>
-                )}
-              </Show>
-              <Show when={guidance()}>
-                {(dir) => (
-                  <div class="den-tool-part-card-facts--wide">
-                    <dt>{APPROVALS_COPY.card.rejectGuidance.directionLabel}</dt>
-                    <dd data-testid="checkpoint-decision-body-guidance">{dir()}</dd>
-                  </div>
-                )}
-              </Show>
-            </dl>
-          </div>
-          <div class="den-checkpoint-decision-chicklet__actions">
-            <Show when={status() === "pending" && props.sessionId}>
-              <button
-                type="button"
-                class="den-checkpoint-decision-chicklet__review-btn"
-                data-testid="checkpoint-decision-review-dock"
-                onClick={() => {
-                  if (props.sessionId) {
-                    reviewPendingApproval({
-                      sessionId: props.sessionId,
-                      checkpointId: props.meta.checkpoint_id,
-                    });
-                  }
+              <ApprovalContentLink
+                label="Approval details"
+                pane="decision"
+                identity={{
+                  checkpointId: props.meta.checkpoint_id,
+                  sessionId: props.sessionId,
+                  projectId: props.projectId,
                 }}
-              >
-                Review in composer
-              </button>
-            </Show>
-            <ApprovalContentLink
-              label="Approval details"
-              pane="decision"
-              identity={{
-                checkpointId: props.meta.checkpoint_id,
-                sessionId: props.sessionId,
-                projectId: props.projectId,
-              }}
-              text={() =>
-                [
-                  `Decision: ${decisionLabel(props.meta)}`,
-                  tool() && `Tool: ${tool()}`,
-                  subject() && `Action: ${subject()}`,
-                  location() && `Location: ${location()}`,
-                  causing() && `${APPROVALS_COPY.card.causedByLabel}: ${causing()}`,
-                  grant() && `Permission: ${grant()}`,
-                  guidance() &&
-                    `${APPROVALS_COPY.card.rejectGuidance.directionLabel}: ${guidance()}`,
-                ]
-                  .filter(Boolean)
-                  .join("\n\n")
-              }
-            />
+                text={() =>
+                  [
+                    `Decision: ${decisionLabel(props.meta)}`,
+                    tool() && `Tool: ${tool()}`,
+                    subject() && `Action: ${subject()}`,
+                    location() && `Location: ${location()}`,
+                    causing() && `${APPROVALS_COPY.card.causedByLabel}: ${causing()}`,
+                    grant() && `Permission: ${grant()}`,
+                    guidance() &&
+                      `${APPROVALS_COPY.card.rejectGuidance.directionLabel}: ${guidance()}`,
+                  ]
+                    .filter(Boolean)
+                    .join("\n\n")
+                }
+              />
+            </div>
           </div>
-        </div>
+        </Show>
       </details>
     </Show>
   );

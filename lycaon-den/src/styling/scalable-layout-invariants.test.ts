@@ -185,7 +185,7 @@ describe("scalable layout chrome", () => {
     );
     expect(tools).not.toMatch(/\.den-activity-span-hint\s*\{\s*display:\s*none/);
     expect(tools).toMatch(
-      /@container den-activity-span \(max-width:\s*15rem\)\s*\{[\s\S]*?\.den-activity-span-count\s*\{[\s\S]*?display:\s*none/,
+      /@container den-activity-span \(max-width:\s*15rem\)\s*\{[\s\S]*?\.den-activity-span-count\s*\{[\s\S]*?clip-path:\s*inset\(50%\)/,
     );
     expect(tools).toMatch(
       /\.den-tool-part\[data-accordion-row\] \.den-row-mark\s*\{\s*margin-left:\s*auto/,
@@ -236,7 +236,7 @@ describe("scalable layout chrome", () => {
       /@container den-notice-rail \(max-width:\s*24rem\)\s*\{[\s\S]*?\.den-notice-toggle-label\s*\{[\s\S]*?clip-path:\s*inset\(50%\)/,
     );
     expect(chat).toMatch(
-      /@container den-notice-rail \(max-width:\s*24rem\)\s*\{[\s\S]*?\.den-notice-toggle-glyph\s*\{\s*display:\s*inline-flex/,
+      /@container den-notice-rail \(max-width:\s*24rem\)\s*\{[\s\S]*?\.den-notice-toggle-glyph\s*\{\s*position:\s*static;\s*visibility:\s*visible/,
     );
 
     // Nudge actions shrink and wrap their labels rather than spilling the card.

@@ -4,9 +4,6 @@
   background: var(--den-surface);
   box-shadow: inset 0 0 0 1px var(--den-line);
   padding: 0;
-  &:not([open]) > .den-citation-evidence-chicklet-body {
-    display: none;
-  }
 }
 
 

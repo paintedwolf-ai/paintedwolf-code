@@ -399,79 +399,82 @@ export function SavedApprovalsPanel(props: Props) {
 
   const grantRow = (grant: ApprovalGrant, showScope = false) => (
     <li
-      class="den-saved-approvals-row"
-      classList={{ "den-saved-approvals-row--expired": grant.expired === true }}
       data-testid="saved-approvals-row"
       data-grant-id={grant.id}
       data-grant-category={grant.category}
     >
-      <span class="den-saved-approvals-kind">
-        {GRANT_KIND_LABELS[grant.category]}
-      </span>
-      <span class="den-saved-approvals-main">
-        <Show
-          when={grant.category === "action_set"}
-          fallback={
-            <Show
-              when={grant.category === "host_resource"}
-              fallback={
+      <div
+        class="den-saved-approvals-row"
+        classList={{ "den-saved-approvals-row--expired": grant.expired === true }}
+      >
+        <span class="den-saved-approvals-kind">
+          {GRANT_KIND_LABELS[grant.category]}
+        </span>
+        <span class="den-saved-approvals-main">
+          <Show
+            when={grant.category === "action_set"}
+            fallback={
+              <Show
+                when={grant.category === "host_resource"}
+                fallback={
+                  <span class="den-saved-approvals-what">
+                    <code data-tip={grant.secret_names?.join(", ") || grant.pattern} data-tip-when-clipped>
+                      {grant.secret_names?.join(", ") || grant.pattern}
+                    </code>
+                    {rowBadges(grant)}
+                  </span>
+                }
+              >
                 <span class="den-saved-approvals-what">
-                  <code data-tip={grant.secret_names?.join(", ") || grant.pattern} data-tip-when-clipped>
-                    {grant.secret_names?.join(", ") || grant.pattern}
-                  </code>
+                  <For each={grant.resource_ids ?? []}>
+                    {(id) => <span class="den-saved-approvals-rchip">{id}</span>}
+                  </For>
                   {rowBadges(grant)}
                 </span>
-              }
-            >
-              <span class="den-saved-approvals-what">
-                <For each={grant.resource_ids ?? []}>
-                  {(id) => <span class="den-saved-approvals-rchip">{id}</span>}
-                </For>
-                {rowBadges(grant)}
-              </span>
-            </Show>
-          }
-        >
-          <span
-            class="den-saved-approvals-what"
-            data-testid="saved-approvals-actionset-summary"
+              </Show>
+            }
           >
-            {SAVED_APPROVALS_COPY.actionSetSummary(grant.action_count ?? 1)}
-            {rowBadges(grant)}
-          </span>
-        </Show>
-        <Show when={showScope}><small class="den-saved-approvals-detail">{SAVED_APPROVALS_COPY.scopeLabel(grant.scope, !!grant.project_id && grant.scope === "device")}</small></Show>
-        <small class="den-saved-approvals-detail">{rowDetail(grant)}</small>
-        <Show when={(grant.secret_recipients?.length ?? 0) > 0}>
-          <small class="den-saved-approvals-detail" data-testid="saved-secret-recipients">
-            {grant.secret_recipients?.map((recipient) => recipient.label).join("; ")}
-          </small>
-        </Show>
-      </span>
-      <span class="den-saved-approvals-dates" data-testid="saved-approvals-granted-cell">
-        {formatGrantedAt(grant.granted_at)}
-        <Show when={grant.expires_at}>
-          {(expires) => (
-            <small data-testid="saved-approvals-expiry">
-              {grant.expired
-                ? SAVED_APPROVALS_COPY.expiredBadge.toLowerCase()
-                : "expires"}{" "}
-              {formatGrantExpiry(expires(), nowMs())}
+            <span
+              class="den-saved-approvals-what"
+              data-testid="saved-approvals-actionset-summary"
+            >
+              {SAVED_APPROVALS_COPY.actionSetSummary(grant.action_count ?? 1)}
+              {rowBadges(grant)}
+            </span>
+          </Show>
+          <Show when={showScope}><small class="den-saved-approvals-detail">{SAVED_APPROVALS_COPY.scopeLabel(grant.scope, !!grant.project_id && grant.scope === "device")}</small></Show>
+          <small class="den-saved-approvals-detail">{rowDetail(grant)}</small>
+          <Show when={(grant.secret_recipients?.length ?? 0) > 0}>
+            <small class="den-saved-approvals-detail" data-testid="saved-secret-recipients">
+              {grant.secret_recipients?.map((recipient) => recipient.label).join("; ")}
             </small>
-          )}
-        </Show>
-      </span>
-      <DenButton
-        variant="danger"
-        compact
-        data-testid="saved-approvals-revoke"
-        disabled={actionsDisabled()}
-        onClick={() => void revokeOne(grant)}
-      >
-        {grant.expired
-          ? SAVED_APPROVALS_COPY.clearButton
-          : SAVED_APPROVALS_COPY.revokeButton}
-      </DenButton>
+          </Show>
+        </span>
+        <span class="den-saved-approvals-dates" data-testid="saved-approvals-granted-cell">
+          {formatGrantedAt(grant.granted_at)}
+          <Show when={grant.expires_at}>
+            {(expires) => (
+              <small data-testid="saved-approvals-expiry">
+                {grant.expired
+                  ? SAVED_APPROVALS_COPY.expiredBadge.toLowerCase()
+                  : "expires"}{" "}
+                {formatGrantExpiry(expires(), nowMs())}
+              </small>
+            )}
+          </Show>
+        </span>
+        <DenButton
+          variant="danger"
+          compact
+          data-testid="saved-approvals-revoke"
+          disabled={actionsDisabled()}
+          onClick={() => void revokeOne(grant)}
+        >
+          {grant.expired
+            ? SAVED_APPROVALS_COPY.clearButton
+            : SAVED_APPROVALS_COPY.revokeButton}
+        </DenButton>
+      </div>
     </li>
   );
 

@@ -169,10 +169,16 @@ font-weight: 600;
 }
 
 
-/* Hide the count before either line truncates. */
+/* Hide the count before either line truncates; assistive tech still reads it. */
 @container den-activity-span (max-width: 15rem) {
   .den-activity-span-count {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 

@@ -58,23 +58,25 @@ export function CitationEvidenceChicklet(props: Props) {
           <TranscriptChickletSummary onClick={onSummaryClick}>
             <CitationGroundingChicklet view={detail} />
           </TranscriptChickletSummary>
-          <div class="den-citation-evidence-chicklet-body">
-            <CitationEvidenceSection
-              view={detail}
-              sectionClass="den-worker-transcript-evidence"
-              sectionClassList={{
-                "den-worker-transcript-evidence--traced":
-                  detail.outcome === "traced" && detail.hadTraceableWork,
-                "den-worker-transcript-evidence--partial":
-                  detail.outcome === "partial" && detail.hadTraceableWork,
-              }}
-              testId="citation-evidence-chicklet-panel"
-              projectId={props.projectId}
-              rootRefs={props.rootRefs}
-              exploreContext={props.exploreContext}
-              onExplore={props.onExplore}
-            />
-          </div>
+          <Show when={open()}>
+            <div class="den-citation-evidence-chicklet-body">
+              <CitationEvidenceSection
+                view={detail}
+                sectionClass="den-worker-transcript-evidence"
+                sectionClassList={{
+                  "den-worker-transcript-evidence--traced":
+                    detail.outcome === "traced" && detail.hadTraceableWork,
+                  "den-worker-transcript-evidence--partial":
+                    detail.outcome === "partial" && detail.hadTraceableWork,
+                }}
+                testId="citation-evidence-chicklet-panel"
+                projectId={props.projectId}
+                rootRefs={props.rootRefs}
+                exploreContext={props.exploreContext}
+                onExplore={props.onExplore}
+              />
+            </div>
+          </Show>
         </details>
       )}
     </Show>

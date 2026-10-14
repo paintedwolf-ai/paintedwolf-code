@@ -118,6 +118,11 @@ export function FocusedSessionList(props: Props) {
   } | null>(null);
   const [sortMenu, setSortMenu] = createSignal<Element | null>(null);
   const [renamingId, setRenamingId] = createSignal<string | null>(null);
+  // The row under the pointer or holding focus shows its actions in place of its time.
+  const [revealedId, setRevealedId] = createSignal<string | null>(null);
+  const concealRow = (sessionId: string) => {
+    if (revealedId() === sessionId) setRevealedId(null);
+  };
   const [pointerInside, setPointerInside] = createSignal(false);
   const [drag, setDrag] = createSignal<Drag | null>(null);
 
@@ -278,8 +283,19 @@ export function FocusedSessionList(props: Props) {
       {...navRow(index())}
       {...travelKey(row().sessionId)}
     >
-      {/* WebKitGTK aborts answering text attributes on a list item laid out as this grid, so the grid is an inner wrapper. */}
-      <div class="den-list-row--nav den-list-row">
+      <div
+        class="den-list-row--nav den-list-row"
+        onPointerEnter={() => setRevealedId(row().sessionId)}
+        onPointerLeave={(e) => {
+          if (!e.currentTarget.contains(document.activeElement)) concealRow(row().sessionId);
+        }}
+        onFocusIn={() => setRevealedId(row().sessionId)}
+        onFocusOut={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null) && !e.currentTarget.matches(":hover")) {
+            concealRow(row().sessionId);
+          }
+        }}
+      >
         <Show
           when={renamingId() !== row().sessionId}
           fallback={
@@ -360,26 +376,28 @@ export function FocusedSessionList(props: Props) {
                 {countLabel(noticeCountFor(row()))}
               </span>
             </Show>
-            <Show
-              when={!isSelected(row()) && attentionFor(row())}
-              keyed
-              fallback={
-                <Show when={row().activityAtMs > 0 && !isSelected(row())}>
-                  <span class="focused-session-list__time" aria-hidden="true">
-                    {formatRelativeTime(row().activityAtMs, now())}
+            <Show when={revealedId() !== row().sessionId}>
+              <Show
+                when={!isSelected(row()) && attentionFor(row())}
+                keyed
+                fallback={
+                  <Show when={row().activityAtMs > 0 && !isSelected(row())}>
+                    <span class="focused-session-list__time" aria-hidden="true">
+                      {formatRelativeTime(row().activityAtMs, now())}
+                    </span>
+                  </Show>
+                }
+              >
+                {(att) => (
+                  <span
+                    class="focused-session-list__status"
+                    data-attention-class={att.class}
+                    data-tip={attentionReasonLabel(att)}
+                  >
+                    {ATTENTION_CLASS_LABEL[att.class]}
                   </span>
-                </Show>
-              }
-            >
-              {(att) => (
-                <span
-                  class="focused-session-list__status"
-                  data-attention-class={att.class}
-                  data-tip={attentionReasonLabel(att)}
-                >
-                  {ATTENTION_CLASS_LABEL[att.class]}
-                </span>
-              )}
+                )}
+              </Show>
             </Show>
           </button>
           <Show when={hasWindowView(row())}>

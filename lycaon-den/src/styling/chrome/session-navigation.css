@@ -102,13 +102,11 @@
   font-size: var(--text-den-caption);
   color: var(--den-text-muted);
 }
-/* Selectable title text keeps WebKitGTK answering text attributes for the row; chrome text it cannot select makes its attribute run overflow. */
 .focused-session-list__row {
   display: flex;
   align-items: center;
   width: 100%;
   min-width: 0;
-  user-select: text;
 }
 .focused-session-list__rename {
   flex: 1;
@@ -175,21 +173,13 @@
 .focused-session-list__status[data-attention-class="finished"] {
   --den-attention-tone: var(--den-status-positive);
 }
-.focused-session-list .den-list-row--nav:is(:hover, :focus-within)
-  .focused-session-list__status {
-  display: none;
-}
-/* Relative timestamp hugs the right edge; hover actions replace it. */
+/* Relative timestamp hugs the right edge; the row's actions replace it on hover and focus. */
 .focused-session-list__time {
   flex-shrink: 0;
   margin-left: 6px;
   font-size: var(--text-den-micro);
   color: var(--den-text-muted);
   font-variant-numeric: tabular-nums;
-}
-.focused-session-list .den-list-row--nav:is(:hover, :focus-within)
-  .focused-session-list__time {
-  display: none;
 }
 /* "All chats" footer entry — same pill language, quieter weight. */
 .focused-session-list__all {

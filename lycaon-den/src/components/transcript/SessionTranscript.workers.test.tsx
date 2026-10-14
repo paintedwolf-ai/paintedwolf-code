@@ -352,7 +352,7 @@ describe("SessionTranscript workers and synthesis", () => {
     expect(container.querySelector('[data-msg-id="a1"] .assistant-prose')?.textContent).toContain("alpha ".repeat(80).trim());
   });
 
-  it("renders a collapsible evidence chicklet on a grounded coordinator summary", () => {
+  it("renders a collapsible evidence chicklet on a grounded coordinator summary", async () => {
     const { container } = render(() => (
       <SessionTranscript
         layout="chat"
@@ -388,15 +388,17 @@ describe("SessionTranscript workers and synthesis", () => {
     expect(
       container.querySelector('[data-testid="synthesis-evidence-section"]'),
     ).toBeNull();
-    const panel = container.querySelector('[data-testid="citation-grounding-panel"]');
-    expect(panel).toBeTruthy();
-    expect(panel!.closest(".den-citation-evidence-chicklet-body")).toBeTruthy();
+    // The evidence body mounts only while the disclosure is open.
+    expect(container.querySelector('[data-testid="citation-grounding-panel"]')).toBeNull();
 
     chicklet.querySelector("summary")!.dispatchEvent(
       new MouseEvent("click", { bubbles: true }),
     );
     expect(chicklet.open).toBe(true);
-    expect(container.querySelector('[data-testid="citation-grounding-panel"]')).toBeTruthy();
+    await vi.waitFor(() => {
+      const panel = container.querySelector('[data-testid="citation-grounding-panel"]');
+      expect(panel?.closest(".den-citation-evidence-chicklet-body")).toBeTruthy();
+    });
     expect(container.querySelector('[data-testid="citation-grounding-check"]')).toBeTruthy();
     expect(container.textContent).toContain("Path citations");
   });
@@ -507,7 +509,7 @@ describe("SessionTranscript workers and synthesis", () => {
     ).toBeTruthy();
   });
 
-  it("renders cited_evidence only inside the collapsed chicklet body", () => {
+  it("renders cited_evidence only inside the collapsed chicklet body", async () => {
     const { container } = render(() => (
       <SessionTranscript
         layout="chat"
@@ -542,12 +544,16 @@ describe("SessionTranscript workers and synthesis", () => {
     expect(
       container.querySelector('[data-testid="synthesis-evidence-section"]'),
     ).toBeNull();
-    expect(
-      chicklet.querySelector('[data-testid="citation-grounding-panel"]')?.closest(
-        ".den-citation-evidence-chicklet-body",
-      ),
-    ).toBeTruthy();
-    chicklet.open = true;
+    chicklet.querySelector("summary")!.dispatchEvent(
+      new MouseEvent("click", { bubbles: true }),
+    );
+    await vi.waitFor(() =>
+      expect(
+        chicklet.querySelector('[data-testid="citation-grounding-panel"]')?.closest(
+          ".den-citation-evidence-chicklet-body",
+        ),
+      ).toBeTruthy(),
+    );
     expect(container.textContent).toContain("Leg evidence handles");
     const citations = chicklet.querySelector(".den-citation-grounding-citations");
     expect(citations).toBeTruthy();

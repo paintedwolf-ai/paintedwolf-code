@@ -748,13 +748,15 @@ function TeachingCTA() {
       <ol class="home-view__teach-list">
         <For each={steps}>
           {(s, i) => (
-            <li class="home-view__teach-step">
-              <span class="home-view__teach-num" aria-hidden="true">
-                {i() + 1}
-              </span>
-              <div class="home-view__teach-copy">
-                <p class="home-view__teach-title">{s.title}</p>
-                <p class="home-view__teach-body">{s.body}</p>
+            <li>
+              <div class="home-view__teach-step">
+                <span class="home-view__teach-num" aria-hidden="true">
+                  {i() + 1}
+                </span>
+                <div class="home-view__teach-copy">
+                  <p class="home-view__teach-title">{s.title}</p>
+                  <p class="home-view__teach-body">{s.body}</p>
+                </div>
               </div>
             </li>
           )}
