@@ -77,6 +77,8 @@
     "allow-den-set-window-backdrop",
     "allow-den-set-badge-count",
     "allow-set-app-menu",
+    "allow-request-quit",
+    "allow-linux-decoration-layout",
     "allow-accessibility-preferred-text-size",
     "allow-system-appearance",
     "allow-update-service",

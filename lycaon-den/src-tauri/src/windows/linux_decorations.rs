@@ -122,7 +122,7 @@ fn current_layout() -> DecorationLayout {
 #[cfg(target_os = "linux")]
 mod portal {
     use gtk::glib::{self, ToVariant, VariantTy};
-    use gtk::{gio, prelude::*};
+    use gtk::gio;
 
     const PORTAL_NAME: &str = "org.freedesktop.portal.Desktop";
     const PORTAL_PATH: &str = "/org/freedesktop/portal/desktop";

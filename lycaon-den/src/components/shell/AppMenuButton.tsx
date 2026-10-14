@@ -44,11 +44,11 @@ export function AppMenuButton(props: { side: WindowChromeSide }) {
           <path d="M1 2.5h8M1 5h8M1 7.5h8" />
         </svg>
       </button>
-      <Show when={items()} keyed>
-        {(entries) => (
+      <Show when={trigger && items() ? { anchor: trigger, entries: items() } : null} keyed>
+        {(menu) => (
           <ContextMenu
-            anchor={trigger!}
-            items={entries}
+            anchor={menu.anchor}
+            items={menu.entries}
             label="App menu"
             align={props.side === "left" ? "start" : "end"}
             gap={6}

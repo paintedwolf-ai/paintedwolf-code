@@ -41,6 +41,8 @@
     "allow-den-set-window-bounds",
     "allow-den-set-window-backdrop",
     "allow-set-app-menu",
+    "allow-request-quit",
+    "allow-linux-decoration-layout",
     "allow-accessibility-preferred-text-size",
     "allow-system-appearance"
   ]
