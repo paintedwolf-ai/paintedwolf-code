@@ -184,7 +184,16 @@ func requireLinuxSandbox(t *testing.T) string {
 }
 
 func denyConfinement(roots ...string) confine.Confinement {
-	return confine.Confinement{Roots: roots, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
+	return confine.Confinement{Roots: sandboxRoots(roots...), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
+}
+
+// sandboxRoots adds the directory a coverage run collects child counters in,
+// so a confined helper can record what it ran; empty in every other run.
+func sandboxRoots(roots ...string) []string {
+	if dir := os.Getenv("GOCOVERDIR"); dir != "" {
+		return append(roots, dir)
+	}
+	return roots
 }
 
 // confinedRun runs name under c and returns its wait status and combined output.
@@ -537,6 +546,7 @@ func TestLinuxDevicesAreCurated(t *testing.T) {
 // status and stderr.
 func rawHelper(t *testing.T, self string, plan linuxsandbox.Plan, target ...string) (syscall.WaitStatus, string) {
 	t.Helper()
+	plan.Filesystem.WriteRoots = sandboxRoots(plan.Filesystem.WriteRoots...)
 	raw, err := plan.Encode()
 	testutil.FailErr(t, "encode plan", err)
 	pr, pw, err := os.Pipe()

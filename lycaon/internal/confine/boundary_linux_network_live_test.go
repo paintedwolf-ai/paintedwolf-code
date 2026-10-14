@@ -47,7 +47,7 @@ func proxyGetProbe() int {
 // proxyConfinement binds a proxy-only boundary to a fresh action.
 func proxyConfinement(t *testing.T, root string) (*confine.Confinement, *confine.ActionLease) {
 	t.Helper()
-	c := &confine.Confinement{Roots: []string{root}, Network: confine.NetworkProxyOnly, ProjectID: "linux-proxy"}
+	c := &confine.Confinement{Roots: sandboxRoots(root), Network: confine.NetworkProxyOnly, ProjectID: "linux-proxy"}
 	lease, err := confine.BindAction(c, confine.EgressCommand{
 		ProjectID: "linux-proxy", SessionID: "s1", ToolCallID: "call-" + t.Name(), ToolName: "command", CommandLine: "proxyget",
 	})
@@ -111,7 +111,7 @@ func TestLinuxProxyOnlyWithoutTheBrokerFailsClosed(t *testing.T) {
 	if hosts := lease.ObservedHosts(); len(hosts) != 0 {
 		t.Fatalf("observations without a broker: %+v", hosts)
 	}
-	if _, err := confine.BindAction(&confine.Confinement{Roots: []string{t.TempDir()}, Network: confine.NetworkProxyOnly}, confine.EgressCommand{ToolCallID: "after-stop"}); err == nil {
+	if _, err := confine.BindAction(&confine.Confinement{Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkProxyOnly}, confine.EgressCommand{ToolCallID: "after-stop"}); err == nil {
 		t.Fatal("a proxy-only action bound with no broker running")
 	}
 }
@@ -219,7 +219,7 @@ func TestLinuxLoopbackConnectGrantReachesTheHost(t *testing.T) {
 	granted := greeter(t, "tcp", "127.0.0.1:0")
 	other := greeter(t, "tcp", "127.0.0.1:0")
 	c, _ := boundConfinement(t, confine.Confinement{
-		Roots: []string{t.TempDir()}, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
+		Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
 		LoopbackConnect: true, LoopbackConnectPorts: []uint16{portOfListener(granted)},
 	})
 	out := probeLines(t, self, *c, "tcpconnect", granted.Addr().String(), other.Addr().String())
@@ -241,7 +241,7 @@ func TestLinuxUnixSocketGrantConnectsOnlyItsPath(t *testing.T) {
 	other := greeter(t, "unix", filepath.Join(dir, "other.sock"))
 	grantedPath := granted.Addr().String()
 	c, _ := boundConfinement(t, confine.Confinement{
-		Roots: []string{t.TempDir()}, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
+		Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
 		SocketGrants: []confine.SocketGrant{{ApprovedPath: grantedPath, ResolvedPath: grantedPath}},
 	})
 	out := probeLines(t, self, *c, "unixconnect", grantedPath, other.Addr().String())
@@ -259,7 +259,7 @@ func TestLinuxLocalListenGrantIsReachableFromTheHost(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	for _, granted := range []bool{true, false} {
 		port := freePort(t)
-		c := confine.Confinement{Roots: []string{t.TempDir()}, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
+		c := confine.Confinement{Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
 		if granted {
 			c.LocalListen, c.LocalListenPorts = true, []uint16{port}
 		}
@@ -371,6 +371,7 @@ func TestLinuxDirectIPResolvesThroughTheHostResolver(t *testing.T) {
 // wait status and combined output.
 func rawHelperRun(t *testing.T, self string, plan linuxsandbox.Plan, env []string, target ...string) (syscall.WaitStatus, string) {
 	t.Helper()
+	plan.Filesystem.WriteRoots = sandboxRoots(plan.Filesystem.WriteRoots...)
 	raw, err := plan.Encode()
 	testutil.FailErr(t, "encode plan", err)
 	pr, pw, err := os.Pipe()
@@ -399,7 +400,7 @@ func rawHelperRun(t *testing.T, self string, plan linuxsandbox.Plan, env []strin
 func TestLinuxSupervisorLossEndsTheSandbox(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	c, lease := boundConfinement(t, confine.Confinement{
-		Roots: []string{t.TempDir()}, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
+		Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
 	})
 	cmd, cleanup, err := confine.Command(t.Context(), self, "/bin/sh", []string{"-c", "sleep 30 & sleep 30"}, *c)
 	testutil.FailErr(t, "confine.Command", err)

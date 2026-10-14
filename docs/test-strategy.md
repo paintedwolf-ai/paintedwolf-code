@@ -388,8 +388,11 @@ touch never fails it, and floors live in
 
 - **Go** measures each changed package with its own short tests, then measures
   a package that falls short again with the tests of the packages that import
-  it, crediting coverage across packages. Changed functions in a package no
-  test reaches fail. Packages in `lycaon/coverage-exempt.txt` and generated
+  it, crediting coverage across packages. A test binary that runs itself again,
+  as a confinement helper does, is counted in the child too: the run sets
+  `GOCOVERDIR` and joins those counters to the profile, so tests run uncached.
+  A test whose child runs confined must give it a write root for that
+  directory. Changed functions in a package no test reaches fail. Packages in `lycaon/coverage-exempt.txt` and generated
   files are skipped, and a touched package below the package floor is noted.
 - **Den** runs the Vitest tests related to the changed files and measures
   coverage of those files. Tests, mocks, declarations, and generated files are
