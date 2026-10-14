@@ -76,7 +76,7 @@ func (m *Service) publishSynthesis(ctx context.Context, info compaction.SessionI
 	if accepted.SummaryThroughOrd < accepted.ThroughOrd {
 		accepted.Reason = "references_only"
 	}
-	text, err := compaction.RenderContinuation(ctx, &accepted, info.RecallAvailable)
+	text, err := compaction.RenderContinuation(ctx, &accepted, info.RecallAvailable, 0)
 	if err != nil {
 		return err
 	}
