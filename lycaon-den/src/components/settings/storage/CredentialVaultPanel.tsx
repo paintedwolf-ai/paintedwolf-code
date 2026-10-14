@@ -3,6 +3,7 @@ import {
   moveVaultCustody,
   readVaultCustody,
   vaultCustodyErrorCode,
+  vaultCustodyStoppedEngine,
   type VaultCustody,
   type VaultCustodyTarget,
 } from "../../../platform/connection/vault-custody.ts";
@@ -60,6 +61,10 @@ export function CredentialVaultPanel() {
       moved = true;
     } catch (err) {
       setError(C.errors[vaultCustodyErrorCode(err)] ?? C.errors.failed);
+      if (!vaultCustodyStoppedEngine(err)) {
+        setBusy(false);
+        return;
+      }
     }
     try {
       await restartAppBackend();

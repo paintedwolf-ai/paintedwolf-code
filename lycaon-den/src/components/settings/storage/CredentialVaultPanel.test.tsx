@@ -93,9 +93,21 @@ describe("CredentialVaultPanel", () => {
     await waitFor(() => expect(moveVaultCustody).toHaveBeenCalledWith("app_password", "a long app password"));
   });
 
+  it("keeps the engine running when the shell refuses the password before stopping it", async () => {
+    readVaultCustody.mockResolvedValue({ mode: "app_password", service_verified: true });
+    moveVaultCustody.mockRejectedValue({ code: "password_incorrect", message: "wrong", engine_stopped: false });
+    const { findByTestId, getByTestId } = render(() => <CredentialVaultPanel />);
+    fireEvent.click(await findByTestId("credential-vault-move"));
+    input(getByTestId("credential-vault-password"), "not the password");
+    fireEvent.submit(getByTestId("credential-vault-move-form"));
+    await waitFor(() => expect(getByTestId("credential-vault-error").textContent).toBe(C.errors.password_incorrect));
+    expect(restartAppBackend).not.toHaveBeenCalled();
+    expect((getByTestId("credential-vault-confirm") as HTMLButtonElement).disabled).toBe(false);
+  });
+
   it("reports the engine's refusal and still restarts the engine", async () => {
     readVaultCustody.mockResolvedValue({ mode: "app_password", service_verified: true });
-    moveVaultCustody.mockRejectedValue({ code: "password_incorrect", message: "wrong" });
+    moveVaultCustody.mockRejectedValue({ code: "password_incorrect", message: "wrong", engine_stopped: true });
     const { findByTestId, getByTestId, queryByTestId } = render(() => <CredentialVaultPanel />);
     fireEvent.click(await findByTestId("credential-vault-move"));
     input(getByTestId("credential-vault-password"), "not the password");

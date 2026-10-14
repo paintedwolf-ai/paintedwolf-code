@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 const invoke = vi.fn(async (..._args: unknown[]) => undefined as unknown);
 vi.mock("@tauri-apps/api/core", () => ({ invoke: (...args: unknown[]) => invoke(...args) }));
 
-import { moveVaultCustody, readVaultCustody, vaultCustodyErrorCode } from "./vault-custody.ts";
+import {
+  moveVaultCustody,
+  readVaultCustody,
+  vaultCustodyErrorCode,
+  vaultCustodyStoppedEngine,
+} from "./vault-custody.ts";
 
 describe("vault custody commands", () => {
   it("calls the shell commands with the target and password", async () => {
@@ -20,5 +25,8 @@ describe("vault custody commands", () => {
     expect(vaultCustodyErrorCode({ code: "unchanged", message: "" })).toBe("unchanged");
     expect(vaultCustodyErrorCode(new Error("x"))).toBe("failed");
     expect(vaultCustodyErrorCode(null)).toBe("failed");
+    expect(vaultCustodyStoppedEngine({ code: "password_incorrect", message: "", engine_stopped: false })).toBe(false);
+    expect(vaultCustodyStoppedEngine({ code: "failed", message: "", engine_stopped: true })).toBe(true);
+    expect(vaultCustodyStoppedEngine(new Error("join"))).toBe(true);
   });
 });

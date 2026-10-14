@@ -41,6 +41,8 @@ impl CustodyTarget {
 pub(crate) struct CustodyError {
     pub code: String,
     pub message: String,
+    /// The engine was stopped for the move and needs a restart.
+    pub engine_stopped: bool,
 }
 
 impl CustodyError {
@@ -48,6 +50,7 @@ impl CustodyError {
         Self {
             code: "failed".into(),
             message: message.into(),
+            engine_stopped: true,
         }
     }
 }
@@ -102,6 +105,7 @@ pub(super) fn parse_outcome(output: &Output) -> Result<(), CustodyError> {
     Err(CustodyError {
         code: outcome.code,
         message: outcome.message,
+        engine_stopped: true,
     })
 }
 
@@ -137,11 +141,25 @@ fn move_custody(
 ) -> Result<(), CustodyError> {
     let _lifecycle = state.lifecycle.lock().unwrap();
     if attach_only_requested() {
-        return Err(CustodyError::failed(
-            "The vault identity cannot be moved while attached to a development engine.",
-        ));
+        return Err(CustodyError {
+            engine_stopped: false,
+            ..CustodyError::failed(
+                "The vault identity cannot be moved while attached to a development engine.",
+            )
+        });
     }
     let password = VaultPassword(password.into_bytes());
+    // The password that unlocked this session settles a wrong entry without
+    // stopping the engine.
+    if target == CustodyTarget::IdentityService
+        && state.verify_vault_password(&password.0) == Some(false)
+    {
+        return Err(CustodyError {
+            code: "password_incorrect".into(),
+            message: "The app password is incorrect.".into(),
+            engine_stopped: false,
+        });
+    }
     stop_sidecar_locked(state);
     run_move(target, &password.0)?;
     *state.vault_password.lock().unwrap() = match target {
@@ -211,7 +229,8 @@ mod tests {
             )),
             Err(CustodyError {
                 code: "password_incorrect".into(),
-                message: "wrong".into()
+                message: "wrong".into(),
+                engine_stopped: true,
             })
         );
         // An ok line from a failing process is not success.
@@ -222,6 +241,22 @@ mod tests {
             "ok"
         );
         assert_eq!(parse_outcome(&output(2, "")).unwrap_err().code, "failed");
+    }
+
+    #[test]
+    fn a_wrong_app_password_is_refused_before_the_engine_stops() {
+        let state = SidecarState::new();
+        *state.vault_password.lock().unwrap() =
+            Some(VaultPassword(b"the held app password".to_vec()));
+        let refused = move_custody(
+            &state,
+            CustodyTarget::IdentityService,
+            "another password".into(),
+        )
+        .unwrap_err();
+        assert_eq!(refused.code, "password_incorrect");
+        assert!(!refused.engine_stopped);
+        assert!(state.holds_vault_password());
     }
 
     #[test]

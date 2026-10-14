@@ -18,7 +18,7 @@ export type VaultCustody = {
 export type VaultCustodyTarget = "identity_service" | "app_password";
 
 /** Mirrors `CustodyError` in `sidecar/custody.rs`; `code` is the engine's outcome code. */
-export type VaultCustodyError = { code: string; message: string };
+export type VaultCustodyError = { code: string; message: string; engine_stopped: boolean };
 
 export function readVaultCustody(): Promise<VaultCustody> {
   return invoke<VaultCustody>("vault_custody");
@@ -30,6 +30,14 @@ export function readVaultCustody(): Promise<VaultCustody> {
  */
 export function moveVaultCustody(target: VaultCustodyTarget, password: string): Promise<void> {
   return invoke<void>("move_vault_custody", { target, password });
+}
+
+/** Whether a failed move stopped the engine; unknown failures assume it did. */
+export function vaultCustodyStoppedEngine(err: unknown): boolean {
+  if (err && typeof err === "object" && typeof (err as VaultCustodyError).engine_stopped === "boolean") {
+    return (err as VaultCustodyError).engine_stopped;
+  }
+  return true;
 }
 
 export function vaultCustodyErrorCode(err: unknown): string {
