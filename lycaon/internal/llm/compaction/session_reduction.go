@@ -123,6 +123,7 @@ func renderCoveredContinuation(ctx context.Context, record *messageview.Continua
 		summary := priorSummary(record)
 		summary.ThroughOrd = record.ThroughOrd
 		summary.ReferenceOnly = record.Reason == "references_only"
+		summary.Level = level
 		limit := 16
 		if level == "compact" {
 			summary.Facts = summary.Facts[:min(2, len(summary.Facts))]
@@ -133,7 +134,7 @@ func renderCoveredContinuation(ctx context.Context, record *messageview.Continua
 			limit = 4
 		}
 		if level == "references" {
-			summary = compactionSummary{ThroughOrd: record.ThroughOrd, ReferenceOnly: true}
+			summary = compactionSummary{Level: level, ThroughOrd: record.ThroughOrd, ReferenceOnly: true}
 			limit = 0
 		}
 		var sources []CompactedSource

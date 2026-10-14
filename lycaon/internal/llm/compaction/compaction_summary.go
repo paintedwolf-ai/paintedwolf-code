@@ -26,6 +26,7 @@ func SummaryFormatRequested(ctx context.Context) bool {
 }
 
 type compactionSummary struct {
+	Level         string             `json:"-"`
 	SourceContext *api.SourceContext `json:"-"`
 	ThroughOrd    int64              `json:"-"`
 	ReferenceOnly bool               `json:"-"`
@@ -136,6 +137,7 @@ func renderContinuationRecord(ctx context.Context, summary compactionSummary, so
 		rows = append(rows, s.templateVars())
 	}
 	out, err := guidance.RenderGuidance(ctx, guidance.CompactionContinuationRecordRef, map[string]any{
+		"level":             summary.Level,
 		"through_ord":       summary.ThroughOrd,
 		"reference_only":    summary.ReferenceOnly,
 		"facts":             summary.Facts,

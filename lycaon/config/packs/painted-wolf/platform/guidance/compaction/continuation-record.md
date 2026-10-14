@@ -1,4 +1,6 @@
-## Compacted continuation record
+{% if level == "references" %}[host:compacted history through ordinal {{ through_ord }}]
+{% if recall_available %}Recover recorded details with `recall(history={"after_ord":0,"through_ord":{{ through_ord }}})`. Use a returned `message_id` for its body and `next_offset` for further pages.{% else %}Reacquire omitted observations before relying on them.{% endif %}
+{% else %}## Compacted continuation record
 {% if facts %}
 ### Facts retained from the transcript
 {% for line in facts %}- {{ line }}
@@ -21,4 +23,5 @@
 {% if through_ord %}### Covered history
 Canonical observations through ordinal {{ through_ord }} remain on record. {% if recall_available %}Use `recall(history={"after_ord":0,"through_ord":{{ through_ord }}})` to page their index. Supply a returned `message_id` in the same history request to recover its body; `offset` and `next_offset` page long bodies. {% endif %}These are recorded observations, not current file contents or verification. Re-read changed sources before editing.
 {% endif %}{% if reference_only %}Some covered observations have no accepted prose summary. Recover the relevant records before relying on their details.
+{% endif %}
 {% endif %}
