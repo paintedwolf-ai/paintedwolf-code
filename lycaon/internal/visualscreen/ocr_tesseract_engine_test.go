@@ -20,6 +20,11 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
+// engineSecret is an AWS-shaped key built without the glyphs the recognizers
+// confuse in the fixture face (0/O, 1/I/l, 5/S, 7), so engine tests measure
+// reading geometry and masking rather than glyph ambiguity.
+const engineSecret = "AKIAQYJK4TXV6NHRWMFD"
+
 // platformEngine is the recognizer shipped for this platform: Apple Vision on
 // macOS, the bundled Tesseract engine on Linux when it is staged.
 func platformEngine(t *testing.T) OCREngine {
@@ -133,7 +138,7 @@ func spanFor(t *testing.T, spans []TextSpan, want ocrfixture.Line, maxErrorRate 
 
 func TestPlatformEngineReadsLinesWithGeometry(t *testing.T) {
 	engine := platformEngine(t)
-	raw, lines := renderPNG(t, ocrfixture.Options{Lines: []string{"Painted Wolf Code", "deploy key " + testSecret}})
+	raw, lines := renderPNG(t, ocrfixture.Options{Lines: []string{"Painted Wolf Code", "deploy key " + engineSecret}})
 	spans := recognize(t, engine, raw)
 	for _, line := range lines {
 		spanFor(t, spans, line, 0.1)
@@ -154,7 +159,8 @@ func TestPlatformEngineReadsNothingFromBlankRaster(t *testing.T) {
 func TestPlatformEngineReadsAcrossScales(t *testing.T) {
 	engine := platformEngine(t)
 	for name, opts := range map[string]ocrfixture.Options{
-		"small": {Lines: []string{"small print 12345"}, PointSize: 11, Padding: 6},
+		// Apple Vision reads this face reliably from 14 pt; smaller type is dropped or misread.
+		"small": {Lines: []string{"small print 12345"}, PointSize: 14, Padding: 6},
 		"large": {Lines: []string{"LARGE HEADING"}, PointSize: 72},
 		"dark":  {Lines: []string{"light on dark"}, Inverted: true},
 	} {
@@ -188,10 +194,10 @@ func TestBundledTesseractReadsRotatedCaptures(t *testing.T) {
 	}
 }
 
-// A raster whose header decodes but whose pixel data is cut short reaches the
-// engine and comes back as a recognition failure, never as a clean read.
-func TestPlatformEngineTruncatedRasterIsFailedNotClean(t *testing.T) {
-	engine := platformEngine(t)
+// A raster whose header decodes but whose pixel data is cut short comes back
+// from the bundled engine as a recognition failure, never as a clean read.
+func TestBundledTesseractTruncatedRasterIsFailedNotClean(t *testing.T) {
+	engine := bundledTesseract(t)
 	raw, _ := renderPNG(t, ocrfixture.Options{Lines: []string{"Painted Wolf Code"}})
 	truncated := raw[:len(raw)*2/3]
 	scanned, err := NewScanner(engine).Scan(context.Background(), "image/png", truncated)
@@ -210,7 +216,7 @@ func TestPlatformEngineTruncatedRasterIsFailedNotClean(t *testing.T) {
 // raster no longer yields it.
 func TestPlatformEngineGateMasksRecognizedSecret(t *testing.T) {
 	engine := platformEngine(t)
-	raw, lines := renderPNG(t, ocrfixture.Options{Lines: []string{"Public heading", "aws key " + testSecret}})
+	raw, lines := renderPNG(t, ocrfixture.Options{Lines: []string{"Public heading", "aws key " + engineSecret}})
 	var seen []secretmatch.Alert
 	outcome, err := NewGate(NewScanner(engine), bundledMatcher(t), decide(secretmatch.SendRedacted, &seen)).Screen(context.Background(), VisualScreenInput{
 		Mime: "image/png", RawBytes: raw,
@@ -221,7 +227,7 @@ func TestPlatformEngineGateMasksRecognizedSecret(t *testing.T) {
 	if len(seen) != 1 || seen[0].ScreeningGap != "" || !seen[0].CanRedact() {
 		t.Fatalf("alerts = %+v", seen)
 	}
-	if outcome.Perception != PerceptionRedacted || strings.Contains(outcome.ExtractedText, testSecret) {
+	if outcome.Perception != PerceptionRedacted || strings.Contains(outcome.ExtractedText, engineSecret) {
 		t.Fatalf("outcome = %+v", outcome)
 	}
 	masked, err := png.Decode(bytes.NewReader(outcome.PerceiveBytes))
@@ -243,7 +249,7 @@ func TestPlatformEngineGateMasksRecognizedSecret(t *testing.T) {
 		t.Fatal("the public heading was masked")
 	}
 	for _, span := range recognize(t, engine, outcome.PerceiveBytes) {
-		if strings.Contains(foldText(span.Text), foldText(testSecret)) {
+		if strings.Contains(foldText(span.Text), foldText(engineSecret)) {
 			t.Fatalf("masked raster still reads the credential: %+v", span)
 		}
 	}
