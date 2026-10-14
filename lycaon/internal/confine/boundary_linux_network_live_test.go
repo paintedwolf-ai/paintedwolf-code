@@ -421,3 +421,66 @@ func rawHelperRun(t *testing.T, self string, plan linuxsandbox.Plan, env []strin
 	}
 	return cmd.ProcessState.Sys().(syscall.WaitStatus), out.String()
 }
+
+// Concurrent actions keep their own refusals, including those a descendant
+// of the command makes.
+func TestLinuxConcurrentActionsKeepTheirOwnRefusals(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	type run struct {
+		lease  *confine.ActionLease
+		target string
+		out    string
+	}
+	runs := make([]*run, 2)
+	done := make(chan struct{}, len(runs))
+	for i := range runs {
+		c, lease := boundConfinement(t, confine.Confinement{
+			Roots: []string{t.TempDir()}, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
+		})
+		r := &run{lease: lease, target: net.JoinHostPort("127.0.0.1", strconv.Itoa(int(freePort(t))))}
+		runs[i] = r
+		go func() {
+			defer func() { done <- struct{}{} }()
+			// The connection is made by a grandchild of the helper.
+			script := self + " " + probeTestFlag
+			env := append(probeEnv("tcpconnect"), linuxProbePathsEnv+"="+r.target)
+			_, r.out = linuxConfinedRun(t, self, *c, env, "/bin/sh", "-c", script)
+		}()
+	}
+	for range runs {
+		<-done
+	}
+	for i, r := range runs {
+		refusals := refusalTargets(r.lease.SettledRefusals(context.Background()))
+		if len(refusals) != 1 || refusals["network-outbound remote:"+r.target] != confine.RecoverOutboundPort {
+			t.Fatalf("action %d refusals = %v, want only its own %s\n%s", i, refusals, r.target, r.out)
+		}
+	}
+}
+
+// Killing the outer helper ends the whole sandbox: nothing it started survives.
+func TestLinuxSupervisorLossEndsTheSandbox(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	c, lease := boundConfinement(t, confine.Confinement{
+		Roots: []string{t.TempDir()}, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
+	})
+	cmd, cleanup, err := confine.Command(t.Context(), self, "/bin/sh", []string{"-c", "sleep 30 & sleep 30"}, *c)
+	testutil.FailErr(t, "confine.Command", err)
+	testutil.FailErr(t, "start", cmd.Start())
+	cleanup()
+	time.Sleep(time.Second)
+	testutil.FailErr(t, "kill outer helper", cmd.Process.Kill())
+	_ = cmd.Wait()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		survivors, err := lease.Survivors()
+		testutil.FailErr(t, "survivors", err)
+		if len(survivors) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("processes outlived the killed supervisor: %v", survivors)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
