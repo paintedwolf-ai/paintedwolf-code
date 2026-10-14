@@ -591,6 +591,25 @@ func (q *Queries) GetSessionMessageOrd(ctx context.Context, arg GetSessionMessag
 	return ord, err
 }
 
+const getSessionMessageOrdBounds = `-- name: GetSessionMessageOrdBounds :one
+SELECT CAST(COALESCE(MIN(ord), 0) AS INTEGER) AS min_ord,
+       CAST(COALESCE(MAX(ord), 0) AS INTEGER) AS max_ord
+FROM messages
+WHERE session_id = ?
+`
+
+type GetSessionMessageOrdBoundsRow struct {
+	MinOrd int64 `json:"min_ord"`
+	MaxOrd int64 `json:"max_ord"`
+}
+
+func (q *Queries) GetSessionMessageOrdBounds(ctx context.Context, sessionID string) (GetSessionMessageOrdBoundsRow, error) {
+	row := q.db.QueryRowContext(ctx, getSessionMessageOrdBounds, sessionID)
+	var i GetSessionMessageOrdBoundsRow
+	err := row.Scan(&i.MinOrd, &i.MaxOrd)
+	return i, err
+}
+
 const getSessionPinState = `-- name: GetSessionPinState :one
 SELECT project_id, pin_rank, archived_at, parent_session_id FROM sessions WHERE id = ?
 `

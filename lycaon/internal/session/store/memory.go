@@ -457,63 +457,67 @@ func (s *Memory) GetTranscriptPage(ctx context.Context, id string, q api.Transcr
 	if _, ok := s.sessions[id]; !ok {
 		return api.SessionTranscriptPage{}, ErrSessionNotFound
 	}
-	all := s.messages[id]
-	if workerJobID := strings.TrimSpace(q.WorkerID); workerJobID != "" {
-		filtered := make([]api.Message, 0, len(all))
-		for _, message := range all {
-			if strings.TrimSpace(message.WorkerID) == workerJobID {
-				filtered = append(filtered, message)
-			}
-		}
-		all = filtered
-	}
+	all := filterWorkerMessages(s.messages[id], q.WorkerID)
 	window := pageAscendingWindow(all, q)
+	if window == nil {
+		window = []api.Message{}
+	}
 	page := api.SessionTranscriptPage{
 		Messages:   window,
 		TurnClocks: map[string]api.TurnClock{},
 		TurnLoads:  map[string][]api.TurnLoad{},
 		Watermark:  s.transcriptSeq[id],
-	}
-	if page.Messages == nil {
-		page.Messages = []api.Message{}
+		OrdBounds:  messageOrdBounds(all),
 	}
 	if strings.TrimSpace(q.WorkerID) == "" {
 		page.TurnClocks = s.turnClocksForMessagesLocked(id, page.Messages)
 	}
-	hasBefore, hasAfter := windowHasMore(all, page.Messages)
-	// Empty window with an explicit before/after cursor: has_more relative to the cursor.
-	if len(page.Messages) == 0 {
-		switch {
-		case q.Before != nil:
-			bound := *q.Before
-			hasBefore, hasAfter = false, false
-			for _, m := range all {
-				if m.Ord < bound {
-					hasBefore = true
-				}
-				if m.Ord >= bound {
-					hasAfter = true
-				}
-			}
-		case q.After != nil:
-			bound := *q.After
-			hasBefore, hasAfter = false, false
-			for _, m := range all {
-				if m.Ord <= bound {
-					hasBefore = true
-				}
-				if m.Ord > bound {
-					hasAfter = true
-				}
-			}
-		default:
-			hasBefore, hasAfter = false, false
-		}
-	}
+	hasBefore, hasAfter := memoryTranscriptWindowHasMore(all, page.Messages, q)
 	if err := SetTranscriptPageCursors(id, &page, hasBefore, hasAfter, q); err != nil {
 		return api.SessionTranscriptPage{}, err
 	}
 	return page, nil
+}
+
+func filterWorkerMessages(all []api.Message, workerID string) []api.Message {
+	workerJobID := strings.TrimSpace(workerID)
+	if workerJobID == "" {
+		return all
+	}
+	filtered := make([]api.Message, 0, len(all))
+	for _, message := range all {
+		if strings.TrimSpace(message.WorkerID) == workerJobID {
+			filtered = append(filtered, message)
+		}
+	}
+	return filtered
+}
+
+func memoryTranscriptWindowHasMore(all, window []api.Message, q api.TranscriptPageQuery) (hasBefore, hasAfter bool) {
+	if len(window) > 0 {
+		return windowHasMore(all, window)
+	}
+	switch {
+	case q.Before != nil:
+		for _, m := range all {
+			if m.Ord < *q.Before {
+				hasBefore = true
+			}
+			if m.Ord >= *q.Before {
+				hasAfter = true
+			}
+		}
+	case q.After != nil:
+		for _, m := range all {
+			if m.Ord <= *q.After {
+				hasBefore = true
+			}
+			if m.Ord > *q.After {
+				hasAfter = true
+			}
+		}
+	}
+	return hasBefore, hasAfter
 }
 
 // nextSeqLocked bumps the session's transcript mutation clock. Callers hold s.mu.

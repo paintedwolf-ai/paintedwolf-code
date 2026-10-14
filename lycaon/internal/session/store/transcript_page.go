@@ -61,6 +61,23 @@ func reverseMessages(msgs []api.Message) {
 	}
 }
 
+// transcriptOrdBounds reports the ord span a transcript holds; an empty
+// transcript (both bounds zero) has none.
+func transcriptOrdBounds(minOrd, maxOrd int64) *api.TranscriptOrdBounds {
+	if minOrd <= 0 || maxOrd <= 0 {
+		return nil
+	}
+	return &api.TranscriptOrdBounds{FirstOrd: minOrd, LastOrd: maxOrd}
+}
+
+// messageOrdBounds reports the ord span of ascending rows.
+func messageOrdBounds(all []api.Message) *api.TranscriptOrdBounds {
+	if len(all) == 0 {
+		return nil
+	}
+	return transcriptOrdBounds(all[0].Ord, all[len(all)-1].Ord)
+}
+
 func windowHasMore(all []api.Message, window []api.Message) (before, after bool) {
 	if len(window) == 0 {
 		return len(all) > 0, false
