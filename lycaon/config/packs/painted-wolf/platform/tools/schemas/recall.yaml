@@ -23,8 +23,9 @@ schema:
         Recover your recorded transcript through through_ord. Page the index with
         after_ord; supply a returned message_id for its body. offset and next_offset
         page Unicode characters. source_seq detects corrections to returned rows.
-        Cannot combine with query or widen.
+        search finds recorded instructions or observations. Cannot combine with query or widen.
       properties:
+        search: {type: string, minLength: 1, maxLength: 256, description: "Up to eight literal terms, all required."}
         after_ord: {type: integer, minimum: 0}
         through_ord: {type: integer, minimum: 1}
         source_seq: {type: integer, minimum: 0}

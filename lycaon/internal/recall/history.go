@@ -24,6 +24,7 @@ const historyText = `COALESCE(NULLIF(content,''),json_extract(NULLIF(tool_result
 
 // HistoryRequest addresses recorded rows in the caller's own session.
 type HistoryRequest struct {
+	Search     string `json:"search,omitempty"`
 	AfterOrd   int64  `json:"after_ord"`
 	ThroughOrd int64  `json:"through_ord"`
 	SourceSeq  int64  `json:"source_seq,omitempty"`
@@ -55,6 +56,9 @@ type HistoryEntry struct {
 
 func (s *Service) history(ctx context.Context, req Request) (*Result, error) {
 	h := req.History
+	if len([]rune(h.Search)) > 256 || len(strings.Fields(h.Search)) > 8 || (h.MessageID != "" && strings.TrimSpace(h.Search) != "") {
+		return nil, &ErrHistoryCoordinates{Reason: "history search must be bounded and separate from a body request"}
+	}
 	if h.ThroughOrd <= 0 || h.AfterOrd < 0 || h.AfterOrd >= h.ThroughOrd || h.Offset < 0 || h.SourceSeq < 0 || strings.TrimSpace(req.Caller.SessionID) == "" {
 		return nil, &ErrHistoryCoordinates{Reason: "invalid history coordinates"}
 	}
@@ -124,8 +128,19 @@ func historyIndex(ctx context.Context, tx *sql.Tx, session string, h *HistoryReq
 		limit = DefaultLimit
 	}
 	limit = min(limit, MaxLimit)
-	rows, err := tx.QueryContext(ctx, `SELECT id, ord, role, substr(`+historyText+`,1,120), length(`+historyText+`), COALESCE(evidence_handles_json,'[]'), seq
-		FROM messages WHERE session_id = ? AND ord > ? AND ord <= ? AND `+historyVisible+` ORDER BY ord LIMIT ?`, session, h.AfterOrd, h.ThroughOrd, limit+1)
+	query := `SELECT id, ord, role, substr(` + historyText + `,1,120), length(` + historyText + `), COALESCE(evidence_handles_json,'[]'), seq
+  FROM messages WHERE session_id = ? AND ord > ? AND ord <= ? AND ` + historyVisible
+	args := []any{session, h.AfterOrd, h.ThroughOrd}
+	if terms := strings.Fields(h.Search); len(terms) > 0 {
+		for i, term := range terms {
+			terms[i] = `"` + strings.ReplaceAll(term, `"`, `""`) + `"`
+		}
+		query += ` AND rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?)`
+		args = append(args, strings.Join(terms, " AND "))
+	}
+	query += ` ORDER BY ord LIMIT ?`
+	args = append(args, limit+1)
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}

@@ -99,6 +99,33 @@ func TestHistoryValidatesCoordinatesAndCanonicalScope(t *testing.T) {
 	}
 }
 
+func TestHistorySearchFindsOriginalInstructionsWithinCallerScope(t *testing.T) {
+	f := newFixture(t)
+	for _, row := range []struct{ id, session, content string }{
+		{"instruction", coordinatorSession, "Keep golden otter releases behind human approval."},
+		{"peer", workerSession, "Golden otter worker assignment"},
+	} {
+		testdbseed.InsertSessionEntry(t, f.db, row.id, row.session, "utterance", row.id, 1)
+		_, err := f.db.ExecContext(t.Context(), `INSERT INTO messages (entry_id,id,session_id,role,content,origin,authority,trust_tier,ord,seq,ts)
+		VALUES (?,?,?,'user',?,'user','user','trusted',1,1,'2026-10-14T00:00:00Z')`, row.id, row.id, row.session, row.content)
+		testutil.FailErr(t, "seed original instruction", err)
+	}
+	req := recall.Request{Caller: coordinator(), History: &recall.HistoryRequest{ThroughOrd: 1, Search: "golden otter"}}
+	result, err := f.svc.Answer(t.Context(), req)
+	testutil.FailErr(t, "search recorded instructions", err)
+	if len(result.History.Entries) != 1 || result.History.Entries[0].ID != "instruction" {
+		t.Fatal("history search lost the original instruction or widened scope")
+	}
+	for _, search := range []string{strings.Repeat("x", 257), "a b c d e f g h i"} {
+		req.History.Search = search
+		_, err := f.svc.Answer(t.Context(), req)
+		var invalid *recall.ErrHistoryCoordinates
+		if !errors.As(err, &invalid) {
+			t.Fatal("history search admitted an unbounded query")
+		}
+	}
+}
+
 func TestHistoryRecoversRecordedToolBodiesAndHandles(t *testing.T) {
 	f := newFixture(t)
 	testdbseed.InsertSessionEntry(t, f.db, "tool", coordinatorSession, "tool_receipt", "tool", 1)
