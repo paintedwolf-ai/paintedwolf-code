@@ -28,6 +28,7 @@ var preflightProbeCodes = []string{
 	preflight.CodeScannerEngineUnavailable,
 	preflight.CodeBrowserEngineUnavailable,
 	preflight.CodeDecisionEngineUnavailable,
+	preflight.CodeOCREngineUnavailable,
 	preflight.CodeNoProviderConfigured,
 	preflight.CodeLiteUnavailable,
 }
