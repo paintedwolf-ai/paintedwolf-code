@@ -253,6 +253,127 @@ describe("ScrollportMotion live tail", () => {
     expect(viewport.scrollTop).toBe(1_400);
     setScrollportTailPolicy(host, null);
   });
+
+  it("reconciles the tail bound after direct input interrupts a final confirmation attempt", () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
+    const frames = stubAnimationFrames();
+    try {
+      const fixture = createScrollportFixture({
+        clientHeight: 600,
+        initialScrollHeight: 2_000,
+        initialScrollTop: 1_400,
+      });
+      const { motion, viewport } = fixture;
+      const tail = 1_100;
+      motion.tail.setTailOffsetResolver(() => tail);
+
+      // Schedule with a single confirmation attempt, then interrupt with direct input that outlives the first timer.
+      motion.tail.scheduleTailBoundReconcile(1);
+      motion.input.noteNativeInput("wheel");
+      frames.flush(1, 16);
+      vi.advanceTimersByTime(300);
+      motion.input.noteNativeInput("wheel");
+      vi.advanceTimersByTime(350);
+      expect(motion.input.isDirectInputActive()).toBe(true);
+
+      vi.advanceTimersByTime(300);
+      expect(motion.input.isDirectInputActive()).toBe(false);
+      frames.flush(2, 1_000);
+      expect(viewport.scrollTop).toBe(1_100);
+
+      unbindScrollportMotion(fixture.host);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries tail-bound reconciliation when a non-press event interrupts the settle glide", async () => {
+    const frames = stubAnimationFrames();
+    const fixture = createScrollportFixture({
+      clientHeight: 600,
+      initialScrollHeight: 2_000,
+      initialScrollTop: 1_400,
+    });
+    const { motion, viewport, host } = fixture;
+
+    // Contraction leaves retained extent holding offset 1400 above tail 1100.
+    fixture.setNaturalScrollHeight(1_700);
+    motion.notifyLayoutMutated();
+    expect(extentHoldPx(viewport)).toBe(300);
+
+    // Confirm tail bound and start the settle glide.
+    await Promise.resolve();
+    frames.flush(2, 16);
+    frames.flush(1, 32);
+    expect(motion.tail.glidingToTail).toBe(true);
+
+    // A keydown cancels the reveal without activating a press anchor.
+    host.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
+    expect(motion.tail.glidingToTail).toBe(false);
+
+    // Tail-bound reconciliation re-schedules and finishes settling to the tail (380ms settle duration).
+    for (let t = 48; t <= 520; t += 16) {
+      frames.flush(2, t);
+    }
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
+    expect(viewport.scrollTop).toBe(1_100);
+    expect(extentHoldPx(viewport)).toBe(0);
+    unbindScrollportMotion(host);
+  });
+
+  it("commits on the final single-attempt confirmation even when geometry moved between samples", () => {
+    const frames = stubAnimationFrames();
+    const fixture = createScrollportFixture({
+      clientHeight: 600,
+      initialScrollHeight: 2_000,
+      initialScrollTop: 1_400,
+    });
+    const { motion, viewport, host } = fixture;
+    let tail = 1_200;
+    motion.tail.setTailOffsetResolver(() => tail);
+    // Cancel the initial multi-frame reconcile from setTailOffsetResolver and schedule a single attempt.
+    frames.flush(4, 16);
+    viewport.scrollTop = 1_400;
+    tail = 1_200;
+    motion.tail.scheduleTailBoundReconcile(1);
+    // Geometry shifts before the single confirmation frame runs.
+    tail = 1_050;
+    frames.flush(1, 32);
+    expect(viewport.scrollTop).toBe(1_050);
+    unbindScrollportMotion(host);
+  });
+
+  it("caps interrupted settle glides under repeated keydown events and commits directly to the tail", async () => {
+    const frames = stubAnimationFrames();
+    const fixture = createScrollportFixture({
+      clientHeight: 600,
+      initialScrollHeight: 2_000,
+      initialScrollTop: 1_400,
+    });
+    const { motion, viewport, host } = fixture;
+
+    fixture.setNaturalScrollHeight(1_700);
+    motion.notifyLayoutMutated();
+    expect(extentHoldPx(viewport)).toBe(300);
+
+    for (let cycle = 0; cycle < 2; cycle += 1) {
+      await Promise.resolve();
+      frames.flush(2, 16 + cycle * 64);
+      frames.flush(1, 32 + cycle * 64);
+      expect(motion.tail.glidingToTail).toBe(true);
+      host.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
+      for (let i = 0; i < 4; i += 1) await Promise.resolve();
+      expect(motion.tail.glidingToTail).toBe(false);
+    }
+
+    // After the retry cap, the next confirmation commits directly without starting another glide.
+    frames.flush(2, 200);
+    expect(motion.tail.glidingToTail).toBe(false);
+    expect(viewport.scrollTop).toBe(1_100);
+    expect(extentHoldPx(viewport)).toBe(0);
+    unbindScrollportMotion(host);
+  });
 });
 
 describe("ScrollportMotion tail pin versus declared layout", () => {
