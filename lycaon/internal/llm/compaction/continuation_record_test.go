@@ -2,6 +2,7 @@ package compaction
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -213,5 +214,48 @@ func TestContinuationRepresentationScalesWithReceiver(t *testing.T) {
 		if !strings.Contains(text, `"through_ord":500`) {
 			t.Fatal("representation omitted its recovery coordinates")
 		}
+	}
+}
+
+type continuationRankFixture struct {
+	ids []string
+	err error
+}
+
+func (f continuationRankFixture) RankContinuation(_ context.Context, _ SessionInfo, sources []messageview.ContinuationSource) ([]string, error) {
+	if len(sources[0].Handles) > 0 {
+		sources[0].Handles[0] = "changed by ranker"
+	}
+	return f.ids, f.err
+}
+
+func TestOptionalContinuationRankingCannotDropOrInventSources(t *testing.T) {
+	for _, tc := range []struct {
+		ids   []string
+		err   error
+		first string
+	}{
+		{[]string{"b", "a"}, nil, "b"},
+		{[]string{"a"}, nil, "a"},
+		{[]string{"a", "a"}, nil, "a"},
+		{[]string{"b", "unknown"}, nil, "a"},
+		{[]string{"b", "a"}, errors.New("unavailable"), "a"},
+	} {
+		record := &messageview.Continuation{ThroughOrd: 20, Sources: []messageview.ContinuationSource{{MessageID: "a", Handles: []string{"read#1"}}, {MessageID: "b"}}}
+		compactor := NewSimpleCompactor(testCompactionConfig(), nil).WithContinuationRanker(continuationRankFixture{tc.ids, tc.err}).WithConfig(testCompactionConfig())
+		compactor.rankContinuation(t.Context(), SessionInfo{}, record)
+		if len(record.Sources) != 2 || record.Sources[0].MessageID != tc.first || record.ThroughOrd != 20 {
+			t.Fatal("ranking changed the host retention contract")
+		}
+		for _, source := range record.Sources {
+			if source.MessageID == "a" && source.Handles[0] != "read#1" {
+				t.Fatal("ranker mutated host source coordinates")
+			}
+		}
+	}
+	record := &messageview.Continuation{Sources: []messageview.ContinuationSource{{MessageID: "a"}}}
+	NewSimpleCompactor(testCompactionConfig(), nil).rankContinuation(t.Context(), SessionInfo{}, record)
+	if record.Sources[0].MessageID != "a" {
+		t.Fatal("absent ranking changed the baseline")
 	}
 }

@@ -42,6 +42,7 @@ func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, 
 	}
 	record := continuationFor(info, prefix, summary, sources, summaryErr)
 	record.Window = c.cfg.ModelContextWindow
+	c.rankContinuation(ctx, info, record)
 	text, err := renderCoveredContinuation(ctx, record, info.RecallAvailable)
 	if err != nil {
 		return nil, nil, "failed", false, err

@@ -63,6 +63,7 @@ type SimpleCompactor struct {
 	cfg     CompactionConfig
 	chunks  *ChunkCompactor
 	summary Summarizer
+	ranker  ContinuationRanker
 }
 
 // NewSimpleCompactor constructs a production compactor.
@@ -464,5 +465,7 @@ type ContextCompactor interface {
 
 // WithConfig binds one attempt to the receiving session's budget.
 func (c *SimpleCompactor) WithConfig(cfg CompactionConfig) *SimpleCompactor {
-	return NewSimpleCompactor(cfg, c.summary)
+	out := NewSimpleCompactor(cfg, c.summary)
+	out.ranker = c.ranker
+	return out
 }
