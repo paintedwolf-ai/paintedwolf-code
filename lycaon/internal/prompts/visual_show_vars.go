@@ -53,9 +53,5 @@ func toolNameSet(names []string) map[string]bool {
 }
 
 func mergeVisualShowVarsFromSurface(data AgentToolSurfaceData, into map[string]any) {
-	requestable := make([]string, 0, len(data.Requestable))
-	for _, row := range data.Requestable {
-		requestable = append(requestable, row.Name)
-	}
-	MergeVisualShowVars(toolViewNames(data.Tools), requestable, into)
+	MergeVisualShowVars(toolViewNames(data.Tools), requestableToolNames(data.Requestable), into)
 }
