@@ -8,6 +8,7 @@ import shutil
 import sys
 
 from built_runtime import verify_application, require_unadmitted
+from capture_storage import clone_file
 from grading_identity import implementation_files
 from preparation import source_snapshot, build_application, validate_runtime, stage
 from progress import save
@@ -57,9 +58,15 @@ def import_prepared(previous, destination):
     elif source.exists() or (destination / owned['preflight']).exists():
         raise ValueError('prepared import requires an unused destination')
     save(ownership, owned)
+    def ignore_build_cache(directory, names):
+        ignored = shutil.ignore_patterns('__pycache__', '.task')(directory, names)
+        if pathlib.Path(directory) == previous / 'source/.bin':
+            ignored.add('decide-target')
+        return ignored
     shutil.copytree(previous / 'source', source, symlinks=True,
-                    ignore=shutil.ignore_patterns('__pycache__', '.task'))
-    shutil.copytree(previous / receipt.parts[0], destination / receipt.parts[0], symlinks=True)
+                    ignore=ignore_build_cache, copy_function=clone_file)
+    shutil.copytree(previous / receipt.parts[0], destination / receipt.parts[0],
+                    symlinks=True, copy_function=clone_file)
     save(destination / 'prepared.json', marker)
     save(destination / 'selection.json', json.loads((previous / 'selection.json').read_text()))
     if verify_prepared(destination) != marker or verify_prepared(previous) != marker:
