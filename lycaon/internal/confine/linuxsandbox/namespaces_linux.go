@@ -25,7 +25,7 @@ func Inside(plan Plan) bool {
 // later reader of /proc, including a failure path, sees sandbox processes only.
 func mountProc() error {
 	if err := unix.Mount("proc", "/proc", "proc", unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, ""); err != nil {
-		return &Unavailability{Code: UnavailableMount, Detail: "mount /proc: " + err.Error()}
+		return classifyPrivilegedStep("mount /proc", err, appArmorLabel())
 	}
 	return nil
 }

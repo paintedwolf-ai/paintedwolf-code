@@ -17,10 +17,14 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// signalReportFD is where the inner helper finds the pipe that names the
+// signal which killed the target. The plan is on 3 and the marker on 4.
+const signalReportFD = 5
+
 // Relaunch runs the helper again as PID 1 of fresh user, mount, PID, and
 // network namespaces, hands it the plan over an inherited pipe and the lineage
 // marker when there is one, and relays signals and exit status until it ends.
-// The returned signal, when set, killed the inner helper and should end this
+// The returned signal, when set, killed the target and should end this
 // process the same way.
 func Relaunch(self string, args []string, plan []byte, marker *os.File) (code int, sig syscall.Signal, err error) {
 	// The parent-death signal is tied to the thread that forks.
@@ -30,20 +34,26 @@ func Relaunch(self string, args []string, plan []byte, marker *os.File) (code in
 	if err != nil {
 		return 0, 0, fmt.Errorf("plan pipe: %w", err)
 	}
+	report, reportWrite, err := os.Pipe()
+	if err != nil {
+		_ = read.Close()
+		_ = write.Close()
+		return 0, 0, fmt.Errorf("signal report pipe: %w", err)
+	}
+	defer func() { _ = report.Close() }()
 	cmd := exec.Command(self, args...)
 	// The standard descriptors are the command's streams, handed through as is.
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.NewFile(0, "stdin"), os.NewFile(1, "stdout"), os.NewFile(2, "stderr")
-	cmd.ExtraFiles = []*os.File{read}
-	if marker != nil {
-		cmd.ExtraFiles = append(cmd.ExtraFiles, marker)
-	}
+	// A nil marker leaves its descriptor closed in the child.
+	cmd.ExtraFiles = []*os.File{read, marker, reportWrite}
 	cmd.SysProcAttr = namespaceAttr()
-	if err := cmd.Start(); err != nil {
-		_ = read.Close()
+	err = cmd.Start()
+	_ = read.Close()
+	_ = reportWrite.Close()
+	if err != nil {
 		_ = write.Close()
 		return 0, 0, classifyLaunch(err)
 	}
-	_ = read.Close()
 	if marker != nil {
 		_ = marker.Close()
 	}
@@ -52,7 +62,29 @@ func Relaunch(self string, args []string, plan []byte, marker *os.File) (code in
 		_, _ = io.Copy(write, bytes.NewReader(plan))
 	}()
 	code, sig = relay(cmd.Process.Pid, cmd.Wait)
+	if reported := readSignalReport(report); reported != 0 {
+		sig = reported
+	}
 	return code, sig, nil
+}
+
+// readSignalReport reads the signal the inner helper named. The inner helper
+// has exited, so the pipe is at end-of-file after at most one byte.
+func readSignalReport(report *os.File) syscall.Signal {
+	var b [1]byte
+	if n, _ := report.Read(b[:]); n == 1 && b[0] != 0 && b[0] < 65 {
+		return syscall.Signal(b[0])
+	}
+	return 0
+}
+
+// ReportSignal names the signal that killed the target to the outer helper.
+// The inner helper is PID 1 of its PID namespace, which the kernel never lets
+// die by a signal it sends itself, so the outer helper dies by it instead.
+func ReportSignal(sig syscall.Signal) {
+	f := os.NewFile(signalReportFD, "signal-report")
+	_, _ = f.Write([]byte{byte(sig)})
+	_ = f.Close()
 }
 
 // namespaceAttr creates the namespaces, maps this one uid and gid onto
@@ -75,6 +107,8 @@ func namespaceAttr() *syscall.SysProcAttr {
 // target exists. The returned error is the raw exec failure, for the caller to
 // classify.
 func Supervise(path string, argv, env []string, afterStart func()) (code int, sig syscall.Signal, err error) {
+	// The target must not inherit the outer helper's signal report.
+	syscall.CloseOnExec(signalReportFD)
 	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0); err != nil {
 		return 0, 0, fmt.Errorf("child subreaper: %w", err)
 	}

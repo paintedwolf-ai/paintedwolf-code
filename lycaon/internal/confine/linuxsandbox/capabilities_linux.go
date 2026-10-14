@@ -124,16 +124,34 @@ func classifyLaunch(err error) *Unavailability {
 	}
 	switch {
 	case errors.Is(errno, unix.EPERM) && sysctlIs(appArmorUsernsSysctl, 1):
-		return &Unavailability{
-			Code:    UnavailableUserNamespacesAppArmor,
-			Detail:  "AppArmor restricts unprivileged user namespaces to profiled programs",
-			Remedy:  RemedyInstallPackage,
-			Profile: AppArmorProfile,
-		}
+		return appArmorDenied("AppArmor restricts unprivileged user namespaces to profiled programs")
 	case errors.Is(errno, unix.EPERM), errors.Is(errno, unix.EACCES), errors.Is(errno, unix.ENOSPC), errors.Is(errno, unix.EUSERS):
 		return &Unavailability{Code: UnavailableUserNamespacesDenied, Detail: errno.Error(), Remedy: RemedyEnableUserNamespaces}
 	case errors.Is(errno, unix.EINVAL), errors.Is(errno, unix.ENOSYS):
 		return &Unavailability{Code: UnavailableUserNamespacesUnsupported, Detail: errno.Error(), Remedy: RemedyUpgradeKernel}
 	}
 	return &Unavailability{Code: UnavailableHelper, Detail: err.Error()}
+}
+
+// unprivilegedUsernsLabel is the AppArmor profile an unprofiled program enters
+// when it creates a user namespace on a host that restricts them. The profile
+// holds no capabilities, so namespace creation succeeds and the first mount fails.
+const unprivilegedUsernsLabel = "unprivileged_userns"
+
+// classifyPrivilegedStep names why a step needing the namespace's own
+// capabilities failed, given the AppArmor label the helper runs under there.
+func classifyPrivilegedStep(step string, err error, label string) *Unavailability {
+	if label == unprivilegedUsernsLabel || strings.HasPrefix(label, unprivilegedUsernsLabel+" ") {
+		return appArmorDenied(step + ": " + err.Error() + " under AppArmor label " + label)
+	}
+	return &Unavailability{Code: UnavailableMount, Detail: step + ": " + err.Error()}
+}
+
+func appArmorDenied(detail string) *Unavailability {
+	return &Unavailability{
+		Code:    UnavailableUserNamespacesAppArmor,
+		Detail:  detail,
+		Remedy:  RemedyInstallPackage,
+		Profile: AppArmorProfile,
+	}
 }

@@ -157,7 +157,10 @@ func applyAndExec(profile []byte, resolved string, target []string) error {
 		if err != nil {
 			return err
 		}
-		exitHelper(code, sig)
+		if sig != 0 {
+			linuxsandbox.ExitWithSignal(sig)
+		}
+		os.Exit(code)
 	}
 	if err := linuxsandbox.Enter(plan); err != nil {
 		return err
@@ -175,15 +178,11 @@ func applyAndExec(profile []byte, resolved string, target []string) error {
 	if err != nil {
 		return ClassifyExecError(resolved, err)
 	}
-	exitHelper(code, sig)
-	return nil
-}
-
-func exitHelper(code int, sig syscall.Signal) {
 	if sig != 0 {
-		linuxsandbox.ExitWithSignal(sig)
+		linuxsandbox.ReportSignal(sig)
 	}
 	os.Exit(code)
+	return nil
 }
 
 // lineageMarkerFile is the descendant marker at its documented descriptor,
