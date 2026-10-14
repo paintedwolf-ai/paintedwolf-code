@@ -2,6 +2,8 @@ package wiring
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -18,6 +20,7 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 			h := BuildForTest(t, WithoutCoordinatorLoop())
 			ctx := t.Context()
 			dir := h.ProjectDir(t, "survey")
+			testutil.FailErr(t, "seed survey source", os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644))
 			sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
 			testutil.FailErr(t, "create survey", err)
 			run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.0"})

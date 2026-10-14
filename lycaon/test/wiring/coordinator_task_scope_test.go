@@ -158,6 +158,8 @@ func TestTaskAdmissionUsesTheExecutedIdentity(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := t.Context()
 			dir := h.ProjectDir(t, tc.name)
+			testutil.FailErr(t, "seed project dir", os.MkdirAll(filepath.Join(dir, "src"), 0o755))
+			testutil.FailErr(t, "seed project source", os.WriteFile(filepath.Join(dir, "src", "main.go"), []byte("package main\n"), 0o644))
 			sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, dir)
 			testutil.FailErr(t, "create coordinator", err)
 			call := wiringToolContext(sess.ID, dir)
