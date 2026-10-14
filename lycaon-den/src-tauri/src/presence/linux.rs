@@ -222,10 +222,12 @@ pub(super) fn confirm_app_password(
         ));
     }
     let (tx, rx) = mpsc::channel();
-    let parent = window.gtk_window().ok();
+    let owner = window.clone();
     let prompt = prompt.to_string();
     window
         .run_on_main_thread(move || {
+            // GTK objects stay on the main thread; the window handle crosses.
+            let parent = owner.gtk_window().ok();
             let _ = tx.send(ask_password(parent.as_ref(), &prompt));
         })
         .map_err(|error| PresenceCommandError::failed(format!("the password dialog could not open: {error}")))?;

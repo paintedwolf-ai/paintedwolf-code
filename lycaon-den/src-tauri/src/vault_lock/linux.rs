@@ -4,6 +4,7 @@
 
 use std::cell::RefCell;
 
+use gtk::glib::ToVariant;
 use gtk::{gio, glib};
 use tauri::AppHandle;
 
