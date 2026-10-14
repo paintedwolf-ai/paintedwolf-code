@@ -309,14 +309,14 @@ describe("ScrollportMotion live tail", () => {
 
     // A keydown cancels the reveal without activating a press anchor.
     host.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
+    expect(motion.tail.glidingToTail).toBe(false);
 
-    // Tail-bound reconciliation re-schedules and finishes settling to the tail.
-    for (let t = 48; t <= 400; t += 16) {
+    // Tail-bound reconciliation re-schedules and finishes settling to the tail (380ms settle duration).
+    for (let t = 48; t <= 520; t += 16) {
       frames.flush(2, t);
-      await Promise.resolve();
     }
+    for (let i = 0; i < 4; i += 1) await Promise.resolve();
     expect(viewport.scrollTop).toBe(1_100);
     expect(extentHoldPx(viewport)).toBe(0);
     unbindScrollportMotion(host);
@@ -363,8 +363,8 @@ describe("ScrollportMotion live tail", () => {
       frames.flush(1, 32 + cycle * 64);
       expect(motion.tail.glidingToTail).toBe(true);
       host.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
-      await Promise.resolve();
-      await Promise.resolve();
+      for (let i = 0; i < 4; i += 1) await Promise.resolve();
+      expect(motion.tail.glidingToTail).toBe(false);
     }
 
     // After the retry cap, the next confirmation commits directly without starting another glide.

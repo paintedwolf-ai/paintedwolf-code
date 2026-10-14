@@ -142,27 +142,32 @@ export class ScrollportTail {
     }
     // Range this scrollport held closes smoothly under the reader.
     this.glidingToTail = true;
-    void this.ports.revealOffset(overrun, { motion: "settle" }).catch(() => false).then((arrived) => {
-      this.glidingToTail = false;
-      if (this.disposed) return;
-      // A press that interrupted the glide keeps the content under it; other interruptions retry up to the cap.
-      if (!arrived) {
-        if (this.ports.pressActive()) {
-          this.interruptedGlideRetries = 0;
-          return;
-        }
-        this.interruptedGlideRetries += 1;
-        this.scheduleTailBoundReconcile(TAIL_BOUND_CONFIRM_FRAMES);
+    void this.ports.revealOffset(overrun, { motion: "settle" }).then(
+      (arrived) => this.finishTailGlide(arrived),
+      () => this.finishTailGlide(false),
+    );
+  };
+
+  private finishTailGlide(arrived: boolean): void {
+    this.glidingToTail = false;
+    if (this.disposed) return;
+    // A press that interrupted the glide keeps the content under it; other interruptions retry up to the cap.
+    if (!arrived) {
+      if (this.ports.pressActive()) {
+        this.interruptedGlideRetries = 0;
         return;
       }
-      this.interruptedGlideRetries = 0;
-      this.tailRangeReleased = true;
-      this.ports.measureGeometry(() => {
-        this.ports.resizeRetainedExtent();
-        this.reconcilePinnedTail();
-      });
+      this.interruptedGlideRetries += 1;
+      this.scheduleTailBoundReconcile(TAIL_BOUND_CONFIRM_FRAMES);
+      return;
+    }
+    this.interruptedGlideRetries = 0;
+    this.tailRangeReleased = true;
+    this.ports.measureGeometry(() => {
+      this.ports.resizeRetainedExtent();
+      this.reconcilePinnedTail();
     });
-  };
+  }
 
   private deferTailBoundReconcile(attempts: number): void {
     this.deferredTailBoundAttempts = Math.max(
