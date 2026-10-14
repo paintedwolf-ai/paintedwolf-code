@@ -140,5 +140,9 @@ func fallbackBudget(source ConfigSource) (compaction.CompactionConfig, llm.Sessi
 	if source != nil {
 		cfg = source.Config()
 	}
-	return cfg, llm.ScaleLimitsFromTrueWindow(modelinfo.DefaultFallbackTrueWindow)
+	derived := llm.ScaleLimitsFromTrueWindow(modelinfo.DefaultFallbackTrueWindow)
+	if cfg.MaxWorkerSummaryChars <= 0 {
+		cfg.MaxWorkerSummaryChars = derived.MaxWorkerSummaryChars
+	}
+	return cfg, derived
 }

@@ -298,7 +298,7 @@ func TestPromptHistoryOverflowNeverLoadsFullTranscript(t *testing.T) {
 	if loaded[1].ID != "active-request" || loaded[1].Content != rows[17].Content || loaded[len(loaded)-1].ID != rows[len(rows)-1].ID {
 		t.Fatal("bounded history lost the active request or newest canonical row")
 	}
-	if !strings.Contains(loaded[0].Content, `"through_ord":`) {
+	if !strings.Contains(loaded[0].Content, "[host:compacted history through ordinal ") {
 		t.Fatal("bounded fallback lost its recovery coordinates")
 	}
 }
@@ -427,7 +427,7 @@ func TestForceCompactHTTP(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 	content := strings.Repeat("x\n", 4000)
 	testutil.FailErr(t, "append historical detail and current request", store.AppendMessages(ctx, sess.ID,
-		api.Message{ID: "big", Role: api.MessageRoleUser, Content: content},
+		api.Message{ID: "big", Role: api.MessageRoleAssistant, Content: content},
 		api.Message{ID: "current", Role: api.MessageRoleUser, Content: "Continue the task"},
 	))
 

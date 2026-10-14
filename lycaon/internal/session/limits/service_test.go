@@ -8,10 +8,29 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
+
+func TestFallbackBudgetKeepsOverridesAndDerivesWorkerLimit(t *testing.T) {
+	cfg, derived := fallbackBudget(nil)
+	if cfg.MaxWorkerSummaryChars <= 0 || cfg.MaxWorkerSummaryChars != derived.MaxWorkerSummaryChars {
+		t.Fatalf("worker limit = %d, derived = %d", cfg.MaxWorkerSummaryChars, derived.MaxWorkerSummaryChars)
+	}
+	custom := compaction.DefaultCompactionConfig()
+	custom.TargetTokens = 321
+	custom.MaxWorkerSummaryChars = 123
+	got, _ := fallbackBudget(fixedConfig{custom})
+	if got.TargetTokens != 321 || got.MaxWorkerSummaryChars != 123 {
+		t.Fatalf("fallback discarded explicit limits: %+v", got)
+	}
+}
+
+type fixedConfig struct{ cfg compaction.CompactionConfig }
+
+func (f fixedConfig) Config() compaction.CompactionConfig { return f.cfg }
 
 func TestCompactionConfigFuncReapplies(t *testing.T) {
 	tmp := t.TempDir()
