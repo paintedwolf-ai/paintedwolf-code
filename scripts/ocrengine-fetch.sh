@@ -66,6 +66,22 @@ read_section() {
   ' "${PIN}"
 }
 
+# Reads one key of a top-level mapping such as producer.
+read_mapping() {
+  local mapping="$1" key="$2"
+  awk -v mapping="${mapping}" -v want="${key}" '
+    $0 == mapping ":" { in_mapping = 1; next }
+    in_mapping && /^[^[:space:]]/ { exit }
+    in_mapping && $1 == want ":" {
+      line = $0
+      sub(/^[^:]+:[[:space:]]*/, "", line)
+      gsub(/"/, "", line)
+      print line
+      exit
+    }
+  ' "${PIN}"
+}
+
 sha256_of() {
   if command -v sha256sum >/dev/null 2>&1; then
     sha256sum "$1" | awk '{print tolower($1)}'
@@ -98,9 +114,9 @@ if [[ -z "${ARCHIVE_SHA}" || "${ARCHIVE_BYTES}" == "0" || -z "${BINARY_SHA}" ]];
   exit 1
 fi
 URL="${URL_TMPL//\{engine_version\}/${ENGINE_VERSION}}"
-PRODUCER_REPOSITORY="$(read_section producer repository)"
-PRODUCER_TAG="$(read_section producer tag)"
-if [[ "${PRODUCER_TAG}" != "v${ENGINE_VERSION}" || "${URL}" != "https://github.com/${PRODUCER_REPOSITORY}/releases/download/${PRODUCER_TAG}/"* ]]; then
+PRODUCER_REPOSITORY="$(read_mapping producer repository)"
+PRODUCER_TAG="$(read_mapping producer tag)"
+if [[ -z "${PRODUCER_REPOSITORY}" || "${PRODUCER_TAG}" != "v${ENGINE_VERSION}" || "${URL}" != "https://github.com/${PRODUCER_REPOSITORY}/releases/download/${PRODUCER_TAG}/"* ]]; then
   echo "error: ${PIN} must fetch ${PLATFORM_KEY} from the ${PRODUCER_REPOSITORY} release ${PRODUCER_TAG}" >&2
   exit 1
 fi
