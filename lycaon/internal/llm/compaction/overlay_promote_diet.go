@@ -1,10 +1,8 @@
 package compaction
 
 import (
-	"fmt"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -17,8 +15,8 @@ var overlayPromoteDietTools = map[string]struct{}{
 	"pack_board":      {},
 }
 
-// DietOverlayPromoteMessages trims investigation-era context on implement_overlay_promote
-// turns: stale product reads, duplicate overlay assessments, and old pack_board snapshots.
+// DietOverlayPromoteMessages retains the latest overlay assessments and pack board.
+// Source reads remain subject to the shared context-budget pipeline.
 func DietOverlayPromoteMessages(messages []api.Message) []api.Message {
 	if len(messages) == 0 {
 		return messages
@@ -44,9 +42,6 @@ func DietOverlayPromoteMessages(messages []api.Message) []api.Message {
 				out[i].Content = overlayPromoteDietTombstone
 			}
 			continue
-		}
-		if name == "read" && overlayPromoteReadShouldElide(call.Args) {
-			out[i].Content = fmt.Sprintf("[overlay-promote diet — product read of %s elided; use preview_overlay or promote_overlay(overlay_id)]", normalizeReadPath(call.Args["path"]))
 		}
 	}
 	return out
@@ -91,16 +86,4 @@ func overlayPromoteToolOverlayID(args map[string]any) string {
 		return id
 	}
 	return strings.TrimSpace(asString(args["job_id"]))
-}
-
-func overlayPromoteReadShouldElide(args map[string]any) bool {
-	path := normalizeReadPath(args["path"])
-	if path == "" {
-		return false
-	}
-	// Keep agent spill reads (relative wire + absolute durable leftovers).
-	if tooloutput.IsAgentWireSpillReadArg(path) {
-		return false
-	}
-	return true
 }

@@ -53,7 +53,7 @@ Tool-output compaction and routing branch on tool identity and chunk role, never
 | `compaction/chunk_compactor.go` `CompactChunk` | routes off the stamped `chunk.Class.Strategy` / `chunk.Class.Source`, never off `chunk.ToolName` at compact time | routes on the stamped diet class |
 | `compaction/overlay_promote_chunk.go` `IsOverlayPromoteConflictProtected` | `strings.Contains(content, …)` on the `OVERLAY_PROMOTE_SPILL` / `BANNER_PROMOTE_CONFLICT_DIGEST` hint codes | reads back codes the host itself stamped; unreachable for other tools after the identity gate |
 | `compaction/chunk_compactor.go` `strategyFor` | `strings.Contains(content, hostmarker.CompactionBannerOpen)` | idempotency for already-compacted chunks, using the named constant the compactor wrote |
-| `compaction/overlay_promote_diet.go` | tool-name map plus read-path heuristics | diet by tool identity and read args, not output sniffing |
+| `compaction/overlay_promote_diet.go` | tool identity and overlay id | retains latest overlay assessments and board snapshots; source reads use shared budget fitting |
 
 Content-substring routers are forbidden outside these sites. Guards: `TestNoContentSubstringToolRouting` in [`test/contract/tools/tool_output_routing_test.go`](../lycaon/test/contract/tools/tool_output_routing_test.go) blocks new content-sniff routers, and `TestCompactChunkRoutesOverlayPromoteByToolIdentity` in [`internal/llm/compaction/chunk_route_test.go`](../lycaon/internal/llm/compaction/chunk_route_test.go) keeps summarize output away from the promote preserver.
 
