@@ -137,6 +137,12 @@ Every provider call has a hard ceiling. The synchronous path fits or exposes an 
 
 The same facts, frame, limits, and compaction revision produce the same fit. Latency never depends on an emergency summarizer call.
 
+## Continuation retention contract
+
+The host preserves the current user instruction, a bounded window of earlier original instructions, and the active worker assignment, and renders operational state from its owning subsystems. Supporting narrative may be summarized, but a model summary never establishes permissions, verification, or workflow completion. Older instructions stay addressable through canonical recall; a follow-up does not delete them or authorize their replacement. Session length never forces an unbounded instruction bundle into the prompt.
+
+Compaction covers the exchanges removed from the prompt. Each source range remains represented by retained text, source-linked summary entries, or a recoverable index. The prior continuation is an input to every subsequent generation. Coordinator and summarizer budgets are resolved independently; changing the receiving model rebuilds its projection from canonical history. Optional local ranking affects supporting detail only, and unavailable or untrained ranking retains the deterministic baseline.
+
 ## Asynchronous compaction
 
 High-quality summarization runs outside the coordinator critical path.
@@ -190,3 +196,11 @@ The [`summarize`](summarize.md) tool returns a structured context pack as a dura
 - Background compaction has one writer and never blocks normal turns.
 - Compaction splices use indexed ordinal and mutation watermarks; a mismatch fails closed to canonical facts.
 - Templates explain typed facts; prose does not become host fact.
+
+## Context-scaled history representations
+
+History has four representations: original exchanges, detailed continuation blocks, a compact continuation, and recovery references. A receiver receives one representation of each covered range. Context allocation reserves the active request and host instructions first, then allocates recent exchanges and continuation detail from the remaining budget. Small windows may omit detailed blocks.
+
+The reference representation records canonical ordinal boundaries and bounded recovery coordinates. Its size stays bounded as the session grows. Compaction does not remove canonical records. Receiver context size determines presentation; summarizer context size determines bounded synthesis batches.
+
+Bialy may rank eligible continuation detail when a trained head is available. It does not determine transcript deletion, coverage, authority, or the fallback representation. The deterministic policy remains complete without Bialy.

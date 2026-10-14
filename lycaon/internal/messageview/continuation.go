@@ -1,0 +1,35 @@
+package messageview
+
+// ContinuationFormat identifies a rebuildable history projection.
+const ContinuationFormat = 1
+
+// Continuation covers canonical observations independently of summary quality.
+type Continuation struct {
+	Format      int                  `json:"format"`
+	ThroughOrd  int64                `json:"through_ord"`
+	RemovedRows int                  `json:"removed_rows"`
+	Summary     ContinuationSummary  `json:"summary"`
+	Sources     []ContinuationSource `json:"sources"`
+	Receiver    string               `json:"receiver"`
+	Window      int                  `json:"window"`
+	Reason      string               `json:"reason"`
+}
+
+// ContinuationSummary contains model-authored navigation clues, not host state.
+type ContinuationSummary struct {
+	Facts       []string `json:"facts"`
+	Completed   []string `json:"completed"`
+	Pending     []string `json:"pending"`
+	Reacquire   []string `json:"reacquire"`
+	Constraints []string `json:"constraints"`
+}
+
+// ContinuationSource records the disposition of one removed observation.
+type ContinuationSource struct {
+	MessageID   string   `json:"message_id"`
+	Ord         int64    `json:"ord"`
+	Tool        string   `json:"tool,omitempty"`
+	Handles     []string `json:"handles,omitempty"`
+	Disposition string   `json:"disposition"`
+	Tokens      int      `json:"tokens"`
+}
