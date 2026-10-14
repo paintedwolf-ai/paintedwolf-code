@@ -18,7 +18,7 @@ const (
 // Installed paths the package manifest lists for each role.
 const (
 	EnginePath     = "/opt/painted-wolf-code/bin/pw"
-	DesktopAppPath = "/usr/bin/painted-wolf-code"
+	DesktopAppPath = "/opt/painted-wolf-code/bin/painted-wolf-code"
 )
 
 func rolePath(role string) string {
