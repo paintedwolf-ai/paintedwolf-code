@@ -108,7 +108,18 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 		for _, meta := range requestable {
 			available = append(available, meta.Name)
 		}
-		return "", FormatRequestToolsReject(t.deps, profileID, need, available)
+		var discovery *turnload.Discovery
+		if outcome.Failure == "" && len(cards) > 0 {
+			entries := make([]turnload.DiscoveryEntry, 0, len(cards))
+			for _, card := range cards {
+				entries = append(entries, turnload.DiscoveryEntry(card))
+			}
+			discovery, err = DiscoveryPage(tctx, "request_tools", need, "", "no_match", "", entries)
+			if err != nil {
+				return "", err
+			}
+		}
+		return "", FormatRequestToolsReject(t.deps, profileID, need, available, discovery)
 	}
 	if browsing || outcome.Failure != "" {
 		status := "ranking_unavailable"
@@ -198,17 +209,20 @@ func (t requestTools) activationResult(ctx context.Context, tctx ToolContext, pr
 	return result
 }
 
-func FormatRequestToolsReject(deps RequestToolsDeps, profileID, need string, available []string) error {
+func FormatRequestToolsReject(deps RequestToolsDeps, profileID, need string, available []string, discovery *turnload.Discovery) error {
 	sort.Strings(available)
 	var fmtr *guidance.StaticRejectFormatter
 	if deps.RejectFmt != nil {
 		fmtr = deps.RejectFmt()
 	}
-	return toolrejection.FormatDecisionReject("TOOL_REQUEST_UNMATCHED", map[string]any{
-		"need":      need,
-		"available": available,
-		"profile":   profileID,
-	}, fmtr)
+	data := map[string]any{"need": need, "available": available, "profile": profileID}
+	if discovery != nil {
+		delete(data, "available")
+		data["discovery"] = discovery
+		data["tool_discovery_status"] = discovery.Status
+		data["tool_discovery_has_more"] = discovery.NextNeed != ""
+	}
+	return toolrejection.FormatDecisionReject("TOOL_REQUEST_UNMATCHED", data, fmtr)
 }
 
 func liveRequestableMetas(deps RequestToolsDeps, reg *DefaultRegistry, profileID string, access sandbox.ToolAccess, plan toolsurface.Plan, constrained bool) []ToolMeta {

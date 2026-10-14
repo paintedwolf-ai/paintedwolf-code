@@ -4,6 +4,8 @@ import "github.com/lycaon/lycaon/internal/oarcore"
 
 // Occurrence facts describe host metadata and are available to every rule consumer ([OAR-FACT-27]).
 var occurrenceFactDecls = []factDecl{
+	{"tool_discovery_status", oarcore.TypeString, FactTierHost, ""},
+	{"tool_discovery_has_more", oarcore.TypeBool, FactTierHost, ""},
 	{"syntax_override_reason", oarcore.TypeString, FactTierHost, ""},
 	{"rejection_reason", oarcore.TypeString, FactTierHost, ""},
 	{"rejection_field", oarcore.TypeString, FactTierHost, ""},

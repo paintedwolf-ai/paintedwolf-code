@@ -725,6 +725,10 @@ host_facts:
    type: list<string>
  - name: paintedwolf.can_request_tools
    type: bool
+ - name: paintedwolf.tool_discovery_status
+   type: string
+ - name: paintedwolf.tool_discovery_has_more
+   type: bool
  - name: paintedwolf.tool_loadable
    type: bool
  - name: paintedwolf.can_task

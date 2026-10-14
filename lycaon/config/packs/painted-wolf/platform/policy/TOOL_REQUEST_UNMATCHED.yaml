@@ -13,14 +13,23 @@ requires:
   - paintedwolf.available
   - paintedwolf.profile
   - paintedwolf.need
+  - paintedwolf.tool_discovery_status
+  - paintedwolf.tool_discovery_has_more
 when: paintedwolf.rejection_code == "TOOL_REQUEST_UNMATCHED"
 effect: block
 copy:
   what: 'No schema loaded for the request "{{ paintedwolf.need }}" in profile {{ paintedwolf.profile }}'
   cause: No additional tool was selected for this need
   why: Existing tools remain available; an empty result does not establish that no relevant tool exists
-  fix: 'Continue with tools already available where possible. Retry only with a more specific need or an exact loadable name: {{ paintedwolf.available }}'
-  instead: Do not repeat the same request unchanged. If the missing capability blocks the task, explain that limit rather than claiming completion
+  fix: >-
+    {% if paintedwolf.tool_discovery_status == "no_match" %}Inspect the names and descriptions in `discovery.entries` in the feedback details.
+    Load a relevant tool by calling `request_tools` with its exact name as `need`.{% if paintedwolf.tool_discovery_has_more %}
+    If this page has no suitable entry, pass `discovery.next_need` unchanged as `need` to inspect the next page.{% endif %}
+    Existing tools remain usable. If no catalog entry fits, report the missing capability.
+    {% else %}Continue with tools already available where possible. Retry only with a more specific need or an exact loadable name: {{ paintedwolf.available }}{% endif %}
+  instead: >-
+    {% if paintedwolf.tool_discovery_status == "no_match" %}Choose an exact tool from the catalog{% if paintedwolf.tool_discovery_has_more %}, or continue browsing with next_need{% endif %}; do not repeat the unchanged description.
+    {% else %}Do not repeat the same request unchanged. If the missing capability blocks the task, explain that limit rather than claiming completion{% endif %}
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:request_tools
 x-paintedwolf-message: 'No schema loaded for "{{ paintedwolf.need }}" in profile {{ paintedwolf.profile }}. Loadable: {{ paintedwolf.available }}'
