@@ -218,7 +218,7 @@ func TestKDEReversedExceptionProxiesOnlyListedHosts(t *testing.T) {
 }
 
 func TestKDEEnvironmentTypeResolvesNamedVariables(t *testing.T) {
-	lookup := writeKIO(t, "[Proxy Settings]\nProxyType=3\nhttpsProxy=CORP_HTTPS_PROXY\nhttpProxy=UNSET_VARIABLE\n")
+	lookup := writeKIO(t, "[Proxy Settings]\nProxyType=4\nhttpsProxy=CORP_HTTPS_PROXY\nhttpProxy=UNSET_VARIABLE\n")
 	config, _, err := readKIOConfiguration(lookup)
 	testutil.FailErr(t, "read kioslaverc", err)
 	if config.HTTPS == nil || config.HTTPS.String() != "http://env.example:9000" || config.HTTP != nil {
@@ -233,7 +233,7 @@ func TestKDEScriptAndDiscoveryAreUnsupported(t *testing.T) {
 	if _, err := config.proxyFor(mustTarget(t, "https://api.example/")); !errors.As(err, &unsupported) || unsupported.Source != SourceKIO || unsupported.Reference != "file:///etc/proxy.pac" {
 		t.Fatalf("script type = %v", err)
 	}
-	config, _, err = readKIOConfiguration(writeKIO(t, "[Proxy Settings]\nProxyType=4\n"))
+	config, _, err = readKIOConfiguration(writeKIO(t, "[Proxy Settings]\nProxyType=3\n"))
 	testutil.FailErr(t, "read discovery type", err)
 	if _, err := config.proxyFor(mustTarget(t, "https://api.example/")); !errors.As(err, &unsupported) || unsupported.Mechanism != "proxy auto-discovery" {
 		t.Fatalf("discovery type = %v", err)

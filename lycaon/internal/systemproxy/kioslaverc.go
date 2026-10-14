@@ -17,13 +17,13 @@ const (
 	maxKIOBytes   = 256 << 10
 )
 
-// KDE proxy types as kioslaverc stores them.
+// KDE proxy types as kioslaverc stores them (KProtocolManager::ProxyType).
 const (
 	kioProxyNone        = 0
 	kioProxyManual      = 1
 	kioProxyScript      = 2
-	kioProxyEnvironment = 3
-	kioProxyDiscovery   = 4
+	kioProxyDiscovery   = 3
+	kioProxyEnvironment = 4
 )
 
 // kioConfigurationPath follows the KDE configuration lookup for the user file.
