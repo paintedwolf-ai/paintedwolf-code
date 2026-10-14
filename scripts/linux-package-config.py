@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Emit the Tauri bundle config fragment that stages the Linux package tree.
 
-The fragment carries what cannot live in the static Tauri config: dependency
-constraints rendered from the measured Linux floor, and the `files` map that
-places the engine payload under the package install root and wires the
-optional packaging fragments other subsystems ship (polkit, systemd, AppArmor,
-SELinux). Tauri stages that tree through its .deb target; linux-package-assemble.py
-finishes both families from it. Missing optional directories are tolerated;
-required payloads are not.
+The fragment carries the `files` map that places the engine payload under the
+package install root and wires the optional packaging fragments other
+subsystems ship (polkit, systemd, AppArmor, SELinux). Tauri stages that tree
+through its .deb target; linux-package-assemble.py builds both families from it
+with dependencies rendered here from the catalog and the measured floor.
+Missing optional directories are tolerated; required payloads are not.
 """
 
 from __future__ import annotations
@@ -135,12 +134,10 @@ def main() -> int:
             raise ValueError("packaging/linux/dependencies.json has an unsupported format")
         required = required_files(root, tauri_dir, args.target, args.manifest.resolve())
         files = {**required, **optional_files(root, "deb")}
-        linux = {
-            "deb": {
-                **render_dependencies(catalog, "deb", floors),
-                "files": {destination: str(source) for destination, source in sorted(files.items())},
-            }
-        }
+        # Validate both families' constraints here; linux-package-assemble.py writes them.
+        for family in ("deb", "rpm"):
+            render_dependencies(catalog, family, floors)
+        linux = {"deb": {"files": {destination: str(source) for destination, source in sorted(files.items())}}}
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

@@ -38,6 +38,7 @@ PACKAGE_NAME = "painted-wolf-code"
 OWNED_ROOT = "opt/painted-wolf-code"
 DEB_ARCHES = {"x86_64": "amd64", "aarch64": "arm64"}
 DEB_COMPRESSION = ("xz", "6")
+DEB_SCRIPTS = ("preinst", "postinst", "prerm", "postrm")
 RPM_SCRIPTLETS = (("pre", "pre"), ("post", "post"), ("preun", "preun"), ("postun", "postun"))
 # rpm expands globs and macros in %files lines; quoting covers spaces only.
 UNSAFE_PATH_CHARACTERS = set('[]*?{}"\\%\n\r\t')
@@ -75,42 +76,95 @@ def tree_files(tree: Path):
             yield Path(dirpath) / name
 
 
-def deb_control(staged: Path, data: Path, version: str) -> str:
-    fields = (staged / "control" / "control").read_text(encoding="utf-8").splitlines()
+def rendered_dependencies(root: Path, family: str) -> dict[str, list[str]]:
+    config = load_package_config(root)
+    floors = config.floor_values(root / "lycaon" / "internal" / "platformfloor" / "linux_floor.txt")
+    catalog = json.loads((root / "packaging" / "linux" / "dependencies.json").read_text(encoding="utf-8"))
+    return config.render_dependencies(catalog, family, floors)
+
+
+def deb_control(root: Path, data: Path, version: str, arch: str) -> str:
+    meta = tauri_metadata(root)
+    deb = meta.get("linux", {}).get("deb", {})
+    dependencies = rendered_dependencies(root, "deb")
     installed_kib = sum(path.lstat().st_size for path in tree_files(data)) // 1024
-    replaced = {"Version": version, "Installed-Size": str(installed_kib)}
-    seen = set()
-    for index, line in enumerate(fields):
-        name = line.split(":", 1)[0]
-        if name in replaced and not line.startswith(" "):
-            fields[index] = f"{name}: {replaced[name]}"
-            seen.add(name)
-    if seen != replaced.keys():
-        raise ValueError(f"Tauri's control file lacks {sorted(replaced.keys() - seen)}")
+    description = textwrap.wrap(meta["longDescription"], width=78)
+    fields = [
+        f"Package: {PACKAGE_NAME}",
+        f"Version: {version}",
+        f"Architecture: {DEB_ARCHES[arch]}",
+        f"Installed-Size: {installed_kib}",
+        f"Maintainer: {meta['publisher']}",
+        f"Section: {deb.get('section', 'devel')}",
+        f"Priority: {deb.get('priority', 'optional')}",
+        f"Homepage: {meta['homepage']}",
+        f"Depends: {', '.join(dependencies['depends'])}",
+        f"Recommends: {', '.join(dependencies['recommends'])}",
+        f"Description: {meta['shortDescription']}",
+        *(f" {line}" for line in description),
+    ]
     return "\n".join(fields) + "\n"
 
 
-def write_deb(staged: Path, workdir: Path, version: str, arch: str, output: Path) -> Path:
-    root = workdir / "deb-root"
-    subprocess.run(["cp", "-al", f"{staged / 'data'}/.", str(root)], check=True)
-    control = root / "DEBIAN"
-    shutil.copytree(staged / "control", control)
-    (control / "control").write_text(deb_control(staged, staged / "data", version), encoding="utf-8")
+def write_deb(root: Path, staged: Path, workdir: Path, version: str, arch: str, output: Path) -> Path:
+    data = staged / "data"
+    deb_root = workdir / "deb-root"
+    subprocess.run(["cp", "-al", f"{data}/.", str(deb_root)], check=True)
+    control = deb_root / "DEBIAN"
+    control.mkdir(mode=0o755)
+    (control / "control").write_text(deb_control(root, data, version, arch), encoding="utf-8")
+    for script in DEB_SCRIPTS:
+        shutil.copyfile(root / "packaging" / "linux" / "deb" / script, control / script)
+        (control / script).chmod(0o755)
     sums = []
-    for path in tree_files(staged / "data"):
+    for path in tree_files(data):
         if path.is_symlink():
             continue
         digest = hashlib.md5(path.read_bytes(), usedforsecurity=False).hexdigest()
-        sums.append(f"{digest}  {path.relative_to(staged / 'data').as_posix()}")
+        sums.append(f"{digest}  {path.relative_to(data).as_posix()}")
     (control / "md5sums").write_text("\n".join(sums) + "\n", encoding="utf-8")
+    for path in control.iterdir():
+        if path.name not in DEB_SCRIPTS:
+            path.chmod(0o644)
     target = output / f"{PACKAGE_NAME}_{version}_{DEB_ARCHES[arch]}.deb"
     kind, level = DEB_COMPRESSION
     subprocess.run(
-        ["dpkg-deb", "--root-owner-group", f"-Z{kind}", f"-z{level}", "--build", str(root), str(target)],
+        ["dpkg-deb", "--root-owner-group", f"-Z{kind}", f"-z{level}", "--build", str(deb_root), str(target)],
         check=True,
         stdout=subprocess.DEVNULL,
     )
     return target
+
+
+def is_shared_library(path: Path) -> bool:
+    """An ELF shared object without a program interpreter (PIE executables carry one)."""
+    with path.open("rb") as handle:
+        header = handle.read(64)
+        if len(header) < 64 or header[:4] != b"\x7fELF" or header[4] != 2:
+            return False
+        order = "little" if header[5] == 1 else "big"
+        if int.from_bytes(header[16:18], order) != 3:  # ET_DYN
+            return False
+        phoff = int.from_bytes(header[32:40], order)
+        phentsize = int.from_bytes(header[54:56], order)
+        phnum = int.from_bytes(header[56:58], order)
+        handle.seek(phoff)
+        for _ in range(phnum):
+            if int.from_bytes(handle.read(phentsize)[:4], order) == 3:  # PT_INTERP
+                return False
+    return True
+
+
+def normalise_modes(data: Path) -> None:
+    """Directories 0755, executables 0755, everything else (shared libraries included) 0644."""
+    for dirpath, dirnames, filenames in os.walk(data):
+        Path(dirpath).chmod(0o755)
+        for name in filenames:
+            path = Path(dirpath) / name
+            if path.is_symlink():
+                continue
+            executable = path.stat().st_mode & 0o111 and not is_shared_library(path)
+            path.chmod(0o755 if executable else 0o644)
 
 
 def rpm_quote(relative: str) -> str:
@@ -151,10 +205,7 @@ def rpm_tree(root: Path, deb_tree: Path, destination: Path) -> Path:
 
 
 def rpm_spec(root: Path, tree: Path, version: str, zstd_level: int) -> str:
-    config = load_package_config(root)
-    floors = config.floor_values(root / "lycaon" / "internal" / "platformfloor" / "linux_floor.txt")
-    catalog = json.loads((root / "packaging" / "linux" / "dependencies.json").read_text(encoding="utf-8"))
-    dependencies = config.render_dependencies(catalog, "rpm", floors)
+    dependencies = rendered_dependencies(root, "rpm")
     meta = tauri_metadata(root)
     scriptlets = []
     for section, filename in RPM_SCRIPTLETS:
@@ -255,6 +306,7 @@ def assemble(args: argparse.Namespace) -> int:
             if shutil.which(tool) is None:
                 raise ValueError(f"{tool} is required to assemble the Linux packages (Debian and Ubuntu: {package})")
         staged = staged_tree(bundle_dir)
+        normalise_modes(staged / "data")
         subprocess.run(
             [sys.executable, str(root / "scripts" / "linux-package-manifest.py"), "seal-tree", "--tree", str(staged / "data")],
             check=True,
@@ -274,7 +326,7 @@ def assemble(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             started = time.monotonic()
-            deb = write_deb(staged, Path(workdir), args.version, args.arch, bundle_dir / "deb")
+            deb = write_deb(root, staged, Path(workdir), args.version, args.arch, bundle_dir / "deb")
             print(
                 f"linux-package-assemble: {deb} ({deb.stat().st_size} bytes, {' '.join(DEB_COMPRESSION)}) "
                 f"in {time.monotonic() - started:.1f}s, peak RSS of rpmbuild and dpkg-deb "

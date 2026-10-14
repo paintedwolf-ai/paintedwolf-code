@@ -36,11 +36,7 @@
       "deb": {
         "section": "devel",
         "priority": "optional",
-        "desktopTemplate": "../../packaging/linux/painted-wolf-code.desktop.hbs",
-        "preInstallScript": "../../packaging/linux/deb/preinst",
-        "postInstallScript": "../../packaging/linux/deb/postinst",
-        "preRemoveScript": "../../packaging/linux/deb/prerm",
-        "postRemoveScript": "../../packaging/linux/deb/postrm"
+        "desktopTemplate": "../../packaging/linux/painted-wolf-code.desktop.hbs"
       }
     }
   }

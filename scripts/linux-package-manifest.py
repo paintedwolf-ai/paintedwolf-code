@@ -152,16 +152,24 @@ def verify_tree(args: argparse.Namespace) -> int:
 
 
 def seal_tree(args: argparse.Namespace) -> int:
-    """Re-digest the listed executables from a staged tree and rewrite its manifest.
+    """Rewrite a staged tree's manifest from the executables the tree installs.
 
-    Bundling patches the shell executable after `generate` ran, so the package
-    manifest is sealed against the bytes that will ship.
+    Bundling patches the shell executable and packaging normalises modes after
+    `generate` ran, so the package manifest is sealed against what will ship.
     """
     tree: Path = args.tree.resolve()
     manifest_path = tree / INSTALL_ROOT.lstrip("/") / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     validate(manifest)
-    manifest["executables"] = [entry(row["path"], tree / row["path"].lstrip("/")) for row in manifest["executables"]]
+    rows = []
+    for base in (tree / INSTALL_ROOT.lstrip("/"), tree / "usr" / "bin"):
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames.sort()
+            for filename in sorted(filenames):
+                path = Path(dirpath) / filename
+                if not path.is_symlink() and is_executable_file(path):
+                    rows.append(entry("/" + path.relative_to(tree).as_posix(), path))
+    manifest["executables"] = sorted(rows, key=lambda row: row["path"])
     validate(manifest)
     # The staged file may be a hard link to the build output; replace it rather than writing through.
     sealed = manifest_path.with_suffix(".json.sealed")
