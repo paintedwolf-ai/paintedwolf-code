@@ -110,8 +110,8 @@ func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
 	cfg, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "load recovery catalogue", err)
 	boolFacts := map[string]bool{}
-	for _, fact := range oar.FactCatalogue() {
-		boolFacts[oar.PublishedFactName(fact.Name)] = fact.Type == "bool"
+	for _, fact := range recoveryHostFacts(t) {
+		boolFacts[fact.Name] = fact.Type == "bool"
 	}
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(testutil.CheckoutRoot(t), "lycaon/config/packs/painted-wolf/platform/tools/schemas"))
 	testutil.FailErr(t, "load recovery argument schemas", err)
@@ -210,7 +210,7 @@ func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
 
 func TestRecoveryAvailabilityFactsMatchFrozenSchemas(t *testing.T) {
 	checked := 0
-	for _, fact := range oar.FactCatalogue() {
+	for _, fact := range recoveryHostFacts(t) {
 		name, ok := strings.CutPrefix(fact.Name, "paintedwolf.can_")
 		if !ok {
 			continue
@@ -228,7 +228,7 @@ func TestRecoveryAvailabilityFactsMatchFrozenSchemas(t *testing.T) {
 				gc := oar.NewGuardContext()
 				gc.ObservationData = map[string]any{key: !offered}
 				tools.RegisterRecoveryFacts(ctx, gc)
-				testutil.FailErr(t, "publish availability", gc.Ensure(oar.PublishedFactName(fact.Name)))
+				testutil.FailErr(t, "publish availability", gc.Ensure(fact.Name))
 				if gc.ObservationData[key] != offered {
 					t.Fatalf("%s did not follow its frozen schema membership", fact.Name)
 				}
@@ -241,4 +241,11 @@ func TestRecoveryAvailabilityFactsMatchFrozenSchemas(t *testing.T) {
 	if checked == 0 {
 		t.Fatal("no declared recovery availability fact was tested")
 	}
+}
+
+func recoveryHostFacts(t *testing.T) []oar.HostFactDecl {
+	t.Helper()
+	doc, err := oar.LoadCapabilityDocument(filepath.Join(testutil.CheckoutRoot(t), "lycaon/config/packs/painted-wolf/platform/host/anchors/oar-profile.yaml"))
+	testutil.FailErr(t, "load published recovery facts", err)
+	return doc.HostFacts
 }
