@@ -317,6 +317,9 @@ Worker count, loop count, tool bytes, assignment size, path count, and overlay s
 
 `pack_board` is a bounded orientation projection assembled from current host state: project roots, repository summary, workflow, workers, progress, overlays, scans, and other active facts. It is not a writable coordination document or a worker-status polling loop; it helps a coordinator decide what to inspect next, and the underlying domain facts remain authoritative. Small and empty repositories are represented explicitly: a warming source catalog is not reported as empty.
 
+Worker summaries use the host-graded delivery outcome. A terminal run can return complete, partial, blocked, failed, canceled, or unreported work; stopping execution does not establish successful delivery. Returned outcomes remain visible alongside workers still in flight.
+
+
 ### Scan visibility (host inject)
 
 When scan state is relevant, the host projects summary and freshness into the board and workflow context. Detailed findings remain behind scan tools so the prompt does not grow with repository size.
