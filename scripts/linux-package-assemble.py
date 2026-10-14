@@ -1,25 +1,28 @@
 #!/usr/bin/env python3
 """Finish the Linux .deb and .rpm from the one tree Tauri staged.
 
-`tauri bundle --bundles deb` compiles nothing new; it renders the desktop entries
-and icons and places every path of the `files` map from linux-package-config.py
-into `bundle/deb/<stem>/data`. Both packages are finished from that tree:
+`tauri bundle --bundles deb` renders the desktop entries and icons and places
+every path of the `files` map from linux-package-config.py into
+`bundle/deb/<stem>/data`; it also patches the shell executable with its bundle
+type. Both packages are built from that tree with the distributions' own tools:
 
-- .deb: Tauri writes the native app version into `control`, which drops the
-  prerelease. The adapter rewrites only the control member with the release's
-  Debian version and keeps Tauri's data member byte for byte.
-- .rpm: Tauri's rpm builder holds the whole payload in memory and compresses it
-  on one thread. rpmbuild packs the same tree, with the fragments only one
-  family ships swapped, and streams it through zstd on every core. The spec takes its dependencies from the catalog the .deb uses,
-  its scriptlets from packaging/linux/rpm, and its metadata from the Tauri
-  configuration.
+- The manifest in the tree is sealed against the staged bytes, so it describes
+  the patched shell.
+- .deb: dpkg-deb with xz on every core. The control file is Tauri's with the
+  release's Debian version (Tauri writes the native app version, which drops the
+  prerelease) and the installed size and md5sums of the sealed tree.
+- .rpm: rpmbuild with zstd on every core. Tauri's rpm builder holds the whole
+  payload in memory and compresses it on one thread. The spec takes its
+  dependencies from the catalog the .deb uses, its scriptlets from
+  packaging/linux/rpm, and its metadata from the Tauri configuration; fragments
+  only one family ships are swapped.
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
-import io
 import json
 import os
 import resource
@@ -27,17 +30,17 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-import tarfile
 import tempfile
+import textwrap
 import time
 
 PACKAGE_NAME = "painted-wolf-code"
 OWNED_ROOT = "opt/painted-wolf-code"
 DEB_ARCHES = {"x86_64": "amd64", "aarch64": "arm64"}
+DEB_COMPRESSION = ("xz", "6")
 RPM_SCRIPTLETS = (("pre", "pre"), ("post", "post"), ("preun", "preun"), ("postun", "postun"))
 # rpm expands globs and macros in %files lines; quoting covers spaces only.
 UNSAFE_PATH_CHARACTERS = set('[]*?{}"\\%\n\r\t')
-AR_MAGIC = b"!<arch>\n"
 
 
 def load_package_config(root: Path):
@@ -58,86 +61,55 @@ def tauri_metadata(root: Path) -> dict:
     return bundle
 
 
-def staged_deb(bundle_dir: Path) -> tuple[Path, Path]:
-    debs = sorted((bundle_dir / "deb").glob("*.deb"))
-    if len(debs) != 1:
-        raise ValueError(f"expected exactly one Tauri .deb under {bundle_dir / 'deb'}, found {len(debs)}")
-    staged = debs[0].with_suffix("")
-    if not (staged / "data").is_dir() or not (staged / "control" / "control").is_file():
-        raise ValueError(f"Tauri left no staged tree beside {debs[0].name}")
-    return debs[0], staged
+def staged_tree(bundle_dir: Path) -> Path:
+    staged = [path for path in (bundle_dir / "deb").iterdir() if path.is_dir()]
+    if len(staged) != 1 or not (staged[0] / "data").is_dir() or not (staged[0] / "control" / "control").is_file():
+        raise ValueError(f"expected exactly one tree staged by Tauri under {bundle_dir / 'deb'}")
+    return staged[0]
 
 
-def read_ar(path: Path) -> list[tuple[str, int, int]]:
-    """Return (name, offset, size) for each member of an ar archive."""
-    members = []
-    with path.open("rb") as handle:
-        if handle.read(8) != AR_MAGIC:
-            raise ValueError(f"{path} is not an ar archive")
-        while header := handle.read(60):
-            if len(header) != 60 or header[58:60] != b"`\n":
-                raise ValueError(f"{path} has a malformed ar header")
-            name = header[0:16].decode().strip().rstrip("/")
-            size = int(header[48:58].decode().strip())
-            members.append((name, handle.tell(), size))
-            handle.seek(size + (size % 2), os.SEEK_CUR)
-    return members
+def tree_files(tree: Path):
+    for dirpath, dirnames, filenames in os.walk(tree):
+        dirnames.sort()
+        for name in sorted(filenames):
+            yield Path(dirpath) / name
 
 
-def ar_header(name: str, size: int, mtime: int) -> bytes:
-    return f"{name:<16}{mtime:<12}{0:<6}{0:<6}{'100644':<8}{size:<10}`\n".encode()
+def deb_control(staged: Path, data: Path, version: str) -> str:
+    fields = (staged / "control" / "control").read_text(encoding="utf-8").splitlines()
+    installed_kib = sum(path.lstat().st_size for path in tree_files(data)) // 1024
+    replaced = {"Version": version, "Installed-Size": str(installed_kib)}
+    seen = set()
+    for index, line in enumerate(fields):
+        name = line.split(":", 1)[0]
+        if name in replaced and not line.startswith(" "):
+            fields[index] = f"{name}: {replaced[name]}"
+            seen.add(name)
+    if seen != replaced.keys():
+        raise ValueError(f"Tauri's control file lacks {sorted(replaced.keys() - seen)}")
+    return "\n".join(fields) + "\n"
 
 
-def control_member(control_dir: Path, version: str, mtime: int) -> bytes:
-    lines = (control_dir / "control").read_text(encoding="utf-8").splitlines()
-    versions = [index for index, line in enumerate(lines) if line.startswith("Version: ")]
-    if len(versions) != 1:
-        raise ValueError("Tauri's control file has no single Version field")
-    lines[versions[0]] = f"Version: {version}"
-    buffer = io.BytesIO()
-    with tarfile.open(fileobj=buffer, mode="w:gz", format=tarfile.GNU_FORMAT) as archive:
-        root = tarfile.TarInfo("./")
-        root.type, root.mode, root.mtime = tarfile.DIRTYPE, 0o755, mtime
-        archive.addfile(root)
-        for path in sorted(control_dir.iterdir()):
-            data = ("\n".join(lines) + "\n").encode() if path.name == "control" else path.read_bytes()
-            info = tarfile.TarInfo(f"./{path.name}")
-            info.size, info.mtime = len(data), mtime
-            info.mode = 0o755 if os.access(path, os.X_OK) else 0o644
-            info.uname = info.gname = "root"
-            archive.addfile(info, io.BytesIO(data))
-    return buffer.getvalue()
-
-
-def write_deb(tauri_deb: Path, staged: Path, version: str, arch: str, output: Path) -> Path:
-    members = read_ar(tauri_deb)
-    names = [name for name, _, _ in members]
-    if names[0] != "debian-binary" or not names[1].startswith("control.tar") or not names[2].startswith("data.tar"):
-        raise ValueError(f"{tauri_deb.name} members are {names}, not debian-binary, control, data")
-    mtime = int(tauri_deb.stat().st_mtime)
-    control = control_member(staged / "control", version, mtime)
+def write_deb(staged: Path, workdir: Path, version: str, arch: str, output: Path) -> Path:
+    root = workdir / "deb-root"
+    subprocess.run(["cp", "-al", f"{staged / 'data'}/.", str(root)], check=True)
+    control = root / "DEBIAN"
+    shutil.copytree(staged / "control", control)
+    (control / "control").write_text(deb_control(staged, staged / "data", version), encoding="utf-8")
+    sums = []
+    for path in tree_files(staged / "data"):
+        if path.is_symlink():
+            continue
+        digest = hashlib.md5(path.read_bytes(), usedforsecurity=False).hexdigest()
+        sums.append(f"{digest}  {path.relative_to(staged / 'data').as_posix()}")
+    (control / "md5sums").write_text("\n".join(sums) + "\n", encoding="utf-8")
     target = output / f"{PACKAGE_NAME}_{version}_{DEB_ARCHES[arch]}.deb"
-    partial = target.with_suffix(".deb.partial")
-    with tauri_deb.open("rb") as source, partial.open("wb") as handle:
-        handle.write(AR_MAGIC)
-        for name, offset, size in members:
-            if name.startswith("control.tar"):
-                name, size = "control.tar.gz", len(control)
-            handle.write(ar_header(name, size, mtime))
-            if name == "control.tar.gz":
-                handle.write(control)
-            else:
-                source.seek(offset)
-                remaining = size
-                while remaining:
-                    chunk = source.read(min(remaining, 1 << 20))
-                    handle.write(chunk)
-                    remaining -= len(chunk)
-            if size % 2:
-                handle.write(b"\n")
-    partial.replace(target)
-    if tauri_deb != target:
-        tauri_deb.unlink()
+    kind, level = DEB_COMPRESSION
+    subprocess.run(
+        ["dpkg-deb", "--root-owner-group", f"-Z{kind}", f"-z{level}", "--build", str(root), str(target)],
+        check=True,
+        stdout=subprocess.DEVNULL,
+    )
     return target
 
 
@@ -206,7 +178,7 @@ def rpm_spec(root: Path, tree: Path, version: str, zstd_level: int) -> str:
         *(f"Recommends: {row}" for row in dependencies["recommends"]),
         "",
         "%description",
-        meta["longDescription"].replace("%", "%%"),
+        textwrap.fill(meta["longDescription"].replace("%", "%%"), width=79),
         "",
         "%install",
         f'cp -al "{tree}/." "%{{buildroot}}/"',
@@ -220,25 +192,22 @@ def rpm_spec(root: Path, tree: Path, version: str, zstd_level: int) -> str:
     return "\n".join(lines)
 
 
-def write_rpm(root: Path, staged: Path, version: str, arch: str, output: Path, zstd_level: int) -> Path:
-    if shutil.which("rpmbuild") is None:
-        raise ValueError("rpmbuild is required to assemble the .rpm (Debian and Ubuntu: the rpm package)")
-    for stale in output.glob("*.rpm"):
-        stale.unlink()
-    with tempfile.TemporaryDirectory(prefix="rpmbuild-", dir=staged.parent) as topdir:
-        tree = rpm_tree(root, staged / "data", Path(topdir) / "tree")
-        spec_path = Path(topdir) / f"{PACKAGE_NAME}.spec"
-        spec_path.write_text(rpm_spec(root, tree, version, zstd_level), encoding="utf-8")
-        subprocess.run(
-            [
-                "rpmbuild", "-bb", "--quiet", "--target", arch,
-                "--define", f"_topdir {topdir}",
-                "--define", f"_rpmdir {output}",
-                "--define", "_build_name_fmt %%{NAME}-%%{VERSION}-%%{RELEASE}.%%{ARCH}.rpm",
-                str(spec_path),
-            ],
-            check=True,
-        )
+def write_rpm(root: Path, staged: Path, workdir: Path, version: str, arch: str, output: Path, zstd_level: int) -> Path:
+    tree = rpm_tree(root, staged / "data", workdir / "rpm-tree")
+    topdir = workdir / "rpmbuild"
+    topdir.mkdir()
+    spec_path = topdir / f"{PACKAGE_NAME}.spec"
+    spec_path.write_text(rpm_spec(root, tree, version, zstd_level), encoding="utf-8")
+    subprocess.run(
+        [
+            "rpmbuild", "-bb", "--quiet", "--target", arch,
+            "--define", f"_topdir {topdir}",
+            "--define", f"_rpmdir {output}",
+            "--define", "_build_name_fmt %%{NAME}-%%{VERSION}-%%{RELEASE}.%%{ARCH}.rpm",
+            str(spec_path),
+        ],
+        check=True,
+    )
     rpms = sorted(output.glob("*.rpm"))
     if len(rpms) != 1:
         raise ValueError(f"rpmbuild produced {len(rpms)} packages in {output}")
@@ -282,20 +251,36 @@ def assemble(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     bundle_dir = args.bundle_dir.resolve()
     try:
-        tauri_deb, staged = staged_deb(bundle_dir)
-        started = time.monotonic()
-        deb = write_deb(tauri_deb, staged, args.version, args.arch, bundle_dir / "deb")
-        print(f"linux-package-assemble: {deb} in {time.monotonic() - started:.1f}s", file=sys.stderr)
-        rpm_dir = bundle_dir / "rpm"
-        rpm_dir.mkdir(parents=True, exist_ok=True)
-        started = time.monotonic()
-        rpm = write_rpm(root, staged, args.version, args.arch, rpm_dir, args.zstd_level)
-        print(
-            f"linux-package-assemble: {rpm} ({rpm.stat().st_size} bytes, zstd {args.zstd_level}) "
-            f"in {time.monotonic() - started:.1f}s, rpmbuild peak RSS "
-            f"{resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss // 1024} MiB",
-            file=sys.stderr,
+        for tool, package in (("dpkg-deb", "dpkg"), ("rpmbuild", "rpm")):
+            if shutil.which(tool) is None:
+                raise ValueError(f"{tool} is required to assemble the Linux packages (Debian and Ubuntu: {package})")
+        staged = staged_tree(bundle_dir)
+        subprocess.run(
+            [sys.executable, str(root / "scripts" / "linux-package-manifest.py"), "seal-tree", "--tree", str(staged / "data")],
+            check=True,
         )
+        for output in (bundle_dir / "deb", bundle_dir / "rpm"):
+            output.mkdir(parents=True, exist_ok=True)
+            for stale in [*output.glob("*.deb"), *output.glob("*.rpm")]:
+                stale.unlink()
+        with tempfile.TemporaryDirectory(prefix="linux-package-", dir=bundle_dir) as workdir:
+            # rpm first, so the first peak reading covers rpmbuild alone.
+            started = time.monotonic()
+            rpm = write_rpm(root, staged, Path(workdir), args.version, args.arch, bundle_dir / "rpm", args.zstd_level)
+            print(
+                f"linux-package-assemble: {rpm} ({rpm.stat().st_size} bytes, zstd {args.zstd_level}) "
+                f"in {time.monotonic() - started:.1f}s, peak RSS "
+                f"{resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss // 1024} MiB",
+                file=sys.stderr,
+            )
+            started = time.monotonic()
+            deb = write_deb(staged, Path(workdir), args.version, args.arch, bundle_dir / "deb")
+            print(
+                f"linux-package-assemble: {deb} ({deb.stat().st_size} bytes, {' '.join(DEB_COMPRESSION)}) "
+                f"in {time.monotonic() - started:.1f}s, peak RSS of rpmbuild and dpkg-deb "
+                f"{resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss // 1024} MiB",
+                file=sys.stderr,
+            )
     except (OSError, ValueError, KeyError, json.JSONDecodeError, subprocess.CalledProcessError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -305,7 +290,7 @@ def assemble(args: argparse.Namespace) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
-    build = commands.add_parser("assemble", help="finish both packages from Tauri's staged tree")
+    build = commands.add_parser("assemble", help="build both packages from Tauri's staged tree")
     build.add_argument("--root", type=Path, default=Path(__file__).resolve().parent.parent)
     build.add_argument("--bundle-dir", type=Path, required=True, help="target/<triple>/release/bundle")
     build.add_argument("--arch", required=True, choices=sorted(DEB_ARCHES))

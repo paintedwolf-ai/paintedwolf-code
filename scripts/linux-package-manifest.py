@@ -3,6 +3,8 @@
 
 `generate` hashes every executable the package installs, as the build staged
 it, and writes `manifest.json` (shape: packaging/linux/manifest/manifest.schema.json).
+`seal-tree` re-digests those executables inside the tree the packages are built
+from, after bundling has patched the shell.
 `verify-tree` reads the manifest inside an extracted package tree and checks
 that every listed executable is present with the recorded digest and size, so
 staging proves the shipped manifest describes the shipped bytes.
@@ -149,6 +151,27 @@ def verify_tree(args: argparse.Namespace) -> int:
     return 0
 
 
+def seal_tree(args: argparse.Namespace) -> int:
+    """Re-digest the listed executables from a staged tree and rewrite its manifest.
+
+    Bundling patches the shell executable after `generate` ran, so the package
+    manifest is sealed against the bytes that will ship.
+    """
+    tree: Path = args.tree.resolve()
+    manifest_path = tree / INSTALL_ROOT.lstrip("/") / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    validate(manifest)
+    manifest["executables"] = [entry(row["path"], tree / row["path"].lstrip("/")) for row in manifest["executables"]]
+    validate(manifest)
+    # The staged file may be a hard link to the build output; replace it rather than writing through.
+    sealed = manifest_path.with_suffix(".json.sealed")
+    sealed.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    sealed.chmod(0o644)
+    sealed.replace(manifest_path)
+    print(f"linux-package-manifest: sealed {len(manifest['executables'])} executables in {manifest_path}", file=sys.stderr)
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
@@ -158,6 +181,9 @@ def main() -> int:
     gen.add_argument("--version", required=True)
     gen.add_argument("--output", type=Path, required=True)
     gen.set_defaults(run=generate)
+    seal = commands.add_parser("seal-tree")
+    seal.add_argument("--tree", type=Path, required=True, help="staged package root")
+    seal.set_defaults(run=seal_tree)
     verify = commands.add_parser("verify-tree")
     verify.add_argument("--tree", type=Path, required=True, help="extracted package root")
     verify.add_argument("--version")
