@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const runtime = vi.hoisted(() => ({ speaks: false, announce: vi.fn(async () => undefined) }));
+const runtime = vi.hoisted(() => ({
+  speaks: false,
+  announce: vi.fn(async (_text: string, _politeness: string) => undefined),
+}));
 vi.mock("./host-announcement.ts", () => ({
   hostSpeaksAnnouncements: () => runtime.speaks,
   announceThroughHost: (text: string, politeness: string) => runtime.announce(text, politeness),
