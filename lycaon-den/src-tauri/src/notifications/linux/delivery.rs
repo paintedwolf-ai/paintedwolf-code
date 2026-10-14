@@ -9,8 +9,6 @@ const PATH: &str = "/org/freedesktop/Notifications";
 const BUS: &str = "org.freedesktop.DBus";
 const BUS_PATH: &str = "/org/freedesktop/DBus";
 const APPLICATION_NAME: &str = "Painted Wolf Code";
-/// Desktop entry id installed by the Linux packages.
-pub(super) const DESKTOP_ENTRY: &str = "ai.paintedwolf.code";
 const SHELL_NOTIFICATIONS: &str = "org.gnome.Shell.Notifications";
 const BANNER_SCHEMA: &str = "org.gnome.desktop.notifications";
 const BANNER_KEY: &str = "show-banners";
@@ -44,14 +42,18 @@ impl Outcome {
 pub(super) struct Delivery {
     connection: gio::DBusConnection,
     owner: String,
+    desktop_entry: String,
     capabilities: Vec<String>,
     delivered: Rc<RefCell<Delivered>>,
     subscriptions: Vec<gio::SignalSubscriptionId>,
 }
 
 impl Delivery {
+    /// `desktop_entry` is the application identifier, which names the
+    /// installed desktop entry the server uses for the icon and grouping.
     pub(super) fn new(
         connection: gio::DBusConnection,
+        desktop_entry: String,
         activated: impl Fn(Option<String>, Option<String>) + 'static,
         deadline: Instant,
     ) -> Result<Self, String> {
@@ -120,6 +122,7 @@ impl Delivery {
         Ok(Self {
             connection,
             owner,
+            desktop_entry,
             capabilities,
             delivered,
             subscriptions,
@@ -156,7 +159,7 @@ impl Delivery {
         self.delivered.borrow().admit(replacement)?;
         let body = notification_body(&body, &self.capabilities);
         let hints = HashMap::from([
-            ("desktop-entry", DESKTOP_ENTRY.to_variant()),
+            ("desktop-entry", self.desktop_entry.to_variant()),
             ("suppress-sound", true.to_variant()),
         ]);
         let actions = if self
@@ -292,12 +295,7 @@ fn resolve_owner(connection: &gio::DBusConnection, deadline: Instant) -> Result<
     if let Ok(owner) = current_owner(connection, deadline) {
         return Ok(owner);
     }
-    let reply = bus_call(
-        connection,
-        "ListActivatableNames",
-        None,
-        timeout(deadline)?,
-    )?;
+    let reply = bus_call(connection, "ListActivatableNames", None, timeout(deadline)?)?;
     let (names,) = reply
         .get::<(Vec<String>,)>()
         .ok_or("Invalid desktop service listing")?;

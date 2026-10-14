@@ -182,6 +182,7 @@ impl Worker {
                 .and_then(|connection| {
                     Delivery::new(
                         connection,
+                        self.app.config().identifier.clone(),
                         move |session, token| activation::activate(&target, session, token),
                         deadline,
                     )

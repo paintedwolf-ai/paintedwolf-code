@@ -190,8 +190,8 @@ impl Fixture {
                                         .get::<HashMap<String, glib::Variant>>()
                                         .unwrap();
                                     assert_eq!(
-                                        hints["desktop-entry"].get::<String>().as_deref(),
-                                        Some("ai.paintedwolf.code")
+                                        hints["desktop-entry"].get::<String>(),
+                                        Some(desktop_entry())
                                     );
                                     let replacement =
                                         parameters.child_value(1).get::<u32>().unwrap();
@@ -318,6 +318,13 @@ fn settle(context: &glib::MainContext) {
     }
 }
 
+/// The application identifier the shell passes as the desktop entry.
+fn desktop_entry() -> String {
+    let config: serde_json::Value =
+        serde_json::from_str(include_str!("../../../tauri.conf.json")).unwrap();
+    config["identifier"].as_str().unwrap().to_owned()
+}
+
 fn deadline() -> Instant {
     Instant::now() + Duration::from_secs(2)
 }
@@ -333,6 +340,7 @@ fn native_service_replaces_cancels_and_routes_only_owned_notifications() {
             let routed = activations.clone();
             let delivery = Delivery::new(
                 connection,
+                desktop_entry(),
                 move |session, token| routed.borrow_mut().push((session, token)),
                 deadline(),
             )
@@ -431,10 +439,13 @@ fn native_capability_admission_rejects_unbounded_and_disconnected_services() {
         let context = glib::MainContext::new();
         context
             .with_thread_default(|| {
-                assert!(
-                    Delivery::new(connect(&context, &fixture.address), |_, _| {}, deadline())
-                        .is_err()
-                );
+                assert!(Delivery::new(
+                    connect(&context, &fixture.address),
+                    desktop_entry(),
+                    |_, _| {},
+                    deadline()
+                )
+                .is_err());
             })
             .unwrap();
     }
@@ -442,9 +453,13 @@ fn native_capability_admission_rejects_unbounded_and_disconnected_services() {
     let context = glib::MainContext::new();
     context
         .with_thread_default(|| {
-            let delivery =
-                Delivery::new(connect(&context, &fixture.address), |_, _| {}, deadline())
-                    .unwrap();
+            let delivery = Delivery::new(
+                connect(&context, &fixture.address),
+                desktop_entry(),
+                |_, _| {},
+                deadline(),
+            )
+            .unwrap();
             fixture
                 .server
                 .call_sync(
@@ -474,6 +489,7 @@ fn native_service_without_actions_preserves_delivery_and_clearing() {
             let routed = activations.clone();
             let delivery = Delivery::new(
                 connect(&context, &fixture.address),
+                desktop_entry(),
                 move |_, _| *routed.borrow_mut() += 1,
                 deadline(),
             )
@@ -502,9 +518,14 @@ fn native_service_starts_from_its_service_file_or_reports_absence() {
     let context = glib::MainContext::new();
     context
         .with_thread_default(|| {
-            let error = Delivery::new(connect(&context, &absent.address), |_, _| {}, deadline())
-                .err()
-                .unwrap();
+            let error = Delivery::new(
+                connect(&context, &absent.address),
+                desktop_entry(),
+                |_, _| {},
+                deadline(),
+            )
+            .err()
+            .unwrap();
             assert!(error.contains("No desktop notification service is installed"));
         })
         .unwrap();
@@ -515,9 +536,13 @@ fn native_service_starts_from_its_service_file_or_reports_absence() {
     let context = glib::MainContext::new();
     context
         .with_thread_default(|| {
-            let delivery =
-                Delivery::new(connect(&context, &fixture.address), |_, _| {}, deadline())
-                    .unwrap();
+            let delivery = Delivery::new(
+                connect(&context, &fixture.address),
+                desktop_entry(),
+                |_, _| {},
+                deadline(),
+            )
+            .unwrap();
             assert!(delivery.current(deadline()));
             assert_eq!(
                 delivery
