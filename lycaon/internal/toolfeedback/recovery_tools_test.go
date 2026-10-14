@@ -138,13 +138,16 @@ func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
 		}
 		checked++
 		for _, scenario := range entry.Scenarios {
-			for mask := -1; mask < 1<<dimensions; mask++ {
+			// Negative masks exercise every state without a model request snapshot.
+			for mask := -(1 << len(states)); mask < 1<<dimensions; mask++ {
 				t.Run(fmt.Sprintf("%s/%s/%d", code, scenario.ID, mask), func(t *testing.T) {
 					vars := guidance.ScenarioVars(entry, scenario)
+					stateMask := mask >> len(names)
+					if mask < 0 {
+						stateMask = -mask - 1
+					}
 					for bit, state := range states {
-						if mask >= 0 {
-							vars[state] = mask&(1<<(len(names)+bit)) != 0
-						}
+						vars[state] = stateMask&(1<<bit) != 0
 					}
 					tool, _ := vars["tool"].(string)
 					if tool == "" && len(entry.Tools) > 0 {
