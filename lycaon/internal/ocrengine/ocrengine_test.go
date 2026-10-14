@@ -54,9 +54,11 @@ func TestPinValidationRequiresProducerTagAndTrainedData(t *testing.T) {
 	otherTag.Producer.Tag = "v5.5.3+paintedwolf.2"
 	noCommit := valid
 	noCommit.Producer.Commit = "2636845"
+	upperCommit := valid
+	upperCommit.Producer.Commit = strings.Repeat("B", 40)
 	noData := valid
 	noData.TrainedData = map[string]pinPayload{"eng_traineddata": data}
-	for name, pin := range map[string]Pin{"tag": otherTag, "commit": noCommit, "trained data": noData, "version": {}} {
+	for name, pin := range map[string]Pin{"tag": otherTag, "commit": noCommit, "uppercase commit": upperCommit, "trained data": noData, "version": {}} {
 		if err := pin.validate(); err == nil {
 			t.Fatalf("%s: invalid pin accepted", name)
 		}
@@ -174,6 +176,74 @@ func TestResolveWithoutEngineReportsPlatformOrMissing(t *testing.T) {
 	}
 	if ue.Reason != want {
 		t.Fatalf("reason = %q, want %q (%v)", ue.Reason, want, err)
+	}
+}
+
+// platformPin is a pin that ships the staged payload for linux/amd64 only.
+func platformPin(pin *Pin, plat PlatformPin) *Pin {
+	withPlatform := *pin
+	withPlatform.Platforms = map[string]PlatformPin{"linux-amd64": plat}
+	return &withPlatform
+}
+
+func TestResolveRefusesAPlatformWithoutAnEngine(t *testing.T) {
+	resetForTest()
+	root, pin, plat := stagedPin(t)
+	_, err := resolve(platformPin(pin, plat), "darwin", "arm64", []string{root})
+	var ue *UnavailableError
+	if !errors.As(err, &ue) || ue.Reason != ReasonUnsupportedPlatform || !strings.Contains(err.Error(), "no bundled text recognizer") {
+		t.Fatalf("unsupported platform err = %v", err)
+	}
+}
+
+func TestResolveSkipsMissingRootsAndUsesTheFirstVerifiedOne(t *testing.T) {
+	resetForTest()
+	root, pin, plat := stagedPin(t)
+	engine, err := resolve(platformPin(pin, plat), "linux", "amd64", []string{t.TempDir(), root})
+	if err != nil {
+		testutil.FailErr(t, "resolve", err)
+	}
+	if engine.Root != filepath.Clean(root) {
+		t.Fatalf("resolved %q, want %q", engine.Root, root)
+	}
+}
+
+// An altered payload in an earlier root is refused even when a later root
+// would verify, so a tampered install never falls back to another copy.
+func TestResolveStopsAtAnAlteredRoot(t *testing.T) {
+	resetForTest()
+	good, pin, plat := stagedPin(t)
+	altered, _, _ := stagedPin(t)
+	osd := filepath.Join(altered, "tessdata", "osd.traineddata")
+	if err := os.WriteFile(osd, []byte("OSD"), 0o644); err != nil {
+		testutil.FailErr(t, "tamper", err)
+	}
+	_, err := resolve(platformPin(pin, plat), "linux", "amd64", []string{altered, good})
+	var ue *UnavailableError
+	if !errors.As(err, &ue) || ue.Reason != ReasonDigestMismatch || ue.Path != osd {
+		t.Fatalf("altered root err = %v", err)
+	}
+	if !strings.Contains(err.Error(), "differs from the pinned payload") {
+		t.Fatalf("altered root message = %q", err)
+	}
+}
+
+func TestResolveWithNoRootIsMissing(t *testing.T) {
+	resetForTest()
+	_, pin, plat := stagedPin(t)
+	_, err := resolve(platformPin(pin, plat), "linux", "amd64", nil)
+	var ue *UnavailableError
+	if !errors.As(err, &ue) || ue.Reason != ReasonMissing || err.Error() != "ocrengine: bundled text recognizer unavailable" {
+		t.Fatalf("no root err = %v", err)
+	}
+}
+
+func TestParsePinRejectsMalformedAndIncompletePins(t *testing.T) {
+	if _, err := parsePin([]byte("engine_version: [")); err == nil || !strings.Contains(err.Error(), "parse pin") {
+		t.Fatalf("malformed pin err = %v", err)
+	}
+	if _, err := parsePin([]byte("engine_version: \"5.5.3+paintedwolf.1\"\n")); err == nil || !strings.Contains(err.Error(), "producer") {
+		t.Fatalf("incomplete pin err = %v", err)
 	}
 }
 

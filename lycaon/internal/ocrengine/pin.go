@@ -65,18 +65,20 @@ func LoadPin() (*Pin, error) {
 			pinErr = err
 			return
 		}
-		var p Pin
-		if err := config.DecodeYAML(data, &p); err != nil {
-			pinErr = fmt.Errorf("ocrengine: parse pin: %w", err)
-			return
-		}
-		if err := p.validate(); err != nil {
-			pinErr = err
-			return
-		}
-		pinVal = &p
+		pinVal, pinErr = parsePin(data)
 	})
 	return pinVal, pinErr
+}
+
+func parsePin(data []byte) (*Pin, error) {
+	var p Pin
+	if err := config.DecodeYAML(data, &p); err != nil {
+		return nil, fmt.Errorf("ocrengine: parse pin: %w", err)
+	}
+	if err := p.validate(); err != nil {
+		return nil, err
+	}
+	return &p, nil
 }
 
 func (p *Pin) validate() error {

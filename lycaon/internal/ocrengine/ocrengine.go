@@ -75,12 +75,18 @@ func Resolve() (Engine, error) {
 	if err != nil {
 		return Engine{}, err
 	}
-	plat, ok := pin.Platform(runtime.GOOS, runtime.GOARCH)
+	return resolve(pin, runtime.GOOS, runtime.GOARCH, candidateRoots())
+}
+
+// resolve returns the first root that verifies for the platform. A missing
+// root falls through to the next; a present but altered one stops resolution.
+func resolve(pin *Pin, goos, goarch string, roots []string) (Engine, error) {
+	plat, ok := pin.Platform(goos, goarch)
 	if !ok {
 		return Engine{}, &UnavailableError{Reason: ReasonUnsupportedPlatform}
 	}
 	var missing error
-	for _, root := range candidateRoots() {
+	for _, root := range roots {
 		engine, err := verifyRoot(root, pin, plat)
 		if err == nil {
 			return engine, nil

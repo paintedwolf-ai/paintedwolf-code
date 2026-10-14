@@ -26,11 +26,15 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 if [[ -z "${TARGET}" ]]; then
-  TARGET="$(rustc --print host-tuple)"
+  if command -v rustc >/dev/null 2>&1; then
+    TARGET="$(rustc --print host-tuple)"
+  else
+    TARGET="$(uname -m)-$(uname -s)"
+  fi
 fi
 case "${TARGET}" in
-  x86_64-unknown-linux-gnu) PLATFORM_KEY="linux-amd64" ;;
-  aarch64-unknown-linux-gnu) PLATFORM_KEY="linux-arm64" ;;
+  x86_64-unknown-linux-gnu | x86_64-Linux) PLATFORM_KEY="linux-amd64" ;;
+  aarch64-unknown-linux-gnu | aarch64-Linux) PLATFORM_KEY="linux-arm64" ;;
   *)
     echo "error: no bundled OCR engine for ${TARGET}; macOS recognizes text in-process" >&2
     exit 1

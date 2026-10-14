@@ -109,6 +109,12 @@ runs:
       shell: bash
       run: ./task gitengine:fetch
 
+    # Text recognition tests resolve the pinned engine from engine-root on Linux.
+    - name: Fetch pinned text recognition engine
+      if: runner.os == 'Linux'
+      shell: bash
+      run: bash scripts/ocrengine-fetch.sh
+
     - name: Restore pinned frontend packages
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
