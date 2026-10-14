@@ -2,12 +2,14 @@ package bgprocess_test
 
 import (
 	"context"
+	"errors"
 	"runtime"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -27,6 +29,18 @@ func TestActiveDirectIPJobsActiveUnknownAndCompleted(t *testing.T) {
 		ProjectDir: dir,
 		Stages:     []exec.Stage{{Name: "sleep", Args: []string{"30"}}},
 	}, runner)
+	if runtime.GOOS == "linux" {
+		// The Linux boundary does not express direct IP yet; the launch fails
+		// closed with the typed reason rather than running unconfined.
+		var unsupported *linuxsandbox.Unsupported
+		if !errors.As(err, &unsupported) || unsupported.Code != linuxsandbox.UnsupportedNetworkMode {
+			t.Fatalf("direct-ip launch on Linux: err = %v, want the typed network_mode refusal", err)
+		}
+		if jobs := reg.ActiveDirectIPJobs("sess-1"); len(jobs) != 0 {
+			t.Fatalf("a refused launch left direct-ip jobs: %+v", jobs)
+		}
+		return
+	}
 	testutil.FailErr(t, "start direct-ip background", err)
 
 	jobs := reg.ActiveDirectIPJobs("sess-1")
