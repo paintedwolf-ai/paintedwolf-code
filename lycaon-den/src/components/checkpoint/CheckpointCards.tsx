@@ -183,7 +183,7 @@ export function CheckpointCards(props: Props) {
     );
     const projectId = project?.id;
     if (!projectId) return;
-    focusReturn.note();
+    focusReturn.note(checkpoint.checkpointId);
     setResolving(checkpoint.checkpointId);
     try {
       const current = await props.client.getReviewSettings(projectId);
@@ -230,7 +230,7 @@ export function CheckpointCards(props: Props) {
   ) => {
     const captured = action === "reject" ? captureGuidance(options?.withGuidance) : captureGuidance();
     const guidance = captured.draft.trim();
-    focusReturn.note();
+    focusReturn.note(checkpoint.checkpointId);
     setResolving(checkpoint.checkpointId);
     try {
       await resolveToolApproval(
@@ -279,7 +279,7 @@ export function CheckpointCards(props: Props) {
   ) => {
     const captured = body.decision === "reject" ? captureGuidance(body.withGuidance) : captureGuidance();
     const guidance = captured.draft.trim();
-    focusReturn.note();
+    focusReturn.note(checkpoint.checkpointId);
     setResolving(checkpoint.checkpointId);
     try {
       await resolveContentApply(

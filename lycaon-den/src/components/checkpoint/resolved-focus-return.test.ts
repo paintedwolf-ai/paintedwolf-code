@@ -40,6 +40,42 @@ describe("createResolvedFocusReturn", () => {
     expect(returnFocus).toHaveBeenCalledOnce();
   });
 
+  it("waits while a closed menu hands focus back into the resolving card, then returns it when the card retires", () => {
+    const returnFocus = vi.fn();
+    const focusReturn = createResolvedFocusReturn(returnFocus);
+    const card = document.createElement("article");
+    card.setAttribute("data-checkpoint-id", "c1");
+    const trigger = document.createElement("button");
+    card.append(trigger);
+    document.body.append(card);
+    const item = focusedButton();
+    focusReturn.note("c1");
+    item.remove();
+    trigger.focus();
+    focusReturn.settle();
+    expect(returnFocus).not.toHaveBeenCalled();
+    card.setAttribute("inert", "");
+    focusReturn.settle();
+    expect(document.activeElement).toBe(document.body);
+    expect(returnFocus).toHaveBeenCalledOnce();
+  });
+
+  it("leaves focus that moved into a different card", () => {
+    const returnFocus = vi.fn();
+    const focusReturn = createResolvedFocusReturn(returnFocus);
+    const other = document.createElement("article");
+    other.setAttribute("data-checkpoint-id", "c2");
+    const control = document.createElement("button");
+    other.append(control);
+    document.body.append(other);
+    const item = focusedButton();
+    focusReturn.note("c1");
+    item.remove();
+    control.focus();
+    focusReturn.settle();
+    expect(returnFocus).not.toHaveBeenCalled();
+  });
+
   it("leaves focus the person moved elsewhere and ignores resolutions made without focus", () => {
     const returnFocus = vi.fn();
     const focusReturn = createResolvedFocusReturn(returnFocus);
