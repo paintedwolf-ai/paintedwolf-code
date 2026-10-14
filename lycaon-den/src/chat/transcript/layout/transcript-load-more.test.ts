@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
+import { createRoot } from "solid-js";
 import { stubClient } from "../../../test/client-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import {
+  createTranscriptHistoryView,
   ensureTranscriptRevealAnchorLoaded,
   loadTranscriptPage,
   createTranscriptPaging,
@@ -436,4 +438,166 @@ describe("createTranscriptPaging", () => {
     }
     clearTranscriptEntryMemory("s-older");
   });
+
+  it("seeks by ordinal when the scrollport lands inside an unloaded runway", async () => {
+    const appStore = createAppStore();
+    const prepareLanding = vi.fn();
+    const { el } = mockStreamHost({
+      scrollTop: 5_000,
+      clientHeight: 500,
+      scrollHeight: () => 50_000,
+    });
+    appStore.actions.installTranscriptBaseline(
+      "s-seek",
+      Array.from({ length: 100 }, (_, i) => older(400 + i)),
+      500,
+      {
+        hasMoreBefore: true,
+        hasMoreAfter: false,
+        bounds: { firstOrd: 1, lastOrd: 500 },
+      },
+    );
+    expect(appStore.state.transcript.bounds).toEqual({ firstOrd: 1, lastOrd: 500 });
+    const listSessionMessages = vi.fn().mockResolvedValue({
+      messages: Array.from({ length: 100 }, (_, i) => older(i)),
+      turn_clocks: {},
+      turn_loads: {},
+      before_cursor: undefined,
+      after_cursor: "newer",
+      ord_bounds: { first_ord: 1, last_ord: 500 },
+    });
+    const client = stubClient({ listSessionMessages });
+
+    const stop = createTranscriptPaging(el, {
+      client: () => client,
+      appStore,
+      sessionId: () => "s-seek",
+      geometry: () => ({
+        residentStartPx: 40_000,
+        residentEndPx: 50_000,
+        residentSpan: { firstOrd: 401, lastOrd: 500 },
+        unloaded: { before: 400, after: 0 },
+        prepareLanding,
+      }),
+    });
+    try {
+      await vi.waitFor(() => {
+        expect(listSessionMessages).toHaveBeenCalledTimes(1);
+      });
+      expect(prepareLanding).toHaveBeenCalledWith(5_000);
+      expect(listSessionMessages).toHaveBeenCalledWith(
+        "s-seek",
+        expect.objectContaining({ afterOrd: 0 }),
+      );
+      expect(appStore.state.transcript.hasTailGap).toBe(true);
+    } finally {
+      stop.dispose();
+      el.remove();
+    }
+  });
+
+  it("protects older pages in the reader's reach during live appends and reclaims them after scrolling away", () => {
+    const appStore = createAppStore();
+    const rows = (from: number, to: number) =>
+      Array.from({ length: to - from + 1 }, (_, i) => older(from + i - 1));
+    appStore.actions.installTranscriptBaseline("s-reach", rows(501, 700), 700, {
+      hasMoreBefore: true,
+      bounds: { firstOrd: 1, lastOrd: 700 },
+    });
+    for (let from = 401; from >= 1; from -= 100) {
+      appStore.actions.loadTranscriptPage(
+        { edge: "older", beforeMessageId: older(from + 99).id },
+        { messages: rows(from, from + 99), watermark: 700, turn_clocks: {}, turn_loads: {} },
+      );
+    }
+    let scrollTop = 0;
+    const { el } = mockStreamHost({
+      scrollTop: 0,
+      clientHeight: 500,
+      scrollHeight: () => 50_000,
+    });
+    Object.defineProperty(el, "scrollTop", {
+      get: () => scrollTop,
+      set: (v: number) => { scrollTop = v; },
+      configurable: true,
+    });
+    const stop = createTranscriptPaging(el, {
+      client: () => stubClient({ listSessionMessages: vi.fn() }),
+      appStore,
+      sessionId: () => "s-reach",
+      geometry: () => ({
+        residentStartPx: 0,
+        residentEndPx: 50_000,
+        residentSpan: { firstOrd: 1, lastOrd: 700 },
+        unloaded: { before: 0, after: 0 },
+        prepareLanding: () => {},
+      }),
+    });
+    try {
+      el.dispatchEvent(new Event("scroll"));
+      appStore.actions.upsertMessage({
+        ...older(700),
+        id: "live-701",
+        ord: 701,
+        seq: 701,
+      });
+      expect(appStore.state.transcript.pages["1:100"]).toBeDefined();
+      expect(Object.keys(appStore.state.transcript.pages).length).toBe(6);
+
+      scrollTop = 45_000;
+      el.dispatchEvent(new Event("scroll"));
+      expect(appStore.state.transcript.pages["1:100"]).toBeUndefined();
+      expect(Object.keys(appStore.state.transcript.pages).length).toBe(5);
+    } finally {
+      stop.dispose();
+      el.remove();
+    }
+  });
+
+  it("derives history view geometry from either an app store or resident message items", () => {
+    const appStore = createAppStore();
+    const msgs = [older(10), older(19)];
+    appStore.actions.installTranscriptBaseline("s-view", msgs, 20, {
+      hasMoreBefore: true,
+      bounds: { firstOrd: 1, lastOrd: 20 },
+    });
+    const items = msgs.map((m) => ({ kind: "user" as const, key: m.id, text: m.content }));
+    const prepareLanding = vi.fn();
+    const fakeVirtualizer = {
+      residentExtent: () => ({ startPx: 1_000, endPx: 2_000 }),
+      prepareLanding,
+    } as unknown as Parameters<ReturnType<typeof createTranscriptHistoryView>["geometry"]>[0];
+
+    createRoot((dispose) => {
+      const withStore = createTranscriptHistoryView({
+        enabled: () => true,
+        messages: () => msgs,
+        items: () => items,
+        appStore: () => appStore,
+      });
+      expect(withStore.unloadedOrds()).toEqual({ before: 10, after: 0 });
+      expect(withStore.residentRowSpan()).toEqual({ count: 2, ordSpan: 10 });
+      const geo = withStore.geometry(fakeVirtualizer);
+      expect(geo).toMatchObject({
+        residentStartPx: 1_000,
+        residentEndPx: 2_000,
+        residentSpan: { firstOrd: 11, lastOrd: 20 },
+        unloaded: { before: 10, after: 0 },
+      });
+      geo?.prepareLanding(300);
+      expect(prepareLanding).toHaveBeenCalledWith(300);
+
+      const withoutStore = createTranscriptHistoryView({
+        enabled: () => false,
+        messages: () => msgs,
+        items: () => items,
+        appStore: () => undefined,
+      });
+      expect(withoutStore.unloadedOrds()).toEqual({ before: 0, after: 0 });
+      expect(withoutStore.residentRowSpan()).toEqual({ count: 2, ordSpan: 10 });
+      expect(withoutStore.geometry(fakeVirtualizer)).toBeNull();
+      dispose();
+    });
+  });
 });
+

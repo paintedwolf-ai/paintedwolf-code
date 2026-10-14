@@ -6,6 +6,7 @@ import type { TranscriptDisclosureKey } from "../transcript/presentation/transcr
 import type { TranscriptRevealAnchor } from "../transcript/presentation/transcript-reveal-target.ts";
 import type { TranscriptItem } from "../transcript/projection/transcript-item-model.ts";
 import type { TranscriptReadingPosition } from "../transcript/layout/transcript-virtualizer.ts";
+import type { TranscriptHistoryGeometry } from "../transcript/layout/transcript-load-more.ts";
 import type { TranscriptDeliveryKind } from "../transcript/layout/transcript-tail.ts";
 export type TranscriptVirtualViewport = {
   /** Samples the transcript origin after outer chrome layout changes. */
@@ -24,6 +25,8 @@ export type TranscriptVirtualViewport = {
   ensureRowLoaded: (rowKey: string) => Promise<void>;
   /** Epoch ms dating the reader's day once its day label is above them; null otherwise. */
   readingDay: () => number | null;
+  /** Session-coordinate extent and ordinal span of the resident window and unloaded runways. */
+  historyGeometry?: () => TranscriptHistoryGeometry | null;
 };
 
 export type TranscriptViewportRuntime = {
