@@ -24,6 +24,52 @@ const FILE_MANAGER_OBJECT_PATH: &str = "/org/freedesktop/FileManager1";
 const CALL_TIMEOUT_MS: i32 = 5_000;
 const IDENTITY_TIMEOUT: Duration = Duration::from_secs(2);
 
+/// Errors meaning nothing on the bus implements the request: no owner for the
+/// name, no such object, interface or method, or a backend that exited before
+/// replying. Only these let a request continue through another service.
+const NOT_IMPLEMENTED_ERRORS: [&str; 6] = [
+    "org.freedesktop.DBus.Error.ServiceUnknown",
+    "org.freedesktop.DBus.Error.NameHasNoOwner",
+    "org.freedesktop.DBus.Error.UnknownObject",
+    "org.freedesktop.DBus.Error.UnknownInterface",
+    "org.freedesktop.DBus.Error.UnknownMethod",
+    "org.freedesktop.DBus.Error.NoReply",
+];
+
+/// Why a desktop service did not complete a request.
+#[derive(Debug, PartialEq, Eq)]
+enum ServiceError {
+    /// No service implements the request; another path may handle it.
+    NotImplemented,
+    /// The service refused or failed; no other path may bypass it.
+    Failed(String),
+}
+
+impl ServiceError {
+    fn from_error_name(name: Option<&str>, detail: impl Into<String>) -> Self {
+        match name {
+            Some(name) if NOT_IMPLEMENTED_ERRORS.contains(&name) => Self::NotImplemented,
+            Some(name) => Self::Failed(format!("{name}: {}", detail.into())),
+            None => Self::Failed(detail.into()),
+        }
+    }
+
+    fn from_call(error: &glib::Error) -> Self {
+        Self::from_error_name(remote_error_name(error).as_deref(), error.message())
+    }
+}
+
+/// The D-Bus error name a reply carried, absent for errors raised locally.
+fn remote_error_name(error: &glib::Error) -> Option<String> {
+    use glib::translate::{from_glib_full, ToGlibPtr};
+    let name: Option<glib::GString> = unsafe {
+        from_glib_full(gio::ffi::g_dbus_error_get_remote_error(
+            error.to_glib_none().0,
+        ))
+    };
+    name.map(|name| name.to_string())
+}
+
 /// The service that handled an open request, for diagnostics.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Via {
@@ -54,20 +100,30 @@ pub struct ParentWindow {
 
 impl ParentWindow {
     pub fn none() -> Self {
-        Self { identity: String::new(), exported: None }
+        Self {
+            identity: String::new(),
+            exported: None,
+        }
     }
 
     pub fn of(window: &tauri::WebviewWindow) -> Self {
         let (sender, receiver) = mpsc::channel();
         let target = window.clone();
-        if window.run_on_main_thread(move || identify_on_main_thread(&target, sender)).is_err() {
+        if window
+            .run_on_main_thread(move || identify_on_main_thread(&target, sender))
+            .is_err()
+        {
             return Self::none();
         }
         match receiver.recv_timeout(IDENTITY_TIMEOUT) {
-            Ok(identity) if identity.starts_with("wayland:") => {
-                Self { identity, exported: Some(window.clone()) }
-            }
-            Ok(identity) => Self { identity, exported: None },
+            Ok(identity) if identity.starts_with("wayland:") => Self {
+                identity,
+                exported: Some(window.clone()),
+            },
+            Ok(identity) => Self {
+                identity,
+                exported: None,
+            },
             Err(_) => Self::none(),
         }
     }
@@ -206,29 +262,41 @@ fn portal_options() -> glib::Variant {
     glib::VariantDict::new(None).end()
 }
 
-fn portal_open_uri(bus: &gio::DBusConnection, parent: &str, uri: &str) -> Result<(), String> {
+fn portal_open_uri(bus: &gio::DBusConnection, parent: &str, uri: &str) -> Result<(), ServiceError> {
     bus.call_sync(
         Some(PORTAL_BUS_NAME),
         PORTAL_OBJECT_PATH,
         OPEN_URI_INTERFACE,
         "OpenURI",
-        Some(&glib::Variant::tuple_from_iter([parent.to_variant(), uri.to_variant(), portal_options()])),
+        Some(&glib::Variant::tuple_from_iter([
+            parent.to_variant(),
+            uri.to_variant(),
+            portal_options(),
+        ])),
         Some(glib::VariantTy::new("(o)").expect("static signature")),
         gio::DBusCallFlags::NONE,
         CALL_TIMEOUT_MS,
         gio::Cancellable::NONE,
     )
     .map(|_| ())
-    .map_err(|error| error.to_string())
+    .map_err(|error| ServiceError::from_call(&error))
 }
 
 /// `OpenFile` and `OpenDirectory` take the entry as a file descriptor, so the
 /// portal opens exactly the entry this process could open. The request goes
 /// out as a message because the reply carries no descriptors back.
-fn portal_open_fd(bus: &gio::DBusConnection, method: &str, parent: &str, path: &Path) -> Result<(), String> {
-    let file = std::fs::File::open(path).map_err(|error| format!("{}: {error}", path.display()))?;
+fn portal_open_fd(
+    bus: &gio::DBusConnection,
+    method: &str,
+    parent: &str,
+    path: &Path,
+) -> Result<(), ServiceError> {
+    let file = std::fs::File::open(path)
+        .map_err(|error| ServiceError::Failed(format!("{}: {error}", path.display())))?;
     let fd_list = gio::UnixFDList::new();
-    let index = fd_list.append(file).map_err(|error| error.to_string())?;
+    let index = fd_list
+        .append(file)
+        .map_err(|error| ServiceError::Failed(error.to_string()))?;
     let message = gio::DBusMessage::new_method_call(
         Some(PORTAL_BUS_NAME),
         PORTAL_OBJECT_PATH,
@@ -248,13 +316,13 @@ fn portal_open_fd(bus: &gio::DBusConnection, method: &str, parent: &str, path: &
             CALL_TIMEOUT_MS,
             gio::Cancellable::NONE,
         )
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| ServiceError::from_call(&error))?;
     // A method return has nothing to convert; only an error reply names a cause.
     if reply.message_type() == gio::DBusMessageType::Error {
-        return Err(reply
-            .error_name()
-            .map(|name| name.to_string())
-            .unwrap_or_else(|| "the portal refused the request".to_string()));
+        return Err(ServiceError::from_error_name(
+            reply.error_name().as_deref(),
+            "the portal refused the request",
+        ));
     }
     Ok(())
 }
@@ -282,14 +350,21 @@ fn file_uri(path: &Path) -> String {
 
 /// Runs the portal request when a portal is up, otherwise the desktop's own
 /// handler; the failure of the last alternative names what the person can fix.
+/// A portal that refuses is final, so its decision is never bypassed.
 fn through_portal(
     parent: &ParentWindow,
-    portal: impl FnOnce(&gio::DBusConnection, &str) -> Result<(), String>,
+    portal: impl FnOnce(&gio::DBusConnection, &str) -> Result<(), ServiceError>,
     uri: &str,
 ) -> Result<Via, String> {
     if let Ok(bus) = session_bus() {
-        if portal_owned(&bus) && portal(&bus, parent.identity()).is_ok() {
-            return Ok(Via::Portal);
+        if portal_owned(&bus) {
+            if let Some(outcome) = settled(
+                portal(&bus, parent.identity()),
+                Via::Portal,
+                "The desktop portal",
+            ) {
+                return outcome;
+            }
         }
     }
     match launch_default_handler(uri) {
@@ -302,19 +377,47 @@ fn through_portal(
 
 /// Opens a web or mail URI with the default application.
 pub fn open_uri(parent: &ParentWindow, uri: &str) -> Result<Via, String> {
-    through_portal(parent, |bus, identity| portal_open_uri(bus, identity, uri), uri)
+    through_portal(
+        parent,
+        |bus, identity| portal_open_uri(bus, identity, uri),
+        uri,
+    )
 }
 
 /// Opens a local file with the application registered for its type.
 pub fn open_file(parent: &ParentWindow, path: &Path) -> Result<Via, String> {
     let uri = file_uri(path);
-    through_portal(parent, |bus, identity| portal_open_fd(bus, "OpenFile", identity, path), &uri)
+    through_portal(
+        parent,
+        |bus, identity| portal_open_fd(bus, "OpenFile", identity, path),
+        &uri,
+    )
 }
 
 /// Opens a directory in the file manager.
 pub fn open_directory(parent: &ParentWindow, path: &Path) -> Result<Via, String> {
     let uri = file_uri(path);
-    through_portal(parent, |bus, identity| portal_open_fd(bus, "OpenDirectory", identity, path), &uri)
+    through_portal(
+        parent,
+        |bus, identity| portal_open_fd(bus, "OpenDirectory", identity, path),
+        &uri,
+    )
+}
+
+/// The final outcome of a service request, or `None` when no service
+/// implements it and the next alternative should run.
+fn settled(
+    result: Result<(), ServiceError>,
+    via: Via,
+    service: &str,
+) -> Option<Result<Via, String>> {
+    match result {
+        Ok(()) => Some(Ok(via)),
+        Err(ServiceError::NotImplemented) => None,
+        Err(ServiceError::Failed(reason)) => {
+            Some(Err(format!("{service} did not open the item: {reason}")))
+        }
+    }
 }
 
 /// Selects the entry in the file manager, falling back to opening its parent
@@ -333,11 +436,18 @@ pub fn show_item(parent: &ParentWindow, path: &Path) -> Result<Via, String> {
             CALL_TIMEOUT_MS,
             gio::Cancellable::NONE,
         );
-        if shown.is_ok() {
-            return Ok(Via::FileManager);
+        let shown = shown
+            .map(|_| ())
+            .map_err(|error| ServiceError::from_call(&error));
+        if let Some(outcome) = settled(shown, Via::FileManager, "The file manager") {
+            return outcome;
         }
     }
-    let directory = if path.is_dir() { path } else { path.parent().unwrap_or(path) };
+    let directory = if path.is_dir() {
+        path
+    } else {
+        path.parent().unwrap_or(path)
+    };
     open_directory(parent, directory)
 }
 
@@ -356,7 +466,10 @@ mod tests {
 
     #[test]
     fn file_uris_encode_reserved_and_unicode_bytes() {
-        assert_eq!(file_uri(Path::new("/repo/a #?%é.txt")), "file:///repo/a%20%23%3F%25%C3%A9.txt");
+        assert_eq!(
+            file_uri(Path::new("/repo/a #?%é.txt")),
+            "file:///repo/a%20%23%3F%25%C3%A9.txt"
+        );
     }
 
     #[test]
@@ -370,7 +483,70 @@ mod tests {
             return;
         };
         let missing = Path::new("/nonexistent/painted-wolf/entry");
-        let error = portal_open_fd(&bus, "OpenFile", "", missing).unwrap_err();
+        let Err(ServiceError::Failed(error)) = portal_open_fd(&bus, "OpenFile", "", missing) else {
+            panic!("a missing entry must fail without reaching the portal");
+        };
         assert!(error.contains("/nonexistent/painted-wolf/entry"), "{error}");
+    }
+
+    #[test]
+    fn only_unimplemented_services_continue_to_another_path() {
+        for name in NOT_IMPLEMENTED_ERRORS {
+            let error = ServiceError::from_error_name(Some(name), "absent");
+            assert_eq!(error, ServiceError::NotImplemented, "{name}");
+            assert_eq!(
+                settled(Err(error), Via::Portal, "The desktop portal"),
+                None,
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn refusals_are_final() {
+        for name in [
+            Some("org.freedesktop.portal.Error.NotAllowed"),
+            Some("org.freedesktop.DBus.Error.AccessDenied"),
+            Some("org.freedesktop.DBus.Error.Failed"),
+            None,
+        ] {
+            let error = ServiceError::from_error_name(name, "refused");
+            assert!(matches!(error, ServiceError::Failed(_)), "{name:?}");
+            let outcome = settled(Err(error), Via::FileManager, "The file manager");
+            assert!(
+                matches!(outcome, Some(Err(ref reason)) if reason.contains("refused")),
+                "{name:?}: {outcome:?}"
+            );
+        }
+        assert_eq!(
+            settled(Ok(()), Via::Portal, "The desktop portal"),
+            Some(Ok(Via::Portal))
+        );
+    }
+
+    #[test]
+    fn reply_error_names_are_read_from_the_error() {
+        let remote = |name: &str| -> glib::Error {
+            use glib::translate::{from_glib_full, ToGlibPtr};
+            unsafe {
+                from_glib_full(gio::ffi::g_dbus_error_new_for_dbus_error(
+                    name.to_glib_none().0,
+                    "reply".to_glib_none().0,
+                ))
+            }
+        };
+        assert_eq!(
+            ServiceError::from_call(&remote("org.freedesktop.DBus.Error.UnknownMethod")),
+            ServiceError::NotImplemented
+        );
+        assert!(matches!(
+            ServiceError::from_call(&remote("org.freedesktop.portal.Error.NotAllowed")),
+            ServiceError::Failed(reason) if reason.starts_with("org.freedesktop.portal.Error.NotAllowed")
+        ));
+        let local = glib::Error::new(gio::IOErrorEnum::TimedOut, "timed out");
+        assert!(matches!(
+            ServiceError::from_call(&local),
+            ServiceError::Failed(_)
+        ));
     }
 }

@@ -124,13 +124,17 @@ func volumeTop(path string) (string, error) {
 }
 
 // An administrator-created sticky `.Trash` directory holds one subdirectory per
-// user; without one the user owns a `.Trash-<uid>` sibling.
+// user; when there is none, or this user's subdirectory cannot be created or
+// used, the user owns a `.Trash-<uid>` sibling.
 func volumeTrashDir(top string) string {
 	uid := os.Getuid()
 	shared := filepath.Join(top, ".Trash")
 	info, err := os.Lstat(shared)
 	if err == nil && info.IsDir() && info.Mode()&os.ModeSticky != 0 {
-		return filepath.Join(shared, fmt.Sprint(uid))
+		perUser := filepath.Join(shared, fmt.Sprint(uid))
+		if privateTrashDirectory(perUser) == nil {
+			return perUser
+		}
 	}
 	return filepath.Join(top, fmt.Sprintf(".Trash-%d", uid))
 }

@@ -172,10 +172,38 @@ func TestLinuxVolumeTrashDirectoryFollowsStickyAdministration(t *testing.T) {
 	if got := volumeTrashDir(top); got != filepath.Join(shared, uid) {
 		t.Fatalf("sticky shared Trash selected %q", got)
 	}
-	testutil.FailErr(t, "replace shared directory with a symlink", os.Remove(shared))
+	testutil.FailErr(t, "replace shared directory with a symlink", os.RemoveAll(shared))
 	testutil.FailErr(t, "create symlink fixture", os.Symlink(t.TempDir(), shared))
 	if got := volumeTrashDir(top); got != filepath.Join(top, ".Trash-"+uid) {
 		t.Fatalf("symlinked shared Trash selected %q", got)
+	}
+}
+
+func TestLinuxVolumeTrashFallsBackWhenSharedTrashIsUnusable(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Fatal("permission fixtures require an unprivileged user")
+	}
+	uid := fmt.Sprint(os.Getuid())
+	top := t.TempDir()
+	shared := filepath.Join(top, ".Trash")
+	testutil.FailErr(t, "create read-only sticky shared directory", os.Mkdir(shared, 0755))
+	testutil.FailErr(t, "mark shared directory read-only and sticky", os.Chmod(shared, 0555|os.ModeSticky))
+	t.Cleanup(func() { _ = os.Chmod(shared, 0755) })
+	if got := volumeTrashDir(top); got != filepath.Join(top, ".Trash-"+uid) {
+		t.Fatalf("unwritable shared Trash selected %q", got)
+	}
+	if _, err := os.Lstat(filepath.Join(shared, uid)); !os.IsNotExist(err) {
+		t.Fatalf("unwritable shared Trash gained a per-user directory: %v", err)
+	}
+
+	other := t.TempDir()
+	shared = filepath.Join(other, ".Trash")
+	testutil.FailErr(t, "create sticky shared directory", os.Mkdir(shared, 0777))
+	testutil.FailErr(t, "mark shared directory sticky", os.Chmod(shared, 0777|os.ModeSticky))
+	testutil.FailErr(t, "create exposed per-user directory", os.Mkdir(filepath.Join(shared, uid), 0700))
+	testutil.FailErr(t, "expose per-user directory", os.Chmod(filepath.Join(shared, uid), 0755))
+	if got := volumeTrashDir(other); got != filepath.Join(other, ".Trash-"+uid) {
+		t.Fatalf("unsafe per-user directory selected %q", got)
 	}
 }
 
