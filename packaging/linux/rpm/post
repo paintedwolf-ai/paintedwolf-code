@@ -21,6 +21,6 @@ if [ -f /usr/share/selinux/packages/painted-wolf-code.pp ] && command -v semodul
   if command -v load_policy >/dev/null 2>&1; then
     load_policy || :
   fi
-  restorecon -R /opt/painted-wolf-code /usr/bin/pw /usr/bin/pw-logs /usr/bin/painted-wolf-code 2>/dev/null || :
+  restorecon -R /opt/painted-wolf-code /usr/bin/pw /usr/bin/pw-logs 2>/dev/null || :
 fi
 exit 0

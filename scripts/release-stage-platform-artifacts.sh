@@ -134,8 +134,8 @@ case "${GOOS}" in
     # native, and both families must install the same tree.
     audit_linux_tree() {
       local label="$1" tree="$2" root="$2/${LINUX_INSTALL_ROOT}"
-      [[ -x "${tree}/usr/bin/${LINUX_PACKAGE_NAME}" ]] || { echo "error: ${PLATFORM} ${label} has no desktop shell executable" >&2; exit 1; }
-      assert_native_arch "${label} desktop shell" "${tree}/usr/bin/${LINUX_PACKAGE_NAME}"
+      [[ -x "${root}/bin/${LINUX_PACKAGE_NAME}" ]] || { echo "error: ${PLATFORM} ${label} has no desktop shell executable under the install root" >&2; exit 1; }
+      assert_native_arch "${label} desktop shell" "${root}/bin/${LINUX_PACKAGE_NAME}"
       for entry in pw pw-logs; do
         [[ -x "${tree}/usr/bin/${entry}" ]] || { echo "error: ${PLATFORM} ${label} has no /usr/bin/${entry} entry point" >&2; exit 1; }
         grep -Fq "exec /opt/painted-wolf-code/bin/${entry} \"\$@\"" "${tree}/usr/bin/${entry}" || {
@@ -172,7 +172,7 @@ case "${GOOS}" in
       APP_ID="$(jq -r .identifier "${ROOT}/lycaon-den/src-tauri/tauri.conf.json")"
       DESKTOP_ENTRY="${tree}/usr/share/applications/${APP_ID}.desktop"
       [[ -f "${DESKTOP_ENTRY}" ]] || { echo "error: ${PLATFORM} ${label} has no ${APP_ID} desktop entry" >&2; exit 1; }
-      grep -Fxq "StartupWMClass=${APP_ID}" "${DESKTOP_ENTRY}" && grep -Fxq "Exec=painted-wolf-code %U" "${DESKTOP_ENTRY}" || {
+      grep -Fxq "StartupWMClass=${APP_ID}" "${DESKTOP_ENTRY}" && grep -Fxq "Exec=/${LINUX_INSTALL_ROOT}/bin/${LINUX_PACKAGE_NAME} %U" "${DESKTOP_ENTRY}" || {
         echo "error: ${PLATFORM} ${label} desktop entry lacks the window class or exec line" >&2
         exit 1
       }
@@ -180,14 +180,11 @@ case "${GOOS}" in
         echo "error: the Linux shell does not set its GTK application id" >&2
         exit 1
       }
-      # The bundler's own product-named entry must stay out of launchers and claim no window.
-      for generated in "${tree}"/usr/share/applications/*.desktop; do
-        [[ "${generated}" == "${DESKTOP_ENTRY}" ]] && continue
-        grep -Fxq "NoDisplay=true" "${generated}" && ! grep -q "^StartupWMClass=" "${generated}" || {
-          echo "error: ${PLATFORM} ${label} ships a second desktop entry that is visible or claims a window: $(basename "${generated}")" >&2
-          exit 1
-        }
-      done
+      [[ "$(find "${tree}/usr/share/applications" -name '*.desktop' | wc -l)" -eq 1 ]] || {
+        echo "error: ${PLATFORM} ${label} ships more than the ${APP_ID} desktop entry" >&2
+        exit 1
+      }
+      [[ ! -e "${tree}/usr/bin/${LINUX_PACKAGE_NAME}" ]] || { echo "error: ${PLATFORM} ${label} installs the shell outside the install root" >&2; exit 1; }
       # Every packaged service runs an executable the package installs and the manifest lists.
       for unit in "${tree}"/usr/lib/systemd/system/*.service; do
         [[ -e "${unit}" ]] || continue

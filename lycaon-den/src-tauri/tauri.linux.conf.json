@@ -35,8 +35,7 @@
     "linux": {
       "deb": {
         "section": "devel",
-        "priority": "optional",
-        "desktopTemplate": "../../packaging/linux/painted-wolf-code.desktop.hbs"
+        "priority": "optional"
       }
     }
   }

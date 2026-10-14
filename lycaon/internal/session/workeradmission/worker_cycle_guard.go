@@ -29,7 +29,7 @@ func ObserveCoordinatorTaskInFlight(
 	deps WorkerCycleGuardDeps,
 	sess *api.Session,
 	toolName string,
-	args map[string]any,
+	identity TaskIdentity,
 	gc *oar.GuardContext,
 ) error {
 	if gc == nil || strings.TrimSpace(strings.ToLower(toolName)) != "task" || sess == nil || !surface.IsCoordinatorParent(sess) {
@@ -50,15 +50,12 @@ func ObserveCoordinatorTaskInFlight(
 			return nil
 		}
 	}
-	agentType := taskAgentType(args)
-	scope, err := api.TaskScopeFromArgs(args)
-	if err != nil {
-		return err
-	}
+	agentType, scope := identity.AgentType, identity.Scope
 	caps := parallelTaskCaps(ctx, deps, sess)
 	publishTaskScopeFacts(gc, scope, caps, agentType)
+	gc.Workers.ProfileMutationCapable = identity.MutationCapable
 	publishRepoEmptyReadOnlyFacts(ctx, deps, sess, agentType, gc)
-	if code := ValidateTaskScopeForAgent(agentType, scope); code != "" {
+	if code := ValidateTaskScopeForProfile(identity.MutationCapable, true, scope); code != "" {
 		observeCoordinatorTaskScope(gc, code, scope, nil, caps, agentType, "")
 		return nil
 	}
@@ -84,9 +81,6 @@ func ObserveCoordinatorTaskInFlight(
 		return nil
 	}
 	publishOverlayBaseFacts(gc, scope, "")
-	if _, err := ParseTaskMaxToolLoopsFromArgs(args); err != nil {
-		return err
-	}
 	active, err := workeroutcomes.ParentSessionInFlightWorkers(ctx, deps.Workers, sess.ProjectID, sess.ID)
 	if err != nil {
 		return err
@@ -122,9 +116,10 @@ func publishRepoEmptyReadOnlyFacts(
 func publishTaskScopeFacts(gc *oar.GuardContext, scope api.TaskScope, caps ParallelTaskCaps, agentType string) {
 	n := scope.Normalized()
 	gc.Workers.ScopeMode = string(n.Mode)
-	if capable, ok := prompts.AgentMutationCapable(agentType); ok {
-		gc.Workers.ProfileMutationCapable = capable
+	if gc.ObservationData == nil {
+		gc.ObservationData = map[string]any{}
 	}
+	gc.ObservationData["agent_type"] = agentType
 	gc.Workers.MaxWorkers = int64(caps.MaxTotal)
 	gc.Workers.MaxReadWorkers = int64(caps.MaxRead)
 	gc.Workers.MaxWriteWorkers = int64(caps.MaxWrite)
@@ -197,12 +192,4 @@ func parallelTaskCaps(ctx context.Context, deps WorkerCycleGuardDeps, sess *api.
 		maxWrite = deps.MaxWriteWorkers(ctx, sess.ID)
 	}
 	return ResolveParallelTaskCaps(maxTotal, maxRead, maxWrite)
-}
-
-func taskAgentType(args map[string]any) string {
-	if args == nil {
-		return ""
-	}
-	agentType, _ := args["agent_type"].(string)
-	return strings.TrimSpace(agentType)
 }

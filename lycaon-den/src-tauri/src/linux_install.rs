@@ -8,9 +8,8 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
-pub const INSTALL_ROOT: &str = "/opt/painted-wolf-code";
+pub const INSTALL_ROOT: &str = crate::installation_mode::LINUX_PACKAGE_ROOT;
 pub const PACKAGE_NAME: &str = "painted-wolf-code";
-pub const ENTRY_POINT_DIR: &str = "/usr/bin";
 const BIN_DIR: &str = "bin";
 const ENGINE_ROOT_DIR: &str = "engine-root";
 const ENGINE_MARKER: &str = "schemas/oar/oar.schema.json";
@@ -159,21 +158,21 @@ mod tests {
 
     #[test]
     fn dpkg_owner_is_read_only_for_the_queried_path() {
-        let exe = Path::new("/usr/bin/painted-wolf-code");
+        let exe = Path::new("/opt/painted-wolf-code/bin/painted-wolf-code");
         assert_eq!(
-            parse_dpkg_owner("painted-wolf-code: /usr/bin/painted-wolf-code\n", exe).as_deref(),
+            parse_dpkg_owner("painted-wolf-code: /opt/painted-wolf-code/bin/painted-wolf-code\n", exe).as_deref(),
             Some("painted-wolf-code")
         );
         assert_eq!(
             parse_dpkg_owner(
-                "painted-wolf-code:amd64, other: /usr/bin/painted-wolf-code\n",
+                "painted-wolf-code:amd64, other: /opt/painted-wolf-code/bin/painted-wolf-code\n",
                 exe
             )
             .as_deref(),
             Some("painted-wolf-code")
         );
         assert_eq!(
-            parse_dpkg_owner("diversion by foo from: /usr/bin/painted-wolf-code\n", exe).as_deref(),
+            parse_dpkg_owner("diversion by foo from: /opt/painted-wolf-code/bin/painted-wolf-code\n", exe).as_deref(),
             Some("diversion by foo from")
         );
         assert!(parse_dpkg_owner("other: /usr/bin/other\n", exe).is_none());

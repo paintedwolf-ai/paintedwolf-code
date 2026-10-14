@@ -54,21 +54,20 @@ export function ShellCommandPanel(): JSX.Element {
     >
       <h3 class="den-settings-subhead">{settingLabel("command-line-tool")}</h3>
       <Show
-        when={s()?.package_managed}
+        when={s()?.managed_by_package}
         fallback={
           <p class="den-settings-hint">
             Install the <code>pw</code> command so you can open projects from a
             terminal with <code>pw .</code>. Symlinks go in{" "}
-            <code>/usr/local/bin</code> (may ask for an administrator password).
+            <code>{s()?.bin_dir || "the command directory"}</code>
+            {s()?.installation_mode === "developer" ? "" : " (may ask for an administrator password)"}.
             Crossbar also offers Install pw command.
           </p>
         }
       >
-        <p class="den-settings-hint" data-testid="shell-command-package-managed">
-          The package installed the <code>pw</code> command, so you can open
-          projects from a terminal with <code>pw .</code>. The commands at{" "}
-          <code>/usr/bin/pw</code> and <code>/usr/bin/pw-logs</code> belong to
-          the package and are removed with it.
+        <p class="den-settings-hint" data-testid="shell-command-managed">
+          The <code>pw</code> command is installed and updated by the system
+          package. Open projects from a terminal with <code>pw .</code>.
         </p>
       </Show>
 
@@ -92,39 +91,39 @@ export function ShellCommandPanel(): JSX.Element {
         {(st) => (
           <>
             <p class="den-settings-hint" data-testid="shell-command-status">
-              {st.package_managed
-                ? `Installed by the package — ${st.pw_link}`
-                : st.installed
-                  ? `Installed — ${st.pw_link}`
+              {st.installed
+                ? `Installed — ${st.pw_link}`
+                : st.managed_by_package
+                  ? `Not installed — the package provides ${st.pw_link}`
                   : "Not installed"}
             </p>
 
-            <Show when={!st.package_managed}>
-              <div class="den-settings-pref-row den-settings-actions">
-                <Show
-                  when={st.installed}
-                  fallback={
-                    <DenButton
-                      variant="secondary"
-                      disabled={busy() || !!st.unavailable_reason}
-                      data-testid="shell-command-install"
-                      onClick={() => void run(installShellCommand)}
-                    >
-                      Install pw command
-                    </DenButton>
-                  }
-                >
+            <div class="den-settings-pref-row den-settings-actions">
+              <Show when={!st.managed_by_package}>
+              <Show
+                when={st.installed}
+                fallback={
                   <DenButton
                     variant="secondary"
-                    disabled={busy()}
-                    data-testid="shell-command-uninstall"
-                    onClick={() => void run(uninstallShellCommand)}
+                    disabled={busy() || !!st.unavailable_reason}
+                    data-testid="shell-command-install"
+                    onClick={() => void run(installShellCommand)}
                   >
-                    Uninstall
+                    Install pw command
                   </DenButton>
-                </Show>
-              </div>
-            </Show>
+                }
+              >
+                <DenButton
+                  variant="secondary"
+                  disabled={busy()}
+                  data-testid="shell-command-uninstall"
+                  onClick={() => void run(uninstallShellCommand)}
+                >
+                  Uninstall
+                </DenButton>
+              </Show>
+              </Show>
+            </div>
           </>
         )}
       </Show>

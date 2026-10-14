@@ -44,7 +44,7 @@ mod tests {
             Failure::PackageManaged | Failure::UnsupportedInstallation
         ));
         assert_eq!(
-            verify_bundle(Path::new("/usr/bin/painted-wolf-code"))
+            verify_bundle(Path::new("/opt/painted-wolf-code/bin/painted-wolf-code"))
                 .unwrap_err()
                 .code,
             code

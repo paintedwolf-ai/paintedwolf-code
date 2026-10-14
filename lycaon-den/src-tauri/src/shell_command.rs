@@ -1,24 +1,33 @@
-//! Manages the bundled command symlinks in `/usr/local/bin`; a Linux package owns its own.
+//! Reports and manages the `pw` and `pw-logs` command entry points.
+//! A package-managed installation owns them; the application only reports.
 
 use std::env;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+#[cfg(any(target_os = "macos", test))]
 use std::process::Command;
 
 use serde::Serialize;
 
+use self::install_location::InstallLocation;
+
+mod install_location;
+
 const ENGINE_NAME: &str = "pw";
 const LOGS_NAME: &str = "pw-logs";
-const INSTALL_BIN_DIR: &str = "/usr/local/bin";
+const PACKAGE_MANAGED_REASON: &str =
+    "The pw command is installed and managed by the system package.";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct ShellCommandStatus {
-    /// Symlinks for `pw` and `pw-logs` both point at the current bundle binaries.
+    /// Symlinks for `pw` and `pw-logs` both point at the current bundle binaries,
+    /// or the package entry points are present.
     pub installed: bool,
-    /// The system package installed the commands; the app neither adds nor removes them.
-    pub package_managed: bool,
+    pub installation_mode: &'static str,
+    /// The package owns the entry points; the application never writes them.
+    pub managed_by_package: bool,
     pub bin_dir: String,
     pub pw_link: String,
     pub pw_logs_link: String,
@@ -74,9 +83,12 @@ fn link_points_at(link: &Path, want: &Path) -> bool {
     fs::read_link(link).is_ok_and(|got| got.as_os_str() == want.as_os_str())
 }
 
-fn status_with(bin_dir: &Path, bins: Result<BundleBins, String>) -> ShellCommandStatus {
-    let pw_link = bin_dir.join(ENGINE_NAME);
-    let pw_logs_link = bin_dir.join(LOGS_NAME);
+fn status_with(location: &InstallLocation, bins: Result<BundleBins, String>) -> ShellCommandStatus {
+    let pw_link = location.bin_dir.join(ENGINE_NAME);
+    let pw_logs_link = location.bin_dir.join(LOGS_NAME);
+    if location.managed_by_package {
+        return package_status(location, &pw_link, &pw_logs_link);
+    }
 
     let (pw_target, pw_logs_target, unavailable, installed) = match bins {
         Ok(b) => {
@@ -94,13 +106,33 @@ fn status_with(bin_dir: &Path, bins: Result<BundleBins, String>) -> ShellCommand
 
     ShellCommandStatus {
         installed,
-        package_managed: false,
-        bin_dir: bin_dir.display().to_string(),
+        installation_mode: location.mode.label(),
+        managed_by_package: false,
+        bin_dir: location.bin_dir.display().to_string(),
         pw_link: pw_link.display().to_string(),
         pw_logs_link: pw_logs_link.display().to_string(),
         pw_target,
         pw_logs_target,
         unavailable_reason: unavailable,
+    }
+}
+
+// Package entry points may be wrappers rather than symlinks; a dangling
+// symlink or a missing file is not installed.
+fn package_status(location: &InstallLocation, pw_link: &Path, pw_logs_link: &Path) -> ShellCommandStatus {
+    let resolve = |link: &Path| fs::canonicalize(link).ok().map(|target| target.display().to_string());
+    let pw_target = resolve(pw_link);
+    let pw_logs_target = resolve(pw_logs_link);
+    ShellCommandStatus {
+        installed: pw_target.is_some() && pw_logs_target.is_some(),
+        installation_mode: location.mode.label(),
+        managed_by_package: true,
+        bin_dir: location.bin_dir.display().to_string(),
+        pw_link: pw_link.display().to_string(),
+        pw_logs_link: pw_logs_link.display().to_string(),
+        pw_target,
+        pw_logs_target,
+        unavailable_reason: None,
     }
 }
 
@@ -122,16 +154,15 @@ fn run_privileged_shell(script: &str) -> Result<(), String> {
     }
     let stderr = String::from_utf8_lossy(&output.stderr);
     Err(format!(
-        "could not update commands in {INSTALL_BIN_DIR} with administrator privileges: {}",
+        "could not update commands with administrator privileges: {}",
         stderr.trim()
     ))
 }
 
+/// Only macOS escalates; elsewhere the command directory belongs to the person.
 #[cfg(not(target_os = "macos"))]
 fn run_privileged_shell(_script: &str) -> Result<(), String> {
-    Err(format!(
-        "could not write to {INSTALL_BIN_DIR} — create the symlinks as root, or make that directory writable"
-    ))
+    Err("could not write the command links into your user command directory".to_string())
 }
 
 fn validate_install_link(link: &Path, target: &Path) -> Result<(), String> {
@@ -268,66 +299,49 @@ fn uninstall_with(bin_dir: &Path, bins: &BundleBins) -> Result<(), String> {
     }
 }
 
-/// The entry points a Linux package installed, when this process runs from one.
-fn package_managed_status() -> Option<ShellCommandStatus> {
-    crate::linux_install::installed()?;
-    let layout =
-        crate::linux_install::package_layout(Path::new(crate::linux_install::INSTALL_ROOT))?;
-    let bin_dir = Path::new(crate::linux_install::ENTRY_POINT_DIR);
-    Some(ShellCommandStatus {
-        installed: bin_dir.join(ENGINE_NAME).is_file() && bin_dir.join(LOGS_NAME).is_file(),
-        package_managed: true,
-        bin_dir: bin_dir.display().to_string(),
-        pw_link: bin_dir.join(ENGINE_NAME).display().to_string(),
-        pw_logs_link: bin_dir.join(LOGS_NAME).display().to_string(),
-        pw_target: Some(layout.engine.display().to_string()),
-        pw_logs_target: Some(layout.log_viewer.display().to_string()),
-        unavailable_reason: None,
-    })
-}
-
-fn refuse_package_managed() -> Result<(), String> {
-    match crate::linux_install::installed() {
-        Some(package) => Err(format!(
-            "the {} package owns {entry}/{ENGINE_NAME} and {entry}/{LOGS_NAME}; use the package manager to change them",
-            package.name,
-            entry = crate::linux_install::ENTRY_POINT_DIR,
-        )),
-        None => Ok(()),
-    }
-}
-
 #[tauri::command]
 pub fn shell_command_status() -> Result<ShellCommandStatus, String> {
-    if let Some(status) = package_managed_status() {
-        return Ok(status);
+    let location = install_location::current()?;
+    Ok(status_with(&location, resolve_bundle_bins()))
+}
+
+fn writable_location() -> Result<InstallLocation, String> {
+    let location = install_location::current()?;
+    if location.managed_by_package {
+        return Err(PACKAGE_MANAGED_REASON.to_string());
     }
-    Ok(status_with(
-        Path::new(INSTALL_BIN_DIR),
-        resolve_bundle_bins(),
-    ))
+    Ok(location)
 }
 
 #[tauri::command]
 pub fn install_shell_command() -> Result<ShellCommandStatus, String> {
-    refuse_package_managed()?;
+    let location = writable_location()?;
     let bins = resolve_bundle_bins()?;
-    install_with(Path::new(INSTALL_BIN_DIR), &bins)?;
-    Ok(status_with(Path::new(INSTALL_BIN_DIR), Ok(bins)))
+    install_with(&location.bin_dir, &bins)?;
+    Ok(status_with(&location, Ok(bins)))
 }
 
 #[tauri::command]
 pub fn uninstall_shell_command() -> Result<ShellCommandStatus, String> {
-    refuse_package_managed()?;
+    let location = writable_location()?;
     let bins = resolve_bundle_bins()?;
-    uninstall_with(Path::new(INSTALL_BIN_DIR), &bins)?;
-    Ok(status_with(Path::new(INSTALL_BIN_DIR), Ok(bins)))
+    uninstall_with(&location.bin_dir, &bins)?;
+    Ok(status_with(&location, Ok(bins)))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::installation_mode::InstallationMode;
     use crate::test_support::TempDir;
+
+    fn developer_location(bin_dir: &Path) -> InstallLocation {
+        InstallLocation {
+            bin_dir: bin_dir.to_path_buf(),
+            managed_by_package: false,
+            mode: InstallationMode::Developer,
+        }
+    }
 
     fn write_exe(path: &Path) {
         if let Some(parent) = path.parent() {
@@ -358,13 +372,44 @@ mod tests {
         };
 
         install_with(&bin_dir, &bins).unwrap();
-        let status = status_with(&bin_dir, Ok(bins.clone()));
+        let status = status_with(&developer_location(&bin_dir), Ok(bins.clone()));
         assert!(status.installed);
+        assert!(!status.managed_by_package);
+        assert_eq!(status.installation_mode, "developer");
         assert!(status.pw_link.ends_with("/pw"));
 
         uninstall_with(&bin_dir, &bins).unwrap();
-        let status = status_with(&bin_dir, Ok(bins));
+        let status = status_with(&developer_location(&bin_dir), Ok(bins));
         assert!(!status.installed);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn package_status_reports_present_entry_points_without_bundle_links() {
+        let root = TempDir::new("shell-cmd-package");
+        let bin_dir = root.path().join("usr-bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+        let location = InstallLocation {
+            bin_dir: bin_dir.clone(),
+            managed_by_package: true,
+            mode: InstallationMode::Package { root: root.path().join("opt") },
+        };
+        let status = status_with(&location, Err("no bundle".into()));
+        assert!(!status.installed);
+        assert!(status.managed_by_package);
+        assert_eq!(status.installation_mode, "package");
+        assert_eq!(status.unavailable_reason, None);
+
+        write_exe(&bin_dir.join(ENGINE_NAME));
+        std::os::unix::fs::symlink(root.path().join("missing-target"), bin_dir.join(LOGS_NAME)).unwrap();
+        let status = status_with(&location, Err("no bundle".into()));
+        assert!(!status.installed, "a dangling entry point is not installed");
+
+        fs::remove_file(bin_dir.join(LOGS_NAME)).unwrap();
+        write_exe(&bin_dir.join(LOGS_NAME));
+        let status = status_with(&location, Err("no bundle".into()));
+        assert!(status.installed);
+        assert_eq!(status.pw_target.as_deref(), fs::canonicalize(bin_dir.join(ENGINE_NAME)).unwrap().to_str());
     }
 
     #[test]

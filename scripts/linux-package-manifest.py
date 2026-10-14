@@ -24,7 +24,7 @@ import sys
 FORMAT_VERSION = 1
 PACKAGE_NAME = "painted-wolf-code"
 INSTALL_ROOT = "/opt/painted-wolf-code"
-SHELL_EXECUTABLE = "/usr/bin/painted-wolf-code"
+SHELL_EXECUTABLE = "/opt/painted-wolf-code/bin/painted-wolf-code"
 HELPERS = ("pw", "pw-logs", "pw-document-core", "bialy")
 OPTIONAL_HELPERS = ("pw-vault-identity",)
 ENTRY_POINTS = ("pw", "pw-logs")

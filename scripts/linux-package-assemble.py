@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Finish the Linux .deb and .rpm from the one tree Tauri staged.
 
-`tauri bundle --bundles deb` renders the desktop entries and icons and places
-every path of the `files` map from linux-package-config.py into
-`bundle/deb/<stem>/data`; it also patches the shell executable with its bundle
-type. Both packages are built from that tree with the distributions' own tools:
+`tauri bundle --bundles deb` renders the icons and places every path of the
+`files` map from linux-package-config.py into `bundle/deb/<stem>/data`; it also
+patches the shell executable with its bundle type. The adapter moves the shell
+under the install root, keeps only the packaged desktop entry, and builds both
+packages from that tree with the distributions' own tools:
 
 - The manifest in the tree is sealed against the staged bytes, so it describes
   the patched shell.
@@ -55,7 +56,7 @@ def tauri_metadata(root: Path) -> dict:
     tauri_dir = root / "lycaon-den" / "src-tauri"
     base = json.loads((tauri_dir / "tauri.conf.json").read_text(encoding="utf-8"))
     linux = json.loads((tauri_dir / "tauri.linux.conf.json").read_text(encoding="utf-8"))
-    bundle = {**base.get("bundle", {}), **linux.get("bundle", {})}
+    bundle = {**base.get("bundle", {}), **linux.get("bundle", {}), "identifier": base["identifier"]}
     for key in ("publisher", "homepage", "license", "shortDescription", "longDescription"):
         if not isinstance(bundle.get(key), str) or not bundle[key].strip():
             raise ValueError(f"Tauri bundle configuration lacks {key}")
@@ -155,6 +156,24 @@ def runs_as_program(path: Path) -> bool:
         phnum = int.from_bytes(header[56:58], order)
         handle.seek(phoff)
         return any(int.from_bytes(handle.read(phentsize)[:4], order) == 3 for _ in range(phnum))
+
+
+def place_shell(data: Path, app_id: str) -> None:
+    """Move the shell Tauri installs in /usr/bin under the install root, and drop
+    the product-named desktop entry Tauri always writes; packaging/linux ships
+    the one entry, named after the application identifier."""
+    staged_shell = data / "usr" / "bin" / PACKAGE_NAME
+    shell = data / OWNED_ROOT / "bin" / PACKAGE_NAME
+    if not staged_shell.is_file():
+        raise ValueError(f"Tauri staged no shell executable at /usr/bin/{PACKAGE_NAME}")
+    shell.parent.mkdir(parents=True, exist_ok=True)
+    staged_shell.replace(shell)
+    applications = data / "usr" / "share" / "applications"
+    for entry in applications.glob("*.desktop"):
+        if entry.name != f"{app_id}.desktop":
+            entry.unlink()
+    if not (applications / f"{app_id}.desktop").is_file():
+        raise ValueError(f"the staged tree has no {app_id}.desktop")
 
 
 def normalise_modes(data: Path) -> None:
@@ -308,6 +327,7 @@ def assemble(args: argparse.Namespace) -> int:
             if shutil.which(tool) is None:
                 raise ValueError(f"{tool} is required to assemble the Linux packages (Debian and Ubuntu: {package})")
         staged = staged_tree(bundle_dir)
+        place_shell(staged / "data", tauri_metadata(root)["identifier"])
         normalise_modes(staged / "data")
         subprocess.run(
             [sys.executable, str(root / "scripts" / "linux-package-manifest.py"), "seal-tree", "--tree", str(staged / "data")],

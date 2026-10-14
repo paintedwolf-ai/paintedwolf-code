@@ -79,7 +79,9 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	if err := blueprint.RegisterPlanTools(b.execution.Host.Registry, b.workflows.Blueprints); err != nil {
 		return fmt.Errorf("plan tools: %w", err)
 	}
-	if err := worker.RegisterTaskTool(b.execution.Host.Registry, taskToolDeps(b)); err != nil {
+	taskDeps := taskToolDeps(b)
+	b.sessions.Manager.Coordinator.Guards.SetTaskIdentityResolver(taskDeps.IdentityResolver())
+	if err := worker.RegisterTaskTool(b.execution.Host.Registry, taskDeps); err != nil {
 		return fmt.Errorf("task tool: %w", err)
 	}
 	if err := worker.RegisterAnswerDecisionTool(b.execution.Host.Registry, worker.AnswerDecisionToolDeps{

@@ -1,5 +1,5 @@
 mod app_state;
-mod files;
+pub mod files;
 mod notifications;
 #[cfg(target_os = "linux")]
 mod linux_desktop;
@@ -12,6 +12,7 @@ mod clipboard;
 mod config_dir;
 mod detect_editors;
 mod http_transport;
+mod installation_mode;
 mod linux_install;
 mod open_external;
 mod open_third_party_notices;
