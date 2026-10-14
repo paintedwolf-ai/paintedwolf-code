@@ -2,14 +2,17 @@ package contract
 
 import (
 	"context"
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/llm/actionenvelope"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -114,4 +117,41 @@ func TestNativeOwnersDoNotFmtMissingArg(t *testing.T) {
 		return nil
 	})
 	contractcheck.FailErr(t, "walk native", err)
+}
+
+// Recognition depends on the frozen offer, never a tool-specific allowlist or
+// argument contents. Exercise every shipped schema, including future additions.
+func TestTextActionRecognitionTracksWholeToolCatalog(t *testing.T) {
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join(contractcheck.RepoRoot(t), "lycaon/config/packs/painted-wolf/platform/tools/schemas"))
+	contractcheck.FailErr(t, "load schemas", err)
+	if len(schemas.Tools) == 0 {
+		t.Fatal("empty tool catalog")
+	}
+	for name := range schemas.Tools {
+		t.Run(name, func(t *testing.T) {
+			for _, keys := range [][2]string{{"tool_name", "tool_args"}, {"name", "arguments"}, {"name", "parameters"}, {"name", "args"}, {"tool", "args"}} {
+				for _, args := range []any{nil, "malformed", map[string]any{"nested": map[string]any{"tool": "not-offered", "args": nil}}} {
+					action := map[string]any{keys[0]: name, keys[1]: args}
+					for _, envelope := range []any{action, []any{action, action}, map[string]any{"tool_calls": []any{map[string]any{"function": action}}}} {
+						raw, err := json.Marshal(envelope)
+						contractcheck.FailErr(t, "encode envelope", err)
+						text := string(raw)
+						if got := actionenvelope.Names(text, []string{name}); !slices.Equal(got, []string{name}) {
+							t.Fatalf("catalog action not recognized exactly once: %s => %v", text, got)
+						}
+						for _, offered := range [][]string{nil, {}, {"not-offered"}} {
+							if got := actionenvelope.Names(text, offered); len(got) != 0 {
+								t.Fatalf("unoffered action recognized: %v", got)
+							}
+						}
+						for _, example := range []string{"Example: " + text, "```json\n" + text + "\n```", `{"data":` + text + `}`, `{"tool":"not-offered","args":` + text + `}`} {
+							if got := actionenvelope.Names(example, []string{name}); len(got) != 0 {
+								t.Fatalf("example or argument data became action: %s => %v", example, got)
+							}
+						}
+					}
+				}
+			}
+		})
+	}
 }

@@ -132,6 +132,34 @@ Native Go and confined MCP tools expose structured rejection codes through the s
 
 An already rejected operation pins its original typed code in the policy context. OAR evaluates all selected rules using the declared anchor, selector, and condition; the renderer retains the original code and details when a different policy decision fires or its presentation is unavailable. Declared external MCP errors map to `MCP_CALL_FAILED` with the external code preserved as a detail and typed cause.
 
+## Model response repair
+
+One response boundary classifies provider output before persistence or tool
+execution. Native calls follow the existing validation and authorization path. A provider's fallback capability does not select a protocol:
+`CompletionRequest.ToolProtocol` must explicitly select a supported alternate
+grammar. Ordinary conversation requests select native calls by default.
+Alternate envelope recovery requires a complete envelope; fenced examples and
+surrounding explanation remain content even when that protocol is selected.
+
+For native requests, leading JSON action objects or arrays naming an offered
+tool produce a non-executable observation. Recognized field pairs are
+`tool_name`/`tool_args`, `name`/`arguments`, `name`/`parameters`, `name`/`args`, and
+`tool`/`args`, including `tool_calls` and `function` containers. The recognizer
+also accepts leading `${`, `[TOOL_CALLS]`, and `<tool_call>` markers. Leading
+whitespace and trailing explanation are allowed. Parsing is bounded to 64 KiB
+and three container levels. Argument validity is left to native resubmission.
+Fenced examples, prose before an envelope, unknown tools, and tool names inside
+argument values do not trigger repair. Requests forbidding tools do not request
+resubmission. Native calls accompanying text take precedence over recognition.
+
+The structured observation enters the existing `content.output` OAR occurrence
+for coordinators and workers. `TOOL_ACTION_IN_TEXT` requests native-channel repair;
+the existing rejected-draft and bounded no-progress lifecycle preserves the
+attempt and delivers feedback. OAR never reparses or executes the text. This
+recovery adds no standing instruction or Bialy instruction unit. A requested raw
+JSON answer with the reserved action shape can also trigger repair; use a fenced
+example to present that shape as content.
+
 ## Coordinator nudges
 
 Post-turn nudges carry OAR or grounding decisions that could not reject an already-finished generation. All matched advisories are retained in evaluation order; the envelope identifies the primary code.
