@@ -67,6 +67,9 @@ func (m *Service) publishSynthesis(ctx context.Context, info compaction.SessionI
 		return nil
 	}
 	accepted := *view.Continuation
+	if accepted.ThroughOrd == enriched.ThroughOrd {
+		accepted.Sources = messageview.CloneContinuation(enriched).Sources
+	}
 	accepted.Summary = enriched.Summary
 	accepted.SummaryThroughOrd = enriched.SummaryThroughOrd
 	accepted.Reason = enriched.Reason

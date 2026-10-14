@@ -231,7 +231,7 @@ func TestUtilityLaneAllowsConcurrentHosted(t *testing.T) {
 	release2()
 }
 
-func TestBackgroundSummarizeNeverSpendsCoordinator(t *testing.T) {
+func TestBackgroundSummarizeIgnoresLatencyAndNeverSpendsCoordinator(t *testing.T) {
 	lite := &namedStubProvider{id: "lite", err: silentLite()}
 	coord := &namedStubProvider{id: "coord", content: "coordinator summary"}
 	r := newFallbackTestSummarizer(t, lite, coord)
@@ -249,11 +249,14 @@ func TestBackgroundSummarizeNeverSpendsCoordinator(t *testing.T) {
 	coord.calls = 0
 	lite.calls = 0
 	_, err = r.Summarize(context.Background(), "sys", "user", 32)
-	if !errors.Is(err, ErrLiteUnavailable) {
+	if _, ok := failure.AsProviderSilent(err); !ok {
 		t.Fatalf("second error = %v", err)
 	}
-	if lite.calls != 0 {
-		t.Fatalf("open circuit still called lite (%d)", lite.calls)
+	if lite.calls != 1 {
+		t.Fatalf("quiet latency failure did not retry lite (%d)", lite.calls)
+	}
+	if r.Plane.Snapshot().State != SlotReady {
+		t.Fatal("latency alone announced a summarizer outage")
 	}
 	if coord.calls != 0 {
 		t.Fatalf("background compaction spent coordinator (%d)", coord.calls)

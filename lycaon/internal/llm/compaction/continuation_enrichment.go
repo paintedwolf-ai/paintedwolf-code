@@ -47,8 +47,3 @@ func (c *SimpleCompactor) EnrichContinuation(ctx context.Context, info SessionIn
 	c.rankContinuation(ctx, info, &enriched)
 	return &enriched, nil
 }
-
-// RenderContinuation chooses a receiver-sized representation of accepted data.
-func RenderContinuation(ctx context.Context, record *messageview.Continuation, recall bool) (string, error) {
-	return renderCoveredContinuation(ctx, record, recall)
-}
