@@ -55,8 +55,11 @@ func runProxyProbe(t *testing.T, self string, c *confine.Confinement) string {
 	return out
 }
 
+// decideEgress makes every new destination ask, and answers allow.
 func decideEgress(t *testing.T, allow bool) {
 	t.Helper()
+	confine.SetEgressPosture(confine.PostureAsk)
+	t.Cleanup(func() { confine.SetEgressPosture(confine.PostureObserve) })
 	release := confine.SetEgressResolver(func(context.Context, confine.EgressCommand, egressproxy.Endpoint, *confine.EgressDetectionCitation) bool {
 		return allow
 	})
