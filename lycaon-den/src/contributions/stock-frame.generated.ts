@@ -4557,6 +4557,9 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "bindings": {
         "linux": [
           "F10"
+        ],
+        "windows": [
+          "F10"
         ]
       }
     },
@@ -4568,6 +4571,12 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "bindings": {
         "linux": [
           "Mod+Q"
+        ],
+        "macos": [
+          "Mod+Q"
+        ],
+        "windows": [
+          "Alt+F4"
         ]
       }
     },
@@ -9866,6 +9875,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "macos",
       "scope": "global",
+      "chord": "Mod+Q",
+      "active": "painted-wolf/platform:key-app-quit",
+      "candidates": [
+        "painted-wolf/platform:key-app-quit"
+      ]
+    },
+    {
+      "platform": "macos",
+      "scope": "global",
       "chord": "Mod+Shift+0",
       "active": "painted-wolf/platform:key-layout-reset-split-size",
       "candidates": [
@@ -10883,6 +10901,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "windows",
       "scope": "global",
+      "chord": "Alt+F4",
+      "active": "painted-wolf/platform:key-app-quit",
+      "candidates": [
+        "painted-wolf/platform:key-app-quit"
+      ]
+    },
+    {
+      "platform": "windows",
+      "scope": "global",
       "chord": "Alt+PageDown",
       "active": "painted-wolf/platform:key-chat-next-message",
       "candidates": [
@@ -10905,6 +10932,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-overlay-dismiss",
       "candidates": [
         "painted-wolf/platform:key-overlay-dismiss"
+      ]
+    },
+    {
+      "platform": "windows",
+      "scope": "global",
+      "chord": "F10",
+      "active": "painted-wolf/platform:key-app-menu-open",
+      "candidates": [
+        "painted-wolf/platform:key-app-menu-open"
       ]
     },
     {
