@@ -44,6 +44,16 @@ func Enter(plan Plan) error {
 	if err := loopbackUp(); err != nil {
 		return err
 	}
+	if plan.Network.Mode == NetworkProxyOnly {
+		if err := handOffProxyListeners(plan.Network); err != nil {
+			return err
+		}
+	}
+	if plan.Network.Mode == NetworkDirectIP && len(plan.Network.Resolvers) > 0 {
+		if err := handOffResolver(); err != nil {
+			return err
+		}
+	}
 	probe, err := newLandlockProbe()
 	if err != nil {
 		return err
@@ -58,8 +68,16 @@ func Enter(plan Plan) error {
 		}
 	}
 	if plan.Attest.Omit != OmitSeccomp {
-		if err := applySeccomp(); err != nil {
+		listener, err := applySeccomp()
+		if err != nil {
 			return err
+		}
+		// The supervisor answers every notified call from here on; without it
+		// those calls fail rather than run unmediated.
+		err = sendHandoff(handoff{Kind: handoffNotify}, listener)
+		_ = unix.Close(listener)
+		if err != nil {
+			return fmt.Errorf("hand off seccomp notifications: %w", err)
 		}
 	}
 	if err := dropCapabilities(); err != nil {

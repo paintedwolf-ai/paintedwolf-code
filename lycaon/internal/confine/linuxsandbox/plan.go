@@ -6,6 +6,7 @@ package linuxsandbox
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 )
 
@@ -78,9 +79,12 @@ const (
 	NetworkDirectIP  = "direct_ip"
 )
 
-// Network is the egress expression. The helper realises NetworkDeny as a
-// network namespace holding one loopback interface. The other fields are
-// carried so the helper refuses, with a typed reason, what it cannot express.
+// Network is the egress expression. Every mode runs in a network namespace
+// holding one loopback interface. ProxyOnly adds the mediated endpoints there,
+// served from the host by the outer helper. The supervisor admits the other
+// grants call by call: loopback connects, listeners, direct IP, and exact
+// Unix-socket paths reach the host only through sockets it creates or
+// connects itself.
 type Network struct {
 	Mode                 string           `json:"mode"`
 	LoopbackConnect      bool             `json:"loopback_connect,omitempty"`
@@ -92,7 +96,10 @@ type Network struct {
 	DirectIPPermits      []DirectIPPermit `json:"direct_ip_permits,omitempty"`
 	// SocketPaths are exact AF_UNIX connect grants.
 	SocketPaths []string `json:"socket_paths,omitempty"`
-	Browser     bool     `json:"browser,omitempty"`
+	// Resolvers are the host's resolvers, in order, that direct IP reaches
+	// names through.
+	Resolvers []string `json:"resolvers,omitempty"`
+	Browser   bool     `json:"browser,omitempty"`
 }
 
 // DirectIPPermit narrows direct IP by transport and port.
@@ -113,7 +120,6 @@ const (
 	UnsupportedPlanVersion    = "plan_version"
 	UnsupportedNetworkMode    = "network_mode"
 	UnsupportedNetworkGrant   = "network_grant"
-	UnsupportedBrowser        = "browser"
 	UnsupportedFilesystemRule = "filesystem_rule"
 )
 
@@ -148,19 +154,26 @@ func (p Plan) Validate() error {
 		return &Unsupported{Code: UnsupportedPlanVersion, Detail: fmt.Sprintf("version %d, helper reads %d", p.Version, PlanVersion)}
 	}
 	n := p.Network
-	if n.Mode != NetworkDeny {
+	switch n.Mode {
+	case NetworkDeny:
+	case NetworkProxyOnly:
+		if n.ProxyAddr == "" && n.SocksProxyAddr == "" {
+			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "proxy_only without a mediated endpoint"}
+		}
+	case NetworkDirectIP:
+		for _, permit := range n.DirectIPPermits {
+			// Datagram sockets never leave the sandbox's namespace.
+			if permit.Protocol != "tcp" {
+				return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "direct_ip " + permit.Protocol + " permit"}
+			}
+		}
+	default:
 		return &Unsupported{Code: UnsupportedNetworkMode, Detail: n.Mode}
 	}
-	if n.Browser {
-		return &Unsupported{Code: UnsupportedBrowser}
-	}
-	switch {
-	case n.LoopbackConnect:
-		return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "loopback_connect"}
-	case n.Listen:
-		return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "local_listen"}
-	case len(n.SocketPaths) > 0:
-		return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "socket_paths"}
+	for _, path := range n.SocketPaths {
+		if !filepath.IsAbs(path) {
+			return &Unsupported{Code: UnsupportedNetworkGrant, Detail: "socket path " + path + " is not absolute"}
+		}
 	}
 	return nil
 }

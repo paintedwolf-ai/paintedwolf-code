@@ -146,6 +146,10 @@ func runLinuxProbe(mode string) int {
 		_, _, errno := unix.Syscall(unix.SYS_IO_URING_SETUP, 1, uintptr(unsafe.Pointer(&params[0])), 0)
 		fmt.Println("io_uring_setup:", errnoName(errno))
 		return 0
+	case "proxyget":
+		return proxyGetProbe()
+	case "tcpconnect", "unixconnect", "serve", "resolve":
+		return networkProbe(mode)
 	case "orphan":
 		daemon := child("sleep", true)
 		if err := daemon.Start(); err != nil {
@@ -595,7 +599,7 @@ func TestLinuxHelperReportsTypedUnavailability(t *testing.T) {
 	unsupported := linuxsandbox.Plan{
 		Version: linuxsandbox.PlanVersion,
 		Attest:  linuxsandbox.Attest{HostNamespaces: linuxsandbox.HostNamespaces()},
-		Network: linuxsandbox.Network{Mode: linuxsandbox.NetworkProxyOnly},
+		Network: linuxsandbox.Network{Mode: "tunnel"},
 	}
 	status, stderr = rawHelper(t, self, unsupported, "/bin/true")
 	if status.ExitStatus() != confine.HelperFailureExit || !strings.Contains(stderr, linuxsandbox.UnsupportedNetworkMode) {

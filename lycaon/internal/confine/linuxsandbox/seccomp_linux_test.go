@@ -104,6 +104,16 @@ func TestSeccompProgramDecides(t *testing.T) {
 	allow := int(unix.SECCOMP_RET_ALLOW)
 	enosys := int(uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.ENOSYS))
 	eacces := int(uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EACCES))
+	notify := int(uint32(unix.SECCOMP_RET_USER_NOTIF))
+	argsRecord := func(nr uint32, args ...uint32) []byte {
+		b := make([]byte, 64)
+		binary.BigEndian.PutUint32(b[seccompDataNr:], nr)
+		binary.BigEndian.PutUint32(b[seccompDataArch:], nativeAuditArch)
+		for i, a := range args {
+			binary.BigEndian.PutUint32(b[seccompArgLow(uint32(i)):], a)
+		}
+		return b
+	}
 	for _, tc := range []struct {
 		name string
 		data []byte
@@ -118,9 +128,19 @@ func TestSeccompProgramDecides(t *testing.T) {
 		{"clone into a user namespace", record(unix.SYS_CLONE, unix.CLONE_NEWUSER, 0, 0), kill},
 		{"plain clone", record(unix.SYS_CLONE, unix.CLONE_VM, 0, 0), allow},
 		{"clone3", record(unix.SYS_CLONE3, 0, 0, 0), enosys},
-		{"unix stream socket", record(unix.SYS_SOCKET, unix.AF_UNIX, unix.SOCK_STREAM, 0), eacces},
+		{"unix stream socket", record(unix.SYS_SOCKET, unix.AF_UNIX, unix.SOCK_STREAM, 0), allow},
 		{"unix datagram socket", record(unix.SYS_SOCKET, unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0), eacces},
-		{"unix seqpacket socket", record(unix.SYS_SOCKET, unix.AF_UNIX, unix.SOCK_SEQPACKET, 0), eacces},
+		{"unix datagram socket, nonblocking", record(unix.SYS_SOCKET, unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_NONBLOCK, 0), eacces},
+		{"unix seqpacket socket", record(unix.SYS_SOCKET, unix.AF_UNIX, unix.SOCK_SEQPACKET, 0), allow},
+		{"inet datagram socket", record(unix.SYS_SOCKET, unix.AF_INET, unix.SOCK_DGRAM, 0), allow},
+		{"connect", record(unix.SYS_CONNECT, 3, 0, 0), notify},
+		{"bind", record(unix.SYS_BIND, 3, 0, 0), notify},
+		{"listen", record(unix.SYS_LISTEN, 3, 0, 0), notify},
+		{"sendto", argsRecord(unix.SYS_SENDTO, 0, 0, 0, 0), allow},
+		{"sendto fast open", argsRecord(unix.SYS_SENDTO, 0, 0, 0, unix.MSG_FASTOPEN), eacces},
+		{"sendmsg fast open", argsRecord(unix.SYS_SENDMSG, 0, 0, unix.MSG_FASTOPEN), eacces},
+		{"sendmsg", argsRecord(unix.SYS_SENDMSG, 0, 0, unix.MSG_DONTWAIT), allow},
+		{"sendmmsg fast open", argsRecord(unix.SYS_SENDMMSG, 0, 0, 0, unix.MSG_FASTOPEN), eacces},
 		{"inet socket", record(unix.SYS_SOCKET, unix.AF_INET, unix.SOCK_STREAM, 0), allow},
 		{"inet6 socket", record(unix.SYS_SOCKET, unix.AF_INET6, unix.SOCK_DGRAM, 0), allow},
 		{"socketpair", record(unix.SYS_SOCKETPAIR, unix.AF_UNIX, unix.SOCK_STREAM, 0), allow},

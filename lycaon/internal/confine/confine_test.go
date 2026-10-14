@@ -981,15 +981,15 @@ func TestBrowserConfinementIsLoopbackOnly(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
 
 	confine.TestingSetAutoConfine(t)
-	if runtime.GOOS != "darwin" || !confine.Available() {
+	if !confine.Available() {
 		if c, ok := confine.BrowserConfinement(confine.Request{Roots: []string{"/proj"}}); ok || c != nil {
-			t.Fatalf("expected nil when seatbelt unavailable; got ok=%v c=%v", ok, c)
+			t.Fatalf("expected nil when confinement is unavailable; got ok=%v c=%v", ok, c)
 		}
 		return
 	}
 	c, ok := confine.BrowserConfinement(confine.Request{Roots: []string{"/proj"}})
 	if !ok || c == nil {
-		t.Fatal("expected BrowserConfinement on darwin")
+		t.Fatal("expected BrowserConfinement where confinement is available")
 	}
 	if c.Network != confine.NetworkDeny {
 		t.Fatalf("Network = %v, want NetworkDeny", c.Network)

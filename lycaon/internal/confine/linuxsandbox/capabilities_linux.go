@@ -21,7 +21,12 @@ const (
 	maxUserNamespacesFile = "/proc/sys/user/max_user_namespaces"
 	appArmorLabelFile     = "/proc/self/attr/apparmor/current"
 	selinuxEnforceFile    = "/sys/fs/selinux/enforce"
+	yamaPtraceScopeFile   = "/proc/sys/kernel/yama/ptrace_scope"
 )
+
+// yamaNoAttach is the Yama scope that forbids every attach, including the
+// supervisor's reads of a sandboxed caller's memory and descriptors.
+const yamaNoAttach = 3
 
 // Facts reads the kernel facts available without creating namespaces. Whether
 // namespaces can be created is only known from a helper run; RecordRun adds it.
@@ -53,6 +58,11 @@ func Facts() Capabilities {
 	} else {
 		_ = unix.Close(fd)
 		c.Pidfd = true
+	}
+	if sysctlIs(yamaPtraceScopeFile, yamaNoAttach) {
+		c.Unavailable = append(c.Unavailable, Unavailability{
+			Code: UnavailableSupervisor, Detail: "Yama forbids every ptrace attach (kernel.yama.ptrace_scope=3)", Remedy: RemedyAllowSupervision,
+		})
 	}
 	if sysctlIs(usernsCloneSysctl, 0) || sysctlIs(maxUserNamespacesFile, 0) {
 		c.Unavailable = append(c.Unavailable, Unavailability{

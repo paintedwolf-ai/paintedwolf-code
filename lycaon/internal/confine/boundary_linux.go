@@ -38,10 +38,6 @@ func Available() bool { return linuxCapabilities().Available() }
 // why confinement is unavailable.
 func LinuxCapabilities() (linuxsandbox.Capabilities, bool) { return linuxCapabilities(), true }
 
-// browserBoundarySupported is false until the plan can express the browser's
-// local network reach.
-func browserBoundarySupported() bool { return false }
-
 func linuxCapabilities() linuxsandbox.Capabilities {
 	linuxHost.once.Do(func() {
 		caps := linuxsandbox.Facts()
@@ -137,6 +133,11 @@ func networkPlan(c Confinement) linuxsandbox.Network {
 	for _, g := range c.SocketGrants {
 		n.SocketPaths = append(n.SocketPaths, g.ResolvedPath)
 	}
+	if c.Network == NetworkDirectIP {
+		if conf, err := os.ReadFile("/etc/resolv.conf"); err == nil {
+			n.Resolvers = linuxsandbox.HostResolvers(string(conf))
+		}
+	}
 	return n
 }
 
@@ -153,7 +154,7 @@ func applyAndExec(profile []byte, resolved string, target []string) error {
 		if err != nil {
 			return err
 		}
-		code, sig, err := linuxsandbox.Relaunch(self, os.Args[1:], profile, lineageMarkerFile())
+		code, sig, err := linuxsandbox.Relaunch(self, os.Args[1:], profile, plan.Network, lineageMarkerFile())
 		if err != nil {
 			return err
 		}
