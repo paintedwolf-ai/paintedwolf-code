@@ -18,14 +18,14 @@ when: >-
   && size(paintedwolf.sandbox_refusals) == 0
 effect: warn
 copy:
-  what: This confined invocation failed without a kernel refusal report.
-  cause: The kernel can suppress repeated refusals even when the reporting stream has no detected gap.
+  what: The command exited unsuccessfully; no kernel refusal was reported.
+  cause: An unsuccessful exit can come from the program or its arguments. The exit status and an empty refusal report do not identify the cause.
   why: Silence does not establish that the sandbox allowed every attempted effect.
-  fix: Diagnose the recorded failure and the invocation's declared boundary. Do not treat this empty report as proof of unrestricted access or infer a refused path from error prose.
-  instead: Report the uncertainty; no refusal path was observed for this invocation
+  fix: Inspect the command arguments, working directory, and program output. Correct the invocation or implementation and retry within the current boundary. Do not infer a sandbox failure or request broader access solely because the refusal report is empty.
+  instead: Diagnose the failed command; keep the current sandbox boundary
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
-x-paintedwolf-message: failed confinement has no observed refusal
+x-paintedwolf-message: failed command has no observed kernel refusal
 x-paintedwolf-scenarios:
   - id: silence
     vars:

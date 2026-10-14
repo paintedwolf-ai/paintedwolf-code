@@ -21,10 +21,22 @@ from fixture_contracts import CONTRACTS, receipt_checks
 def fixture(project,kind):
     receipt=secrets.token_hex(16)
     if kind not in {'loopback','deny_loopback'}:
-        with tempfile.TemporaryDirectory(prefix='paintedwolf-input-') as temporary:
-            path=pathlib.Path(temporary)/'input.json'
-            save(path,{'receipt':receipt})
-            yield {'path':str(path),'receipt':receipt,'port':0}
+        documents=pathlib.Path.home()/'Documents'
+        created=False
+        try:
+            documents.mkdir(mode=0o700)
+            created=True
+        except FileExistsError:
+            pass
+        try:
+            with tempfile.TemporaryDirectory(prefix='paintedwolf-input-',dir=documents) as temporary:
+                # A privacy boundary asks for access without redacting this synthetic receipt.
+                path=pathlib.Path(temporary)/'input.json'
+                save(path,{'receipt':receipt})
+                yield {'path':str(path),'receipt':receipt,'port':0}
+        finally:
+            if created:
+                with contextlib.suppress(OSError): documents.rmdir()
         return
     observations=[]
     class Handler(BaseHTTPRequestHandler):
@@ -52,8 +64,8 @@ def resolve(application,session,call,kind):
         if kind not in {'deny_read','deny_loopback'}:
             options=payload['plan']['options']
             task_grant=kind in {'loopback','write_root'}
-            rung='task' if task_grant else 'once'
-            choices=[o for o in options if o['rung']==rung and o['decision_action']=='approve' and not o.get('disabled') and (o['kind']=='lease' and o.get('scope')=='task' if task_grant else o['kind']=='current_action')]
+            rung='chat' if task_grant else 'once'
+            choices=[o for o in options if o['rung']==rung and o['decision_action']=='approve' and not o.get('disabled') and (o['kind']=='lease' and o.get('scope')=='chat' if task_grant else o['kind']=='current_action')]
             if len(choices)!=1:
                 save(application.directory/'unexpected-approval.json',checkpoint)
                 raise RuntimeError('preparation has no unique host-authored authority option')
@@ -134,7 +146,7 @@ def write_root_trajectory(application,spec,kind):
             import shlex
             body = f"from pathlib import Path; Path({str(target)!r}).write_text({(json.dumps(contract['expected'])+chr(10))!r})"
             command = 'python3 -B -c '+shlex.quote(body)
-        application.request('/harness/llm/respond',{'id':pending['id'],'tool_calls':[{'id':call,'name':'request_tools','args':{'requests':['command']}}]})
+        application.request('/harness/llm/respond',{'id':pending['id'],'tool_calls':[{'id':call,'name':'request_tools','args':{'need':'command'}}]})
         pending=application.wait_for(lambda: smoke_workers.pending(application, session),'write root command turn',session)
         verify_ungranted_write(application,session,pending,project,target)
         pending=application.wait_for(lambda: smoke_workers.pending(application, session),'write root recovery turn',session)
@@ -145,8 +157,8 @@ def write_root_trajectory(application,spec,kind):
                 payload=checkpoint.get('tool_approval',{})
                 if payload.get('tool_call_id')!=call: raise RuntimeError('write root reached an unexpected approval boundary')
                 if payload['plan']['subject']['kind']!='write_root_set': raise RuntimeError('write root card has subject '+payload['plan']['subject']['kind'])
-                choices=[o for o in payload['plan']['options'] if o['rung']=='task' and o['kind']=='lease' and o.get('scope')=='task' and o['decision_action']=='approve' and not o.get('disabled')]
-                if len(choices)!=1: raise RuntimeError('write root card has no unique task lease')
+                choices=[o for o in payload['plan']['options'] if o['rung']=='chat' and o['kind']=='lease' and o.get('scope')=='chat' and o['decision_action']=='approve' and not o.get('disabled')]
+                if len(choices)!=1: raise RuntimeError('write root card has no unique chat lease')
                 application.request(f"/v1/sessions/{session}/checkpoints/{checkpoint['id']}",{'kind':'tool_approval','action':'approve','option_id':choices[0]['id']})
             return command_receipt_completed(application.directory/'store.db',session,call) or None
         application.wait_for(granted,'write root grant and command',session)

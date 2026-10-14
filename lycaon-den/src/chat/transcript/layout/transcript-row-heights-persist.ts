@@ -7,14 +7,24 @@ import type { TranscriptRowHeightsSession } from "../../../../shared/app-state-t
 import {
   TRANSCRIPT_ROW_HEIGHTS_PER_SESSION_CAP,
   TRANSCRIPT_ROW_HEIGHTS_SESSION_CAP,
+  TRANSCRIPT_ROW_HEIGHT_VARIANT_CAP,
 } from "../../../../shared/app-state-types.ts";
 
-const PRESENTATIONS_PER_ROW = 4;
+export { transcriptRowContentRevision } from "./transcript-row-revision.ts";
+
+/**
+ * Measured heights by row. A row remembers the content revision it measured and one height
+ * per layout variant (geometry and presentation); a new revision drops every variant, since
+ * each measured the old content. Rows and variants are insertion-ordered maps re-inserted on
+ * touch, so each is a least-recently-used list: a window resize cycles a row's variants and
+ * never evicts another row, and a session keeps its most recently seen rows.
+ */
+type RowHeights = { revision: string; variants: Map<string, number> };
 
 type SessionRowHeights = {
   scope: SessionChatScope;
   touchedAt: number;
-  heights: Map<string, Map<string, number>>;
+  rows: Map<string, RowHeights>;
 };
 
 const persistedByScope = new Map<string, SessionRowHeights>();
@@ -24,24 +34,36 @@ function scopeKey(scope: SessionChatScope): string {
   return `${scope.projectId}:${scope.sessionId}`;
 }
 
-function capSessionHeights(session: SessionRowHeights): void {
-  while (session.heights.size > TRANSCRIPT_ROW_HEIGHTS_PER_SESSION_CAP) {
-    const oldest = session.heights.keys().next().value;
-    if (oldest === undefined) break;
-    session.heights.delete(oldest);
-  }
+function roundHeight(value: number): number {
+  return Math.round(value * 64) / 64;
 }
 
-function storeHeight(session: SessionRowHeights, item: string, presentation: string, height: number): boolean {
-  const variants = session.heights.get(item) ?? new Map<string, number>();
-  const changed = variants.get(presentation) !== height;
-  variants.delete(presentation);
-  variants.set(presentation, height);
-  while (variants.size > PRESENTATIONS_PER_ROW) variants.delete(variants.keys().next().value!);
-  session.heights.delete(item);
-  session.heights.set(item, variants);
-  capSessionHeights(session);
-  return changed;
+function validHeight(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+/** The row's entry for this revision, most recently used, with stale variants dropped. */
+function touchRow(session: SessionRowHeights, itemKey: string, revision: string): RowHeights {
+  const existing = session.rows.get(itemKey);
+  if (existing) session.rows.delete(itemKey);
+  const row = existing?.revision === revision ? existing : { revision, variants: new Map<string, number>() };
+  session.rows.set(itemKey, row);
+  while (session.rows.size > TRANSCRIPT_ROW_HEIGHTS_PER_SESSION_CAP) {
+    const oldest = session.rows.keys().next().value;
+    if (oldest === undefined) break;
+    session.rows.delete(oldest);
+  }
+  return row;
+}
+
+function setVariant(row: RowHeights, variant: string, height: number): void {
+  row.variants.delete(variant);
+  row.variants.set(variant, height);
+  while (row.variants.size > TRANSCRIPT_ROW_HEIGHT_VARIANT_CAP) {
+    const oldest = row.variants.keys().next().value;
+    if (oldest === undefined) break;
+    row.variants.delete(oldest);
+  }
 }
 
 function capPersistedSessions(): void {
@@ -58,19 +80,16 @@ function capPersistedSessions(): void {
   }
 }
 
-function sessionFromPersisted(row: TranscriptRowHeightsSession): SessionRowHeights | null {
-  const projectId = row.projectId.trim();
-  const sessionId = row.sessionId.trim();
+function sessionFromPersisted(persisted: TranscriptRowHeightsSession): SessionRowHeights | null {
+  const projectId = persisted.projectId.trim();
+  const sessionId = persisted.sessionId.trim();
   if (!projectId || !sessionId) return null;
-  const session: SessionRowHeights = { scope: { projectId, sessionId }, touchedAt: row.touchedAt, heights: new Map() };
-  for (const [itemKey, presentations] of Object.entries(row.rows)) {
-    if (!itemKey) continue;
-    for (const [presentation, value] of Object.entries(presentations)) {
-      if (!presentation || !Number.isFinite(value) || !(value > 0)) continue;
-      storeHeight(session, itemKey, presentation, Math.round(value * 64) / 64);
-    }
+  const session: SessionRowHeights = { scope: { projectId, sessionId }, touchedAt: persisted.touchedAt, rows: new Map() };
+  for (const [itemKey, saved] of Object.entries(persisted.rows)) {
+    const row = touchRow(session, itemKey, saved.revision);
+    for (const [variant, height] of Object.entries(saved.heights)) setVariant(row, variant, height);
   }
-  return session.heights.size ? session : null;
+  return session.rows.size > 0 ? session : null;
 }
 
 function ensurePersistedSession(scope: SessionChatScope): SessionRowHeights {
@@ -80,7 +99,7 @@ function ensurePersistedSession(scope: SessionChatScope): SessionRowHeights {
     session = {
       scope,
       touchedAt: Date.now(),
-      heights: new Map(),
+      rows: new Map(),
     };
     persistedByScope.set(key, session);
   }
@@ -97,50 +116,64 @@ function schedulePersistToDisk(): void {
 
 export function loadTranscriptRowHeightsFromSnapshot(): void {
   persistedByScope.clear();
-  const rows = getAppStateSnapshot().transcriptRowHeights;
-  if (!rows?.length) return;
-  for (const row of rows) {
-    const session = sessionFromPersisted(row);
-    if (!session) continue;
-    persistedByScope.set(scopeKey(session.scope), session);
+  const sessions = getAppStateSnapshot().transcriptRowHeights;
+  if (!sessions?.length) return;
+  for (const persisted of sessions) {
+    const session = sessionFromPersisted(persisted);
+    if (session) persistedByScope.set(scopeKey(session.scope), session);
   }
+}
+
+/** Identifies one measurement: the row, the content it showed, and the layout variant. */
+export type TranscriptRowHeightKey = { itemKey: string; revision: string; variant: string };
+
+function cleanKey(key: TranscriptRowHeightKey): TranscriptRowHeightKey | null {
+  const itemKey = key.itemKey.trim();
+  const revision = key.revision.trim();
+  const variant = key.variant.trim();
+  return itemKey && revision && variant ? { itemKey, revision, variant } : null;
 }
 
 export function recordTranscriptRowHeight(
   scope: SessionChatScope,
-  itemKey: string,
-  presentation: string,
+  key: TranscriptRowHeightKey,
   height: number,
 ): void {
-  const key = itemKey.trim();
-  const state = presentation.trim();
-  if (!key || !state || (!Number.isFinite(height) || !(height > 0))) return;
-
-  const rounded = Math.round(height * 64) / 64;
-  const now = Date.now();
+  const clean = cleanKey(key);
+  if (!clean || !validHeight(height)) return;
+  const rounded = roundHeight(height);
   const session = ensurePersistedSession(scope);
-  const changed = storeHeight(session, key, state, rounded);
-  session.touchedAt = now;
+  session.touchedAt = Date.now();
+  const row = touchRow(session, clean.itemKey, clean.revision);
+  const unchanged = row.variants.get(clean.variant) === rounded;
+  setVariant(row, clean.variant, rounded);
+  if (unchanged) return;
   capPersistedSessions();
-  if (changed) schedulePersistToDisk();
+  schedulePersistToDisk();
 }
 
+/** The remembered height for exactly this content and layout, if any. */
 export function transcriptRowHeightForScope(
   scope: SessionChatScope,
-  itemKey: string,
-  presentation: string,
+  key: TranscriptRowHeightKey,
 ): number | undefined {
-  const key = itemKey.trim();
-  const state = presentation.trim();
-  if (!key || !state) return undefined;
+  const clean = cleanKey(key);
+  if (!clean) return undefined;
   const session = persistedByScope.get(scopeKey(scope));
-  const variants = session?.heights.get(key);
-  const height = variants?.get(state);
-  if (height !== undefined && session) {
-    storeHeight(session, key, state, height);
+  const row = session?.rows.get(clean.itemKey);
+  if (!session || row?.revision !== clean.revision) return undefined;
+  const height = row.variants.get(clean.variant);
+  if (height !== undefined) {
+    touchRow(session, clean.itemKey, clean.revision);
+    setVariant(row, clean.variant, height);
     session.touchedAt = Date.now();
   }
   return height;
+}
+
+/** Rows a session remembers. */
+export function transcriptRowHeightCountForTests(scope: SessionChatScope): number {
+  return persistedByScope.get(scopeKey(scope))?.rows.size ?? 0;
 }
 
 export async function flushTranscriptRowHeightsToDisk(): Promise<void> {
@@ -154,7 +187,12 @@ export async function flushTranscriptRowHeightsToDisk(): Promise<void> {
       projectId: session.scope.projectId,
       sessionId: session.scope.sessionId,
       touchedAt: session.touchedAt,
-      rows: Object.fromEntries([...session.heights].map(([item, variants]) => [item, Object.fromEntries(variants)])),
+      rows: Object.fromEntries(
+        [...session.rows].map(([itemKey, row]) => [
+          itemKey,
+          { revision: row.revision, heights: Object.fromEntries(row.variants) },
+        ]),
+      ),
     }));
   await persistAppState({
     transcriptRowHeights:
@@ -176,50 +214,45 @@ export function clearTranscriptRowHeightsForTests(): void {
 
 export function seedTranscriptRowHeightsForTests(
   scope: SessionChatScope,
-  rows: Record<string, Record<string, number>>,
+  rows: Record<string, { revision: string; heights: Record<string, number> }>,
 ): void {
   const session = ensurePersistedSession(scope);
-  const now = Date.now();
-  for (const [itemKey, presentations] of Object.entries(rows)) {
-    if (!itemKey) continue;
-    for (const [presentation, value] of Object.entries(presentations)) {
-      if (!presentation || (!Number.isFinite(value) || !(value > 0))) continue;
-      storeHeight(session, itemKey, presentation, Math.round(value * 64) / 64);
+  for (const [itemKey, saved] of Object.entries(rows)) {
+    const row = touchRow(session, itemKey, saved.revision);
+    for (const [variant, height] of Object.entries(saved.heights)) {
+      if (validHeight(height)) setVariant(row, variant, roundHeight(height));
     }
   }
-  session.touchedAt = now;
+  session.touchedAt = Date.now();
 }
 
+/** Reads one session's saved heights; rows in any other shape are dropped, since this is a rebuildable cache. */
 export function parseTranscriptRowHeightsSession(
   raw: unknown,
 ): TranscriptRowHeightsSession | null {
   if (typeof raw !== "object" || raw === null) return null;
-  const row = raw as Partial<TranscriptRowHeightsSession>;
-  const projectId = typeof row.projectId === "string" ? row.projectId.trim() : "";
-  const sessionId = typeof row.sessionId === "string" ? row.sessionId.trim() : "";
+  const session = raw as Partial<TranscriptRowHeightsSession>;
+  const projectId = typeof session.projectId === "string" ? session.projectId.trim() : "";
+  const sessionId = typeof session.sessionId === "string" ? session.sessionId.trim() : "";
   if (!projectId || !sessionId) return null;
-  if (typeof row.touchedAt !== "number" || !Number.isFinite(row.touchedAt)) {
+  if (typeof session.touchedAt !== "number" || !Number.isFinite(session.touchedAt)) {
     return null;
   }
-  if (typeof row.rows !== "object" || row.rows === null) return null;
-  const rows: Record<string, Record<string, number>> = {};
-  for (const [itemKey, rawPresentations] of Object.entries(row.rows)) {
-    if (
-      !itemKey ||
-      typeof rawPresentations !== "object" ||
-      rawPresentations === null
-    ) {
-      continue;
+  if (typeof session.rows !== "object" || session.rows === null) return null;
+  const rows: TranscriptRowHeightsSession["rows"] = {};
+  for (const [itemKey, saved] of Object.entries(session.rows as Record<string, unknown>)) {
+    if (!itemKey.trim() || typeof saved !== "object" || saved === null) continue;
+    const { revision, heights } = saved as { revision?: unknown; heights?: unknown };
+    if (typeof revision !== "string" || !revision.trim()) continue;
+    if (typeof heights !== "object" || heights === null) continue;
+    const kept: Record<string, number> = {};
+    for (const [variant, height] of Object.entries(heights)) {
+      if (variant.trim() && validHeight(height)) kept[variant] = roundHeight(height);
     }
-    const presentations: Record<string, number> = {};
-    for (const [presentation, value] of Object.entries(rawPresentations)) {
-      if (!presentation || typeof value !== "number" || (!Number.isFinite(value) || !(value > 0))) continue;
-      presentations[presentation] = Math.round(value * 64) / 64;
-    }
-    if (Object.keys(presentations).length > 0) rows[itemKey] = presentations;
+    if (Object.keys(kept).length > 0) rows[itemKey] = { revision, heights: kept };
   }
   if (Object.keys(rows).length === 0) return null;
-  return { projectId, sessionId, touchedAt: row.touchedAt, rows };
+  return { projectId, sessionId, touchedAt: session.touchedAt, rows };
 }
 
 export function parseTranscriptRowHeightsSessions(

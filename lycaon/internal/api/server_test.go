@@ -540,22 +540,44 @@ func TestGetSessionMessagesPositionsWindows(t *testing.T) {
 	for _, msg := range all.Messages {
 		ids[msg.Content] = msg.ID
 	}
+	if all.OrdBounds == nil || all.OrdBounds.FirstOrd != all.Messages[0].Ord || all.OrdBounds.LastOrd != all.Messages[4].Ord {
+		t.Fatalf("ord_bounds = %+v, want the span of all five rows", all.OrdBounds)
+	}
+	ords := map[string]int64{}
+	for _, msg := range all.Messages {
+		ords[msg.Content] = msg.Ord
+	}
 	cases := []struct{ query, want string }{
 		{"limit=2", "four,five"},
 		{"limit=2&before_message_id=" + ids["four"], "two,three"},
 		{"limit=2&after_message_id=" + ids["two"], "three,four"},
+		{"limit=2&before_ord=" + strconv.FormatInt(ords["four"], 10), "two,three"},
+		{"limit=2&after_ord=" + strconv.FormatInt(ords["two"], 10), "three,four"},
+		{"limit=2&after_ord=0", "one,two"},
 		{"limit=2&from=oldest", "one,two"},
 	}
 	for _, tc := range cases {
-		if got := contents(read(tc.query, http.StatusOK)); got != tc.want {
+		page := read(tc.query, http.StatusOK)
+		if got := contents(page); got != tc.want {
 			t.Fatalf("%s: messages = %s, want %s", tc.query, got, tc.want)
+		}
+		// Every window reports the whole transcript's span, not its own.
+		if page.OrdBounds == nil || *page.OrdBounds != *all.OrdBounds {
+			t.Fatalf("%s: ord_bounds = %+v, want %+v", tc.query, page.OrdBounds, all.OrdBounds)
 		}
 	}
 	if oldest := read("limit=2&from=oldest", http.StatusOK); oldest.BeforeCursor != "" || oldest.AfterCursor == "" {
 		t.Fatalf("oldest window cursors: before=%q after=%q", oldest.BeforeCursor, oldest.AfterCursor)
 	}
+	// An ordinal past the transcript opens an empty window that still reports the span.
+	if beyond := read("after_ord="+strconv.FormatInt(ords["five"]+10, 10), http.StatusOK); len(beyond.Messages) != 0 || beyond.OrdBounds == nil {
+		t.Fatalf("beyond window: messages=%d ord_bounds=%+v", len(beyond.Messages), beyond.OrdBounds)
+	}
 	read("before_message_id=2c0f6f8e-5d4b-4c55-9d7e-8f1b2a3c4d5e", http.StatusNotFound)
 	read("from=oldest&after_message_id="+ids["two"], http.StatusBadRequest)
+	read("after_ord=1&before_ord=3", http.StatusBadRequest)
+	read("before_ord=0", http.StatusBadRequest)
+	read("after_ord=next", http.StatusBadRequest)
 	read("from=middle", http.StatusBadRequest)
 }
 

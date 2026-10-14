@@ -17,9 +17,13 @@ type TailPorts = {
   revealOffset(offset: number, options?: ScrollportRevealOptions): Promise<boolean>;
 };
 
+const MAX_INTERRUPTED_GLIDE_RETRIES = 2;
+
 export class ScrollportTail {
   private tailBound: { attempts: number; sampled: number } | undefined;
   private tailBoundTimer: ReturnType<typeof setTimeout> | undefined;
+  private deferredTailBoundAttempts = 0;
+  private interruptedGlideRetries = 0;
   tailRangeReleased = false;
   glidingToTail = false;
   private tailPin: (() => boolean) | null = null;
@@ -88,7 +92,11 @@ export class ScrollportTail {
   }
 
   scheduleTailBoundReconcile(attempts: number): void {
-    if (this.disposed || this.tailBound || attempts <= 0) return;
+    if (this.disposed || attempts <= 0) return;
+    if (this.tailBound) {
+      this.tailBound.attempts = Math.max(this.tailBound.attempts, attempts);
+      return;
+    }
     // Claims can expire without another layout notification.
     if (this.ports.isDirectInputActive()) {
       this.deferTailBoundReconcile(attempts);
@@ -108,36 +116,65 @@ export class ScrollportTail {
     this.tailBound = undefined;
     if (!pending || this.disposed) return;
     if (this.ports.isDirectInputActive()) {
-      this.deferTailBoundReconcile(pending.attempts - 1);
+      this.deferTailBoundReconcile(Math.max(pending.attempts, TAIL_BOUND_CONFIRM_FRAMES));
       return;
     }
     const overrun = this.ports.measureGeometry(() => this.tailOverrunTail());
-    if (overrun === null) return;
-    if (Math.abs(overrun - pending.sampled) > SCROLL_EPSILON_PX) {
+    if (overrun === null) {
+      this.interruptedGlideRetries = 0;
+      return;
+    }
+    if (Math.abs(overrun - pending.sampled) > SCROLL_EPSILON_PX && pending.attempts > 1) {
       // Changing geometry needs another confirmation; this sample is the next baseline.
-      if (pending.attempts > 1) this.awaitTailBoundConfirmation(pending.attempts - 1, overrun);
+      this.awaitTailBoundConfirmation(pending.attempts - 1, overrun);
       return;
     }
-    // Unheld overrun, such as a native scroll into published runway, never shows blank space.
-    if (this.ports.extentHeld() === 0) {
-      this.ports.commit(overrun, "tail_bound");
-      return;
-    }
-    // Range this scrollport held closes smoothly under the reader.
-    this.glidingToTail = true;
-    void this.ports.revealOffset(overrun, { motion: "settle" }).catch(() => false).then((arrived) => {
-      this.glidingToTail = false;
-      // A press that interrupted the glide keeps the content under it.
-      if (!arrived || this.disposed) return;
+    // Unheld overrun, or a glide interrupted past the retry cap, settles immediately.
+    if (this.ports.extentHeld() === 0 || this.interruptedGlideRetries >= MAX_INTERRUPTED_GLIDE_RETRIES) {
+      this.interruptedGlideRetries = 0;
       this.tailRangeReleased = true;
+      this.ports.commit(overrun, "tail_bound");
       this.ports.measureGeometry(() => {
         this.ports.resizeRetainedExtent();
         this.reconcilePinnedTail();
       });
-    });
+      return;
+    }
+    // Range this scrollport held closes smoothly under the reader.
+    this.glidingToTail = true;
+    void this.ports.revealOffset(overrun, { motion: "settle" }).then(
+      (arrived) => this.finishTailGlide(arrived),
+      () => this.finishTailGlide(false),
+    );
   };
 
+  private finishTailGlide(arrived: boolean): void {
+    this.glidingToTail = false;
+    if (this.disposed) return;
+    // A press that interrupted the glide keeps the content under it; other interruptions retry up to the cap.
+    if (!arrived) {
+      if (this.ports.pressActive()) {
+        this.interruptedGlideRetries = 0;
+        return;
+      }
+      this.interruptedGlideRetries += 1;
+      this.scheduleTailBoundReconcile(TAIL_BOUND_CONFIRM_FRAMES);
+      return;
+    }
+    this.interruptedGlideRetries = 0;
+    this.tailRangeReleased = true;
+    this.ports.measureGeometry(() => {
+      this.ports.resizeRetainedExtent();
+      this.reconcilePinnedTail();
+    });
+  }
+
   private deferTailBoundReconcile(attempts: number): void {
+    this.deferredTailBoundAttempts = Math.max(
+      this.deferredTailBoundAttempts,
+      attempts,
+      TAIL_BOUND_CONFIRM_FRAMES,
+    );
     if (this.tailBoundTimer !== undefined) return;
     const remaining = Math.max(
       16,
@@ -146,17 +183,22 @@ export class ScrollportTail {
     this.tailBoundTimer = setTimeout(() => {
       this.tailBoundTimer = undefined;
       if (this.disposed) return;
+      if (this.ports.isDirectInputActive()) {
+        this.deferTailBoundReconcile(this.deferredTailBoundAttempts);
+        return;
+      }
+      const nextAttempts = this.deferredTailBoundAttempts;
+      this.deferredTailBoundAttempts = 0;
       // Range a gesture kept open settles to what the reader occupies once its claim ends.
-      if (!this.ports.isDirectInputActive()) this.ports.resizeRetainedExtent();
+      this.ports.resizeRetainedExtent();
       // Geometry retries begin after the input claim expires.
-      this.scheduleTailBoundReconcile(
-        this.ports.isDirectInputActive() ? attempts : TAIL_BOUND_CONFIRM_FRAMES,
-      );
+      this.scheduleTailBoundReconcile(nextAttempts);
     }, remaining);
   }
 
   private cancelTailBoundReconcile(): void {
     this.tailBound = undefined;
+    this.deferredTailBoundAttempts = 0;
     cancelScrollportFrame(this.viewport, this.confirmTailBound);
     if (this.tailBoundTimer !== undefined) {
       clearTimeout(this.tailBoundTimer);

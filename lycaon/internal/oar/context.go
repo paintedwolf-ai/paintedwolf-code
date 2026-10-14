@@ -6,8 +6,22 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// ContentSegment is one host-attributed segment at a content anchor. These
-// fields come from the structured occurrence envelope.
+// ContentObservation combines attributed content with response protocol facts.
+type ContentObservation struct {
+	Segments        []ContentSegment
+	TextActionTools []string
+}
+
+// SetContentObservation records response classification without parsing prose.
+func (gc *GuardContext) SetContentObservation(observation ContentObservation) {
+	gc.SetContentSegments(observation.Segments)
+	if len(observation.TextActionTools) > 0 {
+		gc.Rejection.RejectObservation = "text_action_envelope"
+		gc.ObservationData = map[string]any{"offenders_sample": strings.Join(observation.TextActionTools, ", ")}
+	}
+}
+
+// ContentSegment is one host-attributed segment at a content anchor.
 type ContentSegment struct {
 	Content   string
 	Role      string

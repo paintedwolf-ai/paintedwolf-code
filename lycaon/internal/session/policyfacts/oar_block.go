@@ -231,13 +231,13 @@ func (m *Service) fruitlessSearchRun(sess *api.Session, tool string, args map[st
 }
 
 // ContentBlock returns the content decision and any rendered refusal.
-func (m *Service) ContentBlock(ctx context.Context, sess *api.Session, anchor string, segments []oar.ContentSegment, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool, error) {
+func (m *Service) ContentBlock(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool, error) {
 	if m == nil || m.Pipeline == nil || !m.Pipeline.AnchorEnforced(anchor) {
 		return nil, false, "", false, nil
 	}
 	gc := oar.NewGuardContext()
 	m.FillSessionFacts(ctx, gc, sess, tool, args)
-	gc.SetContentSegments(segments)
+	gc.SetContentObservation(observation)
 	res, err := m.Pipeline.EvaluateBlock(ctx, anchor, gc)
 	if err != nil {
 		return nil, false, "", false, err

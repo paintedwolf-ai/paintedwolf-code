@@ -73,6 +73,9 @@ func assertWorkerJobTranscriptPagination(t *testing.T, store workerTranscriptSto
 	if got := messageIDs(tail.Messages); len(got) != 2 || got[0] != "c" || got[1] != "e" {
 		t.Fatalf("tail ids = %v", got)
 	}
+	if tail.OrdBounds == nil || tail.OrdBounds.FirstOrd != all[0].Ord || tail.OrdBounds.LastOrd != all[2].Ord {
+		t.Fatalf("tail ord_bounds = %+v, want {%d %d}", tail.OrdBounds, all[0].Ord, all[2].Ord)
+	}
 	if tail.BeforeCursor == "" || tail.AfterCursor != "" {
 		t.Fatalf("tail cursors = before:%v after:%v", tail.BeforeCursor, tail.AfterCursor)
 	}
@@ -84,6 +87,9 @@ func assertWorkerJobTranscriptPagination(t *testing.T, store workerTranscriptSto
 	testutil.FailErr(t, "load older worker page", err)
 	if got := messageIDs(older.Messages); len(got) != 1 || got[0] != "a" {
 		t.Fatalf("older ids = %v", got)
+	}
+	if older.OrdBounds == nil || *older.OrdBounds != *tail.OrdBounds {
+		t.Fatalf("older ord_bounds = %+v, want %+v", older.OrdBounds, tail.OrdBounds)
 	}
 	if older.BeforeCursor != "" || older.AfterCursor == "" {
 		t.Fatalf("older cursors = before:%v after:%v", older.BeforeCursor, older.AfterCursor)
