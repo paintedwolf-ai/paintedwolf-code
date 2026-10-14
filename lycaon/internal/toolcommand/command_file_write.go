@@ -56,7 +56,7 @@ func InspectCommandFileWrite(ctx context.Context, toolName string, args map[stri
 		firstPath string
 		firstApp  bool
 		calls     []ReplacementCall
-		allExact  = exactEnv
+		allExact  bool
 	)
 
 	if hasPipeline && strings.TrimSpace(rawCommand) == "" {
@@ -249,67 +249,6 @@ func analyzeScriptFileWrites(
 		calls = nil
 	}
 	return true, firstPath, firstApp, calls, allExact
-}
-
-func parseBashStatements(tokens []rawToken) []bashStatement {
-	var stmts []bashStatement
-	var curStmt bashStatement
-	var curStage bashStage
-
-	flushStage := func() {
-		if len(curStage.argv) > 0 || len(curStage.redirects) > 0 || len(curStage.heredocs) > 0 || len(curStage.herestrings) > 0 || curStage.subshell != "" {
-			curStmt.stages = append(curStmt.stages, curStage)
-			curStage = bashStage{}
-		}
-	}
-	flushStmt := func(nextOp string) {
-		flushStage()
-		if len(curStmt.stages) > 0 {
-			stmts = append(stmts, curStmt)
-			curStmt = bashStatement{op: nextOp}
-		} else if nextOp != "" && nextOp != "\n" {
-			curStmt.op = nextOp
-		}
-	}
-
-	for i := 0; i < len(tokens); i++ {
-		tok := tokens[i]
-		switch tok.kind {
-		case "group":
-			curStage.subshell = tok.groupBody
-		case "op":
-			switch tok.raw {
-			case ";", "\n", "&&", "||", "&":
-				flushStmt(tok.raw)
-			case "|":
-				flushStage()
-			case "<<", "<<-":
-				if tok.heredoc != nil {
-					curStage.heredocs = append(curStage.heredocs, *tok.heredoc)
-				}
-			case "<<<":
-				if tok.herestr != nil {
-					curStage.herestrings = append(curStage.herestrings, *tok.herestr)
-				}
-			default:
-				var target bashWord
-				if i+1 < len(tokens) && tokens[i+1].kind == "word" {
-					i++
-					target = parseBashWord(tokens[i].raw)
-				}
-				curStage.redirects = append(curStage.redirects, bashRedirect{op: tok.raw, target: target})
-			}
-		case "word":
-			w := parseBashWord(tok.raw)
-			if len(curStage.argv) == 0 && curStage.subshell == "" && isEnvAssignment(w) {
-				curStage.env = append(curStage.env, w.raw)
-				continue
-			}
-			curStage.argv = append(curStage.argv, w)
-		}
-	}
-	flushStmt("")
-	return stmts
 }
 
 func analyzeStatementExactMkdir(stmt bashStatement) (ReplacementCall, bool) {

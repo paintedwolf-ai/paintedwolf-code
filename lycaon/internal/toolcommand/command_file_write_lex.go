@@ -1,9 +1,6 @@
 package toolcommand
 
-import (
-	"strings"
-	"unicode"
-)
+import "strings"
 
 type bashWord struct {
 	raw     string
@@ -253,93 +250,4 @@ func scanBalancedGroup(src string, start int) (raw, inner string, next int, ok b
 		i++
 	}
 	return "", "", start, false
-}
-
-func parseBashWord(raw string) bashWord {
-	if raw == "" {
-		return bashWord{}
-	}
-	var b strings.Builder
-	literal := true
-	n := len(raw)
-	for i := 0; i < n; {
-		c := raw[i]
-		if c == '\'' {
-			i++
-			for i < n && raw[i] != '\'' {
-				b.WriteByte(raw[i])
-				i++
-			}
-			if i < n {
-				i++
-			}
-			continue
-		}
-		if c == '"' {
-			i++
-			for i < n && raw[i] != '"' {
-				if raw[i] == '$' || raw[i] == '`' {
-					literal = false
-				}
-				if raw[i] == '\\' && i+1 < n {
-					next := raw[i+1]
-					if next == '\n' {
-						i += 2
-						continue
-					}
-					if next == '"' || next == '\\' || next == '$' || next == '`' {
-						b.WriteByte(next)
-						i += 2
-						continue
-					}
-					b.WriteByte('\\')
-					b.WriteByte(next)
-					i += 2
-					continue
-				}
-				b.WriteByte(raw[i])
-				i++
-			}
-			if i < n {
-				i++
-			}
-			continue
-		}
-		if c == '\\' && i+1 < n {
-			b.WriteByte(raw[i+1])
-			i += 2
-			continue
-		}
-		if c == '$' || c == '`' || c == '*' || c == '?' || c == '[' || (c == '~' && i == 0) {
-			literal = false
-		}
-		b.WriteByte(c)
-		i++
-	}
-	return bashWord{raw: raw, value: b.String(), literal: literal}
-}
-
-func hasUnquotedShellExpansion(body string) bool {
-	return strings.ContainsAny(body, "$`\\")
-}
-
-func isShellSpace(c byte) bool {
-	return c == ' ' || c == '\t' || c == '\r'
-}
-
-func isEnvAssignment(word bashWord) bool {
-	eq := strings.IndexByte(word.raw, '=')
-	if eq <= 0 {
-		return false
-	}
-	for i := 0; i < eq; i++ {
-		r := rune(word.raw[i])
-		if i == 0 && !unicode.IsLetter(r) && r != '_' {
-			return false
-		}
-		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' {
-			return false
-		}
-	}
-	return true
 }
