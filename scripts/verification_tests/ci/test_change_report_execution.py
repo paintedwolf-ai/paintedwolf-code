@@ -165,7 +165,7 @@ class ChangedCoverageTests(unittest.TestCase):
                 self.assertIsNone(coverage_changes.measure_go("probe", {"example.com/m/a"}, {"example.com/m/a"}, "example.com/m"))
             command, env = call.call_args.args[0], call.call_args.kwargs["env"]
             self.assertIn("-count=1", command)
-            self.assertEqual(env["GOCOVERDIR"], str(root / "coverage" / "probe-children"))
+            self.assertEqual(env["PW_GO_CHILD_COVERDIR"], str(root / "coverage" / "probe-children"))
             self.assertIsNone(coverage_changes.children_profile(root / "coverage" / "probe-children", root / "out"))
 
     def test_den_changed_run_asks_the_config_not_the_cli_to_ignore_rerun_triggers(self):

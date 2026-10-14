@@ -181,6 +181,8 @@ func requireLinuxSandbox(t *testing.T) string {
 	}
 	self, err := os.Executable()
 	testutil.FailErr(t, "os.Executable", err)
+	// Every environment a test builds afterwards names the coverage directory.
+	helperBinary(t, self)
 	return self
 }
 
@@ -191,19 +193,26 @@ var helperBuild struct {
 	err  error
 }
 
+// childCoverDir is where a coverage run collects children's counters; empty in
+// every other run.
+func childCoverDir() string { return os.Getenv("PW_GO_CHILD_COVERDIR") }
+
 // helperBinary is what confined launches run as their helper: the test binary
 // itself, or in a coverage run a coverage build of the helper alone, since a
 // test binary records nothing it runs as a child of itself.
 func helperBinary(t *testing.T, self string) string {
 	t.Helper()
-	if os.Getenv("GOCOVERDIR") == "" {
+	dir := childCoverDir()
+	if dir == "" {
 		return self
 	}
 	helperBuild.once.Do(func() {
+		// Children inherit it; go test's own directory is never merged.
+		helperBuild.err = os.Setenv("GOCOVERDIR", dir)
 		helperBuild.path = filepath.Join(os.TempDir(), "pw-confine-helper-"+strconv.Itoa(os.Getpid()))
 		build := exec.Command("go", "build", "-cover", "-coverpkg=github.com/lycaon/lycaon/internal/confine/...",
 			"-o", helperBuild.path, "./testdata/helpermain")
-		if out, err := build.CombinedOutput(); err != nil {
+		if out, err := build.CombinedOutput(); err != nil && helperBuild.err == nil {
 			helperBuild.err = fmt.Errorf("build coverage helper: %w: %s", err, out)
 		}
 	})
@@ -216,9 +225,9 @@ func denyConfinement(roots ...string) confine.Confinement {
 }
 
 // sandboxRoots adds the directory a coverage run collects child counters in,
-// so a confined helper can record what it ran; empty in every other run.
+// so a confined helper can record what it ran.
 func sandboxRoots(roots ...string) []string {
-	if dir := os.Getenv("GOCOVERDIR"); dir != "" {
+	if dir := childCoverDir(); dir != "" {
 		return append(roots, dir)
 	}
 	return roots

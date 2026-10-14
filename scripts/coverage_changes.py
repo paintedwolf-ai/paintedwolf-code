@@ -159,9 +159,10 @@ def merge_go_blocks(first, second):
 def measure_go(name, coverpkg, tested, module):
     """Run short tests with coverage across packages; None when tests fail.
 
-    A test binary that runs itself again, as a confinement helper does, counts
-    statements only in the child; GOCOVERDIR collects those counters and they
-    join the parent's profile. Tests run uncached so every child runs."""
+    go test points GOCOVERDIR at a directory of its own that it never merges,
+    so tests that run coverage builds of helpers send their counters to
+    PW_GO_CHILD_COVERDIR, and those join the profile. Tests run uncached so
+    every child runs."""
     profile = artifact_root(ROOT) / "coverage" / f"{name}.out"
     profile.parent.mkdir(parents=True, exist_ok=True)
     profile.unlink(missing_ok=True)
@@ -171,7 +172,7 @@ def measure_go(name, coverpkg, tested, module):
     code = subprocess.call(["bash", str(ROOT / "scripts" / "go-test-digest.sh"), "--name", "coverage:changes", "--",
                             "-count=1", f"-coverpkg={','.join(sorted(coverpkg))}", f"-coverprofile={profile}",
                             *sorted(tested)],
-                           cwd=GO_DIR, env={**os.environ, "GOCOVERDIR": str(children)})
+                           cwd=GO_DIR, env={**os.environ, "PW_GO_CHILD_COVERDIR": str(children)})
     if code != 0 or not profile.exists():
         return None
     blocks = read_go_profile(profile, module)
