@@ -3,6 +3,7 @@ package gitexec
 import (
 	"fmt"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/httpclient"
@@ -137,7 +138,9 @@ func perHostEnvironment(config httpclient.ProxyConfiguration) ([]string, []Proxy
 			exceptions = []string{"*"}
 			break
 		}
-		exceptions = append(exceptions, entry)
+		if !slices.Contains(exceptions, entry) {
+			exceptions = append(exceptions, entry)
+		}
 	}
 	if len(reasons) > 0 {
 		return nil, reasons

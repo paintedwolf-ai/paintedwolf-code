@@ -61,8 +61,8 @@ func TestPerHostPlanTranslatesTheWholePolicy(t *testing.T) {
 		},
 		"environment exceptions apply to the desktop proxy": {
 			config: httpclient.ProxyConfiguration{
-				EnvironmentExceptions: []systemproxy.Exception{systemproxy.ParseDesktopException("mirror.example")},
-				System:                desktop(t, "http://proxy.example:3128", "corp.example"),
+				EnvironmentExceptions: []systemproxy.Exception{systemproxy.ParseDesktopException("mirror.example"), systemproxy.ParseDesktopException("corp.example")},
+				System:                desktop(t, "http://proxy.example:3128", "localhost", "127.0.0.0/8", "::1", "corp.example"),
 			},
 			http: "http://proxy.example:3128", https: "http://proxy.example:3128",
 			noProxy: "localhost,127.0.0.0/8,::1,mirror.example,corp.example",
