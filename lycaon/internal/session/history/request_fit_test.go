@@ -187,3 +187,52 @@ func TestEveryRequestAdoptsPublishedHistoryProjection(t *testing.T) {
 		}
 	}
 }
+
+func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"models":[]}`))
+	}))
+	defer server.Close()
+	provider := ollama.New("local", server.URL+"/v1", "", []modelinfo.Entry{{ID: "gemma4:e4b", ContextLength: 16384}})
+	mem := store.NewMemory()
+	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "local", Model: "gemma4:e4b"}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create active session", err)
+	args := map[string]any{"path": "observations.txt", "offset": float64(650), "limit": float64(151)}
+	body := strings.Repeat("Recorded observation. ", 6000)
+	testutil.FailErr(t, "append active exchange", mem.AppendMessages(t.Context(), sess.ID,
+		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Read the observations"},
+		api.Message{ID: "call", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "read-call", Name: "read", Args: args}}},
+		api.Message{ID: "result", Role: api.MessageRoleTool, Content: body, TrustTier: api.ContentTrustTierTrusted,
+			ContentParts: []api.MessageContentPart{{Content: body, TrustTier: api.ContentTrustTierUntrusted}},
+			ToolResult:   &api.ToolResult{Tool: "read", ToolCallID: "read-call", AssistantMessageID: "call", ToolArgs: args, Content: body, Outcome: api.ToolResultOutcomeCompleted}}))
+	rows, err := mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "load active exchange", err)
+	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: strings.Repeat("Standing instructions. ", 850)}
+	req := modelcall.CompletionRequest{Model: sess.Model, Messages: append([]api.Message{standing}, rows...)}
+	history := &Service{store: mem, recallAvailable: func(context.Context, *api.Session) bool { return true }}
+	fitted, err := history.FitRequest(t.Context(), sess, rows, req, nativeRequestBudgets{provider})
+	testutil.FailErr(t, "fit active observation", err)
+	_, _, err = provider.Prepare(t.Context(), fitted, true)
+	testutil.FailErr(t, "prepare projected active observation", err)
+	call, result := false, false
+	for _, row := range fitted.Messages {
+		if row.ID == "call" {
+			call = reflect.DeepEqual(row.ToolCalls, rows[1].ToolCalls)
+		}
+		if row.ID == "result" {
+			result = row.ToolResult != nil && row.ToolResult.ToolCallID == "read-call" && row.ToolResult.AssistantMessageID == "call" && row.ToolResult.Outcome == api.ToolResultOutcomeCompleted && reflect.DeepEqual(row.ToolResult.ToolArgs, args)
+			if !strings.Contains(row.Content, `"record_request"`) || row.TrustTier != api.ContentTrustTierUntrusted || row.Authority != api.ContentAuthorityNone {
+				t.Fatal("active projection lost recovery or promoted observation trust")
+			}
+		}
+	}
+	if !call || !result {
+		t.Fatal("active projection changed call pairing, arguments, or outcome")
+	}
+	canonical, err := mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "reload original observation", err)
+	if !reflect.DeepEqual(rows, canonical) {
+		t.Fatal("active projection changed canonical tool records")
+	}
+}

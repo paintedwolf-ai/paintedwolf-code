@@ -60,7 +60,7 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 		if step == 11 {
 			capacity = 1
 		}
-		rows, err := m.fitRequestHistory(ctx, sess, projection.history, record, cfg, capacity)
+		rows, err := m.fitRequestHistory(ctx, sess, projection.history, record, cfg, capacity, capacity <= 1)
 		if err != nil {
 			return req, err
 		}
@@ -106,8 +106,11 @@ func (m *Service) requestContinuation(ctx context.Context, sess *api.Session, ro
 	return record
 }
 
-func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, history []api.Message, record *messageview.Continuation, cfg compaction.CompactionConfig, tokens int) ([]api.Message, error) {
+func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, history []api.Message, record *messageview.Continuation, cfg compaction.CompactionConfig, tokens int, shrinkTools bool) ([]api.Message, error) {
 	rows := append([]api.Message(nil), history...)
+	if shrinkTools && m.store != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess) {
+		rows = projectRecordedToolBodies(rows)
+	}
 	found, text := false, ""
 	if record.ThroughOrd > 0 {
 		record = messageview.CloneContinuation(record)
