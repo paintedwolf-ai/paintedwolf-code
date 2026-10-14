@@ -16,6 +16,17 @@ func parseWaitRequest(args map[string]any) (waitRequest, error) {
 		Resume:    parseWaitResumeArg(args["resume"]),
 		TimeoutMS: DefaultWaitSeconds * 1000,
 	}
+	if raw, present := args["until_complete"]; present {
+		value, ok := raw.(bool)
+		if !ok {
+			return waitRequest{}, fmt.Errorf("until_complete must be a boolean")
+		}
+		request.UntilComplete = value
+		request.ExplicitMode = true
+		if value {
+			request.TimeoutMS = MaxWaitSeconds * 1000
+		}
+	}
 	if value, ok := args["timeout_ms"]; ok {
 		switch n := value.(type) {
 		case float64:
@@ -25,6 +36,7 @@ func parseWaitRequest(args map[string]any) (waitRequest, error) {
 		case int64:
 			request.TimeoutMS = int(n)
 		}
+		request.ExplicitMode = true
 	}
 	if request.TimeoutMS > MaxWaitSeconds*1000 {
 		request.TimeoutMS = MaxWaitSeconds * 1000
@@ -38,17 +50,6 @@ func parseWaitRequest(args map[string]any) (waitRequest, error) {
 	request.waitSubscription, err = resolveConditions(args["conditions"])
 	if err != nil {
 		return waitRequest{}, err
-	}
-	if raw, present := args["until_complete"]; present {
-		value, ok := raw.(bool)
-		if !ok {
-			return waitRequest{}, fmt.Errorf("until_complete must be a boolean")
-		}
-		request.UntilComplete = value
-		request.ExplicitMode = true
-	}
-	if _, present := args["timeout_ms"]; present {
-		request.ExplicitMode = true
 	}
 	return request, nil
 }

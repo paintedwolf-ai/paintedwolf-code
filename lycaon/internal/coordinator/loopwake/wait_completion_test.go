@@ -172,33 +172,34 @@ func TestSkipRearmKeepsCompletionMode(t *testing.T) {
 	_, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID}})
 	testutil.FailErr(t, "park completion wait", err)
 	loop.Waits.rearmSleepAfterSkip(t.Context(), "s1")
-	if untilComplete, hasTimer, _ := completionSleepState(loop, "s1"); !untilComplete || hasTimer {
-		t.Fatalf("skip re-arm changed completion mode: untilComplete=%v timer=%v", untilComplete, hasTimer)
+	if untilComplete, hasTimer, until := completionSleepState(loop, "s1"); !untilComplete || !hasTimer || until.IsZero() {
+		t.Fatalf("skip re-arm changed completion mode: untilComplete=%v timer=%v until=%v", untilComplete, hasTimer, until)
 	}
 }
 
-func TestCompletionWaitHasNoTimerAndResumesMode(t *testing.T) {
+func TestCompletionWaitDefaultsToMaxTimeoutAndResumesMode(t *testing.T) {
 	loop, store, reg := completionWaitFixture(t)
 	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID}}
 	out, err := reg.Run(t.Context(), "wait", completionWaitArgs(), tctx)
 	testutil.FailErr(t, "park completion wait", err)
 	var result WaitToolResult
 	testutil.FailErr(t, "decode completion wait", json.Unmarshal([]byte(out), &result))
-	if !result.UntilComplete || result.WakeAt != "" || result.TimeoutMS != 0 {
-		t.Fatalf("completion wait has deadline: %+v", result)
+	if !result.UntilComplete || result.WakeAt == "" || result.TimeoutMS != MaxWaitSeconds*1000 {
+		t.Fatalf("completion wait missing default max deadline: %+v", result)
 	}
 	state := loop.Waits.sleep.state("s1")
 	state.mu.Lock()
-	armedTomorrow := sleepArmedLocked(state, time.Now().Add(24*time.Hour))
+	armedPastDefault := sleepArmedLocked(state, time.Now().Add(2*time.Minute))
+	expiredAfterMax := !sleepArmedLocked(state, time.Now().Add(31*time.Minute))
 	hasTimer := state.timer != nil
 	state.mu.Unlock()
-	if !armedTomorrow || hasTimer {
-		t.Fatalf("completion wait expires: armedTomorrow=%v timer=%v", armedTomorrow, hasTimer)
+	if !armedPastDefault || !expiredAfterMax || !hasTimer {
+		t.Fatalf("completion wait timer window invalid: armedPastDefault=%v expiredAfterMax=%v timer=%v", armedPastDefault, expiredAfterMax, hasTimer)
 	}
 	lease, found, err := store.ForSession(t.Context(), "s1")
 	testutil.FailErr(t, "read completion wait", err)
-	if !found || !lease.Deadline.IsZero() {
-		t.Fatalf("completion wait deadline persisted: %+v", lease)
+	if !found || lease.Deadline.IsZero() || !lease.UntilComplete {
+		t.Fatalf("completion wait deadline not persisted: %+v", lease)
 	}
 	loop.Waits.InterruptSleep(t.Context(), "s1")
 	if loop.Waits.IsSleeping("s1") {
@@ -208,7 +209,7 @@ func TestCompletionWaitHasNoTimerAndResumesMode(t *testing.T) {
 	testutil.FailErr(t, "resume completion wait", err)
 	result = WaitToolResult{}
 	testutil.FailErr(t, "decode resumed wait", json.Unmarshal([]byte(out), &result))
-	if !result.UntilComplete || !result.Resumed || len(result.Conditions) != 1 || result.Conditions[0].Handles[0] != "command-1" {
+	if !result.UntilComplete || !result.Resumed || result.WakeAt == "" || len(result.Conditions) != 1 || result.Conditions[0].Handles[0] != "command-1" {
 		t.Fatalf("resume lost completion mode: %+v", result)
 	}
 	loop.Waits.InterruptSleep(t.Context(), "s1")

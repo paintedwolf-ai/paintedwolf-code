@@ -48,7 +48,6 @@ type waitSubscription struct {
 	WorkerHandles      []string
 	ExplicitConditions bool
 	UntilComplete      bool
-	Bounded            bool
 }
 
 type waitRequest struct {
@@ -57,9 +56,7 @@ type waitRequest struct {
 	TimeoutMS      int
 	Reason         string
 	ResumeDeadline time.Time
-	// ResumeBounded carries whether the resumed wait had a deadline backstop.
-	ResumeBounded bool
-	ExplicitMode  bool
+	ExplicitMode   bool
 }
 
 // RegisterWaitTool registers durable agent waits.
@@ -86,14 +83,9 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 		timeoutMS := request.TimeoutMS
 		reason := request.Reason
 		conditions := request.Conditions
-		triggers := request.Triggers
+		triggers := ensureTimerBackstop(request.Triggers)
 		processHandles := request.ProcessHandles
 		explicitConditions := request.ExplicitConditions
-		triggers = ensureTimerBackstop(triggers)
-		hasDeadline := args["timeout_ms"] != nil || (resume && request.ResumeBounded)
-		if request.UntilComplete && !hasDeadline {
-			triggers = removeWaitTrigger(triggers, WaitTriggerTimer)
-		}
 		triggerNames := make([]string, len(triggers))
 		for i, t := range triggers {
 			triggerNames[i] = string(t)
@@ -141,11 +133,7 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 				until = pendingUntil
 			}
 		}
-		if request.UntilComplete && !hasDeadline {
-			until = time.Time{}
-			resumed = resume
-		}
-		// Coordinator bounded waits keep a timer backstop.
+		// Coordinator waits keep a timer backstop.
 		armedTriggers := triggers
 		if strings.TrimSpace(tctx.Identity.WorkerJobID) != "" {
 			// The durable worker queue schedules its own deadline.
@@ -194,7 +182,7 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 		if !until.IsZero() {
 			result.WakeAt = until.Format(time.RFC3339)
 		}
-		if !resumed && (!request.UntilComplete || hasDeadline) {
+		if !resumed {
 			result.TimeoutMS = timeoutMS
 		}
 		out, err := surveyjson.Marshal(result)
