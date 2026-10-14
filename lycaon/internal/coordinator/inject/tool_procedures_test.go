@@ -168,6 +168,12 @@ func TestProgressProcedureFollowsCoordinatorOperations(t *testing.T) {
 			if want && (strings.Count(block, "Store the checklist") != 1 || !strings.Contains(block, "PROGRESS_ITEM_NOT_CLOSED") || !strings.Contains(block, "one row is sufficient for a small task")) {
 				t.Fatalf("progress lifecycle contract missing or duplicated: %s", block)
 			}
+			if want && strings.Contains(block, "`delegate_dispatch`") != (tool == "delegate_dispatch") {
+				t.Fatalf("delegate_dispatch present=%v for tool %s: %s", strings.Contains(block, "`delegate_dispatch`"), tool, block)
+			}
+			if want && strings.Contains(block, "`delegate_decompose`") != (tool == "delegate_decompose") {
+				t.Fatalf("delegate_decompose present=%v for tool %s: %s", strings.Contains(block, "`delegate_decompose`"), tool, block)
+			}
 		}
 	}
 }
