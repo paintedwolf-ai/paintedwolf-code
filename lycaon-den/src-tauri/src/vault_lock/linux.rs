@@ -237,7 +237,11 @@ mod tests {
             changed.insert("LockedHint", hint);
         }
         changed.insert("IdleHint", true);
-        (interface, changed.end(), Vec::<String>::new()).to_variant()
+        glib::Variant::tuple_from_iter([
+            interface.to_variant(),
+            changed.end(),
+            Vec::<String>::new().to_variant(),
+        ])
     }
 
     #[test]
