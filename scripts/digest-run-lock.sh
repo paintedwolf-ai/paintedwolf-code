@@ -11,6 +11,18 @@ digest_lock_holder_alive() {
   kill -0 "${pid}" 2>/dev/null
 }
 
+# Prints the path's mtime in epoch seconds. GNU `stat -f` reports filesystem
+# status and exits 0, so try the GNU form first and accept only an integer.
+digest_lock_mtime() {
+  local path="$1" mtime=""
+  mtime="$(stat -c %Y "${path}" 2>/dev/null)" || mtime=""
+  if [[ ! "${mtime}" =~ ^[0-9]+$ ]]; then
+    mtime="$(stat -f %m "${path}" 2>/dev/null)" || mtime=""
+  fi
+  [[ "${mtime}" =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "${mtime}"
+}
+
 digest_try_reclaim_stale() {
   local lockdir="$1"
   [[ -d "${lockdir}" ]] || return 1
@@ -19,9 +31,9 @@ digest_try_reclaim_stale() {
   fi
   # A new lock may not have published its owner yet.
   if [[ ! -f "${lockdir}/pid" ]]; then
-    local age=0
-    if stat_mtime="$(stat -f %m "${lockdir}" 2>/dev/null || stat -c %Y "${lockdir}" 2>/dev/null)"; then
-      age=$(( $(date +%s) - stat_mtime ))
+    local age=0 mtime=""
+    if mtime="$(digest_lock_mtime "${lockdir}")"; then
+      age=$(( $(date +%s) - mtime ))
     fi
     if (( age < 5 )); then
       return 1
