@@ -20,7 +20,9 @@ type RequestOutcome struct {
 	// answered and none reached the load threshold. They load anyway and
 	// the result names them as approximate.
 	Nearest map[string]float64 `json:"nearest,omitempty"`
-	Engine  decide.Engine      `json:"engine"`
+	// Order lists candidate tool names in best-first ranked order when the engine answered.
+	Order  []string      `json:"order,omitempty"`
+	Engine decide.Engine `json:"engine"`
 	// Abstained is true when the engine did not answer; Reason says why.
 	Abstained bool           `json:"abstained"`
 	Reason    string         `json:"reason,omitempty"`
@@ -156,6 +158,7 @@ func ResolveRequest(ctx context.Context, d decide.Decider, spec RequestSpec, nee
 		all[strings.TrimSpace(card.Name)] = scores[i]
 	}
 	order := byScore(all)
+	out.Order = order
 	out.Ranked = map[string]float64{}
 	for _, name := range order {
 		if all[name] < spec.LoadAt || len(out.Ranked) == spec.MaxLoads {

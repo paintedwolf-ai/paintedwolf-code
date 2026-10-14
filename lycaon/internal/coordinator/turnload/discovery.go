@@ -32,18 +32,32 @@ type Discovery struct {
 }
 
 type discoveryCursor struct {
-	Need   string `json:"need"`
-	Digest string `json:"digest"`
-	Offset int    `json:"offset"`
+	Need   string   `json:"need"`
+	Digest string   `json:"digest"`
+	Offset int      `json:"offset"`
+	Order  []string `json:"order,omitempty"`
 }
 
 // Discover binds pagination to the need, surface scope, and current catalog.
-func Discover(scope, need, cursor, status string, failure RankingFailure, entries []DiscoveryEntry) (*Discovery, error) {
+func Discover(scope, need, cursor, status string, failure RankingFailure, entries []DiscoveryEntry, order ...string) (*Discovery, error) {
 	entries = append([]DiscoveryEntry{}, entries...)
 	for i := range entries {
 		entries[i].Description = BoundDescription(entries[i].Description)
 	}
-	sort.Slice(entries, func(i, j int) bool { return entries[i].Name < entries[j].Name })
+	var next discoveryCursor
+	if cursor != "" {
+		if len(cursor) > 65536 {
+			return nil, fmt.Errorf("discovery continuation exceeds its length limit")
+		}
+		raw, err := base64.RawURLEncoding.DecodeString(cursor)
+		if err != nil || json.Unmarshal(raw, &next) != nil || next.Need != need || next.Offset <= 0 || next.Offset >= len(entries) {
+			return nil, fmt.Errorf("discovery continuation is invalid or does not match the current request and catalog")
+		}
+		if len(order) == 0 {
+			order = next.Order
+		}
+	}
+	sortDiscoveryEntries(entries, order)
 	raw, err := json.Marshal(struct {
 		Scope   string
 		Need    string
@@ -55,12 +69,7 @@ func Discover(scope, need, cursor, status string, failure RankingFailure, entrie
 	digest := fmt.Sprintf("%x", sha256.Sum256(raw))
 	offset := 0
 	if cursor != "" {
-		if len(cursor) > 65536 {
-			return nil, fmt.Errorf("discovery continuation exceeds its length limit")
-		}
-		raw, err := base64.RawURLEncoding.DecodeString(cursor)
-		var next discoveryCursor
-		if err != nil || json.Unmarshal(raw, &next) != nil || next.Need != need || next.Digest != digest || next.Offset <= 0 || next.Offset >= len(entries) {
+		if next.Digest != digest {
 			return nil, fmt.Errorf("discovery continuation is invalid or does not match the current request and catalog")
 		}
 		offset = next.Offset
@@ -70,7 +79,7 @@ func Discover(scope, need, cursor, status string, failure RankingFailure, entrie
 	for {
 		out.Entries, out.NextNeed = entries[offset:end], ""
 		if end < len(entries) {
-			raw, err := json.Marshal(discoveryCursor{Need: need, Digest: digest, Offset: end})
+			raw, err := json.Marshal(discoveryCursor{Need: need, Digest: digest, Offset: end, Order: order})
 			if err != nil {
 				return nil, err
 			}
@@ -89,6 +98,26 @@ func Discover(scope, need, cursor, status string, failure RankingFailure, entrie
 		end--
 	}
 	return out, nil
+}
+
+func sortDiscoveryEntries(entries []DiscoveryEntry, order []string) {
+	rank := make(map[string]int, len(order))
+	for _, name := range order {
+		if _, exists := rank[name]; !exists {
+			rank[name] = len(rank)
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		ri, oki := rank[entries[i].Name]
+		rj, okj := rank[entries[j].Name]
+		if oki != okj {
+			return oki
+		}
+		if oki && ri != rj {
+			return ri < rj
+		}
+		return entries[i].Name < entries[j].Name
+	})
 }
 
 // ParseDiscoveryNeed recognizes the continuation supplied only in fallback results.

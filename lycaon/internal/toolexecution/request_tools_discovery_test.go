@@ -236,9 +236,18 @@ func TestRequestNoMatchDiscoveryReachesDeferredTask(t *testing.T) {
 	ranks := 0
 	testutil.FailErr(t, "register request", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
 		Activation: activation, Boundary: fakeRequestBoundary{}, RejectFmt: func() *guidance.StaticRejectFormatter { return formatter },
-		Resolve: func(_ context.Context, _ tools.ToolContext, need string, cards []turnload.ToolCard) turnload.RequestOutcome {
+		Resolve: func(ctx context.Context, _ tools.ToolContext, need string, cards []turnload.ToolCard) turnload.RequestOutcome {
 			ranks++
-			return turnload.RequestOutcome{Need: need}
+			scores := make([]float64, len(cards))
+			for i, card := range cards {
+				if card.Name == "task" {
+					scores[i] = 1.2
+				} else {
+					scores[i] = 0.1
+				}
+			}
+			d := &decidetest.Fake{Scores: scores}
+			return turnload.ResolveRequest(ctx, d, turnload.RequestSpec{DeadlineMS: 1000, LoadAt: 1.8, MaxLoads: 4}, need, cards)
 		},
 	}))
 	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "no-match", Agent: "coordinator"}, Turn: tools.InvocationTurn{
@@ -249,6 +258,9 @@ func TestRequestNoMatchDiscoveryReachesDeferredTask(t *testing.T) {
 	page, ok := reject.Data["discovery"].(*turnload.Discovery)
 	if !ok || page.Total != len(names) || page.NextNeed == "" || page.Failure != "" || page.Status != "no_match" {
 		t.Fatalf("missing no-match catalog: %+v", reject.Data)
+	}
+	if len(page.Entries) == 0 || page.Entries[0].Name != "task" {
+		t.Fatalf("expected top-ranked sub-threshold candidate task first on page 1, got %+v", page.Entries)
 	}
 	if !strings.Contains(err.Error(), "discovery.entries") || !strings.Contains(err.Error(), "discovery.next_need") || strings.Contains(err.Error(), "ranking_unavailable") {
 		t.Fatalf("recovery: %v", err)
@@ -276,8 +288,9 @@ func TestRequestNoMatchDiscoveryReachesDeferredTask(t *testing.T) {
 			t.Fatal("continuation lost catalog")
 		}
 	}
-	if !slices.Equal(seen, names) || ranks != 1 {
-		t.Fatalf("catalog = %v, ranks = %d", seen, ranks)
+	wantOrder := append([]string{"task"}, names[:len(names)-1]...)
+	if !slices.Equal(seen, wantOrder) || ranks != 1 {
+		t.Fatalf("catalog = %v, want %v, ranks = %d", seen, wantOrder, ranks)
 	}
 	_, err = reg.Run(t.Context(), "request_tools", map[string]any{"need": "task"}, tctx)
 	testutil.FailErr(t, "load task by exact identity", err)
