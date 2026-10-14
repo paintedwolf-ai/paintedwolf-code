@@ -98,6 +98,8 @@ func TestWorkerOutcomeConservationAcrossStateProduct(t *testing.T) {
 					if grade == "" || grade == "future-grade" {
 						want = "unreported"
 					}
+				case api.WorkerStatusPending, api.WorkerStatusRunning, api.WorkerStatusWaiting, api.WorkerStatusHeld:
+				default:
 				}
 				t.Run(task.ID, func(t *testing.T) {
 					counts := packboard.CountWorkerOutcomes([]api.WorkerTask{task})
