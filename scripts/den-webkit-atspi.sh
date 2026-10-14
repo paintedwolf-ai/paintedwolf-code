@@ -35,14 +35,31 @@ export LYCAON_E2E_FROZEN=1
 harness_up
 harness_vite_bg
 
-# A private session bus and display keep the probe off the developer's desktop and screen reader.
+LAUNCHER=""
+for candidate in /usr/libexec/at-spi-bus-launcher /usr/lib/at-spi2-core/at-spi-bus-launcher; do
+  [[ -x "${candidate}" ]] && LAUNCHER="${candidate}" && break
+done
+if [[ -z "${LAUNCHER}" ]]; then
+  echo "den:webkit:atspi: unverified: at-spi-bus-launcher not found" >&2
+  exit 2
+fi
+
+# A private session bus, accessibility bus and display keep the probe off the developer's desktop and screen reader.
 status=0
 dbus-run-session -- bash -c '
-  busctl --user set-property org.a11y.Bus /org/a11y/bus org.a11y.Status IsEnabled b true
-  exec xvfb-run -a /usr/bin/python3 "$0" "$1"
-' "${DIR}/harness/webkit_atspi_text_attributes.py" "${LYCAON_E2E_BASE_URL}" || status=$?
+  "$0" --launch-immediately &
+  for _ in $(seq 1 50); do
+    busctl --user set-property org.a11y.Bus /org/a11y/bus org.a11y.Status IsEnabled b true 2>/dev/null && break
+    sleep 0.2
+  done
+  exec xvfb-run -a /usr/bin/python3 "$1" "$2"
+' "${LAUNCHER}" "${DIR}/harness/webkit_atspi_text_attributes.py" "${LYCAON_E2E_BASE_URL}" || status=$?
 if ((status == 1)) && [[ -f "${LYCAON_E2E_STATE_DIR}/sidecar.log" ]]; then
   echo "den:webkit:atspi: sidecar log tail" >&2
   tail -n 40 "${LYCAON_E2E_STATE_DIR}/sidecar.log" >&2
+fi
+if ((status != 0 && status != 1)); then
+  echo "den:webkit:atspi: unverified: the probe stopped with status ${status} before checking" >&2
+  status=2
 fi
 exit "${status}"

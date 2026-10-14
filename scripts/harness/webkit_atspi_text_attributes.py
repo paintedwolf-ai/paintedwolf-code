@@ -18,11 +18,18 @@ import subprocess
 import sys
 import time
 
+# A person who finished first-run setup and turned tips off, so nothing covers the sidebar.
+FIRST_RUN_DONE = """
+localStorage.setItem("paintedwolf.app-state.v1.onboarding", JSON.stringify({ firstRunSetupCompleted: true }));
+localStorage.setItem("paintedwolf.app-state.v1.firstTimeTips", JSON.stringify({ enabled: false }));
+"""
+
 SEED = r"""
 for (let i = 0; i < 240 && !window.__harness; i++) await new Promise((r) => setTimeout(r, 250));
-if (!window.__harness) return JSON.stringify({ ok: false, error: "harness API missing" });
+if (!window.__harness) return JSON.stringify({ ok: false, error: "harness API missing; page reads " + JSON.stringify(document.body.innerText.slice(0, 200)) });
+for (let i = 0; i < 480 && !(__harness.state().connected && __harness.state().view !== "loading"); i++) await new Promise((r) => setTimeout(r, 250));
 const opened = await __harness.openProject("Harness");
-if (opened?.ok !== true) return JSON.stringify({ ok: false, error: "open project: " + JSON.stringify(opened) });
+if (opened?.ok !== true) return JSON.stringify({ ok: false, error: "open project: " + JSON.stringify(opened) + "; page reads " + JSON.stringify(document.body.innerText.slice(0, 300)) });
 const session = await __harness.newSession();
 if (session?.ok !== true) return JSON.stringify({ ok: false, error: "new session: " + JSON.stringify(session) });
 for (let i = 0; i < 80 && !document.querySelector('[data-testid="session-rename-action"]'); i++) await new Promise((r) => setTimeout(r, 250));
@@ -46,7 +53,12 @@ def run_page(url: str) -> int:
 
     window = Gtk.Window(title="Den accessibility text attributes")
     window.set_default_size(1280, 800)
-    view = WebKit2.WebView()
+    view = WebKit2.WebView(is_ephemeral=True)
+    view.get_user_content_manager().add_script(WebKit2.UserScript.new(
+        FIRST_RUN_DONE, WebKit2.UserContentInjectedFrames.TOP_FRAME,
+        WebKit2.UserScriptInjectionTime.START, None, None))
+    # Page console lines reach the scan's log when setup fails.
+    view.get_settings().set_enable_write_console_messages_to_stdout(True)
     window.add(view)
     window.show_all()
 
@@ -92,17 +104,19 @@ def run_scan(url: str) -> int:
     page = subprocess.Popen([sys.executable, __file__, "--page", url], stdout=subprocess.PIPE, text=True)
     try:
         line = ""
+        console = []
         deadline = time.monotonic() + 300
         while time.monotonic() < deadline:
             line = page.stdout.readline().strip()
             if line.startswith(("seeded", "terminated")) or page.poll() is not None:
                 break
-        if not line.startswith("seeded"):
-            print(f"unverified: the page did not seed ({line or 'no output'})", file=sys.stderr)
-            return 2
-        seed = json.loads(line.split(" ", 1)[1])
+            if line:
+                console = (console + [line])[-20:]
+        seed = json.loads(line.split(" ", 1)[1]) if line.startswith("seeded") else {}
         if not seed.get("ok"):
-            print(f"unverified: {seed.get('error')}", file=sys.stderr)
+            print(f"unverified: {seed.get('error') or line or 'the page did not seed'}", file=sys.stderr)
+            for entry in console:
+                print(f"  console: {entry}", file=sys.stderr)
             return 2
 
         app = None
