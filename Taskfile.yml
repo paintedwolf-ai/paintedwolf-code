@@ -156,7 +156,7 @@ tasks:
       - '{{.BUILD_DIR}}/lycaon-dev browser ensure'
 
   gitengine:fetch:
-    desc: Download and SHA-256-verify the pinned dugite-native git toolchain into engine-root/gitengine
+    desc: Download and SHA-256-verify the pinned Git toolchain into engine-root/gitengine
     sources:
       - lycaon/config/gitengine/pin.yaml
       - '{{.SCRIPTS_DIR}}/gitengine-fetch.sh'
