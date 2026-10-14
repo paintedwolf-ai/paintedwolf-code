@@ -31,7 +31,8 @@ func Relaunch(self string, args []string, plan []byte, marker *os.File) (code in
 		return 0, 0, fmt.Errorf("plan pipe: %w", err)
 	}
 	cmd := exec.Command(self, args...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	// The standard descriptors are the command's streams, handed through as is.
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.NewFile(0, "stdin"), os.NewFile(1, "stdout"), os.NewFile(2, "stderr")
 	cmd.ExtraFiles = []*os.File{read}
 	if marker != nil {
 		cmd.ExtraFiles = append(cmd.ExtraFiles, marker)

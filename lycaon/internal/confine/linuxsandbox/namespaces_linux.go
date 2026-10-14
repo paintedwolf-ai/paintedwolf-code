@@ -188,14 +188,22 @@ func restore(clone int, path string) error {
 			if err := os.MkdirAll(filepath.Dir(path), 0o555); err != nil {
 				return err
 			}
-			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY, 0o444)
-			if err != nil {
+			if err := createPlaceholder(path, 0o444); err != nil {
 				return err
 			}
-			_ = f.Close()
 		}
 	}
 	return unix.MoveMount(clone, "", unix.AT_FDCWD, path, unix.MOVE_MOUNT_F_EMPTY_PATH)
+}
+
+// createPlaceholder makes an empty file inside a sandbox tmpfs to serve as a
+// mountpoint; it is never a durable write.
+func createPlaceholder(path string, mode uint32) error {
+	fd, err := unix.Open(path, unix.O_CREAT|unix.O_WRONLY|unix.O_CLOEXEC, mode)
+	if err != nil {
+		return err
+	}
+	return unix.Close(fd)
 }
 
 // cloneTree detaches a copy of the mount tree at path.
@@ -272,11 +280,9 @@ func mountDev() error {
 				return mountFailure(target, err)
 			}
 		} else {
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY, 0o666)
-			if err != nil {
+			if err := createPlaceholder(target, 0o666); err != nil {
 				return mountFailure(target, err)
 			}
-			_ = f.Close()
 		}
 		if err := unix.MoveMount(fd, "", unix.AT_FDCWD, target, unix.MOVE_MOUNT_F_EMPTY_PATH); err != nil {
 			return mountFailure(target, err)
