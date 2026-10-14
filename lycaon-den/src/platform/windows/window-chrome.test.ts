@@ -29,6 +29,7 @@ const physicalPosition = (x: number, y: number) => ({
 
 const isFullscreen = vi.fn(async () => false);
 const isMaximized = vi.fn(async () => false);
+const onResized = vi.fn(async (_handler: () => void) => () => undefined);
 const scaleFactor = vi.fn(async () => 1);
 const innerSize = vi.fn(async () => physicalSize(800, 600));
 const outerSize = vi.fn(async () => physicalSize(812, 640));
@@ -56,6 +57,7 @@ vi.mock("@tauri-apps/api/window", () => ({
     onFocusChanged,
     isFullscreen,
     isMaximized,
+    onResized,
     scaleFactor,
     innerSize,
     outerSize,
@@ -77,6 +79,7 @@ describe("setupWindowChrome", () => {
     isFocused.mockClear();
     onThemeChanged.mockClear();
     onFocusChanged.mockClear();
+    onResized.mockClear();
     onThemeChangedHandler = undefined;
     onFocusChangedHandler = undefined;
     isFocused.mockResolvedValue(false);
@@ -116,6 +119,9 @@ describe("setupWindowChrome", () => {
       resetOsColorSchemeWatchForTests();
       await setupWindowChrome();
       expect(setTheme).not.toHaveBeenCalled();
+      // Drawn controls read the desktop's layout and follow the maximized state.
+      await vi.waitFor(() => expect(onResized).toHaveBeenCalledTimes(1));
+      expect(invoke).toHaveBeenCalledWith("linux_decoration_layout");
       expect(osColorSchemeIsDark()).toBe(true);
       onThemeChangedHandler?.({ payload: "light" });
       expect(osColorSchemeIsDark()).toBe(false);

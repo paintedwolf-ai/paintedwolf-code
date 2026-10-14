@@ -153,9 +153,9 @@ export async function setupWindowChrome(): Promise<void> {
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   const win = getCurrentWindow();
 
-  // A null theme follows system appearance. Linux keeps its toolkit theme
-  // preference untouched: resetting it flashes a light frame before the
-  // desktop's own scheme arrives, and the window already reports that scheme.
+  // A null theme follows system appearance. On Linux the window already
+  // reports the Settings portal's color scheme, and setting a theme resets
+  // GTK's dark preference, which flashes a light frame.
   if (tauriPlatform() !== "linux") await win.setTheme(null);
 
   const initial = await win.theme();
