@@ -195,7 +195,7 @@ func TestBoundedCompletionWaitResumesFromRuntimeSubscription(t *testing.T) {
 	testutil.FailErr(t, "resume bounded completion wait", err)
 	var result WaitToolResult
 	testutil.FailErr(t, "decode resumed bounded completion", json.Unmarshal([]byte(out), &result))
-	if !result.UntilComplete || result.WakeAt == "" {
+	if !result.UntilComplete || !result.Resumed || result.WakeAt == "" {
 		t.Fatalf("runtime resume dropped the deadline: %+v", result)
 	}
 	if untilComplete, hasTimer, _ := completionSleepState(loop, "s1"); !untilComplete || !hasTimer {
@@ -257,7 +257,7 @@ func TestCompletionWaitDefaultsToMaxTimeoutAndResumesMode(t *testing.T) {
 	testutil.FailErr(t, "resume completion wait", err)
 	result = WaitToolResult{}
 	testutil.FailErr(t, "decode resumed wait", json.Unmarshal([]byte(out), &result))
-	if !result.UntilComplete || !result.Resumed || result.WakeAt == "" || len(result.Conditions) != 1 || result.Conditions[0].Handles[0] != "command-1" {
+	if !result.UntilComplete || result.TimeoutMS != MaxWaitSeconds*1000 || result.WakeAt == "" || len(result.Conditions) != 1 || result.Conditions[0].Handles[0] != "command-1" {
 		t.Fatalf("resume lost completion mode: %+v", result)
 	}
 	loop.Waits.InterruptSleep(t.Context(), "s1")

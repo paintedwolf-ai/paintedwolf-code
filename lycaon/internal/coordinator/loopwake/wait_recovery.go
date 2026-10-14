@@ -11,10 +11,8 @@ import (
 )
 
 func restoreWaitRequest(ctx context.Context, loop *WaitSubscriptions, store *awaitstore.Store, tctx tools.ToolContext, request *waitRequest) error {
-	var runtimeComplete bool
 	if strings.TrimSpace(tctx.Identity.WorkerJobID) == "" {
 		if subscription, complete := loop.Waits.runtimeWaitSubscription(tctx.Identity.SessionID); complete {
-			runtimeComplete = true
 			if !request.ExplicitConditions {
 				request.Conditions = subscription.Conditions
 				request.Triggers = subscription.Triggers
@@ -27,6 +25,7 @@ func restoreWaitRequest(ctx context.Context, loop *WaitSubscriptions, store *awa
 					request.TimeoutMS = MaxWaitSeconds * 1000
 				}
 			}
+			return nil
 		}
 	}
 	lease, found, err := store.LatestResumeCandidate(ctx, tctx.Identity.SessionID)
@@ -34,15 +33,13 @@ func restoreWaitRequest(ctx context.Context, loop *WaitSubscriptions, store *awa
 		return err
 	}
 	if !request.ExplicitMode {
+		request.UntilComplete = lease.UntilComplete
 		request.ResumeDeadline = lease.Deadline
-		if !runtimeComplete {
-			request.UntilComplete = lease.UntilComplete
-			if lease.UntilComplete {
-				request.TimeoutMS = MaxWaitSeconds * 1000
-			}
+		if lease.UntilComplete {
+			request.TimeoutMS = MaxWaitSeconds * 1000
 		}
 	}
-	if !runtimeComplete && !request.ExplicitConditions {
+	if !request.ExplicitConditions {
 		request.Conditions = append([]awaitstore.Condition(nil), lease.Conditions...)
 		request.Triggers, request.ProcessHandles = triggersFromConditions(request.Conditions)
 		request.WorkerHandles = workerHandlesFromConditions(request.Conditions)

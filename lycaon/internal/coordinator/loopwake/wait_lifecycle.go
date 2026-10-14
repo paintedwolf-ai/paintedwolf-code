@@ -44,18 +44,8 @@ func (l *Waits) InterruptSleep(ctx context.Context, sessionID string) {
 	l.breakSleep(ctx, sessionID, "user_prompt", false)
 	l.Nudges.ClearPending(sessionID)
 }
-func (l *Waits) EnterSleep(
-	ctx context.Context,
-	sessionID string,
-	until time.Time,
-	reason string,
-	triggers []WaitTrigger,
-	processHandles []string,
-	mover SleepMover,
-) {
-	l.enterSleep(ctx, sessionID, sleepArm{
-		until: until, reason: reason, triggers: triggers, processHandles: processHandles, mover: mover,
-	})
+func (l *Waits) EnterSleep(ctx context.Context, sessionID string, until time.Time, reason string, triggers []WaitTrigger, processHandles []string, mover SleepMover) {
+	l.enterSleep(ctx, sessionID, sleepArm{until: until, reason: reason, triggers: triggers, processHandles: processHandles, mover: mover})
 }
 func (l *Waits) MarkWaitCalled(sessionID string) {
 	st := l.sleep.state(sessionID)

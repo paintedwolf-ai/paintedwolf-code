@@ -12,9 +12,14 @@ import (
 )
 
 func parseWaitRequest(args map[string]any) (waitRequest, error) {
+	subscription, err := resolveConditions(args["conditions"])
+	if err != nil {
+		return waitRequest{}, err
+	}
 	request := waitRequest{
-		Resume:    parseWaitResumeArg(args["resume"]),
-		TimeoutMS: DefaultWaitSeconds * 1000,
+		Resume:           parseWaitResumeArg(args["resume"]),
+		TimeoutMS:        DefaultWaitSeconds * 1000,
+		waitSubscription: subscription,
 	}
 	if raw, present := args["until_complete"]; present {
 		value, ok := raw.(bool)
@@ -45,11 +50,6 @@ func parseWaitRequest(args map[string]any) (waitRequest, error) {
 	request.Reason = strings.TrimSpace(request.Reason)
 	if request.Reason == "" {
 		request.Reason = "Waiting"
-	}
-	var err error
-	request.waitSubscription, err = resolveConditions(args["conditions"])
-	if err != nil {
-		return waitRequest{}, err
 	}
 	return request, nil
 }
