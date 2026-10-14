@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -40,5 +41,18 @@ func TestRequireSessionProjectUsesPersistedWorkspace(t *testing.T) {
 				t.Fatalf("store error lost: %v", err)
 			}
 		})
+	}
+}
+
+func TestRejectFanoutTaskReportsInapplicableFields(t *testing.T) {
+	for _, reason := range []string{"not_a_planned_fanout_phase", "workflow_phase_changed"} {
+		var reject *toolrejection.ToolReject
+		if !errors.As(RejectFanoutTask(reason, &api.WorkerTask{WorkflowWorkID: "work"}), &reject) {
+			t.Fatal("missing structured rejection")
+		}
+		fields, present := reject.Data["inapplicable_fields"].([]string)
+		if present != (reason == "not_a_planned_fanout_phase") || present && (len(fields) != 1 || fields[0] != "workflow_work_id") {
+			t.Fatalf("inapplicable fields for %s: %v", reason, reject.Data)
+		}
 	}
 }
