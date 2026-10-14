@@ -121,9 +121,9 @@ Project content applies automatically when its device and project trust switches
 
 ## Confinement
 
-Every agent-spawned subprocess crosses one typed launch boundary. The launch plan carries executable, argv, cwd, environment, filesystem scope, signal rules, egress mode, and any approved capability. On macOS the helper applies the Seatbelt boundary before executing the target, and descendants inherit it. If enforcement is on but the boundary cannot be applied or attested, launch fails closed.
+Every agent-spawned subprocess crosses one typed launch boundary. The launch plan carries executable, argv, cwd, environment, filesystem scope, signal rules, egress mode, and any approved capability. The engine's own binary is the helper that applies it: on macOS it applies the Seatbelt boundary before executing the target; on Linux it builds user, mount, PID, and network namespaces, applies Landlock and seccomp, and stays as the sandbox's first process to relay signals and collect what the target leaves ([Platform coverage](#platform-coverage)). Descendants inherit the boundary either way. If enforcement is on but the boundary cannot be applied or attested, launch fails closed.
 
-Failing closed is uniform across every seam that spawns processes: commands, terminals, background jobs, bundled scanners, local MCP servers, and the managed browser. None may fall through to an unboundaried process while the host is enforcing, because the posture would still report the sandbox as on. An explicitly reviewed `host_execution` command runs without a sandbox for that action; its receipt reports `host_execution: true` and `confined: false`, which is distinct from a boundary that failed to apply. Other unsandboxed execution occurs only where the host applies no boundary to anything: a platform without an enforcement adapter (Linux and Windows builds), the explicit off-switch, or the approval bypass ([Environment switches on the boundary](#environment-switches-on-the-boundary)). On a platform without an adapter the host is not enforcing, so launches proceed unconfined and every spawning action asks as unconfined ([What stays quiet](#what-stays-quiet-and-why)); each receipt reports `confined: false`.
+Failing closed is uniform across every seam that spawns processes: commands, terminals, background jobs, bundled scanners, local MCP servers, and the managed browser. None may fall through to an unboundaried process while the host is enforcing, because the posture would still report the sandbox as on. An explicitly reviewed `host_execution` command runs without a sandbox for that action; its receipt reports `host_execution: true` and `confined: false`, which is distinct from a boundary that failed to apply. Other unsandboxed execution occurs only where the host applies no boundary to anything: a platform without an enforcement adapter (Windows builds), a Linux host whose kernel lacks a capability the boundary needs, the explicit off-switch, or the approval bypass ([Environment switches on the boundary](#environment-switches-on-the-boundary)). Where no adapter can apply, the host is not enforcing, so launches proceed unconfined and every spawning action asks as unconfined ([What stays quiet](#what-stays-quiet-and-why)); each receipt reports `confined: false`, and on Linux the host can name the missing capability ([Platform coverage](#platform-coverage)).
 
 Third-party processes the host executes on the person's behalf (a local MCP server, a remote-package action, the managed browser) start from a reduced environment carrying process plumbing rather than the app's ambient credentials. Credentials reach such a process only where the person named them for it. An environment that filters down to nothing stays empty rather than becoming absent, because a process started with no environment inherits its parent's.
 
@@ -140,6 +140,8 @@ Default write roots derive from operating-system conventions rather than a list 
 
 Path identity lookup on macOS requests the kernel's full-path attribute (`ATTR_CMN_FULLPATH`). Loading protected-path rules does not request permission to read the folders they describe.
 
+The same ordered rule list is rendered as the macOS profile and compiled into the Linux plan, and it answers host verdicts, so the three cannot disagree. On Linux the allows become one Landlock ruleset and the denials inside them become mounts: a denied subtree under a write root is covered by a read-only copy of itself, a read-denied subtree by an empty placeholder, and a grant beneath either is bound back over it ([Platform coverage](#platform-coverage)).
+
 A native tool that reads many files admits the call's attached roots once and opens each file relative to the held root descriptor, so a root retargeted after admission cannot redirect a later read.
 
 Native file tools share the process boundary's default temporary, cache, and tool data locations; these do not become project folders. Other external files cross the normal approval path, and worker isolation and protected-path rules take precedence. For native file tools, **Allow once** carries the reviewed absolute paths and read/write direction into that invocation only. Paths are canonicalized before review; approval does not follow a subsequently retargeted symlink, cover sibling paths, or install a reusable grant. Exact file creation may create missing parent directories through the descriptor-relative write boundary.
@@ -154,7 +156,7 @@ For operations these tools cannot express, `command` and `verify` accept explici
 
 | Capability | Applied boundary | Visibility |
 |---|---|---|
-| `process_control` | Retains filesystem and network restrictions; allows external signals | Individual signal targets are unobserved |
+| `process_control` | Retains filesystem and network restrictions; allows external signals on macOS, while on Linux the PID namespace still bounds signals to the command's own processes ([Platform coverage](#platform-coverage)) | Individual signal targets are unobserved |
 | `host_execution` | Removes the command sandbox | Filesystem, network, and process effects are unobserved |
 
 Process control requires a supported, active sandbox. Host execution supports setuid programs and passwordless `sudo -n`, subject to OS permissions; it is requested alone and supersedes the reduced remote-package boundary. Approval does not supply a password or guarantee that elevated effects can be stopped or undone. These capabilities apply at command launch, not to held terminals accepting later input.
@@ -197,7 +199,7 @@ No credential travels in that environment. Identity is the calling process: the 
 
 ### Processes a command leaves behind
 
-Build tooling reuses daemons by design: a build server, a test supervisor, a watcher, a language server. A process that outlives the command which started it keeps the boundary applied at spawn, so the host tracks whose it is rather than losing sight of it.
+Build tooling reuses daemons by design: a build server, a test supervisor, a watcher, a language server. On macOS a process that outlives the command which started it keeps the boundary applied at spawn, so the host tracks whose it is rather than losing sight of it. On Linux a command's processes end with the command: the helper is the first process of the command's PID namespace, and when it exits the kernel ends everything left inside.
 
 Such a process reaches the broker under whichever action of its project is currently running. Its destination still crosses that action's gate and is recorded against it, marked as reached through a process an earlier command left running. When no action of that project is running, nobody is accountable and the connection is refused. The refusal names which command left the process behind, recorded once per destination. A command's own result states how many processes it left running.
 
@@ -211,7 +213,7 @@ Loopback is decided from the address a destination resolves to, never from how i
 
 Boundary refusals are attributed from structured observations, never guessed from command prose: operating-system errors at launch, markers the egress broker stamps, and the kernel's own report of each operation a profile refused. The executor maps those observations to a structured code and the relevant recovery path. A refusal that cannot be confidently attributed remains a visible unattributed boundary failure; it is not dropped because the host lacks a friendly explanation.
 
-On macOS every deny rule in a bound action's profile carries a random tag, and the host reads the kernel's sandbox reports from the unified log and routes each one to the action whose tag it carries. The kernel cuts a report at its log size limit, which can drop the tag after a very long path; such a report reaches the action through the refused process's lineage while that process is still running, and names no grant because its target is incomplete. Each refusal names the operation, the target, the process, and the capability whose profile rule would admit it:
+Linux hosts do not read kernel refusals yet; every action there reports `sandbox_refusal_witness: unavailable`, and a refused operation surfaces only as the failed command's own error. On macOS every deny rule in a bound action's profile carries a random tag, and the host reads the kernel's sandbox reports from the unified log and routes each one to the action whose tag it carries. The kernel cuts a report at its log size limit, which can drop the tag after a very long path; such a report reaches the action through the refused process's lineage while that process is still running, and names no grant because its target is incomplete. Each refusal names the operation, the target, the process, and the capability whose profile rule would admit it:
 
 | Refused | Recovery |
 |---|---|
@@ -227,7 +229,31 @@ A refusal is a fact about the boundary, not a verdict on the command. Recovery g
 
 ### Platform coverage
 
-The intended policy is platform-independent; enforcement adapters differ. macOS has the only adapter today, and the only kernel refusal reports. Where the host enforces, a capability the adapter cannot represent fails that launch rather than running unconfined. Where no adapter exists, nothing is enforced and the approval layer is the only containment: every spawning action asks as unconfined. User-installed scanner executables and app network clients have separately documented boundaries. “Runs on the device” does not imply “runs inside the agent subprocess sandbox.”
+The intended policy is platform-independent; enforcement adapters differ. macOS and Linux have adapters; macOS has the only kernel refusal reports. Where the host enforces, a capability the adapter cannot represent fails that launch rather than running unconfined. Where no adapter can apply, nothing is enforced and the approval layer is the only containment: every spawning action asks as unconfined. User-installed scanner executables and app network clients have separately documented boundaries. “Runs on the device” does not imply “runs inside the agent subprocess sandbox.”
+
+| Boundary | macOS (Seatbelt) | Linux (namespaces, Landlock, seccomp) |
+|---|---|---|
+| Delivery | SBPL profile over an inherited pipe; one helper exec | Typed boundary plan over the same pipe; the helper re-executes itself once as the first process of fresh user, mount, PID, and network namespaces, and the outer helper relays signals and exit status |
+| Reads | `file-read*` allowed, then denied subtrees with allow-backs | Landlock grants read and execute below `/`; each denied subtree is covered by an empty read-only placeholder, and each allow-back beneath one is bound back over it |
+| Writes | `file-write*` to write roots, then layered denies and grants | Landlock grants every filesystem access the kernel's ABI knows, including rename and truncation, below each write root and exact grant; a denied path inside a grant is covered by a read-only copy of itself, and a grant beneath that is bound back |
+| Devices | Named device sinks | `/dev` is rebuilt: `null`, `zero`, `full`, `random`, `urandom`, `tty`, the host's `pts` and `ptmx`, a fresh `shm`, and the descriptor links; other devices are absent |
+| Network deny | `(deny default)` | A network namespace holding only loopback; a connection elsewhere fails with the network unreachable |
+| Mediated, direct, loopback, listener, and socket grants | Rendered rules | Not expressed yet; a plan that needs one is refused with a typed reason and the launch fails closed |
+| Signals | Same-sandbox descendants, or any process with `process_control` | The PID namespace: a confined process can signal only processes inside it, with or without `process_control`; the host's processes are reached through the native `process_signal` tool |
+| Escape | Profile denies | seccomp kills a process that calls `unshare`, `setns`, `mount` or the mount API, `pivot_root`, `ptrace`, `process_vm_*`, `bpf`, `perf_event_open`, `kexec_*`, module loading, or the key-management syscalls, or `clone` with a namespace flag; `clone3` answers `ENOSYS` so libraries fall back to `clone`; no capability remains and privileges cannot grow |
+| Attestation | `sandbox_check` membership | Landlock refuses a probe write, seccomp mode 2, no-new-privs set, empty capability sets, and every namespace differs from the engine's; any miss ends the helper before the target runs |
+| Kernel refusal reports | Unified log stream | None yet; `sandbox_refusal_witness` is `unavailable` |
+
+The Linux floor is a kernel with Landlock ABI 3 (6.2) and unprivileged user namespaces. The engine probes once per process by running the helper against a plan that only attests, so availability is a fact from a real application. When a fact is missing, confinement is unavailable with a typed reason (`confine.LinuxCapabilities`): the Landlock ABI, seccomp, pidfd, or user namespaces, and for the last whether AppArmor restricted them. Ubuntu 24.04 and later restrict unprivileged user namespaces to programs with an AppArmor profile granting them; the Linux package installs [`packaging/linux/apparmor/painted-wolf-code`](../packaging/linux/apparmor/painted-wolf-code), which grants `userns` to the installed executables and nothing else. An engine run from elsewhere on such a host reports the profile by name, and the remedy is to install the package, not to lower the kernel's restriction.
+
+What the Linux adapter cannot express yet, and what it expresses differently, is bounded:
+
+- Mediated egress, direct IP, loopback-connect, listener, and Unix socket grants refuse the launch with a typed reason; network deny is complete.
+- A write root or grant that does not exist at launch gets no Landlock rule, so a confined process cannot create it.
+- A protected-path write grant for a file that does not exist yet inside a read-only masked tree cannot be opened, because the mask covers its parent.
+- Loader files named at any depth (`AGENTS.md`) are masked read-only where they exist at launch, found by walking each root up to a bounded number of entries; creating a new one deeper in the tree is not refused.
+- Within the sandbox's private loopback, binding and connecting reach only the command's own processes; they are not grants of host-local reach.
+- The command's processes end with the command ([Processes a command leaves behind](#processes-a-command-leaves-behind)).
 
 The macOS profile is deny-default: filesystem and network authority is granted by rule. Mach service lookup is the one capability that inverts that shape. It is allowed broadly, because a confined process needs a wide set of system services to start, and a short list of power-management services is then subtracted. That subtraction is an enumeration and therefore incomplete by construction; it is a posture limit, not a boundary. Narrowing it would mean first observing which services confined tools legitimately reach.
 

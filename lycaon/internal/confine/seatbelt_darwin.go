@@ -23,11 +23,31 @@ import "C"
 
 import (
 	"fmt"
+	"os"
+	"syscall"
 	"unsafe"
 )
 
 // Available reports whether per-command confinement is enforced.
 func Available() bool { return true }
+
+// renderProfile is the Seatbelt profile on this platform.
+func renderProfile(c Confinement) (string, error) { return renderSeatbeltProfile(c) }
+
+// applyAndExec applies the profile to this process, confirms kernel membership,
+// and replaces the process with the target.
+func applyAndExec(profile []byte, resolved string, target []string) error {
+	if err := applySeatbelt(string(profile)); err != nil {
+		return err
+	}
+	if err := attestConfined(); err != nil {
+		return err
+	}
+	if err := syscall.Exec(resolved, target, os.Environ()); err != nil {
+		return ClassifyExecError(resolved, err)
+	}
+	return nil
+}
 
 // The profile applies to the current process.
 func applySeatbelt(profile string) error {

@@ -48,8 +48,8 @@ func TestAgentPolicyFloorCoversEveryRegisteredRootWithReadableFilters(t *testing
 	roots := registeredLongRoots(t, 8)
 	project := t.TempDir()
 	c := packageExecutionConfinement(t, project)
-	_, err := confine.BuildProfile(c)
-	testutil.FailErr(t, "BuildProfile", err)
+	_, err := confine.BuildSeatbeltProfile(c)
+	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 	boundary := confine.BoundaryOf(&c)
 	if !boundary.Applied {
 		t.Fatal("package-execution confinement did not project an applied boundary")
@@ -69,7 +69,7 @@ func TestAgentPolicyFloorCoversEveryRegisteredRootWithReadableFilters(t *testing
 func TestBuildProfileRefusesFilterTheProfileReaderCannotRead(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	long := "/" + strings.Repeat("x", 1100)
-	_, err := confine.BuildProfile(confine.Confinement{Roots: []string{"/proj"}, ReadDenyPaths: []string{long}, Network: confine.NetworkDeny})
+	_, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}, ReadDenyPaths: []string{long}, Network: confine.NetworkDeny})
 	if err == nil || !strings.Contains(err.Error(), "profile reader") {
 		t.Fatalf("BuildProfile with a %d-byte filter = %v, want a profile reader refusal", len(long), err)
 	}
@@ -105,7 +105,7 @@ func TestAgentPolicySourceReleasePreservesCurrentFloor(t *testing.T) {
 	releaseOld()
 	releaseOld()
 	c := confine.Confinement{Roots: []string{t.TempDir()}, Network: confine.NetworkDeny}
-	_, err := confine.BuildProfile(c)
+	_, err := confine.BuildSeatbeltProfile(c)
 	testutil.FailErr(t, "build current floor", err)
 	path := filepath.Join(roots[1], "AGENTS.md")
 	if got := confine.BoundaryOf(&c).Filesystem.Verdict(confine.AccessWrite, path); got.Allowed || got.Layer != confine.FloorAgentPolicy {

@@ -1,0 +1,188 @@
+//go:build linux
+
+package linuxsandbox
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"os/signal"
+	"runtime"
+	"syscall"
+	"unsafe"
+
+	"golang.org/x/sys/unix"
+)
+
+// Relaunch runs the helper again as PID 1 of fresh user, mount, PID, and
+// network namespaces, hands it the plan over an inherited pipe and the lineage
+// marker when there is one, and relays signals and exit status until it ends.
+// The returned signal, when set, killed the inner helper and should end this
+// process the same way.
+func Relaunch(self string, args []string, plan []byte, marker *os.File) (code int, sig syscall.Signal, err error) {
+	// The parent-death signal is tied to the thread that forks.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	read, write, err := os.Pipe()
+	if err != nil {
+		return 0, 0, fmt.Errorf("plan pipe: %w", err)
+	}
+	cmd := exec.Command(self, args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	cmd.ExtraFiles = []*os.File{read}
+	if marker != nil {
+		cmd.ExtraFiles = append(cmd.ExtraFiles, marker)
+	}
+	cmd.SysProcAttr = namespaceAttr()
+	if err := cmd.Start(); err != nil {
+		_ = read.Close()
+		_ = write.Close()
+		return 0, 0, classifyLaunch(err)
+	}
+	_ = read.Close()
+	if marker != nil {
+		_ = marker.Close()
+	}
+	go func() {
+		defer func() { _ = write.Close() }()
+		_, _ = io.Copy(write, bytes.NewReader(plan))
+	}()
+	code, sig = relay(cmd.Process.Pid, cmd.Wait)
+	return code, sig, nil
+}
+
+// namespaceAttr creates the namespaces, maps this one uid and gid onto
+// themselves, keeps the capabilities the inner helper needs to build the
+// boundary, and ends the inner helper if this process dies.
+func namespaceAttr() *syscall.SysProcAttr {
+	return &syscall.SysProcAttr{
+		Cloneflags:                 unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWNET,
+		UidMappings:                []syscall.SysProcIDMap{{ContainerID: os.Getuid(), HostID: os.Getuid(), Size: 1}},
+		GidMappings:                []syscall.SysProcIDMap{{ContainerID: os.Getgid(), HostID: os.Getgid(), Size: 1}},
+		GidMappingsEnableSetgroups: false,
+		AmbientCaps:                []uintptr{unix.CAP_SYS_ADMIN, unix.CAP_NET_ADMIN, unix.CAP_SETPCAP},
+		Pdeathsig:                  syscall.SIGKILL,
+	}
+}
+
+// Supervise runs the target as this process's child and stays as the
+// sandbox's reaper: it forwards the host's signals, collects every process the
+// target leaves, and ends with the target's status. afterStart runs once the
+// target exists. The returned error is the raw exec failure, for the caller to
+// classify.
+func Supervise(path string, argv, env []string, afterStart func()) (code int, sig syscall.Signal, err error) {
+	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0); err != nil {
+		return 0, 0, fmt.Errorf("child subreaper: %w", err)
+	}
+	pid, err := syscall.ForkExec(path, argv, &syscall.ProcAttr{Env: env, Files: []uintptr{0, 1, 2}})
+	if err != nil {
+		return 0, 0, err
+	}
+	if afterStart != nil {
+		afterStart()
+	}
+	code, sig = relay(pid, func() error { return reapUntil(pid) })
+	return code, sig, nil
+}
+
+// reapUntil collects every exited child until the target itself is collected,
+// and returns its status as os/exec would report it.
+func reapUntil(target int) error {
+	for {
+		var status syscall.WaitStatus
+		pid, err := syscall.Wait4(-1, &status, 0, nil)
+		if err != nil {
+			if errors.Is(err, syscall.EINTR) {
+				continue
+			}
+			return fmt.Errorf("wait for target: %w", err)
+		}
+		if pid == target {
+			if status.Exited() && status.ExitStatus() == 0 {
+				return nil
+			}
+			return &exitStatusError{status: status}
+		}
+	}
+}
+
+// exitStatusError carries a wait status the way exec.ExitError does.
+type exitStatusError struct{ status syscall.WaitStatus }
+
+func (e *exitStatusError) Error() string { return "target exited" }
+func (e *exitStatusError) Sys() any      { return e.status }
+
+// relay forwards the host's signals to the child until wait returns, then maps
+// the child's status to an exit code and the signal that killed it.
+func relay(child int, wait func() error) (int, syscall.Signal) {
+	events := make(chan os.Signal, 8)
+	signal.Notify(events, forwardedSignals()...)
+	defer signal.Stop(events)
+	finished := make(chan error, 1)
+	go func() { finished <- wait() }()
+	for {
+		select {
+		case sig := <-events:
+			if s, ok := sig.(syscall.Signal); ok {
+				_ = syscall.Kill(child, s)
+			}
+		case err := <-finished:
+			return exitOf(err)
+		}
+	}
+}
+
+// forwardedSignals are the signals the host may send the helper for the
+// target. A terminal delivers its own signals to the whole foreground group,
+// so those are not forwarded again when the helper is attached to one.
+func forwardedSignals() []os.Signal {
+	signals := []os.Signal{syscall.SIGTERM, syscall.SIGHUP, syscall.SIGUSR1, syscall.SIGUSR2, syscall.SIGCONT, syscall.SIGALRM}
+	if !stdinIsTerminal() {
+		signals = append(signals, syscall.SIGINT, syscall.SIGQUIT, syscall.SIGTSTP)
+	}
+	return signals
+}
+
+func stdinIsTerminal() bool {
+	_, err := unix.IoctlGetTermios(0, unix.TCGETS)
+	return err == nil
+}
+
+// exitOf maps a wait result to the exit code and killing signal to mirror.
+func exitOf(err error) (int, syscall.Signal) {
+	if err == nil {
+		return 0, 0
+	}
+	var sys interface{ Sys() any }
+	if !errors.As(err, &sys) {
+		return 125, 0
+	}
+	status, ok := sys.Sys().(syscall.WaitStatus)
+	if !ok {
+		return 125, 0
+	}
+	if status.Signaled() {
+		return 128 + int(status.Signal()), status.Signal()
+	}
+	return status.ExitStatus(), 0
+}
+
+// ExitWithSignal ends this process by the signal that ended the child, so the
+// host sees the same wait status. It falls back to 128 plus the signal number.
+func ExitWithSignal(sig syscall.Signal) {
+	runtime.LockOSThread()
+	action := struct {
+		handler, flags, restorer uintptr
+		mask                     uint64
+	}{}
+	// Go exposes no SIG_DFL reset, and its own handler would exit 2 or print a
+	// traceback for signals such as SIGQUIT instead of dying by the signal.
+	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGACTION, uintptr(sig), uintptr(unsafe.Pointer(&action)), 0, 8, 0, 0) //nolint:gosec // G103 — zeroed kernel sigaction (SIG_DFL), 8-byte sigset
+	mask := uint64(1) << (uint(sig) - 1)
+	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGPROCMASK, unix.SIG_UNBLOCK, uintptr(unsafe.Pointer(&mask)), 0, 8, 0, 0) //nolint:gosec // G103 — 8-byte kernel sigset for one signal
+	_ = syscall.Kill(os.Getpid(), sig)
+	os.Exit(128 + int(sig))
+}

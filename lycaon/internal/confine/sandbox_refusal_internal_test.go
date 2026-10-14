@@ -215,7 +215,7 @@ func TestNetworkAndProcessRefusalsRouteToTheirCapability(t *testing.T) {
 func TestBoundProfileTagsEveryDenyRule(t *testing.T) {
 	_, project := projectRules(t)
 	c := Confinement{Roots: []string{project}, Network: NetworkDeny, refusalTag: testTag}
-	profile, err := BuildProfile(c)
+	profile, err := BuildSeatbeltProfile(c)
 	testutil.FailErr(t, "build tagged profile", err)
 	tag := `(with message "` + refusalTagPrefix + testTag + `")`
 	blocks := strings.Split(profile, "\n(")
@@ -234,7 +234,7 @@ func TestBoundProfileTagsEveryDenyRule(t *testing.T) {
 	}
 
 	c.refusalTag = ""
-	untagged, err := BuildProfile(c)
+	untagged, err := BuildSeatbeltProfile(c)
 	testutil.FailErr(t, "build untagged profile", err)
 	if strings.Contains(untagged, "with message") {
 		t.Fatalf("unbound profile carries a tag:\n%s", untagged)
