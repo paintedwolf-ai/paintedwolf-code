@@ -50,6 +50,9 @@ const (
 	RemedyEnableUserNamespaces Remedy = "enable_user_namespaces"
 	// RemedyUpgradeKernel asks for a kernel at the platform floor.
 	RemedyUpgradeKernel Remedy = "upgrade_kernel"
+	// RemedyAllowSupervision asks the administrator to let a process inspect
+	// its own descendants, which the supervisor does for every socket call.
+	RemedyAllowSupervision Remedy = "allow_descendant_inspection"
 )
 
 // Unavailability is one typed reason confinement cannot be applied.
@@ -73,6 +76,7 @@ const (
 	UnavailableNamespaces                = "namespaces_unchanged"
 	UnavailableMount                     = "mount_failed"
 	UnavailableHelper                    = "helper_failed"
+	UnavailableSupervisor                = "supervisor_unavailable"
 )
 
 func (u *Unavailability) Error() string {
