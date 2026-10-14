@@ -22,10 +22,10 @@ copy:
   why: The wrap-up gate only counts evidence from the declared command, so a substitute cannot produce the
     verdict this is reaching for — it produces a result shaped like one. A green substitute would read as verified
     when nothing the project recognizes has run.
-  fix: Call verify with no command to run `{{ paintedwolf.declared }}`.{% if paintedwolf.can_command %} For
+  fix: Call verify without a `command` argument to run `{{ paintedwolf.declared }}`.{% if paintedwolf.can_command %} For
     a narrower check while iterating, use the offered command tool; its result does not replace the project
     gate.{% endif %}
-  instead: Drop the command argument and let verify run `{{ paintedwolf.declared }}`
+  instead: Drop the `command` argument and let verify run `{{ paintedwolf.declared }}`
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
 x-paintedwolf-message: verify runs the declared command, not a substitute

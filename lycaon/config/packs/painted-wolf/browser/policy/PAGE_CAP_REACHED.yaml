@@ -22,7 +22,7 @@ copy:
   cause: Per-session page cap prevents unbounded held Chromium pages.
   why: Held pages keep cookies and CDP targets alive; the cap keeps memory bounded.
   fix: '{% if paintedwolf.can_page_close %}Use page_close only on a page whose state is no longer needed, then
-    retry the intended open.{% else %}The current surface offers no page_close; retain the pending open until
+    retry the intended open.{% else %}The current surface offers no tool to close a page; retain the pending open until
     capacity is available.{% endif %} Do not close an unrelated page merely to clear the limit.'
   instead: Preserve needed page state while resolving the capacity limit
 x-paintedwolf-category: recoverable

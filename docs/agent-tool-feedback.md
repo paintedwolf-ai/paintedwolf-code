@@ -89,6 +89,16 @@ A named **field** is reachable on the same terms as a named tool. In card copy, 
 
 An unreachable remedy is worse than none: the agent retries it, the schema refuses again, and the pair loops until the turn dies.
 
+Both `Fix` and `Instead` must respect the same current facts. A short summary
+cannot reintroduce a tool omitted by the detailed remedy. The production recovery
+catalog test varies every declared offered-tool dimension for intrinsic rejection
+scenarios, including absent request context, and checks both fields. Conflicting
+producer metadata must not change the frozen tool surface. These checks cover
+availability claims; permission, workflow, and evidence validity require their
+corresponding structured facts and contracts. An offered tool still crosses its
+normal admission checks. Advice about approval, workflow readiness, or evidence
+freshness must use those facts separately from schema availability.
+
 When a call names a tool whose schema is absent, the compiled tool plan determines
 recovery. A deferred tool with `request_tools` offered returns `TOOL_NOT_OFFERED`
 with `tool_loadable: true` and an exact `replacement_calls` entry that loads its
