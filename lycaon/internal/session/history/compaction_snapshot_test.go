@@ -2,14 +2,62 @@ package history
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func TestDelayedSynthesisPreservesNewerCoverage(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	for _, newerSummary := range []bool{false, true} {
+		t.Run(fmt.Sprint(newerSummary), func(t *testing.T) {
+			mem := store.NewMemory()
+			sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+			testutil.FailErr(t, "create session", err)
+			testutil.FailErr(t, "append sources", mem.AppendMessages(t.Context(), sess.ID,
+				api.Message{ID: "one", Role: api.MessageRoleTool, Content: "first observation"},
+				api.Message{ID: "two", Role: api.MessageRoleTool, Content: "second observation"}))
+			rows, err := mem.GetMessages(t.Context(), sess.ID)
+			testutil.FailErr(t, "read sources", err)
+			snapshot := store.CompactionView{CoveredThroughOrd: rows[0].Ord, CoveredThroughID: rows[0].ID, SourceSeq: rows[0].Seq}
+			record := &messageview.Continuation{Format: messageview.ContinuationFormat, ThroughOrd: rows[1].Ord, Window: 8192,
+				Sources: []messageview.ContinuationSource{{MessageID: "two", Ord: rows[1].Ord, Disposition: "reference"}}}
+			if newerSummary {
+				record.SummaryThroughOrd = rows[1].Ord
+				record.Summary.Facts = []string{"newer accepted clue"}
+			}
+			testutil.FailErr(t, "publish newer baseline", mem.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
+				Generation: 1, CoveredThroughOrd: rows[1].Ord, CoveredThroughID: rows[1].ID, SourceSeq: rows[1].Seq, Continuation: record,
+				Messages: []api.Message{{ID: "summary", Role: api.MessageRoleAssistant, ContentParts: []api.MessageContentPart{{Source: "compaction_summary"}}}},
+			}))
+			enriched := &messageview.Continuation{ThroughOrd: rows[0].Ord, SummaryThroughOrd: rows[0].Ord,
+				Summary: messageview.ContinuationSummary{Facts: []string{"delayed clue"}}}
+			history := &Service{store: mem}
+			testutil.FailErr(t, "publish delayed synthesis", history.publishSynthesis(t.Context(), compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
+			view, _, err := mem.GetCompactionView(t.Context(), sess.ID)
+			testutil.FailErr(t, "read enriched view", err)
+			if view.CoveredThroughOrd != rows[1].Ord || view.Continuation.Sources[0].MessageID != "two" {
+				t.Fatal("delayed synthesis replaced newer recovery coordinates")
+			}
+			want, generation := "delayed clue", 2
+			if newerSummary {
+				want, generation = "newer accepted clue", 1
+			}
+			if view.Generation != generation || view.Continuation.Summary.Facts[0] != want {
+				t.Fatalf("accepted summary = %+v, generation = %d", view.Continuation, view.Generation)
+			}
+		})
+	}
+}
 
 type compactionInterleavedStore struct {
 	Store
