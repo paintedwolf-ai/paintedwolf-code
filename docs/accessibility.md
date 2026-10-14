@@ -101,6 +101,8 @@ Settings → Display → Type says what the host adds: on a desktop that reports
 
 WebKitGTK exposes the document to AT-SPI when the a11y bus is enabled (`org.a11y.Bus` `IsEnabled`, which Orca turns on). Landmarks, dialogs with `aria-modal`, the conversation log, status regions, articles, and toolbars arrive with their roles, names, descriptions, and `container-live` attributes; Orca announces focus moves with role, name, and description, and Tab order follows the DOM. Known differences from macOS: the Linux window controls in the title bar are DOM buttons rather than native chrome, and Orca's browse mode reads the whole document; verification runs with Orca's `--debug-file` speech log against a GNOME session in a VM, not with VoiceOver.
 
+WebKitGTK raises no `text-changed:insert` event when a live region's non-editable content changes, and Orca presents live regions only from that event, so live-region updates are silent under Orca. The completed-turn announcement therefore goes through the host on Linux: the shell emits an ATK `notification` on the window (`den_announce`), which Orca speaks, and the transcript's announcement span stays empty so a WebKitGTK that later emits those events cannot make Orca read a turn twice. macOS keeps the live region as the only channel.
+
 ## Layout resilience rules
 
 At the maximum text-size category (or the harness inject) and the Tauri minimum window width of 720px:

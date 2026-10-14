@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { announceThroughHost } from "./host-announcement.ts";
+import { announceThroughHost, hostSpeaksAnnouncements } from "./host-announcement.ts";
 
 const invokeMock = vi.fn();
 const runtime = vi.hoisted(() => ({
@@ -20,6 +20,19 @@ afterEach(() => {
   invokeMock.mockReset();
   runtime.tauri = true;
   runtime.platform = "linux";
+});
+
+describe("hostSpeaksAnnouncements", () => {
+  it("is true only in the Linux desktop runtime", () => {
+    expect(hostSpeaksAnnouncements()).toBe(true);
+    runtime.platform = "macos";
+    expect(hostSpeaksAnnouncements()).toBe(false);
+    runtime.platform = "windows";
+    expect(hostSpeaksAnnouncements()).toBe(false);
+    runtime.platform = "linux";
+    runtime.tauri = false;
+    expect(hostSpeaksAnnouncements()).toBe(false);
+  });
 });
 
 describe("announceThroughHost", () => {
