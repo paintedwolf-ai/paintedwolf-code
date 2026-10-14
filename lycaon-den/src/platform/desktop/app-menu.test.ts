@@ -286,6 +286,27 @@ describe("attachAppMenuCommands", () => {
     stop();
   });
 
+  it("refuses an accelerator item whose projected chord has no binding behind it", async () => {
+    seedStockFrame();
+    buildAppMenuSpec.mockReturnValue([
+      {
+        menu: "help",
+        title: "Help",
+        groups: [[{
+          id: stockId("help-shortcuts"),
+          title: "Keyboard shortcuts",
+          accelerator: "CmdOrCtrl+/",
+          enabled: true,
+        }]],
+      },
+    ]);
+    await syncAppMenu(null);
+    const stop = attachAppMenuCommands(activate);
+    expect(activateAppMenuCommand(stockId("help-shortcuts"))).toBe(false);
+    expect(activate).not.toHaveBeenCalled();
+    stop();
+  });
+
   it("re-checks the declaration condition when an accelerator fires", async () => {
     seedStockFrame({ projectOpen: false });
     buildAppMenuSpec.mockReturnValue([
