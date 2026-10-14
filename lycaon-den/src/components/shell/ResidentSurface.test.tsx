@@ -9,6 +9,7 @@ import { ResidentSurface } from "./ResidentSurface.tsx";
 import { useResidentPresence } from "../../ui/resident-presence-context.tsx";
 import { useResidentLive } from "../../ui/resident-activity.ts";
 import { PreparedSurface } from "../primitives/PreparedSurface.tsx";
+import { focusRegionsVersion, isFocusRegionMounted, registerFocusRegion, releaseFocusRegion } from "../../shortcuts/focus-region.ts";
 
 function BootBody(props: {
   id: string;
@@ -91,6 +92,26 @@ describe("ResidentSurface", () => {
     flushPaint(2);
     expect(onReady).toHaveBeenCalledOnce();
     expect(screen.getAllByTestId("resident-surface").every((el) => el.dataset.presentation === "published")).toBe(true);
+  });
+
+  it("lets pending focus requests re-check a region once its surface becomes reachable", async () => {
+    const [presence, setPresence] = createSignal<"pending" | "active">("pending");
+    const claim = {};
+    render(() => (
+      <ResidentSurface surfaceKey="chat" presence={presence()}>
+        <textarea data-testid="composer" ref={(el) => registerFocusRegion("composer", el, claim)} />
+      </ResidentSurface>
+    ));
+    flushPaint();
+    await Promise.resolve();
+    expect(isFocusRegionMounted("composer")).toBe(false);
+    const before = focusRegionsVersion();
+    setPresence("active");
+    flushPaint();
+    await Promise.resolve();
+    expect(focusRegionsVersion()).toBeGreaterThan(before);
+    expect(isFocusRegionMounted("composer")).toBe(true);
+    releaseFocusRegion("composer", claim);
   });
 
   it("keeps idle surfaces mounted and inert", () => {

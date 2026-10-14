@@ -45,6 +45,18 @@ describe("applyTextScale", () => {
     );
   });
 
+  it("records the host category beside the scale it applies", async () => {
+    const { applyTextSizePayload, hostTextSizeCategory, LINUX_TEXT_SCALING_CATEGORY } =
+      await import("./accessibility-text-size.ts");
+    expect(hostTextSizeCategory()).toBe("default");
+    applyTextSizePayload({ category: LINUX_TEXT_SCALING_CATEGORY, textScale: 1, revision: 1 });
+    expect(hostTextSizeCategory()).toBe(LINUX_TEXT_SCALING_CATEGORY);
+    expect(document.documentElement.style.getPropertyValue("--den-text-scale")).toBe("1");
+    // An older snapshot never rewinds the category.
+    applyTextSizePayload({ category: "default", textScale: 1, revision: 0 });
+    expect(hostTextSizeCategory()).toBe(LINUX_TEXT_SCALING_CATEGORY);
+  });
+
   it("composes the product scale with the operating-system scale", async () => {
     const { applyProductTextScale, applyTextScale, effectiveTextScale } = await import(
       "./accessibility-text-size.ts"

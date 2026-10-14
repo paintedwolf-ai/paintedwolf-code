@@ -14,13 +14,18 @@ const row = (index: number, text = "source line\n"): ReaderSlot => ({ index, end
 function fixture(viewportInput?: (editor: ReaderEditor) => void) {
   const parent = document.createElement("div"); document.body.append(parent);
   const selection = vi.fn(async () => "selected source"), content = vi.fn(async () => "full source");
-  const editor = new ReaderEditor({ parent, surface: "reader", prefs: editorDisplayPrefs(), access: () => ({ selection, content }),
+  const editor = new ReaderEditor({ parent, surface: "reader", label: "Contents of src/a.ts", prefs: editorDisplayPrefs(), access: () => ({ selection, content }),
     load: vi.fn(), error: vi.fn(), fullSide: () => "after", changes: () => false,
     facts: vi.fn(), hideFacts: vi.fn(), viewportInput });
   cleanup.push(() => { editor.destroy(); parent.remove(); });
   const copy = () => editor.view.contentDOM.dispatchEvent(new Event("copy", { bubbles: true, cancelable: true }));
   return { editor, selection, copy };
 }
+
+it("names its text area for assistive technology", () => {
+  const { editor } = fixture();
+  expect(editor.view.contentDOM.getAttribute("aria-label")).toBe("Contents of src/a.ts");
+});
 
 it.each([false, true])("keeps exact source selection through eviction and reload (reversed=%s)", reversed => {
   const { editor, selection, copy } = fixture();

@@ -2,8 +2,8 @@
   border: 1px solid color-mix(in srgb, var(--den-line) 70%, transparent);
   border-radius: var(--den-radius);
   background: var(--den-surface);
-  &:not([open]) > .den-network-chicklet-body,
-  &:not([open]) > .den-network-chicklet-hosts {
+  &:not([data-expanded="true"]) > .den-network-chicklet-body,
+  &:not([data-expanded="true"]) > .den-network-chicklet-hosts {
     display: none;
   }
 }
@@ -48,10 +48,6 @@
   cursor: pointer;
   color: var(--den-text-muted);
   font-size: var(--text-den-hint);
-  list-style: none;
-  &::-webkit-details-marker {
-    display: none;
-  }
 }
 
 @utility den-network-chicklet-icon {

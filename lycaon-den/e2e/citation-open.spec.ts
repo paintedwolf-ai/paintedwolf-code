@@ -71,12 +71,14 @@ webE2e.describe("citation source opens in-app", () => {
     async ({ page, request }) => {
       await openMockedChat(page, request, "I found the relevant code.");
 
-      const chicklet = page.getByTestId("citation-evidence-chicklet");
+      // Geometry is measured once the row has landed in the transcript, not while it is still arriving.
+      const chicklet = page.locator(".den-chat-transcript-visual").getByTestId("citation-evidence-chicklet");
       await expect(chicklet).toBeVisible({ timeout: 30_000 });
-      const summary = chicklet.locator("summary");
+      const summary = chicklet.locator(".den-transcript-disclosure-header");
+      await expect(summary.locator(".den-tool-chicklet-caret")).toBeAttached();
       const geometry = await chicklet.evaluate((element) => {
         const stream = element.closest(".den-chat-transcript-visual")!;
-        const header = element.querySelector("summary")!;
+        const header = element.querySelector(".den-transcript-disclosure-header")!;
         const row = header.firstElementChild!;
         const caret = header.querySelector(".den-tool-chicklet-caret")!;
         return {

@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { GotoLineBar } from "./GotoLineBar.tsx";
+import { GOTO_LINE_BAR_ID } from "./command-bar-disclosure.ts";
 import {
   gotoLineController,
   openGotoLine,
@@ -30,6 +31,7 @@ describe("GotoLineBar", () => {
     const input = screen.getByTestId("goto-line-input");
     const submit = screen.getByTestId("goto-line-submit");
     expect(bar.classList.contains("den-editor-command-bar")).toBe(true);
+    expect(bar.id).toBe(GOTO_LINE_BAR_ID);
     expect(bar.querySelector("form")).toBeNull();
     expect(submit.getAttribute("type")).toBe("button");
 

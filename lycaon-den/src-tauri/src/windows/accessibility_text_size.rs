@@ -62,13 +62,18 @@ pub fn accessibility_preferred_text_size() -> TextSizePayload {
     {
         current_payload()
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        super::linux_desktop_settings::portal::current_text_size_payload()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         payload_for_category("default")
     }
 }
 
-/// Registers text-size observers.
+/// Registers text-size observers; the Linux portal watch is registered by
+/// `system_appearance::setup`.
 pub fn setup(app: AppHandle) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {

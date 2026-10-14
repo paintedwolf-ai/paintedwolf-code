@@ -5,11 +5,31 @@ import {
   type DenAppearancePrefs,
   type ProductTextScale,
 } from "../../../shared/app-state-types.ts";
-import { applyProductTextScale } from "../../platform/desktop/accessibility-text-size.ts";
+import {
+  LINUX_TEXT_SCALING_CATEGORY,
+  applyProductTextScale,
+} from "../../platform/desktop/accessibility-text-size.ts";
+import type { TauriPlatform } from "../../platform/runtime.ts";
 import { getAppStateSnapshot } from "../../store/app-state-snapshot.ts";
 import { patchAppearancePrefs } from "./appearance-state.ts";
 
 export const DEFAULT_PRODUCT_TEXT_SCALE: ProductTextScale = 1;
+
+/** Settings copy stating what the host adds to this reading-size choice. */
+export function textSizeHint(
+  platform: TauriPlatform | null,
+  hostCategory: string,
+): string {
+  if (platform === "macos") {
+    return "Adjusts the app's reading size in addition to your Mac's accessibility text size.";
+  }
+  if (platform === "linux") {
+    return hostCategory === LINUX_TEXT_SCALING_CATEGORY
+      ? "Adjusts the app's reading size in addition to your desktop's text scaling, which the window already applies."
+      : "Adjusts the app's reading size. This desktop reports no text scaling preference, so this is the only text size control.";
+  }
+  return "Adjusts the app's reading size.";
+}
 
 const [selection, setSelection] = createSignal<ProductTextScale>(
   DEFAULT_PRODUCT_TEXT_SCALE,

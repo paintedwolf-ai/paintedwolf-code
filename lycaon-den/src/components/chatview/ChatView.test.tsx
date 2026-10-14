@@ -14,6 +14,7 @@ import { wireProject } from "../../api/mocks/project-fixture.ts";
 import { setLycaonClientForTest } from "../../platform/connection/app-connection.ts";
 import { stubClient, type ClientStubs } from "../../test/client-fixture.ts";
 import { toolApprovalFixture } from "../../chat/checkpoint/approval-test-fixtures.ts";
+import type { PendingCheckpoint } from "../../chat/checkpoint/checkpoint-model.ts";
 import { noticeActions, resetNoticeActionSinksForTest } from "../../notices/notice-actions.ts";
 import { applyTurnOutcome, resetTurnOutcomesForTests } from "../../chat/recovery/turn-outcome.ts";
 import { focusRegion } from "../../shortcuts/focus-region.ts";
@@ -190,6 +191,30 @@ describe("ChatView composer", () => {
       guidance: "Use the scratch directory instead",
     }));
     expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("returns focus to the composer when the approval card it resolved leaves", async () => {
+    if (!("inert" in HTMLElement.prototype)) {
+      // Browsers reflect Solid's `inert` property to the attribute; jsdom does not.
+      Object.defineProperty(HTMLElement.prototype, "inert", { configurable: true,
+        get(this: HTMLElement) { return this.hasAttribute("inert"); },
+        set(this: HTMLElement, value: boolean) { this.toggleAttribute("inert", value); } });
+      onTestFinished(() => { delete (HTMLElement.prototype as unknown as Record<string, unknown>).inert; });
+    }
+    const resolveCheckpoint = vi.fn(async () => undefined);
+    const { appStore, composer } = mountChat({ client: { resolveCheckpoint } });
+    const setPending = (checkpoints: PendingCheckpoint[]) => appStore.actions.setPendingCheckpoints(
+      SESSION, appStore.state.sessionViewEpoch, appStore.state.checkpointEventEpoch, checkpoints);
+    setPending([{
+      checkpointId: "cp-1", sessionId: SESSION, kind: "tool_approval", status: "pending", issuedAt: "t",
+      tool_approval: toolApprovalFixture({ tool: "request_tools", title: "Approve request_tools", command: "mkdir" }),
+    }]);
+    const no = await screen.findByTestId("approval-no");
+    no.focus();
+    fireEvent.click(no);
+    await waitFor(() => expect(resolveCheckpoint).toHaveBeenCalled());
+    setPending([]);
+    await waitFor(() => expect(document.activeElement).toBe(composer()));
   });
 
   it("answers a pending workflow question from the composer", async () => {

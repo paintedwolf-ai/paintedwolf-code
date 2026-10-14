@@ -1,6 +1,7 @@
 import { createSignal } from "solid-js";
 import { render } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
+
 import type { Message } from "../../api/types.ts";
 import type { ChatSpanBlock } from "../../chat/workflow/workflow-spans.ts";
 import type { RawTranscriptItem } from "../../chat/transcript/projection/transcript-item-model.ts";
@@ -90,5 +91,23 @@ describe("ChatSpanBlocks live log", () => {
     expect(getByTestId("transcript-live-announcement").textContent).toBe(
       "Assistant: Complete answer",
     );
+  });
+
+  it("keeps an inactive surface's log silent", () => {
+    const [active, setActive] = createSignal(false);
+    const { getByTestId } = render(() => (
+      <ChatSpanBlocks
+        blocks={blocks([user("u1", "Hi")])}
+        messages={[user("u1", "Hi")]}
+        sessionId="s1"
+        workers={[]}
+        visibleTurnActive={false}
+        surfaceActive={active}
+      />
+    ));
+    const log = getByTestId("conversation-log");
+    expect(log.getAttribute("aria-live")).toBe("off");
+    setActive(true);
+    expect(log.getAttribute("aria-live")).toBe("polite");
   });
 });

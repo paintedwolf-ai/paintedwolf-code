@@ -1,3 +1,4 @@
+import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render } from "@solidjs/testing-library";
@@ -53,7 +54,7 @@ describe("CheckpointDecisionChicklet", () => {
       <CheckpointDecisionChicklet meta={meta} entryKey="checkpoint:a" />
     ));
     const el = getByTestId("checkpoint-decision-chicklet");
-    expect(el.tagName).toBe("DETAILS");
+    expect(el.hasAttribute("data-transcript-disclosure")).toBe(true);
     expect(el.getAttribute("data-status")).toBe("approved");
     expect(el.getAttribute("data-kind")).toBe("tool_approval");
     expect(el.textContent).toContain("Allowed");
@@ -130,7 +131,14 @@ describe("CheckpointDecisionChicklet", () => {
       expect(listApprovalGrants).toHaveBeenCalledTimes(1);
       expect(getByTestId("checkpoint-decision-revoke")).toBeTruthy();
     });
-    fireEvent.click(getByTestId("checkpoint-decision-revoke"));
+    const card = getByTestId("checkpoint-decision-chicklet");
+    const revoke = getByTestId("checkpoint-decision-revoke");
+    // Revoke sits beside the disclosure toggle in the header row, never inside it.
+    expect(revoke.closest(".den-transcript-disclosure-toggle")).toBeNull();
+    expect(revoke.parentElement).toBe(disclosureToggle(card).parentElement);
+    expect(disclosureToggle(card).getAttribute("aria-controls")).toBe(getByTestId("checkpoint-decision-body").id);
+    fireEvent.click(revoke);
+    expect(isDisclosureOpen(card)).toBe(false);
     await vi.waitFor(() => {
       expect(revokeApprovalGrants).toHaveBeenCalledWith({
         ids: [grantId, secondGrantId],
@@ -180,10 +188,10 @@ describe("CheckpointDecisionChicklet", () => {
     const { getByTestId } = render(() => (
       <CheckpointDecisionChicklet meta={meta} entryKey="checkpoint:b" />
     ));
-    const el = getByTestId("checkpoint-decision-chicklet") as HTMLDetailsElement;
-    expect(el.open).toBe(false);
-    fireEvent.click(el.querySelector("summary")!);
-    expect(el.open).toBe(true);
+    const el = getByTestId("checkpoint-decision-chicklet") as HTMLElement;
+    expect(isDisclosureOpen(el)).toBe(false);
+    fireEvent.click(disclosureToggle(el));
+    expect(isDisclosureOpen(el)).toBe(true);
     fireEvent.click(getByTestId("checkpoint-decision-body").querySelector("button")!);
     expect(decisionText()).toContain("rm -rf /very/long/path/that/would/truncate");
     expect(getByTestId("checkpoint-decision-body").querySelector("pre")).toBeNull();
@@ -204,7 +212,7 @@ describe("CheckpointDecisionChicklet", () => {
         entryKey="checkpoint:guidance"
       />
     ));
-    fireEvent.click(getByTestId("checkpoint-decision-chicklet").querySelector("summary")!);
+    fireEvent.click(disclosureToggle(getByTestId("checkpoint-decision-chicklet")));
     fireEvent.click(getByTestId("checkpoint-decision-body").querySelector("button")!);
     expect(decisionText()).toContain("Direction sent");
     expect(decisionText()).toContain("Keep the file");
@@ -241,10 +249,10 @@ describe("CheckpointDecisionChicklet", () => {
     const { getByTestId } = render(() => (
       <CheckpointDecisionChicklet meta={meta} entryKey="checkpoint:facts" />
     ));
-    const el = getByTestId("checkpoint-decision-chicklet") as HTMLDetailsElement;
-    expect(el.tagName).toBe("DETAILS");
-    fireEvent.click(el.querySelector("summary")!);
-    expect(el.open).toBe(true);
+    const el = getByTestId("checkpoint-decision-chicklet") as HTMLElement;
+    expect(el.hasAttribute("data-transcript-disclosure")).toBe(true);
+    fireEvent.click(disclosureToggle(el));
+    expect(isDisclosureOpen(el)).toBe(true);
 
     const body = getByTestId("checkpoint-decision-body");
     expect(body.querySelector(".den-tool-part-card-facts")).toBeTruthy();
@@ -271,7 +279,7 @@ describe("CheckpointDecisionChicklet", () => {
         entryKey="checkpoint:pending"
       />
     ));
-    const el = getByTestId("checkpoint-decision-chicklet") as HTMLDetailsElement;
+    const el = getByTestId("checkpoint-decision-chicklet") as HTMLElement;
     expect(el.getAttribute("data-status")).toBe("pending");
     expect(el.textContent).toContain("Needs approval");
     expect(container.querySelector(".den-decision")?.getAttribute("data-tone")).toBe("pending");
@@ -282,8 +290,8 @@ describe("CheckpointDecisionChicklet", () => {
     expect(openMarker?.getAttribute("data-checkpoint-id")).toBe("chk-pending");
 
     // Expand chicklet and click review in composer
-    fireEvent.click(el.querySelector("summary")!);
-    expect(el.open).toBe(true);
+    fireEvent.click(disclosureToggle(el));
+    expect(isDisclosureOpen(el)).toBe(true);
 
     const reviewBtn = getByTestId("checkpoint-decision-review-dock");
     expect(reviewBtn).toBeTruthy();

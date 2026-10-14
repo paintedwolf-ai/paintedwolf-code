@@ -1,6 +1,7 @@
 import { createContext, createSignal, useContext, type Accessor } from "solid-js";
 import { useTranscriptViewport } from "../stream/transcript-viewport.tsx";
 import { animateDisclosureHeight } from "../transcript/presentation/transcript-disclosure.tsx";
+import { isTranscriptDisclosureOpen } from "../transcript/presentation/transcript-disclosure-shell.ts";
 import { createRowAccordion } from "../transcript/presentation/row-accordion.ts";
 import type { RowAccordion } from "../transcript/presentation/row-accordion.ts";
 import type { TranscriptDisclosureKey } from "../transcript/presentation/transcript-disclosure-key.ts";
@@ -8,8 +9,8 @@ import type { TranscriptDisclosureKey } from "../transcript/presentation/transcr
 export interface ActivitySpanRowHandle {
   key: string;
   disclosureKey: TranscriptDisclosureKey;
-  details: () => HTMLDetailsElement | null;
-  summary: () => HTMLElement | null;
+  shell: () => HTMLElement | null;
+  header: () => HTMLElement | null;
   applyOpen: (next: boolean) => void;
 }
 
@@ -38,17 +39,20 @@ export function createActivitySpanAccordion(): ActivitySpanAccordion {
       accordion.register({
         key: handle.key,
         // Incomplete handles stay outside accordion motion.
-        el: () => (handle.summary() ? handle.details() : null),
-        domOpen: () => handle.details()?.open ?? false,
+        el: () => (handle.header() ? handle.shell() : null),
+        domOpen: () => {
+          const shell = handle.shell();
+          return shell ? isTranscriptDisclosureOpen(shell) : false;
+        },
         apply: (next) => {
-          const details = handle.details();
-          const summary = handle.summary();
-          if (!details || !summary) return;
+          const shell = handle.shell();
+          const header = handle.header();
+          if (!shell || !header) return;
           const direction = next ? "open" : "close";
           const finishMotion = viewport?.beginDisclosureMotion(handle.disclosureKey, direction);
           animateDisclosureHeight(
-            details,
-            summary,
+            shell,
+            header,
             handle.applyOpen,
             {
               direction,

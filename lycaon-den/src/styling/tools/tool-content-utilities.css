@@ -5,19 +5,19 @@
   box-shadow: inset 0 0 0 1px var(--den-line);
   overflow: visible;
   min-width: 0;
-  &[open] > summary {
+  &[data-expanded="true"] > .den-transcript-disclosure-header {
     width: 100%;
     padding: 0;
     border-bottom: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
   }
-  &[open] .den-tool-part-title {
+  &[data-expanded="true"] .den-tool-part-title {
     max-width: none;
     white-space: normal;
   }
-  &[open] .den-tool-part-progress-state {
+  &[data-expanded="true"] .den-tool-part-progress-state {
     white-space: nowrap;
   }
-  &[open] > .den-tool-part-body {
+  &[data-expanded="true"] > .den-tool-part-body {
     padding-top: 8px;
   }
 }
@@ -265,7 +265,7 @@ display: flex;
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  /* The summary's disclosure seam sits below the chicklet. */
+  /* The header's disclosure seam sits below the chicklet. */
   min-height: calc(var(--den-transcript-card-row-h) - 1px);
   padding: 7px var(--den-transcript-card-inset-x);
   border-radius: 0;

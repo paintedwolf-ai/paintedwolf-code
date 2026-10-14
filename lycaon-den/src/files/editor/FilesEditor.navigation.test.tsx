@@ -117,7 +117,9 @@ describe("FilesEditor", () => {
         onRevealSegment={vi.fn()}
       />
     ));
-    fireEvent.click(screen.getByTestId("files-info-copy-toolbar"));
+    const copy = screen.getByTestId("files-info-copy-toolbar");
+    expect(copy.hasAttribute("aria-haspopup")).toBe(false);
+    fireEvent.click(copy);
     expect(copyTextToClipboard).toHaveBeenCalledWith(
       "/checkouts/chat/big.bin",
     );

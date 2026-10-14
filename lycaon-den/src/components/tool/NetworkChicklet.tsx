@@ -6,7 +6,12 @@ import {
   type ExternalAccessView,
 } from "../../chat/tool/external-access-presentation.ts";
 import { useNetworkActions } from "../../chat/network-action-context.ts";
-import { useTranscriptDisclosure } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
+import {
+  TranscriptDisclosurePanel,
+  TranscriptDisclosureShell,
+  TranscriptDisclosureToggle,
+  useTranscriptDisclosure,
+} from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import type { TranscriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
 import { formatSentenceCase } from "../../format/format-sentence-case.ts";
 
@@ -17,9 +22,7 @@ export function NetworkChicklet(props: {
 }) {
   const actions = useNetworkActions();
   const [blocking, setBlocking] = createSignal<string | null>(null);
-  const { key: disclosureKey, open, onToggle, onSummaryClick } = useTranscriptDisclosure(
-    () => props.disclosureKey,
-  );
+  const disclosure = useTranscriptDisclosure(() => props.disclosureKey);
 
   const view = createMemo((): ExternalAccessView | null =>
     buildExternalAccessView({
@@ -44,17 +47,15 @@ export function NetworkChicklet(props: {
     <Show when={view()} keyed>
       {(v) => (
         <Show when={v.mustShow}>
-          <details
+          <TranscriptDisclosureShell
+            disclosure={disclosure}
             class="den-network-chicklet den-transcript-disclosure-card"
             data-testid="network-chicklet"
             data-visibility={v.visibilitySummary}
-            data-disclosure-key={disclosureKey}
-            open={open()}
-            onToggle={onToggle}
           >
-            <summary
+            <TranscriptDisclosureToggle
+              disclosure={disclosure}
               class="den-network-chicklet-summary"
-              onClick={onSummaryClick}
               aria-label={`${EXTERNAL_ACCESS_LABEL}: ${v.summary}. ${v.visibilityAnnouncement}`}
             >
               <span class="den-network-chicklet-icon" aria-hidden="true">
@@ -63,8 +64,8 @@ export function NetworkChicklet(props: {
               <span class="den-network-chicklet-label">{EXTERNAL_ACCESS_LABEL}</span>
               <span class="den-network-chicklet-count">{v.summary}</span>
               <span class="den-tool-chicklet-caret" aria-hidden="true" />
-            </summary>
-            <div class="den-network-chicklet-body">
+            </TranscriptDisclosureToggle>
+            <TranscriptDisclosurePanel disclosure={disclosure} class="den-network-chicklet-body">
               <p
                 class="den-network-chicklet-sr-only"
                 data-testid="external-access-visibility"
@@ -201,8 +202,8 @@ export function NetworkChicklet(props: {
                   </ul>
                 </div>
               </Show>
-            </div>
-          </details>
+            </TranscriptDisclosurePanel>
+          </TranscriptDisclosureShell>
         </Show>
       )}
     </Show>

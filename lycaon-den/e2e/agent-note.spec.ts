@@ -153,7 +153,7 @@ webE2e.describe("agent mid-turn note", () => {
         noteArticle.getByTestId("citation-evidence-chicklet"),
       ).toBeVisible();
 
-      await stream.getByTestId("activity-span-card").locator(":scope > summary").click();
+      await stream.getByTestId("activity-span-card").locator(":scope > .den-transcript-disclosure-header").click();
       const toolCard = stream.getByTestId("tool-part-card").first();
       await expect(toolCard).toBeVisible();
       const order = await page.evaluate(() => {

@@ -32,12 +32,16 @@ import {
 import { installMainThreadPerfObserver } from "./chat/stream/den-main-thread-perf.ts";
 import { setupAccessibilityTextSize } from "./platform/desktop/accessibility-text-size.ts";
 import { setupSystemAppearance } from "./platform/desktop/system-appearance.ts";
+import { setupLiveRegionBridge } from "./platform/desktop/live-region-bridge.ts";
 import { setupWheelGlideDiagnostics } from "./platform/scrolling/wheel-glide-diagnostics.ts";
 import { setupScrollActivity } from "./platform/scrolling/scroll-activity.ts";
 import { TooltipHost } from "./components/primitives/TooltipHost.tsx";
 import { HelpMenuHost } from "./help/HelpMenuHost.tsx";
+import { Announcer } from "./platform/interaction/announcer.tsx";
 
 installTranscriptSpacing(document.documentElement);
+// Installed before render so every live region is silenced as it mounts.
+setupLiveRegionBridge();
 syncOsColorScheme();
 tagTauriPlatformClasses();
 // Reveal after platform geometry is tagged; the host timer handles stalled boot.
@@ -68,6 +72,7 @@ try {
         <App />
         <TooltipHost />
         <HelpMenuHost />
+        <Announcer />
       </>
     ),
     root,

@@ -8,6 +8,8 @@ export type FocusTrapOptions = {
   onEscape?: () => void;
   /** Focus target after deactivation. */
   returnFocus?: HTMLElement | null;
+  /** Runs when restoring focus leaves it on the document or inside the closed surface. */
+  fallbackFocus?: () => void;
   /** Preferred initial focus target. */
   initialFocus?: HTMLElement | null;
   /** Moves focus on activation unless false. */
@@ -145,11 +147,13 @@ export function activateFocusTrap(
       active = false;
       container.removeEventListener("keydown", onKeyDown);
       releaseInert();
-      if (
-        deactivateOptions.restoreFocus !== false &&
-        previouslyFocused?.isConnected
-      ) {
+      if (deactivateOptions.restoreFocus === false) return;
+      if (previouslyFocused?.isConnected) {
         previouslyFocused.focus({ preventScroll: true });
+      }
+      const landed = document.activeElement;
+      if (!landed || landed === document.body || container.contains(landed)) {
+        options.fallbackFocus?.();
       }
     },
   };

@@ -9,6 +9,7 @@ import {
 } from "../presentation/transcript-disclosure-key.ts";
 import { ACTIVITY_SPAN_ENTRY_ESTIMATE_PX } from "../presentation/transcript-row-presentation.ts";
 import type { TranscriptItem } from "./transcript-item-model.ts";
+import { isTranscriptDisclosureOpen, isTranscriptDisclosureShell } from "../presentation/transcript-disclosure-shell.ts";
 
 export type TranscriptSpanState = {
   entryToSpanKey: ReadonlyMap<string, string>;
@@ -235,8 +236,8 @@ export function visibleTranscriptToolTarget(
   if (!command) return null;
   let target = command;
   for (let parent = command.parentElement; parent && parent !== root; parent = parent.parentElement) {
-    if (parent instanceof HTMLDetailsElement && (
-      !parent.open || parent.hasAttribute("data-closing") || parent.dataset.animating === "true"
+    if (isTranscriptDisclosureShell(parent) && (
+      !isTranscriptDisclosureOpen(parent) || parent.hasAttribute("data-closing") || parent.dataset.animating === "true"
     )) target = parent;
   }
   return target;

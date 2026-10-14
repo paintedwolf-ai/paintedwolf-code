@@ -727,17 +727,17 @@ webE2e.describe("transcript scale den", () => {
       await expect(activity).toBeVisible({ timeout: 30_000 });
       await wheelStreamUp(page);
       await settleTranscriptLayout(page);
-      if (!await activity.evaluate((el) => el.hasAttribute("open"))) {
-        await activity.locator(":scope > summary").click();
+      if (!await activity.evaluate((el) => el.getAttribute("data-expanded") === "true")) {
+        await activity.locator(":scope > .den-transcript-disclosure-header").click();
       }
-      await expect(activity).toHaveAttribute("open", "");
+      await expect(activity).toHaveAttribute("data-expanded", "true");
       await expect(activity).not.toHaveAttribute("data-animating");
-      const nestedTool = activity.locator("details.den-tool-part").first();
+      const nestedTool = activity.locator(".den-tool-part[data-transcript-disclosure]").first();
       await expect(nestedTool).toBeVisible();
-      if (!await nestedTool.evaluate((el) => el.hasAttribute("open"))) {
-        await nestedTool.locator(":scope > summary").click();
+      if (!await nestedTool.evaluate((el) => el.getAttribute("data-expanded") === "true")) {
+        await nestedTool.locator(":scope > .den-transcript-disclosure-header").click();
       }
-      await expect(nestedTool).toHaveAttribute("open", "");
+      await expect(nestedTool).toHaveAttribute("data-expanded", "true");
       await expect(nestedTool).not.toHaveAttribute("data-animating");
 
       await page.evaluate(() => {
@@ -753,7 +753,7 @@ webE2e.describe("transcript scale den", () => {
       });
       await settleTranscriptLayout(page);
       const expandedOffset = (await transcriptScrollSample(page)).scrollTop;
-      await nestedTool.locator(":scope > summary").evaluate((summary) => {
+      await nestedTool.locator(":scope > .den-transcript-disclosure-header").evaluate((summary) => {
         (summary as HTMLElement).click();
       });
       await settleTranscriptLayout(page);
@@ -761,9 +761,9 @@ webE2e.describe("transcript scale den", () => {
         expandedOffset,
         0,
       );
-      await expect(nestedTool).not.toHaveAttribute("open", "");
+      await expect(nestedTool).not.toHaveAttribute("data-expanded", "true");
 
-      await nestedTool.locator(":scope > summary").evaluate((summary) => {
+      await nestedTool.locator(":scope > .den-transcript-disclosure-header").evaluate((summary) => {
         (summary as HTMLElement).click();
       });
       await settleTranscriptLayout(page);
@@ -771,7 +771,7 @@ webE2e.describe("transcript scale den", () => {
         expandedOffset,
         0,
       );
-      await expect(nestedTool).toHaveAttribute("open", "");
+      await expect(nestedTool).toHaveAttribute("data-expanded", "true");
 
       const viewport = page
         .locator(".den-resident-surface:not([data-resident=idle]) .den-shell-stage--chat .den-chat-stream")
@@ -781,7 +781,7 @@ webE2e.describe("transcript scale den", () => {
       for (let index = 0; index < 40; index += 1) {
         await page.mouse.wheel(0, 120);
         if (index === 10 || index === 22) {
-          await nestedTool.locator(":scope > summary").evaluate((summary) => {
+          await nestedTool.locator(":scope > .den-transcript-disclosure-header").evaluate((summary) => {
             (summary as HTMLElement).click();
           });
         }
@@ -796,8 +796,8 @@ webE2e.describe("transcript scale den", () => {
         JSON.stringify(samples),
       ).toBeNull();
       expect(await transcriptBottomBoundaryStatus(page)).toBe("aligned");
-      expect(await nestedTool).toHaveAttribute("open", "");
-      expect(await activity).toHaveAttribute("open", "");
+      expect(await nestedTool).toHaveAttribute("data-expanded", "true");
+      expect(await activity).toHaveAttribute("data-expanded", "true");
     },
   );
 

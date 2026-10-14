@@ -1,3 +1,4 @@
+import { isDisclosureOpen } from "../test/transcript-disclosure-fixture.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal, type JSX } from "solid-js";
@@ -63,14 +64,14 @@ describe("tool body find + collapsed reveal", () => {
     ));
 
     const card = await screen.findByTestId("tool-part-card");
-    expect((card as HTMLDetailsElement).open).toBe(false);
+    expect(isDisclosureOpen(card)).toBe(false);
     card.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
 
     openFind();
     setFindQuery("TOOL_BODY_FIND_NEEDLE");
     expect(findController.matches().length).toBeGreaterThanOrEqual(1);
     expect(findController.collapsedCount()).toBeGreaterThanOrEqual(1);
-    expect((card as HTMLDetailsElement).open).toBe(false);
+    expect(isDisclosureOpen(card)).toBe(false);
   });
 
   it("expands on first next, restores on close", async () => {
@@ -82,21 +83,21 @@ describe("tool body find + collapsed reveal", () => {
 
     const card = (await screen.findByTestId(
       "tool-part-card",
-    )) as HTMLDetailsElement;
+    )) as HTMLElement;
     card.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     openFind();
     setFindQuery("TOOL_BODY_FIND_NEEDLE");
     expect(findController.collapsedCount()).toBeGreaterThanOrEqual(1);
 
     findNext();
-    expect(card.open).toBe(true);
+    expect(isDisclosureOpen(card)).toBe(true);
     expect(findController.collapsedCount()).toBe(0);
     expect(
       document.querySelectorAll(`span[${FIND_MARK_ATTR}="1"]`).length,
     ).toBeGreaterThanOrEqual(1);
 
     closeFind();
-    expect(card.open).toBe(false);
+    expect(isDisclosureOpen(card)).toBe(false);
   });
 
   it("drills a collapsed activity span and nested disclosure through temporary leases", async () => {
@@ -148,29 +149,29 @@ describe("tool body find + collapsed reveal", () => {
 
     const span = (await screen.findByTestId(
       "activity-span-card",
-    )) as HTMLDetailsElement;
+    )) as HTMLElement;
     const cards = (await screen.findAllByTestId(
       "tool-part-card",
-    )) as HTMLDetailsElement[];
-    expect(span.open).toBe(false);
-    expect(cards.every((c) => !c.open)).toBe(true);
+    )) as HTMLElement[];
+    expect(isDisclosureOpen(span)).toBe(false);
+    expect(cards.every((c) => !isDisclosureOpen(c))).toBe(true);
 
     openFind();
     setFindQuery("GROUP_NESTED_FIND_NEEDLE");
     expect(findController.collapsedCount()).toBeGreaterThanOrEqual(1);
-    expect(span.open).toBe(false);
+    expect(isDisclosureOpen(span)).toBe(false);
 
     findNext();
-    expect(span.open).toBe(true);
+    expect(isDisclosureOpen(span)).toBe(true);
     const nested = cards.find(
       (c) => c.getAttribute("data-tool-call-id") === "r2",
     );
-    expect(nested?.open).toBe(true);
+    expect(isDisclosureOpen(nested)).toBe(true);
     expect(findController.collapsedCount()).toBe(0);
 
     closeFind();
-    expect(span.open).toBe(false);
-    expect(nested?.open).toBe(false);
+    expect(isDisclosureOpen(span)).toBe(false);
+    expect(isDisclosureOpen(nested)).toBe(false);
   });
 
   it("opens linked inline output from a collapsed production tool card", async () => {

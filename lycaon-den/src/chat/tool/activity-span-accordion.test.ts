@@ -4,23 +4,32 @@ import { createActivitySpanAccordion } from "./activity-span-accordion.ts";
 import type { ActivitySpanRowHandle } from "./activity-span-accordion.ts";
 import { transcriptDisclosureKey } from "../transcript/presentation/transcript-disclosure-key.ts";
 
+function setOpen(shell: HTMLElement, open: boolean): void {
+  shell.setAttribute("data-expanded", String(open));
+}
+
+function isOpen(shell: HTMLElement): boolean {
+  return shell.getAttribute("data-expanded") === "true";
+}
+
 function fakeRow(key: string, domOpen = false) {
-  const details = document.createElement("details");
-  const summary = document.createElement("summary");
-  details.append(summary, document.createElement("div"));
-  details.open = domOpen;
+  const shell = document.createElement("div");
+  shell.setAttribute("data-transcript-disclosure", "");
+  const header = document.createElement("button");
+  shell.append(header, document.createElement("div"));
+  setOpen(shell, domOpen);
   const committed: boolean[] = [];
   const handle: ActivitySpanRowHandle = {
     key,
     disclosureKey: transcriptDisclosureKey.tool(key),
-    details: () => details,
-    summary: () => summary,
+    shell: () => shell,
+    header: () => header,
     applyOpen: (next: boolean) => {
       committed.push(next);
-      details.open = next;
+      setOpen(shell, next);
     },
   };
-  return { handle, details, committed };
+  return { handle, shell, committed };
 }
 
 describe("createActivitySpanAccordion", () => {
@@ -30,7 +39,7 @@ describe("createActivitySpanAccordion", () => {
     for (const row of rows) accordion.register(row.handle);
 
     const openKeys = () =>
-      rows.filter((r) => r.details.open).map((r) => r.handle.key);
+      rows.filter((r) => isOpen(r.shell)).map((r) => r.handle.key);
 
     accordion.toggle("a");
     expect(openKeys()).toEqual(["a"]);
@@ -50,10 +59,10 @@ describe("createActivitySpanAccordion", () => {
     accordion.register(b.handle);
 
     accordion.toggle("a");
-    expect(a.details.open).toBe(true);
+    expect(isOpen(a.shell)).toBe(true);
     accordion.toggle("a");
-    expect(a.details.open).toBe(false);
-    expect(b.details.open).toBe(false);
+    expect(isOpen(a.shell)).toBe(false);
+    expect(isOpen(b.shell)).toBe(false);
   });
 
   it("reopens a row whose DOM still reads open mid-close", () => {
@@ -66,11 +75,11 @@ describe("createActivitySpanAccordion", () => {
 
     accordion.toggle("a");
     accordion.toggle("b");
-    a.details.open = true;
+    setOpen(a.shell, true);
 
     accordion.toggle("a");
     expect(a.committed[a.committed.length - 1]).toBe(true);
-    expect(b.details.open).toBe(false);
+    expect(isOpen(b.shell)).toBe(false);
   });
 
   it("sweeps up a row restored open by the disclosure store", () => {
@@ -82,8 +91,8 @@ describe("createActivitySpanAccordion", () => {
     accordion.register(other.handle);
 
     accordion.toggle("b");
-    expect(restored.details.open).toBe(false);
-    expect(other.details.open).toBe(true);
+    expect(isOpen(restored.shell)).toBe(false);
+    expect(isOpen(other.shell)).toBe(true);
   });
 
   it("does not resurrect intent after the open row unregisters", () => {
@@ -95,10 +104,10 @@ describe("createActivitySpanAccordion", () => {
 
     accordion.toggle("a");
     unregisterA();
-    a.details.open = false;
+    setOpen(a.shell, false);
 
     accordion.toggle("b");
-    expect(b.details.open).toBe(true);
+    expect(isOpen(b.shell)).toBe(true);
   });
 
   it("ignores toggles for rows it does not know", () => {
@@ -106,6 +115,6 @@ describe("createActivitySpanAccordion", () => {
     const a = fakeRow("a");
     accordion.register(a.handle);
     expect(() => accordion.toggle("missing")).not.toThrow();
-    expect(a.details.open).toBe(false);
+    expect(isOpen(a.shell)).toBe(false);
   });
 });

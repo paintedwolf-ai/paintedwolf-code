@@ -163,7 +163,7 @@ describe("macOS a11y transcript + live regions", () => {
     const userBubble = read("components/transcript/UserBubble.tsx");
     const assistant = read("components/transcript/AssistantChatTurn.tsx");
     expect(spans).toMatch(/role="log"/);
-    expect(spans).toMatch(/aria-live="polite"/);
+    expect(spans).toMatch(/aria-live=\{\(props\.surfaceActive\?\.\(\) \?\? true\) \? "polite" : "off"\}/);
     expect(spans).toMatch(/class="den-chat-transcript-visual" aria-live="off"/);
     expect(spans).toMatch(/aria-label="Conversation"/);
     expect(transcript).not.toMatch(/role="log"/);

@@ -160,8 +160,6 @@ export function FilesInfoCard(props: Props) {
             data-tip="Copy path"
             data-tip-pos="below"
             aria-label="Copy path"
-            aria-haspopup="menu"
-            aria-expanded={toolbarMenu()?.kind === "copy"}
             onClick={onCopyPath}
             onContextMenu={copyMenuBind.onContextMenu}
             onKeyDown={copyMenuBind.onKeyDown}

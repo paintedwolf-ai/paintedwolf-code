@@ -34,43 +34,42 @@
 }
 
 /* Disclosure chrome and content share one measured timeline. */
-.den-tool-part > summary,
-.den-activity-span > summary,
-.den-citation-evidence-chicklet > summary {
+.den-tool-part > .den-transcript-disclosure-header,
+.den-activity-span > .den-transcript-disclosure-header,
+.den-citation-evidence-chicklet > .den-transcript-disclosure-header {
   border-bottom: 1px solid transparent;
   transition: border-color var(--den-duration-drawer) var(--den-ease);
 }
 
-.den-tool-part[data-closing] > summary,
-.den-activity-span[data-closing] > summary,
-.den-citation-evidence-chicklet[data-closing] > summary {
+.den-tool-part[data-closing] > .den-transcript-disclosure-header,
+.den-activity-span[data-closing] > .den-transcript-disclosure-header,
+.den-citation-evidence-chicklet[data-closing] > .den-transcript-disclosure-header {
   border-bottom-color: transparent;
 }
 
-.den-chat-stream details[data-animating]:not([data-closing])
-  > :not(summary) {
+.den-chat-stream [data-transcript-disclosure][data-animating]:not([data-closing])
+  > :not(.den-transcript-disclosure-header) {
   animation: den-transcript-disclosure-body-in 200ms var(--den-ease) both;
 }
 
-.den-chat-stream details[data-animating][data-closing] > :not(summary) {
+.den-chat-stream [data-transcript-disclosure][data-animating][data-closing] > :not(.den-transcript-disclosure-header) {
   animation: den-transcript-disclosure-body-out 160ms var(--den-ease) both;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .den-tool-part > summary,
-  .den-activity-span > summary,
-  .den-citation-evidence-chicklet > summary,
+  .den-tool-part > .den-transcript-disclosure-header,
+  .den-activity-span > .den-transcript-disclosure-header,
+  .den-citation-evidence-chicklet > .den-transcript-disclosure-header,
   .den-tool-part-chicklet {
     transition: none;
   }
 
-  .den-chat-stream details[data-animating] > :not(summary) {
+  .den-chat-stream [data-transcript-disclosure][data-animating] > :not(.den-transcript-disclosure-header) {
     animation: none;
   }
 }
 
-.den-activity-span > summary {
-  list-style: none;
+.den-activity-span > .den-transcript-disclosure-header {
   cursor: pointer;
   display: block;
   padding: 0;
@@ -79,8 +78,6 @@
   min-width: 0;
   max-width: 100%;
 }
-
-.den-activity-span > summary::-webkit-details-marker { display: none; }
 
 .den-worker-group-item:not(:last-child) {
   border-bottom: 1px solid color-mix(in srgb, var(--den-line) 26%, transparent);
@@ -203,7 +200,7 @@
   border-bottom: none;
 }
 
-.den-tool-part[data-accordion-row] > summary {
+.den-tool-part[data-accordion-row] > .den-transcript-disclosure-header {
   border-radius: 0;
 }
 
@@ -223,25 +220,24 @@
 }
 
 .den-tool-part[data-accordion-row]:hover .den-tool-part-chicklet,
-.den-tool-part[data-accordion-row][open] .den-tool-part-chicklet {
+.den-tool-part[data-accordion-row][data-expanded="true"] .den-tool-part-chicklet {
   background: color-mix(in srgb, var(--den-text) 4%, transparent);
 }
 
-.den-tool-part[data-accordion-row][open] .den-row-mark::after {
+.den-tool-part[data-accordion-row][data-expanded="true"] .den-row-mark::after {
   transform: scaleY(0);
 }
 
-.den-tool-part[data-accordion-row][open] .den-row-mark::before {
+.den-tool-part[data-accordion-row][data-expanded="true"] .den-row-mark::before {
   background: var(--den-text);
 }
 
-.den-tool-part[data-accordion-row][open] > .den-tool-part-body {
+.den-tool-part[data-accordion-row][data-expanded="true"] > .den-tool-part-body {
   margin-top: 0;
   padding: 8px 12px 10px;
 }
 
 @utility den-transcript-chicklet-summary {
-  list-style: none;
   cursor: pointer;
   display: block;
   padding: 0;
@@ -254,14 +250,12 @@
 }
 
 .den-transcript-chicklet-summary:focus-visible,
-.den-tool-part > summary:focus-visible,
-.den-activity-span > summary:focus-visible {
+.den-tool-part > .den-transcript-disclosure-header:focus-visible,
+.den-activity-span > .den-transcript-disclosure-header:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px
     color-mix(in srgb, var(--den-accent-text) 85%, var(--den-background));
 }
-
-.den-transcript-chicklet-summary::-webkit-details-marker { display: none; }
 
 .den-tool-part-card-facts > div {
   display: flex;

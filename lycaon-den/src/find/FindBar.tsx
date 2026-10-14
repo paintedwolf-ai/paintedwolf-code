@@ -6,6 +6,7 @@ import {
   releaseFocusRegion,
 } from "../shortcuts/focus-region.ts";
 import { chromeProps } from "../styling/ui-chrome.ts";
+import { FIND_BAR_ID } from "./command-bar-disclosure.ts";
 import { DenCheckboxControl } from "../components/primitives/DenCheckbox.tsx";
 import { ThemeIcon } from "../components/primitives/ThemeIcon.tsx";
 import {
@@ -102,6 +103,7 @@ export function FindBar() {
   return (
     <Show when={findController.isOpen()}>
       <div
+        id={FIND_BAR_ID}
         class="den-find-bar den-editor-command-bar den-editor-command-bar--find"
         role="search"
         aria-label="Find in view"

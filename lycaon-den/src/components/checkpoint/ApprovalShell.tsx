@@ -455,7 +455,6 @@ export function GrantMenu(p: {
                 disabled={p.disabled}
                 aria-haspopup="menu"
                 aria-expanded={p.open}
-                aria-label={APPROVALS_COPY.card.grantMenu.ariaLabel}
                 onClick={() => p.onOpenChange(!p.open)}
               >
                 <span>{p.face.title}</span>
@@ -554,8 +553,9 @@ export function GrantMenu(p: {
                           }
                           disabled={p.disabled || itemRow.item.disabled}
                           onClick={() => {
-                            close(false);
+                            // The pick sees the item still focused, so a resolution can hand focus on.
                             p.onPick(itemRow.item.id);
+                            close(false);
                           }}
                         >
                           <Show when={itemRow.item.slot} keyed>
@@ -630,11 +630,12 @@ export function ActionsZone(p: {
         data-testid={p.no.testid ?? "approval-no"}
         disabled={p.resolving}
         data-tip={APPROVALS_COPY.card.noAssurance}
+        aria-keyshortcuts={armed() ? undefined : "Escape"}
         onClick={() => p.no.onNo(armed())}
       >
         <span>{armed() ? (p.no.armedLabel ?? APPROVALS_COPY.card.noArmed) : p.no.label}</span>
         <Show when={!armed()}>
-          <kbd class="den-approval-kbd">esc</kbd>
+          <kbd class="den-approval-kbd" aria-hidden="true">esc</kbd>
         </Show>
       </DenButton>
       <span class="den-approval-card-actions-affirm">
@@ -645,10 +646,11 @@ export function ActionsZone(p: {
           data-approval-primary=""
           disabled={p.resolving || p.primary.disabled}
           data-tip={p.primary.title}
+          aria-keyshortcuts="Enter"
           onClick={p.primary.onPrimary}
         >
           <span>{p.primary.label}</span>
-          <kbd class="den-approval-kbd">↵</kbd>
+          <kbd class="den-approval-kbd" aria-hidden="true">↵</kbd>
         </DenButton>
       </span>
     </footer>

@@ -60,6 +60,53 @@ describe("advanceTranscriptAnnouncement", () => {
     expect(stable.announcement).toBeUndefined();
   });
 
+  it("announces a reply the host writes as a hidden draft once it commits", () => {
+    const user: Message = {
+      id: "u2",
+      role: "user",
+      origin: "user",
+      authority: "user",
+      trust_tier: "trusted",
+      content: "Next",
+      created_at: "t",
+    };
+    const history = [assistant("a1", "Earlier", "complete")];
+    const draft = (content: string): Message => ({
+      ...assistant("a2", content),
+      visibility: "internal",
+      draft_status: "live",
+    });
+    const committed: Message = {
+      ...assistant("a2", "Answer"),
+      kind: "completion_report",
+      draft_status: "committed",
+    };
+
+    const seeded = step(undefined, history);
+    const asked = step(seeded.state, [...history, user]);
+    const opened = step(asked.state, [...history, user, draft("")]);
+    const written = step(opened.state, [...history, user, draft("Answer")]);
+    expect([asked, opened, written].map((s) => s.announcement)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+    ]);
+
+    const done = step(written.state, [...history, user, committed]);
+    expect(done.announcement).toBe("Assistant: Answer");
+    const settled = step(done.state, [...history, user, { ...committed, status: "complete" }]);
+    expect(settled.announcement).toBeUndefined();
+  });
+
+  it("announces nothing when a reload empties and refills the history", () => {
+    const history = [assistant("a1", "First", "complete"), assistant("a2", "Second", "complete")];
+    const seeded = step(undefined, history);
+    const emptied = step(seeded.state, []);
+    expect(emptied.announcement).toBeUndefined();
+    const refilled = step(emptied.state, history);
+    expect(refilled.announcement).toBeUndefined();
+  });
+
   it("ignores prepended history and internal messages", () => {
     const visible = assistant("a2", "Current");
     const initial = step(undefined, [visible]);

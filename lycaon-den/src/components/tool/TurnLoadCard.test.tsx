@@ -1,5 +1,6 @@
+import { disclosureToggle } from "../../test/transcript-disclosure-fixture.ts";
 import { describe, expect, it } from "vitest";
-import { render } from "@solidjs/testing-library";
+import { fireEvent, render } from "@solidjs/testing-library";
 import type { TurnLoad } from "../../api/types.ts";
 import type { TurnLoadRow } from "../../chat/turnload/turn-load-rows.ts";
 import { TurnLoadCard, turnLoadToolPart } from "./TurnLoadCard.tsx";
@@ -25,13 +26,12 @@ describe("TurnLoadCard", () => {
 
   it("renders the tools row with its decision in the body", () => {
     const { getByTestId } = render(() => <TurnLoadCard row={toolsRow} layout="chat" />);
-    const card = getByTestId("turn-load-card") as HTMLDetailsElement;
+    const card = getByTestId("turn-load-card") as HTMLElement;
     expect(card.dataset.tool).toBe("Bialy");
     expect(card.textContent).toContain("Local AI");
     expect(card.textContent).toContain("git_commit, git_status");
     expect(card.textContent).toContain("offered · 438 ms");
-    card.open = true;
-    card.dispatchEvent(new Event("toggle"));
+    fireEvent.click(disclosureToggle(card));
     expect(getByTestId("turn-load-kind").textContent).toBe("change · .86");
     expect(getByTestId("turn-load-tools").textContent).toContain("git_commit .88");
     expect(getByTestId("turn-load-guides").textContent).toBe("6 rendered · 9 left out of the prompt");
@@ -49,9 +49,8 @@ describe("TurnLoadCard", () => {
       boundary: { cache: "warm", idle_ms: 95_000, cold_after_ms: 360_000 },
     };
     const { getByTestId } = render(() => <TurnLoadCard row={{ ...toolsRow, load: warm }} layout="chat" />);
-    const card = getByTestId("turn-load-card") as HTMLDetailsElement;
-    card.open = true;
-    card.dispatchEvent(new Event("toggle"));
+    const card = getByTestId("turn-load-card") as HTMLElement;
+    fireEvent.click(disclosureToggle(card));
     expect(getByTestId("turn-load-tools").textContent).toBe("None");
     expect(getByTestId("turn-load-kept-tools").textContent).toBe("edit, web_search");
     expect(getByTestId("turn-load-kept-tools").textContent).not.toContain(".71");
@@ -64,9 +63,8 @@ describe("TurnLoadCard", () => {
       tools: [...load.tools, { tool: "page_open", source: "requested", carried: true }],
     };
     const { getByTestId } = render(() => <TurnLoadCard row={{ ...toolsRow, load: mixed }} layout="chat" />);
-    const card = getByTestId("turn-load-card") as HTMLDetailsElement;
-    card.open = true;
-    card.dispatchEvent(new Event("toggle"));
+    const card = getByTestId("turn-load-card") as HTMLElement;
+    fireEvent.click(disclosureToggle(card));
     expect(getByTestId("turn-load-tools").textContent).toBe("git_commit .88, git_status .91");
     expect(getByTestId("turn-load-kept-tools").textContent).toBe("page_open");
   });
@@ -74,9 +72,8 @@ describe("TurnLoadCard", () => {
   it("names the fact that made a turn cold", () => {
     const cold: TurnLoad = { ...load, boundary: { cache: "cold", reason: "idle", idle_ms: 900_000, cold_after_ms: 360_000 } };
     const { getByTestId } = render(() => <TurnLoadCard row={{ ...toolsRow, load: cold }} layout="chat" />);
-    const card = getByTestId("turn-load-card") as HTMLDetailsElement;
-    card.open = true;
-    card.dispatchEvent(new Event("toggle"));
+    const card = getByTestId("turn-load-card") as HTMLElement;
+    fireEvent.click(disclosureToggle(card));
     expect(getByTestId("turn-load-boundary").textContent).toBe("Cold · idle 15m 0s, past the 6m 0s the cache keeps · tools chosen again");
   });
 
@@ -85,9 +82,8 @@ describe("TurnLoadCard", () => {
 it("shows the automatically preloaded skill separately from tools", () => {
   const withSkill: TurnLoad = { ...load, preloaded_skill: { name: "work-with-containers", score: 3.6 } };
   const { getByTestId } = render(() => <TurnLoadCard row={{ ...toolsRow, load: withSkill }} layout="chat" />);
-  const card = getByTestId("turn-load-card") as HTMLDetailsElement;
-  card.open = true;
-  card.dispatchEvent(new Event("toggle"));
+  const card = getByTestId("turn-load-card") as HTMLElement;
+  fireEvent.click(disclosureToggle(card));
   expect(getByTestId("turn-load-preloaded-skill").textContent).toBe("work-with-containers · 3.60");
   expect(getByTestId("turn-load-tools").textContent).not.toContain("work-with-containers");
 });

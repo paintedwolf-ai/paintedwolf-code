@@ -1,3 +1,4 @@
+import { isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { render, fireEvent } from "@solidjs/testing-library";
 import { SkillCard } from "./SkillCard.tsx";
@@ -40,12 +41,12 @@ describe("SkillCard chicklet", () => {
     const { container } = render(() => (
       <SkillCard part={part()} layout="chat" sessionId="s1" />
     ));
-    const details = container.querySelector("details") as HTMLDetailsElement;
+    const details = container.querySelector<HTMLElement>("[data-transcript-disclosure]") as HTMLElement;
     expect(details).toBeTruthy();
     expect(details.classList.contains("den-tool-part")).toBe(true);
     expect(details.classList.contains("den-tool-part-card")).toBe(true);
     expect(details.dataset.status).toBe("done");
-    expect(details.open).toBe(false);
+    expect(isDisclosureOpen(details)).toBe(false);
     expect(container.querySelector(".den-tool-part-status-dot")).toBeTruthy();
     expect(container.querySelector(".den-tool-part-chicklet")).toBeTruthy();
   });
@@ -86,7 +87,7 @@ describe("SkillCard chicklet", () => {
     expect(container.querySelector(".den-tool-part-title")?.textContent).toBe(
       "verify-a-change · build a container image",
     );
-    fireEvent.click(container.querySelector("summary")!);
+    fireEvent.click(container.querySelector<HTMLElement>(".den-transcript-disclosure-toggle")!);
     expect(getByTestId("skill-card-resource").textContent).toBe(
       "references/build_a_container_image.md",
     );
@@ -102,7 +103,7 @@ describe("SkillCard body", () => {
     const { getByTestId, container, getByRole } = render(() => (
       <SkillCard part={part()} layout="chat" sessionId="s1" />
     ));
-    fireEvent.click(container.querySelector("summary")!);
+    fireEvent.click(container.querySelector<HTMLElement>(".den-transcript-disclosure-toggle")!);
     expect(getByTestId("skill-card-name").textContent).toBe("verify-a-change");
     expect(getByTestId("skill-card-description").textContent).toBe(
       "Run the scoped checks before handoff.",
@@ -117,7 +118,7 @@ describe("SkillCard body", () => {
     const { getByTestId, container, getByRole } = render(() => (
       <SkillCard part={part()} layout="chat" sessionId="s1" />
     ));
-    fireEvent.click(container.querySelector("summary")!);
+    fireEvent.click(container.querySelector<HTMLElement>(".den-transcript-disclosure-toggle")!);
     const body = getByTestId("skill-card-body");
     expect(getByRole("button", {name:"Instructions in Files"})).toBeTruthy();
     expect(body.querySelector("h1")).toBeNull();
@@ -133,7 +134,7 @@ describe("SkillCard body", () => {
         sessionId="s1"
       />
     ));
-    fireEvent.click(container.querySelector("summary")!);
+    fireEvent.click(container.querySelector<HTMLElement>(".den-transcript-disclosure-toggle")!);
     expect(getByTestId("skill-card-body").textContent).toContain(
       "+3 more not listed",
     );
@@ -147,7 +148,7 @@ describe("SkillCard body", () => {
         sessionId="s1"
       />
     ));
-    fireEvent.click(container.querySelector("summary")!);
+    fireEvent.click(container.querySelector<HTMLElement>(".den-transcript-disclosure-toggle")!);
     expect(getByTestId("skill-card-allowed-tools").textContent).toContain(
       "not enforced",
     );
@@ -167,7 +168,7 @@ describe("SkillCard body", () => {
       container.querySelector(".den-tool-part-name")?.textContent,
     ).toBe("Skill");
     expect(
-      (container.querySelector("details") as HTMLDetailsElement).dataset.status,
+      (container.querySelector<HTMLElement>("[data-transcript-disclosure]") as HTMLElement).dataset.status,
     ).toBe("running");
   });
 
@@ -200,9 +201,9 @@ describe("SkillCard body", () => {
 // Tool cards share one chicklet structure.
 describe("chicklet parity with the generic tool card", () => {
   const chickletShape = (root: HTMLElement) => {
-    const summary = root.querySelector("summary") as HTMLElement;
+    const summary = root.querySelector<HTMLElement>(".den-transcript-disclosure-toggle")! as HTMLElement;
     return {
-      detailsClass: (root.querySelector("details") as HTMLElement).className,
+      detailsClass: (root.querySelector<HTMLElement>("[data-transcript-disclosure]") as HTMLElement).className,
       summaryHtml: summary.innerHTML
         .replace(/verify-a-change/g, "TITLE")
         .replace(/main\.go/g, "TITLE")
@@ -243,7 +244,7 @@ describe("ToolPartCard routing", () => {
       <ToolPartCard part={part()} layout="chat" sessionId="s1" />
     ));
     expect(getByTestId("skill-part-card")).toBeTruthy();
-    fireEvent.click(container.querySelector("summary")!);
+    fireEvent.click(container.querySelector<HTMLElement>(".den-transcript-disclosure-toggle")!);
     expect(getByTestId("skill-card-body")).toBeTruthy();
   });
 

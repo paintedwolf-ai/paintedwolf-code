@@ -208,7 +208,7 @@ export function SourceReader(props: {
 
   function buildEditors(after: HTMLElement, before: HTMLDivElement | undefined, divided: boolean): void {
     const make = (parent: HTMLElement, side?: ReaderSide) => new ReaderEditor({
-      surface: "reader",
+      surface: "reader", label: `Text of ${props.path}`,
       parent, side, scrollPastEnd: props.scrollPastEnd, changes: () => readerShowsChangeMarks(untrack(change) ?? "changed") && ["changes", "full"].includes(untrack(mode)), facts: facts.show, hideFacts: facts.leave, prefs: untrack(prefs), access: () => props.access, fullSide,
       load: (slot, offset) => { void loadRange(slot, offset); }, error: reportError,
       heightChanged: (_editor, height) => { setContentHeight(Math.max(60, height + 36)); splitEditors?.measure(); retainContentHeight(); },

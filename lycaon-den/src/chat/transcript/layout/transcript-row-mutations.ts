@@ -16,6 +16,6 @@ export function observeTranscriptRowMutations(
     if (rows.size > 0) onRowsChanged([...rows]);
   });
   observer.observe(root, { subtree: true, childList: true, characterData: true,
-    attributes: true, attributeFilter: ["hidden", "open"] });
+    attributes: true, attributeFilter: ["hidden", "open", "data-expanded"] });
   return () => observer.disconnect();
 }

@@ -60,14 +60,14 @@ async function seedConversation(page: Page, request: Parameters<typeof apiSeedSe
 
 modelIndependentWebE2e("End at the collapsed activity tail resumes autofollow without movement", async ({ page, request }) => {
   const { sessionId, activity, stream } = await seedConversation(page, request);
-  const summary = activity.locator(":scope > summary");
+  const summary = activity.locator(":scope > .den-transcript-disclosure-header");
   await summary.click();
   await expect(activity).not.toHaveAttribute("data-animating", "true");
   await stream.focus();
   await page.keyboard.press("End");
   await atTail(page);
   await summary.click();
-  await expect(activity).not.toHaveAttribute("open", "");
+  await expect(activity).not.toHaveAttribute("data-expanded", "true");
   await atTail(page);
   await stream.focus();
   await page.keyboard.press("End");
@@ -91,7 +91,7 @@ modelIndependentWebE2e("a layout clamp at the followed tail returns to the tail"
 modelIndependentWebE2e("expanded action lists scroll with the transcript and resume autofollow", async ({ page, request }) => {
   // Activity cards virtualize their actions past 100 entries.
   const { sessionId, activity, stream, nextSeq } = await seedConversation(page, request, 120);
-  await activity.locator(":scope > summary").click();
+  await activity.locator(":scope > .den-transcript-disclosure-header").click();
   await expect(activity).not.toHaveAttribute("data-animating", "true");
   await stream.focus();
   await page.keyboard.press("End");
@@ -146,7 +146,7 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
   modelIndependentWebE2e(`short chat keeps following when expansion fits with ${reducedMotion} motion`, async ({ page, request }) => {
     await page.emulateMedia({ reducedMotion });
     const { sessionId, activity, stream, nextSeq } = await seedConversation(page, request, 2, 0);
-    await activity.locator(":scope > summary").click();
+    await activity.locator(":scope > .den-transcript-disclosure-header").click();
     await expect(activity).not.toHaveAttribute("data-animating", "true");
     expect(await stream.evaluate(host => host.scrollHeight - host.clientHeight)).toBe(0);
     await apiSeedSessionTranscript(request, sessionId, transcriptMessages([
@@ -160,9 +160,9 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
   modelIndependentWebE2e(`short chat expansion preserves the reader with ${reducedMotion} motion`, async ({ page, request }) => {
     await page.emulateMedia({ reducedMotion });
     const { sessionId, activity, stream, nextSeq } = await seedConversation(page, request, 48, 0);
-    const summary = activity.locator(":scope > summary");
+    const summary = activity.locator(":scope > .den-transcript-disclosure-header");
     const sample = stream.evaluate(async host => {
-      const summary = host.querySelector<HTMLElement>('[data-testid="activity-span-card"] > summary')!;
+      const summary = host.querySelector<HTMLElement>('[data-testid="activity-span-card"] > .den-transcript-disclosure-header')!;
       const read = () => ({ offset: host.scrollTop, summaryTop: summary.getBoundingClientRect().top });
       const samples = [read()];
       const until = performance.now() + 1800;
@@ -194,12 +194,12 @@ for (const reducedMotion of ["no-preference", "reduce"] as const) {
 
 modelIndependentWebE2e("activity expansion holds the reading position until End resumes follow", async ({ page, request }) => {
   const { sessionId, activity, stream } = await seedConversation(page, request);
-  const summary = activity.locator(":scope > summary");
+  const summary = activity.locator(":scope > .den-transcript-disclosure-header");
   const box = await summary.boundingBox();
   if (!box) throw new Error("activity summary is missing");
   const before = box.y;
   const trace = stream.evaluate(async host => {
-    const summary = host.querySelector<HTMLElement>('[data-testid="activity-span-card"] > summary')!;
+    const summary = host.querySelector<HTMLElement>('[data-testid="activity-span-card"] > .den-transcript-disclosure-header')!;
     const read = () => ({ offset: host.scrollTop, summaryTop: summary.getBoundingClientRect().top, height: host.scrollHeight, viewport: host.clientHeight });
     const samples = [read()];
     const until = performance.now() + 1000;
@@ -213,7 +213,7 @@ modelIndependentWebE2e("activity expansion holds the reading position until End 
   const [samples] = await Promise.all([trace, (async () => {
     // A locator click can reveal the summary before dispatching the input.
     await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
-    await expect(activity).toHaveAttribute("open", "");
+    await expect(activity).toHaveAttribute("data-expanded", "true");
     await expect(activity).not.toHaveAttribute("data-animating", "true");
   })()]);
   expect(Math.max(...samples.map(sample => Math.abs(sample.summaryTop - before))), JSON.stringify(samples)).toBeLessThan(2);
@@ -275,7 +275,7 @@ modelIndependentWebE2e("idle virtualized history stays on the same visible row",
 
 modelIndependentWebE2e("expanded tool cards never bounce during later transcript updates", async ({ page, request }) => {
   const { sessionId, activity, stream } = await seedConversation(page, request);
-  await activity.locator(":scope > summary").click();
+  await activity.locator(":scope > .den-transcript-disclosure-header").click();
   await expect(activity).not.toHaveAttribute("data-animating", "true");
   await stream.focus();
   await page.keyboard.press("End");

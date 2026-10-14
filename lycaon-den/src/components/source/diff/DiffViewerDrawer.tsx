@@ -243,8 +243,6 @@ export function DiffViewerDrawer(props: Props) {
                 data-testid="diff-viewer-copy"
                 data-tip="Copy path"
                 aria-label="Copy path"
-                aria-haspopup="menu"
-                aria-expanded={toolbarMenu()?.kind === "copy"}
                 onClick={onCopy}
                 onContextMenu={copyMenuBind.onContextMenu}
                 onKeyDown={copyMenuBind.onKeyDown}

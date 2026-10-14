@@ -20,7 +20,10 @@ import { PRODUCT_TEXT_SCALES } from "../../../../shared/app-state-types.ts";
 import {
   productTextScale,
   setProductTextScale,
+  textSizeHint,
 } from "../../../settings/appearance/text-scale-prefs.ts";
+import { hostTextSizeCategory } from "../../../platform/desktop/accessibility-text-size.ts";
+import { detectedPlatform } from "../../../platform/runtime.ts";
 import {
   settingAnchor,
   settingLabel,
@@ -62,8 +65,8 @@ export function TypographySettings() {
       <div class="den-settings-pref-row" {...settingAnchor("text-size")}>
         <div class="den-settings-pref-copy">
           <span class="den-settings-pref-label">{settingLabel("text-size")}</span>
-          <p class="den-settings-hint">
-            Adjusts the app&apos;s reading size in addition to your Mac&apos;s accessibility text size.
+          <p class="den-settings-hint" data-testid="text-size-hint">
+            {textSizeHint(detectedPlatform(), hostTextSizeCategory())}
           </p>
         </div>
         <DenSelect

@@ -14,7 +14,12 @@ import {
   revokeGrantsOptimistic,
 } from "../../settings/security/approval-grants-cache.ts";
 import { useTranscriptEntry } from "../../chat/transcript/presentation/transcript-entry.ts";
-import { useTranscriptDisclosure } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
+import {
+  TranscriptDisclosurePanel,
+  TranscriptDisclosureShell,
+  TranscriptDisclosureToggle,
+  useTranscriptDisclosure,
+} from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
 import { ApprovalContentLink } from "./ApprovalContentLink.tsx";
 import { reviewPendingApproval } from "../../chat/checkpoint/approval-review.ts";
@@ -168,7 +173,7 @@ export function CheckpointDecisionChicklet(props: Props) {
       ? { sessionId: props.sessionId ?? undefined, entryKey: props.entryKey }
       : undefined;
   const { bindTranscriptEntry } = useTranscriptEntry(entryOpts);
-  const { key: disclosureKey, open, onToggle, onSummaryClick } = useTranscriptDisclosure(() =>
+  const disclosure = useTranscriptDisclosure(() =>
     props.entryKey ? transcriptDisclosureKey.checkpoint(props.entryKey) : undefined,
   );
 
@@ -241,7 +246,8 @@ export function CheckpointDecisionChicklet(props: Props) {
         </div>
       }
     >
-      <details
+      <TranscriptDisclosureShell
+        disclosure={disclosure}
         ref={bindTranscriptEntry}
         class="den-checkpoint-decision-chicklet den-checkpoint-decision-chicklet--expandable den-transcript-disclosure-card"
         classList={statusClass()}
@@ -249,9 +255,6 @@ export function CheckpointDecisionChicklet(props: Props) {
         data-status={status()}
         data-kind={props.meta.kind}
         data-checkpoint-id={props.meta.checkpoint_id}
-        data-disclosure-key={disclosureKey}
-        open={open()}
-        onToggle={onToggle}
       >
         <Show when={status() === "pending"}>
           <span
@@ -260,12 +263,13 @@ export function CheckpointDecisionChicklet(props: Props) {
             class="sr-only"
           />
         </Show>
-        <summary
-          class="den-checkpoint-decision-chicklet__summary"
-          onClick={onSummaryClick}
-          aria-label={decisionAriaLabel(props.meta)}
-        >
-          <span class="den-checkpoint-decision-chicklet__summary-main">
+        <div class="den-transcript-disclosure-header den-checkpoint-decision-chicklet__summary">
+          <TranscriptDisclosureToggle
+            disclosure={disclosure}
+            inHeader
+            class="den-checkpoint-decision-chicklet__summary-main"
+            aria-label={decisionAriaLabel(props.meta)}
+          >
             <DecisionChrome
               meta={props.meta}
               tool={tool()}
@@ -275,7 +279,7 @@ export function CheckpointDecisionChicklet(props: Props) {
               grant={grant()}
               truncateSubject
             />
-          </span>
+          </TranscriptDisclosureToggle>
           <Show when={revokeCtx()} keyed>
             {(ctx) => (
               <RevokeButton
@@ -286,8 +290,12 @@ export function CheckpointDecisionChicklet(props: Props) {
             )}
           </Show>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
-        </summary>
-        <div class="den-checkpoint-decision-chicklet__body" data-testid="checkpoint-decision-body">
+        </div>
+        <TranscriptDisclosurePanel
+          disclosure={disclosure}
+          class="den-checkpoint-decision-chicklet__body"
+          data-testid="checkpoint-decision-body"
+        >
           <div class="den-tool-part-card-section">
             <dl class="den-tool-part-card-facts">
               <div>
@@ -394,8 +402,8 @@ export function CheckpointDecisionChicklet(props: Props) {
               }
             />
           </div>
-        </div>
-      </details>
+        </TranscriptDisclosurePanel>
+      </TranscriptDisclosureShell>
     </Show>
   );
 }

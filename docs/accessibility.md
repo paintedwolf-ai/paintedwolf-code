@@ -1,6 +1,6 @@
-# Accessibility (macOS)
+# Accessibility
 
-The Den chrome accessibility contract for human users on macOS: OS text-size scaling, layout resilience, VoiceOver semantics, Spoken Content, hover tips, focus, and reduced motion. There is no Linux or Windows system text-size bridge.
+The Den chrome accessibility contract for human users on macOS and Linux: OS text-size scaling, layout resilience, VoiceOver and Orca semantics, Spoken Content, hover tips, focus, and reduced motion. Linux desktop preferences come from the Settings portal ([Linux desktop preferences](#linux-desktop-preferences)); there is no Windows system text-size bridge.
 
 **See also:** [Den](den.md) · [Keyboard shortcuts](keyboard-shortcuts.md) · [In-view find](den-in-view-find.md) · [Dev tasks](dev-tasks.md#den-harness-llm-drivable-stack)
 
@@ -26,7 +26,7 @@ Accessibility → Display → Text size is read from the Sonoma+ content-size ca
 | Type tokens | `@theme --text-den-*` in rem, where `1rem` is the baseline root at scale 1 (14px). Every font size resolves to a rung (`accessibility-macos-invariants.test.ts`) |
 | Transcript seams | The four rungs in [`transcript-spacing.ts`](../lycaon-den/src/chat/transcript/layout/transcript-spacing.ts) are rem for the same reason: a px seam holds 14px while the text around it triples, so a turn boundary vanishes where it is needed most. Virtual geometry resolves them against one published root size (`styling/scalable-layout-invariants.test.ts`) |
 | Delivery | Tauri event and the `accessibility_preferred_text_size()` command return `{ category, textScale, revision }`; the monotonic revision prevents an older launch snapshot from overwriting a live change |
-| Non-macOS | The bridge returns `{ category: "default", textScale: 1, revision: 0 }`; the app runs unscaled |
+| Non-macOS | Linux reports the desktop text scaling fact ([Linux desktop preferences](#linux-desktop-preferences)); elsewhere the bridge returns `{ category: "default", textScale: 1, revision: 0 }` and the app runs unscaled |
 
 **Category → scale table** (same numbers in Rust and the Den fixture). Scales are the published Dynamic Type body point sizes ÷ 17 (Large body = 17pt → `1.0`). No cap is applied to `--den-text-scale`; layout resilience sets max-category chrome.
 
@@ -72,11 +72,36 @@ Accessibility → Display also carries **Increase contrast** and **Reduce transp
 | Increase contrast | Theme tokens re-derived: `text-muted` and `accent-text` to 7:1, `border` to 3:1 against the theme background ([`theme-adjustments.ts`](../lycaon-den/src/contributions/theme-adjustments.ts)) |
 | Reduce transparency | Blurred chrome drops `backdrop-filter` and paints its opaque surface token ([`accessibility-appearance.css`](../lycaon-den/src/accessibility-appearance.css)) |
 | Accent | The theme compiler's accent family is rebuilt from the chosen colour, so hover, label ink, signal, and selection stay legible in the active theme |
-| Non-macOS | The web build falls back to `prefers-contrast: more` and `prefers-reduced-transparency: reduce`; no accent is read |
+| Non-macOS | Linux reads contrast and accent from the Settings portal ([Linux desktop preferences](#linux-desktop-preferences)); the web build falls back to `prefers-contrast: more` and `prefers-reduced-transparency: reduce` and reads no accent |
 
 Adjustments apply where the theme applies: theme tokens land as inline custom properties on the root, which a later stylesheet could only beat with `!important`.
 
 **Proof:** `contributions/theme-color.test.ts` (colour math against the compiler's values), `contributions/theme-adjustments.test.ts` (the contrast floors), `platform/desktop/system-appearance.test.ts` (root stamping, stale snapshots, one notification per change).
+
+## Linux desktop preferences
+
+The host reads `org.freedesktop.portal.Settings` on the session bus (`ReadAll` at launch, `SettingChanged` afterwards) and reduces the snapshot to typed facts ([`linux_desktop_settings.rs`](../lycaon-den/src-tauri/src/windows/linux_desktop_settings.rs)). A fact the desktop does not expose is absent, and the app says so rather than inventing a preference. The same two events and commands as macOS deliver the payloads, with the same monotonic revisions.
+
+| Concern | Source | Delivery |
+|---------|--------|----------|
+| Increase contrast | `org.freedesktop.appearance` `contrast` ≥ 1, or `org.gnome.desktop.a11y.interface` `high-contrast` | `increaseContrast`; theme tokens re-derived as on macOS |
+| Accent | `org.freedesktop.appearance` `accent-color` (components outside 0..1 mean no preference), else `org.kde.kdeglobals.General` `AccentColor` | `accent` |
+| Reduce transparency | No Linux desktop exposes one | `reduceTransparency` stays `false` |
+| Text scale | `org.gnome.desktop.interface` `text-scaling-factor` | Category `linux-text-scaling-factor` with `textScale` `1`; see below |
+| Colour scheme | `org.freedesktop.appearance` `color-scheme`, read and followed by the window toolkit | Window theme and `ThemeChanged`, as on macOS |
+| Reduced motion | `gtk-enable-animations`, which GTK sources from the desktop | `prefers-reduced-motion` media query, no host bridge |
+
+WebKitGTK applies the desktop text scaling factor itself, as device scale: at factor 1.5 the page reports `devicePixelRatio` 1.5 and the CSS viewport narrows accordingly, so a 720 px window presents 480 CSS px. The host therefore reports the factor's presence but never multiplies it into `--den-text-scale`; the device Text size preference multiplies on top of the desktop scale exactly as on macOS. GTK also derives `prefers-reduced-motion` from the desktop's animation preference and `prefers-contrast` from a high-contrast GTK theme, so those CSS media queries are live on Linux without a host bridge; a desktop without a settings daemon leaves the toolkit defaults, which is what the app then truthfully follows.
+
+Settings → Display → Type says what the host adds: on a desktop that reports a text scaling factor, the reading size adds to it; on one that reports none, the reading size is the only text size control (`textSizeHint`, [`text-scale-prefs.ts`](../lycaon-den/src/settings/appearance/text-scale-prefs.ts)).
+
+**Proof:** `linux_desktop_settings/tests.rs` (fixture bus: snapshot reduction, change emissions, revisions), `settings/appearance/text-scale-prefs.test.ts`, `platform/desktop/accessibility-text-size.test.ts`.
+
+### Orca and AT-SPI
+
+WebKitGTK exposes the document to AT-SPI when the a11y bus is enabled (`org.a11y.Bus` `IsEnabled`, which Orca turns on). Landmarks, dialogs with `aria-modal`, the conversation log, status regions, articles, and toolbars arrive with their roles, names, descriptions, and `container-live` attributes; Orca announces focus moves with role, name, and description, and Tab order follows the DOM. Known differences from macOS: the Linux window controls in the title bar are DOM buttons rather than native chrome, and Orca's browse mode reads the whole document; verification runs with Orca's `--debug-file` speech log against a GNOME session in a VM, not with VoiceOver.
+
+WebKitGTK raises no `text-changed:insert` event when a live region's non-editable content changes, and Orca presents live regions only from that event, so live regions are silent under Orca. On Linux the live-region bridge (`platform/desktop/live-region-bridge.ts`, installed before the app renders) is therefore the one announcement channel: it observes every ARIA live region (`aria-live`, the `status`, `log` and `alert` roles, `<output>`), forwards each change to the shell with the region's politeness, and rewrites the region's own `aria-live` to `off` while keeping the author's value, so a WebKitGTK that later emits those events cannot make Orca read anything twice. The shell speaks the text as an ATK `notification` on the window (`den_announce`). The bridge follows ARIA: the nearest region owns a change and a nearer `aria-live="off"` silences it, atomic regions (`status`, `alert`, or `aria-atomic`) speak their whole text and others what was added, hidden content is not spoken, and a region inserted already holding text speaks only when assertive. Announcements with no region of their own, such as an approval arriving, go through the shared polite `Announcer`. `live-region-inventory.json` lists every live-region declaration in Den's source; its test fails when a region is added or changed until it is reviewed, and when a region uses a form the bridge cannot observe. macOS keeps live regions as the only channel.
 
 ## Layout resilience rules
 

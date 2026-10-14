@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, fireEvent, waitFor } from "@solidjs/testing-library";
+import { createSignal } from "solid-js";
 import { MoveToProjectDialog } from "./MoveToProjectDialog.tsx";
+import { registerFocusRegion, releaseFocusRegion } from "../../shortcuts/focus-region.ts";
 
 describe("MoveToProjectDialog", () => {
   it("submits the chosen folder and git toggle", async () => {
@@ -52,5 +54,28 @@ describe("MoveToProjectDialog", () => {
     ));
     fireEvent.keyDown(getByTestId("move-project-dialog"), { key: "Escape" });
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it("returns focus to the chat composer when the opener left with the draft", async () => {
+    const composer = document.createElement("textarea");
+    const opener = document.createElement("button");
+    document.body.append(composer, opener);
+    const claim = {};
+    registerFocusRegion("composer", composer, claim);
+    opener.focus();
+    const [open, setOpen] = createSignal(true);
+    const view = render(() => (
+      <MoveToProjectDialog open={open()} onPickFolder={vi.fn()} onSubmit={vi.fn()} onClose={() => setOpen(false)} />
+    ));
+    try {
+      await waitFor(() => expect(view.getByTestId("move-project-dialog").contains(document.activeElement)).toBe(true));
+      opener.remove();
+      fireEvent.click(view.getByRole("button", { name: "Cancel" }));
+      expect(document.activeElement).toBe(composer);
+    } finally {
+      view.unmount();
+      releaseFocusRegion("composer", claim);
+      composer.remove();
+    }
   });
 });

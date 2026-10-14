@@ -1,7 +1,11 @@
 import { Show } from "solid-js";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
 import { useTranscriptEntry } from "../../chat/transcript/presentation/transcript-entry.ts";
-import { useTranscriptDisclosure } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
+import {
+  TranscriptDisclosurePanel,
+  TranscriptDisclosureShell,
+  useTranscriptDisclosure,
+} from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
 import {
   indexWarmingChickletTitle,
@@ -28,21 +32,19 @@ export function IndexWarmingChicklet(props: Props) {
       ? { sessionId: props.sessionId ?? undefined, entryKey: props.entryKey }
       : undefined,
   );
-  const { key: disclosureKey, open, onToggle, onSummaryClick } = useTranscriptDisclosure(() =>
+  const disclosure = useTranscriptDisclosure(() =>
     props.entryKey ? transcriptDisclosureKey.indexWarming(props.entryKey) : undefined,
   );
   return (
-    <details
+    <TranscriptDisclosureShell
+      disclosure={disclosure}
       ref={bindTranscriptEntry}
       class="den-tool-part-card den-transcript-disclosure-card den-tool-part"
       data-testid="index-warming-chicklet"
       data-layout={props.layout}
       data-status="done"
-      data-disclosure-key={disclosureKey}
-      open={open()}
-      onToggle={onToggle}
     >
-      <TranscriptChickletSummary onClick={onSummaryClick}>
+      <TranscriptChickletSummary disclosure={disclosure}>
         <span
           class="den-tool-part-status-dot"
           data-status="done"
@@ -53,7 +55,7 @@ export function IndexWarmingChicklet(props: Props) {
           {indexWarmingChickletTitle(props.meta)}
         </span>
       </TranscriptChickletSummary>
-      <div class="den-tool-part-card-body den-tool-part-body">
+      <TranscriptDisclosurePanel disclosure={disclosure} class="den-tool-part-card-body den-tool-part-body">
         <p class="den-tool-part-card-note">
           {indexWarmingTriggerDetail(props.meta.trigger)}
         </p>
@@ -86,7 +88,7 @@ export function IndexWarmingChicklet(props: Props) {
             </p>
           )}
         </Show>
-      </div>
-    </details>
+      </TranscriptDisclosurePanel>
+    </TranscriptDisclosureShell>
   );
 }

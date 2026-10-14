@@ -539,6 +539,8 @@ export type SourceEditorOptions = {
   /** Files editors route commands through the shared command bridge. */
   commandBridge?: boolean;
   collaborative?: boolean;
+  /** Accessible name of the text area; without one, WebKitGTK names it by its placeholder. */
+  label?: string;
 };
 
 export function createSourceEditorState(args: SourceEditorOptions): EditorState {
@@ -598,6 +600,7 @@ function sourceEditorExtensions(args: SourceEditorOptions): Extension[] {
     secretSpanExtension,
     // Indentation supplies folds when no syntax tree exists.
     ...(args.language ? [] : [indentFoldService]),
+    ...(args.label ? [EditorView.contentAttributes.of({ "aria-label": args.label })] : []),
   ];
 
   extensions.push(

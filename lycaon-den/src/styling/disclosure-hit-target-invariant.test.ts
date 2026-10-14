@@ -12,7 +12,7 @@ function read(path: string): string {
 describe("transcript disclosure hit targets", () => {
   it("makes the full card header toggle every shared disclosure", () => {
     expect(read("chat-utilities.css")).toMatch(
-      /@utility den-transcript-disclosure-card\s*\{[\s\S]*?& > summary\s*\{[\s\S]*?width:\s*100%/,
+      /@utility den-transcript-disclosure-card\s*\{[\s\S]*?& > \.den-transcript-disclosure-header\s*\{[\s\S]*?width:\s*100%/,
     );
   });
 

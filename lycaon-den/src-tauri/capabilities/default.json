@@ -85,6 +85,7 @@
     "allow-request-quit",
     "allow-linux-decoration-layout",
     "allow-accessibility-preferred-text-size",
+    "allow-den-announce",
     "allow-system-appearance",
     "allow-update-service",
     "allow-shell-command-status",

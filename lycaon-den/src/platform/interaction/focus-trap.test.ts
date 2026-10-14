@@ -101,6 +101,44 @@ describe("activateFocusTrap", () => {
     shell.remove();
   });
 
+  it("falls back when the opener is gone or focus would stay in the closed surface", async () => {
+    const composer = document.createElement("textarea");
+    document.body.append(composer);
+    const fallbackFocus = vi.fn(() => composer.focus());
+    const opener = button("opener");
+    document.body.append(opener);
+    opener.focus();
+    const dialog = document.createElement("div");
+    dialog.append(button("close"));
+    document.body.append(dialog);
+
+    const removedOpener = activateFocusTrap(dialog, { fallbackFocus });
+    await Promise.resolve();
+    opener.remove();
+    removedOpener.deactivate();
+    expect(fallbackFocus).toHaveBeenCalledOnce();
+    expect(document.activeElement).toBe(composer);
+
+    const bodyOpener = activateFocusTrap(dialog, { returnFocus: document.body, fallbackFocus });
+    await Promise.resolve();
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    bodyOpener.deactivate();
+    expect(fallbackFocus).toHaveBeenCalledTimes(2);
+
+    const restored = button("restored");
+    document.body.append(restored);
+    const kept = activateFocusTrap(dialog, { returnFocus: restored, fallbackFocus });
+    await Promise.resolve();
+    kept.deactivate();
+    expect(document.activeElement).toBe(restored);
+    const relinquished = activateFocusTrap(dialog, { fallbackFocus });
+    relinquished.deactivate({ restoreFocus: false });
+    expect(fallbackFocus).toHaveBeenCalledTimes(2);
+    dialog.remove();
+    composer.remove();
+    restored.remove();
+  });
+
   it("can relinquish focus restoration to a destination surface", async () => {
     const opener = button("opener");
     const destination = button("destination");

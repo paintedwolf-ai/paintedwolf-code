@@ -94,7 +94,7 @@ modelIndependentWebE2e("chat path actions reselect an active file after a folder
   const destination = prose.getByRole("button", { name: "destination", exact: true });
   const folderLink = prose.getByRole("button", { name: "nested", exact: true });
   const firstLink = prose.getByRole("button", { name: "first.ts", exact: true });
-  await page.getByTestId("citation-evidence-chicklet").locator("summary").click();
+  await page.getByTestId("citation-evidence-chicklet").locator(".den-transcript-disclosure-header").click();
   const citation = page.getByTestId("citation-evidence-chicklet-panel").getByTestId("source-path-link");
   for (const link of [destination, folderLink, firstLink, citation]) {
     await link.evaluate((element) => {

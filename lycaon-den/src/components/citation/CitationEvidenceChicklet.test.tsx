@@ -1,3 +1,4 @@
+import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@solidjs/testing-library";
 import { CitationEvidenceChicklet } from "./CitationEvidenceChicklet.tsx";
@@ -23,11 +24,11 @@ describe("CitationEvidenceChicklet", () => {
     ));
     expect(screen.getByTestId("citation-evidence-chicklet")).toBeTruthy();
     expect(screen.getByText("Grounded")).toBeTruthy();
-    const details = screen.getByTestId("citation-evidence-chicklet") as HTMLDetailsElement;
-    expect(details.open).toBe(false);
+    const details = screen.getByTestId("citation-evidence-chicklet") as HTMLElement;
+    expect(isDisclosureOpen(details)).toBe(false);
 
-    details.querySelector("summary")!.click();
-    expect(details.open).toBe(true);
+    disclosureToggle(details).click();
+    expect(isDisclosureOpen(details)).toBe(true);
     expect(screen.getByTestId("citation-grounding-panel")).toBeTruthy();
     expect(screen.getByText("Path citations")).toBeTruthy();
     expect(screen.getByText("1 citation(s) matched leg evidence")).toBeTruthy();
@@ -59,12 +60,12 @@ describe("CitationEvidenceChicklet", () => {
 
     const details = screen.getByTestId(
       "citation-evidence-chicklet",
-    ) as HTMLDetailsElement;
-    const summary = details.querySelector("summary")!;
+    ) as HTMLElement;
+    const summary = disclosureToggle(details);
     const animations: Animation[] = [];
     Object.defineProperty(details, "scrollHeight", { value: 180 });
     details.getBoundingClientRect = () =>
-      ({ height: details.open ? 180 : 24 }) as DOMRect;
+      ({ height: isDisclosureOpen(details) ? 180 : 24 }) as DOMRect;
     summary.getBoundingClientRect = () => ({ height: 24 }) as DOMRect;
     details.animate = vi.fn(() => {
       const animation = {
@@ -76,7 +77,7 @@ describe("CitationEvidenceChicklet", () => {
     });
 
     summary.click();
-    expect(details.open).toBe(true);
+    expect(isDisclosureOpen(details)).toBe(true);
     expect(details.dataset.animating).toBe("true");
     expect(details.style.overflow).toBe("hidden");
     expect(details.style.clipPath).toBe(
@@ -94,7 +95,7 @@ describe("CitationEvidenceChicklet", () => {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
     summary.click();
-    expect(details.open).toBe(true);
+    expect(isDisclosureOpen(details)).toBe(true);
     expect(details.dataset.closing).toBe("true");
     expect(details.dataset.animating).toBe("true");
     expect(details.style.overflow).toBe("hidden");

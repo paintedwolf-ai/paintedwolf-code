@@ -46,6 +46,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
   const { viewport, chrome, workflow, blueprint, queue, surfaceActive, composerRefocus, composerRehydrate, clientOrThrow, connectedClient, chatNotices } = options;
   const { activeRun, catalogRun, chatLive, stopping, thinkingLabel, pauseHint, launcherTiles, showSessionLauncher, sessionHoldsExternalContent } = options.activity;
   const [askRefocusPulse, setAskRefocusPulse] = createSignal(0);
+  const [checkpointRefocusPulse, setCheckpointRefocusPulse] = createSignal(0);
   let askDockSubmit: AskUserDockSubmitFn | undefined;
   const [askAnswerReady, setAskAnswerReady] = createSignal(false);
   /** Keeps minimized state across keyed dock mounts. */
@@ -296,6 +297,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                       client={client}
                       sessionId={props.sessionId}
                       projectDir={props.projectDir}
+                      onFocusReturn={() => setCheckpointRefocusPulse((n) => n + 1)}
                     />
                   )}
                 </Show>
@@ -347,6 +349,7 @@ export function createChatViewComposer(props: ChatViewProps, options: ComposerOp
                   chrome.tabRefocus() +
                   composerRefocus() +
                   askRefocusPulse() +
+                  checkpointRefocusPulse() +
                   composerAttachFocusPulse()
                 }
                 rehydrateDraftPulse={composerRehydrate()}

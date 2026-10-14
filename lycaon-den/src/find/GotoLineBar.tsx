@@ -4,6 +4,7 @@ import {
   releaseFocusRegion,
 } from "../shortcuts/focus-region.ts";
 import { chromeProps } from "../styling/ui-chrome.ts";
+import { GOTO_LINE_BAR_ID } from "./command-bar-disclosure.ts";
 import {
   closeGotoLine,
   gotoLineController,
@@ -42,6 +43,7 @@ export function GotoLineBar() {
     <Show when={gotoLineController.state()} keyed>
       {(active) => (
         <div
+          id={GOTO_LINE_BAR_ID}
           class="den-editor-command-bar den-editor-command-bar--goto"
           role="dialog"
           aria-label="Go to line"

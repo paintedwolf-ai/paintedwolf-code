@@ -160,6 +160,8 @@ function inlineDecorations(view: EditorView, found: ReaderMatch | undefined, cha
 
 export type ReaderEditorOptions = {
   parent: HTMLElement;
+  /** Accessible name of the reader's text area. */
+  label: string;
   /** Names this reader's scroll cost in a perf capture. */
   surface: EditorSurface;
   prefs: EditorDisplayPrefs;
@@ -228,7 +230,7 @@ export class ReaderEditor {
     // Atomic ranges prevent cursor selection inside non-text chrome.
     const atomicChrome = EditorView.atomicRanges.of(view => chromeRanges(view.state.field(documentField)));
     this.view = acquireEditorViewport(createSourceEditorState({
-      doc: "", surface: options.surface, ...options.prefs, editable: false, scrollPastEnd: options.scrollPastEnd, commandBridge: options.commandBridge,
+      doc: "", surface: options.surface, label: options.label, ...options.prefs, editable: false, scrollPastEnd: options.scrollPastEnd, commandBridge: options.commandBridge,
       extensions: [documentField, matchField, alignmentField, blocks, rows, atomicChrome,
         projectedSecretSpans.compute([documentField], state => {
           const spans: ReturnType<typeof readerSecretSpans> = [];

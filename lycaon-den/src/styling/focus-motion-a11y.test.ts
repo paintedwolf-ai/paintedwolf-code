@@ -15,7 +15,7 @@ describe("focus-visible + reduced-motion", () => {
     const tools = read("tool-utilities.css");
     expect(chrome).toMatch(/\.den-shell-dock-link:focus-visible/);
     expect(chrome).toMatch(/\.tabs__chip:focus-visible/);
-    expect(tools).toMatch(/\.den-tool-part > summary:focus-visible/);
+    expect(tools).toMatch(/\.den-tool-part > \.den-transcript-disclosure-header:focus-visible/);
   });
 
   it("zeros tab chrome fade and drawer motion under prefers-reduced-motion", () => {

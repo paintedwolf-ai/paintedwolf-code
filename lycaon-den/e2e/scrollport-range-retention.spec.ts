@@ -92,7 +92,7 @@ async function expandedCardAtBottom(page: Page, request: APIRequestContext) {
   await bootstrapChatSession(page, request);
   await seedActivityAtTail(page, request);
   const card = liveChatStage(page).getByTestId("activity-span-card").last();
-  const summary = card.locator(":scope > summary");
+  const summary = card.locator(":scope > .den-transcript-disclosure-header");
   await expect(summary).toBeVisible({ timeout: 30_000 });
   await summary.click();
   await expect(card).not.toHaveAttribute("data-animating", "true");

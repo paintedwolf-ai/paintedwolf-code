@@ -37,6 +37,7 @@ import {
   replaceComposerDocumentDraft,
 } from "../../chat/composer/composer-document-store.ts";
 import { KeyedIndex } from "../keyed-index.tsx";
+import { createResolvedFocusReturn } from "./resolved-focus-return.ts";
 
 /** Review rules match an exact path or a directory subtree. */
 function reviewRuleMatches(
@@ -62,6 +63,8 @@ type Props = {
   client: LycaonClient;
   sessionId: string;
   projectDir: string;
+  /** Focus left with a resolved card; the chat returns it to its composer. */
+  onFocusReturn?: () => void;
 };
 
 /** Bounds approval queue height. */
@@ -148,6 +151,14 @@ export function CheckpointCards(props: Props) {
     return checkpoint ? [checkpoint] : [];
   });
 
+  const focusReturn = createResolvedFocusReturn(() => props.onFocusReturn?.());
+  createEffect(() => {
+    expandedRows();
+    const done = retired();
+    queueMicrotask(() => focusReturn.settle(done));
+  });
+  onCleanup(() => focusReturn.settle(true));
+
   // Composer Send targets the visible card.
   createEffect(() => {
     setDockVisibleCheckpointId(expanded()?.checkpointId ?? null);
@@ -172,6 +183,7 @@ export function CheckpointCards(props: Props) {
     );
     const projectId = project?.id;
     if (!projectId) return;
+    focusReturn.note(checkpoint.checkpointId);
     setResolving(checkpoint.checkpointId);
     try {
       const current = await props.client.getReviewSettings(projectId);
@@ -218,6 +230,7 @@ export function CheckpointCards(props: Props) {
   ) => {
     const captured = action === "reject" ? captureGuidance(options?.withGuidance) : captureGuidance();
     const guidance = captured.draft.trim();
+    focusReturn.note(checkpoint.checkpointId);
     setResolving(checkpoint.checkpointId);
     try {
       await resolveToolApproval(
@@ -266,6 +279,7 @@ export function CheckpointCards(props: Props) {
   ) => {
     const captured = body.decision === "reject" ? captureGuidance(body.withGuidance) : captureGuidance();
     const guidance = captured.draft.trim();
+    focusReturn.note(checkpoint.checkpointId);
     setResolving(checkpoint.checkpointId);
     try {
       await resolveContentApply(

@@ -67,30 +67,39 @@ position: relative;
   --den-transcript-card-width: min(100%, 32rem);
 }
 
+/* Disclosure toggles take the header layout their utilities give them. */
+@layer base {
+  .den-transcript-disclosure-toggle {
+    display: block;
+    text-align: start;
+    white-space: inherit;
+    cursor: pointer;
+  }
+}
+
 @utility den-transcript-disclosure-card {
   align-self: flex-start;
   width: var(--den-transcript-card-width, 100%);
   max-width: 100%;
   min-width: 0;
 
-  & > summary {
+  & > .den-transcript-disclosure-header {
     box-sizing: border-box;
     width: 100%;
     max-width: 100%;
   }
 
-  &[open],
   &[data-expanded="true"] {
     align-self: stretch;
     width: 100%;
     max-width: 100%;
   }
 
-  &[open] > summary .den-tool-chicklet-caret {
+  &[data-expanded="true"] > .den-transcript-disclosure-header .den-tool-chicklet-caret {
     transform: rotate(90deg);
   }
 
-  &[data-closing] > summary .den-tool-chicklet-caret {
+  &[data-closing] > .den-transcript-disclosure-header .den-tool-chicklet-caret {
     transform: rotate(0);
   }
 }

@@ -155,7 +155,7 @@ describe("scalable layout chrome", () => {
 
     expect(chat).toMatch(/--den-transcript-card-width:\s*min\(100%,\s*32rem\)/);
     expect(chat).toMatch(
-      /@utility den-transcript-disclosure-card\s*\{[\s\S]*?width:\s*var\(--den-transcript-card-width,\s*100%\)[\s\S]*?&\[open\],\s*&\[data-expanded="true"\]\s*\{[\s\S]*?width:\s*100%/,
+      /@utility den-transcript-disclosure-card\s*\{[\s\S]*?width:\s*var\(--den-transcript-card-width,\s*100%\)[\s\S]*?&\[data-expanded="true"\]\s*\{[\s\S]*?width:\s*100%/,
     );
     expect(components).toMatch(
       /\.den-turn-walk\s*\{[\s\S]*?width:\s*var\(--den-transcript-card-width\)/,
@@ -191,7 +191,7 @@ describe("scalable layout chrome", () => {
       /\.den-tool-part\[data-accordion-row\] \.den-row-mark\s*\{\s*margin-left:\s*auto/,
     );
     expect(workers).toMatch(
-      /\.den-worker-part--tool-card\s+\.den-tool-part:not\(\[open\]\):not\(\[data-accordion-row\]\)\s*\{[\s\S]*?width:\s*auto/,
+      /\.den-worker-part--tool-card\s+\.den-tool-part:not\(\[data-expanded="true"\]\):not\(\[data-accordion-row\]\)\s*\{[\s\S]*?width:\s*auto/,
     );
   });
 

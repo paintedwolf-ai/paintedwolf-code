@@ -161,7 +161,10 @@ export function createSessionNavigation(options: Pick<ShellScope,
     options.closeCrossbar();
     options.closeLauncher();
     options.showProjects();
-    void startEmptySession({ kind: "new-project" });
+    // A failed creation returns Home, where no composer should take a pending focus request.
+    void startEmptySession({ kind: "new-project" }).then(() => {
+      if (options.activeChat()) options.focusComposer();
+    });
   };
 
   const goHome = () => {

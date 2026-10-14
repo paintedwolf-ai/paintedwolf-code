@@ -1,3 +1,4 @@
+import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render } from "@solidjs/testing-library";
 import { GenericToolCard } from "./GenericToolCard.tsx";
@@ -34,10 +35,10 @@ describe("GenericToolCard", () => {
       <GenericToolCard part={readPart()} layout="chat" />
     ));
     const details = container.querySelector(
-      'details.den-tool-part[data-tool="read"]',
+      '.den-tool-part[data-transcript-disclosure][data-tool="read"]',
     );
     expect(details).toBeTruthy();
-    expect(details?.hasAttribute("open")).toBe(false);
+    expect(details?.getAttribute("data-expanded") === "true").toBe(false);
   });
 
   it("renders running reads collapsed by default", () => {
@@ -48,9 +49,9 @@ describe("GenericToolCard", () => {
       />
     ));
     const details = container.querySelector(
-      'details.den-tool-part[data-tool="read"]',
+      '.den-tool-part[data-transcript-disclosure][data-tool="read"]',
     );
-    expect(details?.hasAttribute("open")).toBe(false);
+    expect(details?.getAttribute("data-expanded") === "true").toBe(false);
   });
 
   it("renders failed reads collapsed by default", () => {
@@ -65,9 +66,9 @@ describe("GenericToolCard", () => {
       />
     ));
     const details = container.querySelector(
-      'details.den-tool-part[data-tool="read"]',
+      '.den-tool-part[data-transcript-disclosure][data-tool="read"]',
     );
-    expect(details?.hasAttribute("open")).toBe(false);
+    expect(details?.getAttribute("data-expanded") === "true").toBe(false);
   });
 
   it("renders completed reads collapsed in worker layout", () => {
@@ -75,9 +76,9 @@ describe("GenericToolCard", () => {
       <GenericToolCard part={readPart()} layout="worker" />
     ));
     const details = container.querySelector(
-      'details.den-tool-part[data-tool="read"][data-layout="worker"]',
+      '.den-tool-part[data-transcript-disclosure][data-tool="read"][data-layout="worker"]',
     );
-    expect(details?.hasAttribute("open")).toBe(false);
+    expect(details?.getAttribute("data-expanded") === "true").toBe(false);
   });
 
   it("renders generic tools collapsed by default", () => {
@@ -100,9 +101,9 @@ describe("GenericToolCard", () => {
       />
     ));
     const details = container.querySelector(
-      'details.den-tool-part[data-tool="update_progress"]',
-    ) as HTMLDetailsElement | null;
-    expect(details?.hasAttribute("open")).toBe(false);
+      '.den-tool-part[data-transcript-disclosure][data-tool="update_progress"]',
+    ) as HTMLElement | null;
+    expect(details?.getAttribute("data-expanded") === "true").toBe(false);
   });
 
   it("renders a typed lifecycle completion in the card summary", () => {
@@ -136,13 +137,12 @@ describe("GenericToolCard", () => {
       />
     ));
     const details = container.querySelector(
-      'details.den-tool-part[data-tool="update_progress"]',
+      '.den-tool-part[data-transcript-disclosure][data-tool="update_progress"]',
     );
-    if (!(details instanceof HTMLDetailsElement)) throw new Error("Missing progress details");
-    details.open = true;
-    fireEvent(details, new Event("toggle", { bubbles: true }));
+    if (!(details instanceof HTMLElement)) throw new Error("Missing progress details");
+    fireEvent.click(disclosureToggle(details));
     await Promise.resolve();
-    expect(details.open).toBe(true);
+    expect(isDisclosureOpen(details)).toBe(true);
     expect(details?.querySelector(".den-tool-part-card-structured")).toBeTruthy();
   });
 
@@ -163,11 +163,10 @@ describe("GenericToolCard", () => {
       />
     ));
     const card = container.querySelector(
-      'details.den-tool-part[data-tool="find"]',
+      '.den-tool-part[data-transcript-disclosure][data-tool="find"]',
     );
-    if (!(card instanceof HTMLDetailsElement)) throw new Error("Missing find details");
-    card.open = true;
-    fireEvent(card, new Event("toggle", { bubbles: true }));
+    if (!(card instanceof HTMLElement)) throw new Error("Missing find details");
+    fireEvent.click(disclosureToggle(card));
     await Promise.resolve();
     expect(getByRole("button", { name: "Results in Files" })).toBeTruthy();
     expect(
@@ -196,9 +195,8 @@ describe("GenericToolCard", () => {
     const { container, getByRole } = render(() => <GenericToolCard
       part={readPart({ output: "bounded preview", outputReference: reference })}
       layout="worker" sessionId="worker-session" projectId="proj-1" />);
-    const card = container.querySelector("details")!;
-    card.open = true;
-    fireEvent(card, new Event("toggle", { bubbles: true }));
+    const card = container.querySelector<HTMLElement>("[data-transcript-disclosure]")!;
+    fireEvent.click(disclosureToggle(card));
     await Promise.resolve();
     fireEvent.click(getByRole("button", { name: "Raw output in Files" }));
     expect(openFilesSurface).toHaveBeenCalledWith(expect.objectContaining({ document: expect.objectContaining({
@@ -221,11 +219,10 @@ describe("GenericToolCard", () => {
       />
     ));
     const card = container.querySelector(
-      'details.den-tool-part[data-tool="find"]',
+      '.den-tool-part[data-transcript-disclosure][data-tool="find"]',
     );
-    if (!(card instanceof HTMLDetailsElement)) throw new Error("Missing find details");
-    card.open = true;
-    fireEvent(card, new Event("toggle", { bubbles: true }));
+    if (!(card instanceof HTMLElement)) throw new Error("Missing find details");
+    fireEvent.click(disclosureToggle(card));
     await Promise.resolve();
     expect(
       card?.querySelector('[data-testid="tool-raw-add-to-chat"]'),
@@ -260,11 +257,10 @@ describe("GenericToolCard", () => {
         />
       ));
       const details = container.querySelector(
-        'details.den-tool-part[data-tool="page_snapshot"]',
+        '.den-tool-part[data-transcript-disclosure][data-tool="page_snapshot"]',
       );
       expect(details).toBeTruthy();
-      (details as HTMLDetailsElement).open = true;
-      fireEvent(details!, new Event("toggle", { bubbles: true }));
+      fireEvent.click(disclosureToggle(details));
       await Promise.resolve();
       const body = details?.querySelector('[data-testid="tool-part-body"]');
       expect(body?.querySelector('[data-testid="transcript-visual-artifact"]'))
@@ -282,9 +278,9 @@ describe("GenericToolCard", () => {
         />
       ));
       const details = container.querySelector(
-        'details.den-tool-part[data-tool="page_snapshot"]',
-      ) as HTMLDetailsElement | null;
-      expect(details?.hasAttribute("open")).toBe(false);
+        '.den-tool-part[data-transcript-disclosure][data-tool="page_snapshot"]',
+      ) as HTMLElement | null;
+      expect(details?.getAttribute("data-expanded") === "true").toBe(false);
     });
   });
 });
@@ -294,7 +290,7 @@ it("leads with the command and retains its exact handle in the disclosure", asyn
   const { container, findByText } = render(() => <GenericToolCard layout="chat" part={readPart({
     tool: "command_output", kind: "generic", title: "./task den:test:fast", args: { handle, cursor: 0 }, output: "done",
   })} />);
-  const summary = container.querySelector("summary");
+  const summary = container.querySelector<HTMLElement>(".den-transcript-disclosure-toggle")!;
   if (!summary) throw new Error("Missing command summary");
   expect(summary.textContent).toContain("./task den:test:fast");
   expect(summary.textContent).not.toContain(handle);

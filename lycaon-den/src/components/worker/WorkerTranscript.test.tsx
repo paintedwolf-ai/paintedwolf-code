@@ -1,3 +1,4 @@
+import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
@@ -45,10 +46,10 @@ function addWorkerToolOutputToChat(worker: WorkerTask) {
   }]);
   const view = render(() => <WorkerTranscript workerId={worker.id} workers={[worker]}
     appStore={appStore} projectDir="/tmp/p" />);
-  const activity = view.container.querySelector<HTMLDetailsElement>(".den-activity-span");
-  if (activity && !activity.open) fireEvent.click(activity.querySelector("summary")!);
-  const card = view.container.querySelector<HTMLDetailsElement>('[data-tool-call-id="worker-command-chat"]')!;
-  if (!card.open) fireEvent.click(card.querySelector("summary")!);
+  const activity = view.container.querySelector<HTMLElement>(".den-activity-span");
+  if (activity && !isDisclosureOpen(activity)) fireEvent.click(disclosureToggle(activity));
+  const card = view.container.querySelector<HTMLElement>('[data-tool-call-id="worker-command-chat"]')!;
+  if (!isDisclosureOpen(card)) fireEvent.click(disclosureToggle(card));
   fireEvent.click(within(card).getByTestId("tool-raw-add-to-chat"));
 }
 
@@ -86,10 +87,10 @@ describe("WorkerTranscript", () => {
     const view = render(() => <WorkerTranscript workerId="job-output"
       workers={[{ ...completeWorker("job-output"), child_session_id: "child-output", project_id: "project-output" }]}
       appStore={appStore} projectDir="/tmp/p" />);
-    const activity = view.container.querySelector<HTMLDetailsElement>(".den-activity-span");
-    if (activity && !activity.open) fireEvent.click(activity.querySelector("summary")!);
-    const card = view.container.querySelector<HTMLDetailsElement>('[data-tool-call-id="worker-command-output"]')!;
-    if (!card.open) fireEvent.click(card.querySelector("summary")!);
+    const activity = view.container.querySelector<HTMLElement>(".den-activity-span");
+    if (activity && !isDisclosureOpen(activity)) fireEvent.click(disclosureToggle(activity));
+    const card = view.container.querySelector<HTMLElement>('[data-tool-call-id="worker-command-output"]')!;
+    if (!isDisclosureOpen(card)) fireEvent.click(disclosureToggle(card));
     fireEvent.click(view.getByRole("button", { name: "Raw output in Files" }));
     expect(openFilesSurface).toHaveBeenCalledWith(expect.objectContaining({
       kind: "chat-content", projectId: "project-output", document: expect.objectContaining({
