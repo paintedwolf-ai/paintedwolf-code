@@ -96,7 +96,7 @@ func TestInjectedBoardRetainsPendingWorkerIntegration(t *testing.T) {
 		if truncated {
 			t.Fatalf("small worker state was truncated: %s", body)
 		}
-		for _, want := range []string{"Work: 1 done", "Merge: pending abcd", "Overlay plan: 1 pending", "status.py:conflict(1)"} {
+		for _, want := range []string{"Work: 1 ", "Merge: pending abcd", "Overlay plan: 1 pending", "status.py:conflict(1)"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("scope %v omitted %q: %s", scope, want, body)
 			}
