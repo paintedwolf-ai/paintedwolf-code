@@ -90,6 +90,8 @@ position: relative;
   flex-direction: column;
   overflow-y: auto;
   overscroll-behavior: none;
+  /* A row scrolled into view by focus stops clear of the dock wash. */
+  scroll-padding-block-end: var(--den-nav-wash-height);
 }
 
 
