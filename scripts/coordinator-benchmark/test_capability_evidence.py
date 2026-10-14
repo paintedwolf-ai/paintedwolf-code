@@ -11,7 +11,7 @@ class CapabilityTests(LedgerCase):
         (self.root / 'project').mkdir()
 
     def card(self, id_, subject, status, call, created):
-        self.session['checkpoints'].append({'checkpoint_id':id_,'kind':'tool_approval','status':status,'issued_at':created,
+        self.session['checkpoints'].append({'id':id_,'kind':'tool_approval','status':status,'issued_at':created,
             'tool_approval':{'tool_call_id':call,'plan':{'subject':{'kind':subject}}}})
         self.save()
 

@@ -4,6 +4,8 @@ import "github.com/lycaon/lycaon/internal/oarcore"
 
 // Occurrence facts describe host metadata and are available to every rule consumer ([OAR-FACT-27]).
 var occurrenceFactDecls = []factDecl{
+	{"tool_discovery_status", oarcore.TypeString, FactTierHost, ""},
+	{"tool_discovery_has_more", oarcore.TypeBool, FactTierHost, ""},
 	{"syntax_override_reason", oarcore.TypeString, FactTierHost, ""},
 	{"rejection_reason", oarcore.TypeString, FactTierHost, ""},
 	{"rejection_field", oarcore.TypeString, FactTierHost, ""},
@@ -34,6 +36,8 @@ var occurrenceFactDecls = []factDecl{
 	{"scan_new_status", oarcore.TypeString, FactTierHost, ""},
 
 	{"can_stat", oarcore.TypeBool, FactTierHost, ""},
+	{"can_view_image", oarcore.TypeBool, FactTierHost, ""},
+	{"workspace_image_supported", oarcore.TypeBool, FactTierHost, ""},
 	{"recall_widen_invalid", oarcore.TypeBool, FactTierHost, ""},
 	{"recall_allowed_fields", oarcore.TypeListString, FactTierHost, ""},
 	{"render_total_exceeded", oarcore.TypeBool, FactTierHost, ""},
@@ -282,6 +286,8 @@ var occurrenceFactDecls = []factDecl{
 	{"largest_subtree", oarcore.TypeString, FactTierHost, ""},
 	{"offset", oarcore.TypeString, FactTierHost, ""},
 	{"old_string_chars", oarcore.TypeString, FactTierHost, ""},
+	{"replacement_matches", oarcore.TypeInt, FactTierHost, ""},
+	{"replacement_line", oarcore.TypeInt, FactTierHost, ""},
 	{"opaque_overflow", oarcore.TypeBool, FactTierHost, ""},
 	{"operator", oarcore.TypeString, FactTierHost, ""},
 	{"original_author", oarcore.TypeString, FactTierHost, ""},
@@ -384,6 +390,7 @@ var occurrenceFactDecls = []factDecl{
 	{"workflow_id", oarcore.TypeString, FactTierHost, ""},
 	{"year", oarcore.TypeString, FactTierHost, ""},
 	{"misplaced_fields", oarcore.TypeListString, FactTierHost, ""},
+	{"inapplicable_fields", oarcore.TypeListString, FactTierHost, ""},
 	{"found_under", oarcore.TypeString, FactTierHost, ""},
 	{"belongs_under", oarcore.TypeString, FactTierHost, ""},
 	{"close_before", oarcore.TypeString, FactTierHost, ""},

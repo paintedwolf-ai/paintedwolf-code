@@ -904,13 +904,13 @@
       "summary": "edit on {{ paintedwolf.path }} found {{ paintedwolf.occurrences }} matches for old_string — a single-occurrence edit needs a unique target."
     },
     "EDIT_OLD_STRING_NOT_FOUND": {
-      "branch_instruction": "Use a fresh verbatim substring. Do not replace the whole file merely to bypass a failed exact edit.",
+      "branch_instruction": "Inspect source_history only when attribution is needed. Do not replace the whole file to bypass a missing match.",
       "category": "recoverable",
       "emit": "guard:edit",
-      "summary": "edit on {{ paintedwolf.path }} could not find old_string ({{ paintedwolf.old_string_chars }} chars) in the current file ({{ paintedwolf.total_lines }} lines)."
+      "summary": "{% if paintedwolf.replacement_matches %}No edit was applied to {{ paintedwolf.path }}. The requested new_string is already present {{ paintedwolf.replacement_matches }} time(s), first at line {{ paintedwolf.replacement_line }}.{% else %}No edit was applied to {{ paintedwolf.path }}: old_string ({{ paintedwolf.old_string_chars }} chars) is absent from the edit basis ({{ paintedwolf.total_lines }} lines).{% endif %}"
     },
     "EDIT_TARGET_CHANGED_BY_OTHERS": {
-      "branch_instruction": "Branch on Code; never retry the same old_string without a fresh read",
+      "branch_instruction": "Inspect source_history when attribution is needed. Do not repeat the same edit or replace the whole file merely to bypass a missing match.",
       "category": "recoverable",
       "emit": "guard:edit",
       "summary": "edit on {{ paintedwolf.path }} could not find old_string ({{ paintedwolf.old_string_chars }} chars), and the ledger recorded {{ paintedwolf.change_count }} change(s) to this file by other actors during this session."
@@ -2207,13 +2207,13 @@
       "summary": "The sandbox refused terminal paths. Reads {{ paintedwolf.refused_terminal_read_paths }}; writes {{ paintedwolf.refused_terminal_write_paths }}."
     },
     "SANDBOX_TRY_HOST_EXECUTION": {
-      "branch_instruction": "Request capability_request.host_execution for the command, or leave the operation out — do not wait on it",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused {{ paintedwolf.unsandboxed_refusals }}{% if paintedwolf.process_running %}, and the job is still running{% endif %}."
     },
     "SANDBOX_TRY_LOCAL_NETWORK": {
-      "branch_instruction": "Declare the listener or connection in capability_request — a retry without it is refused again",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused{% if paintedwolf.refused_listen_ports %} a listener on port {{ paintedwolf.refused_listen_ports }}{% if paintedwolf.refused_connect_ports %} and{% endif %}{% endif %}{% if paintedwolf.refused_connect_ports %} a direct connection to port {{ paintedwolf.refused_connect_ports }}{% endif %}."
@@ -2225,25 +2225,25 @@
       "summary": "`{{ tool }}` requires access to a local service{% if paintedwolf.port %} on port {{ paintedwolf.port }}{% endif %}."
     },
     "SANDBOX_TRY_PROCESS_CONTROL": {
-      "branch_instruction": "Declare capability_request.process_control — a retry without it is refused again",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused signals to processes outside the command's boundary: {{ paintedwolf.refused_signals }}."
     },
     "SANDBOX_TRY_READ_PATH": {
-      "branch_instruction": "Reissue with capability_request.read_path naming the refused path — do not retry the bare read",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused reads of protected paths {{ paintedwolf.refused_read_paths }}{% if paintedwolf.process_running %} while the job runs{% else %}, and {{ paintedwolf.failed_stages }} failed{% endif %}."
     },
     "SANDBOX_TRY_SOCKET_PATH": {
-      "branch_instruction": "Declare the socket in capability_request — a retry without it is refused again",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused connections to the local sockets {{ paintedwolf.refused_socket_paths }}."
     },
     "SANDBOX_TRY_WRITE_ROOT": {
-      "branch_instruction": "Reissue with capability_request.write_root naming the refused path's grant — do not relocate the write to scratch or /tmp",
+      "branch_instruction": "{% if paintedwolf.process_running %}Resolve the running job before retrying; a stop request alone does not establish exit.{% else %}Preserve completed effects; retry with the required capability only if the operation is still needed.{% endif %}",
       "category": "recoverable",
       "emit": "guard:sandbox",
       "summary": "In `{{ tool }}`, the sandbox refused writes to {{ paintedwolf.refused_write_paths }}{% if paintedwolf.process_running %} while the job runs{% else %}, and {{ paintedwolf.failed_stages }} failed{% endif %}."
@@ -2965,11 +2965,17 @@
       "emit": "guard:text_write_base",
       "summary": "{% if paintedwolf.text_base_changed %}{{ paintedwolf.path }} no longer matches the validated write base.{% else %}The host could not confirm the current write base for {{ paintedwolf.path }}.{% endif %}"
     },
+    "TOOL_ACTION_IN_TEXT": {
+      "branch_instruction": "If explaining tool syntax or logs, use a fenced code example with an explanation.",
+      "category": "recoverable",
+      "emit": "guard:coordinator",
+      "summary": "No tool executed. The assistant response contained a text action envelope for {{ paintedwolf.offenders_sample }}."
+    },
     "TOOL_ARGS_INVALID": {
       "branch_instruction": "{% if paintedwolf.suggested_tool %}Fix the argument object, or switch to `{{ paintedwolf.suggested_tool }}`.{% else %}Repair the rejected argument object and retry.{% endif %}",
       "category": "recoverable",
       "emit": "guard:tool_args",
-      "summary": "{% if paintedwolf.json_malformed %}Argument `{{ paintedwolf.rejection_field }}` is not valid JSON, so it arrived as text instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.json_encoded %}Argument `{{ paintedwolf.rejection_field }}` was passed as a JSON string instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.misplaced_fields %}Arguments `{{ paintedwolf.misplaced_fields }}` were placed under {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}; they belong under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}{% else %}{% if paintedwolf.did_you_mean %}Unknown argument `{{ paintedwolf.rejection_field }}`: did you mean `{{ paintedwolf.did_you_mean }}`?{% else %}{% if paintedwolf.conflict_keys %}Conflicting arguments provided: pass only one of {{ paintedwolf.conflict_keys }}{% else %}Tool arguments failed validation: {{ paintedwolf.rejection_reason }}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}"
+      "summary": "{% if paintedwolf.json_malformed %}Argument `{{ paintedwolf.rejection_field }}` is not valid JSON, so it arrived as text instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.json_encoded %}Argument `{{ paintedwolf.rejection_field }}` was passed as a JSON string instead of a native {{ paintedwolf.expected_type }}{% else %}{% if paintedwolf.misplaced_fields %}Arguments `{{ paintedwolf.misplaced_fields }}` were placed under {% if paintedwolf.found_under %}`{{ paintedwolf.found_under }}`{% else %}the top level{% endif %}; they belong under {% if paintedwolf.belongs_under %}`{{ paintedwolf.belongs_under }}`{% else %}the top level{% endif %}{% else %}{% if paintedwolf.did_you_mean %}Unknown argument `{{ paintedwolf.rejection_field }}`: did you mean `{{ paintedwolf.did_you_mean }}`?{% else %}{% if paintedwolf.conflict_keys %}Conflicting arguments provided: pass only one of {{ paintedwolf.conflict_keys }}{% else %}Tool arguments failed validation{% if paintedwolf.rejection_field %} at `{{ paintedwolf.rejection_field }}`{% endif %}: {{ paintedwolf.rejection_reason }}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}"
     },
     "TOOL_ARGS_MALFORMED": {
       "branch_instruction": "Repair the arguments object without changing the intended payload",
@@ -3041,7 +3047,7 @@
       "summary": "{{ tool }} is not permitted for the active agent profile."
     },
     "TOOL_REQUEST_UNMATCHED": {
-      "branch_instruction": "Do not repeat the same request unchanged. If the missing capability blocks the task, explain that limit rather than claiming completion",
+      "branch_instruction": "{% if paintedwolf.tool_discovery_status %}Choose an exact tool from the catalog{% if paintedwolf.tool_discovery_has_more %}, or continue browsing with next_need{% endif %}; do not repeat the unchanged description. {% else %}Do not repeat the same request unchanged. If the missing capability blocks the task, explain that limit rather than claiming completion{% endif %}",
       "category": "recoverable",
       "emit": "guard:request_tools",
       "summary": "No schema loaded for the request \"{{ paintedwolf.need }}\" in profile {{ paintedwolf.profile }}"

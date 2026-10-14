@@ -158,8 +158,8 @@ func buildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 		// Skill paths are relative to the skill directory.
 		rec.Fidelity = FidelityStructured
 		captureRecordBody(&rec, content)
-	case "render_view":
-		// Authored mockups do not prove runtime state.
+	case "render_view", "verify", "preview_overlay", "promote_overlay", "reject_overlay":
+		// Result receipts do not establish observations of referenced file contents.
 		rec.Fidelity = FidelityStructured
 		captureRecordBody(&rec, content)
 	case "capture_page", "page_snapshot", "page_open":

@@ -1,10 +1,13 @@
 """Validate prepared boundaries separately from the candidate's outcome."""
 import json
 import pathlib
+import re
 import uuid
 from focused_outcomes import required_fields, read_json, same
 from episode_evidence import read, member
 import ledger
+
+HANDLE_TAG = re.compile(r'^\[(?:[a-zA-Z0-9_-]+:)*[a-z_]+#[1-9][0-9]*\]\n?')
 
 
 def prepared_case(capture, case, spec):
@@ -45,7 +48,7 @@ def preparation_checks(capture, case, spec):
                 raise ValueError('preparation checkpoint decision differs')
             if step.get('code') and step['code'] not in result.get('codes',[]):
                 raise ValueError('preparation result code differs')
-            if step.get('json') and not required_fields(json.loads(result['content']),step['json']):
+            if step.get('json') and not required_fields(json.loads(HANDLE_TAG.sub('', result['content'], count=1)),step['json']):
                 raise ValueError('preparation result envelope differs')
             if step['tool'] == 'verify':
                 proof=next((r for r in ledger.invocations(db,case['session_id']) if r['tool_call_id']==call),None)
