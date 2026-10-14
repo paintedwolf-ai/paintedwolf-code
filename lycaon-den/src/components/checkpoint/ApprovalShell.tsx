@@ -455,7 +455,6 @@ export function GrantMenu(p: {
                 disabled={p.disabled}
                 aria-haspopup="menu"
                 aria-expanded={p.open}
-                aria-label={APPROVALS_COPY.card.grantMenu.ariaLabel}
                 onClick={() => p.onOpenChange(!p.open)}
               >
                 <span>{p.face.title}</span>
