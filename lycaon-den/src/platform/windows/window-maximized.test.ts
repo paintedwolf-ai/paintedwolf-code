@@ -13,8 +13,8 @@ const onResized = vi.fn(async (handler: () => void) => {
   resized = handler;
   return () => undefined;
 });
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ isMaximized, isFullscreen, onResized }),
+vi.mock("./current-window.ts", () => ({
+  currentWindow: async () => ({ isMaximized, isFullscreen, onResized }),
 }));
 
 const {

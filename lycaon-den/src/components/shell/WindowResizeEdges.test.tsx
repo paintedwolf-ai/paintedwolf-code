@@ -9,8 +9,8 @@ vi.mock("../../platform/runtime.ts", async (importOriginal) => ({
 }));
 
 const startResizeDragging = vi.fn(async (_direction: string) => undefined);
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ startResizeDragging }),
+vi.mock("../../platform/windows/current-window.ts", () => ({
+  currentWindow: async () => ({ startResizeDragging }),
 }));
 
 const { WindowResizeEdges } = await import("./WindowResizeEdges.tsx");

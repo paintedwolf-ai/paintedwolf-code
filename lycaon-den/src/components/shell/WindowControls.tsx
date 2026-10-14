@@ -4,6 +4,7 @@ import {
   windowChromeControls,
   type WindowChromeSide,
 } from "../../platform/windows/window-chrome-layout.ts";
+import { currentWindow } from "../../platform/windows/current-window.ts";
 import { windowMaximized } from "../../platform/windows/window-maximized.ts";
 import { AppMenuButton } from "./AppMenuButton.tsx";
 
@@ -15,11 +16,6 @@ export type WindowEdgeClaim = {
   /** This column keeps the edge once the narrow band drops its neighbor. */
   narrow: boolean;
 };
-
-async function windowApi() {
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  return getCurrentWindow();
-}
 
 const glyph = (path: JSX.Element) => (
   <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true" class="den-shell-window-control__glyph">
@@ -67,7 +63,7 @@ export function WindowControls(props: WindowEdgeClaim) {
                   class="den-shell-window-control"
                   aria-label="Minimize window"
                   data-testid="window-minimize"
-                  onClick={() => void windowApi().then((win) => win.minimize())}
+                  onClick={() => void currentWindow().then((win) => win.minimize())}
                 >
                   {minimizeGlyph()}
                 </button>
@@ -79,7 +75,7 @@ export function WindowControls(props: WindowEdgeClaim) {
                   aria-label={windowMaximized() ? "Restore window" : "Maximize window"}
                   data-testid="window-maximize"
                   data-maximized={windowMaximized() ? "" : undefined}
-                  onClick={() => void windowApi().then((win) => win.toggleMaximize())}
+                  onClick={() => void currentWindow().then((win) => win.toggleMaximize())}
                 >
                   {windowMaximized() ? restoreGlyph() : maximizeGlyph()}
                 </button>
@@ -90,7 +86,7 @@ export function WindowControls(props: WindowEdgeClaim) {
                   class="den-shell-window-control den-shell-window-control-close"
                   aria-label="Close window"
                   data-testid="window-close"
-                  onClick={() => void windowApi().then((win) => win.close())}
+                  onClick={() => void currentWindow().then((win) => win.close())}
                 >
                   {closeGlyph()}
                 </button>

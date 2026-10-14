@@ -1,6 +1,6 @@
 import { createSignal } from "solid-js";
 import { EditorView } from "@codemirror/view";
-import type { ContextMenuItem } from "../../components/ContextMenu.tsx";
+import type { ContextMenuEntry, ContextMenuItem } from "../../components/ContextMenu.tsx";
 import { stepEditorHistory } from "../../components/source/editor/editor-history.ts";
 import { nativeCommandId } from "../../contributions/dispatch.ts";
 import { buildAppMenuSpec, type AppMenuItemSpec, type AppMenuSpec } from "../../shortcuts/app-menu-model.ts";
@@ -18,6 +18,7 @@ import {
   type EditableSnapshot,
 } from "../interaction/text-edit-context.ts";
 import { isTauriRuntime } from "../runtime.ts";
+import { currentWindow } from "../windows/current-window.ts";
 import { windowFullscreen, windowMaximized } from "../windows/window-maximized.ts";
 import { activateAppMenuCommand } from "./app-menu.ts";
 
@@ -29,12 +30,7 @@ export function requestAppMenuOpen(): void {
   setOpenRequests((count) => count + 1);
 }
 
-async function currentWindow() {
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  return getCurrentWindow();
-}
-
-function contributedItem(item: AppMenuItemSpec): ContextMenuItem {
+function contributedItem(item: AppMenuItemSpec): ContextMenuEntry {
   return {
     label: item.title,
     shortcut: item.binding ? displayBinding(item.binding) : undefined,
@@ -45,15 +41,15 @@ function contributedItem(item: AppMenuItemSpec): ContextMenuItem {
   };
 }
 
-function contributedGroups(section: AppMenuSpec | undefined): ContextMenuItem[][] {
+function contributedGroups(section: AppMenuSpec | undefined): ContextMenuEntry[][] {
   return (section?.groups ?? [])
     .filter((group) => group.length > 0)
     .map((group) => group.map(contributedItem));
 }
 
 /** Groups joined by separators; empty groups add none. */
-function joinGroups(groups: ContextMenuItem[][]): ContextMenuItem[] {
-  const items: ContextMenuItem[] = [];
+function joinGroups(groups: ContextMenuEntry[][]): ContextMenuEntry[] {
+  const items: ContextMenuEntry[] = [];
   for (const group of groups) {
     if (group.length === 0) continue;
     if (items.length > 0) items.push({ separator: true });
@@ -82,7 +78,7 @@ function stepHistory(direction: "undo" | "redo"): void {
 }
 
 /** Undo, redo, cut, copy, paste, select all against the focused editable. */
-function editItems(): ContextMenuItem[][] {
+function editItems(): ContextMenuEntry[][] {
   const snap = focusedEditable();
   const editable = snap !== null && !snap.readOnly;
   const selected = snap !== null && editableHasSelection(snap);
@@ -105,7 +101,7 @@ function editItems(): ContextMenuItem[][] {
 }
 
 /** A stock command's menu entry, labelled with its live chord. */
-function commandItem(handlerId: string, label: string): ContextMenuItem {
+function commandItem(handlerId: string, label: string): ContextMenuEntry {
   const commandId = nativeCommandId(handlerId);
   const chord = commandId ? displayBindingFor(commandId) : "—";
   return {
@@ -118,7 +114,7 @@ function commandItem(handlerId: string, label: string): ContextMenuItem {
   };
 }
 
-function windowItems(): ContextMenuItem[] {
+function windowItems(): ContextMenuEntry[] {
   if (!isTauriRuntime()) return [];
   return [
     { label: "Minimize", onSelect: () => void currentWindow().then((win) => win.minimize()) },
@@ -129,12 +125,11 @@ function windowItems(): ContextMenuItem[] {
   ];
 }
 
-function fullscreenItem(): ContextMenuItem[] {
+function fullscreenItem(): ContextMenuEntry[] {
   if (!isTauriRuntime()) return [];
   return [
     {
       label: windowFullscreen() ? "Exit full screen" : "Enter full screen",
-      shortcut: "F11",
       onSelect: () => void currentWindow().then((win) => win.setFullscreen(!windowFullscreen())),
     },
   ];
@@ -147,7 +142,7 @@ function fullscreenItem(): ContextMenuItem[] {
  */
 export function inWindowAppMenuItems(): ContextMenuItem[] {
   const sections = new Map(buildAppMenuSpec().map((section) => [section.menu, section]));
-  const section = (menu: AppMenuSpec["menu"], groups: ContextMenuItem[][]): ContextMenuItem[] => {
+  const section = (menu: AppMenuSpec["menu"], groups: ContextMenuEntry[][]): ContextMenuItem[] => {
     const items = joinGroups(groups);
     if (items.length === 0) return [];
     const spec = sections.get(menu);

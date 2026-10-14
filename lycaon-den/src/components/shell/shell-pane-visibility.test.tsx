@@ -4,6 +4,7 @@ import { EMPTY_APP_STATE_V1, type SplitOrder, type WorkspaceOrientation } from "
 import { resetAppStateSnapshotForTests } from "../../store/app-state-snapshot.ts";
 import { resetLayoutForTests } from "../../layout/layout-test-support.ts";
 import { syncLayoutFromSnapshot } from "../../layout/layout-preferences.ts";
+import { setLayoutViewportWidth } from "../../shell/workspace-layout.ts";
 import { createShellPaneVisibility } from "./shell-pane-visibility.ts";
 
 afterEach(() => resetLayoutForTests());
@@ -15,6 +16,8 @@ function panes(orientation: WorkspaceOrientation, splitOrder: SplitOrder, hidden
     layout: { workspaceOrientation: orientation, splitOrder, navCollapsed: opts?.navCollapsed ?? true,
       hiddenSplitPane: hidden ? "conversation" : opts?.hiddenPane } });
   syncLayoutFromSnapshot();
+  // Wide enough that nothing collapses on its own.
+  setLayoutViewportWidth(2400);
   let dispose!: () => void;
   const value = createRoot((d) => {
     dispose = d;
@@ -66,17 +69,18 @@ describe("window edge hosts", () => {
 
   it("splits the edges between the stage and the chat once the sidebar collapses", () => {
     const { value, dispose } = panes("standard", "context-first", false);
-    expect(hosts(value)).toEqual([{ owner: "stage", narrow: "stage" }, { owner: "chat", narrow: "chat" }]);
+    expect(hosts(value)).toEqual([{ owner: "stage", narrow: "chat" }, { owner: "chat", narrow: "chat" }]);
     dispose();
     const chatFirst = panes("standard", "chat-first", false);
-    expect(hosts(chatFirst.value)).toEqual([{ owner: "chat", narrow: "chat" }, { owner: "stage", narrow: "stage" }]);
+    expect(hosts(chatFirst.value)).toEqual([{ owner: "chat", narrow: "chat" }, { owner: "stage", narrow: "chat" }]);
     chatFirst.dispose();
   });
 
   it("hands the dropped column's edge to the narrow survivor", () => {
     resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1,
-      layout: { workspaceOrientation: "standard", splitOrder: "context-first", navCollapsed: true, narrowSplitSurvivor: "stage" } });
+      layout: { workspaceOrientation: "standard", splitOrder: "context-first", navCollapsed: true, narrowSurvivor: "stage" } });
     syncLayoutFromSnapshot();
+    setLayoutViewportWidth(2400);
     const value = createRoot(() => createShellPaneVisibility({ windowSubject: null, splitLive: () => true,
       presentedSplitLive: () => true, presentedStageId: () => "files", stageColumnOccupied: () => true }));
     expect(hosts(value)).toEqual([{ owner: "stage", narrow: "stage" }, { owner: "chat", narrow: "stage" }]);

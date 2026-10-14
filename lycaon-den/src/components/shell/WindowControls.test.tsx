@@ -11,8 +11,8 @@ vi.mock("../../platform/runtime.ts", async (importOriginal) => ({
 const minimize = vi.fn(async () => undefined);
 const toggleMaximize = vi.fn(async () => undefined);
 const close = vi.fn(async () => undefined);
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ minimize, toggleMaximize, close }),
+vi.mock("../../platform/windows/current-window.ts", () => ({
+  currentWindow: async () => ({ minimize, toggleMaximize, close }),
 }));
 
 vi.mock("./AppMenuButton.tsx", () => ({

@@ -63,7 +63,7 @@ function mountChat() {
     settingsStore={settingsStore} costStore={{ state: { session: { estimated_nano_usd: 3e9 } } } as never} notices={notices as never}
     actions={actions as never} workerDrawer={workerDrawer} panes={{ chatHeaderLeadsWindow: () => true, windowNavCollapsed: () => true,
       navTouchesChat: () => false, navAutomaticallyCollapsed: () => false, contextHidden: () => false, navSide: () => "left",
-      showWindowNav, conversationSeam: () => false } as never}
+      showWindowNav, conversationSeam: () => false, windowEdgeClaims: () => [] } as never}
     onboarding={{ showNoProviderBanner: () => true, providerGap: () => "missing-provider" as never }}
     projectDirForChat={() => "/garden"} nav={() => "projects"} splitLive={() => true} notificationStack={() => <div>Shared notice</div>}
     showPromoteNudge={() => true} showNoFolderBanner={() => true} {...callbacks} />);

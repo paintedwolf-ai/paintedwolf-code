@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { isTauriRuntime } from "../runtime.ts";
+import { currentWindow } from "./current-window.ts";
 
 const [maximized, setMaximized] = createSignal(false);
 const [fullscreen, setFullscreen] = createSignal(false);
@@ -21,8 +22,7 @@ export function setWindowFullscreenForTests(next: boolean): void {
 /** Follows the window's maximized and fullscreen state through its resizes. */
 export async function trackWindowMaximized(): Promise<void> {
   if (!isTauriRuntime()) return;
-  const { getCurrentWindow } = await import("@tauri-apps/api/window");
-  const win = getCurrentWindow();
+  const win = await currentWindow();
   const refresh = async () => {
     try {
       const [isMaximized, isFullscreen] = await Promise.all([win.isMaximized(), win.isFullscreen()]);

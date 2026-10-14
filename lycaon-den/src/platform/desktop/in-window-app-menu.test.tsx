@@ -11,8 +11,8 @@ vi.mock("../runtime.ts", async (importOriginal) => ({
 const minimize = vi.fn(async () => undefined);
 const toggleMaximize = vi.fn(async () => undefined);
 const setFullscreen = vi.fn(async (_on: boolean) => undefined);
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ minimize, toggleMaximize, setFullscreen }),
+vi.mock("../windows/current-window.ts", () => ({
+  currentWindow: async () => ({ minimize, toggleMaximize, setFullscreen }),
 }));
 
 const { appMenuOpenRequests, inWindowAppMenuItems, requestAppMenuOpen } = await import("./in-window-app-menu.ts");
@@ -56,7 +56,7 @@ describe("inWindowAppMenuItems", () => {
   it("carries every menu the native bar would, in bar order", () => {
     const items = inWindowAppMenuItems();
     expect(items.map((item) => item.label)).toEqual([
-      "Painted Wolf Code", "File", "Edit", "View", "Go", "Window", "Help",
+      "Painted Wolf Code", "File", "Edit", "Selection", "View", "Go", "Window", "Help",
     ]);
     expect(items.every((item) => item.submenu !== undefined)).toBe(true);
   });
@@ -65,7 +65,8 @@ describe("inWindowAppMenuItems", () => {
     const help = section(inWindowAppMenuItems(), "Help");
     const shortcuts = help.submenu.find((item) => item.testId === `app-menu-item-${stockId("help-shortcuts")}`);
     expect(shortcuts?.label).toBe("Keyboard shortcuts");
-    expect(shortcuts?.shortcut).toBe("? / Ctrl+/");
+    // The one chord with an accelerator spelling, as the native bar shows it.
+    expect(shortcuts?.shortcut).toBe("Ctrl+/");
   });
 
   it("runs a chosen command through the menu activation gate", () => {

@@ -1,5 +1,6 @@
 import { For, Show } from "solid-js";
 import { isTauriRuntime } from "../../platform/runtime.ts";
+import { currentWindow } from "../../platform/windows/current-window.ts";
 import { drawsWindowControls } from "../../platform/windows/window-chrome-layout.ts";
 import { windowFullscreen, windowMaximized } from "../../platform/windows/window-maximized.ts";
 
@@ -26,8 +27,7 @@ const DIRECTIONS: readonly ResizeDirection[] = [
 
 async function startResize(direction: ResizeDirection): Promise<void> {
   try {
-    const { getCurrentWindow } = await import("@tauri-apps/api/window");
-    await getCurrentWindow().startResizeDragging(direction);
+    await (await currentWindow()).startResizeDragging(direction);
   } catch (err) {
     console.debug("[window-chrome] resize drag refused", err);
   }
