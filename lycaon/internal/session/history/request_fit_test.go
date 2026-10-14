@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -44,8 +45,8 @@ func TestCompleteRequestFitsColdOllamaWindowWithoutChangingFrame(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	var rows []api.Message
 	for i := 0; i < 8; i++ {
-		rows = append(rows, api.Message{Role: api.MessageRoleAssistant, Content: "Ready"},
-			api.Message{Role: api.MessageRoleSystem, Content: strings.Repeat("Recorded feedback. ", 200)})
+		rows = append(rows, api.Message{ID: fmt.Sprintf("answer-%d", i), Role: api.MessageRoleAssistant, Content: "Ready"},
+			api.Message{ID: fmt.Sprintf("feedback-%d", i), Role: api.MessageRoleSystem, Content: strings.Repeat("Recorded feedback. ", 200)})
 	}
 	rows = append(rows, api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser,
 		Authority: api.ContentAuthorityUser, Content: "Recover the original observation",
