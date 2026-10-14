@@ -70,6 +70,12 @@ type WatchCoverage struct {
 	// Faulted means the platform stream reported an error; events since then
 	// may be missing.
 	Faulted bool
+	// Overflows counts dropped-event windows the stream has already closed
+	// with a resync.
+	Overflows int
+	// WatchLimit means the kernel refused the last registration because the
+	// per-user watch limit is reached.
+	WatchLimit bool
 	// Recursive means one root registration observes every descendant, so
 	// Watched counts registrations rather than covered directories.
 	Recursive bool
