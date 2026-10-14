@@ -33,7 +33,8 @@ func recordAgentReceipt(ctx context.Context, tx *sql.Tx, id string, in AgentEdit
 
 // Retry admission precedes anchor resolution: an accepted edit may have removed
 // its own anchors, and another replica may already have edited its result.
-func (s *Service) replayAgentEdit(ctx context.Context, d *Document, in AgentEdit) (*AgentEditResult, error) {
+func (e agentEditPlanner) replayAgentEdit(ctx context.Context, d *Document, in AgentEdit) (*AgentEditResult, error) {
+	s := e.s
 	var digest, held, publicationError string
 	var publish bool
 	err := s.store.db.QueryRowContext(ctx, `SELECT input_digest,held_version_id,publication_requested,publication_error

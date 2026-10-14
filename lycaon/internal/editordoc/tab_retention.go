@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"slices"
+	"sort"
 	"strings"
 )
 
@@ -14,7 +15,8 @@ type ClientLive func(clientID string) bool
 // ReplaceRetention records tab references without creating collaboration presence.
 // A window inventory sweeps the caller's namespace, but a client whose stream is
 // live keeps its marks even when a stale inventory omits it.
-func (s *Service) ReplaceRetention(ctx context.Context, projectID, clientID string, ids []string, retainedClients []string, live ClientLive) error {
+func (p *PresenceService) ReplaceRetention(ctx context.Context, projectID, clientID string, ids []string, retainedClients []string, live ClientLive) error {
+	s := p.s
 	if strings.TrimSpace(clientID) == "" || len(clientID) > 256 || len(ids) > 16384 {
 		return ErrReplicaIdentity
 	}
@@ -100,6 +102,11 @@ func (s *Service) LifecycleDependents(ctx context.Context, projectID, rootID str
 	if s == nil || s.store == nil {
 		return nil, nil
 	}
+	return s.lifecycleDependents(ctx, projectID, rootID)
+}
+
+func (a authorshipTracker) lifecycleDependents(ctx context.Context, projectID, rootID string) ([]*Document, error) {
+	s := a.s
 	s.presenceMu.Lock()
 	ids := make([]string, 0, len(s.participants))
 	for id, participants := range s.participants {
@@ -128,4 +135,33 @@ func (s *Service) LifecycleDependents(ctx context.Context, projectID, rootID str
 		result = append(result, d)
 	}
 	return result, rows.Err()
+}
+
+func (p *PresenceService) closePresence() {
+	s := p.s
+	s.presenceMu.Lock()
+	defer s.presenceMu.Unlock()
+	s.presenceClosed = true
+	for _, participants := range s.participants {
+		for _, participant := range participants {
+			if participant.expiry != nil {
+				participant.expiry.Stop()
+			}
+		}
+	}
+	clear(s.participants)
+}
+
+func (p *PresenceService) withParticipants(d *Document) *Document {
+	s := p.s
+	out := *d
+	out.Participants = nil
+	s.presenceMu.Lock()
+	for _, participant := range s.participants[d.ID] {
+		participant.Ranges = clonePresenceRanges(participant.Ranges)
+		out.Participants = append(out.Participants, participant)
+	}
+	s.presenceMu.Unlock()
+	sort.Slice(out.Participants, func(i, j int) bool { return out.Participants[i].ClientID < out.Participants[j].ClientID })
+	return &out
 }

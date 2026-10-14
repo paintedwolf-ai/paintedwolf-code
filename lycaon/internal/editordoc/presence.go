@@ -6,7 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
@@ -32,7 +31,8 @@ type Participant struct {
 	UpdatedAt    time.Time
 }
 
-func (s *Service) joinParticipant(ctx context.Context, documentID, clientID, incarnation string) bool {
+func (p *PresenceService) joinParticipant(ctx context.Context, documentID, clientID, incarnation string) bool {
+	s := p.s
 	if strings.TrimSpace(clientID) == "" {
 		return false
 	}
@@ -59,7 +59,8 @@ func (s *Service) joinParticipant(ctx context.Context, documentID, clientID, inc
 }
 
 // A client ID remains bound to one person.
-func (s *Service) bindClientPerson(clientID, personID string) error {
+func (p *PresenceService) bindClientPerson(clientID, personID string) error {
+	s := p.s
 	s.presenceMu.Lock()
 	defer s.presenceMu.Unlock()
 	if bound, ok := s.clientPeople[clientID]; ok && bound != personID {
@@ -76,7 +77,8 @@ type ReplicaJoin struct {
 	Vector      []byte
 }
 
-func (s *Service) Join(ctx context.Context, id, projectID string, in ReplicaJoin) (*Document, error) {
+func (p *PresenceService) Join(ctx context.Context, id, projectID string, in ReplicaJoin) (*Document, error) {
+	s := p.s
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	unlock := s.docLocks.lock(documentLockKey(id))
@@ -85,11 +87,11 @@ func (s *Service) Join(ctx context.Context, id, projectID string, in ReplicaJoin
 	if err != nil {
 		return nil, err
 	}
-	p, err := s.projectBranch(ctx, projectID, d.BranchID)
+	proj, err := s.projectBranch(ctx, projectID, d.BranchID)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.reconcileDocumentDisk(ctx, p, d, ""); err != nil {
+	if err := s.reconcileDocumentDisk(ctx, proj, d, ""); err != nil {
 		return nil, err
 	}
 	clientID, incarnation, vector := in.ClientID, in.Incarnation, in.Vector
@@ -125,7 +127,8 @@ func (s *Service) Join(ctx context.Context, id, projectID string, in ReplicaJoin
 }
 
 // A replica incarnation remains bound to its client and person.
-func (s *Service) registerReplica(ctx context.Context, id, role, clientID, incarnation, personID string) (uint32, error) {
+func (a authorshipTracker) registerReplica(ctx context.Context, id, role, clientID, incarnation, personID string) (uint32, error) {
+	s := a.s
 	var replica uint32
 	var registered, registeredPerson string
 	err := s.store.db.QueryRowContext(ctx, `SELECT replica_id,client_id,COALESCE(person_id,'') FROM editor_replicas WHERE document_id=? AND role=? AND incarnation=?`, id, role, incarnation).Scan(&replica, &registered, &registeredPerson)
@@ -170,7 +173,8 @@ func (s *Service) registerReplica(ctx context.Context, id, role, clientID, incar
 	}
 }
 
-func (s *Service) Leave(ctx context.Context, id, projectID, clientID, incarnation string) error {
+func (p *PresenceService) Leave(ctx context.Context, id, projectID, clientID, incarnation string) error {
+	s := p.s
 	d, err := s.checked(ctx, id, projectID)
 	if err != nil {
 		return err
@@ -199,7 +203,8 @@ func (s *Service) Leave(ctx context.Context, id, projectID, clientID, incarnatio
 
 // DisconnectClient releases what a client holds only while live: presence and
 // its person binding. Documents, replicas, and retention stay.
-func (s *Service) DisconnectClient(ctx context.Context, clientID string) {
+func (p *PresenceService) DisconnectClient(ctx context.Context, clientID string) {
+	s := p.s
 	s.presenceMu.Lock()
 	var ids []string
 	for id, participants := range s.participants {
@@ -223,7 +228,8 @@ func (s *Service) DisconnectClient(ctx context.Context, clientID string) {
 	}
 }
 
-func (s *Service) UpdatePresence(ctx context.Context, id, projectID string, participant Participant) error {
+func (p *PresenceService) UpdatePresence(ctx context.Context, id, projectID string, participant Participant) error {
+	s := p.s
 	d, err := s.checked(ctx, id, projectID)
 	if err != nil {
 		return err
@@ -262,15 +268,16 @@ func (s *Service) UpdatePresence(ctx context.Context, id, projectID string, part
 
 // Caller holds presenceMu. A heartbeat extends presence without creating a
 // content event or keeping durable work alive.
-func (s *Service) refreshParticipant(ctx context.Context, id string, participant *Participant) {
+func (p *PresenceService) refreshParticipant(ctx context.Context, id string, participant *Participant) {
 	if participant.expiry != nil {
 		participant.expiry.Stop()
 	}
 	clientID, updated := participant.ClientID, participant.UpdatedAt
-	participant.expiry = time.AfterFunc(participantTTL, func() { s.expireParticipant(context.WithoutCancel(ctx), id, clientID, updated) })
+	participant.expiry = time.AfterFunc(participantTTL, func() { p.s.expireParticipant(context.WithoutCancel(ctx), id, clientID, updated) })
 }
 
-func (s *Service) expireParticipant(ctx context.Context, id, clientID string, updated time.Time) {
+func (p *PresenceService) expireParticipant(ctx context.Context, id, clientID string, updated time.Time) {
+	s := p.s
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	s.presenceMu.Lock()
@@ -289,33 +296,6 @@ func (s *Service) expireParticipant(ctx context.Context, id, clientID string, up
 	if d, err := s.store.Get(ctx, id); err == nil {
 		s.changed(ctx, d, false)
 	}
-}
-
-func (s *Service) closePresence() {
-	s.presenceMu.Lock()
-	defer s.presenceMu.Unlock()
-	s.presenceClosed = true
-	for _, participants := range s.participants {
-		for _, participant := range participants {
-			if participant.expiry != nil {
-				participant.expiry.Stop()
-			}
-		}
-	}
-	clear(s.participants)
-}
-
-func (s *Service) withParticipants(d *Document) *Document {
-	out := *d
-	out.Participants = nil
-	s.presenceMu.Lock()
-	for _, participant := range s.participants[d.ID] {
-		participant.Ranges = clonePresenceRanges(participant.Ranges)
-		out.Participants = append(out.Participants, participant)
-	}
-	s.presenceMu.Unlock()
-	sort.Slice(out.Participants, func(i, j int) bool { return out.Participants[i].ClientID < out.Participants[j].ClientID })
-	return &out
 }
 
 func clonePresenceRanges(ranges []PresenceRange) []PresenceRange {

@@ -11,7 +11,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Service) publicationTextState(ctx context.Context, d *Document, checkpoint []byte) (*sourceledger.TextState, error) {
+func (a authorshipTracker) publicationTextState(ctx context.Context, d *Document, checkpoint []byte) (*sourceledger.TextState, error) {
+	s := a.s
 	if len(checkpoint) == 0 {
 		return nil, nil
 	}
@@ -67,8 +68,8 @@ func (a textActor) hostReplica() string {
 var filesystemActor = textActor{kind: actorExternal}
 
 // personActor attributes a client's transition to the acting person.
-func (s *Service) personActor(ctx context.Context, kind, clientID string) (textActor, error) {
-	person, err := people.Acting(ctx, s.store.people)
+func (a authorshipTracker) personActor(ctx context.Context, kind, clientID string) (textActor, error) {
+	person, err := people.Acting(ctx, a.s.store.people)
 	if err != nil {
 		return textActor{}, fmt.Errorf("editor actor: %w", err)
 	}
@@ -104,7 +105,8 @@ func contributionRanges(ranges []documentcore.IdentityRange) []sourceledger.Text
 
 // Host participants always edit the current head, so their clocks can be reused
 // across operations. The contribution ledger retains each operation's ranges.
-func (s *Service) hostTextParticipant(ctx context.Context, d *Document, actor textActor) (uint32, error) {
+func (a authorshipTracker) hostTextParticipant(ctx context.Context, d *Document, actor textActor) (uint32, error) {
+	s := a.s
 	if actor.kind == actorAgent {
 		return s.registerReplica(ctx, d.ID, "agent", d.authorship.sessionID, d.authorship.sessionID, "")
 	}

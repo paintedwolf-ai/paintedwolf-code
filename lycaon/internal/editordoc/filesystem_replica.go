@@ -12,12 +12,13 @@ import (
 )
 
 // Filesystem edits use the published state, preserving unseen concurrent text.
-func (s *Service) importPublishedText(ctx context.Context, d *Document, read *projectsource.SourceReadResult, actor textActor) error {
-	return s.importPublishedReplica(ctx, d, read, actor, nil)
+func (f filesystemSynchronizer) importPublishedText(ctx context.Context, d *Document, read *projectsource.SourceReadResult, actor textActor) error {
+	return f.importPublishedReplica(ctx, d, read, actor, nil)
 }
 
 // A retained semantic checkpoint preserves character identities across rewind.
-func (s *Service) importPublishedReplica(ctx context.Context, d *Document, read *projectsource.SourceReadResult, actor textActor, checkpoint []byte) error {
+func (f filesystemSynchronizer) importPublishedReplica(ctx context.Context, d *Document, read *projectsource.SourceReadResult, actor textActor, checkpoint []byte) error {
+	s := f.s
 	staged, err := s.stagePublishedReplica(ctx, d, read, actor, checkpoint)
 	if err != nil {
 		return err
@@ -41,7 +42,8 @@ type stagedReplica struct {
 
 // stagePublishedReplica applies published bytes to the live replica. The caller
 // persists next and then settles the stage, which evicts the replica unless the write committed.
-func (s *Service) stagePublishedReplica(ctx context.Context, d *Document, read *projectsource.SourceReadResult, actor textActor, checkpoint []byte) (*stagedReplica, error) {
+func (f filesystemSynchronizer) stagePublishedReplica(ctx context.Context, d *Document, read *projectsource.SourceReadResult, actor textActor, checkpoint []byte) (*stagedReplica, error) {
+	s := f.s
 	s.replicas.mu.Lock()
 	defer s.replicas.mu.Unlock()
 	entry, err := s.loadReplica(ctx, d)
@@ -94,14 +96,15 @@ func (s *Service) stagePublishedReplica(ctx context.Context, d *Document, read *
 	}
 	next.publishedCheckpoint = published.Checkpoint
 	next.filesystemClient = published.clientID
-	next.replicaCommit = &replicaCommit{undoUnits: snapshot.UndoUnits, undoFloor: entry.undoFloor, revision: next.Revision, epoch: entry.head.Epoch, operationID: uuid.NewString(), actor: actor,
+	next.replicaCommit = &replicaCommit{replicaUndoCommit: replicaUndoCommit{undoUnits: snapshot.UndoUnits, undoFloor: entry.undoFloor}, revision: next.Revision, epoch: entry.head.Epoch, operationID: uuid.NewString(), actor: actor,
 		update: published.Update, vector: snapshot.Vector, checkpoint: snapshot.Checkpoint}
 	next.replicaCommit.contribution = textContribution(&next, &snapshot, actor, next.replicaCommit.operationID)
 	return &stagedReplica{entry: entry, next: next, published: published, snapshot: snapshot}, nil
 }
 
 // settleStagedReplica advances the replica head after a durable write, or discards the live import.
-func (s *Service) settleStagedReplica(ctx context.Context, staged *stagedReplica, committed bool) {
+func (f filesystemSynchronizer) settleStagedReplica(ctx context.Context, staged *stagedReplica, committed bool) {
+	s := f.s
 	s.replicas.mu.Lock()
 	defer s.replicas.mu.Unlock()
 	if !committed {
@@ -123,7 +126,8 @@ type filesystemBranch struct {
 	clientID uint32
 }
 
-func (s *Service) filesystemUpdate(ctx context.Context, entry *replicaEntry, base, content string) (filesystemBranch, error) {
+func (f filesystemSynchronizer) filesystemUpdate(ctx context.Context, entry *replicaEntry, base, content string) (filesystemBranch, error) {
+	s := f.s
 	s.replicas.next++
 	handle := s.replicas.next
 	defer s.replicas.drop(context.WithoutCancel(ctx), handle)
@@ -172,7 +176,7 @@ func (s *Service) filesystemUpdate(ctx context.Context, entry *replicaEntry, bas
 	return filesystemBranch{Snapshot: snapshot, clientID: client}, nil
 }
 
-func (s *Service) filesystemAuthor(ctx context.Context, entry *replicaEntry, publishedVector []byte) (uint32, error) {
+func (f filesystemSynchronizer) filesystemAuthor(ctx context.Context, entry *replicaEntry, publishedVector []byte) (uint32, error) {
 	published, err := documentcore.VectorClocks(publishedVector)
 	if err != nil {
 		return 0, err
@@ -186,10 +190,11 @@ func (s *Service) filesystemAuthor(ctx context.Context, entry *replicaEntry, pub
 		return client, nil
 	}
 	// A rewound disk branch needs a fresh author clock.
-	return s.registerReplica(ctx, entry.documentID, "filesystem", "filesystem", uuid.NewString(), "")
+	return f.s.registerReplica(ctx, entry.documentID, "filesystem", "filesystem", uuid.NewString(), "")
 }
 
-func (s *Service) publicationCheckpoint(ctx context.Context, d *Document) ([]byte, error) {
+func (f filesystemSynchronizer) publicationCheckpoint(ctx context.Context, d *Document) ([]byte, error) {
+	s := f.s
 	if len(d.pinnedCheckpoint) > 0 {
 		return d.pinnedCheckpoint, nil
 	}

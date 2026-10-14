@@ -29,7 +29,8 @@ type agentAcceptance struct {
 // ApplyAgentEdits validates all anchors before accepting any agent text. The
 // accepted document heads and publication intents share one writer transaction.
 // Results retain input order; publication failures belong to individual files.
-func (s *Service) ApplyAgentEdits(ctx context.Context, inputs []AgentEdit) ([]*AgentEditResult, error) {
+func (a *AgentService) ApplyAgentEdits(ctx context.Context, inputs []AgentEdit) ([]*AgentEditResult, error) {
+	s := a.s
 	if len(inputs) == 0 {
 		return []*AgentEditResult{}, nil
 	}
@@ -112,7 +113,8 @@ func agentBatchKeys(inputs []AgentEdit) ([]string, error) {
 	return keys, nil
 }
 
-func (s *Service) planAgentBatch(ctx context.Context, inputs []AgentEdit) ([]*agentAcceptance, bool, error) {
+func (b agentBatchPlanner) planAgentBatch(ctx context.Context, inputs []AgentEdit) ([]*agentAcceptance, bool, error) {
+	s := b.s
 	batch := make([]*agentAcceptance, len(inputs))
 	replays := 0
 	for i, in := range inputs {
@@ -159,7 +161,8 @@ func (s *Service) planAgentBatch(ctx context.Context, inputs []AgentEdit) ([]*ag
 	return batch, false, nil
 }
 
-func (s *Service) replayAgentBatch(ctx context.Context, batch []*agentAcceptance) ([]*AgentEditResult, error) {
+func (b agentBatchPlanner) replayAgentBatch(ctx context.Context, batch []*agentAcceptance) ([]*AgentEditResult, error) {
+	s := b.s
 	results := make([]*AgentEditResult, len(batch))
 	for i, item := range batch {
 		result, err := s.replayAgentEdit(ctx, item.document, item.input)
@@ -171,7 +174,8 @@ func (s *Service) replayAgentBatch(ctx context.Context, batch []*agentAcceptance
 	return results, nil
 }
 
-func (s *Service) prepareAgentAcceptance(ctx context.Context, item *agentAcceptance) error {
+func (b agentBatchPlanner) prepareAgentAcceptance(ctx context.Context, item *agentAcceptance) error {
+	s := b.s
 	d := item.document
 	item.previous = d.Revision
 	d.Draft, d.plannedEdits = item.plan.content, item.plan.edits
@@ -201,7 +205,8 @@ func (s *Service) prepareAgentAcceptance(ctx context.Context, item *agentAccepta
 	return nil
 }
 
-func (s *Service) commitAgentAcceptance(ctx context.Context, tx *sql.Tx, item *agentAcceptance) error {
+func (b agentBatchPlanner) commitAgentAcceptance(ctx context.Context, tx *sql.Tx, item *agentAcceptance) error {
+	s := b.s
 	d := item.document
 	if d.Dirty && d.Diverged {
 		held, err := item.held.CommitTx(ctx, tx)
@@ -221,7 +226,8 @@ func (s *Service) commitAgentAcceptance(ctx context.Context, tx *sql.Tx, item *a
 	return recordAgentReceipt(ctx, tx, d.ID, item.input, d.HeldAgentVersionID, item.mutation != nil)
 }
 
-func (s *Service) publishAgentAcceptance(ctx context.Context, item *agentAcceptance) *AgentEditResult {
+func (b agentBatchPlanner) publishAgentAcceptance(ctx context.Context, item *agentAcceptance) *AgentEditResult {
+	s := b.s
 	d := item.document
 	result := &AgentEditResult{Document: s.withParticipants(d), Saved: !d.Dirty && !d.Diverged, HeldVersionID: d.HeldAgentVersionID}
 	if item.mutation == nil {

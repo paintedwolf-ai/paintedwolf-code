@@ -12,11 +12,11 @@ import (
 // recoverHistoryCapacity starts a new epoch after a transition was refused
 // for history capacity. The refusal still reaches the caller; the replica
 // synchronizes and finds the new epoch. The caller holds the document lock.
-func (s *Service) recoverHistoryCapacity(ctx context.Context, id string, cause error) {
+func (m replicaManager) recoverHistoryCapacity(ctx context.Context, id string, cause error) {
 	if !isHistoryCapacity(cause) {
 		return
 	}
-	if err := s.rebaseEpoch(ctx, id); err != nil {
+	if err := m.s.rebaseEpoch(ctx, id); err != nil {
 		slog.WarnContext(ctx, "editor document epoch rebase failed", "document_id", id, "err", err)
 	}
 }
@@ -24,7 +24,8 @@ func (s *Service) recoverHistoryCapacity(ctx context.Context, id string, cause e
 // rebaseEpoch rebuilds the CRDT history as the saved base plus the current
 // draft. Character identities, semantic undo, and the journal of the old
 // epoch end here.
-func (s *Service) rebaseEpoch(ctx context.Context, id string) error {
+func (c replicaCommitter) rebaseEpoch(ctx context.Context, id string) error {
+	s := c.s
 	d, err := s.store.Get(ctx, id)
 	if err != nil {
 		return err

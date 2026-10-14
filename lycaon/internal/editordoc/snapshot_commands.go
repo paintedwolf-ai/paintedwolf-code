@@ -40,7 +40,8 @@ func commandDigest(action string, input any) (string, error) {
 	return action + ":" + hex.EncodeToString(digest[:]), nil
 }
 
-func (s *Service) checkedSnapshotCommand(ctx context.Context, id, projectID string, in DocumentCommand, digest string) (*Document, bool, error) {
+func (c saveCommitter) checkedSnapshotCommand(ctx context.Context, id, projectID string, in DocumentCommand, digest string) (*Document, bool, error) {
+	s := c.s
 	if _, err := uuid.Parse(in.OperationID); err != nil {
 		return nil, false, ErrOperationConflict
 	}
@@ -66,7 +67,8 @@ func (s *Service) checkedSnapshotCommand(ctx context.Context, id, projectID stri
 	return d, false, err
 }
 
-func (s *Service) commitSnapshotCommand(ctx context.Context, d *Document, previous int64, kind string, in DocumentCommand, digest string) error {
+func (c saveCommitter) commitSnapshotCommand(ctx context.Context, d *Document, previous int64, kind string, in DocumentCommand, digest string) error {
+	s := c.s
 	d.authorship = authorshipContext{sessionID: in.SessionID, turn: in.Turn}
 	d.historyVector = in.HistoryVector
 	actor := textActor{kind: kind, clientID: strings.TrimSpace(in.ClientID)}
@@ -92,7 +94,8 @@ func (s *Service) commitSnapshotCommand(ctx context.Context, d *Document, previo
 	return s.store.UpdateCAS(ctx, d, previous)
 }
 
-func (s *Service) ReplaceSnapshot(ctx context.Context, id, projectID string, in SnapshotReplacement) (*Document, error) {
+func (c *SnapshotService) ReplaceSnapshot(ctx context.Context, id, projectID string, in SnapshotReplacement) (*Document, error) {
+	s := c.s
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	unlock := s.docLocks.lock(documentLockKey(id))
@@ -128,7 +131,8 @@ func (s *Service) ReplaceSnapshot(ctx context.Context, id, projectID string, in 
 	return s.withParticipants(d), nil
 }
 
-func (s *Service) Discard(ctx context.Context, id, projectID string, in DocumentCommand) (*Document, error) {
+func (c *SnapshotService) Discard(ctx context.Context, id, projectID string, in DocumentCommand) (*Document, error) {
+	s := c.s
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	unlock := s.docLocks.lock(documentLockKey(id))
@@ -155,7 +159,8 @@ func (s *Service) Discard(ctx context.Context, id, projectID string, in Document
 	return s.withParticipants(d), nil
 }
 
-func (s *Service) Reload(ctx context.Context, p *project.Project, id string, in DocumentCommand) (*Document, error) {
+func (c *SnapshotService) Reload(ctx context.Context, p *project.Project, id string, in DocumentCommand) (*Document, error) {
+	s := c.s
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	unlock := s.docLocks.lock(documentLockKey(id))

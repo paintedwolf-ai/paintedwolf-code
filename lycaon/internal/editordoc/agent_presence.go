@@ -83,6 +83,11 @@ func (s *Service) SpansHold(ctx context.Context, projectID, documentID string, s
 	if s == nil || s.store == nil {
 		return nil, ErrNotFound
 	}
+	return s.spansHold(ctx, projectID, documentID, spans)
+}
+
+func (a *AgentService) spansHold(ctx context.Context, projectID, documentID string, spans []AnchoredSpan) ([]bool, error) {
+	s := a.s
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	unlock := s.lockDocuments([]string{documentID})
@@ -116,7 +121,8 @@ func (s *Service) SpansHold(ctx context.Context, projectID, documentID string, s
 	return held, nil
 }
 
-func (s *Service) anchorSpans(ctx context.Context, current *Document, revision int64, spans []TextSpan) (*AnchoredText, error) {
+func (a *AgentService) anchorSpans(ctx context.Context, current *Document, revision int64, spans []TextSpan) (*AnchoredText, error) {
+	s := a.s
 	s.replicas.mu.Lock()
 	defer s.replicas.mu.Unlock()
 	entry, err := s.loadReplica(ctx, current)

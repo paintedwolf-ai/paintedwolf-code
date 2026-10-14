@@ -13,7 +13,8 @@ import (
 )
 
 // ResolveSourceRewind applies retained CRDT inverses to a clone, preserving later edits.
-func (s *Service) ResolveSourceRewind(ctx context.Context, p *project.Project, sessionID string, anchors []string, plan *sourceledger.RewindPlan) error {
+func (r *RewindService) ResolveSourceRewind(ctx context.Context, p *project.Project, sessionID string, anchors []string, plan *sourceledger.RewindPlan) error {
+	s := r.s
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	ledger := s.history
@@ -102,7 +103,8 @@ type semanticRewindUndo struct {
 
 type semanticRewindTarget struct{ content, checkpoint []byte }
 
-func (s *Service) semanticRewindContent(ctx context.Context, d *Document, sessionID string, anchors []string) (*semanticRewindTarget, error) {
+func (w semanticRewinder) semanticRewindContent(ctx context.Context, d *Document, sessionID string, anchors []string) (*semanticRewindTarget, error) {
+	s := w.s
 	replicaHead, err := s.store.replicaHead(ctx, d.ID)
 	if err != nil {
 		return nil, err
@@ -147,7 +149,8 @@ func (s *Service) semanticRewindContent(ctx context.Context, d *Document, sessio
 	return &semanticRewindTarget{content: content, checkpoint: snapshot.Checkpoint}, nil
 }
 
-func (s *Service) semanticRewindUndos(ctx context.Context, d *Document, sessionID string, anchors []string, epoch int64) ([]semanticRewindUndo, error) {
+func (w semanticRewinder) semanticRewindUndos(ctx context.Context, d *Document, sessionID string, anchors []string, epoch int64) ([]semanticRewindUndo, error) {
+	s := w.s
 	encoded, err := json.Marshal(anchors)
 	if err != nil {
 		return nil, err

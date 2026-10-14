@@ -82,8 +82,8 @@ func (s *Service) DirtyDocuments(ctx context.Context, projectID string, branch s
 
 // ApplyAgentEdit accepts an anchored edit and journals its publication. A
 // failed publication of an accepted edit is the result's PublicationError.
-func (s *Service) ApplyAgentEdit(ctx context.Context, in AgentEdit) (*AgentEditResult, error) {
-	results, err := s.ApplyAgentEdits(ctx, []AgentEdit{in})
+func (a *AgentService) ApplyAgentEdit(ctx context.Context, in AgentEdit) (*AgentEditResult, error) {
+	results, err := a.s.ApplyAgentEdits(ctx, []AgentEdit{in})
 	if err != nil {
 		return nil, err
 	}
@@ -91,12 +91,12 @@ func (s *Service) ApplyAgentEdit(ctx context.Context, in AgentEdit) (*AgentEditR
 }
 
 // prepareRetainedAgentEdit publishes accepted bytes before document commit.
-func (s *Service) prepareRetainedAgentEdit(ctx context.Context, d *Document, in AgentEdit) (sourceledger.PreparedHeldEdit, error) {
+func (b agentBatchPlanner) prepareRetainedAgentEdit(ctx context.Context, d *Document, in AgentEdit) (sourceledger.PreparedHeldEdit, error) {
 	encoded, err := textfile.EncodeBounded(serializeEOL(d.Draft, d.EOL), d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
 	if err != nil {
 		return nil, err
 	}
-	return s.ledger.PrepareHeldEdit(ctx, sourceledger.HeldEdit{
+	return b.s.ledger.PrepareHeldEdit(ctx, sourceledger.HeldEdit{
 		BranchID:  d.BranchID,
 		ProjectID: d.ProjectID, FileID: d.FileID, RootID: d.RootID, Path: d.Path,
 		Content: encoded, SHA256: textfile.SHA256(encoded), Size: int64(len(encoded)),

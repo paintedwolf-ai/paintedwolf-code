@@ -12,8 +12,8 @@ import (
 )
 
 // Seed shared text identities with the ledger's recorded authorship.
-func (s *Service) initialAuthorship(ctx context.Context, d *Document, client uint32) ([]sourceledger.TextContribution, error) {
-	prior, err := s.history.QueryAttribution(ctx, d.ProjectID, d.BranchID, d.RootID, d.Path)
+func (a authorshipTracker) initialAuthorship(ctx context.Context, d *Document, client uint32) ([]sourceledger.TextContribution, error) {
+	prior, err := a.s.history.QueryAttribution(ctx, d.ProjectID, d.BranchID, d.RootID, d.Path)
 	if err != nil || prior.HeadSHA256 != d.BaseSHA256 || d.Draft != d.BaseContent {
 		return nil, err
 	}

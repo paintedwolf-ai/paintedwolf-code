@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io/fs"
 	"path/filepath"
 	"strings"
@@ -20,7 +19,8 @@ import (
 )
 
 // Save publishes an exact accepted snapshot and deduplicates operation retries.
-func (s *Service) Save(ctx context.Context, p *project.Project, id, clientID, operationID, sessionID string, turn int, expected int64) (*Document, error) {
+func (c savePublisher) Save(ctx context.Context, p *project.Project, id, clientID, operationID, sessionID string, turn int, expected int64) (*Document, error) {
+	s := c.s
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	unlock := s.docLocks.lock(documentLockKey(id))
@@ -75,53 +75,10 @@ func (s *Service) Save(ctx context.Context, p *project.Project, id, clientID, op
 	return result, err
 }
 
-type saveReplay struct {
-	document *Document
-	mutation *Mutation
-}
-
-// findSaveReplay validates reused input; nil means the operation ID is unused.
-func (s *Service) findSaveReplay(ctx context.Context, p *project.Project, id, operationID string, actor saveActor, expected int64) (*saveReplay, error) {
-	operationID = strings.TrimSpace(operationID)
-	if operationID == "" {
-		return nil, fmt.Errorf("operation id required")
-	}
-	inputDigest := saveInputDigest(strings.TrimSpace(id), strings.TrimSpace(p.ID), actor, expected)
-	existing, getErr := s.store.Mutation(ctx, operationID)
-	if errors.Is(getErr, ErrNotFound) {
-		return nil, nil
-	}
-	if getErr != nil {
-		return nil, getErr
-	}
-	if existing.InputDigest != inputDigest {
-		return nil, ErrOperationConflict
-	}
-	d, err := s.checked(ctx, id, p.ID)
-	if err != nil {
-		return nil, err
-	}
-	return &saveReplay{document: d, mutation: existing}, nil
-}
-
-func (s *Service) resumeSave(ctx context.Context, p *project.Project, replay *saveReplay) (*Document, error) {
-	if err := checkWorkspace(p, replay.document); err != nil {
-		return nil, err
-	}
-	if replay.mutation.Status == "complete" {
-		return s.mutationResponse(ctx, replay.document, replay.mutation)
-	}
-	release, err := s.reserveDocumentSource(ctx, p, replay.document)
-	if err != nil {
-		return nil, err
-	}
-	defer release()
-	return s.finishMutation(ctx, p, replay.document, replay.mutation)
-}
-
 // saveLocked journals and applies one save of the document's current draft.
 // The caller holds the document lock and has settled who is saving.
-func (s *Service) saveLocked(ctx context.Context, p *project.Project, d *Document, operationID string, actor saveActor) (*Document, error) {
+func (c savePublisher) saveLocked(ctx context.Context, p *project.Project, d *Document, operationID string, actor saveActor) (*Document, error) {
+	s := c.s
 	if err := checkWorkspace(p, d); err != nil {
 		return nil, err
 	}
@@ -147,7 +104,8 @@ func (s *Service) saveLocked(ctx context.Context, p *project.Project, d *Documen
 
 // prepareSaveMutation journals the exact bytes one save will publish. An
 // absent document expects no file, so its mutation carries an empty hash.
-func (s *Service) prepareSaveMutation(ctx context.Context, d *Document, operationID string, actor saveActor) (*Mutation, error) {
+func (c savePublisher) prepareSaveMutation(ctx context.Context, d *Document, operationID string, actor saveActor) (*Mutation, error) {
+	s := c.s
 	checkpoint, err := s.publicationCheckpoint(ctx, d)
 	if err != nil {
 		return nil, err
@@ -185,7 +143,8 @@ func (s *Service) prepareSaveMutation(ctx context.Context, d *Document, operatio
 	return m, nil
 }
 
-func (s *Service) finishMutation(ctx context.Context, p *project.Project, d *Document, m *Mutation) (*Document, error) {
+func (c savePublisher) finishMutation(ctx context.Context, p *project.Project, d *Document, m *Mutation) (*Document, error) {
+	s := c.s
 	if err := checkWorkspace(p, d); err != nil {
 		return nil, err
 	}
@@ -240,7 +199,8 @@ func publishMutation(p *project.Project, m *Mutation) (*projectsource.SourceWrit
 func (m *Mutation) Creates() bool { return m.ExpectedSHA256 == "" }
 
 // commit atomically records attribution, events, document state, and completion.
-func (s *Service) commit(ctx context.Context, p *project.Project, d *Document, m *Mutation) error {
+func (c saveCommitter) commit(ctx context.Context, p *project.Project, d *Document, m *Mutation) error {
+	s := c.s
 	if err := s.replicaProjection(ctx, d, nil); err != nil {
 		return err
 	}
@@ -343,27 +303,3 @@ func (s *Service) commit(ctx context.Context, p *project.Project, d *Document, m
 	s.changed(ctx, d, false)
 	return nil
 }
-
-// Compact receipts prevent duplicate publication on reconnect.
-func (s *Service) mutationResponse(ctx context.Context, current *Document, m *Mutation) (*Document, error) {
-	if m.ReplayCompacted {
-		if err := s.replicaProjection(ctx, current, nil); err != nil {
-			return nil, err
-		}
-		return s.withParticipants(current), nil
-	}
-	return decodeMutationResponse(m)
-}
-
-func decodeMutationResponse(m *Mutation) (*Document, error) {
-	if strings.TrimSpace(m.ResponseJSON) == "" {
-		return nil, fmt.Errorf("editor save %s has no committed response", m.ID)
-	}
-	var response Document
-	if err := json.Unmarshal([]byte(m.ResponseJSON), &response); err != nil {
-		return nil, fmt.Errorf("decode editor save %s response: %w", m.ID, err)
-	}
-	return &response, nil
-}
-
-// A remembered byte order applies only while the bytes need explicit decoding.

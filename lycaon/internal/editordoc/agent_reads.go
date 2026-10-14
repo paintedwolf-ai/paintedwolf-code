@@ -26,11 +26,11 @@ type agentReadCache struct {
 }
 
 // Read leases expire on restart or eviction; editing then requires a fresh read.
-func (s *Service) RememberAgentRead(projectID, sessionID, documentID string, revision int64) {
+func (a *AgentService) RememberAgentRead(projectID, sessionID, documentID string, revision int64) {
 	if sessionID == "" || revision <= 0 {
 		return
 	}
-	c := &s.agentReads
+	c := &a.agentReads
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.bases == nil {
@@ -55,13 +55,14 @@ func (s *Service) RememberAgentRead(projectID, sessionID, documentID string, rev
 }
 
 // DropAgentRead withdraws a chat's basis for a document; the next write needs a read.
-func (s *Service) DropAgentRead(projectID, sessionID, documentID string) {
-	s.agentReads.mu.Lock()
-	defer s.agentReads.mu.Unlock()
-	delete(s.agentReads.bases, agentReadKey{projectID, sessionID, documentID})
+func (a *AgentService) DropAgentRead(projectID, sessionID, documentID string) {
+	a.agentReads.mu.Lock()
+	defer a.agentReads.mu.Unlock()
+	delete(a.agentReads.bases, agentReadKey{projectID, sessionID, documentID})
 }
 
-func (s *Service) AgentReadBase(ctx context.Context, projectID, sessionID, documentID string, frozen ReadBasisLookup) (*Document, error) {
+func (a *AgentService) AgentReadBase(ctx context.Context, projectID, sessionID, documentID string, frozen ReadBasisLookup) (*Document, error) {
+	s := a.s
 	c := &s.agentReads
 	c.mu.Lock()
 	key := agentReadKey{projectID, sessionID, documentID}
@@ -92,8 +93,8 @@ func (s *Service) AgentReadBase(ctx context.Context, projectID, sessionID, docum
 
 // FreezeAgentReads binds a model response to reads completed before its tools
 // execute; a read in that response cannot advance its own bases.
-func (s *Service) FreezeAgentReads(projectID, sessionID string) map[string]int64 {
-	c := &s.agentReads
+func (a *AgentService) FreezeAgentReads(projectID, sessionID string) map[string]int64 {
+	c := &a.agentReads
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	out := make(map[string]int64)

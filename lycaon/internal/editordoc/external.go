@@ -24,6 +24,11 @@ func (s *Service) ObserveExternal(ctx context.Context, p *project.Project, selec
 	if s == nil || s.store == nil || p == nil {
 		return nil
 	}
+	return s.observeExternal(ctx, p, selection)
+}
+
+func (r externalReconciler) observeExternal(ctx context.Context, p *project.Project, selection []PathRef) error {
+	s := r.s
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	query, err := s.observationQuery(p, selection)
@@ -49,7 +54,8 @@ func (s *Service) ObserveExternal(ctx context.Context, p *project.Project, selec
 	}
 }
 
-func (s *Service) observeExternalDocument(ctx context.Context, p *project.Project, id string, selection []PathRef) error {
+func (r externalReconciler) observeExternalDocument(ctx context.Context, p *project.Project, id string, selection []PathRef) error {
+	s := r.s
 	unlock := s.docLocks.lock(documentLockKey(id))
 	defer unlock()
 	d, err := s.store.Get(ctx, id)
@@ -78,7 +84,8 @@ func (s *Service) observeExternalDocument(ctx context.Context, p *project.Projec
 // reconcileDocumentDisk is the one transition between a document and its
 // file: a missing file marks the document absent; a present file is tracked
 // and its bytes reconcile into the shared text. The caller holds the lock.
-func (s *Service) reconcileDocumentDisk(ctx context.Context, p *project.Project, d *Document, observerClientID string) error {
+func (r externalReconciler) reconcileDocumentDisk(ctx context.Context, p *project.Project, d *Document, observerClientID string) error {
+	s := r.s
 	release, err := s.reserveDocumentSource(ctx, p, d)
 	if errors.Is(err, projectsource.ErrSourceBusy) {
 		return nil
@@ -107,7 +114,8 @@ func (s *Service) reconcileDocumentDisk(ctx context.Context, p *project.Project,
 }
 
 // markAbsent records that the path has no file; the draft and saved base stay.
-func (s *Service) markAbsent(ctx context.Context, d *Document) error {
+func (r externalReconciler) markAbsent(ctx context.Context, d *Document) error {
+	s := r.s
 	if d.Absent {
 		return nil
 	}
@@ -124,7 +132,8 @@ func (s *Service) markAbsent(ctx context.Context, d *Document) error {
 
 // reconcileObservedDocument folds one observed file into the document. A
 // recreated path rebinds the document to fileID and imports its bytes.
-func (s *Service) reconcileObservedDocument(ctx context.Context, d *Document, read *projectsource.SourceReadResult, unsupported bool, observerClientID, fileID string) error {
+func (r externalReconciler) reconcileObservedDocument(ctx context.Context, d *Document, read *projectsource.SourceReadResult, unsupported bool, observerClientID, fileID string) error {
+	s := r.s
 	previous := d.Revision
 	reappeared := d.Absent
 	rebound := fileID != "" && fileID != d.FileID

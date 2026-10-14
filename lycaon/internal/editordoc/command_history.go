@@ -15,11 +15,11 @@ type CommandHistory struct {
 }
 
 // The dependency delta is remote context; only Update is the person's command.
-func (s *Service) captureCommandHistory(ctx context.Context, d *Document, entry *replicaEntry, operationID string, vector []byte) error {
+func (a authorshipTracker) captureCommandHistory(ctx context.Context, d *Document, entry *replicaEntry, operationID string, vector []byte) error {
 	if len(vector) == 0 {
 		return nil
 	}
-	before, err := s.replicas.engine.Call(ctx, documentcore.Request{Action: "inspect", OmitText: true, Handle: entry.handle, Vector: vector})
+	before, err := a.s.replicas.engine.Call(ctx, documentcore.Request{Action: "inspect", OmitText: true, Handle: entry.handle, Vector: vector})
 	if err != nil {
 		return err
 	}

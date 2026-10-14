@@ -43,7 +43,8 @@ type RevertChange struct {
 
 // Changes lists agent and restore changes newest first, older than before
 // when it is positive, at most limit of them.
-func (s *Service) Changes(ctx context.Context, projectID, id string, before int64, limit int) ([]DocumentChange, error) {
+func (c *SnapshotService) Changes(ctx context.Context, projectID, id string, before int64, limit int) ([]DocumentChange, error) {
+	s := c.s
 	if _, err := s.checked(ctx, id, projectID); err != nil {
 		return nil, err
 	}
@@ -70,7 +71,8 @@ func (s *Service) Changes(ctx context.Context, projectID, id string, before int6
 
 // Revert selectively undoes a semantic edit. Later replicas retain their own
 // insertions and deletions; the resulting draft uses the ordinary save command.
-func (s *Service) Revert(ctx context.Context, projectID, id string, in RevertChange) (*Document, error) {
+func (c *SnapshotService) Revert(ctx context.Context, projectID, id string, in RevertChange) (*Document, error) {
+	s := c.s
 	if strings.TrimSpace(in.ClientID) == "" {
 		return nil, ErrReplicaIdentity
 	}
@@ -128,7 +130,8 @@ func (s *Service) Revert(ctx context.Context, projectID, id string, in RevertCha
 	return s.withParticipants(d), nil
 }
 
-func (s *Service) prepareRevert(ctx context.Context, d *Document, in RevertChange, change *DocumentChange, inputDigest string) error {
+func (w semanticRewinder) prepareRevert(ctx context.Context, d *Document, in RevertChange, change *DocumentChange, inputDigest string) error {
+	s := w.s
 	actor, err := s.personActor(ctx, actorRestore, in.ClientID)
 	if err != nil {
 		return err
@@ -171,8 +174,8 @@ func (s *Service) prepareRevert(ctx context.Context, d *Document, in RevertChang
 	d.UpdatedAt = time.Now().UTC()
 	d.Epoch, d.CRDTUpdate, d.StateVector = entry.head.Epoch, snapshot.Update, snapshot.Vector
 	d.PublishedRevision = entry.head.PublishedRevision
-	d.replicaCommit = &replicaCommit{undoUnits: snapshot.UndoUnits, undoFloor: entry.undoFloor, revision: d.Revision, epoch: d.Epoch, operationID: in.OperationID, actor: actor,
-		update: snapshot.Update, vector: snapshot.Vector, checkpoint: snapshot.Checkpoint, undo: snapshot.Undo, reverts: in.ChangeOperationID, inputDigest: inputDigest}
+	d.replicaCommit = &replicaCommit{replicaUndoCommit: replicaUndoCommit{undoUnits: snapshot.UndoUnits, undoFloor: entry.undoFloor, undo: snapshot.Undo, reverts: in.ChangeOperationID}, revision: d.Revision, epoch: d.Epoch, operationID: in.OperationID, actor: actor,
+		update: snapshot.Update, vector: snapshot.Vector, checkpoint: snapshot.Checkpoint, inputDigest: inputDigest}
 	d.authorship = authorshipContext{sessionID: in.SessionID, turn: in.Turn}
 	d.replicaCommit.contribution = textContribution(d, &snapshot, actor, in.OperationID)
 	entry.revision, entry.head.Vector, entry.head.CheckpointRevision = d.Revision, snapshot.Vector, d.Revision

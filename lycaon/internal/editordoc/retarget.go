@@ -20,7 +20,8 @@ type retargetRecord struct {
 	BranchID                                                   sourcebranch.ID
 }
 
-func (s *Service) PrepareRetarget(ctx context.Context, p *project.Project, plan projectsource.SourceRenamePlan) (string, error) {
+func (l *LifecycleService) PrepareRetarget(ctx context.Context, p *project.Project, plan projectsource.SourceRenamePlan) (string, error) {
+	s := l.s
 	s.ops.Lock()
 	defer s.ops.Unlock()
 	if plan.OperationID == "" {
@@ -44,14 +45,16 @@ func (s *Service) PrepareRetarget(ctx context.Context, p *project.Project, plan 
 	return intent.ID, nil
 }
 
-func (s *Service) ReconcileRetarget(ctx context.Context, id string) error {
+func (l *LifecycleService) ReconcileRetarget(ctx context.Context, id string) error {
+	s := l.s
 	s.ops.Lock()
 	defer s.ops.Unlock()
 	return s.reconcileRetargetLocked(ctx, id)
 }
 
 // ReconcilePendingRetargets resolves durable rename intents.
-func (s *Service) ReconcilePendingRetargets(ctx context.Context) error {
+func (l *LifecycleService) ReconcilePendingRetargets(ctx context.Context) error {
+	s := l.s
 	s.ops.Lock()
 	defer s.ops.Unlock()
 	ids, err := s.pendingRetargets(ctx)
@@ -67,7 +70,8 @@ func (s *Service) ReconcilePendingRetargets(ctx context.Context) error {
 	return reconcileErr
 }
 
-func (s *Service) reconcileRetargetLocked(ctx context.Context, id string) error {
+func (r externalReconciler) reconcileRetargetLocked(ctx context.Context, id string) error {
+	s := r.s
 	intent, err := s.retargetIntent(ctx, id)
 	if err != nil {
 		return err
@@ -89,9 +93,9 @@ func (s *Service) reconcileRetargetLocked(ctx context.Context, id string) error 
 	return s.finishRetarget(ctx, intent)
 }
 
-func (s *Service) retargetIntent(ctx context.Context, id string) (*retargetRecord, error) {
+func (r externalReconciler) retargetIntent(ctx context.Context, id string) (*retargetRecord, error) {
 	var intent retargetRecord
-	err := s.store.db.QueryRowContext(ctx, `SELECT id, project_id, branch_id, root_id, from_path, to_path, source_operation_id FROM editor_retargets WHERE id=?`, strings.TrimSpace(id)).Scan(
+	err := r.s.store.db.QueryRowContext(ctx, `SELECT id, project_id, branch_id, root_id, from_path, to_path, source_operation_id FROM editor_retargets WHERE id=?`, strings.TrimSpace(id)).Scan(
 		&intent.ID, &intent.ProjectID, &intent.BranchID, &intent.RootID,
 		&intent.FromPath, &intent.ToPath, &intent.SourceOperationID)
 	if err != nil {
@@ -100,7 +104,8 @@ func (s *Service) retargetIntent(ctx context.Context, id string) (*retargetRecor
 	return &intent, nil
 }
 
-func (s *Service) retargetDocumentsLocked(ctx context.Context, intent *retargetRecord) error {
+func (r externalReconciler) retargetDocumentsLocked(ctx context.Context, intent *retargetRecord) error {
+	s := r.s
 	rows, err := s.store.db.QueryContext(ctx, `SELECT id, path, revision FROM editor_documents WHERE project_id=? AND branch_id=? AND root_id=? AND (path=? OR substr(path, 1, ?) = ?) ORDER BY length(path) DESC`,
 		intent.ProjectID, intent.BranchID, intent.RootID,
 		intent.FromPath, len(intent.FromPath)+1, intent.FromPath+"/")
@@ -205,7 +210,8 @@ func supersedeDocumentAt(ctx context.Context, tx *sql.Tx, intent *retargetRecord
 }
 
 // forgetDocuments drops the runtime state of documents whose rows are gone.
-func (s *Service) forgetDocuments(ctx context.Context, ids []string) {
+func (r externalReconciler) forgetDocuments(ctx context.Context, ids []string) {
+	s := r.s
 	if len(ids) == 0 {
 		return
 	}
@@ -226,13 +232,13 @@ func (s *Service) forgetDocuments(ctx context.Context, ids []string) {
 	s.agentReads.mu.Unlock()
 }
 
-func (s *Service) finishRetarget(ctx context.Context, intent *retargetRecord) error {
-	_, err := s.store.db.ExecContext(ctx, `DELETE FROM editor_retargets WHERE id=?`, intent.ID)
+func (r externalReconciler) finishRetarget(ctx context.Context, intent *retargetRecord) error {
+	_, err := r.s.store.db.ExecContext(ctx, `DELETE FROM editor_retargets WHERE id=?`, intent.ID)
 	return err
 }
 
-func (s *Service) pendingRetargets(ctx context.Context) ([]string, error) {
-	rows, err := s.store.db.QueryContext(ctx, `SELECT id FROM editor_retargets ORDER BY created_at, id`)
+func (r externalReconciler) pendingRetargets(ctx context.Context) ([]string, error) {
+	rows, err := r.s.store.db.QueryContext(ctx, `SELECT id FROM editor_retargets ORDER BY created_at, id`)
 	if err != nil {
 		return nil, err
 	}

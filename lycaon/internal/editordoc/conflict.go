@@ -30,7 +30,8 @@ type ConflictResolution struct {
 
 // Resolve verifies both versions shown in the merge. Acceptance and the save
 // intent commit together so interruption cannot strand a half-applied merge.
-func (s *Service) Resolve(ctx context.Context, p *project.Project, id string, in ConflictResolution) (*Document, error) {
+func (r *RewindService) Resolve(ctx context.Context, p *project.Project, id string, in ConflictResolution) (*Document, error) {
+	s := r.s
 	if strings.TrimSpace(in.ClientID) == "" {
 		return nil, ErrReplicaIdentity
 	}

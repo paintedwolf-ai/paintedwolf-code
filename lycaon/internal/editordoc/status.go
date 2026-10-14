@@ -9,7 +9,8 @@ import (
 )
 
 // Statuses reads accepted metadata without allocating text or a CRDT runtime.
-func (s *Service) Statuses(ctx context.Context, projectID string, ids []string) (api.EditorDocumentStatuses, error) {
+func (l *LifecycleService) Statuses(ctx context.Context, projectID string, ids []string) (api.EditorDocumentStatuses, error) {
+	s := l.s
 	result := api.EditorDocumentStatuses{Documents: []api.EditorDocumentStatus{}, Missing: []string{}}
 	if len(ids) == 0 || len(ids) > 64 {
 		return result, errors.New("document status reads require between 1 and 64 identities")
