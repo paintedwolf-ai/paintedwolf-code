@@ -77,6 +77,10 @@
               "description": "The full project list. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
               "type": "string"
             },
+            "app-menu": {
+              "description": "Open the app menu from a drawn title bar. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
             "arrow-down": {
               "description": "Move to the next item. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
               "type": "string"
@@ -527,6 +531,22 @@
             },
             "walk-refresh": {
               "description": "Show newly arrived walk steps. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "window-close": {
+              "description": "Close a window with drawn decorations. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "window-maximize": {
+              "description": "Maximize a window with drawn decorations. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "window-minimize": {
+              "description": "Minimize a window with drawn decorations. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
+              "type": "string"
+            },
+            "window-restore": {
+              "description": "Restore a maximized window with drawn decorations. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
               "type": "string"
             },
             "workers": {

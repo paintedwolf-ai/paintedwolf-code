@@ -5,6 +5,7 @@ import {
 } from "../../platform/desktop/in-window-app-menu.ts";
 import type { WindowChromeSide } from "../../platform/windows/window-chrome-layout.ts";
 import { ContextMenu, type ContextMenuItem } from "../ContextMenu.tsx";
+import { ThemeIcon } from "../primitives/ThemeIcon.tsx";
 import { bindChromeContextMenu } from "../context-menu-open.ts";
 
 /**
@@ -45,9 +46,7 @@ export function AppMenuButton(props: { side: WindowChromeSide }) {
         onKeyDown={binding.onKeyDown}
         onContextMenu={binding.onContextMenu}
       >
-        <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true" class="den-shell-window-control__glyph">
-          <path d="M1 2.5h8M1 5h8M1 7.5h8" />
-        </svg>
+        <ThemeIcon slot="app-menu" size={12} />
       </button>
       <Show when={menu()} keyed>
         {(menu) => (

@@ -216,6 +216,11 @@ The frame is the host's either way: grid, rendered size, paint mode, and each sl
 | `all-projects` | The full project list. |
 | `sidebar-collapse` | Collapse the nav rail. |
 | `sidebar-expand` | Expand the nav rail. |
+| `app-menu` | Open the app menu from a drawn title bar. |
+| `window-minimize` | Minimize a window with drawn decorations. |
+| `window-maximize` | Maximize a window with drawn decorations. |
+| `window-restore` | Restore a maximized window with drawn decorations. |
+| `window-close` | Close a window with drawn decorations. |
 | `back` | Return to the previous list. |
 | `project-folder` | A project's folder. |
 | `project-switcher` | Switch project. |

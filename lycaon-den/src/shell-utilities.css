@@ -334,17 +334,6 @@ display: flex;
   flex-shrink: 0;
 }
 
-/* Glyphs are drawn as strokes so they stay crisp at every display scale. */
-.den-shell-window-control__glyph {
-  width: 10px;
-  height: 10px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.1;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .den-shell-window-control,
 .den-shell-header-titlebar .den-stage-back,
 .den-shell-aside-titlebar .den-inset-icon-btn,

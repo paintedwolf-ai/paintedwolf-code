@@ -1,4 +1,5 @@
 import { For, Show, Switch, Match, type JSX } from "solid-js";
+import { ThemeIcon } from "../primitives/ThemeIcon.tsx";
 import {
   drawsWindowControls,
   windowChromeControls,
@@ -16,24 +17,6 @@ export type WindowEdgeClaim = {
   /** This column keeps the edge once the narrow band drops its neighbor. */
   narrow: boolean;
 };
-
-const glyph = (path: JSX.Element) => (
-  <svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true" class="den-shell-window-control__glyph">
-    {path}
-  </svg>
-);
-
-// Each render draws its own nodes; a shared node would move between buttons.
-const minimizeGlyph = () => glyph(<path d="M1 5.5h8" />);
-const maximizeGlyph = () => glyph(<rect x="1.5" y="1.5" width="7" height="7" />);
-const restoreGlyph = () =>
-  glyph(
-    <>
-      <rect x="1.5" y="3.5" width="5" height="5" />
-      <path d="M3.5 3.5v-2h5v5h-2" />
-    </>,
-  );
-const closeGlyph = () => glyph(<path d="M1.5 1.5l7 7M8.5 1.5l-7 7" />);
 
 /**
  * Drawn window controls for one window edge. Linux lays them out as the
@@ -68,7 +51,7 @@ export function WindowControls(props: WindowEdgeClaim) {
                   data-testid="window-minimize"
                   onClick={() => void currentWindow().then((win) => win.minimize())}
                 >
-                  {minimizeGlyph()}
+                  <ThemeIcon slot="window-minimize" size={12} />
                 </button>
               </Match>
               <Match when={control === "maximize"}>
@@ -81,7 +64,7 @@ export function WindowControls(props: WindowEdgeClaim) {
                   data-maximized={windowMaximized() ? "" : undefined}
                   onClick={() => void currentWindow().then((win) => win.toggleMaximize())}
                 >
-                  {windowMaximized() ? restoreGlyph() : maximizeGlyph()}
+                  <ThemeIcon slot={windowMaximized() ? "window-restore" : "window-maximize"} size={12} />
                 </button>
               </Match>
               <Match when={control === "close"}>
@@ -93,7 +76,7 @@ export function WindowControls(props: WindowEdgeClaim) {
                   data-testid="window-close"
                   onClick={() => void currentWindow().then((win) => win.close())}
                 >
-                  {closeGlyph()}
+                  <ThemeIcon slot="window-close" size={12} />
                 </button>
               </Match>
             </Switch>
