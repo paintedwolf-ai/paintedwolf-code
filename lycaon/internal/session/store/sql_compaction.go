@@ -75,6 +75,13 @@ func (s *SQL) PutCompactionView(ctx context.Context, sessionID string, view Comp
 }
 
 func validateCompactionSource(ctx context.Context, queries *db.Queries, sessionID string, view CompactionView) error {
+	clock, err := queries.GetSessionTranscriptSeq(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if clock < view.SourceSeq || clock-view.SourceSeq > messageview.MaxCompactionRevisionLag {
+		return fmt.Errorf("compaction source revision gap exceeded")
+	}
 	if view.CoveredThroughOrd > 0 {
 		boundary, err := queries.GetMessageOrdAndTS(ctx, db.GetMessageOrdAndTSParams{SessionID: sessionID, ID: view.CoveredThroughID})
 		if err != nil {
@@ -134,6 +141,13 @@ func (s *SQL) GetCompactionView(ctx context.Context, sessionID string) (*Compact
 
 // CompactionViewCurrent detects mutations at or below the view watermark.
 func (s *SQL) CompactionViewCurrent(ctx context.Context, sessionID string, coveredThroughOrd int64, coveredThroughID string, sourceSeq int64) (bool, error) {
+	clock, err := s.queries.GetSessionTranscriptSeq(ctx, sessionID)
+	if err != nil {
+		return false, err
+	}
+	if clock < sourceSeq || clock-sourceSeq > messageview.MaxCompactionRevisionLag {
+		return false, nil
+	}
 	if coveredThroughOrd > 0 {
 		boundary, err := s.queries.GetMessageOrdAndTS(ctx, db.GetMessageOrdAndTSParams{
 			SessionID: sessionID,

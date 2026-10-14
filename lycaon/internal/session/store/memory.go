@@ -589,6 +589,10 @@ func (s *Memory) PutCompactionView(ctx context.Context, sessionID string, view C
 	if view.Generation != s.sessions[sessionID].CompactionGeneration+1 {
 		return fmt.Errorf("compaction generation changed")
 	}
+	clock := s.transcriptSeq[sessionID]
+	if clock < view.SourceSeq || clock-view.SourceSeq > messageview.MaxCompactionRevisionLag {
+		return fmt.Errorf("compaction source revision gap exceeded")
+	}
 	boundaryFound := view.CoveredThroughOrd == 0 && strings.TrimSpace(view.CoveredThroughID) == ""
 	for _, message := range s.messages[sessionID] {
 		if message.Ord <= view.CoveredThroughOrd && message.Seq > view.SourceSeq {
@@ -603,6 +607,7 @@ func (s *Memory) PutCompactionView(ctx context.Context, sessionID string, view C
 	}
 	cp := view
 	cp.Messages = append([]api.Message(nil), view.Messages...)
+	cp.Continuation = messageview.CloneContinuation(view.Continuation)
 	cp.CreatedAt = time.Now().UTC()
 	s.compactionViews[sessionID] = cp
 	s.sessions[sessionID].CompactionGeneration = view.Generation
@@ -623,6 +628,7 @@ func (s *Memory) GetCompactionView(ctx context.Context, sessionID string) (*Comp
 	}
 	cp := v
 	cp.Messages = append([]api.Message(nil), v.Messages...)
+	cp.Continuation = messageview.CloneContinuation(v.Continuation)
 	return &cp, true, nil
 }
 
@@ -635,6 +641,10 @@ func (s *Memory) CompactionViewCurrent(ctx context.Context, sessionID string, co
 	defer s.mu.RUnlock()
 	if _, ok := s.sessions[sessionID]; !ok {
 		return false, ErrSessionNotFound
+	}
+	clock := s.transcriptSeq[sessionID]
+	if clock < sourceSeq || clock-sourceSeq > messageview.MaxCompactionRevisionLag {
+		return false, nil
 	}
 	boundaryFound := coveredThroughOrd == 0
 	for _, message := range s.messages[sessionID] {

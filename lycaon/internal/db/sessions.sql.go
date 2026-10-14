@@ -119,7 +119,7 @@ func (q *Queries) CommitRewindOperation(ctx context.Context, arg CommitRewindOpe
 const countCompactionSourceMutations = `-- name: CountCompactionSourceMutations :one
 SELECT COUNT(*)
 FROM messages
-WHERE session_id = ? AND ord <= ? AND seq > ?
+WHERE session_id = ? AND ord <= ? AND seq > ? AND seq > 0
 `
 
 type CountCompactionSourceMutationsParams struct {

@@ -319,7 +319,7 @@ WHERE session_id = ?;
 -- name: CountCompactionSourceMutations :one
 SELECT COUNT(*)
 FROM messages
-WHERE session_id = ? AND ord <= ? AND seq > ?;
+WHERE session_id = ? AND ord <= ? AND seq > ? AND seq > 0;
 
 -- Rewind removes transcript rows after explicit confirmation.
 -- name: GetSessionMessageOrd :one

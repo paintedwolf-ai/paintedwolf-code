@@ -3,6 +3,9 @@ package messageview
 // ContinuationFormat identifies a rebuildable history projection.
 const ContinuationFormat = 1
 
+// MaxCompactionRevisionLag bounds source validation before a projection is rebuilt.
+const MaxCompactionRevisionLag int64 = 4096
+
 // Continuation covers canonical observations independently of summary quality.
 type Continuation struct {
 	Level             string               `json:"level"`
@@ -34,4 +37,22 @@ type ContinuationSource struct {
 	Handles     []string `json:"handles,omitempty"`
 	Disposition string   `json:"disposition"`
 	Tokens      int      `json:"tokens"`
+}
+
+// CloneContinuation separates an accepted projection from mutable consumers.
+func CloneContinuation(record *Continuation) *Continuation {
+	if record == nil {
+		return nil
+	}
+	copy := *record
+	copy.Summary.Facts = append([]string(nil), record.Summary.Facts...)
+	copy.Summary.Completed = append([]string(nil), record.Summary.Completed...)
+	copy.Summary.Pending = append([]string(nil), record.Summary.Pending...)
+	copy.Summary.Reacquire = append([]string(nil), record.Summary.Reacquire...)
+	copy.Summary.Constraints = append([]string(nil), record.Summary.Constraints...)
+	copy.Sources = append([]ContinuationSource(nil), record.Sources...)
+	for i := range copy.Sources {
+		copy.Sources[i].Handles = append([]string(nil), record.Sources[i].Handles...)
+	}
+	return &copy
 }
