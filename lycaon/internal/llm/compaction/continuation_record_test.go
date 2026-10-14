@@ -59,6 +59,20 @@ func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 	}
 }
 
+func TestContinuationExplicitQuotaKeepsCanonicalRecovery(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	record := &messageview.Continuation{Format: messageview.ContinuationFormat, Window: 1_000_000, ThroughOrd: 700,
+		Summary: messageview.ContinuationSummary{Facts: []string{strings.Repeat("Recorded fact. ", 40)}}}
+	text, err := RenderContinuation(t.Context(), record, true, 96)
+	testutil.FailErr(t, "render bounded continuation", err)
+	if record.Level != "references" || !strings.Contains(text, `"through_ord":700`) {
+		t.Fatalf("quota lost recovery coordinates: %s", text)
+	}
+	if len(record.Summary.Facts) != 1 {
+		t.Fatal("presentation quota changed retained summary data")
+	}
+}
+
 func TestSessionCompactionRecordCarriesRemovedHandles(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	cfg := testCompactionConfig()
@@ -209,7 +223,7 @@ func TestContinuationRepresentationScalesWithReceiver(t *testing.T) {
 		for range 5 {
 			record.Summary.Pending = append(record.Summary.Pending, strings.Repeat("pending ", 18))
 		}
-		text, err := RenderContinuation(t.Context(), record, true)
+		text, err := RenderContinuation(t.Context(), record, true, 0)
 		testutil.FailErr(t, "render receiver representation", err)
 		if record.Level != tc.level {
 			t.Fatalf("window %d selected %s, want %s", tc.window, record.Level, tc.level)

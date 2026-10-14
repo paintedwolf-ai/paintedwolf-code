@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -83,15 +84,18 @@ func validateCompactionSource(ctx context.Context, queries *db.Queries, sessionI
 		return err
 	}
 	if clock < view.SourceSeq || clock-view.SourceSeq > messageview.MaxCompactionRevisionLag {
-		return fmt.Errorf("compaction source revision gap exceeded")
+		return errCompactionSourceChanged
 	}
 	if view.CoveredThroughOrd > 0 {
 		boundary, err := queries.GetMessageOrdAndTS(ctx, db.GetMessageOrdAndTSParams{SessionID: sessionID, ID: view.CoveredThroughID})
+		if db.IsNoRows(err) {
+			return errCompactionSourceChanged
+		}
 		if err != nil {
 			return err
 		}
 		if boundary.Ord != view.CoveredThroughOrd {
-			return fmt.Errorf("compaction boundary changed")
+			return errCompactionSourceChanged
 		}
 	}
 	mutations, err := queries.CountCompactionSourceMutations(ctx, db.CountCompactionSourceMutationsParams{SessionID: sessionID, Ord: view.CoveredThroughOrd, Seq: view.SourceSeq})
@@ -99,7 +103,7 @@ func validateCompactionSource(ctx context.Context, queries *db.Queries, sessionI
 		return err
 	}
 	if mutations != 0 {
-		return fmt.Errorf("compaction source changed")
+		return errCompactionSourceChanged
 	}
 	return nil
 }
@@ -144,32 +148,11 @@ func (s *SQL) GetCompactionView(ctx context.Context, sessionID string) (*Compact
 
 // CompactionViewCurrent detects mutations at or below the view watermark.
 func (s *SQL) CompactionViewCurrent(ctx context.Context, sessionID string, coveredThroughOrd int64, coveredThroughID string, sourceSeq int64) (bool, error) {
-	clock, err := s.queries.GetSessionTranscriptSeq(ctx, sessionID)
-	if err != nil {
-		return false, err
-	}
-	if clock < sourceSeq || clock-sourceSeq > messageview.MaxCompactionRevisionLag {
+	err := validateCompactionSource(ctx, s.queries, sessionID, CompactionView{
+		CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq,
+	})
+	if errors.Is(err, errCompactionSourceChanged) {
 		return false, nil
 	}
-	if coveredThroughOrd > 0 {
-		boundary, err := s.queries.GetMessageOrdAndTS(ctx, db.GetMessageOrdAndTSParams{
-			SessionID: sessionID,
-			ID:        coveredThroughID,
-		})
-		if db.IsNoRows(err) {
-			return false, nil
-		}
-		if err != nil {
-			return false, err
-		}
-		if boundary.Ord != coveredThroughOrd {
-			return false, nil
-		}
-	}
-	mutations, err := s.queries.CountCompactionSourceMutations(ctx, db.CountCompactionSourceMutationsParams{
-		SessionID: sessionID,
-		Ord:       coveredThroughOrd,
-		Seq:       sourceSeq,
-	})
-	return mutations == 0, err
+	return err == nil, err
 }

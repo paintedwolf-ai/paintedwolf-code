@@ -116,7 +116,7 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 		record.Window = m.compactionConfig(ctx, sess).ModelContextWindow
 		record.Receiver = sess.Model
 		recall := m.recallAvailable != nil && m.recallAvailable(ctx, sess)
-		text, renderErr := compaction.RenderContinuation(ctx, record, recall)
+		text, renderErr := compaction.RenderContinuation(ctx, record, recall, 0)
 		if renderErr != nil {
 			return history
 		}

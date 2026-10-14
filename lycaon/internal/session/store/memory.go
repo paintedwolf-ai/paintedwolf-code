@@ -566,21 +566,8 @@ func (s *Memory) PutCompactionView(ctx context.Context, sessionID string, view C
 	if view.Generation != s.sessions[sessionID].CompactionGeneration+1 {
 		return fmt.Errorf("compaction generation changed")
 	}
-	clock := s.transcriptSeq[sessionID]
-	if clock < view.SourceSeq || clock-view.SourceSeq > messageview.MaxCompactionRevisionLag {
-		return fmt.Errorf("compaction source revision gap exceeded")
-	}
-	boundaryFound := view.CoveredThroughOrd == 0 && strings.TrimSpace(view.CoveredThroughID) == ""
-	for _, message := range s.messages[sessionID] {
-		if message.Ord <= view.CoveredThroughOrd && message.Seq > view.SourceSeq {
-			return fmt.Errorf("compaction source changed")
-		}
-		if message.Ord == view.CoveredThroughOrd && message.ID == view.CoveredThroughID {
-			boundaryFound = true
-		}
-	}
-	if !boundaryFound {
-		return fmt.Errorf("compaction boundary is not a live session message")
+	if err := validateMemoryCompactionSource(s.messages[sessionID], s.transcriptSeq[sessionID], view); err != nil {
+		return err
 	}
 	cp := view
 	cp.Messages = append([]api.Message(nil), view.Messages...)
@@ -619,20 +606,8 @@ func (s *Memory) CompactionViewCurrent(ctx context.Context, sessionID string, co
 	if _, ok := s.sessions[sessionID]; !ok {
 		return false, ErrSessionNotFound
 	}
-	clock := s.transcriptSeq[sessionID]
-	if clock < sourceSeq || clock-sourceSeq > messageview.MaxCompactionRevisionLag {
-		return false, nil
-	}
-	boundaryFound := coveredThroughOrd == 0
-	for _, message := range s.messages[sessionID] {
-		if message.Ord == coveredThroughOrd && message.ID == coveredThroughID {
-			boundaryFound = true
-		}
-		if message.Ord <= coveredThroughOrd && message.Seq > sourceSeq {
-			return false, nil
-		}
-	}
-	return boundaryFound, nil
+	view := CompactionView{CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq}
+	return validateMemoryCompactionSource(s.messages[sessionID], s.transcriptSeq[sessionID], view) == nil, nil
 }
 
 // UpdateMessage replaces one message by ID.
