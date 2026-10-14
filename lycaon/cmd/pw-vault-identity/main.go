@@ -20,7 +20,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/launchverify"
 	"github.com/lycaon/lycaon/internal/osprocess"
-	"github.com/lycaon/lycaon/internal/vaultidentity"
+	"github.com/lycaon/lycaon/internal/pkgmanifest"
 )
 
 const (
@@ -40,7 +40,7 @@ func run(args []string) error {
 	fs := flag.NewFlagSet("pw-vault-identity", flag.ContinueOnError)
 	socket := fs.String("socket", "", "listen on this socket path instead of the systemd-activated descriptor")
 	state := fs.String("state", os.Getenv("STATE_DIRECTORY"), "directory holding per-user identities")
-	manifest := fs.String("manifest", vaultidentity.ManifestPath, "installed executable manifest")
+	manifest := fs.String("manifest", pkgmanifest.DefaultPath, "installed executable manifest")
 	procRoot := fs.String("proc", "/proc", "process filesystem root")
 	if err := fs.Parse(args); err != nil {
 		return err

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/launchverify"
+	"github.com/lycaon/lycaon/internal/pkgmanifest"
 	"github.com/lycaon/lycaon/internal/vaultidentity"
 )
 
@@ -150,7 +151,7 @@ func (s *Server) serveConn(conn net.Conn) {
 
 // verifierFor loads the manifest for one connection.
 func (s *Server) verifierFor() (launchverify.Verifier, *vaultidentity.Response) {
-	manifest, err := launchverify.LoadManifest(s.Manifest)
+	manifest, err := pkgmanifest.Load(s.Manifest)
 	if err != nil {
 		s.Log.Error("vault identity manifest unreadable", "path", s.Manifest, "error", err)
 		return launchverify.Verifier{}, &vaultidentity.Response{

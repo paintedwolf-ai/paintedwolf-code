@@ -5,7 +5,7 @@ Requires=paintedwolf-vault-identity.socket
 
 [Service]
 Type=exec
-ExecStart=/opt/painted-wolf-code/pw-vault-identity
+ExecStart=/opt/painted-wolf-code/bin/pw-vault-identity
 # The identities belong to a user that exists only while the service runs.
 DynamicUser=yes
 StateDirectory=paintedwolf-vault

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+
+	"github.com/lycaon/lycaon/internal/pkgmanifest"
 )
 
 // Code names why a process failed verification. Codes are stable facts for
@@ -62,7 +64,7 @@ func CodeOf(err error) Code {
 // Verifier checks processes under ProcRoot against Manifest.
 type Verifier struct {
 	ProcRoot string
-	Manifest Manifest
+	Manifest *pkgmanifest.Manifest
 	// statFile replaces the filesystem in tests of the mapping check.
 	statFile func(string) (fileFacts, error)
 }
@@ -135,10 +137,10 @@ func (v Verifier) Recheck(chain Chain) error {
 }
 
 // VerifyExecutable hashes the image pid is running, through the exe link
-// opened as a descriptor, and compares it with the manifest's digest for
-// role.
+// opened as a descriptor, and compares it with the manifest's entry for the
+// role's installed path.
 func (v Verifier) VerifyExecutable(pid int, role string) error {
-	want, ok := v.Manifest.Digest(role)
+	want, size, ok := expected(v.Manifest, role)
 	if !ok {
 		return refuse(CodeManifestUnreadable, role, pid, "the manifest lists no such executable")
 	}
@@ -148,10 +150,11 @@ func (v Verifier) VerifyExecutable(pid int, role string) error {
 	}
 	defer file.Close()
 	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
+	n, err := io.Copy(hash, file)
+	if err != nil {
 		return refuse(CodeExecutableUnreadable, role, pid, err.Error())
 	}
-	if subtle.ConstantTimeCompare(hash.Sum(nil), want) != 1 {
+	if n != size || subtle.ConstantTimeCompare(hash.Sum(nil), want) != 1 {
 		return refuse(CodeExecutableMismatch, role, pid, "")
 	}
 	return nil

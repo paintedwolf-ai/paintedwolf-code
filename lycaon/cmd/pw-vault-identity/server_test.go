@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/launchverify"
+	"github.com/lycaon/lycaon/internal/pkgmanifest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/vaultidentity"
 )
@@ -59,14 +61,17 @@ func (f *fixture) removeProcess(pid int) {
 	testutil.FailErr(f.t, "remove proc", os.RemoveAll(filepath.Join(f.procRoot, strconv.Itoa(pid))))
 }
 
-func digest(image []byte) string {
+func entry(path string, image []byte) pkgmanifest.Executable {
 	sum := sha256.Sum256(image)
-	return launchverify.DigestString(sum[:])
+	return pkgmanifest.Executable{Path: path, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(image))}
 }
 
-func writeManifest(t *testing.T, path string, executables map[string]string) {
+func writeManifest(t *testing.T, path string, executables ...pkgmanifest.Executable) {
 	t.Helper()
-	raw, err := json.Marshal(launchverify.Manifest{Version: "1.0.2", Executables: executables})
+	raw, err := json.Marshal(pkgmanifest.Manifest{
+		FormatVersion: pkgmanifest.FormatVersion, Package: "painted-wolf-code", Version: "1.0.2",
+		Architecture: "x86_64", InstallRoot: "/opt/painted-wolf-code", Executables: executables,
+	})
 	testutil.FailErr(t, "encode manifest", err)
 	testutil.FailErr(t, "write manifest", os.WriteFile(path, raw, 0o644))
 }
@@ -81,9 +86,7 @@ func newFixture(t *testing.T) *fixture {
 		t: t, procRoot: filepath.Join(root, "proc"), manifest: filepath.Join(root, "manifest.json"),
 		state: filepath.Join(root, "state"), peer: Peer{UID: 1000, PID: 301}, socket: filepath.Join(sockDir, "s.sock"),
 	}
-	writeManifest(t, f.manifest, map[string]string{
-		"painted-wolf-code": digest(desktopImage), "engine/pw": digest(engineImage),
-	})
+	writeManifest(t, f.manifest, entry(launchverify.DesktopAppPath, desktopImage), entry(launchverify.EnginePath, engineImage))
 	f.addProcess(process{pid: 300, ppid: 1, uid: 1000, start: 10, image: desktopImage})
 	f.addProcess(process{pid: 301, ppid: 300, uid: 1000, start: 20, image: engineImage})
 	f.server = &Server{
@@ -198,7 +201,7 @@ func TestServiceRefusesUnverifiedCallersAndClosesTheConnection(t *testing.T) {
 			testutil.FailErr(f.t, "remove manifest", os.Remove(f.manifest))
 		}},
 		{name: "manifest without the desktop app", status: vaultidentity.StatusUnavailable, code: launchverify.CodeManifestUnreadable, setup: func(f *fixture) {
-			writeManifest(f.t, f.manifest, map[string]string{"pw": digest(engineImage)})
+			writeManifest(f.t, f.manifest, entry(launchverify.EnginePath, engineImage))
 		}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

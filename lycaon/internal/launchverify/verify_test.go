@@ -2,7 +2,7 @@ package launchverify
 
 import (
 	"crypto/sha256"
-	"encoding/json"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/pkgmanifest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -62,9 +63,9 @@ func (f fakeProc) appendMaps(pid int, lines string) {
 	testutil.FailErr(f.t, "append maps", os.WriteFile(path, append(raw, lines...), 0o644))
 }
 
-func digestOf(image []byte) string {
+func entryOf(path string, image []byte) pkgmanifest.Executable {
 	sum := sha256.Sum256(image)
-	return DigestString(sum[:])
+	return pkgmanifest.Executable{Path: path, SHA256: hex.EncodeToString(sum[:]), Size: int64(len(image))}
 }
 
 var (
@@ -72,11 +73,11 @@ var (
 	desktopImage = []byte("desktop app image bytes")
 )
 
-func installedManifest() Manifest {
-	return Manifest{Version: "1.0.2", Executables: map[string]string{
-		"pw":                digestOf(engineImage),
-		"painted-wolf-code": digestOf(desktopImage),
-		"pw-logs":           digestOf([]byte("logs")),
+func installedManifest() *pkgmanifest.Manifest {
+	return &pkgmanifest.Manifest{Executables: []pkgmanifest.Executable{
+		entryOf(EnginePath, engineImage),
+		entryOf(DesktopAppPath, desktopImage),
+		entryOf("/opt/painted-wolf-code/bin/pw-logs", []byte("logs")),
 	}}
 }
 
@@ -164,11 +165,25 @@ func TestVerifyChainRefusesWithStructuredCodes(t *testing.T) {
 
 func TestVerifyChainNeedsTheManifestRoles(t *testing.T) {
 	proc, verifier := newFixture(t)
-	verifier.Manifest = Manifest{Executables: map[string]string{"pw": digestOf(engineImage)}}
 	proc.add(fakeProcess{pid: 300, ppid: 1, uid: 1000, euid: 1000, image: desktopImage})
 	proc.add(fakeProcess{pid: 301, ppid: 300, uid: 1000, euid: 1000, image: engineImage})
+	// The desktop app listed under its name rather than its installed path.
+	verifier.Manifest = &pkgmanifest.Manifest{Executables: []pkgmanifest.Executable{
+		entryOf(EnginePath, engineImage), entryOf("painted-wolf-code", desktopImage),
+	}}
 	if _, err := verifier.VerifyChain(301, 1000); CodeOf(err) != CodeManifestUnreadable {
 		t.Fatalf("err = %v", err)
+	}
+	verifier.Manifest = nil
+	if _, err := verifier.VerifyChain(301, 1000); CodeOf(err) != CodeManifestUnreadable {
+		t.Fatalf("no manifest: %v", err)
+	}
+	// Equal digests with a different recorded size are not the installed file.
+	shorter := entryOf(EnginePath, engineImage)
+	shorter.Size--
+	verifier.Manifest = &pkgmanifest.Manifest{Executables: []pkgmanifest.Executable{shorter, entryOf(DesktopAppPath, desktopImage)}}
+	if _, err := verifier.VerifyChain(301, 1000); CodeOf(err) != CodeExecutableMismatch {
+		t.Fatalf("size mismatch: %v", err)
 	}
 	if CodeOf(errors.New("plain")) != "" {
 		t.Fatal("a plain error carries a code")
@@ -215,43 +230,5 @@ func TestParseStatHandlesCommandNamesWithSpacesAndParentheses(t *testing.T) {
 	}
 	if _, _, err := parseStatusUIDs([]byte("Name:\tpw\n")); err == nil {
 		t.Fatal("accepted a status without Uid")
-	}
-}
-
-func TestLoadManifestValidatesShape(t *testing.T) {
-	dir := t.TempDir()
-	write := func(name string, value any) string {
-		raw, err := json.Marshal(value)
-		testutil.FailErr(t, "encode manifest", err)
-		p := filepath.Join(dir, name)
-		testutil.FailErr(t, "write manifest", os.WriteFile(p, raw, 0o644))
-		return p
-	}
-	good, err := LoadManifest(write("good.json", installedManifest()))
-	testutil.FailErr(t, "load manifest", err)
-	if sum, ok := good.Digest(RoleEngine); !ok || DigestString(sum) != digestOf(engineImage) {
-		t.Fatalf("engine digest = %x, %v", sum, ok)
-	}
-	if _, ok := good.Digest("missing"); ok {
-		t.Fatal("found a missing role")
-	}
-	for name, value := range map[string]any{
-		"empty":    map[string]any{"version": "1"},
-		"absolute": map[string]any{"executables": map[string]string{"/opt/pw": digestOf(engineImage)}},
-		"dotdot":   map[string]any{"executables": map[string]string{"../pw": digestOf(engineImage)}},
-		"md5":      map[string]any{"executables": map[string]string{"pw": "md5:00"}},
-		"short":    map[string]any{"executables": map[string]string{"pw": "sha256:abcd"}},
-		"nothex":   map[string]any{"executables": map[string]string{"pw": "sha256:" + string(make([]byte, 64))}},
-	} {
-		if _, err := LoadManifest(write(name+".json", value)); err == nil {
-			t.Fatalf("%s manifest accepted", name)
-		}
-	}
-	if _, err := LoadManifest(filepath.Join(dir, "absent.json")); err == nil {
-		t.Fatal("absent manifest accepted")
-	}
-	testutil.FailErr(t, "write junk", os.WriteFile(filepath.Join(dir, "junk.json"), []byte("{"), 0o644))
-	if _, err := LoadManifest(filepath.Join(dir, "junk.json")); err == nil {
-		t.Fatal("junk manifest accepted")
 	}
 }

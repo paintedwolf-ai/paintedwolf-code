@@ -17,8 +17,6 @@ const (
 	// SocketPath is where the socket unit listens. Any user may connect; the
 	// service decides from the peer's credentials and process image.
 	SocketPath = "/run/painted-wolf-code/vault-identity.sock"
-	// ManifestPath is the package's signed list of installed executables.
-	ManifestPath = "/opt/painted-wolf-code/manifest.json"
 
 	// MaxValueBytes bounds one stored identity; a frame also carries its
 	// base64 expansion and the envelope.
