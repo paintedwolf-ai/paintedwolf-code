@@ -134,23 +134,22 @@
   margin-left: 0;
 }
 
-/* The chat header's clusters take their own place in its row, so the tab
-   rail ends before them instead of running under them. */
-.den-custom-chrome .den-shell-header-chat > .den-shell-window-controls {
-  align-self: flex-start;
-  margin-top: calc(
-    var(--den-pane-control-center) - var(--den-window-control-size) / 2 -
-      var(--den-chat-chrome-top, 0px)
-  );
+/* The chat rail ends in the conversation's clusters, so its chips stop short
+   of them while the dock below still spans the column. */
+.den-custom-chrome .den-shell-header-chat .tabs__rail > .den-shell-window-controls {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  pointer-events: auto;
 }
 
-.den-custom-chrome .den-shell-header-chat > .den-shell-window-controls[data-side="left"] {
-  order: -1;
+.den-custom-chrome .den-shell-header-chat .tabs__rail > .den-shell-window-controls[data-side="left"] {
   margin-left: var(--den-window-controls-inset);
+  margin-right: calc(2 * var(--den-window-control-gap));
 }
 
-.den-custom-chrome .den-shell-header-chat > .den-shell-window-controls[data-side="right"] {
-  order: 1;
+.den-custom-chrome .den-shell-header-chat .tabs__rail > .den-shell-window-controls[data-side="right"] {
+  margin-left: calc(2 * var(--den-window-control-gap));
   margin-right: var(--den-window-controls-inset);
 }
 
