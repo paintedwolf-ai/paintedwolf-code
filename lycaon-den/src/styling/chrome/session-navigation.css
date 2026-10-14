@@ -102,11 +102,13 @@
   font-size: var(--text-den-caption);
   color: var(--den-text-muted);
 }
+/* Selectable title text keeps WebKitGTK answering text attributes for the row; chrome text it cannot select makes its attribute run overflow. */
 .focused-session-list__row {
   display: flex;
   align-items: center;
   width: 100%;
   min-width: 0;
+  user-select: text;
 }
 .focused-session-list__rename {
   flex: 1;
