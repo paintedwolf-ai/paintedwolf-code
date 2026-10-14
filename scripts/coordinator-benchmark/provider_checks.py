@@ -16,7 +16,7 @@ from progress import save, timestamp
 from snapshot import ROOT, identity
 from smoke import Application
 sys.path.append(str(ROOT / 'scripts'))
-from artifact_paths import build_dir
+from built_runtime import engine_path
 
 CLOUD_PROVIDER_KINDS=('openai','anthropic','together','azure','gemini','fireworks',
                       'bedrock','vertex','vertex-express','openrouter','cloudflare-workers-ai')
@@ -189,7 +189,7 @@ def main():
     plan=load_plan(args.plan)
     args.out=args.out.resolve();args.out.mkdir(parents=True,exist_ok=True)
     args.source_config=args.source_config.resolve()
-    binary_sha256=hashlib.sha256((build_dir(ROOT)/'lycaon-dev').read_bytes()).hexdigest()
+    binary_sha256=hashlib.sha256((engine_path(ROOT)).read_bytes()).hexdigest()
     binding={'binary_sha256':binary_sha256,'plan':plan,'providers':args.providers,
              'source_config_sha256':source_fingerprint(args.source_config)}
     ledger=args.out/'binding.json'

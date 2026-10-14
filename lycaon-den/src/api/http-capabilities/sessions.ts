@@ -85,6 +85,10 @@ export interface SessionsClient {
       after?: string;
       beforeMessageId?: string;
       afterMessageId?: string;
+      /** Window below an ordinal the client computed from the transcript's span. */
+      beforeOrd?: number;
+      /** Window above an ordinal the client computed from the transcript's span; 0 is the start. */
+      afterOrd?: number;
       from?: "newest" | "oldest";
       workerId?: string;
     },
@@ -215,6 +219,8 @@ export function createSessionsClient(j: JsonRequester, connection: BackendConnec
           after: opts?.after,
           before_message_id: opts?.beforeMessageId,
           after_message_id: opts?.afterMessageId,
+          before_ord: opts?.beforeOrd,
+          after_ord: opts?.afterOrd,
           from: opts?.from,
           worker_id: opts?.workerId,
         })}`,

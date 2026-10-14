@@ -8,7 +8,7 @@ No project folder is attached — only **`web-researcher`** is spawnable via `ta
 No project folder is attached — attach a folder to enable codebase scouts and implementers.
 {% endif %}
 {% elif repo_known_empty %}
-Board reports **`Repo: empty · no files yet · skip read scouts`** — project-tree survey workers are off this roster (`REPO_EMPTY_READ_ONLY_WORKER`). {% if execution_mode == "investigate" %}Keep a sequential runtime workflow inline on investigate. Use native file and HTTP tools for operations they represent; use `command` for process execution. {% endif %}Pick routine defaults the user left unspecified. Delegate only bounded work that can proceed independently or needs a substantial specialist leg. Use **`web-researcher`** for substantial external research that informs a later build.
+Board reports **`Repo: empty · no files yet · skip read scouts`** — project-tree survey workers are off this roster (`REPO_EMPTY_READ_ONLY_WORKER`). {% if execution_mode == "investigate" %}Keep a sequential runtime workflow inline on investigate unless the user requests delegation. Use native file and HTTP tools for operations they represent; use `command` for process execution. {% endif %}Pick routine defaults the user left unspecified. Prefer delegating bounded work that can proceed independently or needs a substantial specialist leg. Use **`web-researcher`** for substantial external research that informs a later build.
 {% else %}
 `task(agent_type=…)` allowlist{% if surface_id %} ({{ surface_id }}){% endif %}; else `DISALLOWED_AGENT`.
 {% endif %}

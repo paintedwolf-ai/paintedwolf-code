@@ -260,6 +260,7 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 	if err != nil {
 		return "", fmt.Errorf("summarize encode: %w", err)
 	}
+	rememberSummaryReads(ctx, reads, tctx, res.Pack.Substance)
 	return string(raw), nil
 }
 

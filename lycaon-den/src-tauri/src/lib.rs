@@ -1,6 +1,8 @@
 mod app_state;
 mod files;
 mod notifications;
+#[cfg(target_os = "linux")]
+mod linux_desktop;
 mod windows;
 mod app_exit;
 mod app_menu;
@@ -41,12 +43,12 @@ pub fn run() {
             return;
         }
     };
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "windows")]
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_notification::init());
-    #[cfg(target_os = "macos")]
+    #[cfg(not(target_os = "windows"))]
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_shell::init());
@@ -160,11 +162,8 @@ pub fn run() {
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             vault_lock::setup(app.handle().clone())
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
-            #[cfg(target_os = "macos")]
-            {
-                notifications::native::setup(app.handle().clone())
-                    .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
-            }
+            notifications::setup(app.handle().clone())
+                .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -183,6 +182,7 @@ pub fn run() {
                 ..
             } => windows::window_appearance::restore_main_workspace(app),
             RunEvent::Exit => {
+                notifications::shutdown(app);
                 if let Some(state) = app.try_state::<clipboard::ClipboardState>() {
                     state.shutdown();
                 }

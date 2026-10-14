@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/llm/actionenvelope"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
@@ -16,7 +17,6 @@ import (
 // Text recovery accepts only declared envelope markers.
 var (
 	toolCallTagRE   = regexp.MustCompile(`(?is)<tool_call>\s*(.*?)\s*</tool_call>`)
-	fencedBlockRE   = regexp.MustCompile("(?is)```(?:json|tool_code|tool_calls)?\\s*(.*?)\\s*```")
 	toolCallsPrefix = "[TOOL_CALLS]"
 )
 
@@ -27,38 +27,53 @@ type proseToolCall struct {
 	Parameters json.RawMessage `json:"parameters"`
 }
 
-// EnforceToolCallSupport recovers declared text tool-call envelopes.
-func EnforceToolCallSupport(profile providerprofile.Profile, req modelcall.CompletionRequest, c *modelcall.Completion, providerID, model string) (*modelcall.Completion, error) {
-	if c == nil || len(c.ToolCalls) > 0 {
-		return c, nil
+// ToolResponse retains the delivered completion and the non-executable action
+// observation. Only a native call or a request-selected protocol supplies calls.
+type ToolResponse struct {
+	Completion      *modelcall.Completion
+	TextActionTools []string
+}
+
+// ClassifyToolResponse is the action/content boundary for every model role.
+func ClassifyToolResponse(profile providerprofile.Profile, req modelcall.CompletionRequest, c *modelcall.Completion, providerID, model string) (*ToolResponse, error) {
+	out := &ToolResponse{Completion: c}
+	if c == nil || len(c.ToolCalls) > 0 || !req.ToolsCallable() {
+		return out, nil
 	}
-	if profile.TextToolCallGrammars.Supports(providerprofile.TextToolCallGrammarHarmony) {
+	switch req.ToolProtocol {
+	case modelcall.ToolProtocolNative:
+		offered := make([]string, 0, len(req.Tools))
+		for _, meta := range req.Tools {
+			offered = append(offered, meta.Name)
+		}
+		out.TextActionTools = actionenvelope.Names(c.Content, offered)
+		return out, nil
+	case modelcall.ToolProtocolHarmony:
+		if !profile.TextToolCallGrammars.Supports(providerprofile.TextToolCallGrammarHarmony) {
+			return nil, fmt.Errorf("provider does not support the selected Harmony action protocol")
+		}
 		recovered := *c
-		c = RecoverHarmonyCompletion(&recovered, req.ToolsCallable())
-		if len(c.ToolCalls) > 0 && !validRecoveredToolCalls(c.ToolCalls, req.Tools) {
+		out.Completion = RecoverHarmonyCompletion(&recovered, true)
+		if len(recovered.ToolCalls) > 0 && !validRecoveredToolCalls(recovered.ToolCalls, req.Tools) {
 			return nil, &failure.ProviderToolCallsInProseError{ProviderID: providerID, Model: model}
 		}
-	}
-	if !req.ToolsCallable() || len(c.ToolCalls) > 0 {
-		return c, nil
-	}
-	if strings.TrimSpace(c.Content) == "" {
-		return c, nil
-	}
-	if !profile.TextToolCallGrammars.Supports(providerprofile.TextToolCallGrammarBoundedEnvelope) {
-		return c, nil
+		return out, nil
+	case modelcall.ToolProtocolEnvelope:
+		if !profile.TextToolCallGrammars.Supports(providerprofile.TextToolCallGrammarBoundedEnvelope) {
+			return nil, fmt.Errorf("provider does not support the selected envelope action protocol")
+		}
+	default:
+		return nil, fmt.Errorf("unknown action protocol %q", req.ToolProtocol)
 	}
 	calls, detected := recoverToolCallsFromProse(c.Content)
 	if !detected {
-		return c, nil
+		return out, nil
 	}
-	if len(calls) > 0 {
-		if !validRecoveredToolCalls(calls, req.Tools) {
-			return nil, &failure.ProviderToolCallsInProseError{ProviderID: providerID, Model: model}
-		}
-		c.ToolCalls = calls
-		c.Content = ""
-		return c, nil
+	if len(calls) > 0 && validRecoveredToolCalls(calls, req.Tools) {
+		recovered := *c
+		recovered.ToolCalls, recovered.Content = calls, ""
+		out.Completion = &recovered
+		return out, nil
 	}
 	if !profile.ToolCalls.SupportsToolCalls() {
 		return nil, &failure.ProviderToolCallsUnsupportedError{ProviderID: providerID, Model: model}
@@ -82,7 +97,8 @@ func validRecoveredToolCalls(calls []api.ToolCall, offered []tools.ToolMeta) boo
 
 // recoverToolCallsFromProse parses declared envelope forms.
 func recoverToolCallsFromProse(content string) (calls []api.ToolCall, detected bool) {
-	if matches := toolCallTagRE.FindAllStringSubmatch(content, -1); len(matches) > 0 {
+	content = strings.TrimSpace(content)
+	if matches := toolCallTagRE.FindAllStringSubmatch(content, -1); len(matches) > 0 && strings.TrimSpace(toolCallTagRE.ReplaceAllString(content, "")) == "" {
 		detected = true
 		for _, m := range matches {
 			var valid bool
@@ -94,27 +110,10 @@ func recoverToolCallsFromProse(content string) (calls []api.ToolCall, detected b
 		return calls, detected
 	}
 
-	if idx := strings.Index(content, toolCallsPrefix); idx >= 0 {
+	if strings.HasPrefix(content, toolCallsPrefix) {
 		detected = true
-		calls, _ = appendParsed(calls, content[idx+len(toolCallsPrefix):])
+		calls, _ = appendParsed(calls, content[len(toolCallsPrefix):])
 		return calls, detected
-	}
-
-	if matches := fencedBlockRE.FindAllStringSubmatch(content, -1); len(matches) > 0 {
-		for _, m := range matches {
-			body := strings.TrimSpace(m[1])
-			if looksLikeToolCall(body) {
-				detected = true
-				var valid bool
-				calls, valid = appendParsed(calls, body)
-				if !valid {
-					return nil, true
-				}
-			}
-		}
-		if detected {
-			return calls, detected
-		}
 	}
 
 	if looksLikeToolCall(strings.TrimSpace(content)) {

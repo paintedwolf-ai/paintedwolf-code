@@ -49,6 +49,15 @@ class BuiltRuntimeTests(unittest.TestCase):
             path.chmod(0o755)
         return source, runtime
 
+    def test_sealed_engine_ignores_the_invoking_checkout_build_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            source, _ = self.fixture(root)
+            with patch.dict(os.environ, {'PW_BUILD_DIR': '/unrelated/build'}):
+                self.assertEqual(built_runtime.engine_path(source), pathlib.Path('/unrelated/build/lycaon-dev'))
+                built_runtime.seal_application(source)
+                self.assertEqual(built_runtime.engine_path(source), source / '.bin/lycaon-dev')
+
     def test_staging_changes_runtime_then_seal_survives_resume_without_rebuilding(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)

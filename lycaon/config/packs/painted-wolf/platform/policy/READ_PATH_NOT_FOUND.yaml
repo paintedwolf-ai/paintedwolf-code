@@ -31,7 +31,7 @@ copy:
   fix: '{% if paintedwolf.can_list_dir %}Inspect the intended parent with list_dir.{% endif %}{% if paintedwolf.can_find
     %} Use find to resolve the intended filename.{% endif %} Correct a demonstrated path mistake within attached
     roots, then retry {{ tool }}. Do not create an empty substitute for missing input.'
-  instead: Branch on Code; fix path or use list_dir to discover the correct name
+  instead: Correct the path from observed evidence, or report the missing input
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:read
 x-paintedwolf-message: read path does not exist

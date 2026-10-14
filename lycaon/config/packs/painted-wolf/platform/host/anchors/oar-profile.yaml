@@ -126,6 +126,10 @@ host_facts:
    type: string
  - name: paintedwolf.can_stat
    type: bool
+ - name: paintedwolf.can_view_image
+   type: bool
+ - name: paintedwolf.workspace_image_supported
+   type: bool
  - name: paintedwolf.recall_widen_invalid
    type: bool
  - name: paintedwolf.recall_allowed_fields
@@ -725,8 +729,16 @@ host_facts:
    type: list<string>
  - name: paintedwolf.can_request_tools
    type: bool
+ - name: paintedwolf.tool_discovery_status
+   type: string
+ - name: paintedwolf.tool_discovery_has_more
+   type: bool
  - name: paintedwolf.tool_loadable
    type: bool
+ - name: paintedwolf.tool_discovery_available
+   type: bool
+ - name: paintedwolf.offered_tools
+   type: list<string>
  - name: paintedwolf.can_task
    type: bool
  - name: paintedwolf.can_complete_leg
@@ -925,6 +937,10 @@ host_facts:
    type: string
  - name: paintedwolf.old_string_chars
    type: string
+ - name: paintedwolf.replacement_matches
+   type: int
+ - name: paintedwolf.replacement_line
+   type: int
  - name: paintedwolf.operator
    type: string
  - name: paintedwolf.opaque_overflow
@@ -1132,6 +1148,8 @@ host_facts:
  - name: paintedwolf.http_request_web_page
    type: bool
  - name: paintedwolf.misplaced_fields
+   type: list<string>
+ - name: paintedwolf.inapplicable_fields
    type: list<string>
  - name: paintedwolf.found_under
    type: string

@@ -22,7 +22,7 @@ copy:
   fix: '{% if paintedwolf.can_grep %}Use grep for current-tree content.{% endif %}{% if paintedwolf.can_find
     %} Use find for current paths.{% endif %} Current-source evidence requires an offered source tool; recall
     retrieves dated observations, including completed legs, and cannot establish current file contents.'
-  instead: Branch on Code RECALL_LIVE_CODE_NOT_IN_SCOPE; use grep or find for the current tree
+  instead: Use an offered current-source tool, or report the missing evidence
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:recall
 x-paintedwolf-message: recall reads the record, not the working tree.

@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"compress/gzip"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/promptattach/format"
@@ -216,5 +218,36 @@ func TestDetectVideoContainersFromStoredBytes(t *testing.T) {
 	}
 	if !format.IsVideoMIME("video/webm") || format.IsVideoMIME("image/png") {
 		t.Fatal("IsVideoMIME")
+	}
+}
+
+func TestWorkspaceImageFormatsDoNotExpandAttachmentIntake(t *testing.T) {
+	want := map[string]string{".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
+	exts := format.WorkspaceImageExtensions()
+	if len(exts) != len(want) || !slices.IsSorted(exts) {
+		t.Fatalf("viewer formats = %v", exts)
+	}
+	for ext, mime := range want {
+		for _, spelling := range []string{ext, strings.ToUpper(ext)} {
+			got, ok := format.WorkspaceImageMIME(spelling)
+			if !ok || got != mime || !slices.Contains(exts, ext) {
+				t.Fatalf("viewer format %s = %q/%v", spelling, got, ok)
+			}
+		}
+	}
+	exts[0] = ".exe"
+	if slices.Contains(format.WorkspaceImageExtensions(), ".exe") {
+		t.Fatal("caller changed viewer formats")
+	}
+	for _, ext := range []string{"", ".ico", ".bmp", ".tiff", ".avif", ".txt"} {
+		if _, ok := format.WorkspaceImageMIME(ext); ok {
+			t.Fatalf("unsupported workspace format %s accepted", ext)
+		}
+	}
+	if format.IsRasterMIME("image/svg+xml") {
+		t.Fatal("workspace SVG support expanded prompt image intake")
+	}
+	if got := format.Detect("logo.svg", "image/svg+xml", []byte(`<svg><script/></svg>`)); got.Kind == format.KindImage {
+		t.Fatal("active SVG entered prompt image path")
 	}
 }
