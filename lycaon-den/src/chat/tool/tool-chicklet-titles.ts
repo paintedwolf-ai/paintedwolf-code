@@ -60,10 +60,7 @@ function taskToolChickletTitle(
   return undefined;
 }
 
-/**
- * A recall past the current chat leads with its scope: the query reads the same
- * either way, and the collapsed card is the only place the reach is visible.
- */
+/** Cross-chat recall subtitles lead with their wider scope. */
 const RECALL_WIDEN_LABELS: Record<string, string> = {
   project: "all chats in this project",
   all: "all chats, all projects",
@@ -81,10 +78,73 @@ function recallToolChickletTitle(
   return query ? truncateTitle(query) : undefined;
 }
 
-/**
- * A drive row reads as what it did. The page handle is minted per open, so it
- * would print a uuid; waits pad the step that mattered.
- */
+const WAIT_TOOL = "wait";
+
+const WAIT_CHICKLET_PRIORITY = [
+  "process_done",
+  "http_ready",
+  "port_ready",
+  "overlay_promote_pending",
+  "scan_done",
+  "all_workers_idle",
+  "next_worker_done",
+] as const;
+
+function waitConditionTitle(
+  kind: (typeof WAIT_CHICKLET_PRIORITY)[number],
+  entry: Record<string, unknown>,
+): string {
+  switch (kind) {
+    case "process_done":
+      return "Waiting for a command to finish";
+    case "http_ready": {
+      const url = titleArgument(entry.url);
+      return url
+        ? truncateTitle(`Waiting for a service · ${url}`, 96)
+        : "Waiting for a service";
+    }
+    case "port_ready": {
+      const port =
+        typeof entry.port === "number" &&
+        Number.isFinite(entry.port) &&
+        entry.port > 0
+          ? String(Math.trunc(entry.port))
+          : titleArgument(entry.port);
+      const host = titleArgument(entry.host) ?? "localhost";
+      return port
+        ? truncateTitle(`Waiting for a port · ${host}:${port}`, 96)
+        : "Waiting for a port";
+    }
+    case "overlay_promote_pending":
+      return "Waiting to combine results";
+    case "scan_done":
+      return "Waiting for search to finish";
+    case "all_workers_idle":
+    case "next_worker_done":
+      return "Waiting for workers";
+  }
+}
+
+/** Named reasons win; default "Waiting" yields to condition details. */
+function waitToolChickletTitle(
+  args: Record<string, unknown>,
+): string | undefined {
+  const reason = titleArgument(args.reason);
+  if (reason && reason.toLowerCase() !== "waiting") {
+    return truncateTitle(reason);
+  }
+  const conditions = Array.isArray(args.conditions) ? args.conditions : [];
+  for (const kind of WAIT_CHICKLET_PRIORITY) {
+    for (const raw of conditions) {
+      if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+      const entry = raw as Record<string, unknown>;
+      if (entry.kind === kind) return waitConditionTitle(kind, entry);
+    }
+  }
+  return reason ? truncateTitle(reason) : undefined;
+}
+
+/** Page action subtitles summarize the first material step instead of the page handle. */
 function pageActChickletTitle(
   args: Record<string, unknown>,
 ): string | undefined {
@@ -155,6 +215,9 @@ export function resolveChickletTitle(
   }
   if (tool.toLowerCase() === RECALL_TOOL) {
     return recallToolChickletTitle(args);
+  }
+  if (tool.toLowerCase() === WAIT_TOOL) {
+    return waitToolChickletTitle(args);
   }
   if (tool.toLowerCase() === PAGE_ACT_TOOL) {
     return pageActChickletTitle(args);

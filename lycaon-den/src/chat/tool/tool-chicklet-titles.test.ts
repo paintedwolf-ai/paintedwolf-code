@@ -105,6 +105,10 @@ const SAMPLE_ARGS: Record<string, Record<string, unknown>> = {
   terminal_close: {
     id: "pty-1",
   },
+  wait: {
+    conditions: [{ kind: "process_done", handles: ["handle-1"] }],
+    until_complete: true,
+  },
 };
 
 describe("tool-chicklet-titles", () => {
@@ -325,6 +329,74 @@ describe("tool-chicklet-titles", () => {
           caption: "watcher rebuilding",
         }),
       ).toBe("watcher rebuilding");
+    });
+
+    it("titles wait calls from explicit reasons or subscribed conditions", () => {
+      expect(
+        resolveChickletTitle("wait", {
+          reason: "Let server warm up",
+          conditions: [{ kind: "process_done", handles: ["h-1"] }],
+        }),
+      ).toBe("Let server warm up");
+      expect(
+        resolveChickletTitle("wait", {
+          reason: "Waiting",
+          conditions: [{ kind: "process_done", handles: ["h-1"] }],
+        }),
+      ).toBe("Waiting for a command to finish");
+      expect(
+        resolveChickletTitle("wait", {
+          conditions: [{ kind: "process_done", handles: ["h-1"] }],
+          until_complete: true,
+        }),
+      ).toBe("Waiting for a command to finish");
+      expect(
+        resolveChickletTitle("wait", {
+          conditions: [{ kind: "http_ready", url: "http://127.0.0.1:8080/health" }],
+        }),
+      ).toBe("Waiting for a service · http://127.0.0.1:8080/health");
+      expect(
+        resolveChickletTitle("wait", {
+          conditions: [{ kind: "http_ready" }],
+        }),
+      ).toBe("Waiting for a service");
+      expect(
+        resolveChickletTitle("wait", {
+          conditions: [{ kind: "port_ready", port: 8080 }],
+        }),
+      ).toBe("Waiting for a port · localhost:8080");
+      expect(
+        resolveChickletTitle("wait", {
+          conditions: [{ kind: "port_ready", host: "127.0.0.1", port: "5432" }],
+        }),
+      ).toBe("Waiting for a port · 127.0.0.1:5432");
+      expect(
+        resolveChickletTitle("wait", {
+          conditions: [{ kind: "port_ready" }],
+        }),
+      ).toBe("Waiting for a port");
+      expect(
+        resolveChickletTitle("wait", {
+          conditions: [{ kind: "overlay_promote_pending" }],
+        }),
+      ).toBe("Waiting to combine results");
+      expect(
+        resolveChickletTitle("wait", {
+          conditions: [{ kind: "scan_done" }],
+        }),
+      ).toBe("Waiting for search to finish");
+      expect(
+        resolveChickletTitle("wait", {
+          conditions: [{ kind: "all_workers_idle" }],
+        }),
+      ).toBe("Waiting for workers");
+      expect(
+        resolveChickletTitle("wait", {
+          conditions: [{ kind: "next_worker_done" }],
+        }),
+      ).toBe("Waiting for workers");
+      expect(resolveChickletTitle("wait", { reason: "Waiting" })).toBe("Waiting");
+      expect(resolveChickletTitle("wait", {})).toBeUndefined();
     });
   });
 });
