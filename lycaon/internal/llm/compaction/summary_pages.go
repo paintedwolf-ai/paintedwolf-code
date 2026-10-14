@@ -2,6 +2,7 @@ package compaction
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -71,6 +72,9 @@ func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo,
 			}
 			if callErr != nil {
 				err = callErr
+				if errors.Is(callErr, context.Canceled) {
+					break
+				}
 				inputBudget = min(inputBudget/2, c.cfg.SummaryRetryInputTokens)
 				continue
 			}

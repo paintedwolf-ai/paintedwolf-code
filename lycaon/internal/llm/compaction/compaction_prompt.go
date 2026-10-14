@@ -30,7 +30,7 @@ func BuildCompactionInput(
 		return CompactionInput{}, fmt.Errorf("compaction resume prompt requires positive token budgets")
 	}
 	limit := min(len(sliced), max(1, min(128, maxTokens/maxMessageTokens)))
-	rows, messages := compactionRecentMessages(sliced[:limit], maxMessageTokens)
+	rows, messages := compactionRecentMessages(sliced[:limit])
 	for {
 		block, err := renderCompactionUserPrompt(ctx, info, rows)
 		if err != nil {
@@ -71,7 +71,7 @@ func renderCompactionUserPrompt(ctx context.Context, info SessionInfo, rows []ma
 	return block, nil
 }
 
-func compactionRecentMessages(sliced []ContextMessage, maxMessageTokens int) ([]map[string]any, []api.Message) {
+func compactionRecentMessages(sliced []ContextMessage) ([]map[string]any, []api.Message) {
 	out := make([]map[string]any, 0, len(sliced))
 	messages := make([]api.Message, 0, len(sliced))
 	for _, msg := range sliced {

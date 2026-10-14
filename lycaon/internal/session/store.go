@@ -27,6 +27,7 @@ type QueryStore interface {
 	ListProjectSummaries(ctx context.Context, q store.SummaryQuery) (store.SummaryPage, error)
 	GetMessages(ctx context.Context, id string) ([]api.Message, error)
 	GetWorkerJobMessages(ctx context.Context, sessionID, workerJobID string) ([]api.Message, error)
+	GetMessagesTail(ctx context.Context, sessionID string, limit int) ([]api.Message, error)
 	GetMessagesAfterOrd(ctx context.Context, sessionID string, afterOrd int64, limit int) ([]api.Message, error)
 	GetMessage(ctx context.Context, sessionID, messageID string) (api.Message, error)
 	// LastAssistantMessageContent and LastTurnMessageContent read one row from

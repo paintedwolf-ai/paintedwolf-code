@@ -267,7 +267,7 @@ func TestCompactionRecentMessagesTotalBudget(t *testing.T) {
 	_, segments := continuationSegments(msgs, messageTokens)
 	input, err := BuildCompactionInput(context.Background(), SessionInfo{ID: "s1"}, segments, 1024, messageTokens)
 	testutil.FailErr(t, "build bounded source page", err)
-	if tokenest.EstimateDefault(input.Text) > 1024 || input.Consumed <= 0 || input.Messages[0].Content != segments[0].Content {
+	if tokenest.EstimateDefault(input.Text) > 1024 || input.Consumed <= 0 || !strings.Contains(input.Messages[0].Content, segments[0].Content) {
 		t.Fatal("source page lost its bounded oldest-prefix coverage")
 	}
 }
@@ -379,7 +379,7 @@ func TestCompactSessionSummaryAlignsToolBoundary(t *testing.T) {
 	}
 }
 
-func TestCompactFailureDoesNotCreateDurableSummary(t *testing.T) {
+func TestSummaryFailurePublishesRecoverableReferences(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	cfg := testCompactionConfig()
 	cfg.KeepRecentMessages = 2
@@ -391,15 +391,23 @@ func TestCompactFailureDoesNotCreateDurableSummary(t *testing.T) {
 		{ID: "3", Role: string(api.MessageRoleUser), Content: "recent"},
 	}
 	c := NewSimpleCompactor(cfg, failSessionSummarizer{})
-	out, report, err := c.Compact(context.Background(), SessionInfo{ID: "s1"}, msgs, cfg.TargetTokens)
-	if err == nil {
-		t.Fatal("failed session summary must be surfaced to the durable writer")
+	for i := range msgs {
+		msgs[i].Ord = int64(i + 1)
 	}
-	if report.SessionCompacted {
-		t.Fatal("failed summary must not be reported as durable compaction")
+	out, report, err := c.Compact(context.Background(), SessionInfo{ID: "s1", RecallAvailable: true}, msgs, cfg.TargetTokens)
+	testutil.FailErr(t, "compact with failed summarizer", err)
+	if !report.SessionCompacted || report.Continuation == nil || report.Continuation.Reason != "references_only" {
+		t.Fatalf("failed summary did not preserve recoverable coverage: %+v", report)
 	}
-	if len(out) != len(msgs) || out[0].Content != msgs[0].Content {
-		t.Fatalf("failed summary changed canonical projection: %+v", out)
+	if len(report.Continuation.Summary.Facts) != 0 || report.Continuation.ThroughOrd != 1 {
+		t.Fatal("failed synthesis invented a summary or changed coverage")
+	}
+	recoverable := false
+	for _, row := range out {
+		recoverable = recoverable || strings.Contains(row.Content, `"through_ord":1`)
+	}
+	if !recoverable || msgs[0].Content != strings.Repeat("old observation ", 200) {
+		t.Fatalf("fallback lost recovery coordinates or changed original content: %+v", out)
 	}
 }
 
