@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { isTauriRuntime, tauriPlatform } from "../runtime.ts";
+import { listenHostEvent } from "./window-channel.ts";
 
 /** One control the desktop places in a client-side title bar. */
 export type WindowChromeControl = "appmenu" | "minimize" | "maximize" | "close";
@@ -79,9 +80,8 @@ export const WINDOW_CHROME_LAYOUT_CHANGED_EVENT = "linux-decoration-layout-chang
 export async function trackWindowChromeLayout(): Promise<void> {
   if (!isTauriRuntime() || !drawsWindowControls()) return;
   try {
-    const { listen } = await import("@tauri-apps/api/event");
     let changed = false;
-    await listen<unknown>(WINDOW_CHROME_LAYOUT_CHANGED_EVENT, ({ payload }) => {
+    await listenHostEvent<unknown>(WINDOW_CHROME_LAYOUT_CHANGED_EVENT, ({ payload }) => {
       changed = true;
       setLayout(normalizeWindowChromeLayout(payload));
     });
