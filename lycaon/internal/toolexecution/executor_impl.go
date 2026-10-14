@@ -181,10 +181,6 @@ func (e *Executor) validateInvocation(
 			return reject
 		}
 	}
-	if reject := tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir); reject != nil {
-		return reject
-	}
-
 	// Freeze the registry contract when the caller did not lease one.
 	// Dynamic tools are absent from the compiled catalog.
 	if strings.TrimSpace(tc.Invocation.Contract.Owner) == "" {
@@ -201,7 +197,10 @@ func (e *Executor) validateInvocation(
 		}
 		tc.Invocation.Contract = def.Contract
 	}
-	return capabilityrequest.ValidateCapabilityContract(tc.Invocation.Contract, args)
+	if reject := capabilityrequest.ValidateCapabilityContract(tc.Invocation.Contract, args); reject != nil {
+		return reject
+	}
+	return tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir)
 }
 
 func (e *Executor) exactCommandReplacementReject(

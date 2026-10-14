@@ -156,3 +156,26 @@ func TestCoordinatorProfileDenialDoesNotInventDispatchState(t *testing.T) {
 		}
 	}
 }
+
+func TestExecutorCapabilityParseRejectIncludesContractFields(t *testing.T) {
+	reg := tools.NewDefaultRegistry()
+	if err := reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		return "ran", nil
+	}); err != nil {
+		t.Fatalf("register command: %v", err)
+	}
+	executor := NewExecutor(nil, reg, "implement")
+	_, err := executor.Invoke(t.Context(), "command", map[string]any{
+		"command":            []any{"python3", "-c", "pass"},
+		"capability_request": map[string]any{"write_root": "receipt.json"},
+	}, fixtureToolContext(t.TempDir()))
+	reject := toolrejection.AsToolReject(err)
+	if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
+		t.Fatalf("err = %v, want SANDBOX_CAPABILITY_REQUEST_INVALID", err)
+	}
+	fields, _ := reject.Data["capability_request_fields"].([]string)
+	if len(fields) == 0 {
+		t.Fatalf("capability_request_fields = %#v, want command contract fields", reject.Data["capability_request_fields"])
+	}
+}
+
