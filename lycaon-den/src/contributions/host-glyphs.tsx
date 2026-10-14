@@ -66,7 +66,6 @@ export const HOST_GLYPHS: Record<IconSlot, Glyph> = {
   "window-minimize": () => <path d="M3.5 8.5h9" />,
   "window-maximize": () => <path d="M3.5 3.5h9v9h-9z" />,
   "window-restore": () => <path d="M3.5 6.5h6v6h-6zM6.5 6.5v-3h6v6h-3" />,
-  "window-close": () => <path d="M4 4l8 8M12 4l-8 8" />,
   "back": () => <path d="M9.71 4 5.71 8l4 4" />,
   "project-folder": () => <ProjectFolderMark />,
   "project-switcher": () => (

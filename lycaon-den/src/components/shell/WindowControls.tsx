@@ -76,7 +76,7 @@ export function WindowControls(props: WindowEdgeClaim) {
                   data-testid="window-close"
                   onClick={() => void currentWindow().then((win) => win.close())}
                 >
-                  <ThemeIcon slot="window-close" size={12} />
+                  <ThemeIcon slot="dismiss" size={12} />
                 </button>
               </Match>
             </Switch>

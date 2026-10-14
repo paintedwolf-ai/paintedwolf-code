@@ -127,7 +127,6 @@ export const ICON_SLOTS = {
   "window-minimize": { paint: "stroke", weight: 1.25 },
   "window-maximize": { paint: "stroke", weight: 1.25 },
   "window-restore": { paint: "stroke", weight: 1.25 },
-  "window-close": { paint: "stroke", weight: 1.25 },
   "back": { paint: "stroke", weight: 1.25 },
   "project-folder": { paint: "stroke", weight: 1.1 },
   "project-switcher": { paint: "stroke", weight: 1.25 },

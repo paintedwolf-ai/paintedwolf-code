@@ -533,10 +533,6 @@
               "description": "Show newly arrived walk steps. (action group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
               "type": "string"
             },
-            "window-close": {
-              "description": "Close a window with drawn decorations. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
-              "type": "string"
-            },
             "window-maximize": {
               "description": "Maximize a window with drawn decorations. (shell group, stroke). SVG child geometry on the 0 0 16 16 grid, one color.",
               "type": "string"

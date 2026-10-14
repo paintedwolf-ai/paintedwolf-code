@@ -49,7 +49,6 @@ var iconSlots = []IconSlot{
 	{ID: "window-minimize", Group: "shell", Description: "Minimize a window with drawn decorations.", Paint: PaintStroke, Weight: weightRegular},
 	{ID: "window-maximize", Group: "shell", Description: "Maximize a window with drawn decorations.", Paint: PaintStroke, Weight: weightRegular},
 	{ID: "window-restore", Group: "shell", Description: "Restore a maximized window with drawn decorations.", Paint: PaintStroke, Weight: weightRegular},
-	{ID: "window-close", Group: "shell", Description: "Close a window with drawn decorations.", Paint: PaintStroke, Weight: weightRegular},
 
 	{ID: "back", Group: "shell", Description: "Return to the previous list.", Paint: PaintStroke, Weight: weightRegular},
 	{ID: "project-folder", Group: "shell", Description: "A project's folder.", Paint: PaintStroke, Weight: weightHairline},

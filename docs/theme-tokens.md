@@ -220,7 +220,6 @@ The frame is the host's either way: grid, rendered size, paint mode, and each sl
 | `window-minimize` | Minimize a window with drawn decorations. |
 | `window-maximize` | Maximize a window with drawn decorations. |
 | `window-restore` | Restore a maximized window with drawn decorations. |
-| `window-close` | Close a window with drawn decorations. |
 | `back` | Return to the previous list. |
 | `project-folder` | A project's folder. |
 | `project-switcher` | Switch project. |
