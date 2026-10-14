@@ -99,6 +99,13 @@ func (s *Service) history(ctx context.Context, req Request) (*Result, error) {
 		Truncated: page.NextAfterOrd > 0 || page.NextOffset != nil}
 	if len(page.Entries) == 0 {
 		out.Resolution = ResolutionNoMatchInScope
+		var present bool
+		if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM messages WHERE session_id = ? LIMIT 1)", req.Caller.SessionID).Scan(&present); err != nil {
+			return nil, err
+		}
+		if !present {
+			out.Resolution = ResolutionScopeEmpty
+		}
 	}
 	if out.Truncated {
 		out.Count.Relation = RelationAtLeast

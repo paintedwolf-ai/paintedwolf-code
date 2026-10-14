@@ -1,0 +1,24 @@
+oar: '1.0'
+id: RECALL_HISTORY_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [recall]
+requires:
+  facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason]
+  profiles: [tool]
+when: paintedwolf.rejection_code == "RECALL_HISTORY_INVALID"
+effect: block
+copy:
+  what: 'The history request was rejected: {{ paintedwolf.rejection_reason }}.'
+  cause: The canonical recovery coordinates or argument combination are invalid.
+  why: History recovery addresses recorded rows in your own session.
+  fix: Use a positive through_ord, with 0 <= after_ord < through_ord and nonnegative offset and source_seq. Supply message_id for a body. Omit query and widen.
+  instead: Correct the history coordinates and retry
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:recall
+x-paintedwolf-message: The history recovery coordinates are invalid.
+x-paintedwolf-scenarios:
+- id: default
+  vars: {profile: coordinator, tool: recall}
+  expect_contains: ['Rejected:', 'Code: RECALL_HISTORY_INVALID']

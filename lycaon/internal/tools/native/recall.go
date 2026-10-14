@@ -15,6 +15,7 @@ import (
 
 // Structured reject codes for recall.
 const (
+	recallHistoryInvalid     = "RECALL_HISTORY_INVALID"
 	recallQueryInvalid       = "RECALL_QUERY_INVALID"
 	recallScopeNotPermitted  = "RECALL_SCOPE_NOT_PERMITTED"
 	recallLiveCodeNotInScope = "RECALL_LIVE_CODE_NOT_IN_SCOPE"
@@ -74,7 +75,7 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 func recallReject(err error) error {
 	var coordinates *recall.ErrHistoryCoordinates
 	if errors.As(err, &coordinates) {
-		return &toolrejection.ToolReject{Code: recallQueryInvalid, Retryable: true, Data: map[string]any{"reason": coordinates.Reason}}
+		return &toolrejection.ToolReject{Code: recallHistoryInvalid, Retryable: true, Data: map[string]any{"reason": coordinates.Reason}}
 	}
 	var denied *recall.ErrScopeDenied
 	if asScopeDenied(err, &denied) {

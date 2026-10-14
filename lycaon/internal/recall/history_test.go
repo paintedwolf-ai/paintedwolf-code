@@ -1,6 +1,7 @@
 package recall_test
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -64,5 +65,47 @@ func TestHistoryPagesCanonicalRowsWithoutAnIndex(t *testing.T) {
 	req.Widen = recall.WidenProject
 	if _, err := f.svc.Answer(t.Context(), req); err == nil {
 		t.Fatal("history widened a worker's scope")
+	}
+}
+
+func TestHistoryValidatesCoordinatesAndCanonicalScope(t *testing.T) {
+	f := newFixture(t)
+	for _, history := range []recall.HistoryRequest{{}, {ThroughOrd: 2, AfterOrd: 2}, {ThroughOrd: 2, AfterOrd: -1}, {ThroughOrd: 2, Offset: -1}, {ThroughOrd: 2, SourceSeq: -1}} {
+		_, err := f.svc.Answer(t.Context(), recall.Request{Caller: coordinator(), History: &history})
+		var invalid *recall.ErrHistoryCoordinates
+		if !errors.As(err, &invalid) {
+			t.Fatalf("invalid coordinates returned %v", err)
+		}
+	}
+	req := recall.Request{Caller: coordinator(), History: &recall.HistoryRequest{ThroughOrd: 2}}
+	empty, err := f.svc.Answer(t.Context(), req)
+	testutil.FailErr(t, "empty canonical session", err)
+	if empty.Resolution != recall.ResolutionScopeEmpty {
+		t.Fatal("empty history claimed unmatched observations")
+	}
+	req.Caller.ProjectID = "another-project"
+	_, err = f.svc.Answer(t.Context(), req)
+	var denied *recall.ErrScopeDenied
+	if !errors.As(err, &denied) {
+		t.Fatalf("project mismatch returned %v", err)
+	}
+	req.Caller = recall.Caller{SessionID: "removed", ProjectID: projectID}
+	removed, err := f.svc.Answer(t.Context(), req)
+	testutil.FailErr(t, "removed session", err)
+	if removed.Resolution != recall.ResolutionRecordDeleted {
+		t.Fatal("missing session was not reported")
+	}
+}
+
+func TestHistoryRecoversRecordedToolBodiesAndHandles(t *testing.T) {
+	f := newFixture(t)
+	_, err := f.db.ExecContext(t.Context(), `INSERT INTO messages (id,session_id,role,content,tool_result_json,evidence_handles_json,origin,authority,trust_tier,ord,seq,ts)
+	VALUES ('tool',?,'tool','',?,?,'tool','none','untrusted',1,1,'2026-10-14T00:00:00Z')`, coordinatorSession, `{"tool":"read","content":"recorded bytes"}`, `["read#3"]`)
+	testutil.FailErr(t, "seed tool body", err)
+	result, err := f.svc.Answer(t.Context(), recall.Request{Caller: coordinator(), History: &recall.HistoryRequest{ThroughOrd: 1, MessageID: "tool"}})
+	testutil.FailErr(t, "recover tool body", err)
+	entry := result.History.Entries[0]
+	if entry.Content != "recorded bytes" || entry.Handles[0] != "read#3" || result.History.NextOffset != nil {
+		t.Fatal("recorded tool recovery lost its body or handle")
 	}
 }
