@@ -10,6 +10,7 @@ import (
 
 // RequestBudget uses the same projection and calibration as native dispatch.
 func (p *Provider) RequestBudget(ctx context.Context, req modelcall.CompletionRequest) modelcall.RequestBudget {
+	req.AttemptBudget, req.ControlCapture = nil, nil
 	model := p.ResolveModel(req)
 	entry, _ := p.ModelEntry(model)
 	vision := modelinfo.Supported(entry.EffectiveCapabilities().Vision)
@@ -18,7 +19,7 @@ func (p *Provider) RequestBudget(ctx context.Context, req modelcall.CompletionRe
 	_, output := p.resolveControls(req, model)
 	return modelcall.RequestBudget{
 		Window: p.ContextLimit(ctx, model),
-		Input: p.projectPromptTokens(model, estimatePromptTokens(messages, ollamaCallableTools(req))),
+		Input:  p.projectPromptTokens(model, estimatePromptTokens(messages, ollamaCallableTools(req))),
 		Output: output, Headroom: ollamaContextHeadroom,
 	}
 }

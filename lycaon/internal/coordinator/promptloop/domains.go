@@ -54,6 +54,7 @@ type ContextDeps struct {
 }
 
 type ModelDeps struct {
+	FitRequest                       func(context.Context, *api.Session, []api.Message, modelcall.CompletionRequest) (modelcall.CompletionRequest, error)
 	LLM                              modelcall.LLMClient
 	LLMService                       *llm.Service
 	Cost                             cost.CostTracker

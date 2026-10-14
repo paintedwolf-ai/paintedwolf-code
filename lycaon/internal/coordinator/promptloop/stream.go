@@ -292,9 +292,9 @@ func (l *modelTurn) completeStream(
 				return
 			}
 			l.Projection.Deps.Events.PublishLLM(context.WithoutCancel(ctx), sessionProjectKey(sess), sessionID, api.LLMCallEvent{
-				CallID:   llmCallID,
-				Provider: callProvider,
-				Model:    callModel,
+				CallID:          llmCallID,
+				Provider:        callProvider,
+				Model:           callModel,
 				Status:          api.LLMCallStatusError,
 				CoordinatorLoop: coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish),
 			})
@@ -534,7 +534,6 @@ func (l *modelTurn) buildTurnRequest(
 			st.history = append(st.history, feedback...)
 		}
 	}
-	messages = l.fitMessagesForCompaction(ctx, sess, sessionID, messages, turnTools)
 	// Detach the request from mutable history.
 	messages = append([]api.Message(nil), messages...)
 	req := modelcall.CompletionRequest{
@@ -559,11 +558,17 @@ func (l *modelTurn) buildTurnRequest(
 	}
 	req.Tools = turnTools
 	req.ToolUse = toolUse
+	if l.Deps.FitRequest != nil {
+		req, err = l.Deps.FitRequest(ctx, sess, history, req)
+		if err != nil {
+			return coordinatorTurnRequest{}, err
+		}
+	}
 	st.stampOfferedToolNames(callable)
 	return coordinatorTurnRequest{
 		Req:                req,
 		SurfaceID:          surfaceID,
-		TranscriptEstimate: compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(messages)),
+		TranscriptEstimate: compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(req.Messages)),
 		ToolPlan:           toolPlan,
 	}, nil
 }
@@ -590,28 +595,4 @@ func (l *promptContext) primaryProjectRoot(ctx context.Context, sess *api.Sessio
 		return ""
 	}
 	return strings.TrimSpace(l.citationRoots(ctx, sess).ProjectDir)
-}
-
-func (l *modelTurn) fitMessagesForCompaction(ctx context.Context, sess *api.Session, sessionID string, messages []api.Message, turnTools []tools.ToolMeta) []api.Message {
-	if l.Deps.CompactionConfig == nil {
-		return messages
-	}
-	compCfg := l.Deps.CompactionConfig(ctx, sess)
-	if !compCfg.Enabled || compCfg.HardCeilingTokens <= 0 {
-		return messages
-	}
-	cal := compaction.PromptTokenCalibration{}
-	if l.Deps.CompactionTokenCalibration != nil {
-		cal = l.Deps.CompactionTokenCalibration(sessionID)
-	}
-	toolsJSON := ""
-	if len(turnTools) > 0 {
-		if raw, marshalErr := json.Marshal(turnTools); marshalErr == nil {
-			toolsJSON = string(raw)
-		}
-	}
-	maxTokens := compaction.FitMaxTokens(compCfg, cal, compCfg.ColdStartOverhead(compaction.ResolveColdStartOverhead(toolsJSON)))
-	ctxMsgs := compaction.ContextMessagesFromAPI(messages)
-	fitted := compaction.DeterministicFit(compCfg, ctxMsgs, maxTokens)
-	return compaction.ContextMessagesToAPI(fitted, messages)
 }

@@ -36,6 +36,9 @@ func EstimateRequestInput(req CompletionRequest) int {
 		tokens += tokenest.EstimateDefault(row.Content) + 16
 		if row.ModelReasoning != nil {
 			tokens += tokenest.EstimateDefault(row.ModelReasoning.Text)
+			for _, detail := range row.ModelReasoning.Details {
+				tokens += tokenest.EstimateDefault(string(detail))
+			}
 		}
 		if raw, err := json.Marshal(row.ToolCalls); err == nil {
 			tokens += tokenest.EstimateDefault(string(raw))

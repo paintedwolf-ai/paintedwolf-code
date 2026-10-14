@@ -30,6 +30,15 @@ func (m *Model) Build() promptloop.ModelDeps {
 		Cost:       m.Cost,
 	}
 	deps.CompactionConfig = m.Limits.Compaction
+	if m.History != nil {
+		deps.FitRequest = func(ctx context.Context, sess *api.Session, rows []api.Message, req modelcall.CompletionRequest) (modelcall.CompletionRequest, error) {
+			var budgets history.RequestBudgets
+			if m.LLMService != nil && m.LLMService.Registry != nil {
+				budgets = m.LLMService.Registry
+			}
+			return m.History.FitRequest(ctx, sess, rows, req, budgets)
+		}
+	}
 	deps.RecordCompactionTokenObservation = func(sessionID string, reportedPromptTokens, transcriptEstimate int) {
 		if m != nil {
 			m.History.ObserveTokens(sessionID, reportedPromptTokens, transcriptEstimate)

@@ -7,7 +7,7 @@ import (
 )
 
 func (r *Registry) RequestBudget(ctx context.Context, providerID string, req modelcall.CompletionRequest) modelcall.RequestBudget {
-	budget := modelcall.RequestBudget{Input: modelcall.EstimateRequestInput(req), Output: req.MaxTokens, Headroom: 1024}
+	budget := modelcall.RequestBudget{Input: modelcall.EstimateRequestInput(req), Output: modelcall.CompletionTokenLimit(req, 0, modelcall.OrchestrationMaxTokens, req.Think, false), Headroom: 1024}
 	if r == nil {
 		return budget
 	}
@@ -27,5 +27,5 @@ func (p *loggingProvider) RequestBudget(ctx context.Context, req modelcall.Compl
 	if reporter, ok := p.inner.(modelcall.RequestBudgetReporter); ok {
 		return reporter.RequestBudget(ctx, req)
 	}
-	return modelcall.RequestBudget{Input: modelcall.EstimateRequestInput(req), Output: req.MaxTokens, Headroom: 1024}
+	return modelcall.RequestBudget{Input: modelcall.EstimateRequestInput(req), Output: modelcall.CompletionTokenLimit(req, 0, modelcall.OrchestrationMaxTokens, req.Think, false), Headroom: 1024}
 }
