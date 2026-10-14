@@ -343,6 +343,8 @@ jobs:
     needs: [classify]
     strategy:
       fail-fast: false
+      # One runner per architecture; both hosted Linux runners are plentiful.
+      max-parallel: 2
       matrix:
         include:
           - updater_key: linux-x86_64
