@@ -38,7 +38,7 @@ func TestEstimateRequestInputAndCatalogRequestBudget(t *testing.T) {
 		Messages: []api.Message{
 			{Role: api.MessageRoleUser, Content: "Describe", ArtifactIDs: []string{"img-1", "img-2"}},
 			{Role: api.MessageRoleAssistant, ModelReasoning: &api.ModelReasoning{Text: "plan", Details: []json.RawMessage{json.RawMessage(`"step"`)}}, ToolCalls: []api.ToolCall{{Name: "read"}}},
-			{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Visual: &api.ToolVisualResult{Perceive: true}}},
+			{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Visual: &api.VisualArtifact{Perceive: true}}},
 		},
 		Tools: []tools.ToolMeta{{Name: "read", Description: "Read file", ArgsSchema: map[string]any{"type": "object"}}},
 	}

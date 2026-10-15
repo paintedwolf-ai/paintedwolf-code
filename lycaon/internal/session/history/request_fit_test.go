@@ -305,7 +305,7 @@ func TestReviewRequestBudgetCountsAttachedImages(t *testing.T) {
 	}
 	req.Messages = append(req.Messages,
 		api.Message{Role: api.MessageRoleAssistant, ModelReasoning: &api.ModelReasoning{Text: "inspecting", Details: []json.RawMessage{json.RawMessage(`"detail"`)}}},
-		api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Visual: &api.ToolVisualResult{Perceive: true}}},
+		api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Visual: &api.VisualArtifact{Perceive: true}}},
 	)
 	if withToolVisual := modelcall.EstimateRequestInput(req); withToolVisual < got+providerwire.UnsizedImageTokenEstimate {
 		t.Fatalf("budget with perceived tool image = %d, want at least %d", withToolVisual, got+providerwire.UnsizedImageTokenEstimate)
