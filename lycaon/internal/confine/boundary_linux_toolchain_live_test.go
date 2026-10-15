@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -30,7 +29,8 @@ func requireTool(t *testing.T, name string) string {
 func TestLinuxToolchainsWorkInsideTheBoundary(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	proj := t.TempDir()
-	goTool := filepath.Join(runtime.GOROOT(), "bin", "go")
+	goTool, err := exec.LookPath("go")
+	testutil.FailErr(t, "locate the go toolchain", err)
 	testutil.FailErr(t, "write module", os.WriteFile(filepath.Join(proj, "go.mod"), []byte("module probe\n\ngo 1.22\n"), 0o644))
 	testutil.FailErr(t, "write main", os.WriteFile(filepath.Join(proj, "main.go"), []byte("package main\n\nimport \"fmt\"\n\nfunc main() { fmt.Println(\"go-ok\") }\n"), 0o644))
 	env := []string{

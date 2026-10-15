@@ -44,13 +44,15 @@ func TestIPv6AbsenceIsNotAFailure(t *testing.T) {
 func TestGatewayReportsEachDroppedDestinationOnce(t *testing.T) {
 	t.Parallel()
 	d := droppedDestinations{}
-	if !d.first(ap("192.0.2.1:53")) || d.first(ap("192.0.2.1:53")) || !d.first(ap("192.0.2.1:54")) {
+	first, repeat, other := d.first(ap("192.0.2.1:53")), d.first(ap("192.0.2.1:53")), d.first(ap("192.0.2.1:54"))
+	if !first || repeat || !other {
 		t.Fatal("each destination must be reported on its first drop only")
 	}
 	for i := 0; len(d) < maxDroppedDestinations; i++ {
 		d.first(ap("198.51.100.1:" + strconv.Itoa(1000+i)))
 	}
-	if !d.first(ap("203.0.113.1:1")) || !d.first(ap("203.0.113.1:1")) {
+	once, again := d.first(ap("203.0.113.1:1")), d.first(ap("203.0.113.1:1"))
+	if !once || !again {
 		t.Fatal("past the bound every drop is reported")
 	}
 	if unmapped(ap("[::ffff:192.0.2.1]:53")) != ap("192.0.2.1:53") {
