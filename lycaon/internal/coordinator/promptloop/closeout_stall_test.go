@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -114,7 +115,7 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 				}
 				return nil
 			}}})
-			st := &promptLoopTurnState{turnID: "turn", attemptID: "attempt", closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old", codes: []string{"citation"}}}
+			st := &promptLoopTurnState{turnToolPlan: toolsurface.Compile([]string{"read"}, nil), offeredToolNames: []string{"read"}, turnID: "turn", attemptID: "attempt", closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old", codes: []string{"citation"}}}
 			sess := &api.Session{ID: "session"}
 			for i := 0; i < 7; i++ {
 				call := api.ToolCall{ID: fmt.Sprint(i), Name: "read", Args: map[string]any{"path": "missing"}}
@@ -158,6 +159,7 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 }
 
 func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	reg, err := anchor.LoadRegistryFromConfigRoot()
 	testutil.FailErr(t, "load anchor registry", err)
 	release := anchor.SetAnchorsFor(func(context.Context, string) *anchor.Registry { return reg })
