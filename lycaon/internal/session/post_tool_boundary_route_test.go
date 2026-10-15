@@ -199,3 +199,38 @@ func TestSandboxRecoveryPreservesRunningJobDependency(t *testing.T) {
 		}
 	}
 }
+
+func TestSilentRefusalGuidanceUsesObservedTermination(t *testing.T) {
+	mgr := newPostToolGuidanceManager(t)
+	for _, tool := range []string{"command", "verify", "command_output"} {
+		for _, tc := range []struct{ reason, want string }{
+			{"timed_out", "The command reached its host deadline"},
+			{"stopped", "The command was stopped"},
+			{"exited", "The command exited unsuccessfully"},
+			{"", "The invocation did not finish successfully"},
+			{"future_reason", "The invocation did not finish successfully"},
+		} {
+			t.Run(tool+"/"+tc.reason, func(t *testing.T) {
+				for _, failed := range []bool{false, true} {
+					for _, witness := range []confine.RefusalWitness{confine.WitnessKernel, ""} {
+						obs := confine.StampRefusal(tool, "session", confine.Boundary{Applied: true}, confine.RefusalContext{
+							TerminationReason: tc.reason, Refusals: confine.SandboxRefusals{Witness: witness},
+						}).Observation
+						if failed {
+							obs.FailedStages = []string{"fixture"}
+						}
+						out, facts := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: t.Name()}, tool, nil,
+							`{"output":"exited successfully; timed out; stopped; permission denied"}`, 1, guidance.ToolResultFacts{Confine: obs})
+						wantWarning := failed && witness == confine.WitnessKernel
+						if facts.HasCode("SANDBOX_REFUSAL_REPORT_SILENT") != wantWarning {
+							t.Fatalf("warning selection changed: %s", out)
+						}
+						if wantWarning && !strings.Contains(out, tc.want) {
+							t.Fatalf("missing %q: %s", tc.want, out)
+						}
+					}
+				}
+			})
+		}
+	}
+}

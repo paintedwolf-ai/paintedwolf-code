@@ -48,7 +48,7 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 	}
 	out := commandOutputOf(snapshot.Output)
 	capBackgroundOutput(&out, 0)
-	payload := observeBackgroundOutput(tctx, out, snapshot.Boundary, snapshot.Facts)
+	payload := observeBackgroundOutput(tctx, out, snapshot.Boundary, snapshot.Facts, snapshot.TerminationReason)
 	payload.ExecFailure = snapshot.Failure
 	t.Registry.Output.NoteRefusalsShown(tctx.Identity.SessionID, handle, len(payload.SandboxRefusals))
 	encoded, err := surveyjson.Marshal(payload)
@@ -95,6 +95,7 @@ func observeBackgroundOutput(
 	out commandOutput,
 	boundary confine.Boundary,
 	facts confine.SpawnFacts,
+	terminationReason bgprocess.TerminationReason,
 ) commandOutputResult {
 	report := facts.Report
 	network := facts.MediatedNetwork()
@@ -106,6 +107,7 @@ func observeBackgroundOutput(
 				MediatedNetwork:        network,
 				RemotePackageExecution: report.RemotePackageExecution,
 				Running:                out.Running,
+				TerminationReason:      string(terminationReason),
 				Refusals:               refusals,
 			},
 		)
@@ -306,7 +308,9 @@ func runCommandBackground(
 		}
 		result.ExitedEarly = true
 		result.ExitCode = &code
+		var terminationReason bgprocess.TerminationReason
 		if snap, snapErr := registry.Snapshot(ctx, tctx.Identity.SessionID, handle, bgprocess.DefaultTailBytes); snapErr == nil {
+			terminationReason = snap.TerminationReason
 			recordContainerLaunch(tctx, snap)
 		} else {
 			recordContainerLaunch(tctx, bgprocess.Snapshot{Tail: tail, Output: tail})
@@ -318,6 +322,7 @@ func runCommandBackground(
 					MediatedNetwork:        observedNetwork,
 					RemotePackageExecution: spawnFacts.Report.RemotePackageExecution,
 					FailedStages:           hostcmd.FailedStages(settled, code),
+					TerminationReason:      string(terminationReason),
 					Refusals:               refusals,
 				})
 			boundaryRefusal = stamped.Attribution
