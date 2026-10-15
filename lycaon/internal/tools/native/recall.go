@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -61,6 +62,11 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 		return "", recallReject(err)
 	}
 
+	if result.NextRequest != nil {
+		if action, err := guidance.RenderGuidance(ctx, "recall/history-continuation", nil); err == nil {
+			result.NextAction = action
+		}
+	}
 	for _, hit := range result.Hits {
 		tctx.RecordSourceContext(hit.SourceContext)
 	}

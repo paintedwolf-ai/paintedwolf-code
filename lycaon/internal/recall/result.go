@@ -24,8 +24,9 @@ type Result struct {
 	Issues []string `json:"issues,omitempty"`
 	// NextAction names a reachable exit when the answer was not what the caller
 	// wanted.
-	NextAction string  `json:"next_action,omitempty"`
-	Receipt    Receipt `json:"receipt"`
+	NextAction  string               `json:"next_action,omitempty"`
+	Receipt     Receipt              `json:"receipt"`
+	NextRequest *HistoryContinuation `json:"next_request,omitempty"`
 }
 
 // Count carries an explicit relation so a capped generation is not presented as

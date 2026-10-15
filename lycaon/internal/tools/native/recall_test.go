@@ -1,11 +1,14 @@
 package native
 
 import (
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -15,6 +18,7 @@ import (
 )
 
 func TestRecallHistoryAndCoordinateReject(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	dir := t.TempDir()
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
 	sessionID := "coord-recall-1"
@@ -42,6 +46,26 @@ func TestRecallHistoryAndCoordinateReject(t *testing.T) {
 	testutil.FailErr(t, "run recall history record", err)
 	if !strings.Contains(out, `"format":"record"`) || !strings.Contains(out, "recovered canonical detail") {
 		t.Fatalf("unexpected recall history output: %s", out)
+	}
+
+	out, err = reg.Run(t.Context(), recall.ToolName, map[string]any{
+		"history": map[string]any{"through_ord": 1, "message_id": "m1", "body_runes": 8},
+	}, tctx)
+	testutil.FailErr(t, "run bounded recall body", err)
+	var page recall.Result
+	testutil.FailErr(t, "decode bounded recall body", json.Unmarshal([]byte(out), &page))
+	if page.NextRequest == nil || page.NextRequest.History.Offset != 8 || page.NextAction == "" {
+		t.Fatal("truncated recall omitted its reachable continuation action")
+	}
+	encoded, err := json.Marshal(page.NextRequest)
+	testutil.FailErr(t, "encode returned recall arguments", err)
+	var nextArgs map[string]any
+	testutil.FailErr(t, "decode returned recall arguments", json.Unmarshal(encoded, &nextArgs))
+	out, err = reg.Run(t.Context(), recall.ToolName, nextArgs, tctx)
+	testutil.FailErr(t, "continue recall with returned arguments", err)
+	testutil.FailErr(t, "decode continued recall", json.Unmarshal([]byte(out), &page))
+	if len(page.History.Entries) != 1 || page.History.Entries[0].Offset != 8 {
+		t.Fatal("returned request did not resume the recorded body")
 	}
 
 	_, err = reg.Run(t.Context(), recall.ToolName, map[string]any{

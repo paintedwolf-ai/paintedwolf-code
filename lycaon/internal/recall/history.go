@@ -47,14 +47,13 @@ type HistoryContinuation struct {
 
 // HistoryPage is an ordinal index or a bounded recorded body.
 type HistoryPage struct {
-	NextRequest   *HistoryContinuation `json:"next_request,omitempty"`
-	Format        string               `json:"format,omitempty"`
-	Entries       []HistoryEntry       `json:"entries"`
-	NextAfterOrd  int64                `json:"next_after_ord,omitempty"`
-	NextOffset    *int                 `json:"next_offset,omitempty"`
-	ThroughOrd    int64                `json:"through_ord"`
-	SourceChanged bool                 `json:"source_changed"`
-	Recorded      bool                 `json:"recorded"`
+	Format        string         `json:"format,omitempty"`
+	Entries       []HistoryEntry `json:"entries"`
+	NextAfterOrd  int64          `json:"next_after_ord,omitempty"`
+	NextOffset    *int           `json:"next_offset,omitempty"`
+	ThroughOrd    int64          `json:"through_ord"`
+	SourceChanged bool           `json:"source_changed"`
+	Recorded      bool           `json:"recorded"`
 }
 
 // HistoryEntry retains observation coordinates without promoting their authority.
@@ -119,8 +118,7 @@ func (s *Service) history(ctx context.Context, req Request) (*Result, error) {
 			page.SourceChanged = true
 		}
 	}
-	page.NextRequest = historyContinuation(h, req.Limit, page)
-	out := &Result{Resolution: ResolutionMatched, ScopeStated: "this session only", History: page,
+	out := &Result{NextRequest: historyContinuation(h, req.Limit, page), Resolution: ResolutionMatched, ScopeStated: "this session only", History: page,
 		Count:     Count{Value: len(page.Entries), Relation: RelationExact},
 		Truncated: page.NextAfterOrd > 0 || page.NextOffset != nil}
 	if len(page.Entries) == 0 {
