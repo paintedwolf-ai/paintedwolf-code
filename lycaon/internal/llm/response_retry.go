@@ -28,6 +28,7 @@ func (p *responseRetryProvider) Complete(ctx context.Context, req modelcall.Comp
 	var usage responseRetryUsage
 	for attempt := 0; ; attempt++ {
 		req.AttemptBudget = &modelcall.CompletionBudget{}
+		req.CaptureSources()
 		completion, err := p.inner.Complete(ctx, req)
 		noteResponseBudget(req, completion)
 		if completion != nil {
@@ -59,6 +60,7 @@ func (p *responseRetryProvider) Stream(ctx context.Context, req modelcall.Comple
 	for attempt := 0; ; attempt++ {
 		attemptCtx, cancel := context.WithCancel(ctx)
 		req.AttemptBudget = &modelcall.CompletionBudget{}
+		req.CaptureSources()
 		first, err := p.inner.Stream(attemptCtx, req)
 		if err == nil {
 			out := make(chan modelcall.StreamChunk)
@@ -127,6 +129,7 @@ func (p *responseRetryProvider) forwardStream(
 		attempt++
 		attemptCtx, nextCancel := context.WithCancel(ctx)
 		req.AttemptBudget = &modelcall.CompletionBudget{}
+		req.CaptureSources()
 		stream, startErr = p.inner.Stream(attemptCtx, req)
 		cancel = nextCancel
 		if startErr != nil {
@@ -273,7 +276,15 @@ func (p *responseRetryProvider) prepareResponseRetry(ctx context.Context, req *m
 	if !retryable || !providerretry.ShouldRetryFault(p.policy, attempt, emptyCompletionFault(empty)) {
 		return false, nil
 	}
-	return true, providerretry.AwaitFaultRetry(ctx, p.policy, attempt, emptyCompletionFault(empty))
+	if err := providerretry.AwaitFaultRetry(ctx, p.policy, attempt, emptyCompletionFault(empty)); err != nil {
+		return false, err
+	}
+	if empty.Terminal {
+		if err := appendEmptyResponseRecovery(ctx, req); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 func noteResponseBudget(req modelcall.CompletionRequest, completion *modelcall.Completion) {

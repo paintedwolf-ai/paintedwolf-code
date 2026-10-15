@@ -292,9 +292,9 @@ func (l *modelTurn) completeStream(
 				return
 			}
 			l.Projection.Deps.Events.PublishLLM(context.WithoutCancel(ctx), sessionProjectKey(sess), sessionID, api.LLMCallEvent{
-				CallID:   llmCallID,
-				Provider: callProvider,
-				Model:    callModel,
+				CallID:          llmCallID,
+				Provider:        callProvider,
+				Model:           callModel,
 				Status:          api.LLMCallStatusError,
 				CoordinatorLoop: coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish),
 			})
@@ -320,6 +320,7 @@ func (l *modelTurn) completeStream(
 		})
 	})
 
+	req.EmptyResponseRecovery = l.emptyResponseRecovery(sess, req)
 	req, sourceRequest := modelcall.CaptureSourceRequest(req)
 	collected, collectErr := l.collectPromptStream(ctx, sess, client, req, onProgress, llmCallID, callProvider, callModel)
 	callProvider, callModel = collected.providerID, collected.model
