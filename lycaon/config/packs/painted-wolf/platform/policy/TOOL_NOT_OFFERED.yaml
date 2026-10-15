@@ -4,15 +4,15 @@ kind: policy
 anchor: tool.rejected
 requires:
   profiles: [tool]
-  facts: [paintedwolf.rejection_code, paintedwolf.tool_loadable, paintedwolf.tool_discovery_available, paintedwolf.offered_tools]
+  facts: [paintedwolf.rejection_code, paintedwolf.tool_loadable, paintedwolf.tool_discovery_available, paintedwolf.offered_tools, paintedwolf.tool_discovery_status, paintedwolf.tool_discovery_has_more]
 when: paintedwolf.rejection_code == "TOOL_NOT_OFFERED"
 effect: block
 copy:
   what: '{% if paintedwolf.tool_loadable %}`{{ tool }}` is available but its schema is not loaded{% else %}`{{ tool }}` is unavailable on this model call{% endif %}'
   cause: '{% if paintedwolf.tool_loadable %}The current tool plan permits this tool to be loaded with `request_tools`{% else %}The current tool plan provides no loading path for this name{% endif %}'
   why: 'A tool call must use a schema offered on the current request. Tools offered now: {% if paintedwolf.offered_tools %}{{ paintedwolf.offered_tools }}{% else %}none{% endif %}.'
-  fix: '{% if paintedwolf.tool_loadable %}Call `request_tools` with `need` set to exactly `{{ tool }}`. Its schema arrives on the next model call; then retry using that schema. Loading grants no additional permissions.{% else %}{% if paintedwolf.tool_discovery_available %}Use a suitable tool from those offered now. If none can perform the operation, call `request_tools` with `need` describing the operation and target in your own words; you do not need a tool name. The unavailable name `{{ tool }}` cannot be loaded here. Use the returned schema on the next model call. Loading grants no additional permissions.{% else %}Choose an available tool that can perform the work. Do not request or retry this unavailable name; report the missing capability if the available tools cannot complete the assignment.{% endif %}{% endif %}'
-  instead: '{% if paintedwolf.tool_loadable %}Load `{{ tool }}` with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.tool_discovery_available %}Use a suitable offered tool, or describe the missing operation and target to `request_tools`{% else %}Use an available capability or report the constraint{% endif %}{% endif %}'
+  fix: '{% if paintedwolf.tool_loadable %}Call `request_tools` with `need` set to exactly `{{ tool }}`. Its schema arrives on the next model call; then retry using that schema. Loading grants no additional permissions.{% else %}{% if paintedwolf.tool_discovery_status %}Choose a suitable name from `discovery.entries` in the feedback details. Call `request_tools` with that exact name as `need`.{% if paintedwolf.tool_discovery_has_more %} To see more entries, pass `discovery.next_need` unchanged as `need`.{% endif %} Use the returned schema on the next model call. The unavailable name `{{ tool }}` cannot be loaded here. Loading grants no additional permissions.{% else %}{% if paintedwolf.tool_discovery_available %}Use a suitable tool from those offered now. If none can perform the operation, call `request_tools` with `need` describing the operation and target in your own words; you do not need a tool name. The unavailable name `{{ tool }}` cannot be loaded here. Use the returned schema on the next model call. Loading grants no additional permissions.{% else %}Choose an available tool that can perform the work. Do not request or retry this unavailable name; report the missing capability if the available tools cannot complete the assignment.{% endif %}{% endif %}{% endif %}'
+  instead: '{% if paintedwolf.tool_loadable %}Load `{{ tool }}` with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.tool_discovery_status %}Select an exact catalog name{% if paintedwolf.tool_discovery_has_more %}, or continue with next_need{% endif %}; do not repeat an unavailable name{% else %}{% if paintedwolf.tool_discovery_available %}Use a suitable offered tool, or describe the missing operation and target to `request_tools`{% else %}Use an available capability or report the constraint{% endif %}{% endif %}{% endif %}'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 x-paintedwolf-message: This tool was not offered on this request
@@ -42,3 +42,22 @@ x-paintedwolf-scenarios:
       - 'Tools offered now: read, request_tools'
       - describing the operation and target
       - Loading grants no additional permissions
+
+  - id: unavailable-name-with-catalog
+    vars:
+      tool: write
+      tool_discovery_status: catalog
+      tool_discovery_has_more: true
+      offered_tools: [read, request_tools]
+    expect_contains:
+      - discovery.entries
+      - discovery.next_need
+      - exact name
+  - id: unavailable-name-with-last-page
+    vars:
+      tool: write
+      tool_discovery_status: catalog
+      offered_tools: [request_tools]
+    expect_contains:
+      - discovery.entries
+      - exact name
