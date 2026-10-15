@@ -21,7 +21,7 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message) []api.Me
 			out = append(out, row)
 			continue
 		}
-		content, fitted, isHistory := projectRecallHistoryPage(row.Content, 2048, row.ToolResult.ToolArgs)
+		content, fitted, isHistory := projectRecallHistoryPage(ctx, row.Content, 2048, row.ToolResult.ToolArgs)
 		if !fitted {
 			record := recall.HistoryRequest{ThroughOrd: row.Ord, MessageID: row.ID,
 				SourceSeq: row.Seq, Format: "text", BodyRunes: 4096}
@@ -67,7 +67,7 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message) []api.Me
 	return out
 }
 
-func projectRecallHistoryPage(raw string, maxBytes int, originalArgs map[string]any) (string, bool, bool) {
+func projectRecallHistoryPage(ctx context.Context, raw string, maxBytes int, originalArgs map[string]any) (string, bool, bool) {
 	prefix, body, suffix, ok := hostmarker.SplitToolJSONBody(raw)
 	if !ok {
 		return "", false, false
@@ -83,6 +83,9 @@ func projectRecallHistoryPage(raw string, maxBytes int, originalArgs map[string]
 	entries, ok := history["entries"].([]any)
 	if !ok || len(entries) == 0 {
 		return "", false, true
+	}
+	if action, err := guidance.RenderGuidance(ctx, "recall/history-continuation", nil); err == nil {
+		root["next_action"] = action
 	}
 	if format, _ := history["format"].(string); len(entries) == 1 && format != "index" {
 		entry, ok := entries[0].(map[string]any)
@@ -102,7 +105,7 @@ func projectRecallHistoryPage(raw string, maxBytes int, originalArgs map[string]
 			entry["content"] = trimmed
 			if next := offset + mid; mid < len(runes) || totalRunes > next || prevNext > next {
 				history["next_offset"] = next
-				if coordinates := recallContinuationCoordinates(history, originalArgs); coordinates != nil {
+				if coordinates := recallContinuationCoordinates(root, originalArgs); coordinates != nil {
 					coordinates["offset"] = next
 					if _, present := coordinates["source_seq"]; !present {
 						if seq, present := entry["seq"]; present {
@@ -131,7 +134,7 @@ func projectRecallHistoryPage(raw string, maxBytes int, originalArgs map[string]
 		if mid < len(entries) {
 			if last, ok := entries[mid-1].(map[string]any); ok {
 				history["next_after_ord"] = last["ord"]
-				if coordinates := recallContinuationCoordinates(history, originalArgs); coordinates != nil {
+				if coordinates := recallContinuationCoordinates(root, originalArgs); coordinates != nil {
 					coordinates["after_ord"] = last["ord"]
 				}
 			}
@@ -146,8 +149,8 @@ func projectRecallHistoryPage(raw string, maxBytes int, originalArgs map[string]
 	return best, best != "", true
 }
 
-func recallContinuationCoordinates(history, originalArgs map[string]any) map[string]any {
-	request, ok := history["next_request"].(map[string]any)
+func recallContinuationCoordinates(root, originalArgs map[string]any) map[string]any {
+	request, ok := root["next_request"].(map[string]any)
 	if !ok {
 		coordinates, ok := originalArgs["history"].(map[string]any)
 		if !ok {
@@ -157,7 +160,7 @@ func recallContinuationCoordinates(history, originalArgs map[string]any) map[str
 		if limit, ok := originalArgs["limit"]; ok {
 			request["limit"] = limit
 		}
-		history["next_request"] = request
+		root["next_request"] = request
 	}
 	coordinates, _ := request["history"].(map[string]any)
 	return coordinates

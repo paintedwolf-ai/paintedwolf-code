@@ -19,8 +19,8 @@ func TestRecordedRecallPageKeepsEnvelopeAndCursor(t *testing.T) {
 		Entries: []recall.HistoryEntry{{MessageID: "original", Ord: 1, Content: strings.Repeat("😀", 4096), Runes: 9000, Offset: 4096}}}
 	next := 8192
 	page.NextOffset = &next
-	page.NextRequest = &recall.HistoryContinuation{History: recall.HistoryRequest{Format: "record", ThroughOrd: 1, MessageID: "original", Offset: next}}
-	raw, err := json.Marshal(map[string]any{"history": page})
+	nextRequest := &recall.HistoryContinuation{History: recall.HistoryRequest{Format: "record", ThroughOrd: 1, MessageID: "original", Offset: next}}
+	raw, err := json.Marshal(map[string]any{"history": page, "next_request": nextRequest})
 	testutil.FailErr(t, "encode recall page", err)
 	content := "[recall#4]\n" + string(raw) + "\nrecorded suffix"
 	rows := projectRecordedToolBodies(t.Context(), []api.Message{{ID: "recall-result", Ord: 3, Role: api.MessageRoleTool,
@@ -30,14 +30,15 @@ func TestRecordedRecallPageKeepsEnvelopeAndCursor(t *testing.T) {
 		t.Fatalf("projection lost the tool envelope or exceeded its budget: %q", rows[0].Content)
 	}
 	var projected struct {
-		History recall.HistoryPage `json:"history"`
+		History     recall.HistoryPage          `json:"history"`
+		NextRequest *recall.HistoryContinuation `json:"next_request"`
 	}
 	testutil.FailErr(t, "decode projected recall page", json.Unmarshal([]byte(body), &projected))
 	if len(projected.History.Entries) != 1 || projected.History.NextOffset == nil {
 		t.Fatal("projection lost its recorded page")
 	}
 	entry := projected.History.Entries[0]
-	if projected.History.NextRequest == nil || projected.History.NextRequest.History.Offset != *projected.History.NextOffset || *projected.History.NextOffset != entry.Offset+utf8.RuneCountInString(entry.Content) {
+	if projected.NextRequest == nil || projected.NextRequest.History.Offset != *projected.History.NextOffset || *projected.History.NextOffset != entry.Offset+utf8.RuneCountInString(entry.Content) {
 		t.Fatal("projection skipped recorded characters")
 	}
 }

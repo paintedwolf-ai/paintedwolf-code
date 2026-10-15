@@ -285,13 +285,14 @@ func TestReviewRecallPageProjectionKeepsCursorContiguous(t *testing.T) {
 	indexArgs := map[string]any{"history": map[string]any{"through_ord": 4, "search": "needle"}, "limit": 4}
 	indexRows := projectRecordedToolBodies(t.Context(), []api.Message{{ID: "recall-index", Ord: 4, Role: api.MessageRoleTool, Content: string(indexRaw), ToolResult: &api.ToolResult{Tool: "recall", Content: string(indexRaw), ToolArgs: indexArgs}}})
 	var indexPage struct {
-		History recall.HistoryPage `json:"history"`
+		History     recall.HistoryPage          `json:"history"`
+		NextRequest *recall.HistoryContinuation `json:"next_request"`
 	}
 	testutil.FailErr(t, "decode projected index page", json.Unmarshal([]byte(indexRows[0].Content), &indexPage))
 	if len(indexPage.History.Entries) == 0 || indexPage.History.Entries[len(indexPage.History.Entries)-1].Ord != indexPage.History.NextAfterOrd {
 		t.Fatalf("projected index page lost contiguous next_after_ord: %+v", indexPage.History)
 	}
-	if next := indexPage.History.NextRequest; next == nil || next.History.AfterOrd != indexPage.History.NextAfterOrd || next.History.Search != "needle" || next.Limit != 4 {
+	if next := indexPage.NextRequest; next == nil || next.History.AfterOrd != indexPage.History.NextAfterOrd || next.History.Search != "needle" || next.Limit != 4 {
 		t.Fatalf("projected index lost its complete continuation: %+v", next)
 	}
 	if _, changed := indexArgs["history"].(map[string]any)["after_ord"]; changed {
