@@ -193,12 +193,17 @@ func portOfListener(ln net.Listener) uint16 {
 	return uint16(ln.Addr().(*net.TCPAddr).Port)
 }
 
-// boundConfinement binds c to a fresh action, which gives it a lineage.
+// boundConfinement binds c to a fresh action so its refusals reach a feed.
 func boundConfinement(t *testing.T, c confine.Confinement) (*confine.Confinement, *confine.ActionLease) {
 	t.Helper()
+	confine.StartRefusalWatch(context.Background(), t.TempDir())
+	t.Cleanup(confine.StopRefusalWatch)
 	lease, err := confine.BindAction(&c, confine.EgressCommand{ToolCallID: "call-" + t.Name(), ToolName: "command", CommandLine: "probe"})
 	testutil.FailErr(t, "bind action", err)
 	t.Cleanup(func() { lease.Close(context.Background()) })
+	if w := lease.Refusals().Witness; w != confine.WitnessIncomplete {
+		t.Fatalf("bound action has refusal witness %q, want a live supervised feed", w)
+	}
 	return &c, lease
 }
 
@@ -212,13 +217,22 @@ func probeLines(t *testing.T, self string, c confine.Confinement, mode string, t
 	return out
 }
 
+func refusalTargets(r confine.SandboxRefusals) map[string]confine.RefusalRecovery {
+	out := map[string]confine.RefusalRecovery{}
+	for _, x := range r.Refusals {
+		out[x.Operation+" "+x.Target] = x.Recovery
+	}
+	return out
+}
+
 // A granted loopback port reaches the host's listener through a socket the
-// supervisor connects; any other port stays inside the sandbox.
+// supervisor connects; any other port stays inside the sandbox, and the
+// refusal reaches the action with the capability that would open it.
 func TestLinuxLoopbackConnectGrantReachesTheHost(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	granted := greeter(t, "tcp", "127.0.0.1:0")
 	other := greeter(t, "tcp", "127.0.0.1:0")
-	c, _ := boundConfinement(t, confine.Confinement{
+	c, lease := boundConfinement(t, confine.Confinement{
 		Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
 		LoopbackConnect: true, LoopbackConnectPorts: []uint16{portOfListener(granted)},
 	})
@@ -229,9 +243,18 @@ func TestLinuxLoopbackConnectGrantReachesTheHost(t *testing.T) {
 	if strings.Contains(out, "connect "+other.Addr().String()+": ok") {
 		t.Fatalf("ungranted port reached the host listener:\n%s", out)
 	}
+	refusals := lease.SettledRefusals(context.Background())
+	key := "network-outbound remote:" + other.Addr().String()
+	if refusals.Witness != confine.WitnessIncomplete || refusalTargets(refusals)[key] != confine.RecoverOutboundPort {
+		t.Fatalf("refusals = %+v, want %s routed to %s with an incomplete witness", refusals, key, confine.RecoverOutboundPort)
+	}
+	if _, reported := refusalTargets(refusals)["network-outbound remote:"+granted.Addr().String()]; reported {
+		t.Fatalf("an admitted connection was reported refused: %+v", refusals)
+	}
 }
 
-// An exact socket grant connects; every other path socket stays refused.
+// An exact socket grant connects; every other path socket stays refused and
+// is reported with the grant that would open it.
 func TestLinuxUnixSocketGrantConnectsOnlyItsPath(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	dir, err := os.MkdirTemp("/tmp", "pw-grant-") //nolint:usetesting // Short socket path.
@@ -240,7 +263,7 @@ func TestLinuxUnixSocketGrantConnectsOnlyItsPath(t *testing.T) {
 	granted := greeter(t, "unix", filepath.Join(dir, "granted.sock"))
 	other := greeter(t, "unix", filepath.Join(dir, "other.sock"))
 	grantedPath := granted.Addr().String()
-	c, _ := boundConfinement(t, confine.Confinement{
+	c, lease := boundConfinement(t, confine.Confinement{
 		Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
 		SocketGrants: []confine.SocketGrant{{ApprovedPath: grantedPath, ResolvedPath: grantedPath}},
 	})
@@ -251,6 +274,10 @@ func TestLinuxUnixSocketGrantConnectsOnlyItsPath(t *testing.T) {
 	if !strings.Contains(out, "connect "+other.Addr().String()+": EACCES") {
 		t.Fatalf("ungranted socket was not refused with EACCES:\n%s", out)
 	}
+	settled := lease.SettledRefusals(context.Background())
+	if refusalTargets(settled)["network-outbound "+other.Addr().String()] != confine.RecoverSocketPath {
+		t.Fatalf("refusals = %+v, want the ungranted path routed to %s\n%s", settled, confine.RecoverSocketPath, out)
+	}
 }
 
 // A granted listener is reachable from the host on loopback; an ungranted one
@@ -258,7 +285,7 @@ func TestLinuxUnixSocketGrantConnectsOnlyItsPath(t *testing.T) {
 func TestLinuxLocalListenGrantIsReachableFromTheHost(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	for _, granted := range []bool{true, false} {
-		port := freePort(t)
+		port := servicePort(t)
 		c := confine.Confinement{Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
 		if granted {
 			c.LocalListen, c.LocalListenPorts = true, []uint16{port}
@@ -294,14 +321,6 @@ func TestLinuxLocalListenGrantIsReachableFromTheHost(t *testing.T) {
 			t.Fatalf("ungranted listener reachable from the host (got %q):\n%s", reached, out.String())
 		}
 	}
-}
-
-func freePort(t *testing.T) uint16 {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	testutil.FailErr(t, "free port", err)
-	defer ln.Close()
-	return portOfListener(ln)
 }
 
 // fakeResolver answers every A question with 192.0.2.7 until the test ends.
@@ -394,6 +413,45 @@ func rawHelperRun(t *testing.T, self string, plan linuxsandbox.Plan, env []strin
 		t.Fatalf("helper did not start: %s", out.String())
 	}
 	return cmd.ProcessState.Sys().(syscall.WaitStatus), out.String()
+}
+
+// Concurrent actions keep their own refusals, including those a descendant
+// of the command makes.
+func TestLinuxConcurrentActionsKeepTheirOwnRefusals(t *testing.T) {
+	self := requireLinuxSandbox(t)
+	type run struct {
+		lease  *confine.ActionLease
+		target string
+		out    string
+	}
+	runs := make([]*run, 2)
+	done := make(chan struct{}, len(runs))
+	for i := range runs {
+		c, lease := boundConfinement(t, confine.Confinement{
+			Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
+		})
+		r := &run{lease: lease, target: net.JoinHostPort("127.0.0.1", strconv.Itoa(int(servicePort(t))))}
+		runs[i] = r
+		// The connection is made by a grandchild of the helper.
+		cmd, cleanup, err := confine.Command(t.Context(), helperBinary(t, self), "/bin/sh", []string{"-c", self + " " + probeTestFlag}, *c)
+		testutil.FailErr(t, "confine.Command", err)
+		cmd.Env = append(probeEnv("tcpconnect"), linuxProbePathsEnv+"="+r.target)
+		go func() {
+			defer func() { done <- struct{}{} }()
+			defer cleanup()
+			out, _ := cmd.CombinedOutput()
+			r.out = string(out)
+		}()
+	}
+	for range runs {
+		<-done
+	}
+	for i, r := range runs {
+		refusals := refusalTargets(r.lease.SettledRefusals(context.Background()))
+		if len(refusals) != 1 || refusals["network-outbound remote:"+r.target] != confine.RecoverOutboundPort {
+			t.Fatalf("action %d refusals = %v, want only its own %s\n%s", i, refusals, r.target, r.out)
+		}
+	}
 }
 
 // Killing the outer helper ends the whole sandbox: nothing it started survives.

@@ -153,7 +153,7 @@ func runLinuxProbe(mode string) int {
 		return proxyGetProbe()
 	case "tcpconnect", "unixconnect", "serve", "resolve":
 		return networkProbe(mode)
-	case "udpsend", "udpserve":
+	case "udpsend", "udpsendto", "udpserve":
 		return datagramProbe(mode)
 	case "orphan":
 		daemon := child("sleep", true)

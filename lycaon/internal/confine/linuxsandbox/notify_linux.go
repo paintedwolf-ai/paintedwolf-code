@@ -67,7 +67,10 @@ func (s *supervisor) serveNotifications(listener int) {
 // answer performs one notified call and replies with its result. Any failure
 // to read the call refuses it: a call is never run unexamined.
 func (s *supervisor) answer(listener int, n seccompNotif) {
-	result, errno := s.perform(listener, n)
+	result, errno, examined := s.perform(listener, n)
+	if !examined {
+		s.refusals.report(Refusal{Unexamined: true})
+	}
 	resp := seccompNotifResp{ID: n.ID, Val: result}
 	if errno != 0 {
 		resp = seccompNotifResp{ID: n.ID, Error: -int32(errno)}
@@ -75,24 +78,28 @@ func (s *supervisor) answer(listener int, n seccompNotif) {
 	_ = ioctlPtr(listener, unix.SECCOMP_IOCTL_NOTIF_SEND, unsafe.Pointer(&resp))
 }
 
-// perform returns the call's result or the errno to answer with.
-func (s *supervisor) perform(listener int, n seccompNotif) (int64, unix.Errno) {
+// perform returns the call's result or the errno to answer with, and whether
+// the supervisor could examine the call at all. A call that ended before it
+// was examined is not reported.
+func (s *supervisor) perform(listener int, n seccompNotif) (int64, unix.Errno, bool) {
 	target, err := openTarget(listener, n)
 	if err != nil {
-		return 0, unix.EACCES
+		return 0, unix.EACCES, errors.Is(err, unix.ESRCH)
 	}
 	defer target.close()
 	fd := int(int32(n.Args[0]))
 	sock, err := unix.PidfdGetfd(target.pidfd, fd, 0)
 	if err != nil {
-		return 0, errnoOf(err, unix.EBADF)
+		// A descriptor that is not open is the caller's own error.
+		return 0, errnoOf(err, unix.EBADF), errors.Is(err, unix.EBADF)
 	}
 	defer func() { _ = unix.Close(sock) }()
 	info, err := describeSocket(sock)
 	if err != nil {
-		return 0, errnoOf(err, unix.ENOTSOCK)
+		return 0, errnoOf(err, unix.ENOTSOCK), true
 	}
-	return s.decideAndPerform(target, n, fd, sock, info)
+	result, errno := s.decideAndPerform(target, n, fd, sock, info)
+	return result, errno, true
 }
 
 func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd, sock int, info socketInfo) (int64, unix.Errno) {
@@ -129,6 +136,10 @@ func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd,
 		return 0, unix.EINTR
 	}
 	decision := s.network.Decide(req)
+	if decision.Refusal != nil {
+		decision.Refusal.Process = target.comm()
+		s.refusals.report(*decision.Refusal)
+	}
 	switch decision.Action {
 	case Refuse:
 		return 0, unix.EACCES
@@ -419,6 +430,14 @@ func (t *targetProcess) read(addr uint64, into []byte) error {
 		return errors.New("short read of the target's memory")
 	}
 	return nil
+}
+
+func (t *targetProcess) comm() string {
+	raw, err := os.ReadFile("/proc/" + strconv.Itoa(t.pid) + "/comm")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
 }
 
 // fdFlags keeps close-on-exec on a descriptor the supervisor replaces.

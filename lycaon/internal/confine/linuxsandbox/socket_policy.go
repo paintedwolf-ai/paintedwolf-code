@@ -73,11 +73,15 @@ type Decision struct {
 	Refusal *Refusal
 }
 
-// Refusal names an operation that will not reach its destination, in the
-// vocabulary the macOS kernel uses for the same operation.
+// Refusal is one refused socket operation as the supervisor reports it, in
+// the vocabulary the macOS kernel uses for the same operation.
 type Refusal struct {
-	Operation string
-	Target    string
+	Operation string `json:"operation,omitempty"`
+	Target    string `json:"target,omitempty"`
+	Process   string `json:"process,omitempty"`
+	// Unexamined marks a call the supervisor refused because it could not
+	// read it; what it would have reached is unknown.
+	Unexamined bool `json:"unexamined,omitempty"`
 }
 
 // Decide applies the plan's network grants to one socket request.
