@@ -62,3 +62,11 @@ LEFT JOIN projects p ON p.id = s.project_id
 WHERE r.id > sqlc.arg(after_id) AND r.trigger = 'turn'
 ORDER BY r.id
 LIMIT sqlc.arg(row_limit);
+
+-- name: ListSessionProviderCalls :many
+-- Reported conversation usage for offline request comparisons.
+SELECT id, caller, started_at, prompt_tokens, completion_tokens, cache_read_tokens, usage_source
+FROM llm_calls
+WHERE session_id = sqlc.arg(session_id) AND status = 'reported'
+  AND caller IN ('', 'coordinator', 'worker')
+ORDER BY started_at, id;

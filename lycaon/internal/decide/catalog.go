@@ -97,12 +97,12 @@ const catalogVersion = 2
 type catalogFile struct {
 	Version int                  `yaml:"version"`
 	Rerank  map[string]policyRow `yaml:"rerank"`
-	// The turn-decision sections belong to internal/coordinator/turnload, which
-	// parses the same file; they are named here so a strict decode accepts them.
+	// Turnload validates these sections of the shared catalog.
 	State     any `yaml:"state"`
 	Turn      any `yaml:"turn"`
 	Request   any `yaml:"request"`
 	Lookup    any `yaml:"lookup"`
+	Retention any `yaml:"retention"`
 	ToolEvent any `yaml:"tool_event"`
 }
 

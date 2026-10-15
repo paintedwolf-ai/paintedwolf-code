@@ -26,7 +26,7 @@ const REQUIRED_PREFIXES: [&str; 4] = ["encoder.", "type_emb.", "scorer.", "act_h
 pub const DEFAULT_MAX_ROWS: usize = 32;
 
 /// The heads a shared backbone can serve, by the names requests use.
-pub const HEAD_NAMES: [&str; 5] = [HEAD_TURN_LOAD, HEAD_GUIDE_LOAD, HEAD_UNIT_RANK, HEAD_CODE_RANK, HEAD_WEB_RANK];
+pub const HEAD_NAMES: [&str; 6] = [HEAD_TURN_LOAD, HEAD_GUIDE_LOAD, HEAD_UNIT_RANK, HEAD_CODE_RANK, HEAD_WEB_RANK, HEAD_RETENTION];
 /// Turn decisions: which units a request needs and the turn kind.
 pub const HEAD_TURN_LOAD: &str = "turn-load";
 /// Guide decisions: which instruction units a request needs, when a separate head answers them.
@@ -37,6 +37,8 @@ pub const HEAD_UNIT_RANK: &str = "unit-rank";
 pub const HEAD_CODE_RANK: &str = "code-rank";
 /// Web ranking: fetched pages and search snippets.
 pub const HEAD_WEB_RANK: &str = "web-rank";
+/// Optional continuation detail ranking.
+pub const HEAD_RETENTION: &str = "retention";
 
 /// Ranking text shared with the trainers under `scripts/bialy/`.
 const RANK_RUBRIC: &str = include_str!("../../../../../scripts/bialy/rank-rubric.json");

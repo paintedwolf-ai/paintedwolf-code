@@ -1,44 +1,9 @@
 #!/usr/bin/env python3
-"""Fine-tune a Bialy head on turn examples.
+"""Train decision heads from the host's exported corpus and labeled observations.
 
-Reads training rows (rows.py, `lycaon-debug decide export`) and trains
-the head, scorer, and type embedding of a Laya checkpoint on the same
-questions the host asks, all as marker classification. `--families` picks
-the head: the turn questions (tools, guides, kind) train `turn-load`, and
-the rank pairs (skills, requests) train `unit-rank`, kept apart because they
-otherwise outnumber the turn questions and pull the shared weights:
-
-  tool.<name>   noul   label 1 when the turn needed that loadable tool, over
-                       the loadable tools the row's turn offered
-  guide.<id>    noul   label 1 when the turn needed that instruction unit, over
-                       the units it offered (unknown labels are masked)
-  kind          choice label = the observed turn kind
-  skill         score  (request, skill card) pairs over the corpus's cards,
-                       the text the engine ranks: level = the judged
-                       relevance in labels.skill_scores, 4 for the skill the
-                       coordinator read first; without judged scores, 4 for
-                       the read skill and 0 for sampled others
-  request       score  (request_tools need, tool card) pairs over the tools
-                       the host ranks: 4 for the tools the turn used after the
-                       need, else the judged score in the request's `scores`
-
-Turn families train only on rows whose engine did not answer (--turn-rows
-engine-off): a tool the engine preloaded and the session then called is a
-label the engine produced. The rank families read every row's needs, which
-under a live engine are the needs it missed. --tool-weight sqrt-inverse
-weighs each tool's positives by sqrt(N / (n_t + 1)), clamped to [1, 20], so
-rare tools are not drowned by the few every turn uses.
-
-Units from packs named in --holdout-pack are left out of training so the
-replay eval can measure generalization to unseen units. Encoder features are
-precomputed once, so a few thousand examples train in minutes on a GPU. The
-checkpoint records the backbone and a label the engine reports on its
-handshake, so receipts name the head that answered.
-
-Usage: train.py --corpus C --train FILE [--val FILE] [--holdout-pack ID ...]
-                [--turn-rows engine-off|all] [--tool-weight none|sqrt-inverse]
-                [--tool-truth consensus|judged|called] [--rank-levels blended|skills-blended|judged]
-                [--out <decide dir>/heads/turn-load-<backbone>.safetensors]
+Turn families use pw-decide-row/1. The optional retention family trains alone
+from pw-retention-row/1 with verified positive and negative labels. Unknown
+labels remain masked; loading a retention checkpoint is optional at runtime.
 """
 
 import argparse
@@ -117,7 +82,25 @@ FAMILIES = ("tools", "guides", "kind", "skills", "requests")
 RANK_FAMILIES = {"skills", "requests"}
 # The families whose answers change what a turn carries; their validation loss picks
 # the checkpoint. Kind only reports, and the rank families train their own head.
-SELECT = ("tools", "guides")
+SELECT = ("tools", "guides", "retention")
+
+
+def build_retention_items(examples, corpus, tok, max_len, head_max_len, truth, turn_rows):
+    """Encode independently verified continuation candidates for the optional head."""
+    instructions = (corpus.data.get("retention") or {}).get("question")
+    if not instructions:
+        raise ValueError("corpus has no retention question")
+    items = []
+    for row in examples:
+        if row["partial"] or (turn_rows != "all" and rowfile.engine_answered(row)):
+            continue
+        options = rowfile.retention_options(row)
+        question = {"instructions": instructions, "options": options}
+        items.extend(independent_items(tok, state_text(row["state"]), question,
+                     rowfile.retention_targets(row, truth), max_len, head_max_len, "retention", row["host"]))
+    if {item["target"][0] for item in items} != {0, 1}:
+        raise ValueError("retention training needs verified positive and negative examples")
+    return items
 
 
 def skill_levels(row, cards, rng, scored, zeros, observed=True):
@@ -476,15 +459,19 @@ def main():
     ap.add_argument("--tool-weight", choices=("none", "sqrt-inverse"), default="none", help="per-tool positive weighting")
     ap.add_argument("--tool-negatives", type=int, default=0,
                     help="independent heads: sample this many negative tools per training row, weighted to keep their share; validation keeps all (0 keeps all)")
+    ap.add_argument("--retention-truth", choices=rowfile.RETENTION_TRUTH, default="needed")
     args = ap.parse_args()
     if args.tool_negatives < 0:
         ap.error("--tool-negatives must be nonnegative")
     POS_WEIGHT = args.pos_weight
     families = tuple(f for f in args.families.split(",") if f)
-    if set(families) - set(FAMILIES):
-        ap.error("unknown families %s" % ", ".join(sorted(set(families) - set(FAMILIES))))
+    if set(families) - (set(FAMILIES) | {"retention"}):
+        ap.error("unknown families %s" % ", ".join(sorted(set(families) - (set(FAMILIES) | {"retention"}))))
+    retention = "retention" in families
+    if retention and families != ("retention",):
+        ap.error("retention trains alone using its observation schema")
     select = tuple(f for f in SELECT if f in families) or families
-    head_name = "unit-rank" if set(families) <= RANK_FAMILIES else "turn-load"
+    head_name = "retention" if retention else "unit-rank" if set(families) <= RANK_FAMILIES else "turn-load"
     out = Path(args.out) if args.out else decide_dir() / "heads" / ("%s-%s.safetensors" % (head_name, args.model.rsplit("/", 1)[-1]))
     lock = headfile.claim(out)  # noqa: F841 - held until the process exits, before any expensive work
 
@@ -496,10 +483,11 @@ def main():
     if held:
         sys.stderr.write("holding out %d units from %s\n" % (len(held), ", ".join(args.holdout_pack)))
 
-    train = rowfile.load(args.train)
+    schema = rowfile.RETENTION_SCHEMA if retention else rowfile.SCHEMA
+    train = rowfile.load(args.train, schema)
     rng.shuffle(train)
     if args.val:
-        val = rowfile.load(args.val)
+        val = rowfile.load(args.val, schema)
     else:
         cut = max(1, len(train) // 10)
         val, train = train[:cut], train[cut:]
@@ -511,9 +499,13 @@ def main():
     head_max_len = min(int(corpus.state_spec.get("head_tokens", 512)), max(context - 64, 16))
     max_len = context
     print("context %d head budget %d" % (max_len, head_max_len), flush=True)
-    pos = tool_weights(train, args.tool_weight, args.tool_truth)
-    train_items = build_items(train, corpus, held, rng, tok, max_len, head_max_len, families, args.skill_scored, args.skill_zeros, args.turn_rows, pos, args.tool_truth, observed_levels(args.rank_levels), args.tool_negatives)
-    val_items = build_items(val, corpus, held, rng, tok, max_len, head_max_len, families, args.skill_scored, args.skill_zeros, args.turn_rows, None, args.tool_truth, observed_levels(args.rank_levels))
+    if retention:
+        train_items = build_retention_items(train, corpus, tok, max_len, head_max_len, args.retention_truth, args.turn_rows)
+        val_items = build_retention_items(val, corpus, tok, max_len, head_max_len, args.retention_truth, args.turn_rows)
+    else:
+        pos = tool_weights(train, args.tool_weight, args.tool_truth)
+        train_items = build_items(train, corpus, held, rng, tok, max_len, head_max_len, families, args.skill_scored, args.skill_zeros, args.turn_rows, pos, args.tool_truth, observed_levels(args.rank_levels), args.tool_negatives)
+        val_items = build_items(val, corpus, held, rng, tok, max_len, head_max_len, families, args.skill_scored, args.skill_zeros, args.turn_rows, None, args.tool_truth, observed_levels(args.rank_levels))
     sys.stderr.write("items: train=%d val=%d\n" % (len(train_items), len(val_items)))
     state_tokens = state_room(train_items)
     print("state tokens after the options: %s" % state_tokens, flush=True)
@@ -557,8 +549,8 @@ def main():
                 "corpus": corpus.revision, "holdout": sorted(held), "val_loss": loss, "val_acc": acc, "by_type": by_type,
                 "train_rows": len(train), "turn_rows": args.turn_rows, "tool_weight": args.tool_weight, "tool_truth": args.tool_truth, "rank_levels": args.rank_levels, "seed": args.seed,
                 "max_len": max_len, "head_max_len": head_max_len, "pos_weight": POS_WEIGHT, "state_tokens": state_tokens,
-                "tool_encoding": "independent" if corpus.independent() else "joint", "tool_negatives": args.tool_negatives,
-                "tool_option_words": corpus.spec["tools"]["option_words"], "families": ",".join(families)})
+                "tool_encoding": "independent" if retention or corpus.independent() else "joint", "tool_negatives": args.tool_negatives,
+                "tool_option_words": corpus.spec["tools"]["option_words"], "families": ",".join(families), "retention_truth": args.retention_truth if retention else ""})
             print("  saved %s" % out, flush=True)
 
 

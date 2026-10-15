@@ -10,9 +10,11 @@ corpus, so a label is always read against the options the host had.
 import json
 
 SCHEMA = "pw-decide-row/1"
+RETENTION_SCHEMA = "pw-retention-row/1"
+RETENTION_TRUTH = ("needed", "later")
 
 
-def load(path):
+def load(path, schema=SCHEMA):
     """Every row of a JSON-lines file, refusing any row of another shape."""
     rows = []
     with open(path, encoding="utf-8") as fh:
@@ -20,8 +22,8 @@ def load(path):
             if not line.strip():
                 continue
             row = json.loads(line)
-            if row.get("schema") != SCHEMA:
-                raise ValueError("%s:%d: schema %r, want %r" % (path, n, row.get("schema"), SCHEMA))
+            if row.get("schema") != schema:
+                raise ValueError("%s:%d: schema %r, want %r" % (path, n, row.get("schema"), schema))
             rows.append(row)
     return rows
 
@@ -104,3 +106,24 @@ def tool_targets(row, rule="consensus"):
 def truth_tools(row, rule="consensus"):
     """The loadable tools the turn needed, under a TOOL_TRUTH rule."""
     return {t for t, v in tool_targets(row, rule).items() if v == 1}
+
+
+def retention_targets(row, rule="needed"):
+    """Keep unknown labels masked and require provenance for negative labels."""
+    if rule not in RETENTION_TRUTH:
+        raise ValueError("unknown retention truth %r" % rule)
+    labels = row["labels"]
+    targets = {}
+    for candidate in row["candidates"]:
+        identity = candidate["id"]
+        mark = labels[rule].get(identity)
+        source = labels.get("provenance", {}).get(identity)
+        evidence = labels.get("by", {}).get(identity)
+        verified = source in {"scenario", "judge"} or (mark is True and source == "canonical_recovery")
+        targets[candidate["ref"]] = int(mark) if isinstance(mark, bool) and verified and evidence else None
+    return targets
+
+
+def retention_options(row):
+    """Encode the candidate text recorded with the observation."""
+    return {c["ref"]: c["option"] for c in row["candidates"] if c.get("option")}

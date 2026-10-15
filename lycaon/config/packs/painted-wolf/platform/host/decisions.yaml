@@ -180,3 +180,7 @@ rerank:
     max_candidates: 24
     chunk: 8
     weight: 0.5
+
+# Continuation detail ranking never changes canonical coverage or recovery.
+retention:
+  question: Which recorded observations are needed to continue this request?

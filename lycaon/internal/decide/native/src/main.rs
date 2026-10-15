@@ -33,7 +33,7 @@ struct LoadArgs {
     #[arg(long, default_value = "")]
     metallib: String,
 
-    /// A head file, as NAME=PATH (turn-load, guide-load, unit-rank, code-rank or web-rank); repeatable.
+    /// A head file, as NAME=PATH (turn-load, guide-load, unit-rank, code-rank, web-rank or retention); repeatable.
     #[arg(long = "head", value_name = "NAME=PATH")]
     heads: Vec<String>,
 

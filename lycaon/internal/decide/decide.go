@@ -97,10 +97,12 @@ const (
 	HeadCodeRank Head = "code-rank"
 	// HeadWebRank ranks fetched web pages and search snippets.
 	HeadWebRank Head = "web-rank"
+	// HeadRetention ranks optional continuation detail.
+	HeadRetention Head = "retention"
 )
 
 // heads is the catalog of heads a shared backbone can serve.
-var heads = []Head{HeadTurnLoad, HeadGuideLoad, HeadUnitRank, HeadCodeRank, HeadWebRank}
+var heads = []Head{HeadTurnLoad, HeadGuideLoad, HeadUnitRank, HeadCodeRank, HeadWebRank, HeadRetention}
 
 // Heads lists every head a shared backbone can serve, in catalog order.
 func Heads() []Head { return append([]Head(nil), heads...) }

@@ -107,16 +107,17 @@ type corpusSkill struct {
 }
 
 type corpus struct {
-	CatalogRevision string               `json:"catalog_revision"`
-	State           turnload.StateSpec   `json:"state"`
-	Questions       turnload.TurnSpec    `json:"questions"`
-	Request         turnload.RequestSpec `json:"request"`
-	Lookup          turnload.LookupSpec  `json:"lookup"`
-	Kinds           []string             `json:"kinds"`
-	Surfaces        []corpusSurface      `json:"surfaces"`
-	Tools           []corpusTool         `json:"tools"`
-	Units           []corpusUnit         `json:"units"`
-	Skills          []corpusSkill        `json:"skills"`
+	CatalogRevision string                 `json:"catalog_revision"`
+	State           turnload.StateSpec     `json:"state"`
+	Questions       turnload.TurnSpec      `json:"questions"`
+	Request         turnload.RequestSpec   `json:"request"`
+	Lookup          turnload.LookupSpec    `json:"lookup"`
+	Retention       turnload.RetentionSpec `json:"retention"`
+	Kinds           []string               `json:"kinds"`
+	Surfaces        []corpusSurface        `json:"surfaces"`
+	Tools           []corpusTool           `json:"tools"`
+	Units           []corpusUnit           `json:"units"`
+	Skills          []corpusSkill          `json:"skills"`
 }
 
 func buildCorpus() (corpus, error) {
@@ -140,7 +141,7 @@ func buildCorpus() (corpus, error) {
 	if err != nil {
 		return corpus{}, err
 	}
-	out := corpus{CatalogRevision: units.Revision(), State: catalog.State, Questions: catalog.Turn, Request: catalog.Request, Lookup: catalog.Lookup, Kinds: turnload.Kinds()}
+	out := corpus{CatalogRevision: units.Revision(), State: catalog.State, Questions: catalog.Turn, Request: catalog.Request, Lookup: catalog.Lookup, Retention: catalog.Retention, Kinds: turnload.Kinds()}
 	ids := make([]string, 0, len(plans))
 	for id := range plans {
 		ids = append(ids, id)
