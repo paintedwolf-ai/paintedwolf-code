@@ -21,7 +21,7 @@ const fakeEngine = `#!/bin/sh
 while IFS= read -r line; do
   id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
   case "$line" in
-    *'"method":"hello"'*) printf '{"id":%s,"engine":{"name":"fake-bialy","model":"test","device":"cpu","head":"turn-load"}}\n' "$id" ;;
+    *'"method":"hello"'*) printf '{"id":%s,"engine":{"name":"fake-bialy","model":"test","device":"vulkan:0","adapter":"Fake GPU","probe_ms":265.5,"head":"turn-load"}}\n' "$id" ;;
     *'"method":"decide"'*) printf '{"id":%s,"answers":{"edit":{"type":"noul","noul":0.91,"confidence":0.91},"kind":{"type":"choice","choice":"change","probabilities":{"change":0.8,"answer_only":0.2},"confidence":0.7}}}\n' "$id" ;;
     *'"method":"rank"'*) printf '{"id":%s,"scores":[0.1,3.7]}\n' "$id" ;;
     *) printf '{"id":%s,"error":"unknown method"}\n' "$id" ;;
@@ -79,8 +79,11 @@ func TestClientDecidesAndRanksOverTheLineProtocol(t *testing.T) {
 	if res.Answers["edit"].Noul != 0.91 || res.Answers["kind"].Choice != "change" {
 		t.Fatalf("answers = %+v", res.Answers)
 	}
-	if res.Engine.Head != "turn-load" || res.Engine.Name != "fake-bialy" {
+	if res.Engine.Head != "turn-load" || res.Engine.Name != "fake-bialy" || res.Engine.Adapter != "Fake GPU" {
 		t.Fatalf("engine = %+v", res.Engine)
+	}
+	if got := client.Speed(); got != 265500*time.Microsecond {
+		t.Fatalf("speed = %v, want the handshake's probe_ms", got)
 	}
 	scores, engine, err := client.Rank(ctx, decide.HeadCodeRank, "task", []string{"a", "b"})
 	testutil.FailErr(t, "Rank", err)

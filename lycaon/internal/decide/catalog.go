@@ -157,15 +157,13 @@ func ParseCatalog(data []byte) (Catalog, error) {
 			continue
 		}
 		faults = append(faults, row.validate(name)...)
-		policy := RerankPolicy{
+		out[Site(name)] = RerankPolicy{
 			Enabled:       row.Enabled,
 			Deadline:      time.Duration(row.DeadlineMS) * time.Millisecond,
 			MaxCandidates: row.MaxCandidates,
 			Chunk:         row.Chunk,
 			Weight:        row.Weight,
 		}
-		faults = append(faults, engine.fits(name, policy)...)
-		out[Site(name)] = policy
 	}
 	for _, site := range sites {
 		if _, ok := file.Rerank[string(site)]; !ok {
@@ -177,20 +175,6 @@ func ParseCatalog(data []byte) (Catalog, error) {
 		return Catalog{}, fmt.Errorf("decisions.yaml: %s", strings.Join(faults, "; "))
 	}
 	return Catalog{Policies: out, Engine: engine}, nil
-}
-
-// fits reports an enabled site the slowest qualifying device could not finish
-// within its deadline.
-func (e EngineRequirement) fits(name string, p RerankPolicy) []string {
-	if !p.Enabled || e.Reference <= 0 {
-		return nil
-	}
-	batches := (p.MaxCandidates + ReferenceCandidates - 1) / ReferenceCandidates
-	if worst := time.Duration(batches) * e.Reference; worst > p.Deadline {
-		return []string{fmt.Sprintf("rerank.%s.deadline_ms %d cannot fit %d reference batches of engine.reference_ms %d",
-			name, p.Deadline.Milliseconds(), batches, e.Reference.Milliseconds())}
-	}
-	return nil
 }
 
 func (r policyRow) validate(name string) []string {

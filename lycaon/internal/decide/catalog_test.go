@@ -76,17 +76,6 @@ func TestParseCatalogValidatesBudgets(t *testing.T) {
 	}
 }
 
-func TestParseCatalogRefusesARequirementSlowerThanAnEnabledSite(t *testing.T) {
-	t.Parallel()
-	_, err := decide.ParseCatalog([]byte(catalogWith("150", "100")))
-	if err == nil || !strings.Contains(err.Error(), "deadline_ms 100 cannot fit 1 reference batches of engine.reference_ms 150") {
-		t.Fatalf("a requirement no site can meet was accepted: %v", err)
-	}
-	disabled := strings.ReplaceAll(catalogWith("150", "100"), "enabled: true", "enabled: false")
-	_, err = decide.ParseCatalog([]byte(disabled))
-	testutil.FailErr(t, "disabled sites carry no deadline obligation", err)
-}
-
 func TestPoliciesForUndeclaredSiteIsDisabled(t *testing.T) {
 	t.Parallel()
 	var none decide.Policies

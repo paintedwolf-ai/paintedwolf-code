@@ -116,6 +116,12 @@ func (c *Client) Engine() decide.Engine {
 	return c.engine
 }
 
+// Speed is the reference batch time the engine measured when it chose its
+// device; zero before the handshake or for a pinned device.
+func (c *Client) Speed() time.Duration {
+	return time.Duration(c.Engine().ProbeMS * float64(time.Millisecond))
+}
+
 // Loaded reports whether the handshake listed head among the loaded heads;
 // before the handshake nothing is.
 func (c *Client) Loaded(head decide.Head) bool {
