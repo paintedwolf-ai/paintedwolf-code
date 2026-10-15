@@ -1,0 +1,23 @@
+# rpmlint policy for the vendor package: errors fail staging, the listed
+# findings describe the bundled-toolchain layout and are accepted.
+Filters = [
+    "no-manual-page-for-binary",
+    "no-documentation",
+    "no-changelogname-tag",
+    "unstripped-binary-or-object",
+    "statically-linked-binary",
+    "position-independent-executable-suggested",
+    "non-standard-dir-in-opt",
+    "dir-or-file-in-opt",
+    "binary-or-shlib-defines-rpath",
+    "shared-library-not-executable",
+    "arch-dependent-file-in-usr-share",
+    "unexpanded-macro",
+    # Repository publication signs the package; staging checks structure.
+    "no-signature",
+    # Requirements are declared from the measured floor with AutoReqProv off.
+    "explicit-lib-dependency",
+    # The bundled browser ships identical locale and hyphenation files.
+    "files-duplicated-waste",
+    "files-duplicate",
+]
