@@ -16,19 +16,17 @@ schema:
     history:
       type: object
       description: >-
-        Recover your recorded transcript through through_ord. Page the index with
-        after_ord; supply a returned message_id for its body. offset and next_offset
-        page Unicode characters. source_seq detects corrections to returned rows.
-        search finds recorded instructions or observations. Cannot combine with query or widen.
+        Page transcript index or load a message body within through_ord. Cannot
+        combine with query or widen.
       properties:
         search: {type: string, minLength: 1, maxLength: 256, description: "Up to eight literal terms, all required."}
         format: {type: string, enum: [text, record], description: "Body format. record includes original parts and arguments; concatenate pages before parsing."}
-        body_runes: {type: integer, minimum: 1, maximum: 4096}
-        after_ord: {type: integer, minimum: 0}
-        through_ord: {type: integer, minimum: 1}
-        source_seq: {type: integer, minimum: 0}
-        message_id: {type: string, minLength: 1}
-        offset: {type: integer, minimum: 0}
+        body_runes: {type: integer, minimum: 1, maximum: 4096, description: "Unicode characters per body page."}
+        after_ord: {type: integer, minimum: 0, description: "Start index after this ordinal."}
+        through_ord: {type: integer, minimum: 1, description: "Inclusive upper ordinal bound."}
+        source_seq: {type: integer, minimum: 0, description: "Sequence stamp to detect row edits."}
+        message_id: {type: string, minLength: 1, description: "Row ID to read in full pages."}
+        offset: {type: integer, minimum: 0, description: "Unicode character offset for body paging."}
       required: [through_ord]
       additionalProperties: false
     widen:
