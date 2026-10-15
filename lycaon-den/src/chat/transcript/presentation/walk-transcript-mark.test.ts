@@ -85,10 +85,11 @@ describe("applyWalkMark", () => {
 
   it("rings the visible activity item when its connected tool is grouped", () => {
     const root = stream([], "session-1");
-    const span = document.createElement("details");
+    const span = document.createElement("div");
     span.className = "den-activity-span";
+    span.setAttribute("data-transcript-disclosure", "");
     span.innerHTML = [
-      "<summary>Read ×2</summary>",
+      '<button class="den-transcript-disclosure-header">Read ×2</button>',
       '<div><div class="den-tool-part" data-tool-call-id="t1"></div></div>',
     ].join("");
     root.appendChild(span);
@@ -138,8 +139,9 @@ describe("applyWalkMark", () => {
 
   it("tracks expansion and collapse without changing the selected command or reopening cards", async () => {
     const root = stream([], "s1");
-    root.innerHTML = '<details class="den-activity-span"><summary>Commands</summary><div class="den-tool-part" data-tool-call-id="call-a"></div><div class="den-tool-part" data-tool-call-id="call-b"></div></details>';
-    const activity = root.querySelector<HTMLDetailsElement>("details")!;
+    root.innerHTML = '<div class="den-activity-span" data-transcript-disclosure><button class="den-transcript-disclosure-header">Commands</button><div class="den-tool-part" data-tool-call-id="call-a"></div><div class="den-tool-part" data-tool-call-id="call-b"></div></div>';
+    const activity = root.querySelector<HTMLElement>(".den-activity-span")!;
+    const setOpen = (open: boolean) => activity.setAttribute("data-expanded", String(open));
     const command = root.querySelector<HTMLElement>("[data-tool-call-id=call-a]")!;
     const controller = createTranscriptViewportController({ sessionId: () => "s1" });
     controller.attachStream(root);
@@ -149,10 +151,10 @@ describe("applyWalkMark", () => {
     try {
       await enterWalk("p1", walkClientFixture(() => walkResponseFixture([walkEffectFixture("a", 1, 1)])), "s1");
       expect(activity.classList.contains(MARK)).toBe(true);
-      expect(activity.open).toBe(false);
+      expect(activity.getAttribute("data-expanded") === "true").toBe(false);
       expect(reveal).toHaveBeenCalledOnce();
       activity.dataset.animating = "true";
-      activity.open = true;
+      setOpen(true);
       await Promise.resolve();
       expect(activity.classList.contains(MARK)).toBe(true);
       expect(reveal).toHaveBeenCalledOnce();
@@ -167,14 +169,14 @@ describe("applyWalkMark", () => {
       await Promise.resolve();
       expect(activity.classList.contains(MARK)).toBe(true);
       expect(reveal).toHaveBeenCalledTimes(2);
-      activity.open = false;
+      setOpen(false);
       delete activity.dataset.animating;
       delete activity.dataset.closing;
       await vi.waitFor(() => expect(reveal).toHaveBeenCalledTimes(3));
       expect(root.querySelectorAll(`.${MARK}`)).toHaveLength(1);
-      expect(reveal.mock.calls[2]![1]!.element!()).toBe(activity.querySelector("summary"));
+      expect(reveal.mock.calls[2]![1]!.element!()).toBe(activity.querySelector(".den-transcript-disclosure-header"));
       leaveWalk("p1");
-      activity.open = true;
+      setOpen(true);
       await Promise.resolve();
       expect(reveal.mock.calls[2]![1]!.signal!.aborted).toBe(true);
       expect(root.querySelectorAll(`.${MARK}`)).toHaveLength(0);

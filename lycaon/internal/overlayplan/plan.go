@@ -44,12 +44,12 @@ func Build(
 	}
 	sort.Slice(pending, func(i, j int) bool { return pending[i].ID < pending[j].ID })
 
-	pendingSet := map[string]struct{}{}
+	promotableSet := map[string]struct{}{}
 	pathToJobs := map[string][]string{}
 	entries := make([]api.OverlayMergePlanEntry, 0, len(pending))
+	promotableEntries := make([]api.OverlayMergePlanEntry, 0, len(pending))
 
 	for _, task := range pending {
-		pendingSet[task.ID] = struct{}{}
 		paths := planPaths(task)
 		for _, p := range paths {
 			pathToJobs[p] = append(pathToJobs[p], task.ID)
@@ -69,6 +69,10 @@ func Build(
 			entry.PreviewStale = true
 		}
 		entries = append(entries, entry)
+		if !unfinishedOverlayLeg(task) {
+			promotableSet[task.ID] = struct{}{}
+			promotableEntries = append(promotableEntries, entry)
+		}
 	}
 
 	for path := range pathToJobs {
@@ -87,7 +91,7 @@ func Build(
 	}
 	sort.Slice(shared, func(i, j int) bool { return shared[i].Path < shared[j].Path })
 
-	sequence := promoteSequence(entries, pendingSet, shared)
+	sequence := promoteSequence(promotableEntries, promotableSet, shared)
 
 	return api.OverlayMergePlan{
 		PendingCount:    len(pending),
@@ -95,6 +99,20 @@ func Build(
 		SharedPaths:     shared,
 		Entries:         entries,
 	}
+}
+
+func unfinishedOverlayLeg(task api.WorkerTask) bool {
+	switch api.WorkerTaskLegStatus(task) {
+	case "partial", "blocked":
+		return true
+	}
+	if task.Result != nil {
+		switch strings.TrimSpace(task.Result.Status) {
+		case "partial", "blocked", "needs_decision":
+			return true
+		}
+	}
+	return false
 }
 
 func planPaths(task api.WorkerTask) []string {

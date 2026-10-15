@@ -47,6 +47,7 @@ type LoopDeps struct {
 	ScanCycleOpen             func(ctx context.Context, sessionID string) bool
 	ProcessRunning            func(sessionID string, handles []string) bool
 	ProcessState              func(sessionID, handle string) (known, running bool)
+	ProcessSubject            func(sessionID, handle string) string
 	// ProcessReport returns the published account of an ended process job;
 	// false until its completion is published.
 	ProcessReport                  func(sessionID, handle string) (report string, published bool)

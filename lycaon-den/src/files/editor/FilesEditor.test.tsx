@@ -59,6 +59,8 @@ import { putBufferViewState } from "./editor-session-fidelity.ts";
 import { flushFilesDraftSync } from "../documents/files-draft-sync.ts";
 
 import { focusRegion } from "../../shortcuts/focus-region.ts";
+import { closeGotoLine } from "../../find/goto-line-controller.ts";
+import { GOTO_LINE_BAR_ID } from "../../find/command-bar-disclosure.ts";
 
 describe("FilesEditor", () => {
   setupFilesEditorTests();
@@ -191,6 +193,26 @@ describe("FilesEditor", () => {
     expect(copyTextToClipboard).toHaveBeenCalledWith(
       "line1\nline2\nline3 target\nline4\n",
     );
+  });
+
+  it("exposes find and go to line as command bar disclosures and copy path as a plain button", async () => {
+    render(() => <FilesEditor {...editorProps(loadedBuffer())} />);
+    await waitFor(() => expect(screen.getByTestId("files-editor-host").textContent).toContain("line3 target"));
+    const find = screen.getByRole("button", { name: "Find in file" });
+    const goto = screen.getByRole("button", { name: "Go to line" });
+    const copy = screen.getByRole("button", { name: "Copy path" });
+    for (const button of [find, goto, copy]) expect(button.hasAttribute("aria-haspopup")).toBe(false);
+    expect(copy.hasAttribute("aria-expanded")).toBe(false);
+    expect(find.getAttribute("aria-expanded")).toBe("false");
+    expect(find.hasAttribute("aria-controls")).toBe(false);
+    try {
+      fireEvent.click(goto);
+      expect(goto.getAttribute("aria-expanded")).toBe("true");
+      expect(goto.getAttribute("aria-controls")).toBe(GOTO_LINE_BAR_ID);
+      expect(find.getAttribute("aria-expanded")).toBe("false");
+    } finally {
+      closeGotoLine(false);
+    }
   });
 
   it("renders a sanitized markdown preview behind the Code/Preview toggle", async () => {

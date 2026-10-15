@@ -98,61 +98,26 @@ pub fn parse_button_layout(raw: &str) -> Option<DecorationLayout> {
 /// Event carrying the desktop's layout after `button-layout` changes.
 pub const LAYOUT_CHANGED_EVENT: &str = "linux-decoration-layout-changed";
 
-/// The desktop's layout when the Settings portal exposes one, else the default.
+/// The desktop's layout as the Settings portal last reported it, else the default.
 #[tauri::command]
-pub async fn linux_decoration_layout() -> DecorationLayout {
-    tauri::async_runtime::spawn_blocking(current_layout)
-        .await
-        .unwrap_or_else(|_| DecorationLayout::default_layout())
+pub fn linux_decoration_layout() -> DecorationLayout {
+    current_layout()
 }
 
 /// A layout from a raw `button-layout`; a value naming no control falls back to the default.
-fn layout_from_raw(raw: &str) -> DecorationLayout {
+pub(crate) fn layout_from_raw(raw: &str) -> DecorationLayout {
     parse_button_layout(raw).unwrap_or_else(DecorationLayout::default_layout)
 }
 
 #[cfg(target_os = "linux")]
 fn current_layout() -> DecorationLayout {
-    match portal::read_button_layout() {
-        Ok(raw) => layout_from_raw(&raw),
-        Err(reason) => {
-            eprintln!("window button layout unavailable: {reason}; drawing the default");
-            DecorationLayout::default_layout()
-        }
-    }
+    super::linux_desktop_settings::portal::current_decoration_layout()
 }
 
 #[cfg(not(target_os = "linux"))]
 fn current_layout() -> DecorationLayout {
     DecorationLayout::default_layout()
 }
-
-/// Follows `button-layout` through the portal's `SettingChanged` signal.
-#[cfg(target_os = "linux")]
-pub fn setup(app: tauri::AppHandle) {
-    use tauri::Emitter;
-    let spawned = std::thread::Builder::new()
-        .name("decoration-layout".into())
-        .spawn(move || {
-            let outcome = portal::watch_button_layout(move |raw| {
-                if let Err(err) = app.emit(LAYOUT_CHANGED_EVENT, layout_from_raw(raw)) {
-                    eprintln!("window button layout: emit: {err}");
-                }
-            });
-            if let Err(reason) = outcome {
-                eprintln!("window button layout changes unavailable: {reason}");
-            }
-        });
-    if let Err(err) = spawned {
-        eprintln!("window button layout: watch thread: {err}");
-    }
-}
-
-#[cfg(not(target_os = "linux"))]
-pub fn setup(_app: tauri::AppHandle) {}
-
-#[cfg(target_os = "linux")]
-mod portal;
 
 #[cfg(test)]
 mod tests {

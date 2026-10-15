@@ -1,11 +1,13 @@
 import type { Message } from "../../../api/types.ts";
+import { isCoordinatorDraftWire } from "../projection/draft-model.ts";
 import { isDenTranscriptMessage } from "../projection/message-transcript.ts";
 
 export type TranscriptAnnouncementState = {
   sessionId: string;
   hadMessages: boolean;
   tailId?: string;
-  assistantStreaming: ReadonlyMap<string, boolean>;
+  /** Whether each assistant row, visible or not, was still being written. */
+  assistantPending: ReadonlyMap<string, boolean>;
 };
 
 export type TranscriptAnnouncementStep = {
@@ -13,22 +15,29 @@ export type TranscriptAnnouncementStep = {
   announcement?: string;
 };
 
+/**
+ * A reply is still being written while it streams or while the host holds it
+ * as an uncommitted draft, which arrives hidden and becomes visible on commit.
+ */
+function isPendingAssistant(message: Message): boolean {
+  return message.status === "streaming" || isCoordinatorDraftWire(message);
+}
+
 function captureState(
   sessionId: string,
   messages: readonly Message[],
 ): TranscriptAnnouncementState {
-  const assistantStreaming = new Map<string, boolean>();
+  const assistantPending = new Map<string, boolean>();
   for (const message of messages) {
-    if (message.role !== "assistant" || !isDenTranscriptMessage(message)) {
-      continue;
+    if (message.role === "assistant") {
+      assistantPending.set(message.id, isPendingAssistant(message));
     }
-    assistantStreaming.set(message.id, message.status === "streaming");
   }
   return {
     sessionId,
     hadMessages: messages.length > 0,
     tailId: messages[messages.length - 1]?.id,
-    assistantStreaming,
+    assistantPending,
   };
 }
 
@@ -44,6 +53,10 @@ export function advanceTranscriptAnnouncement(
   sessionId: string,
   messages: readonly Message[],
 ): TranscriptAnnouncementStep {
+  // A reload empties the rows before refilling them; the history it brings back is not new.
+  if (previous?.sessionId === sessionId && previous.hadMessages && messages.length === 0) {
+    return { state: previous };
+  }
   const state = captureState(sessionId, messages);
   if (!previous || previous.sessionId !== sessionId) return { state };
 
@@ -70,12 +83,12 @@ export function advanceTranscriptAnnouncement(
     if (
       message.role !== "assistant" ||
       !isDenTranscriptMessage(message) ||
-      message.status === "streaming" ||
+      isPendingAssistant(message) ||
       !message.content.trim()
     ) {
       continue;
     }
-    const settled = previous.assistantStreaming.get(message.id) === true;
+    const settled = previous.assistantPending.get(message.id) === true;
     if (settled || appended) announcement = `Assistant: ${message.content.trim()}`;
   }
 

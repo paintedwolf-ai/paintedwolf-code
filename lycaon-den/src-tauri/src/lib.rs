@@ -81,6 +81,7 @@ pub fn run() {
             notifications::den_notify_cancel_sessions,
             notifications::den_set_badge_count,
             windows::accessibility_text_size::accessibility_preferred_text_size,
+            windows::accessibility_announce::den_announce,
             windows::system_appearance::system_appearance,
             clipboard::read_clipboard_text,
             clipboard::write_clipboard_text,
@@ -155,7 +156,6 @@ pub fn run() {
             sidecar::setup_supervision(app.handle());
             webkit_features::create_main_window(app.handle())?;
             windows::window_appearance::setup(app.handle());
-            windows::linux_decorations::setup(app.handle().clone());
             clipboard::setup();
             update_service::startup::start(app.handle().clone());
             windows::accessibility_text_size::setup(app.handle().clone())
