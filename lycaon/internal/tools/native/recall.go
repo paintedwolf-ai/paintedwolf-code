@@ -76,7 +76,7 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 func recallReject(err error) error {
 	var coordinates *recall.ErrHistoryCoordinates
 	if errors.As(err, &coordinates) {
-		return &toolrejection.ToolReject{Code: recallHistoryInvalid, Retryable: true, Data: map[string]any{"field": coordinates.Field, "reason": coordinates.Reason}}
+		return &toolrejection.ToolReject{Code: recallHistoryInvalid, Retryable: true, Data: recallCoordinateRejectFacts(coordinates)}
 	}
 	var denied *recall.ErrScopeDenied
 	if asScopeDenied(err, &denied) {
@@ -100,10 +100,9 @@ func recallReject(err error) error {
 			Code:      recallQueryInvalid,
 			Retryable: true,
 			Data: map[string]any{
-				"field":                 parseErr.Field,
-				"recall_allowed_fields": search.DSLFieldAllowlist(),
-				"offset":                parseErr.Offset,
-				"reason":                parseErr.Message,
+				"field": parseErr.Field, "recall_allowed_fields": search.DSLFieldAllowlist(),
+				"offset": parseErr.Offset, "reason": parseErr.Message,
+				"recall_query_time_invalid": parseErr.Field == "after" || parseErr.Field == "before",
 			},
 		}
 	}

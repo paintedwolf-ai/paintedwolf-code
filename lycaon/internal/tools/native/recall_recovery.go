@@ -30,3 +30,18 @@ func addRecallRecoveryAction(ctx context.Context, result *recall.Result) {
 		result.NextAction = strings.TrimSpace(result.NextAction + "\n" + action)
 	}
 }
+
+func recallCoordinateRejectFacts(err *recall.ErrHistoryCoordinates) map[string]any {
+	facts := map[string]any{"field": err.Field, "reason": err.Reason}
+	switch err.Field {
+	case "history":
+		facts["recall_history_mode_invalid"] = true
+	case "history.through_ord", "history.after_ord":
+		facts["recall_history_bounds_invalid"] = true
+	case "history.message_id":
+		facts["recall_history_body_missing"] = true
+	case "history.search":
+		facts["recall_history_search_invalid"] = true
+	}
+	return facts
+}

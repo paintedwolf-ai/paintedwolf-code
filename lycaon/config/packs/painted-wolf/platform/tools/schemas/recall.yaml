@@ -16,9 +16,8 @@ schema:
     history:
       type: object
       description: >-
-        Recover a known message with message_id; use through_ord to page its session
-        index. Pass a returned record_request as history, or next_request as the
-        complete recall arguments. Cannot combine with query or widen.
+        Use message_id for a body or through_ord for the index. Pass record_request
+        as history or next_request as recall arguments; omit query and widen.
       properties:
         search: {type: string, minLength: 1, maxLength: 256, description: "Up to eight literal terms, all required."}
         format: {type: string, enum: [text, record], description: "Body format. record includes original parts and arguments; concatenate pages before parsing."}
@@ -26,7 +25,7 @@ schema:
         after_ord: {type: integer, minimum: 0, description: "Start index after this ordinal."}
         through_ord: {type: integer, minimum: 1, description: "Inclusive upper ordinal bound."}
         source_seq: {type: integer, minimum: 0, description: "Sequence stamp to detect row edits."}
-        message_id: {type: string, minLength: 1, description: "Row ID to recover; sufficient on its own for body paging."}
+        message_id: {type: string, minLength: 1, description: "Known row ID; enough for body recovery."}
         offset: {type: integer, minimum: 0, description: "Unicode character offset for body paging."}
       anyOf:
         - required: [through_ord]

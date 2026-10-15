@@ -11,6 +11,7 @@ requires:
   - paintedwolf.recall_allowed_fields
   - paintedwolf.rejection_reason
   - paintedwolf.rejection_field
+  - paintedwolf.recall_query_time_invalid
   profiles:
   - tool
 when: paintedwolf.rejection_code == "RECALL_QUERY_INVALID"
@@ -20,7 +21,7 @@ copy:
   cause: A filter field, a value, or the boolean grouping is not part of the query language.
   why: The query compiles to a bounded lookup over the recorded index; an unparsed query has no safe reading.
   fix: >-
-    {% if paintedwolf.rejection_field == "after" or paintedwolf.rejection_field == "before" %}
+    {% if paintedwolf.recall_query_time_invalid %}
     `{{ paintedwolf.rejection_field }}` is a time filter. Use an RFC 3339 timestamp
     such as 2026-09-01T00:00:00Z or a duration such as 7d. Transcript ordinals belong
     in history.after_ord and history.through_ord, not query time filters.
@@ -30,7 +31,7 @@ copy:
     phrases containing a colon. Correct the reported field or grouping while retaining scope.
     {% endif %}
   instead: >-
-    {% if paintedwolf.rejection_field == "after" or paintedwolf.rejection_field == "before" %}
+    {% if paintedwolf.recall_query_time_invalid %}
     Correct the time value, or use history coordinates for transcript paging.
     {% else %}Correct the rejected query and retry only that call.{% endif %}
 x-paintedwolf-category: recoverable

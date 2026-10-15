@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/recall"
+	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -106,5 +107,20 @@ func TestRecallRecoveryActionExplainsRecordRequestsAndPreservesExistingAction(t 
 				t.Fatalf("lost reachable or existing action: %s", tc.result.NextAction)
 			}
 		})
+	}
+}
+
+func TestRecallRejectionFactsComeFromTypedFields(t *testing.T) {
+	for field, flag := range map[string]string{"history": "recall_history_mode_invalid", "history.after_ord": "recall_history_bounds_invalid", "history.through_ord": "recall_history_bounds_invalid", "history.message_id": "recall_history_body_missing", "history.search": "recall_history_search_invalid"} {
+		var reject *toolrejection.ToolReject
+		if !errors.As(recallReject(&recall.ErrHistoryCoordinates{Field: field, Reason: "diagnostic"}), &reject) || reject.Data[flag] != true {
+			t.Fatalf("missing typed fact for %s", field)
+		}
+	}
+	for _, field := range []string{"after", "before", "other"} {
+		var reject *toolrejection.ToolReject
+		if !errors.As(recallReject(&search.ParseError{Field: field, Message: "diagnostic"}), &reject) || reject.Data["recall_query_time_invalid"] != (field != "other") {
+			t.Fatalf("wrong time fact for %s", field)
+		}
 	}
 }

@@ -222,7 +222,12 @@ func TestRecallRejectionsRenderRecoveryForTheActualField(t *testing.T) {
 		{"fallback", "RECALL_HISTORY_INVALID", "", "rejected history arguments", "Correct  using"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			reject := bp.RejectFromObservation(t.Context(), oar.AnchorToolRejected, "recall", "coordinator", nil, &toolrejection.ToolReject{Code: tc.code, Data: map[string]any{"field": tc.field, "reason": "invalid request", "recall_allowed_fields": []string{"after", "handle", "path"}}})
+			facts := map[string]any{"field": tc.field, "reason": "invalid request", "recall_allowed_fields": []string{"after", "handle", "path"}}
+			flag := map[string]string{"after": "recall_query_time_invalid", "history.after_ord": "recall_history_bounds_invalid", "history.message_id": "recall_history_body_missing", "history": "recall_history_mode_invalid", "history.search": "recall_history_search_invalid"}[tc.field]
+			if flag != "" {
+				facts[flag] = true
+			}
+			reject := bp.RejectFromObservation(t.Context(), oar.AnchorToolRejected, "recall", "coordinator", nil, &toolrejection.ToolReject{Code: tc.code, Data: facts})
 			if reject == nil {
 				t.Fatal("recall rejection was lost")
 			}
