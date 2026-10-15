@@ -30,7 +30,7 @@ func TestReadProjectionSeparatesExactSourceAndLocations(t *testing.T) {
 	if !strings.Contains(got, marked) {
 		t.Fatalf("exact source absent from projection: %s", got)
 	}
-	for _, want := range []string{"[read#1]", `"offset":7`, `"end_line":9`, `"receipt":`} {
+	for _, want := range []string{`File contents "source.py" (lines 7–9); evidence "[read#1]":`, "Tool result metadata:", "[read#1]", `"offset":7`, `"end_line":9`, `"receipt":`} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("location or receipt %q absent: %s", want, got)
 		}
@@ -141,7 +141,7 @@ func TestSummarizeProjectionSeparatesExactSourceWindows(t *testing.T) {
 	message.EvidenceHandles = []string{"summarize#3"}
 	projected := transcript.Project([]api.Message{message})
 	got := projected[len(projected)-1].Content
-	for _, want := range []string{"⟦D:tool:summarize_metadata⟧", "[summarize#3]", `"start_line":4`, `"end_line":6`, `"path":"app.py"`,
+	for _, want := range []string{`File contents "ranking.py" (lines 4–6); evidence "summarize#1":`, `File contents "app.py" (lines 10–10); evidence "summarize#2":`, "⟦D:tool:summarize_metadata⟧", "[summarize#3]", `"start_line":4`, `"end_line":6`, `"path":"app.py"`,
 		`"anchors":`, `"skeleton":`, "⟦D⟧def rank():\n⟦D⟧    return \"score\"\n⟦D⟧\n", "⟦D⟧\tlast()"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("projection lacks %q: %s", want, got)
