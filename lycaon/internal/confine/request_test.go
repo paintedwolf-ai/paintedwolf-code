@@ -44,12 +44,12 @@ func TestBuildProfileExactSocketLiterals(t *testing.T) {
 	sock := socketGrant(t, filepath.Join(dir, "svc.sock"))
 	wild := socketGrant(t, filepath.Join(dir, "star*.sock"))
 
-	p, err := confine.BuildProfile(confine.Confinement{
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{
 		Roots:        []string{dir},
 		Network:      confine.NetworkDeny,
 		SocketGrants: []confine.SocketGrant{sock, wild},
 	})
-	testutil.FailErr(t, "BuildProfile", err)
+	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 	if !strings.Contains(p, "; exact AF_UNIX socket grants") {
 		t.Fatalf("socket block marker missing:\n%s", p)
 	}
@@ -82,13 +82,13 @@ func TestBuildProfileDropsRepointedSocketGrant(t *testing.T) {
 	testutil.FailErr(t, "remove link", os.Remove(link))
 	testutil.FailErr(t, "repoint", os.Symlink(b, link))
 
-	p, err := confine.BuildProfile(confine.Confinement{
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{
 		Roots: []string{dir},
 		SocketGrants: []confine.SocketGrant{
 			{ApprovedPath: link, ResolvedPath: resolved},
 		},
 	})
-	testutil.FailErr(t, "BuildProfile", err)
+	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 	if strings.Contains(p, `(literal "`+resolved+`")`) {
 		t.Fatalf("repointed grant must be dropped:\n%s", p)
 	}

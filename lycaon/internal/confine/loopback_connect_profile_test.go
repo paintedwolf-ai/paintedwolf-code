@@ -10,7 +10,7 @@ import (
 
 func TestLoopbackConnectProfileIsIndependentAndPortNarrowed(t *testing.T) {
 	t.Parallel()
-	profile, err := confine.BuildProfile(confine.Confinement{
+	profile, err := confine.BuildSeatbeltProfile(confine.Confinement{
 		Roots: []string{"/proj"}, Network: confine.NetworkProxyOnly,
 		ProxyAddr: "127.0.0.1:8472", SocksProxyAddr: "127.0.0.1:8473",
 		LoopbackConnect: true, LoopbackConnectPorts: []uint16{8123},
@@ -38,7 +38,7 @@ func TestBrowserProfileFollowsTheRequestedLoopbackPorts(t *testing.T) {
 		Roots: []string{"/proj"}, Network: confine.NetworkDeny,
 		Browser: true, LoopbackConnect: true, LoopbackConnectPorts: []uint16{8123},
 	}
-	profile, err := confine.BuildProfile(narrowed)
+	profile, err := confine.BuildSeatbeltProfile(narrowed)
 	testutil.FailErr(t, "build narrowed browser profile", err)
 	if !strings.Contains(profile, `(allow network-outbound (remote ip "localhost:8123"))`) {
 		t.Fatalf("narrowed browser profile missing its reviewed port:\n%s", profile)
@@ -52,7 +52,7 @@ func TestBrowserProfileFollowsTheRequestedLoopbackPorts(t *testing.T) {
 		Roots: []string{"/proj"}, Network: confine.NetworkDeny,
 		Browser: true, LoopbackConnect: true,
 	}
-	floor, err := confine.BuildProfile(floorC)
+	floor, err := confine.BuildSeatbeltProfile(floorC)
 	testutil.FailErr(t, "build browser floor profile", err)
 	if !strings.Contains(floor, `(allow network-outbound (remote ip "localhost:*"))`) {
 		t.Fatalf("browser floor lost local reach:\n%s", floor)

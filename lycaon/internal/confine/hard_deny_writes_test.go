@@ -70,11 +70,11 @@ func TestBuildProfileDeniesControlPlaneSubtreeWithWorkspaceAllowBack(t *testing.
 	draft := filepath.Join(cfgResolved, "drafts", "d1")
 	testutil.FailErr(t, "mkdir draft", os.MkdirAll(draft, 0o700))
 
-	p, err := confine.BuildProfile(confine.Confinement{
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{
 		Roots:             []string{"/proj"},
 		GrantedWriteRoots: []string{draft},
 	})
-	testutil.FailErr(t, "BuildProfile", err)
+	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 	denyWrite, denyAt := profileBlock(t, p, blockDenyWrite, 0)
 	assertBlockMentions(t, denyWrite, cfgResolved, "control-plane subtree deny")
 	tail := p[denyAt+len(denyWrite):]
@@ -87,8 +87,8 @@ func TestBuildProfileRendersHardDenyWrites(t *testing.T) {
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 	proj := "/proj"
-	p, err := confine.BuildProfile(confine.Confinement{Roots: []string{proj}})
-	testutil.FailErr(t, "BuildProfile", err)
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{proj}})
+	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 	// Each entry must appear in the deny block.
 	denyWrite, _ := profileBlockContaining(t, p, blockDenyWrite, "approvals.yaml")
 	assertBlockMentions(t, denyWrite, "approvals.yaml", "write hard-deny")
@@ -110,12 +110,12 @@ func TestReviewedWriteRootOverridesBaselineButNotProtectedOrAgentPolicy(t *testi
 	readRoot := filepath.Join(home, "reviewed-read-root")
 	project := t.TempDir()
 	sink := filepath.Join(project, settingsoverlay.DirName(), settingsoverlay.BasenameApprovals)
-	p, err := confine.BuildProfile(confine.Confinement{
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{
 		Roots: []string{project}, ReadRoots: []string{readRoot},
 		GrantedWriteRoots:    []string{readRoot},
 		ProtectedWriteGrants: []confine.ProtectedPathGrant{{ResolvedPath: sink}},
 	})
-	testutil.FailErr(t, "BuildProfile", err)
+	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 
 	firstDeny, firstDenyAt := profileBlock(t, p, blockDenyWrite, 0)
 	assertBlockCoversPath(t, firstDeny, readRoot, "baseline read-root deny")
@@ -227,8 +227,8 @@ func shellSingleQuote(s string) string {
 }
 
 func TestBuildProfileOmitsPrivateVarFoldersWriteRoot(t *testing.T) {
-	p, err := confine.BuildProfile(confine.Confinement{Roots: []string{"/proj"}})
-	testutil.FailErr(t, "BuildProfile", err)
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
+	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 	// The path must not appear in the write-root allow block.
 	allowWrite, _ := profileBlock(t, p, blockAllowWrite, 0)
 	assertBlockOmitsPath(t, allowWrite, "/private/var/folders", "write-root allow")

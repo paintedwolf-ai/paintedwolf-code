@@ -17,7 +17,7 @@ func TestBuildProfileRefusesUnresolvableControlPlaneReadFloor(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", "")
 	t.Setenv("HOME", "")
 
-	p, err := confine.BuildProfile(confine.Confinement{Roots: []string{"/proj"}})
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
 	if err == nil {
 		t.Fatalf("unresolvable control-plane read floor built a profile instead of refusing:\n%s", p)
 	}
@@ -33,7 +33,7 @@ func TestBuildProfileRefusesUnresolvableKeyMaterialReadFloor(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	t.Setenv("HOME", "")
 
-	p, err := confine.BuildProfile(confine.Confinement{Roots: []string{"/proj"}})
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
 	if err == nil {
 		t.Fatalf("unresolvable key-material read floor built a profile instead of refusing:\n%s", p)
 	}
@@ -49,7 +49,7 @@ func TestReadDenyOptOutStillRequiresKeyMaterialFloor(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", "")
 	t.Setenv("HOME", "")
 
-	if p, err := confine.BuildProfile(confine.Confinement{Roots: []string{"/proj"}}); err == nil {
+	if p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}}); err == nil {
 		t.Fatalf("opt-out skipped the key-material precondition and built a profile:\n%s", p)
 	}
 }
@@ -60,8 +60,8 @@ func TestBuildProfileStillBuildsWhenReadFloorResolves(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 
-	p, err := confine.BuildProfile(confine.Confinement{Roots: []string{"/proj"}})
-	testutil.FailErr(t, "confine.BuildProfile failed", err)
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
+	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
 	if !strings.Contains(p, "(deny file-read*") {
 		t.Fatalf("resolvable floor produced no read-deny block:\n%s", p)
 	}

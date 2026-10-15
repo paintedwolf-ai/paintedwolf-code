@@ -157,6 +157,17 @@ class ChangedCoverageTests(unittest.TestCase):
             blocks = coverage_changes.read_go_profile(profile, "example.com/m")
         self.assertEqual(sorted(blocks["lycaon/internal/a/a.go"]), [("3.10", "5.2", 2, True), ("7.1", "7.9", 1, False)])
 
+    def test_go_run_collects_child_counters_and_runs_uncached(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(coverage_changes, "artifact_root", return_value=root), \
+                    patch.object(coverage_changes.subprocess, "call", return_value=1) as call:
+                self.assertIsNone(coverage_changes.measure_go("probe", {"example.com/m/a"}, {"example.com/m/a"}, "example.com/m"))
+            command, env = call.call_args.args[0], call.call_args.kwargs["env"]
+            self.assertIn("-count=1", command)
+            self.assertEqual(env["PW_GO_CHILD_COVERDIR"], str(root / "coverage" / "probe-children"))
+            self.assertIsNone(coverage_changes.children_profile(root / "coverage" / "probe-children", root / "out"))
+
     def test_den_changed_run_asks_the_config_not_the_cli_to_ignore_rerun_triggers(self):
         # Vitest's CLI rejects unknown options, so a rerun-trigger override must reach vitest.config.ts.
         changed = "lycaon-den/src/App.tsx"

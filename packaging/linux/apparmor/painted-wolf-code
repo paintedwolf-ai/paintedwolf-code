@@ -1,0 +1,16 @@
+# AppArmor profile for Painted Wolf Code.
+#
+# Ubuntu 24.04 and later restrict unprivileged user namespaces to programs
+# whose profile grants them. The engine creates one for every confined
+# command, so the package installs this profile. It grants user namespaces to
+# the installed executables and nothing else: the per-command sandbox is the
+# engine's own boundary, built from the namespaces this profile permits.
+abi <abi/4.0>,
+
+include <tunables/global>
+
+profile painted-wolf-code /opt/painted-wolf-code/** flags=(unconfined) {
+  userns,
+
+  include if exists <local/painted-wolf-code>
+}

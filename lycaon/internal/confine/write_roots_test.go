@@ -10,12 +10,12 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestWriteRootsForProjectMatchesBuildProfile(t *testing.T) {
+func TestWriteRootsForProjectMatchesBuildSeatbeltProfile(t *testing.T) {
 	proj := t.TempDir()
 	t.Setenv("LYCAON_SANDBOX_WRITE_ROOTS", "/opt/customcache-1451")
 	roots := confine.WriteRootsForProject("", []string{proj})
-	profile, err := confine.BuildProfile(confine.Confinement{Roots: []string{proj}})
-	testutil.FailErr(t, "BuildProfile", err)
+	profile, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{proj}})
+	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 	// Scoped to the write-allow block: a root that appears only in a deny block is not
 	// a write root, and an unscoped Contains cannot tell the two apart.
 	allowWrite, _ := profileBlock(t, profile, blockAllowWrite, 0)

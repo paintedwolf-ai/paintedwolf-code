@@ -16,7 +16,7 @@ import (
 func enforceConfinement(t *testing.T) {
 	t.Helper()
 	if !confine.Available() {
-		t.Skip("Seatbelt confinement only on darwin")
+		t.Skip("this host applies no command confinement")
 	}
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")

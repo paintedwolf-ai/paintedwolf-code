@@ -64,6 +64,15 @@ runs:
       shell: bash
       run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
 
+    - name: Allow Go test binaries to create user namespaces
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        if [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" == 1 ]]; then
+          sudo install -m 0644 "$GITHUB_ACTION_PATH/apparmor-go-test-userns" /etc/apparmor.d/paintedwolf-go-test
+          sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-go-test
+        fi
+
     - name: Install Tauri Linux build dependencies
       if: runner.os == 'Linux' && inputs.setup == 'shell'
       shell: bash

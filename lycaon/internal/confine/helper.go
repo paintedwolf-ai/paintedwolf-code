@@ -3,6 +3,7 @@
 package confine
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
 	"github.com/lycaon/lycaon/internal/lineage"
 )
 
@@ -21,12 +23,24 @@ func runHelperIfInvoked() {
 		return
 	}
 	if err := runHelper(os.Args[2:]); err != nil {
+		var unavailable interface{ UnavailableJSON() string }
+		if errors.As(err, &unavailable) {
+			// The typed reason lets the host say what the kernel lacks.
+			fmt.Fprint(os.Stderr, HelperStderrPrefix+linuxsandbox.UnavailableMarker+unavailable.UnavailableJSON()+"\n")
+			exitHelper(HelperUnavailableExit)
+		}
 		fmt.Fprint(os.Stderr, HelperStderrPrefix+err.Error()+"\n")
 		if IsCommandNotFound(err) {
-			os.Exit(CommandNotFoundExit)
+			exitHelper(CommandNotFoundExit)
 		}
-		os.Exit(HelperFailureExit)
+		exitHelper(HelperFailureExit)
 	}
+}
+
+// exitHelper ends a helper process with code.
+func exitHelper(code int) {
+	linuxsandbox.FlushCoverage()
+	os.Exit(code)
 }
 
 // runHelper applies an inherited profile before replacing the process.
@@ -81,7 +95,7 @@ func runHelper(args []string) error {
 		}
 	}
 
-	// Resolve PATH before applying the profile.
+	// Resolve PATH before applying the boundary.
 	name := target[0]
 	resolved := name
 	if !strings.ContainsRune(name, '/') {
@@ -91,18 +105,8 @@ func runHelper(args []string) error {
 		}
 		resolved = p
 	}
-
-	if err := applySeatbelt(string(profile)); err != nil {
-		return err
-	}
-	// Confirm kernel membership before transferring control.
-	if err := attestConfined(); err != nil {
-		return err
-	}
-	if err := syscall.Exec(resolved, target, os.Environ()); err != nil {
-		return ClassifyExecError(resolved, err)
-	}
-	return nil
+	// The platform applies the boundary, confirms it, and runs the target.
+	return applyAndExec(profile, resolved, target)
 }
 
 // placeLineageMarker moves the inherited marker to lineage.ChildFD and clears

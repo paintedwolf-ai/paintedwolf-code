@@ -2,6 +2,7 @@ package contract
 
 import (
 	"go/ast"
+	"go/build/constraint"
 	"go/parser"
 	"go/token"
 	"os"
@@ -31,8 +32,8 @@ func TestHelperDispatchIsConfineInit(t *testing.T) {
 			continue
 		}
 		path := filepath.Join(dir, name)
-		f, parseErr := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
-		if parseErr != nil {
+		f, parseErr := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution|parser.ParseComments)
+		if parseErr != nil || onlyInHelperMainBuild(f) {
 			continue
 		}
 		for _, decl := range f.Decls {
@@ -66,6 +67,35 @@ func TestHelperDispatchIsConfineInit(t *testing.T) {
 		missing = append(missing, "Command does not refuse IsHelperInvocation with ErrNestedHelper")
 	}
 	contractcheck.FailViolations(t, "confine helper dispatch", missing)
+}
+
+// onlyInHelperMainBuild reports a file only the confinehelpermain build
+// compiles: the coverage build of the helper, which dispatches from its own
+// main. Every other build, on any platform, dispatches from init.
+func onlyInHelperMainBuild(f *ast.File) bool {
+	for _, group := range f.Comments {
+		if group.Pos() >= f.Package {
+			break
+		}
+		for _, c := range group.List {
+			expr, err := constraint.Parse(c.Text)
+			if err != nil {
+				continue
+			}
+			return requiresTag(expr, "confinehelpermain")
+		}
+	}
+	return false
+}
+
+func requiresTag(e constraint.Expr, tag string) bool {
+	switch x := e.(type) {
+	case *constraint.TagExpr:
+		return x.Tag == tag
+	case *constraint.AndExpr:
+		return requiresTag(x.X, tag) || requiresTag(x.Y, tag)
+	}
+	return false
 }
 
 func TestEnableAutoConfineIsProductionOptIn(t *testing.T) {

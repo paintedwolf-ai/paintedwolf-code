@@ -64,13 +64,12 @@ func LaunchHeadless(ctx context.Context, opts LaunchOptions) (*rod.Browser, func
 	launchCtx, cancel := context.WithTimeout(ctx, RasterizeTimeout)
 	defer cancel()
 
-	l := newHeadlessLauncher(launchCtx, resolved.Path, profileDir, opts.DisableJS)
-
 	conf, confined, err := browserBoundary(append(opts.attachedWriteRoots(), profileDir))
 	if err != nil {
 		_ = os.RemoveAll(profileDir)
 		return nil, nil, err
 	}
+	l := newHeadlessLauncher(launchCtx, resolved.Path, profileDir, opts.DisableJS, confined)
 
 	var (
 		controlURL string
@@ -151,13 +150,17 @@ func browserBoundary(roots []string) (*confine.Confinement, bool, error) {
 	return conf, confined, nil
 }
 
-func newHeadlessLauncher(ctx context.Context, browserPath, profileDir string, disableJS bool) *launcher.Launcher {
+// newHeadlessLauncher configures the pinned browser. Its own sandbox is turned
+// off only inside the host boundary, which already confines every browser
+// process and forbids the namespace and profile calls that sandbox makes;
+// launched without the boundary, the browser keeps its sandbox or fails.
+func newHeadlessLauncher(ctx context.Context, browserPath, profileDir string, disableJS, confined bool) *launcher.Launcher {
 	l := launcher.New().
 		Bin(browserPath).
 		// Reuse the resolved executable after confinement applies.
 		Set("browser-subprocess-path", browserPath).
 		Headless(true).
-		NoSandbox(true). // The host boundary supplies process confinement.
+		NoSandbox(confined).
 		UserDataDir(profileDir).
 		Set("disable-extensions", "true").
 		Set("disable-dev-shm-usage", "true").

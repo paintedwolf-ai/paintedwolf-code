@@ -23,11 +23,6 @@ import (
 // helperFlag marks the confined re-exec path.
 const helperFlag = "__confine-exec"
 
-func init() {
-	// Helper argv is handled here, before main.
-	runHelperIfInvoked()
-}
-
 // helperProfileFD receives the inherited profile stream.
 const (
 	profileFDFlag   = "--profile-fd"
@@ -372,26 +367,51 @@ func Command(
 	return cmd, cleanup, nil
 }
 
-// BuildProfile renders the platform confinement profile.
+// BuildProfile renders the boundary the helper applies on this platform: the
+// Seatbelt profile on macOS, the boundary plan on Linux.
 func BuildProfile(c Confinement) (string, error) {
+	c, err := validateProfileInputs(c)
+	if err != nil {
+		return "", err
+	}
+	return renderProfile(c)
+}
+
+// BuildSeatbeltProfile renders the macOS profile for c. It is what BuildProfile
+// applies on macOS and renders on every platform, so the policy it expresses
+// can be read anywhere.
+func BuildSeatbeltProfile(c Confinement) (string, error) {
+	c, err := validateProfileInputs(c)
+	if err != nil {
+		return "", err
+	}
+	return renderSeatbeltProfile(c)
+}
+
+// validateProfileInputs settles the grants every platform's rendering reads.
+func validateProfileInputs(c Confinement) (Confinement, error) {
 	if c.HostExecution {
-		return "", fmt.Errorf("host execution has no sandbox profile")
+		return c, fmt.Errorf("host execution has no sandbox profile")
 	}
 	policy, err := ValidatePolicyWriteGrants(c.PolicyWriteGrants, c.Roots)
 	if err != nil {
-		return "", err
+		return c, err
 	}
 	c.PolicyWriteGrants = policy
 	normalized, err := normalizeSocketGrantList(c.SocketGrants)
 	if err != nil {
-		return "", err
+		return c, err
 	}
 	applied, dropped, err := validateSocketGrants(normalized)
 	if err != nil {
-		return "", err
+		return c, err
 	}
 	c.SocketGrants = applied
 	c.DroppedSocketGrants = append(append([]SocketGrantDrop(nil), c.DroppedSocketGrants...), dropped...)
+	return c, nil
+}
+
+func renderSeatbeltProfile(c Confinement) (string, error) {
 	var b strings.Builder
 	deny := denyReport(c.refusalTag)
 	b.WriteString("(version 1)\n")

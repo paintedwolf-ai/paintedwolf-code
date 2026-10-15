@@ -157,14 +157,37 @@ def merge_go_blocks(first, second):
 
 
 def measure_go(name, coverpkg, tested, module):
-    """Run short tests with coverage across packages; None when tests fail."""
+    """Run short tests with coverage across packages; None when tests fail.
+
+    go test points GOCOVERDIR at a directory of its own that it never merges,
+    so tests that run coverage builds of helpers send their counters to
+    PW_GO_CHILD_COVERDIR, and those join the profile. Tests run uncached so
+    every child runs."""
     profile = artifact_root(ROOT) / "coverage" / f"{name}.out"
     profile.parent.mkdir(parents=True, exist_ok=True)
     profile.unlink(missing_ok=True)
+    children = profile.parent / f"{name}-children"
+    shutil.rmtree(children, ignore_errors=True)
+    children.mkdir()
     code = subprocess.call(["bash", str(ROOT / "scripts" / "go-test-digest.sh"), "--name", "coverage:changes", "--",
-                            f"-coverpkg={','.join(sorted(coverpkg))}", f"-coverprofile={profile}", *sorted(tested)],
-                           cwd=GO_DIR)
-    return read_go_profile(profile, module) if code == 0 and profile.exists() else None
+                            "-count=1", f"-coverpkg={','.join(sorted(coverpkg))}", f"-coverprofile={profile}",
+                            *sorted(tested)],
+                           cwd=GO_DIR, env={**os.environ, "PW_GO_CHILD_COVERDIR": str(children)})
+    if code != 0 or not profile.exists():
+        return None
+    blocks = read_go_profile(profile, module)
+    child_profile = children_profile(children, profile.parent / f"{name}-children.out")
+    return merge_go_blocks(blocks, read_go_profile(child_profile, module)) if child_profile else blocks
+
+
+def children_profile(directory, out):
+    """The counters child processes wrote, as a text profile; None when none did."""
+    if not any(directory.glob("covcounters.*")):
+        return None
+    out.unlink(missing_ok=True)
+    converted = subprocess.run(["go", "tool", "covdata", "textfmt", f"-i={directory}", f"-o={out}"],
+                               cwd=GO_DIR, capture_output=True, text=True)
+    return out if converted.returncode == 0 and out.exists() else None
 
 
 def go_units(touched, blocks, lines, module):

@@ -92,8 +92,8 @@ func TestSeatbeltHostCapabilityBoundary(t *testing.T) {
 
 // The profile explicitly denies privileged host surfaces.
 func TestBuildProfileDeniesHostCapabilitySurfaces(t *testing.T) {
-	p, err := confine.BuildProfile(confine.Confinement{Roots: []string{"/proj"}})
-	testutil.FailErr(t, "confine.BuildProfile failed", err)
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
+	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
 	for _, want := range []string{
 		`(deny file-write*`,
 		`/dev/disk`,
