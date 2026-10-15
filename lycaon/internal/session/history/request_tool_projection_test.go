@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -77,5 +78,46 @@ func TestStructuredToolProjectionKeepsItsRecoveryCue(t *testing.T) {
 	content := projectRecordedToolBodies(t.Context(), []api.Message{row})[0].Content
 	if len(content) > 2048 || !strings.Contains(content, "recall(history=") || !strings.Contains(content, `"wire_compacted":true`) {
 		t.Fatalf("structured projection lost its cue, residue, or byte bound: %q", content)
+	}
+}
+
+func TestProjectedRecallKeepsOriginalRecoveryTarget(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	raw, err := json.Marshal(map[string]any{
+		"history": recall.HistoryPage{Format: "text", ThroughOrd: 4, Recorded: true,
+			Entries: []recall.HistoryEntry{{MessageID: "original-read", Ord: 4, Content: strings.Repeat("recorded bytes 😀 ", 1000), Runes: 17000}}},
+	})
+	testutil.FailErr(t, "encode original recall", err)
+	content := "[recall#1]\n" + string(raw)
+	original := api.Message{ID: "recall-result", Ord: 6, Role: api.MessageRoleTool, Origin: api.MessageOriginTool,
+		Content: content, TrustTier: api.ContentTrustTierUntrusted, Authority: api.ContentAuthorityNone,
+		EvidenceHandles: []string{"recall#1"}, ToolResult: &api.ToolResult{Tool: "recall", Content: content, Outcome: api.ToolResultOutcomeCompleted,
+			ToolArgs: map[string]any{"history": map[string]any{"message_id": "original-read", "format": "text"}}}}
+	projected := transcript.Project([]api.Message{original})
+	var row api.Message
+	for _, candidate := range projected {
+		if candidate.ID == original.ID {
+			row = candidate
+		}
+	}
+	if !row.ModelProjected || row.Content == content {
+		t.Fatal("fixture did not cross model projection")
+	}
+	result := projectRecordedToolBodies(t.Context(), []api.Message{row})[0]
+	_, body, _, ok := hostmarker.SplitToolJSONBody(result.Content)
+	if !ok || len(result.Content) > 2048 {
+		t.Fatal("fitting discarded the canonical recall page")
+	}
+	var recovered struct {
+		History     recall.HistoryPage         `json:"history"`
+		NextRequest recall.HistoryContinuation `json:"next_request"`
+	}
+	testutil.FailErr(t, "decode fitted model-ready recall", json.Unmarshal([]byte(body), &recovered))
+	if len(recovered.History.Entries) != 1 || recovered.History.Entries[0].MessageID != "original-read" ||
+		recovered.NextRequest.History.MessageID != "original-read" || recovered.NextRequest.History.Offset != utf8.RuneCountInString(recovered.History.Entries[0].Content) {
+		t.Fatal("fitting redirected recovery to the recall wrapper or skipped source bytes")
+	}
+	if original.Content != content || original.ToolResult.Content != content {
+		t.Fatal("fitting changed canonical bytes")
 	}
 }

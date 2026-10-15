@@ -21,11 +21,15 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message) []api.Me
 			out = append(out, row)
 			continue
 		}
-		content, fitted, isHistory := projectRecallHistoryPage(ctx, row.Content, 2048, row.ToolResult.ToolArgs)
+		raw := row.Content
+		if row.ModelProjected {
+			raw = row.ToolResult.Content
+		}
+		content, fitted, isHistory := projectRecallHistoryPage(ctx, raw, 2048, row.ToolResult.ToolArgs)
 		if !fitted {
 			record := recall.HistoryRequest{ThroughOrd: row.Ord, MessageID: row.ID,
 				SourceSeq: row.Seq, Format: "text", BodyRunes: 4096}
-			raw, err := json.Marshal(struct {
+			envelope, err := json.Marshal(struct {
 				Compacted bool                  `json:"compacted"`
 				Outcome   api.ToolResultOutcome `json:"outcome,omitempty"`
 				Record    recall.HistoryRequest `json:"record_request"`
@@ -34,7 +38,7 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message) []api.Me
 				out = append(out, row)
 				continue
 			}
-			content = string(raw)
+			content = string(envelope)
 			historyJSON, err := json.Marshal(record)
 			if err == nil {
 				if rendered, err := guidance.RenderGuidance(ctx, "compaction/tool-result-reference", map[string]any{
@@ -45,7 +49,7 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message) []api.Me
 				}
 			}
 			if !isHistory {
-				if partial, fitted := tooloutput.FitWireJSON(row.Content, 2048-len(content)-1); fitted {
+				if partial, fitted := tooloutput.FitWireJSON(raw, 2048-len(content)-1); fitted {
 					content += "\n" + partial
 				}
 			}
