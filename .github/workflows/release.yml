@@ -160,16 +160,21 @@ jobs:
             ./task release:preflight
           fi
       - name: Check out the release controller
+        if: ${{ !cancelled() }}
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
           path: .release-controller
           fetch-depth: 0
           persist-credentials: false
+      - name: Provision release controller inputs
+        working-directory: .release-controller
+        run: |
+          ./task setup-dev -- --ci-inputs
+          ./task gitengine:fetch
       - name: Enforce published stable compatibility
         env:
           BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}
-          LYCAON_ENGINE_ROOT: ${{ github.workspace }}/lycaon-den/src-tauri/engine-root
         working-directory: .release-controller
         run: |
           export PW_ARTIFACT_ROOT="$(python3 "${GITHUB_WORKSPACE}/scripts/artifact_paths.py" artifacts "${GITHUB_WORKSPACE}")"

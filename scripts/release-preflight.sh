@@ -35,7 +35,7 @@ done
 
 if [[ "${COMPATIBILITY_ONLY}" -eq 1 ]]; then
   [[ -n "${BASELINE_REF}" && -d "${SOURCE_ROOT}" ]] || usage
-  (cd "${ROOT}/lycaon" && LYCAON_ENGINE_ROOT="${LYCAON_ENGINE_ROOT:-${SOURCE_ROOT}/lycaon-den/src-tauri/engine-root}" \
+  (cd "${ROOT}/lycaon" && LYCAON_ENGINE_ROOT="${LYCAON_ENGINE_ROOT:-${ROOT}/lycaon-den/src-tauri/engine-root}" \
     go run ./cmd/codegen-workflow-archive --check-all --baseline "${BASELINE_REF}" --repo-root "${SOURCE_ROOT}")
   candidate_version="$(tr -d '[:space:]' < "${SOURCE_ROOT}/VERSION")"
   candidate_build="$(python3 "${SOURCE_ROOT}/scripts/artifact_paths.py" build "${SOURCE_ROOT}")"
@@ -46,6 +46,7 @@ if [[ "${COMPATIBILITY_ONLY}" -eq 1 ]]; then
   exit 0
 fi
 [[ -z "${SOURCE_ROOT}" ]] || usage
+"${ROOT}/task" build:lycaon-dev
 
 for need in jq awk python3 bun; do
   command -v "${need}" >/dev/null 2>&1 || {

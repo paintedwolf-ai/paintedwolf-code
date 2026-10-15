@@ -1708,8 +1708,6 @@ tasks:
 
   release:preflight:
     desc: 'Validate version, updater, brand, and optional corpus identity and integrity against the current engine'
-    deps:
-      - build:lycaon-dev
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-preflight.sh {{.CLI_ARGS}}
 
