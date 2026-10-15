@@ -2,14 +2,11 @@ package toolfeedback
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
@@ -52,7 +49,7 @@ func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
 			reject: &toolrejection.ToolReject{Code: "COMMAND_DUPLICATE_RUNNING", Data: map[string]any{
 				"handles": []string{"command-1"}, "handles_text": "command-1",
 			}},
-			want: []string{"command-1", "command_output"},
+			want: []string{"command-1", "observed exit"},
 		},
 		{
 			tool:   "command",
@@ -152,34 +149,35 @@ func TestSandboxCapabilityRejectsRenderGuidance(t *testing.T) {
 	}
 }
 
-func TestCommandFailureSourceEvidenceIsConditional(t *testing.T) {
+func TestDuplicateCommandRecoveryRequiresOfferedControlsAndObservedExit(t *testing.T) {
 	bp := stockBlockPlane(t)
-	for _, known := range []bool{false, true} {
-		err := bp.RejectObservation(t.Context(), "command", "coordinator", map[string]any{"command": "test -f ready.txt"}, &toolrejection.ToolReject{Code: "COMMAND_FAILURE_LOOP", Data: map[string]any{"command": "test -f ready.txt", "count": 3, "failure_source_unchanged": known}})
-		if err == nil {
-			t.Fatal("missing loop rejection")
-		}
-		refusal, ok := guidance.RefusalFromError(err)
-		if !ok {
-			t.Fatalf("not a structured refusal: %T", err)
-		}
-		result := guidance.ComposeToolResult(refusal.Body, refusal.Facts, nil)
-		result.Tool = "command"
-		result.ToolCallID = "failed-call"
-		projected := transcript.Project([]api.Message{{ID: "failure", Role: api.MessageRoleTool, Content: result.Content, ToolResult: result}})
-		wire, marshalErr := json.Marshal(projected)
-		if marshalErr != nil {
-			t.Fatalf("marshal provider projection: %v", marshalErr)
-		}
-		if !strings.Contains(string(wire), "failure_source_unchanged") {
-			t.Fatalf("provider lost source fact: %s", wire)
-		}
-		text := err.Error()
-		if strings.Contains(text, "workspace source is unchanged") != known || strings.Contains(text, "cannot authorize a source-only retry") == known {
-			t.Fatalf("known=%v: %s", known, text)
-		}
-		if !strings.Contains(text, "does not prove the cause is fixed") {
-			t.Fatalf("overstated source evidence: %s", text)
+	for _, tool := range []string{"command", "verify"} {
+		for offered := 0; offered < 4; offered++ {
+			names := []string{}
+			if offered&1 != 0 {
+				names = append(names, "command_output")
+			}
+			if offered&2 != 0 {
+				names = append(names, "command_stop")
+			}
+			ctx := tools.WithRecoveryTools(t.Context(), names)
+			err := bp.RejectObservation(ctx, tool, "implement", nil, &toolrejection.ToolReject{
+				Code: "COMMAND_DUPLICATE_RUNNING", Data: map[string]any{"handles_text": "command-1", "can_command_output": true, "can_command_stop": true},
+			})
+			if err == nil {
+				t.Fatal("duplicate command was not rejected")
+			}
+			text := err.Error()
+			for i, name := range []string{"command_output", "command_stop"} {
+				if strings.Contains(text, "`"+name+"`") != (offered&(1<<i) != 0) {
+					t.Errorf("%s offered=%v: %s", name, names, text)
+				}
+			}
+			for _, required := range []string{"command-1", "A stop request alone does not establish exit", "Do not reissue while the job is running", "preserve completed effects"} {
+				if !strings.Contains(text, required) {
+					t.Errorf("missing %q: %s", required, text)
+				}
+			}
 		}
 	}
 }
