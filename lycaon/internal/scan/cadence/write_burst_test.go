@@ -167,12 +167,12 @@ func TestCadenceContinuousWritesCappedAtMaxDefer(t *testing.T) {
 	testutil.FailErr(t, "BaselineRoot", cadence.BaselineRoot(context.Background(), dir))
 	testutil.FailErr(t, "write file", os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main\n"), 0o644))
 	testutil.FailErr(t, "NoteWrites first", noteCadenceWrites(context.Background(), cadence, dir, []string{"main.go"}))
-	capDeadline := clock.Now().Add(cadence.cadenceCfg().MaxDefer())
+	capDeadline := clock.Now().Add(cadenceCfg(cadence).MaxDefer())
 
 	canonical, err := scanbase.CanonicalPath(dir)
 	testutil.FailErr(t, "CanonicalPath", err)
 	// The maximum wait makes continuous writes eligible for capture.
-	step := cadence.cadenceCfg().WriteBurstSettle() / 2
+	step := cadenceCfg(cadence).WriteBurstSettle() / 2
 	for clock.Now().Add(step).Before(capDeadline) {
 		clock.Advance(step)
 		testutil.FailErr(t, "NoteWrites loop", noteCadenceWrites(context.Background(), cadence, dir, []string{"main.go"}))

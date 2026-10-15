@@ -13,8 +13,12 @@ import (
 
 // SecurityOverview reports the project baseline, full passes, and scanner readiness.
 func (c *Service) SecurityOverview(ctx context.Context, projectDir string, labels map[string]string) (api.SecurityOverview, error) {
-	out := api.SecurityOverview{Enabled: c.securityOn(), Scanners: []api.SecurityScannerState{}}
-	if !c.configured() {
+	return buildSecurityOverview(ctx, c, projectDir, labels)
+}
+
+func buildSecurityOverview(ctx context.Context, c *Service, projectDir string, labels map[string]string) (api.SecurityOverview, error) {
+	out := api.SecurityOverview{Enabled: securityOn(c), Scanners: []api.SecurityScannerState{}}
+	if !configured(c) {
 		return out, nil
 	}
 	canonical, err := scanbase.CanonicalPath(projectDir)
@@ -113,8 +117,7 @@ func applySeriesReadiness(state *api.SecurityScannerState, row scanbase.SeriesRo
 	state.PassSuperseded = covered != "" && current != "" && covered != current
 }
 
-// currentFullPasses picks, from passes newest first, the newest unfinished
-// pass and the newest finished one.
+// currentFullPasses selects the newest unfinished and newest finished passes.
 func currentFullPasses(passes []scanbase.FullPass) (running, last *scanbase.FullPass) {
 	for i := range passes {
 		if passes[i].Finished() {

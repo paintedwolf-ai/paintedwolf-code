@@ -10,30 +10,30 @@ import (
 
 // OnTerminal settles the series; its store notification wakes the cadence runner.
 func (c *Service) OnTerminal(ctx context.Context, scan api.CodeScan) {
-	if !c.configured() {
+	if !configured(c) {
 		return
 	}
-	if err := c.settleTerminal(ctx, scan); err != nil {
+	if err := (seriesPlanner{c: c}).settleTerminal(ctx, scan); err != nil {
 		slog.WarnContext(ctx, "settle scan series", "scan_id", scan.ID, "error", err)
 		return
 	}
 }
 
-func (c *Service) settleTerminal(ctx context.Context, scan api.CodeScan) error {
-	behind := scan.Status == api.CodeScanStatusComplete && c.scanGenerationBehind(ctx, scan)
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	row, err := c.Store.SeriesByActiveScan(ctx, scan.ID)
+func (p seriesPlanner) settleTerminal(ctx context.Context, scan api.CodeScan) error {
+	behind := scan.Status == api.CodeScanStatusComplete && p.scanGenerationBehind(ctx, scan)
+	p.c.mu.Lock()
+	defer p.c.mu.Unlock()
+	row, err := p.c.Store.SeriesByActiveScan(ctx, scan.ID)
 	if err != nil || row == nil {
 		return err
 	}
-	if selected, known := c.seriesSelected(ctx, *row); known && !selected {
-		return c.Store.DeleteSeries(ctx, row.CanonicalPath, row.ScannerID)
+	if selected, known := p.seriesSelected(ctx, *row); known && !selected {
+		return p.c.Store.DeleteSeries(ctx, row.CanonicalPath, row.ScannerID)
 	} else if !known {
 		slog.WarnContext(ctx, "scanner selection unreadable; keeping cadence series rather than deleting it",
 			"component", "scan_cadence", "path", row.CanonicalPath, "scanner_id", row.ScannerID)
 	}
-	now := c.now()
+	now := nowUTC(p.c)
 	completedAt := now
 	if scan.CompletedAt != nil {
 		completedAt = scan.CompletedAt.UTC()
@@ -51,15 +51,15 @@ func (c *Service) settleTerminal(ctx context.Context, scan api.CodeScan) error {
 		}
 		if behind && !row.WantsDispatch() {
 			row.DesiredTrigger = api.ScanTriggerAuthorityRefresh
-			c.armSeries(row, now, 0)
+			p.arm(row, now, 0)
 		}
 	}
-	return c.Store.UpsertSeries(ctx, *row)
+	return p.c.Store.UpsertSeries(ctx, *row)
 }
 
 // An empty registry result can indicate a read failure; unknown selection preserves the series.
-func (c *Service) seriesSelected(ctx context.Context, row scanbase.SeriesRow) (selected bool, known bool) {
-	scanners := scanbase.ListSelectedScanners(ctx, c.Registry, row.CanonicalPath)
+func (p seriesPlanner) seriesSelected(ctx context.Context, row scanbase.SeriesRow) (selected bool, known bool) {
+	scanners := scanbase.ListSelectedScanners(ctx, p.c.Registry, row.CanonicalPath)
 	if len(scanners) == 0 {
 		return false, false
 	}
@@ -71,8 +71,8 @@ func (c *Service) seriesSelected(ctx context.Context, row scanbase.SeriesRow) (s
 	return false, true
 }
 
-func (c *Service) scanGenerationBehind(ctx context.Context, scan api.CodeScan) bool {
-	store := c.Coordinator.SnapshotStore()
+func (p seriesPlanner) scanGenerationBehind(ctx context.Context, scan api.CodeScan) bool {
+	store := p.c.Coordinator.SnapshotStore()
 	if store == nil || scan.SourceSnapshotID == "" {
 		return false
 	}
@@ -84,20 +84,20 @@ func (c *Service) scanGenerationBehind(ctx context.Context, scan api.CodeScan) b
 	return refresh
 }
 
-func (c *Service) reconcileActiveSeries(ctx context.Context) {
-	rows, err := c.Store.ListActiveSeries(ctx)
+func (p seriesPlanner) reconcileActive(ctx context.Context) {
+	rows, err := p.c.Store.ListActiveSeries(ctx)
 	if err != nil {
 		slog.WarnContext(ctx, "list active scan series", "error", err)
 		return
 	}
 	for _, row := range rows {
-		scan, getErr := c.Store.Get(ctx, row.ActiveScanID)
+		scan, getErr := p.c.Store.Get(ctx, row.ActiveScanID)
 		if getErr != nil {
 			slog.WarnContext(ctx, "read active scan series member", "scan_id", row.ActiveScanID, "error", getErr)
 			continue
 		}
 		if scan != nil && scanbase.StatusTerminal(scan.Status) {
-			c.OnTerminal(ctx, *scan)
+			p.c.OnTerminal(ctx, *scan)
 		}
 	}
 }

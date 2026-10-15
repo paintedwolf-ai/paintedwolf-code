@@ -29,16 +29,16 @@ func (c *Service) PublishObligation(ctx context.Context, plan obligation.Plan) e
 	if plan.CanonicalPath == "" {
 		return nil
 	}
-	return c.dropDesiredPaths(ctx, plan.CanonicalPath, plan.ScannerID, plan.ChangedPaths)
+	return (seriesPlanner{c: c}).dropDesiredPaths(ctx, plan.CanonicalPath, plan.ScannerID, plan.ChangedPaths)
 }
 
-func (c *Service) dropDesiredPaths(ctx context.Context, canonical, scannerID string, paths []string) error {
+func (p seriesPlanner) dropDesiredPaths(ctx context.Context, canonical, scannerID string, paths []string) error {
 	if len(paths) == 0 || scannerID == "" {
 		return nil
 	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	row, err := c.Store.GetSeries(ctx, canonical, scannerID)
+	p.c.mu.Lock()
+	defer p.c.mu.Unlock()
+	row, err := p.c.Store.GetSeries(ctx, canonical, scannerID)
 	if err != nil || row == nil || row.DesiredPassID != "" {
 		return err
 	}
@@ -49,8 +49,8 @@ func (c *Service) dropDesiredPaths(ctx context.Context, canonical, scannerID str
 		row.MaxDueAt = time.Time{}
 		row.DesiredTrigger = ""
 	}
-	row.UpdatedAt = c.now()
-	return c.Store.UpsertSeries(ctx, *row)
+	row.UpdatedAt = nowUTC(p.c)
+	return p.c.Store.UpsertSeries(ctx, *row)
 }
 
 func formatDispatchFailures(failures []dispatchFailure) error {

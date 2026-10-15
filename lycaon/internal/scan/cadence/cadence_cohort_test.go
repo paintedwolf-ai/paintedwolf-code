@@ -51,7 +51,7 @@ func TestCadenceAssessmentMembersKeepTheirOwnDeltaAndTrigger(t *testing.T) {
 				testutil.FailErr(t, "retain scanner state", store.UpsertSeries(ctx, *row))
 			}
 			clock.Advance(5 * time.Second)
-			records, failures := cadence.dispatchRoot(ctx, canonical)
+			records, failures := (rootDispatcher{c: cadence}).dispatchRoot(ctx, canonical)
 			if len(failures) != 0 || len(records) != 3 {
 				t.Fatalf("dispatch records=%d failures=%+v; want all three scanners admitted without retries", len(records), failures)
 			}

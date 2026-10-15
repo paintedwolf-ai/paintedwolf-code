@@ -13,32 +13,39 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// IgnoreService serves finding ledger queries and project ignore rules.
+type IgnoreService struct {
+	Store *scanbase.SQLStore
+	// OverlayRootsApply selects trusted roots whose scan settings apply; nil disables overlays.
+	OverlayRootsApply func(ctx context.Context, rootPaths []string) []string
+}
+
 // ignoreRoots returns the overlay roots the trust gate admits. An untrusted
 // project contributes no ignores.
-func (c *Service) ignoreRoots(ctx context.Context, projectDir string) ([]string, error) {
+func (s *IgnoreService) ignoreRoots(ctx context.Context, projectDir string) ([]string, error) {
 	if err := settingsoverlay.CheckFormat(projectDir); err != nil {
 		return nil, err
 	}
-	if c == nil || c.OverlayRootsApply == nil {
+	if s == nil || s.OverlayRootsApply == nil {
 		return nil, nil
 	}
-	return c.OverlayRootsApply(ctx, []string{projectDir}), nil
+	return s.OverlayRootsApply(ctx, []string{projectDir}), nil
 }
 
 // ListIgnores reports the catalog with each entry's current ledger match count.
-func (c *Service) ListIgnores(ctx context.Context, projectDir string) (*api.FindingIgnoreListResponse, error) {
-	if c == nil || c.Store == nil {
+func (s *IgnoreService) ListIgnores(ctx context.Context, projectDir string) (*api.FindingIgnoreListResponse, error) {
+	if s == nil || s.Store == nil {
 		return nil, fmt.Errorf("scan cadence not configured")
 	}
 	canonical, err := scanbase.CanonicalPath(projectDir)
 	if err != nil {
 		return nil, err
 	}
-	roots, err := c.ignoreRoots(ctx, projectDir)
+	roots, err := s.ignoreRoots(ctx, projectDir)
 	if err != nil {
 		return nil, err
 	}
-	catalog, matches, err := c.Store.IgnoreMatches(ctx, canonical, roots)
+	catalog, matches, err := s.Store.IgnoreMatches(ctx, canonical, roots)
 	if err != nil {
 		return nil, err
 	}
@@ -71,15 +78,15 @@ func (c *Service) ListIgnores(ctx context.Context, projectDir string) (*api.Find
 	return out, nil
 }
 
-func (c *Service) AddIgnore(ctx context.Context, projectDir string, entry api.FindingIgnoreEntry) (*api.FindingIgnoreListResponse, error) {
-	if c == nil || c.Store == nil {
+func (s *IgnoreService) AddIgnore(ctx context.Context, projectDir string, entry api.FindingIgnoreEntry) (*api.FindingIgnoreListResponse, error) {
+	if s == nil || s.Store == nil {
 		return nil, fmt.Errorf("scan cadence not configured")
 	}
 	canonical, err := scanbase.CanonicalPath(projectDir)
 	if err != nil {
 		return nil, err
 	}
-	roots, err := c.ignoreRoots(ctx, projectDir)
+	roots, err := s.ignoreRoots(ctx, projectDir)
 	if err != nil {
 		return nil, err
 	}
@@ -89,21 +96,21 @@ func (c *Service) AddIgnore(ctx context.Context, projectDir string, entry api.Fi
 	if _, err := scanignore.AddIgnoreEntry(projectDir, fromAPIIgnoreEntry(entry)); err != nil {
 		return nil, err
 	}
-	if err := c.Store.InvalidateIgnoreDigest(ctx, canonical); err != nil {
+	if err := s.Store.InvalidateIgnoreDigest(ctx, canonical); err != nil {
 		return nil, err
 	}
-	return c.ListIgnores(ctx, projectDir)
+	return s.ListIgnores(ctx, projectDir)
 }
 
-func (c *Service) RemoveIgnore(ctx context.Context, projectDir, id string) (*api.FindingIgnoreListResponse, error) {
-	if c == nil || c.Store == nil {
+func (s *IgnoreService) RemoveIgnore(ctx context.Context, projectDir, id string) (*api.FindingIgnoreListResponse, error) {
+	if s == nil || s.Store == nil {
 		return nil, fmt.Errorf("scan cadence not configured")
 	}
 	canonical, err := scanbase.CanonicalPath(projectDir)
 	if err != nil {
 		return nil, err
 	}
-	roots, err := c.ignoreRoots(ctx, projectDir)
+	roots, err := s.ignoreRoots(ctx, projectDir)
 	if err != nil {
 		return nil, err
 	}
@@ -127,10 +134,10 @@ func (c *Service) RemoveIgnore(ctx context.Context, projectDir, id string) (*api
 	if err := scanignore.RemoveIgnoreEntry(projectDir, fileID); err != nil {
 		return nil, err
 	}
-	if err := c.Store.InvalidateIgnoreDigest(ctx, canonical); err != nil {
+	if err := s.Store.InvalidateIgnoreDigest(ctx, canonical); err != nil {
 		return nil, err
 	}
-	return c.ListIgnores(ctx, projectDir)
+	return s.ListIgnores(ctx, projectDir)
 }
 
 func toAPIIgnoreEntry(entry scanignore.IgnoreEntry) api.FindingIgnoreEntry {
@@ -164,8 +171,8 @@ func fromAPIIgnoreEntry(entry api.FindingIgnoreEntry) scanignore.IgnoreEntry {
 }
 
 // FindingLedger pages a project's findings across every selected scanner.
-func (c *Service) FindingLedger(ctx context.Context, projectDir string, req api.FindingLedgerQueryRequest) (*api.FindingLedgerResponse, error) {
-	if c == nil || c.Store == nil {
+func (s *IgnoreService) FindingLedger(ctx context.Context, projectDir string, req api.FindingLedgerQueryRequest) (*api.FindingLedgerResponse, error) {
+	if s == nil || s.Store == nil {
 		return nil, fmt.Errorf("scan cadence not configured")
 	}
 	canonical, err := scanbase.CanonicalPath(projectDir)
@@ -173,12 +180,12 @@ func (c *Service) FindingLedger(ctx context.Context, projectDir string, req api.
 		return nil, err
 	}
 	// Re-apply ignores if the file changed, so hand edits apply without a rescan.
-	roots, err := c.ignoreRoots(ctx, projectDir)
+	roots, err := s.ignoreRoots(ctx, projectDir)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := c.Store.SyncIgnores(ctx, canonical, roots); err != nil {
+	if _, err := s.Store.SyncIgnores(ctx, canonical, roots); err != nil {
 		return nil, err
 	}
-	return c.Store.FindingLedger(ctx, canonical, req)
+	return s.Store.FindingLedger(ctx, canonical, req)
 }

@@ -49,7 +49,7 @@ func TestIgnoreCompatibilityCannotBeMaskedByTrustFiltering(t *testing.T) {
 	root := ledgerRoot(t)
 	testutil.FailErr(t, "create overlay", os.MkdirAll(settingsoverlay.Dir(root), 0o750))
 	testutil.FailErr(t, "write unmarked ignore file", os.WriteFile(projectignore.Path(root), []byte("version: 1\nfindings: []\n"), 0o644))
-	cadence := &Service{Store: ledgerFixture(t, root, "sast", "execution-1"),
+	cadence := &IgnoreService{Store: ledgerFixture(t, root, "sast", "execution-1"),
 		OverlayRootsApply: func(context.Context, []string) []string { return nil }}
 	if _, err := cadence.ListIgnores(t.Context(), root); !errors.Is(err, settingsoverlay.ErrFormatInvalid) {
 		t.Fatalf("trust filtering hid ignore incompatibility: %v", err)

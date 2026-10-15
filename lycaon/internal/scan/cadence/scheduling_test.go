@@ -52,7 +52,7 @@ func TestCadenceDeadlinesIgnoreWorkBlockedByActiveScan(t *testing.T) {
 		CanonicalPath: root, ScannerID: "mock", DueAt: time.Now().Add(-time.Second),
 		DesiredTrigger: api.ScanTriggerWriteBurst, DesiredPaths: []string{"main.go"},
 	}))
-	if delay := cadence.nextWake(t.Context(), time.Minute); delay != time.Minute {
+	if delay := (rootDispatcher{c: cadence}).nextWake(t.Context(), time.Minute); delay != time.Minute {
 		t.Fatalf("active scan kept dispatch hot: next wake %s", delay)
 	}
 	row, err := store.GetSeries(t.Context(), root, "mock")
@@ -60,7 +60,7 @@ func TestCadenceDeadlinesIgnoreWorkBlockedByActiveScan(t *testing.T) {
 	row.DispatchToken = "abandoned"
 	row.ClaimHeartbeatAt = time.Now().Add(-scanbase.DispatchClaimTTL + 2*time.Second)
 	testutil.FailErr(t, "record dispatch lease", store.UpsertSeries(t.Context(), *row))
-	if delay := cadence.nextWake(t.Context(), time.Minute); delay <= 0 || delay > 2*time.Second {
+	if delay := (rootDispatcher{c: cadence}).nextWake(t.Context(), time.Minute); delay <= 0 || delay > 2*time.Second {
 		t.Fatalf("dispatch recovery deadline = %s", delay)
 	}
 }
