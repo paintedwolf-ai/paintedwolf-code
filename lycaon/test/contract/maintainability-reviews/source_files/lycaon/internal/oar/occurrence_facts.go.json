@@ -5,12 +5,12 @@
   "workstream": "canonical-recall-recovery",
   "disposition": "retain",
   "reason": "This declaration table owns the typed occurrence vocabulary used by rule validation and rendering. Recall fault facts belong to that shared catalog. Retain the cohesive table at 397 measured lines, supported by owner-produced fault facts and the production OAR recovery matrix.",
-  "reviewed_commit": "b513343e081cb4a7e7b26f1ae9c45da9b9880f7e",
+  "reviewed_commit": "739064ed9e41e976120214060104befa4c6eaa7f",
   "ceiling": 397,
   "boundaries": {
     "lycaon/internal/oar/catalogue_test.go": "ce7b081696e3b9e013dadad7c1766919fc403ca541ba115c339f7a674ec7cbe2",
     "lycaon/internal/toolfeedback/recovery_tools_test.go": "d1316e9e6510a090d3ff910cbabf6250dacb6a42c9b1ec27bfc166c7c7ed5e78",
-    "lycaon/internal/tools/native/recall_test.go": "df46d882665723da5886f4af058469c77000b1491bdaaaa1eb28daa34825a0bd",
+    "lycaon/internal/tools/native/recall_test.go": "bffb8834ff05ddf1e98ce8622ac86d34dc8ec05b0e2fcc67c2f2c78bdf39e927",
     "lycaon/internal/toolfeedback/block_plane_reject_data_test.go": "3bbb56ccd41f25f325735ffae081c809c48fb87d935bb5f6837459b3bddc886c"
   }
 }
