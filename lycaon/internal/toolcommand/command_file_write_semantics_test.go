@@ -17,6 +17,8 @@ func TestFileWriteReplacementPreservesConsumerSemantics(t *testing.T) {
 		{"pipeline changes case", "cat | tr a-z A-Z > out.txt", "xy", false},
 		{"pipeline selects first line", "cat | head -n 1 > out.txt", "first\nsecond\n", false},
 		{"pipeline numbers lines", "cat | cat -n > out.txt", "xy\n", false},
+		{"producer discards pipeline stream", "cat > /dev/null | cat > out.txt", "xy", false},
+		{"producer appends to null before pipe", "cat >> /dev/null | cat > out.txt", "xy", false},
 		{"last redirect discards stream", "cat > out.txt > /dev/null", "xy", false},
 		{"empty command truncates only", "> out.txt", "xy", false},
 	}

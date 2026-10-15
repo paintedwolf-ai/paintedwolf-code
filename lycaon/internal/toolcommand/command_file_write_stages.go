@@ -118,8 +118,7 @@ func analyzeTwoStagePipelineFileWrite(
 	producerExact := false
 
 	if hasStream {
-		outPath, _, _, outConflicts := stageStdoutRedirect(producer.redirects, "", false)
-		if outPath == "" && !outConflicts {
+		if len(producer.redirects) == 0 {
 			producerPassThrough, producerExact = isPassThroughProducer(producer)
 		}
 	} else if depth > 0 {
