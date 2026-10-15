@@ -735,6 +735,14 @@ host_facts:
    type: bool
  - name: paintedwolf.tool_loadable
    type: bool
+ - name: paintedwolf.native_replacement_tools
+   type: list<string>
+ - name: paintedwolf.native_replacement_exact
+   type: bool
+ - name: paintedwolf.native_replacement_manual
+   type: bool
+ - name: paintedwolf.replacement_calls_available
+   type: bool
  - name: paintedwolf.tool_discovery_available
    type: bool
  - name: paintedwolf.offered_tools

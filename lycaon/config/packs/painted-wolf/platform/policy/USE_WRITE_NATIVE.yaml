@@ -15,6 +15,11 @@ requires:
   - paintedwolf.habit_redirect_match
   - paintedwolf.path
   - paintedwolf.tool_loadable
+  - paintedwolf.can_request_tools
+  - paintedwolf.native_replacement_tools
+  - paintedwolf.replacement_calls_available
+  - paintedwolf.native_replacement_exact
+  - paintedwolf.native_replacement_manual
   - paintedwolf.can_write
   - paintedwolf.can_task
 when: paintedwolf.rejection_code == "USE_WRITE_NATIVE"
@@ -23,8 +28,8 @@ copy:
   what: Shell file-writing redirection or stream piping{% if paintedwolf.path %} targeting `{{ paintedwolf.path }}`{% endif %} is not run through `{{ tool }}`.
   cause: The command uses a here-document, here-string, stdin stream, or output pipeline to create or overwrite a file instead of structured file authoring.
   why: Native `write` validates syntax on supported source files, enforces write scope and read-before-overwrite safety, and records file authorship without shell quoting or delimiter hazards.
-  fix: '{% if paintedwolf.can_write %}Use the supplied `replacement_calls` entries in order, or call `write` with `path` and full `content` (set `append` to `true` only when appending to an existing file){% if paintedwolf.path %} for `{{ paintedwolf.path }}`{% endif %}.{% else %}{% if paintedwolf.tool_loadable %}Call `request_tools` using the supplied `replacement_calls` entry (or set `need` to describe creating or replacing{% if paintedwolf.path %} `{{ paintedwolf.path }}`{% else %} the target file{% endif %}) so the file-authoring schema is loaded on the next model call, then retry.{% else %}{% if paintedwolf.can_task %}Dispatch `task` with a scoped brief, target paths, and completion criteria so an implementation worker creates or updates{% if paintedwolf.path %} `{{ paintedwolf.path }}`{% else %} the target file{% endif %}.{% else %}Use the currently offered schemas to complete the step, or report that this turn surface cannot author{% if paintedwolf.path %} `{{ paintedwolf.path }}`{% else %} files{% endif %}.{% endif %}{% endif %}{% endif %}'
-  instead: '{% if paintedwolf.can_write %}Use `write` (or the supplied `replacement_calls`) to author the file directly{% else %}{% if paintedwolf.tool_loadable %}Load the file-authoring schema with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.can_task %}Dispatch `task` so a worker authors the file in its branch{% else %}Use an offered tool or report that this surface cannot author files{% endif %}{% endif %}{% endif %}'
+  fix: '{% if paintedwolf.tool_loadable %}{% if paintedwolf.can_request_tools %}For each of these exact tool names: {{ paintedwolf.native_replacement_tools }}, call `request_tools` separately with `need` containing only that name. Its schemas arrive on the next model call; then perform the original operation using those native schemas. Loading grants no additional permissions.{% else %}No validated loading route is available from this call; use an appropriate offered capability or report the missing recovery context.{% endif %}{% else %}{% if paintedwolf.replacement_calls_available %}If `replacement_calls` are present, use all entries exactly and in order. If details were omitted, reconstruct the file-writing operation using the offered schemas; preserve its prerequisites and append or overwrite behavior.{% else %}{% if paintedwolf.native_replacement_exact %}No complete native replacement was validated for this call. Use another appropriate offered capability, or report that no complete validated recovery is available; do not perform only part of the operation.{% else %}{% if paintedwolf.can_write %}{% if paintedwolf.native_replacement_manual %}Call `write` with the intended `path` and full `content`; use `append` only for appending. No complete replacement recipe was validated{% if paintedwolf.path %} for `{{ paintedwolf.path }}`{% endif %}.{% else %}No validated manual file-authoring target is available from this call; use another appropriate offered capability or report the missing recovery context.{% endif %}{% else %}{% if paintedwolf.can_task %}Dispatch `task` with a scoped brief, target paths, and completion criteria for the file-authoring step.{% else %}Use an appropriate offered capability, or report that no validated file-authoring recovery is available from this call’s tool context.{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
+  instead: '{% if paintedwolf.tool_loadable %}{% if paintedwolf.can_request_tools %}Load `{{ paintedwolf.native_replacement_tools }}` before the file operation{% else %}No validated loading route is available from this call; use an appropriate offered capability or report the missing recovery context.{% endif %}{% else %}{% if paintedwolf.replacement_calls_available %}Use the complete replacement when present; preserve the operation and its prerequisites{% else %}{% if paintedwolf.native_replacement_exact %}Establish a complete validated route before performing the file operation{% else %}{% if paintedwolf.can_write %}{% if paintedwolf.native_replacement_manual %}Use `write` with the intended file contents{% else %}No validated manual file-authoring target is available from this call; use another appropriate offered capability or report the missing recovery context.{% endif %}{% else %}{% if paintedwolf.can_task %}Delegate the scoped file operation with `task`{% else %}Use an appropriate offered capability or report the missing recovery context{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_habit_redirect
 x-paintedwolf-message: Use native write instead of shell file redirection or tee
@@ -45,6 +50,8 @@ x-paintedwolf-scenarios:
     profile: coordinator
     tool: command
     tool_loadable: true
+    can_request_tools: true
+    native_replacement_tools: [write]
   expect_contains:
   - 'Rejected:'
   - 'Code: USE_WRITE_NATIVE'
