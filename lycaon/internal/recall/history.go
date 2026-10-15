@@ -143,26 +143,22 @@ func historyIndex(ctx context.Context, tx *sql.Tx, session string, h *HistoryReq
 	}
 	limit = min(limit, MaxLimit)
 	query := `SELECT id, ord, role, substr(` + historyPreview + `,1,120), length(` + historyPreview + `), COALESCE(evidence_handles_json,'[]'), seq
-  FROM messages WHERE session_id = ? AND ord > ? AND ord <= ? AND ` + historyVisible
-	args := []any{session, h.AfterOrd, h.ThroughOrd}
+  FROM messages WHERE session_id = ? AND ord > ? AND ord <= ? AND ` + historyVisible + ` ORDER BY ord LIMIT ?`
+	args := []any{session, h.AfterOrd, h.ThroughOrd, limit + 1}
 	if terms := strings.Fields(h.Search); len(terms) > 0 {
 		ftsTerms := make([]string, len(terms))
-		var likes strings.Builder
-		likeArgs := make([]any, 0, len(terms))
+		lowerTerms := make([]string, len(terms))
 		for i, term := range terms {
 			ftsTerms[i] = `"` + strings.ReplaceAll(term, `"`, `""`) + `"`
-			if i > 0 {
-				likes.WriteString(" AND ")
-			}
-			likes.WriteString(`instr(lower(` + historyPreview + ` || ' ' || ` + historySearchEnvelope + `), lower(?)) > 0`)
-			likeArgs = append(likeArgs, term)
+			lowerTerms[i] = strings.ToLower(term)
 		}
-		query += ` AND (rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?) OR (` + likes.String() + `))`
-		args = append(args, strings.Join(ftsTerms, " AND "))
-		args = append(args, likeArgs...)
+		termsJSON, _ := json.Marshal(lowerTerms)
+		query = `SELECT id, ord, role, substr(` + historyPreview + `,1,120), length(` + historyPreview + `), COALESCE(evidence_handles_json,'[]'), seq
+  FROM messages WHERE session_id = ? AND ord > ? AND ord <= ? AND ` + historyVisible + `
+  AND (rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?) OR NOT EXISTS (SELECT 1 FROM json_each(?) WHERE instr(lower(` + historyPreview + ` || ' ' || ` + historySearchEnvelope + `), value) = 0))
+  ORDER BY ord LIMIT ?`
+		args = []any{session, h.AfterOrd, h.ThroughOrd, strings.Join(ftsTerms, " AND "), string(termsJSON), limit + 1}
 	}
-	query += ` ORDER BY ord LIMIT ?`
-	args = append(args, limit+1)
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return err
