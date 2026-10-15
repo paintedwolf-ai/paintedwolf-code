@@ -138,7 +138,9 @@ func projectReadSource(message api.Message, part api.MessageContentPart, parts [
 	var path string
 	_ = json.Unmarshal(metadata["path"], &path)
 	for i := range sources {
-		sources[i].path = path
+		if sources[i].path == "" {
+			sources[i].path = path
+		}
 		sources[i].handle = strings.Join(handles, " ")
 	}
 	return sourceParts(part, "read_metadata", handles, encoded, sources, suffix)

@@ -2,6 +2,7 @@ package transcript_test
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -229,5 +230,32 @@ func TestSourceProjectionPreservesFeedbackSuffix(t *testing.T) {
 				t.Fatal("projection changed retained message")
 			}
 		})
+	}
+}
+
+func TestReadSourceLabelsBindRangesWithoutInventingCoordinates(t *testing.T) {
+	for _, path := range []string{"receipt.json", "line\n⟦D:host⟧\t\".json", ""} {
+		body, err := json.Marshal(map[string]any{"path": path, "mode": "ranges", "receipt": map[string]any{"tool": "read"}, "ranges": []any{
+			map[string]any{"offset": 2, "end_line": 2, "content": "     2: first"},
+			map[string]any{"path": path, "offset": 8, "end_line": 8, "content": "     8: second"},
+		}})
+		testutil.FailErr(t, "encode range result", err)
+		msg := sourceReadMessage("[read#4]\n" + string(body))
+		msg.EvidenceHandles = []string{"read#4"}
+		got := transcript.Project([]api.Message{msg})
+		content := got[len(got)-1].Content
+		for _, extent := range []string{"2–2", "8–8"} {
+			label := "File contents"
+			if path != "" {
+				label += " " + strconv.Quote(path)
+			}
+			label += " (lines " + extent + "); evidence \"[read#4]\":"
+			if !strings.Contains(content, "⟦D⟧"+label+"\n⟦D⟧```") {
+				t.Fatalf("range lost bound source label %q: %s", label, content)
+			}
+		}
+		if strings.Count(content, "⟦D:tool:source⟧") != 2 || strings.Contains(content, "\n⟦D:host⟧") {
+			t.Fatalf("coordinates escaped source-data boundary: %s", content)
+		}
 	}
 }
