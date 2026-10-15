@@ -24,6 +24,7 @@ import { ModelSlotPicker } from "./ModelSlotPicker.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
 import { DenCheckbox } from "../primitives/DenCheckbox.tsx";
 import { DenField } from "../primitives/DenField.tsx";
+import { SummarizerModelHint } from "./SummarizerModelHint.tsx";
 import { DenSelect } from "../primitives/DenSelect.tsx";
 
 type Props = {
@@ -100,7 +101,7 @@ export function ModelPolicyPanel(props: Props) {
  disabled={props.saving}
             label={MODELS_SETTINGS_COPY.liteSlotLabel}
             hint={
-              projectLocal() ? undefined : MODELS_SETTINGS_COPY.summarizerModelHint
+              projectLocal() ? undefined : <SummarizerModelHint />
             }
             providers={props.providers}
             roleSlot="lite"

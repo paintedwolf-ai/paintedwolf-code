@@ -137,6 +137,23 @@ describe("TabBar", () => {
     ).toBe("false");
   });
 
+  it("ends the rail in the window controls, outside the side slots and above the dock", () => {
+    render(() => (
+      <TabBar
+        tabs={tabs}
+        leading={<span data-testid="lead" />}
+        trailing={<span data-testid="trail" />}
+        dock={<span data-testid="dock-row" />}
+        windowControlsStart={<span data-testid="controls-start" />}
+        windowControlsEnd={<span data-testid="controls-end" />}
+      />
+    ));
+    const rail = screen.getByTestId("tabs").querySelector(".tabs__rail");
+    expect(rail?.firstElementChild).toBe(screen.getByTestId("controls-start"));
+    expect(rail?.lastElementChild).toBe(screen.getByTestId("controls-end"));
+    expect(rail?.contains(screen.getByTestId("dock-row"))).toBe(false);
+  });
+
   it("offers a tab label tooltip only for an icon chip whose label can disappear", () => {
     render(() => (
       <TabBar
