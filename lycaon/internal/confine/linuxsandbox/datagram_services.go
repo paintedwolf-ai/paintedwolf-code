@@ -8,10 +8,6 @@ import (
 	"strings"
 )
 
-// maxSnapshotRelays bounds the loopback relays opened at launch for the host's
-// datagram services.
-const maxSnapshotRelays = 256
-
 // boundDatagramSockets reads the bound sockets a /proc/net/udp or udp6 table
 // lists, by local address.
 func boundDatagramSockets(table string) []netip.AddrPort {

@@ -16,6 +16,16 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+const resolvConf = "/etc/resolv.conf"
+
+// resolverQueryTimeout bounds one relayed query.
+const resolverQueryTimeout = 5 * time.Second
+
+const (
+	handoffResolverUDP = "resolver_udp"
+	handoffResolverTCP = "resolver_tcp"
+)
+
 // handOffResolver binds the stub inside the sandbox, points resolv.conf at it
 // when the host names another resolver, and passes both sockets to the
 // supervisor. A host without resolv.conf names no resolver, so the sandbox

@@ -12,6 +12,10 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// maxSnapshotRelays bounds the loopback relays opened at launch for the host's
+// datagram services.
+const maxSnapshotRelays = 256
+
 // datagramRelays carries the sandbox's datagrams to the host's loopback
 // services and a granted datagram listener's from the host. Each relay pairs a
 // socket inside the sandbox, from the inner helper, with sockets of the outer
