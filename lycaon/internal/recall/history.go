@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -90,7 +91,7 @@ func (s *Service) history(ctx context.Context, req Request) (*Result, error) {
 	defer func() { _ = tx.Rollback() }()
 	var project string
 	if err := tx.QueryRowContext(ctx, "SELECT project_id FROM sessions WHERE id = ?", req.Caller.SessionID).Scan(&project); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return &Result{Resolution: ResolutionRecordDeleted, ScopeStated: "this session only", History: &HistoryPage{Recorded: true}}, nil
 		}
 		return nil, err
@@ -196,7 +197,7 @@ func historyBody(ctx context.Context, tx *sql.Tx, session string, h *HistoryRequ
 	row := tx.QueryRowContext(ctx, `SELECT id, ord, role, substr(`+text+`,?,?), length(`+text+`), COALESCE(evidence_handles_json,'[]'), seq
   FROM messages WHERE session_id = ? AND id = ? AND ord > ? AND ord <= ? AND `+historyVisible, h.Offset+1, width, session, h.MessageID, h.AfterOrd, h.ThroughOrd)
 	entry, err := scanHistoryEntry(row)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
 	if err != nil {
