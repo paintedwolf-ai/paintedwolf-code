@@ -72,6 +72,7 @@ func TestCompleteStreamDoesNotFailWhenAccountingIsUnavailable(t *testing.T) {
 }
 
 func TestCompleteStreamRecordsUsage(t *testing.T) {
+	observed := 0
 	projectID := eventFixtureProject(t)
 	tracker := costtest.NewTracker(t, nil)
 	hub := events.NewMemoryHub()

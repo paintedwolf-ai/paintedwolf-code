@@ -149,7 +149,7 @@ func newGatedUsageStreamLLM(usage modelcall.TokenUsage) *gatedUsageStreamLLM {
 }
 
 func (s *gatedUsageStreamLLM) Complete(context.Context, modelcall.CompletionRequest) (*modelcall.Completion, error) {
-	return &modelcall.Completion{Content: "ok", Usage: s.usage, AttemptUsage: s.attemptUsage}, nil
+	return &modelcall.Completion{Content: "ok", Usage: s.usage}, nil
 }
 
 func (s *gatedUsageStreamLLM) Stream(_ context.Context, _ modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
@@ -158,7 +158,7 @@ func (s *gatedUsageStreamLLM) Stream(_ context.Context, _ modelcall.CompletionRe
 	go func() {
 		defer close(ch)
 		<-s.release
-		ch <- modelcall.StreamChunk{Content: "ok", Usage: s.usage, AttemptUsage: s.attemptUsage, Done: true}
+		ch <- modelcall.StreamChunk{Content: "ok", Usage: s.usage, Done: true}
 	}()
 	return ch, nil
 }
