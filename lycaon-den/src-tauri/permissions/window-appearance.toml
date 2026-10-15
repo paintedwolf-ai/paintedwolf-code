@@ -17,3 +17,8 @@ commands.allow = ["den_set_window_backdrop"]
 identifier = "allow-den-set-badge-count"
 description = "Set or clear the dock badge count."
 commands.allow = ["den_set_badge_count"]
+
+[[permission]]
+identifier = "allow-linux-decoration-layout"
+description = "Read which window buttons the desktop places in a client-side title bar, and on which side."
+commands.allow = ["linux_decoration_layout"]
