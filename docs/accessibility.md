@@ -142,6 +142,7 @@ WebKitGTK aborts its web process while answering AT-SPI text queries (`Text.GetA
 | Drawn input hint | The Home idea field draws its hint while empty instead of carrying a `placeholder`, and takes its name from `aria-label` |
 | Loading text leaves after its fade | The Files loading layer's text is removed once the layer has faded |
 | Responsive hide keeps a box | Text hidden at a narrow width (search result kind, activity count) stays in a visually hidden box |
+| Selectable text | All text stays selectable |
 
 [`webkit-atspi-workaround-inventory.json`](../lycaon-den/src/platform/desktop/webkit-atspi-workaround-inventory.json) lists every site, and its test fails when a site is added without an entry. These shapes hold on every engine, because they render the same: no list item is itself a grid (the grid goes on a wrapper), icons carry `role="img"` beside `aria-hidden`, the line gutter's spacer is an empty fixed-width box, and the chat column carries no `aria-label` of its own. [`list-item-accessibility-shape.test.ts`](../lycaon-den/src/platform/list-item-accessibility-shape.test.ts) and `line-gutter.test.ts` hold them in source, and `./task den:webkit:atspi` asks every text object in the window for its attributes on each supported WebKitGTK release ([dev tasks](dev-tasks.md)).
 
