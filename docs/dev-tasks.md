@@ -929,6 +929,15 @@ A final channel recheck has a three-second total deadline. Expiry during replay-
 
 **Upgrade fixtures.** Before tagging, `./task upgrade:corpus:prepare` freezes the candidate's exact revision and shape into `lycaon/testdata/upgrade-corpus/<VERSION>/`; review and commit it with the candidate. A candidate fixture stays editable until its version ships; a released fixture is immutable. `release:preflight -- --require-corpus` checks the current engine's exact baseline against the fixture metadata, standalone database, and independent archived database, and verifies archive inventory, checksums, and copied preferences, so an unchanged product version cannot hide a stale schema. `./task upgrade:corpus:seed` defaults to the same versioned directory and accepts `--out` for a scratch fixture. `./task upgrade:corpus:boot` boots each supported fixture through the normal startup path, requires a healthy server, and checks semantic history and retained files; registered older baselines must upgrade and remain healthy across restart, unknown/future shapes are refused without mutation, and full archive restore is staged into a different data root and checked after reboot. `./task upgrade:rehearse` requires the exact prior release fixture and matching application version, exercises that release before upgrading it, and checks history through the candidate API; recovery mode is a failure for a supported fixture. `pw diagnostics store-baseline <store.db>` exposes the read-only baseline identity.
 
+Prepare only the version selected in `VERSION`. A future final-version fixture
+prepared before a candidate schema change is not release evidence: remove that
+unreleased fixture and prepare it again after selecting the final version. Keep
+released fixtures unchanged. To replace the current unreleased candidate, seed
+into a separate directory with `./task upgrade:corpus:seed -- --out <directory>`,
+boot it with `./task upgrade:corpus:boot -- <directory>`, and replace the candidate
+only after verification. Never relabel a fixture by editing its manifest; the
+standalone store, backup, semantic expectations, and checksums must agree.
+
 **Halt and recovery.** Run the protected `release-halt` workflow with the
 affected channel, signing generation, active bad version, and last-good version.
 It restores only that channel's pointer and matching cask; `dry_run` defaults to
