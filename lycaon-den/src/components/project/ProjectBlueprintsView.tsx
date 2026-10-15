@@ -598,152 +598,155 @@ export function ProjectBlueprintsView(props: Props) {
                       const deleteFailure = () => deleteFailures().get(bp.path);
                       return (
                         <li
-                          class="den-blueprints-row"
-                          classList={{
-                            "den-blueprints-row--selected": isSelected(),
-                            "den-blueprints-row--picking": picking(),
-                            "den-blueprints-row--pending": pendingDelete(),
-                            "den-blueprints-row--failed": Boolean(deleteFailure()),
-                          }}
                           aria-busy={pendingDelete() || undefined}
                           data-testid="project-blueprint-row"
                           data-blueprint-path={bp.path}
                         >
-                          <label class="project-list-check">
-                            <DenCheckboxControl
-                              checked={isSelected()}
-                              aria-label={`Select ${blueprintListTitle(bp)}`}
-                              data-testid="project-blueprint-select"
-                              onChange={(e) =>
-                                toggleSelect(bp.path, e.currentTarget.checked)
-                              }
-                            />
-                          </label>
-                          <div class="den-blueprints-row__meta">
-                            <Show
-                              when={!renaming()}
-                              fallback={
-                                <InlineRenameInput
-                                  class="den-blueprints-row__rename"
-                                  testId="blueprint-rename-input"
-                                  initialValue={
-                                    bp.title?.trim() || blueprintListTitle(bp)
-                                  }
-                                  maxLength={BLUEPRINT_TITLE_MAX_LEN}
-                                  ariaLabel="Rename blueprint"
-                                  onCommit={(next) => void commitRename(bp, next)}
-                                  onCancel={() => setRenamingPath(null)}
-                                />
-                              }
-                            >
-                              <span class="den-blueprints-row__title">
-                                {blueprintListTitle(bp)}
-                              </span>
-                            </Show>
-                            <Show when={blueprintPathLabel(bp)}>
-                              {(path) => (
-                                <span class="den-blueprints-row__path">{path()}</span>
-                              )}
-                            </Show>
-                            <Show when={deleteFailure()}>
-                              {(reason) => (
-                                <span
-                                  class="den-blueprints-row__failure"
-                                  data-tip={reason()}
-                                  data-tip-when-clipped
-                                  data-testid="project-blueprint-delete-failure"
-                                >
-                                  Not deleted — {reason()}
+                          <div
+                            class="den-blueprints-row"
+                            classList={{
+                              "den-blueprints-row--selected": isSelected(),
+                              "den-blueprints-row--picking": picking(),
+                              "den-blueprints-row--pending": pendingDelete(),
+                              "den-blueprints-row--failed": Boolean(deleteFailure()),
+                            }}
+                          >
+                            <label class="project-list-check">
+                              <DenCheckboxControl
+                                checked={isSelected()}
+                                aria-label={`Select ${blueprintListTitle(bp)}`}
+                                data-testid="project-blueprint-select"
+                                onChange={(e) =>
+                                  toggleSelect(bp.path, e.currentTarget.checked)
+                                }
+                              />
+                            </label>
+                            <div class="den-blueprints-row__meta">
+                              <Show
+                                when={!renaming()}
+                                fallback={
+                                  <InlineRenameInput
+                                    class="den-blueprints-row__rename"
+                                    testId="blueprint-rename-input"
+                                    initialValue={
+                                      bp.title?.trim() || blueprintListTitle(bp)
+                                    }
+                                    maxLength={BLUEPRINT_TITLE_MAX_LEN}
+                                    ariaLabel="Rename blueprint"
+                                    onCommit={(next) => void commitRename(bp, next)}
+                                    onCancel={() => setRenamingPath(null)}
+                                  />
+                                }
+                              >
+                                <span class="den-blueprints-row__title">
+                                  {blueprintListTitle(bp)}
                                 </span>
-                              )}
-                            </Show>
-                          </div>
-                          <span class="den-blueprints-row__kind">
-                            {blueprintKindLabel(bp)}
-                          </span>
-                          <span class="den-blueprints-row__when">
-                            {updatedLabel(bp)}
-                          </span>
-                          <div class="den-blueprints-row__actions">
-                            <Show
-                              when={picking()}
-                              fallback={
+                              </Show>
+                              <Show when={blueprintPathLabel(bp)}>
+                                {(path) => (
+                                  <span class="den-blueprints-row__path">{path()}</span>
+                                )}
+                              </Show>
+                              <Show when={deleteFailure()}>
+                                {(reason) => (
+                                  <span
+                                    class="den-blueprints-row__failure"
+                                    data-tip={reason()}
+                                    data-tip-when-clipped
+                                    data-testid="project-blueprint-delete-failure"
+                                  >
+                                    Not deleted — {reason()}
+                                  </span>
+                                )}
+                              </Show>
+                            </div>
+                            <span class="den-blueprints-row__kind">
+                              {blueprintKindLabel(bp)}
+                            </span>
+                            <span class="den-blueprints-row__when">
+                              {updatedLabel(bp)}
+                            </span>
+                            <div class="den-blueprints-row__actions">
+                              <Show
+                                when={picking()}
+                                fallback={
+                                  <button
+                                    type="button"
+                                    class="den-blueprints-run"
+                                    data-testid="project-blueprint-run"
+                                    disabled={busy() || renaming()}
+                                    onClick={() => openRun(bp)}
+                                  >
+                                    Run
+                                  </button>
+                                }
+                              >
+                                <label class="den-blueprints-picker">
+                                  <span class="den-blueprints-picker__label">Workflow</span>
+                                  <DenSelect
+                                    aria-label="Workflow"
+                                    data-testid="project-blueprint-workflow-picker"
+                                    value={selectedWorkflow()}
+                                    options={(bp.compatible_workflows ?? []).map((id) => ({
+                                      value: id,
+                                      label: workflowPickerLabel(id, catalogRows()),
+                                    }))}
+                                    onValueChange={setSelectedWorkflow}
+                                  />
+                                </label>
                                 <button
                                   type="button"
                                   class="den-blueprints-run"
-                                  data-testid="project-blueprint-run"
-                                  disabled={busy() || renaming()}
-                                  onClick={() => openRun(bp)}
+                                  data-testid="project-blueprint-launch"
+                                  disabled={busy() || !selectedWorkflow().trim()}
+                                  onClick={() =>
+                                    void runLaunch(bp, selectedWorkflow().trim())
+                                  }
                                 >
-                                  Run
+                                  Start
                                 </button>
-                              }
-                            >
-                              <label class="den-blueprints-picker">
-                                <span class="den-blueprints-picker__label">Workflow</span>
-                                <DenSelect
-                                  aria-label="Workflow"
-                                  data-testid="project-blueprint-workflow-picker"
-                                  value={selectedWorkflow()}
-                                  options={(bp.compatible_workflows ?? []).map((id) => ({
-                                    value: id,
-                                    label: workflowPickerLabel(id, catalogRows()),
-                                  }))}
-                                  onValueChange={setSelectedWorkflow}
-                                />
-                              </label>
+                                <button
+                                  type="button"
+                                  class="den-blueprints-cancel"
+                                  data-testid="project-blueprint-cancel-picker"
+                                  disabled={busy()}
+                                  onClick={() => setPickerFor(null)}
+                                >
+                                  Cancel
+                                </button>
+                              </Show>
+                            </div>
+                            <div>
                               <button
                                 type="button"
-                                class="den-blueprints-run"
-                                data-testid="project-blueprint-launch"
-                                disabled={busy() || !selectedWorkflow().trim()}
-                                onClick={() =>
-                                  void runLaunch(bp, selectedWorkflow().trim())
-                                }
+                                class="den-blueprints-row__menu-btn den-inset-icon-btn"
+                                aria-label="Blueprint actions"
+                                aria-haspopup="menu"
+                                aria-expanded={menuOpen()}
+                                data-testid="project-blueprint-menu"
+                                disabled={busy() || deleting()}
+                                onPointerDown={(e) => {
+                                  // The open menu stays closed for this pointer cycle.
+                                  if (menuOpen()) e.stopPropagation();
+                                }}
+                                onClick={(e) => {
+                                  if (menuOpen()) {
+                                    setRowMenu(null);
+                                    return;
+                                  }
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  setRowMenu({
+                                    bp,
+                                    anchor: {
+                                      x: rect.right,
+                                      y: rect.bottom + 4,
+                                    },
+                                  });
+                                }}
                               >
-                                Start
+                                <ThemeIcon slot="more" size={15} />
                               </button>
-                              <button
-                                type="button"
-                                class="den-blueprints-cancel"
-                                data-testid="project-blueprint-cancel-picker"
-                                disabled={busy()}
-                                onClick={() => setPickerFor(null)}
-                              >
-                                Cancel
-                              </button>
-                            </Show>
-                          </div>
-                          <div>
-                            <button
-                              type="button"
-                              class="den-blueprints-row__menu-btn den-inset-icon-btn"
-                              aria-label="Blueprint actions"
-                              aria-haspopup="menu"
-                              aria-expanded={menuOpen()}
-                              data-testid="project-blueprint-menu"
-                              disabled={busy() || deleting()}
-                              onPointerDown={(e) => {
-                                // The open menu stays closed for this pointer cycle.
-                                if (menuOpen()) e.stopPropagation();
-                              }}
-                              onClick={(e) => {
-                                if (menuOpen()) {
-                                  setRowMenu(null);
-                                  return;
-                                }
-                                const rect = e.currentTarget.getBoundingClientRect();
-                                setRowMenu({
-                                  bp,
-                                  anchor: {
-                                    x: rect.right,
-                                    y: rect.bottom + 4,
-                                  },
-                                });
-                              }}
-                            >
-                              <ThemeIcon slot="more" size={15} />
-                            </button>
+                            </div>
                           </div>
                         </li>
                       );

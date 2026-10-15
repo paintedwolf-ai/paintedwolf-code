@@ -1,3 +1,4 @@
+import { expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
 import { render } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import {
@@ -129,5 +130,19 @@ describe("indexWarmingChickletTitle", () => {
         topic: "Widget guide",
       }),
     ).toBe("after fetch_url · 0 hosts, 1 page");
+  });
+});
+
+describe("IndexWarmingChicklet under the WebKitGTK AT-SPI workaround", () => {
+  it("shows the same collapsed card", async () => {
+    await expectSameCollapsedFace(() => {
+      const view = render(() => (
+        <IndexWarmingChicklet
+          layout="chat"
+          meta={{ trigger: "declared_url", tier: "crawl", topic: "docs.example", hosts: ["docs.example", "news.example"], pages: 3, skip_reason: "hourly seed cap" }}
+        />
+      ));
+      return { card: () => view.container.querySelector('[data-testid="index-warming-chicklet"]'), unmount: view.unmount };
+    });
   });
 });

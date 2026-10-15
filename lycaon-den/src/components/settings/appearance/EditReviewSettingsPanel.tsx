@@ -98,34 +98,38 @@ export function EditReviewSettingsPanel(props: Props) {
         </p>
         <ul class="den-settings-rules den-settings-rules-pairs">
           <li class="den-settings-rules-head" aria-hidden="true">
-            <span>Tool (optional)</span>
-            <span>Path glob</span>
-            <span />
+            <div class="den-settings-rules-row">
+              <span>Tool (optional)</span>
+              <span>Path glob</span>
+              <span />
+            </div>
           </li>
           <Index each={rules()}>
             {(rule, index) => (
               <li>
-                <DenInput
-                  kind="rules"
-                  aria-label="Tool"
-                  placeholder="any"
-                  value={rule().tool ?? ""}
-                  onInput={(e) =>
-                    updateRule(index, { tool: e.currentTarget.value })
-                  }
-                />
-                <DenInput
-                  kind="rules"
-                  aria-label="Path glob"
-                  placeholder="infra/**"
-                  value={rule().path}
-                  onInput={(e) =>
-                    updateRule(index, { path: e.currentTarget.value })
-                  }
-                />
-                <DenButton variant="danger" onClick={() => removeRule(index)}>
-                  Remove
-                </DenButton>
+                <div class="den-settings-rules-row">
+                  <DenInput
+                    kind="rules"
+                    aria-label="Tool"
+                    placeholder="any"
+                    value={rule().tool ?? ""}
+                    onInput={(e) =>
+                      updateRule(index, { tool: e.currentTarget.value })
+                    }
+                  />
+                  <DenInput
+                    kind="rules"
+                    aria-label="Path glob"
+                    placeholder="infra/**"
+                    value={rule().path}
+                    onInput={(e) =>
+                      updateRule(index, { path: e.currentTarget.value })
+                    }
+                  />
+                  <DenButton variant="danger" onClick={() => removeRule(index)}>
+                    Remove
+                  </DenButton>
+                </div>
               </li>
             )}
           </Index>

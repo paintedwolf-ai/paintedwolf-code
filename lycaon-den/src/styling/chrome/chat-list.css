@@ -8,7 +8,7 @@
   border-bottom: 1px solid var(--den-line);
   cursor: pointer;
 }
-.chat-list-row:last-child {
+li:last-child > .chat-list-row {
   border-bottom: none;
 }
 .chat-list-row:hover {

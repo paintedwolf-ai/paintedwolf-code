@@ -1,5 +1,5 @@
-import { disclosureToggle } from "../../test/transcript-disclosure-fixture.ts";
-import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { disclosureToggle, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
+import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createStore } from "solid-js/store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SecurityFullPass, SecurityOverview, WorkflowExplainMeta, WorkflowRun } from "../../api/types.ts";
@@ -117,5 +117,15 @@ describe("WorkflowExplainChicklet", () => {
     fireEvent.click(disclosureToggle(screen.getByTestId("workflow-explain-chicklet")));
     await waitFor(() => expect(screen.getByTestId("workflow-explain-body").textContent).toContain(meta.body));
     expect(screen.queryByTestId("workflow-explain-progress")).toBeNull();
+  });
+});
+
+describe("WorkflowExplainChicklet under the WebKitGTK AT-SPI workaround", () => {
+  it("shows the same collapsed chicklet", async () => {
+    await expectSameCollapsedFace(() => {
+      resetSurfaceQueriesForTests();
+      mount("ingest", overview({ running: runningPass }));
+      return { card: () => screen.queryByTestId("workflow-explain-chicklet"), unmount: cleanup };
+    }, (face) => face.includes("scanners"));
   });
 });

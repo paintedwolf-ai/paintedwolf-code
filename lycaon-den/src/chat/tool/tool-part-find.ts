@@ -5,6 +5,13 @@ import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 
 export const TOOL_CONTENT_REVEAL_EVENT = "den:tool-content-reveal";
 
+/** Text Find searches for a collapsed card, from its data; retained content searches remotely. */
+export function toolPartFindCorpus(part: ToolPartView): string {
+  return [part.title, part.displaySubject, part.argsReference ? "" : JSON.stringify(part.args), part.outputReference ? "" : part.output]
+    .filter(Boolean)
+    .join("\n");
+}
+
 /** Search card data without creating its body or downloading retained output. */
 export async function searchToolPart(part: ToolPartView, sessionId: string | undefined, query: string, sensitive: boolean, signal: AbortSignal): Promise<VirtualListMatch[]> {
   const matches: VirtualListMatch[] = [];

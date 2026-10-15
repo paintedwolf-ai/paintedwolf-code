@@ -92,24 +92,25 @@ export function WorklogPanel(props: WorklogPanelProps) {
               <For each={progressLog()}>
                 {(entry) => (
                   <li
-                    class="worklog-panel__progress-row"
                     data-testid="worklog-progress-row"
                     data-kind={entry.kind}
                     data-state={entry.state}
                   >
-                    <span class="worklog-panel__progress-kind">
-                      {formatSentenceCase(entry.kind)}
-                    </span>
-                    <div class="worklog-panel__progress-body">
-                      <p class="worklog-panel__progress-label">{entry.label}</p>
-                      <p class="worklog-panel__progress-meta">
-                        <span class="worklog-panel__progress-state">
-                          {progressStateLabel(entry.state)}
-                        </span>
-                        <Show when={entry.ts}>
-                          <span class="worklog-panel__progress-ref">{entry.ts}</span>
-                        </Show>
-                      </p>
+                    <div class="worklog-panel__progress-row">
+                      <span class="worklog-panel__progress-kind">
+                        {formatSentenceCase(entry.kind)}
+                      </span>
+                      <div class="worklog-panel__progress-body">
+                        <p class="worklog-panel__progress-label">{entry.label}</p>
+                        <p class="worklog-panel__progress-meta">
+                          <span class="worklog-panel__progress-state">
+                            {progressStateLabel(entry.state)}
+                          </span>
+                          <Show when={entry.ts}>
+                            <span class="worklog-panel__progress-ref">{entry.ts}</span>
+                          </Show>
+                        </p>
+                      </div>
                     </div>
                   </li>
                 )}
@@ -184,22 +185,24 @@ export function WorklogPanel(props: WorklogPanelProps) {
             <ul class="worklog-panel__findings">
               <For each={findings()}>
                 {(finding) => (
-                  <li class="worklog-panel__finding" data-testid="worklog-finding-row">
-                    <span class="worklog-panel__finding-agent">{finding.agent}</span>
-                    <div class="worklog-panel__finding-body">
-                      <p class="worklog-panel__finding-summary">{finding.summary}</p>
-                      <Show when={finding.body}>
-                        <details>
-                          <summary><span class="den-disclosure-caret" aria-hidden="true" />Details</summary>
-                          <p class="worklog-panel__finding-summary worklog-panel__finding-detail">{finding.body}</p>
-                        </details>
-                      </Show>
-                      <Show when={finding.ref}>
-                        <p class="worklog-panel__finding-ref">{finding.ref}</p>
-                      </Show>
-                      <Show when={finding.recorded_at}>
-                        <p class="worklog-panel__finding-recorded_at">{finding.recorded_at}</p>
-                      </Show>
+                  <li data-testid="worklog-finding-row">
+                    <div class="worklog-panel__finding">
+                      <span class="worklog-panel__finding-agent">{finding.agent}</span>
+                      <div class="worklog-panel__finding-body">
+                        <p class="worklog-panel__finding-summary">{finding.summary}</p>
+                        <Show when={finding.body}>
+                          <details>
+                            <summary><span class="den-disclosure-caret" aria-hidden="true" />Details</summary>
+                            <p class="worklog-panel__finding-summary worklog-panel__finding-detail">{finding.body}</p>
+                          </details>
+                        </Show>
+                        <Show when={finding.ref}>
+                          <p class="worklog-panel__finding-ref">{finding.ref}</p>
+                        </Show>
+                        <Show when={finding.recorded_at}>
+                          <p class="worklog-panel__finding-recorded_at">{finding.recorded_at}</p>
+                        </Show>
+                      </div>
                     </div>
                   </li>
                 )}
@@ -224,28 +227,27 @@ export function WorklogPanel(props: WorklogPanelProps) {
             <ul class="worklog-panel__reservations">
               <For each={reservations()}>
                 {(group: WorklogReservationGroup) => (
-                  <li
-                    class="worklog-panel__reservation-group"
-                    data-testid="worklog-reservation-group"
-                  >
-                    <p class="worklog-panel__reservation-head">
-                      <span class="worklog-panel__reservation-agent">
-                        {group.agentType}
-                      </span>
-                      <span class="worklog-panel__reservation-job">{group.jobId}</span>
-                    </p>
-                    <ul class="worklog-panel__reservation-paths">
-                      <For each={group.paths}>
-                        {(path) => (
-                          <li
-                            class="worklog-panel__reservation-path"
-                            data-testid="worklog-reservation-path"
-                          >
-                            {path}
-                          </li>
-                        )}
-                      </For>
-                    </ul>
+                  <li data-testid="worklog-reservation-group">
+                    <div class="worklog-panel__reservation-group">
+                      <p class="worklog-panel__reservation-head">
+                        <span class="worklog-panel__reservation-agent">
+                          {group.agentType}
+                        </span>
+                        <span class="worklog-panel__reservation-job">{group.jobId}</span>
+                      </p>
+                      <ul class="worklog-panel__reservation-paths">
+                        <For each={group.paths}>
+                          {(path) => (
+                            <li
+                              class="worklog-panel__reservation-path"
+                              data-testid="worklog-reservation-path"
+                            >
+                              {path}
+                            </li>
+                          )}
+                        </For>
+                      </ul>
+                    </div>
                   </li>
                 )}
               </For>

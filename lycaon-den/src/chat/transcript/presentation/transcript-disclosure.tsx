@@ -1,6 +1,7 @@
 import { useTranscriptDisclosureStore } from "./disclosure-state.tsx";
-import { createSignal, createUniqueId, splitProps, type Accessor, type JSX } from "solid-js";
+import { Show, createSignal, createUniqueId, splitProps, type Accessor, type JSX } from "solid-js";
 import { useTranscriptViewport } from "../../stream/transcript-viewport.tsx";
+import { webkitAtspiWorkaroundActive } from "../../../platform/desktop/webkit-atspi-workaround.ts";
 import {
   animateHeightToggle,
   heightToggleDirectionFor,
@@ -171,7 +172,8 @@ export function TranscriptDisclosureToggle(props: ToggleProps) {
       type="button"
       class={classes()}
       aria-expanded={local.disclosure.open()}
-      aria-controls={local.disclosure.panelId}
+      // The WebKitGTK AT-SPI workaround mounts the panel only while open.
+      aria-controls={!webkitAtspiWorkaroundActive() || local.disclosure.open() ? local.disclosure.panelId : undefined}
       onClick={(event) => {
         if (typeof local.onClick === "function") local.onClick(event);
         else local.disclosure.onToggleClick(event);
@@ -184,12 +186,26 @@ export function TranscriptDisclosureToggle(props: ToggleProps) {
 
 type PanelProps = JSX.HTMLAttributes<HTMLDivElement> & { disclosure: TranscriptDisclosure };
 
-/** The content a transcript card reveals; hidden while the card is closed. */
+/**
+ * The content a transcript card reveals; hidden while the card is closed. Under the
+ * WebKitGTK AT-SPI workaround it is mounted only while open instead.
+ */
 export function TranscriptDisclosurePanel(props: PanelProps) {
   const [local, rest] = splitProps(props, ["disclosure", "children"]);
   return (
-    <div {...rest} id={local.disclosure.panelId} hidden={!local.disclosure.open()}>
-      {local.children}
-    </div>
+    <Show
+      when={webkitAtspiWorkaroundActive()}
+      fallback={
+        <div {...rest} id={local.disclosure.panelId} hidden={!local.disclosure.open()}>
+          {local.children}
+        </div>
+      }
+    >
+      <Show when={local.disclosure.open()}>
+        <div {...rest} id={local.disclosure.panelId}>
+          {local.children}
+        </div>
+      </Show>
+    </Show>
   );
 }

@@ -110,6 +110,8 @@ describe("StageSplitHost", () => {
     expect(screen.getByTestId("split-col-stage")).toBeTruthy();
     // Occupancy CSS controls the mounted columns.
     expect(screen.getByTestId("split-col-chat")).toBeTruthy();
+    // A named column crashes WebKitGTK's text queries; the transcript log names the conversation.
+    expect(screen.getByTestId("split-col-chat").hasAttribute("aria-label")).toBe(false);
     expect(screen.queryByTestId("split-divider")).toBeNull();
     unmount();
 

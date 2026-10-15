@@ -23,6 +23,9 @@ import { bindFindRevealHost } from "../../find/use-findable-view.ts";
 import { heightToggleDirectionFor } from "../../ui/height-toggle-motion.ts";
 import { KeyedIndex } from "../keyed-index.tsx";
 import { FileEditDiff } from "../FileEditDiff.tsx";
+import { createFoldNetStats } from "../../chat/file-edit/file-edit-net-stats.ts";
+import { observeSurfaceFailure } from "../../notices/surface-failure.ts";
+import { SOURCE_COMPARISON_FAILURE } from "../source/reader/SourceReader.tsx";
 
 type Props = {
   folds: readonly FileEditFold[];
@@ -78,9 +81,14 @@ export function TranscriptDiffGroup(props: Props) {
     revealForFind: revealTemporarily,
   });
 
+  // Folds of several writes are measured here, so the summary does not wait for mounted rows.
+  const measured = createFoldNetStats(() => props.folds, () => props.projectId, () => props.sessionId ?? undefined);
+  observeSurfaceFailure(SOURCE_COMPARISON_FAILURE, measured.error, () => props.projectId);
   const [netStats, setNetStats] = createSignal(new Map<string, { added: number; removed: number }>());
+  const netStatOf = (fold: FileEditFold) =>
+    fileEditLineStat(fold.net) ?? measured.stats().get(fileEditFoldFingerprint(fold)) ?? netStats().get(fileEditFoldFingerprint(fold));
   const summary = createMemo(() => {
-    const stats = props.folds.map(fold => fileEditLineStat(fold.net) ?? netStats().get(fileEditFoldFingerprint(fold)));
+    const stats = props.folds.map(netStatOf);
     let total: { added: number; removed: number } | null = { added: 0, removed: 0 };
     for (const stat of stats) {
       if (!stat) { total = null; break; }
@@ -143,6 +151,7 @@ export function TranscriptDiffGroup(props: Props) {
                 chrome="row"
                 fold={fold()}
                 disclosureKey={transcriptDisclosureKey.diffFile(fold().key)}
+                netStat={() => measured.stats().get(fileEditFoldFingerprint(fold()))}
                 onNetStat={stat => setNetStats(previous => new Map([...previous].filter(([key]) => props.folds.some(fold => fileEditFoldFingerprint(fold) === key))).set(fileEditFoldFingerprint(fold()), stat))}
                 projectId={props.projectId}
                 sessionId={props.sessionId}

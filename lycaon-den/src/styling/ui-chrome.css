@@ -14,6 +14,11 @@ button,
   cursor: auto;
 }
 
+/* WebKitGTK AT-SPI workaround: its text queries abort over text that cannot be selected. */
+:root[data-den-webkit-atspi-workaround] * {
+  user-select: text !important;
+}
+
 /* Open popup triggers remain pressed, unless the control paints its own open
    state — this rule is unlayered, so it would otherwise bury that recipe. */
 button[aria-haspopup][aria-expanded="true"]:not(:disabled):not(.den-quiet-icon-btn) {

@@ -320,47 +320,46 @@ export function SearchReplacePreview(props: Props) {
                             const hunk = () =>
                               previewFile()?.hunks[hunkIndex()];
                             return (
-                              <li
-                                class="den-search-replace__hunk"
-                                data-testid="search-replace-hunk"
-                              >
-                                <label class="den-search-replace__check">
-                                  <DenCheckboxControl
-                                    checked={on}
-                                    data-testid="search-replace-hunk-check"
-                                    onChange={(e) =>
-                                      props.onSelectionChange(
-                                        toggleReplaceHunk(
-                                          sel,
-                                          fileIndex(),
-                                          hunkIndex(),
-                                          e.currentTarget.checked,
-                                        ),
-                                      )
-                                    }
-                                  />
-                                  <span class="den-search-replace__line">
-                                    {hunkLineLabel(hunk())}
-                                  </span>
-                                  <Show
-                                    when={
-                                      hunk()?.context === "comment_or_string"
-                                    }
-                                  >
-                                    <span
-                                      class="den-search-replace__context-chip den-status-mark"
-                                      data-testid="search-replace-context-chip"
-                                    >
-                                      comment/string
+                              <li data-testid="search-replace-hunk">
+                                <div class="den-search-replace__hunk">
+                                  <label class="den-search-replace__check">
+                                    <DenCheckboxControl
+                                      checked={on}
+                                      data-testid="search-replace-hunk-check"
+                                      onChange={(e) =>
+                                        props.onSelectionChange(
+                                          toggleReplaceHunk(
+                                            sel,
+                                            fileIndex(),
+                                            hunkIndex(),
+                                            e.currentTarget.checked,
+                                          ),
+                                        )
+                                      }
+                                    />
+                                    <span class="den-search-replace__line">
+                                      {hunkLineLabel(hunk())}
                                     </span>
-                                  </Show>
-                                </label>
-                                <div class="den-search-replace__diff">
-                                  <div class="den-search-replace__before">
-                                    {hunk()?.before ?? ""}
-                                  </div>
-                                  <div class="den-search-replace__after">
-                                    {hunk()?.after ?? ""}
+                                    <Show
+                                      when={
+                                        hunk()?.context === "comment_or_string"
+                                      }
+                                    >
+                                      <span
+                                        class="den-search-replace__context-chip den-status-mark"
+                                        data-testid="search-replace-context-chip"
+                                      >
+                                        comment/string
+                                      </span>
+                                    </Show>
+                                  </label>
+                                  <div class="den-search-replace__diff">
+                                    <div class="den-search-replace__before">
+                                      {hunk()?.before ?? ""}
+                                    </div>
+                                    <div class="den-search-replace__after">
+                                      {hunk()?.after ?? ""}
+                                    </div>
                                   </div>
                                 </div>
                               </li>

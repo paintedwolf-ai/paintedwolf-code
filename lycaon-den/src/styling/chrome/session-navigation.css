@@ -173,11 +173,12 @@
 .focused-session-list__status[data-attention-class="finished"] {
   --den-attention-tone: var(--den-status-positive);
 }
-.focused-session-list .den-list-row--nav:is(:hover, :focus-within)
+:root:not([data-den-webkit-atspi-workaround]) .focused-session-list .den-list-row--nav:is(:hover, :focus-within)
   .focused-session-list__status {
   display: none;
 }
-/* Relative timestamp hugs the right edge; hover actions replace it. */
+/* Relative timestamp hugs the right edge; hover actions replace it. Under the WebKitGTK
+   AT-SPI workaround the row stops rendering it instead. */
 .focused-session-list__time {
   flex-shrink: 0;
   margin-left: 6px;
@@ -185,7 +186,7 @@
   color: var(--den-text-muted);
   font-variant-numeric: tabular-nums;
 }
-.focused-session-list .den-list-row--nav:is(:hover, :focus-within)
+:root:not([data-den-webkit-atspi-workaround]) .focused-session-list .den-list-row--nav:is(:hover, :focus-within)
   .focused-session-list__time {
   display: none;
 }
@@ -221,6 +222,10 @@
   text-align: center;
 }
 
+.focused-session-list__item {
+  display: block;
+  position: relative;
+}
 /* Reveals the rename action without shifting the row highlight. */
 .focused-session-list .den-list-row--nav {
   position: relative;
@@ -239,14 +244,14 @@
   color: var(--den-accent-text);
 }
 /* Dragging within Pinned: the others step aside, the dragged row lifts. */
-.focused-session-list__list--dragging > .den-list-row--nav {
+.focused-session-list__list--dragging > .focused-session-list__item {
   transition: transform var(--den-duration) var(--den-ease);
 }
-.focused-session-list__list--dragging > .den-list-row--nav.is-dragging {
+.focused-session-list__list--dragging > .focused-session-list__item.is-dragging {
   z-index: 2;
   transition: none;
 }
-.focused-session-list__list--dragging > .den-list-row--nav.is-dragging > .focused-session-list__row {
+.focused-session-list__list--dragging > .focused-session-list__item.is-dragging .focused-session-list__row {
   background: var(--den-background);
   box-shadow: var(--den-shadow-lg);
   cursor: grabbing;
@@ -255,7 +260,7 @@
   visibility: hidden;
 }
 @media (prefers-reduced-motion: reduce) {
-  .focused-session-list__list--dragging > .den-list-row--nav {
+  .focused-session-list__list--dragging > .focused-session-list__item {
     transition: none;
   }
 }

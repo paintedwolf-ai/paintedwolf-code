@@ -30,8 +30,9 @@ import { formatSentenceCase } from "../../format/format-sentence-case.ts";
 import { IndexWarmingChicklet } from "../transcript/IndexWarmingChicklet.tsx";
 import { TurnLoadCard } from "./TurnLoadCard.tsx";
 import { VirtualCardList } from "../primitives/VirtualCardList.tsx";
-import { searchToolPart, TOOL_CONTENT_REVEAL_EVENT } from "../../chat/tool/tool-part-find.ts";
+import { searchToolPart, TOOL_CONTENT_REVEAL_EVENT, toolPartFindCorpus } from "../../chat/tool/tool-part-find.ts";
 import { findController } from "../../find/find-controller.ts";
+import { webkitAtspiWorkaroundActive } from "../../platform/desktop/webkit-atspi-workaround.ts";
 import type { VirtualListMatch } from "../../find/virtual-list-find.ts";
 
 type Props = {
@@ -181,11 +182,16 @@ export function ActivitySpanCard(props: Props) {
     onCleanup(() => host.removeEventListener(TOOL_CONTENT_REVEAL_EVENT, reveal));
   });
   const revealId = () => `activity-span-reveal:${disclosure.key ?? props.label}`;
+  const collapsedToolCorpus = () =>
+    props.entries.flatMap((entry) => (entry.kind === "tool" ? [toolPartFindCorpus(entry.part)] : [])).join("\n");
   bindFindRevealHost({
     id: revealId(),
     hostEl,
     isCollapsed: () => !open(),
     revealForFind: revealTemporarily,
+    // Under the WebKitGTK AT-SPI workaround a closed span mounts no cards, so it searches theirs from data.
+    collapsedCorpus: () => (webkitAtspiWorkaroundActive() ? collapsedToolCorpus() : ""),
+    collapsedCorpusAnchor: hostEl,
   });
   const count = () => props.entries.length;
   const [processRevision, setProcessRevision] = createSignal(0);

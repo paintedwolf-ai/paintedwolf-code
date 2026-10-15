@@ -1,5 +1,6 @@
 import { isDisclosureOpen } from "../test/transcript-disclosure-fixture.ts";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { applyWebEngineFact } from "../platform/desktop/webkit-atspi-workaround.ts";
 import { render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal, type JSX } from "solid-js";
 import {
@@ -100,7 +101,14 @@ describe("tool body find + collapsed reveal", () => {
     expect(isDisclosureOpen(card)).toBe(false);
   });
 
-  it("drills a collapsed activity span and nested disclosure through temporary leases", async () => {
+  it.each([
+    ["by default", false],
+    ["under the WebKitGTK AT-SPI workaround", true],
+  ])("drills a collapsed activity span and nested disclosure through temporary leases %s", async (_mode, workaround) => {
+    if (workaround) {
+      applyWebEngineFact({ engine: "webkitgtk", version: "2.50.4" });
+      onTestFinished(() => applyWebEngineFact(null));
+    }
     const parts: ToolPartView[] = [
       {
         id: "r1",
@@ -150,11 +158,11 @@ describe("tool body find + collapsed reveal", () => {
     const span = (await screen.findByTestId(
       "activity-span-card",
     )) as HTMLElement;
-    const cards = (await screen.findAllByTestId(
-      "tool-part-card",
-    )) as HTMLElement[];
+    const cards = () => screen.queryAllByTestId("tool-part-card");
     expect(isDisclosureOpen(span)).toBe(false);
-    expect(cards.every((c) => !isDisclosureOpen(c))).toBe(true);
+    // The workaround mounts a closed span's cards only once it opens.
+    expect(cards()).toHaveLength(workaround ? 0 : 2);
+    expect(cards().every((c) => !isDisclosureOpen(c))).toBe(true);
 
     openFind();
     setFindQuery("GROUP_NESTED_FIND_NEEDLE");
@@ -163,7 +171,7 @@ describe("tool body find + collapsed reveal", () => {
 
     findNext();
     expect(isDisclosureOpen(span)).toBe(true);
-    const nested = cards.find(
+    const nested = cards().find(
       (c) => c.getAttribute("data-tool-call-id") === "r2",
     );
     expect(isDisclosureOpen(nested)).toBe(true);
@@ -171,7 +179,7 @@ describe("tool body find + collapsed reveal", () => {
 
     closeFind();
     expect(isDisclosureOpen(span)).toBe(false);
-    expect(isDisclosureOpen(nested)).toBe(false);
+    expect(isDisclosureOpen(cards().find((c) => c.getAttribute("data-tool-call-id") === "r2"))).toBe(false);
   });
 
   it("opens linked inline output from a collapsed production tool card", async () => {

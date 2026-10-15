@@ -238,26 +238,28 @@ export function ManagedSecretDetail(props: ManagedSecretDetailProps) {
                   <For each={props.uses.items}>
                     {(use) => (
                       <li data-outcome={use.outcome} data-delivery={use.delivery}>
-                        <span class="den-secret-use-list__tool">{use.tool_name}</span>
-                        <span class="den-secret-use-list__outcome">
-                          {useOutcomeLabel(use)}
-                        </span>
-                        <span class="den-secret-use-list__when">
-                          {formatSecretTimestamp(use.used_at) ?? use.used_at}
-                        </span>
-                        <Show when={use.recipients?.length}>
-                          <span class="den-secret-use-list__call">
-                            {C.useRecipients((use.recipients ?? []).map((recipient) => recipient.label).join(", "))}
+                        <div class="den-secret-use-list__row">
+                          <span class="den-secret-use-list__tool">{use.tool_name}</span>
+                          <span class="den-secret-use-list__outcome">
+                            {useOutcomeLabel(use)}
                           </span>
-                        </Show>
-                        <Show when={use.unlock_id}>
-                          <span class="den-secret-use-list__call">{C.useUnlocked}</span>
-                        </Show>
-                        <Show when={use.tool_call_id}>
-                          <span class="den-secret-use-list__call">
-                            Tool call: <code>{use.tool_call_id}</code>
+                          <span class="den-secret-use-list__when">
+                            {formatSecretTimestamp(use.used_at) ?? use.used_at}
                           </span>
-                        </Show>
+                          <Show when={use.recipients?.length}>
+                            <span class="den-secret-use-list__call">
+                              {C.useRecipients((use.recipients ?? []).map((recipient) => recipient.label).join(", "))}
+                            </span>
+                          </Show>
+                          <Show when={use.unlock_id}>
+                            <span class="den-secret-use-list__call">{C.useUnlocked}</span>
+                          </Show>
+                          <Show when={use.tool_call_id}>
+                            <span class="den-secret-use-list__call">
+                              Tool call: <code>{use.tool_call_id}</code>
+                            </span>
+                          </Show>
+                        </div>
                       </li>
                     )}
                   </For>

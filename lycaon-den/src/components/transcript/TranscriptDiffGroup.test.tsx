@@ -1,4 +1,4 @@
-import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
+import { disclosureToggle, isDisclosureOpen, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
 import { stubFilesClient } from "../../test/source-client-fixture.ts";
 import { fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -261,5 +261,14 @@ describe("TranscriptDiffGroup", () => {
     summary.click();
     expect(isDisclosureOpen(group)).toBe(true);
     expect(screen.getByTestId("file-edit-diff").getAttribute("data-expanded")).toBe("true");
+  });
+});
+
+describe("TranscriptDiffGroup under the WebKitGTK AT-SPI workaround", () => {
+  it("shows the same collapsed summary, net totals included", async () => {
+    await expectSameCollapsedFace(() => {
+      const view = renderGroup();
+      return { card: () => view.container.querySelector('[data-testid="diff-group"]'), unmount: view.unmount };
+    }, (face) => !face.includes("pending"));
   });
 });

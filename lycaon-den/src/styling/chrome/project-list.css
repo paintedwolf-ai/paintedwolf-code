@@ -7,7 +7,7 @@
   padding: 8px 14px;
   border-bottom: 1px solid var(--den-line);
 }
-.project-list-row:last-child {
+li:last-child > .project-list-row {
   border-bottom: none;
 }
 .project-list-row:hover {

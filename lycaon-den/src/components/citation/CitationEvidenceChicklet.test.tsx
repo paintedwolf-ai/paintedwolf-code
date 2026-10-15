@@ -1,4 +1,4 @@
-import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
+import { disclosureToggle, isDisclosureOpen, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@solidjs/testing-library";
 import { CitationEvidenceChicklet } from "./CitationEvidenceChicklet.tsx";
@@ -167,5 +167,21 @@ describe("CitationEvidenceChicklet", () => {
       />
     ));
     expect(screen.queryByTestId("citation-evidence-chicklet")).toBeNull();
+  });
+});
+
+describe("CitationEvidenceChicklet under the WebKitGTK AT-SPI workaround", () => {
+  it("shows the same collapsed evidence", async () => {
+    await expectSameCollapsedFace(() => {
+      const view = render(() => (
+        <CitationEvidenceChicklet
+          grounding={{
+            traced: true,
+            checks: [{ id: "path_citations", label: "Path citations", status: "passed" as const, kind: "citation" as const, summary: "1 citation(s) matched leg evidence", matched: ["`engine.py`"] }],
+          }}
+        />
+      ));
+      return { card: () => view.container.querySelector('[data-testid="citation-evidence-chicklet"]'), unmount: view.unmount };
+    });
   });
 });

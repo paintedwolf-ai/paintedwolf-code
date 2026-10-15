@@ -391,7 +391,7 @@
   padding: 0;
   list-style: none;
 
-  & > li {
+  & > li > .den-secret-use-list__row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
     gap: var(--spacing-den-4);

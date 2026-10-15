@@ -75,49 +75,47 @@ export function RecentAsksStrip(props: Props) {
             <ul class="den-saved-approvals-list">
               <For each={rows() ?? []}>
                 {(row) => (
-                  <li
-                    class="den-saved-approvals-row"
-                    data-testid="saved-approvals-recent-row"
-                    data-gate={row.gate}
-                  >
-                    <div class="den-saved-approvals-row-main">
-                      <span class="den-saved-approvals-title">{gateLabel(row.gate)}</span>
-                      <p class="den-settings-hint">
-                        {SAVED_APPROVALS_COPY.recentCounts(row.asks, row.allowed)}
-                        <Show when={row.asks > 1 && row.allowed === row.asks}>
-                          {" · "}
-                          <span data-testid="saved-approvals-recent-all-allowed">
-                            {SAVED_APPROVALS_COPY.recentAllAllowed}
-                          </span>
-                        </Show>
-                      </p>
-                      <Show when={(row.subjects ?? []).length > 0}>
-                        <p class="den-settings-hint" data-testid="saved-approvals-recent-subjects">
-                          {SAVED_APPROVALS_COPY.recentSubjects(row.subjects ?? [])}
+                  <li data-testid="saved-approvals-recent-row" data-gate={row.gate}>
+                    <div class="den-saved-approvals-row">
+                      <div class="den-saved-approvals-row-main">
+                        <span class="den-saved-approvals-title">{gateLabel(row.gate)}</span>
+                        <p class="den-settings-hint">
+                          {SAVED_APPROVALS_COPY.recentCounts(row.asks, row.allowed)}
+                          <Show when={row.asks > 1 && row.allowed === row.asks}>
+                            {" · "}
+                            <span data-testid="saved-approvals-recent-all-allowed">
+                              {SAVED_APPROVALS_COPY.recentAllAllowed}
+                            </span>
+                          </Show>
                         </p>
+                        <Show when={(row.subjects ?? []).length > 0}>
+                          <p class="den-settings-hint" data-testid="saved-approvals-recent-subjects">
+                            {SAVED_APPROVALS_COPY.recentSubjects(row.subjects ?? [])}
+                          </p>
+                        </Show>
+                      </div>
+                      <Show when={row.host_pattern?.trim()} keyed>
+                        {(pattern) => (
+                          <Show
+                            when={!done()[row.gate]}
+                            fallback={
+                              <span class="den-settings-hint" data-testid="saved-approvals-recent-widened">
+                                {SAVED_APPROVALS_COPY.recentWidenDone(pattern)}
+                              </span>
+                            }
+                          >
+                            <DenButton
+                              variant="secondary"
+                              data-testid="saved-approvals-recent-widen"
+                              disabled={busy() === row.gate}
+                              onClick={() => void widen(row)}
+                            >
+                              {SAVED_APPROVALS_COPY.recentWiden(pattern)}
+                            </DenButton>
+                          </Show>
+                        )}
                       </Show>
                     </div>
-                    <Show when={row.host_pattern?.trim()} keyed>
-                      {(pattern) => (
-                        <Show
-                          when={!done()[row.gate]}
-                          fallback={
-                            <span class="den-settings-hint" data-testid="saved-approvals-recent-widened">
-                              {SAVED_APPROVALS_COPY.recentWidenDone(pattern)}
-                            </span>
-                          }
-                        >
-                          <DenButton
-                            variant="secondary"
-                            data-testid="saved-approvals-recent-widen"
-                            disabled={busy() === row.gate}
-                            onClick={() => void widen(row)}
-                          >
-                            {SAVED_APPROVALS_COPY.recentWiden(pattern)}
-                          </DenButton>
-                        </Show>
-                      )}
-                    </Show>
                   </li>
                 )}
               </For>

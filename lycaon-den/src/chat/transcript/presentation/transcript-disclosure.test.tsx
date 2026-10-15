@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
+import { applyWebEngineFact } from "../../../platform/desktop/webkit-atspi-workaround.ts";
 import { fireEvent, render } from "@solidjs/testing-library";
 import { createRoot, createSignal } from "solid-js";
 import { bindScrollportMotion, scrollportMotionForHost, unbindScrollportMotion } from "../../../platform/scrolling/scrollport-motion.ts";
@@ -149,6 +150,24 @@ describe("transcript disclosure leases", () => {
       </TranscriptViewportProvider>
     ));
     expect(second.getByTestId("shell").getAttribute("data-expanded") === "true").toBe(true);
+  });
+
+  it("mounts the panel only while open under the WebKitGTK workaround", () => {
+    applyWebEngineFact({ engine: "webkitgtk", version: "2.52.6" });
+    onTestFinished(() => applyWebEngineFact(null));
+    const controller = createTranscriptViewportController({ sessionId: () => "s1" });
+    const view = render(() => (
+      <TranscriptViewportProvider value={controller}>
+        <Disclosure />
+      </TranscriptViewportProvider>
+    ));
+    const toggle = view.getByRole("button", { name: "Details" });
+    expect(view.queryByText("Body")).toBeNull();
+    expect(toggle.hasAttribute("aria-controls")).toBe(false);
+    fireEvent.click(toggle);
+    const panel = view.getByText("Body");
+    expect(panel.hidden).toBe(false);
+    expect(toggle.getAttribute("aria-controls")).toBe(panel.id);
   });
 
   it("exposes the toggle as a button that controls its panel", () => {

@@ -4,7 +4,7 @@ import type { LycaonClient } from "../../api/client.ts";
 import { createChatContentAccess } from "../../chat/transcript/content/chat-content-reader.ts";
 import { bindChatContentFind } from "../../chat/transcript/content/chat-content-find.ts";
 import { ToolContentProvider } from "../../chat/tool/tool-content.tsx";
-import { TOOL_CONTENT_REVEAL_EVENT } from "../../chat/tool/tool-part-find.ts";
+import { TOOL_CONTENT_REVEAL_EVENT, toolPartFindCorpus } from "../../chat/tool/tool-part-find.ts";
 import { findController } from "../../find/find-controller.ts";
 import { useTranscriptEntry } from "../../chat/transcript/presentation/transcript-entry.ts";
 import {
@@ -158,7 +158,7 @@ export function ToolPartShell(props: Props) {
     hostEl,
     isCollapsed: () => !open(),
     revealForFind: revealTemporarily,
-    collapsedCorpus: () => [props.part.title, props.part.displaySubject, props.part.argsReference ? "" : JSON.stringify(props.part.args), props.part.outputReference ? "" : props.part.output].filter(Boolean).join("\n"),
+    collapsedCorpus: () => toolPartFindCorpus(props.part),
     collapsedCorpusAnchor: summaryEl,
   });
 

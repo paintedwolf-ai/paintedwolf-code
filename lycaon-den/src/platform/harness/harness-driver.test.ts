@@ -67,4 +67,11 @@ describe("harness prompt admission", () => {
     await vi.advanceTimersByTimeAsync(1_000);
     expect(await result).toMatchObject({ ok: true, state: { sessionId: "new-session" } });
   });
+
+  it("stands in for the shell's web engine fact", () => {
+    expect(window.__harness!.setWebEngine("webkitgtk", "2.54.1")).toEqual({ ok: true, webkitAtspiWorkaround: true });
+    expect(document.documentElement.hasAttribute("data-den-webkit-atspi-workaround")).toBe(true);
+    expect(window.__harness!.setWebEngine("wkwebview")).toEqual({ ok: true, webkitAtspiWorkaround: false });
+    expect(document.documentElement.hasAttribute("data-den-webkit-atspi-workaround")).toBe(false);
+  });
 });

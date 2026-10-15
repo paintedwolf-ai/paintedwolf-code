@@ -21,6 +21,8 @@ import type { TranscriptDisclosureKey } from "../../../chat/transcript/presentat
 type Props = {
   source: DiffRowSource;
   onNetStat?: (stat: FileEditLineStat) => void;
+  /** Set when the owner measures this row's net change. */
+  netStat?: () => FileEditLineStat | undefined;
   chrome?: "card" | "row";
   /** Holds the measured net-diff height until the reader loads. */
   reserve?: number;
@@ -70,12 +72,15 @@ export function SourceDiffRow(props: Props) {
   const [statError, setStatError] = createSignal<unknown>();
   const [readerHandle, setReaderHandle] = createSignal<SourceReaderHandle>();
   const access = createMemo(() => props.source.access(activeIndex()));
-  const stat = () => props.source.stat(activeIndex()) ?? hostStat();
+  const ownerNet = () => (activeIndex() == null ? props.netStat?.() : undefined);
+  const stat = () => props.source.stat(activeIndex()) ?? ownerNet() ?? hostStat();
   createEffect(() => {
     const reader = access(); const index = activeIndex();
     setHostStat(null); setStatError(undefined);
     // Measured comparisons already include line counts.
     if (!reader || (revisions().length <= 1 && !bodyOpen())) return;
+    // An owner that measures the net change leaves it to the owner.
+    if (index == null && props.netStat && revisions().length > 1) return;
     let cancelled = false;
     void reader.summary().then(summary => {
       if (cancelled) return;

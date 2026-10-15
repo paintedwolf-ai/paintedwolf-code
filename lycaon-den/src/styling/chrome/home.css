@@ -301,6 +301,19 @@
 .home-view__idea-input::placeholder {
   color: var(--den-text-muted);
 }
+/* WebKitGTK AT-SPI workaround: the hint drawn in place of the placeholder. */
+:root[data-den-webkit-atspi-workaround] .home-view__idea-scroll .den-scrollport__content {
+  position: relative;
+}
+.home-view__idea-hint {
+  position: absolute;
+  inset: 0 auto auto 0;
+  pointer-events: none;
+  color: var(--den-text-muted);
+  font-size: var(--text-den-subhead);
+  line-height: 1.45;
+  white-space: nowrap;
+}
 .home-view__idea-input:focus-visible {
   box-shadow: none;
 }

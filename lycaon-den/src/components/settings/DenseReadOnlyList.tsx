@@ -57,20 +57,22 @@ export function DenseReadOnlyList(props: Props) {
         <ul class="den-dense-list-items" data-testid={`${testId()}-items`}>
           <For each={paged().slice}>
             {(item) => (
-              <li class="den-dense-list-row" data-testid={`${testId()}-row-${item.id}`}>
-                <span class="den-dense-list-primary">{item.primary}</span>
-                <Show when={item.meta} keyed>
-                  {(meta) => (
-                    <span class="den-dense-list-meta" data-tip={item.metaTitle}>
-                      {meta}
-                    </span>
-                  )}
-                </Show>
-                <Show when={item.secondary} keyed>
-                  {(secondary) => (
-                    <span class="den-dense-list-secondary">{secondary}</span>
-                  )}
-                </Show>
+              <li data-testid={`${testId()}-row-${item.id}`}>
+                <div class="den-dense-list-row">
+                  <span class="den-dense-list-primary">{item.primary}</span>
+                  <Show when={item.meta} keyed>
+                    {(meta) => (
+                      <span class="den-dense-list-meta" data-tip={item.metaTitle}>
+                        {meta}
+                      </span>
+                    )}
+                  </Show>
+                  <Show when={item.secondary} keyed>
+                    {(secondary) => (
+                      <span class="den-dense-list-secondary">{secondary}</span>
+                    )}
+                  </Show>
+                </div>
               </li>
             )}
           </For>

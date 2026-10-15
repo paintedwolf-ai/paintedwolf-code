@@ -271,6 +271,9 @@
 .project-folders__summary .project-folders__path {
   grid-column: auto;
 }
+.project-folders__item {
+  display: block;
+}
 .project-folders__row.den-list-row {
   --project-folder-action-width: max(24px, 1.5em);
   display: grid;

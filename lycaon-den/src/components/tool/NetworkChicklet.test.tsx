@@ -1,4 +1,4 @@
-import { disclosureToggle } from "../../test/transcript-disclosure-fixture.ts";
+import { disclosureToggle, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { fireEvent, render } from "@solidjs/testing-library";
@@ -210,5 +210,27 @@ describe("NetworkChicklet / External access", () => {
     });
     expect(view?.endpoints[0]?.label).toContain("[2001:db8::1]:443");
     expect(view?.endpoints[0]?.label).toContain("SOCKS TCP");
+  });
+});
+
+describe("NetworkChicklet under the WebKitGTK AT-SPI workaround", () => {
+  it("shows the same collapsed summary", async () => {
+    await expectSameCollapsedFace(() => {
+      const view = render(() => (
+        <NetworkActionContext.Provider value={{ blockHost: vi.fn(), isBlocked: () => false }}>
+          <NetworkChicklet
+            externalAccess={{
+              modes: ["mediated_http"],
+              visibility_summary: "observed",
+              endpoints: [
+                { host: "github.com", port: 443, transport: "http_connect", visibility: "observed", decision: "allow", attempt_count: 1 },
+                { host: "evil.test", port: 443, transport: "http_connect", visibility: "observed", decision: "deny", attempt_count: 2 },
+              ],
+            }}
+          />
+        </NetworkActionContext.Provider>
+      ));
+      return { card: () => view.container.firstElementChild, unmount: view.unmount };
+    });
   });
 });

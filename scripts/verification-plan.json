@@ -335,6 +335,9 @@
     "den:webkit:scroll": [
       "den:webkit:scroll"
     ],
+    "den:webkit:atspi": [
+      "den:webkit:atspi"
+    ],
     "decide:test": [
       "decide:test"
     ],
@@ -361,7 +364,8 @@
     "den:harness:test": "playwright",
     "lint:fast": "passthrough",
     "lint:full": "passthrough",
-    "oar:conformance": "passthrough"
+    "oar:conformance": "passthrough",
+    "den:webkit:atspi": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -639,6 +643,12 @@
     "den:webkit:scroll": {
       "locks": [
         "*"
+      ],
+      "workers": 1
+    },
+    "den:webkit:atspi": {
+      "locks": [
+        "harness"
       ],
       "workers": 1
     },

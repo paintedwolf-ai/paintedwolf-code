@@ -563,30 +563,29 @@ export function SidebarScopePicker(props: Props) {
                 />
               </label>
             </li>
-            <li
-              class="den-sidebar-scope-picker__option"
-              data-testid="sidebar-scope-deleted-lines"
-            >
-              <span class="den-sidebar-scope-picker__option-title">
-                Deleted lines
-              </span>
-              <BrowseSegmented
-                class="den-sidebar-scope-picker__segment"
-                ariaLabel="Deleted lines"
-                value={deletedLines()}
-                options={[
-                  { id: "folded", label: "Folded", testId: "sidebar-scope-deleted-lines-folded" },
-                  { id: "inplace", label: "In place", testId: "sidebar-scope-deleted-lines-inplace" },
-                ]}
-                onChange={(id) => {
-                  if (id === "folded" || id === "inplace") setDeletedLines(props.projectId, id);
-                }}
-              />
-              <span class="den-sidebar-scope-picker__option-detail">
-                {deletedLines() === "folded"
-                  ? "Folded into a mark on the edge. Hover it to preview."
-                  : "Shown above the lines that replaced them."}
-              </span>
+            <li data-testid="sidebar-scope-deleted-lines">
+              <div class="den-sidebar-scope-picker__option">
+                <span class="den-sidebar-scope-picker__option-title">
+                  Deleted lines
+                </span>
+                <BrowseSegmented
+                  class="den-sidebar-scope-picker__segment"
+                  ariaLabel="Deleted lines"
+                  value={deletedLines()}
+                  options={[
+                    { id: "folded", label: "Folded", testId: "sidebar-scope-deleted-lines-folded" },
+                    { id: "inplace", label: "In place", testId: "sidebar-scope-deleted-lines-inplace" },
+                  ]}
+                  onChange={(id) => {
+                    if (id === "folded" || id === "inplace") setDeletedLines(props.projectId, id);
+                  }}
+                />
+                <span class="den-sidebar-scope-picker__option-detail">
+                  {deletedLines() === "folded"
+                    ? "Folded into a mark on the edge. Hover it to preview."
+                    : "Shown above the lines that replaced them."}
+                </span>
+              </div>
             </li>
 
             <li

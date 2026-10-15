@@ -32,6 +32,7 @@ import {
 import { installMainThreadPerfObserver } from "./chat/stream/den-main-thread-perf.ts";
 import { setupAccessibilityTextSize } from "./platform/desktop/accessibility-text-size.ts";
 import { setupSystemAppearance } from "./platform/desktop/system-appearance.ts";
+import { setupWebKitAtspiWorkaround } from "./platform/desktop/webkit-atspi-workaround.ts";
 import { loadShellCommandPackaged } from "./platform/desktop/shell-command.ts";
 import { setupLiveRegionBridge } from "./platform/desktop/live-region-bridge.ts";
 import { setupWheelGlideDiagnostics } from "./platform/scrolling/wheel-glide-diagnostics.ts";
@@ -59,6 +60,7 @@ installMainThreadPerfObserver();
 void setupWindowChrome();
 void setupAccessibilityTextSize();
 void setupSystemAppearance();
+void setupWebKitAtspiWorkaround();
 void setupWheelGlideDiagnostics();
 void loadShellCommandPackaged();
 

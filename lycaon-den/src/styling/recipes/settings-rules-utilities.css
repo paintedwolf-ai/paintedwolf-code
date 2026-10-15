@@ -22,7 +22,7 @@
   background: var(--den-background);
   overflow: hidden;
 
-  & li {
+  & .den-settings-rules-row {
     display: grid;
     grid-template-columns:
       minmax(112px, 0.85fr)
@@ -34,7 +34,7 @@
     padding: var(--spacing-den-5) var(--spacing-den-6);
     border-bottom: 1px solid var(--den-line);
   }
-  & li:last-child {
+  & li:last-child > .den-settings-rules-row {
     border-bottom: none;
   }
   & code {
@@ -51,7 +51,7 @@
 }
 
 @utility den-settings-rules-pairs {
-  & li {
+  & .den-settings-rules-row {
     grid-template-columns: 1fr 1fr auto;
   }
 }

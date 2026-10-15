@@ -1,4 +1,4 @@
-import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
+import { disclosureToggle, isDisclosureOpen, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render } from "@solidjs/testing-library";
@@ -301,6 +301,20 @@ describe("CheckpointDecisionChicklet", () => {
     expect(approvalReviewTarget()).toEqual({
       sessionId: "s-test",
       checkpointId: "chk-pending",
+    });
+  });
+});
+
+describe("CheckpointDecisionChicklet under the WebKitGTK AT-SPI workaround", () => {
+  it("shows the same collapsed decision", async () => {
+    await expectSameCollapsedFace(() => {
+      const view = render(() => (
+        <CheckpointDecisionChicklet
+          meta={{ checkpoint_id: "chk-secret", kind: "tool_approval", status: "approved", tool: "model request", subject: "GitHub Personal Access Token", location: ".env.local:7 → Fireworks" }}
+          entryKey="checkpoint:parity"
+        />
+      ));
+      return { card: () => view.container.firstElementChild, unmount: view.unmount };
     });
   });
 });

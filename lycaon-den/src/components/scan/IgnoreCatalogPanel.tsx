@@ -30,32 +30,34 @@ export function IgnoreCatalogPanel(props: Props) {
   };
 
   const row = (rule: FindingIgnoreRule) => (
-    <li class="den-ignore-rules__row" data-testid="ignore-catalog-row">
-      <span class="den-ignore-rules__row-text">
-        <span class="den-ignore-rules__reason">{rule.reason}</span>
-        <span class="den-ignore-rules__predicates">{ignoreEntrySummary(rule)}</span>
-      </span>
-      <span class="den-ignore-rules__coverage">{coverageLine(rule)}</span>
-      <span class="den-ignore-rules__action">
-        <Show
-          when={rule.withdrawable}
-          fallback={
-            <Show when={rule.source === "project"}>
-              <span data-testid="ignore-catalog-readonly">Edit in the file</span>
-            </Show>
-          }
-        >
-          <button
-            type="button"
-            class="den-ignore-rules__withdraw"
-            data-testid="ignore-catalog-withdraw"
-            disabled={props.pending}
-            onClick={() => props.onWithdraw(rule.id)}
+    <li data-testid="ignore-catalog-row">
+      <div class="den-ignore-rules__row">
+        <span class="den-ignore-rules__row-text">
+          <span class="den-ignore-rules__reason">{rule.reason}</span>
+          <span class="den-ignore-rules__predicates">{ignoreEntrySummary(rule)}</span>
+        </span>
+        <span class="den-ignore-rules__coverage">{coverageLine(rule)}</span>
+        <span class="den-ignore-rules__action">
+          <Show
+            when={rule.withdrawable}
+            fallback={
+              <Show when={rule.source === "project"}>
+                <span data-testid="ignore-catalog-readonly">Edit in the file</span>
+              </Show>
+            }
           >
-            Withdraw
-          </button>
-        </Show>
-      </span>
+            <button
+              type="button"
+              class="den-ignore-rules__withdraw"
+              data-testid="ignore-catalog-withdraw"
+              disabled={props.pending}
+              onClick={() => props.onWithdraw(rule.id)}
+            >
+              Withdraw
+            </button>
+          </Show>
+        </span>
+      </div>
     </li>
   );
 
