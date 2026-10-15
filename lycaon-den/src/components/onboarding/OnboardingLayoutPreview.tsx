@@ -1,4 +1,9 @@
 import { For, Show } from "solid-js";
+import {
+  drawsWindowControls,
+  windowChromeControls,
+  type WindowChromeSide,
+} from "../../platform/windows/window-chrome-layout.ts";
 
 type Width = "10" | "15" | "20" | "25" | "30" | "40" | "55" | "65" | "75" | "85" | "95";
 type Tone = "keyword" | "function" | "string" | "type" | "plain";
@@ -165,6 +170,35 @@ function Conversation() {
   );
 }
 
+function PreviewControls(props: { side: WindowChromeSide }) {
+  return (
+    <span class="onboarding-layout-preview__controls" data-side={props.side}>
+      <For each={windowChromeControls(props.side)}>{(control) => <i data-control={control} />}</For>
+    </span>
+  );
+}
+
+/** The miniature's title bar carries the buttons this desktop draws, where it draws them. */
+function PreviewTitlebar() {
+  return (
+    <Show
+      when={drawsWindowControls()}
+      fallback={
+        <span class="onboarding-layout-preview__titlebar">
+          <i />
+          <i />
+          <i />
+        </span>
+      }
+    >
+      <span class="onboarding-layout-preview__titlebar" data-window-controls="drawn">
+        <PreviewControls side="left" />
+        <PreviewControls side="right" />
+      </span>
+    </Show>
+  );
+}
+
 /** A miniature window in the live theme, mirrored with the workspace. */
 export function OnboardingLayoutPreview(props: {
   kind: "chat" | "split";
@@ -182,11 +216,7 @@ export function OnboardingLayoutPreview(props: {
       }}
       data-testid={`onboarding-layout-preview-${props.kind}`}
     >
-      <span class="onboarding-layout-preview__titlebar">
-        <i />
-        <i />
-        <i />
-      </span>
+      <PreviewTitlebar />
       <span class="onboarding-layout-preview__body">
         <Rail />
         <Show when={props.kind === "split"}>

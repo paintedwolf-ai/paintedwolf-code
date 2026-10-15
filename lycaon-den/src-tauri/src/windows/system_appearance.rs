@@ -15,7 +15,7 @@ pub struct SystemAppearancePayload {
 
 pub const SYSTEM_APPEARANCE_CHANGED_EVENT: &str = "appearance://system-changed";
 
-#[cfg(any(not(target_os = "macos"), test))]
+#[cfg(any(not(any(target_os = "macos", target_os = "linux")), test))]
 fn default_payload() -> SystemAppearancePayload {
     SystemAppearancePayload {
         increase_contrast: false,
@@ -31,7 +31,11 @@ pub fn system_appearance() -> SystemAppearancePayload {
     {
         macos::current_payload()
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        super::linux_desktop_settings::portal::current_appearance_payload()
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         default_payload()
     }
@@ -43,7 +47,12 @@ pub fn setup(app: AppHandle) -> Result<(), String> {
     {
         macos::setup_macos(app)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(target_os = "linux")]
+    {
+        // One portal watch serves both the appearance and text-size payloads.
+        super::linux_desktop_settings::portal::setup(app)
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = app;
         Ok(())
@@ -54,7 +63,7 @@ fn hex_channel(value: f64) -> u8 {
     (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-fn hex_color(red: f64, green: f64, blue: f64) -> String {
+pub(crate) fn hex_color(red: f64, green: f64, blue: f64) -> String {
     format!(
         "#{:02x}{:02x}{:02x}",
         hex_channel(red),

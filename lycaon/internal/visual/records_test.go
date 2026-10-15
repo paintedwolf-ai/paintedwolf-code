@@ -15,14 +15,18 @@ import (
 
 func recordFor(f durableFixture, id string, body []byte) ArtifactRecord {
 	return ArtifactRecord{
-		ID:            id,
-		ProjectID:     f.project,
-		RootSessionID: "root-1",
-		SessionID:     "root-1",
-		ContentHash:   artifactContentHash(body),
-		ByteSize:      int64(len(body)),
-		Mime:          "image/png",
-		Source:        string(api.VisualArtifactSourceRender),
+		ArtifactScope: ArtifactScope{
+			ID:            id,
+			ProjectID:     f.project,
+			RootSessionID: "root-1",
+			SessionID:     "root-1",
+		},
+		ArtifactContent: ArtifactContent{
+			ContentHash: artifactContentHash(body),
+			ByteSize:    int64(len(body)),
+			Mime:        "image/png",
+			Source:      string(api.VisualArtifactSourceRender),
+		},
 	}
 }
 

@@ -74,6 +74,9 @@ type refusalWatchT struct {
 	ready  string
 	cancel context.CancelFunc
 	done   chan struct{}
+	// supervised marks refusals reported by each launch's supervisor rather
+	// than read from a kernel stream.
+	supervised bool
 }
 
 var refusalWatch = &refusalWatchT{
@@ -84,9 +87,21 @@ var refusalWatch = &refusalWatchT{
 
 // StartRefusalWatch begins reading the kernel's sandbox reports. Actions bound
 // before the stream is live report an incomplete witness; a host that cannot
-// read the reports gives every action an unavailable one.
+// read the reports gives every action an unavailable one. Where each launch's
+// supervisor reports instead, the watch is live at once.
 func StartRefusalWatch(ctx context.Context, stateRoot string) {
+	if supervisedRefusalReports() {
+		refusalWatch.startSupervised()
+		return
+	}
 	refusalWatch.start(ctx, newRefusalSource(stateRoot))
+}
+
+// startSupervised marks the watch live for launch-reported refusals.
+func (w *refusalWatchT) startSupervised() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.state, w.reason, w.supervised = watchLive, "", true
 }
 
 // StopRefusalWatch preserves collected reports and degrades active witnesses.
@@ -117,6 +132,7 @@ func (w *refusalWatchT) stop() {
 	if w.state != watchUnavailable {
 		w.state = watchOff
 	}
+	w.supervised = false
 	w.degradeLocked()
 	w.mu.Unlock()
 	if cancel != nil {
@@ -282,6 +298,11 @@ func (w *refusalWatchT) register(tag string, rules FilesystemRules) *refusalFeed
 	defer w.mu.Unlock()
 	switch w.state {
 	case watchLive:
+		if w.supervised {
+			// The supervisor reports socket calls only; a refused file access
+			// reaches no record.
+			feed.witness = WitnessIncomplete
+		}
 	case watchStarting:
 		feed.witness = WitnessIncomplete
 	default:
@@ -301,8 +322,14 @@ func (w *refusalWatchT) unregister(tag string) {
 }
 
 // settle waits for a kernel refusal barrier; silent stream loss remains possible.
+// Supervised reports settle when every launch's report pipe has closed.
 func (w *refusalWatchT) settle(ctx context.Context, feed *refusalFeed) {
 	w.mu.Lock()
+	if w.supervised {
+		w.mu.Unlock()
+		feed.awaitReports(ctx)
+		return
+	}
 	if w.state != watchLive || feed.currentWitness() != WitnessKernel {
 		w.mu.Unlock()
 		return
@@ -338,6 +365,8 @@ func newRefusalNonce() string {
 }
 
 type refusalFeed struct {
+	// reports counts launch report pipes still open.
+	reports   sync.WaitGroup
 	mu        sync.Mutex
 	rules     FilesystemRules
 	witness   RefusalWitness
@@ -379,6 +408,33 @@ func (f *refusalFeed) record(k kernelRefusal) {
 	for _, listen := range listeners {
 		listen()
 	}
+}
+
+// awaitReports waits, within the settle bound, for every launch's report pipe
+// to close; a pipe still open then degrades the record.
+func (f *refusalFeed) awaitReports(ctx context.Context) {
+	done := make(chan struct{})
+	go func() {
+		f.reports.Wait()
+		close(done)
+	}()
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refusalSettleTimeout)
+	defer cancel()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		f.degrade(WitnessIncomplete)
+	}
+}
+
+// feedFor is the feed of a bound action's tag; nil for an unbound one.
+func (w *refusalWatchT) feedFor(tag string) *refusalFeed {
+	if tag == "" {
+		return nil
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.feeds[tag]
 }
 
 func (f *refusalFeed) snapshot() SandboxRefusals {

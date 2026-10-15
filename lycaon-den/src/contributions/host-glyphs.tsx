@@ -62,6 +62,10 @@ export const HOST_GLYPHS: Record<IconSlot, Glyph> = {
   ),
   "sidebar-collapse": () => <path d="M10 3.5 5.5 8 10 12.5" />,
   "sidebar-expand": () => <path d="M6 3.5 10.5 8 6 12.5" />,
+  "app-menu": () => <path d="M3 4.5h10M3 8h10M3 11.5h10" />,
+  "window-minimize": () => <path d="M3.5 8.5h9" />,
+  "window-maximize": () => <path d="M3.5 3.5h9v9h-9z" />,
+  "window-restore": () => <path d="M3.5 6.5h6v6h-6zM6.5 6.5v-3h6v6h-3" />,
   "back": () => <path d="M9.71 4 5.71 8l4 4" />,
   "project-folder": () => <ProjectFolderMark />,
   "project-switcher": () => (

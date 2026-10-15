@@ -199,16 +199,16 @@ export async function toggleAndExpectControlled(
   opts?: { geometryAboveChanges?: boolean },
 ) {
   const before = await stream.evaluate((element) => element.scrollTop);
-  const wasOpen = await shell.getAttribute("open");
+  const wasOpen = (await shell.getAttribute("data-expanded")) === "true";
   await startDisclosureScrollTrace(control);
   await clickDisclosureWithoutReveal(control);
-  if (wasOpen === null) await expect(shell).toHaveAttribute("open", "");
-  else await expect(shell).not.toHaveAttribute("open", "");
+  if (!wasOpen) await expect(shell).toHaveAttribute("data-expanded", "true");
+  else await expect(shell).not.toHaveAttribute("data-expanded", "true");
   await expect(shell).not.toHaveAttribute("data-animating", "true", {
     timeout: 2_000,
   });
   const trace = await stopDisclosureScrollTrace(control);
-  if (wasOpen === null) {
+  if (!wasOpen) {
     expectStableScrollTrace(
       trace,
       opts?.geometryAboveChanges ? ["scrollTop"] : undefined,

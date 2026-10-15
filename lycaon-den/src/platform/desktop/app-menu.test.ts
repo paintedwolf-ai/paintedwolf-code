@@ -31,11 +31,13 @@ vi.mock("../windows/window-channel.ts", () => ({
 }));
 
 const {
+  activateAppMenuCommand,
   attachAppMenuCommands,
   invalidateAppMenuProjection,
   syncAppMenu,
   resetAppMenuForTests,
 } = await import("./app-menu.ts");
+const { setShortcutPlatformForTests } = await import("../../shortcuts/platform.ts");
 const { seedStockFrame, stockBindingId, stockId } = await import(
   "../../contributions/stock-frame-test.ts"
 );
@@ -44,6 +46,11 @@ const { claimShortcutBoundary } = await import("../../shortcuts/dispatcher.ts");
 
 const specA = [{ menu: "file", title: "File", groups: [] }];
 const specB = [{ menu: "file", title: "Fichier", groups: [] }];
+
+// The native menu bar is the default surface; tests that need the in-window
+// surface set Linux themselves. Pinning it keeps the host's user agent out.
+beforeEach(() => setShortcutPlatformForTests("macos"));
+afterEach(() => setShortcutPlatformForTests(null));
 
 describe("syncAppMenu", () => {
   beforeEach(() => {
@@ -199,6 +206,17 @@ describe("syncAppMenu", () => {
     expect(buildAppMenuSpec).not.toHaveBeenCalled();
   });
 
+  it("pushes nothing where the menu opens inside the window", async () => {
+    setShortcutPlatformForTests("linux");
+    try {
+      await syncAppMenu(null);
+      expect(invoke).not.toHaveBeenCalled();
+      expect(buildAppMenuSpec).not.toHaveBeenCalled();
+    } finally {
+      setShortcutPlatformForTests(null);
+    }
+  });
+
   it("a build failure never throws into the shell", async () => {
     buildAppMenuSpec.mockImplementation(() => {
       throw new Error("bad spec");
@@ -273,6 +291,27 @@ describe("attachAppMenuCommands", () => {
     stop();
   });
 
+  it("refuses an accelerator item whose projected chord has no binding behind it", async () => {
+    seedStockFrame();
+    buildAppMenuSpec.mockReturnValue([
+      {
+        menu: "help",
+        title: "Help",
+        groups: [[{
+          id: stockId("help-shortcuts"),
+          title: "Keyboard shortcuts",
+          accelerator: "CmdOrCtrl+/",
+          enabled: true,
+        }]],
+      },
+    ]);
+    await syncAppMenu(null);
+    const stop = attachAppMenuCommands(activate);
+    expect(activateAppMenuCommand(stockId("help-shortcuts"))).toBe(false);
+    expect(activate).not.toHaveBeenCalled();
+    stop();
+  });
+
   it("re-checks the declaration condition when an accelerator fires", async () => {
     seedStockFrame({ projectOpen: false });
     buildAppMenuSpec.mockReturnValue([
@@ -300,5 +339,35 @@ describe("attachAppMenuCommands", () => {
     menuListener?.({ payload: stockId("session-new") });
     expect(activate).toHaveBeenCalledOnce();
     stop();
+  });
+});
+
+describe("activateAppMenuCommand", () => {
+  beforeEach(() => {
+    resetAppMenuForTests();
+    resetContributionStoreForTest();
+    seedStockFrame();
+  });
+
+  it("routes a known, available command to the attached activation", () => {
+    const activate = vi.fn();
+    const detach = attachAppMenuCommands(activate);
+    expect(activateAppMenuCommand(stockId("help-shortcuts"))).toBe(true);
+    expect(activate).toHaveBeenCalledWith(stockId("help-shortcuts"));
+    expect(activateAppMenuCommand("acme/pack:unknown")).toBe(false);
+    detach();
+    expect(activateAppMenuCommand(stockId("help-shortcuts"))).toBe(false);
+    expect(activate).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not listen for native menu events where the menu is in the window", () => {
+    setShortcutPlatformForTests("linux");
+    try {
+      const detach = attachAppMenuCommands(vi.fn());
+      expect(menuListener).toBeNull();
+      detach();
+    } finally {
+      setShortcutPlatformForTests(null);
+    }
   });
 });

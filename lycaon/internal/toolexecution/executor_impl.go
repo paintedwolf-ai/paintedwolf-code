@@ -1,20 +1,15 @@
 package toolexecution
 
 import (
-	"github.com/lycaon/lycaon/internal/toolsecrets"
-
-	"github.com/lycaon/lycaon/internal/capabilityrequest"
-
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolcommand"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/authzledger"
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/oar"
@@ -22,7 +17,11 @@ import (
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/toolcommand"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolsecrets"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -64,6 +63,7 @@ func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[st
 		ProjectDir:      tc.ActiveRootPath(),
 	})
 	if reject := e.validateInvocation(ctx, qualifiedName, profileID, args, &tc); reject != nil {
+		ctx = tools.WithRecoveryTools(ctx, tc.Turn.TurnOfferedToolNames)
 		return "", e.Rejections.rejectBeforeInvoke(ctx, qualifiedName, profileID, args, reject)
 	}
 	secretUse, parseErr := parseSecretUse(tc.Invocation.Contract, args)
@@ -172,6 +172,9 @@ func (e *Executor) validateInvocation(
 	if reject := e.exactCommandReplacementReject(ctx, qualifiedName, profileID, args, *tc); reject != nil {
 		return reject
 	}
+	if reject := commandFileWriteReject(ctx, e, qualifiedName, profileID, args, tc); reject != nil {
+		return reject
+	}
 	if reject := toolcommand.ArgvShapeReject(qualifiedName, args); reject != nil {
 		return reject
 	}
@@ -181,10 +184,6 @@ func (e *Executor) validateInvocation(
 			return reject
 		}
 	}
-	if reject := tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir); reject != nil {
-		return reject
-	}
-
 	// Freeze the registry contract when the caller did not lease one.
 	// Dynamic tools are absent from the compiled catalog.
 	if strings.TrimSpace(tc.Invocation.Contract.Owner) == "" {
@@ -201,7 +200,10 @@ func (e *Executor) validateInvocation(
 		}
 		tc.Invocation.Contract = def.Contract
 	}
-	return capabilityrequest.ValidateCapabilityContract(tc.Invocation.Contract, args)
+	if reject := capabilityrequest.ValidateCapabilityContract(tc.Invocation.Contract, args); reject != nil {
+		return reject
+	}
+	return tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir)
 }
 
 func (e *Executor) exactCommandReplacementReject(
@@ -242,6 +244,67 @@ func (e *Executor) exactCommandReplacementReject(
 		}
 	}
 	return toolcommand.ReplacementReject(envelope.Command, profileID, calls)
+}
+
+func commandFileWriteReject(
+	ctx context.Context,
+	e *Executor,
+	toolName, profileID string,
+	args map[string]any,
+	tc *tools.ToolContext,
+) *toolrejection.ToolReject {
+	if _, callable := e.definitionFor("write"); !callable {
+		return nil
+	}
+	schema := e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, toolName)
+	fw, ok := toolcommand.InspectCommandFileWrite(ctx, toolName, toolcommand.ArgsWithoutDefaults(args, schema), tc.ActiveRootPath())
+	if !ok {
+		return nil
+	}
+	var canWrite, toolLoadable bool
+	for _, name := range tc.Turn.TurnOfferedToolNames {
+		if name == "write" {
+			canWrite = true
+		}
+		if name == "request_tools" && tc.Turn.TurnToolPlan.Deferred("write") {
+			toolLoadable = true
+		}
+	}
+	if canWrite {
+		toolLoadable = false
+	}
+	var calls []toolcommand.ReplacementCall
+	if canWrite && fw.Exact {
+		valid := true
+		for _, call := range fw.Calls {
+			if !slices.Contains(tc.Turn.TurnOfferedToolNames, call.Tool) {
+				valid = false
+				break
+			}
+			if _, callable := e.definitionFor(call.Tool); !callable {
+				valid = false
+				break
+			}
+			decision, _ := tools.EvaluateListVisible(ctx, e.Metadata.policy, platform.PolicyContext{
+				ProfileID: profileID, ToolAccess: tc.Turn.ToolAccess, ToolName: call.Tool,
+			})
+			if decision == nil || !decision.Allowed {
+				valid = false
+				break
+			}
+			callSchema := e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, call.Tool)
+			if callSchema == nil || tools.ValidateToolArgs(callSchema, call.Args) != nil {
+				valid = false
+				break
+			}
+		}
+		if valid {
+			calls = fw.Calls
+		}
+	} else if !canWrite && toolLoadable {
+		calls = []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "write"}}}
+	}
+	return toolcommand.FileWriteReject(fw, profileID, calls, toolLoadable)
 }
 
 // definitionFor reads the registry snapshot dispatch will run.

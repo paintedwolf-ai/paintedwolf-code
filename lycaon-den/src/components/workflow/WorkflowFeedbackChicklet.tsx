@@ -1,7 +1,12 @@
 import { Show } from "solid-js";
 import type { WorkflowFeedbackMeta } from "../../api/types.ts";
 import { useTranscriptEntry } from "../../chat/transcript/presentation/transcript-entry.ts";
-import { useTranscriptDisclosure } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
+import {
+  TranscriptDisclosurePanel,
+  TranscriptDisclosureShell,
+  TranscriptDisclosureToggle,
+  useTranscriptDisclosure,
+} from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
 import { DecisionRow } from "../transcript/DecisionRow.tsx";
 import {
@@ -25,7 +30,7 @@ export function WorkflowFeedbackChicklet(props: Props) {
       ? { sessionId: props.sessionId ?? undefined, entryKey: props.entryKey }
       : undefined;
   const { bindTranscriptEntry } = useTranscriptEntry(entryOpts);
-  const { key: disclosureKey, open, onToggle, onSummaryClick } = useTranscriptDisclosure(() =>
+  const disclosure = useTranscriptDisclosure(() =>
     props.entryKey ? transcriptDisclosureKey.workflowFeedback(props.entryKey) : undefined,
   );
 
@@ -47,7 +52,8 @@ export function WorkflowFeedbackChicklet(props: Props) {
   });
 
   return (
-    <details
+    <TranscriptDisclosureShell
+      disclosure={disclosure}
       ref={bindTranscriptEntry}
       class="den-checkpoint-decision-chicklet den-checkpoint-decision-chicklet--expandable den-transcript-disclosure-card"
       classList={statusClass()}
@@ -55,13 +61,10 @@ export function WorkflowFeedbackChicklet(props: Props) {
       data-card-state={props.view.kind}
       data-resolved-by={resolvedBy() || undefined}
       data-phase-id={props.meta.phase_id}
-      data-disclosure-key={disclosureKey}
-      open={open()}
-      onToggle={onToggle}
     >
-      <summary
+      <TranscriptDisclosureToggle
+        disclosure={disclosure}
         class="den-checkpoint-decision-chicklet__summary"
-        onClick={onSummaryClick}
         aria-label={ariaLabel()}
       >
         <DecisionRow
@@ -78,8 +81,9 @@ export function WorkflowFeedbackChicklet(props: Props) {
           ]}
         />
         <span class="den-tool-chicklet-caret" aria-hidden="true" />
-      </summary>
-      <div
+      </TranscriptDisclosureToggle>
+      <TranscriptDisclosurePanel
+        disclosure={disclosure}
         class="den-checkpoint-decision-chicklet__body"
         data-testid="workflow-feedback-chicklet-body"
       >
@@ -107,7 +111,7 @@ export function WorkflowFeedbackChicklet(props: Props) {
             </p>
           )}
         </Show>
-      </div>
-    </details>
+      </TranscriptDisclosurePanel>
+    </TranscriptDisclosureShell>
   );
 }

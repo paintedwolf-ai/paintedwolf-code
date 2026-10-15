@@ -113,7 +113,7 @@ serde_json.workspace = true
 semver = "1"
 base64 = "0.23"
 minisign-verify = "0.3.0"
-rand = "0.9"
+rand = "0.10"
 ed25519-dalek = "3"
 which = "8"
 ureq = "2"
@@ -121,16 +121,19 @@ libc.workspace = true
 # The blocking picker preserves window-level presentation.
 # The dialog plugin builds rfd with gtk3; rfd refuses gtk3 and xdg-portal together.
 rfd = { version = "0.17", default-features = false, features = ["gtk3"] }
-arboard = "3"
 uuid = { version = "1", features = ["v4"] }
 wheel-glide = { path = "crates/wheel-glide" }
 
-# Desktop portals, the file manager bus interface and window identity use the
-# GTK display connection the shell already runs on.
+# Clipboard, desktop portals, the file manager bus interface and window identity
+# use the GTK display connection the shell already runs on.
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
 gdkx11 = "0.18"
 gdkwayland-sys = "0.18"
+
+# macOS and Windows use the OS pasteboard through arboard.
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+arboard = "3"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 tauri-plugin-notification = "2"

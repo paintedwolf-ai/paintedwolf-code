@@ -13,6 +13,7 @@ mod config_dir;
 mod detect_editors;
 mod http_transport;
 mod installation_mode;
+mod linux_install;
 mod open_external;
 mod open_third_party_notices;
 mod presence;
@@ -32,6 +33,12 @@ use tauri::{Manager, RunEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    harden_process();
+    let context = tauri::generate_context!();
+    // GTK 3 names the Wayland toplevel and the X11 window class after the program
+    // name, which must be the identifier the desktop entry is named after.
+    #[cfg(target_os = "linux")]
+    gtk::glib::set_prgname(Some(context.config().identifier.as_str()));
     // The launch guard runs before any window so an interrupted update finishes first.
     let launch = match update_service::transaction::launch() {
         Ok(launch) => launch,
@@ -81,6 +88,7 @@ pub fn run() {
             notifications::den_notify_cancel_sessions,
             notifications::den_set_badge_count,
             windows::accessibility_text_size::accessibility_preferred_text_size,
+            windows::accessibility_announce::den_announce,
             windows::system_appearance::system_appearance,
             clipboard::read_clipboard_text,
             clipboard::write_clipboard_text,
@@ -131,6 +139,8 @@ pub fn run() {
             sidecar::commands::ipc_export_startup_diagnostics,
             sidecar::commands::ipc_restart_sidecar,
             sidecar::commands::ipc_reset_credential_vault,
+            sidecar::custody::ipc_vault_custody,
+            sidecar::custody::ipc_move_vault_custody,
             sidecar::commands::ipc_cancel_sidecar_start,
             sidecar::commands::ipc_attach_existing_daemon,
             sidecar::commands::ipc_sidecar_info,
@@ -141,6 +151,9 @@ pub fn run() {
             windows::window_appearance::den_set_window_bounds,
             windows::window_backdrop::den_set_window_backdrop,
             app_menu::set_app_menu,
+            app_menu::request_quit,
+            windows::linux_decorations::linux_decoration_layout,
+            windows::linux_frame::linux_window_frame,
         ])
         .on_menu_event(|app, event| {
             app_menu::on_menu_event(app, event.id().as_ref());
@@ -152,6 +165,7 @@ pub fn run() {
             sidecar::setup_supervision(app.handle());
             webkit_features::create_main_window(app.handle())?;
             windows::window_appearance::setup(app.handle());
+            clipboard::setup();
             update_service::startup::start(app.handle().clone());
             windows::accessibility_text_size::setup(app.handle().clone())
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
@@ -165,7 +179,7 @@ pub fn run() {
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while running tauri application")
         .run(|app, event| match event {
             RunEvent::ExitRequested { api, code, .. } => {
@@ -183,7 +197,7 @@ pub fn run() {
             RunEvent::Exit => {
                 notifications::shutdown(app);
                 if let Some(state) = app.try_state::<clipboard::ClipboardState>() {
-                    state.shutdown();
+                    state.shutdown(app);
                 }
                 if let Some(state) = app.try_state::<SidecarState>() {
                     // Record why the unlocks ended before the engine stops.
@@ -195,6 +209,20 @@ pub fn run() {
         });
 }
 
+
+/// The shell holds the vault password and the presence signing key, so on
+/// Linux it is non-dumpable: no same-user process can ptrace it or read its
+/// memory through the process filesystem. Debug builds stay debuggable.
+fn harden_process() {
+    #[cfg(all(target_os = "linux", not(debug_assertions)))]
+    {
+        // SAFETY: PR_SET_DUMPABLE takes one integer argument and touches no memory.
+        let status = unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0) };
+        if status != 0 {
+            eprintln!("Could not make the shell non-dumpable: {}", std::io::Error::last_os_error());
+        }
+    }
+}
 
 /// The installer mode never initializes windows, tools, or the engine.
 pub fn run_update_helper(id: &str, installation: &str) -> Result<(), String> {

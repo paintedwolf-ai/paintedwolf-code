@@ -9,9 +9,12 @@ import (
 
 const (
 	// HelperFailureExit is the helper's exit status for every failure except an
-	// unresolvable argv0.
+	// unresolvable argv0 and a boundary the host cannot provide.
 	HelperFailureExit = 126
-	execDeniedText    = "exec denied"
+	// HelperUnavailableExit is the helper's exit status when the kernel lacks a
+	// capability the boundary needs; stderr carries the typed reason.
+	HelperUnavailableExit = 125
+	execDeniedText        = "exec denied"
 )
 
 // ExecDeniedError is a resolved argv0 that syscall.Exec refused with EACCES or EPERM.

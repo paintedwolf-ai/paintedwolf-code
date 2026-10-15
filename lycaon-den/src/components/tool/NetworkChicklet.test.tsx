@@ -1,3 +1,4 @@
+import { disclosureToggle } from "../../test/transcript-disclosure-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { fireEvent, render } from "@solidjs/testing-library";
@@ -93,7 +94,7 @@ describe("NetworkChicklet / External access", () => {
     expect(getByTestId("external-access-visibility").textContent).toMatch(
       /unobserved/i,
     );
-    const summary = getByTestId("network-chicklet").querySelector("summary");
+    const summary = disclosureToggle(getByTestId("network-chicklet"));
     expect(summary?.getAttribute("aria-label")).toMatch(/External access/);
     expect(summary?.getAttribute("aria-label")).toMatch(/unobserved/i);
   });

@@ -39,7 +39,7 @@ def main() -> int:
             fail("publication date requires a timezone")
         catalog = json.loads(args.catalog.read_text(encoding="utf-8"))
         rows = catalog.get("platforms")
-        if catalog.get("schema_version") != 1 or not isinstance(rows, list) or not rows:
+        if catalog.get("schema_version") != 2 or not isinstance(rows, list) or not rows:
             fail("release platform catalog has an unsupported shape")
         expected = {row["updater_key"]: row for row in rows}
         if len(expected) != len(rows):
@@ -48,10 +48,13 @@ def main() -> int:
             if not isinstance(key, str) or not re.fullmatch(r"[a-z0-9]+-[a-z0-9_]+", key):
                 fail("release platform catalog has an invalid updater key")
             extension = row.get("updater_extension")
-            if not isinstance(extension, str) or not re.fullmatch(r"[A-Za-z0-9.]+", extension):
+            # Package-managed platforms carry no updater artifact and announce null.
+            if extension is not None and (not isinstance(extension, str) or not re.fullmatch(r"[A-Za-z0-9.]+", extension)):
                 fail(f"release platform {key} has an invalid updater extension")
             if row.get("publication") not in {"public", "candidate"}:
                 fail(f"release platform {key} has an invalid publication state")
+            if row["publication"] == "public" and extension is None:
+                fail(f"public release platform {key} has no updater artifact")
         binding = release_binding(load_registry(), version)
         platforms: dict[str, dict[str, str]] = {}
         landed: set[str] = set()
@@ -70,6 +73,8 @@ def main() -> int:
                 fail(f"{path.name} has an empty signature")
             require_version(fragment["signature"], version, f"{path.name} signature")
             updater_extension = expected[key]["updater_extension"]
+            if updater_extension is None:
+                fail(f"{path.name} offers an updater artifact for package-managed platform {key}")
             wanted_artifact = f"painted-wolf-code_v{version}_{key}.{updater_extension}"
             if fragment["updater_artifact"] != wanted_artifact:
                 fail(f"{path.name} updater artifact does not equal {wanted_artifact}")

@@ -1,0 +1,13 @@
+[Unit]
+Description=Painted Wolf Code vault identity socket
+
+[Socket]
+ListenStream=/run/painted-wolf-code/vault-identity.sock
+# Any user may connect; the service decides from the peer's credentials and
+# process image.
+SocketMode=0666
+DirectoryMode=0755
+RemoveOnStop=yes
+
+[Install]
+WantedBy=sockets.target

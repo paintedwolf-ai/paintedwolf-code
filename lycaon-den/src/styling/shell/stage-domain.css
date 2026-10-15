@@ -15,6 +15,17 @@
   --shell-header-row-gap: 0px;
 }
 
+.den-tauri-linux.den-custom-chrome {
+  /* Drawn window buttons center on the strip; no corner is reserved. */
+  --den-pane-control-center: calc(var(--den-titlebar-inset) / 2);
+  /* A drawn button's hit area spans the strip; its disc sits inside it. */
+  --den-window-control-size: var(--den-titlebar-inset);
+  --den-window-control-disc: 22px;
+  --den-window-control-gap: 4px;
+  /* Every host places its clusters this far from the window edge. */
+  --den-window-controls-inset: 6px;
+}
+
 .den-tauri-macos.den-custom-chrome {
   --den-titlebar-inset: 30px;
   --den-unified-chrome-row: max(30px, 2.14em);

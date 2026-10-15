@@ -803,6 +803,10 @@ host_facts:
    type: bool
  - name: paintedwolf.can_read
    type: bool
+ - name: paintedwolf.can_write
+   type: bool
+ - name: paintedwolf.can_edit
+   type: bool
  - name: paintedwolf.can_list_dir
    type: bool
  - name: paintedwolf.can_find
@@ -1025,6 +1029,8 @@ host_facts:
    type: bool
  - name: paintedwolf.size
    type: string
+ - name: paintedwolf.failure_source_unchanged
+   type: bool
  - name: paintedwolf.source_revision
    type: string
  - name: paintedwolf.spill_bytes

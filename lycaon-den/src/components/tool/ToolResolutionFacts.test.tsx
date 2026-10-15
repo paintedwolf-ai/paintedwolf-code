@@ -33,7 +33,7 @@ function renderResolved(tool: "request_tools" | "skills_read", by: TurnLoadMatch
       <ToolPartCard part={part(tool)} layout="chat" sessionId="s1" />
     </TurnLoadIndexProvider>
   ));
-  fireEvent.click(view.container.querySelector("summary")!);
+  fireEvent.click(view.container.querySelector<HTMLElement>(".den-transcript-disclosure-toggle")!);
   return view;
 }
 
@@ -74,7 +74,7 @@ it.each(["request_tools", "skills_read"] as const)("does not label an unavailabl
       <ToolPartCard part={toolPart} layout="chat" sessionId="s1" />
     </TurnLoadIndexProvider>
   ));
-  fireEvent.click(view.container.querySelector("summary")!);
+  fireEvent.click(view.container.querySelector<HTMLElement>(".den-transcript-disclosure-toggle")!);
   expect(view.queryByTestId("tool-resolution-method")).toBeNull();
   expect(view.queryByTestId("skill-card-body")).toBeNull();
   expect(view.container.textContent).toContain("Local AI timed out");
