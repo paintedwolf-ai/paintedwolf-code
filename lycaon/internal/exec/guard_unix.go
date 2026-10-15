@@ -29,6 +29,12 @@ type unixGuard struct {
 	// terminated marks a tree that was asked to exit; release then sweeps
 	// whatever outlived the leader.
 	terminated bool
+	// awaitingLaunch holds termination until a supervised command reports its
+	// launch: before the supervisor installs its handlers a signal kills it,
+	// and the parent would see a failed start instead of a terminated command.
+	awaitingLaunch bool
+	// heldTerminate is a termination requested while awaitingLaunch.
+	heldTerminate bool
 	// killTimer is the SIGKILL fallback armed by terminate.
 	killTimer *time.Timer
 }
@@ -46,6 +52,7 @@ func (g *unixGuard) configure(cmd *exec.Cmd) {
 	// A session leader cannot also Setpgid.
 	cmd.SysProcAttr.Setsid = true
 	cmd.SysProcAttr.Setpgid = false
+	g.awaitingLaunch = commandSupervisor(cmd)
 	// Cancellation terminates the entire session the leader started.
 	cmd.Cancel = func() error {
 		g.terminate(cmd)
@@ -62,7 +69,7 @@ func (g *unixGuard) onStarted(cmd *exec.Cmd) error {
 		g.supervisorStart, _ = osprocess.StartTime(cmd.Process.Pid)
 	}
 	g.recordProcessGroup(cmd.Process.Pid)
-	if err := supervisorStartupError(cmd); err != nil {
+	if err := g.confirmLaunch(cmd); err != nil {
 		return err
 	}
 	if !g.belowNormal {
@@ -95,6 +102,20 @@ func (g *unixGuard) recordProcessGroup(pid int) {
 	}
 }
 
+// confirmLaunch reads the supervisor's launch report, then delivers a
+// termination requested while the launch was unconfirmed.
+func (g *unixGuard) confirmLaunch(cmd *exec.Cmd) error {
+	err := supervisorStartupError(cmd)
+	g.mu.Lock()
+	held := g.heldTerminate && err == nil
+	g.awaitingLaunch, g.heldTerminate = false, false
+	g.mu.Unlock()
+	if held {
+		g.deliverTerminate(cmd)
+	}
+	return err
+}
+
 // terminate sends SIGTERM to the tree and arms a SIGKILL for whatever is still
 // running after TerminateGrace. A second call is a no-op.
 func (g *unixGuard) terminate(cmd *exec.Cmd) {
@@ -104,7 +125,16 @@ func (g *unixGuard) terminate(cmd *exec.Cmd) {
 		return
 	}
 	g.terminated = true
+	if g.awaitingLaunch {
+		g.heldTerminate = true
+		g.mu.Unlock()
+		return
+	}
 	g.mu.Unlock()
+	g.deliverTerminate(cmd)
+}
+
+func (g *unixGuard) deliverTerminate(cmd *exec.Cmd) {
 	if !g.signal(cmd, syscall.SIGTERM) {
 		return
 	}
