@@ -145,10 +145,10 @@ func TestPartialWorkerOrientationUsesLatestExactChildIdentity(t *testing.T) {
 				if truncated {
 					t.Fatal("small partial identity fixture truncated")
 				}
-				if strings.Contains(text, "Partial worker:") != tc.want {
-					t.Fatalf("partial row=%t want%t: %s", strings.Contains(text, "Partial worker:"), tc.want, text)
+				if strings.Contains(text, "Partial:") != tc.want {
+					t.Fatalf("partial row=%t want%t: %s", strings.Contains(text, "Partial:"), tc.want, text)
 				}
-				if tc.want && !strings.Contains(text, "Partial worker: job_id="+partial.ID+" · child_session_id="+partial.ChildSessionID) {
+				if tc.want && !strings.Contains(text, "Partial: job_id="+partial.ID+" · child_session_id="+partial.ChildSessionID) {
 					t.Fatalf("identity abbreviated or separated: %s", text)
 				}
 				if strings.Contains(text, "task(") || strings.Contains(text, "request_tools") {

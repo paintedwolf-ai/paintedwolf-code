@@ -65,7 +65,7 @@ func partialWorkerLines(tasks []api.WorkerTask) []string {
 		if !task.Status.IsTerminal() || api.WorkerTaskLegStatus(task) != "partial" || strings.TrimSpace(task.ID) == "" {
 			continue
 		}
-		lines = append(lines, fmt.Sprintf("Partial worker: job_id=%s · child_session_id=%s", task.ID, child))
+		lines = append(lines, fmt.Sprintf("Partial: job_id=%s · child_session_id=%s", task.ID, child))
 	}
 	sort.Strings(lines)
 	return lines
