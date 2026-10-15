@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/scopedstore"
@@ -138,6 +139,9 @@ func (m *Service) BeginPrompt(ctx context.Context, sess *api.Session, in prompti
 	if in.HostSignal == nil && !in.Continuation && !sess.IsWorkerChild() && hasInput {
 		m.BeginIntent(ctx, sess.ID)
 		return
+	}
+	if !sess.IsWorkerChild() && in.HostSignal != nil && in.HostSignal.Kind == api.MessageKindHostLoopWake && in.HostSignal.ID == string(anchor.LoopWake) {
+		m.ResumeWork(ctx, sess.ID)
 	}
 	m.beginPrompt(sess.ID)
 }

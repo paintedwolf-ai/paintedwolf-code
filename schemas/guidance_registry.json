@@ -1289,13 +1289,13 @@
       "summary": "The report has no cited_evidence or cited_urls although recorded tool observations are available."
     },
     "INVEST_CITATION_UNVERIFIABLE": {
-      "branch_instruction": "Use existing coordinator or worker observations; citation repair does not reopen tool calls.",
+      "branch_instruction": "Use existing coordinator or worker observations. Resuming work requires a fresh report.",
       "category": "recoverable",
       "emit": "guard:coordinator_investigate",
       "summary": "Investigate supplied {{ paintedwolf.offender_count }} citation(s) whose location or excerpt does not match the recorded evidence."
     },
     "INVEST_HANDLE_NOT_OBSERVED": {
-      "branch_instruction": "Use existing coordinator or worker observations that support the pinned report; citation repair does not reopen tool calls.",
+      "branch_instruction": "Use existing coordinator or worker observations that support the pinned report. Resuming work requires a fresh report.",
       "category": "recoverable",
       "emit": "guard:coordinator_investigate",
       "summary": "Investigate cited {{ paintedwolf.offender_count }} evidence item(s) not seen in your tool results or worker results for this chat."
@@ -1307,7 +1307,7 @@
       "summary": "Investigate repeated {{ paintedwolf.offender_count }} citation(s) already committed in an earlier report this turn — no new evidence."
     },
     "INVEST_URL_NOT_OBSERVED": {
-      "branch_instruction": "The citation repair does not reopen research or worker dispatch. Keep unsupported claims explicitly untraced.",
+      "branch_instruction": "Keep unsupported claims explicitly untraced. Resuming work requires a fresh report.",
       "category": "recoverable",
       "emit": "guard:coordinator_investigate",
       "summary": "Investigate cited {{ paintedwolf.offender_count }} URL(s) absent from the coordinator and worker evidence available to this report."
@@ -2864,7 +2864,7 @@
       "summary": "The report has no cited_evidence or cited_urls although recorded tool observations are available."
     },
     "SYNTH_CITATION_UNVERIFIABLE": {
-      "branch_instruction": "Use existing coordinator or worker observations; citation repair does not reopen tool calls.",
+      "branch_instruction": "Use existing coordinator or worker observations. Resuming work requires a fresh report.",
       "category": "recoverable",
       "emit": "guard:coordinator_synthesis",
       "summary": "Synthesis supplied {{ paintedwolf.offender_count }} citation(s) whose location or excerpt does not match the recorded evidence."
@@ -2882,7 +2882,7 @@
       "summary": "Synthesis repeated {{ paintedwolf.offender_count }} citation(s) already committed in an earlier report this turn — no new evidence."
     },
     "SYNTH_URL_NOT_OBSERVED": {
-      "branch_instruction": "The citation repair does not reopen research or worker dispatch. Keep unsupported claims explicitly untraced.",
+      "branch_instruction": "Keep unsupported claims explicitly untraced. Resuming work requires a fresh report.",
       "category": "recoverable",
       "emit": "guard:coordinator_synthesis",
       "summary": "Synthesis cited {{ paintedwolf.offender_count }} URL(s) absent from the coordinator and worker evidence available to this report."

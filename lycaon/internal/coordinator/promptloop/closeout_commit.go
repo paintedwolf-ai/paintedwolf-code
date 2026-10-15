@@ -66,6 +66,9 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 			if original, ok := guidance.ParseCoordinatorCompletionReport(retained.Drafted); ok {
 				report = guidance.PinCloseoutReport(original, report, guidance.RepairsReportDocument(retained.ForcedBy))
 			}
+		} else {
+			st.closeoutRetry.prevKey = ""
+			st.closeoutRetry.codes = nil
 		}
 	}
 	observation, err := l.observeCloseoutReport(ctx, sess, history, surfaceID, report, read.Unread, st.turnTools, completionReportBinding(st).PhaseDeliversRunReport)

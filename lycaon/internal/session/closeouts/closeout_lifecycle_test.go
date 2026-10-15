@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
@@ -33,13 +34,18 @@ func seedCloseoutState(c *Service, sessionID, rootID string) {
 
 func TestCloseoutPromptBoundary(t *testing.T) {
 	for _, tc := range []struct {
-		name      string
-		input     promptinput.Input
-		worker    bool
-		newIntent bool
+		name       string
+		input      promptinput.Input
+		worker     bool
+		newIntent  bool
+		resumeWork bool
 	}{
 		{name: "recovery continuation", input: promptinput.Input{Text: "Keep going", Continuation: true}},
 		{name: "host continuation", input: promptinput.Input{Text: "continue", HostSignal: &promptinput.HostSignal{}}},
+		{name: "operational host wake", input: promptinput.Input{HostSignal: &promptinput.HostSignal{Kind: api.MessageKindHostLoopWake, ID: string(anchor.LoopWake)}}, resumeWork: true},
+		{name: "metadata retry", input: promptinput.Input{HostSignal: &promptinput.HostSignal{Kind: api.MessageKindHostKick, ID: string(anchor.WorkerCitationGrounding)}}},
+		{name: "unrecognized wake", input: promptinput.Input{HostSignal: &promptinput.HostSignal{Kind: api.MessageKindHostLoopWake, ID: "other"}}},
+		{name: "worker wake", input: promptinput.Input{HostSignal: &promptinput.HostSignal{Kind: api.MessageKindHostLoopWake, ID: string(anchor.LoopWake)}}, worker: true},
 		{name: "human direction", input: promptinput.Input{Text: "continue"}, newIntent: true},
 		{name: "artifact direction", input: promptinput.Input{ArtifactIDs: []string{"artifact"}}, newIntent: true},
 		{name: "attached content", input: promptinput.Input{ContentParts: []api.MessageContentPart{{Content: "attachment"}}}, newIntent: true},
@@ -64,6 +70,9 @@ func TestCloseoutPromptBoundary(t *testing.T) {
 				t.Fatalf("prompt budget survived: %+v", prompt)
 			}
 			wantCycle := cycleBefore
+			if tc.resumeWork {
+				wantCycle.stall = guidance.RetainedCloseout{Attempt: cycleBefore.stall.Attempt, DocumentAttempt: cycleBefore.stall.DocumentAttempt}
+			}
 			if tc.newIntent {
 				wantCycle = closeoutCycleState{}
 			}
