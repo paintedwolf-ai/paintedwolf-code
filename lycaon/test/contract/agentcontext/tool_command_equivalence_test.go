@@ -122,6 +122,7 @@ func TestToolCommandEquivalenceExactReplacementData(t *testing.T) {
 	}{
 		{"cp source.txt destination.txt", "USE_COPY_NATIVE", "copy"},
 		{"curl -X POST -d payload https://api.example.test/v1", "USE_HTTP_REQUEST_NATIVE", "http_request"},
+		{"cat <<'EOF' > index.html\n<h1>Hello</h1>\nEOF", "USE_WRITE_NATIVE", "write"},
 	}
 	for _, c := range cases {
 		assertExactCommandReplacement(t, c.command, c.code, c.tool)
@@ -187,7 +188,6 @@ func assertExactCommandReplacement(t *testing.T, command, code, tool string) {
 // commandEquivalenceExceptions lists native tools exempt from command redirects.
 var commandEquivalenceExceptions = map[string]string{
 	"git_compare":       "composite graph comparison with frozen tips, counts and all merge bases; no single command redirect",
-	"write":             "no detectable command prefix (shell > / tee redirection)",
 	"replace_lines":     "line-range edit; line addressing redirects via edit",
 	"jq_edit":           "structured document rewrite; in-place jq/yq habits have no exact native form",
 	"request_tools":     "meta tool; no command analog",

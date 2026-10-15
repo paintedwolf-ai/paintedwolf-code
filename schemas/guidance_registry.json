@@ -3180,6 +3180,12 @@
       "emit": "guard:command_habit_redirect",
       "summary": "The parsed command can be represented by the supplied wc call."
     },
+    "USE_WRITE_NATIVE": {
+      "branch_instruction": "{% if paintedwolf.can_write %}Use `write` (or the supplied `replacement_calls`) to author the file directly{% else %}{% if paintedwolf.tool_loadable %}Load the file-authoring schema with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.can_task %}Dispatch `task` so a worker authors the file in its branch{% else %}Use an offered tool or report that this surface cannot author files{% endif %}{% endif %}{% endif %}",
+      "category": "recoverable",
+      "emit": "guard:command_habit_redirect",
+      "summary": "Shell file-writing redirection or stream piping{% if paintedwolf.path %} targeting `{{ paintedwolf.path }}`{% endif %} is not run through `{{ tool }}`."
+    },
     "VERIFY_COMMAND_UNDECLARED": {
       "branch_instruction": "Run `verify(command: \"…\")` now, or declare the test command in Settings → Tests",
       "category": "recoverable",

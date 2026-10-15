@@ -14,6 +14,7 @@ var replacementPathArgs = map[string]struct {
 	projectOnly bool
 }{
 	"read":            {single: []string{"path"}},
+	"write":           {single: []string{"path"}},
 	"list_dir":        {single: []string{"path"}},
 	"jq":              {single: []string{"path"}},
 	"grep":            {single: []string{"path"}},

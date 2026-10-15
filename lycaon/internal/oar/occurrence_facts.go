@@ -214,6 +214,8 @@ var occurrenceFactDecls = []factDecl{
 	{"response_type", oarcore.TypeString, FactTierHost, ""},
 	{"spill_readable", oarcore.TypeBool, FactTierHost, ""},
 	{"can_read", oarcore.TypeBool, FactTierHost, ""},
+	{"can_write", oarcore.TypeBool, FactTierHost, ""},
+	{"can_edit", oarcore.TypeBool, FactTierHost, ""},
 	{"can_list_dir", oarcore.TypeBool, FactTierHost, ""},
 	{"can_find", oarcore.TypeBool, FactTierHost, ""},
 	{"can_grep", oarcore.TypeBool, FactTierHost, ""},
