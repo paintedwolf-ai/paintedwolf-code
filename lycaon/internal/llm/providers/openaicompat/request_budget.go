@@ -8,5 +8,10 @@ import (
 )
 
 func (p *Provider) RequestBudget(ctx context.Context, req modelcall.CompletionRequest) modelcall.RequestBudget {
-	return providerwire.CatalogRequestBudget(ctx, req, p.Catalog)
+	req.AttemptBudget = nil
+	budget := providerwire.CatalogRequestBudget(ctx, req, p.Catalog)
+	if output := p.resolveRequestControls(req, p.ResolveModel(req), controlOpts{}).MaxTokens; output > 0 {
+		budget.Output = output
+	}
+	return budget
 }

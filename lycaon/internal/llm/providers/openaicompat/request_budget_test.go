@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -37,5 +38,19 @@ func TestRequestBudgetUsesDispatchedToolImages(t *testing.T) {
 	}
 	if got.Input+got.Output+got.Headroom > got.Window {
 		t.Fatalf("dispatched images should fit: %+v", got)
+	}
+}
+
+func TestRequestBudgetUsesNativeReasoningReservation(t *testing.T) {
+	p := New("fireworks", "https://example.invalid", "", []modelinfo.Entry{{
+		ID: "accounts/fireworks/models/glm-5p3-flash", ContextLength: 32768,
+	}}).WithProfile(providerprofile.Fireworks())
+	req := modelcall.CompletionRequest{Model: "accounts/fireworks/models/glm-5p3-flash"}
+	want := p.resolveRequestControls(req, req.Model, controlOpts{}).MaxTokens
+	if want <= modelcall.OrchestrationMaxTokens {
+		t.Fatalf("fixture did not reserve native reasoning: %d", want)
+	}
+	if got := p.RequestBudget(t.Context(), req).Output; got != want {
+		t.Fatalf("planned output = %d, native output = %d", got, want)
 	}
 }
