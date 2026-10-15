@@ -35,11 +35,13 @@ func mergeContinuationSources(prior *messageview.Continuation, current []message
 	}
 	selected := make(map[string]bool)
 	var out []messageview.ContinuationSource
-	for i := len(rows) - 1; i >= 0 && len(out) < maxContinuationSources/2; i-- {
-		row := rows[i]
-		if len(row.Handles) > 0 || row.Tool != "" {
-			selected[row.MessageID] = true
-			out = append(out, row)
+	for _, allowRecall := range []bool{false, true} {
+		for i := len(rows) - 1; i >= 0 && len(out) < maxContinuationSources/2; i-- {
+			row := rows[i]
+			if (len(row.Handles) > 0 || row.Tool != "") && (row.Tool == "recall") == allowRecall && !selected[row.MessageID] {
+				selected[row.MessageID] = true
+				out = append(out, row)
+			}
 		}
 	}
 	for i := len(rows) - 1; i >= 0 && len(out) < maxContinuationSources; i-- {

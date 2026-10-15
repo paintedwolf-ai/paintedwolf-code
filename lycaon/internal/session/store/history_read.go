@@ -19,13 +19,19 @@ func (s *SQL) ReadMessageWindow(ctx context.Context, id string, window messagevi
 		rows, err := s.queries.ListSessionMessagesAfterOrd(ctx, db.ListSessionMessagesAfterOrdParams{SessionID: id, Ord: window.AfterOrd, Limit: int64(window.Limit)})
 		return decodeMessageRows(rows, err)
 	}
+	if window.BeforeOrd > 0 {
+		rows, err := s.queries.ListSessionMessagesBeforeOrd(ctx, db.ListSessionMessagesBeforeOrdParams{SessionID: id, Ord: window.BeforeOrd, Limit: int64(window.Limit)})
+		out, err := decodeMessageRows(rows, err)
+		reverseMessages(out)
+		return out, err
+	}
 	rows, err := s.queries.ListSessionMessagesTail(ctx, db.ListSessionMessagesTailParams{SessionID: id, Limit: int64(window.Limit)})
 	out, err := decodeMessageRows(rows, err)
 	reverseMessages(out)
 	return out, err
 }
 
-func decodeMessageRows[T db.ListSessionMessagesAfterOrdRow | db.ListSessionMessagesTailRow](rows []T, err error) ([]api.Message, error) {
+func decodeMessageRows[T db.ListSessionMessagesAfterOrdRow | db.ListSessionMessagesBeforeOrdRow | db.ListSessionMessagesTailRow](rows []T, err error) ([]api.Message, error) {
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +59,11 @@ func (s *Memory) ReadMessageWindow(ctx context.Context, id string, window messag
 		return []api.Message{}, nil
 	}
 	rows := s.messages[id]
-	start, end := max(0, len(rows)-window.Limit), len(rows)
+	end := len(rows)
+	if !window.After && window.BeforeOrd > 0 {
+		end = sort.Search(len(rows), func(i int) bool { return rows[i].Ord >= window.BeforeOrd })
+	}
+	start := max(0, end-window.Limit)
 	if window.After {
 		start = sort.Search(len(rows), func(i int) bool { return rows[i].Ord > window.AfterOrd })
 		end = start + min(window.Limit, len(rows)-start)

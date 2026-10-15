@@ -32,11 +32,18 @@ func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, e
 	}
 	// Background publication may advance the caller's session snapshot.
 	sess.CompactionGeneration = view.Generation
-	suffix, err := m.store.ReadMessageWindow(ctx, sess.ID, messageview.MessageWindow{After: true, AfterOrd: view.CoveredThroughOrd, Limit: UncompactedLimit + 1})
+	cfg := m.compactionConfig(ctx, sess)
+	if restored, ok, err := m.restoreCanonicalTail(ctx, sess, view, cfg); err != nil {
+		return nil, err
+	} else if ok {
+		return restored, nil
+	}
+	bounds := m.canonicalTailBounds(cfg)
+	suffix, hasMore, err := m.readBoundedSuffix(ctx, sess.ID, view.CoveredThroughOrd, bounds)
 	if err != nil {
 		return nil, err
 	}
-	if len(suffix) > UncompactedLimit {
+	if hasMore {
 		return m.loadBoundedCanonicalPromptHistory(ctx, sess)
 	}
 	// Replay fields stay canonical rather than being duplicated in projections.
@@ -55,7 +62,8 @@ func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, e
 }
 
 func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *api.Session) ([]api.Message, error) {
-	history, err := m.store.ReadMessageWindow(ctx, sess.ID, messageview.MessageWindow{Limit: UncompactedLimit})
+	bounds := m.canonicalTailBounds(m.compactionConfig(ctx, sess))
+	history, err := m.readBoundedCanonicalTail(ctx, sess.ID, bounds)
 	if err != nil {
 		return nil, err
 	}
@@ -110,10 +118,14 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 		return history
 	}
 	sess.CompactionGeneration = view.Generation
+	cfg := m.compactionConfig(ctx, sess)
+	if restored, ok := m.applyRestoredReceiverView(ctx, sess, view, history, cfg); ok {
+		return restored
+	}
 	continuationText := ""
 	if view.Continuation != nil {
 		record := messageview.CloneContinuation(view.Continuation)
-		record.Window = m.compactionConfig(ctx, sess).ModelContextWindow
+		record.Window = cfg.ModelContextWindow
 		record.Receiver = sess.Model
 		recall := m.recallAvailable != nil && m.recallAvailable(ctx, sess)
 		text, renderErr := compaction.RenderContinuation(ctx, record, recall, 0)
@@ -150,10 +162,19 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 
 // withCurrentRequest restores the active human opener when it predates the tail.
 func (m *Service) withCurrentRequest(ctx context.Context, sess *api.Session, tail []api.Message) ([]api.Message, error) {
-	if sess.CurrentTurn <= 0 || len(tail) == 0 {
+	if len(tail) == 0 {
 		return tail, nil
 	}
-	turn, err := m.store.ReadSourceTurn(ctx, sess.ID, sess.CurrentTurn)
+	currentTurn := sess.CurrentTurn
+	if currentTurn <= 0 {
+		if latest, err := m.store.Get(ctx, sess.ID); err == nil && latest != nil {
+			currentTurn = latest.CurrentTurn
+		}
+	}
+	if currentTurn <= 0 {
+		return tail, nil
+	}
+	turn, err := m.store.ReadSourceTurn(ctx, sess.ID, currentTurn)
 	if err != nil {
 		return nil, err
 	}

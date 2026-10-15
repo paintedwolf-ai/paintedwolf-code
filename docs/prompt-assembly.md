@@ -201,6 +201,8 @@ The [`summarize`](summarize.md) tool returns a structured context pack as a dura
 
 History has four representations: original exchanges, detailed continuation blocks, a compact continuation, and recovery references. A receiver receives one representation of each covered range. Context allocation reserves the active request and host instructions first, then allocates recent exchanges and continuation detail from the remaining budget. Small windows may omit detailed blocks.
 
+Unprojected fallback and post-view suffix reads scale with the receiver window and are bounded by rows, estimated tokens, and payload bytes, paging backward from the latest turn in fixed database windows while preserving complete tool batches and the active user request. Switching a compacted session to a larger receiver window restores canonical tail exchanges that now fit the receiver's target budget and shrinks or omits the continuation prefix to cover only the remaining prefix.
+
 The reference representation records canonical ordinal boundaries and bounded recovery coordinates. Its size stays bounded as the session grows. Compaction does not remove canonical records. Receiver context size determines presentation; summarizer context size determines bounded synthesis batches.
 
 Bialy may rank eligible continuation detail when a trained head is available. It does not determine transcript deletion, coverage, authority, or the fallback representation. The deterministic policy remains complete without Bialy.

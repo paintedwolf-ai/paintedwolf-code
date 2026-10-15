@@ -3,7 +3,6 @@ package history
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/messageview"
 	"log/slog"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -68,8 +67,9 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 
 	// Full summaries run only above the session watermark.
 	cfg := sc.Config()
+	bounds := m.canonicalTailBounds(cfg)
 	budgetEst := m.BudgetTokens(sessionID, compaction.EstimateMessagesTokens(working))
-	rowPressure := hasMore || len(working) > UncompactedLimit
+	rowPressure := hasMore || len(working) > bounds.maxRows
 	if compaction.ShouldCompactSession(budgetEst, cfg.ModelContextWindow, cfg) || rowPressure {
 		maxTokens := cfg.TargetTokens
 		if rowPressure && compaction.EstimateMessagesTokens(working) <= maxTokens {
@@ -124,14 +124,16 @@ func (m *Service) loadCompactionPage(ctx context.Context, sess *api.Session) ([]
 			sourceSeq = view.SourceSeq
 		}
 	}
+	bounds := m.canonicalTailBounds(m.compactionConfig(ctx, sess))
 	var suffix []api.Message
+	var hasMore bool
 	if len(base) == 0 {
-		suffix, err = m.store.ReadMessageWindow(ctx, sess.ID, messageview.MessageWindow{Limit: UncompactedLimit})
+		suffix, err = m.readBoundedCanonicalTail(ctx, sess.ID, bounds)
 		if err == nil {
 			suffix, err = m.withCurrentRequest(ctx, sess, suffix)
 		}
 	} else {
-		suffix, err = m.store.ReadMessageWindow(ctx, sess.ID, messageview.MessageWindow{After: true, AfterOrd: coveredThroughOrd, Limit: UncompactedLimit + 1})
+		suffix, hasMore, err = m.readBoundedSuffix(ctx, sess.ID, coveredThroughOrd, bounds)
 	}
 	if err != nil {
 		return nil, 0, "", 0, false, err
@@ -146,10 +148,6 @@ func (m *Service) loadCompactionPage(ctx context.Context, sess *api.Session) ([]
 		if !current {
 			return nil, 0, "", 0, false, fmt.Errorf("compaction source changed while reading history")
 		}
-	}
-	hasMore := len(suffix) > UncompactedLimit
-	if hasMore {
-		suffix = suffix[:UncompactedLimit]
 	}
 	for _, msg := range suffix {
 		if msg.Ord > coveredThroughOrd {

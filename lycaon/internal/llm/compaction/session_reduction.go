@@ -147,10 +147,10 @@ func RenderContinuation(ctx context.Context, record *messageview.Continuation, r
 		}
 		if level == "references" {
 			summary = compactionSummary{Level: level, ThroughOrd: record.ThroughOrd, ReferenceOnly: true}
-			limit = 0
+			limit = 2
 		}
-		sources := recoverySources(record.Sources)
-		seen := make(map[string]bool)
+		sources := recoverySources(record.Sources, limit)
+		seen := make(map[string]bool, len(sources))
 		for _, source := range sources {
 			seen[source.MessageID] = true
 		}
@@ -165,7 +165,7 @@ func RenderContinuation(ctx context.Context, record *messageview.Continuation, r
 		if err != nil {
 			return "", err
 		}
-		if level == "references" && len(sources) > 0 && tokenest.EstimateDefault(text) > budget {
+		if level == "references" && len(sources) > 0 && tokenest.EstimateDefault(text) > max(192, budget) {
 			text, err = renderContinuationRecord(ctx, summary, nil, recall)
 			if err != nil {
 				return "", err
@@ -180,22 +180,39 @@ func RenderContinuation(ctx context.Context, record *messageview.Continuation, r
 }
 
 // recoverySources keeps a bounded set of evidence and original-call addresses.
-func recoverySources(rows []messageview.ContinuationSource) []CompactedSource {
+func recoverySources(rows []messageview.ContinuationSource, limit int) []CompactedSource {
+	limit = max(2, limit)
 	var out []CompactedSource
 	seen := make(map[string]bool)
-	for _, wantHandles := range []bool{true, false} {
-		for i := len(rows) - 1; i >= 0; i-- {
-			row := rows[i]
-			hasHandles := len(row.Handles) > 0
-			if seen[row.MessageID] || row.MessageID == "" || hasHandles != wantHandles || !hasHandles && row.Tool == "" {
-				continue
-			}
-			seen[row.MessageID] = true
-			out = append(out, CompactedSource{Handles: row.Handles[:min(2, len(row.Handles))], Tool: row.Tool, MessageID: row.MessageID})
-			if len(out) == 2 {
-				return out
+	for _, singleEach := range []bool{true, false} {
+		for _, allowRecall := range []bool{false, true} {
+			for _, wantHandles := range []bool{true, false} {
+				for step := 0; step < len(rows); step++ {
+					i := step
+					if !singleEach {
+						i = len(rows) - 1 - step
+					}
+					row := rows[i]
+					hasHandles := len(row.Handles) > 0
+					isRecall := row.Tool == "recall"
+					if seen[row.MessageID] || row.MessageID == "" || isRecall != allowRecall || hasHandles != wantHandles || !hasHandles && row.Tool == "" {
+						continue
+					}
+					seen[row.MessageID] = true
+					out = append(out, CompactedSource{Handles: row.Handles[:min(2, len(row.Handles))], Tool: sourceTool(row), MessageID: row.MessageID})
+					if len(out) >= limit {
+						return out
+					}
+					if singleEach {
+						break
+					}
+				}
 			}
 		}
 	}
 	return out
+}
+
+func sourceTool(row messageview.ContinuationSource) string {
+	return row.Tool
 }
