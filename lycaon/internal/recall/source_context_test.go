@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/recall"
+	"github.com/lycaon/lycaon/internal/search"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -33,5 +34,33 @@ func TestRecallPreservesOriginalSourceWorkspace(t *testing.T) {
 	testutil.FailErr(t, "decode model-facing recall hit", json.Unmarshal(raw, &wire))
 	if _, exists := wire["source_context"]; exists {
 		t.Fatal("host navigation metadata consumed model context")
+	}
+}
+
+func TestRecallCitationUsesOriginalRecordSourceContext(t *testing.T) {
+	f := newFixture(t)
+	original := api.NavigationTarget{ProjectID: projectID, RootID: "original-root", WorkerID: "original-worker", Path: "original.go", EntryKind: api.NavigationEntryKindFile}
+	later := original
+	later.RootID = "later-root"
+	later.WorkerID = "later-worker"
+	store := sessionstore.NewSQL(f.db)
+	testutil.FailErr(t, "append original and citing contexts", store.AppendMessages(t.Context(), coordinatorSession,
+		api.Message{ID: "original-observation", Role: api.MessageRoleTool, Content: "original.go observed", EvidenceHandles: []string{"read#1"}, SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{original}}, CreatedAt: time.Now()},
+		api.Message{ID: "later-citation", Role: api.MessageRoleAssistant, Content: "original.go cited", SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{later}}, CreatedAt: time.Now()}))
+	source := evidenceRow("raw-observation", coordinatorSession, "read#1", "original.go", "original observation")
+	source.HitKind = search.HitKindTool
+	source.Shape = "raw"
+	source.MessageID = "original-observation"
+	citation := evidenceRow("citation-row", coordinatorSession, "read#1", "original.go", "citation lookup")
+	citation.Source = search.SourceMessage
+	citation.MessageID = "later-citation"
+	f.seed(t, source, citation)
+	result := f.answer(t, coordinator(), "citation lookup", recall.WidenDefault)
+	if len(result.Hits) != 1 || result.Hits[0].Record == nil || result.Hits[0].SourceContext == nil {
+		t.Fatalf("missing canonical source context: %+v", result.Hits)
+	}
+	locations := result.Hits[0].SourceContext.Locations
+	if len(locations) != 1 || locations[0] != original {
+		t.Fatalf("later citation replaced original workspace: %+v", locations)
 	}
 }

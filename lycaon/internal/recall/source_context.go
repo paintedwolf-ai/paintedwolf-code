@@ -15,12 +15,16 @@ func (s *Service) attachSourceContexts(ctx context.Context, sources []search.Hit
 		if source.MessageID == "" || source.SessionID == "" {
 			continue
 		}
-		key := source.SessionID + "\x00" + source.MessageID
+		messageID := source.MessageID
+		if hits[i].Record != nil {
+			messageID = hits[i].Record.MessageID
+		}
+		key := source.SessionID + "\x00" + messageID
 		sourceContext, loaded := contexts[key]
 		if !loaded {
 			contexts[key] = nil
 			var err error
-			sourceContext, err = sourceref.ReadContext(ctx, s.db, source.SessionID, source.MessageID)
+			sourceContext, err = sourceref.ReadContext(ctx, s.db, source.SessionID, messageID)
 			if err != nil {
 				continue
 			}
