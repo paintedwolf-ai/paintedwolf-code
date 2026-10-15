@@ -733,6 +733,8 @@ host_facts:
    type: string
  - name: paintedwolf.tool_discovery_has_more
    type: bool
+ - name: paintedwolf.task_loadable
+   type: bool
  - name: paintedwolf.tool_loadable
    type: bool
  - name: paintedwolf.tool_discovery_available

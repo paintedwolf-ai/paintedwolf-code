@@ -192,6 +192,14 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 			data["replacement_calls"] = []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": tc.Name}}}
 		}
 	}
+	if code == "COORDINATOR_DELEGATE_DISPATCH_USE_TASK" {
+		loadable := !tools.ToolOffered(ctx, "task") && toolCtx.Turn.TurnToolPlan.Deferred("task") && tools.ToolOffered(ctx, "request_tools")
+		data["task_loadable"] = loadable
+		delete(data, "replacement_calls")
+		if loadable {
+			data["replacement_calls"] = []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "task"}}}
+		}
+	}
 	tr := &toolrejection.ToolReject{Code: code, FailureClass: api.FailureClassPolicyRejection, Data: data}
 	if code == toolrejection.ToolOwnerFailedCode {
 		tr.FailureClass = api.FailureClassOwnerError

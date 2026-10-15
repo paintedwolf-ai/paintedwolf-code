@@ -7,30 +7,31 @@ requires:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.can_task
+  - paintedwolf.task_loadable
 when: paintedwolf.rejection_code == "COORDINATOR_DELEGATE_DISPATCH_USE_TASK"
 effect: block
 copy:
-  what: This session is not linked to a delegation (implement@ default chat).
-  cause: delegate_dispatch dispatches workflow delegation legs — not ambient implement-mode workers.
-  why: delegate_dispatch dispatches workflow delegation legs — not ambient implement-mode workers.
-  fix: Call `task(agent_type=implementer, …)` with the mutation-capable profile’s required scope and optional
-    focus paths, or chain verify legs via `task()`.
-  instead: Use `task()` for implement-mode worker dispatch — delegate_dispatch is for workflow delegation
-    legs only
+  what: This turn uses ambient worker dispatch rather than workflow delegation legs.
+  cause: delegate_dispatch is not available on this implement surface.
+  why: The current task schema determines which worker profiles and scope are accepted.
+  fix: '{% if paintedwolf.can_task %}Call `task` using its offered schema, an allowed agent type, and the required scope and completion criteria.{% else %}{% if paintedwolf.task_loadable %}Call `request_tools` with `need: "task"` using the supplied `replacement_calls` entry. Its schema arrives on the next model call; then use its allowed agent types and required fields.{% else %}This turn has no available worker-dispatch path. Continue with the offered tools, or report the capability limitation if delegation is required.{% endif %}{% endif %}'
+  instead: '{% if paintedwolf.can_task %}Use the offered `task` schema to dispatch a worker{% else %}{% if paintedwolf.task_loadable %}Load `task` with `request_tools`, then use its schema on the next call{% else %}Use offered tools or report that worker dispatch is unavailable{% endif %}{% endif %}'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: delegate_dispatch requires a delegation — use `task()` in implement mode
+x-paintedwolf-message: Use the current implement surface’s available worker-dispatch path
 x-paintedwolf-scenarios:
 - id: default
   vars:
-    detail: session not linked to a delegation
+    can_task: true
+    detail: ambient worker dispatch
     path: src/main.go
     profile: coordinator
     tool: delegate_dispatch
   expect_contains:
   - 'Rejected:'
   - 'Code: COORDINATOR_DELEGATE_DISPATCH_USE_TASK'
-  - task(
+  - '`task`'
 selector:
   tool:
   - delegate_dispatch
