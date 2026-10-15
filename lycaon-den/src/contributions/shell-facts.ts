@@ -38,6 +38,8 @@ export type ShellFactState = {
   filesVersionHistorical: boolean;
   peerOpenAvailable: boolean;
   peerViewsPresent: boolean;
+  /** The system package installs and owns the pw command. */
+  shellCommandPackaged: boolean;
   projectOpen: boolean;
   sessionExists: boolean;
   sessionIdle: boolean;
@@ -84,6 +86,7 @@ const FACT_BINDERS: Record<
   files_version_historical: (s) => s.filesVersionHistorical,
   peer_open_available: (s) => s.peerOpenAvailable,
   peer_views_present: (s) => s.peerViewsPresent,
+  shell_command_packaged: (s) => s.shellCommandPackaged,
 };
 
 function shellFactLookup(state: ShellFactState): FactLookup {

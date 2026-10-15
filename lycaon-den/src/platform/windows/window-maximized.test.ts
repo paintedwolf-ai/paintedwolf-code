@@ -58,6 +58,30 @@ describe("trackWindowMaximized", () => {
     expect(windowMaximized()).toBe(true);
   });
 
+  it("listens for resizes before its first read", async () => {
+    isMaximized.mockImplementationOnce(async () => {
+      expect(onResized).toHaveBeenCalledOnce();
+      return true;
+    });
+    await trackWindowMaximized();
+    expect(windowMaximized()).toBe(true);
+  });
+
+  it("keeps the newest state when an older read answers last", async () => {
+    await trackWindowMaximized();
+    let answerFirst: (value: boolean) => void = () => undefined;
+    isMaximized
+      .mockImplementationOnce(() => new Promise<boolean>((resolve) => (answerFirst = resolve)))
+      .mockResolvedValueOnce(true);
+    resized?.();
+    resized?.();
+    await vi.waitFor(() => expect(windowMaximized()).toBe(true));
+    answerFirst(false);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(windowMaximized()).toBe(true);
+  });
+
   it("does nothing outside the desktop runtime", async () => {
     tauri = false;
     await trackWindowMaximized();

@@ -123,6 +123,12 @@ export function ChatWorkspace(props: Props) {
     conversationSeam,
     windowEdgeClaims,
   } = props.panes;
+  /** The conversation's claim on one window edge's drawn controls, inside its tab rail. */
+  const chatWindowControls = (side: "left" | "right") => (
+    <For each={windowEdgeClaims("chat").filter((claim) => claim.side === side)}>
+      {(claim) => <WindowControls {...claim} />}
+    </For>
+  );
   const { sendPrompt, stopChat, resumeSpendLimitedChat } = props.actions;
   const { showNoProviderBanner, providerGap } = props.onboarding;
   const noticeIndex = () => props.notices.index();
@@ -344,9 +350,6 @@ export function ChatWorkspace(props: Props) {
             {...tauriDragRegionProps()}
           >
             <ChromeDragSurface />
-            <For each={windowEdgeClaims("chat")}>
-              {(claim) => <WindowControls {...claim} />}
-            </For>
             <ChatTabRail
               appStore={props.appStore}
               sessionId={layer.chat.sessionId}
@@ -361,6 +364,8 @@ export function ChatWorkspace(props: Props) {
               onNavExpand={() => void showWindowNav()}
               conversationSeam={conversationSeam()}
               dock={dock}
+              windowControlsStart={chatWindowControls("left")}
+              windowControlsEnd={chatWindowControls("right")}
             />
           </header>
           <main class="den-shell-main" aria-label="Chat">

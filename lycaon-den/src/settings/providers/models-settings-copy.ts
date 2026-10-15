@@ -4,6 +4,7 @@
 const TEST_CONNECTION_LABEL = "Test connection";
 const REFRESH_MODELS_LABEL = "Refresh models";
 const CONTINUE_LABEL = "Continue";
+const UNSET_MODEL_LABEL = "---";
 
 export const MODELS_SETTINGS_COPY = {
   providersIntro: "Connect AI providers.",
@@ -177,8 +178,9 @@ export const MODELS_SETTINGS_COPY = {
   coordinatorSlotHint:
     "Must be tool-calling capable or Painted Wolf Code cannot run. We recommend GLM 5.3 Flash, Gemini 3.5 Flash, Claude Sonnet, or a similar class model — this is the hard part, so use your strongest model.",
   liteSlotLabel: "Summarizer",
-  summarizerModelHint:
-    "Optional override for compaction, context diet, and web search seeding. --- inherits the default model and tracks when it changes.",
+  /** Wraps the unset label: the hint names it as the picker shows it. */
+  summarizerModelHintLead: "Optional override for compaction, context diet, and web search seeding.",
+  summarizerModelHintTail: "inherits the default model and tracks when it changes.",
   modelPolicyEmpty:
     "Configure at least one provider in Settings → AI providers, then choose models here.",
   workerSectionTitle: "Workers",
@@ -199,7 +201,7 @@ export const MODELS_SETTINGS_COPY = {
     "When multiple workers run together, Painted Wolf Code picks as different models as possible from your pool.",
   /** Prefs-band label — short; onboarding keeps the longer field label via copy sites. */
   defaultSummarizerModelLabel: "Summarizer",
-  unsetModel: "---",
+  unsetModel: UNSET_MODEL_LABEL,
   defaultModelRequired:
     "You must set up a default model before using Painted Wolf Code.",
   noProvidersLoaded: "No providers loaded from the backend.",

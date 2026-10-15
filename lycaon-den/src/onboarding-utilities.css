@@ -233,6 +233,30 @@
   }
 }
 
+/* Drawn window buttons sit in clusters at the desktop's chosen edges. */
+@utility onboarding-layout-preview__controls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+
+  &[data-side="right"] {
+    margin-left: auto;
+  }
+  & > i {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--olp-ink-soft);
+  }
+  & > i[data-control="appmenu"] {
+    width: 6px;
+    height: 4px;
+    border-radius: 0;
+    border-block: 1px solid var(--olp-ink-soft);
+    background: linear-gradient(var(--olp-ink-soft), var(--olp-ink-soft)) center / 100% 1px no-repeat;
+  }
+}
+
 /* Column separators come from the gap, so mirroring needs no border swap. */
 @utility onboarding-layout-preview__body {
   flex: 1;

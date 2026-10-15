@@ -1,0 +1,20 @@
+/* A floating Linux window sits in a client-side frame with rounded corners.
+   The web view is transparent, so the page rounds itself to the same radius
+   (`linux_frame::CORNER_RADIUS_PX`); a maximized, fullscreen, or tiled window
+   has square corners and paints edge to edge. */
+.den-tauri-linux {
+  --den-window-radius: 12px;
+}
+
+:root.den-tauri-linux[data-window-frame="floating"],
+:root.den-tauri-linux[data-window-frame="floating"] body {
+  background: transparent;
+}
+
+/* Body holds the app and every portal; paint containment makes it the box
+   fixed overlays position in, so its rounded clip covers them too. */
+:root.den-tauri-linux[data-window-frame="floating"] body {
+  border-radius: var(--den-window-radius);
+  overflow: clip;
+  contain: paint;
+}

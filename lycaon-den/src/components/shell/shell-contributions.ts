@@ -5,6 +5,7 @@ import { createEffect, createMemo, onCleanup, onMount } from "solid-js";
 import { CONTEXT_NAV_CATALOG, type ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { isChatActivityLive } from "../../chat/session/session-activity.ts";
 import { contributionFrame } from "../../contributions/contribution-store.ts";
+import { shellCommandPackaged } from "../../platform/desktop/shell-command.ts";
 import { type ShellFactState, setShellFactState } from "../../contributions/shell-facts.ts";
 import { filesCommandContext } from "../../files/commands/files-command-context.ts";
 import { mountedFilesEditorView } from "../../files/editor/files-editor-host.ts";
@@ -149,6 +150,7 @@ export function createShellContributions(options: Pick<ShellScope, "shell" | "ap
       peerOpenAvailable:
         isTauriRuntime() && projectId != null && focusedPeerSubject() != null,
       peerViewsPresent: focusedPeerViews().length > 0,
+      shellCommandPackaged: shellCommandPackaged(),
       projectOpen: projectId != null,
       sessionExists: chat != null,
       sessionIdle: chat != null && !activityLive,

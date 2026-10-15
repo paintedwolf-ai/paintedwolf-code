@@ -9,6 +9,7 @@ use tauri::{AppHandle, Emitter};
 
 use super::{DesktopSettingsState, Emission, SettingValue, SettingsSnapshot, NAMESPACES};
 use crate::windows::accessibility_text_size::{TextSizePayload, TEXT_SIZE_CHANGED_EVENT};
+use crate::windows::linux_decorations::{DecorationLayout, LAYOUT_CHANGED_EVENT};
 use crate::windows::system_appearance::{SystemAppearancePayload, SYSTEM_APPEARANCE_CHANGED_EVENT};
 
 const PORTAL_BUS_NAME: &str = "org.freedesktop.portal.Desktop";
@@ -28,6 +29,10 @@ pub(crate) fn current_text_size_payload() -> TextSizePayload {
 
 pub(crate) fn current_appearance_payload() -> SystemAppearancePayload {
     state().appearance_payload()
+}
+
+pub(crate) fn current_decoration_layout() -> DecorationLayout {
+    state().decoration_layout()
 }
 
 /// Reads the portal on its own thread; the main loop keeps the GTK thread free.
@@ -154,6 +159,7 @@ fn emit(app: &AppHandle, emissions: Vec<Emission>) {
         let result = match emission {
             Emission::TextSize(payload) => app.emit(TEXT_SIZE_CHANGED_EVENT, &payload),
             Emission::Appearance(payload) => app.emit(SYSTEM_APPEARANCE_CHANGED_EVENT, &payload),
+            Emission::DecorationLayout(layout) => app.emit(LAYOUT_CHANGED_EVENT, &layout),
         };
         if let Err(err) = result {
             eprintln!("desktop settings: emit: {err}");

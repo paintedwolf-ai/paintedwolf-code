@@ -1,6 +1,6 @@
 import { ChromeDragSurface } from "../shell/ChromeDragSurface.tsx";
 import { chromeProps } from "../../styling/ui-chrome.ts";
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createSignal, type JSX } from "solid-js";
 import { ResidentPortal } from "../primitives/ResidentPortal.tsx";
 import type { ModelRef, ProviderMeta } from "../../api/types.ts";
 import {
@@ -20,7 +20,7 @@ import { cn } from "../../shared/cn.ts";
 
 type Props = {
   label: string;
-  hint?: string;
+  hint?: JSX.Element;
   compact?: boolean;
   disabled?: boolean;
   /** Label for the empty assignment. */

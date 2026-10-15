@@ -39,6 +39,8 @@ export const ALL_SHELL_FACTS: ShellFactState = {
   filesVersionHistorical: true,
   peerOpenAvailable: true,
   peerViewsPresent: true,
+  // The install command's gate holds while no package owns the command.
+  shellCommandPackaged: false,
   projectOpen: true,
   sessionExists: true,
   sessionIdle: true,

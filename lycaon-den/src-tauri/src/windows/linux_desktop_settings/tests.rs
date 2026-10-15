@@ -182,3 +182,45 @@ fn transparency_has_no_linux_source_and_stays_off() {
     bus.connect();
     assert!(!bus.state.appearance_payload().reduce_transparency);
 }
+
+#[test]
+fn the_desktop_button_layout_is_reported_once_and_followed() {
+    use crate::windows::linux_decorations::{DecorationControl::*, DecorationLayout};
+    let mut bus = gnome_defaults().with(WM_PREFERENCES_NS, "button-layout", SettingValue::Str("appmenu:close".into()));
+    let first = bus.connect();
+    let expected = crate::windows::linux_decorations::parse_button_layout("appmenu:close").unwrap();
+    assert!(first.contains(&Emission::DecorationLayout(expected.clone())));
+    assert_eq!(bus.state.decoration_layout(), expected);
+
+    let moved = bus.setting_changed(
+        WM_PREFERENCES_NS,
+        "button-layout",
+        SettingValue::Str("close,minimize,maximize:".into()),
+    );
+    assert!(matches!(
+        &moved[..],
+        [Emission::DecorationLayout(layout)] if layout.left == vec![Close, Minimize, Maximize] && layout.right.is_empty()
+    ));
+    assert!(bus
+        .setting_changed(WM_PREFERENCES_NS, "button-layout", SettingValue::Str("close,minimize,maximize:".into()))
+        .is_empty());
+
+    let cleared = bus.setting_changed(WM_PREFERENCES_NS, "button-layout", SettingValue::Str("icon:".into()));
+    assert_eq!(cleared, vec![Emission::DecorationLayout(DecorationLayout::default_layout())]);
+}
+
+#[test]
+fn a_desktop_without_a_button_layout_keeps_the_default_silently() {
+    let mut bus = gnome_defaults();
+    assert!(!bus
+        .connect()
+        .iter()
+        .any(|emission| matches!(emission, Emission::DecorationLayout(_))));
+    assert_eq!(
+        bus.state.decoration_layout(),
+        crate::windows::linux_decorations::DecorationLayout::default_layout()
+    );
+    assert!(bus
+        .setting_changed(WM_PREFERENCES_NS, "theme", SettingValue::Str("Adwaita".into()))
+        .is_empty());
+}

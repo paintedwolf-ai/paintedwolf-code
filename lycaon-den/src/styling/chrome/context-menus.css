@@ -57,15 +57,23 @@
 /* `--virtual-focus` marks the active row while the field keeps DOM focus. */
 .den-context-menu__item:hover,
 .den-context-menu__item:focus-visible,
+.den-context-menu[data-keyboard-open] .den-context-menu__item:focus,
 .den-context-menu__item--virtual-focus {
   background: color-mix(in srgb, var(--den-text) 8%, transparent);
+}
+/* A keyboard-opened menu rings its focused row the way a keyboard move does. */
+.den-context-menu[data-keyboard-open] .den-context-menu__item:focus {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--den-accent-text) 85%, var(--den-background));
 }
 .den-context-menu__item--danger {
   color: var(--den-danger-text);
 }
-/* Every row reserves the check column. */
+/* Every row reserves the check column. A width, not a flex basis: WebKit
+   sizes the menu from the glyph's own width, and a wider basis would then
+   take the difference out of the row's label. */
 .den-context-menu__check {
-  flex: 0 0 12px;
+  flex: none;
+  width: 12px;
   margin-inline-end: 7px;
   font-size: var(--text-den-micro);
   line-height: 1;

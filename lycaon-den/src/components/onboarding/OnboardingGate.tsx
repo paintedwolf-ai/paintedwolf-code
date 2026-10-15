@@ -39,6 +39,7 @@ import { ONBOARDING_LAYOUT_COPY } from "./onboarding-layout-copy.ts";
 import { setOnboardingWelcomeDismissSink } from "./onboarding-welcome-dismiss.ts";
 import { OnboardingLayoutChoices } from "./OnboardingLayoutChoices.tsx";
 import { OnboardingSettingsTeachNav } from "./OnboardingSettingsTeachNav.tsx";
+import { SummarizerModelHint } from "../model/SummarizerModelHint.tsx";
 import { OnboardingStepPage } from "./OnboardingStepPage.tsx";
 
 type Props = {
@@ -466,7 +467,7 @@ export function OnboardingGate(props: Props) {
                     {MODELS_SETTINGS_COPY.defaultSummarizerModelLabel}
                   </label>
                   <p class="den-settings-hint">
-                    {MODELS_SETTINGS_COPY.summarizerModelHint}
+                    <SummarizerModelHint />
                   </p>
                   <ModelSlotPicker
                     compact

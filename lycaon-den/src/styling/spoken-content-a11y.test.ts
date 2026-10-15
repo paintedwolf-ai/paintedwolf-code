@@ -20,6 +20,14 @@ describe("spoken content + modal semantics", () => {
     expect(md).not.toMatch(/\.markdown-body\s*\{[\s\S]*?user-select:\s*none/);
   });
 
+  it("keeps list markers on prose lists the element reset strips", () => {
+    // WebKit also stops announcing a list once its markers are gone.
+    const md = read("markdown.css");
+    expect(read("element-reset.css")).toMatch(/ol,\s*ul,\s*menu\s*\{\s*list-style:\s*none/);
+    expect(md).toMatch(/\.markdown-body ul\s*\{\s*list-style:\s*disc/);
+    expect(md).toMatch(/\.markdown-body ol\s*\{\s*list-style:\s*decimal/);
+  });
+
   it("keeps fenced code from trapping transcript wheel", () => {
     // Fences scroll in a sideways scrollport, whose viewport hands vertical gestures on.
     expect(read("chat/markdown/markdown-render.ts")).toMatch(

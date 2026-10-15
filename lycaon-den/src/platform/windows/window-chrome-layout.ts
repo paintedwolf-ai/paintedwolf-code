@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
 import { isTauriRuntime, tauriPlatform } from "../runtime.ts";
+import { listenHostEvent } from "./window-channel.ts";
 
 /** One control the desktop places in a client-side title bar. */
 export type WindowChromeControl = "appmenu" | "minimize" | "maximize" | "close";
@@ -68,12 +69,25 @@ export function setWindowChromeLayoutForTests(next: WindowChromeLayout | null): 
   setLayout(next ?? DEFAULT_WINDOW_CHROME_LAYOUT);
 }
 
-/** Reads the desktop's button layout once; the default stands on any failure. */
-export async function loadWindowChromeLayout(): Promise<void> {
+/** The host sends this after the desktop's `button-layout` changes. */
+export const WINDOW_CHROME_LAYOUT_CHANGED_EVENT = "linux-decoration-layout-changed";
+
+/**
+ * Follows the desktop's button layout: listens for changes before the first
+ * read so a change between the two is not lost. The default stands on any
+ * failure.
+ */
+export async function trackWindowChromeLayout(): Promise<void> {
   if (!isTauriRuntime() || !drawsWindowControls()) return;
   try {
+    let changed = false;
+    await listenHostEvent<unknown>(WINDOW_CHROME_LAYOUT_CHANGED_EVENT, ({ payload }) => {
+      changed = true;
+      setLayout(normalizeWindowChromeLayout(payload));
+    });
     const { invoke } = await import("@tauri-apps/api/core");
-    setLayout(normalizeWindowChromeLayout(await invoke("linux_decoration_layout")));
+    const initial = normalizeWindowChromeLayout(await invoke("linux_decoration_layout"));
+    if (!changed) setLayout(initial);
   } catch (err) {
     console.debug("[window-chrome] decoration layout unavailable", err);
   }

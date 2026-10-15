@@ -1,4 +1,4 @@
-//! Desktop appearance and text-scale facts from the Settings portal.
+//! Desktop appearance, text-scale, and title bar layout facts from the Settings portal.
 //!
 //! A portal snapshot reduces to typed facts. A fact is absent when none of the
 //! namespaces the desktop exposes carries it, so the app can report that
@@ -7,6 +7,7 @@
 use std::collections::BTreeMap;
 
 use super::accessibility_text_size::{payload_for_category, TextSizePayload};
+use super::linux_decorations::{layout_from_raw, DecorationLayout};
 use super::system_appearance::{hex_color, SystemAppearancePayload};
 
 #[cfg(target_os = "linux")]
@@ -18,13 +19,15 @@ pub const APPEARANCE_NS: &str = "org.freedesktop.appearance";
 pub const GNOME_INTERFACE_NS: &str = "org.gnome.desktop.interface";
 pub const GNOME_A11Y_NS: &str = "org.gnome.desktop.a11y.interface";
 pub const KDE_GENERAL_NS: &str = "org.kde.kdeglobals.General";
+pub const WM_PREFERENCES_NS: &str = "org.gnome.desktop.wm.preferences";
 
 /// Namespaces read at startup and followed through `SettingChanged`.
-pub const NAMESPACES: [&str; 4] = [
+pub const NAMESPACES: [&str; 5] = [
     APPEARANCE_NS,
     GNOME_INTERFACE_NS,
     GNOME_A11Y_NS,
     KDE_GENERAL_NS,
+    WM_PREFERENCES_NS,
 ];
 
 /// Text-size category while the desktop exposes a text scaling factor.
@@ -119,11 +122,20 @@ fn kde_accent(snapshot: &SettingsSnapshot) -> Option<String> {
     }
 }
 
+/// The title bar layout the desktop asks for; the default when it names none.
+fn decoration_layout(snapshot: &SettingsSnapshot) -> DecorationLayout {
+    match lookup(snapshot, WM_PREFERENCES_NS, "button-layout") {
+        Some(SettingValue::Str(raw)) => layout_from_raw(raw),
+        _ => DecorationLayout::default_layout(),
+    }
+}
+
 /// A payload whose content changed since the last emission.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Emission {
     TextSize(TextSizePayload),
     Appearance(SystemAppearancePayload),
+    DecorationLayout(DecorationLayout),
 }
 
 /// Current facts and the revisions both payloads carry.
@@ -133,6 +145,8 @@ pub struct DesktopSettingsState {
     facts: DesktopSettingsFacts,
     text_revision: u64,
     appearance_revision: u64,
+    /// `None` until the desktop names a layout other than the default.
+    decoration_layout: Option<DecorationLayout>,
 }
 
 impl DesktopSettingsState {
@@ -146,7 +160,14 @@ impl DesktopSettingsState {
             },
             text_revision: 0,
             appearance_revision: 0,
+            decoration_layout: None,
         }
+    }
+
+    pub fn decoration_layout(&self) -> DecorationLayout {
+        self.decoration_layout
+            .clone()
+            .unwrap_or_else(DecorationLayout::default_layout)
     }
 
     #[cfg(test)]
@@ -207,6 +228,11 @@ impl DesktopSettingsState {
         if self.appearance_revision == 0 || appearance_changed {
             self.appearance_revision += 1;
             emissions.push(Emission::Appearance(self.appearance_payload()));
+        }
+        let layout = decoration_layout(&self.snapshot);
+        if layout != self.decoration_layout() {
+            self.decoration_layout = Some(layout.clone());
+            emissions.push(Emission::DecorationLayout(layout));
         }
         emissions
     }
