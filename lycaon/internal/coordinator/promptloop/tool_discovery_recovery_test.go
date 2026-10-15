@@ -73,7 +73,18 @@ func TestUnknownToolRecoveryPagesAndLoadsThroughProductionLoader(t *testing.T) {
 	if !strings.Contains(rejected.Copy["fix"], "discovery.entries") || !strings.Contains(rejected.Copy["fix"], "discovery.next_need") {
 		t.Fatalf("recovery=%v", rejected.Copy)
 	}
+	beforeMetadata, err := json.Marshal(tr.Data)
+	testutil.FailErr(t, "encode complete diagnostics", err)
+	toolrejection.CompleteFailureMetadata(tr, "create_file", "")
+	afterMetadata, err := json.Marshal(tr.Data)
+	testutil.FailErr(t, "encode completed metadata", err)
+	if string(beforeMetadata) != string(afterMetadata) {
+		t.Fatal("recovery budget preceded ordinary metadata completion")
+	}
 	msg := loop.Tools.toolRejectMessage("create_file", "call", "assistant", nil, rejected)
+	if len(msg.ToolResult.Feedback) != 1 {
+		t.Fatalf("intrinsic feedback count=%d", len(msg.ToolResult.Feedback))
+	}
 	projected := transcript.Project([]api.Message{msg})
 	var content string
 	for _, p := range projected {
@@ -83,6 +94,40 @@ func TestUnknownToolRecoveryPagesAndLoadsThroughProductionLoader(t *testing.T) {
 	}
 	if !strings.Contains(content, `"status":"catalog"`) || strings.Contains(content, "details_omitted") || strings.Contains(content, "privateprivate") {
 		t.Fatalf("provider lost safe catalog: %s", content)
+	}
+	if !strings.Contains(page.Instruction, "Call request_tools") || strings.Contains(page.Instruction, "this tool") {
+		t.Fatal("cross-tool discovery did not name its loader")
+	}
+	pageBytes, err := json.Marshal(page)
+	testutil.FailErr(t, "encode catalog page", err)
+	if len(pageBytes) > turnload.DiscoveryPageBytes {
+		t.Fatal("recovery page exceeded catalog bound")
+	}
+	firstCursor := page.NextNeed
+	for _, mutate := range []func(*tools.ToolContext){
+		func(c *tools.ToolContext) { c.Identity.SessionID = "other" },
+		func(c *tools.ToolContext) { c.Identity.Agent = "worker" },
+		func(c *tools.ToolContext) { c.Turn.TurnSurfaceID = "other" },
+		func(c *tools.ToolContext) {
+			c.Turn.TurnToolPlan = toolsurface.Compile([]string{"request_tools"}, names[:3])
+		},
+	} {
+		changed := tctx
+		mutate(&changed)
+		if _, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": firstCursor}, changed); err == nil {
+			t.Fatal("recovery cursor escaped caller/catalog binding")
+		}
+	}
+	withEscalation := *rejected
+	withEscalation.Facts = rejected.Facts.Merge(guidance.ToolResultFacts{}.WithFeedback("REPEATED_REJECTION", map[string]any{"detail": strings.Repeat("x", 40<<10)}, nil))
+	escalated := loop.Tools.toolRejectMessage("create_file", "call", "assistant", nil, &withEscalation)
+	if escalated.ToolResult.Feedback[0].Code != "TOOL_NOT_OFFERED" {
+		t.Fatal("escalation displaced primary recovery")
+	}
+	for _, p := range transcript.Project([]api.Message{escalated}) {
+		if p.Role == api.MessageRoleTool && !strings.Contains(p.Content, `"status":"catalog"`) {
+			t.Fatal("later feedback displaced first catalog")
+		}
 	}
 	var seen []string
 	for {
@@ -104,9 +149,68 @@ func TestUnknownToolRecoveryPagesAndLoadsThroughProductionLoader(t *testing.T) {
 	if !slices.Equal(seen, names[1:24]) {
 		t.Fatalf("catalog leaked/omitted names: %v", seen)
 	}
-	_, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": names[23]}, tctx)
+	_, err = reg.Run(t.Context(), "request_tools", map[string]any{"need": names[23]}, tctx)
 	testutil.FailErr(t, "activate exact selected name", err)
 	if !active.Active("s")[names[23]] || len(active.Active("s")) != 2 {
 		t.Fatal("exact recovery changed unrelated activation")
+	}
+	if _, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": firstCursor}, tctx); err == nil {
+		t.Fatal("recovery cursor survived changed active catalog")
+	}
+}
+
+func TestUnknownToolDiscoveryGuidanceRequiresProjectedCurrentCatalog(t *testing.T) {
+	reg := tools.NewDefaultRegistry()
+	testutil.FailErr(t, "register write", reg.Register("write", func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil }))
+	for _, tc := range []struct {
+		name  string
+		setup func(*tools.ToolContext, *ContextDeps, *api.ToolCall)
+		want  bool
+	}{
+		{name: "last page", want: true},
+		{name: "known deferred", setup: func(_ *tools.ToolContext, _ *ContextDeps, call *api.ToolCall) { call.Name = "write" }},
+		{name: "no session identity", setup: func(ctx *tools.ToolContext, _ *ContextDeps, _ *api.ToolCall) { ctx.Identity.SessionID = "" }},
+		{name: "other session", setup: func(ctx *tools.ToolContext, _ *ContextDeps, _ *api.ToolCall) { ctx.Identity.SessionID = "other" }},
+		{name: "no profile identity", setup: func(ctx *tools.ToolContext, _ *ContextDeps, _ *api.ToolCall) { ctx.Identity.Agent = "" }},
+		{name: "unknown activation", setup: func(_ *tools.ToolContext, deps *ContextDeps, _ *api.ToolCall) { deps.LoadedTools = nil }},
+		{name: "unknown plan", setup: func(ctx *tools.ToolContext, _ *ContextDeps, _ *api.ToolCall) {
+			ctx.Turn.TurnToolPlan = toolsurface.Plan{}
+		}},
+		{name: "no loader", setup: func(ctx *tools.ToolContext, _ *ContextDeps, _ *api.ToolCall) {
+			ctx.Turn.TurnOfferedToolNames = []string{"read"}
+		}},
+		{name: "no unloaded entries", setup: func(_ *tools.ToolContext, deps *ContextDeps, _ *api.ToolCall) {
+			deps.LoadedTools = func(string) map[string]bool { return map[string]bool{"write": true} }
+		}},
+		{name: "oversized rejected identifier", setup: func(_ *tools.ToolContext, _ *ContextDeps, call *api.ToolCall) {
+			call.Name = strings.Repeat("<界>\"", 12000)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			loop := discoveryRecoveryLoop(t, reg, func(string) map[string]bool { return nil })
+			ctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s", Agent: "coordinator"}, Turn: tools.InvocationTurn{TurnOfferedToolNames: []string{"request_tools"}, TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{"write"})}}
+			call := api.ToolCall{Name: "create_file"}
+			if tc.setup != nil {
+				tc.setup(&ctx, &loop.Context.Deps, &call)
+			}
+			reject := loop.Tools.rejectToolOccurrence(t.Context(), &api.Session{ID: "s"}, call, ctx, "TOOL_NOT_OFFERED", nil)
+			tr := toolrejection.AsToolReject(reject)
+			page, hasPage := tr.Data["discovery"].(*turnload.Discovery)
+			if hasPage && strings.Contains(page.Instruction, "next_need") {
+				t.Fatal("last page instruction promised continuation")
+			}
+			if hasPage != tc.want || strings.Contains(reject.Copy["fix"], "discovery.entries") != tc.want {
+				t.Fatalf("page=%v fix=%s", hasPage, reject.Copy["fix"])
+			}
+			if strings.Contains(reject.Copy["fix"], "discovery.next_need") {
+				t.Fatal("last or missing page promised continuation")
+			}
+			msg := loop.Tools.toolRejectMessage(call.Name, "call", "assistant", nil, reject)
+			for _, p := range transcript.Project([]api.Message{msg}) {
+				if tc.want && p.Role == api.MessageRoleTool && (strings.Contains(p.Content, "details_omitted") || !strings.Contains(p.Content, `"name":"write"`)) {
+					t.Fatal("actionable page dropped at projection")
+				}
+			}
+		})
 	}
 }

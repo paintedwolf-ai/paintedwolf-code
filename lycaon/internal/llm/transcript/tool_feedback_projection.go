@@ -20,7 +20,7 @@ func toolFeedbackParts(msg api.Message) []api.MessageContentPart {
 	}
 	invocation, invocationOmitted := invocationFeedback(msg.ToolResult)
 	var entries []json.RawMessage
-	budget := maxToolFeedbackBytes - 256 - len(invocation)
+	budget := maxToolFeedbackBytes - toolFeedbackEnvelopeReserve - len(invocation)
 	omitted := 0
 	for _, feedback := range msg.ToolResult.Feedback {
 		if len(feedback.Details) == 0 && feedback.Subject == nil {
@@ -134,7 +134,7 @@ func invocationFeedback(result *api.ToolResult) (json.RawMessage, bool) {
 		SourceRootDigest string               `json:"source_root_digest,omitempty"`
 		SourceVerdict    string               `json:"source_verdict,omitempty"`
 	}{receipt.ID, receipt.Tool, receipt.ToolCallID, receipt.Status, receipt.Invoked, code, receipt.SourceRevision, receipt.SourceRootDigest, receipt.SourceVerdict})
-	if err != nil || len(body) > 2<<10 {
+	if err != nil || len(body) > maxInvocationFeedbackBytes {
 		return nil, true
 	}
 	return body, false

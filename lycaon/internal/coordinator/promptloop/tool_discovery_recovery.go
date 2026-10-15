@@ -1,15 +1,15 @@
 package promptloop
 
 import (
-	"encoding/json"
-
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // addToolDiscovery supplies the same permitted catalog that request_tools pages.
 func (l *toolInvocations) addToolDiscovery(sessionID string, tctx tools.ToolContext, data map[string]any) {
-	if l.Context.Deps.LoadedTools == nil || tctx.Identity.SessionID == "" || tctx.Identity.SessionID != sessionID || tctx.Identity.Agent == "" {
+	if l.Context == nil || l.Context.Deps.LoadedTools == nil || tctx.Identity.SessionID == "" || tctx.Identity.SessionID != sessionID || tctx.Identity.Agent == "" {
 		return
 	}
 	cards := tools.DeferredToolCatalog(l.Context.Deps.Tools, tctx.Turn.TurnToolPlan, l.Context.Deps.LoadedTools(sessionID))
@@ -24,11 +24,16 @@ func (l *toolInvocations) addToolDiscovery(sessionID string, tctx tools.ToolCont
 	if err != nil {
 		return
 	}
+	// This page is carried by another tool's refusal, so name its loader explicitly.
+	page.Instruction = "Call request_tools with a relevant entry's exact name as need."
+	if page.NextNeed != "" {
+		page.Instruction += " For more entries, pass next_need unchanged as need."
+	}
 	data["discovery"] = page
 	data["tool_discovery_status"] = page.Status
 	data["tool_discovery_has_more"] = page.NextNeed != ""
-	// Leave room for the invocation and sealing metadata in the 32 KiB provider envelope.
-	if raw, err := json.Marshal(data); err != nil || len(raw) > 24<<10 {
+	// Intrinsic refusal feedback is first, including when escalation appends feedback.
+	if !transcript.ToolFeedbackFitsFirst(api.ToolFeedback{Code: "TOOL_NOT_OFFERED", Details: data}) {
 		delete(data, "discovery")
 		delete(data, "tool_discovery_status")
 		delete(data, "tool_discovery_has_more")
