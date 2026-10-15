@@ -298,8 +298,17 @@
   outline: none;
   overflow: hidden;
 }
-.home-view__idea-input::placeholder {
+.home-view__idea-scroll .den-scrollport__content {
+  position: relative;
+}
+.home-view__idea-hint {
+  position: absolute;
+  inset: 0 auto auto 0;
+  pointer-events: none;
   color: var(--den-text-muted);
+  font-size: var(--text-den-subhead);
+  line-height: 1.45;
+  white-space: nowrap;
 }
 .home-view__idea-input:focus-visible {
   box-shadow: none;

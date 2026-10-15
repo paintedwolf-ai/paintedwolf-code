@@ -85,6 +85,16 @@ describe("HomeView missing provider config", () => {
 });
 
 describe("HomeView draft materialization", () => {
+  it("draws the idea hint while the field is empty instead of a placeholder", () => {
+    render(() => <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} onSubmitIdea={vi.fn()} />);
+    const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
+    expect(input.hasAttribute("placeholder")).toBe(false);
+    expect(input.getAttribute("aria-label")).toBe("Describe your idea");
+    expect(document.querySelector(".home-view__idea-hint")?.textContent).toBe("Describe your idea…");
+    fireEvent.input(input, { target: { value: "An orchard notebook" } });
+    expect(document.querySelector(".home-view__idea-hint")).toBeNull();
+  });
+
   it.each([true, false])("clears only accepted Home drafts (accepted=%s)", async (accepted) => {
     let settle!: (accepted: boolean) => void;
     const result = new Promise<boolean>((resolve) => { settle = resolve; });

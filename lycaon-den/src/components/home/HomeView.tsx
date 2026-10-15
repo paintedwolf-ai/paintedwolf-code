@@ -351,12 +351,17 @@ export function HomeView(props: Props) {
               <ThemeIcon slot="sparkle" size={17} />
             </span>
             <Scrollport class="home-view__idea-scroll" eager>
+              {/* A drawn hint, not a placeholder: WebKitGTK aborts a screen reader's text query
+                  over the Home stage while this textarea carries a placeholder. */}
+              <Show when={!idea()}>
+                <span class="home-view__idea-hint" aria-hidden="true">Describe your idea…</span>
+              </Show>
               <textarea
                 ref={ideaRef}
                 class="home-view__idea-input"
                 data-testid="home-idea-input"
                 rows={1}
-                placeholder="Describe your idea…"
+                aria-label="Describe your idea"
                 value={idea()}
                 disabled={props.submitting}
                 onInput={(e) => {
