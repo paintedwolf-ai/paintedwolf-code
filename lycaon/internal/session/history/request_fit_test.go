@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
+	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -281,16 +282,20 @@ func TestReviewRecallPageProjectionKeepsCursorContiguous(t *testing.T) {
 		map[string]any{"message_id": "m4", "ord": 4, "content": strings.Repeat("d", 15000)},
 	}, "through_ord": 4, "recorded": true}})
 	testutil.FailErr(t, "encode index page", err)
-	indexRows := projectRecordedToolBodies(t.Context(), []api.Message{{ID: "recall-index", Ord: 4, Role: api.MessageRoleTool, Content: string(indexRaw), ToolResult: &api.ToolResult{Tool: "recall", Content: string(indexRaw)}}})
+	indexArgs := map[string]any{"history": map[string]any{"through_ord": 4, "search": "needle"}, "limit": 4}
+	indexRows := projectRecordedToolBodies(t.Context(), []api.Message{{ID: "recall-index", Ord: 4, Role: api.MessageRoleTool, Content: string(indexRaw), ToolResult: &api.ToolResult{Tool: "recall", Content: string(indexRaw), ToolArgs: indexArgs}}})
 	var indexPage struct {
-		History struct {
-			Entries      []struct{ Ord int `json:"ord"` } `json:"entries"`
-			NextAfterOrd int                              `json:"next_after_ord"`
-		} `json:"history"`
+		History recall.HistoryPage `json:"history"`
 	}
 	testutil.FailErr(t, "decode projected index page", json.Unmarshal([]byte(indexRows[0].Content), &indexPage))
 	if len(indexPage.History.Entries) == 0 || indexPage.History.Entries[len(indexPage.History.Entries)-1].Ord != indexPage.History.NextAfterOrd {
 		t.Fatalf("projected index page lost contiguous next_after_ord: %+v", indexPage.History)
+	}
+	if next := indexPage.History.NextRequest; next == nil || next.History.AfterOrd != indexPage.History.NextAfterOrd || next.History.Search != "needle" || next.Limit != 4 {
+		t.Fatalf("projected index lost its complete continuation: %+v", next)
+	}
+	if _, changed := indexArgs["history"].(map[string]any)["after_ord"]; changed {
+		t.Fatal("projection changed the recorded invocation")
 	}
 }
 
@@ -326,7 +331,6 @@ func TestReviewFittingHonorsProviderHeadroom(t *testing.T) {
 		t.Fatalf("fit admitted input=%d output=%d headroom=%d window=%d, exceeding provider contract by %d", actual.Input, actual.Output, actual.Headroom, actual.Window, actual.Input+actual.Output+actual.Headroom-actual.Window)
 	}
 }
-
 
 func TestRequestFittingReservesObservedInputUsage(t *testing.T) {
 	current := api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: strings.Repeat("Measured input. ", 600)}

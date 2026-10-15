@@ -3,6 +3,7 @@ package history
 import (
 	"context"
 	"encoding/json"
+	"maps"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 
@@ -20,7 +21,7 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message) []api.Me
 			out = append(out, row)
 			continue
 		}
-		content, fitted, isHistory := projectRecallHistoryPage(row.Content, 2048)
+		content, fitted, isHistory := projectRecallHistoryPage(row.Content, 2048, row.ToolResult.ToolArgs)
 		if !fitted {
 			record := recall.HistoryRequest{ThroughOrd: row.Ord, MessageID: row.ID,
 				SourceSeq: row.Seq, Format: "text", BodyRunes: 4096}
@@ -66,7 +67,7 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message) []api.Me
 	return out
 }
 
-func projectRecallHistoryPage(raw string, maxBytes int) (string, bool, bool) {
+func projectRecallHistoryPage(raw string, maxBytes int, originalArgs map[string]any) (string, bool, bool) {
 	prefix, body, suffix, ok := hostmarker.SplitToolJSONBody(raw)
 	if !ok {
 		return "", false, false
@@ -101,9 +102,12 @@ func projectRecallHistoryPage(raw string, maxBytes int) (string, bool, bool) {
 			entry["content"] = trimmed
 			if next := offset + mid; mid < len(runes) || totalRunes > next || prevNext > next {
 				history["next_offset"] = next
-				if request, ok := history["next_request"].(map[string]any); ok {
-					if coordinates, ok := request["history"].(map[string]any); ok {
-						coordinates["offset"] = next
+				if coordinates := recallContinuationCoordinates(history, originalArgs); coordinates != nil {
+					coordinates["offset"] = next
+					if _, present := coordinates["source_seq"]; !present {
+						if seq, present := entry["seq"]; present {
+							coordinates["source_seq"] = seq
+						}
 					}
 				}
 				root["truncated"] = true
@@ -127,10 +131,8 @@ func projectRecallHistoryPage(raw string, maxBytes int) (string, bool, bool) {
 		if mid < len(entries) {
 			if last, ok := entries[mid-1].(map[string]any); ok {
 				history["next_after_ord"] = last["ord"]
-				if request, ok := history["next_request"].(map[string]any); ok {
-					if coordinates, ok := request["history"].(map[string]any); ok {
-						coordinates["after_ord"] = last["ord"]
-					}
+				if coordinates := recallContinuationCoordinates(history, originalArgs); coordinates != nil {
+					coordinates["after_ord"] = last["ord"]
 				}
 			}
 			root["truncated"] = true
@@ -142,6 +144,23 @@ func projectRecallHistoryPage(raw string, maxBytes int) (string, bool, bool) {
 		}
 	}
 	return best, best != "", true
+}
+
+func recallContinuationCoordinates(history, originalArgs map[string]any) map[string]any {
+	request, ok := history["next_request"].(map[string]any)
+	if !ok {
+		coordinates, ok := originalArgs["history"].(map[string]any)
+		if !ok {
+			return nil
+		}
+		request = map[string]any{"history": maps.Clone(coordinates)}
+		if limit, ok := originalArgs["limit"]; ok {
+			request["limit"] = limit
+		}
+		history["next_request"] = request
+	}
+	coordinates, _ := request["history"].(map[string]any)
+	return coordinates
 }
 
 func jsonInt(v any) int64 {
