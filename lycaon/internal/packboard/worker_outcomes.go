@@ -78,7 +78,6 @@ func workerStateLines(snapshot api.BoardSnapshot, now time.Time) []string {
 	if work := FormatWorkLine(tasks, now); work != "" {
 		lines = append(lines, work)
 	}
-	lines = append(lines, partialWorkerLines(tasks)...)
 	if merge := FormatBranchMergeLine(tasks); merge != "" {
 		lines = append(lines, merge)
 	}
@@ -88,5 +87,6 @@ func workerStateLines(snapshot api.BoardSnapshot, now time.Time) []string {
 	if pathLine := FormatPromotePathStatusLine(PromotePathsFromSnapshot(snapshot)); pathLine != "" {
 		lines = append(lines, pathLine)
 	}
+	lines = append(lines, partialWorkerLines(tasks)...)
 	return lines
 }
