@@ -17,7 +17,7 @@ import (
 
 const LockFormat = 1
 
-// LockFile is the exact installed package graph.
+// LockFile pins installed packages and records selected dependency versions.
 type LockFile struct {
 	LockFormat int             `yaml:"lock_format" json:"lock_format"`
 	Packages   []LockedPackage `yaml:"packages" json:"packages"`
@@ -33,6 +33,7 @@ type LockedPackage struct {
 	Revision     string            `yaml:"revision,omitempty" json:"revision,omitempty"`
 	Integrity    string            `yaml:"integrity" json:"integrity"`
 	Kind         PackKind          `yaml:"kind" json:"kind"`
+	// Stock versions record the solve; the bundled host supplies their runtime versions.
 	Dependencies map[string]string `yaml:"dependencies,omitempty" json:"dependencies,omitempty"`
 }
 
@@ -96,10 +97,7 @@ func ValidateLock(lock LockFile) error {
 	for _, pkg := range lock.Packages {
 		for dependencyID, dependencyVersion := range pkg.Dependencies {
 			if IsStockPackID(dependencyID) {
-				stock, ok := stockVersion(dependencyID)
-				if !ok || stock != dependencyVersion {
-					return fmt.Errorf("package %s dependency %s locks %s, host provides %s", pkg.ID, dependencyID, dependencyVersion, stock)
-				}
+				// Resolve checks bundled versions against the captured manifest's ranges.
 				continue
 			}
 			dependency, ok := seen[dependencyID]
