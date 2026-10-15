@@ -17,6 +17,7 @@ use gtk::prelude::*;
 use gtk::{gdk, gio};
 
 const PORTAL_BUS_NAME: &str = "org.freedesktop.portal.Desktop";
+const SESSION_CONNECT_TIMEOUT: Duration = Duration::from_millis(500);
 const PORTAL_OBJECT_PATH: &str = "/org/freedesktop/portal/desktop";
 const OPEN_URI_INTERFACE: &str = "org.freedesktop.portal.OpenURI";
 const FILE_MANAGER_BUS_NAME: &str = "org.freedesktop.FileManager1";
@@ -237,8 +238,11 @@ fn session_bus() -> Result<gio::DBusConnection, String> {
     if let Some(open) = bus.as_ref().filter(|connection| !connection.is_closed()) {
         return Ok(open.clone());
     }
-    let connection = crate::linux_desktop::session_bus::connect(&glib::MainContext::new())
-        .map_err(|error| format!("The desktop session bus is unavailable: {error}"))?;
+    let connection = crate::linux_desktop::bus::connect_session(
+        &glib::MainContext::new(),
+        SESSION_CONNECT_TIMEOUT,
+    )
+    .map_err(|error| format!("The desktop session bus is unavailable: {error}"))?;
     *bus = Some(connection.clone());
     Ok(connection)
 }

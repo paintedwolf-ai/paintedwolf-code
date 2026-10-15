@@ -98,6 +98,11 @@ reviews without recorded assignment context require replacement work; the host
 does not reconstruct historical inputs from current state. The optional
 `assignment_binding` manifest member affects only definitions that declare it.
 
+Schema revision 3 widens the authenticator sets of the `managed_secret_reveals`
+and `vault_unlocks` audits to admit `linux_user_presence` and
+`linux_app_password`. The registered migration rebuilds both tables from the
+released revision-2 shape and keeps every recorded reveal and unlock.
+
 Worker `coverage_gaps` is an additive completion-report field. Co-shipped Go and
 Den wire types move together, and archived workflows do not acquire the new
 plan-charter requirement.

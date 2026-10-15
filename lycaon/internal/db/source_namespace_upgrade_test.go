@@ -88,7 +88,7 @@ func namespaceTableContents(t *testing.T, database *sql.DB, table string) string
 func TestSourceNamespaceTargetsFreshSchema(t *testing.T) {
 	fresh, err := CurrentBaseline(t.Context())
 	testutil.FailErr(t, "inspect fresh schema", err)
-	source := migrations.SourceNamespace(fresh).From
+	source := migrations.SourceNamespace().From
 	plan, err := PlanSchemaUpgrade(t.Context(), source)
 	testutil.FailErr(t, "plan released namespace and review upgrade", err)
 	if !plan.Required() || plan.Target != fresh {

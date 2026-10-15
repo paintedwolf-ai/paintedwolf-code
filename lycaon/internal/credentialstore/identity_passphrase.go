@@ -19,6 +19,9 @@ const (
 
 type passphraseIdentityProvider struct {
 	path string
+	// missingGuidance names where a vault's identity may be instead when no
+	// wrapped identity exists beside it.
+	missingGuidance string
 }
 
 func newPassphraseIdentityProvider(vaultPath string) identityProvider {
@@ -36,13 +39,13 @@ func (p *passphraseIdentityProvider) LoadOrCreate(vaultExists bool) (identityDoc
 	}
 	if os.IsNotExist(err) {
 		if vaultExists {
-			return identityDocument{}, fmt.Errorf("%w: wrapped identity is missing", ErrVaultCorrupt)
+			return identityDocument{}, fmt.Errorf("%w: wrapped identity is missing%s", ErrVaultCorrupt, p.missingGuidance)
 		}
 		if len(password) == 0 {
 			return identityDocument{}, ErrVaultUninitialized
 		}
-		if len(password) < minUnlockSecretBytes || strings.TrimSpace(string(password)) == "" {
-			return identityDocument{}, fmt.Errorf("credential vault password must be at least %d bytes", minUnlockSecretBytes)
+		if err := checkNewUnlockSecret(password); err != nil {
+			return identityDocument{}, err
 		}
 		doc, createErr := generateIdentityDocument()
 		if createErr != nil {
@@ -72,6 +75,13 @@ func (p *passphraseIdentityProvider) LoadOrCreate(vaultExists bool) (identityDoc
 		return identityDocument{}, fmt.Errorf("%w: identity exceeds %d bytes", ErrVaultCorrupt, maxIdentityBytes)
 	}
 	return decodeIdentityDocument(plaintext)
+}
+
+func checkNewUnlockSecret(password []byte) error {
+	if len(password) < minUnlockSecretBytes || strings.TrimSpace(string(password)) == "" {
+		return fmt.Errorf("%w: credential vault password must be at least %d bytes", ErrUnlockSecretInvalid, minUnlockSecretBytes)
+	}
+	return nil
 }
 
 func (p *passphraseIdentityProvider) commit(doc identityDocument, password []byte) error {

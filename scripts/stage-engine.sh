@@ -8,6 +8,7 @@ BINARIES_DIR="${TAURI_DIR}/binaries"
 ENGINE_ROOT="${TAURI_DIR}/engine-root"
 SIDECAR_NAME="pw"
 LOGS_NAME="pw-logs"
+VAULT_IDENTITY_NAME="pw-vault-identity"
 DECIDE_NAME="bialy"
 DOCUMENT_CORE_NAME="pw-document-core"
 
@@ -50,6 +51,7 @@ case "${TARGET}" in
 esac
 SIDECAR_BIN="${BINARIES_DIR}/${SIDECAR_NAME}-${TARGET}${EXE_SUFFIX}"
 LOGS_BIN="${BINARIES_DIR}/${LOGS_NAME}-${TARGET}${EXE_SUFFIX}"
+VAULT_IDENTITY_BIN="${BINARIES_DIR}/${VAULT_IDENTITY_NAME}-${TARGET}${EXE_SUFFIX}"
 DECIDE_BIN="${BINARIES_DIR}/${DECIDE_NAME}-${TARGET}${EXE_SUFFIX}"
 DOCUMENT_CORE_BIN="${BINARIES_DIR}/${DOCUMENT_CORE_NAME}-${TARGET}${EXE_SUFFIX}"
 
@@ -89,6 +91,27 @@ if [[ "${HOST_KIND}" == "darwin" ]]; then
   # Native linking records the deployment floor in the sidecar binary.
   export CGO_ENABLED=1
 fi
+if [[ "${HOST_KIND}" == "linux" ]]; then
+  # A static engine gives no dynamic loader a way into the process that
+  # holds the decrypted vault; the manifest verifier hashes one file.
+  export CGO_ENABLED=0
+fi
+
+# assert_static fails when a Linux executable asks for a program interpreter.
+assert_static() {
+  local bin="$1"
+  if [[ "${HOST_KIND}" != "linux" ]]; then
+    return 0
+  fi
+  if ! command -v readelf >/dev/null 2>&1; then
+    echo "error: readelf required to verify that ${bin} is statically linked" >&2
+    exit 1
+  fi
+  if readelf -l "${bin}" | grep -q 'INTERP\|Requesting program interpreter'; then
+    echo "error: ${bin} is dynamically linked; the Linux engine must be static" >&2
+    exit 1
+  fi
+}
 
 VERSION_PKG="github.com/lycaon/lycaon/internal/version"
 LDFLAGS="-s -w -X ${VERSION_PKG}.Version=${APP_VERSION} -X github.com/lycaon/lycaon/internal/scan/bundled.buildIdentityBase64=${OPENGREP_IDENTITY}"
@@ -103,8 +126,17 @@ echo "stage-engine — building Go sidecar + logs sibling for ${TARGET} (version
   fi
   go build "${BUILD_ARGS[@]}" -o "${SIDECAR_BIN}" ./cmd/lycaon
   go build "${BUILD_ARGS[@]}" -o "${LOGS_BIN}" ./cmd/pw-logs
+  if [[ "${HOST_KIND}" == "linux" ]]; then
+    go build "${BUILD_ARGS[@]}" -o "${VAULT_IDENTITY_BIN}" ./cmd/pw-vault-identity
+  fi
 )
 chmod +x "${SIDECAR_BIN}" "${LOGS_BIN}"
+assert_static "${SIDECAR_BIN}"
+assert_static "${LOGS_BIN}"
+if [[ "${HOST_KIND}" == "linux" ]]; then
+  chmod +x "${VAULT_IDENTITY_BIN}"
+  assert_static "${VAULT_IDENTITY_BIN}"
+fi
 
 echo "stage-engine — building the document core for ${TARGET}" >&2
 bash "${ROOT}/scripts/build-document-core.sh" --output "${DOCUMENT_CORE_BIN}" >/dev/null

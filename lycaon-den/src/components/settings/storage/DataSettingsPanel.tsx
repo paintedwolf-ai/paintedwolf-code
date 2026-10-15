@@ -10,6 +10,7 @@ import { restartAppBackend } from "../../../platform/connection/app-connection.t
 import { DenButton } from "../../primitives/DenButton.tsx";
 import { backupProgressMessage, type BackupTransferProgress } from "../../../platform/persistence/backup-transfer.ts";
 import { HistoryStorageSettingsPanel } from "./HistoryStorageSettingsPanel.tsx";
+import { CredentialVaultPanel } from "./CredentialVaultPanel.tsx";
 import { settingAnchor, settingLabel } from "../../../settings/settings-registry.ts";
 
 type Props = {
@@ -155,6 +156,9 @@ export function DataSettingsPanel(props: Props) {
               {text}
             </p>
           )}
+        </Show>
+        <Show when={isTauriRuntime()}>
+          <CredentialVaultPanel />
         </Show>
         <HistoryStorageSettingsPanel client={props.client} />
       </Show>

@@ -13,9 +13,9 @@ import (
 )
 
 // VerifyLauncher confirms that the process that started this engine is the
-// desktop app named by identifier, signed by this engine's own team.
-func VerifyLauncher(identifier string) error {
-	name := C.CString(identifier)
+// desktop app named by the bundle identifier, signed by this engine's own team.
+func VerifyLauncher(evidence LauncherEvidence) error {
+	name := C.CString(evidence.BundleID)
 	defer C.free(unsafe.Pointer(name))
 	reason := make([]byte, 256)
 	if C.pw_presence_verify_parent(name, (*C.char)(unsafe.Pointer(&reason[0])), C.size_t(len(reason))) != 0 {

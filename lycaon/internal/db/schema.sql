@@ -749,7 +749,7 @@ CREATE TABLE IF NOT EXISTS managed_secret_reveals (
     secret_id TEXT NOT NULL REFERENCES managed_secrets(id) ON DELETE CASCADE,
     version INTEGER NOT NULL CHECK (version >= 1),
     authenticator TEXT NOT NULL CHECK (
-        authenticator IN ('macos_user_presence', 'windows_user_presence')
+        authenticator IN ('macos_user_presence', 'windows_user_presence', 'linux_user_presence', 'linux_app_password')
     ),
     window_label TEXT NOT NULL CHECK (length(trim(window_label)) BETWEEN 1 AND 120),
     person_id TEXT NOT NULL REFERENCES people(id),
@@ -772,7 +772,7 @@ CREATE TABLE IF NOT EXISTS vault_unlocks (
     chat_session_id TEXT NOT NULL CHECK (length(trim(chat_session_id)) > 0),
     person_id TEXT NOT NULL REFERENCES people(id),
     authenticator TEXT NOT NULL CHECK (
-        authenticator IN ('macos_user_presence', 'windows_user_presence')
+        authenticator IN ('macos_user_presence', 'windows_user_presence', 'linux_user_presence', 'linux_app_password')
     ),
     window_label TEXT NOT NULL CHECK (length(trim(window_label)) BETWEEN 1 AND 120),
     unlocked_at TEXT NOT NULL CHECK (unlocked_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]Z'),

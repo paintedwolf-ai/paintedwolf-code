@@ -70,6 +70,8 @@
     "allow-export-startup-diagnostics",
     "allow-restart-sidecar",
 		"allow-reset-credential-vault",
+    "allow-vault-custody",
+    "allow-move-vault-custody",
     "allow-cancel-sidecar-start",
     "allow-attach-existing-daemon",
     "allow-sidecar-info",

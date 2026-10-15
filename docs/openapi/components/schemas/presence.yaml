@@ -2,8 +2,11 @@ components:
   schemas:
     PresenceAuthenticator:
       type: string
-      enum: [macos_user_presence, windows_user_presence]
-      description: Operating-system user-presence verifier that confirmed the person before the shell signed.
+      enum: [macos_user_presence, windows_user_presence, linux_user_presence, linux_app_password]
+      description: >-
+        User-presence verifier that confirmed the person before the shell
+        signed: the operating system's own prompt, or on Linux without a
+        polkit agent, the shell's native app-password dialog.
     PresenceChallenge:
       x-go-generate: true
       type: object

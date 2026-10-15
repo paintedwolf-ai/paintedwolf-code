@@ -8,6 +8,7 @@ import { LycaonApiError } from "../../../api/http.ts";
 import type { DownloadExportResult } from "../../../platform/files/save-file.ts";
 
 vi.mock("./HistoryStorageSettingsPanel.tsx", () => ({ HistoryStorageSettingsPanel: () => null }));
+vi.mock("./CredentialVaultPanel.tsx", () => ({ CredentialVaultPanel: () => null }));
 
 const downloadExport = vi.fn<() => Promise<DownloadExportResult>>();
 const pickBackupArchive = vi.fn();

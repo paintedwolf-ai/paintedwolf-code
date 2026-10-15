@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -46,6 +47,8 @@ func TestRustHostWireFixturesMatchGoTypes(t *testing.T) {
 		"managed_secret_reveal_response": goTypeFixture(t, "pkg/api.ManagedSecretRevealResponse", wire.ManagedSecretRevealResponse{}),
 		"daemon_manifest":                goTypeFixture(t, "internal/api.DaemonManifest", api.DaemonManifest{}),
 		"startup_record":                 startupRecordFixture(t),
+		"vault_custody_report":           goTypeFixture(t, "internal/credentialstore.CustodyReport", credentialstore.CustodyReport{}),
+		"vault_custody_outcome":          goTypeFixture(t, "internal/credentialstore.CustodyOutcome", credentialstore.CustodyOutcome{}),
 	}
 	phases := make([]string, 0, len(startupprotocol.Phases()))
 	for _, phase := range startupprotocol.Phases() {

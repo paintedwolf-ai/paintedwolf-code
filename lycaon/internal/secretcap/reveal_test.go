@@ -55,6 +55,31 @@ func TestRevealRequiresNativeProofAndRecordsDisclosure(t *testing.T) {
 	}
 }
 
+func TestRevealAuditsLinuxAuthenticators(t *testing.T) {
+	for _, authenticator := range []string{presence.AuthenticatorLinux, presence.AuthenticatorLinuxAppPassword} {
+		t.Run(authenticator, func(t *testing.T) {
+			service, _, _ := testService(t)
+			secret, err := service.CreateSettingsSecret(t.Context(), CreateSettingsSecretRequest{
+				ProjectID: testdbseed.DefaultProjectID, PersonID: testOwner(t, service), OperationID: "reveal-" + authenticator,
+				Name: "Linux key", Purpose: "reveal on Linux", Value: "opaque-reveal-linux-001",
+			})
+			testutil.FailErr(t, "create settings secret", err)
+			privateKey := configureRevealKey(t, service)
+			challenge, err := service.BeginReveal(t.Context(), testdbseed.DefaultProjectID, secret.Reference, "main", testOwner(t, service))
+			testutil.FailErr(t, "begin reveal", err)
+			_, err = service.CompleteReveal(t.Context(), testdbseed.DefaultProjectID, secret.Reference, testOwner(t, service),
+				signedProof(privateKey, challenge, authenticator))
+			testutil.FailErr(t, "complete reveal", err)
+			var recorded string
+			testutil.FailErr(t, "read reveal audit", service.handle.QueryRowContext(t.Context(),
+				`SELECT authenticator FROM managed_secret_reveals WHERE id = ?`, challenge.ID).Scan(&recorded))
+			if recorded != authenticator {
+				t.Fatalf("reveal authenticator = %q, want %q", recorded, authenticator)
+			}
+		})
+	}
+}
+
 func TestRevealConsumesInvalidProofAndNeverAuditsIt(t *testing.T) {
 	service, _, _ := testService(t)
 	secret, err := service.CreateSettingsSecret(t.Context(), CreateSettingsSecretRequest{
