@@ -3,6 +3,8 @@ package decisions
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/decide"
@@ -54,5 +56,44 @@ func TestDecisionRuntimeDisabledEngineNeverStartsDuringWarm(t *testing.T) {
 	for _, engine := range []decide.Decider{nil, decide.Absent{}} {
 		runtime.Decider = engine
 		testutil.FailErr(t, "warm absent engine", runtime.Warm(t.Context()))
+	}
+}
+
+func TestDecisionRuntimeMissingCheckpointCanBootstrapWithoutClaimingAvailability(t *testing.T) {
+	binary, err := os.Executable()
+	testutil.FailErr(t, "locate fixture executable", err)
+	dir := filepath.Join(t.TempDir(), "checkpoint")
+	client := bialy.New(bialy.Config{Binary: binary, ModelDir: dir})
+	runtime := Runtime{Decider: client}
+	if client.Available() || client.Status() != bialy.ReasonModelMissing {
+		t.Fatal("missing checkpoint reported ready")
+	}
+	if _, ok := runtime.Warmer(); !ok {
+		t.Fatal("missing checkpoint excluded from bootstrap")
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	testutil.FailErr(t, "cancel provisioning before network", runtime.Warm(ctx))
+	if _, err := os.Stat(dir); err != nil {
+		t.Fatalf("provisioning did not create destination: %v", err)
+	}
+	if client.Available() || client.Status() != bialy.ReasonModelMissing {
+		t.Fatal("incomplete provisioning reported ready")
+	}
+	result, err := client.Decide(t.Context(), decide.HeadTurnLoad, "fixture", nil)
+	if !errors.Is(err, decide.ErrUnavailable) || len(result.Answers) != 0 {
+		t.Fatalf("incomplete provisioning invented decision: %+v, %v", result, err)
+	}
+}
+
+func TestDecisionRuntimeMissingBinaryNeverProvisions(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "checkpoint")
+	runtime := Runtime{Decider: bialy.New(bialy.Config{Binary: filepath.Join(t.TempDir(), "missing"), ModelDir: dir})}
+	if _, ok := runtime.Warmer(); ok {
+		t.Fatal("missing executable eligible for bootstrap")
+	}
+	testutil.FailErr(t, "warm missing executable", runtime.Warm(t.Context()))
+	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("unavailable executable provisioned checkpoint: %v", err)
 	}
 }

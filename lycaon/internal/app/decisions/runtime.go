@@ -34,7 +34,16 @@ func (b *Runtime) Load(override decide.Decider) error {
 }
 
 func (b *Runtime) Warmer() (interface{ Warm(context.Context) error }, bool) {
-	if b.Decider == nil || !b.Decider.Available() {
+	if b.Decider == nil {
+		return nil, false
+	}
+	if client, ok := b.Decider.(*bialy.Client); ok {
+		// A missing checkpoint is provisioned by Warm; inference remains unavailable.
+		switch client.Status() {
+		case bialy.ReasonDisabled, bialy.ReasonBinaryMissing:
+			return nil, false
+		}
+	} else if !b.Decider.Available() {
 		return nil, false
 	}
 	warmer, ok := b.Decider.(interface{ Warm(context.Context) error })
