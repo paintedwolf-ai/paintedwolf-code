@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"reflect"
@@ -396,35 +397,41 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 	}
 	for _, offered := range [][]string{nil, {}, {"read"}, {"task"}, {"request_tools"}, {"task", "request_tools"}} {
 		for _, deferred := range [][]string{nil, {"task"}, {"command"}} {
-			sess := &api.Session{ID: "dispatch-recovery", AgentType: "coordinator"}
-			ctx := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator"}, Turn: tools.InvocationTurn{TurnOfferedToolNames: offered, TurnToolPlan: toolsurface.Compile(offered, deferred)}}
-			reject := loop.Tools.rejectToolOccurrence(t.Context(), sess, api.ToolCall{Name: "delegate_dispatch"}, ctx, "COORDINATOR_DELEGATE_DISPATCH_USE_TASK", map[string]any{"task_loadable": true, "replacement_calls": "untrusted"})
-			if reject.Copy == nil {
-				t.Fatalf("missing dynamic copy: %+v", reject)
-			}
-			canTask := slices.Contains(offered, "task")
-			loadable := !canTask && slices.Contains(offered, "request_tools") && slices.Contains(deferred, "task")
-			data := toolrejection.AsToolReject(reject).Data
-			if data["task_loadable"] != loadable {
-				t.Fatalf("task loadability disagrees with offered=%v deferred=%v: %v", offered, deferred, data)
-			}
-			if loadable {
-				want := []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "task"}}}
-				if !reflect.DeepEqual(data["replacement_calls"], want) {
-					t.Fatalf("wrong loader replacement: %v", data)
+			for _, agents := range [][]string{nil, {}, {"repo-researcher"}} {
+				sess := &api.Session{ID: "dispatch-recovery", AgentType: "coordinator"}
+				ctx := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator"}, Turn: tools.InvocationTurn{TurnOfferedToolNames: offered, TurnToolPlan: toolsurface.Compile(offered, deferred)}}
+				requestCtx := t.Context()
+				if agents != nil {
+					requestCtx = toolpolicy.WithTaskSpawnAllowlist(requestCtx, agents)
 				}
-			} else if _, exists := data["replacement_calls"]; exists {
-				t.Fatalf("unreachable replacement survived: %v", data)
-			}
-			for _, field := range []string{"fix", "instead"} {
-				copy := reject.Copy[field]
-				if strings.Contains(copy, "request_tools") != loadable || strings.Contains(copy, "`task`") != (canTask || loadable) || strings.Contains(copy, "implementer") {
-					t.Fatalf("%s disagrees with offered=%v deferred=%v: %s", field, offered, deferred, copy)
+				reject := loop.Tools.rejectToolOccurrence(requestCtx, sess, api.ToolCall{Name: "delegate_dispatch"}, ctx, "COORDINATOR_DELEGATE_DISPATCH_USE_TASK", map[string]any{"task_loadable": true, "replacement_calls": "untrusted"})
+				if reject.Copy == nil {
+					t.Fatalf("missing dynamic copy: %+v", reject)
+				}
+				canTask := slices.Contains(offered, "task")
+				loadable := (agents == nil || len(agents) > 0) && !canTask && slices.Contains(offered, "request_tools") && slices.Contains(deferred, "task")
+				data := toolrejection.AsToolReject(reject).Data
+				if data["task_loadable"] != loadable {
+					t.Fatalf("task loadability disagrees with offered=%v deferred=%v: %v", offered, deferred, data)
+				}
+				if loadable {
+					want := []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "task"}}}
+					if !reflect.DeepEqual(data["replacement_calls"], want) {
+						t.Fatalf("wrong loader replacement: %v", data)
+					}
+				} else if _, exists := data["replacement_calls"]; exists {
+					t.Fatalf("unreachable replacement survived: %v", data)
+				}
+				for _, field := range []string{"fix", "instead"} {
+					copy := reject.Copy[field]
+					if strings.Contains(copy, "request_tools") != loadable || strings.Contains(copy, "`task`") != (canTask || loadable) || strings.Contains(copy, "implementer") {
+						t.Fatalf("%s disagrees with offered=%v deferred=%v: %s", field, offered, deferred, copy)
+					}
 				}
 			}
 		}
-	}
 
+	}
 }
 
 func TestDelegateDispatchOnImplementSurfaceRedirectsToTask(t *testing.T) {

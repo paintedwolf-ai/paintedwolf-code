@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolcommand"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"maps"
 	"strings"
@@ -194,6 +195,9 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 	}
 	if code == "COORDINATOR_DELEGATE_DISPATCH_USE_TASK" {
 		loadable := !tools.ToolOffered(ctx, "task") && toolCtx.Turn.TurnToolPlan.Deferred("task") && tools.ToolOffered(ctx, "request_tools")
+		if agents, constrained := toolpolicy.TaskSpawnAllowlistFromContext(ctx); constrained && len(agents) == 0 {
+			loadable = false
+		}
 		data["task_loadable"] = loadable
 		delete(data, "replacement_calls")
 		if loadable {

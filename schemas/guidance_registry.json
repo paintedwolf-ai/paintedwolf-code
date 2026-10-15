@@ -609,10 +609,10 @@
       "summary": "Completed leg {{ paintedwolf.leg_id }} has unmet closeout criteria."
     },
     "COORDINATOR_DELEGATE_DISPATCH_USE_TASK": {
-      "branch_instruction": "Use `task()` for implement-mode worker dispatch — delegate_dispatch is for workflow delegation legs only",
+      "branch_instruction": "{% if paintedwolf.can_task %}Use the offered `task` schema to dispatch a worker{% else %}{% if paintedwolf.task_loadable %}Load `task` with `request_tools`, then use its schema on the next call{% else %}Use offered tools or report that worker dispatch is unavailable{% endif %}{% endif %}",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "This session is not linked to a delegation (implement@ default chat)."
+      "summary": "This turn uses ambient worker dispatch rather than workflow delegation legs."
     },
     "COORDINATOR_GROUNDING_ESCALATED": {
       "branch_instruction": "Stop asserting completion and wait for user guidance",
