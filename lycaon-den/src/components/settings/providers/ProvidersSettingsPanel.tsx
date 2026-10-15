@@ -21,6 +21,7 @@ import { ShowLatest } from "../../primitives/ShowLatest.tsx";
 import { SettingsEditorTitle, ProvidersIcon } from "../SettingsEditorTitle.tsx";
 import { SettingsScopeLede } from "../SettingsScopeLede.tsx";
 import { ProvidersPanel } from "./ProvidersPanel.tsx";
+import { SummarizerModelHint } from "../../model/SummarizerModelHint.tsx";
 import { settingAnchor, settingLabel } from "../../../settings/settings-registry.ts";
 
 type Props = {
@@ -135,7 +136,7 @@ export function ProvidersSettingsPanel(props: Props) {
           >
             {MODELS_SETTINGS_COPY.defaultSummarizerModelLabel}
           </label>
-          <p class="den-settings-hint">{MODELS_SETTINGS_COPY.summarizerModelHint}</p>
+          <p class="den-settings-hint"><SummarizerModelHint /></p>
           <ModelSlotPicker
  disabled={savingPolicy()}
             compact

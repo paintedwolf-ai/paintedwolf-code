@@ -33,6 +33,7 @@ import { installMainThreadPerfObserver } from "./chat/stream/den-main-thread-per
 import { setupAccessibilityTextSize } from "./platform/desktop/accessibility-text-size.ts";
 import { setupSystemAppearance } from "./platform/desktop/system-appearance.ts";
 import { setupScreenReader } from "./platform/desktop/screen-reader.ts";
+import { loadShellCommandPackaged } from "./platform/desktop/shell-command.ts";
 import { setupLiveRegionBridge } from "./platform/desktop/live-region-bridge.ts";
 import { setupWheelGlideDiagnostics } from "./platform/scrolling/wheel-glide-diagnostics.ts";
 import { setupScrollActivity } from "./platform/scrolling/scroll-activity.ts";
@@ -61,6 +62,7 @@ void setupAccessibilityTextSize();
 void setupSystemAppearance();
 void setupScreenReader();
 void setupWheelGlideDiagnostics();
+void loadShellCommandPackaged();
 
 const root = document.getElementById("root");
 if (!root) {

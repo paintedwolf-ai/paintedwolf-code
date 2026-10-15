@@ -11,6 +11,7 @@ use tauri::{AppHandle, Emitter};
 
 use super::{DesktopSettingsState, Emission, SettingValue, SettingsSnapshot, NAMESPACES};
 use crate::windows::accessibility_text_size::{TextSizePayload, TEXT_SIZE_CHANGED_EVENT};
+use crate::windows::linux_decorations::{DecorationLayout, LAYOUT_CHANGED_EVENT};
 use crate::windows::screen_reader::{ScreenReaderPayload, SCREEN_READER_CHANGED_EVENT};
 use crate::windows::system_appearance::{SystemAppearancePayload, SYSTEM_APPEARANCE_CHANGED_EVENT};
 
@@ -39,6 +40,10 @@ pub(crate) fn current_appearance_payload() -> SystemAppearancePayload {
 
 pub(crate) fn current_screen_reader_payload() -> ScreenReaderPayload {
     state().screen_reader_payload()
+}
+
+pub(crate) fn current_decoration_layout() -> DecorationLayout {
+    state().decoration_layout()
 }
 
 /// Reads the portal on its own thread; the main loop keeps the GTK thread free.
@@ -220,6 +225,7 @@ fn emit(app: &AppHandle, emissions: Vec<Emission>) {
             Emission::TextSize(payload) => app.emit(TEXT_SIZE_CHANGED_EVENT, &payload),
             Emission::Appearance(payload) => app.emit(SYSTEM_APPEARANCE_CHANGED_EVENT, &payload),
             Emission::ScreenReader(payload) => app.emit(SCREEN_READER_CHANGED_EVENT, &payload),
+            Emission::DecorationLayout(layout) => app.emit(LAYOUT_CHANGED_EVENT, &layout),
         };
         if let Err(err) = result {
             eprintln!("desktop settings: emit: {err}");

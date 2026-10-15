@@ -83,19 +83,21 @@ then
 fi
 
 if ! jq -e '
-  .schema_version == 1
+  .schema_version == 2
   and (.platforms | type == "array" and length > 0)
   and ([.platforms[].updater_key] | length == (unique | length))
   and all(.platforms[];
-    ((keys | sort) == ["artifact_arch", "goarch", "goos", "package_extension", "publication", "runner", "updater_extension", "updater_key"])
+    ((keys | sort) == ["artifact_arch", "goarch", "goos", "package_extensions", "publication", "runner", "updater_extension", "updater_key"])
     and (.updater_key | test("^[a-z0-9]+-[a-z0-9_]+$"))
     and (.runner | type == "string" and length > 0)
     and (.artifact_arch | test("^(aarch64|x86_64)$"))
     and (.goos | test("^(darwin|linux|windows)$"))
     and (.goarch | test("^(arm64|amd64)$"))
     and (.publication | test("^(public|candidate)$"))
-    and (.package_extension | test("^[A-Za-z0-9.]+$"))
-    and (.updater_extension | test("^[A-Za-z0-9.]+$")))
+    and (.package_extensions | type == "array" and length > 0 and all(.[]; test("^[A-Za-z0-9.]+$")))
+    and (.updater_extension == null or (.updater_extension | test("^[A-Za-z0-9.]+$")))
+    and (.publication == "candidate" or .updater_extension != null))
+  and all(.platforms[] | select(.goos == "linux"); .package_extensions == ["deb", "rpm"] and .updater_extension == null)
   and ([.platforms[] | select(.goos == "linux") | .updater_key] | sort
     == ["linux-aarch64", "linux-x86_64"])
   and ([.platforms[] | select(.goos == "windows") | .updater_key]

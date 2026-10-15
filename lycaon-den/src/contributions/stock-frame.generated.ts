@@ -3545,6 +3545,11 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "invocation": "den",
       "action_kind": "native_ui",
       "handler_id": "shell.installPw",
+      "when": {
+        "not": {
+          "fact": "shell_command_packaged"
+        }
+      },
       "result_treatment": "effect"
     },
     {

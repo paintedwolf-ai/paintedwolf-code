@@ -1,5 +1,10 @@
 import { createTranscriptRowMeasurements, type RowSize } from "./transcript-row-measurements.ts";
 import {
+  createTranscriptRunwayBudget,
+  type TranscriptRunwayState,
+  type TranscriptUnloadedOrds,
+} from "../history/transcript-runway.ts";
+import {
   createVirtualizer,
   type Range,
   type VirtualItem,
@@ -142,23 +147,31 @@ export type MeasuredTranscriptVirtualizer = TranscriptVirtualizer & {
   forgetMeasurement: (element: Element) => void;
   remeasureMounted: () => void;
   resizeItems: (sizes: readonly RowSize[]) => void;
+  runway: () => TranscriptRunwayState;
+  prepareLanding: (targetOffsetPx: number) => void;
+  residentExtent: () => { startPx: number; endPx: number };
+  rowRangeWithin: (
+    topPx: number,
+    bottomPx: number,
+  ) => { firstIndex: number; lastIndex: number } | null;
 };
 
-export type TranscriptVirtualRunway = {
+export type TranscriptUnmountedSpace = {
   beforePx: number;
   afterPx: number;
 };
+export type TranscriptVirtualRunway = TranscriptUnmountedSpace;
 
 function nonNegativeFinite(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
 /** Unmounted space keeps the end sentinel at the full transcript height. */
-export function transcriptVirtualRunway(
+export function transcriptUnmountedSpace(
   rows: readonly Pick<VirtualItem, "start" | "end">[],
   totalSize: number,
   originPx = 0,
-): TranscriptVirtualRunway {
+): TranscriptUnmountedSpace {
   const total = nonNegativeFinite(totalSize);
   const first = rows[0];
   const last = rows[rows.length - 1];
@@ -168,6 +181,7 @@ export function transcriptVirtualRunway(
     afterPx: nonNegativeFinite(total - nonNegativeFinite(last.end - originPx)),
   };
 }
+export const transcriptVirtualRunway = transcriptUnmountedSpace;
 
 /** Initial tail offset in the shared scrollport. */
 export function transcriptInitialEndOffset(
@@ -386,6 +400,10 @@ export type CreateTranscriptVirtualizerOptions<
   /** Finds the row that now carries a vanished anchor's content, such as a regrouped span. */
   resolveLostAnchor?: (rowKey: string) => TranscriptAnchorResolution | undefined;
   originPx?: () => number;
+  /** Unloaded message ordinals on each side of the resident window. */
+  unloadedOrds?: () => TranscriptUnloadedOrds;
+  /** Message-backed resident row count and ordinal span, for sizing unloaded runways. */
+  residentRowSpan?: () => { count: number; ordSpan: number };
   minimumBufferRows?: number;
   bufferViewports?: number;
   observeElementRect?: VirtualizerOptions<
@@ -420,14 +438,49 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
     if (!item) return 72;
     return opts.rowSizeHint?.(item) ?? transcriptRowEstimatedHeight(item);
   };
+  const [measurementEpoch, setMeasurementEpoch] = createSignal(0);
+  const virtualizerRef: { current?: TranscriptVirtualizer } = {};
+  const residentHeight = (): number => {
+    const count = opts.items().length;
+    if (count === 0) return 0;
+    let total = 0;
+    for (let index = 0; index < count; index += 1) {
+      const item = opts.items()[index];
+      const cached = item ? virtualizerRef.current?.itemSizeCache.get(item.key) : undefined;
+      total += cached ?? estimatedSize(index);
+    }
+    return total;
+  };
+  const runwayBudget = createTranscriptRunwayBudget();
+  const runway = createMemo<TranscriptRunwayState>(() => {
+    measurementEpoch();
+    const items = opts.items();
+    const unloaded = opts.unloadedOrds?.() ?? { before: 0, after: 0 };
+    const span = opts.residentRowSpan?.() ?? { count: items.length, ordSpan: items.length };
+    const heightPx = residentHeight();
+    const viewport = opts.scrollElement();
+    const viewportHeightPx =
+      virtualizerRef.current?.scrollRect?.height ||
+      viewport?.clientHeight ||
+      TRANSCRIPT_VIRTUAL_INITIAL_VIEWPORT_HEIGHT_PX;
+    const scrollOffsetPx =
+      virtualizerRef.current?.scrollOffset ??
+      viewport?.scrollTop ??
+      0;
+    return runwayBudget.observe({
+      unloaded,
+      residentRowCount: span.count,
+      residentOrdSpan: span.ordSpan,
+      residentHeightPx: heightPx,
+      scrollOffsetPx,
+      viewportHeightPx,
+      following: unloaded.after === 0,
+    });
+  });
   const initialEndOffset = (): number => {
     const count = opts.items().length;
     if (count === 0) return 0;
-    // Seams live inside each row's box, so the extent is the sum of row sizes.
-    let total = 0;
-    for (let index = 0; index < count; index += 1) {
-      total += estimatedSize(index);
-    }
+    const total = runway().beforePx + residentHeight() + runway().afterPx;
     const viewportHeight =
       opts.scrollElement()?.clientHeight ||
       TRANSCRIPT_VIRTUAL_INITIAL_VIEWPORT_HEIGHT_PX;
@@ -436,7 +489,6 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
       total - viewportHeight,
     );
   };
-  const [measurementEpoch, setMeasurementEpoch] = createSignal(0);
   let disposed = false;
   onCleanup(() => { disposed = true; });
   let measurementRefreshQueued = false;
@@ -483,7 +535,6 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
     }
     return size;
   };
-  const virtualizerRef: { current?: TranscriptVirtualizer } = {};
   const viewportBufferPx = (): number => {
     const viewportHeight =
       virtualizerRef.current?.scrollRect?.height ||
@@ -535,6 +586,8 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
       return rangeExtractor();
     },
     get scrollMargin() { return opts.originPx?.() ?? 0; },
+    get paddingStart() { return runway().beforePx; },
+    get paddingEnd() { return runway().afterPx; },
     measureElement: measureAndRefreshRange,
     // Each adjustment is relative to the current virtual offset.
     scrollToFn: (offset, { adjustments, behavior }, instance) => {
@@ -565,6 +618,36 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
       opts.observeElementOffset ?? observeTranscriptScrollOffset,
     onChange: opts.onChange,
   }) as MeasuredTranscriptVirtualizer;
+  virtualizer.runway = runway;
+  virtualizer.prepareLanding = (targetOffsetPx: number) => {
+    runwayBudget.prepareLanding(
+      targetOffsetPx,
+      opts.originPx?.() ?? 0,
+      residentHeight(),
+    );
+  };
+  virtualizer.residentExtent = () => {
+    virtualizer.getVirtualItemForOffset(0);
+    const cache = virtualizer.measurementsCache;
+    if (cache.length === 0) {
+      const start = (opts.originPx?.() ?? 0) + runway().beforePx;
+      return { startPx: start, endPx: start };
+    }
+    return {
+      startPx: cache[0]!.start,
+      endPx: cache[cache.length - 1]!.end,
+    };
+  };
+  virtualizer.rowRangeWithin = (topPx: number, bottomPx: number) => {
+    if (virtualizer.options.count === 0) return null;
+    const first = virtualizer.getVirtualItemForOffset(Math.max(0, topPx));
+    const last = virtualizer.getVirtualItemForOffset(Math.max(0, bottomPx));
+    if (!first || !last) return null;
+    return {
+      firstIndex: Math.min(first.index, last.index),
+      lastIndex: Math.max(first.index, last.index),
+    };
+  };
   const synchronizeScrollOffset = () => {
     const viewport = opts.scrollElement();
     const captured = viewport && scrollportMotionForViewport(viewport)?.offsetY();

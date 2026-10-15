@@ -1006,7 +1006,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal
 
   den:bundle:
-    desc: 'Build desktop bundle (.dmg on macOS; AppImage on Linux) with embedded engine sidecar; signs + notarizes when APPLE_SIGNING_IDENTITY is a Developer ID'
+    desc: 'Build desktop bundle (.dmg on macOS; .deb and .rpm on Linux) with embedded engine sidecar; signs + notarizes when APPLE_SIGNING_IDENTITY is a Developer ID'
     preconditions:
       - sh: command -v bun
         msg: bun required — install from https://bun.sh
