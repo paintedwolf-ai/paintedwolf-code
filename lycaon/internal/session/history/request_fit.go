@@ -54,6 +54,10 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 		reserve = max(reserve, budget.MinimumOutput)
 	}
 	ceiling := budget.Window - budget.Headroom - reserve
+	if req.MaxTokens <= 0 && budget.Input <= ceiling {
+		req.MaxTokens = budget.Window - budget.Headroom - budget.Input
+		return req, nil
+	}
 	frame := req
 	frame.Messages = projection.frame
 	frameBudget := measure(frame)

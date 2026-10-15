@@ -352,3 +352,25 @@ func TestRequestFittingReservesObservedInputUsage(t *testing.T) {
 		t.Fatalf("explicit output must not overcommit observed input: %v", err)
 	}
 }
+
+func TestRequestFittingKeepsToolBodyWhenOutputCanYield(t *testing.T) {
+	body := strings.Repeat("Recorded observation. ", 1000)
+	rows := []api.Message{
+		{ID: "intent", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Inspect the observations"},
+		{ID: "call", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "read-call", Name: "read"}}},
+		{ID: "result", Role: api.MessageRoleTool, Content: body, PromptCacheBreakpoint: api.PromptCacheTierHistory,
+			ToolResult: &api.ToolResult{ToolCallID: "read-call", Tool: "read", Content: body}},
+	}
+	req := modelcall.CompletionRequest{Model: "small", Messages: rows}
+	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 16384}})}
+	service := &Service{store: store.NewMemory(), recallAvailable: func(context.Context, *api.Session) bool { return true }}
+	fitted, err := service.FitRequest(t.Context(), &api.Session{ID: "s", Model: "small"}, rows, req, budgets)
+	testutil.FailErr(t, "allocate output around complete observations", err)
+	if !reflect.DeepEqual(rows, fitted.Messages) || fitted.MaxTokens <= 0 {
+		t.Fatal("automatic output reservation displaced a tool body that fits")
+	}
+	budget := budgets.RequestBudget(t.Context(), "fixture", fitted)
+	if budget.Input+budget.Output+budget.Headroom > budget.Window {
+		t.Fatalf("unprojected observations exceeded fitted window: %+v", budget)
+	}
+}
