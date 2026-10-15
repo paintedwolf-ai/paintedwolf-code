@@ -23,6 +23,10 @@ const historyVisible = `visibility = 'transcript' AND (kind != 'draft' OR draft_
 
 const historyText = `COALESCE(NULLIF(content,''),json_extract(NULLIF(tool_result_json,''),'$.content'),'')`
 
+const historyPreview = `COALESCE(NULLIF(` + historyText + `,''),NULLIF(` + historyCalls + `,'[]'),'')`
+
+const historySearchEnvelope = `COALESCE(evidence_handles_json,'') || ' ' || COALESCE(` + historyCalls + `,'') || ' ' || COALESCE(json_remove(NULLIF(tool_result_json,''),'$.content'),'')`
+
 // HistoryRequest addresses recorded rows in the caller's own session.
 type HistoryRequest struct {
 	Format     string `json:"format,omitempty"`
@@ -137,15 +141,24 @@ func historyIndex(ctx context.Context, tx *sql.Tx, session string, h *HistoryReq
 		limit = DefaultLimit
 	}
 	limit = min(limit, MaxLimit)
-	query := `SELECT id, ord, role, substr(` + historyText + `,1,120), length(` + historyText + `), COALESCE(evidence_handles_json,'[]'), seq
+	query := `SELECT id, ord, role, substr(` + historyPreview + `,1,120), length(` + historyPreview + `), COALESCE(evidence_handles_json,'[]'), seq
   FROM messages WHERE session_id = ? AND ord > ? AND ord <= ? AND ` + historyVisible
 	args := []any{session, h.AfterOrd, h.ThroughOrd}
 	if terms := strings.Fields(h.Search); len(terms) > 0 {
+		ftsTerms := make([]string, len(terms))
+		var likes strings.Builder
+		likeArgs := make([]any, 0, len(terms))
 		for i, term := range terms {
-			terms[i] = `"` + strings.ReplaceAll(term, `"`, `""`) + `"`
+			ftsTerms[i] = `"` + strings.ReplaceAll(term, `"`, `""`) + `"`
+			if i > 0 {
+				likes.WriteString(" AND ")
+			}
+			likes.WriteString(`instr(lower(` + historyPreview + ` || ' ' || ` + historySearchEnvelope + `), lower(?)) > 0`)
+			likeArgs = append(likeArgs, term)
 		}
-		query += ` AND rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?)`
-		args = append(args, strings.Join(terms, " AND "))
+		query += ` AND (rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?) OR (` + likes.String() + `))`
+		args = append(args, strings.Join(ftsTerms, " AND "))
+		args = append(args, likeArgs...)
 	}
 	query += ` ORDER BY ord LIMIT ?`
 	args = append(args, limit+1)

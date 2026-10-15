@@ -175,15 +175,32 @@ func TestHistorySearchFindsOriginalInstructionsWithinCallerScope(t *testing.T) {
 
 func TestHistoryRecoversRecordedToolBodiesAndHandles(t *testing.T) {
 	f := newFixture(t)
+	body := "recorded bytes " + strings.Repeat("x", 5000)
+	toolResultJSON, err := json.Marshal(map[string]any{
+		"tool":      "read",
+		"content":   body,
+		"tool_args": map[string]any{"path": "observations.txt", "offset": 650, "limit": 151},
+	})
+	testutil.FailErr(t, "marshal tool result", err)
 	testdbseed.InsertSessionEntry(t, f.db, "tool", coordinatorSession, "tool_receipt", "tool", 1)
-	_, err := f.db.ExecContext(t.Context(), `INSERT INTO messages (entry_id,id,session_id,role,content,tool_result_json,evidence_handles_json,origin,authority,trust_tier,ord,seq,ts)
-	VALUES ('tool','tool',?,'tool','',?,?,'tool','none','untrusted',1,1,'2026-10-14T00:00:00Z')`, coordinatorSession, `{"tool":"read","content":"recorded bytes"}`, `["read#3"]`)
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO messages (entry_id,id,session_id,role,content,tool_result_json,evidence_handles_json,origin,authority,trust_tier,ord,seq,ts)
+	VALUES ('tool','tool',?,'tool','',?,?,'tool','none','untrusted',1,1,'2026-10-14T00:00:00Z')`, coordinatorSession, string(toolResultJSON), `["read#3"]`)
 	testutil.FailErr(t, "seed tool body", err)
-	result, err := f.svc.Answer(t.Context(), recall.Request{Caller: coordinator(), History: &recall.HistoryRequest{ThroughOrd: 1, MessageID: "tool"}})
-	testutil.FailErr(t, "recover tool body", err)
-	entry := result.History.Entries[0]
-	if entry.Content != "recorded bytes" || entry.Handles[0] != "read#3" || result.History.NextOffset != nil {
+	searched, err := f.svc.Answer(t.Context(), recall.Request{Caller: coordinator(), History: &recall.HistoryRequest{ThroughOrd: 1, Search: "observations.txt"}})
+	testutil.FailErr(t, "search tool envelope", err)
+	if len(searched.History.Entries) != 1 || searched.History.Entries[0].MessageID != "tool" {
+		t.Fatalf("expected tool envelope search to find tool row, got %+v", searched.History.Entries)
+	}
+	firstText, err := f.svc.Answer(t.Context(), recall.Request{Caller: coordinator(), History: &recall.HistoryRequest{ThroughOrd: 1, MessageID: "tool", BodyRunes: 14}})
+	testutil.FailErr(t, "recover tool body prefix", err)
+	entry := firstText.History.Entries[0]
+	if entry.Content != "recorded bytes" || entry.Handles[0] != "read#3" || firstText.History.NextOffset == nil {
 		t.Fatal("recorded tool recovery lost its body or handle")
+	}
+	firstRecord, err := f.svc.Answer(t.Context(), recall.Request{Caller: coordinator(), History: &recall.HistoryRequest{Format: "record", ThroughOrd: 1, MessageID: "tool", BodyRunes: 512}})
+	testutil.FailErr(t, "recover tool record first page", err)
+	if !strings.Contains(firstRecord.History.Entries[0].Content, `"path":"observations.txt"`) || !strings.Contains(firstRecord.History.Entries[0].Content, `"offset":650`) {
+		t.Fatalf("expected first record page to surface tool_args before body paging, got %s", firstRecord.History.Entries[0].Content)
 	}
 }
 
