@@ -10,7 +10,7 @@ import (
 )
 
 // CommandFileWrite describes a command or pipeline that writes a file via
-// heredoc, here-string, stdin pass-through, or shell wrapper redirection.
+// literal output, heredoc, here-string, or stdin pass-through.
 type CommandFileWrite struct {
 	Command string
 	Path    string

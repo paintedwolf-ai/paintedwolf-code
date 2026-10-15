@@ -2,12 +2,15 @@ package toolexecution
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -117,6 +120,61 @@ func TestCommandFileWriteRecoveryUsesOnlyFrozenOfferedTools(t *testing.T) {
 			}
 			if !reflect.DeepEqual(ctx.Turn.TurnOfferedToolNames, tc.offered) {
 				t.Fatalf("offered snapshot mutated: %#v", ctx.Turn.TurnOfferedToolNames)
+			}
+		})
+	}
+}
+
+func TestLiteralOutputRecoveryRendersActualSurface(t *testing.T) {
+	wireFixtureGuidanceRenderer(t)
+	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
+	registry := tools.NewDefaultRegistry()
+	calls := 0
+	noop := func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		calls++
+		return `{"ok":true}`, nil
+	}
+	for _, name := range []string{"command", "write", "request_tools"} {
+		testutil.FailErr(t, "register tool", registry.Register(name, noop))
+	}
+	executor := NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "implement")
+	executor.Rejections.SetBlockPlane(stockBlockPlane(t))
+	for _, tc := range []struct {
+		name              string
+		offered, deferred []string
+		want              string
+		loadable          bool
+	}{
+		{"offered", []string{"command", "write"}, nil, "Use the supplied", false},
+		{"deferred", []string{"command", "request_tools"}, []string{"write"}, "Call `request_tools`", true},
+		{"unavailable", []string{"command", "request_tools"}, nil, "cannot author", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := fixtureToolContext(t.TempDir())
+			ctx.Turn.TurnOfferedToolNames = tc.offered
+			ctx.Turn.TurnToolPlan = toolsurface.Compile(tc.offered, tc.deferred)
+			args := map[string]any{"command": `echo built > out.log`}
+			_, err := executor.Invoke(t.Context(), "command", args, ctx)
+			refusal, ok := guidance.RefusalFromError(err)
+			if !ok || refusal.Code() != "USE_WRITE_NATIVE" || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("recovery=%v, want USE_WRITE_NATIVE with %q", err, tc.want)
+			}
+			if calls != 0 {
+				t.Fatalf("rejected command executed %d handlers", calls)
+			}
+			if len(refusal.Facts.Feedback) != 1 {
+				t.Fatalf("missing delivered recovery facts: %#v", refusal.Facts)
+			}
+			details := refusal.Facts.Feedback[0].Details
+			if tc.loadable {
+				want := []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "write"}}}
+				actualJSON, err := json.Marshal(details["replacement_calls"])
+				testutil.FailErr(t, "encode delivered recovery", err)
+				wantJSON, err := json.Marshal(want)
+				testutil.FailErr(t, "encode expected recovery", err)
+				if string(actualJSON) != string(wantJSON) {
+					t.Fatalf("delivered loader recovery=%s, want %s", actualJSON, wantJSON)
+				}
 			}
 		})
 	}

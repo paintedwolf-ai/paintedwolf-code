@@ -1,6 +1,9 @@
 package toolcommand
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestFileWriteReplacementPreservesConsumerSemantics(t *testing.T) {
 	cases := []struct {
@@ -29,5 +32,71 @@ func TestFileWriteReplacementPreservesConsumerSemantics(t *testing.T) {
 				t.Fatalf("command=%q stdin=%q: matched=%t exact=%t replacement=%#v; want exact=%t without semantic changes", tc.command, tc.stdin, matched, got.Exact, got.Calls, tc.wantExact)
 			}
 		})
+	}
+}
+
+func TestLiteralOutputFileWriteParity(t *testing.T) {
+	cases := []struct {
+		command                    string
+		matched, exact, appendMode bool
+		content, path              string
+	}{
+		{`echo built > out.log`, true, true, false, "built\n", "out.log"},
+		{`echo built | cat > out.log`, true, true, false, "built\n", "out.log"},
+		{`echo built | tr a-z A-Z > out.log`, true, false, false, "", ""},
+		{`echo 'two words' >> 'out file.txt'`, true, true, true, "two words\n", "out file.txt"},
+		{`printf '%s\n' 'hello' > out.txt`, true, true, false, "hello\n", "out.txt"},
+		{`echo 'a\nb' > out.txt`, true, false, false, "", ""},
+		{`echo --help > out.txt`, true, false, false, "", ""},
+		{`echo --version > out.txt`, true, false, false, "", ""},
+		{`echo -e hello > out.txt`, true, false, false, "", ""},
+		{`echo -E hello > out.txt`, true, false, false, "", ""},
+		{`echo -n hello > out.txt`, true, false, false, "", ""},
+		{`echo "$VALUE" > out.txt`, true, false, false, "", ""},
+		{`printf '%d' 12 > out.txt`, true, false, false, "", ""},
+		{`echo hello`, false, false, false, "", ""},
+		{`echo ">" out.txt`, false, false, false, "", ""},
+		{`printf '%s' '>> out.txt'`, false, false, false, "", ""},
+		{`echo hello > /dev/null`, false, false, false, "", ""},
+		{`echo hello > out.txt > /dev/null`, false, false, false, "", ""},
+		{`echo hello > one.txt > two.txt`, false, false, false, "", ""},
+		{`ls > listing.txt`, false, false, false, "", ""},
+		{`cat source.txt > copy.txt`, false, false, false, "", ""},
+	}
+	for _, tc := range cases {
+		for _, wrapped := range []bool{false, true} {
+			command := tc.command
+			if wrapped {
+				command = "sh -c '" + strings.ReplaceAll(command, "'", "'\"'\"'") + "'"
+			}
+			t.Run(command, func(t *testing.T) {
+				got, matched := InspectCommandFileWrite(t.Context(), "command", map[string]any{"command": command}, t.TempDir())
+				if matched != tc.matched || got.Exact != tc.exact {
+					t.Fatalf("matched=%t exact=%t, want %t/%t: %#v", matched, got.Exact, tc.matched, tc.exact, got)
+				}
+				if !tc.exact {
+					if len(got.Calls) != 0 {
+						t.Fatalf("uncertain output has replacements: %#v", got.Calls)
+					}
+					return
+				}
+				if got.Append != tc.appendMode || len(got.Calls) != 1 || got.Calls[0].Args["content"] != tc.content || got.Path != tc.path || got.Calls[0].Args["path"] != tc.path {
+					t.Fatalf("replacement changed output: %#v", got)
+				}
+				actualAppend, _ := got.Calls[0].Args["append"].(bool)
+				if actualAppend != tc.appendMode {
+					t.Fatalf("replacement append=%t, want %t", actualAppend, tc.appendMode)
+				}
+			})
+		}
+	}
+}
+
+func TestLiteralOutputDirectArgvMustAgree(t *testing.T) {
+	for _, command := range []string{`printf '%s' a\qb > out.txt`, `printf '%s' @scratch/body > out.txt`, `printf '%s' body > out\q.txt`} {
+		got, matched := InspectCommandFileWrite(t.Context(), "command", map[string]any{"command": command}, t.TempDir())
+		if !matched || got.Exact || len(got.Calls) != 0 {
+			t.Fatalf("direct argv disagreement must retain inexact recovery: %#v, matched=%t", got, matched)
+		}
 	}
 }
