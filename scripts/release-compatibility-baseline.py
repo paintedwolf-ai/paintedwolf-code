@@ -2,6 +2,7 @@
 """Pin the last published stable release as the compatibility baseline."""
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import json
 from pathlib import Path
@@ -14,7 +15,7 @@ import subprocess
 import sys
 
 from release_semver import compare, parse, parse_release_build
-from release_distribution import PUBLIC_READ_HEADERS, timestamp
+from release_distribution import PUBLIC_READ_HEADERS, activation_manifest, timestamp
 import feed_signature
 import feed_signing
 from update_keys import fingerprint, generation, load_registry, validate_binding
@@ -164,6 +165,39 @@ def check_progression(candidate, releases, channel_release, source_ref):
             raise ValueError("RELEASE_BUILD must exceed every published release build")
 
 
+def activated_history(releases, base):
+    known = {row["tag_name"] for row in releases if row.get("draft") is False}
+    tags = subprocess.check_output(["git", "tag", "--list", "v*"], text=True).splitlines()
+    pending = []
+    for tag in tags:
+        try:
+            version = parse(tag[1:])
+        except ValueError:
+            continue
+        if compare(version, parse("1.0.0")) >= 0 and tag not in known:
+            pending.append(tag)
+    registry = load_registry()
+    def read(tag):
+        version = tag[1:]
+        raw = read_public(f"{base.rstrip('/')}/release-metadata/{version}/activation.json")
+        if raw is None:
+            return None
+        manifest_raw = read_public(f"{base.rstrip('/')}/updates/releases/{version}.json")
+        if manifest_raw is None:
+            raise ValueError("activated release has no immutable manifest: " + version)
+        manifest = json.loads(manifest_raw)
+        if manifest["version"] != version:
+            raise ValueError("activated release identity differs from its tag")
+        activated = activation_manifest(manifest, json.loads(raw))
+        validate_binding(registry, activated)
+        release = {"draft": False, "prerelease": parse(version).channel == "preview", "tag_name": tag,
+                   "published_at": activated["pub_date"], "activation_sha256": hashlib.sha256(raw).hexdigest()}
+        published_version(release, parse(version).channel)
+        return release
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        return [release for release in executor.map(read, pending) if release is not None]
+
+
 def check_key_history(previous, current):
     for counter in ("signing_generation", "embedded_generation"):
         if current[counter] < previous[counter]:
@@ -213,9 +247,10 @@ if __name__ == "__main__":
         tag, sha = resolve(release, args.source_ref)
         pages = json.loads(args.releases_file.read_text())
         releases = [row for page in pages for row in page]
+        releases += activated_history(releases, args.base_url)
         channel = parse(candidate).channel
         preview = published_feed(channel_mirror(releases, "preview"), args.base_url, "preview")
-        latest = release if channel == "stable" else preview
+        latest = channel_mirror(releases + [release], "stable") if channel == "stable" else preview
         history = releases + [release] + ([preview] if preview is not None else [])
         check_progression(candidate, history, latest, args.source_ref)
         check_published_keys(args.source_ref, history)

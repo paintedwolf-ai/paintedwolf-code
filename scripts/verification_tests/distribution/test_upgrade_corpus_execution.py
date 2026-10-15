@@ -410,3 +410,35 @@ class SigningHistoryTests(unittest.TestCase):
         old["generations"][0].update(successor=2, bridge_version="1.0.2")
         with self.assertRaisesRegex(ValueError, "bridge changed"):
             release_baseline.check_key_history(old, current)
+
+
+class ActivatedHistoryTests(unittest.TestCase):
+    def test_activation_survives_a_missing_github_mirror_and_later_pointer(self):
+        from release_distribution import encoded
+        from update_keys import release_binding
+        registry = release_baseline.load_registry()
+        version = "1.0.2-rc3"
+        manifest = {"version": version, "pub_date": "2026-10-03T12:00:00Z",
+                    "update_keys": release_binding(registry, version)}
+        activation = {"version": version, "manifest_sha256": sha(encoded(manifest)),
+                      "started_at": "2026-10-03T12:05:00Z"}
+        def read(url):
+            if "/1.0.2-rc3/activation.json" in url:
+                return json.dumps(activation).encode()
+            if url.endswith("/updates/releases/1.0.2-rc3.json"):
+                return encoded(manifest)
+            return None
+        with patch.object(release_baseline.subprocess, "check_output", return_value="v1.0.1\nv1.0.2-rc3\nv1.0.2\nv0.9.0\nvbad\n"), \
+             patch.object(release_baseline, "read_public", side_effect=read):
+            history = release_baseline.activated_history([PublishedStableBaselineTests.release], "https://downloads.example")
+            self.assertEqual([row["tag_name"] for row in history], ["v1.0.2-rc3"])
+            self.assertEqual(history[0]["published_at"], activation["started_at"])
+            activation["manifest_sha256"] = "0" * 64
+            with self.assertRaisesRegex(ValueError, "immutable release"):
+                release_baseline.activated_history([], "https://downloads.example")
+
+    def test_unverifiable_activation_cannot_be_ignored_as_an_unpublished_tag(self):
+        with patch.object(release_baseline.subprocess, "check_output", return_value="v1.0.2\n"), \
+             patch.object(release_baseline, "read_public", side_effect=[b"{}", None]), \
+             self.assertRaisesRegex(ValueError, "no immutable manifest"):
+            release_baseline.activated_history([], "https://downloads.example")

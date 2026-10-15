@@ -148,8 +148,9 @@ they do not become the stable compatibility baseline.
 The first release stages check channel progression, packaging versions, release notes,
 and static corpus integrity before native setup or application builds. The candidate
 must be newer than every publication in its channel, and `RELEASE_BUILD` must
-exceed every published build across both channels. Signed pointers and all published
-GitHub releases count; drafts do not. SemVer precedence applies to preview names.
+exceed every published build across both channels. Signed pointers, all published GitHub releases, and immutable activation receipts
+count; drafts and unactivated tags do not. Activation receipts retain obligations
+when a GitHub mirror fails or a channel pointer later advances. SemVer precedence applies to preview names.
 Full database shape and upgrade rehearsal checks follow with the built candidate.
 
 The release controller owns these checks and reads the selected candidate tree,
