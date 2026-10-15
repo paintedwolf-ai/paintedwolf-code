@@ -132,6 +132,20 @@ At the maximum text-size category (or the harness inject) and the Tauri minimum 
 
 Naming uses wire and catalog fields (session title, tool id, worker agent type), never markdown substring classification ([AGENTS.md](../AGENTS.md) § No heuristics).
 
+## WebKitGTK AT-SPI workaround
+
+WebKitGTK aborts its web process while answering AT-SPI text queries (`Text.GetAttributeRun`, selection queries) over some content shapes, and a screen reader user loses the whole window. The shell reports its web engine and version (`den_web_engine`); while it reports WebKitGTK, [`webkit-atspi-workaround.ts`](../lycaon-den/src/platform/desktop/webkit-atspi-workaround.ts) turns on crash-safe alternatives and stamps `data-den-webkit-atspi-workaround` on the root. Every other engine keeps its own rendering. It applies to every WebKitGTK release until one ships the upstream AT-SPI fix; remove it when the minimum WebKitGTK includes that fix.
+
+| Mechanism | Under the workaround |
+|------|----------|
+| Content hidden until shown leaves the DOM | Transcript disclosure panels mount only while open, and the toggle names its panel in `aria-controls` only then; a sidebar chat row stops rendering its time and status while its actions are revealed |
+| Drawn input hint | The Home idea field draws its hint while empty instead of carrying a `placeholder`, and takes its name from `aria-label` |
+| Loading text leaves after its fade | The Files loading layer's text is removed once the layer has faded |
+| Responsive hide keeps a box | Text hidden at a narrow width (search result kind, activity count) stays in a visually hidden box |
+| Selectable text | All text stays selectable |
+
+[`webkit-atspi-workaround-inventory.json`](../lycaon-den/src/platform/desktop/webkit-atspi-workaround-inventory.json) lists every site, and its test fails when a site is added without an entry. These shapes hold on every engine, because they render the same: no list item is itself a grid (the grid goes on a wrapper), icons carry `role="img"` beside `aria-hidden`, the line gutter's spacer is an empty fixed-width box, and the chat column carries no `aria-label` of its own. [`list-item-accessibility-shape.test.ts`](../lycaon-den/src/platform/list-item-accessibility-shape.test.ts) and `line-gutter.test.ts` hold them in source, and `./task den:webkit:atspi` asks every text object in the window for its attributes on each supported WebKitGTK release ([dev tasks](dev-tasks.md)).
+
 ## macOS Spoken Content (Speak selection / Speak under pointer)
 
 Speak selection and VoiceOver read the selectable transcript; there is no in-app `SpeechSynthesis`. Selectable text is required in user message bubbles, rendered assistant markdown (`AssistantProseBody` / `.markdown-body`), and code blocks.

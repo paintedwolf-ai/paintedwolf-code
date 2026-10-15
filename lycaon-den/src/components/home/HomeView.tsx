@@ -43,6 +43,9 @@ import {
   ATTACHMENT_PROVIDER_SEND_HINT,
   filesFromClipboard,
 } from "../../chat/composer/composer-attachments.ts";
+import { webkitAtspiWorkaroundActive } from "../../platform/desktop/webkit-atspi-workaround.ts";
+
+const IDEA_HINT = "Describe your idea…";
 import {
   HOME_IDEA_DROP_AFFORDANCE,
   homeIdeaChipDetail,
@@ -351,12 +354,17 @@ export function HomeView(props: Props) {
               <ThemeIcon slot="sparkle" size={17} />
             </span>
             <Scrollport class="home-view__idea-scroll" eager>
+              {/* The WebKitGTK AT-SPI workaround draws the hint instead of a placeholder. */}
+              <Show when={webkitAtspiWorkaroundActive() && !idea()}>
+                <span class="home-view__idea-hint" aria-hidden="true">{IDEA_HINT}</span>
+              </Show>
               <textarea
                 ref={ideaRef}
                 class="home-view__idea-input"
                 data-testid="home-idea-input"
                 rows={1}
-                placeholder="Describe your idea…"
+                placeholder={webkitAtspiWorkaroundActive() ? undefined : IDEA_HINT}
+                aria-label={webkitAtspiWorkaroundActive() ? "Describe your idea" : undefined}
                 value={idea()}
                 disabled={props.submitting}
                 onInput={(e) => {
@@ -748,13 +756,15 @@ function TeachingCTA() {
       <ol class="home-view__teach-list">
         <For each={steps}>
           {(s, i) => (
-            <li class="home-view__teach-step">
-              <span class="home-view__teach-num" aria-hidden="true">
-                {i() + 1}
-              </span>
-              <div class="home-view__teach-copy">
-                <p class="home-view__teach-title">{s.title}</p>
-                <p class="home-view__teach-body">{s.body}</p>
+            <li>
+              <div class="home-view__teach-step">
+                <span class="home-view__teach-num" aria-hidden="true">
+                  {i() + 1}
+                </span>
+                <div class="home-view__teach-copy">
+                  <p class="home-view__teach-title">{s.title}</p>
+                  <p class="home-view__teach-body">{s.body}</p>
+                </div>
               </div>
             </li>
           )}
