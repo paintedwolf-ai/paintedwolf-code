@@ -63,6 +63,9 @@ func TestCloudflareOutputLimitRecoversOnceAndPreservesUsage(t *testing.T) {
 			if !ok || empty.Retryable || empty.Reason != "length" || empty.Attempts != 2 || calls != 2 || !empty.RecoveryAttempted {
 				t.Fatalf("output limit error = %v, requests = %d", err, calls)
 			}
+			if completion.ContextInputTokens() != 42 {
+				t.Fatalf("failed attempts inflated context input: %d", completion.ContextInputTokens())
+			}
 			if completion == nil || completion.Usage.PromptTokens != 84 || completion.Usage.CompletionTokens != 256 {
 				t.Fatalf("failed completion lost billed usage: %+v", completion)
 			}
@@ -72,40 +75,59 @@ func TestCloudflareOutputLimitRecoversOnceAndPreservesUsage(t *testing.T) {
 
 func TestResponseRetryAddsUsageAcrossAttempts(t *testing.T) {
 	for _, stream := range []bool{false, true} {
-		inner := &responseRetryStub{
-			complete: func(call int) (*modelcall.Completion, error) {
-				out := &modelcall.Completion{Usage: modelcall.TokenUsage{PromptTokens: 10, CompletionTokens: call}}
-				if call == 1 {
-					return out, &failure.ProviderEmptyCompletionError{Retryable: true}
+		for _, finalReported := range []bool{false, true} {
+			t.Run(fmt.Sprintf("stream_%t_reported_%t", stream, finalReported), func(t *testing.T) {
+				attemptUsage := func(call int) modelcall.TokenUsage {
+					if call == 2 && !finalReported {
+						return modelcall.TokenUsage{}
+					}
+					return modelcall.TokenUsage{PromptTokens: 10, CompletionTokens: call, CacheReadInputTokens: 4}
 				}
-				out.Content = "done"
-				return out, nil
-			},
-			stream: func(call int) (<-chan modelcall.StreamChunk, error) {
-				last := modelcall.StreamChunk{Usage: modelcall.TokenUsage{PromptTokens: 10, CompletionTokens: call}, Done: true}
-				if call == 1 {
-					last.Err = &failure.ProviderEmptyCompletionError{Retryable: true}
+				inner := &responseRetryStub{
+					complete: func(call int) (*modelcall.Completion, error) {
+						out := &modelcall.Completion{Usage: attemptUsage(call)}
+						if call == 1 {
+							return out, &failure.ProviderEmptyCompletionError{Retryable: true}
+						}
+						out.Content = "done"
+						return out, nil
+					},
+					stream: func(call int) (<-chan modelcall.StreamChunk, error) {
+						last := modelcall.StreamChunk{Usage: attemptUsage(call), Done: true}
+						if call == 1 {
+							last.Err = &failure.ProviderEmptyCompletionError{Retryable: true}
+						} else {
+							last.Content = "done"
+						}
+						return retryChunkStream(modelcall.StreamChunk{Usage: last.Usage}, last), nil
+					},
+				}
+				provider := &responseRetryProvider{inner: inner, policy: retryEmptyOncePolicy()}
+				var got *modelcall.Completion
+				var err error
+				if stream {
+					var chunks <-chan modelcall.StreamChunk
+					chunks, err = provider.Stream(t.Context(), modelcall.CompletionRequest{})
+					if err != nil {
+						t.Fatalf("start retry stream: %v", err)
+					}
+					got, _, err = modelcall.CollectStream(chunks)
 				} else {
-					last.Content = "done"
+					got, err = provider.Complete(t.Context(), modelcall.CompletionRequest{})
 				}
-				return retryChunkStream(modelcall.StreamChunk{Usage: last.Usage}, last), nil
-			},
-		}
-		provider := &responseRetryProvider{inner: inner, policy: retryEmptyOncePolicy()}
-		var got *modelcall.Completion
-		var err error
-		if stream {
-			var chunks <-chan modelcall.StreamChunk
-			chunks, err = provider.Stream(t.Context(), modelcall.CompletionRequest{})
-			if err != nil {
-				t.Fatalf("start retry stream: %v", err)
-			}
-			got, _, err = modelcall.CollectStream(chunks)
-		} else {
-			got, err = provider.Complete(t.Context(), modelcall.CompletionRequest{})
-		}
-		if err != nil || got == nil || got.Usage.PromptTokens != 20 || got.Usage.CompletionTokens != 3 {
-			t.Fatalf("stream=%v: combined usage = %+v, error = %v", stream, got, err)
+				want := modelcall.TokenUsage{PromptTokens: 10, CompletionTokens: 1, CacheReadInputTokens: 4}
+				wantContext := 0
+				if finalReported {
+					want.PromptTokens, want.CompletionTokens, want.CacheReadInputTokens = 20, 3, 8
+					wantContext = 10
+				}
+				if err != nil || got == nil || got.Usage.PromptTokens != want.PromptTokens || got.Usage.CompletionTokens != want.CompletionTokens || got.Usage.CacheReadInputTokens != want.CacheReadInputTokens {
+					t.Fatalf("combined billing usage = %+v, error = %v", got, err)
+				}
+				if got.ContextInputTokens() != wantContext {
+					t.Fatalf("context input = %d, want %d independently of billing", got.ContextInputTokens(), wantContext)
+				}
+			})
 		}
 	}
 }
@@ -123,5 +145,36 @@ func TestOutputLimitReasonsAcrossProtocols(t *testing.T) {
 	}
 	if anthropicprovider.EmptyCompletionRetryable("max_tokens") || openaicompat.EmptyCompletionRetryable("length") {
 		t.Fatal("output limit permits identical request replay")
+	}
+}
+
+func TestResponseRetryPreservesAttemptMetadata(t *testing.T) {
+	for _, stream := range []bool{false, true} {
+		billed := modelcall.TokenUsage{PromptTokens: 20, CompletionTokens: 3, CacheReadInputTokens: 8}
+		attempt := modelcall.TokenUsage{PromptTokens: 7, CompletionTokens: 2, CacheReadInputTokens: 4}
+		inner := &responseRetryStub{
+			complete: func(int) (*modelcall.Completion, error) {
+				return &modelcall.Completion{Content: "done", Usage: billed, AttemptUsage: &attempt}, nil
+			},
+			stream: func(int) (<-chan modelcall.StreamChunk, error) {
+				return retryChunkStream(modelcall.StreamChunk{Content: "done", Usage: billed, AttemptUsage: &attempt, Done: true}), nil
+			},
+		}
+		provider := &responseRetryProvider{inner: inner}
+		var completion *modelcall.Completion
+		var err error
+		if stream {
+			var chunks <-chan modelcall.StreamChunk
+			chunks, err = provider.Stream(t.Context(), modelcall.CompletionRequest{})
+			if err != nil {
+				t.Fatalf("start stream: %v", err)
+			}
+			completion, _, err = modelcall.CollectStream(chunks)
+		} else {
+			completion, err = provider.Complete(t.Context(), modelcall.CompletionRequest{})
+		}
+		if err != nil || completion == nil || completion.ContextInputTokens() != 7 || completion.Usage.PromptTokens != 20 || completion.Usage.CacheReadInputTokens != 8 {
+			t.Fatalf("stream=%v lost separated attempt and billing usage: %+v, %v", stream, completion, err)
+		}
 	}
 }
