@@ -8,6 +8,7 @@
   "reviewed_commit": "9be7f9794800e4f970243604590b355a30677c75",
   "ceiling": 395,
   "boundaries": {
-    "lycaon/internal/coordinator/promptloop/prompt_loop_tool_execution_internal_test.go": "d75ec21ca63f24e833cec15e1519c167321bb71289ea9f2d42e13124489afab3"
+    "lycaon/internal/coordinator/promptloop/prompt_loop_tool_execution_internal_test.go": "d75ec21ca63f24e833cec15e1519c167321bb71289ea9f2d42e13124489afab3",
+    "lycaon/internal/oar/catalogue_test.go": "ce7b081696e3b9e013dadad7c1766919fc403ca541ba115c339f7a674ec7cbe2"
   }
 }
