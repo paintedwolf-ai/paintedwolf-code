@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/verification"
 )
 
@@ -218,13 +219,12 @@ func normalizeCoordinatorCitedEvidence(in []CoordinatorCitedEvidence, max int) [
 	}
 	seen := map[string]struct{}{}
 	var out []CoordinatorCitedEvidence
-	for _, item := range in {
-		handle := strings.TrimSpace(item.Evidence)
-		path := strings.TrimSpace(item.Path)
-		if handle == "" && path == "" {
+	for _, raw := range in {
+		item, ok := normalizeSingleCoordinatorCitedEvidence(raw)
+		if !ok {
 			continue
 		}
-		key := handle + "\x00" + path
+		key := item.Evidence + "\x00" + item.Path
 		if item.Line > 0 {
 			key = fmt.Sprintf("%s:%d", key, item.Line)
 		}
@@ -232,17 +232,49 @@ func normalizeCoordinatorCitedEvidence(in []CoordinatorCitedEvidence, max int) [
 			continue
 		}
 		seen[key] = struct{}{}
-		out = append(out, CoordinatorCitedEvidence{
-			Evidence: handle,
-			Path:     path,
-			Line:     item.Line,
-			Excerpt:  strings.TrimSpace(item.Excerpt),
-		})
+		out = append(out, item)
 		if max > 0 && len(out) >= max {
 			break
 		}
 	}
 	return out
+}
+
+func normalizeSingleCoordinatorCitedEvidence(item CoordinatorCitedEvidence) (CoordinatorCitedEvidence, bool) {
+	handle := strings.TrimSpace(item.Evidence)
+	path := strings.TrimSpace(item.Path)
+	line := item.Line
+	if hPrefix, hLine, ok := evidence.SplitPathLineToken(handle); ok {
+		if evidence.IsEvidenceHandleToken(hPrefix) {
+			handle = hPrefix
+			if line <= 0 {
+				line = hLine
+			}
+		} else if !evidence.IsEvidenceHandleToken(handle) {
+			if path == "" {
+				path = hPrefix
+			}
+			if line <= 0 {
+				line = hLine
+			}
+			handle = ""
+		}
+	}
+	if pPrefix, pLine, ok := evidence.SplitPathLineToken(path); ok && !evidence.IsEvidenceHandleToken(pPrefix) {
+		path = pPrefix
+		if line <= 0 {
+			line = pLine
+		}
+	}
+	if handle == "" && path == "" {
+		return CoordinatorCitedEvidence{}, false
+	}
+	return CoordinatorCitedEvidence{
+		Evidence: handle,
+		Path:     path,
+		Line:     line,
+		Excerpt:  strings.TrimSpace(item.Excerpt),
+	}, true
 }
 
 func normalizeReportStringList(in []string, max int) []string {
