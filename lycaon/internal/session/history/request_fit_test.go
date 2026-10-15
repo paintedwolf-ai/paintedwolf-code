@@ -408,3 +408,39 @@ func TestRequestFittingDiscardsOtherReceiverCalibration(t *testing.T) {
 		})
 	}
 }
+
+func TestRequestFittingCanProjectRecallBelowSixteenKilobytes(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	raw, err := json.Marshal(map[string]any{"resolution": "matched", "hits": []any{map[string]any{"snippet": strings.Repeat("recorded observation ", 500)}}})
+	testutil.FailErr(t, "encode recall observation", err)
+	if len(raw) <= 2048 || len(raw) >= 16384 {
+		t.Fatal("fixture must exercise the medium recall size")
+	}
+	rows := []api.Message{
+		{ID: "current", Ord: 1, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Recover the original observation"},
+		{ID: "call", Ord: 2, Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "recall-call", Name: "recall"}}},
+		{ID: "result", Ord: 3, Role: api.MessageRoleTool, Content: string(raw), ToolResult: &api.ToolResult{ToolCallID: "recall-call", Tool: "recall", Content: string(raw)}},
+	}
+	frame := api.Message{ID: "frame", Role: api.MessageRoleSystem, Content: strings.Repeat("standing instruction ", 800)}
+	req := modelcall.CompletionRequest{Model: "small", MaxTokens: 512, Messages: append([]api.Message{frame}, rows...)}
+	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 8192}})}
+	service := &Service{store: store.NewMemory(), recallAvailable: func(context.Context, *api.Session) bool { return true }}
+	fitted, err := service.FitRequest(t.Context(), &api.Session{ID: "s", Model: "small"}, rows, req, budgets)
+	testutil.FailErr(t, "fit medium recall around required frame", err)
+	budget := budgets.RequestBudget(t.Context(), "fixture", fitted)
+	if budget.Input+budget.Output+budget.Headroom > budget.Window {
+		t.Fatalf("recall exceeded receiver window: %+v", budget)
+	}
+	var result string
+	for _, row := range fitted.Messages {
+		if row.ID == "result" {
+			result = row.Content
+		}
+	}
+	if result == "" || result == string(raw) || !strings.Contains(result, "recall(history=") {
+		t.Fatal("active recall result lost its bounded canonical recovery")
+	}
+	if rows[2].Content != string(raw) || rows[2].ToolResult.Content != string(raw) {
+		t.Fatal("request fitting changed the recorded observation")
+	}
+}

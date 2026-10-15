@@ -186,8 +186,5 @@ func isOversizedToolBody(row api.Message) bool {
 	if row.Role != api.MessageRoleTool || row.ToolResult == nil || row.ID == "" || row.Ord <= 0 || len(row.Content) <= 2048 {
 		return false
 	}
-	if row.ToolResult.Tool == recall.ToolName && len(row.Content) <= 16384 {
-		return false
-	}
 	return true
 }
