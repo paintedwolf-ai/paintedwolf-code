@@ -2,12 +2,13 @@ package command
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -87,13 +88,17 @@ func commandSourceReaders(ctx context.Context, tctx tools.ToolContext, cwd strin
 
 // commandFailureSourceRoot excludes scratch and preserves worker isolation.
 func commandFailureSourceRoot(tctx tools.ToolContext, cwd string) string {
+	canonical := fspath.CanonicalPath(cwd)
+	if scratch := strings.TrimSpace(tctx.Host.SessionScratchDir); scratch != "" && confine.PathAtOrUnder(canonical, fspath.CanonicalPath(scratch)) {
+		return ""
+	}
 	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
-		rel, err := filepath.Rel(branch, cwd)
-		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		if confine.PathAtOrUnder(canonical, fspath.CanonicalPath(branch)) {
 			return branch
 		}
 		return ""
 	}
+
 	_, root, err := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, cwd)
 	if err != nil {
 		return ""

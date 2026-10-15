@@ -128,15 +128,20 @@ func TestFailureStreakNilTracker(t *testing.T) {
 
 func TestCommandSourceReadersRespectExecutionAndReceiptRoots(t *testing.T) {
 	primary, attached, worker, scratch := t.TempDir(), t.TempDir(), t.TempDir(), t.TempDir()
+	nestedScratch := filepath.Join(primary, "scratch")
+	testutil.FailErr(t, "create nested scratch", os.Mkdir(nestedScratch, 0700))
 	ledger := sourceledger.New(testdbfixture.Open(t, "source.db"), filepath.Join(t.TempDir(), "content"))
 	t.Cleanup(func() { testutil.FailErr(t, "close snapshots", ledger.Snapshots.Close()) })
 	tctx := tools.ToolContext{Source: tools.InvocationSource{Observations: ledger.Inventory, Roots: []projectroot.RootRef{{ID: "primary", Path: primary, IsPrimary: true}, {ID: "attached", Path: attached}}, ActiveRootID: "primary"}}
 	for _, tc := range []struct{ name, cwd, branch, want string }{
-		{"primary", primary, "", primary}, {"attached", attached, "", attached}, {"worker", worker, worker, worker}, {"worker-external", primary, worker, ""}, {"scratch", scratch, "", ""},
+		{"primary", primary, "", primary}, {"attached", attached, "", attached}, {"worker", worker, worker, worker}, {"worker-external", primary, worker, ""}, {"scratch", scratch, "", ""}, {"nested-scratch", nestedScratch, "", ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			local := tctx
 			local.Source.WorkerBranchRoot = tc.branch
+			if tc.name == "nested-scratch" {
+				local.Host.SessionScratchDir = nestedScratch
+			}
 			if got := commandFailureSourceRoot(local, tc.cwd); got != tc.want {
 				t.Fatalf("root=%q want%q", got, tc.want)
 			}
