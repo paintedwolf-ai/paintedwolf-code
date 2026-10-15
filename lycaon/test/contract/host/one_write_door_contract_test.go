@@ -39,6 +39,7 @@ var doorExemptions = map[string]string{
 	"lycaon/internal/inspector/jsonl_store.go":  "append-only evidence journal",
 
 	// O_EXCL reports collisions without replacing existing bytes.
+	"lycaon/cmd/pw-vault-identity/store.go":               "O_EXCL staging file published with link(2), so a stored identity is never replaced",
 	"lycaon/internal/api/owner_only_posix.go":             "O_EXCL create so the 0600 mode is in force before any byte lands",
 	"lycaon/internal/api/owner_only_windows.go":           "owner-only ACL applied to a freshly created manifest",
 	"lycaon/internal/filelock/filelock.go":                "lock file opened for the flock it carries, not for its contents",
