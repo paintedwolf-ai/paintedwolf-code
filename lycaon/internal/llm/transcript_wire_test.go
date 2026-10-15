@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -233,7 +234,7 @@ func TestFileContentLabelsSurviveProviderProjection(t *testing.T) {
 		system, anthropic := anthropicprovider.ProjectMessages(messages, nil, false, "", "", "")
 		rawSystem, err := json.Marshal(system)
 		testutil.FailErr(t, "encode static prefix", err)
-		if strings.Contains(string(rawSystem), "File contents") {
+		if bytes.Contains(rawSystem, []byte("File contents")) {
 			t.Fatal("source label entered static prefix")
 		}
 		_, vertex := vertexexpressprovider.ProjectMessages(messages, false, "")
@@ -243,7 +244,7 @@ func TestFileContentLabelsSurviveProviderProjection(t *testing.T) {
 			for _, want := range []string{`⟦D⟧File contents "input.json" (lines 1–1)`, "⟦D⟧Tool result metadata:", `⟦D⟧{"receipt":"payload"}`} {
 				quoted, err := json.Marshal(want)
 				testutil.FailErr(t, "encode expected source", err)
-				if strings.Count(string(raw), string(quoted[1:len(quoted)-1])) != 1 {
+				if bytes.Count(raw, quoted[1:len(quoted)-1]) != 1 {
 					t.Fatalf("%s %s lost or duplicated %q: %s", tool, name, want, raw)
 				}
 			}
