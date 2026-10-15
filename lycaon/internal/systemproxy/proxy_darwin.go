@@ -180,6 +180,7 @@ static int pw_pac_script_proxy(const char *script, const char *target,
 }
 
 typedef struct {
+	int found;
 	int http_enabled, http_port, https_enabled, https_port, socks_enabled, socks_port;
 	int pac_enabled, discovery_enabled, exclude_simple;
 	char *http_host, *https_host, *socks_host, *pac_url, *exceptions;
@@ -215,9 +216,12 @@ static char *pw_exceptions(CFDictionaryRef settings) {
 	return out;
 }
 
-static int pw_read_proxy_settings(pw_proxy_settings *out) {
+static pw_proxy_settings pw_read_proxy_settings(void) {
+	pw_proxy_settings settings_out = {0};
+	pw_proxy_settings *out = &settings_out;
 	CFDictionaryRef settings = CFNetworkCopySystemProxySettings();
-	if (settings == NULL) return 0;
+	if (settings == NULL) return settings_out;
+	out->found = 1;
 	out->http_enabled = pw_number(settings, CFSTR("HTTPEnable"));
 	out->http_host = pw_string(settings, CFSTR("HTTPProxy"));
 	out->http_port = pw_number(settings, CFSTR("HTTPPort"));
@@ -233,7 +237,7 @@ static int pw_read_proxy_settings(pw_proxy_settings *out) {
 	out->exclude_simple = pw_number(settings, CFSTR("ExcludeSimpleHostnames"));
 	out->exceptions = pw_exceptions(settings);
 	CFRelease(settings);
-	return 1;
+	return settings_out;
 }
 */
 import "C"
@@ -253,8 +257,8 @@ const pacResolutionTimeout = 5 * time.Second
 
 // Current returns the macOS system proxy configuration.
 func Current() (Configuration, error) {
-	var raw C.pw_proxy_settings
-	if read := C.pw_read_proxy_settings(&raw); read == 0 {
+	raw := C.pw_read_proxy_settings()
+	if raw.found == 0 {
 		return Configuration{Source: SourceMacOS, Mode: ModeNone}, nil
 	}
 	defer func() {
