@@ -133,7 +133,7 @@ func TestPreflightNeverLeaksHomePath(t *testing.T) {
 	env := preflight.Env{
 		ConfigDir:     configDir,
 		FreeBytes:     func(string) (uint64, error) { return 1 << 20, nil },
-		OSProductVer:  func() (string, error) { return "10.15", nil },
+		OSProductVer:  func() (string, error) { return "1.0", nil },
 		ProviderCount: func() int { return 0 },
 		ResolveGitEngine: func() error {
 			return &gitengine.UnavailableError{Reason: "missing"}

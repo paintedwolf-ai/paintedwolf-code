@@ -1,7 +1,11 @@
 import { Show, createEffect, createSignal, on, onCleanup } from "solid-js";
 import type { WorkflowExplainMeta } from "../../api/types.ts";
 import { useTranscriptEntry } from "../../chat/transcript/presentation/transcript-entry.ts";
-import { useTranscriptDisclosure } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
+import {
+  TranscriptDisclosurePanel,
+  TranscriptDisclosureShell,
+  useTranscriptDisclosure,
+} from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
 import { bindFindRevealHost } from "../../find/use-findable-view.ts";
 import { SCANS_LIVE_REFRESH_MAX_MS, SCANS_LIVE_REFRESH_MS } from "../../lib/scan-display.ts";
@@ -37,9 +41,10 @@ export function WorkflowExplainChicklet(props: Props) {
   const { bindTranscriptEntry } = useTranscriptEntry(() =>
     props.entryKey ? { sessionId: props.sessionId ?? undefined, entryKey: props.entryKey } : undefined,
   );
-  const { key: disclosureKey, open, onToggle, onSummaryClick, revealTemporarily } = useTranscriptDisclosure(() =>
+  const disclosure = useTranscriptDisclosure(() =>
     props.entryKey ? transcriptDisclosureKey.workflowExplain(props.entryKey) : undefined,
   );
+  const { open, revealTemporarily } = disclosure;
   const [hostEl, setHostEl] = createSignal<HTMLElement | null>(null);
   const [summaryEl, setSummaryEl] = createSignal<HTMLElement | null>(null);
 
@@ -92,7 +97,8 @@ export function WorkflowExplainChicklet(props: Props) {
   });
 
   return (
-    <details
+    <TranscriptDisclosureShell
+      disclosure={disclosure}
       ref={(el) => {
         setHostEl(el);
         bindTranscriptEntry(el);
@@ -101,13 +107,10 @@ export function WorkflowExplainChicklet(props: Props) {
       data-testid="workflow-explain-chicklet"
       data-status={status()}
       data-phase-id={props.meta.phase_id}
-      data-disclosure-key={disclosureKey}
-      open={open()}
-      onToggle={onToggle}
     >
       <TranscriptChickletSummary
+        disclosure={disclosure}
         ref={setSummaryEl}
-        onClick={onSummaryClick}
         label={[WORKFLOW_EXPLAIN_NAME, props.meta.summary, progressState()].filter(Boolean).join(", ")}
       >
         <span class="den-tool-part-status-dot" data-status={status()} aria-hidden="true" />
@@ -121,7 +124,7 @@ export function WorkflowExplainChicklet(props: Props) {
           )}
         </Show>
       </TranscriptChickletSummary>
-      <div class="den-tool-part-card-body den-tool-part-body" data-testid="workflow-explain-body">
+      <TranscriptDisclosurePanel disclosure={disclosure} class="den-tool-part-card-body den-tool-part-body" data-testid="workflow-explain-body">
         <Show when={open()}>
           <p class="den-tool-part-card-note">{props.meta.body}</p>
           <Show when={pass()} keyed>
@@ -131,7 +134,7 @@ export function WorkflowExplainChicklet(props: Props) {
           </Show>
           <ProgressRows rows={topologyLegRows(legs(), run())} testId="workflow-explain-legs" />
         </Show>
-      </div>
-    </details>
+      </TranscriptDisclosurePanel>
+    </TranscriptDisclosureShell>
   );
 }

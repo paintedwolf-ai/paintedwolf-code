@@ -112,8 +112,10 @@ type Env struct {
 	UserPathSource  userpath.Source
 	UserPathFailure userpath.Failure
 
-	FreeBytes     func(path string) (uint64, error)
-	OSProductVer  func() (string, error)
+	FreeBytes    func(path string) (uint64, error)
+	OSProductVer func() (string, error)
+	// LibcVersion reports the C library version on hosts with a glibc floor; nil elsewhere.
+	LibcVersion   func() (string, error)
 	ProviderCount func() int
 	// MissingRoleProviders maps roles to unavailable provider ids.
 	MissingRoleProviders func() map[string]string

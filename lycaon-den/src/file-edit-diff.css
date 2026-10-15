@@ -270,7 +270,7 @@
   border-radius: inherit;
   pointer-events: none;
 }
-.den-diff-group > summary {
+.den-diff-group > .den-transcript-disclosure-header {
   display: flex;
   align-items: center;
   min-height: var(--den-transcript-card-row-h);
@@ -278,19 +278,15 @@
   border-bottom: 1px solid transparent;
   background: transparent;
   cursor: pointer;
-  list-style: none;
 }
-.den-diff-group > summary::-webkit-details-marker {
-  display: none;
-}
-.den-diff-group > summary:hover {
+.den-diff-group > .den-transcript-disclosure-header:hover {
   background: var(--den-tint-2);
 }
-.den-diff-group > summary:focus-visible {
+.den-diff-group > .den-transcript-disclosure-header:focus-visible {
   outline: 2px solid var(--den-accent-signal);
   outline-offset: -2px;
 }
-.den-diff-group[open] > summary {
+.den-diff-group[data-expanded="true"] > .den-transcript-disclosure-header {
   border-bottom-color: color-mix(in srgb, var(--den-line) 55%, transparent);
 }
 .den-diff-group-summary {

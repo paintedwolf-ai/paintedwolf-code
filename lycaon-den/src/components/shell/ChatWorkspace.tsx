@@ -4,7 +4,7 @@ import { createShellWorkerDrawer } from "./shell-worker-drawer.ts";
 import { createShellPaneVisibility } from "./shell-pane-visibility.ts";
 import { type ShellScope } from "./shell-scope.ts";
 import { type LycaonClient } from "../../api/client.ts";
-import { Show, createSignal, type JSX } from "solid-js";
+import { For, Show, createSignal, type JSX } from "solid-js";
 import { ChatTabChromeProvider } from "../../chat/composer/chat-tab-chrome.tsx";
 import { coordinatorModelVisionSupport } from "../../chat/composer/composer-vision.ts";
 import { hasSpendRecoveryDraft } from "../../chat/recovery/spend-ceiling-recovery.ts";
@@ -35,6 +35,7 @@ import {
 } from "../SpendCeilingReachedNudge.tsx";
 import { VerifyTestNudge } from "../VerifyTestNudge.tsx";
 import { ChromeDragSurface } from "./ChromeDragSurface.tsx";
+import { WindowControls } from "./WindowControls.tsx";
 import { ContextDrawerHost } from "./ContextDrawer.tsx";
 import {
   SessionProtectionBanners,
@@ -70,6 +71,7 @@ type Props = Pick<ShellScope, "shell" | "appStore" | "recents" | "projects"> & {
     | "navSide"
     | "showWindowNav"
     | "conversationSeam"
+    | "windowEdgeClaims"
   >;
   actions: ShellChatActions;
   onboarding: Pick<ReturnType<typeof createShellOnboarding>, "showNoProviderBanner" | "providerGap">;
@@ -119,6 +121,7 @@ export function ChatWorkspace(props: Props) {
     navSide,
     showWindowNav,
     conversationSeam,
+    windowEdgeClaims,
   } = props.panes;
   const { sendPrompt, stopChat, resumeSpendLimitedChat } = props.actions;
   const { showNoProviderBanner, providerGap } = props.onboarding;
@@ -341,6 +344,9 @@ export function ChatWorkspace(props: Props) {
             {...tauriDragRegionProps()}
           >
             <ChromeDragSurface />
+            <For each={windowEdgeClaims("chat")}>
+              {(claim) => <WindowControls {...claim} />}
+            </For>
             <ChatTabRail
               appStore={props.appStore}
               sessionId={layer.chat.sessionId}

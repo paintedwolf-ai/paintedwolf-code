@@ -4,7 +4,7 @@ import { apiSeedSessionTranscript, bootstrapChatSession, liveChatStage, modelInd
 modelIndependentWebE2e("long activity cards use the enclosing viewport through the last action", async ({ page }) => {
   await page.goto("/e2e/fixtures/chat-content-scroll.html");
   const activity = page.getByTestId("activity-span-card");
-  await activity.locator(":scope > summary").click();
+  await activity.locator(":scope > .den-transcript-disclosure-header").click();
   await expect(activity).not.toHaveAttribute("data-animating", "true");
   const list = activity.getByTestId("virtual-card-list");
   await expect(list).toHaveCSS("overflow-y", "visible");
@@ -19,10 +19,10 @@ modelIndependentWebE2e("long activity cards use the enclosing viewport through t
 modelIndependentWebE2e("tool content opens a Files reader with bounded scrolling through end and resize", async ({ page }, testInfo) => {
   await page.goto("/e2e/fixtures/chat-content-scroll.html");
   const activity = page.getByTestId("activity-span-card");
-  await activity.locator(":scope > summary").click();
+  await activity.locator(":scope > .den-transcript-disclosure-header").click();
   expect(await page.getByTestId("tool-part-card").count()).toBeLessThan(40);
   const card = page.locator('[data-testid="tool-part-card"][data-tool-call-id="call-0"]');
-  await card.locator(":scope > summary").click();
+  await card.locator(":scope > .den-transcript-disclosure-header").click();
   await expect.poll(() => card.evaluate(element => {
     const next = element.closest('[data-index]')?.nextElementSibling;
     return next ? next.getBoundingClientRect().top - element.getBoundingClientRect().bottom : -Infinity;
@@ -93,7 +93,7 @@ modelIndependentWebE2e("approval documents open in Files without approving or ad
   await page.getByTestId("goto-line-input").press("Enter");
   await expect(reader).toContainText("1000. host-999.example");
   const completed = page.getByTestId("checkpoint-decision-chicklet");
-  await completed.locator("summary").click();
+  await completed.locator(".den-transcript-disclosure-header").click();
   await completed.getByRole("button", {name:"Approval details in Files",exact:true}).click();
   await expect(reader).toContainText("Preserve the build manifest");
   await expect(page.getByTestId("approval-decision-count")).toHaveText("0");

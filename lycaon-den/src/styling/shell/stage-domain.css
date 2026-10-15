@@ -15,6 +15,14 @@
   --shell-header-row-gap: 0px;
 }
 
+.den-tauri-linux.den-custom-chrome {
+  /* Drawn window buttons center on the strip; no corner is reserved. */
+  --den-pane-control-center: calc(var(--den-titlebar-inset) / 2);
+  --den-window-controls-inset: 8px;
+  --den-window-resize-edge: 5px;
+  --den-window-resize-corner: 12px;
+}
+
 .den-tauri-macos.den-custom-chrome {
   --den-titlebar-inset: 30px;
   --den-unified-chrome-row: max(30px, 2.14em);

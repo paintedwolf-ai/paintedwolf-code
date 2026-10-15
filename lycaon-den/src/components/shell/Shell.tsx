@@ -116,6 +116,7 @@ export function Shell(props: ShellProps) {
   const panes = createShellPaneVisibility({
     windowSubject: itemSubject, splitLive,
     presentedSplitLive: () => presentedSplitLive(),
+    stageColumnOccupied: () => showStageColumn(),
     presentedStageId: () => presentedStageColumn().stageId,
   });
   const { windowNavUserCollapsed, windowNavCollapsed, navAutomaticallyCollapsed, navSlotWidthCss, showConversation, hideConversation, contextHidden, revealConversation, splitFitClaim, conversationHidden, stageIsLeading, stageHeaderLeadsWindow, stageEdges} = panes;
@@ -564,6 +565,7 @@ export function Shell(props: ShellProps) {
             headerLeadsWindow={stageHeaderLeadsWindow()}
             back={titlebarBack()}
             edges={stageEdges(conversationAttention())}
+            windowEdges={panes.windowEdgeClaims("stage")}
             notifications={showHome() ? notificationStack() : null}
             waitingVisible={!stageOpeningOverChat()}
             preparation={props.shell.state.activeProjectId ? workspacePreparation(props.shell.state.activeProjectId) : undefined}
@@ -578,7 +580,8 @@ export function Shell(props: ShellProps) {
               projectLifecycle={{ toggleStar, renameProject, openMoveDialog }}
               peerWindows={{ openFileInNewWindow, openFileWindow, beginFileWindowDrag, detachStageToWindow }}
               workspaceContext={{ backFor, stageBack }} providerGap={providerGap}
-              showConversation={showConversation} startOpenFolder={startOpenFolder} openCloneDialog={openCloneDialog}
+              showConversation={showConversation} focusComposer={() => setPendingRegionFocus("composer")}
+              startOpenFolder={startOpenFolder} openCloneDialog={openCloneDialog}
               deleteProject={deleteProject} setFoldersPanelProjectId={setFoldersPanelProjectId}
               settingsProjectDir={settingsProjectDir} setSecurityScannersFeature={setSecurityScannersFeature}
               selectContextSection={selectContextSection} openProjectTrustSettings={openProjectTrustSettings}

@@ -1,7 +1,8 @@
 surfaces: [preflight]
-# One code, two resolved conditions. A macOS below the floor has no in-app fix,
+# One code, two resolved conditions. A system below the floor has no in-app fix,
 # so it takes the whole window; a version we could not read is only an unproven
-# capability, and the app still works.
+# capability, and the app still works. `component` names what was compared:
+# macos, kernel (Linux), or glibc.
 notification:
   discriminator: reason
   resolutions:
@@ -13,13 +14,33 @@ context_schema:
   optional:
     - want
     - got
+    - component
 title: >-
-  {% if reason == "unreadable" -%}
-  Could not check this Mac's macOS version
+  {% if component == "glibc" -%}
+  {% if reason == "unreadable" %}Could not check this system's C library version{% else %}This system's C library is too old{% endif %}
+  {%- elif component == "kernel" -%}
+  {% if reason == "unreadable" %}Could not check this system's kernel version{% else %}This system is running an older kernel{% endif %}
   {%- else -%}
-  This Mac is running an older macOS
+  {% if reason == "unreadable" %}Could not check this Mac's macOS version{% else %}This Mac is running an older macOS{% endif %}
   {%- endif %}
 message: >-
+  {% if component == "glibc" -%}
+  {% if reason == "unreadable" -%}
+  The app could not read this system's glibc version, so it cannot confirm the
+  system meets the minimum. Most features will still work.
+  {%- else -%}
+  This app needs glibc {{ want }} or later, and this system has {{ got }}.
+  Some features will not start, and the engine may fail to launch.
+  {%- endif %}
+  {%- elif component == "kernel" -%}
+  {% if reason == "unreadable" -%}
+  The app could not read this system's kernel version, so it cannot confirm the
+  system meets the minimum. Most features will still work.
+  {%- else -%}
+  This app needs Linux kernel {{ want }} or later, and this system runs {{ got }}.
+  Confined execution and some features will not start.
+  {%- endif %}
+  {%- else -%}
   {% if reason == "unreadable" -%}
   The app could not read this Mac's macOS version, so it cannot confirm the
   system meets the minimum. Most features will still work.
@@ -27,8 +48,12 @@ message: >-
   This app needs macOS {{ want }} or later, and this Mac is on {{ got }}.
   Some features will not start, and the engine may fail to launch.
   {%- endif %}
+  {%- endif %}
 suggested_action: >-
-  {% if reason == "unreadable" -%}
+  {% if component == "glibc" or component == "kernel" -%}
+  Update the system with your distribution's package manager, or install a
+  supported release (Ubuntu 24.04, Debian 13, Fedora 41, or RHEL 10 and later).
+  {%- elif reason == "unreadable" -%}
   Check for macOS updates in System Settings → General → Software Update.
   {%- else -%}
   Update macOS from System Settings → General → Software Update.
@@ -38,6 +63,7 @@ scenarios:
     resolution: below_floor
     vars:
       reason: below_floor
+      component: macos
       want: "13.0"
       got: "12.7"
     expect_contains:
@@ -47,6 +73,34 @@ scenarios:
     resolution: unreadable
     vars:
       reason: unreadable
+      component: macos
     expect_contains:
       - could not read this Mac's macOS version
       - Software Update
+  - id: kernel_below_floor
+    resolution: below_floor
+    vars:
+      reason: below_floor
+      component: kernel
+      want: "6.2"
+      got: "5.15.0"
+    expect_contains:
+      - Linux kernel 6.2 or later
+      - package manager
+  - id: glibc_below_floor
+    resolution: below_floor
+    vars:
+      reason: below_floor
+      component: glibc
+      want: "2.35"
+      got: "2.31"
+    expect_contains:
+      - glibc 2.35 or later
+      - package manager
+  - id: glibc_unreadable
+    resolution: unreadable
+    vars:
+      reason: unreadable
+      component: glibc
+    expect_contains:
+      - could not read this system's glibc version

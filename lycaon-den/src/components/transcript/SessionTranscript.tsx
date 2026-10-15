@@ -82,6 +82,7 @@ import type { VirtualItem } from "@tanstack/solid-virtual";
 import { useTranscriptViewport } from "../../chat/stream/transcript-viewport.tsx";
 import { useResidentPresence } from "../../ui/resident-presence-context.tsx";
 import {
+  createTranscriptHistoryView,
   ensureTranscriptRevealAnchorLoaded,
   loadTranscriptHistoryUntil,
   loadTranscriptPage,
@@ -471,6 +472,9 @@ export function SessionTranscript(props: Props) {
   const resolveLostAnchor = bindTranscriptSpanAnchors({
     items, isOpen: disclosureOpen, rename: (from, to) => viewport?.disclosures.rename(from, to), root: scrollHostEl,
   });
+  const historyView = createTranscriptHistoryView({
+    enabled: () => layout() === "chat", messages: () => props.messages, items, appStore: () => props.checkpointAppStore,
+  });
 
   const virtualizer = createTranscriptVirtualizer({
     items: () => (layout() === "chat" ? items() : []),
@@ -495,6 +499,8 @@ export function SessionTranscript(props: Props) {
     contentRevision: transcriptRowContentRevision,
     resolveLostAnchor,
     originPx: geometry.origin,
+    unloadedOrds: historyView.unloadedOrds,
+    residentRowSpan: historyView.residentRowSpan,
     onRowMeasured: ({ element, index, size, width }) => {
       if (!(element instanceof HTMLElement)) return;
       if (document.fonts?.status === "loading") return;
@@ -508,9 +514,7 @@ export function SessionTranscript(props: Props) {
       for (const disclosure of element.querySelectorAll<HTMLElement>("[data-disclosure-key]")) {
         const key = parseTranscriptDisclosureKey(disclosure.dataset.disclosureKey);
         if (!key) continue;
-        const isOpen = disclosure instanceof HTMLDetailsElement
-          ? disclosure.open
-          : disclosure.dataset.expanded === "true";
+        const isOpen = disclosure.dataset.expanded === "true";
         if (isOpen !== disclosureOpen(key)) return;
       }
       const item = items()[index];
@@ -624,6 +628,7 @@ export function SessionTranscript(props: Props) {
     const detach = requireChatViewport().attachVirtualWindow({
       measureOrigin: geometry.measureOrigin,
       items,
+      historyGeometry: historyView.geometry.bind(null, virtualizer),
       // Only host-backed rows survive session restoration.
       readingPosition: () =>
         transcriptReadingPosition(virtualizer, (rowKey) => {

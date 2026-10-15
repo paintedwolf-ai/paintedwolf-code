@@ -1,0 +1,51 @@
+oar: '1.0'
+id: USE_WRITE_NATIVE
+kind: policy
+anchor: tool.rejected
+selector:
+  tool:
+  - command
+  - verify
+  - terminal_open
+requires:
+  profiles:
+  - tool
+  facts:
+  - paintedwolf.rejection_code
+  - paintedwolf.habit_redirect_match
+  - paintedwolf.path
+  - paintedwolf.tool_loadable
+  - paintedwolf.can_write
+  - paintedwolf.can_task
+when: paintedwolf.rejection_code == "USE_WRITE_NATIVE"
+effect: block
+copy:
+  what: Shell file-writing redirection or stream piping{% if paintedwolf.path %} targeting `{{ paintedwolf.path }}`{% endif %} is not run through `{{ tool }}`.
+  cause: The command uses a here-document, here-string, stdin stream, or output pipeline to create or overwrite a file instead of structured file authoring.
+  why: Native `write` validates syntax on supported source files, enforces write scope and read-before-overwrite safety, and records file authorship without shell quoting or delimiter hazards.
+  fix: '{% if paintedwolf.can_write %}Use the supplied `replacement_calls` entries in order, or call `write` with `path` and full `content` (set `append` to `true` only when appending to an existing file){% if paintedwolf.path %} for `{{ paintedwolf.path }}`{% endif %}.{% else %}{% if paintedwolf.tool_loadable %}Call `request_tools` using the supplied `replacement_calls` entry (or set `need` to describe creating or replacing{% if paintedwolf.path %} `{{ paintedwolf.path }}`{% else %} the target file{% endif %}) so the file-authoring schema is loaded on the next model call, then retry.{% else %}{% if paintedwolf.can_task %}Dispatch `task` with a scoped brief, target paths, and completion criteria so an implementation worker creates or updates{% if paintedwolf.path %} `{{ paintedwolf.path }}`{% else %} the target file{% endif %}.{% else %}Use the currently offered schemas to complete the step, or report that this turn surface cannot author{% if paintedwolf.path %} `{{ paintedwolf.path }}`{% else %} files{% endif %}.{% endif %}{% endif %}{% endif %}'
+  instead: '{% if paintedwolf.can_write %}Use `write` (or the supplied `replacement_calls`) to author the file directly{% else %}{% if paintedwolf.tool_loadable %}Load the file-authoring schema with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.can_task %}Dispatch `task` so a worker authors the file in its branch{% else %}Use an offered tool or report that this surface cannot author files{% endif %}{% endif %}{% endif %}'
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_habit_redirect
+x-paintedwolf-message: Use native write instead of shell file redirection or tee
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    command: cat <<'EOF' > index.html
+    path: index.html
+    profile: implement
+    tool: command
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: USE_WRITE_NATIVE'
+- id: deferred-loadable
+  vars:
+    command: cat <<'EOF' > index.html
+    path: index.html
+    profile: coordinator
+    tool: command
+    tool_loadable: true
+  expect_contains:
+  - 'Rejected:'
+  - 'Code: USE_WRITE_NATIVE'
+  - request_tools

@@ -236,6 +236,13 @@ pub fn set_app_menu<R: Runtime>(
     Ok(true)
 }
 
+/// Quit from the in-window menu; the exit coordinator still decides whether
+/// the app may leave.
+#[tauri::command]
+pub fn request_quit<R: Runtime>(app: AppHandle<R>) {
+    app.exit(0);
+}
+
 /// Sends the selected command id to the focused webview.
 pub fn on_menu_event<R: Runtime>(app: &AppHandle<R>, id: &str) {
     for window in app.webview_windows().values() {

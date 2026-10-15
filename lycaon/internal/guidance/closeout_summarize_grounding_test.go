@@ -79,3 +79,43 @@ func TestNormalizeCoordinatorCitedEvidence_handle(t *testing.T) {
 		t.Fatalf("code=%q want grounded handle citation", result.Code)
 	}
 }
+
+func TestNormalizeCoordinatorCitedEvidence_pathLineAndHandleLine(t *testing.T) {
+	t.Parallel()
+	body := `{"path":"index.html","content":"1|<!DOCTYPE html>\n2|<h1>Hello</h1>","offset":1,"end_line":2,"limit":2}`
+	msgs := []api.Message{
+		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
+			{Name: "read", ID: "r1", Args: map[string]any{"path": "index.html", "offset": 1, "limit": 2}},
+		}},
+		{Role: api.MessageRoleTool, Content: body, ToolResult: &api.ToolResult{
+			Content: body, Outcome: api.ToolResultOutcomeCompleted,
+		}},
+	}
+	ev := guidance.CloseoutEvidence{Ledger: ledgertest.BuildFromMessages("", msgs)}
+
+	report := guidance.CoordinatorCompletionReport{
+		Synthesis: "Verified index.html.",
+		CitedEvidence: []guidance.CoordinatorCitedEvidence{
+			{Evidence: "index.html:1", Excerpt: "<!DOCTYPE html>"},
+			{Path: "index.html:2", Excerpt: "<h1>Hello</h1>"},
+			{Evidence: "read#1:2", Excerpt: "<h1>Hello</h1>"},
+		},
+	}
+	report.Normalize()
+	if len(report.CitedEvidence) != 3 {
+		t.Fatalf("expected 3 normalized citations, got %#v", report.CitedEvidence)
+	}
+	if report.CitedEvidence[0].Evidence != "" || report.CitedEvidence[0].Path != "index.html" || report.CitedEvidence[0].Line != 1 {
+		t.Fatalf("unexpected first normalized citation: %#v", report.CitedEvidence[0])
+	}
+	if report.CitedEvidence[1].Path != "index.html" || report.CitedEvidence[1].Line != 2 {
+		t.Fatalf("unexpected second normalized citation: %#v", report.CitedEvidence[1])
+	}
+	if report.CitedEvidence[2].Evidence != "read#1" || report.CitedEvidence[2].Line != 2 {
+		t.Fatalf("unexpected third normalized citation: %#v", report.CitedEvidence[2])
+	}
+	eval := guidance.EvaluateCloseoutCitations(evidence.CitationRoots{}, "implement_synthesis", report, ev)
+	if eval.Code != "" {
+		t.Fatalf("code=%q offenders=%v want grounded citations", eval.Code, eval.Offenders)
+	}
+}

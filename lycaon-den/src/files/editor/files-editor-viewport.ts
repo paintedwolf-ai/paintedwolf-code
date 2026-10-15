@@ -189,6 +189,7 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
       ];
       const state = createSourceEditorState({
             surface: "files",
+            label: `Contents of ${path}`,
             doc: draft,
             language: languageExtensionForPath(path),
             wordWrap: prefs.wordWrap,
