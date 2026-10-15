@@ -26,7 +26,7 @@ pub(super) fn rollout_admits(bucket: u8, manifest_age_secs: Option<u64>) -> bool
 }
 
 pub(super) fn draw_rollout_bucket() -> u8 {
-    use rand::Rng;
+    use rand::RngExt;
     rand::rng().random_range(0..ROLLOUT_BUCKETS)
 }
 
