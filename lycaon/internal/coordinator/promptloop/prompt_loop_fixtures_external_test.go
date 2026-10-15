@@ -207,17 +207,20 @@ func (r richDenyRules) Evaluate(context.Context, rules.EvalContext) (*rules.Rule
 	return r.out, nil
 }
 
-type usageReportingLLM struct{ usage modelcall.TokenUsage }
+type usageReportingLLM struct {
+	usage        modelcall.TokenUsage
+	attemptUsage *modelcall.TokenUsage
+}
 
 func (u usageReportingLLM) Complete(context.Context, modelcall.CompletionRequest) (*modelcall.Completion, error) {
-	return &modelcall.Completion{Content: "done", Usage: u.usage}, nil
+	return &modelcall.Completion{Content: "done", Usage: u.usage, AttemptUsage: u.attemptUsage}, nil
 }
 
 func (u usageReportingLLM) Stream(_ context.Context, _ modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
 	ch := make(chan modelcall.StreamChunk, 1)
 	go func() {
 		defer close(ch)
-		ch <- modelcall.StreamChunk{Content: "done", Usage: u.usage, Done: true}
+		ch <- modelcall.StreamChunk{Content: "done", Usage: u.usage, AttemptUsage: u.attemptUsage, Done: true}
 	}()
 	return ch, nil
 }

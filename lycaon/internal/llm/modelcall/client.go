@@ -147,10 +147,11 @@ type Completion struct {
 	ReasoningDetails []json.RawMessage
 	ToolCalls        []api.ToolCall
 	Usage            TokenUsage
-	AttemptUsage     *TokenUsage `json:"-" yaml:"-"`
-	ProviderID       string
-	Model            string
-	Fallback         bool
+	// A nil AttemptUsage uses Usage; an empty value means unreported.
+	AttemptUsage *TokenUsage `json:"-" yaml:"-"`
+	ProviderID   string
+	Model        string
+	Fallback     bool
 }
 
 // ModelReasoning projects replayable reasoning onto the transcript.
