@@ -413,10 +413,16 @@ class SigningHistoryTests(unittest.TestCase):
 
 
 class ActivatedHistoryTests(unittest.TestCase):
+    def setUp(self):
+        self.registry = SigningHistoryTests().registry()
+        patched = patch.object(release_baseline, "load_registry", return_value=self.registry)
+        patched.start()
+        self.addCleanup(patched.stop)
+
     def test_activation_survives_a_missing_github_mirror_and_later_pointer(self):
         from release_distribution import encoded
         from update_keys import release_binding
-        registry = release_baseline.load_registry()
+        registry = self.registry
         version = "1.0.2-rc3"
         manifest = {"version": version, "pub_date": "2026-10-03T12:00:00Z",
                     "update_keys": release_binding(registry, version)}

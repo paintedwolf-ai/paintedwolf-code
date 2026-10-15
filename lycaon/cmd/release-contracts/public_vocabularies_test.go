@@ -1,8 +1,9 @@
 package main
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func publicVocabularyFixture() treeRelease {
@@ -34,12 +35,33 @@ func TestPublicVocabularyUsesCatalogIdentities(t *testing.T) {
 			t.Errorf("%s removal passed", kind)
 		}
 	}
-	for _, file := range []string{"schemas/workflow_vocabulary.json", packsRoot + "/painted-wolf/platform/host/anchors/catalog.yaml"} {
+	for _, file := range []string{"schemas/workflow_vocabulary.json", packsRoot + "/painted-wolf/platform/host/anchors/catalog.yaml", packsRoot + "/painted-wolf/platform/tools/native-tools.yaml", packsRoot + "/painted-wolf/themes/contributions/themes/example.yaml"} {
 		raw := source[file]
 		source[file] = []byte("invalid")
 		if _, err := publicVocabularies(source); err == nil {
 			t.Errorf("invalid %s passed", file)
 		}
 		source[file] = raw
+	}
+}
+
+func TestPublicVocabularyRefusesMissingCatalogsAndDuplicateIdentifiers(t *testing.T) {
+	for _, file := range []string{"schemas/workflow_vocabulary.json", packsRoot + "/painted-wolf/platform/tools/native-tools.yaml", packsRoot + "/painted-wolf/platform/host/anchors/catalog.yaml"} {
+		source := publicVocabularyFixture()
+		delete(source, file)
+		if _, err := publicVocabularies(source); err == nil {
+			t.Errorf("missing %s passed", file)
+		}
+	}
+	for file, raw := range map[string]string{
+		"schemas/workflow_vocabulary.json":                                   `{"entries":[{"id":"same"},{"id":"same"}]}`,
+		packsRoot + "/painted-wolf/platform/host/anchors/catalog.yaml":       "anchors: [{id: same}, {id: same}]",
+		packsRoot + "/painted-wolf/themes/contributions/themes/example.yaml": "name: Missing ID",
+	} {
+		source := publicVocabularyFixture()
+		source[file] = []byte(raw)
+		if _, err := publicVocabularies(source); err == nil {
+			t.Errorf("invalid identities in %s passed", file)
+		}
 	}
 }

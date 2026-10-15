@@ -101,6 +101,14 @@ func TestCheckAllDiscoversStableWorkflowBaselines(t *testing.T) {
 	if !strings.Contains(report, "v1.0.1 ") || !strings.Contains(report, "security-survey/security-survey") || strings.Contains(report, "Stable baseline: v0.9.0") || strings.Contains(report, "Stable baseline: v1.0.1-rc.1") {
 		t.Fatalf("wrong baseline discovery: %s", report)
 	}
+	if code := run(t.Context(), repo, []string{"--check-all", "--published-versions", `["1.0.1"]`}, &stdout, &stderr); code != 0 {
+		t.Fatalf("published migration check exit=%d: %s", code, &stderr)
+	}
+	for _, raw := range []string{"null", "{}", `["0.9.0"]`, `["invalid"]`, `["1.0.2"]`} {
+		if code := run(t.Context(), repo, []string{"--check-all", "--published-versions", raw}, &stdout, &stderr); code != 1 {
+			t.Fatalf("invalid published sources %s exit=%d", raw, code)
+		}
+	}
 	if code := run(t.Context(), repo, []string{"--check-all", "--check"}, &stdout, &stderr); code != 2 {
 		t.Fatalf("conflicting flags exit=%d", code)
 	}

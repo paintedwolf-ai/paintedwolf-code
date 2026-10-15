@@ -1,9 +1,10 @@
 package main
 
 import (
-	"github.com/lycaon/lycaon/internal/testutil"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestPublishedMigrationIdentitiesSurviveImplementationMoves(t *testing.T) {

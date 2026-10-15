@@ -2,9 +2,10 @@ package main
 
 import (
 	"bytes"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestSuiteMembershipHasItsOwnVersionAndAPIRequirement(t *testing.T) {
