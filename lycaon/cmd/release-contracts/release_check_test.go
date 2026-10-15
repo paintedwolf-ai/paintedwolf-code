@@ -79,6 +79,7 @@ func TestCheckAllDiscoversStableWorkflowBaselines(t *testing.T) {
 	testutil.FailErr(t, "read valid host fact vocabulary", err)
 	files[capabilityPath] = facts
 	files["schemas/guidance_registry.json"] = []byte(`{"hint_codes":{}}`)
+	files["schemas/agent-public-retirements.json"] = []byte(`{"format_version":1,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}}`)
 	for rel, raw := range publicVocabularyFixture() {
 		files[rel] = raw
 	}
@@ -113,9 +114,10 @@ func TestCheckAllDiscoversStableWorkflowBaselines(t *testing.T) {
 		t.Fatalf("conflicting flags exit=%d", code)
 	}
 	testutil.FailErr(t, "change candidate guidance", os.WriteFile(filepath.Join(repo, filepath.FromSlash(securityPack), "guidance", "coordinator-security-plan.md"), []byte("drift\n"), 0o600))
+	stdout.Reset()
 	stderr.Reset()
-	if code := run(t.Context(), repo, []string{"--check-all"}, &stdout, &stderr); code != 1 || !strings.Contains(stderr.String(), "without a version bump") {
-		t.Fatalf("drift exit=%d: %s", code, &stderr)
+	if code := run(t.Context(), repo, []string{"--check-all"}, &stdout, &stderr); code != 1 || !strings.Contains(stderr.String(), "without a version bump") || !strings.Contains(stdout.String(), "(dirty)") {
+		t.Fatalf("drift exit=%d stdout=%s stderr=%s", code, &stdout, &stderr)
 	}
 }
 

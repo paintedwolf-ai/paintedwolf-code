@@ -32,7 +32,7 @@ func TestAgentVocabularyRequiresStableSignaturesAndRetirementSuccessors(t *testi
 			if tc.missing {
 				delete(after, "new")
 			}
-			err := checkVocabulary("host fact", before, after, retired, true)
+			err := checkVocabulary("host fact", before, after, retired)
 			if tc.want == "" {
 				testutil.FailErr(t, "check fact lineage", err)
 			} else if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -40,13 +40,16 @@ func TestAgentVocabularyRequiresStableSignaturesAndRetirementSuccessors(t *testi
 			}
 		})
 	}
-	if err := checkVocabulary("rejection code", map[string]struct{}{}, map[string]struct{}{}, map[string][]string{"OLD": {}}, false); err == nil {
+	if err := checkVocabulary("rejection code", map[string]codeSignature{}, map[string]codeSignature{}, map[string][]string{"OLD": {}}); err == nil {
 		t.Fatal("retirement without successor passed")
+	}
+	if err := checkVocabulary("rejection code", map[string]codeSignature{"EXAMPLE": {Category: "gate", Emit: "reject"}}, map[string]codeSignature{"EXAMPLE": {Category: "gate", Emit: "kick"}}, map[string][]string{}); err == nil || !strings.Contains(err.Error(), "signature") {
+		t.Fatalf("changed rejection code meaning passed: %v", err)
 	}
 }
 
 func TestAgentVocabularyReadsStructuredDeclarations(t *testing.T) {
-	tree := treeRelease{capabilityPath: []byte("host_facts:\n - name: observed\n   type: bool\n   observation: host\n"), "schemas/guidance_registry.json": []byte(`{"hint_codes":{"EXAMPLE":{"summary":"display copy"}}}`)}
+	tree := treeRelease{capabilityPath: []byte("host_facts:\n - name: observed\n   type: bool\n   observation: host\n"), "schemas/guidance_registry.json": []byte(`{"hint_codes":{"EXAMPLE":{"category":"gate","emit":"reject","severity":"error","summary":"display copy"}}}`)}
 	facts, err := factVocabulary(tree)
 	testutil.FailErr(t, "read facts", err)
 	if facts["observed"].Observation != "host" || facts["observed"].Type != "bool" {
@@ -54,8 +57,8 @@ func TestAgentVocabularyReadsStructuredDeclarations(t *testing.T) {
 	}
 	codes, err := codeVocabulary(tree)
 	testutil.FailErr(t, "read codes", err)
-	if _, ok := codes["EXAMPLE"]; !ok {
-		t.Fatal("missing structured rejection code")
+	if codes["EXAMPLE"].Category != "gate" || codes["EXAMPLE"].Emit != "reject" {
+		t.Fatalf("missing structured rejection code signature: %+v", codes["EXAMPLE"])
 	}
 	tree[capabilityPath] = append(tree[capabilityPath], []byte(" - name: observed\n   type: string\n")...)
 	if _, err := factVocabulary(tree); err == nil {
@@ -83,8 +86,9 @@ func TestRetirementCatalogIsClosedAndVersioned(t *testing.T) {
 	}
 	_, err := parseRetirements([]byte(`{"format_version":1,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}}`))
 	testutil.FailErr(t, "parse closed retirement catalog", err)
-	source := treeRelease{"schemas/agent-public-retirements.json": []byte(`{"format_version":1,"vocabularies":{"host_facts":{"paintedwolf.forgotten":["paintedwolf.successor"]},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}}`)}
-	if err := checkAgentVocabulary(source, source); err == nil || !strings.Contains(err.Error(), "released retirement") {
+	before := treeRelease{"schemas/agent-public-retirements.json": []byte(`{"format_version":1,"vocabularies":{"host_facts":{"paintedwolf.forgotten":["paintedwolf.successor"]},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}}`)}
+	after := treeRelease{"schemas/agent-public-retirements.json": []byte(`{"format_version":1,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}}`)}
+	if err := checkAgentVocabulary(before, after); err == nil || !strings.Contains(err.Error(), "released retirement") {
 		t.Fatalf("retirement removal: %v", err)
 	}
 }

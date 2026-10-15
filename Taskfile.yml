@@ -1749,10 +1749,6 @@ tasks:
 
   openapi:diff:
     desc: 'Report OpenAPI breaking changes against the release-review baseline'
-    sources:
-      - docs/openapi.yaml
-      - docs/openapi/baseline-bundle.yaml
-      - '{{.SCRIPTS_DIR}}/diff-openapi.sh'
     cmds:
       - bash {{.SCRIPTS_DIR}}/diff-openapi.sh {{.CLI_ARGS}}
 

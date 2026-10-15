@@ -118,7 +118,7 @@ func checkAnchorVersions(release, current releaseSource) error {
 		}
 		for name, variable := range prior.Envelope.Vars {
 			current, ok := now.Envelope.Vars[name]
-			if !ok || current.Type != variable.Type || (!variable.Required && current.Required) {
+			if !ok || current.Type != variable.Type || current.Required != variable.Required {
 				breaking = true
 			}
 		}

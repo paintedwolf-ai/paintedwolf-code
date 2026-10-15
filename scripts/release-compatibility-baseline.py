@@ -39,7 +39,18 @@ def stable_version(release):
     return published_version(release, "stable")
 
 
-def resolve(release, candidate_ref="HEAD"):
+def same_release_commit(source_ref, tag):
+    try:
+        shas = subprocess.check_output(
+            ["git", "rev-parse", "--verify", source_ref + "^{commit}", "refs/tags/" + tag + "^{commit}"],
+            text=True,
+        ).splitlines()
+    except (subprocess.CalledProcessError, OSError):
+        return False
+    return len(shas) == 2 and bool(re.fullmatch(r"[0-9a-f]{40}", shas[0])) and shas[0] == shas[1]
+
+
+def resolve(release, candidate_ref="HEAD", publish=True):
     version = stable_version(release)
     tag = release["tag_name"]
     def git(*arguments):
@@ -51,7 +62,7 @@ def resolve(release, candidate_ref="HEAD"):
     candidate = git("show", candidate_ref + ":VERSION")
     if compare(version, parse(candidate)) > 0:
         raise ValueError("candidate is older than the published stable release")
-    if compare(version, parse(candidate)) == 0 and git("rev-parse", candidate_ref) != sha:
+    if publish and compare(version, parse(candidate)) == 0 and git("rev-parse", candidate_ref) != sha:
         raise ValueError("candidate reuses a published product version at another commit")
     return tag, sha
 
@@ -145,12 +156,21 @@ def check_source_versions(source_ref):
     return product
 
 
-def check_progression(candidate, releases, channel_release, source_ref):
+def check_progression(candidate, releases, channel_release, source_ref, publish=True):
     selected = parse(candidate)
     if selected.major < 1 or "+" in candidate:
         raise ValueError("release VERSION must be post-v1 without build metadata")
-    if channel_release is not None and compare(selected, published_version(channel_release, selected.channel)) <= 0:
-        raise ValueError("release must be newer than the last publication in its channel")
+    rerun = None
+    def allow_equal_version():
+        nonlocal rerun
+        if rerun is None:
+            rerun = (not publish) or same_release_commit(source_ref, "v" + candidate)
+        return rerun
+    if channel_release is not None:
+        channel_version = published_version(channel_release, selected.channel)
+        ordering = compare(selected, channel_version)
+        if ordering < 0 or (ordering == 0 and not allow_equal_version()):
+            raise ValueError("release must be newer than the last publication in its channel")
     candidate_build = parse_release_build(subprocess.check_output(
         ["git", "show", source_ref + ":RELEASE_BUILD"], text=True).strip())
     for release in releases:
@@ -159,6 +179,8 @@ def check_progression(candidate, releases, channel_release, source_ref):
         channel = "preview" if release.get("prerelease") is True else "stable"
         prior = published_version(release, channel)
         if compare(selected, prior) == 0:
+            if allow_equal_version():
+                continue
             raise ValueError("release version has already been published")
         raw = subprocess.check_output(["git", "show", "refs/tags/" + release["tag_name"] + ":RELEASE_BUILD"], text=True).strip()
         if candidate_build <= parse_release_build(raw):
@@ -235,34 +257,48 @@ def channel_mirror(releases, channel):
     return selected
 
 
+def pin_baseline(source_ref, base_url, releases_file, latest_mirror, publish=True):
+    candidate = check_source_versions(source_ref)
+    release = published_stable(latest_mirror, base_url)
+    pages = json.loads(releases_file.read_text())
+    releases = [row for page in pages for row in page]
+    releases += activated_history(releases, base_url)
+    release = channel_mirror(releases + [release], "stable")
+    tag, sha = resolve(release, source_ref, publish=publish)
+    channel = parse(candidate).channel
+    preview = published_feed(channel_mirror(releases, "preview"), base_url, "preview")
+    latest = channel_mirror(releases + [release], "stable") if channel == "stable" else preview
+    history = releases + [release] + ([preview] if preview is not None else [])
+    check_progression(candidate, history, latest, source_ref, publish=publish)
+    check_published_keys(source_ref, history)
+    versions = sorted({row["tag_name"][1:] for row in history if row.get("draft") is False
+                       and compare(parse(row["tag_name"][1:]), parse("1.0.0")) >= 0})
+    lines = [
+        "baseline_tag=" + tag,
+        "baseline_sha=" + sha,
+        "published_versions=" + json.dumps(versions, separators=(",", ":")),
+    ]
+    if "activation_sha256" in release:
+        lines.append("baseline_activation_sha256=" + release["activation_sha256"])
+    if "feed_manifest_sha256" in release:
+        lines.append("baseline_manifest_sha256=" + release["feed_manifest_sha256"])
+    return "\n".join(lines) + "\n"
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source_ref", nargs="?", default="HEAD")
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--releases-file", type=Path, required=True)
+    parser.add_argument("--publish", choices=("true", "false"), default="true")
     args = parser.parse_args()
     try:
-        candidate = check_source_versions(args.source_ref)
-        release = published_stable(json.load(sys.stdin), args.base_url)
-        pages = json.loads(args.releases_file.read_text())
-        releases = [row for page in pages for row in page]
-        releases += activated_history(releases, args.base_url)
-        release = channel_mirror(releases + [release], "stable")
-        tag, sha = resolve(release, args.source_ref)
-        channel = parse(candidate).channel
-        preview = published_feed(channel_mirror(releases, "preview"), args.base_url, "preview")
-        latest = channel_mirror(releases + [release], "stable") if channel == "stable" else preview
-        history = releases + [release] + ([preview] if preview is not None else [])
-        check_progression(candidate, history, latest, args.source_ref)
-        check_published_keys(args.source_ref, history)
+        sys.stdout.write(pin_baseline(
+            args.source_ref,
+            args.base_url,
+            args.releases_file,
+            json.load(sys.stdin),
+            publish=args.publish == "true",
+        ))
     except (ValueError, KeyError, TypeError, AttributeError, OSError, subprocess.CalledProcessError) as error:
         sys.exit("error: " + str(error))
-    print("baseline_tag=" + tag)
-    print("baseline_sha=" + sha)
-    versions = sorted({row["tag_name"][1:] for row in history if row.get("draft") is False
-                       and compare(parse(row["tag_name"][1:]), parse("1.0.0")) >= 0})
-    print("published_versions=" + json.dumps(versions, separators=(",", ":")))
-    if "activation_sha256" in release:
-        print("baseline_activation_sha256=" + release["activation_sha256"])
-    if "feed_manifest_sha256" in release:
-        print("baseline_manifest_sha256=" + release["feed_manifest_sha256"])

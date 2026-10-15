@@ -69,6 +69,9 @@ func checkPackAPI(root string, manifest extpacks.Manifest) error {
 			return err
 		}
 		rel = filepath.ToSlash(rel)
+		if isIgnoredPackFile(entry.Name()) {
+			return nil
+		}
 		if entry.Type()&os.ModeSymlink != 0 {
 			return fmt.Errorf("bundled pack contains symlink %s", rel)
 		}

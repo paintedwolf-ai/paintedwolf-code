@@ -29,13 +29,16 @@ func TestSelectedReleaseTagPinsEverySourceCheckout(t *testing.T) {
 				continue
 			}
 			if step.With["path"] == ".release-controller" {
-				if step.With["ref"] != "${{ github.workflow_sha }}" {
-					t.Errorf("%s controller is not pinned to workflow source", name)
+				if step.With["ref"] != "refs/heads/main" {
+					t.Errorf("%s controller is not pinned to refs/heads/main", name)
 				}
 				continue
 			}
 			count++
 			if name == "classify" && count == 1 {
+				if step.With["ref"] != "refs/heads/main" {
+					t.Errorf("classify controller checkout uses %q, want refs/heads/main", step.With["ref"])
+				}
 				continue
 			}
 			want := "${{ needs.classify.outputs.source_sha }}"
@@ -152,7 +155,7 @@ func TestReleaseCompatibilityCannotBeSkippedForEitherChannel(t *testing.T) {
 	for _, step := range jobs["classify"].Steps {
 		if strings.Contains(step.Run, "/releases/latest") {
 			stable = true
-			if step.If != "" || step.Continue || !strings.Contains(step.Run, "release-compatibility-baseline.py") || step.Env["SOURCE_SHA"] != "${{ steps.source.outputs.source_sha }}" {
+			if step.If != "" || step.Continue || !strings.Contains(step.Run, "release-compatibility-baseline.py") || !strings.Contains(step.Run, `--publish "${PUBLISH}"`) || step.Env["SOURCE_SHA"] != "${{ steps.source.outputs.source_sha }}" {
 				t.Fatal("published stable baseline is not mandatory for the selected source")
 			}
 		}
@@ -172,7 +175,12 @@ func TestReleaseCompatibilityCannotBeSkippedForEitherChannel(t *testing.T) {
 		}
 	}
 	for _, step := range jobs["preflight"].Steps {
-		corpus = corpus || strings.Contains(step.Run, "--require-corpus")
+		if strings.Contains(step.Run, "release:preflight") {
+			if step.Env["BASELINE_SHA"] != "${{ needs.classify.outputs.baseline_sha }}" || strings.Count(step.Run, `--baseline-ref "${BASELINE_SHA}"`) < 2 {
+				t.Fatal("preflight does not pass pinned baseline_sha to both publish and dry-run paths")
+			}
+			corpus = corpus || strings.Contains(step.Run, "--require-corpus")
+		}
 	}
 	for _, job := range []string{"preflight", "build-release"} {
 		if !slices.Contains(hostedNeeds(t, jobs[job]), "compatibility") {

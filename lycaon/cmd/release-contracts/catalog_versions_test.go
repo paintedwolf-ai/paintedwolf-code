@@ -36,14 +36,15 @@ func TestSuiteMembershipHasItsOwnVersionAndAPIRequirement(t *testing.T) {
 
 func TestAnchorContractChangesAdvanceTheirInterpretationVersion(t *testing.T) {
 	const file = packsRoot + "/painted-wolf/platform/host/anchors/catalog.yaml"
-	raw := "schema_version: '2.0'\nanchors:\n - id: gate.blocked\n   surface: coordinator\n   planes: [inform]\n   envelope:\n     vars:\n       detail: {type: string}\n"
+	raw := "schema_version: '2.0'\nanchors:\n - id: gate.blocked\n   surface: coordinator\n   planes: [inform]\n   envelope:\n     vars:\n       detail: {type: string}\n       mandate: {type: string, required: true}\n"
 	before := treeRelease{file: []byte(raw)}
 	for _, tc := range []struct{ name, version, old, next, want string }{
 		{name: "unchanged", version: "2.0"},
 		{name: "display copy", version: "2.0", old: "   surface:", next: "   description: changed copy\n   surface:"},
-		{name: "type change", version: "2.1", old: "type: string", next: "type: bool", want: "major"},
-		{name: "required field", version: "2.1", old: "type: string", next: "type: string, required: true", want: "major"},
-		{name: "breaking epoch", version: "3.0", old: "type: string", next: "type: bool"},
+		{name: "type change", version: "2.1", old: "detail: {type: string}", next: "detail: {type: bool}", want: "major"},
+		{name: "required field", version: "2.1", old: "detail: {type: string}", next: "detail: {type: string, required: true}", want: "major"},
+		{name: "optionalized required field", version: "2.1", old: "mandate: {type: string, required: true}", next: "mandate: {type: string}", want: "major"},
+		{name: "breaking epoch", version: "3.0", old: "detail: {type: string}", next: "detail: {type: bool}"},
 		{name: "new anchor without version", version: "2.0", old: "anchors:\n", next: "anchors:\n - id: added\n", want: "advance"},
 		{name: "new anchor with minor", version: "2.1", old: "anchors:\n", next: "anchors:\n - id: added\n"},
 		{name: "downgrade", version: "1.9", want: "regressed"},

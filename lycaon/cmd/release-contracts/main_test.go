@@ -132,6 +132,11 @@ func TestRunSealsATaggedReleaseFromGit(t *testing.T) {
 	args := []string{"painted-wolf/security-survey", "security-survey", "v1.0.0"}
 
 	var stdout, stderr bytes.Buffer
+	outRepo := t.TempDir()
+	gittest.Run(t, repo, "clone", repo, outRepo)
+	if code := run(t.Context(), t.TempDir(), append([]string{"--repo-root", outRepo}, args...), &stdout, &stderr); code != 0 {
+		t.Fatalf("seal with --repo-root exit %d: %s", code, stderr.String())
+	}
 	if code := run(t.Context(), repo, args, &stdout, &stderr); code != 0 {
 		t.Fatalf("seal exit %d: %s", code, stderr.String())
 	}
@@ -210,4 +215,7 @@ func TestVerifyArchiveRejectsExtraAndLinkedFiles(t *testing.T) {
 			t.Fatal("unsealed archive content passed")
 		}
 	}
+	root := t.TempDir()
+	testutil.FailErr(t, "create OS metadata in archive", os.WriteFile(filepath.Join(root, ".DS_Store"), []byte("ignored\n"), 0o600))
+	testutil.FailErr(t, "ignore OS metadata in archive", verifyArchive(root, map[string][]byte{}))
 }

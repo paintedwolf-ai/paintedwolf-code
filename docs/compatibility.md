@@ -148,19 +148,26 @@ Published preview database revisions remain supported upgrade sources even thoug
 they do not become the stable compatibility baseline.
 
 The first release stages check channel progression, packaging versions, release notes,
-and static corpus integrity before native setup or application builds. The candidate
-must be newer than every publication in its channel, and `RELEASE_BUILD` must
-exceed every published build across both channels. Signed pointers, all published GitHub releases, and immutable activation receipts
+and static corpus integrity before native setup or application builds. When publishing,
+the candidate must be newer than every publication in its channel (or match the exact
+tagged commit on a rerun after partial publication), and `RELEASE_BUILD` must
+exceed every other published build across both channels; dry runs still reject downgrades
+and reused versions at different commits. Signed pointers, all published GitHub releases, and immutable activation receipts
 count; drafts and unactivated tags do not. Activation receipts retain obligations
-when a GitHub mirror fails or a channel pointer later advances. SemVer precedence applies to preview names.
+when a GitHub mirror fails or a channel pointer later advances. SemVer 2.0 precedence applies to preview names: use dot-separated numeric prerelease identifiers (`-rc.N`) so multi-digit candidates sort numerically (`1.0.2-rc.10 > 1.0.2-rc.9`) across both release gates and the native updater.
 Full database shape and upgrade rehearsal checks follow with the built candidate.
 
-The release controller owns these checks and reads the selected candidate tree,
-so selecting an older qualified source cannot select an older compatibility gate.
-OAR fact signatures cannot change under a surviving name. Removed facts and
+The release controller is pinned to `refs/heads/main` and reads the selected candidate tree
+(including [`agent-public-retirements.json`](../schemas/agent-public-retirements.json)),
+so neither a tag push nor an older qualified source can select an older compatibility gate.
+OAR fact signatures and rejection-code meanings (`category`, `emit`, `severity`) cannot change under a surviving name. Removed facts and
 rejection codes require named successors in
 [`agent-public-retirements.json`](../schemas/agent-public-retirements.json), and
-retired names cannot return. These checks validate structured contracts; they do
+retired names cannot return; retiring a vocabulary item with a named successor does not
+force a major bump of `painted-wolf/platform`, preserving `^1.0.0` compatibility for
+existing extension locks. Conversely, any pack whose `policy/*.yaml` requires a host fact
+absent from the baseline release must advance at least a minor version and raise both its
+`extension_api` and `painted-wolf/platform` floors above the baseline. These checks validate structured contracts; they do
 not infer behavioral equivalence from display copy.
 
 ### Release coverage

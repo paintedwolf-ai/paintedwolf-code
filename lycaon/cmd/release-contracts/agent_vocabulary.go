@@ -5,11 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"path/filepath"
 	"reflect"
 
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"gopkg.in/yaml.v3"
 )
 
@@ -28,8 +25,14 @@ type factSignature struct {
 	Observation string `yaml:"observation"`
 }
 
+type codeSignature struct {
+	Category string `json:"category"`
+	Emit     string `json:"emit"`
+	Severity string `json:"severity"`
+}
+
 func checkAgentVocabulary(release releaseSource, current releaseSource) error {
-	raw, err := os.ReadFile(filepath.Join(configlayout.FindModuleRoot(), "..", "schemas", "agent-public-retirements.json"))
+	raw, err := current.show("schemas/agent-public-retirements.json")
 	if err != nil {
 		return err
 	}
@@ -54,8 +57,8 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 			return err
 		}
 		for kind, names := range previous.Vocabularies {
-			for name := range names {
-				if _, ok := retired.Vocabularies[kind][name]; !ok {
+			for name, successors := range names {
+				if !reflect.DeepEqual(retired.Vocabularies[kind][name], successors) {
 					return fmt.Errorf("released retirement %s %s was removed", kind, name)
 				}
 			}
@@ -69,7 +72,7 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 	if err != nil {
 		return err
 	}
-	if err := checkVocabulary("host fact", before, after, retired.Vocabularies["host_facts"], true); err != nil {
+	if err := checkVocabulary("host fact", before, after, retired.Vocabularies["host_facts"]); err != nil {
 		return err
 	}
 	oldCodes, err := codeVocabulary(release)
@@ -80,7 +83,7 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 	if err != nil {
 		return err
 	}
-	if err := checkVocabulary("rejection code", oldCodes, newCodes, retired.Vocabularies["rejection_codes"], false); err != nil {
+	if err := checkVocabulary("rejection code", oldCodes, newCodes, retired.Vocabularies["rejection_codes"]); err != nil {
 		return err
 	}
 	beforePublic, err := publicVocabularies(release)
@@ -92,7 +95,7 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 		return err
 	}
 	for _, kind := range []string{"tools", "workflow_terms", "anchors", "themes"} {
-		if err := checkVocabulary(kind, beforePublic[kind], afterPublic[kind], retired.Vocabularies[kind], true); err != nil {
+		if err := checkVocabulary(kind, beforePublic[kind], afterPublic[kind], retired.Vocabularies[kind]); err != nil {
 			return err
 		}
 	}
@@ -120,25 +123,24 @@ func factVocabulary(source releaseSource) (map[string]factSignature, error) {
 	return result, nil
 }
 
-func codeVocabulary(source releaseSource) (map[string]struct{}, error) {
+func codeVocabulary(source releaseSource) (map[string]codeSignature, error) {
 	raw, err := source.show("schemas/guidance_registry.json")
 	if err != nil {
 		return nil, err
 	}
 	var document struct {
-		Codes map[string]json.RawMessage `json:"hint_codes"`
+		Codes map[string]codeSignature `json:"hint_codes"`
 	}
 	if err := json.Unmarshal(raw, &document); err != nil {
 		return nil, err
 	}
-	result := map[string]struct{}{}
-	for code := range document.Codes {
-		result[code] = struct{}{}
+	if document.Codes == nil {
+		return map[string]codeSignature{}, nil
 	}
-	return result, nil
+	return document.Codes, nil
 }
 
-func checkVocabulary[T any](kind string, before, after map[string]T, retired map[string][]string, signatures bool) error {
+func checkVocabulary[T any](kind string, before, after map[string]T, retired map[string][]string) error {
 	for name, successors := range retired {
 		if len(successors) == 0 {
 			return fmt.Errorf("retired %s %s has no named successor", kind, name)
@@ -155,7 +157,7 @@ func checkVocabulary[T any](kind string, before, after map[string]T, retired map
 	for name, prior := range before {
 		current, exists := after[name]
 		if exists {
-			if signatures && !reflect.DeepEqual(prior, current) {
+			if !reflect.DeepEqual(prior, current) {
 				return fmt.Errorf("%s %s changed its signature", kind, name)
 			}
 			continue

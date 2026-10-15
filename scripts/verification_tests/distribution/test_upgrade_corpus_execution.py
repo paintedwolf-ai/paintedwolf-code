@@ -345,6 +345,18 @@ class ReleaseProgressionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "without build metadata"):
             release_baseline.check_progression("1.0.2+another", [], None, "source")
 
+    def test_dry_runs_and_same_commit_reruns_preserve_progression_safety(self):
+        published = [self.release("1.0.1"), self.release("1.0.2")]
+        with patch.object(release_baseline, "same_release_commit", return_value=True), \
+             patch.object(release_baseline.subprocess, "check_output", side_effect=["20", "19", "20", "19"]):
+            release_baseline.check_progression("1.0.2", published, published[1], "source", publish=True)
+            release_baseline.check_progression("1.0.2", published, published[1], "source", publish=False)
+        with patch.object(release_baseline, "same_release_commit", return_value=False), \
+             patch.object(release_baseline.subprocess, "check_output", side_effect=["20", "19"]):
+            release_baseline.check_progression("1.0.2", published, published[1], "source", publish=False)
+            with self.assertRaisesRegex(ValueError, "newer than the last publication"):
+                release_baseline.check_progression("1.0.2", published, published[1], "source", publish=True)
+
 
 class SourceVersionTests(unittest.TestCase):
     def inputs(self):
@@ -454,3 +466,24 @@ class ActivatedHistoryTests(unittest.TestCase):
              patch.object(release_baseline, "read_public", side_effect=[b"{}", None]), \
              self.assertRaisesRegex(ValueError, "no immutable manifest"):
             release_baseline.activated_history([], "https://downloads.example")
+
+    def test_pin_baseline_merges_stable_preview_paginated_and_activated_sources(self):
+        with tempfile.TemporaryDirectory() as root:
+            releases_file = Path(root) / "releases.json"
+            releases_file.write_text(json.dumps([[PublishedStableBaselineTests.release]]), encoding="utf-8")
+            preview = {**PublishedStableBaselineTests.release, "tag_name": "v1.0.2-rc1", "prerelease": True}
+            activated = {**PublishedStableBaselineTests.release, "tag_name": "v1.0.2-rc2", "prerelease": True}
+            with patch.object(release_baseline, "check_source_versions", return_value="1.0.2-rc3"), \
+                 patch.object(release_baseline, "published_stable", return_value=PublishedStableBaselineTests.release), \
+                 patch.object(release_baseline, "published_feed", return_value=preview), \
+                 patch.object(release_baseline, "activated_history", return_value=[activated]), \
+                 patch.object(release_baseline, "resolve", return_value=("v1.0.1", "a" * 40)) as resolve, \
+                 patch.object(release_baseline, "check_progression") as progression, \
+                 patch.object(release_baseline, "check_published_keys") as keys:
+                out = release_baseline.pin_baseline(
+                    "selected", "https://downloads.example", releases_file, PublishedStableBaselineTests.release, publish=False
+                )
+            self.assertIn("baseline_tag=v1.0.1\nbaseline_sha=" + "a" * 40 + "\npublished_versions=[\"1.0.1\",\"1.0.2-rc1\",\"1.0.2-rc2\"]\n", out)
+            self.assertFalse(resolve.call_args.kwargs["publish"])
+            self.assertFalse(progression.call_args.kwargs["publish"])
+            self.assertEqual(len({row["tag_name"] for row in keys.call_args.args[1]}), 3)

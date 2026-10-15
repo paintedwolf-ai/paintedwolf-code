@@ -3,5 +3,5 @@ id: painted-wolf/platform
 name: Platform
 version: 1.1.0
 compatibility:
-  extension_api: "^1.0.0"
+  extension_api: "^1.1.0"
 feature: platform

@@ -44,6 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: refs/heads/main
           fetch-depth: 0
 
       - name: Validate release tag and source
@@ -86,12 +87,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          PUBLISH: ${{ steps.source.outputs.publish }}
           DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
         run: |
           set -euo pipefail
           gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" > "${RUNNER_TEMP}/published-releases.json"
           gh api "repos/${GITHUB_REPOSITORY}/releases/latest" \
-            | python3 scripts/release-compatibility-baseline.py "${SOURCE_SHA}" --base-url "${DOWNLOAD_BASE_URL}" --releases-file "${RUNNER_TEMP}/published-releases.json" >> "${GITHUB_OUTPUT}"
+            | python3 scripts/release-compatibility-baseline.py "${SOURCE_SHA}" --base-url "${DOWNLOAD_BASE_URL}" --releases-file "${RUNNER_TEMP}/published-releases.json" --publish "${PUBLISH}" >> "${GITHUB_OUTPUT}"
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -154,7 +156,7 @@ jobs:
       - name: Check out the release controller
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.workflow_sha }}
+          ref: refs/heads/main
           path: .release-controller
           fetch-depth: 0
           persist-credentials: false
@@ -174,14 +176,16 @@ jobs:
           PUBLISHED_VERSIONS: ${{ needs.classify.outputs.published_versions }}
         working-directory: .release-controller
         run: |
-          export PW_ARTIFACT_ROOT="$(python3 "${GITHUB_WORKSPACE}/scripts/artifact_paths.py" artifacts "${GITHUB_WORKSPACE}")"
+          PW_ARTIFACT_ROOT="$(python3 "${GITHUB_WORKSPACE}/scripts/artifact_paths.py" artifacts "${GITHUB_WORKSPACE}")"
+          export PW_ARTIFACT_ROOT
           ./task release:preflight -- --compatibility-only --source-root "${GITHUB_WORKSPACE}" --baseline-ref "${BASELINE_SHA}" --published-versions "${PUBLISHED_VERSIONS}"
       - name: Report OpenAPI compatibility
         env:
           BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}
         working-directory: .release-controller
         run: |
-          export PW_ARTIFACT_ROOT="$(python3 "${GITHUB_WORKSPACE}/scripts/artifact_paths.py" artifacts "${GITHUB_WORKSPACE}")"
+          PW_ARTIFACT_ROOT="$(python3 "${GITHUB_WORKSPACE}/scripts/artifact_paths.py" artifacts "${GITHUB_WORKSPACE}")"
+          export PW_ARTIFACT_ROOT
           ./task openapi:diff -- --source-root "${GITHUB_WORKSPACE}" --baseline-ref "${BASELINE_SHA}"
       - uses: ./.github/actions/verification-evidence
         if: always()
@@ -207,9 +211,9 @@ jobs:
           BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}
         run: |
           if [[ "${PUBLISH}" == true ]]; then
-            ./task release:preflight -- --require-corpus
+            ./task release:preflight -- --require-corpus --baseline-ref "${BASELINE_SHA}"
           else
-            ./task release:preflight
+            ./task release:preflight -- --baseline-ref "${BASELINE_SHA}"
           fi
       - uses: ./.github/actions/verification-evidence
         if: always()

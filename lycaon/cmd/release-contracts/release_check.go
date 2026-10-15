@@ -23,7 +23,11 @@ func checkReleaseCompatibility(ctx context.Context, repoRoot, baseline string, o
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "Release compatibility source: %s\n", bytes.TrimSpace(source))
+	dirtySuffix := ""
+	if status, statusErr := git.run("status", "--porcelain", "--untracked-files=normal"); statusErr == nil && len(bytes.TrimSpace(status)) > 0 {
+		dirtySuffix = " (dirty)"
+	}
+	fmt.Fprintf(out, "Release compatibility source: %s%s\n", bytes.TrimSpace(source), dirtySuffix)
 	if err := checkPackAPIs(repoRoot, out); err != nil {
 		return err
 	}
@@ -189,6 +193,10 @@ func (d diskRelease) show(rel string) ([]byte, error) {
 	return root.ReadFile(filepath.FromSlash(rel))
 }
 
+func isIgnoredPackFile(name string) bool {
+	return name == ".DS_Store" || name == "Thumbs.db" || name == "Desktop.ini" || strings.HasPrefix(name, "._")
+}
+
 func (d diskRelease) list(dir string) ([]string, error) {
 	entries, err := os.ReadDir(filepath.Join(d.root, filepath.FromSlash(dir)))
 	if os.IsNotExist(err) {
@@ -199,7 +207,7 @@ func (d diskRelease) list(dir string) ([]string, error) {
 	}
 	var names []string
 	for _, entry := range entries {
-		if !entry.IsDir() {
+		if !entry.IsDir() && !isIgnoredPackFile(entry.Name()) {
 			names = append(names, entry.Name())
 		}
 	}
@@ -215,12 +223,16 @@ func (g gitRelease) paths(dir string) ([]string, error) {
 }
 
 func (d diskRelease) paths(dir string) ([]string, error) {
+	target := filepath.Join(d.root, filepath.FromSlash(dir))
+	if _, err := os.Stat(target); os.IsNotExist(err) {
+		return nil, nil
+	}
 	var paths []string
-	err := filepath.WalkDir(filepath.Join(d.root, filepath.FromSlash(dir)), func(file string, entry fs.DirEntry, err error) error {
+	err := filepath.WalkDir(target, func(file string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if !entry.IsDir() {
+		if !entry.IsDir() && !isIgnoredPackFile(entry.Name()) {
 			rel, err := filepath.Rel(d.root, file)
 			if err != nil {
 				return err

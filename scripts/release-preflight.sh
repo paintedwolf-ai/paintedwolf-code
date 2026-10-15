@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/artifact-paths.sh
 source "${ROOT}/scripts/artifact-paths.sh"
 REQUIRE_CORPUS=0
-BASELINE_REF=""
+BASELINE_REF="${BASELINE_SHA:-}"
 COMPATIBILITY_ONLY=0
 SOURCE_ROOT=""
 PUBLISHED_VERSIONS="[]"

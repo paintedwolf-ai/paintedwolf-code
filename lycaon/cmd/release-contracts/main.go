@@ -46,8 +46,8 @@ func run(ctx context.Context, repoRoot string, argv []string, stdout, stderr io.
 	if err := flags.Parse(argv); err != nil {
 		return 2
 	}
+	repoRoot = *sourceRoot
 	if *checkAll && !*checkOnly && flags.NArg() == 0 {
-		repoRoot = *sourceRoot
 		if err := checkReleaseCompatibility(ctx, repoRoot, *baseline, stdout); err != nil {
 			fmt.Fprintf(stderr, "release compatibility: %v\n", err)
 			return 1
@@ -173,7 +173,7 @@ func verifyArchive(archiveDir string, files map[string][]byte) error {
 		if err != nil {
 			return err
 		}
-		if entry.IsDir() {
+		if entry.IsDir() || isIgnoredPackFile(entry.Name()) {
 			return nil
 		}
 		if !entry.Type().IsRegular() {
