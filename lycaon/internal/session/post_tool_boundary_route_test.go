@@ -199,3 +199,50 @@ func TestSandboxRecoveryPreservesRunningJobDependency(t *testing.T) {
 		}
 	}
 }
+
+func TestSilentRefusalGuidanceUsesObservedTermination(t *testing.T) {
+	mgr := newPostToolGuidanceManager(t)
+	statuses := []struct{ reason, want string }{
+		{"timed_out", "The command reached its host deadline"}, {"stopped", "The command was stopped"},
+		{"exited", "The command exited unsuccessfully"}, {"", "The invocation did not finish successfully"},
+		{"future_reason", "The invocation did not finish successfully"},
+	}
+	for _, tool := range []string{"command", "verify", "command_output"} {
+		for _, tc := range statuses {
+			t.Run(tool+"/"+tc.reason, func(t *testing.T) {
+				for mask := 0; mask < 32; mask++ {
+					applied, failed, kernel, reported, running := mask&1 != 0, mask&2 != 0, mask&4 != 0, mask&8 != 0, mask&16 != 0
+					refusals := confine.SandboxRefusals{}
+					if kernel {
+						refusals.Witness = confine.WitnessKernel
+					}
+					if reported {
+						refusals.Refusals = []confine.SandboxRefusal{{Operation: "file-write-data", Target: "/tmp/fixture", Recovery: confine.RecoverNone}}
+					}
+					obs := confine.StampRefusal(tool, "session", confine.Boundary{Applied: applied}, confine.RefusalContext{TerminationReason: tc.reason, Running: running, Refusals: refusals}).Observation
+					if applied && failed {
+						obs.FailedStages = []string{"fixture"}
+					}
+					out, facts := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: t.Name()}, tool, nil,
+						`{"output":"exited successfully; timed out; stopped; permission denied"}`, 1, guidance.ToolResultFacts{Confine: obs})
+					wantWarning := applied && failed && kernel && !reported
+					if facts.HasCode("SANDBOX_REFUSAL_REPORT_SILENT") != wantWarning {
+						t.Fatalf("mask %d: warning selection changed: %s", mask, out)
+					}
+					if !wantWarning {
+						continue
+					}
+					want := tc.want
+					if running {
+						want = statuses[3].want
+					}
+					for _, status := range statuses[:4] {
+						if strings.Contains(out, status.want) != (status.want == want) {
+							t.Fatalf("mask %d: inconsistent status %q, want %q: %s", mask, status.want, want, out)
+						}
+					}
+				}
+			})
+		}
+	}
+}

@@ -163,9 +163,10 @@ type RawOutput struct {
 
 // OutputSnapshot combines process output with its spawn boundary.
 type OutputSnapshot struct {
-	Output   RawOutput
-	Boundary confine.Boundary
-	Facts    confine.SpawnFacts
+	TerminationReason TerminationReason
+	Output            RawOutput
+	Boundary          confine.Boundary
+	Facts             confine.SpawnFacts
 	// Failure is the run error the exit status does not carry.
 	Failure *hostcmd.ExecFailure
 }
@@ -179,6 +180,7 @@ func (r *Output) ReadRawOutput(sessionID, handle string, cursor int64) (OutputSn
 	chunks, next, truncated := proc.buffer.ReadSince(cursor)
 	r.jobs.mu.Lock()
 	running, hasExit, exitCode, failure := proc.running, proc.hasExit, proc.exitCode, proc.failure
+	terminationReason := proc.reason
 	r.jobs.mu.Unlock()
 	out := RawOutput{
 		Handle:    handle,
@@ -191,7 +193,7 @@ func (r *Output) ReadRawOutput(sessionID, handle string, cursor int64) (OutputSn
 	if hasExit {
 		out.ExitCode = &exitCode
 	}
-	return OutputSnapshot{Output: out, Boundary: proc.boundary, Facts: proc.facts, Failure: failure}, nil
+	return OutputSnapshot{Output: out, Boundary: proc.boundary, Facts: proc.facts, Failure: failure, TerminationReason: terminationReason}, nil
 }
 
 // ReadOutput returns the safe Den-facing projection of the whole retained window.

@@ -9,6 +9,9 @@ requires:
   facts:
     - paintedwolf.confine_applied
     - paintedwolf.failed_stages
+    - paintedwolf.process_timed_out
+    - paintedwolf.process_stopped
+    - paintedwolf.process_exited
     - paintedwolf.sandbox_refusal_witness
     - paintedwolf.sandbox_refusals
 when: >-
@@ -18,8 +21,10 @@ when: >-
   && size(paintedwolf.sandbox_refusals) == 0
 effect: warn
 copy:
-  what: The command exited unsuccessfully; no kernel refusal was reported.
-  cause: An unsuccessful exit can come from the program or its arguments. The exit status and an empty refusal report do not identify the cause.
+  what: >-
+    {% if paintedwolf.process_timed_out %}The command reached its host deadline; no kernel refusal was reported.{% else %}{% if paintedwolf.process_stopped %}The command was stopped; no kernel refusal was reported.{% else %}{% if paintedwolf.process_exited %}The command exited unsuccessfully; no kernel refusal was reported.{% else %}The invocation did not finish successfully; no kernel refusal was reported.{% endif %}{% endif %}{% endif %}
+  cause: >-
+    {% if paintedwolf.process_timed_out %}The host ended the invocation at its deadline. This does not identify why it had not completed.{% else %}{% if paintedwolf.process_stopped %}The host recorded a stop. This does not establish a program error.{% else %}{% if paintedwolf.process_exited %}An unsuccessful exit can come from the program or its arguments. The exit status does not identify the cause.{% else %}The terminal reason is unavailable. Do not infer whether the invocation exited, was stopped, or reached a deadline.{% endif %}{% endif %}{% endif %} An empty refusal report does not identify the cause.
   why: Silence does not establish that the sandbox allowed every attempted effect.
   fix: Inspect the command arguments, working directory, and program output. Correct the invocation or implementation and retry within the current boundary. Do not infer a sandbox failure or request broader access solely because the refusal report is empty.
   instead: Diagnose the failed command; keep the current sandbox boundary

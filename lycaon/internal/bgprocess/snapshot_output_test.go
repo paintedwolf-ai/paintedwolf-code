@@ -4,6 +4,9 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // A foreground snapshot keeps the whole screened body next to the cut tail,
@@ -65,5 +68,36 @@ func TestSnapshotReportsRingEviction(t *testing.T) {
 	}
 	if !snap.OutputEvicted {
 		t.Fatal("an overflowed ring must report that output is a suffix")
+	}
+}
+
+func TestTerminalPublicationAndOutputPreserveTermination(t *testing.T) {
+	for _, reason := range []TerminationReason{TerminationTimedOut, TerminationStopped, TerminationExited, "", "future_reason"} {
+		t.Run(string(reason), func(t *testing.T) {
+			h := newProjectionHarness(t, DefaultRingBufferBytes)
+			h.write("stderr", "exited successfully; timed out; stopped; permission denied")
+			h.proc.running = false
+			h.proc.hasExit = true
+			h.proc.exitCode = 1
+			h.proc.reason = reason
+			h.proc.boundary = confine.Boundary{Applied: true}
+			calls := 0
+			h.reg.Output.complete = func(_ context.Context, c Completion) {
+				calls++
+				if c.TerminationReason != reason || c.Observation.TerminationReason != string(reason) {
+					t.Fatalf("terminal publication lost reason: %+v", c)
+				}
+			}
+			h.reg.Output.publishTerminal(t.Context(), h.proc)
+			h.reg.Output.publishTerminal(t.Context(), h.proc)
+			if calls != 1 {
+				t.Fatalf("terminal publication count=%d", calls)
+			}
+			raw, err := h.reg.Output.ReadRawOutput("s1", "h1", 0)
+			testutil.FailErr(t, "read terminal output", err)
+			if raw.TerminationReason != reason || raw.Output.Running || raw.Output.ExitCode == nil || *raw.Output.ExitCode != 1 {
+				t.Fatalf("output lost terminal facts: %+v", raw)
+			}
+		})
 	}
 }

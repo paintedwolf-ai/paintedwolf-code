@@ -264,6 +264,7 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		MediatedNetwork:        facts.MediatedNetwork(),
 		RemotePackageExecution: facts.Report.RemotePackageExecution,
 		FailedStages:           hostcmd.FailedStages(completion.Stages, exitCode),
+		TerminationReason:      string(completion.TerminationReason),
 		Refusals:               facts.SettledRefusals(ctx),
 	})
 	completion.BoundaryRefusal = string(stamped.Attribution)

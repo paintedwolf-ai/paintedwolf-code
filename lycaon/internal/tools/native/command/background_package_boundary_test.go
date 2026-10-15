@@ -27,6 +27,7 @@ func TestBackgroundOutputPreservesRemotePackageBoundaryAndRecovery(t *testing.T)
 				return []confine.EgressHost{{Host: "gitea.example.com", Port: 443, Allowed: false}}
 			},
 		},
+		"",
 	)
 	if payload.RemotePackageExecution == nil ||
 		payload.RemotePackageExecution.NetworkScope != confine.RemotePackageNetworkScopeRegistryOnly {
@@ -59,11 +60,23 @@ func TestBackgroundOutputDoesNotClassifyOrdinaryLiveOutputAsRefusal(t *testing.T
 		},
 		boundary,
 		confine.SpawnFacts{Report: confine.ReportOf(boundary)},
+		"",
 	)
 	if payload.BoundaryRefusal != "" {
 		t.Fatalf("boundary refusal = %q", payload.BoundaryRefusal)
 	}
 	if len(outFacts.Facts.Codes) != 0 {
 		t.Fatalf("codes = %v", outFacts.Facts.Codes)
+	}
+}
+
+func TestBackgroundOutputPreservesTerminationWithoutRepeatingFailure(t *testing.T) {
+	for _, reason := range []bgprocess.TerminationReason{bgprocess.TerminationTimedOut, bgprocess.TerminationStopped, bgprocess.TerminationExited, ""} {
+		outFacts := &tools.ToolInvocationOut{}
+		observeBackgroundOutput(tools.ToolContext{Effects: tools.InvocationEffects{Out: outFacts}}, commandOutput{}, confine.Boundary{Applied: true}, confine.SpawnFacts{}, reason)
+		obs := outFacts.Facts.Confine
+		if obs.TerminationReason != string(reason) || len(obs.FailedStages) != 0 {
+			t.Fatalf("output polling changed termination or repeated failure: %+v", obs)
+		}
 	}
 }

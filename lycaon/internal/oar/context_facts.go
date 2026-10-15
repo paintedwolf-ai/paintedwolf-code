@@ -135,6 +135,9 @@ type ExecutionFacts struct {
 	ConfineSignals  []string
 	FailedStages    []string
 	ProcessRunning  bool
+	ProcessTimedOut bool
+	ProcessStopped  bool
+	ProcessExited   bool
 	SandboxRefusals []string
 	ModeBits        string
 }
