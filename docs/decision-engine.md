@@ -202,7 +202,10 @@ which costs nothing. So the engine serves only on a device fast enough for
 every enabled site, and otherwise does not serve at all. At its first launch
 on a machine it runs a reference batch on every device it can reach (MLX on
 Apple silicon, each Vulkan GPU, the CPU) and keeps the fastest one within
-`engine.reference_ms` in `decisions.yaml`. The device's kind decides nothing:
+`engine.reference_ms` in `decisions.yaml`. Each measurement runs in a child
+process (`bialy probe`), so a graphics driver that crashes costs its device,
+not the engine; a launch that dies loading its chosen device is remembered,
+and the next launch measures again without it. The device's kind decides nothing:
 an integrated GPU that is fast enough serves, and a discrete one that is not
 does not. The catalog refuses a requirement any enabled rerank site could not
 meet within its deadline.

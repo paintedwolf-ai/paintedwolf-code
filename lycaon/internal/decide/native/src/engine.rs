@@ -108,6 +108,9 @@ pub struct EngineOptions {
     pub qualify: Option<Duration>,
     /// Where device verdicts and compiled GPU kernels persist across launches.
     pub cache_dir: Option<PathBuf>,
+    /// Under `auto`, measure each candidate in this executable's `probe` command, so a driver
+    /// that crashes costs the candidate, not the engine. `None` measures in this process.
+    pub probe_exe: Option<PathBuf>,
 }
 
 /// What the handshake reports about the loaded engine.
@@ -339,7 +342,7 @@ impl Engine {
 
     /// [`Engine::probe`], stopping at the first timed run slower than `ceiling`: a device
     /// that cannot win is not worth the remaining runs. That run's time is returned.
-    pub(crate) fn probe_within(&self, ceiling: Option<Duration>) -> Result<Duration> {
+    pub fn probe_within(&self, ceiling: Option<Duration>) -> Result<Duration> {
         let candidates = reference_candidates(REFERENCE_CANDIDATES);
         self.rank_with(&self.base, REFERENCE_TASK, &candidates)?;
         let mut times = Vec::with_capacity(REFERENCE_RUNS);

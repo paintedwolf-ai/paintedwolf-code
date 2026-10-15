@@ -20,6 +20,12 @@
 /// The exit status for `auto` finding no device that meets the speed requirement.
 pub const EXIT_NO_CAPABLE_DEVICE: u8 = 3;
 
+/// What `bialy probe` prints on stdout: one device's reference batch time.
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ProbeReport {
+    pub probe_ms: f64,
+}
+
 use std::collections::{BTreeMap, HashMap};
 use std::io::{BufRead, Write};
 

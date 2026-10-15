@@ -5,7 +5,7 @@ use std::process::ExitCode;
 use std::time::{Duration, Instant};
 
 use bialy::engine::{HEAD_CODE_RANK, HEAD_NAMES, REFERENCE_TASK, reference_candidates};
-use bialy::protocol::EXIT_NO_CAPABLE_DEVICE;
+use bialy::protocol::{EXIT_NO_CAPABLE_DEVICE, ProbeReport};
 use bialy::{DeviceChoice, Engine, EngineOptions, Error};
 use clap::{Parser, Subcommand};
 
@@ -65,6 +65,9 @@ enum Command {
     Serve(LoadArgs),
     /// Load the checkpoint, run one warm-up pass, and print the engine identity as JSON.
     Check(LoadArgs),
+    /// Time the reference batch on one explicit device and print it as JSON; `auto` runs this
+    /// for each candidate. `--qualify-ms` stops at the first run slower than it.
+    Probe(LoadArgs),
     /// Time ranking batches of the given size.
     Bench {
         #[command(flatten)]
@@ -126,6 +129,10 @@ fn options(args: &LoadArgs) -> Result<EngineOptions, String> {
         metallib: optional_path(&args.metallib),
         qualify: (args.qualify_ms > 0).then(|| Duration::from_millis(args.qualify_ms)),
         cache_dir: optional_path(&args.cache_dir),
+        probe_exe: match device {
+            DeviceChoice::Auto => std::env::current_exe().ok(),
+            _ => None,
+        },
     })
 }
 
@@ -160,6 +167,17 @@ fn run(cli: Cli) -> Result<(), Failure> {
             let engine = load(&args)?;
             let identity = serde_json::to_string(engine.identity()).map_err(|e| e.to_string())?;
             println!("{identity}");
+            Ok(())
+        }
+        Command::Probe(args) => {
+            let opts = options(&args)?;
+            if opts.device == DeviceChoice::Auto {
+                return Err("probe measures one device; name it with --device".to_string().into());
+            }
+            let engine = Engine::load(&EngineOptions { qualify: None, heads: Vec::new(), ..opts.clone() })?;
+            let elapsed = engine.probe_within(opts.qualify)?;
+            let report = ProbeReport { probe_ms: elapsed.as_secs_f64() * 1000.0 };
+            println!("{}", serde_json::to_string(&report).map_err(|e| e.to_string())?);
             Ok(())
         }
         Command::Bench { load: args, candidates, runs } => {
