@@ -51,3 +51,23 @@ func TestBrokerDenialSurvivesSilentCommandExit(t *testing.T) {
 		}
 	}
 }
+
+func TestForegroundBoundaryPreservesTerminationWithoutChangingVerdict(t *testing.T) {
+	for _, tool := range []string{"command", "verify"} {
+		for _, termination := range []string{"timed_out", "stopped", "exited", "", "future_reason"} {
+			for _, diagnostic := range []string{"process exited successfully", "timed out", "stopped", "permission denied"} {
+				result := &hostcmd.Result{ExitCode: 1, TerminationReason: termination, Tail: diagnostic}
+				beforeVerdict, beforeReason := VerdictFor(result)
+				appendBoundaryNotes(tool, "session", RunOutcome{
+					Boundary: confine.Boundary{Applied: true, Network: confine.NetworkProxyOnly},
+				}, result)
+				if result.Observation.TerminationReason != termination || result.Tail != diagnostic {
+					t.Fatalf("%s: termination or output changed: %+v", tool, result)
+				}
+				if verdict, reason := VerdictFor(result); verdict != beforeVerdict || reason != beforeReason {
+					t.Fatalf("%s: observation changed verdict: %s/%s to %s/%s", tool, beforeVerdict, beforeReason, verdict, reason)
+				}
+			}
+		}
+	}
+}
