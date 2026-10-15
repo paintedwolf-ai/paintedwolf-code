@@ -1039,6 +1039,8 @@ host_facts:
    type: bool
  - name: paintedwolf.size
    type: string
+ - name: paintedwolf.failure_source_unchanged
+   type: bool
  - name: paintedwolf.source_revision
    type: string
  - name: paintedwolf.spill_bytes

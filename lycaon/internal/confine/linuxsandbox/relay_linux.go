@@ -34,7 +34,7 @@ const reportReady = 0xff
 // action, and reports each refused socket call to refusals when it is set. The
 // returned signal, when set, killed the target and should end this process
 // the same way.
-func Relaunch(self string, args []string, plan []byte, network Network, marker *os.File) (code int, sig syscall.Signal, err error) {
+func Relaunch(self string, args []string, plan []byte, network Network, marker, refusals *os.File) (code int, sig syscall.Signal, err error) {
 	// The parent-death signal is tied to the thread that forks.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -57,7 +57,12 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker *
 		return 0, 0, fmt.Errorf("control socket: %w", err)
 	}
 	control, controlChild := os.NewFile(uintptr(pair[0]), "control"), os.NewFile(uintptr(pair[1]), "control-child")
-	sup := newSupervisor(control, network)
+	// A nil *os.File stored in the interface would not read as no feed.
+	var lines io.Writer
+	if refusals != nil {
+		lines = refusals
+	}
+	sup := newSupervisor(control, network, lines)
 	defer sup.close()
 	// The inner helper ends with this process, by its parent-death signal.
 	cmd := exec.CommandContext(context.Background(), self, args...)

@@ -363,6 +363,7 @@ var occurrenceFactDecls = []factDecl{
 	{"shape", oarcore.TypeString, FactTierHost, ""},
 	{"shell_metacharacters", oarcore.TypeBool, FactTierHost, ""},
 	{"size", oarcore.TypeString, FactTierHost, ""},
+	{"failure_source_unchanged", oarcore.TypeBool, FactTierHost, ""},
 	{"source_revision", oarcore.TypeString, FactTierHost, ""},
 	{"spill_bytes", oarcore.TypeString, FactTierHost, ""},
 	{"spill_path", oarcore.TypeString, FactTierHost, ""},
