@@ -125,16 +125,7 @@ func (m *Service) loadCompactionPage(ctx context.Context, sess *api.Session) ([]
 		}
 	}
 	bounds := m.canonicalTailBounds(m.compactionConfig(ctx, sess))
-	var suffix []api.Message
-	var hasMore bool
-	if len(base) == 0 {
-		suffix, err = m.readBoundedCanonicalTail(ctx, sess.ID, bounds)
-		if err == nil {
-			suffix, err = m.withCurrentRequest(ctx, sess, suffix)
-		}
-	} else {
-		suffix, hasMore, err = m.readBoundedSuffix(ctx, sess.ID, coveredThroughOrd, bounds)
-	}
+	suffix, hasMore, err := m.readBoundedSuffix(ctx, sess.ID, coveredThroughOrd, bounds)
 	if err != nil {
 		return nil, 0, "", 0, false, err
 	}

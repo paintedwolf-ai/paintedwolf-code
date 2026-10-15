@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestFallbackBudgetKeepsOverridesAndDerivesWorkerLimit(t *testing.T) {
@@ -110,5 +111,11 @@ agent_pool:
 	projectCfg, _ := mgr.ResolveRoots([]string{projectDir})
 	if projectCfg.ModelContextWindow != 196608 {
 		t.Fatalf("project live = %d want 196608", projectCfg.ModelContextWindow)
+	}
+	if got := mgr.Compaction(t.Context(), nil); got.ModelContextWindow != 96000 {
+		t.Fatalf("nil session compaction window = %d want 96000", got.ModelContextWindow)
+	}
+	if got := mgr.Compaction(t.Context(), &api.Session{ProviderID: "fw", Model: "accounts/fireworks/models/kimi-k2p7-code"}); got.ModelContextWindow != 196608 {
+		t.Fatalf("session model compaction window = %d want 196608", got.ModelContextWindow)
 	}
 }
