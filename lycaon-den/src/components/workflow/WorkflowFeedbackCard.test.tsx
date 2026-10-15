@@ -1,4 +1,5 @@
 import { stubClient } from "../../test/client-fixture.ts";
+import { disclosureToggle } from "../../test/transcript-disclosure-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import { render } from "@solidjs/testing-library";
 import { WorkflowFeedbackCard } from "./WorkflowFeedbackCard.tsx";
@@ -85,7 +86,7 @@ describe("WorkflowFeedbackCard", () => {
       <WorkflowFeedbackCard meta={meta} client={client()} {...base} />
     ));
     expect(queryByTestId("workflow-feedback-chicklet-body")).toBeNull();
-    getByTestId("workflow-feedback-chicklet").querySelector("summary")!.click();
+    disclosureToggle(getByTestId("workflow-feedback-chicklet")).click();
     await vi.waitFor(() => expect(getByTestId("workflow-feedback-chicklet-body")).toBeTruthy());
     expect(getByTestId("workflow-feedback-chicklet-prompt").textContent).toBe("Pick one");
     expect(getByTestId("workflow-feedback-answer").textContent).toContain("blue");
@@ -100,7 +101,7 @@ describe("WorkflowFeedbackCard", () => {
     const { getByTestId } = render(() => (
       <WorkflowFeedbackCard meta={meta} client={client()} {...base} activePendingPhaseId="new" />
     ));
-    getByTestId("workflow-feedback-chicklet").querySelector("summary")!.click();
+    disclosureToggle(getByTestId("workflow-feedback-chicklet")).click();
     await vi.waitFor(() => expect(getByTestId("workflow-feedback-closed-hint").textContent).toBeTruthy());
   });
 });

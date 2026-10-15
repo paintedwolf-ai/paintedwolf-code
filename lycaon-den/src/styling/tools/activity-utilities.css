@@ -7,7 +7,7 @@
   box-shadow: inset 0 0 0 1px var(--den-line);
   overflow: visible;
   min-width: 0;
-  &[open] > summary {
+  &[data-expanded="true"] > .den-transcript-disclosure-header {
     width: 100%;
     padding: 0;
     border-bottom: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);

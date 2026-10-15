@@ -14,7 +14,12 @@ import {
   revokeGrantsOptimistic,
 } from "../../settings/security/approval-grants-cache.ts";
 import { useTranscriptEntry } from "../../chat/transcript/presentation/transcript-entry.ts";
-import { useTranscriptDisclosure } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
+import {
+  TranscriptDisclosurePanel,
+  TranscriptDisclosureShell,
+  TranscriptDisclosureToggle,
+  useTranscriptDisclosure,
+} from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
 import { ApprovalContentLink } from "./ApprovalContentLink.tsx";
 import { reviewPendingApproval } from "../../chat/checkpoint/approval-review.ts";
@@ -168,7 +173,7 @@ export function CheckpointDecisionChicklet(props: Props) {
       ? { sessionId: props.sessionId ?? undefined, entryKey: props.entryKey }
       : undefined;
   const { bindTranscriptEntry } = useTranscriptEntry(entryOpts);
-  const { key: disclosureKey, open, onToggle, onSummaryClick } = useTranscriptDisclosure(() =>
+  const disclosure = useTranscriptDisclosure(() =>
     props.entryKey ? transcriptDisclosureKey.checkpoint(props.entryKey) : undefined,
   );
 
@@ -241,7 +246,8 @@ export function CheckpointDecisionChicklet(props: Props) {
         </div>
       }
     >
-      <details
+      <TranscriptDisclosureShell
+        disclosure={disclosure}
         ref={bindTranscriptEntry}
         class="den-checkpoint-decision-chicklet den-checkpoint-decision-chicklet--expandable den-transcript-disclosure-card"
         classList={statusClass()}
@@ -249,9 +255,6 @@ export function CheckpointDecisionChicklet(props: Props) {
         data-status={status()}
         data-kind={props.meta.kind}
         data-checkpoint-id={props.meta.checkpoint_id}
-        data-disclosure-key={disclosureKey}
-        open={open()}
-        onToggle={onToggle}
       >
         <Show when={status() === "pending"}>
           <span
@@ -260,12 +263,13 @@ export function CheckpointDecisionChicklet(props: Props) {
             class="sr-only"
           />
         </Show>
-        <summary
-          class="den-checkpoint-decision-chicklet__summary"
-          onClick={onSummaryClick}
-          aria-label={decisionAriaLabel(props.meta)}
-        >
-          <span class="den-checkpoint-decision-chicklet__summary-main">
+        <div class="den-transcript-disclosure-header den-checkpoint-decision-chicklet__summary">
+          <TranscriptDisclosureToggle
+            disclosure={disclosure}
+            inHeader
+            class="den-checkpoint-decision-chicklet__summary-main"
+            aria-label={decisionAriaLabel(props.meta)}
+          >
             <DecisionChrome
               meta={props.meta}
               tool={tool()}
@@ -275,7 +279,7 @@ export function CheckpointDecisionChicklet(props: Props) {
               grant={grant()}
               truncateSubject
             />
-          </span>
+          </TranscriptDisclosureToggle>
           <Show when={revokeCtx()} keyed>
             {(ctx) => (
               <RevokeButton
@@ -286,118 +290,120 @@ export function CheckpointDecisionChicklet(props: Props) {
             )}
           </Show>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
-        </summary>
-        <Show when={open()}>
-          <div class="den-checkpoint-decision-chicklet__body" data-testid="checkpoint-decision-body">
-            <div class="den-tool-part-card-section">
-              <dl class="den-tool-part-card-facts">
-                <div>
-                  <dt>{status() === "pending" ? "Status" : "Decision"}</dt>
-                  <dd data-testid="checkpoint-decision-body-status">{decisionLabel(props.meta)}</dd>
-                </div>
-                <Show when={tool()}>
-                  {(t) => (
-                    <div>
-                      <dt>Tool</dt>
-                      <dd data-testid="checkpoint-decision-body-tool">
-                        <code>{t()}</code>
-                      </dd>
-                    </div>
-                  )}
-                </Show>
-                <Show when={subject()}>
-                  {(s) => (
-                    <div class="den-tool-part-card-facts--wide">
-                      <dt>Action</dt>
-                      <dd data-testid="checkpoint-decision-body-action">
-                        <code>{s()}</code>
-                      </dd>
-                    </div>
-                  )}
-                </Show>
-                <Show when={location()}>
-                  {(loc) => (
-                    <div class="den-tool-part-card-facts--wide">
-                      <dt>Location</dt>
-                      <dd data-testid="checkpoint-decision-body-location">
-                        <code>{loc()}</code>
-                      </dd>
-                    </div>
-                  )}
-                </Show>
-                <Show when={causing()}>
-                  {(c) => (
-                    <div class="den-tool-part-card-facts--wide">
-                      <dt>{APPROVALS_COPY.card.causedByLabel}</dt>
-                      <dd data-testid="checkpoint-decision-body-causing">
-                        <code>{c()}</code>
-                      </dd>
-                    </div>
-                  )}
-                </Show>
-                <Show when={grant()}>
-                  {(g) => (
-                    <div class="den-tool-part-card-facts--wide">
-                      <dt>Permission</dt>
-                      <dd data-testid="checkpoint-decision-body-grant">{g()}</dd>
-                    </div>
-                  )}
-                </Show>
-                <Show when={guidance()}>
-                  {(dir) => (
-                    <div class="den-tool-part-card-facts--wide">
-                      <dt>{APPROVALS_COPY.card.rejectGuidance.directionLabel}</dt>
-                      <dd data-testid="checkpoint-decision-body-guidance">{dir()}</dd>
-                    </div>
-                  )}
-                </Show>
-              </dl>
-            </div>
-            <div class="den-checkpoint-decision-chicklet__actions">
-              <Show when={status() === "pending" && props.sessionId}>
-                <button
-                  type="button"
-                  class="den-checkpoint-decision-chicklet__review-btn"
-                  data-testid="checkpoint-decision-review-dock"
-                  onClick={() => {
-                    if (props.sessionId) {
-                      reviewPendingApproval({
-                        sessionId: props.sessionId,
-                        checkpointId: props.meta.checkpoint_id,
-                      });
-                    }
-                  }}
-                >
-                  Review in composer
-                </button>
+        </div>
+        <TranscriptDisclosurePanel
+          disclosure={disclosure}
+          class="den-checkpoint-decision-chicklet__body"
+          data-testid="checkpoint-decision-body"
+        >
+          <div class="den-tool-part-card-section">
+            <dl class="den-tool-part-card-facts">
+              <div>
+                <dt>{status() === "pending" ? "Status" : "Decision"}</dt>
+                <dd data-testid="checkpoint-decision-body-status">{decisionLabel(props.meta)}</dd>
+              </div>
+              <Show when={tool()}>
+                {(t) => (
+                  <div>
+                    <dt>Tool</dt>
+                    <dd data-testid="checkpoint-decision-body-tool">
+                      <code>{t()}</code>
+                    </dd>
+                  </div>
+                )}
               </Show>
-              <ApprovalContentLink
-                label="Approval details"
-                pane="decision"
-                identity={{
-                  checkpointId: props.meta.checkpoint_id,
-                  sessionId: props.sessionId,
-                  projectId: props.projectId,
-                }}
-                text={() =>
-                  [
-                    `Decision: ${decisionLabel(props.meta)}`,
-                    tool() && `Tool: ${tool()}`,
-                    subject() && `Action: ${subject()}`,
-                    location() && `Location: ${location()}`,
-                    causing() && `${APPROVALS_COPY.card.causedByLabel}: ${causing()}`,
-                    grant() && `Permission: ${grant()}`,
-                    guidance() &&
-                      `${APPROVALS_COPY.card.rejectGuidance.directionLabel}: ${guidance()}`,
-                  ]
-                    .filter(Boolean)
-                    .join("\n\n")
-                }
-              />
-            </div>
+              <Show when={subject()}>
+                {(s) => (
+                  <div class="den-tool-part-card-facts--wide">
+                    <dt>Action</dt>
+                    <dd data-testid="checkpoint-decision-body-action">
+                      <code>{s()}</code>
+                    </dd>
+                  </div>
+                )}
+              </Show>
+              <Show when={location()}>
+                {(loc) => (
+                  <div class="den-tool-part-card-facts--wide">
+                    <dt>Location</dt>
+                    <dd data-testid="checkpoint-decision-body-location">
+                      <code>{loc()}</code>
+                    </dd>
+                  </div>
+                )}
+              </Show>
+              <Show when={causing()}>
+                {(c) => (
+                  <div class="den-tool-part-card-facts--wide">
+                    <dt>{APPROVALS_COPY.card.causedByLabel}</dt>
+                    <dd data-testid="checkpoint-decision-body-causing">
+                      <code>{c()}</code>
+                    </dd>
+                  </div>
+                )}
+              </Show>
+              <Show when={grant()}>
+                {(g) => (
+                  <div class="den-tool-part-card-facts--wide">
+                    <dt>Permission</dt>
+                    <dd data-testid="checkpoint-decision-body-grant">{g()}</dd>
+                  </div>
+                )}
+              </Show>
+              <Show when={guidance()}>
+                {(dir) => (
+                  <div class="den-tool-part-card-facts--wide">
+                    <dt>{APPROVALS_COPY.card.rejectGuidance.directionLabel}</dt>
+                    <dd data-testid="checkpoint-decision-body-guidance">{dir()}</dd>
+                  </div>
+                )}
+              </Show>
+            </dl>
           </div>
-        </Show>
-      </details>
+          <div class="den-checkpoint-decision-chicklet__actions">
+            <Show when={status() === "pending" && props.sessionId}>
+              <button
+                type="button"
+                class="den-checkpoint-decision-chicklet__review-btn"
+                data-testid="checkpoint-decision-review-dock"
+                onClick={() => {
+                  if (props.sessionId) {
+                    reviewPendingApproval({
+                      sessionId: props.sessionId,
+                      checkpointId: props.meta.checkpoint_id,
+                    });
+                  }
+                }}
+              >
+                Review in composer
+              </button>
+            </Show>
+            <ApprovalContentLink
+              label="Approval details"
+              pane="decision"
+              identity={{
+                checkpointId: props.meta.checkpoint_id,
+                sessionId: props.sessionId,
+                projectId: props.projectId,
+              }}
+              text={() =>
+                [
+                  `Decision: ${decisionLabel(props.meta)}`,
+                  tool() && `Tool: ${tool()}`,
+                  subject() && `Action: ${subject()}`,
+                  location() && `Location: ${location()}`,
+                  causing() && `${APPROVALS_COPY.card.causedByLabel}: ${causing()}`,
+                  grant() && `Permission: ${grant()}`,
+                  guidance() &&
+                    `${APPROVALS_COPY.card.rejectGuidance.directionLabel}: ${guidance()}`,
+                ]
+                  .filter(Boolean)
+                  .join("\n\n")
+              }
+            />
+          </div>
+        </TranscriptDisclosurePanel>
+      </TranscriptDisclosureShell>
     </Show>
   );
 }

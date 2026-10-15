@@ -324,8 +324,8 @@ color: var(--den-text-muted);
   max-width: 100%;
 }
 
-.den-citation-evidence-chicklet[open] > summary,
-.den-citation-evidence-chicklet[data-animating] > summary {
+.den-citation-evidence-chicklet[data-expanded="true"] > .den-transcript-disclosure-header,
+.den-citation-evidence-chicklet[data-animating] > .den-transcript-disclosure-header {
   width: 100%;
   max-width: 100%;
   margin: 0;
@@ -333,7 +333,7 @@ color: var(--den-text-muted);
   border-bottom: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
 }
 
-.den-citation-evidence-chicklet[open] > .den-citation-evidence-chicklet-body {
+.den-citation-evidence-chicklet[data-expanded="true"] > .den-citation-evidence-chicklet-body {
   width: 100%;
   padding: 8px 10px 10px;
   margin-top: 0;

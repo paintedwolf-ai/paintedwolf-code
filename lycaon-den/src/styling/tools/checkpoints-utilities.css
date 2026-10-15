@@ -96,7 +96,7 @@ display: flex;
 display: block;
   min-height: 0;
   padding: 0;
-  &[open] > .den-checkpoint-decision-chicklet__summary {
+  &[data-expanded="true"] > .den-checkpoint-decision-chicklet__summary {
     border-bottom-color: color-mix(in srgb, var(--den-line) 55%, transparent);
   }
 }
@@ -112,9 +112,24 @@ display: flex;
   padding: 0 var(--den-transcript-card-inset-x);
   border-bottom: 1px solid transparent;
   cursor: pointer;
-  list-style: none;
-  &::-webkit-details-marker {
-    display: none;
+  position: relative;
+  /* A toggle beside other controls covers the rest of its header row. */
+  & > .den-transcript-disclosure-toggle::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+  }
+  & > .den-transcript-disclosure-toggle > *,
+  & > .den-checkpoint-decision-chicklet__revoke {
+    position: relative;
+    z-index: 1;
+  }
+  &:has(> .den-transcript-disclosure-toggle:focus-visible) {
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--den-accent-text) 85%, var(--den-background));
+    border-radius: var(--den-radius-sm);
+  }
+  & > .den-transcript-disclosure-toggle:focus-visible {
+    box-shadow: none;
   }
 }
 

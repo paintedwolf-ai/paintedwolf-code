@@ -8,7 +8,11 @@ import {
   groundingEvidenceEntryKey,
   useTranscriptEntry,
 } from "../../chat/transcript/presentation/transcript-entry.ts";
-import { useTranscriptDisclosure } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
+import {
+  TranscriptDisclosurePanel,
+  TranscriptDisclosureShell,
+  useTranscriptDisclosure,
+} from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
 import { CitationEvidenceSection } from "./CitationEvidenceSection.tsx";
 import { CitationGroundingChicklet } from "./CitationGroundingChicklet.tsx";
@@ -39,45 +43,41 @@ export function CitationEvidenceChicklet(props: Props) {
       ? { sessionId: props.sessionId ?? undefined, entryKey: groundingEvidenceEntryKey(props.rowKey) }
       : undefined,
   );
-  const { key: disclosureKey, open, onToggle, onSummaryClick } = useTranscriptDisclosure(() =>
+  const disclosure = useTranscriptDisclosure(() =>
     props.rowKey ? transcriptDisclosureKey.groundingEvidence(props.rowKey) : undefined,
   );
 
   return (
     <Show when={view()} keyed>
       {(detail) => (
-        <details
+        <TranscriptDisclosureShell
+          disclosure={disclosure}
           ref={bindTranscriptEntry}
           class="den-citation-evidence-chicklet den-transcript-disclosure-card"
           data-testid="citation-evidence-chicklet"
           data-evidence-outcome={detail.outcome}
-          data-disclosure-key={disclosureKey}
-          open={open()}
-          onToggle={onToggle}
         >
-          <TranscriptChickletSummary onClick={onSummaryClick}>
+          <TranscriptChickletSummary disclosure={disclosure}>
             <CitationGroundingChicklet view={detail} />
           </TranscriptChickletSummary>
-          <Show when={open()}>
-            <div class="den-citation-evidence-chicklet-body">
-              <CitationEvidenceSection
-                view={detail}
-                sectionClass="den-worker-transcript-evidence"
-                sectionClassList={{
-                  "den-worker-transcript-evidence--traced":
-                    detail.outcome === "traced" && detail.hadTraceableWork,
-                  "den-worker-transcript-evidence--partial":
-                    detail.outcome === "partial" && detail.hadTraceableWork,
-                }}
-                testId="citation-evidence-chicklet-panel"
-                projectId={props.projectId}
-                rootRefs={props.rootRefs}
-                exploreContext={props.exploreContext}
-                onExplore={props.onExplore}
-              />
-            </div>
-          </Show>
-        </details>
+          <TranscriptDisclosurePanel disclosure={disclosure} class="den-citation-evidence-chicklet-body">
+            <CitationEvidenceSection
+              view={detail}
+              sectionClass="den-worker-transcript-evidence"
+              sectionClassList={{
+                "den-worker-transcript-evidence--traced":
+                  detail.outcome === "traced" && detail.hadTraceableWork,
+                "den-worker-transcript-evidence--partial":
+                  detail.outcome === "partial" && detail.hadTraceableWork,
+              }}
+              testId="citation-evidence-chicklet-panel"
+              projectId={props.projectId}
+              rootRefs={props.rootRefs}
+              exploreContext={props.exploreContext}
+              onExplore={props.onExplore}
+            />
+          </TranscriptDisclosurePanel>
+        </TranscriptDisclosureShell>
       )}
     </Show>
   );

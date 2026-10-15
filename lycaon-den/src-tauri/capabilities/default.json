@@ -86,6 +86,7 @@
     "allow-linux-decoration-layout",
     "allow-accessibility-preferred-text-size",
     "allow-accessibility-screen-reader",
+    "allow-den-announce",
     "allow-system-appearance",
     "allow-update-service",
     "allow-shell-command-status",

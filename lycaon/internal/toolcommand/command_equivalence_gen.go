@@ -391,6 +391,18 @@ var commandEquivalenceEntries = []commandEquivalenceEntry{
 			"implement":        true,
 		},
 	},
+	{
+		Native:       "write",
+		RedirectCode: "USE_WRITE_NATIVE",
+		ArgsHint:     "Pass path and full content (or append:true to append to an existing file); use edit for targeted replacements.",
+		Example:      "cat <<'EOF' > index.html",
+		ReplacesLine: " Replaces command: cat <<EOF > file / tee file.",
+		Profiles: map[string]bool{
+			"coordinator":     true,
+			"implement":       true,
+			"plan_write_only": true,
+		},
+	},
 }
 
 // commandGrammarFor selects a closed exact-translation grammar by program name.
@@ -442,6 +454,7 @@ var commandSurveyNativeTools = []string{
 	"extract_archive",
 	"http_request",
 	"wait",
+	"write",
 	"edit",
 	"code_rewrite",
 	"git_checkout",
