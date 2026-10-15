@@ -70,8 +70,9 @@ func landlockRules(fs Filesystem, abi int) []landlockRule {
 // applyLandlock restricts the calling thread with the plan's rules. Paths that
 // do not exist at launch get no rule, so nothing can create them.
 func applyLandlock(fs Filesystem, abi int) error {
-	attr := unix.LandlockRulesetAttr{Access_fs: handledAccesses(abi)}
-	ruleset, err := landlockCreateRuleset(&attr, unsafe.Sizeof(attr), 0)
+	attr := unix.LandlockRulesetAttr{Handled_access_fs: handledAccesses(abi)}
+	// Pass only the filesystem field, which every Landlock ABI defines.
+	ruleset, err := landlockCreateRuleset(&attr, unsafe.Offsetof(attr.Handled_access_net), 0)
 	if err != nil {
 		return fmt.Errorf("landlock ruleset: %w", err)
 	}
