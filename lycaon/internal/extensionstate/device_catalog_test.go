@@ -127,7 +127,7 @@ func TestPublishDeviceCatalogChecksStockRangesWithoutRewritingLocks(t *testing.T
 			integrity, err := extpacks.PackTreeIntegrity(author)
 			testutil.FailErr(t, "hash author pack", err)
 			desired := extpacks.EmptyDesired()
-			desired.Packs = []extpacks.DesiredPack{{ID: manifest.ID, Source: author, Development: true}}
+			desired.Packs = []extpacks.DesiredPack{{ID: manifest.ID, Source: "path:" + author, Development: true}}
 			desiredBytes, err := extpacks.EncodeDesired(desired)
 			testutil.FailErr(t, "encode device intent", err)
 			writeDeviceDesired(t, string(desiredBytes))
