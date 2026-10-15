@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -45,7 +46,7 @@ func TestRequestBudgetUsesNativeReasoningReservation(t *testing.T) {
 	p := New("fireworks", "https://example.invalid", "", []modelinfo.Entry{{
 		ID: "accounts/fireworks/models/glm-5p3-flash", ContextLength: 32768,
 	}}).WithProfile(providerprofile.Fireworks())
-	req := modelcall.CompletionRequest{Model: "accounts/fireworks/models/glm-5p3-flash"}
+	req := modelcall.CompletionRequest{Model: "accounts/fireworks/models/glm-5p3-flash", Tools: []tools.ToolMeta{{Name: "read"}}}
 	want := p.resolveRequestControls(req, req.Model, controlOpts{}).MaxTokens
 	if want <= modelcall.OrchestrationMaxTokens {
 		t.Fatalf("fixture did not reserve native reasoning: %d", want)
