@@ -42,10 +42,15 @@ func rejectedProgressCall(tool string, args map[string]any) map[string]any {
 	if !ok || path == "" || !utf8.ValidString(path) {
 		return nil
 	}
-	call := map[string]any{"tool": tool, "argument_excerpt": map[string]any{"path": path}}
-	encoded, _ := json.Marshal(call)
+	encoded, _ := json.Marshal(struct {
+		Tool            string            `json:"tool"`
+		ArgumentExcerpt map[string]string `json:"argument_excerpt"`
+	}{
+		Tool:            tool,
+		ArgumentExcerpt: map[string]string{"path": path},
+	})
 	if len(encoded) > 512 {
 		return nil
 	}
-	return call
+	return map[string]any{"tool": tool, "argument_excerpt": map[string]any{"path": path}}
 }
