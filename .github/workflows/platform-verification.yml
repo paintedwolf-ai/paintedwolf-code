@@ -1,8 +1,7 @@
 name: Platform verification
 
-# The merge queue's platform gates: the retained upgrade corpus, macOS
-# confinement, browser-boundary, and Git engine checks, and Linux applied
-# confinement on both architectures.
+# The platform gates: the retained upgrade corpus with applied Linux
+# confinement, and macOS confinement, browser-boundary, and Git engine checks.
 # The free plan runs five macOS jobs at once, so only what needs macOS runs there.
 on:
   workflow_call:
@@ -15,11 +14,18 @@ env:
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
 jobs:
-  # Boot the retained upgrade-corpus fixtures with HEAD. Booting stored databases
-  # is platform-neutral, so it stays off the scarce macOS runners.
+  # Boot the retained upgrade-corpus fixtures with HEAD, then apply Linux
+  # confinement on the same runner and sidecar build. Booting stored databases
+  # is platform-neutral, so it stays off the scarce macOS runners; the Linux
+  # boundary needs a Linux runner, and sharing this one keeps the stage at two.
+  # The confine live suites (namespaces, mounts, Landlock, seccomp, the
+  # supervisor's network grants and refusal reports, toolchains) fail rather
+  # than skip when the host cannot confine; setup-verification loads the
+  # profile that lets test binaries create user namespaces on Ubuntu. Each
+  # suite runs even when an earlier one fails.
   upgrade-corpus:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 255
     env:
       PW_TEST_HOST: dedicated
     steps:
@@ -30,6 +36,7 @@ jobs:
       - uses: ./.github/actions/setup-bialy
 
       - name: Build sidecar
+        id: build
         timeout-minutes: 60
         run: ./task build:lycaon-dev
 
@@ -37,43 +44,30 @@ jobs:
         timeout-minutes: 90
         run: ./task upgrade:corpus:boot
 
-      - uses: ./.github/actions/verification-evidence
-        if: always()
-        timeout-minutes: 5
-        with:
-          name: upgrade-corpus-${{ github.run_attempt }}
-          status: ${{ job.status }}
-
-  # Applied Linux boundaries on both architectures: the confine live suites
-  # (namespaces, mounts, Landlock, seccomp, the supervisor's network grants and
-  # refusal reports, toolchains) and the managed browser inside the boundary.
-  # The live tests fail rather than skip when the host cannot confine; Ubuntu
-  # runners restrict user namespaces, so setup-verification loads the profile
-  # that lets test binaries create them.
-  linux-confinement:
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 90
-    env:
-      PW_TEST_HOST: dedicated
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: ./.github/actions/setup-verification
-
       - name: Applied Linux confinement
+        if: ${{ !cancelled() }}
         timeout-minutes: 45
         run: ./task test:digest -- ./internal/confine/... -count=1
 
-      - name: Confined browser
-        if: ${{ !cancelled() }}
+      - name: Provision pinned browser
+        id: browser
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        timeout-minutes: 15
+        run: |
+          set -euo pipefail
+          BUILD_DIR="$(python3 scripts/artifact_paths.py build "$GITHUB_WORKSPACE")"
+          BROWSER_OUT="$("$BUILD_DIR/lycaon-dev" browser ensure --cache-dir "$RUNNER_TEMP/browser-cache")"
+          BROWSER_PATH="${BROWSER_OUT##* path=}"
+          test -x "$BROWSER_PATH"
+          echo "path=$BROWSER_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Confined Linux browser
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
         timeout-minutes: 30
         env:
-          # The pinned browser is provisioned here, and a missing one fails.
-          LYCAON_BROWSER_INTEGRATION: '1'
+          LYCAON_BROWSER_BIN: ${{ steps.browser.outputs.path }}
+          # The step above provisioned one, so a skip here would be a green job
+          # covering nothing.
           LYCAON_BROWSER_REQUIRED: '1'
         run: >
           ./task test:digest -- ./internal/browser
@@ -84,7 +78,7 @@ jobs:
         if: always()
         timeout-minutes: 5
         with:
-          name: linux-confinement-${{ matrix.runner }}-${{ github.run_attempt }}
+          name: upgrade-corpus-${{ github.run_attempt }}
           status: ${{ job.status }}
 
   # Applied Seatbelt profiles, the managed browser under Seatbelt, and the owned
