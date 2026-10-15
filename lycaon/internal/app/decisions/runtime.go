@@ -42,6 +42,7 @@ func (b *Runtime) Warmer() (interface{ Warm(context.Context) error }, bool) {
 		switch client.Status() {
 		case bialy.ReasonDisabled, bialy.ReasonBinaryMissing:
 			return nil, false
+		default:
 		}
 	} else if !b.Decider.Available() {
 		return nil, false
