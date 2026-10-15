@@ -62,7 +62,7 @@ func processExecutable(pid int) (string, error) {
 // parentProcess reads the parent from the process status record, which is
 // immune to spaces or parentheses inside the command name.
 func parentProcess(pid int) (int, error) {
-	raw, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat")) //nolint:gosec // G304 — fixed procfs path for a kernel-reported pid
+	raw, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
 	if err != nil {
 		return 0, err
 	}

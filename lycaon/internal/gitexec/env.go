@@ -118,7 +118,7 @@ var hostCABundles = []string{
 
 func firstReadableFile(candidates []string) (string, bool) {
 	for _, path := range candidates {
-		file, err := os.Open(path) //nolint:gosec // G304 — fixed system trust store locations
+		file, err := os.Open(path)
 		if err != nil {
 			continue
 		}

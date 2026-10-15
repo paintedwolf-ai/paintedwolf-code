@@ -45,7 +45,7 @@ func readKIOConfiguration(lookupEnv func(string) (string, bool)) (Configuration,
 	if path == "" {
 		return Configuration{}, false, nil
 	}
-	file, err := os.Open(path) //nolint:gosec // G304 — fixed basename under the user's configuration directory
+	file, err := os.Open(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return Configuration{}, false, nil

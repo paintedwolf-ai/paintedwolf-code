@@ -46,6 +46,9 @@ func TestServiceAnswersHelperOperationsForVerifiedPeers(t *testing.T) {
 	if err := Forward("get", "", strings.NewReader(""), &out); err == nil {
 		t.Fatal("missing socket was accepted")
 	}
+	if err := Forward("get", "relative/credential", strings.NewReader(""), &out); err == nil || !strings.Contains(err.Error(), "not an absolute path") {
+		t.Fatalf("relative socket path = %v", err)
+	}
 	path := service.Path()
 	testutil.FailErr(t, "close", service.Close())
 	testutil.FailErr(t, "repeat close", service.Close())

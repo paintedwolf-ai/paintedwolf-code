@@ -73,10 +73,10 @@ func planFor(config httpclient.ProxyConfiguration, remote string) (ProxyPlan, er
 		return ProxyPlan{Mode: ProxyPlanPerHost, env: env}, nil
 	}
 	plan := ProxyPlan{Mode: ProxyPlanPerRemote, Reasons: reasons}
-	target, err := url.Parse(strings.TrimSpace(remote))
-	if err != nil || target.Host == "" || !httpScheme(target.Scheme) {
-		// A remote outside HTTP gives no decision to extend; Git keeps the
-		// launch environment's variables.
+	target, ok := httpRemote(remote)
+	if !ok {
+		// A remote outside HTTP, including scp-like SSH addresses that are not
+		// URLs, gives no decision to extend; Git keeps the launch environment's variables.
 		return plan, nil
 	}
 	proxy, err := config.ProxyFor(target)
@@ -108,6 +108,7 @@ func perHostEnvironment(config httpclient.ProxyConfiguration) ([]string, []Proxy
 			continue
 		}
 		switch config.System.Mode {
+		case systemproxy.ModeNone:
 		case systemproxy.ModeAuto:
 			reasons = appendReason(reasons, ProxyPlanReason{Kind: ProxyReasonAutomatic, Detail: string(config.System.Source)})
 		case systemproxy.ModeManual:
@@ -192,6 +193,15 @@ func appendReason(reasons []ProxyPlanReason, reason ProxyPlanReason) []ProxyPlan
 		}
 	}
 	return append(reasons, reason)
+}
+
+// httpRemote parses remote as an HTTP(S) URL with a host.
+func httpRemote(remote string) (*url.URL, bool) {
+	target, err := url.Parse(strings.TrimSpace(remote))
+	if err != nil || target.Host == "" || !httpScheme(target.Scheme) {
+		return nil, false
+	}
+	return target, true
 }
 
 func httpScheme(scheme string) bool {

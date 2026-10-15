@@ -78,7 +78,7 @@ func Serve(ctx context.Context, options ServeOptions) (*Service, error) {
 
 // socketRoot prefers the per-user runtime directory, whose lifetime is the session.
 func socketRoot() string {
-	if runtime := os.Getenv("XDG_RUNTIME_DIR"); filepath.IsAbs(runtime) {
+	if runtime := filepath.Clean(os.Getenv("XDG_RUNTIME_DIR")); filepath.IsAbs(runtime) {
 		if info, err := os.Stat(runtime); err == nil && info.IsDir() {
 			return runtime
 		}
@@ -145,7 +145,10 @@ func Forward(operation, socketPath string, in io.Reader, out io.Writer) error {
 	default:
 		return fmt.Errorf("unsupported credential operation %q", operation)
 	}
-	conn, err := net.DialTimeout("unix", socketPath, requestDeadline)
+	if !filepath.IsAbs(socketPath) {
+		return fmt.Errorf("git credential service socket %q is not an absolute path", socketPath)
+	}
+	conn, err := net.DialUnix("unix", nil, &net.UnixAddr{Name: filepath.Clean(socketPath), Net: "unix"})
 	if err != nil {
 		return fmt.Errorf("connect to git credential service: %w", err)
 	}
@@ -171,10 +174,8 @@ func Forward(operation, socketPath string, in io.Reader, out io.Writer) error {
 			return err
 		}
 	}
-	if unixConn, ok := conn.(*net.UnixConn); ok {
-		if err := unixConn.CloseWrite(); err != nil {
-			return err
-		}
+	if err := conn.CloseWrite(); err != nil {
+		return err
 	}
 	_, err = io.Copy(out, io.LimitReader(conn, maxCredentialInputBytes+1))
 	return err

@@ -33,7 +33,7 @@ type gitCredentialBackend interface {
 
 func runGitCredentials(args []string, in io.Reader, out io.Writer) error {
 	if len(args) == 0 {
-		return errors.New(gitCredentialsUsage)
+		return fmt.Errorf("%s", gitCredentialsUsage)
 	}
 	store := gitCredentialStore()
 	switch args[0] {
@@ -52,7 +52,7 @@ func runGitCredentials(args []string, in io.Reader, out io.Writer) error {
 		return setGitCredential(args[1:], store, in)
 	case "remove":
 		if len(args) != 2 {
-			return errors.New(gitCredentialsUsage)
+			return fmt.Errorf("%s", gitCredentialsUsage)
 		}
 		credential, err := gitcredential.CredentialForRemote(args[1])
 		if err != nil {
@@ -77,11 +77,11 @@ func setGitCredential(args []string, store gitCredentialBackend, in io.Reader) e
 		case remote == "" && !strings.HasPrefix(args[i], "-"):
 			remote = args[i]
 		default:
-			return errors.New(gitCredentialsUsage)
+			return fmt.Errorf("%s", gitCredentialsUsage)
 		}
 	}
 	if remote == "" || username == "" {
-		return errors.New(gitCredentialsUsage)
+		return fmt.Errorf("%s", gitCredentialsUsage)
 	}
 	credential, err := gitcredential.CredentialForRemote(remote)
 	if err != nil {

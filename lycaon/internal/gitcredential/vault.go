@@ -100,7 +100,7 @@ func (b vaultBackend) Store(credential Credential) error {
 	if err != nil {
 		return err
 	}
-	encoded, err := json.Marshal(storedCredential{Username: credential.Username, Password: credential.Password})
+	encoded, err := json.Marshal(storedCredential{Username: credential.Username, Password: credential.Password}) //nolint:gosec // G117 — encoded only into the encrypted vault entry
 	if err != nil {
 		return err
 	}
