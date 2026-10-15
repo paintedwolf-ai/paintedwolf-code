@@ -103,6 +103,20 @@ prepare_runtime() {
     rm -rf "$engine_root/gitengine"
     mv "$staged" "$engine_root/gitengine"
   fi
+  # The staged text recognizer is gitignored; tests resolve it from the snapshot.
+  if [[ -d "$ROOT/lycaon-den/src-tauri/engine-root/ocr" ]]; then
+    local ocr_root="$SNAPSHOT_DIR/lycaon-den/src-tauri/engine-root" staged_ocr
+    mkdir -p "$ocr_root"
+    staged_ocr="$(mktemp -d "$ocr_root/.ocr.XXXXXX")"
+    if [[ "$(uname -s)" == Darwin ]]; then
+      cp -cpR "$ROOT/lycaon-den/src-tauri/engine-root/ocr/." "$staged_ocr/"
+    else
+      cp -a --reflink=auto "$ROOT/lycaon-den/src-tauri/engine-root/ocr/." "$staged_ocr/" 2>/dev/null ||
+        cp -a "$ROOT/lycaon-den/src-tauri/engine-root/ocr/." "$staged_ocr/"
+    fi
+    rm -rf "$ocr_root/ocr"
+    mv "$staged_ocr" "$ocr_root/ocr"
+  fi
 }
 
 preserve_fuzz_failures() {

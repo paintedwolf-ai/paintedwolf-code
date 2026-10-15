@@ -36,6 +36,7 @@ var userNoticeYAMLExtraRows = map[string]string{
 	"SCANNER_ENGINE_UNAVAILABLE":  "preflight surface; emitted by the scanner_engine probe",
 	"BROWSER_ENGINE_UNAVAILABLE":  "preflight surface; emitted by the browser_engine probe",
 	"DECISION_ENGINE_UNAVAILABLE": "preflight surface; emitted by the decision_engine probe",
+	"OCR_ENGINE_UNAVAILABLE":      "preflight surface; emitted by the ocr_engine probe",
 	"NO_PROVIDER_CONFIGURED":      "preflight surface; emitted by the provider_configured probe",
 	"LITE_UNAVAILABLE":            "preflight surface; emitted by the lite_slot probe",
 

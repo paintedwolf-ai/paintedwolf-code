@@ -123,6 +123,13 @@ bash "${ROOT}/scripts/gitengine-ensure.sh" || {
   echo "warning: gitengine:ensure failed — run ./task gitengine:fetch, or expect GIT_ENGINE_UNAVAILABLE" >&2
 }
 
+if [[ "$(uname -s)" == "Linux" ]]; then
+  echo "==> Fetching pinned text recognition engine"
+  bash "${ROOT}/scripts/ocrengine-fetch.sh" || {
+    echo "warning: ocrengine-fetch failed — rerun scripts/ocrengine-fetch.sh, or expect OCR_ENGINE_UNAVAILABLE" >&2
+  }
+fi
+
 echo "==> Generating third-party notices"
 bash "${ROOT}/scripts/licenses-notices.sh"
 

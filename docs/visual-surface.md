@@ -126,7 +126,10 @@ Host-produced images are not screened here. `render_view` rasterizes markup and 
 | Platform | Text recognition |
 |---|---|
 | macOS (cgo build) | Apple Vision; an engine error is a coverage fact (`ocr_failed`) |
-| macOS without cgo, Linux, Windows | unavailable (`ocr_unavailable`) |
+| Linux | the bundled Tesseract engine ([Bundled OCR engine](dependencies.md#bundled-ocr-engine)) with the English model: Latin-script text, orientation detected per image; a missing or altered engine is `ocr_unavailable`, an engine failure, timeout, or output overflow is `ocr_failed` |
+| macOS without cgo, Windows | unavailable (`ocr_unavailable`) |
+
+Both recognizers return the same shape: line spans with text, confidence on [0, 1], and a box normalized to the raster, which is what masking a match consumes.
 
 An SVG can draw other images: `href`, `xlink:href`, or `src` on any element, and `url(...)` in a `style` attribute or `<style>` text. A `data:` image is decoded and screened like any raster, under the same dimension bound, metadata reading, and OCR coverage; a nested SVG is read as markup, two levels deep. That text has no range in the document, so a match in it cannot be redacted there, and **Send redacted** withholds the pixels. An embedded image the gate cannot decode, more than 32 embedded images, or deeper nesting leaves the SVG not fully screened. A reference that is not `data:` is fetched only if the renderer would load it: the SVG rasterizer fails every request at its offline fence except project assets under the asset origin, so a remote or relative URL draws nothing, while a project asset is an image the gate did not read. Either unread case raises the card with `screening_gap: embedded_reference`.
 

@@ -1,0 +1,30 @@
+# Pinned OCR engine for Linux: a static Tesseract executable and its trained
+# data, released by the producer below and fetched into engine-root/ocr by
+# scripts/ocrengine-fetch.sh. The host verifies every payload digest before it
+# runs the engine. Build inputs and notices live in the producer repository;
+# these values come from the release's attested release.json.
+engine_version: "5.5.3+paintedwolf.1"
+producer:
+  repository: "paintedwolf-ai/paintedwolf-tesseract"
+  tag: "v5.5.3+paintedwolf.1"
+  commit: "2636845cf5c6ddba17145ccac4638539a386a53c"
+trained_data:
+  eng_traineddata:
+    sha256: "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"
+    bytes: 4113088
+  osd_traineddata:
+    sha256: "9cf5d576fcc47564f11265841e5ca839001e7e6f38ff7f7aacf46d15a96b00ff"
+    bytes: 10562727
+platforms:
+  linux-amd64:
+    url: "https://github.com/paintedwolf-ai/paintedwolf-tesseract/releases/download/v{engine_version}/paintedwolf-tesseract-{engine_version}-linux-amd64.tar.gz"
+    sha256: "7104c62a1a43d72840c522433bbf60bed0618f223480b0628603f439c5444f06"
+    bytes: 9198207
+    binary_sha256: "157fb8f9c711769ca488ccd409d75995ee9973b8fbda19c39ad26d89862e9668"
+    binary_bytes: 6474544
+  linux-arm64:
+    url: "https://github.com/paintedwolf-ai/paintedwolf-tesseract/releases/download/v{engine_version}/paintedwolf-tesseract-{engine_version}-linux-arm64.tar.gz"
+    sha256: "be02c0c80ff58b2f7ffe8167da483fa4603ea197ce57667ecb9204641c6bcbd4"
+    bytes: 9096306
+    binary_sha256: "12206d71c9b82b7d9a9849ce92cd95eaf4aca716a0ec5b907687ac4967de0b9d"
+    binary_bytes: 6240832

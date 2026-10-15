@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/ocrengine"
 	"github.com/lycaon/lycaon/internal/userpath"
 )
 
@@ -43,6 +44,7 @@ const (
 	CodeScannerEngineUnavailable  = "SCANNER_ENGINE_UNAVAILABLE"
 	CodeBrowserEngineUnavailable  = "BROWSER_ENGINE_UNAVAILABLE"
 	CodeDecisionEngineUnavailable = "DECISION_ENGINE_UNAVAILABLE"
+	CodeOCREngineUnavailable      = "OCR_ENGINE_UNAVAILABLE"
 	CodeNoProviderConfigured      = "NO_PROVIDER_CONFIGURED"
 	CodeLiteUnavailable           = "LITE_UNAVAILABLE"
 	CodeCommandPathLimited        = "COMMAND_PATH_LIMITED"
@@ -186,6 +188,7 @@ func Default() *Registry {
 		scannerEngineProbe{},
 		browserEngineProbe{},
 		decisionEngineProbe{},
+		ocrEngineProbe{available: ocrengine.Available},
 		providerConfiguredProbe{},
 		liteSlotProbe{},
 	)

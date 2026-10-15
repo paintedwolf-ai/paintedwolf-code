@@ -22,6 +22,11 @@ func NewDefaultOCREngine() OCREngine {
 	return &appleVisionOCR{}
 }
 
+// DefaultOCRBackend names the in-process recognizer.
+func DefaultOCRBackend() (string, error) {
+	return "apple_vision", nil
+}
+
 func (e *appleVisionOCR) RecognizeText(ctx context.Context, mime string, raw []byte) ([]TextSpan, error) {
 	if len(raw) == 0 {
 		return nil, nil

@@ -140,6 +140,7 @@ var confinementProducerInventory = map[string]string{
 	"internal/hitl/contained.go":                          "ContainedForRequest projection — reads the same union the executor applies",
 	"internal/toolexecution/command_operand_expansion.go": "globReadable(confReq) — pre-grant read boundaries for glob expansion",
 	"internal/documentcore/process.go":                    "DefaultConfinement(host MkdirTemp scratch) — native document core: only its own scratch root, network denied, mandatory application",
+	"internal/visualscreen/ocr_tesseract.go":              "DefaultConfinement(host MkdirTemp scratch) — bundled OCR engine: only its own per-image scratch root, network denied, mandatory application",
 }
 
 // The producer inventory matches the syntax tree.

@@ -18,6 +18,7 @@ const (
 	LaunchManagedBrowser  LaunchKind = "managed_browser"
 	LaunchLocalMCP        LaunchKind = "local_mcp"
 	LaunchDocumentCore    LaunchKind = "document_core"
+	LaunchOCREngine       LaunchKind = "ocr_engine"
 )
 
 // LaunchPlan carries mandatory process authority and attribution.
@@ -69,6 +70,11 @@ func DocumentCoreLaunch(confinement *confine.Confinement) LaunchPlan {
 	return LaunchPlan{Kind: LaunchDocumentCore, Subject: "document_core", Confinement: confinement}
 }
 
+// OCREngineLaunch starts the confined bundled text recognizer for one image.
+func OCREngineLaunch(confinement *confine.Confinement) LaunchPlan {
+	return LaunchPlan{Kind: LaunchOCREngine, Subject: "ocr_engine", Confinement: confinement}
+}
+
 // ScratchDirEnv names the session scratch folder in an agent process's environment.
 const ScratchDirEnv = "SCRATCH_DIR"
 
@@ -105,7 +111,7 @@ func (p LaunchPlan) validate() error {
 			return fmt.Errorf("external scanner launch cannot carry confinement")
 		}
 		return nil
-	case LaunchAgentCommand, LaunchBundledScanner, LaunchManagedBrowser, LaunchLocalMCP, LaunchDocumentCore:
+	case LaunchAgentCommand, LaunchBundledScanner, LaunchManagedBrowser, LaunchLocalMCP, LaunchDocumentCore, LaunchOCREngine:
 		if p.Confinement == nil && confine.Enforcing() {
 			return confine.ErrNotConfined
 		}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/dotversion"
 	"github.com/lycaon/lycaon/internal/gitengine"
+	"github.com/lycaon/lycaon/internal/ocrengine"
 	"github.com/lycaon/lycaon/internal/platformfloor"
 	"github.com/lycaon/lycaon/internal/userpath"
 )
@@ -339,6 +340,37 @@ func (decisionEngineProbe) Run(ctx context.Context, env Env) Result {
 	return Result{Status: StatusDegraded, Code: CodeDecisionEngineUnavailable, Detail: map[string]string{
 		"reason": string(reason),
 	}}
+}
+
+// ---------------------------------------------------------------------------
+// ocr_engine
+// ---------------------------------------------------------------------------
+
+// ocrEngineProbe asks available whether this device can recognize text.
+type ocrEngineProbe struct {
+	available func() error
+}
+
+func (ocrEngineProbe) ID() string { return "ocr_engine" }
+
+// Run reports whether images can be read for credentials before a model sees
+// them. Without a recognizer every raster asks before it is sent, so the app
+// works; the probe degrades rather than blocks.
+func (p ocrEngineProbe) Run(context.Context, Env) Result {
+	err := p.available()
+	if err == nil {
+		return Result{Status: StatusOK}
+	}
+	detail := map[string]string{"reason": ocrengine.ReasonMissing}
+	var ue *ocrengine.UnavailableError
+	if errors.As(err, &ue) {
+		detail["reason"] = ue.Reason
+		if ue.Path != "" {
+			// The payload name identifies the file without exposing the install path.
+			detail["payload"] = filepath.Base(ue.Path)
+		}
+	}
+	return Result{Status: StatusDegraded, Code: CodeOCREngineUnavailable, Detail: detail}
 }
 
 // ---------------------------------------------------------------------------
