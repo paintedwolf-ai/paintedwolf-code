@@ -17,7 +17,7 @@ func isPassThroughProducer(st bashStage) (passThrough, exact bool) {
 
 func isPassThroughWriterStage(st bashStage, hasOutRedirect bool) (passThrough, exact bool) {
 	if len(st.argv) == 0 {
-		return hasOutRedirect, hasOutRedirect
+		return false, false
 	}
 	prog := filepath.Base(st.argv[0].value)
 	if !st.argv[0].literal {
@@ -109,8 +109,10 @@ func parseDDArgs(args []bashWord) (path string, literal, appendMode, exact, ok b
 			}
 		case strings.HasPrefix(a.value, "status="):
 		case a.value == "conv=notrunc":
-		case a.value == "oflag=append" || a.value == "conv=notrunc,append":
+			exact = false
+		case a.value == "oflag=append":
 			appendMode = true
+			exact = false
 		case strings.HasPrefix(a.value, "if="):
 			return "", false, false, false, false
 		default:
