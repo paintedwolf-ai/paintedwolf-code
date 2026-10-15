@@ -110,3 +110,61 @@ func TestInjectedBoardRetainsPendingWorkerIntegration(t *testing.T) {
 		}
 	}
 }
+
+func TestPartialWorkerOrientationUsesLatestExactChildIdentity(t *testing.T) {
+	now := time.Date(2026, 10, 15, 12, 0, 0, 0, time.UTC)
+	partial := api.WorkerTask{ID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", ChildSessionID: "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", CreatedAt: now, Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "partial"}}}
+	for _, tc := range []struct {
+		name   string
+		change func(*api.WorkerTask)
+		newer  *api.WorkerTask
+		want   bool
+	}{
+		{name: "returned partial", want: true},
+		{name: "missing child", change: func(w *api.WorkerTask) { w.ChildSessionID = "" }},
+		{name: "missing job", change: func(w *api.WorkerTask) { w.ID = "" }},
+		{name: "not settled", change: func(w *api.WorkerTask) { w.Status = api.WorkerStatusRunning }},
+		{name: "newer running", newer: &api.WorkerTask{ID: "next", ChildSessionID: partial.ChildSessionID, CreatedAt: now.Add(time.Second), Status: api.WorkerStatusRunning}},
+		{name: "newer completed", newer: &api.WorkerTask{ID: "next", ChildSessionID: partial.ChildSessionID, CreatedAt: now.Add(time.Second), Status: api.WorkerStatusComplete}},
+		{name: "equal time deterministic", newer: &api.WorkerTask{ID: "zzzz", ChildSessionID: partial.ChildSessionID, CreatedAt: now, Status: api.WorkerStatusRunning}},
+		{name: "unrelated running", newer: &api.WorkerTask{ID: "next", ChildSessionID: "another-child", CreatedAt: now.Add(time.Second), Status: api.WorkerStatusRunning}, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			task := partial
+			if tc.change != nil {
+				tc.change(&task)
+			}
+			tasks := []api.WorkerTask{task}
+			if tc.newer != nil {
+				tasks = append([]api.WorkerTask{*tc.newer}, tasks...)
+			}
+			snapshot := api.BoardSnapshot{Workers: &api.BoardWorkersSlice{"tasks": tasks}}
+			for _, scope := range []packboard.InjectScope{packboard.InjectScopeFull, packboard.InjectScopePulse} {
+				lines, truncated := packboard.FormatInjectBodyScoped(snapshot, scope, false, now, api.MaxBoardInjectChars)
+				text := strings.Join(lines, "\n")
+				if truncated {
+					t.Fatal("small partial identity fixture truncated")
+				}
+				if strings.Contains(text, "Partial worker:") != tc.want {
+					t.Fatalf("partial row=%t want%t: %s", strings.Contains(text, "Partial worker:"), tc.want, text)
+				}
+				if tc.want && !strings.Contains(text, "Partial worker: job_id="+partial.ID+" · child_session_id="+partial.ChildSessionID) {
+					t.Fatalf("identity abbreviated or separated: %s", text)
+				}
+				if strings.Contains(text, "task(") || strings.Contains(text, "request_tools") {
+					t.Fatalf("factual board invented an action: %s", text)
+				}
+			}
+		})
+	}
+	before := api.BoardSnapshot{Workers: &api.BoardWorkersSlice{"tasks": []api.WorkerTask{partial}}}
+	changed := partial
+	changed.ChildSessionID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+	after := api.BoardSnapshot{Workers: &api.BoardWorkersSlice{"tasks": []api.WorkerTask{changed}}}
+	if packboard.PulseFingerprint(before, now) == packboard.PulseFingerprint(after, now) {
+		t.Fatal("partial identity change did not refresh dynamic board")
+	}
+	if packboard.OrientationFingerprint(before) != packboard.OrientationFingerprint(after) {
+		t.Fatal("partial identity invalidated stable orientation")
+	}
+}
