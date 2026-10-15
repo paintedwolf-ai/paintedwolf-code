@@ -186,6 +186,12 @@ Worker artifact checks and parent completion receipts share the same host inspec
 
 Some successful tool results include structured state updates such as queue position, active task, new revision, or no-op reason. Prompt steering consumes those fields directly. A no-op remains a result; if the agent must branch, the result needs a structured discriminator, not a parse of “nothing changed.”
 
+### Recall recovery
+
+Recall separates recorded observations from current files. A known message ID is sufficient for body recovery; ordinal bounds remain available for index paging and bounded reads. The host resolves a body’s ordinal and returns complete continuation arguments. `record_request` is the value of the next call’s `history` argument; `next_request` is the complete argument object.
+
+Matched results explain how to recover their public records when no body is present. Recorded text is projected beside its metadata, preserving cursor coordinates, authority, and canonical bytes. Query time-filter failures and history-coordinate failures carry separate typed facts into OAR copy. A read-only streak never establishes that evidence is complete or that another required recovery page is unnecessary.
+
 ### Progress reconciliation
 
 `update_progress` reports `status: updated` or `status: unchanged`; this is a
