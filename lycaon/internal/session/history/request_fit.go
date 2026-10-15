@@ -34,8 +34,10 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 			budget = budgets.RequestBudget(ctx, provider, candidate)
 		}
 		if calibration := m.Calibration(ctx, sess); calibration.Calibrated() {
+			tools := modelcall.EstimateRequestInput(modelcall.CompletionRequest{Tools: candidate.Tools})
 			transcript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(candidate.Messages))
-			observed := calibration.ProjectBilled(transcript, 0)
+			calibration.TranscriptEstimate += tools
+			observed := calibration.ProjectBilled(transcript+tools, 0)
 			// Composition changes need room beyond the last observed ratio.
 			budget.Input = max(budget.Input, observed+(observed+9)/10)
 		}
@@ -128,7 +130,7 @@ func (m *Service) requestContinuation(ctx context.Context, sess *api.Session, ro
 func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, history []api.Message, record *messageview.Continuation, cfg compaction.CompactionConfig, tokens int, shrinkTools bool) ([]api.Message, error) {
 	rows := append([]api.Message(nil), history...)
 	if shrinkTools && m.store != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess) {
-		rows = projectRecordedToolBodies(ctx, rows)
+		rows = projectRecordedToolBodies(ctx, rows, tokens)
 	}
 	found, text := false, ""
 	if record.ThroughOrd > 0 {

@@ -240,7 +240,7 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 			}
 		}
 		if row.ID == "recall-result" {
-			recallKept = row.Content == recallBody || strings.Contains(row.Content, `"message_id":"recall-result"`) && strings.Contains(row.Content, `recall(history=`)
+			recallKept = row.Content == recallBody
 		}
 	}
 	if !call || !result || !recallKept {
@@ -362,18 +362,23 @@ func TestRequestFittingReservesObservedInputUsage(t *testing.T) {
 func TestRequestFittingKeepsToolBodyWhenOutputCanYield(t *testing.T) {
 	body := strings.Repeat("Recorded observation. ", 1000)
 	rows := []api.Message{
-		{ID: "intent", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Inspect the observations"},
-		{ID: "call", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "read-call", Name: "read"}}},
-		{ID: "result", Role: api.MessageRoleTool, Content: body, PromptCacheBreakpoint: api.PromptCacheTierHistory,
+		{ID: "intent", Ord: 1, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Inspect the observations"},
+		{ID: "call", Ord: 2, Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "read-call", Name: "read"}}},
+		{ID: "result", Ord: 3, Role: api.MessageRoleTool, Content: body, PromptCacheBreakpoint: api.PromptCacheTierHistory,
 			ToolResult: &api.ToolResult{ToolCallID: "read-call", Tool: "read", Content: body}},
 	}
-	req := modelcall.CompletionRequest{Model: "small", Messages: rows}
+	toolDefs := []tools.ToolMeta{{Name: "read", Description: strings.Repeat("Tool schema. ", 800)}}
+	req := modelcall.CompletionRequest{Model: "small", Messages: rows, Tools: toolDefs}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 16384}})}
 	service := &Service{store: store.NewMemory(), recallAvailable: func(context.Context, *api.Session) bool { return true }}
-	fitted, err := service.FitRequest(t.Context(), &api.Session{ID: "s", Model: "small"}, rows, req, budgets)
+	sess := &api.Session{ID: "s", Model: "small"}
+	initialTranscript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(rows[:1]))
+	toolTokens := modelcall.EstimateRequestInput(modelcall.CompletionRequest{Tools: toolDefs})
+	service.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, initialTranscript+toolTokens, initialTranscript)
+	fitted, err := service.FitRequest(t.Context(), sess, rows, req, budgets)
 	testutil.FailErr(t, "allocate output around complete observations", err)
 	if !reflect.DeepEqual(rows, fitted.Messages) || fitted.MaxTokens <= 0 {
-		t.Fatal("automatic output reservation displaced a tool body that fits")
+		t.Fatal("automatic output reservation or tool-schema calibration displaced a tool body that fits")
 	}
 	budget := budgets.RequestBudget(t.Context(), "fixture", fitted)
 	if budget.Input+budget.Output+budget.Headroom > budget.Window {

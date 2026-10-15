@@ -6,20 +6,22 @@ import (
 	"maps"
 
 	"github.com/lycaon/lycaon/internal/guidance"
-
 	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // projectRecordedToolBodies preserves active exchanges while moving large bodies behind recall.
-func projectRecordedToolBodies(ctx context.Context, rows []api.Message) []api.Message {
-	out := make([]api.Message, 0, len(rows))
-	for _, row := range rows {
+func projectRecordedToolBodies(ctx context.Context, rows []api.Message, tokens ...int) []api.Message {
+	out := append([]api.Message(nil), rows...)
+	for i, row := range out {
 		if !isOversizedToolBody(row) {
-			out = append(out, row)
 			continue
+		}
+		if len(tokens) > 0 && tokens[0] > 1 && compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(out)) <= tokens[0] {
+			break
 		}
 		raw := row.Content
 		if row.ModelProjected {
@@ -41,7 +43,6 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message) []api.Me
 				Record    recall.HistoryRequest `json:"record_request"`
 			}{true, row.ToolResult.Outcome, record})
 			if err != nil {
-				out = append(out, row)
 				continue
 			}
 			content = string(envelope)
@@ -72,7 +73,7 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message) []api.Me
 		result := *row.ToolResult
 		result.Content = content
 		row.ToolResult = &result
-		out = append(out, row)
+		out[i] = row
 	}
 	return out
 }
