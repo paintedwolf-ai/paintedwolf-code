@@ -21,7 +21,7 @@ import { createFileConfirmations } from "../commands/file-confirmations.ts";
 import { createBufferLoading } from "../documents/files-buffer-loading.ts";
 import { createFileMergeCommands } from "../documents/file-merge-commands.ts";
 import { FilesNavigationPane } from "./FilesNavigationPane.tsx";
-import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from "solid-js";
 import { registerEscapeLadderLayer } from "../../find/escape-ladder.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { isBackendReachable } from "../../platform/connection/sidecar-status.ts";
@@ -127,6 +127,20 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
   });
   const { filesOpenListOpen, setRovingTabKey, closeBuffers, requestCloseFamily, openFilesList, closeBuffer } = tabCommands;
   const [hiddenTabCount, setHiddenTabCount] = createSignal(0);
+  // The loading layer leaves the DOM once it has faded: WebKitGTK aborts a screen
+  // reader's text query over text left in a visibility-hidden layer.
+  const [loadingMounted, setLoadingMounted] = createSignal(true);
+  let loadingLayer: HTMLDivElement | undefined;
+  createEffect(on(stageReady, (ready) => {
+    if (!ready) {
+      setLoadingMounted(true);
+      return;
+    }
+    const fades = loadingLayer
+      ? getComputedStyle(loadingLayer).transitionDuration.split(",").some((value) => Number.parseFloat(value) > 0)
+      : false;
+    if (!fades) setLoadingMounted(false);
+  }));
   const [showLeadingFade, setShowLeadingFade] = createSignal(false);
   const [showTrailingFade, setShowTrailingFade] = createSignal(false);
   const treeInteraction = createFilesTreeInteraction({
@@ -309,18 +323,28 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
       aria-busy={retainedWorkspacePending()}
     >
       <div
+        ref={(element) => {
+          loadingLayer = element;
+        }}
         class="project-files-stage-boundary__loading"
         classList={{
           "project-files-stage-boundary__loading--ready": stageReady(),
         }}
         aria-hidden={stageReady()}
         inert={stageReady() ? true : undefined}
+        onTransitionEnd={(event) => {
+          if (event.target === event.currentTarget && event.propertyName === "visibility" && stageReady()) {
+            setLoadingMounted(false);
+          }
+        }}
       >
-        <ProjectLoadingStage
-          label={holdLabel()}
-          hint={holdHint()}
-          tone={holdTone()}
-        />
+        <Show when={loadingMounted()}>
+          <ProjectLoadingStage
+            label={holdLabel()}
+            hint={holdHint()}
+            tone={holdTone()}
+          />
+        </Show>
       </div>
       <div
         class="project-files-stage-boundary__content den-retained-presentation"

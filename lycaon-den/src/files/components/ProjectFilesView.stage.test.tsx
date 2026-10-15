@@ -99,6 +99,39 @@ describe("ProjectFilesView stage chrome", () => {
     await waitFor(() => {
       expect(boundary.getAttribute("data-ready")).toBe("true");
     });
+    // Without a fade the loading text leaves at once; none stays in a hidden layer.
+    expect(screen.queryByTestId("project-loading-stage")).toBeNull();
+  });
+
+  it("removes the loading text once the loading layer has faded out", async () => {
+    const appStore = createAppStore();
+    appStore.actions.setSidecarStatus("connected");
+    const base = getLycaonClient()!;
+    let resolveWorkspace!: (value: ReturnType<typeof sourceWorkspace>) => void;
+    const workspace = new Promise<ReturnType<typeof sourceWorkspace>>((resolve) => {
+      resolveWorkspace = resolve;
+    });
+    const client = stubFilesClient({ ...base, getSourceWorkspace: vi.fn(() => workspace) });
+    render(() => (
+      <ProjectFilesView projectId={PROJECT} projectName="Nomos" appStore={appStore} roots={[]} client={client} />
+    ));
+    const boundary = screen.getByTestId("project-files-stage-boundary");
+    const layer = required(boundary.querySelector<HTMLElement>(".project-files-stage-boundary__loading"));
+    layer.style.transitionDuration = "0.2s";
+
+    resolveWorkspace(sourceWorkspace("workspace-ready", []));
+    await waitFor(() => expect(boundary.getAttribute("data-ready")).toBe("true"));
+    expect(screen.getByTestId("project-loading-stage")).toBeTruthy();
+
+    const faded = (propertyName: string) => {
+      const event = new Event("transitionend", { bubbles: true });
+      Object.defineProperty(event, "propertyName", { value: propertyName });
+      layer.dispatchEvent(event);
+    };
+    faded("opacity");
+    expect(screen.getByTestId("project-loading-stage")).toBeTruthy();
+    faded("visibility");
+    expect(screen.queryByTestId("project-loading-stage")).toBeNull();
   });
 
   it("confirms the physical workspace before browsing from cached state", async () => {
