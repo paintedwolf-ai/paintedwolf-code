@@ -135,6 +135,31 @@ Secret declarations are `user-repo` content governed by the project's existing `
 
 Project overlays never hold device credentials or grants. `model-policy.yaml` has two distinct artifacts: the device file is `device-config`; `{project}/.paintedwolf/model-policy.yaml` is `user-repo` content under the primary root's `overlay_format` contract.
 
+## Extension identities
+
+`extension_api` selects host interpretation and capabilities. A pack's `version`
+is its semantic release identity; workflow versions separately pin resumable run
+content. Catalog revisions identify captured effective content and configuration.
+None substitutes for another. Content changes can move a catalog revision without
+changing a pack version, while a version bump alone does not prove compatibility.
+
+## Prompt overrides
+
+Project and site prompt overrides persist independently of the bundled templates.
+Their include paths, required persona sections, unit slots, and template variables
+must be considered when changing prompt composition. A missing dependency fails
+rendering; the host does not silently omit it. Validate an override against the
+candidate's template graph before using it.
+
+Overrides copied from 1.0.1 must remove includes of
+`partials/coordinator-mode-investigate-progress.md` and
+`partials/coordinator-progress-closure.md`. The host now composes progress
+instructions through `shared/units/coordinator-progress-procedure.md` in the
+`procedures` slot. Keep `{{ units.procedures }}` in the parent template instead of
+including that unit directly, so its tool and surface eligibility still applies.
+Overrides of `guidance/coordinator-report-document.md` must consume its structured
+issue and retained-document variables instead of `drafted_synthesis`.
+
 ## Agent-public vocabulary
 
 Structured tool names, `Code:` meanings, rule effects, theme tokens, and other model- or extension-authored ids are contracts because external text or content can name them. Virtual root prefixes such as `@scratch` are likewise agent-public path vocabulary, and no attached root may carry a virtual root's label.
