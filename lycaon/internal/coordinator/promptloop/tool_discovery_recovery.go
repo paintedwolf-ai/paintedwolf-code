@@ -24,11 +24,8 @@ func (l *toolInvocations) addToolDiscovery(sessionID string, tctx tools.ToolCont
 	if err != nil {
 		return
 	}
-	// This page is carried by another tool's refusal, so name its loader explicitly.
-	page.Instruction = "Call request_tools with a relevant entry's exact name as need."
-	if page.NextNeed != "" {
-		page.Instruction += " For more entries, pass next_need unchanged as need."
-	}
+	// The OAR remedy names the loader; its embedded catalog carries only data.
+	page.Instruction = ""
 	data["discovery"] = page
 	data["tool_discovery_status"] = page.Status
 	data["tool_discovery_has_more"] = page.NextNeed != ""

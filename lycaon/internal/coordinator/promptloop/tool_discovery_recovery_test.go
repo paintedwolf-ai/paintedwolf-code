@@ -95,8 +95,8 @@ func TestUnknownToolRecoveryPagesAndLoadsThroughProductionLoader(t *testing.T) {
 	if !strings.Contains(content, `"status":"catalog"`) || strings.Contains(content, "details_omitted") || strings.Contains(content, "privateprivate") {
 		t.Fatalf("provider lost safe catalog: %s", content)
 	}
-	if !strings.Contains(page.Instruction, "Call request_tools") || strings.Contains(page.Instruction, "this tool") {
-		t.Fatal("cross-tool discovery did not name its loader")
+	if page.Instruction != "" || !strings.Contains(rejected.Copy["fix"], "`request_tools`") {
+		t.Fatal("catalog must defer recovery instructions to rendered OAR")
 	}
 	pageBytes, err := json.Marshal(page)
 	testutil.FailErr(t, "encode catalog page", err)
