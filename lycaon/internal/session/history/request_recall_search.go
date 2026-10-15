@@ -25,6 +25,12 @@ func projectRecallSearch(raw string, maxBytes int) (string, bool) {
 		if !ok {
 			return "", false
 		}
+		handle, _ := hit["handle"].(string)
+		record, _ := hit["record_request"].(map[string]any)
+		messageID, _ := record["message_id"].(string)
+		if handle == "" && messageID == "" {
+			return "", false
+		}
 		delete(hit, "snippet")
 		if _, exists := hit["body"]; exists {
 			delete(hit, "body")

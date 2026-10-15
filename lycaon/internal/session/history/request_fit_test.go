@@ -240,7 +240,7 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 			}
 		}
 		if row.ID == "recall-result" {
-			recallKept = row.Content == recallBody
+			recallKept = row.Content == recallBody || strings.Contains(row.Content, `"message_id":"recall-result"`) && strings.Contains(row.Content, `recall(history=`)
 		}
 	}
 	if !call || !result || !recallKept {
