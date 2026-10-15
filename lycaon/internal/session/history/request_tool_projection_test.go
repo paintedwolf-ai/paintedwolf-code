@@ -121,3 +121,37 @@ func TestProjectedRecallKeepsOriginalRecoveryTarget(t *testing.T) {
 		t.Fatal("fitting changed canonical bytes")
 	}
 }
+
+func TestRecallSearchFitKeepsRecoverableHits(t *testing.T) {
+	hits := []any{}
+	for _, id := range []string{"newest", "middle", "oldest"} {
+		hits = append(hits, map[string]any{"handle": id, "record_request": map[string]any{"message_id": id}, "body": []string{strings.Repeat("recorded observation ", 2000)}, "untrusted": true, "currency": "stale"})
+	}
+	raw, err := json.Marshal(map[string]any{"resolution": "matched", "count": map[string]any{"value": 3, "relation": "exact"}, "hits": hits})
+	testutil.FailErr(t, "encode search observations", err)
+	row := api.Message{ID: "query-result", Ord: 8, Role: api.MessageRoleTool, Content: "[recall#4]\n" + string(raw), ToolResult: &api.ToolResult{Tool: "recall", Content: "[recall#4]\n" + string(raw)}}
+	result := projectRecordedToolBodies(t.Context(), []api.Message{row})[0]
+	_, body, _, ok := hostmarker.SplitToolJSONBody(result.Content)
+	if !ok || len(result.Content) > 2048 {
+		t.Fatal("search projection lost its bounded envelope")
+	}
+	var page map[string]any
+	testutil.FailErr(t, "decode bounded search", json.Unmarshal([]byte(body), &page))
+	shown, ok := page["hits"].([]any)
+	if !ok || len(shown) != 3 {
+		t.Fatal("search projection discarded source addresses with the bodies")
+	}
+	for _, item := range shown {
+		hit := item.(map[string]any)
+		if hit["record_request"] == nil || hit["untrusted"] != true || hit["currency"] != "stale" || hit["body"] != nil {
+			t.Fatal("search projection lost identity or authority metadata")
+		}
+	}
+	if !strings.Contains(row.Content, "recorded observation") {
+		t.Fatal("search projection changed original bytes")
+	}
+	fitted, ok := projectRecallSearch(row.Content, 450)
+	if !ok || !strings.Contains(fitted, "oldest") || !strings.Contains(fitted, "newest") || !strings.Contains(fitted, `"hits_truncated":true`) {
+		t.Fatalf("partial search did not preserve endpoint addresses and truncation: %s", fitted)
+	}
+}

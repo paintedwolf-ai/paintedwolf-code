@@ -26,6 +26,9 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message) []api.Me
 			raw = row.ToolResult.Content
 		}
 		content, fitted, isHistory := projectRecallHistoryPage(ctx, raw, 2048, row.ToolResult.ToolArgs)
+		if !fitted && !isHistory && row.ToolResult.Tool == "recall" {
+			content, fitted = projectRecallSearch(raw, 2048)
+		}
 		if !fitted {
 			record := recall.HistoryRequest{ThroughOrd: row.Ord, MessageID: row.ID,
 				SourceSeq: row.Seq, Format: "text", BodyRunes: 4096}
