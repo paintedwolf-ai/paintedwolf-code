@@ -234,7 +234,7 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 		}
 		if row.ID == "result" {
 			result = row.ToolResult != nil && row.ToolResult.ToolCallID == "read-call" && row.ToolResult.AssistantMessageID == "call" && row.ToolResult.Outcome == api.ToolResultOutcomeCompleted && reflect.DeepEqual(row.ToolResult.ToolArgs, args)
-			if !strings.Contains(row.Content, `"record_request"`) || row.TrustTier != api.ContentTrustTierUntrusted || row.Authority != api.ContentAuthorityNone {
+			if !strings.Contains(row.Content, `recall(history=`) || row.TrustTier != api.ContentTrustTierUntrusted || row.Authority != api.ContentAuthorityNone {
 				t.Fatal("active projection lost recovery or promoted observation trust")
 			}
 		}
@@ -256,7 +256,7 @@ func TestReviewRecallPageProjectionKeepsCursorContiguous(t *testing.T) {
 	body := strings.Repeat("😀", 4096)
 	raw, err := json.Marshal(map[string]any{"history": map[string]any{"format": "record", "entries": []any{map[string]any{"message_id": "original", "ord": 1, "content": body, "runes": 9000, "offset": 4096, "seq": 1}}, "next_offset": 8192, "through_ord": 1, "recorded": true}})
 	testutil.FailErr(t, "encode record page", err)
-	rows := projectRecordedToolBodies([]api.Message{{ID: "recall-result", Ord: 3, Role: api.MessageRoleTool, Content: string(raw), ToolResult: &api.ToolResult{Tool: "recall", Content: string(raw)}}})
+	rows := projectRecordedToolBodies(t.Context(), []api.Message{{ID: "recall-result", Ord: 3, Role: api.MessageRoleTool, Content: string(raw), ToolResult: &api.ToolResult{Tool: "recall", Content: string(raw)}}})
 	var page struct {
 		History struct {
 			Entries []struct {
@@ -281,7 +281,7 @@ func TestReviewRecallPageProjectionKeepsCursorContiguous(t *testing.T) {
 		map[string]any{"message_id": "m4", "ord": 4, "content": strings.Repeat("d", 15000)},
 	}, "through_ord": 4, "recorded": true}})
 	testutil.FailErr(t, "encode index page", err)
-	indexRows := projectRecordedToolBodies([]api.Message{{ID: "recall-index", Ord: 4, Role: api.MessageRoleTool, Content: string(indexRaw), ToolResult: &api.ToolResult{Tool: "recall", Content: string(indexRaw)}}})
+	indexRows := projectRecordedToolBodies(t.Context(), []api.Message{{ID: "recall-index", Ord: 4, Role: api.MessageRoleTool, Content: string(indexRaw), ToolResult: &api.ToolResult{Tool: "recall", Content: string(indexRaw)}}})
 	var indexPage struct {
 		History struct {
 			Entries      []struct{ Ord int `json:"ord"` } `json:"entries"`

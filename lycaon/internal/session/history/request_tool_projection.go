@@ -1,7 +1,10 @@
 package history
 
 import (
+	"context"
 	"encoding/json"
+
+	"github.com/lycaon/lycaon/internal/guidance"
 
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/recall"
@@ -10,7 +13,7 @@ import (
 )
 
 // projectRecordedToolBodies preserves active exchanges while moving large bodies behind recall.
-func projectRecordedToolBodies(rows []api.Message) []api.Message {
+func projectRecordedToolBodies(ctx context.Context, rows []api.Message) []api.Message {
 	out := make([]api.Message, 0, len(rows))
 	for _, row := range rows {
 		if !isOversizedToolBody(row) {
@@ -22,17 +25,27 @@ func projectRecordedToolBodies(rows []api.Message) []api.Message {
 			content, fitted = tooloutput.FitWireJSON(row.Content, 2048)
 		}
 		if !fitted {
+			record := recall.HistoryRequest{ThroughOrd: row.Ord, MessageID: row.ID,
+				SourceSeq: row.Seq, Format: "record", BodyRunes: 2048}
 			raw, err := json.Marshal(struct {
 				Compacted bool                  `json:"compacted"`
 				Outcome   api.ToolResultOutcome `json:"outcome,omitempty"`
 				Record    recall.HistoryRequest `json:"record_request"`
-			}{true, row.ToolResult.Outcome, recall.HistoryRequest{ThroughOrd: row.Ord, MessageID: row.ID,
-				SourceSeq: row.Seq, Format: "record", BodyRunes: 2048}})
+			}{true, row.ToolResult.Outcome, record})
 			if err != nil {
 				out = append(out, row)
 				continue
 			}
 			content = string(raw)
+			historyJSON, err := json.Marshal(record)
+			if err == nil {
+				if rendered, err := guidance.RenderGuidance(ctx, "compaction/tool-result-reference", map[string]any{
+					"tool": row.ToolResult.Tool, "outcome": row.ToolResult.Outcome,
+					"evidence_handles": row.EvidenceHandles, "history_json": string(historyJSON),
+				}); err == nil && rendered != "" && len(rendered) <= 2048 {
+					content = rendered
+				}
+			}
 		}
 		tiers := []api.ContentTrustTier{row.TrustTier}
 		for _, part := range api.MessageTextParts(row) {

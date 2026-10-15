@@ -128,7 +128,7 @@ func (m *Service) requestContinuation(ctx context.Context, sess *api.Session, ro
 func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, history []api.Message, record *messageview.Continuation, cfg compaction.CompactionConfig, tokens int, shrinkTools bool) ([]api.Message, error) {
 	rows := append([]api.Message(nil), history...)
 	if shrinkTools && m.store != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess) {
-		rows = projectRecordedToolBodies(rows)
+		rows = projectRecordedToolBodies(ctx, rows)
 	}
 	found, text := false, ""
 	if record.ThroughOrd > 0 {

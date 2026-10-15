@@ -6,7 +6,9 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -20,7 +22,7 @@ func TestRecordedRecallPageKeepsEnvelopeAndCursor(t *testing.T) {
 	raw, err := json.Marshal(map[string]any{"history": page})
 	testutil.FailErr(t, "encode recall page", err)
 	content := "[recall#4]\n" + string(raw) + "\nrecorded suffix"
-	rows := projectRecordedToolBodies([]api.Message{{ID: "recall-result", Ord: 3, Role: api.MessageRoleTool,
+	rows := projectRecordedToolBodies(t.Context(), []api.Message{{ID: "recall-result", Ord: 3, Role: api.MessageRoleTool,
 		Content: content, ToolResult: &api.ToolResult{Tool: "recall", Content: content}}})
 	prefix, body, suffix, ok := hostmarker.SplitToolJSONBody(rows[0].Content)
 	if !ok || prefix != "[recall#4]\n" || suffix != "\nrecorded suffix" || len(rows[0].Content) > 2048 {
@@ -36,5 +38,30 @@ func TestRecordedRecallPageKeepsEnvelopeAndCursor(t *testing.T) {
 	entry := projected.History.Entries[0]
 	if *projected.History.NextOffset != entry.Offset+utf8.RuneCountInString(entry.Content) {
 		t.Fatal("projection skipped recorded characters")
+	}
+}
+
+func TestRecordedToolReferenceNamesRecoveryInvocation(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	body := strings.Repeat("Recorded observation. ", 1000)
+	row := api.Message{ID: "original", Ord: 7, Seq: 12, Role: api.MessageRoleTool,
+		Content: body, EvidenceHandles: []string{"read#1"},
+		ToolResult: &api.ToolResult{Tool: "read", Content: body, Outcome: api.ToolResultOutcomeCompleted}}
+	projected := projectRecordedToolBodies(t.Context(), []api.Message{row})[0]
+	_, invocation, found := strings.Cut(projected.Content, "recall(history=")
+	if !found || !strings.Contains(projected.Content, "read#1") {
+		t.Fatal("compacted observation omitted its recovery invocation or evidence handle")
+	}
+	encoded, _, found := strings.Cut(invocation, ")`")
+	if !found {
+		t.Fatal("recovery invocation is incomplete")
+	}
+	var history recall.HistoryRequest
+	testutil.FailErr(t, "decode model-facing recovery invocation", json.Unmarshal([]byte(encoded), &history))
+	if history.MessageID != row.ID || history.ThroughOrd != row.Ord || history.SourceSeq != row.Seq || history.Format != "record" || history.BodyRunes != 2048 {
+		t.Fatalf("recovery invocation lost canonical coordinates: %+v", history)
+	}
+	if len(projected.Content) > 2048 || row.Content != body || row.ToolResult.Content != body {
+		t.Fatal("recovery cue exceeded its projection budget or changed the original observation")
 	}
 }
