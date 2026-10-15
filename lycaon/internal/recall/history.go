@@ -142,22 +142,26 @@ func historyIndex(ctx context.Context, tx *sql.Tx, session string, h *HistoryReq
 		limit = DefaultLimit
 	}
 	limit = min(limit, MaxLimit)
+	const historyTermMatch = `instr(lower(` + historyPreview + ` || ' ' || ` + historySearchEnvelope + `), ?) > 0`
 	query := `SELECT id, ord, role, substr(` + historyPreview + `,1,120), length(` + historyPreview + `), COALESCE(evidence_handles_json,'[]'), seq
   FROM messages WHERE session_id = ? AND ord > ? AND ord <= ? AND ` + historyVisible + ` ORDER BY ord LIMIT ?`
 	args := []any{session, h.AfterOrd, h.ThroughOrd, limit + 1}
 	if terms := strings.Fields(h.Search); len(terms) > 0 {
 		ftsTerms := make([]string, len(terms))
-		lowerTerms := make([]string, len(terms))
 		for i, term := range terms {
 			ftsTerms[i] = `"` + strings.ReplaceAll(term, `"`, `""`) + `"`
-			lowerTerms[i] = strings.ToLower(term)
 		}
-		termsJSON, _ := json.Marshal(lowerTerms)
+		args = []any{session, h.AfterOrd, h.ThroughOrd, strings.Join(ftsTerms, " AND ")}
+		for i := range 8 {
+			args = append(args, strings.ToLower(terms[min(i, len(terms)-1)]))
+		}
+		args = append(args, limit+1)
 		query = `SELECT id, ord, role, substr(` + historyPreview + `,1,120), length(` + historyPreview + `), COALESCE(evidence_handles_json,'[]'), seq
   FROM messages WHERE session_id = ? AND ord > ? AND ord <= ? AND ` + historyVisible + `
-  AND (rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?) OR NOT EXISTS (SELECT 1 FROM json_each(?) WHERE instr(lower(` + historyPreview + ` || ' ' || ` + historySearchEnvelope + `), value) = 0))
+  AND (rowid IN (SELECT rowid FROM messages_fts WHERE messages_fts MATCH ?) OR (` +
+			historyTermMatch + ` AND ` + historyTermMatch + ` AND ` + historyTermMatch + ` AND ` + historyTermMatch + ` AND ` +
+			historyTermMatch + ` AND ` + historyTermMatch + ` AND ` + historyTermMatch + ` AND ` + historyTermMatch + `))
   ORDER BY ord LIMIT ?`
-		args = []any{session, h.AfterOrd, h.ThroughOrd, strings.Join(ftsTerms, " AND "), string(termsJSON), limit + 1}
 	}
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
