@@ -226,7 +226,6 @@ func TestInspectCommandFileWriteIgnoresNonWriteCommands(t *testing.T) {
 		{"command": "python3 - << 'EOF'\nprint('hello')\nEOF"},
 		{"command": "sqlite3 app.db << 'EOF'\nSELECT 1;\nEOF"},
 		{"command": "cat << 'EOF' > /dev/null\nignored\nEOF"},
-		{"command": "echo built > out.log"},
 		{"command": "ls > listing.txt"},
 		{"command": "cat notes.txt > copy.txt"},
 		{"command": "sort < in.txt > out.log"},

@@ -20,6 +20,13 @@ At rendering, [`oarcopy.FactsFromData`](../lycaon/internal/oarcopy/facts.go) pub
 
 On the wire, a tool result carries ordered `feedback` entries (`code`, typed `details`, optional `subject`), a producer-stated `dispatch` record for worker creation, and a producer-stated `completion` record for lifecycle work. `codes` is the compact ordered card-selection projection of `feedback`; it is never the only rejection data.
 
+Literal `echo` and `printf` output directed to a file uses `USE_WRITE_NATIVE`,
+including short log lines. The file-writing operation has the same recovery
+whether called directly or inside a shell wrapper. Ordinary stdout and arbitrary
+program output are unaffected. Exact replacement calls require representable
+paths and known output bytes; uncertain quoting, expansion, or output options
+retain recovery guidance without synthesized file content.
+
 ## Source text in model requests
 
 Successful native content, symbol, and range reads retain their structured result
