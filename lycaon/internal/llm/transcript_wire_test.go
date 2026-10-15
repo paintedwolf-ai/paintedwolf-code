@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"bytes"
 	"encoding/json"
 	"strings"
 	"testing"
@@ -211,5 +212,45 @@ func TestInvocationFactsSurviveContextAndProviderWire(t *testing.T) {
 	testutil.FailErr(t, "capture retained result", err)
 	if string(before) != string(after) {
 		t.Fatal("provider projection changed durable invocation evidence")
+	}
+}
+
+func TestFileContentLabelsSurviveProviderProjection(t *testing.T) {
+	for _, tool := range []string{"read", "summarize"} {
+		body := `{"path":"input.json","mode":"content","offset":1,"end_line":1,"content":"     1: {\"receipt\":\"payload\"}","receipt":{"tool":"read"}}`
+		if tool == "summarize" {
+			body = `{"pack":{"substance":[{"path":"input.json","start_line":1,"end_line":1,"handle":"summarize#1","body":"     1: {\"receipt\":\"payload\"}"}]}}`
+		}
+		original := api.Message{Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Content: body, PromptCacheBreakpoint: api.PromptCacheTierHistory, ToolResult: &api.ToolResult{Tool: tool, ToolCallID: "source-call", Outcome: api.ToolResultOutcomeCompleted, Content: body}}
+		messages := transcript.Project([]api.Message{
+			{Role: api.MessageRoleSystem, Content: "Standing guidance", PromptCacheBreakpoint: api.PromptCacheTierStanding},
+			{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "source-call", Name: tool, Args: map[string]any{"path": "input.json"}}}}, original,
+		})
+		round := compaction.ContextMessagesToAPI(compaction.ContextMessagesFromAPI(messages), messages)
+		messages = transcript.Project(round)
+		if messages[0].PromptCacheBreakpoint != api.PromptCacheTierStanding || messages[len(messages)-1].PromptCacheBreakpoint != api.PromptCacheTierHistory {
+			t.Fatal("source projection moved cache boundaries")
+		}
+		system, anthropic := anthropicprovider.ProjectMessages(messages, nil, false, "", "", "")
+		rawSystem, err := json.Marshal(system)
+		testutil.FailErr(t, "encode static prefix", err)
+		if bytes.Contains(rawSystem, []byte("File contents")) {
+			t.Fatal("source label entered static prefix")
+		}
+		_, vertex := vertexexpressprovider.ProjectMessages(messages, false, "")
+		for name, wire := range map[string]any{"Ollama": ollamaprovider.ProjectMessages(messages, ollamaprovider.MessageProjection{}), "OpenAI": openaicompat.ProjectMessages(messages, openaicompat.MessageProjection{}), "Anthropic": anthropic, "Vertex": vertex} {
+			raw, err := json.Marshal(wire)
+			testutil.FailErr(t, "encode source wire", err)
+			for _, want := range []string{`⟦D⟧File contents "input.json" (lines 1–1)`, "⟦D⟧Tool result metadata:", `⟦D⟧{"receipt":"payload"}`} {
+				quoted, err := json.Marshal(want)
+				testutil.FailErr(t, "encode expected source", err)
+				if bytes.Count(raw, quoted[1:len(quoted)-1]) != 1 {
+					t.Fatalf("%s %s lost or duplicated %q: %s", tool, name, want, raw)
+				}
+			}
+		}
+		if original.Content != body || original.ToolResult.Content != body {
+			t.Fatal("projection changed retained source")
+		}
 	}
 }
