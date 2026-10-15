@@ -124,6 +124,12 @@ func runDecideExport(args []string) error {
 		out = f
 	}
 	exporter := rowExporter{queries: queries, units: units, roots: roots, messages: map[string][]db.ListSessionMessagesRow{}, enc: json.NewEncoder(out)}
+	var closers []io.Closer
+	defer func() {
+		for _, c := range closers {
+			_ = c.Close()
+		}
+	}()
 	for _, target := range []struct {
 		path    string
 		encoder **json.Encoder
@@ -135,7 +141,7 @@ func runDecideExport(args []string) error {
 		if err != nil {
 			return err
 		}
-		defer func() { _ = f.Close() }()
+		closers = append(closers, f)
 		*target.encoder = json.NewEncoder(f)
 	}
 	if err := exporter.run(ctx, *after); err != nil {
