@@ -357,7 +357,7 @@ jobs:
             --updater-extension "${UPDATER_EXTENSION}" --output "${RUNNER_TEMP}/release"
 
       - name: Upload signed platform result
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: platform-release-${{ matrix.updater_key }}
           path: ${{ runner.temp }}/release/*
@@ -478,7 +478,7 @@ jobs:
           ls -l "${RUNNER_TEMP}/candidate"
 
       - name: Retain candidate packages
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: linux-candidate-${{ matrix.updater_key }}
           path: ${{ runner.temp }}/candidate/*
@@ -546,7 +546,7 @@ jobs:
           fi
 
       - name: Upload aggregate release metadata
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-metadata
           path: aggregate/*
@@ -554,7 +554,7 @@ jobs:
           retention-days: 14
 
       - name: Upload public release artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-public-artifacts
           path: public-artifacts/*
