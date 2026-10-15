@@ -75,8 +75,9 @@ func answerControl() (bool, error) {
 		return false, io.EOF
 	}
 	var m controlMessage
-	if json.Unmarshal(buf[:n], &m) != nil {
-		return false, nil
+	if err := json.Unmarshal(buf[:n], &m); err != nil {
+		// Only the outer helper writes here; anything else ends the sandbox.
+		return false, fmt.Errorf("control message: %w", err)
 	}
 	switch m.Kind {
 	case controlReady:
@@ -84,7 +85,7 @@ func answerControl() (bool, error) {
 	case controlSocket:
 		return false, answerSocket(m.Family)
 	}
-	return false, nil
+	return false, fmt.Errorf("control message kind %q", m.Kind)
 }
 
 func answerSocket(family int) error {

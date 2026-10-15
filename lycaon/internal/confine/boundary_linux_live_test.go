@@ -219,7 +219,7 @@ func helperBinary(t *testing.T, self string) string {
 	}
 	helperBuild.once.Do(func() {
 		// Children inherit it; go test's own directory is never merged.
-		helperBuild.err = os.Setenv("GOCOVERDIR", dir)
+		helperBuild.err = os.Setenv("GOCOVERDIR", dir) //nolint:usetesting // Process-wide: every later test's helper shares the one build.
 		helperBuild.path = filepath.Join(os.TempDir(), "pw-confine-helper-"+strconv.Itoa(os.Getpid()))
 		build := exec.Command("go", "build", "-cover", "-tags", "confinehelpermain",
 			"-coverpkg=github.com/lycaon/lycaon/internal/confine/...", "-o", helperBuild.path, "./testdata/helpermain")
@@ -288,7 +288,7 @@ func TestLinuxWritesStayInsideWriteRoots(t *testing.T) {
 	// since the test harness relocates it under the temporary root.
 	account, err := user.Current()
 	testutil.FailErr(t, "current user", err)
-	outside, err := os.MkdirTemp(account.HomeDir, ".pwc-confine-test-")
+	outside, err := os.MkdirTemp(account.HomeDir, ".pwc-confine-test-") //nolint:usetesting // Must lie outside every write root.
 	testutil.FailErr(t, "outside dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(outside) })
 	c := denyConfinement(proj)
@@ -451,7 +451,7 @@ func TestLinuxUnixSocketsAreRefused(t *testing.T) {
 	// A socket the test serves outside every root; the test reaches it itself,
 	// so the confined refusal is the boundary and not a missing listener.
 	// The test's own temporary directory is too deep for a socket path.
-	short, err := os.MkdirTemp("/tmp", "pw-unix-")
+	short, err := os.MkdirTemp("/tmp", "pw-unix-") //nolint:usetesting // Short socket path.
 	testutil.FailErr(t, "socket directory", err)
 	t.Cleanup(func() { _ = os.RemoveAll(short) })
 	own := filepath.Join(short, "own.sock")

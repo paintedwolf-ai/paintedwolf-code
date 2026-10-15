@@ -161,30 +161,37 @@ func TestRelayDatagramsKeepsEachSendersFlow(t *testing.T) {
 	go relayDatagrams(relay, func() (net.Conn, error) { return net.Dial("udp", echo.LocalAddr().String()) })
 	upstream := map[string]bool{}
 	for i := 0; i < 2; i++ {
-		c, err := net.Dial("udp", relay.LocalAddr().String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer c.Close()
-		for j := 0; j < 2; j++ {
-			if _, err := c.Write([]byte("ping")); err != nil {
-				t.Fatal(err)
-			}
-			_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
-			buf := make([]byte, 64)
-			n, err := c.Read(buf)
-			if err != nil {
-				t.Fatalf("client %d: %v", i, err)
-			}
-			from, body, _ := bytes.Cut(buf[:n], []byte(" "))
-			if string(body) != "ping" {
-				t.Fatalf("client %d got %q", i, buf[:n])
-			}
-			upstream[string(from)] = true
-		}
+		pingThroughRelay(t, i, relay.LocalAddr().String(), upstream)
 	}
 	if len(upstream) != 2 {
 		t.Fatalf("two senders reached the service from %d flows: %v", len(upstream), upstream)
+	}
+}
+
+// pingThroughRelay sends twice from one client and records the address the
+// service saw it from.
+func pingThroughRelay(t *testing.T, i int, relay string, upstream map[string]bool) {
+	t.Helper()
+	c, err := net.Dial("udp", relay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	for j := 0; j < 2; j++ {
+		if _, err := c.Write([]byte("ping")); err != nil {
+			t.Fatal(err)
+		}
+		_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
+		buf := make([]byte, 64)
+		n, err := c.Read(buf)
+		if err != nil {
+			t.Fatalf("client %d: %v", i, err)
+		}
+		from, body, _ := bytes.Cut(buf[:n], []byte(" "))
+		if string(body) != "ping" {
+			t.Fatalf("client %d got %q", i, buf[:n])
+		}
+		upstream[string(from)] = true
 	}
 }
 

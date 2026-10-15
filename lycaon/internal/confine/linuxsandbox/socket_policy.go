@@ -114,7 +114,7 @@ func (n Network) decideUnix(r SocketRequest) Decision {
 func (n Network) decideOutbound(r SocketRequest) Decision {
 	ip := r.IP.Addr().Unmap()
 	target := "remote:" + netip.AddrPortFrom(ip, r.IP.Port()).String()
-	admitted := false
+	var admitted bool
 	if ip.IsLoopback() {
 		if r.SandboxListener && !r.HostSocket {
 			return Decision{Action: Perform}

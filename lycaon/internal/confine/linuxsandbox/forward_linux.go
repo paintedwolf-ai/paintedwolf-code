@@ -3,6 +3,7 @@
 package linuxsandbox
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -287,7 +288,7 @@ func forwardListener(ln net.Listener, upstream netip.AddrPort) {
 			return
 		}
 		go func() {
-			outside, err := net.Dial("tcp", upstream.String())
+			outside, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", upstream.String())
 			if err != nil {
 				_ = inside.Close()
 				return

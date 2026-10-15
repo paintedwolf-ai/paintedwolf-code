@@ -134,6 +134,8 @@ func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd,
 		return 0, unix.EACCES
 	case HostSocket:
 		return s.hostSocketCall(target, fd, sock, info, req, decision)
+	case Perform:
+		// Performed below on the supervisor's descriptor.
 	}
 	if decision.Relay {
 		s.relays.ensureToHost(req.IP)

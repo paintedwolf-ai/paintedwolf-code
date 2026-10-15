@@ -234,7 +234,7 @@ func TestLinuxLoopbackConnectGrantReachesTheHost(t *testing.T) {
 // An exact socket grant connects; every other path socket stays refused.
 func TestLinuxUnixSocketGrantConnectsOnlyItsPath(t *testing.T) {
 	self := requireLinuxSandbox(t)
-	dir, err := os.MkdirTemp("/tmp", "pw-grant-")
+	dir, err := os.MkdirTemp("/tmp", "pw-grant-") //nolint:usetesting // Short socket path.
 	testutil.FailErr(t, "socket directory", err)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	granted := greeter(t, "unix", filepath.Join(dir, "granted.sock"))

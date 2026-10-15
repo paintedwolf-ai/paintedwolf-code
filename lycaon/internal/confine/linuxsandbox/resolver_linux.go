@@ -3,6 +3,10 @@
 package linuxsandbox
 
 import (
+	"context"
+	"errors"
+	"fmt"
+	"io/fs"
 	"net"
 	"net/netip"
 	"os"
@@ -14,11 +18,15 @@ import (
 
 // handOffResolver binds the stub inside the sandbox, points resolv.conf at it
 // when the host names another resolver, and passes both sockets to the
-// supervisor. A host without resolv.conf gets no stub.
+// supervisor. A host without resolv.conf names no resolver, so the sandbox
+// gets no stub; one it cannot read fails the launch.
 func handOffResolver() error {
 	raw, err := os.ReadFile(resolvConf)
-	if err != nil {
+	if errors.Is(err, fs.ErrNotExist) {
 		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("read %s: %w", resolvConf, err)
 	}
 	if content := sandboxResolvConf(string(raw)); content != "" {
 		if err := overlayFile(resolvConf, content); err != nil {
@@ -91,7 +99,9 @@ func relayResolverDatagrams(stub net.PacketConn, upstream netip.AddrPort) {
 		}
 		query := append([]byte(nil), buf[:n]...)
 		go func() {
-			conn, err := net.DialTimeout("udp", upstream.String(), resolverQueryTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), resolverQueryTimeout)
+			defer cancel()
+			conn, err := (&net.Dialer{}).DialContext(ctx, "udp", upstream.String())
 			if err != nil {
 				return
 			}

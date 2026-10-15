@@ -4,6 +4,7 @@ package linuxsandbox
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -58,7 +59,8 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker *
 	control, controlChild := os.NewFile(uintptr(pair[0]), "control"), os.NewFile(uintptr(pair[1]), "control-child")
 	sup := newSupervisor(control, network)
 	defer sup.close()
-	cmd := exec.Command(self, args...)
+	// The inner helper ends with this process, by its parent-death signal.
+	cmd := exec.CommandContext(context.Background(), self, args...)
 	// The standard descriptors are the command's streams, handed through as is.
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.NewFile(0, "stdin"), os.NewFile(1, "stdout"), os.NewFile(2, "stderr")
 	// A nil marker leaves its descriptor closed in the child.
@@ -319,9 +321,9 @@ func ExitWithSignal(sig syscall.Signal) {
 	}{}
 	// Go exposes no SIG_DFL reset, and its own handler would exit 2 or print a
 	// traceback for signals such as SIGQUIT instead of dying by the signal.
-	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGACTION, uintptr(sig), uintptr(unsafe.Pointer(&action)), 0, 8, 0, 0) //nolint:gosec // G103 — zeroed kernel sigaction (SIG_DFL), 8-byte sigset
+	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGACTION, uintptr(sig), uintptr(unsafe.Pointer(&action)), 0, 8, 0, 0)
 	mask := uint64(1) << (uint(sig) - 1)
-	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGPROCMASK, unix.SIG_UNBLOCK, uintptr(unsafe.Pointer(&mask)), 0, 8, 0, 0) //nolint:gosec // G103 — 8-byte kernel sigset for one signal
+	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGPROCMASK, unix.SIG_UNBLOCK, uintptr(unsafe.Pointer(&mask)), 0, 8, 0, 0)
 	// Aimed at this thread, the signal lands before the syscall returns; a
 	// process-wide kill would race the exit below.
 	_ = unix.Tgkill(os.Getpid(), unix.Gettid(), sig)
