@@ -270,13 +270,21 @@ pub fn backdrop_for_os_theme(os: Theme) -> Color {
 }
 
 pub fn apply_to_window(window: &WebviewWindow, color: Color) -> Result<(), String> {
-    let window_result = window
-        .set_background_color(Some(color))
-        .map_err(|err| format!("window background color: {err}"));
-    let webview_result = apply_webview_backdrop(window, color);
-    window_result.and(webview_result)
+    #[cfg(target_os = "linux")]
+    {
+        crate::windows::linux_frame::paint_backdrop(window, color)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let window_result = window
+            .set_background_color(Some(color))
+            .map_err(|err| format!("window background color: {err}"));
+        let webview_result = apply_webview_backdrop(window, color);
+        window_result.and(webview_result)
+    }
 }
 
+#[cfg(not(target_os = "linux"))]
 fn apply_webview_backdrop(window: &WebviewWindow, color: Color) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {

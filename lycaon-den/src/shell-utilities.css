@@ -299,38 +299,53 @@ display: flex;
 }
 
 
+/* Window buttons are discs in the text color, as the desktop draws them; the
+   padding keeps the whole strip height clickable around the disc. */
 @utility den-shell-window-control {
 display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: var(--den-titlebar-edge-control);
-  height: var(--den-titlebar-edge-control);
-  padding: 0;
+  width: var(--den-window-control-size);
+  height: var(--den-window-control-size);
+  padding: calc((var(--den-window-control-size) - var(--den-window-control-disc)) / 2);
   border: none;
-  border-radius: var(--den-radius-sm);
-  background: transparent;
-  color: var(--den-text-muted);
+  border-radius: 50%;
+  background-color: color-mix(in srgb, var(--den-text) 10%, transparent);
+  background-clip: content-box;
+  color: var(--den-text);
   line-height: 1;
-  cursor: pointer;
-  transition:
-    background var(--den-duration) var(--den-ease),
-    color var(--den-duration) var(--den-ease);
+  cursor: default;
+  transition: background-color var(--den-duration) var(--den-ease);
   &:hover {
-    background: var(--den-nav-hover-bg);
-    color: var(--den-text);
+    background-color: color-mix(in srgb, var(--den-text) 16%, transparent);
+  }
+  &:active {
+    background-color: color-mix(in srgb, var(--den-text) 24%, transparent);
   }
 }
 
+/* The app menu is a flat header button beside the discs. */
+.den-shell-app-menu-trigger {
+  width: calc(var(--den-window-control-disc) + 10px);
+  padding: 0;
+  border-radius: var(--den-radius-sm);
+  background-color: transparent;
+  background-clip: border-box;
+}
 
-.den-shell-window-control-close:hover {
-  background: color-mix(in srgb, var(--den-danger) 18%, transparent);
-  color: var(--den-text);
+.den-shell-app-menu-trigger:hover {
+  background-color: var(--den-nav-hover-bg);
+}
+
+.den-shell-app-menu-trigger[aria-expanded="true"],
+.den-shell-app-menu-trigger:active {
+  background-color: color-mix(in srgb, var(--den-text) 14%, transparent);
 }
 
 @utility den-shell-window-controls {
 display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--den-window-control-gap);
   flex-shrink: 0;
 }
 
