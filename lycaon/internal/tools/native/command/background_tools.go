@@ -183,14 +183,8 @@ func RunBackground(
 }
 
 func runCommandBackground(
-	ctx context.Context,
-	registry *bgprocess.Registry,
-	runner *hostcmd.Runner,
-	boundary *sandbox.Boundary,
-	args map[string]any,
-	tctx tools.ToolContext,
-	extraWriteRoots []string,
-	toolName string,
+	ctx context.Context, registry *bgprocess.Registry, runner *hostcmd.Runner, boundary *sandbox.Boundary,
+	args map[string]any, tctx tools.ToolContext, extraWriteRoots []string, toolName string,
 ) (string, error) {
 	if registry == nil {
 		return "", fmt.Errorf("background registry not configured")
