@@ -209,4 +209,36 @@ describe("AppMenuButton", () => {
     requestAppMenuOpen();
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
   });
+
+  it("opens from F10 like a menu bar, with its first section current", async () => {
+    render(() => <AppMenuButton side="right" />);
+    requestAppMenuOpen();
+    const first = await vi.waitFor(() => {
+      const item = screen.getByTestId("app-menu-section-app");
+      expect(document.activeElement).toBe(item);
+      return item;
+    });
+    expect(first.closest("[data-keyboard-open]")).not.toBeNull();
+  });
+
+  it("opens from a click without marking a current entry", async () => {
+    render(() => <AppMenuButton side="right" />);
+    screen.getByTestId("window-app-menu").click();
+    const first = await vi.waitFor(() => screen.getByTestId("app-menu-section-app"));
+    expect(first.closest("[data-keyboard-open]")).toBeNull();
+  });
+});
+
+describe("Install pw command", () => {
+  it("is offered while no package owns the command", () => {
+    seedStockFrame({ shellCommandPackaged: false });
+    const app = section(inWindowAppMenuItems(), "Painted Wolf Code");
+    expect(labels(app.submenu)).toContain("Install pw command");
+  });
+
+  it("is left out where the system package installs the command", () => {
+    seedStockFrame({ shellCommandPackaged: true });
+    const app = section(inWindowAppMenuItems(), "Painted Wolf Code");
+    expect(labels(app.submenu)).not.toContain("Install pw command");
+  });
 });

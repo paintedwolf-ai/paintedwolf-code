@@ -13,7 +13,11 @@ import {
 } from "../../../fonts/font-catalog.ts";
 import { DEN_FONT_DEFAULTS, DEN_FONT_FALLBACKS } from "../../../fonts/font-catalog.generated.ts";
 import { clearBootFontsForTests } from "../../../fonts/boot-font-cache.ts";
-import { resetTextScaleForTests } from "../../../platform/desktop/accessibility-text-size.ts";
+import {
+  LINUX_TEXT_SCALING_CATEGORY,
+  applyTextSizePayload,
+  resetTextScaleForTests,
+} from "../../../platform/desktop/accessibility-text-size.ts";
 import {
   resetProductTextScaleForTests,
   syncProductTextScaleFromSnapshot,
@@ -28,6 +32,13 @@ vi.mock("../../../store/app-state-snapshot.ts", async (importOriginal) => {
       actual.setAppStateSnapshot({ ...actual.getAppStateSnapshot(), ...patch });
     }),
   };
+});
+
+const platformMock = vi.hoisted(() => vi.fn<() => "macos" | "linux" | "windows" | null>(() => "macos"));
+
+vi.mock("../../../platform/runtime.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../platform/runtime.ts")>();
+  return { ...actual, detectedPlatform: () => platformMock() };
 });
 
 /** Simulate a machine with no custom fonts. */
@@ -84,6 +95,24 @@ describe("TypographySettings", () => {
         .getAllByRole("option")
         .map((option) => option.getAttribute("data-value")),
     ).toContain(DEN_FONT_DEFAULTS.mono);
+  });
+
+  it("tells a Linux reader whether the desktop already scales text", () => {
+    platformMock.mockReturnValue("linux");
+    const first = render(() => <TypographySettings />);
+    expect(screen.getByTestId("text-size-hint").textContent).toContain(
+      "reports no text scaling preference",
+    );
+    first.unmount();
+
+    applyTextSizePayload({ category: LINUX_TEXT_SCALING_CATEGORY, textScale: 1, revision: 1 });
+    render(() => <TypographySettings />);
+    expect(screen.getByTestId("text-size-hint").textContent).toContain(
+      "desktop's text scaling, which the window already applies",
+    );
+    // The desktop factor is applied by the web view, never by the rem root.
+    expect(document.documentElement.style.getPropertyValue("--den-text-scale")).toBe("1");
+    platformMock.mockReturnValue("macos");
   });
 
   it("starts on the product defaults", () => {

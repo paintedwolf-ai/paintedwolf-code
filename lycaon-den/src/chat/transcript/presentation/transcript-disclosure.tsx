@@ -1,72 +1,74 @@
 import { useTranscriptDisclosureStore } from "./disclosure-state.tsx";
-import { createSignal, type Accessor, type JSX } from "solid-js";
+import { createSignal, createUniqueId, splitProps, type Accessor, type JSX } from "solid-js";
 import { useTranscriptViewport } from "../../stream/transcript-viewport.tsx";
 import {
   animateHeightToggle,
   heightToggleDirectionFor,
-  isHeightToggleAnimating,
   type HeightToggleDirection,
 } from "../../../ui/height-toggle-motion.ts";
 import type { TranscriptDisclosureKey } from "./transcript-disclosure-key.ts";
+import { isTranscriptDisclosureOpen, isTranscriptDisclosureShell } from "./transcript-disclosure-shell.ts";
 
 export const TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT =
   "den:transcript-disclosure-layout";
 
-function notifyDisclosureLayout(details: HTMLDetailsElement): void {
-  details.dispatchEvent(
+function notifyDisclosureLayout(shell: HTMLElement): void {
+  shell.dispatchEvent(
     new Event(TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT, { bubbles: true }),
   );
 }
 
-function detailsBodies(details: HTMLDetailsElement): HTMLElement[] {
-  return Array.from(details.children).filter(
-    (child): child is HTMLElement =>
-      child instanceof HTMLElement && child.tagName !== "SUMMARY",
-  );
-}
-
-function setDetailsBodiesHidden(details: HTMLDetailsElement, hidden: boolean): void {
-  for (const body of detailsBodies(details)) {
-    if (hidden) body.style.display = "none";
-    else body.style.removeProperty("display");
+function setBodiesHidden(shell: HTMLElement, header: HTMLElement, hidden: boolean): void {
+  for (const child of shell.children) {
+    if (!(child instanceof HTMLElement) || child === header) continue;
+    if (hidden) child.style.display = "none";
+    else child.style.removeProperty("display");
   }
 }
 
+/** The shell's child that stays visible while the disclosure is closed. */
+function disclosureHeader(toggle: HTMLElement): { shell: HTMLElement; header: HTMLElement } | null {
+  let header = toggle;
+  for (let parent = toggle.parentElement; parent; parent = parent.parentElement) {
+    if (isTranscriptDisclosureShell(parent)) return { shell: parent, header };
+    header = parent;
+  }
+  return null;
+}
+
 export function animateDisclosureHeight(
-  details: HTMLDetailsElement,
-  summary: HTMLElement,
+  shell: HTMLElement,
+  header: HTMLElement,
   applyOpen: (next: boolean) => void,
   opts: {
     direction?: HeightToggleDirection;
     onSettled?: () => void;
   },
 ): void {
-  const direction = opts.direction ?? heightToggleDirectionFor(details, details.open);
-  animateHeightToggle(details, {
+  const direction = opts.direction ?? heightToggleDirectionFor(shell, isTranscriptDisclosureOpen(shell));
+  animateHeightToggle(shell, {
     direction,
     showBody: () => {
-      setDetailsBodiesHidden(details, false);
-      details.open = true;
+      setBodiesHidden(shell, header, false);
       applyOpen(true);
     },
-    hideBody: () => setDetailsBodiesHidden(details, true),
-    closeBody: () => {
-      applyOpen(false);
-      details.open = false;
-    },
-    resetBodyVisibility: () => setDetailsBodiesHidden(details, false),
-    collapsedHeight: () => summary.getBoundingClientRect().height,
-    bodyStillOpen: () => details.open,
+    hideBody: () => setBodiesHidden(shell, header, true),
+    closeBody: () => applyOpen(false),
+    resetBodyVisibility: () => setBodiesHidden(shell, header, false),
+    collapsedHeight: () => header.getBoundingClientRect().height,
+    bodyStillOpen: () => isTranscriptDisclosureOpen(shell),
     onSettled: () => opts.onSettled?.(),
   });
-  notifyDisclosureLayout(details);
+  notifyDisclosureLayout(shell);
 }
 
-type TranscriptDisclosure = {
+export type TranscriptDisclosure = {
   key: TranscriptDisclosureKey | undefined;
   open: Accessor<boolean>;
-  onToggle: (event: Event) => void;
-  onSummaryClick: JSX.EventHandler<HTMLElement, MouseEvent>;
+  /** Id of the panel the toggle controls. */
+  panelId: string;
+  /** Animates the disclosure that contains the clicked toggle. */
+  onToggleClick: JSX.EventHandler<HTMLElement, MouseEvent>;
   applyOpen: (next: boolean) => void;
   revealTemporarily: () => () => void;
 };
@@ -99,36 +101,18 @@ export function useTranscriptDisclosure(
     return () => setLocalOpen(false);
   };
 
-  const onToggle = (event: Event) => {
-    const details = event.currentTarget;
-    if (!(details instanceof HTMLDetailsElement)) return;
-    if (isHeightToggleAnimating(details)) return;
-    if (details.open === open()) return;
-    const key = currentKey();
-    const direction = details.open ? "open" : "close";
-    const finishMotion = viewport?.beginDisclosureMotion(key, direction);
-    applyOpen(details.open);
-    notifyDisclosureLayout(details);
-    finishMotion?.();
-  };
-
-  const onSummaryClick: JSX.EventHandler<HTMLElement, MouseEvent> = (event) => {
-    const summary = event.currentTarget;
-    const details = summary.parentElement;
-    if (!(details instanceof HTMLDetailsElement)) return;
-    // Synthetic non-cancelable clicks keep the native details default action.
-    if (event.cancelable === false) return;
-    event.preventDefault();
-    const direction = heightToggleDirectionFor(details, details.open);
+  const onToggleClick: JSX.EventHandler<HTMLElement, MouseEvent> = (event) => {
+    const found = disclosureHeader(event.currentTarget);
+    if (!found) return;
+    const { shell, header } = found;
+    const direction = heightToggleDirectionFor(shell, open());
     const finishMotion = viewport?.beginDisclosureMotion(currentKey(), direction);
-    const settle = () => {
-      notifyDisclosureLayout(details);
-      finishMotion?.();
-    };
-
-    animateDisclosureHeight(details, summary, applyOpen, {
+    animateDisclosureHeight(shell, header, applyOpen, {
       direction,
-      onSettled: settle,
+      onSettled: () => {
+        notifyDisclosureLayout(shell);
+        finishMotion?.();
+      },
     });
   };
 
@@ -137,9 +121,75 @@ export function useTranscriptDisclosure(
       return currentKey();
     },
     open,
-    onToggle,
-    onSummaryClick,
+    panelId: createUniqueId(),
+    onToggleClick,
     applyOpen,
     revealTemporarily,
   };
+}
+
+type ShellProps = Omit<JSX.HTMLAttributes<HTMLDivElement>, "ref"> & {
+  disclosure: TranscriptDisclosure;
+  ref?: (element: HTMLDivElement) => void;
+};
+
+/** A transcript card that opens and closes through its toggle. */
+export function TranscriptDisclosureShell(props: ShellProps) {
+  const [local, rest] = splitProps(props, ["disclosure", "ref", "children"]);
+  return (
+    <div
+      {...rest}
+      ref={(element) => local.ref?.(element)}
+      data-transcript-disclosure=""
+      data-disclosure-key={local.disclosure.key}
+      data-expanded={local.disclosure.open() ? "true" : "false"}
+    >
+      {local.children}
+    </div>
+  );
+}
+
+type ToggleProps = Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "ref" | "type" | "class"> & {
+  disclosure: TranscriptDisclosure;
+  ref?: (element: HTMLButtonElement) => void;
+  class?: string;
+  /** True when a header row holds the toggle beside other controls. */
+  inHeader?: boolean;
+};
+
+/** The button that opens a transcript card; it is the card header unless `inHeader`. */
+export function TranscriptDisclosureToggle(props: ToggleProps) {
+  const [local, rest] = splitProps(props, ["disclosure", "ref", "class", "inHeader", "onClick", "children"]);
+  const classes = () =>
+    ["den-transcript-disclosure-toggle", local.inHeader ? "" : "den-transcript-disclosure-header", local.class ?? ""]
+      .filter(Boolean)
+      .join(" ");
+  return (
+    <button
+      {...rest}
+      ref={(element) => local.ref?.(element)}
+      type="button"
+      class={classes()}
+      aria-expanded={local.disclosure.open()}
+      aria-controls={local.disclosure.panelId}
+      onClick={(event) => {
+        if (typeof local.onClick === "function") local.onClick(event);
+        else local.disclosure.onToggleClick(event);
+      }}
+    >
+      {local.children}
+    </button>
+  );
+}
+
+type PanelProps = JSX.HTMLAttributes<HTMLDivElement> & { disclosure: TranscriptDisclosure };
+
+/** The content a transcript card reveals; hidden while the card is closed. */
+export function TranscriptDisclosurePanel(props: PanelProps) {
+  const [local, rest] = splitProps(props, ["disclosure", "children"]);
+  return (
+    <div {...rest} id={local.disclosure.panelId} hidden={!local.disclosure.open()}>
+      {local.children}
+    </div>
+  );
 }

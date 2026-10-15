@@ -14,7 +14,6 @@
     "core:window:allow-destroy",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
-    "core:window:allow-start-resize-dragging",
     "core:window:allow-set-fullscreen",
     "dialog:default",
     "allow-read-app-state",
@@ -47,7 +46,10 @@
     "allow-set-app-menu",
     "allow-request-quit",
     "allow-linux-decoration-layout",
+    "allow-linux-window-frame",
     "allow-accessibility-preferred-text-size",
-    "allow-system-appearance"
+    "allow-den-announce",
+    "allow-system-appearance",
+    "allow-shell-command-status"
   ]
 }

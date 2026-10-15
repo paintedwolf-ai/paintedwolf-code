@@ -452,11 +452,14 @@ describe("den-shell drawer layout contract", () => {
     expect(chat).toMatch(/useChatTabChrome/);
     expect(chat).toMatch(/setChatTabRailBindings/);
     const tabRail = readSourceText(join(root, "components/nav/ChatTabRail.tsx"), "utf8");
-    // The chat header strip, not the tab rail, draws the window edge it owns.
-    expect(tabRail).not.toMatch(/WindowControls/);
-    expect(readSourceText(join(root, "components/shell/ChatWorkspace.tsx"), "utf8")).toMatch(
-      /<For each=\{windowEdgeClaims\("chat"\)\}>[\s\S]*?<WindowControls \{\.\.\.claim\} \/>/,
+    // The conversation's edge claims draw its window controls; the rail only places them at its ends.
+    expect(tabRail).not.toMatch(/WindowControls\b(?!Start|End)/);
+    const workspace = readSourceText(join(root, "components/shell/ChatWorkspace.tsx"), "utf8");
+    expect(workspace).toMatch(
+      /<For each=\{windowEdgeClaims\("chat"\)[^}]*\}>[\s\S]*?<WindowControls \{\.\.\.claim\} \/>/,
     );
+    expect(workspace).toMatch(/windowControlsStart=\{chatWindowControls\("left"\)\}/);
+    expect(workspace).toMatch(/windowControlsEnd=\{chatWindowControls\("right"\)\}/);
     expect(tabRail).toMatch(
       /<BrowseOverflowMenu[\s\S]*?disabled=\{!canExportConversation\(\)\}/,
     );

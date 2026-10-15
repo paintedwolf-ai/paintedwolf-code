@@ -297,7 +297,7 @@ margin-left: 8px;
 }
 
 .den-worker-part--tool-card
-  .den-tool-part:not([open]):not([data-accordion-row]) {
+  .den-tool-part:not([data-expanded="true"]):not([data-accordion-row]) {
   align-self: flex-start;
   width: auto;
 }

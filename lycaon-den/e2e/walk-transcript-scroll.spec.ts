@@ -90,7 +90,7 @@ webE2e("walk keeps the selected chat item visible after virtual rows settle", as
     });
     expect(Math.max(...positions) - Math.min(...positions)).toBeLessThan(2);
     await expect(marked).toBeInViewport({ ratio: 1 });
-    await activity.locator(":scope > summary").click();
+    await activity.locator(":scope > .den-transcript-disclosure-header").click();
     const command = activity.locator(`[data-tool-call-id="call-${index}"].den-walk-step-mark`);
     await expect(command).toHaveCount(1);
     await expect(command).toBeInViewport({ ratio: 1 });
@@ -103,8 +103,8 @@ webE2e("walk keeps the selected chat item visible after virtual rows settle", as
     const next = activity.locator(`[data-tool-call-id="call-${index}-next"].den-walk-step-mark`);
     await expect(next).toHaveCount(1);
     await expect(next).toBeInViewport({ ratio: 1 });
-    await expect(activity).toHaveAttribute("open", "");
-    await activity.locator(":scope > summary").click();
+    await expect(activity).toHaveAttribute("data-expanded", "true");
+    await activity.locator(":scope > .den-transcript-disclosure-header").click();
     await expect(marked).toHaveCount(1);
     await expect(marked).toBeInViewport({ ratio: 1 });
   }

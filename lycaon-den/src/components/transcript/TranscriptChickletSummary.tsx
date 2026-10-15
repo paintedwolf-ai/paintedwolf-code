@@ -1,8 +1,13 @@
 import { Show, type JSX } from "solid-js";
+import {
+  TranscriptDisclosureToggle,
+  type TranscriptDisclosure,
+} from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 
 type Props = {
+  disclosure: TranscriptDisclosure;
   ref?: (element: HTMLElement) => void;
-  onClick: JSX.EventHandler<HTMLElement, MouseEvent>;
+  onClick?: JSX.EventHandler<HTMLButtonElement, MouseEvent>;
   label?: string;
   accordion?: boolean;
   children: JSX.Element;
@@ -10,8 +15,9 @@ type Props = {
 
 export function TranscriptChickletSummary(props: Props) {
   return (
-    <summary
-      ref={props.ref}
+    <TranscriptDisclosureToggle
+      disclosure={props.disclosure}
+      ref={(element) => props.ref?.(element)}
       class="den-transcript-chicklet-summary"
       onClick={props.onClick}
       aria-label={props.label}
@@ -25,6 +31,6 @@ export function TranscriptChickletSummary(props: Props) {
           <span class="den-row-mark" aria-hidden="true" />
         </Show>
       </span>
-    </summary>
+    </TranscriptDisclosureToggle>
   );
 }

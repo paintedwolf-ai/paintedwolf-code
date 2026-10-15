@@ -334,6 +334,17 @@ describe("ApprovalCard shortcuts", () => {
     return { view, onToolApproval, onContentApply };
   }
 
+  it("names the answer buttons without their keycaps and exposes the keys as shortcuts", () => {
+    const { view } = mountWithoutGlobalKeyListeners(checkpoint());
+    const no = view.getByTestId("approval-no");
+    const primary = view.getByTestId("approval-approve-primary");
+    expect(no.getAttribute("aria-keyshortcuts")).toBe("Escape");
+    expect(primary.getAttribute("aria-keyshortcuts")).toBe("Enter");
+    for (const keycap of [...no.querySelectorAll("kbd"), ...primary.querySelectorAll("kbd")]) {
+      expect(keycap.getAttribute("aria-hidden")).toBe("true");
+    }
+  });
+
   it("answers Enter on the tool card and ignores keys pressed outside it", () => {
     const { view, onToolApproval } = mountWithoutGlobalKeyListeners(checkpoint());
     const outside = document.createElement("div");

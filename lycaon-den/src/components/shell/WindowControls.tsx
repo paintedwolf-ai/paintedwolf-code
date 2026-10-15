@@ -51,7 +51,7 @@ export function WindowControls(props: WindowEdgeClaim) {
                   data-testid="window-minimize"
                   onClick={() => void currentWindow().then((win) => win.minimize())}
                 >
-                  <ThemeIcon slot="window-minimize" size={12} />
+                  <ThemeIcon slot="window-minimize" size={14} />
                 </button>
               </Match>
               <Match when={control === "maximize"}>
@@ -64,7 +64,7 @@ export function WindowControls(props: WindowEdgeClaim) {
                   data-maximized={windowMaximized() ? "" : undefined}
                   onClick={() => void currentWindow().then((win) => win.toggleMaximize())}
                 >
-                  <ThemeIcon slot={windowMaximized() ? "window-restore" : "window-maximize"} size={12} />
+                  <ThemeIcon slot={windowMaximized() ? "window-restore" : "window-maximize"} size={14} />
                 </button>
               </Match>
               <Match when={control === "close"}>
@@ -76,7 +76,7 @@ export function WindowControls(props: WindowEdgeClaim) {
                   data-testid="window-close"
                   onClick={() => void currentWindow().then((win) => win.close())}
                 >
-                  <ThemeIcon slot="dismiss" size={12} />
+                  <ThemeIcon slot="dismiss" size={14} />
                 </button>
               </Match>
             </Switch>

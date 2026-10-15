@@ -35,6 +35,7 @@ function createFocusTrap(
     const handle = activateFocusTrap(element, {
       onEscape: options.onEscape,
       returnFocus: options.returnFocus,
+      fallbackFocus: options.fallbackFocus,
       initialFocus: options.initialFocus,
       autoFocus: options.autoFocus,
       inertTarget: options.inertTarget?.() ?? null,
