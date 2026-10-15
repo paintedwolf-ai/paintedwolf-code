@@ -105,7 +105,7 @@ func splitSelections(claimed []scanbase.SeriesRow, selections map[string]dispatc
 func (b claimBook) finishBaselineDispatches(ctx context.Context, rows []scanbase.SeriesRow, snapshot sourcesnapshot.Snapshot, executions map[string]dispatchExecution) {
 	b.c.mu.Lock()
 	defer b.c.mu.Unlock()
-	planner := seriesPlanner{c: b.c}
+	planner := seriesPlanner(b)
 	now := nowUTC(b.c)
 	for _, frozen := range rows {
 		row, err := b.c.Store.GetSeries(ctx, frozen.CanonicalPath, frozen.ScannerID)
@@ -158,7 +158,7 @@ func targetSummary(claimed []scanbase.SeriesRow, selections map[string]dispatchS
 func (b claimBook) finishNoopDispatches(ctx context.Context, claimed []scanbase.SeriesRow) {
 	b.c.mu.Lock()
 	defer b.c.mu.Unlock()
-	planner := seriesPlanner{c: b.c}
+	planner := seriesPlanner(b)
 	now := nowUTC(b.c)
 	for _, frozen := range claimed {
 		row, err := b.c.Store.GetSeries(ctx, frozen.CanonicalPath, frozen.ScannerID)
