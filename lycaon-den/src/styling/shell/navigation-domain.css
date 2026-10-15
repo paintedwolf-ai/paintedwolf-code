@@ -45,7 +45,7 @@
 /* Drawn window controls take the strip's far side from the collapse control. */
 .den-custom-chrome .den-shell-aside-titlebar .den-shell-window-controls {
   position: absolute;
-  top: calc(var(--den-pane-control-center) - var(--den-titlebar-edge-control) / 2);
+  top: calc(var(--den-pane-control-center) - var(--den-window-control-size) / 2);
   z-index: 1;
 }
 

@@ -78,6 +78,8 @@ type Props = {
   label?: string;
   /** Virtual menu navigation preserves the field selection. */
   retainFocus?: boolean;
+  /** Opened from the keyboard, like a menu bar: the focused row shows as current from the start. */
+  keyboard?: boolean;
   onDismiss: () => void;
 };
 
@@ -289,6 +291,7 @@ function ContextMenuSurface(props: SurfaceProps) {
       ref={(element) => {
         // The placed surface is the scrollport frame.
         element.setAttribute(DEN_SCROLLPORT_AXIS_ATTR, "y");
+        element.toggleAttribute("data-keyboard-open", props.keyboard === true);
         menuEl = element;
         props.surfaceRef?.(element);
       }}
@@ -479,6 +482,7 @@ function ContextMenuSurface(props: SurfaceProps) {
                               align="start"
                               gap={2}
                               autoFocus={false}
+                              keyboard={props.keyboard}
                               depth={props.depth + 1}
                               dismissTree={props.dismissTree}
                               onDismiss={() => setOpenSubmenuIdx(null)}

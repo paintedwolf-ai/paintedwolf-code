@@ -31,6 +31,7 @@ export type ContributionFactId =
   | "project_open"
   | "session_exists"
   | "session_idle"
+  | "shell_command_packaged"
   | "sidebar_expanded"
   | "split_live"
   | "view_mounted"
@@ -69,6 +70,7 @@ export const CONTRIBUTION_FACTS: Record<ContributionFactId, ContributionFactSpec
   "project_open": { plane: "host", operand: null },
   "session_exists": { plane: "host", operand: null },
   "session_idle": { plane: "host", operand: null },
+  "shell_command_packaged": { plane: "shell", operand: null },
   "sidebar_expanded": { plane: "shell", operand: null },
   "split_live": { plane: "shell", operand: null },
   "view_mounted": { plane: "shell", operand: "region" },

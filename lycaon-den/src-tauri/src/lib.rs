@@ -153,6 +153,7 @@ pub fn run() {
             app_menu::set_app_menu,
             app_menu::request_quit,
             windows::linux_decorations::linux_decoration_layout,
+            windows::linux_frame::linux_window_frame,
         ])
         .on_menu_event(|app, event| {
             app_menu::on_menu_event(app, event.id().as_ref());

@@ -94,7 +94,7 @@
 }
 .onboarding-gate__window-controls .den-shell-window-controls {
   position: absolute;
-  top: calc(var(--den-pane-control-center) - var(--den-titlebar-edge-control) / 2);
+  top: calc(var(--den-pane-control-center) - var(--den-window-control-size) / 2);
   pointer-events: auto;
 }
 .onboarding-gate__window-controls .den-shell-window-controls[data-side="left"] {
