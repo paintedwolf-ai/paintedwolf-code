@@ -147,7 +147,7 @@ func sanitizeScanBoardError(msg string) string {
 	return msg
 }
 
-// WorkerPulseSig hashes non-terminal worker tasks for inject dedup.
+// WorkerPulseSig hashes active jobs and outstanding partial identities for inject dedup.
 func WorkerPulseSig(tasks []api.WorkerTask, now time.Time) string {
 	type row struct {
 		id, status string
@@ -169,6 +169,7 @@ func WorkerPulseSig(tasks []api.WorkerTask, now time.Time) string {
 	for _, r := range rows {
 		parts = append(parts, fmt.Sprintf("%s:%s:%d", r.id, r.status, r.started))
 	}
+	parts = append(parts, partialWorkerLines(tasks)...)
 	_ = now
 	return strings.Join(parts, ",")
 }

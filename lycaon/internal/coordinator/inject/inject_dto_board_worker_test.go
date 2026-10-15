@@ -121,6 +121,45 @@ func TestRenderBoardOrientationInject_CharBudget(t *testing.T) {
 	}
 }
 
+func TestRenderBoardOrientationInject_PartialIdentityWithinBudget(t *testing.T) {
+	renderer := testInjectRenderer(t)
+	now := time.Date(2026, 10, 15, 7, 1, 0, 0, time.FixedZone("PDT", -7*60*60))
+	partial := api.WorkerTask{
+		ID: "55504f06-30c7-4b18-b1e8-86a59fb5ffcf", ChildSessionID: "130fee5b-68a4-459d-a288-b0c8a636457b",
+		CreatedAt: now, CompletedAt: &now, Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending,
+		Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "partial"}},
+	}
+	snap := api.BoardSnapshot{
+		Host: &api.BoardHostSlice{OS: "darwin", Arch: "arm64", ExecutionTarget: api.ExecutionTargetLocal, Shell: true},
+		Repo: api.RepoBrief{Languages: []string{"Python"}, FileCount: 4},
+		Git:  &api.BoardGitSlice{Available: false},
+		Workers: &api.BoardWorkersSlice{
+			"tasks":              []api.WorkerTask{partial},
+			"overlay_merge_plan": &api.OverlayMergePlan{PendingCount: 1},
+		},
+	}
+	for _, scope := range []packboard.InjectScope{packboard.InjectScopeFull, packboard.InjectScopePulse} {
+		block, err := RenderBoardOrientationInject(context.Background(), renderer, "sess-inject-test", snap, scope, false, true, now)
+		testutil.FailErr(t, "RenderBoardOrientationInject", err)
+		_, body, found := strings.Cut(block, packboard.InjectSentinel(scope))
+		if !found {
+			t.Fatalf("missing board sentinel: %s", block)
+		}
+		body = strings.TrimSpace(body)
+		if len(body) > api.MaxBoardInjectChars {
+			t.Fatalf("board exceeds budget: %d bytes: %s", len(body), body)
+		}
+		for _, want := range []string{"Host: darwin/arm64", "Work: 1 partial", "Merge: pending 5550…", "Overlay plan: 1 pending", "Partial: job_id=" + partial.ID + " · child_session_id=" + partial.ChildSessionID} {
+			if !strings.Contains(body, want) {
+				t.Fatalf("scope %v missing %q: %s", scope, want, body)
+			}
+		}
+		if scope == packboard.InjectScopeFull && (!strings.Contains(body, "Repo: 4 files · Python") || !strings.Contains(body, "Git: none")) {
+			t.Fatalf("full board lost repository orientation: %s", body)
+		}
+	}
+}
+
 func TestRenderBoardOrientationInject_RepoLine(t *testing.T) {
 	renderer := testInjectRenderer(t)
 	now := time.Date(2026, 5, 31, 14, 0, 0, 0, time.UTC)
