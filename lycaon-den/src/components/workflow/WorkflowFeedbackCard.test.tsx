@@ -74,7 +74,7 @@ describe("WorkflowFeedbackCard", () => {
     expect(getByTestId("workflow-feedback-chicklet")).toBeTruthy();
   });
 
-  it("mounts the chicklet body only while it is open", async () => {
+  it("withdraws the chicklet body from assistive tech while it is closed", async () => {
     const meta: WorkflowFeedbackMeta = {
       phase_id: "pick",
       prompt: "Pick one",
@@ -82,12 +82,14 @@ describe("WorkflowFeedbackCard", () => {
       options: ["red", "blue"],
       answer: "blue",
     };
-    const { getByTestId, queryByTestId } = render(() => (
+    const { getByTestId } = render(() => (
       <WorkflowFeedbackCard meta={meta} client={client()} {...base} />
     ));
-    expect(queryByTestId("workflow-feedback-chicklet-body")).toBeNull();
+    const panel = () => getByTestId("workflow-feedback-chicklet-body").closest("[data-transcript-disclosure-panel]")!;
+    expect(panel().getAttribute("aria-hidden")).toBe("true");
+    expect((panel() as HTMLElement).inert).toBeTruthy();
     disclosureToggle(getByTestId("workflow-feedback-chicklet")).click();
-    await vi.waitFor(() => expect(getByTestId("workflow-feedback-chicklet-body")).toBeTruthy());
+    await vi.waitFor(() => expect(panel().hasAttribute("aria-hidden")).toBe(false));
     expect(getByTestId("workflow-feedback-chicklet-prompt").textContent).toBe("Pick one");
     expect(getByTestId("workflow-feedback-answer").textContent).toContain("blue");
   });

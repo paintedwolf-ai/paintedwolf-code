@@ -47,6 +47,19 @@
   border-bottom-color: transparent;
 }
 
+/* A closed card keeps its body mounted but out of sight and layout, with a box. */
+[data-transcript-disclosure-panel="closed"] {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .den-chat-stream [data-transcript-disclosure][data-animating]:not([data-closing])
   > :not(.den-transcript-disclosure-header) {
   animation: den-transcript-disclosure-body-in 200ms var(--den-ease) both;

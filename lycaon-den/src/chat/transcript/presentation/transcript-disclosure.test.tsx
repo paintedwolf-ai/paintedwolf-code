@@ -164,12 +164,14 @@ describe("transcript disclosure leases", () => {
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     expect(toggle.getAttribute("aria-controls")).toBe(panel.id);
     expect(toggle.classList.contains("den-transcript-disclosure-header")).toBe(true);
-    expect(panel.hidden).toBe(true);
+    expect(panel.getAttribute("aria-hidden")).toBe("true");
+    expect(panel.inert).toBeTruthy();
     const layouts = vi.fn();
     view.getByTestId("shell").addEventListener(TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT, layouts);
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(panel.hidden).toBe(false);
+    expect(panel.hasAttribute("aria-hidden")).toBe(false);
+    expect(panel.inert).toBeFalsy();
     expect(view.getByTestId("shell").getAttribute("data-expanded") === "true").toBe(true);
     expect(layouts).toHaveBeenCalled();
   });

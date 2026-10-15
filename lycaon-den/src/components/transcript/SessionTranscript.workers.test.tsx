@@ -389,15 +389,15 @@ describe("SessionTranscript workers and synthesis", () => {
     expect(
       container.querySelector('[data-testid="synthesis-evidence-section"]'),
     ).toBeNull();
-    // The evidence body mounts only while the disclosure is open.
-    expect(container.querySelector('[data-testid="citation-grounding-panel"]')).toBeNull();
+    const panel = container.querySelector('[data-testid="citation-grounding-panel"]');
+    expect(panel).toBeTruthy();
+    expect(panel!.closest(".den-citation-evidence-chicklet-body")).toBeTruthy();
 
     disclosureToggle(chicklet).dispatchEvent(
       new MouseEvent("click", { bubbles: true }),
     );
     expect(isDisclosureOpen(chicklet)).toBe(true);
-    const panel = container.querySelector('[data-testid="citation-grounding-panel"]');
-    expect(panel?.closest(".den-citation-evidence-chicklet-body")).toBeTruthy();
+    expect(container.querySelector('[data-testid="citation-grounding-panel"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="citation-grounding-check"]')).toBeTruthy();
     expect(container.textContent).toContain("Path citations");
   });
@@ -543,14 +543,12 @@ describe("SessionTranscript workers and synthesis", () => {
     expect(
       container.querySelector('[data-testid="synthesis-evidence-section"]'),
     ).toBeNull();
-    // The evidence body mounts only while the disclosure is open.
-    expect(chicklet.querySelector('[data-testid="citation-grounding-panel"]')).toBeNull();
-    fireEvent.click(disclosureToggle(chicklet));
     expect(
       chicklet.querySelector('[data-testid="citation-grounding-panel"]')?.closest(
         ".den-citation-evidence-chicklet-body",
       ),
     ).toBeTruthy();
+    fireEvent.click(disclosureToggle(chicklet));
     expect(container.textContent).toContain("Leg evidence handles");
     const citations = chicklet.querySelector(".den-citation-grounding-citations");
     expect(citations).toBeTruthy();
