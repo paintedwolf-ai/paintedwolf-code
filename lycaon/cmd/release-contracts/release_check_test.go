@@ -131,13 +131,13 @@ func TestWorkflowPathDiscovery(t *testing.T) {
 	}
 }
 
-func TestCheckBundledReleaseCompatibility(t *testing.T) {
+func TestCheckBundledReleaseCompatibilityFromStablePatch(t *testing.T) {
 	root := configlayout.FindModuleRoot()
 	if root == "" {
 		t.Fatal("module root not found")
 	}
 	var report bytes.Buffer
-	testutil.FailErr(t, "check bundled release contracts", checkReleaseCompatibility(t.Context(), filepath.Dir(root), "", &report))
+	testutil.FailErr(t, "check bundled release contracts", checkReleaseCompatibility(t.Context(), filepath.Dir(root), "v1.0.1", &report))
 	if !strings.Contains(report.String(), "Stable baseline: v1.0.1 ") {
 		t.Fatalf("missing released baseline: %s", &report)
 	}
