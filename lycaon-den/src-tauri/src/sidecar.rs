@@ -7,9 +7,9 @@ use self::startup::{await_child_ready, StartupProgress};
 use self::supervisor::{EngineState, ExitWatch};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use ed25519_dalek::{Signer, SigningKey};
-use rand::rngs::OsRng;
-use rand::TryRngCore;
-use rand::RngCore;
+use rand::rngs::SysRng;
+use rand::Rng;
+use rand::TryRng;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::path::Path;
@@ -19,6 +19,7 @@ use std::sync::{mpsc, Mutex};
 use std::time::Instant;
 
 pub(crate) mod commands;
+pub(crate) mod custody;
 pub(crate) mod daemon;
 mod diagnostics;
 pub(crate) mod layout;
@@ -203,6 +204,18 @@ impl SidecarState {
         URL_SAFE_NO_PAD.encode(self.presence_signing_key.verifying_key().as_bytes())
     }
 
+    /// Whether this shell unlocked the vault with an app password it still holds.
+    pub(crate) fn holds_vault_password(&self) -> bool {
+        self.vault_password.lock().unwrap().is_some()
+    }
+
+    /// Compares a re-entered app password with the one that unlocked the
+    /// vault. None when the vault is not on the app-password path.
+    pub(crate) fn verify_vault_password(&self, candidate: &[u8]) -> Option<bool> {
+        let held = self.vault_password.lock().unwrap();
+        held.as_ref().map(|held| constant_time_eq(&held.0, candidate))
+    }
+
     pub(crate) fn sign_presence(&self, proof_payload: &str, authenticator: &str) -> String {
         let message =
             format!("painted-wolf-presence-v1\n{proof_payload}\nauthenticator={authenticator}");
@@ -214,9 +227,22 @@ impl SidecarState {
     }
 }
 
+/// Equal-length byte comparison whose time does not depend on where the
+/// inputs differ.
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for (x, y) in a.iter().zip(b) {
+        diff |= x ^ y;
+    }
+    std::hint::black_box(diff) == 0
+}
+
 fn generate_presence_signing_key() -> SigningKey {
     let mut secret = [0u8; 32];
-    OsRng
+    SysRng
         .try_fill_bytes(&mut secret)
         .expect("operating system random source is unavailable");
     SigningKey::from_bytes(&secret)

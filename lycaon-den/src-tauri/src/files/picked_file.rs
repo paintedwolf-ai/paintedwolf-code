@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
-use rand::RngCore;
+use rand::Rng;
 
 /// Bounds how long a handle left in renderer state stays redeemable.
 const GRANT_TTL: Duration = Duration::from_secs(5 * 60);

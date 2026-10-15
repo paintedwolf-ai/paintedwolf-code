@@ -33,6 +33,7 @@ use tauri::{Manager, RunEvent};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    harden_process();
     let context = tauri::generate_context!();
     // GTK 3 names the Wayland toplevel and the X11 window class after the program
     // name, which must be the identifier the desktop entry is named after.
@@ -139,6 +140,8 @@ pub fn run() {
             sidecar::commands::ipc_export_startup_diagnostics,
             sidecar::commands::ipc_restart_sidecar,
             sidecar::commands::ipc_reset_credential_vault,
+            sidecar::custody::ipc_vault_custody,
+            sidecar::custody::ipc_move_vault_custody,
             sidecar::commands::ipc_cancel_sidecar_start,
             sidecar::commands::ipc_attach_existing_daemon,
             sidecar::commands::ipc_sidecar_info,
@@ -207,6 +210,20 @@ pub fn run() {
         });
 }
 
+
+/// The shell holds the vault password and the presence signing key, so on
+/// Linux it is non-dumpable: no same-user process can ptrace it or read its
+/// memory through the process filesystem. Debug builds stay debuggable.
+fn harden_process() {
+    #[cfg(all(target_os = "linux", not(debug_assertions)))]
+    {
+        // SAFETY: PR_SET_DUMPABLE takes one integer argument and touches no memory.
+        let status = unsafe { libc::prctl(libc::PR_SET_DUMPABLE, 0) };
+        if status != 0 {
+            eprintln!("Could not make the shell non-dumpable: {}", std::io::Error::last_os_error());
+        }
+    }
+}
 
 /// The installer mode never initializes windows, tools, or the engine.
 pub fn run_update_helper(id: &str, installation: &str) -> Result<(), String> {

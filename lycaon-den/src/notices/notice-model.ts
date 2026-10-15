@@ -1,6 +1,7 @@
 import type { SessionHostError } from "../api/types.ts";
 import { LycaonApiError } from "../api/http.ts";
 import { isBackendUnreachableError } from "../platform/connection/request-connectivity.ts";
+import { PresenceError } from "../platform/presence.ts";
 import { CLIENT_NOTICES, type ClientNoticeKind } from "./client-notices.generated.ts";
 import { ClientNoticeError } from "./client-notices.ts";
 import type { NoticeScope } from "./notice-scope.ts";
@@ -152,6 +153,21 @@ export function noticeFromUnknown(err: unknown, callSite: NoticeScope): AppNotic
     );
   }
   if (err instanceof LycaonApiError) {
+    return noticeFromWire(
+      {
+        code: err.code,
+        title: err.title,
+        message: err.message,
+        suggested_action: err.suggestedAction,
+        actions: err.actions,
+        scope: err.scope,
+        resolution: err.resolution,
+      },
+      callSite,
+    );
+  }
+  // The desktop shell authors presence refusals, such as a canceled prompt.
+  if (err instanceof PresenceError) {
     return noticeFromWire(
       {
         code: err.code,
