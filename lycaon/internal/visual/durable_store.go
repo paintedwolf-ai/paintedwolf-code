@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/bloblifecycle"
 	"github.com/lycaon/lycaon/internal/scopedstore"
@@ -17,8 +16,7 @@ type ActiveRunLookup func(ctx context.Context, sessionID string) (string, error)
 
 // DurableConfig wires the two-tier visual store.
 type DurableConfig struct {
-	DataDir string
-	// ArtifactsDir resolves project artifact storage.
+	DataDir      string
 	ArtifactsDir ArtifactsDirFunc
 	Lookup       SessionProjectLookup
 	ActiveRun    ActiveRunLookup
@@ -29,19 +27,28 @@ type DurableConfig struct {
 // ArtifactsDirFunc resolves project artifact storage.
 type ArtifactsDirFunc func(projectID string) (string, error)
 
-// DurableStore combines a hot cache, records, and project blob storage.
-type DurableStore struct {
-	lifecycle       *bloblifecycle.Lifecycle
-	hot             *MemoryStore
-	artifactsDir    ArtifactsDirFunc
-	lookup          SessionProjectLookup
-	activeRun       ActiveRunLookup
-	records         *Records
+type durableState struct {
 	rootProj        scopedstore.LRU[string]
 	storageLocks    projectStorageLockRegistry
 	reconciled      scopedstore.LRU[struct{}]
 	reconcileStates artifactRepairRegistry
 	garbage         artifactGCState
+}
+
+// DurableStore combines a hot cache, records, and project blob storage.
+type DurableStore struct {
+	lifecycle    *bloblifecycle.Lifecycle
+	hot          *MemoryStore
+	artifactsDir ArtifactsDirFunc
+	lookup       SessionProjectLookup
+	activeRun    ActiveRunLookup
+	records      *Records
+	durableState
+	durableBlobs
+}
+
+type durableBlobs struct {
+	s *DurableStore
 }
 
 var _ Store = (*DurableStore)(nil)
@@ -52,20 +59,24 @@ func NewDurableStore(cfg DurableConfig) *DurableStore {
 	if hot == nil {
 		hot = NewMemoryStore()
 	}
-	if cfg.Records != nil {
-		cfg.Records.onHandleBound = func(ctx context.Context, artifactID, handle string) {
-			// An artifact the hot tier does not hold has nothing to refresh.
-			_ = hot.BindEvidenceHandle(ctx, artifactID, handle)
-		}
+	records := cfg.Records
+	if records == nil {
+		records = &Records{}
 	}
-	return &DurableStore{
+	records.r = records
+	records.onHandleBound = func(ctx context.Context, artifactID, handle string) {
+		_ = hot.BindEvidenceHandle(ctx, artifactID, handle)
+	}
+	s := &DurableStore{
 		lifecycle:    bloblifecycle.ForDevice(cfg.DataDir),
 		hot:          hot,
 		artifactsDir: cfg.ArtifactsDir,
 		lookup:       cfg.Lookup,
 		activeRun:    cfg.ActiveRun,
-		records:      cfg.Records,
+		records:      records,
 	}
+	s.s = s
+	return s
 }
 
 // Put publishes content before its durable record.
@@ -108,38 +119,7 @@ func (s *DurableStore) Put(ctx context.Context, rootSessionID string, entry Entr
 	if err != nil {
 		return api.VisualArtifact{}, err
 	}
-	rec := ArtifactRecord{
-		ID:              wire.ID,
-		ProjectID:       projectID,
-		RootSessionID:   normalizeKey(rootSessionID),
-		SessionID:       holder,
-		WorkflowRunID:   s.runForSession(ctx, entry.WorkflowRunID, holder),
-		ToolCallID:      wire.ToolCallID,
-		OriginMessageID: wire.OriginMessageID,
-		OperationID:     entry.OperationID,
-		NaturalKey:      entry.NaturalKey,
-		ContentHash:     artifactContentHash(raw),
-		ByteSize:        int64(len(raw)),
-		Mime:            wire.Mime,
-		Source:          string(wire.Source),
-		Caption:         wire.Caption,
-		EvidenceHandle:  wire.EvidenceHandle,
-		PageID:          wire.PageID,
-		Perceive:        wire.Perceive,
-		DurationMS:      wire.DurationMS,
-		Width:           wire.Width,
-		Height:          wire.Height,
-		CreatedAt:       time.Now().UTC().Format(time.RFC3339Nano),
-	}
-	if entry.AutomaticRecording {
-		rec.RetentionClass = "recording"
-	}
-	if hadPrior {
-		rec.CreatedAt = prior.CreatedAt
-	}
-	if wire.RecordedAt != nil {
-		rec.RecordedAt = wire.RecordedAt.UTC().Format(time.RFC3339Nano)
-	}
+	rec := s.newArtifactRecord(ctx, projectID, rootSessionID, holder, entry, wire, raw, prior, hadPrior)
 	created, storedSize, err := putArtifactBlob(dir, rec.ContentHash, raw)
 	if err != nil {
 		return api.VisualArtifact{}, err
@@ -155,59 +135,6 @@ func (s *DurableStore) Put(ctx context.Context, rootSessionID string, entry Entr
 	// Warm the hot tier only after the record commits.
 	_, _ = s.hot.Put(ctx, rootSessionID, Entry{Meta: wire, Bytes: raw, ProducerSessionID: holder})
 	return wire, nil
-}
-
-// identify resolves a scoped write ID without reviving tombstones.
-func (s *DurableStore) identify(ctx context.Context, projectID, rootSessionID string, entry Entry) (string, error) {
-	claimed, err := s.records.ClaimedID(ctx, projectID, entry.OperationID, entry.NaturalKey)
-	if err != nil {
-		return "", err
-	}
-	id := normalizeID(entry.Meta.ID)
-	if claimed != "" {
-		id = claimed
-	}
-	if id == "" {
-		return "", nil
-	}
-	existing, found, err := s.records.GetInProject(ctx, projectID, id)
-	if err != nil {
-		return "", err
-	}
-	if !found {
-		return id, nil
-	}
-	if normalizeKey(existing.RootSessionID) != normalizeKey(rootSessionID) {
-		return "", fmt.Errorf("artifact id %s belongs to another session tree", id)
-	}
-	if existing.Deleted() {
-		return "", nil
-	}
-	return id, nil
-}
-
-// runForSession resolves the producing workflow run.
-func (s *DurableStore) runForSession(ctx context.Context, declared, sessionID string) string {
-	if runID := strings.TrimSpace(declared); runID != "" {
-		return runID
-	}
-	if s.activeRun == nil || sessionID == "" {
-		return ""
-	}
-	runID, err := s.activeRun(ctx, sessionID)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(runID)
-}
-
-// dropSupersededBlob removes orphaned replacement bytes.
-func (s *DurableStore) dropSupersededBlob(ctx context.Context, projectID, dir string, prior ArtifactRecord, next ArtifactRecord) {
-	old := strings.TrimSpace(prior.ContentHash)
-	if old == "" || old == next.ContentHash {
-		return
-	}
-	s.removeBlobIfOrphan(ctx, projectID, dir, old, next.ID)
 }
 
 // Resolve returns bytes or a typed absence.
@@ -256,7 +183,6 @@ func (s *DurableStore) Resolve(ctx context.Context, rootSessionID, artifactID st
 		return Absent(AbsenceUnavailable)
 	}
 	meta := metaFromRecord(rec)
-	// Re-warm is best effort; the bytes are already in hand.
 	_, _ = s.hot.Put(ctx, rootSessionID, Entry{Meta: meta, Bytes: raw, ProducerSessionID: rec.SessionID})
 	return Present(meta, raw)
 }
@@ -332,117 +258,6 @@ func (s *DurableStore) FindByEvidenceHandle(ctx context.Context, rootSessionID, 
 	return s.hot.FindByEvidenceHandle(ctx, rootSessionID, handle)
 }
 
-// Delete tombstones the record and drops orphaned bytes.
-func (s *DurableStore) Delete(ctx context.Context, projectID, artifactID, reason string) (ArtifactDeleteResult, bool, error) {
-	if s == nil {
-		return ArtifactDeleteResult{}, false, fmt.Errorf("visual store not configured")
-	}
-	projectID = strings.TrimSpace(projectID)
-	artifactID = normalizeID(artifactID)
-	unlock := s.lockProjectStorage(projectID)
-	defer unlock()
-	rec, refs, err := s.records.SoftDelete(ctx, projectID, artifactID, reason)
-	if err != nil || rec.ID == "" {
-		return ArtifactDeleteResult{}, false, err
-	}
-	s.hot.forget(artifactID)
-	if dir, derr := s.artifactsDir(projectID); derr == nil {
-		s.removeBlobIfOrphan(ctx, projectID, dir, rec.ContentHash, rec.ID)
-	} else {
-		s.resetProjectStorageReconciliation(projectID)
-	}
-	deletedAt, _ := time.Parse(time.RFC3339Nano, rec.DeletedAt)
-	if refs == nil {
-		refs = []ArtifactReference{}
-	}
-	return ArtifactDeleteResult{ID: rec.ID, DeletedAt: deletedAt, References: refs}, true, nil
-}
-
-func (s *DurableStore) Discard(ctx context.Context, projectID, artifactID string) error {
-	if s == nil {
-		return fmt.Errorf("visual store not configured")
-	}
-	projectID = strings.TrimSpace(projectID)
-	artifactID = normalizeID(artifactID)
-	unlock := s.lockProjectStorage(projectID)
-	defer unlock()
-	rec, found, err := s.records.Discard(ctx, projectID, artifactID)
-	if err != nil || !found {
-		return err
-	}
-	s.hot.forget(artifactID)
-	if dir, derr := s.artifactsDir(projectID); derr == nil {
-		s.removeBlobIfOrphan(ctx, projectID, dir, rec.ContentHash, rec.ID)
-	} else {
-		s.resetProjectStorageReconciliation(projectID)
-	}
-	return nil
-}
-
-func (s *DurableStore) reconcileProjectStorage(ctx context.Context, projectID, dir string) error {
-	if _, ok := s.reconciled.Load(projectID); ok {
-		return nil
-	}
-	unlock := s.lockProjectStorage(projectID)
-	defer unlock()
-	if _, ok := s.reconciled.Load(projectID); ok {
-		return nil
-	}
-	state, release := s.reconcileStates.acquire(projectID)
-	defer release()
-	if !s.lifecycle.TryLock() {
-		return nil
-	}
-	defer s.lifecycle.Unlock()
-	done, err := pruneArtifactBlobBatch(dir, state, func(hash string) (bool, error) {
-		return s.records.HashIsOrphan(ctx, projectID, hash, "")
-	})
-	if err != nil {
-		s.reconcileStates.delete(projectID)
-		return err
-	}
-	if done {
-		s.reconcileStates.delete(projectID)
-		s.reconciled.Store(projectID, struct{}{})
-	}
-	return nil
-}
-
-func (s *DurableStore) lockProjectStorage(projectID string) func() {
-	return s.storageLocks.lock(projectID)
-}
-
-func (s *DurableStore) removeBlob(ctx context.Context, projectID, dir, hash string) {
-	if err := removeArtifactBlob(dir, hash); err != nil {
-		s.resetProjectStorageReconciliation(projectID)
-		return
-	}
-	if _, err := s.records.sqlDB.ExecContext(ctx, `DELETE FROM artifact_gc_queue WHERE project_id=? AND content_hash=?`, projectID, hash); err != nil {
-		s.resetProjectStorageReconciliation(projectID)
-	}
-}
-
-func (s *DurableStore) removeBlobIfOrphan(ctx context.Context, projectID, dir, hash, excludeID string) {
-	if !s.lifecycle.TryLock() {
-		s.resetProjectStorageReconciliation(projectID)
-		return
-	}
-	defer s.lifecycle.Unlock()
-	orphan, err := s.records.HashIsOrphan(ctx, projectID, hash, excludeID)
-	if err != nil {
-		s.resetProjectStorageReconciliation(projectID)
-		return
-	}
-	if orphan {
-		s.removeBlob(ctx, projectID, dir, hash)
-	}
-}
-
-func (s *DurableStore) resetProjectStorageReconciliation(projectID string) {
-	s.reconciled.Delete(projectID)
-	s.reconcileStates.delete(projectID)
-}
-
 // StorageUsage reports retained project artifact bytes.
 func (s *DurableStore) StorageUsage(ctx context.Context, projectID string) (storageusage.Usage, error) {
 	if s == nil {
@@ -457,88 +272,3 @@ func (s *DurableStore) StorageUsage(ctx context.Context, projectID string) (stor
 	return usage, nil
 }
 
-func (s *DurableStore) resolveProject(ctx context.Context, rootSessionID string) (string, error) {
-	rootSessionID = normalizeKey(rootSessionID)
-	if rootSessionID == "" {
-		return "", nil
-	}
-	if id, ok := s.rootProj.Load(rootSessionID); ok && id != "" {
-		return id, nil
-	}
-	if s.lookup == nil {
-		return "", nil
-	}
-	id, err := s.lookup(ctx, rootSessionID)
-	id = strings.TrimSpace(id)
-	if err != nil {
-		return "", err
-	}
-	if id != "" {
-		s.rootProj.Store(rootSessionID, id)
-	}
-	return id, nil
-}
-
-func listItems(records []ArtifactRecord, origins map[string]ArtifactOrigin, refs map[string][]api.ArtifactReferenceCount) []api.ArtifactListItem {
-	out := make([]api.ArtifactListItem, 0, len(records))
-	for _, rec := range records {
-		origin := origins[rec.ID]
-		originMessageID := strings.TrimSpace(rec.OriginMessageID)
-		if originMessageID == "" {
-			originMessageID = strings.TrimSpace(origin.MessageID)
-		}
-		// Claim references can supply a missing tool call.
-		toolCallID := strings.TrimSpace(rec.ToolCallID)
-		if toolCallID == "" {
-			toolCallID = strings.TrimSpace(origin.ToolCallID)
-		}
-		item := api.ArtifactListItem{
-			ID:              rec.ID,
-			Mime:            rec.Mime,
-			Source:          api.VisualArtifactSource(rec.Source),
-			Caption:         rec.Caption,
-			EvidenceHandle:  rec.EvidenceHandle,
-			PageID:          rec.PageID,
-			SessionID:       rec.SessionID,
-			WorkflowRunID:   rec.WorkflowRunID,
-			ToolCallID:      toolCallID,
-			DurationMS:      rec.DurationMS,
-			OriginMessageID: originMessageID,
-			References:      refs[rec.ID],
-		}
-		if ts, err := time.Parse(time.RFC3339Nano, rec.CreatedAt); err == nil {
-			item.CreatedAt = ts
-		}
-		if rec.RecordedAt != "" {
-			if ts, err := time.Parse(time.RFC3339Nano, rec.RecordedAt); err == nil {
-				item.RecordedAt = &ts
-			}
-		}
-		out = append(out, item)
-	}
-	return out
-}
-
-func metaFromRecord(rec ArtifactRecord) api.VisualArtifact {
-	meta := api.VisualArtifact{
-		ID:              rec.ID,
-		Mime:            rec.Mime,
-		Source:          api.VisualArtifactSource(rec.Source),
-		Caption:         rec.Caption,
-		EvidenceHandle:  rec.EvidenceHandle,
-		PageID:          rec.PageID,
-		ToolCallID:      rec.ToolCallID,
-		OriginMessageID: rec.OriginMessageID,
-		DurationMS:      rec.DurationMS,
-		Width:           rec.Width,
-		Height:          rec.Height,
-		Perceive:        rec.Perceive,
-		StoreRef:        true,
-	}
-	if rec.RecordedAt != "" {
-		if ts, err := time.Parse(time.RFC3339Nano, rec.RecordedAt); err == nil {
-			meta.RecordedAt = &ts
-		}
-	}
-	return meta
-}

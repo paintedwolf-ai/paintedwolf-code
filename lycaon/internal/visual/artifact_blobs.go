@@ -2,6 +2,7 @@ package visual
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -133,3 +134,80 @@ func (s *artifactPruneState) close() {
 		s.dir = nil
 	}
 }
+
+// dropSupersededBlob removes orphaned replacement bytes.
+func (b durableBlobs) dropSupersededBlob(ctx context.Context, projectID, dir string, prior ArtifactRecord, next ArtifactRecord) {
+	old := strings.TrimSpace(prior.ContentHash)
+	if old == "" || old == next.ContentHash {
+		return
+	}
+	b.removeBlobIfOrphan(ctx, projectID, dir, old, next.ID)
+}
+
+func (b durableBlobs) reconcileProjectStorage(ctx context.Context, projectID, dir string) error {
+	s := b.s
+	if _, ok := s.reconciled.Load(projectID); ok {
+		return nil
+	}
+	unlock := s.lockProjectStorage(projectID)
+	defer unlock()
+	if _, ok := s.reconciled.Load(projectID); ok {
+		return nil
+	}
+	state, release := s.reconcileStates.acquire(projectID)
+	defer release()
+	if !s.lifecycle.TryLock() {
+		return nil
+	}
+	defer s.lifecycle.Unlock()
+	done, err := pruneArtifactBlobBatch(dir, state, func(hash string) (bool, error) {
+		return s.records.HashIsOrphan(ctx, projectID, hash, "")
+	})
+	if err != nil {
+		s.reconcileStates.delete(projectID)
+		return err
+	}
+	if done {
+		s.reconcileStates.delete(projectID)
+		s.reconciled.Store(projectID, struct{}{})
+	}
+	return nil
+}
+
+func (b durableBlobs) lockProjectStorage(projectID string) func() {
+	return b.s.storageLocks.lock(projectID)
+}
+
+func (b durableBlobs) removeBlob(ctx context.Context, projectID, dir, hash string) {
+	s := b.s
+	if err := removeArtifactBlob(dir, hash); err != nil {
+		s.resetProjectStorageReconciliation(projectID)
+		return
+	}
+	if _, err := s.records.sqlDB.ExecContext(ctx, `DELETE FROM artifact_gc_queue WHERE project_id=? AND content_hash=?`, projectID, hash); err != nil {
+		s.resetProjectStorageReconciliation(projectID)
+	}
+}
+
+func (b durableBlobs) removeBlobIfOrphan(ctx context.Context, projectID, dir, hash, excludeID string) {
+	s := b.s
+	if !s.lifecycle.TryLock() {
+		s.resetProjectStorageReconciliation(projectID)
+		return
+	}
+	defer s.lifecycle.Unlock()
+	orphan, err := s.records.HashIsOrphan(ctx, projectID, hash, excludeID)
+	if err != nil {
+		s.resetProjectStorageReconciliation(projectID)
+		return
+	}
+	if orphan {
+		s.removeBlob(ctx, projectID, dir, hash)
+	}
+}
+
+func (b durableBlobs) resetProjectStorageReconciliation(projectID string) {
+	b.s.reconciled.Delete(projectID)
+	b.s.reconcileStates.delete(projectID)
+}
+
