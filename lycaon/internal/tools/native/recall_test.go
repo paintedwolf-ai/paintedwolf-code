@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 func TestRecallHistoryAndCoordinateReject(t *testing.T) {
@@ -122,5 +123,32 @@ func TestRecallRejectionFactsComeFromTypedFields(t *testing.T) {
 		if !errors.As(recallReject(&search.ParseError{Field: field, Message: "diagnostic"}), &reject) || reject.Data["recall_query_time_invalid"] != (field != "other") {
 			t.Fatalf("wrong time fact for %s", field)
 		}
+	}
+}
+
+func TestRecallSchemaKeepsBothRecoveryModes(t *testing.T) {
+	config, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	testutil.FailErr(t, "load actual recall schema", err)
+	meta, ok := config.ToolMeta("recall")
+	if !ok {
+		t.Fatal("recall schema missing")
+	}
+	for _, tc := range []struct {
+		name  string
+		args  map[string]any
+		valid bool
+	}{
+		{"handle", map[string]any{"query": "handle:read#1"}, true},
+		{"known body", map[string]any{"history": map[string]any{"message_id": "original"}}, true},
+		{"full record", map[string]any{"history": map[string]any{"message_id": "original", "format": "record", "through_ord": 3}}, true},
+		{"index", map[string]any{"history": map[string]any{"through_ord": 3, "search": "observations.txt"}}, true},
+		{"empty", map[string]any{"history": map[string]any{}}, false},
+		{"mixed", map[string]any{"query": "tool:read", "history": map[string]any{"message_id": "original"}}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tools.ValidateToolArgs(meta.ArgsSchema, tc.args); (err == nil) != tc.valid {
+				t.Fatalf("schema validity=%v, want %v: %v", err == nil, tc.valid, err)
+			}
+		})
 	}
 }
