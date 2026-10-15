@@ -42,7 +42,7 @@ func (b claimBook) claimDueSeries(ctx context.Context, canonical string) ([]scan
 		}
 	}
 	now := nowUTC(b.c)
-	planner := seriesPlanner{c: b.c}
+	planner := seriesPlanner(b)
 	candidates := make([]*scanbase.SeriesRow, 0, len(rows))
 	owed := make(map[string]int)
 	free := make(map[string]int)
@@ -171,7 +171,7 @@ func (b claimBook) finishDispatch(ctx context.Context, claimed scanbase.SeriesRo
 	if record == nil {
 		return fmt.Errorf("scanner %s enqueue returned no scan", claimed.ScannerID)
 	}
-	planner := seriesPlanner{c: b.c}
+	planner := seriesPlanner(b)
 	b.c.mu.Lock()
 	row, err := b.c.Store.GetSeries(ctx, claimed.CanonicalPath, claimed.ScannerID)
 	if err != nil || row == nil {
@@ -206,7 +206,7 @@ func (b claimBook) finishDispatch(ctx context.Context, claimed scanbase.SeriesRo
 
 // Retry changed-file work; release members from a pass that started without them.
 func (b claimBook) releaseUndispatched(ctx context.Context, canonical string, row scanbase.SeriesRow, cause error) {
-	dispatcher := rootDispatcher{c: b.c}
+	dispatcher := rootDispatcher(b)
 	if row.DispatchPassID == "" {
 		dispatcher.logDispatch(ctx, "requeued", canonical, []scanbase.SeriesRow{row}, cause)
 		b.requeueDispatch(ctx, row)
@@ -267,7 +267,7 @@ func (b claimBook) leavePass(ctx context.Context, claimed scanbase.SeriesRow) {
 		return
 	}
 	releaseClaim(row)
-	(seriesPlanner{c: b.c}).rearmHeldDesireLocked(row)
+	seriesPlanner(b).rearmHeldDesireLocked(row)
 	row.UpdatedAt = nowUTC(b.c)
 	if err := b.c.Store.UpsertSeries(ctx, *row); err != nil {
 		slog.WarnContext(ctx, "release full pass member", "scanner_id", row.ScannerID, "error", err)

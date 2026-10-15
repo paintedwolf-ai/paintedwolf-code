@@ -54,7 +54,7 @@ func (c *Service) RequestFull(ctx context.Context, projectDir string, scannerIDs
 }
 
 func (f fullPassAdmission) admitLocked(ctx context.Context, canonical string, scannerIDs []string, trigger api.ScanTrigger) (string, error) {
-	series, err := (seriesPlanner{c: f.c}).syncLocked(ctx, canonical)
+	series, err := seriesPlanner(f).syncLocked(ctx, canonical)
 	if err != nil {
 		return "", err
 	}
@@ -125,7 +125,7 @@ func (f fullPassAdmission) oweLocked(ctx context.Context, series []scanbase.Seri
 	for _, row := range series {
 		bySeries[row.ScannerID] = row
 	}
-	planner := seriesPlanner{c: f.c}
+	planner := seriesPlanner(f)
 	for _, id := range members {
 		row := bySeries[id]
 		if err := planner.requestFullLocked(ctx, &row, passID, trigger); err != nil {

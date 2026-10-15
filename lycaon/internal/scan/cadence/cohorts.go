@@ -50,7 +50,7 @@ type cohortAssessment struct {
 }
 
 func (d rootDispatcher) enqueueCohort(ctx context.Context, generation dispatchGeneration, cohort dispatchCohort) ([]*api.CodeScan, []dispatchFailure) {
-	claims := claimBook{c: d.c}
+	claims := claimBook(d)
 	assessment, err := d.ensureCohortAssessment(ctx, generation, cohort)
 	if err != nil {
 		d.logDispatch(ctx, "requeued", generation.canonical, cohort.rows, err)

@@ -26,7 +26,7 @@ type rootDispatcher struct {
 
 // dispatchRoot gives due scanners one source generation and requeues failed claims.
 func (d rootDispatcher) dispatchRoot(ctx context.Context, canonical string) ([]*api.CodeScan, []dispatchFailure) {
-	claims := claimBook{c: d.c}
+	claims := claimBook(d)
 	claimed, err := claims.claimDueSeries(ctx, canonical)
 	if err != nil {
 		claims.cleanupDispatches(ctx, claimed)

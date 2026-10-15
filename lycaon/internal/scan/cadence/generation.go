@@ -20,7 +20,7 @@ type dispatchExecution struct {
 func (d rootDispatcher) dispatchExecutions(ctx context.Context, canonical string, claimed []scanbase.SeriesRow) (map[string]dispatchExecution, map[string]error) {
 	executions := make(map[string]dispatchExecution, len(claimed))
 	failures := make(map[string]error)
-	admission := fullPassAdmission{c: d.c}
+	admission := fullPassAdmission(d)
 	for _, row := range claimed {
 		execution, err := admission.resolveExecution(ctx, canonical, row)
 		if err != nil {
