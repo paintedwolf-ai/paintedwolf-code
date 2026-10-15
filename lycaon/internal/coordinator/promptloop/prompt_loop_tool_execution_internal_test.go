@@ -424,7 +424,7 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 				}
 				for _, field := range []string{"fix", "instead"} {
 					copy := reject.Copy[field]
-					if strings.Contains(copy, "request_tools") != loadable || strings.Contains(copy, "`task`") != (canTask || loadable) || strings.Contains(copy, "implementer") {
+					if strings.Contains(copy, "request_tools") != loadable || strings.Contains(copy, "task") != (canTask || loadable) || strings.Contains(copy, "implementer") {
 						t.Fatalf("%s disagrees with offered=%v deferred=%v: %s", field, offered, deferred, copy)
 					}
 				}
