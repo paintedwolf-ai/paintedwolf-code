@@ -46,10 +46,19 @@ func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, e
 	if hasMore {
 		return m.loadBoundedCanonicalPromptHistory(ctx, sess)
 	}
+	active, err := m.loadActiveWorkingSet(ctx, sess, cfg, view.CoveredThroughOrd)
+	if err != nil {
+		return nil, err
+	}
+	activeOrd := int64(0)
+	if len(active) > 0 {
+		activeOrd = active[0].Ord
+		suffix = active
+	}
 	// Replay fields stay canonical rather than being duplicated in projections.
 	retained := make([]api.Message, 0, len(view.Messages)+len(suffix))
 	for _, row := range view.Messages {
-		if row.Ord <= 0 || row.Role != api.MessageRoleAssistant || row.CompactedChunk != nil {
+		if row.Ord <= 0 || row.Role != api.MessageRoleAssistant || row.CompactedChunk != nil || activeOrd > 0 && row.Ord >= activeOrd {
 			continue
 		}
 		canonical, err := m.store.GetMessage(ctx, sess.ID, row.ID)
@@ -138,8 +147,13 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 	for _, msg := range history {
 		byID[msg.ID] = msg
 	}
+	intent, _ := api.LastUserIntentMessage(history)
+	activeOrd := intent.Ord
 	out := make([]api.Message, 0, len(view.Messages)+8)
 	for _, msg := range view.Messages {
+		if activeOrd > 0 && msg.Ord >= activeOrd {
+			continue
+		}
 		if canonical, ok := byID[msg.ID]; ok {
 			// Canonical rows restore fields excluded from prompt projections.
 			msg = api.RehydrateTranscriptProjectionFields(msg, canonical)
@@ -152,7 +166,7 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 		out = append(out, msg)
 	}
 	for _, msg := range history {
-		if msg.Ord <= view.CoveredThroughOrd {
+		if msg.Ord <= view.CoveredThroughOrd && (activeOrd <= 0 || msg.Ord < activeOrd) {
 			continue
 		}
 		out = append(out, msg)
