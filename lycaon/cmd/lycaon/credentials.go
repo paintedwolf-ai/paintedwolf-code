@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/credentialstore"
+	"github.com/lycaon/lycaon/internal/gitcredential"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/osprocess"
@@ -15,7 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 )
 
-const recoveryUsage = `usage: pw credentials {where|custody|purge|move-to-service|move-to-app-password|verify-protection} [--yes]
+const recoveryUsage = `usage: pw credentials {where|custody|purge|move-to-service|move-to-app-password|verify-protection|git ...} [--yes]
 
 Inspect and reset every private credential namespace:
   where   name the backend holding each credential set
@@ -26,6 +27,7 @@ Inspect and reset every private credential namespace:
   move-to-app-password   wrap the identity with a new app password and remove
                          it from the vault identity service; requires --yes
   verify-protection   verify the native identity custodian using disposable identities
+  git     list, store or remove Git HTTPS credentials the host serves
 
 Moves read the app password framed on stdin and run only as a child of the
 installed desktop app, which the vault identity service verifies.
@@ -42,6 +44,9 @@ identity file.`
 func runCredentials(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("%s", recoveryUsage)
+	}
+	if args[0] == "git" {
+		return runGitCredentials(args[1:], os.Stdin, os.Stdout)
 	}
 	if args[0] == "verify-protection" {
 		if len(args) != 1 {
@@ -96,7 +101,11 @@ func allCredentialSlots() ([]credentialstore.Slot, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []credentialstore.Slot{provider, research, oauth, fingerprint, managed}, nil
+	git, err := gitcredential.DefaultSlot()
+	if err != nil {
+		return nil, err
+	}
+	return []credentialstore.Slot{provider, research, oauth, fingerprint, managed, git}, nil
 }
 
 func describeCredentials(slots []credentialstore.Slot) error {

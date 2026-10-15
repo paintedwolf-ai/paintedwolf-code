@@ -459,11 +459,19 @@ func TestCandidatePlatformsCarryPinnedGitAndOpenGrep(t *testing.T) {
 	if gitPin.GitVersion == "" || gitPin.LFSVersion == "" {
 		t.Fatal("Git and Git LFS versions must both be pinned")
 	}
-	for _, key := range []string{"darwin-arm64", "linux-amd64", "linux-arm64", "windows-amd64"} {
+	const (
+		dugite         = "https://github.com/desktop/dugite-native/releases/download/"
+		paintedwolfGit = "https://github.com/paintedwolf-ai/paintedwolf-git/releases/download/"
+	)
+	for key, producer := range map[string]string{
+		"darwin-arm64":  dugite,
+		"linux-amd64":   paintedwolfGit,
+		"linux-arm64":   paintedwolfGit,
+		"windows-amd64": dugite,
+	} {
 		pin, ok := gitPin.Platforms[key]
 		sha, shaErr := hex.DecodeString(pin.SHA256)
-		if !ok || pin.ReportedVersion == "" ||
-			!strings.HasPrefix(pin.URL, "https://github.com/desktop/dugite-native/releases/download/") || shaErr != nil || len(sha) != 32 {
+		if !ok || pin.ReportedVersion == "" || !strings.HasPrefix(pin.URL, producer) || shaErr != nil || len(sha) != 32 {
 			t.Fatalf("Git engine platform %q is absent or not immutable: %+v", key, pin)
 		}
 	}
