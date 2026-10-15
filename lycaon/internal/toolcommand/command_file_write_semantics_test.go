@@ -39,25 +39,29 @@ func TestLiteralOutputFileWriteParity(t *testing.T) {
 	cases := []struct {
 		command                    string
 		matched, exact, appendMode bool
-		content                    string
+		content, path              string
 	}{
-		{`echo built > out.log`, true, true, false, "built\n"},
-		{`echo built | cat > out.log`, true, true, false, "built\n"},
-		{`echo built | tr a-z A-Z > out.log`, true, false, false, ""},
-		{`echo 'two words' >> 'out file.txt'`, true, true, true, "two words\n"},
-		{`printf '%s\n' 'hello' > out.txt`, true, true, false, "hello\n"},
-		{`echo 'a\nb' > out.txt`, true, false, false, ""},
-		{`echo -e hello > out.txt`, true, false, false, ""},
-		{`echo -E hello > out.txt`, true, false, false, ""},
-		{`echo -n hello > out.txt`, true, false, false, ""},
-		{`echo "$VALUE" > out.txt`, true, false, false, ""},
-		{`printf '%d' 12 > out.txt`, true, false, false, ""},
-		{`echo hello`, false, false, false, ""},
-		{`echo hello > /dev/null`, false, false, false, ""},
-		{`echo hello > out.txt > /dev/null`, false, false, false, ""},
-		{`echo hello > one.txt > two.txt`, false, false, false, ""},
-		{`ls > listing.txt`, false, false, false, ""},
-		{`cat source.txt > copy.txt`, false, false, false, ""},
+		{`echo built > out.log`, true, true, false, "built\n", "out.log"},
+		{`echo built | cat > out.log`, true, true, false, "built\n", "out.log"},
+		{`echo built | tr a-z A-Z > out.log`, true, false, false, "", ""},
+		{`echo 'two words' >> 'out file.txt'`, true, true, true, "two words\n", "out file.txt"},
+		{`printf '%s\n' 'hello' > out.txt`, true, true, false, "hello\n", "out.txt"},
+		{`echo 'a\nb' > out.txt`, true, false, false, "", ""},
+		{`echo --help > out.txt`, true, false, false, "", ""},
+		{`echo --version > out.txt`, true, false, false, "", ""},
+		{`echo -e hello > out.txt`, true, false, false, "", ""},
+		{`echo -E hello > out.txt`, true, false, false, "", ""},
+		{`echo -n hello > out.txt`, true, false, false, "", ""},
+		{`echo "$VALUE" > out.txt`, true, false, false, "", ""},
+		{`printf '%d' 12 > out.txt`, true, false, false, "", ""},
+		{`echo hello`, false, false, false, "", ""},
+		{`echo ">" out.txt`, false, false, false, "", ""},
+		{`printf '%s' '>> out.txt'`, false, false, false, "", ""},
+		{`echo hello > /dev/null`, false, false, false, "", ""},
+		{`echo hello > out.txt > /dev/null`, false, false, false, "", ""},
+		{`echo hello > one.txt > two.txt`, false, false, false, "", ""},
+		{`ls > listing.txt`, false, false, false, "", ""},
+		{`cat source.txt > copy.txt`, false, false, false, "", ""},
 	}
 	for _, tc := range cases {
 		for _, wrapped := range []bool{false, true} {
@@ -76,8 +80,12 @@ func TestLiteralOutputFileWriteParity(t *testing.T) {
 					}
 					return
 				}
-				if got.Append != tc.appendMode || len(got.Calls) != 1 || got.Calls[0].Args["content"] != tc.content {
+				if got.Append != tc.appendMode || len(got.Calls) != 1 || got.Calls[0].Args["content"] != tc.content || got.Path != tc.path || got.Calls[0].Args["path"] != tc.path {
 					t.Fatalf("replacement changed output: %#v", got)
+				}
+				actualAppend, _ := got.Calls[0].Args["append"].(bool)
+				if actualAppend != tc.appendMode {
+					t.Fatalf("replacement append=%t, want %t", actualAppend, tc.appendMode)
 				}
 			})
 		}

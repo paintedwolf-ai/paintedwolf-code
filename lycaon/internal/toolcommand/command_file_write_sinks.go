@@ -193,7 +193,7 @@ func literalEchoOrPrintf(argv []bashWord) (body string, literal, ok bool) {
 		}
 		var parts []string
 		// Echo option and backslash behavior differs between external programs and shells.
-		lit := !interpretEscapes && idx == 1
+		lit := !interpretEscapes && idx == 1 && (len(argv) < 2 || !strings.HasPrefix(argv[1].value, "-"))
 		for ; idx < len(argv); idx++ {
 			if !argv[idx].literal || strings.Contains(argv[idx].value, `\`) {
 				lit = false

@@ -137,6 +137,7 @@ func TestLiteralOutputRecoveryRendersActualSurface(t *testing.T) {
 		testutil.FailErr(t, "register tool", registry.Register(name, noop))
 	}
 	executor := NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "implement")
+	executor.Rejections.SetBlockPlane(stockBlockPlane(t))
 	for _, tc := range []struct {
 		name              string
 		offered, deferred []string
