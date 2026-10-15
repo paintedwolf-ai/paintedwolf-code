@@ -1014,7 +1014,7 @@ xattr -w com.apple.quarantine "0083;00000000;Chrome;|com.google.Chrome" ~/Downlo
 ### Tag gate
 
 Both preview and stable publication run the controller's compatibility check
-against the last published stable GitHub Release. The controller pins that
+against the newest published stable release confirmed by the signed updater feed or GitHub mirror. The controller pins that
 release's commit once and uses it for catalog and OpenAPI comparisons. An
 unpublished tag or a preview cannot replace the baseline. Missing or inconsistent
 evidence fails closed; there is no additional approval record to maintain.

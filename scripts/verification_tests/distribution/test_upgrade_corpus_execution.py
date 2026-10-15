@@ -205,3 +205,69 @@ class PublishedStableBaselineTests(unittest.TestCase):
         with patch.object(release_baseline.subprocess, "check_output", side_effect=["a" * 40, "1.0.0"]), \
              self.assertRaisesRegex(ValueError, "does not match"):
             release_baseline.resolve(self.release)
+
+
+class StableFeedBaselineTests(unittest.TestCase):
+    mirror = PublishedStableBaselineTests.release
+
+    def setUp(self):
+        registry = release_baseline.load_registry()
+        row = {**registry["generations"][0], "generation": 1, "successor": None, "bridge_version": None}
+        self.registry = {"schema_version": 1, "signing_generation": 1, "embedded_generation": 1, "generations": [row]}
+        self.patch_registry = patch.object(release_baseline, "load_registry", return_value=self.registry)
+        self.patch_registry.start()
+        self.addCleanup(self.patch_registry.stop)
+
+    def manifest(self, version):
+        from update_keys import release_binding
+        return json.dumps({"version": version, "pub_date": "2026-10-03T19:41:04Z",
+                           "update_keys": release_binding(self.registry, version)}).encode()
+
+    def test_signed_feed_can_advance_before_the_github_mirror(self):
+        raw = self.manifest("1.0.2")
+        with patch.object(release_baseline, "read_public", side_effect=[raw, b"signature"]), \
+             patch.object(release_baseline.feed_signature, "check") as binding, \
+             patch.object(release_baseline.feed_signing, "verify") as crypto:
+            selected = release_baseline.published_stable(self.mirror, "https://downloads.example")
+            self.assertEqual(selected["tag_name"], "v1.0.2")
+            self.assertEqual(selected["feed_manifest_sha256"], sha(raw))
+            binding.assert_called_once()
+            crypto.assert_called_once()
+
+    def test_a_newer_published_mirror_is_not_lost_to_an_older_feed(self):
+        with patch.object(release_baseline, "read_public", side_effect=[self.manifest("1.0.0"), b"signature"]), \
+             patch.object(release_baseline.feed_signature, "check"), patch.object(release_baseline.feed_signing, "verify"):
+            self.assertEqual(release_baseline.published_stable(self.mirror, "https://downloads.example"), self.mirror)
+
+    def test_missing_or_unverifiable_feed_blocks_baseline_selection(self):
+        for replies, verify_error in (([None], None), ([self.manifest("1.0.1"), None], None),
+                                      ([self.manifest("1.0.1"), b"signature"], ValueError("invalid signature"))):
+            with self.subTest(replies=replies), \
+                 patch.object(release_baseline, "read_public", side_effect=replies), \
+                 patch.object(release_baseline.feed_signature, "check"), \
+                 patch.object(release_baseline.feed_signing, "verify", side_effect=verify_error), self.assertRaises(ValueError):
+                release_baseline.published_stable(self.mirror, "https://downloads.example")
+
+    def test_preview_feed_values_and_unsafe_origins_are_refused(self):
+        with patch.object(release_baseline, "read_public", side_effect=[self.manifest("1.0.2-rc3"), b"signature"]), \
+             self.assertRaisesRegex(ValueError, "stable"):
+            release_baseline.published_stable(self.mirror, "https://downloads.example")
+        for origin in ("http://downloads.example", "https://downloads.example/path", "https://user@downloads.example"):
+            with self.subTest(origin=origin), self.assertRaisesRegex(ValueError, "HTTPS download origin"):
+                release_baseline.published_stable(self.mirror, origin)
+
+    def test_public_reads_are_bounded_and_only_404_means_absent(self):
+        from io import BytesIO
+        with patch.object(release_baseline.urllib.request, "urlopen", return_value=BytesIO(b"{}")):
+            self.assertEqual(release_baseline.read_public("https://downloads.example"), b"{}")
+        with patch.object(release_baseline.urllib.request, "urlopen", return_value=BytesIO(b"x" * (2 * 1024 * 1024 + 1))), \
+             self.assertRaisesRegex(ValueError, "size bound"):
+            release_baseline.read_public("https://downloads.example")
+        for status in (404, 403):
+            error = release_baseline.urllib.error.HTTPError("https://downloads.example", status, "fixture", None, None)
+            with patch.object(release_baseline.urllib.request, "urlopen", side_effect=error):
+                if status == 404:
+                    self.assertIsNone(release_baseline.read_public("https://downloads.example"))
+                else:
+                    with self.assertRaises(release_baseline.urllib.error.HTTPError):
+                        release_baseline.read_public("https://downloads.example")

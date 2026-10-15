@@ -13,6 +13,7 @@ SOURCE_ROOT=""
 usage() {
   cat >&2 <<'EOF'
 Usage: release-preflight.sh [--require-corpus] [--baseline-ref COMMIT]
+       release-preflight.sh --compatibility-only --source-root DIR --baseline-ref COMMIT
 
   --require-corpus  Require lycaon/testdata/upgrade-corpus/<VERSION>/ and verify
                     its version, schema, stores, and archive integrity.
