@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -67,7 +68,18 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 		t.Run(outcome, func(t *testing.T) {
 			retained := guidance.RetainedCloseout{Active: true, Attempt: 2, DocumentAttempt: 1, Drafted: "stale success", ForcedBy: []string{"citation"}}
 			reg := tools.NewStubRegistry()
+			executed := 0
+			defer func() {
+				want := 0
+				if outcome == "completed" || outcome == "failed" {
+					want = 7
+				}
+				if executed != want {
+					t.Fatalf("handler executions=%d, want %d", executed, want)
+				}
+			}()
 			_ = reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+				executed++
 				if retained.Active {
 					t.Fatal("tool ran before pinned report retired")
 				}
@@ -113,8 +125,8 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 					if err == nil {
 						t.Fatal("expected checkpoint failure")
 					}
-				} else if err != nil {
-					t.Fatal(err)
+				} else {
+					testutil.FailErr(t, "process recovery attempt", err)
 				}
 				if retained.Active || retained.Drafted != "" || st.closeoutRetry.attempt != 2 || st.closeoutRetry.documentAttempt != 1 || st.closeoutRetry.prevKey != "" || len(st.closeoutRetry.codes) != 0 {
 					t.Fatalf("retirement lost invariant: %+v / %+v", retained, st.closeoutRetry)
@@ -147,9 +159,7 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 
 func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 	reg, err := anchor.LoadRegistryFromConfigRoot()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "load anchor registry", err)
 	release := anchor.SetAnchorsFor(func(context.Context, string) *anchor.Registry { return reg })
 	defer release()
 
@@ -182,9 +192,7 @@ func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 			}})
 			st := &promptLoopTurnState{proseFinish: tc.prose, offeredToolNames: tc.offered}
 			_, err := loop.Closeout.rejectCloseoutGrounding(t.Context(), "session", st, nil, "", &oar.Decision{Code: guidance.InvestHandleNotObservedCode, Copy: map[string]string{"what": "Citation is unobserved"}}, "Pinned report", nil)
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "render closeout rejection", err)
 			if got := strings.Contains(rendered, "use an offered tool"); got != tc.want {
 				t.Fatalf("offered guidance = %v, want %v: %s", got, tc.want, rendered)
 			}

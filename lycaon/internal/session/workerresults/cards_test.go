@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/session/closeouts"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/session/closeouts"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/testdbseed"
