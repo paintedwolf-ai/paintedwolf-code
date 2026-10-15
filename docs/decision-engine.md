@@ -182,7 +182,7 @@ and the app never sends them off the device ([Privacy](privacy.md#the-local-deci
 | Piece | Where |
 |---|---|
 | Policy: questions, thresholds, deadlines, rerank sites | `lycaon/config/packs/painted-wolf/platform/host/decisions.yaml` |
-| Engine process (`bialy`, Rust, candle everywhere, MLX on Apple silicon) | `lycaon/internal/decide/native` |
+| Engine process (`bialy`, Rust: candle on the CPU, MLX on Apple silicon, Burn on Vulkan GPUs) | `lycaon/internal/decide/native` |
 | Host client, checkpoint pin, provisioning, preflight | `lycaon/internal/decide/bialy` |
 | Turn decisions, cache boundaries, and the standing-surface ledger | `lycaon/internal/coordinator/turnload` |
 | Reranking sites | `lycaon/internal/decide/rerank.go` and each site's blend |
@@ -194,6 +194,27 @@ under its engine root; a development checkout builds the engine with
 and stages the checksum-pinned head set installed under the shared artifact cache
 ([Dev tasks](dev-tasks.md#targets-with-behavior-the-description-cannot-carry)).
 Artifacts, pins, and the runtime choice are in [Dependencies](dependencies.md#decision-model).
+
+## Where it runs
+
+A decision that arrives after its deadline is worth less than the fallback,
+which costs nothing. So the engine serves only on a device fast enough for
+every enabled site, and otherwise does not serve at all. At its first launch
+on a machine it runs a reference batch on every device it can reach (MLX on
+Apple silicon, each Vulkan GPU, the CPU) and keeps the fastest one within
+`engine.reference_ms` in `decisions.yaml`. The device's kind decides nothing:
+an integrated GPU that is fast enough serves, and a discrete one that is not
+does not. The catalog refuses a requirement any enabled rerank site could not
+meet within its deadline.
+
+The verdict and the compiled GPU kernels persist under the device
+configuration's `cache/decide/`, keyed by the engine build, the checkpoint,
+the requirement and the hardware, so later launches load the chosen device
+directly; a new GPU, driver target or app version measures again. Where no
+device qualifies, the engine exits with a dedicated status, the host reports
+`no_capable_device` through the `decision_engine` preflight probe, and every
+decision falls back without waiting. `LYCAON_DECIDE_DEVICE` pins a device for
+development, whatever its speed.
 
 Bialy retains the `pw-decide-row/1`, `pw-decide-head/1`, and
 `pw-decide-anchor/1` artifact identifiers so existing training data, trained
