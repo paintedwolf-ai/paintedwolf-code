@@ -1,4 +1,4 @@
-import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
+import { disclosureToggle, isDisclosureOpen, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
 import { fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
 import { createSignal, type ComponentProps } from "solid-js";
 import { afterEach, describe, expect, it } from "vitest";
@@ -864,5 +864,14 @@ describe("ActivitySpanCard", () => {
     );
     expect(renderedParts).toHaveLength(16);
     expect(container.querySelector('[data-testid="virtual-card-list"]')).toBeNull();
+  });
+});
+
+describe("ActivitySpanCard under the WebKitGTK AT-SPI workaround", () => {
+  it("shows the same collapsed span", async () => {
+    await expectSameCollapsedFace(() => {
+      const view = render(() => <ActivitySpanCard label="read" entries={entries} layout="chat" />);
+      return { card: () => view.container.querySelector('[data-testid="activity-span-card"]'), unmount: view.unmount };
+    });
   });
 });

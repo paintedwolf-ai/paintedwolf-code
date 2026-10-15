@@ -175,12 +175,12 @@ func netlinkRequest(typ uint16, body []byte) error {
 }
 
 // serveGateway forwards the datagrams the network's permits cover until the
-// gateway closes. A datagram no permit covers is dropped, so a connected
-// socket the policy refused at connect and an unconnected send alike reach
-// nothing.
-func serveGateway(tun *os.File, network Network) {
+// gateway closes. A datagram no permit covers is dropped and its destination
+// reported once, so an unconnected send to it reaches nothing but the record.
+func serveGateway(tun *os.File, network Network, refusals *refusalLines) {
 	flows := newDatagramFlows()
 	defer func() { _ = flows.Close() }()
+	dropped := droppedDestinations{}
 	buf := make([]byte, maxDatagram+ipv6HeaderLen)
 	for {
 		n, err := tun.Read(buf)
@@ -188,7 +188,13 @@ func serveGateway(tun *os.File, network Network) {
 			return
 		}
 		d, ok := parseDatagram(buf[:n])
-		if !ok || !gatewayCarries(network, d.dst) {
+		if !ok {
+			continue
+		}
+		if !gatewayCarries(network, d.dst) {
+			if dropped.first(d.dst) {
+				refusals.report(Refusal{Operation: "network-outbound", Target: "remote:" + unmapped(d.dst).String()})
+			}
 			continue
 		}
 		src, dst := d.src, d.dst
@@ -212,4 +218,26 @@ func gatewayCarries(n Network, dst netip.AddrPort) bool {
 		return false
 	}
 	return n.directAllowed(false, dst.Port())
+}
+
+// maxDroppedDestinations bounds the destinations the gateway remembers having
+// reported; past it every drop is reported, which the feed counts.
+const maxDroppedDestinations = 1024
+
+// droppedDestinations remembers which destinations' drops were reported, so a
+// sender repeating one does not flood the action's feed.
+type droppedDestinations map[netip.AddrPort]bool
+
+func (d droppedDestinations) first(dst netip.AddrPort) bool {
+	if d[dst] {
+		return false
+	}
+	if len(d) < maxDroppedDestinations {
+		d[dst] = true
+	}
+	return true
+}
+
+func unmapped(a netip.AddrPort) netip.AddrPort {
+	return netip.AddrPortFrom(a.Addr().Unmap(), a.Port())
 }
