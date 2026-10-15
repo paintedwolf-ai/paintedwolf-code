@@ -48,6 +48,41 @@ binaries:
     source_url: https://github.com/paintedwolf-ai/paintedwolf-git/releases/download/v2.53.0+paintedwolf.1/paintedwolf-git-2.53.0+paintedwolf.1-source.tar.gz
     license_text_file: texts/GPL-2.0.txt
 
+  # Linux text recognition engine staged into engine-root/ocr by
+  # scripts/ocrengine-fetch.sh from the archive pinned in
+  # lycaon/config/runtime/ocrengine/pin.yaml; the paintedwolf-tesseract producer builds
+  # it statically from these sources, so no dependency manifest sees them.
+  - name: tesseract
+    version: "5.5.3"
+    license: Apache-2.0
+    source_url: https://github.com/tesseract-ocr/tesseract
+    license_text_file: texts/Apache-2.0.txt
+
+  - name: leptonica
+    version: "1.87.0"
+    license: BSD-2-Clause
+    source_url: https://github.com/DanBloomberg/leptonica
+    license_text_file: texts/BSD-2-Clause-leptonica.txt
+
+  - name: tessdata_fast (eng, osd)
+    version: "87416418657359cb625c412a48b6e1d6d41c29bd"
+    license: Apache-2.0
+    source_url: https://github.com/tesseract-ocr/tessdata_fast
+    license_text_file: texts/Apache-2.0.txt
+
+  - name: musl
+    version: "1.2.5"
+    license: MIT
+    source_url: https://musl.libc.org/
+    license_text_file: texts/MIT-musl.txt
+
+  # libstdc++ and libgcc are linked into the static tesseract executable.
+  - name: GCC runtime libraries (libstdc++, libgcc)
+    version: "14.2.0"
+    license: GPL-3.0-or-later WITH GCC-exception-3.1
+    source_url: https://gcc.gnu.org/git/gcc.git
+    license_text_file: texts/GPL-3.0-with-GCC-exception.txt
+
   - name: chrome-headless-shell
     version: "154.0.8037.92"
     license: BSD-3-Clause
