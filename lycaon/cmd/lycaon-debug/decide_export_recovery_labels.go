@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -53,7 +54,8 @@ func canonicalRecoveryLabels(sessionID string, msgs []db.ListSessionMessagesRow,
 		if body == "" {
 			body = m.Content
 		}
-		if json.Unmarshal([]byte(body), &recovered) != nil || recovered.Resolution != "matched" {
+		_, body, _, ok := hostmarker.SplitToolJSONBody(body)
+		if !ok || json.Unmarshal([]byte(body), &recovered) != nil || recovered.Resolution != "matched" {
 			continue
 		}
 		ids := map[string]bool{}
