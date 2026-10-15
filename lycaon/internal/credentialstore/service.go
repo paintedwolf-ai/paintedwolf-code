@@ -59,5 +59,15 @@ func releaseBuild() bool { return !configdir.IsDevelopmentBuild() }
 // UnlocksUnattended reports whether the vault opens without a human secret:
 // any process that can start the signed engine reaches its plaintext.
 func UnlocksUnattended() bool {
-	return unattendedIdentityProvider && releaseBuild() && !isolatedProcess()
+	return releaseBuild() && !isolatedProcess() && unattendedIdentity()
+}
+
+// VerifiedLauncherPID is the desktop app a custodian outside this process
+// verified as the engine's parent while releasing the identity, or 0 where
+// no custodian verifies launchers.
+func VerifiedLauncherPID() int {
+	if !releaseBuild() || isolatedProcess() {
+		return 0
+	}
+	return verifiedLauncherPID()
 }

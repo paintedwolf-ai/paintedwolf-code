@@ -70,6 +70,7 @@
   "components/settings/security/ScannersSettingsPanel.tsx": 1,
   "components/settings/SettingsStagePanel.tsx": 2,
   "components/settings/storage/CacheSettingsPanel.tsx": 3,
+  "components/settings/storage/CredentialVaultPanel.tsx": 3,
   "components/settings/storage/DataSettingsPanel.tsx": 4,
   "components/settings/storage/HistoryStorageSettingsPanel.tsx": 5,
   "components/settings/system/AboutSettingsPanel.tsx": 1,
