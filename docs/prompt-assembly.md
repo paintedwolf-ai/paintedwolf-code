@@ -177,7 +177,7 @@ Compaction is independent of pricing: the session trigger selects when to compac
 
 Before the provider has reported usage, budget estimates use a character-based approximation and a cold-start reserve. The approximation can undercount or overcount; the separate compaction acceptance measurement uses the declared tokenizer when available. After a completion, assembly records observed prompt overhead so later budget decisions include static system and schema material, not only transcript text.
 
-Token observations are advisory measurements. A bad estimate may cause earlier fitting; it cannot cause the host to skip a gate.
+Token observations use the final provider attempt and are scoped to its provider and model. Billing retains usage across all attempts. A receiver switch discards the previous receiver’s calibration. The final fit uses observed input with a composition margin beside the native request estimate. A bad estimate may cause earlier fitting; it cannot cause the host to skip a gate.
 
 ## Summarize tool
 
