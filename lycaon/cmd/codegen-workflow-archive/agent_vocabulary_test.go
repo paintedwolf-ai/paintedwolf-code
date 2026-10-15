@@ -75,15 +75,15 @@ func TestRetirementCatalogIsClosedAndVersioned(t *testing.T) {
 	for _, raw := range []string{
 		`{}`, `{"format_version":2,"facts":{},"rejection_codes":{}}`,
 		`{"format_version":1,"facts":{},"rejection_codes":{},"extra":true}`,
-		`{"format_version":1,"facts":{},"rejection_codes":{}} {}`,
+		`{"format_version":1,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}} {}`,
 	} {
 		if _, err := parseRetirements([]byte(raw)); err == nil {
 			t.Fatalf("invalid retirement catalog passed: %s", raw)
 		}
 	}
-	_, err := parseRetirements([]byte(`{"format_version":1,"facts":{},"rejection_codes":{}}`))
+	_, err := parseRetirements([]byte(`{"format_version":1,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}}`))
 	testutil.FailErr(t, "parse closed retirement catalog", err)
-	source := treeRelease{"schemas/agent-public-retirements.json": []byte(`{"format_version":1,"facts":{"paintedwolf.forgotten":["paintedwolf.successor"]},"rejection_codes":{}}`)}
+	source := treeRelease{"schemas/agent-public-retirements.json": []byte(`{"format_version":1,"vocabularies":{"host_facts":{"paintedwolf.forgotten":["paintedwolf.successor"]},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}}`)}
 	if err := checkAgentVocabulary(source, source); err == nil || !strings.Contains(err.Error(), "released retirement") {
 		t.Fatalf("retirement removal: %v", err)
 	}

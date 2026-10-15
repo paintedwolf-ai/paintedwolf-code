@@ -34,6 +34,7 @@ jobs:
       source_sha: ${{ steps.source.outputs.source_sha }}
       baseline_sha: ${{ steps.compatibility.outputs.baseline_sha }}
       baseline_tag: ${{ steps.compatibility.outputs.baseline_tag }}
+      published_versions: ${{ steps.compatibility.outputs.published_versions }}
       publish: ${{ steps.source.outputs.publish }}
       version: ${{ steps.release.outputs.version }}
       channel: ${{ steps.release.outputs.channel }}
@@ -170,10 +171,11 @@ jobs:
       - name: Enforce published stable compatibility
         env:
           BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}
+          PUBLISHED_VERSIONS: ${{ needs.classify.outputs.published_versions }}
         working-directory: .release-controller
         run: |
           export PW_ARTIFACT_ROOT="$(python3 "${GITHUB_WORKSPACE}/scripts/artifact_paths.py" artifacts "${GITHUB_WORKSPACE}")"
-          ./task release:preflight -- --compatibility-only --source-root "${GITHUB_WORKSPACE}" --baseline-ref "${BASELINE_SHA}"
+          ./task release:preflight -- --compatibility-only --source-root "${GITHUB_WORKSPACE}" --baseline-ref "${BASELINE_SHA}" --published-versions "${PUBLISHED_VERSIONS}"
       - name: Report OpenAPI compatibility
         env:
           BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}

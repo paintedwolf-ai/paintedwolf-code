@@ -104,7 +104,7 @@ printf built > "$PREFLIGHT_BUILD_CALLS"
 			}
 			want := "candidate " + corpus + " --sidecar " + filepath.Join(paths.Build, "lycaon-dev") + " --version " + version + " --inventory-root " + filepath.Dir(corpus) + "\n"
 			if tc.controller {
-				want = "candidate-static " + corpus + " --schema-lock " + filepath.Join(root, "lycaon/internal/db/schema_version_lock.json") + " --version " + version + " --inventory-root " + filepath.Dir(corpus) + "\n"
+				want = "candidate-static " + corpus + " --schema-lock " + filepath.Join(root, "lycaon/internal/db/schema_version_lock.json") + " --version " + version + " --inventory-root " + filepath.Dir(corpus) + " --published-versions []\n"
 			}
 			if string(raw) != want {
 				t.Fatalf("complete corpus verification = %q, want %q\n%s", raw, want, out)

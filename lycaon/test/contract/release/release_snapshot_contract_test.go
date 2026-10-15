@@ -160,7 +160,7 @@ func TestReleaseCompatibilityCannotBeSkippedForEitherChannel(t *testing.T) {
 	for _, step := range jobs["compatibility"].Steps {
 		if strings.Contains(step.Run, "--compatibility-only") {
 			guard = true
-			if step.If != "" || step.Continue || step.Env["BASELINE_SHA"] != "${{ needs.classify.outputs.baseline_sha }}" || !strings.Contains(step.Run, "--source-root") {
+			if step.If != "" || step.Continue || step.Env["BASELINE_SHA"] != "${{ needs.classify.outputs.baseline_sha }}" || !strings.Contains(step.Run, "--source-root") || !strings.Contains(step.Run, "--published-versions") || step.Env["PUBLISHED_VERSIONS"] != "${{ needs.classify.outputs.published_versions }}" {
 				t.Fatal("compatibility enforcement can skip a release or inspect another source")
 			}
 		}

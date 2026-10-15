@@ -37,7 +37,7 @@ class CorpusIntegrityTests(unittest.TestCase):
         self.write_archive()
 
     def write_archive(self, mutate=None):
-        manifest = {"app_version": "1.0.0-rc.1", "format_version": 1,
+        manifest = {"app_version": self.metadata["app_version"], "format_version": 1,
                     "schema_user_version": 1, "schema_shape_digest": self.identity["shape"],
                     "files": [{"rel_path": name, "kind": self.kinds.get(name, "file"),
                                "mode": 0o600, "size": len(body), "sha256": sha(body)}
@@ -57,6 +57,30 @@ class CorpusIntegrityTests(unittest.TestCase):
         if command[2] == "schema-baseline":
             return json.dumps(self.identity)
         return json.dumps({"compatible": Path(command[3]).read_bytes() == b"valid database"})
+
+    def test_every_published_corpus_retains_its_schema_and_exact_release_bytes(self):
+        target = self.root / "lycaon/testdata/upgrade-corpus/1.0.1"
+        target.parent.mkdir(parents=True)
+        self.fixture.rename(target)
+        self.fixture = target
+        self.metadata["app_version"] = "1.0.1"
+        self.write_archive()
+        baseline = {p.relative_to(self.root).as_posix(): p.read_bytes()
+                    for p in self.fixture.rglob("*") if p.is_file()}
+        def git(command):
+            if command[3] == "ls-tree":
+                return ("\0".join(baseline) + "\0").encode()
+            return baseline[command[4].split(":", 1)[1]]
+        with patch.object(fixture_files.subprocess, "check_output", side_effect=git):
+            fixture_files.released_corpus(target.parent, ["1.0.1"], self.root, [self.identity])
+            with self.assertRaisesRegex(ValueError, "retained baseline"):
+                fixture_files.released_corpus(target.parent, ["1.0.1"], self.root, [])
+            with self.assertRaisesRegex(ValueError, "missing"):
+                fixture_files.released_corpus(target.parent, ["1.0.2"])
+            (self.fixture / "SEMANTICS.json").write_text('{"rewritten":true}')
+            self.write_archive()
+            with self.assertRaisesRegex(ValueError, "bytes differ"):
+                fixture_files.released_corpus(target.parent, ["1.0.1"], self.root, [self.identity])
 
     def test_static_gate_needs_no_engine_and_rejects_stale_schema_revision(self):
         lock = self.root / "schema-lock.json"
@@ -348,3 +372,40 @@ class SourceVersionTests(unittest.TestCase):
                 with self.subTest(name=name), self.assertRaises(ValueError):
                     release_baseline.check_source_versions("selected")
                 source[name] = original
+
+
+class SigningHistoryTests(unittest.TestCase):
+    def registry(self):
+        row = {**release_baseline.load_registry()["generations"][0], "generation": 1,
+               "successor": None, "bridge_version": None}
+        return {"schema_version": 1, "signing_generation": 1, "embedded_generation": 1, "generations": [row]}
+
+    def test_published_source_keys_are_checked_without_building_old_releases(self):
+        current = self.registry()
+        previous = json.loads(json.dumps(current))
+        del previous["generations"][0]["feed_public_key"]
+        with patch.object(release_baseline.subprocess, "check_output", side_effect=[json.dumps(current), json.dumps(previous)]) as git:
+            release_baseline.check_published_keys("selected", [PublishedStableBaselineTests.release])
+            self.assertEqual([call.args[0][2] for call in git.call_args_list],
+                             ["selected:packaging/update-keys.json", "refs/tags/v1.0.1:packaging/update-keys.json"])
+
+    def test_published_keys_and_closed_bridges_are_permanent(self):
+        import copy
+        current = self.registry()
+        old = copy.deepcopy(current)
+        release_baseline.check_key_history(old, current)
+        # Early releases carried the artifact key before feed signing was added.
+        del old["generations"][0]["feed_public_key"]
+        release_baseline.check_key_history(old, current)
+        old = copy.deepcopy(current)
+        old["generations"][0]["public_key"] = current["generations"][0]["feed_public_key"]
+        with self.assertRaisesRegex(ValueError, "signing key"):
+            release_baseline.check_key_history(old, current)
+        old = copy.deepcopy(current)
+        old["embedded_generation"] = current["embedded_generation"] + 1
+        with self.assertRaisesRegex(ValueError, "regressed"):
+            release_baseline.check_key_history(old, current)
+        old = copy.deepcopy(current)
+        old["generations"][0].update(successor=2, bridge_version="1.0.2")
+        with self.assertRaisesRegex(ValueError, "bridge changed"):
+            release_baseline.check_key_history(old, current)

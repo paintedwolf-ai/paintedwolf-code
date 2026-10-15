@@ -17,7 +17,7 @@ from release_semver import compare, parse, parse_release_build
 from release_distribution import PUBLIC_READ_HEADERS, timestamp
 import feed_signature
 import feed_signing
-from update_keys import load_registry, validate_binding
+from update_keys import fingerprint, generation, load_registry, validate_binding
 
 
 def published_version(release, channel):
@@ -164,6 +164,32 @@ def check_progression(candidate, releases, channel_release, source_ref):
             raise ValueError("RELEASE_BUILD must exceed every published release build")
 
 
+def check_key_history(previous, current):
+    for counter in ("signing_generation", "embedded_generation"):
+        if current[counter] < previous[counter]:
+            raise ValueError("published signing generation regressed")
+    for prior in previous["generations"]:
+        retained = generation(current, prior["generation"])
+        for field in ("public_key", "feed_public_key"):
+            if field in prior and fingerprint(prior[field]) != fingerprint(retained[field]):
+                raise ValueError("published signing key changed within its generation")
+        if prior["successor"] is not None and any(retained[field] != prior[field] for field in ("successor", "bridge_version")):
+            raise ValueError("published signing bridge changed")
+
+
+def check_published_keys(source_ref, releases):
+    def registry(ref):
+        return subprocess.check_output(["git", "show", ref + ":packaging/update-keys.json"], text=True)
+    with tempfile.TemporaryDirectory(prefix="release-key-history-") as temporary:
+        path = Path(temporary) / "update-keys.json"
+        path.write_text(registry(source_ref))
+        current = load_registry(path)
+    for release in releases:
+        if release.get("draft") is False:
+            previous = json.loads(registry("refs/tags/" + release["tag_name"]))
+            check_key_history(previous, current)
+
+
 def channel_mirror(releases, channel):
     selected, newest = None, None
     for release in releases:
@@ -192,9 +218,13 @@ if __name__ == "__main__":
         latest = release if channel == "stable" else preview
         history = releases + [release] + ([preview] if preview is not None else [])
         check_progression(candidate, history, latest, args.source_ref)
+        check_published_keys(args.source_ref, history)
     except (ValueError, KeyError, TypeError, AttributeError, OSError, subprocess.CalledProcessError) as error:
         sys.exit("error: " + str(error))
     print("baseline_tag=" + tag)
     print("baseline_sha=" + sha)
+    versions = sorted({row["tag_name"][1:] for row in history if row.get("draft") is False
+                       and compare(parse(row["tag_name"][1:]), parse("1.0.0")) >= 0})
+    print("published_versions=" + json.dumps(versions, separators=(",", ":")))
     if "feed_manifest_sha256" in release:
         print("baseline_manifest_sha256=" + release["feed_manifest_sha256"])

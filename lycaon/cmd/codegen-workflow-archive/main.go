@@ -41,6 +41,7 @@ func run(ctx context.Context, repoRoot string, argv []string, stdout, stderr io.
 	checkOnly := flags.Bool("check", false, "verify the archive matches the tag without writing")
 	sourceRoot := flags.String("repo-root", repoRoot, "candidate checkout to inspect")
 	baseline := flags.String("baseline", "", "stable release commit to compare")
+	published := flags.String("published-versions", "[]", "published post-v1 versions whose migration identities must survive")
 	checkAll := flags.Bool("check-all", false, "verify catalog contracts against a stable release")
 	if err := flags.Parse(argv); err != nil {
 		return 2
@@ -49,6 +50,10 @@ func run(ctx context.Context, repoRoot string, argv []string, stdout, stderr io.
 		repoRoot = *sourceRoot
 		if err := checkReleaseCompatibility(ctx, repoRoot, *baseline, stdout); err != nil {
 			fmt.Fprintf(stderr, "release compatibility: %v\n", err)
+			return 1
+		}
+		if err := checkPublishedMigrationHistory(ctx, repoRoot, *published); err != nil {
+			fmt.Fprintf(stderr, "release migrations: %v\n", err)
 			return 1
 		}
 		return 0

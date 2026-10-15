@@ -16,10 +16,11 @@ import (
 const capabilityPath = packsRoot + "/painted-wolf/platform/host/anchors/oar-profile.yaml"
 
 type vocabularyRetirements struct {
-	FormatVersion int                 `json:"format_version"`
-	Facts         map[string][]string `json:"facts"`
-	Codes         map[string][]string `json:"rejection_codes"`
+	FormatVersion int                            `json:"format_version"`
+	Vocabularies  map[string]map[string][]string `json:"vocabularies"`
 }
+
+var vocabularyKinds = []string{"host_facts", "rejection_codes", "tools", "workflow_terms", "anchors", "themes"}
 
 type factSignature struct {
 	Name        string `yaml:"name"`
@@ -52,10 +53,10 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 		if err != nil {
 			return err
 		}
-		for _, pair := range [][2]map[string][]string{{previous.Facts, retired.Facts}, {previous.Codes, retired.Codes}} {
-			for name := range pair[0] {
-				if _, ok := pair[1][name]; !ok {
-					return fmt.Errorf("released retirement %s was removed", name)
+		for kind, names := range previous.Vocabularies {
+			for name := range names {
+				if _, ok := retired.Vocabularies[kind][name]; !ok {
+					return fmt.Errorf("released retirement %s %s was removed", kind, name)
 				}
 			}
 		}
@@ -68,7 +69,7 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 	if err != nil {
 		return err
 	}
-	if err := checkVocabulary("host fact", before, after, retired.Facts, true); err != nil {
+	if err := checkVocabulary("host fact", before, after, retired.Vocabularies["host_facts"], true); err != nil {
 		return err
 	}
 	oldCodes, err := codeVocabulary(release)
@@ -79,7 +80,23 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 	if err != nil {
 		return err
 	}
-	return checkVocabulary("rejection code", oldCodes, newCodes, retired.Codes, false)
+	if err := checkVocabulary("rejection code", oldCodes, newCodes, retired.Vocabularies["rejection_codes"], false); err != nil {
+		return err
+	}
+	beforePublic, err := publicVocabularies(release)
+	if err != nil {
+		return err
+	}
+	afterPublic, err := publicVocabularies(current)
+	if err != nil {
+		return err
+	}
+	for _, kind := range []string{"tools", "workflow_terms", "anchors", "themes"} {
+		if err := checkVocabulary(kind, beforePublic[kind], afterPublic[kind], retired.Vocabularies[kind], true); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func factVocabulary(source releaseSource) (map[string]factSignature, error) {
@@ -129,6 +146,11 @@ func checkVocabulary[T any](kind string, before, after map[string]T, retired map
 		if _, active := after[name]; active {
 			return fmt.Errorf("retired %s %s was reused", kind, name)
 		}
+		for _, successor := range successors {
+			if _, ok := after[successor]; !ok {
+				return fmt.Errorf("retired %s %s names unavailable successor %s", kind, name, successor)
+			}
+		}
 	}
 	for name, prior := range before {
 		current, exists := after[name]
@@ -138,14 +160,8 @@ func checkVocabulary[T any](kind string, before, after map[string]T, retired map
 			}
 			continue
 		}
-		successors, ok := retired[name]
-		if !ok {
+		if _, ok := retired[name]; !ok {
 			return fmt.Errorf("%s %s was removed without a named successor", kind, name)
-		}
-		for _, successor := range successors {
-			if _, ok := after[successor]; !ok {
-				return fmt.Errorf("retired %s %s names unavailable successor %s", kind, name, successor)
-			}
 		}
 	}
 	return nil
@@ -162,8 +178,13 @@ func parseRetirements(raw []byte) (vocabularyRetirements, error) {
 	if err := decoder.Decode(&extra); err != io.EOF {
 		return retired, fmt.Errorf("retirement catalog must contain one JSON document")
 	}
-	if retired.FormatVersion != 1 || retired.Facts == nil || retired.Codes == nil {
+	if retired.FormatVersion != 1 || len(retired.Vocabularies) != len(vocabularyKinds) {
 		return retired, fmt.Errorf("unsupported or incomplete agent-public retirement catalog")
+	}
+	for _, kind := range vocabularyKinds {
+		if retired.Vocabularies[kind] == nil {
+			return retired, fmt.Errorf("missing retirement vocabulary %s", kind)
+		}
 	}
 	return retired, nil
 }

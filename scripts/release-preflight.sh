@@ -9,6 +9,7 @@ REQUIRE_CORPUS=0
 BASELINE_REF=""
 COMPATIBILITY_ONLY=0
 SOURCE_ROOT=""
+PUBLISHED_VERSIONS="[]"
 
 usage() {
   cat >&2 <<'EOF'
@@ -28,6 +29,7 @@ while [[ $# -gt 0 ]]; do
     --require-corpus) REQUIRE_CORPUS=1; shift ;;
     --baseline-ref) [[ $# -ge 2 && -n "$2" ]] || usage; BASELINE_REF="$2"; shift 2 ;;
     --compatibility-only) COMPATIBILITY_ONLY=1; shift ;;
+    --published-versions) [[ $# -ge 2 && -n "$2" ]] || usage; PUBLISHED_VERSIONS="$2"; shift 2 ;;
     --source-root) [[ $# -ge 2 && -n "$2" ]] || usage; SOURCE_ROOT="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "error: unknown argument: $1" >&2; usage ;;
@@ -37,12 +39,12 @@ done
 if [[ "${COMPATIBILITY_ONLY}" -eq 1 ]]; then
   [[ -n "${BASELINE_REF}" && -d "${SOURCE_ROOT}" ]] || usage
   (cd "${ROOT}/lycaon" && LYCAON_ENGINE_ROOT="${LYCAON_ENGINE_ROOT:-${ROOT}/lycaon-den/src-tauri/engine-root}" \
-    go run ./cmd/codegen-workflow-archive --check-all --baseline "${BASELINE_REF}" --repo-root "${SOURCE_ROOT}")
+    go run ./cmd/codegen-workflow-archive --check-all --baseline "${BASELINE_REF}" --repo-root "${SOURCE_ROOT}" --published-versions "${PUBLISHED_VERSIONS}")
   candidate_version="$(tr -d '[:space:]' < "${SOURCE_ROOT}/VERSION")"
   python3 "${ROOT}/scripts/upgrade-fixture-files.py" candidate-static \
     "${SOURCE_ROOT}/lycaon/testdata/upgrade-corpus/${candidate_version}" \
     --schema-lock "${SOURCE_ROOT}/lycaon/internal/db/schema_version_lock.json" --version "${candidate_version}" \
-    --inventory-root "${SOURCE_ROOT}/lycaon/testdata/upgrade-corpus"
+    --inventory-root "${SOURCE_ROOT}/lycaon/testdata/upgrade-corpus" --published-versions "${PUBLISHED_VERSIONS}"
   exit 0
 fi
 [[ -z "${SOURCE_ROOT}" ]] || usage

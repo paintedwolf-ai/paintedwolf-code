@@ -160,6 +160,34 @@ rejection codes require named successors in
 retired names cannot return. These checks validate structured contracts; they do
 not infer behavioral equivalence from display copy.
 
+### Release coverage
+
+Product versions identify publications. Other identities advance only when their
+own contract changes. An additive configuration field does not require a new
+store schema, and a regenerated cache does not justify changing an archive format.
+
+| Surface | Independent contract | Automated assurance |
+|---|---|---|
+| Product and packages | `VERSION`, `RELEASE_BUILD`, native projections, channel | Early checks require channel advancement, globally increasing builds, matching package metadata, and release notes. Source tags and exact-commit qualification are mandatory. |
+| Main store and migration history | Revision plus canonical shape; immutable migration IDs and checksums | Every published post-v1 corpus must remain byte-for-byte identical to its tag and retain a supported schema identity. Early checks also preserve published migration IDs and checksums. Compiled migration registration validates complete routes; built-candidate preflight and upgrade/restore rehearsal validate actual stores. |
+| Backups and recovery | Archive format, store identity, exact replacement scope, journal formats | Corpus integrity checks run early. Backup integrity, relocation, recovery, unknown-format refusal, and restart tests run during qualification; release rehearsal restores a released archive. |
+| Worker branches and retained source | Worker metadata, seed/package manifests, promotion and rewind journals | Workspace, checkpoint, source-ledger, and promotion recovery tests preserve retained bytes and resumable operations. These formats are independent of product SemVer. |
+| Project configuration | Overlay format, extension manifest/desired-state/lock formats, ignore document version | Format, transition, unknown-shape refusal, dependency-lock, and catalog publication tests run during qualification. Compatible stock updates are resolved against declared constraints. |
+| Extension and suite releases | Pack version, suite version, extension API requirement | Early checks require changed pack/suite bytes to advance their own release identity and reject API regressions or unavailable capabilities. Suite membership has its own version; member content changes do not change membership. |
+| Workflows and prompt content | Workflow ID/version, sealed archives, persona contract, prompt-unit identity | Early checks preserve released workflow bytes and archives. Persona, prompt rendering, bindings, and unit/catalog validation run during qualification. Copied prompt overrides need the explicit repairs above. |
+| Agent and extension vocabulary | OAR facts, rejection codes, tool names/runtime prefixes, workflow terms, anchors, theme IDs | Early checks reject unnamed removals, retired-name reuse, changed fact/term signatures, and missing successors. Anchor contract changes advance the catalog's minor or major version as appropriate. |
+| OAR language and authoring schemas | Vendored spec/capability version and pinned source digests | Vendor integrity, schema synchronization, conformance, and catalog tests run during qualification. A pack version does not authorize changing a language contract. |
+| Den/host and native IPC | Generated OpenAPI, startup/document/decision protocols | OpenAPI evidence is retained against the pinned stable source. Drift, generated-consumer, native protocol, and platform tests run on the qualified commit. Co-shipped protocols move with both consumers. |
+| Device settings and credentials | App-state/preferences formats, exact grants, identity and vault custody | Strict decoding, explicit updater format-1 conversions, unknown-journal preservation, app-state normalization, credential custody, and store-reset tests run during qualification. A database wipe is never their migration. |
+| Update distribution | Feed schema, signatures, signing generations, platform/package manifests | Early reads verify signed channel pointers and retain every published public key, closed bridge, and signing/embedded generation. Registry, key-transition, manifest, platform, credential, immutable-publication, and replay checks gate later publication stages. |
+| Browser/media artifacts and exported findings | Timeline/archive and findings format versions | Archive reader/writer, retained-reference, and output-format tests run during qualification. Stored artifact formats remain independently interpreted after an update. |
+| Models, decisions, and ephemeral caches | Decision/catalog format, generated head identity, content revisions, cache schemas | Generation drift, native/head contracts, and invalidation tests run during qualification. Disposable data may be rebuilt on mismatch; recovery journals and retained source may not. |
+
+The release controller performs the early structural checks for either channel
+before application/native setup. Full qualification on the exact selected commit
+supplies the behavioral and platform evidence; the early gate does not replace it.
+Neither stage adds a human acknowledgement requirement.
+
 ## Extension identities
 
 `extension_api` selects host interpretation and capabilities. A pack's `version`

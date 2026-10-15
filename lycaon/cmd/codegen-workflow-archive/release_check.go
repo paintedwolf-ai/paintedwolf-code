@@ -69,6 +69,23 @@ func checkReleaseCompatibility(ctx context.Context, repoRoot, baseline string, o
 		if _, err := git.run("merge-base", "--is-ancestor", tag, "HEAD"); err != nil {
 			return fmt.Errorf("stable baseline is not an ancestor of the candidate: %w", err)
 		}
+		if err := checkMigrationHistory(git, diskRelease{root: repoRoot}); err != nil {
+			return err
+		}
+		beforeAPI, err := sourceExtensionAPI(git)
+		if err != nil {
+			return err
+		}
+		afterAPI, err := sourceExtensionAPI(diskRelease{root: repoRoot})
+		if err != nil {
+			return err
+		}
+		if afterAPI.LessThan(beforeAPI) {
+			return fmt.Errorf("extension API version regressed")
+		}
+		if err := checkAnchorVersions(git, diskRelease{root: repoRoot}); err != nil {
+			return err
+		}
 		if err := checkAgentVocabulary(git, diskRelease{root: repoRoot}); err != nil {
 			return err
 		}
@@ -83,6 +100,11 @@ func checkReleaseCompatibility(ctx context.Context, repoRoot, baseline string, o
 		}
 		releasedPaths := strings.Split(strings.TrimSuffix(string(files), "\x00"), "\x00")
 		for _, rel := range releasedPaths {
+			if strings.HasSuffix(rel, "/meta.yaml") {
+				if err := checkReleasedSuite(git, diskRelease{root: repoRoot}, rel); err != nil {
+					return err
+				}
+			}
 			if strings.HasSuffix(rel, "/extension.yaml") {
 				if err := checkReleasedPack(git, repoRoot, strings.TrimSuffix(rel, "/extension.yaml"), releasedPaths); err != nil {
 					return fmt.Errorf("%s: %w", tag, err)

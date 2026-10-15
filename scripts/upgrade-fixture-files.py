@@ -131,6 +131,40 @@ def check_inventory(root, version):
             raise ValueError("future-version corpus must be prepared after VERSION selects it: " + entry.name)
 
 
+def released_corpus(root, versions, source_root=None, baselines=None):
+    if not isinstance(versions, list) or any(not isinstance(version, str) for version in versions):
+        raise ValueError("published corpus inventory must be a list of versions")
+    for version in versions:
+        if compare(parse(version), parse("1.0.0")) < 0:
+            raise ValueError("published corpus inventory must start at 1.0.0")
+        fixture = root / version
+        if fixture.is_symlink() or not fixture.is_dir():
+            raise ValueError("published release corpus is missing or unsafe: " + version)
+        metadata, _ = checked_archive(fixture)
+        if metadata["app_version"] != version:
+            raise ValueError("published corpus version differs: " + version)
+        if baselines is not None and metadata["schema_identity"] not in baselines:
+            raise ValueError("published corpus schema has no retained baseline: " + version)
+        if source_root is not None:
+            rel = "lycaon/testdata/upgrade-corpus/" + version
+            tag = "refs/tags/v" + version
+            def git(*arguments):
+                return subprocess.check_output(["git", "-C", str(source_root), *arguments])
+            paths = git("ls-tree", "-r", "--name-only", "-z", tag, "--", rel + "/").decode().split("\0")
+            expected = {name for name in paths if name}
+            actual = set()
+            for file in fixture.rglob("*"):
+                if file.is_symlink():
+                    raise ValueError("published corpus contains a symlink: " + str(file))
+                if file.is_file():
+                    actual.add(file.relative_to(source_root).as_posix())
+            if not expected or expected != actual:
+                raise ValueError("published corpus inventory differs from its release: " + version)
+            for name in sorted(expected):
+                if (source_root / name).read_bytes() != git("show", tag + ":" + name):
+                    raise ValueError("published corpus bytes differ from its release: " + name)
+
+
 def candidate_static(fixture, version, inventory_root=None, schema_lock=None):
     if inventory_root is not None:
         check_inventory(inventory_root, version)
@@ -187,6 +221,7 @@ if __name__ == "__main__":
     static.add_argument("--version", required=True)
     static.add_argument("--inventory-root", type=Path, required=True)
     static.add_argument("--schema-lock", type=Path, required=True)
+    static.add_argument("--published-versions", default="[]")
     inventory = commands.add_parser("inventory")
     inventory.add_argument("root", type=Path)
     inventory.add_argument("--version", required=True)
@@ -195,7 +230,11 @@ if __name__ == "__main__":
         if args.command == "materialize":
             materialize(args.fixture, args.destination)
         elif args.command == "candidate-static":
-            candidate_static(args.fixture, args.version, args.inventory_root, args.schema_lock)
+            metadata = candidate_static(args.fixture, args.version, args.inventory_root, args.schema_lock)
+            source_root = args.inventory_root.parents[2]
+            baselines = json.loads((source_root / "lycaon/internal/db/released-baselines.json").read_text())
+            released_corpus(args.inventory_root, json.loads(args.published_versions), source_root,
+                            baselines + [metadata["schema_identity"]])
         elif args.command == "inventory":
             check_inventory(args.root, args.version)
         else:

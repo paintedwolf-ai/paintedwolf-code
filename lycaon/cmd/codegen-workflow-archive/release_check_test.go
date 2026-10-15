@@ -73,9 +73,15 @@ func TestCheckAllDiscoversStableWorkflowBaselines(t *testing.T) {
 	repo := t.TempDir()
 	files := committedRelease(t)
 	files["VERSION"] = []byte("1.0.1\n")
+	files["lycaon/internal/db/migrations/registry.go"] = []byte("package migrations\n")
 	files["lycaon/internal/extpacks/manifest.go"] = []byte(`package extpacks; const ExtensionAPIVersion="1.1.0"`)
-	files[capabilityPath] = []byte("host_facts: []\n")
+	facts, err := os.ReadFile(filepath.Join(configlayout.FindModuleRoot(), "config/packs/painted-wolf/platform/host/anchors/oar-profile.yaml"))
+	testutil.FailErr(t, "read valid host fact vocabulary", err)
+	files[capabilityPath] = facts
 	files["schemas/guidance_registry.json"] = []byte(`{"hint_codes":{}}`)
+	for rel, raw := range publicVocabularyFixture() {
+		files[rel] = raw
+	}
 	files[securityPack+"/extension.yaml"] = []byte("manifest_version: 1\nid: painted-wolf/security-survey\nname: Security survey\nversion: 1.0.0\ncompatibility:\n  extension_api: '^1.1.0'\n")
 	writeReleaseTree(t, repo, files)
 	gittest.InitCommit(t, repo, "released workflow")
