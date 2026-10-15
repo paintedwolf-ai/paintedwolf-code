@@ -49,22 +49,23 @@ type cohortAssessment struct {
 	draft    *scanbase.AssessmentDraft
 }
 
-func (c *Service) enqueueCohort(ctx context.Context, generation dispatchGeneration, cohort dispatchCohort) ([]*api.CodeScan, []dispatchFailure) {
-	assessment, err := c.ensureCohortAssessment(ctx, generation, cohort)
+func (d rootDispatcher) enqueueCohort(ctx context.Context, generation dispatchGeneration, cohort dispatchCohort) ([]*api.CodeScan, []dispatchFailure) {
+	claims := claimBook(d)
+	assessment, err := d.ensureCohortAssessment(ctx, generation, cohort)
 	if err != nil {
-		c.logDispatch(ctx, "requeued", generation.canonical, cohort.rows, err)
+		d.logDispatch(ctx, "requeued", generation.canonical, cohort.rows, err)
 		if cohort.passID != "" && errors.Is(err, scanbase.ErrAssessmentIdentityMismatch) {
 			// Members cannot join a pass that started over another generation.
 			for _, row := range cohort.rows {
-				c.leavePass(ctx, row)
+				claims.leavePass(ctx, row)
 			}
 		} else {
-			c.requeueDispatches(ctx, cohort.rows)
+			claims.requeueDispatches(ctx, cohort.rows)
 		}
 		return nil, []dispatchFailure{{Error: err.Error()}}
 	}
 	if cohort.passID != "" {
-		if err := c.Store.MarkFullPassStarted(ctx, cohort.passID, c.now()); err != nil {
+		if err := d.c.Store.MarkFullPassStarted(ctx, cohort.passID, nowUTC(d.c)); err != nil {
 			slog.WarnContext(ctx, "mark full pass started", "component", "scan_cadence", "pass_id", cohort.passID, "error", err)
 		}
 	}
@@ -73,7 +74,7 @@ func (c *Service) enqueueCohort(ctx context.Context, generation dispatchGenerati
 	for _, row := range cohort.rows {
 		if executionErr := generation.executionErrors[row.ScannerID]; executionErr != nil {
 			failures = append(failures, dispatchFailure{ScannerID: row.ScannerID, Error: executionErr.Error()})
-			c.releaseUndispatched(ctx, generation.canonical, row, executionErr)
+			claims.releaseUndispatched(ctx, generation.canonical, row, executionErr)
 			continue
 		}
 		execution := generation.executions[row.ScannerID]
@@ -83,7 +84,7 @@ func (c *Service) enqueueCohort(ctx context.Context, generation dispatchGenerati
 		if cohort.passID != "" {
 			trigger = assessment.trigger
 		}
-		record, enqueueErr := c.Coordinator.Enqueue(ctx, scanbase.EnqueueRequest{
+		record, enqueueErr := d.c.Coordinator.Enqueue(ctx, scanbase.EnqueueRequest{
 			ProjectDir: generation.canonical, Categories: row.Categories, ScannerID: row.ScannerID,
 			Paths: selection.Paths, DeletedPaths: selection.DeletedPaths, TargetKind: selection.Kind,
 			HeadSHA: generation.headSHA, SourceSnapshotID: generation.snapshot.ID, Trigger: trigger,
@@ -93,15 +94,15 @@ func (c *Service) enqueueCohort(ctx context.Context, generation dispatchGenerati
 		})
 		if enqueueErr != nil {
 			failures = append(failures, dispatchFailure{ScannerID: row.ScannerID, Error: enqueueErr.Error()})
-			c.releaseUndispatched(ctx, generation.canonical, row, enqueueErr)
+			claims.releaseUndispatched(ctx, generation.canonical, row, enqueueErr)
 			continue
 		}
-		if err := c.finishDispatch(ctx, row, record); err != nil {
+		if err := claims.finishDispatch(ctx, row, record); err != nil {
 			failures = append(failures, dispatchFailure{ScannerID: row.ScannerID, Error: err.Error()})
 			continue
 		}
 		if cohort.passID != "" {
-			if err := c.Store.BindFullPassScan(ctx, cohort.passID, record.ID); err != nil {
+			if err := d.c.Store.BindFullPassScan(ctx, cohort.passID, record.ID); err != nil {
 				slog.WarnContext(ctx, "bind full pass requesters", "component", "scan_cadence",
 					"pass_id", cohort.passID, "scan_id", record.ID, "error", err)
 			}
@@ -112,11 +113,11 @@ func (c *Service) enqueueCohort(ctx context.Context, generation dispatchGenerati
 }
 
 // Full-pass assessments cover every requested scanner; delta cohorts get fresh assessments.
-func (c *Service) ensureCohortAssessment(ctx context.Context, generation dispatchGeneration, cohort dispatchCohort) (cohortAssessment, error) {
-	concrete, recorded := c.Coordinator.(*scanbase.CoordinatorImpl)
+func (d rootDispatcher) ensureCohortAssessment(ctx context.Context, generation dispatchGeneration, cohort dispatchCohort) (cohortAssessment, error) {
+	concrete, recorded := d.c.Coordinator.(*scanbase.CoordinatorImpl)
 	recorded = recorded && concrete != nil
 	if cohort.passID != "" {
-		request, err := c.Store.ReadFullPassRequest(ctx, cohort.passID)
+		request, err := d.c.Store.ReadFullPassRequest(ctx, cohort.passID)
 		if err != nil {
 			return cohortAssessment{}, err
 		}
