@@ -5,8 +5,10 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/recall"
+	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -232,6 +234,50 @@ func TestHistoryDoesNotExposeInternalOrUncommittedRows(t *testing.T) {
 		if len(result.History.Entries) != 0 || result.Resolution != recall.ResolutionScopeEmpty {
 			t.Fatal("history exposed a row outside the transcript")
 		}
+	}
+}
+
+func TestHistorySearchAddressesObservationRatherThanCitation(t *testing.T) {
+	f := newFixture(t)
+	for _, row := range []struct {
+		id, role, handles string
+		ord               int64
+	}{
+		{"original-result", "tool", `["read#1"]`, 1}, {"later-citation", "assistant", `[]`, 2},
+	} {
+		testdbseed.InsertSessionEntry(t, f.db, row.id, coordinatorSession, "model_output", row.id, row.ord)
+		origin := "tool"
+		if row.role == "assistant" {
+			origin = "model"
+		}
+		_, err := f.db.ExecContext(t.Context(), `INSERT INTO messages(entry_id,id,session_id,role,content,evidence_handles_json,origin,authority,trust_tier,ord,seq,ts)
+   VALUES(?,?,?,?,?,?,?,'none','untrusted',?,?,?)`, row.id, row.id, coordinatorSession, row.role, "recorded bytes", row.handles, origin, row.ord, row.ord, time.Date(2026, 10, 14, int(row.ord)-1, 0, 0, 0, time.UTC).Format(time.RFC3339))
+		testutil.FailErr(t, "seed observation and citing message", err)
+	}
+	row := evidenceRow("citation-hit", coordinatorSession, "read#1", "original.go", "old observation cited later")
+	row.Source = search.SourceMessage
+	row.MessageID = "later-citation"
+	source := evidenceRow("raw-result", coordinatorSession, "read#1", "original.go", "original tool observation")
+	source.HitKind = search.HitKindTool
+	source.Shape = "raw"
+	source.MessageID = "original-result"
+	f.seed(t, row, source)
+	seedSourceChange(t, f.db, "original.go", "write", time.Date(2026, 10, 14, 0, 30, 0, 0, time.UTC))
+	result := f.answer(t, coordinator(), "handle:read#1", recall.WidenDefault)
+	if len(result.Hits) != 2 || result.Hits[0].Record == nil || result.Hits[0].Record.MessageID != "original-result" || result.Hits[0].Record.ThroughOrd != 1 || result.Hits[1].Record == nil || result.Hits[1].Record.MessageID != "original-result" {
+		t.Fatal("recall addressed the citing message instead of the original observation")
+	}
+	for _, hit := range result.Hits {
+		if hit.TS != "2026-10-14T00:00:00Z" || hit.Currency != recall.CurrencyChanged {
+			t.Fatal("later citation time hid a change after the original observation")
+		}
+	}
+	row.ID = "missing-origin"
+	row.Handle = "read#2"
+	f.seed(t, row)
+	missing := f.answer(t, coordinator(), "handle:read#2", recall.WidenDefault)
+	if len(missing.Hits) != 1 || missing.Hits[0].Record != nil {
+		t.Fatal("missing origin was replaced with a citation address")
 	}
 }
 

@@ -38,15 +38,15 @@ func (s *Service) decorate(ctx context.Context, caller Caller, scope Scope, hits
 			Verified:  h.Verified,
 			Currency:  CurrencyUnknown,
 		})
-		if h.MessageID != "" && h.SessionID == caller.SessionID {
-			var ord, seq int64
-			err := s.db.QueryRowContext(ctx, `SELECT ord, seq FROM messages WHERE session_id = ? AND id = ? AND `+historyVisible,
-				caller.SessionID, h.MessageID).Scan(&ord, &seq)
-			if err == nil && ord > 0 {
-				out[len(out)-1].Record = &HistoryRequest{ThroughOrd: ord, MessageID: h.MessageID, SourceSeq: seq, Format: "record"}
-			} else if err != nil && !errors.Is(err, sql.ErrNoRows) {
-				issues = append(issues, fmt.Sprintf("%s: load canonical coordinates: %v", h.MessageID, err))
+		record, err := s.recordCoordinates(ctx, h)
+		if err != nil {
+			issues = append(issues, fmt.Sprintf("%s: load canonical coordinates: %v", h.MessageID, err))
+		} else if record != nil {
+			out[len(out)-1].sourceMessageID = record.request.MessageID
+			if h.SessionID == caller.SessionID {
+				out[len(out)-1].Record = record.request
 			}
+			out[len(out)-1].TS = record.observedAt
 		}
 	}
 	if inline {
