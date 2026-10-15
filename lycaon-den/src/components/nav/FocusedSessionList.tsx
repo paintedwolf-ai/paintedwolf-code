@@ -33,6 +33,7 @@ import { useNow } from "../../time/now.ts";
 import { formatRelativeTime } from "../../time/time-copy.ts";
 import { sessionLifecycleMenuItems } from "../../session/session-lifecycle-menu.ts";
 import { requestFirstTimeTip } from "../../first-time-tips/first-time-tips-service.ts";
+import { webkitAtspiWorkaroundActive } from "../../platform/desktop/webkit-atspi-workaround.ts";
 import { focusRegion } from "../../shortcuts/focus-region.ts";
 
 type ActiveChat = { projectId: string; sessionId: string | null };
@@ -118,7 +119,8 @@ export function FocusedSessionList(props: Props) {
   } | null>(null);
   const [sortMenu, setSortMenu] = createSignal<Element | null>(null);
   const [renamingId, setRenamingId] = createSignal<string | null>(null);
-  // The row under the pointer or holding focus shows its actions in place of its time.
+  // The row under the pointer or holding focus shows its actions in place of its time;
+  // under the WebKitGTK AT-SPI workaround the row stops rendering the time while it does.
   const [revealedId, setRevealedId] = createSignal<string | null>(null);
   const concealRow = (sessionId: string) => {
     if (revealedId() === sessionId) setRevealedId(null);
@@ -376,7 +378,7 @@ export function FocusedSessionList(props: Props) {
                 {countLabel(noticeCountFor(row()))}
               </span>
             </Show>
-            <Show when={revealedId() !== row().sessionId}>
+            <Show when={!webkitAtspiWorkaroundActive() || revealedId() !== row().sessionId}>
               <Show
                 when={!isSelected(row()) && attentionFor(row())}
                 keyed

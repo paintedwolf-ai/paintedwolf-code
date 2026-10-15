@@ -4,9 +4,9 @@ description = "Read the macOS Accessibility text-size category once at boot; lat
 commands.allow = ["accessibility_preferred_text_size"]
 
 [[permission]]
-identifier = "allow-accessibility-screen-reader"
-description = "Read whether a screen reader is running once at boot; later changes arrive on the accessibility://screen-reader-changed event."
-commands.allow = ["accessibility_screen_reader"]
+identifier = "allow-den-web-engine"
+description = "Read the web engine and version the shell renders the app with."
+commands.allow = ["den_web_engine"]
 
 [[permission]]
 identifier = "allow-den-announce"

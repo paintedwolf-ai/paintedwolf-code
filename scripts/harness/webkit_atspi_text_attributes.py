@@ -3,7 +3,7 @@
 WebKitGTK can abort its web process while answering `GetAttributeRun` for an
 object whose content it lays out unusually; Orca asks for those attributes when
 focus or the braille line reaches the object. This loads the harness Den in a
-WebKitGTK view with the screen reader fact set, walks it through a chat with a
+WebKitGTK view with the shell's web engine fact stood in, walks it through a chat with a
 transcript and an approval, the Files view with an open file, Settings and
 Home, and on each calls `GetAttributeRun` at every caret offset, with and
 without defaults, `GetDefaultAttributes` and `GetNSelections` on every text
@@ -35,8 +35,8 @@ SURFACES = [
 for (let i = 0; i < 240 && !window.__harness; i++) await new Promise((r) => setTimeout(r, 250));
 if (!window.__harness) return { ok: false, error: "harness API missing; page reads " + JSON.stringify(document.body.innerText.slice(0, 200)) };
 for (let i = 0; i < 480 && !(__harness.state().connected && __harness.state().view !== "loading"); i++) await new Promise((r) => setTimeout(r, 250));
-// Orca sets the host fact; the plain WebKitGTK view has no host to report it.
-__harness.setScreenReader(true);
+// The shell reports its web engine; the plain WebKitGTK view has no shell to report it.
+__harness.setWebEngine("webkitgtk", "WEBKIT_VERSION");
 const opened = await __harness.openProject("Harness");
 if (opened?.ok !== true) return { ok: false, error: "open project: " + JSON.stringify(opened) };
 const session = await __harness.newSession();
@@ -101,7 +101,8 @@ def run_page(url: str) -> int:
     view.get_settings().set_enable_write_console_messages_to_stdout(True)
     window.add(view)
     window.show_all()
-    bodies = {name: body.replace("PAUSE", PAUSE) for name, body in SURFACES}
+    version = f"{WebKit2.get_major_version()}.{WebKit2.get_minor_version()}.{WebKit2.get_micro_version()}"
+    bodies = {name: body.replace("PAUSE", PAUSE).replace("WEBKIT_VERSION", version) for name, body in SURFACES}
 
     def report(line: str) -> None:
         print(line, flush=True)

@@ -298,7 +298,11 @@
   outline: none;
   overflow: hidden;
 }
-.home-view__idea-scroll .den-scrollport__content {
+.home-view__idea-input::placeholder {
+  color: var(--den-text-muted);
+}
+/* WebKitGTK AT-SPI workaround: the hint drawn in place of the placeholder. */
+:root[data-den-webkit-atspi-workaround] .home-view__idea-scroll .den-scrollport__content {
   position: relative;
 }
 .home-view__idea-hint {

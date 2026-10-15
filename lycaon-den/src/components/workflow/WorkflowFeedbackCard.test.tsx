@@ -1,5 +1,4 @@
 import { stubClient } from "../../test/client-fixture.ts";
-import { disclosureToggle } from "../../test/transcript-disclosure-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import { render } from "@solidjs/testing-library";
 import { WorkflowFeedbackCard } from "./WorkflowFeedbackCard.tsx";
@@ -72,38 +71,5 @@ describe("WorkflowFeedbackCard", () => {
     ));
     expect(queryByTestId("workflow-feedback-open-marker")).toBeNull();
     expect(getByTestId("workflow-feedback-chicklet")).toBeTruthy();
-  });
-
-  it("withdraws the chicklet body from assistive tech while it is closed", async () => {
-    const meta: WorkflowFeedbackMeta = {
-      phase_id: "pick",
-      prompt: "Pick one",
-      response_type: "single_choice",
-      options: ["red", "blue"],
-      answer: "blue",
-    };
-    const { getByTestId } = render(() => (
-      <WorkflowFeedbackCard meta={meta} client={client()} {...base} />
-    ));
-    const panel = () => getByTestId("workflow-feedback-chicklet-body").closest("[data-transcript-disclosure-panel]")!;
-    expect(panel().getAttribute("aria-hidden")).toBe("true");
-    expect((panel() as HTMLElement).inert).toBeTruthy();
-    disclosureToggle(getByTestId("workflow-feedback-chicklet")).click();
-    await vi.waitFor(() => expect(panel().hasAttribute("aria-hidden")).toBe(false));
-    expect(getByTestId("workflow-feedback-chicklet-prompt").textContent).toBe("Pick one");
-    expect(getByTestId("workflow-feedback-answer").textContent).toContain("blue");
-  });
-
-  it("explains a closed ask once opened", async () => {
-    const meta: WorkflowFeedbackMeta = {
-      phase_id: "old",
-      prompt: "Old?",
-      response_type: "text",
-    };
-    const { getByTestId } = render(() => (
-      <WorkflowFeedbackCard meta={meta} client={client()} {...base} activePendingPhaseId="new" />
-    ));
-    disclosureToggle(getByTestId("workflow-feedback-chicklet")).click();
-    await vi.waitFor(() => expect(getByTestId("workflow-feedback-closed-hint").textContent).toBeTruthy());
   });
 });

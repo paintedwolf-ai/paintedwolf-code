@@ -4,6 +4,8 @@ import * as ts from "typescript";
 import { loadSourceCorpus, loadTypeScriptCorpus, type TypeScriptSourceFile } from "../source-corpus.ts";
 import { splitTopLevel, subjectCompound } from "./stylesheet-parser.ts";
 
+const WORKAROUND_ATTRIBUTE = "data-den-webkit-atspi-workaround";
+
 /** Which class names a stylesheet can make `display: none`, or lay out as a grid. */
 type DisplayIndex = { hidden: Map<string, string>; grid: Map<string, string> };
 
@@ -50,6 +52,8 @@ export function buildDisplayIndex(denSrc: string): DisplayIndex {
       if (owner?.type !== "rule") return;
       for (const selector of fullSelectors(owner as Rule)) {
         for (const part of splitTopLevel(selector, /,/)) {
+          // Rules that never apply under the WebKitGTK AT-SPI workaround keep their own rendering.
+          if (part.includes(`:not([${WORKAROUND_ATTRIBUTE}])`)) continue;
           for (const name of subjectClasses(part)) record(index[shape], name, where);
         }
       }
@@ -163,6 +167,8 @@ export function findListItemShapes(denSrc: string): ListItemShapeFinding[] {
   const hiddenCache = new Map<string, string | null>();
 
   const hiddenReason = (node: ts.JsxElement | ts.JsxSelfClosingElement): string | null => {
+    // Under the workaround a disclosure panel is mounted only while open.
+    if (tagName(node) === "TranscriptDisclosurePanel") return null;
     const hidden = attribute(node, "hidden");
     if (hidden && hidden.initializer?.getText() !== "{false}") return `hidden attribute on <${tagName(node)}>`;
     if (inlineDisplay(node).includes("none")) return `inline display: none on <${tagName(node)}>`;
@@ -213,7 +219,7 @@ export function findListItemShapes(denSrc: string): ListItemShapeFinding[] {
       const reason = hiddenReason(element);
       if (reason) return `${reason} at ${siteOf(file, element, denSrc)}`;
       const tag = tagName(element);
-      if (depth >= 4 || !/^[A-Z]/.test(tag) || tag.includes(".")) continue;
+      if (depth >= 4 || !/^[A-Z]/.test(tag) || tag.includes(".") || tag === "TranscriptDisclosurePanel") continue;
       const definition = componentDefinition(file, tag);
       if (!definition) continue;
       const key = `${definition.file.path}#${tag}`;

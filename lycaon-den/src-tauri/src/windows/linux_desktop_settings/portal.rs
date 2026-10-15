@@ -1,28 +1,21 @@
-//! Session-bus reads and change tracking for `org.freedesktop.portal.Settings`
-//! and the accessibility bus service's `org.a11y.Status`.
+//! Session-bus reads and change tracking for `org.freedesktop.portal.Settings`.
 
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
 use gtk::gio;
-use gtk::gio::prelude::*;
 use gtk::glib::{self, ToVariant, Variant, VariantTy};
 use tauri::{AppHandle, Emitter};
 
 use super::{DesktopSettingsState, Emission, SettingValue, SettingsSnapshot, NAMESPACES};
 use crate::windows::accessibility_text_size::{TextSizePayload, TEXT_SIZE_CHANGED_EVENT};
 use crate::windows::linux_decorations::{DecorationLayout, LAYOUT_CHANGED_EVENT};
-use crate::windows::screen_reader::{ScreenReaderPayload, SCREEN_READER_CHANGED_EVENT};
 use crate::windows::system_appearance::{SystemAppearancePayload, SYSTEM_APPEARANCE_CHANGED_EVENT};
 
 const PORTAL_BUS_NAME: &str = "org.freedesktop.portal.Desktop";
 const PORTAL_OBJECT_PATH: &str = "/org/freedesktop/portal/desktop";
 const SETTINGS_INTERFACE: &str = "org.freedesktop.portal.Settings";
 const BUS_TIMEOUT: Duration = Duration::from_millis(1500);
-const A11Y_BUS_NAME: &str = "org.a11y.Bus";
-const A11Y_OBJECT_PATH: &str = "/org/a11y/bus";
-const A11Y_STATUS_INTERFACE: &str = "org.a11y.Status";
-const SCREEN_READER_PROPERTY: &str = "ScreenReaderEnabled";
 
 static STATE: Mutex<DesktopSettingsState> = Mutex::new(DesktopSettingsState::new());
 
@@ -36,10 +29,6 @@ pub(crate) fn current_text_size_payload() -> TextSizePayload {
 
 pub(crate) fn current_appearance_payload() -> SystemAppearancePayload {
     state().appearance_payload()
-}
-
-pub(crate) fn current_screen_reader_payload() -> ScreenReaderPayload {
-    state().screen_reader_payload()
 }
 
 pub(crate) fn current_decoration_layout() -> DecorationLayout {
@@ -59,20 +48,23 @@ fn watch(app: AppHandle) {
     let context = glib::MainContext::new();
     let outcome = context.with_thread_default(|| {
         let connection = connect(&context)?;
-        // Each source is followed on its own; a desktop without the portal still reports its screen reader.
-        let portal = follow_portal(&app, &context, &connection);
-        if let Err(err) = &portal {
-            eprintln!("desktop settings: {err}");
-        }
-        let status = follow_screen_reader(&app, &connection);
-        if let Err(err) = &status {
-            eprintln!("desktop settings: screen reader: {err}");
-        }
-        if portal.is_ok() || status.is_ok() {
-            // The status proxy lives as long as the loop that delivers its signals.
-            let _status = status;
-            glib::MainLoop::new(Some(&context), false).run();
-        }
+        let snapshot = read_all(&context, &connection)?;
+        emit(&app, state().replace_snapshot(snapshot));
+        let app = app.clone();
+        connection.signal_subscribe(
+            Some(PORTAL_BUS_NAME),
+            Some(SETTINGS_INTERFACE),
+            Some("SettingChanged"),
+            Some(PORTAL_OBJECT_PATH),
+            None,
+            gio::DBusSignalFlags::NONE,
+            move |_, _, _, _, _, parameters| {
+                if let Some((namespace, key, value)) = parse_setting_changed(parameters) {
+                    emit(&app, state().apply_change(&namespace, &key, value));
+                }
+            },
+        );
+        glib::MainLoop::new(Some(&context), false).run();
         Ok::<(), String>(())
     });
     match outcome {
@@ -80,63 +72,6 @@ fn watch(app: AppHandle) {
         Ok(Err(err)) => eprintln!("desktop settings: {err}"),
         Err(err) => eprintln!("desktop settings: main context: {err}"),
     }
-}
-
-fn follow_portal(
-    app: &AppHandle,
-    context: &glib::MainContext,
-    connection: &gio::DBusConnection,
-) -> Result<(), String> {
-    let snapshot = read_all(context, connection)?;
-    emit(app, state().replace_snapshot(snapshot));
-    let app = app.clone();
-    connection.signal_subscribe(
-        Some(PORTAL_BUS_NAME),
-        Some(SETTINGS_INTERFACE),
-        Some("SettingChanged"),
-        Some(PORTAL_OBJECT_PATH),
-        None,
-        gio::DBusSignalFlags::NONE,
-        move |_, _, _, _, _, parameters| {
-            if let Some((namespace, key, value)) = parse_setting_changed(parameters) {
-                emit(&app, state().apply_change(&namespace, &key, value));
-            }
-        },
-    );
-    Ok(())
-}
-
-/// The proxy follows the accessibility bus service as it starts and stops and
-/// refreshes its property cache before each `g-properties-changed`.
-fn follow_screen_reader(
-    app: &AppHandle,
-    connection: &gio::DBusConnection,
-) -> Result<gio::DBusProxy, String> {
-    let proxy = gio::DBusProxy::new_sync(
-        connection,
-        gio::DBusProxyFlags::DO_NOT_AUTO_START,
-        None,
-        Some(A11Y_BUS_NAME),
-        A11Y_OBJECT_PATH,
-        A11Y_STATUS_INTERFACE,
-        gio::Cancellable::NONE,
-    )
-    .map_err(|err| err.to_string())?;
-    let read = |proxy: &gio::DBusProxy| {
-        proxy
-            .cached_property(SCREEN_READER_PROPERTY)
-            .map(|value| setting_value(&value))
-    };
-    emit(app, state().apply_screen_reader(read(&proxy)));
-    let app = app.clone();
-    // gio's bindings leave this signal unwrapped.
-    proxy.connect_local("g-properties-changed", false, move |args| {
-        if let Some(proxy) = args.first().and_then(|value| value.get::<gio::DBusProxy>().ok()) {
-            emit(&app, state().apply_screen_reader(read(&proxy)));
-        }
-        None
-    });
-    Ok(proxy)
 }
 
 fn connect(context: &glib::MainContext) -> Result<gio::DBusConnection, String> {
@@ -224,7 +159,6 @@ fn emit(app: &AppHandle, emissions: Vec<Emission>) {
         let result = match emission {
             Emission::TextSize(payload) => app.emit(TEXT_SIZE_CHANGED_EVENT, &payload),
             Emission::Appearance(payload) => app.emit(SYSTEM_APPEARANCE_CHANGED_EVENT, &payload),
-            Emission::ScreenReader(payload) => app.emit(SCREEN_READER_CHANGED_EVENT, &payload),
             Emission::DecorationLayout(layout) => app.emit(LAYOUT_CHANGED_EVENT, &layout),
         };
         if let Err(err) = result {

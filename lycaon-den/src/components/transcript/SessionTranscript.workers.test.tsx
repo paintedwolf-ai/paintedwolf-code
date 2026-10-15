@@ -353,7 +353,7 @@ describe("SessionTranscript workers and synthesis", () => {
     expect(container.querySelector('[data-msg-id="a1"] .assistant-prose')?.textContent).toContain("alpha ".repeat(80).trim());
   });
 
-  it("renders a collapsible evidence chicklet on a grounded coordinator summary", async () => {
+  it("renders a collapsible evidence chicklet on a grounded coordinator summary", () => {
     const { container } = render(() => (
       <SessionTranscript
         layout="chat"
@@ -508,7 +508,7 @@ describe("SessionTranscript workers and synthesis", () => {
     ).toBeTruthy();
   });
 
-  it("renders cited_evidence only inside the collapsed chicklet body", async () => {
+  it("renders cited_evidence only inside the collapsed chicklet body", () => {
     const { container } = render(() => (
       <SessionTranscript
         layout="chat"

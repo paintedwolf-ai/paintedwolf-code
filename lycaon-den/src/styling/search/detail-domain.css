@@ -91,8 +91,13 @@
   border-color: color-mix(in srgb, var(--den-accent-signal) 45%, var(--den-line));
 }
 
-/* A narrow stage keeps the kind for assistive tech and shows only its glyph. */
-:where(.den-browse-stage[data-browse-band~="max-620"]) {
+:where(:root:not([data-den-webkit-atspi-workaround]) .den-browse-stage[data-browse-band~="max-620"]) {
+  .den-search-row__kind-label {
+    display: none;
+  }
+}
+/* WebKitGTK AT-SPI workaround: the narrow stage keeps the kind label's box. */
+:where(:root[data-den-webkit-atspi-workaround] .den-browse-stage[data-browse-band~="max-620"]) {
   .den-search-row__kind-label {
     position: absolute;
     width: 1px;

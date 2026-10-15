@@ -184,53 +184,6 @@ fn transparency_has_no_linux_source_and_stays_off() {
 }
 
 #[test]
-fn the_first_screen_reader_reading_publishes_even_when_none_runs() {
-    let mut state = DesktopSettingsState::new();
-    assert!(matches!(
-        state.apply_screen_reader(None).as_slice(),
-        [Emission::ScreenReader(payload)] if !payload.active && payload.revision == 1
-    ));
-}
-
-#[test]
-fn only_screen_reader_changes_publish_and_each_advances_the_revision() {
-    let mut state = DesktopSettingsState::new();
-    state.apply_screen_reader(Some(SettingValue::Bool(false)));
-    assert!(state.apply_screen_reader(Some(SettingValue::Bool(false))).is_empty());
-    assert!(matches!(
-        state.apply_screen_reader(Some(SettingValue::Bool(true))).as_slice(),
-        [Emission::ScreenReader(payload)] if payload.active && payload.revision == 2
-    ));
-    assert!(state.apply_screen_reader(Some(SettingValue::Bool(true))).is_empty());
-    // The service stopping drops the property.
-    assert!(matches!(
-        state.apply_screen_reader(None).as_slice(),
-        [Emission::ScreenReader(payload)] if !payload.active && payload.revision == 3
-    ));
-    assert_eq!(state.screen_reader_payload().revision, 3);
-}
-
-#[test]
-fn a_mistyped_screen_reader_value_means_none_runs() {
-    let mut state = DesktopSettingsState::new();
-    state.apply_screen_reader(Some(SettingValue::Bool(true)));
-    assert!(matches!(
-        state.apply_screen_reader(Some(SettingValue::Str("yes".into()))).as_slice(),
-        [Emission::ScreenReader(payload)] if !payload.active
-    ));
-}
-
-#[test]
-fn the_screen_reader_fact_leaves_portal_payloads_alone() {
-    let mut bus = gnome_defaults();
-    bus.connect();
-    let emissions = bus.state.apply_screen_reader(Some(SettingValue::Bool(true)));
-    assert_eq!(emissions.len(), 1);
-    assert_eq!(bus.state.appearance_payload().revision, 1);
-    assert_eq!(bus.state.text_size_payload().revision, 1);
-}
-
-#[test]
 fn the_desktop_button_layout_is_reported_once_and_followed() {
     use crate::windows::linux_decorations::{DecorationControl::*, DecorationLayout};
     let mut bus = gnome_defaults().with(WM_PREFERENCES_NS, "button-layout", SettingValue::Str("appmenu:close".into()));

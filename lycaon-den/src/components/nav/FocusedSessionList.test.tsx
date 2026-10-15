@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, onTestFinished, vi, beforeEach } from "vitest";
+import { applyWebEngineFact } from "../../platform/desktop/webkit-atspi-workaround.ts";
 import { FocusedSessionList } from "./FocusedSessionList.tsx";
 import type {
   SidebarChatRow,
@@ -564,7 +565,21 @@ describe("FocusedSessionList", () => {
     expect(screen.queryByTestId("focused-session-list-empty")).toBeNull();
   });
 
-  it("replaces a row's time with its actions only while the pointer or focus is on it", () => {
+  it("keeps the row's time rendered for its hover style without the WebKitGTK workaround", () => {
+    render(() => (
+      <FocusedSessionList
+        {...baseProps()}
+        sections={chats(row({ sessionId: "s1", activityAtMs: Date.now() - 60_000 }))}
+      />
+    ));
+    const wrapper = document.querySelector<HTMLElement>(".focused-session-list__item > .den-list-row--nav")!;
+    fireEvent.pointerEnter(wrapper);
+    expect(document.querySelector(".focused-session-list__time")).toBeTruthy();
+  });
+
+  it("stops rendering the row's time while pointer or focus reveal its actions under the WebKitGTK workaround", () => {
+    applyWebEngineFact({ engine: "webkitgtk", version: "2.54.1" });
+    onTestFinished(() => applyWebEngineFact(null));
     render(() => (
       <FocusedSessionList
         {...baseProps()}

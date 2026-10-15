@@ -1,5 +1,4 @@
-//! Desktop appearance, text-scale, and title bar layout facts from the Settings
-//! portal, and the screen reader fact from the accessibility bus status.
+//! Desktop appearance, text-scale, and title bar layout facts from the Settings portal.
 //!
 //! A portal snapshot reduces to typed facts. A fact is absent when none of the
 //! namespaces the desktop exposes carries it, so the app can report that
@@ -9,7 +8,6 @@ use std::collections::BTreeMap;
 
 use super::accessibility_text_size::{payload_for_category, TextSizePayload};
 use super::linux_decorations::{layout_from_raw, DecorationLayout};
-use super::screen_reader::ScreenReaderPayload;
 use super::system_appearance::{hex_color, SystemAppearancePayload};
 
 #[cfg(target_os = "linux")]
@@ -137,18 +135,16 @@ fn decoration_layout(snapshot: &SettingsSnapshot) -> DecorationLayout {
 pub enum Emission {
     TextSize(TextSizePayload),
     Appearance(SystemAppearancePayload),
-    ScreenReader(ScreenReaderPayload),
     DecorationLayout(DecorationLayout),
 }
 
-/// Current facts and the revisions their payloads carry.
+/// Current facts and the revisions both payloads carry.
 #[derive(Debug)]
 pub struct DesktopSettingsState {
     snapshot: SettingsSnapshot,
     facts: DesktopSettingsFacts,
     text_revision: u64,
     appearance_revision: u64,
-    screen_reader: ScreenReaderPayload,
     /// `None` until the desktop names a layout other than the default.
     decoration_layout: Option<DecorationLayout>,
 }
@@ -164,7 +160,6 @@ impl DesktopSettingsState {
             },
             text_revision: 0,
             appearance_revision: 0,
-            screen_reader: ScreenReaderPayload { active: false, revision: 0 },
             decoration_layout: None,
         }
     }
@@ -200,24 +195,6 @@ impl DesktopSettingsState {
             accent: self.facts.accent.clone(),
             revision: self.appearance_revision,
         }
-    }
-
-    pub fn screen_reader_payload(&self) -> ScreenReaderPayload {
-        self.screen_reader
-    }
-
-    /// Applies `org.a11y.Status` `ScreenReaderEnabled`; a missing or mistyped
-    /// value means no screen reader is running.
-    pub fn apply_screen_reader(&mut self, value: Option<SettingValue>) -> Vec<Emission> {
-        let active = matches!(value, Some(SettingValue::Bool(true)));
-        if self.screen_reader.revision > 0 && self.screen_reader.active == active {
-            return Vec::new();
-        }
-        self.screen_reader = ScreenReaderPayload {
-            active,
-            revision: self.screen_reader.revision + 1,
-        };
-        vec![Emission::ScreenReader(self.screen_reader)]
     }
 
     /// Replaces every namespace from a full read.

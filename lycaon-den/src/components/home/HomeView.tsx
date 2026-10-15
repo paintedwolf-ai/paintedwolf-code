@@ -43,6 +43,9 @@ import {
   ATTACHMENT_PROVIDER_SEND_HINT,
   filesFromClipboard,
 } from "../../chat/composer/composer-attachments.ts";
+import { webkitAtspiWorkaroundActive } from "../../platform/desktop/webkit-atspi-workaround.ts";
+
+const IDEA_HINT = "Describe your idea…";
 import {
   HOME_IDEA_DROP_AFFORDANCE,
   homeIdeaChipDetail,
@@ -351,17 +354,17 @@ export function HomeView(props: Props) {
               <ThemeIcon slot="sparkle" size={17} />
             </span>
             <Scrollport class="home-view__idea-scroll" eager>
-              {/* A drawn hint, not a placeholder: WebKitGTK aborts a screen reader's text query
-                  over the Home stage while this textarea carries a placeholder. */}
-              <Show when={!idea()}>
-                <span class="home-view__idea-hint" aria-hidden="true">Describe your idea…</span>
+              {/* The WebKitGTK AT-SPI workaround draws the hint instead of a placeholder. */}
+              <Show when={webkitAtspiWorkaroundActive() && !idea()}>
+                <span class="home-view__idea-hint" aria-hidden="true">{IDEA_HINT}</span>
               </Show>
               <textarea
                 ref={ideaRef}
                 class="home-view__idea-input"
                 data-testid="home-idea-input"
                 rows={1}
-                aria-label="Describe your idea"
+                placeholder={webkitAtspiWorkaroundActive() ? undefined : IDEA_HINT}
+                aria-label={webkitAtspiWorkaroundActive() ? "Describe your idea" : undefined}
                 value={idea()}
                 disabled={props.submitting}
                 onInput={(e) => {

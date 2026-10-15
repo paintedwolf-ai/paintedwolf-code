@@ -99,6 +99,9 @@ display: block;
   &[data-expanded="true"] > .den-checkpoint-decision-chicklet__summary {
     border-bottom-color: color-mix(in srgb, var(--den-line) 55%, transparent);
   }
+  &:not([data-expanded="true"]) > .den-checkpoint-decision-chicklet__body {
+    display: none;
+  }
 }
 
 

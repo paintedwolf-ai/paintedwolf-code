@@ -24,6 +24,7 @@ import { FilesNavigationPane } from "./FilesNavigationPane.tsx";
 import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from "solid-js";
 import { registerEscapeLadderLayer } from "../../find/escape-ladder.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
+import { webkitAtspiWorkaroundActive } from "../../platform/desktop/webkit-atspi-workaround.ts";
 import { isBackendReachable } from "../../platform/connection/sidecar-status.ts";
 import { useResidentLive } from "../../ui/resident-activity.ts";
 import { BrowseStagePanel } from "../../components/browse/BrowseStagePanel.tsx";
@@ -127,8 +128,7 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
   });
   const { filesOpenListOpen, setRovingTabKey, closeBuffers, requestCloseFamily, openFilesList, closeBuffer } = tabCommands;
   const [hiddenTabCount, setHiddenTabCount] = createSignal(0);
-  // The loading layer leaves the DOM once it has faded: WebKitGTK aborts a screen
-  // reader's text query over text left in a visibility-hidden layer.
+  // Under the WebKitGTK AT-SPI workaround the loading text leaves the DOM once its layer has faded.
   const [loadingMounted, setLoadingMounted] = createSignal(true);
   let loadingLayer: HTMLDivElement | undefined;
   createEffect(on(stageReady, (ready) => {
@@ -339,7 +339,7 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
         aria-hidden={stageReady()}
         inert={stageReady() ? true : undefined}
       >
-        <Show when={loadingMounted()}>
+        <Show when={!webkitAtspiWorkaroundActive() || loadingMounted()}>
           <ProjectLoadingStage
             label={holdLabel()}
             hint={holdHint()}

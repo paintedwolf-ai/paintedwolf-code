@@ -173,13 +173,22 @@
 .focused-session-list__status[data-attention-class="finished"] {
   --den-attention-tone: var(--den-status-positive);
 }
-/* Relative timestamp hugs the right edge; the row's actions replace it on hover and focus. */
+:root:not([data-den-webkit-atspi-workaround]) .focused-session-list .den-list-row--nav:is(:hover, :focus-within)
+  .focused-session-list__status {
+  display: none;
+}
+/* Relative timestamp hugs the right edge; hover actions replace it. Under the WebKitGTK
+   AT-SPI workaround the row stops rendering it instead. */
 .focused-session-list__time {
   flex-shrink: 0;
   margin-left: 6px;
   font-size: var(--text-den-micro);
   color: var(--den-text-muted);
   font-variant-numeric: tabular-nums;
+}
+:root:not([data-den-webkit-atspi-workaround]) .focused-session-list .den-list-row--nav:is(:hover, :focus-within)
+  .focused-session-list__time {
+  display: none;
 }
 /* "All chats" footer entry — same pill language, quieter weight. */
 .focused-session-list__all {

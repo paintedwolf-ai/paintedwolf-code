@@ -169,9 +169,13 @@ font-weight: 600;
 }
 
 
-/* Hide the count before either line truncates; assistive tech still reads it. */
+/* Hide the count before either line truncates; under the WebKitGTK AT-SPI workaround
+   it keeps its box. */
 @container den-activity-span (max-width: 15rem) {
-  .den-activity-span-count {
+  :root:not([data-den-webkit-atspi-workaround]) .den-activity-span-count {
+    display: none;
+  }
+  :root[data-den-webkit-atspi-workaround] .den-activity-span-count {
     position: absolute;
     width: 1px;
     height: 1px;

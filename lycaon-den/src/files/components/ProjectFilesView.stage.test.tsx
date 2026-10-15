@@ -3,7 +3,8 @@ import "../../test/document-outbox-fixture.ts";
 import { filesBufferBase, filesBufferText } from "../documents/project-files-buffers.ts";
 import { stubFilesClient } from "../../test/source-client-fixture.ts";
 import { PROJECT, ROOTS, loadedBuffer, resetProjectFilesViewTest, sourceWorkspace, PROJECT_SOURCE_IDENTITY, deferred, waitForFilesStageReady } from "./project-files-view-test-harness.ts";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { applyWebEngineFact } from "../../platform/desktop/webkit-atspi-workaround.ts";
 import { render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
@@ -99,11 +100,16 @@ describe("ProjectFilesView stage chrome", () => {
     await waitFor(() => {
       expect(boundary.getAttribute("data-ready")).toBe("true");
     });
-    // Without a fade the loading text leaves at once; none stays in a hidden layer.
-    expect(screen.queryByTestId("project-loading-stage")).toBeNull();
+    // Without the WebKitGTK workaround the loading text stays in its faded layer.
+    expect(screen.getByTestId("project-loading-stage")).toBeTruthy();
   });
 
-  it("removes the loading text once the loading layer has faded out", async () => {
+  it.each([
+    ["without a fade", ""],
+    ["after its fade", "0.1s, 0s"],
+  ])("removes the loading text %s under the WebKitGTK workaround", async (_label, duration) => {
+    applyWebEngineFact({ engine: "webkitgtk", version: "2.50.4" });
+    onTestFinished(() => applyWebEngineFact(null));
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
     const base = getLycaonClient()!;
@@ -117,12 +123,14 @@ describe("ProjectFilesView stage chrome", () => {
     ));
     const boundary = screen.getByTestId("project-files-stage-boundary");
     const layer = required(boundary.querySelector<HTMLElement>(".project-files-stage-boundary__loading"));
-    layer.style.transitionDuration = "0.1s, 0s";
-    layer.style.transitionDelay = "0s, 100ms";
+    if (duration) {
+      layer.style.transitionDuration = duration;
+      layer.style.transitionDelay = "0s, 100ms";
+    }
 
     resolveWorkspace(sourceWorkspace("workspace-ready", []));
     await waitFor(() => expect(boundary.getAttribute("data-ready")).toBe("true"));
-    expect(screen.getByTestId("project-loading-stage")).toBeTruthy();
+    if (duration) expect(screen.getByTestId("project-loading-stage")).toBeTruthy();
 
     await waitFor(() => expect(screen.queryByTestId("project-loading-stage")).toBeNull());
   });

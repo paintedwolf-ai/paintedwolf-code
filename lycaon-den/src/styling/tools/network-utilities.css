@@ -2,6 +2,10 @@
   border: 1px solid color-mix(in srgb, var(--den-line) 70%, transparent);
   border-radius: var(--den-radius);
   background: var(--den-surface);
+  &:not([data-expanded="true"]) > .den-network-chicklet-body,
+  &:not([data-expanded="true"]) > .den-network-chicklet-hosts {
+    display: none;
+  }
 }
 
 @utility den-network-chicklet-body {

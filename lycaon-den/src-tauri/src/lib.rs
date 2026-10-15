@@ -88,7 +88,7 @@ pub fn run() {
             notifications::den_notify_cancel_sessions,
             notifications::den_set_badge_count,
             windows::accessibility_text_size::accessibility_preferred_text_size,
-            windows::screen_reader::accessibility_screen_reader,
+            windows::web_engine::den_web_engine,
             windows::accessibility_announce::den_announce,
             windows::system_appearance::system_appearance,
             clipboard::read_clipboard_text,

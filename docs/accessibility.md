@@ -90,13 +90,12 @@ The host reads `org.freedesktop.portal.Settings` on the session bus (`ReadAll` a
 | Text scale | `org.gnome.desktop.interface` `text-scaling-factor` | Category `linux-text-scaling-factor` with `textScale` `1`; see below |
 | Colour scheme | `org.freedesktop.appearance` `color-scheme`, read and followed by the window toolkit | Window theme and `ThemeChanged`, as on macOS |
 | Reduced motion | `gtk-enable-animations`, which GTK sources from the desktop | `prefers-reduced-motion` media query, no host bridge |
-| Screen reader running | `org.a11y.Status` `ScreenReaderEnabled` on the accessibility bus service, which the desktop sets with its screen reader setting (a hand-started Orca leaves it false); followed by the same watch, and independent of the portal | `accessibility_screen_reader()` and `accessibility://screen-reader-changed` return `{ active, revision }`; see [Linux screen readers](#linux-screen-readers-webkitgtk) |
 
 WebKitGTK applies the desktop text scaling factor itself, as device scale: at factor 1.5 the page reports `devicePixelRatio` 1.5 and the CSS viewport narrows accordingly, so a 720 px window presents 480 CSS px. The host therefore reports the factor's presence but never multiplies it into `--den-text-scale`; the device Text size preference multiplies on top of the desktop scale exactly as on macOS. GTK also derives `prefers-reduced-motion` from the desktop's animation preference and `prefers-contrast` from a high-contrast GTK theme, so those CSS media queries are live on Linux without a host bridge; a desktop without a settings daemon leaves the toolkit defaults, which is what the app then truthfully follows.
 
 Settings → Display → Type says what the host adds: on a desktop that reports a text scaling factor, the reading size adds to it; on one that reports none, the reading size is the only text size control (`textSizeHint`, [`text-scale-prefs.ts`](../lycaon-den/src/settings/appearance/text-scale-prefs.ts)).
 
-**Proof:** `linux_desktop_settings/tests.rs` (fixture bus: snapshot reduction, change emissions, revisions, the screen reader fact), `settings/appearance/text-scale-prefs.test.ts`, `platform/desktop/accessibility-text-size.test.ts`.
+**Proof:** `linux_desktop_settings/tests.rs` (fixture bus: snapshot reduction, change emissions, revisions), `settings/appearance/text-scale-prefs.test.ts`, `platform/desktop/accessibility-text-size.test.ts`.
 
 ### Orca and AT-SPI
 
@@ -133,19 +132,19 @@ At the maximum text-size category (or the harness inject) and the Tauri minimum 
 
 Naming uses wire and catalog fields (session title, tool id, worker agent type), never markdown substring classification ([AGENTS.md](../AGENTS.md) § No heuristics).
 
-## Linux screen readers (WebKitGTK)
+## WebKitGTK AT-SPI workaround
 
-WebKitGTK aborts its web process while answering AT-SPI `Text.GetAttributeRun` for some content, and an Orca user loses the whole window. Den avoids the shapes that trigger it rather than recovering from the crash:
+WebKitGTK aborts its web process while answering AT-SPI text queries (`Text.GetAttributeRun`, selection queries) over some content shapes, and a screen reader user loses the whole window. The shell reports its web engine and version (`den_web_engine`); while it reports WebKitGTK, [`webkit-atspi-workaround.ts`](../lycaon-den/src/platform/desktop/webkit-atspi-workaround.ts) turns on crash-safe alternatives and stamps `data-den-webkit-atspi-workaround` on the root. Every other engine keeps its own rendering. It applies to every WebKitGTK release until one ships the upstream AT-SPI fix; remove it when the minimum WebKitGTK includes that fix.
 
-| Trigger | Contract |
+| Mechanism | Under the workaround |
 |------|----------|
-| Content that ends in a `display: none` subtree | No list item (`li` or `role="listitem"`) holds a CSS-hidden subtree. Content hidden until hover, focus or expansion is conditionally rendered; a responsive swap keeps a box (visually hidden, or out of flow and invisible). [`list-item-accessibility-shape.test.ts`](../lycaon-den/src/platform/list-item-accessibility-shape.test.ts) holds the shape in source |
-| A list item laid out as a grid with an actions column | Grid layout goes on a wrapper inside the item, held by the same test |
-| A transcript card's closed body | `TranscriptDisclosurePanel` mounts its content only while the card is open, and the toggle names it in `aria-controls` only then |
-| Text in CodeMirror's `visibility: hidden` gutter spacer cell (Files editor) | The line gutter's spacer is an empty five-digit-wide box; `line-gutter.test.ts` holds every hidden gutter cell empty |
-| Text that cannot be selected (WebKitGTK 2.50) | The screen reader fact ([Linux desktop preferences](#linux-desktop-preferences)). While it is true, [`screen-reader.ts`](../lycaon-den/src/platform/desktop/screen-reader.ts) stamps `data-den-screen-reader="active"` on the root and one rule in `ui-chrome.css` makes all text selectable. Sighted users see no change |
+| Content hidden until shown leaves the DOM | Transcript disclosure panels mount only while open, and the toggle names its panel in `aria-controls` only then; a sidebar chat row stops rendering its time and status while its actions are revealed |
+| Drawn input hint | The Home idea field draws its hint while empty instead of carrying a `placeholder`, and takes its name from `aria-label` |
+| Loading text leaves after its fade | The Files loading layer's text is removed once the layer has faded |
+| Responsive hide keeps a box | Text hidden at a narrow width (search result kind, activity count) stays in a visually hidden box |
+| Selectable text | All text stays selectable |
 
-`./task den:webkit:atspi` asks every text object in the window for its attributes on each supported WebKitGTK release ([dev tasks](dev-tasks.md)).
+[`webkit-atspi-workaround-inventory.json`](../lycaon-den/src/platform/desktop/webkit-atspi-workaround-inventory.json) lists every site, and its test fails when a site is added without an entry. These shapes hold on every engine, because they render the same: no list item is itself a grid (the grid goes on a wrapper), icons carry `role="img"` beside `aria-hidden`, the line gutter's spacer is an empty fixed-width box, and the chat column carries no `aria-label` of its own. [`list-item-accessibility-shape.test.ts`](../lycaon-den/src/platform/list-item-accessibility-shape.test.ts) and `line-gutter.test.ts` hold them in source, and `./task den:webkit:atspi` asks every text object in the window for its attributes on each supported WebKitGTK release ([dev tasks](dev-tasks.md)).
 
 ## macOS Spoken Content (Speak selection / Speak under pointer)
 

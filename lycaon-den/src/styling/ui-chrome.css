@@ -14,8 +14,8 @@ button,
   cursor: auto;
 }
 
-/* WebKitGTK aborts answering a screen reader's text attributes over text that cannot be selected. */
-:root[data-den-screen-reader="active"] * {
+/* WebKitGTK AT-SPI workaround: its text queries abort over text that cannot be selected. */
+:root[data-den-webkit-atspi-workaround] * {
   user-select: text !important;
 }
 

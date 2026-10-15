@@ -68,10 +68,10 @@ describe("harness prompt admission", () => {
     expect(await result).toMatchObject({ ok: true, state: { sessionId: "new-session" } });
   });
 
-  it("stands in for the host screen reader fact", () => {
-    expect(window.__harness!.setScreenReader()).toEqual({ ok: true, active: true });
-    expect(document.documentElement.getAttribute("data-den-screen-reader")).toBe("active");
-    expect(window.__harness!.setScreenReader(false)).toEqual({ ok: true, active: false });
-    expect(document.documentElement.hasAttribute("data-den-screen-reader")).toBe(false);
+  it("stands in for the shell's web engine fact", () => {
+    expect(window.__harness!.setWebEngine("webkitgtk", "2.54.1")).toEqual({ ok: true, webkitAtspiWorkaround: true });
+    expect(document.documentElement.hasAttribute("data-den-webkit-atspi-workaround")).toBe(true);
+    expect(window.__harness!.setWebEngine("wkwebview")).toEqual({ ok: true, webkitAtspiWorkaround: false });
+    expect(document.documentElement.hasAttribute("data-den-webkit-atspi-workaround")).toBe(false);
   });
 });

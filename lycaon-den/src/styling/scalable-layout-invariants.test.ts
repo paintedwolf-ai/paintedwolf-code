@@ -185,7 +185,7 @@ describe("scalable layout chrome", () => {
     );
     expect(tools).not.toMatch(/\.den-activity-span-hint\s*\{\s*display:\s*none/);
     expect(tools).toMatch(
-      /@container den-activity-span \(max-width:\s*15rem\)\s*\{[\s\S]*?\.den-activity-span-count\s*\{[\s\S]*?clip-path:\s*inset\(50%\)/,
+      /@container den-activity-span \(max-width:\s*15rem\)\s*\{[\s\S]*?\.den-activity-span-count\s*\{[\s\S]*?display:\s*none/,
     );
     expect(tools).toMatch(
       /\.den-tool-part\[data-accordion-row\] \.den-row-mark\s*\{\s*margin-left:\s*auto/,
