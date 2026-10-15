@@ -120,13 +120,9 @@ func (m *Service) ResolveRoots(projectDirs []string) (compaction.CompactionConfi
 	if policySource == nil {
 		return fallbackBudget(fallbackConfig)
 	}
-	var policy llm.ModelPolicy
-	if policySource != nil {
-		var err error
-		policy, err = policySource.GetForProjectRoots(projectDirs)
-		if err != nil {
-			return fallbackBudget(fallbackConfig)
-		}
+	policy, err := policySource.GetForProjectRoots(projectDirs)
+	if err != nil {
+		return fallbackBudget(fallbackConfig)
 	}
 	cfg, derived, err := llm.ApplyLiveBudget(compaction.DefaultCompactionConfig(), policy, lookup, modelinfo.DefaultModelContextWindows())
 	if err != nil {
