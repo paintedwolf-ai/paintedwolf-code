@@ -222,6 +222,9 @@ func inFarHostNamespace(t *testing.T, self string) bool {
 		UidMappings:                []syscall.SysProcIDMap{{ContainerID: os.Getuid(), HostID: os.Getuid(), Size: 1}},
 		GidMappings:                []syscall.SysProcIDMap{{ContainerID: os.Getgid(), HostID: os.Getgid(), Size: 1}},
 		GidMappingsEnableSetgroups: false,
+		// Executing as a non-root uid would otherwise drop what assigning the
+		// address needs.
+		AmbientCaps: []uintptr{unix.CAP_NET_ADMIN},
 	}
 	out, err := cmd.CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "--- PASS: "+t.Name()) {
