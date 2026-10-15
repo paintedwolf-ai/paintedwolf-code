@@ -3,7 +3,12 @@ import {
   activitySpanEnterFadeKey,
   useTranscriptEntry,
 } from "../../chat/transcript/presentation/transcript-entry.ts";
-import { useTranscriptDisclosure } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
+import {
+  TranscriptDisclosurePanel,
+  TranscriptDisclosureShell,
+  TranscriptDisclosureToggle,
+  useTranscriptDisclosure,
+} from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
 import { subscribeBackgroundProcessStore } from "../../chat/tool/background-process-store.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
@@ -147,16 +152,11 @@ export function ActivitySpanCard(props: Props) {
       entryKey: activitySpanEnterFadeKey(key),
     };
   });
-  const {
-    key: disclosureKey,
-    open,
-    onToggle,
-    onSummaryClick,
-    revealTemporarily,
-  } = useTranscriptDisclosure(() => {
+  const disclosure = useTranscriptDisclosure(() => {
     const key = props.entryKey?.trim();
     return key ? transcriptDisclosureKey.activitySpan(key) : undefined;
   });
+  const { open, onToggleClick, revealTemporarily } = disclosure;
   const accordion = createActivitySpanAccordion();
   const [findToolKey, setFindToolKey] = createSignal<string>();
   let revealRow: ((key: string) => void) | undefined;
@@ -180,7 +180,7 @@ export function ActivitySpanCard(props: Props) {
     host.addEventListener(TOOL_CONTENT_REVEAL_EVENT, reveal);
     onCleanup(() => host.removeEventListener(TOOL_CONTENT_REVEAL_EVENT, reveal));
   });
-  const revealId = () => `activity-span-reveal:${disclosureKey ?? props.label}`;
+  const revealId = () => `activity-span-reveal:${disclosure.key ?? props.label}`;
   bindFindRevealHost({
     id: revealId(),
     hostEl,
@@ -217,17 +217,18 @@ export function ActivitySpanCard(props: Props) {
     const entry = props.entries[0];
     return count() === 1 && entry?.kind === "tool" ? entry.part.id : null;
   };
-  const handleSummaryClick: JSX.EventHandler<HTMLElement, MouseEvent> = (
+  const handleSummaryClick: JSX.EventHandler<HTMLButtonElement, MouseEvent> = (
     event,
   ) => {
     const expanding = !open();
-    onSummaryClick(event);
+    onToggleClick(event);
     const toolKey = singletonToolKey();
     if (expanding && toolKey) accordion.open(toolKey);
   };
 
   return (
-    <details
+    <TranscriptDisclosureShell
+      disclosure={disclosure}
       ref={(el) => {
         bindTranscriptEntry(el);
         setHostEl(el);
@@ -238,11 +239,9 @@ export function ActivitySpanCard(props: Props) {
       data-count={count()}
       data-layout={props.layout}
       data-status={statusAttr()}
-      data-disclosure-key={disclosureKey}
-      open={open()}
-      onToggle={onToggle}
     >
-      <summary
+      <TranscriptDisclosureToggle
+        disclosure={disclosure}
         onClick={handleSummaryClick}
         aria-label={`${label()}, ${statusAttr()}, ${count()} ${count() === 1 ? "action" : "actions"}${
           failed() > 0 ? `, ${failed()} failed` : ""
@@ -264,8 +263,8 @@ export function ActivitySpanCard(props: Props) {
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
           <span class="den-activity-span-hint">{summary().detail}</span>
         </span>
-      </summary>
-      <div class="den-activity-span-items">
+      </TranscriptDisclosureToggle>
+      <TranscriptDisclosurePanel disclosure={disclosure} class="den-activity-span-items">
         <span
           class="den-activity-span-composition"
           aria-label={formatActivitySpanComposition(summary().composition)}
@@ -293,7 +292,7 @@ export function ActivitySpanCard(props: Props) {
               revealTool(entry.part.toolCallId, match);
             }}>
             {(entry) => (
-              <div class="den-activity-span-item">
+              <div class="den-activity-span-item" data-activity-entry-key={entryLeadKey(entry())}>
                 <ActivitySpanEntryRow
                   entry={entry}
                   layout={props.layout}
@@ -304,7 +303,7 @@ export function ActivitySpanCard(props: Props) {
             )}
           </VirtualCardList>
         </ActivitySpanAccordionProvider>
-      </div>
-    </details>
+      </TranscriptDisclosurePanel>
+    </TranscriptDisclosureShell>
   );
 }

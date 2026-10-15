@@ -3,7 +3,6 @@ package linuxsandbox
 import (
 	"net/netip"
 	"strings"
-	"time"
 )
 
 // Direct IP reaches names through the system resolver, as it does on macOS.
@@ -12,16 +11,6 @@ import (
 
 // sandboxResolver is the stub address resolv.conf names inside the sandbox.
 var sandboxResolver = netip.MustParseAddrPort("127.0.0.53:53")
-
-const resolvConf = "/etc/resolv.conf"
-
-// resolverQueryTimeout bounds one relayed query.
-const resolverQueryTimeout = 5 * time.Second
-
-const (
-	handoffResolverUDP = "resolver_udp"
-	handoffResolverTCP = "resolver_tcp"
-)
 
 // hostNameservers reads the host's resolvers in the order resolv.conf lists them.
 func hostNameservers(conf string) []netip.AddrPort {
@@ -65,4 +54,3 @@ func sandboxResolvConf(conf string) string {
 	}
 	return b.String()
 }
-

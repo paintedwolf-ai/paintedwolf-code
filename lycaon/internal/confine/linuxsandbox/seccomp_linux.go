@@ -47,6 +47,11 @@ var escapeSyscalls = []uint32{
 const namespaceCloneFlags = unix.CLONE_NEWUSER | unix.CLONE_NEWNS | unix.CLONE_NEWPID | unix.CLONE_NEWNET |
 	unix.CLONE_NEWUTS | unix.CLONE_NEWIPC | unix.CLONE_NEWCGROUP | unix.CLONE_NEWTIME
 
+// unixDatagramCreators create Unix-domain sockets. A datagram one, even a
+// connected end of a pair, sends wherever a later call names a path, which the
+// filter cannot read, so the filter refuses creating one.
+var unixDatagramCreators = []uint32{unix.SYS_SOCKET, unix.SYS_SOCKETPAIR}
+
 // notifiedSyscalls go to the supervisor, which performs each one itself on its
 // own descriptor for the socket with its own copy of the address.
 var notifiedSyscalls = []uint32{unix.SYS_CONNECT, unix.SYS_BIND, unix.SYS_LISTEN}
@@ -63,8 +68,9 @@ func seccompArgLow(n uint32) uint32 { return seccompDataArg0 + 8*n }
 // seccompProgram builds the filter: kill on an escape syscall, a terminal
 // injection ioctl, or a clone that asks for a namespace; hand connect, bind,
 // and listen to the supervisor, since a network namespace does not isolate
-// path sockets and the filter cannot read an address; refuse a Unix-domain
-// datagram socket, whose sends name a path the supervisor never sees, and any
+// path sockets and the filter cannot read an address; refuse creating a
+// Unix-domain datagram socket or pair, whose sends name a path the supervisor
+// never sees, and any
 // send that would open a connection by Fast Open; answer io_uring and clone3
 // with ENOSYS so libraries fall back to calls the filter can read; allow
 // everything else.
@@ -116,18 +122,20 @@ func seccompProgram() ([]bpf.RawInstruction, error) {
 		insts = append(insts, bpf.JumpIf{Cond: bpf.JumpEqual, Val: nr, SkipTrue: uint8(u - 1 - i), SkipFalse: past})
 	}
 	eacces := uint32(unix.SECCOMP_RET_ERRNO) | uint32(unix.EACCES)
-	insts = append(insts,
-		bpf.RetConstant{Val: enosys},
-		// socket: the domain and type are ints compared on their low halves.
-		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SYS_SOCKET, SkipFalse: 7},
-		bpf.LoadAbsolute{Off: seccompDataArg0, Size: 4},
-		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.AF_UNIX, SkipFalse: 4},
-		bpf.LoadAbsolute{Off: seccompArgLow(1), Size: 4},
-		bpf.ALUOpConstant{Op: bpf.ALUOpAnd, Val: socketTypeMask},
-		bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SOCK_DGRAM, SkipFalse: 1},
-		bpf.RetConstant{Val: eacces},
-		bpf.RetConstant{Val: unix.SECCOMP_RET_ALLOW},
-	)
+	insts = append(insts, bpf.RetConstant{Val: enosys})
+	for _, nr := range unixDatagramCreators {
+		// The domain and type are ints compared on their low halves.
+		insts = append(insts,
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: nr, SkipFalse: 7},
+			bpf.LoadAbsolute{Off: seccompDataArg0, Size: 4},
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.AF_UNIX, SkipFalse: 4},
+			bpf.LoadAbsolute{Off: seccompArgLow(1), Size: 4},
+			bpf.ALUOpConstant{Op: bpf.ALUOpAnd, Val: socketTypeMask},
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: unix.SOCK_DGRAM, SkipFalse: 1},
+			bpf.RetConstant{Val: eacces},
+			bpf.RetConstant{Val: unix.SECCOMP_RET_ALLOW},
+		)
+	}
 	m := len(notifiedSyscalls)
 	for i, nr := range notifiedSyscalls {
 		var past uint8

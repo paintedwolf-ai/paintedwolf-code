@@ -1,0 +1,35 @@
+[Unit]
+Description=Painted Wolf Code vault identity service
+Documentation=https://paintedwolf.ai
+Requires=paintedwolf-vault-identity.socket
+
+[Service]
+Type=exec
+ExecStart=/opt/painted-wolf-code/bin/pw-vault-identity
+# The identities belong to a user that exists only while the service runs.
+DynamicUser=yes
+StateDirectory=paintedwolf-vault
+StateDirectoryMode=0700
+# Reading a non-dumpable caller's image through /proc needs this one capability.
+CapabilityBoundingSet=CAP_SYS_PTRACE
+AmbientCapabilities=CAP_SYS_PTRACE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077

@@ -1,6 +1,7 @@
 import { APP_SCOPE } from "./notice-scope.ts";
 import { describe, expect, it } from "vitest";
 import { LycaonApiError } from "../api/http.ts";
+import { PresenceError } from "../platform/presence.ts";
 import { clientNoticeError } from "./client-notices.ts";
 import { BackendTransportError } from "../platform/connection/request-connectivity.ts";
 import {
@@ -78,6 +79,18 @@ describe("noticeFromUnknown", () => {
     );
     expect(notice.title).toBe("No model configured");
     expect(notice.suggestedAction).toBe("Set a key");
+  });
+
+  it("keeps the shell's presence refusal copy", () => {
+    const notice = noticeFromUnknown(
+      new PresenceError("presence_denied", "Authentication was canceled.", {
+        suggestedAction: "Try again when you are at this computer.",
+      }),
+      APP_SCOPE,
+    );
+    expect(notice.code).toBe("presence_denied");
+    expect(notice.message).toBe("Authentication was canceled.");
+    expect(notice.suggestedAction).toBe("Try again when you are at this computer.");
   });
 
   it("maps client notice errors", () => {

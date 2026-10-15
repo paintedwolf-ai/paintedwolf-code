@@ -161,14 +161,14 @@ func applyAndExec(profile []byte, resolved string, target []string) error {
 		if sig != 0 {
 			linuxsandbox.ExitWithSignal(sig)
 		}
-		os.Exit(code)
+		exitHelper(code)
 	}
 	linuxsandbox.HoldSignals()
 	if err := linuxsandbox.Enter(plan); err != nil {
 		return err
 	}
 	if plan.Probe {
-		os.Exit(0)
+		exitHelper(0)
 	}
 	// Only the target's tree should hold the marker once it runs.
 	releaseMarker := func() {
@@ -183,7 +183,7 @@ func applyAndExec(profile []byte, resolved string, target []string) error {
 	if sig != 0 {
 		linuxsandbox.ReportSignal(sig)
 	}
-	os.Exit(code)
+	exitHelper(code)
 	return nil
 }
 

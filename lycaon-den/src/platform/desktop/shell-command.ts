@@ -1,7 +1,11 @@
+import { createSignal } from "solid-js";
 import { isTauriRuntime } from "../runtime.ts";
 
 export type ShellCommandStatus = {
   installed: boolean;
+  installation_mode: "package" | "bundle" | "developer";
+  /** The system package owns the entry points; the app never writes them. */
+  managed_by_package: boolean;
   bin_dir: string;
   pw_link: string;
   pw_logs_link: string;
@@ -15,6 +19,8 @@ const DESKTOP_ONLY_REASON = "The command-line tool is available in the desktop a
 function unavailableStatus(): ShellCommandStatus {
   return {
     installed: false,
+    installation_mode: "developer",
+    managed_by_package: false,
     bin_dir: "",
     pw_link: "",
     pw_logs_link: "",
@@ -30,9 +36,26 @@ async function invokeShellCommand(command: string): Promise<ShellCommandStatus> 
   return await invoke<ShellCommandStatus>(command);
 }
 
+const [packaged, setPackaged] = createSignal(false);
+
+/** The system package owns the pw command, so the app offers no install. */
+export const shellCommandPackaged = packaged;
+
 export async function shellCommandStatus(): Promise<ShellCommandStatus> {
   if (!isTauriRuntime()) return unavailableStatus();
-  return await invokeShellCommand("shell_command_status");
+  const status = await invokeShellCommand("shell_command_status");
+  setPackaged(status.managed_by_package);
+  return status;
+}
+
+/** Reads at startup whether a package provides the command. */
+export async function loadShellCommandPackaged(): Promise<void> {
+  if (!isTauriRuntime()) return;
+  try {
+    await shellCommandStatus();
+  } catch (err) {
+    console.debug("[shell-command] status unavailable", err);
+  }
 }
 
 export async function installShellCommand(): Promise<ShellCommandStatus> {

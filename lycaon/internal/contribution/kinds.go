@@ -175,6 +175,9 @@ type Keybinding struct {
 	AllowInInput bool                `yaml:"allow_in_input,omitempty" json:"allow_in_input,omitempty"`
 	Bindings     map[string][]string `yaml:"bindings" json:"bindings"`
 	When         *Condition          `yaml:"when,omitempty" json:"when,omitempty"`
+	// SystemMenu names platforms whose OS menu bar carries the command and its
+	// chord, so the binding declares none there and the app never sees one.
+	SystemMenu []string `yaml:"system_menu,omitempty" json:"-"`
 }
 
 // EditorAction is a prompt-driven action inside a host preset boundary.
@@ -410,6 +413,19 @@ func validateKeybinding(k *Keybinding, stock bool) error {
 			if !bindingProducible(platform, binding) {
 				return fmt.Errorf("chord %q cannot be produced on %s", binding, platform)
 			}
+		}
+	}
+	seen := map[string]bool{}
+	for _, platform := range k.SystemMenu {
+		if !bindingPlatforms[platform] {
+			return fmt.Errorf("unknown system_menu platform %q", platform)
+		}
+		if seen[platform] {
+			return fmt.Errorf("system_menu lists %s twice", platform)
+		}
+		seen[platform] = true
+		if len(k.Bindings[platform]) > 0 {
+			return fmt.Errorf("platform %s both declares chords and leaves them to the system menu", platform)
 		}
 	}
 	return nil

@@ -9,6 +9,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestReadReport(t *testing.T) {
@@ -42,7 +44,7 @@ func startSleeper(t *testing.T) *exec.Cmd {
 	t.Helper()
 	cmd := exec.Command("/bin/sleep", "30")
 	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "cmd.Start failed", err)
 	}
 	t.Cleanup(func() { _ = cmd.Process.Kill() })
 	return cmd

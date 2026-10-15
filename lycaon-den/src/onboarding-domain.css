@@ -82,6 +82,27 @@
   height: var(--onboarding-gate-inset-top);
   z-index: 1;
 }
+/* The gate replaces the shell, so it carries the drawn window controls. */
+.onboarding-gate__window-controls {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  min-height: var(--den-titlebar-inset);
+  pointer-events: none;
+}
+.onboarding-gate__window-controls .den-shell-window-controls {
+  position: absolute;
+  top: calc(var(--den-pane-control-center) - var(--den-window-control-size) / 2);
+  pointer-events: auto;
+}
+.onboarding-gate__window-controls .den-shell-window-controls[data-side="left"] {
+  left: var(--den-window-controls-inset);
+}
+.onboarding-gate__window-controls .den-shell-window-controls[data-side="right"] {
+  right: var(--den-window-controls-inset);
+}
 .onboarding-gate__chrome-drag[data-tauri-drag-region] {
   cursor: default;
   -webkit-app-region: drag;

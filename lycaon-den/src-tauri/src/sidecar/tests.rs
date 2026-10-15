@@ -123,6 +123,21 @@ fn bundled_layout_uses_platform_resources_and_sidecar_name() {
 }
 
 #[test]
+fn linux_package_layout_resolves_from_the_install_root() {
+    use super::layout::linux_package_engine_layout;
+    let root = TempDir::new("linux-package-engine-layout");
+    assert!(linux_package_engine_layout(&root).is_none());
+    std::fs::create_dir_all(root.join("bin")).expect("create bin");
+    std::fs::create_dir_all(root.join("engine-root/schemas/oar")).expect("create schemas");
+    std::fs::write(root.join("bin/pw"), b"engine").expect("write engine");
+    std::fs::write(root.join("bin/pw-logs"), b"logs").expect("write log viewer");
+    std::fs::write(root.join("engine-root/schemas/oar/oar.schema.json"), b"{}").expect("marker");
+    let layout = linux_package_engine_layout(&root).expect("package layout");
+    assert_eq!(layout.binary, root.join("bin/pw"));
+    assert_eq!(layout.engine_root, root.join("engine-root"));
+}
+
+#[test]
 fn bundled_layout_requires_resource_marker() {
     let temp = TempDir::new("bundled-layout-missing-marker");
     let executable = temp.join("bin/painted-wolf-code");

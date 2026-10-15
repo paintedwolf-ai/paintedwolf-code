@@ -44,18 +44,8 @@ func (l *Waits) InterruptSleep(ctx context.Context, sessionID string) {
 	l.breakSleep(ctx, sessionID, "user_prompt", false)
 	l.Nudges.ClearPending(sessionID)
 }
-func (l *Waits) EnterSleep(
-	ctx context.Context,
-	sessionID string,
-	until time.Time,
-	reason string,
-	triggers []WaitTrigger,
-	processHandles []string,
-	mover SleepMover,
-) {
-	l.enterSleep(ctx, sessionID, sleepArm{
-		until: until, reason: reason, triggers: triggers, processHandles: processHandles, mover: mover,
-	})
+func (l *Waits) EnterSleep(ctx context.Context, sessionID string, until time.Time, reason string, triggers []WaitTrigger, processHandles []string, mover SleepMover) {
+	l.enterSleep(ctx, sessionID, sleepArm{until: until, reason: reason, triggers: triggers, processHandles: processHandles, mover: mover})
 }
 func (l *Waits) MarkWaitCalled(sessionID string) {
 	st := l.sleep.state(sessionID)
@@ -183,6 +173,9 @@ func (l *Waits) ResolveWaitUntil(ctx context.Context, sessionID string, resume b
 	}
 	if requested <= 0 {
 		requested = defaultCoordinatorWaitInterval
+		if l != nil && l.activeUntilComplete(sessionID) {
+			requested = MaxWaitSeconds * time.Second
+		}
 	}
 	if l == nil || strings.TrimSpace(sessionID) == "" {
 		return now.Add(l.Facts.capSleepDuration(ctx, sessionID, requested)), false
@@ -190,6 +183,9 @@ func (l *Waits) ResolveWaitUntil(ctx context.Context, sessionID string, resume b
 	st := l.sleep.state(sessionID)
 	st.mu.Lock()
 	interrupted := st.interruptedUntil
+	if interrupted.IsZero() && st.armed {
+		interrupted = st.until
+	}
 	st.interruptedUntil = time.Time{}
 	st.mu.Unlock()
 	if !interrupted.IsZero() && interrupted.After(now) {
@@ -273,10 +269,8 @@ func (l *Waits) runtimeWaitSubscription(sessionID string) (waitSubscription, boo
 			return waitSubscription{}, false
 		}
 	}
-	_, bounded := waitTriggerSet(state.waitTriggers)[WaitTriggerTimer]
 	subscription := waitSubscription{
 		UntilComplete:  state.untilComplete,
-		Bounded:        bounded,
 		Triggers:       append([]WaitTrigger(nil), state.waitTriggers...),
 		ProcessHandles: append([]string(nil), state.processHandles...),
 		WorkerHandles:  append([]string(nil), state.workerHandles...),

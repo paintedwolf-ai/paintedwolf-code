@@ -32,12 +32,17 @@ import {
 import { installMainThreadPerfObserver } from "./chat/stream/den-main-thread-perf.ts";
 import { setupAccessibilityTextSize } from "./platform/desktop/accessibility-text-size.ts";
 import { setupSystemAppearance } from "./platform/desktop/system-appearance.ts";
+import { loadShellCommandPackaged } from "./platform/desktop/shell-command.ts";
+import { setupLiveRegionBridge } from "./platform/desktop/live-region-bridge.ts";
 import { setupWheelGlideDiagnostics } from "./platform/scrolling/wheel-glide-diagnostics.ts";
 import { setupScrollActivity } from "./platform/scrolling/scroll-activity.ts";
 import { TooltipHost } from "./components/primitives/TooltipHost.tsx";
 import { HelpMenuHost } from "./help/HelpMenuHost.tsx";
+import { Announcer } from "./platform/interaction/announcer.tsx";
 
 installTranscriptSpacing(document.documentElement);
+// Installed before render so every live region is silenced as it mounts.
+setupLiveRegionBridge();
 syncOsColorScheme();
 tagTauriPlatformClasses();
 // Reveal after platform geometry is tagged; the host timer handles stalled boot.
@@ -55,6 +60,7 @@ void setupWindowChrome();
 void setupAccessibilityTextSize();
 void setupSystemAppearance();
 void setupWheelGlideDiagnostics();
+void loadShellCommandPackaged();
 
 const root = document.getElementById("root");
 if (!root) {
@@ -68,6 +74,7 @@ try {
         <App />
         <TooltipHost />
         <HelpMenuHost />
+        <Announcer />
       </>
     ),
     root,

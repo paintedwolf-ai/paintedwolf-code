@@ -59,7 +59,7 @@ func TestLinuxToolchainsWorkInsideTheBoundary(t *testing.T) {
 	}
 	c := denyConfinement(proj)
 	for _, tc := range cases {
-		cmd, cleanup, err := confine.Command(t.Context(), self, tc.argv[0], tc.argv[1:], c)
+		cmd, cleanup, err := confine.Command(t.Context(), helperBinary(t, self), tc.argv[0], tc.argv[1:], c)
 		testutil.FailErr(t, "confine.Command "+tc.name, err)
 		cmd.Dir, cmd.Env = proj, env
 		out, err := cmd.CombinedOutput()

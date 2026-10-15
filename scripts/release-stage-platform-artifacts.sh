@@ -8,16 +8,17 @@ if [[ -n "${LYCAON_OPENGREP_CANDIDATE:-}" ]]; then
 fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "${ROOT}/scripts/sha256.sh"
 PLATFORM=""
 GOOS=""
 ARCH=""
 VERSION=""
-PACKAGE_EXTENSION=""
+PACKAGE_EXTENSIONS=""
 UPDATER_EXTENSION=""
 OUTPUT=""
 
 usage() {
-  echo "Usage: release-stage-platform-artifacts.sh --platform KEY --goos OS --arch ARCH --version VERSION --package-extension EXT --updater-extension EXT --output DIR" >&2
+  echo "Usage: release-stage-platform-artifacts.sh --platform KEY --goos OS --arch ARCH --version VERSION --package-extensions EXT[,EXT] [--updater-extension EXT] --output DIR" >&2
   exit 2
 }
 
@@ -27,7 +28,7 @@ while [[ $# -gt 0 ]]; do
     --goos) GOOS="${2:-}"; shift 2 ;;
     --arch) ARCH="${2:-}"; shift 2 ;;
     --version) VERSION="${2:-}"; shift 2 ;;
-    --package-extension) PACKAGE_EXTENSION="${2:-}"; shift 2 ;;
+    --package-extensions) PACKAGE_EXTENSIONS="${2:-}"; shift 2 ;;
     --updater-extension) UPDATER_EXTENSION="${2:-}"; shift 2 ;;
     --output) OUTPUT="${2:-}"; shift 2 ;;
     -h|--help) usage ;;
@@ -38,19 +39,35 @@ done
 [[ "${PLATFORM}" =~ ^[a-z0-9]+-[a-z0-9_]+$ ]] || usage
 case "${GOOS}" in darwin|linux|windows) ;; *) usage ;; esac
 case "${ARCH}" in aarch64|x86_64) ;; *) usage ;; esac
-[[ "${PACKAGE_EXTENSION}" =~ ^[A-Za-z0-9.]+$ ]] || usage
-[[ "${UPDATER_EXTENSION}" =~ ^[A-Za-z0-9.]+$ ]] || usage
+[[ "${PACKAGE_EXTENSIONS}" =~ ^[A-Za-z0-9.]+(,[A-Za-z0-9.]+)*$ ]] || usage
+[[ -z "${UPDATER_EXTENSION}" || "${UPDATER_EXTENSION}" =~ ^[A-Za-z0-9.]+$ ]] || usage
 [[ -n "${VERSION}" && -n "${OUTPUT}" ]] || usage
-if [[ "${GOOS}" != darwin && "${UPDATER_EXTENSION}" != "${PACKAGE_EXTENSION}" ]]; then
-  echo "error: ${GOOS} updater must be the native installer bundle" >&2
-  exit 2
-fi
+IFS=, read -r -a PACKAGE_EXTENSION_LIST <<<"${PACKAGE_EXTENSIONS}"
+PACKAGE_EXTENSION="${PACKAGE_EXTENSION_LIST[0]}"
+case "${GOOS}" in
+  linux)
+    # Linux installs through the package manager: two package families, no updater artifact.
+    [[ "${PACKAGE_EXTENSIONS}" == "deb,rpm" && -z "${UPDATER_EXTENSION}" ]] || {
+      echo "error: Linux stages exactly deb,rpm with no updater artifact" >&2
+      exit 2
+    }
+    ;;
+  *)
+    [[ ${#PACKAGE_EXTENSION_LIST[@]} -eq 1 && -n "${UPDATER_EXTENSION}" ]] || usage
+    if [[ "${GOOS}" != darwin && "${UPDATER_EXTENSION}" != "${PACKAGE_EXTENSION}" ]]; then
+      echo "error: ${GOOS} updater must be the native installer bundle" >&2
+      exit 2
+    fi
+    ;;
+esac
 python3 "${ROOT}/scripts/semver-compare.py" eq "${VERSION}" "${VERSION}" >/dev/null
 eval "$(python3 "${ROOT}/scripts/release-metadata.py" --root "${ROOT}" --format shell)"
 [[ "${VERSION}" == "${PRODUCT_VERSION}" ]] || {
   echo "error: artifact version ${VERSION} does not equal repository VERSION ${PRODUCT_VERSION}" >&2
   exit 1
 }
+# Package versions follow each family's grammar; the metadata script is the sole projection.
+: "${LINUX_PACKAGE_VERSION:?release metadata has no Linux package version}"
 
 assert_native_arch() {
   local label="$1" path="$2" kind
@@ -98,82 +115,198 @@ case "${GOOS}" in
     OPENGREP="$(verify_opengrep "${APP}/Contents/Resources/engine-root" "${APP}/Contents/Helpers/Painted Wolf Code engine.app/Contents/MacOS/pw")"
     ;;
   linux)
-    PACKAGE="$(find "${TARGET_ROOT}" -maxdepth 8 -path "*/release/bundle/appimage/*.${PACKAGE_EXTENSION}" ! -name '*.tar.gz' -print -quit)"
-    UPDATER="${PACKAGE}"
-    [[ -n "${PACKAGE}" && -n "${UPDATER}" ]] || {
-      echo "error: incomplete Linux bundle output for ${PLATFORM}" >&2
+    DEB_PACKAGE="$(find "${TARGET_ROOT}" -maxdepth 8 -path '*/release/bundle/deb/*.deb' -print -quit)"
+    RPM_PACKAGE="$(find "${TARGET_ROOT}" -maxdepth 8 -path '*/release/bundle/rpm/*.rpm' -print -quit)"
+    [[ -n "${DEB_PACKAGE}" && -n "${RPM_PACKAGE}" ]] || {
+      echo "error: incomplete Linux package output for ${PLATFORM}: need one .deb and one .rpm" >&2
       exit 1
     }
-    assert_native_arch "AppImage" "${PACKAGE}"
-    EXTRACT="$(mktemp -d "${TMPDIR:-/tmp}/painted-wolf-appimage.XXXXXX")"
+    for tool in dpkg-deb rpm rpm2cpio cpio; do
+      command -v "${tool}" >/dev/null 2>&1 || { echo "error: ${tool} is required to audit Linux packages" >&2; exit 1; }
+    done
+    LINUX_PACKAGE_NAME="painted-wolf-code"
+    LINUX_INSTALL_ROOT="opt/painted-wolf-code"
+    case "${ARCH}" in x86_64) DEB_ARCH="amd64" ;; aarch64) DEB_ARCH="arm64" ;; esac
+    EXTRACT="$(mktemp -d "${TMPDIR:-/tmp}/painted-wolf-linux.XXXXXX")"
     trap 'rm -rf "${EXTRACT}"' EXIT
-    (
-      cd "${EXTRACT}"
-      "${PACKAGE}" --appimage-extract >/dev/null
-    )
-    [[ -x "${EXTRACT}/squashfs-root/AppRun" ]] || {
-      echo "error: ${PLATFORM} AppImage has no executable AppRun" >&2
+
+    # The package manifest must describe the shipped bytes, every helper must be
+    # native, and both families must install the same tree.
+    audit_linux_tree() {
+      local label="$1" tree="$2" root="$2/${LINUX_INSTALL_ROOT}"
+      [[ -x "${root}/bin/${LINUX_PACKAGE_NAME}" ]] || { echo "error: ${PLATFORM} ${label} has no desktop shell executable under the install root" >&2; exit 1; }
+      assert_native_arch "${label} desktop shell" "${root}/bin/${LINUX_PACKAGE_NAME}"
+      for entry in pw pw-logs; do
+        [[ -x "${tree}/usr/bin/${entry}" ]] || { echo "error: ${PLATFORM} ${label} has no /usr/bin/${entry} entry point" >&2; exit 1; }
+        grep -Fq "exec /opt/painted-wolf-code/bin/${entry} \"\$@\"" "${tree}/usr/bin/${entry}" || {
+          echo "error: ${PLATFORM} ${label} /usr/bin/${entry} does not exec the packaged binary" >&2
+          exit 1
+        }
+      done
+      ENGINE="${root}/bin/pw"
+      [[ -x "${ENGINE}" ]] || { echo "error: ${PLATFORM} ${label} has no bundled engine sidecar" >&2; exit 1; }
+      assert_native_arch "${label} bundled engine" "${ENGINE}"
+      [[ -x "${root}/bin/pw-logs" ]] || { echo "error: ${PLATFORM} ${label} has no bundled log viewer" >&2; exit 1; }
+      assert_native_arch "${label} bundled log viewer" "${root}/bin/pw-logs"
+      DOCUMENT_CORE="${root}/bin/pw-document-core"
+      [[ -x "${DOCUMENT_CORE}" ]] || { echo "error: ${PLATFORM} ${label} has no document core beside its engine" >&2; exit 1; }
+      assert_native_arch "${label} bundled document core" "${DOCUMENT_CORE}"
+      DECIDE_ENGINE="${root}/bin/bialy"
+      [[ -x "${DECIDE_ENGINE}" ]] || { echo "error: ${PLATFORM} ${label} has no bundled decision engine" >&2; exit 1; }
+      assert_native_arch "${label} bundled decision engine" "${DECIDE_ENGINE}"
+      BROWSER="$(find "${root}/engine-root" -type f -name chrome-headless-shell -perm -u+x -print -quit)"
+      [[ -n "${BROWSER}" ]] || { echo "error: ${PLATFORM} ${label} has no bundled browser" >&2; exit 1; }
+      assert_native_arch "${label} bundled browser" "${BROWSER}"
+      [[ -n "$(find "${root}/engine-root/decide/models" -type f -name .complete -print -quit 2>/dev/null)" ]] || {
+        echo "error: ${PLATFORM} ${label} has no bundled decision checkpoint" >&2
+        exit 1
+      }
+      [[ -f "${root}/engine-root/schemas/oar/oar.schema.json" ]] || { echo "error: ${PLATFORM} ${label} has no engine schema tree" >&2; exit 1; }
+      [[ "$(tr -d '[:space:]' < "${root}/release-version")" == "${VERSION}" ]] || {
+        echo "error: ${PLATFORM} ${label} release-version does not equal ${VERSION}" >&2
+        exit 1
+      }
+      [[ -s "${root}/THIRD-PARTY-NOTICES.md" ]] || { echo "error: ${PLATFORM} ${label} has no third-party notices" >&2; exit 1; }
+      # The application id is the bundle identifier; the GTK application sets it as the
+      # Wayland app id and the X11 window class.
+      APP_ID="$(jq -r .identifier "${ROOT}/lycaon-den/src-tauri/tauri.conf.json")"
+      DESKTOP_ENTRY="${tree}/usr/share/applications/${APP_ID}.desktop"
+      [[ -f "${DESKTOP_ENTRY}" ]] || { echo "error: ${PLATFORM} ${label} has no ${APP_ID} desktop entry" >&2; exit 1; }
+      grep -Fxq "StartupWMClass=${APP_ID}" "${DESKTOP_ENTRY}" && grep -Fxq "Exec=/${LINUX_INSTALL_ROOT}/bin/${LINUX_PACKAGE_NAME} %U" "${DESKTOP_ENTRY}" || {
+        echo "error: ${PLATFORM} ${label} desktop entry lacks the window class or exec line" >&2
+        exit 1
+      }
+      [[ "$(jq -r .app.enableGTKAppId "${ROOT}/lycaon-den/src-tauri/tauri.linux.conf.json")" == true ]] || {
+        echo "error: the Linux shell does not set its GTK application id" >&2
+        exit 1
+      }
+      [[ "$(find "${tree}/usr/share/applications" -name '*.desktop' | wc -l)" -eq 1 ]] || {
+        echo "error: ${PLATFORM} ${label} ships more than the ${APP_ID} desktop entry" >&2
+        exit 1
+      }
+      [[ ! -e "${tree}/usr/bin/${LINUX_PACKAGE_NAME}" ]] || { echo "error: ${PLATFORM} ${label} installs the shell outside the install root" >&2; exit 1; }
+      # Every packaged service runs an executable the package installs and the manifest lists.
+      for unit in "${tree}"/usr/lib/systemd/system/*.service; do
+        [[ -e "${unit}" ]] || continue
+        exec_start="$(sed -n 's/^ExecStart=//p' "${unit}")"
+        [[ "${exec_start}" == /opt/painted-wolf-code/bin/* && -x "${tree}${exec_start%% *}" ]] || {
+          echo "error: ${PLATFORM} ${label} $(basename "${unit}") runs ${exec_start:-nothing}, not a packaged helper" >&2
+          exit 1
+        }
+        jq -e --arg path "${exec_start%% *}" 'any(.executables[]; .path == $path)' "${root}/manifest.json" >/dev/null || {
+          echo "error: ${PLATFORM} ${label} manifest omits ${exec_start%% *}" >&2
+          exit 1
+        }
+      done
+      # GTK, WebKitGTK and the C library come from the distribution, never from the package.
+      [[ -z "$(find "${tree}" -type f \( -name 'libgtk-3*.so*' -o -name 'libgdk-3*.so*' -o -name 'libwebkit2gtk*.so*' -o -name 'libjavascriptcoregtk*.so*' -o -name 'libc.so*' -o -name 'libsoup-3*.so*' \) -print -quit)" ]] || {
+        echo "error: ${PLATFORM} ${label} bundles a desktop toolkit or C library the distribution provides" >&2
+        exit 1
+      }
+      [[ -n "$(find "${tree}/usr/share/icons/hicolor" -type f -name "${LINUX_PACKAGE_NAME}.png" -print -quit 2>/dev/null)" ]] || {
+        echo "error: ${PLATFORM} ${label} has no application icons" >&2
+        exit 1
+      }
+      python3 "${ROOT}/scripts/linux-package-manifest.py" verify-tree --tree "${tree}" --version "${VERSION}" --architecture "${ARCH}"
+      LINUX_OPENGREP="$(verify_opengrep "${root}/engine-root" "${ENGINE}")"
+      assert_native_arch "${label} bundled OpenGrep" "${LINUX_OPENGREP}"
+      GIT_ENGINE_LINK="${root}/engine-root/gitengine/bin/git"
+      GIT_LFS="${root}/engine-root/gitengine/bin/git-lfs"
+      [[ -e "${GIT_ENGINE_LINK}" && -x "${GIT_ENGINE_LINK}" && -f "${GIT_LFS}" && -x "${GIT_LFS}" ]] || {
+        echo "error: ${PLATFORM} ${label} has no complete bundled Git toolchain" >&2
+        exit 1
+      }
+      GIT_ENGINE="$(readlink -f "${GIT_ENGINE_LINK}")"
+      assert_native_arch "${label} bundled Git" "${GIT_ENGINE}"
+      assert_native_arch "${label} bundled Git LFS" "${GIT_LFS}"
+      while IFS= read -r -d '' payload; do
+        if [[ "$(file -b "${payload}")" == *"ELF"* ]]; then
+          assert_native_arch "packaged native payload" "${payload}"
+        fi
+      done < <(find "${tree}" -type f -print0)
+      # Nothing the package installs may be writable by other users or carry setuid bits.
+      [[ -z "$(find "${tree}" -type f \( -perm -o+w -o -perm -4000 -o -perm -2000 \) -print -quit)" ]] || {
+        echo "error: ${PLATFORM} ${label} installs world-writable or setuid files" >&2
+        exit 1
+      }
+    }
+
+    # Maintainer scripts name the socket units they enable; a renamed unit would ship disabled.
+    assert_sockets_enabled() {
+      local label="$1" tree="$2" scripts="$3" socket
+      for socket in "${tree}"/usr/lib/systemd/system/*.socket; do
+        [[ -e "${socket}" ]] || continue
+        [[ "${scripts}" == *"$(basename "${socket}")"* ]] || {
+          echo "error: ${PLATFORM} ${label} maintainer scripts do not enable $(basename "${socket}")" >&2
+          exit 1
+        }
+      done
+    }
+
+    echo "release-stage: auditing ${DEB_PACKAGE}" >&2
+    DEB_TREE="${EXTRACT}/deb"
+    mkdir -p "${DEB_TREE}"
+    dpkg-deb -x "${DEB_PACKAGE}" "${DEB_TREE}"
+    dpkg-deb -e "${DEB_PACKAGE}" "${EXTRACT}/deb-control"
+    [[ "$(dpkg-deb -f "${DEB_PACKAGE}" Package)" == "${LINUX_PACKAGE_NAME}" ]] || { echo "error: .deb package name is not ${LINUX_PACKAGE_NAME}" >&2; exit 1; }
+    [[ "$(dpkg-deb -f "${DEB_PACKAGE}" Architecture)" == "${DEB_ARCH}" ]] || { echo "error: .deb architecture is not ${DEB_ARCH}" >&2; exit 1; }
+    [[ "$(dpkg-deb -f "${DEB_PACKAGE}" Version)" == "${LINUX_PACKAGE_VERSION}" ]] || {
+      echo "error: .deb version $(dpkg-deb -f "${DEB_PACKAGE}" Version) does not equal ${LINUX_PACKAGE_VERSION}" >&2
       exit 1
     }
-    ENGINE="$(find "${EXTRACT}/squashfs-root" -type f -name pw -perm -u+x -print -quit)"
-    [[ -n "${ENGINE}" ]] || {
-      echo "error: ${PLATFORM} AppImage has no bundled engine sidecar" >&2
-      exit 1
-    }
-    assert_native_arch "bundled engine" "${ENGINE}"
-    LOG_VIEWER="$(find "${EXTRACT}/squashfs-root" -type f -name pw-logs -perm -u+x -print -quit)"
-    [[ -n "${LOG_VIEWER}" ]] || {
-      echo "error: ${PLATFORM} AppImage has no bundled log viewer" >&2
-      exit 1
-    }
-    assert_native_arch "bundled log viewer" "${LOG_VIEWER}"
-    DOCUMENT_CORE="$(find "${EXTRACT}/squashfs-root" -type f -name pw-document-core -perm -u+x -print -quit)"
-    [[ -n "${DOCUMENT_CORE}" && "$(dirname "${DOCUMENT_CORE}")" == "$(dirname "${ENGINE}")" ]] || {
-      echo "error: ${PLATFORM} AppImage has no document core beside its engine" >&2
-      exit 1
-    }
-    assert_native_arch "bundled document core" "${DOCUMENT_CORE}"
-    "${ENGINE}" diagnostics document-core
-    DECIDE_ENGINE="$(find "${EXTRACT}/squashfs-root" -type f -name bialy -perm -u+x -print -quit)"
-    [[ -n "${DECIDE_ENGINE}" ]] || {
-      echo "error: ${PLATFORM} AppImage has no bundled decision engine" >&2
-      exit 1
-    }
-    assert_native_arch "bundled decision engine" "${DECIDE_ENGINE}"
-    BROWSER="$(find "${EXTRACT}/squashfs-root" -type f -name chrome-headless-shell -perm -u+x -print -quit)"
-    [[ -n "${BROWSER}" ]] || {
-      echo "error: ${PLATFORM} AppImage has no bundled browser" >&2
-      exit 1
-    }
-    assert_native_arch "bundled browser" "${BROWSER}"
-    [[ -n "$(find "${EXTRACT}/squashfs-root" -type f -path '*/engine-root/decide/models/*/.complete' -print -quit)" ]] || {
-      echo "error: ${PLATFORM} AppImage has no bundled decision checkpoint" >&2
-      exit 1
-    }
-    SCANNER_ROOTS=()
-    while IFS= read -r -d '' candidate_root; do
-      SCANNER_ROOTS+=("${candidate_root}")
-    done < <(find "${EXTRACT}/squashfs-root" -type d -name engine-root -print0)
-    if (( ${#SCANNER_ROOTS[@]} != 1 )); then
-      echo "error: ${PLATFORM} AppImage requires exactly one engine resource root" >&2
-      exit 1
+    DEB_DEPENDS="$(dpkg-deb -f "${DEB_PACKAGE}" Depends)"
+    for required in libwebkit2gtk-4.1-0 libc6 libgtk-3 libsoup-3.0-0 ca-certificates xdg-utils polkitd; do
+      [[ "${DEB_DEPENDS}" == *"${required}"* ]] || { echo "error: .deb Depends lacks ${required}" >&2; exit 1; }
+    done
+    for script in preinst postinst prerm postrm; do
+      [[ -x "${EXTRACT}/deb-control/${script}" ]] || { echo "error: .deb has no ${script} maintainer script" >&2; exit 1; }
+    done
+    audit_linux_tree ".deb" "${DEB_TREE}"
+    assert_sockets_enabled ".deb" "${DEB_TREE}" "$(cat "${EXTRACT}/deb-control/postinst")"
+    if command -v lintian >/dev/null 2>&1; then
+      lintian --fail-on error --no-tag-display-limit --suppress-tags-from-file "${ROOT}/packaging/linux/deb/lintian-suppress" "${DEB_PACKAGE}" || {
+        echo "error: lintian reported errors for ${DEB_PACKAGE}" >&2
+        exit 1
+      }
+    else
+      echo "::warning title=lintian::lintian is not installed; the .deb policy check did not run"
     fi
-    OPENGREP="$(verify_opengrep "${SCANNER_ROOTS[0]}" "${ENGINE}")"
-    assert_native_arch "bundled OpenGrep" "${OPENGREP}"
-    GIT_ENGINE_LINK="$(find "${EXTRACT}/squashfs-root" -path '*/engine-root/gitengine/bin/git' -print -quit)"
-    GIT_LFS="$(find "${EXTRACT}/squashfs-root" -type f -path '*/engine-root/gitengine/bin/git-lfs' -perm -u+x -print -quit)"
-    [[ -n "${GIT_ENGINE_LINK}" && -x "${GIT_ENGINE_LINK}" && -n "${GIT_LFS}" ]] || {
-      echo "error: ${PLATFORM} AppImage has no complete bundled Git toolchain" >&2
+
+    echo "release-stage: auditing ${RPM_PACKAGE}" >&2
+    RPM_TREE="${EXTRACT}/rpm"
+    mkdir -p "${RPM_TREE}"
+    (cd "${RPM_TREE}" && rpm2cpio "${RPM_PACKAGE}" | cpio --quiet -idm)
+    RPM_IDENTITY="$(rpm -qp --nosignature --qf '%{NAME} %{VERSION} %{ARCH}' "${RPM_PACKAGE}")"
+    [[ "${RPM_IDENTITY}" == "${LINUX_PACKAGE_NAME} ${LINUX_PACKAGE_VERSION} ${ARCH}" ]] || {
+      echo "error: .rpm identity '${RPM_IDENTITY}' does not equal '${LINUX_PACKAGE_NAME} ${LINUX_PACKAGE_VERSION} ${ARCH}'" >&2
       exit 1
     }
-    GIT_ENGINE="$(readlink -f "${GIT_ENGINE_LINK}")"
-    assert_native_arch "bundled Git" "${GIT_ENGINE}"
-    assert_native_arch "bundled Git LFS" "${GIT_LFS}"
-    while IFS= read -r -d '' payload; do
-      if [[ "$(file -b "${payload}")" == *"ELF"* ]]; then
-        assert_native_arch "packaged native payload" "${payload}"
-      fi
-    done < <(find "${EXTRACT}/squashfs-root" -type f -print0)
+    RPM_REQUIRES="$(rpm -qp --nosignature --requires "${RPM_PACKAGE}")"
+    for required in webkit2gtk4.1 glibc gtk3 libsoup3 ca-certificates xdg-utils polkit; do
+      [[ "${RPM_REQUIRES}" == *"${required}"* ]] || { echo "error: .rpm Requires lacks ${required}" >&2; exit 1; }
+    done
+    RPM_SCRIPTS="$(rpm -qp --nosignature --scripts "${RPM_PACKAGE}")"
+    for script in preinstall postinstall preuninstall postuninstall; do
+      [[ "${RPM_SCRIPTS}" == *"${script} scriptlet"* ]] || { echo "error: .rpm has no ${script} scriptlet" >&2; exit 1; }
+    done
+    audit_linux_tree ".rpm" "${RPM_TREE}"
+    assert_sockets_enabled ".rpm" "${RPM_TREE}" "${RPM_SCRIPTS}"
+    if command -v rpmlint >/dev/null 2>&1; then
+      rpmlint --config "${ROOT}/packaging/linux/rpm/rpmlint.toml" "${RPM_PACKAGE}" || {
+        echo "error: rpmlint reported errors for ${RPM_PACKAGE}" >&2
+        exit 1
+      }
+    else
+      echo "::warning title=rpmlint::rpmlint is not installed; the .rpm policy check did not run"
+    fi
+    # Both families install the same tree apart from the fragments only one ships.
+    python3 "${ROOT}/scripts/linux-package-assemble.py" compare --root "${ROOT}" --deb-tree "${DEB_TREE}" --rpm-tree "${RPM_TREE}"
+    ENGINE="${DEB_TREE}/${LINUX_INSTALL_ROOT}/bin/pw"
+    LYCAON_DOCUMENT_CORE_BINARY="${DEB_TREE}/${LINUX_INSTALL_ROOT}/bin/pw-document-core" \
+      LYCAON_ENGINE_ROOT="${DEB_TREE}/${LINUX_INSTALL_ROOT}/engine-root" "${ENGINE}" diagnostics document-core
+    OPENGREP="$(verify_opengrep "${DEB_TREE}/${LINUX_INSTALL_ROOT}/engine-root" "${ENGINE}")"
+    PACKAGE="${DEB_PACKAGE}"
+    RPM_OUTPUT="${RPM_PACKAGE}"
     ;;
   windows)
     PACKAGE="$(find "${TARGET_ROOT}" -maxdepth 8 -path "*/release/bundle/nsis/*.${PACKAGE_EXTENSION}" -print -quit)"
@@ -229,6 +362,7 @@ case "${GOOS}" in
     ;;
 esac
 
+if [[ -n "${UPDATER_EXTENSION}" ]]; then
 SIGNATURE="${UPDATER}.sig"
 [[ -f "${SIGNATURE}" ]] || { echo "error: missing updater signature ${SIGNATURE}" >&2; exit 1; }
 python3 - "${ROOT}/packaging/update-limits.json" "${UPDATER}" "${VERSION}" "${PLATFORM}" <<'PYLIMITS'
@@ -291,6 +425,7 @@ if artifact.name.endswith(".tar.gz"):
         raise SystemExit("updater bundle product version does not match the release")
 PYLIMITS
 bash "${ROOT}/scripts/verify-updater-signature.sh" "${UPDATER}" "${SIGNATURE}" "${VERSION}"
+fi
 
 mkdir -p "${OUTPUT}/opengrep"
 OUTPUT="$(cd "${OUTPUT}" && pwd)"
@@ -304,13 +439,16 @@ OPENGREP_ARTIFACT="$(bash "${ROOT}/scripts/resolve-opengrep.sh" --artifact-dir-o
     -evidence-root "${ROOT}/lycaon/config/runtime/scanners" \
     -audit-output "${OUTPUT}/opengrep/${STEM}.json" >/dev/null
 )
-cp "${PACKAGE}" "${OUTPUT}/${STEM}.${PACKAGE_EXTENSION}"
-if command -v sha256sum >/dev/null 2>&1; then
-  sha256sum "${OUTPUT}/${STEM}.${PACKAGE_EXTENSION}" | awk '{print $1}' \
-    > "${OUTPUT}/${STEM}.${PACKAGE_EXTENSION}.sha256"
-else
-  shasum -a 256 "${OUTPUT}/${STEM}.${PACKAGE_EXTENSION}" | awk '{print $1}' \
-    > "${OUTPUT}/${STEM}.${PACKAGE_EXTENSION}.sha256"
+stage_package() {
+  local source="$1" extension="$2"
+  cp "${source}" "${OUTPUT}/${STEM}.${extension}"
+  sha256_hex "${OUTPUT}/${STEM}.${extension}" > "${OUTPUT}/${STEM}.${extension}.sha256"
+}
+stage_package "${PACKAGE}" "${PACKAGE_EXTENSION}"
+if [[ "${GOOS}" == linux ]]; then
+  stage_package "${RPM_OUTPUT}" "rpm"
+  # Package-managed platforms publish no updater artifact and no feed fragment.
+  exit 0
 fi
 if [[ "${PACKAGE_EXTENSION}" != "${UPDATER_EXTENSION}" ]]; then
   cp "${UPDATER}" "${OUTPUT}/${STEM}.${UPDATER_EXTENSION}"

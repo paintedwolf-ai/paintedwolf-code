@@ -156,7 +156,7 @@ tasks:
       - '{{.BUILD_DIR}}/lycaon-dev browser ensure'
 
   gitengine:fetch:
-    desc: Download and SHA-256-verify the pinned dugite-native git toolchain into engine-root/gitengine
+    desc: Download and SHA-256-verify the pinned Git toolchain into engine-root/gitengine
     sources:
       - lycaon/config/gitengine/pin.yaml
       - '{{.SCRIPTS_DIR}}/gitengine-fetch.sh'
@@ -994,7 +994,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/stage-engine.sh --minimal
 
   den:bundle:
-    desc: 'Build desktop bundle (.dmg on macOS; AppImage on Linux) with embedded engine sidecar; signs + notarizes when APPLE_SIGNING_IDENTITY is a Developer ID'
+    desc: 'Build desktop bundle (.dmg on macOS; .deb and .rpm on Linux) with embedded engine sidecar; signs + notarizes when APPLE_SIGNING_IDENTITY is a Developer ID'
     preconditions:
       - sh: command -v bun
         msg: bun required — install from https://bun.sh

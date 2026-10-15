@@ -1,4 +1,6 @@
-import { attachDispatcher, setFilesStageActive, registerCommandHandler } from "../../shortcuts/dispatcher.ts";
+import { attachDispatcher, COMMAND_DECLINED, setFilesStageActive, registerCommandHandler } from "../../shortcuts/dispatcher.ts";
+import { appMenuSurface } from "../../platform/desktop/app-menu-surface.ts";
+import { requestAppMenuOpen } from "../../platform/desktop/in-window-app-menu.ts";
 import { type ShellScope } from "./shell-scope.ts";
 import { createEffect, createSignal, onCleanup } from "solid-js";
 import { type ContextNavItemId, CONTEXT_NAV_CATALOG } from "../../../shared/app-state-types.ts";
@@ -259,6 +261,14 @@ export function registerShellCommands(deps: Dependencies) {
     void import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
       getCurrentWindow().close(),
     );
+  });
+  on("app.quit", () => {
+    if (!isTauriRuntime()) return;
+    void import("@tauri-apps/api/core").then(({ invoke }) => invoke("request_quit"));
+  });
+  on("appMenu.open", () => {
+    if (appMenuSurface() !== "in-window") return COMMAND_DECLINED;
+    requestAppMenuOpen();
   });
 
   for (const section of APP_SETTINGS) {

@@ -23,6 +23,18 @@ const (
 	keychainUnexpectedSynchronization keychainStatus = C.PW_KEYCHAIN_UNEXPECTED_SYNCHRONIZATION
 )
 
+// Is maps the Keychain's missing and duplicate statuses to the custodian
+// sentinels the identity provider acts on.
+func (s keychainStatus) Is(target error) bool {
+	switch target {
+	case errIdentityMissing:
+		return s == keychainNotFound
+	case errIdentityExists:
+		return s == keychainDuplicate
+	}
+	return false
+}
+
 func (s keychainStatus) Error() string {
 	switch s {
 	case keychainMissingEntitlement:

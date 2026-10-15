@@ -10,6 +10,10 @@ keywords:
   - "pw"
   - "pw-logs"
   - "command line"
+# A package-managed install already provides the command.
+when:
+  not:
+    fact: "shell_command_packaged"
 action:
   kind: native_ui
   handler: "shell.installPw"

@@ -15,6 +15,7 @@ func TestDecideSocketCalls(t *testing.T) {
 	listen := Network{Mode: NetworkDeny, Listen: true, ListenPorts: []uint16{3000}}
 	anyListen := Network{Mode: NetworkDeny, Listen: true}
 	direct := Network{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "tcp", Port: 443}}}
+	directUDP := Network{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "tcp", Port: 443}, {Protocol: "udp", Port: 53}}}
 	anyDirect := Network{Mode: NetworkDirectIP}
 	grant := Network{Mode: NetworkDeny, SocketPaths: []string{"/run/user/1/agent.sock"}}
 	browser := Network{Mode: NetworkDeny, Browser: true, LoopbackConnect: true}
@@ -41,7 +42,14 @@ func TestDecideSocketCalls(t *testing.T) {
 		{"loopback mapped granted port", loopback, SocketRequest{Op: OpConnect, IP: ap("[::ffff:127.0.0.1]:5432"), Stream: true}, HostSocket, ""},
 		{"loopback other port", loopback, SocketRequest{Op: OpConnect, IP: ap("127.0.0.1:6379"), Stream: true}, Perform, "network-outbound remote:127.0.0.1:6379"},
 		{"loopback any port", anyLoopback, SocketRequest{Op: OpConnect, IP: ap("127.0.0.1:6379"), Stream: true}, HostSocket, ""},
-		{"loopback datagram stays", anyLoopback, SocketRequest{Op: OpConnect, IP: ap("127.0.0.1:8125"), Stream: false}, Perform, "network-outbound remote:127.0.0.1:8125"},
+		{"loopback datagram relays", anyLoopback, SocketRequest{Op: OpConnect, IP: ap("127.0.0.1:8125"), Stream: false}, Perform, ""},
+		{"loopback datagram other port", loopback, SocketRequest{Op: OpConnect, IP: ap("127.0.0.1:8125"), Stream: false}, Perform, "network-outbound remote:127.0.0.1:8125"},
+		{"datagram to a sandbox socket", deny, SocketRequest{Op: OpConnect, IP: ap("127.0.0.1:8125"), SandboxListener: true}, Perform, ""},
+		{"direct udp permitted", directUDP, SocketRequest{Op: OpConnect, IP: ap("9.9.9.9:53")}, Perform, ""},
+		{"direct udp other port", directUDP, SocketRequest{Op: OpConnect, IP: ap("9.9.9.9:123")}, Refuse, "network-outbound remote:9.9.9.9:123"},
+		{"direct stream refused beside the gateway", directUDP, SocketRequest{Op: OpConnect, IP: ap("9.9.9.9:80"), Stream: true}, Refuse, "network-outbound remote:9.9.9.9:80"},
+		{"direct datagram without a udp permit", direct, SocketRequest{Op: OpConnect, IP: ap("9.9.9.9:53")}, Perform, "network-outbound remote:9.9.9.9:53"},
+		{"direct any datagram", anyDirect, SocketRequest{Op: OpConnect, IP: ap("[2001:db8::1]:443")}, Perform, ""},
 		{"proxy endpoint is a sandbox listener", loopback, SocketRequest{Op: OpConnect, IP: ap("127.0.0.1:9"), Stream: true, SandboxListener: true}, Perform, ""},
 		{"direct permitted", direct, SocketRequest{Op: OpConnect, IP: ap("93.184.216.34:443"), Stream: true}, HostSocket, ""},
 		{"direct other port", direct, SocketRequest{Op: OpConnect, IP: ap("93.184.216.34:80"), Stream: true}, Perform, "network-outbound remote:93.184.216.34:80"},
@@ -54,7 +62,9 @@ func TestDecideSocketCalls(t *testing.T) {
 		{"bind other port", listen, SocketRequest{Op: OpBind, IP: ap("127.0.0.1:3001"), Stream: true}, Perform, ""},
 		{"bind ephemeral with port list", listen, SocketRequest{Op: OpBind, IP: ap("127.0.0.1:0"), Stream: true}, Perform, ""},
 		{"bind ephemeral any port", anyListen, SocketRequest{Op: OpBind, IP: ap("0.0.0.0:0"), Stream: true}, HostSocket, ""},
-		{"bind datagram stays", anyListen, SocketRequest{Op: OpBind, IP: ap("127.0.0.1:5353"), Stream: false}, Perform, ""},
+		{"bind granted datagram", anyListen, SocketRequest{Op: OpBind, IP: ap("127.0.0.1:5353"), Stream: false}, Perform, ""},
+		{"bind ephemeral datagram", anyListen, SocketRequest{Op: OpBind, IP: ap("0.0.0.0:0"), Stream: false}, Perform, ""},
+		{"bind datagram other port", listen, SocketRequest{Op: OpBind, IP: ap("127.0.0.1:5353"), Stream: false}, Perform, ""},
 		{"bind browser", browser, SocketRequest{Op: OpBind, IP: ap("[::]:9222"), Stream: true}, HostSocket, ""},
 		{"bind on host socket", anyListen, SocketRequest{Op: OpBind, IP: ap("127.0.0.1:4000"), Stream: true, HostSocket: true}, Refuse, "network-bind local:127.0.0.1:4000"},
 		{"listen granted host listener", anyListen, SocketRequest{Op: OpListen, HostSocket: true, HostListener: true}, Perform, ""},
@@ -87,5 +97,51 @@ func TestGrantedWildcardListenerNarrowsToLoopback(t *testing.T) {
 		if d.Action != HostSocket || d.Bind != ap(want) {
 			t.Errorf("%s: %+v, want host socket bound to %s", in, d, want)
 		}
+	}
+}
+
+// Datagrams reach the host's loopback services through a relay, and a granted
+// datagram listener is relayed from the host's loopback, narrowed like a
+// stream listener.
+func TestDatagramDecisionsNameTheirRelays(t *testing.T) {
+	t.Parallel()
+	anyLoopback := Network{Mode: NetworkDeny, LoopbackConnect: true}
+	if d := anyLoopback.Decide(SocketRequest{Op: OpConnect, IP: ap("127.0.0.1:8125")}); !d.Relay {
+		t.Fatalf("granted loopback datagram: %+v, want a relay", d)
+	}
+	if d := anyLoopback.Decide(SocketRequest{Op: OpConnect, IP: ap("127.0.0.1:8125"), Stream: true}); d.Relay {
+		t.Fatalf("stream connect asked for a datagram relay: %+v", d)
+	}
+	listen := Network{Mode: NetworkDeny, Listen: true, ListenPorts: []uint16{5353}}
+	for in, want := range map[string]string{"0.0.0.0:5353": "127.0.0.1:5353", "[::]:5353": "[::1]:5353", "127.0.0.1:5353": "127.0.0.1:5353"} {
+		if d := listen.Decide(SocketRequest{Op: OpBind, IP: ap(in)}); d.Action != Perform || d.Expose != ap(want) {
+			t.Errorf("%s: %+v, want the sandbox bind exposed at %s", in, d, want)
+		}
+	}
+	for _, in := range []string{"127.0.0.1:5354", "0.0.0.0:0", "192.0.2.1:5353"} {
+		if d := listen.Decide(SocketRequest{Op: OpBind, IP: ap(in)}); d.Expose.IsValid() {
+			t.Errorf("%s: exposed at %s", in, d.Expose)
+		}
+	}
+}
+
+func TestDatagramGatewayFollowsUDPReach(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		net     Network
+		gateway bool
+	}{
+		{Network{Mode: NetworkDirectIP}, true},
+		{Network{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "udp", Port: 53}}}, true},
+		{Network{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "tcp", Port: 443}}}, false},
+		{Network{Mode: NetworkProxyOnly, ProxyAddr: "127.0.0.1:1"}, false},
+		{Network{Mode: NetworkDeny, LoopbackConnect: true}, false},
+	} {
+		if got := tc.net.DatagramGateway(); got != tc.gateway {
+			t.Errorf("%+v: gateway %v, want %v", tc.net, got, tc.gateway)
+		}
+	}
+	if (Network{Mode: NetworkDeny}).LoopbackDatagrams() || !(Network{Mode: NetworkDeny, LoopbackConnect: true}).LoopbackDatagrams() || !(Network{Mode: NetworkDirectIP}).LoopbackDatagrams() {
+		t.Fatal("loopback datagram reach must follow loopback connect and direct IP")
 	}
 }

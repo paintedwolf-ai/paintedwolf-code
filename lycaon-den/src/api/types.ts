@@ -11484,10 +11484,10 @@ export interface components {
             checkpoints: components["schemas"]["CheckpointEvent"][];
         };
         /**
-         * @description Operating-system user-presence verifier that confirmed the person before the shell signed.
+         * @description User-presence verifier that confirmed the person before the shell signed: the operating system's own prompt, or on Linux without a polkit agent, the shell's native app-password dialog.
          * @enum {string}
          */
-        PresenceAuthenticator: "macos_user_presence" | "windows_user_presence";
+        PresenceAuthenticator: "macos_user_presence" | "windows_user_presence" | "linux_user_presence" | "linux_app_password";
         /** @description Challenge-bound native user-presence proof. The signature covers the challenge payload plus the authenticator identifier. */
         PresenceProof: {
             /** Format: uuid */
@@ -12103,6 +12103,8 @@ export interface components {
             policy_unwatched?: number;
             /** @description Directories a per-directory watcher could not register. */
             unwatched_directories: number;
+            /** @description The kernel refused the latest registration because the per-user watch limit is reached (`fs.inotify.max_user_watches` on Linux); unwatched directories recover once the limit is raised or watches free up. */
+            watch_limit_reached?: boolean;
         };
         SourceWorkspaceRoot: {
             /** @description Durable source branch for this root; omitted for the primary tree. Roots unaffected by a worktree binding retain their primary branch. */

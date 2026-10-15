@@ -284,7 +284,8 @@ fn open_item_window(
     .resizable(true)
     .visible(false)
     .background_color(crate::windows::window_appearance::background_for_new_window(&app))
-    .decorations(true);
+    // Linux windows draw their own title bar inside the client-side frame.
+    .decorations(cfg!(not(target_os = "linux")));
 
     if is_drag {
         builder = builder

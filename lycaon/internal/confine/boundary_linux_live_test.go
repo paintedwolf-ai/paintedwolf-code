@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -140,6 +141,8 @@ func runLinuxProbe(mode string) int {
 		buf := make([]byte, 1)
 		n, err := unix.Read(fds[1], buf)
 		fmt.Println("socketpair:", n, string(buf[:n]), err)
+		_, err = unix.Socketpair(unix.AF_UNIX, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0)
+		fmt.Println("datagram socketpair:", errnoName(err))
 		return 0
 	case "iouring":
 		params := make([]byte, 120)
@@ -150,6 +153,8 @@ func runLinuxProbe(mode string) int {
 		return proxyGetProbe()
 	case "tcpconnect", "unixconnect", "serve", "resolve":
 		return networkProbe(mode)
+	case "udpsend", "udpsendto", "udpserve":
+		return datagramProbe(mode)
 	case "orphan":
 		daemon := child("sleep", true)
 		if err := daemon.Start(); err != nil {
@@ -180,11 +185,63 @@ func requireLinuxSandbox(t *testing.T) string {
 	}
 	self, err := os.Executable()
 	testutil.FailErr(t, "os.Executable", err)
+	// Every environment a test builds afterwards names the coverage directory.
+	helperBinary(t, self)
 	return self
 }
 
+// helperBuild is the coverage build of the helper, made once per test binary.
+var helperBuild struct {
+	once sync.Once
+	path string
+	err  error
+}
+
+// helperBinaryEnv names, for a test re-executed in another namespace, the
+// helper its parent already chose.
+const helperBinaryEnv = "PW_CONFINE_TEST_HELPER"
+
+// childCoverDir is where a coverage run collects children's counters; empty in
+// every other run.
+func childCoverDir() string { return os.Getenv("PW_GO_CHILD_COVERDIR") }
+
+// helperBinary is what confined launches run as their helper: the test binary
+// itself, or in a coverage run a coverage build of the helper alone, since a
+// test binary records nothing it runs as a child of itself.
+func helperBinary(t *testing.T, self string) string {
+	t.Helper()
+	if built := os.Getenv(helperBinaryEnv); built != "" {
+		return built
+	}
+	dir := childCoverDir()
+	if dir == "" {
+		return self
+	}
+	helperBuild.once.Do(func() {
+		// Children inherit it; go test's own directory is never merged.
+		helperBuild.err = os.Setenv("GOCOVERDIR", dir) //nolint:usetesting // Process-wide: every later test's helper shares the one build.
+		helperBuild.path = filepath.Join(os.TempDir(), "pw-confine-helper-"+strconv.Itoa(os.Getpid()))
+		build := exec.Command("go", "build", "-cover", "-tags", "confinehelpermain",
+			"-coverpkg=github.com/lycaon/lycaon/internal/confine/...", "-o", helperBuild.path, "./testdata/helpermain")
+		if out, err := build.CombinedOutput(); err != nil && helperBuild.err == nil {
+			helperBuild.err = fmt.Errorf("build coverage helper: %w: %s", err, out)
+		}
+	})
+	testutil.FailErr(t, "coverage helper", helperBuild.err)
+	return helperBuild.path
+}
+
 func denyConfinement(roots ...string) confine.Confinement {
-	return confine.Confinement{Roots: roots, Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
+	return confine.Confinement{Roots: sandboxRoots(roots...), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
+}
+
+// sandboxRoots adds the directory a coverage run collects child counters in,
+// so a confined helper can record what it ran.
+func sandboxRoots(roots ...string) []string {
+	if dir := childCoverDir(); dir != "" {
+		return append(roots, dir)
+	}
+	return roots
 }
 
 // confinedRun runs name under c and returns its wait status and combined output.
@@ -192,7 +249,7 @@ func linuxConfinedRun(t *testing.T, self string, c confine.Confinement, env []st
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd, cleanup, err := confine.Command(ctx, self, name, args, c)
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), name, args, c)
 	testutil.FailErr(t, "confine.Command", err)
 	defer cleanup()
 	if env != nil {
@@ -231,7 +288,7 @@ func TestLinuxWritesStayInsideWriteRoots(t *testing.T) {
 	// since the test harness relocates it under the temporary root.
 	account, err := user.Current()
 	testutil.FailErr(t, "current user", err)
-	outside, err := os.MkdirTemp(account.HomeDir, ".pwc-confine-test-")
+	outside, err := os.MkdirTemp(account.HomeDir, ".pwc-confine-test-") //nolint:usetesting // Must lie outside every write root.
 	testutil.FailErr(t, "outside dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(outside) })
 	c := denyConfinement(proj)
@@ -351,7 +408,7 @@ func TestLinuxTerminalInjectionKillsTheProcess(t *testing.T) {
 	for _, mode := range []string{"tiocsti", "tioclinux"} {
 		master, slave := openPty(t)
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-		cmd, cleanup, err := confine.Command(ctx, self, self, []string{probeTestFlag}, denyConfinement(t.TempDir()))
+		cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{probeTestFlag}, denyConfinement(t.TempDir()))
 		testutil.FailErr(t, "confine.Command", err)
 		cmd.Env = probeEnv(mode)
 		var out bytes.Buffer
@@ -394,7 +451,7 @@ func TestLinuxUnixSocketsAreRefused(t *testing.T) {
 	// A socket the test serves outside every root; the test reaches it itself,
 	// so the confined refusal is the boundary and not a missing listener.
 	// The test's own temporary directory is too deep for a socket path.
-	short, err := os.MkdirTemp("/tmp", "pw-unix-")
+	short, err := os.MkdirTemp("/tmp", "pw-unix-") //nolint:usetesting // Short socket path.
 	testutil.FailErr(t, "socket directory", err)
 	t.Cleanup(func() { _ = os.RemoveAll(short) })
 	own := filepath.Join(short, "own.sock")
@@ -431,7 +488,7 @@ func TestLinuxUnixSocketsAreRefused(t *testing.T) {
 	}
 
 	status, out = linuxConfinedRun(t, self, denyConfinement(t.TempDir()), probeEnv("socketpair"), self, probeTestFlag)
-	if status.ExitStatus() != 0 || !strings.Contains(out, "socketpair: 1 p <nil>") {
+	if status.ExitStatus() != 0 || !strings.Contains(out, "socketpair: 1 p <nil>") || !strings.Contains(out, "datagram socketpair: EACCES") {
 		t.Fatalf("socketpair: exit %d: %s", status.ExitStatus(), out)
 	}
 }
@@ -475,7 +532,7 @@ func TestLinuxExitStatusAndSignalsAreMirrored(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd, cleanup, err := confine.Command(ctx, self, "/bin/sleep", []string{"30"}, c)
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), "/bin/sleep", []string{"30"}, c)
 	testutil.FailErr(t, "confine.Command", err)
 	defer cleanup()
 	testutil.FailErr(t, "start sleep", cmd.Start())
@@ -498,7 +555,7 @@ func TestLinuxIdentityAndWorkingDirectorySurvive(t *testing.T) {
 	proj := t.TempDir()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd, cleanup, err := confine.Command(ctx, self, self, []string{probeTestFlag}, denyConfinement(proj))
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{probeTestFlag}, denyConfinement(proj))
 	testutil.FailErr(t, "confine.Command", err)
 	defer cleanup()
 	cmd.Env = probeEnv("identity")
@@ -537,6 +594,7 @@ func TestLinuxDevicesAreCurated(t *testing.T) {
 // status and stderr.
 func rawHelper(t *testing.T, self string, plan linuxsandbox.Plan, target ...string) (syscall.WaitStatus, string) {
 	t.Helper()
+	plan.Filesystem.WriteRoots = sandboxRoots(plan.Filesystem.WriteRoots...)
 	raw, err := plan.Encode()
 	testutil.FailErr(t, "encode plan", err)
 	pr, pw, err := os.Pipe()
@@ -544,7 +602,7 @@ func rawHelper(t *testing.T, self string, plan linuxsandbox.Plan, target ...stri
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	args := append([]string{"__confine-exec", "--profile-fd", strconv.Itoa(3), "--"}, target...)
-	cmd := exec.CommandContext(ctx, self, args...)
+	cmd := exec.CommandContext(ctx, helperBinary(t, self), args...)
 	cmd.ExtraFiles = []*os.File{pr}
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

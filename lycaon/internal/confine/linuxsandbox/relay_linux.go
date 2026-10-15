@@ -4,6 +4,7 @@ package linuxsandbox
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -56,13 +57,15 @@ func Relaunch(self string, args []string, plan []byte, network Network, marker, 
 		return 0, 0, fmt.Errorf("control socket: %w", err)
 	}
 	control, controlChild := os.NewFile(uintptr(pair[0]), "control"), os.NewFile(uintptr(pair[1]), "control-child")
-	var refusalLines io.Writer
+	// A nil *os.File stored in the interface would not read as no feed.
+	var lines io.Writer
 	if refusals != nil {
-		refusalLines = refusals
+		lines = refusals
 	}
-	sup := newSupervisor(control, network, refusalLines)
+	sup := newSupervisor(control, network, lines)
 	defer sup.close()
-	cmd := exec.Command(self, args...)
+	// The inner helper ends with this process, by its parent-death signal.
+	cmd := exec.CommandContext(context.Background(), self, args...)
 	// The standard descriptors are the command's streams, handed through as is.
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.NewFile(0, "stdin"), os.NewFile(1, "stdout"), os.NewFile(2, "stderr")
 	// A nil marker leaves its descriptor closed in the child.
@@ -185,10 +188,17 @@ func Supervise(path string, argv, env []string, afterStart func()) (code int, si
 	if err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0); err != nil {
 		return 0, 0, fmt.Errorf("child subreaper: %w", err)
 	}
+	// A process that could read this one's memory or take its descriptors
+	// could speak for it on the control socket. The target's own dumpable
+	// flag is reset when it executes.
+	if err := unix.Prctl(unix.PR_SET_DUMPABLE, 0, 0, 0, 0); err != nil {
+		return 0, 0, fmt.Errorf("dumpable: %w", err)
+	}
 	pid, err := syscall.ForkExec(path, argv, &syscall.ProcAttr{Env: env, Files: []uintptr{0, 1, 2}})
 	if err != nil {
 		return 0, 0, err
 	}
+	go serveSocketRequests()
 	if afterStart != nil {
 		afterStart()
 	}
@@ -308,6 +318,7 @@ func exitOf(err error) (int, syscall.Signal) {
 // ExitWithSignal ends this process by the signal that ended the child, so the
 // host sees the same wait status. It falls back to 128 plus the signal number.
 func ExitWithSignal(sig syscall.Signal) {
+	FlushCoverage()
 	runtime.LockOSThread()
 	action := struct {
 		handler, flags, restorer uintptr
@@ -315,9 +326,9 @@ func ExitWithSignal(sig syscall.Signal) {
 	}{}
 	// Go exposes no SIG_DFL reset, and its own handler would exit 2 or print a
 	// traceback for signals such as SIGQUIT instead of dying by the signal.
-	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGACTION, uintptr(sig), uintptr(unsafe.Pointer(&action)), 0, 8, 0, 0) //nolint:gosec // G103 — zeroed kernel sigaction (SIG_DFL), 8-byte sigset
+	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGACTION, uintptr(sig), uintptr(unsafe.Pointer(&action)), 0, 8, 0, 0)
 	mask := uint64(1) << (uint(sig) - 1)
-	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGPROCMASK, unix.SIG_UNBLOCK, uintptr(unsafe.Pointer(&mask)), 0, 8, 0, 0) //nolint:gosec // G103 — 8-byte kernel sigset for one signal
+	_, _, _ = unix.RawSyscall6(unix.SYS_RT_SIGPROCMASK, unix.SIG_UNBLOCK, uintptr(unsafe.Pointer(&mask)), 0, 8, 0, 0)
 	// Aimed at this thread, the signal lands before the syscall returns; a
 	// process-wide kill would race the exit below.
 	_ = unix.Tgkill(os.Getpid(), unix.Gettid(), sig)

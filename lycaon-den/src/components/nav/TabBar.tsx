@@ -59,6 +59,9 @@ type TabBarProps = {
   dock?: JSX.Element;
   leading?: JSX.Element;
   trailing?: JSX.Element;
+  /** Window controls at the rail's outer ends, outside the side slots; the dock spans beneath them. */
+  windowControlsStart?: JSX.Element;
+  windowControlsEnd?: JSX.Element;
 };
 
 export function TabBar(props: TabBarProps) {
@@ -415,6 +418,7 @@ export function TabBar(props: TabBarProps) {
           }}
           {...chromeProps()}
         >
+          {props.windowControlsStart}
           <Show when={props.leading}>
             <div
               class="tabs__rail-leading"
@@ -542,6 +546,7 @@ export function TabBar(props: TabBarProps) {
               {props.trailing}
             </div>
           </Show>
+          {props.windowControlsEnd}
         </div>
         {/* The dock spans the rail beneath the side slots, not just the chip strip. */}
         <div

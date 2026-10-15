@@ -13,7 +13,8 @@ type agentPlan struct {
 	edits   []documentcore.Edit
 }
 
-func (s *Service) planAgentEdit(ctx context.Context, current *Document, in AgentEdit) (*agentPlan, error) {
+func (e agentEditPlanner) planAgentEdit(ctx context.Context, current *Document, in AgentEdit) (*agentPlan, error) {
+	s := e.s
 	s.replicas.mu.Lock()
 	defer s.replicas.mu.Unlock()
 	entry, err := s.loadReplica(ctx, current)

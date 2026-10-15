@@ -69,7 +69,7 @@ func (s *supervisor) serveNotifications(listener int) {
 func (s *supervisor) answer(listener int, n seccompNotif) {
 	result, errno, examined := s.perform(listener, n)
 	if !examined {
-		s.report(Refusal{Unexamined: true})
+		s.refusals.report(Refusal{Unexamined: true})
 	}
 	resp := seccompNotifResp{ID: n.ID, Val: result}
 	if errno != 0 {
@@ -105,7 +105,7 @@ func (s *supervisor) perform(listener int, n seccompNotif) (int64, unix.Errno, b
 func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd, sock int, info socketInfo) (int64, unix.Errno) {
 	req := SocketRequest{Stream: info.typ == unix.SOCK_STREAM}
 	cookie, _ := unix.GetsockoptUint64(sock, unix.SOL_SOCKET, unix.SO_COOKIE)
-	req.HostSocket, req.HostListener = s.hostSocket(cookie)
+	req.HostSocket, req.HostListener = s.host.lookup(cookie)
 
 	var raw []byte
 	switch n.Nr {
@@ -138,19 +138,30 @@ func (s *supervisor) decideAndPerform(target *targetProcess, n seccompNotif, fd,
 	decision := s.network.Decide(req)
 	if decision.Refusal != nil {
 		decision.Refusal.Process = target.comm()
-		s.report(*decision.Refusal)
+		s.refusals.report(*decision.Refusal)
 	}
 	switch decision.Action {
 	case Refuse:
 		return 0, unix.EACCES
 	case HostSocket:
 		return s.hostSocketCall(target, fd, sock, info, req, decision)
+	case Perform:
+		// Performed below on the supervisor's descriptor.
+	}
+	if decision.Relay {
+		s.relays.ensureToHost(req.IP)
 	}
 	switch req.Op {
 	case OpListen:
 		return rawResult(unix.Syscall(unix.SYS_LISTEN, uintptr(sock), uintptr(n.Args[1]), 0))
 	case OpBind:
-		return rawResult(unix.Syscall(unix.SYS_BIND, uintptr(sock), uintptr(unsafe.Pointer(&raw[0])), uintptr(len(raw))))
+		bind := func() (int64, unix.Errno) {
+			return rawResult(unix.Syscall(unix.SYS_BIND, uintptr(sock), uintptr(unsafe.Pointer(&raw[0])), uintptr(len(raw))))
+		}
+		if decision.Expose.IsValid() {
+			return s.relays.expose(decision.Expose, req.IP, bind)
+		}
+		return bind()
 	default:
 		if req.Unix != "" {
 			// The resolved path is what the grant names and what is connected.
@@ -267,7 +278,7 @@ func (s *supervisor) hostSocketCall(target *targetProcess, fd, sock int, info so
 	if err != nil {
 		return 0, unix.EACCES
 	}
-	s.markHost(cookie, listener)
+	s.host.mark(cookie, listener)
 	add := seccompNotifAddfd{
 		ID:         target.id,
 		Flags:      unix.SECCOMP_ADDFD_FLAG_SETFD,
@@ -276,7 +287,7 @@ func (s *supervisor) hostSocketCall(target *targetProcess, fd, sock int, info so
 		NewFDFlags: target.fdFlags(fd),
 	}
 	if err := ioctlPtr(target.listener, unix.SECCOMP_IOCTL_NOTIF_ADDFD, unsafe.Pointer(&add)); err != nil {
-		s.forgetHost(cookie)
+		s.host.forget(cookie)
 		return 0, unix.EINTR
 	}
 	return 0, 0

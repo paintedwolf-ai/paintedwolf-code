@@ -58,7 +58,7 @@ func TestValidateNamesWhatTheHelperCannotExpress(t *testing.T) {
 	}{
 		{"unknown mode", Network{Mode: "tunnel"}, UnsupportedNetworkMode},
 		{"proxy without endpoint", Network{Mode: NetworkProxyOnly}, UnsupportedNetworkGrant},
-		{"direct udp", Network{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "udp", Port: 53}}}, UnsupportedNetworkGrant},
+		{"direct sctp", Network{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "sctp", Port: 53}}}, UnsupportedNetworkGrant},
 		{"relative socket", Network{Mode: NetworkDeny, SocketPaths: []string{"run/x.sock"}}, UnsupportedNetworkGrant},
 	}
 	for _, tc := range cases {
@@ -78,6 +78,7 @@ func TestValidateNamesWhatTheHelperCannotExpress(t *testing.T) {
 		{Mode: NetworkProxyOnly, ProxyAddr: "127.0.0.1:1", LoopbackConnect: true, LoopbackConnectPorts: []uint16{5432}},
 		{Mode: NetworkDeny, Listen: true, ListenPorts: []uint16{3000}, SocketPaths: []string{"/run/x.sock"}},
 		{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "tcp", Port: 443}}},
+		{Mode: NetworkDirectIP, DirectIPPermits: []DirectIPPermit{{Protocol: "tcp", Port: 443}, {Protocol: "udp", Port: 443}}},
 		{Mode: NetworkDirectIP},
 	} {
 		if err := (Plan{Version: PlanVersion, Network: n}).Validate(); err != nil {

@@ -17,6 +17,7 @@ func DefaultEnv(
 		ConfigDir:            configDir,
 		FreeBytes:            freeBytes,
 		OSProductVer:         osProductVersion,
+		LibcVersion:          libcVersion,
 		ProviderCount:        providerCount,
 		MissingRoleProviders: missingRoleProviders,
 		ResolveScanner:       resolveScanner,

@@ -78,7 +78,7 @@
 }
 
 /* Reopen controls align with the window buttons above the stage. */
-.den-tauri-macos.den-custom-chrome .den-shell-header-titlebar__edge {
+.den-custom-chrome .den-shell-header-titlebar__edge {
   align-self: flex-start;
   margin-top: calc(
     var(--den-pane-control-center) - var(--den-titlebar-edge-control) / 2 -
@@ -107,19 +107,82 @@
   pointer-events: auto;
 }
 
-.den-custom-chrome .den-shell-header-titlebar .den-shell-header-drawers {
+/* Drawn window controls share the strip with the reopen controls, at the
+   same distance from the window edge as every other host places them. */
+.den-custom-chrome .den-shell-header-titlebar > .den-shell-window-controls {
   position: relative;
   z-index: 1;
-  pointer-events: none;
-}
-.den-custom-chrome .den-shell-header-titlebar .den-shell-window-controls {
+  align-self: flex-start;
+  margin-top: calc(
+    var(--den-pane-control-center) - var(--den-window-control-size) / 2 -
+      var(--den-titlebar-pad-top, 0px)
+  );
   pointer-events: auto;
 }
 
-.den-custom-chrome .den-shell-header-drawers {
-  pointer-events: none;
+.den-shell-header-titlebar > .den-shell-window-controls[data-side="left"] {
+  margin-left: calc(var(--den-window-controls-inset) - var(--den-chat-gutter-x));
 }
 
+.den-shell-header-titlebar > .den-shell-window-controls[data-side="right"] {
+  margin-left: auto;
+  margin-right: calc(var(--den-window-controls-inset) - var(--den-chat-gutter-x));
+}
+
+/* A trailing reopen control already claims the free space. */
+.den-shell-header-titlebar__edge--trailing ~ .den-shell-window-controls[data-side="right"] {
+  margin-left: 0;
+}
+
+/* The chat rail ends in the conversation's clusters, so its chips stop short
+   of them while the dock below still spans the column. */
+.den-custom-chrome .den-shell-header-chat .tabs__rail > .den-shell-window-controls {
+  position: relative;
+  z-index: 1;
+  align-self: center;
+  pointer-events: auto;
+}
+
+.den-custom-chrome .den-shell-header-chat .tabs__rail > .den-shell-window-controls[data-side="left"] {
+  margin-left: var(--den-window-controls-inset);
+  margin-right: calc(2 * var(--den-window-control-gap));
+}
+
+.den-custom-chrome .den-shell-header-chat .tabs__rail > .den-shell-window-controls[data-side="right"] {
+  margin-left: calc(2 * var(--den-window-control-gap));
+  margin-right: var(--den-window-controls-inset);
+}
+
+/* A lone surface has nothing else in its strip. */
+.den-custom-chrome .den-window-host__controls > .den-shell-window-controls {
+  position: absolute;
+  top: calc(var(--den-pane-control-center) - var(--den-window-control-size) / 2);
+  z-index: 1;
+}
+
+.den-custom-chrome .den-window-host__controls > .den-shell-window-controls[data-side="left"] {
+  left: var(--den-window-controls-inset);
+}
+
+.den-custom-chrome .den-window-host__controls > .den-shell-window-controls[data-side="right"] {
+  right: var(--den-window-controls-inset);
+}
+
+/* The stylesheet drops a split column below the narrow band; its edge's
+   controls move to the surviving column. */
+.den-shell-window-controls[data-narrow-only] {
+  display: none;
+}
+
+.den-shell-stage-host--split:where([data-host-band~="max-900"])
+  .den-shell-window-controls[data-narrow-only] {
+  display: flex;
+}
+
+.den-shell-stage-host--split:where([data-host-band~="max-900"])
+  .den-shell-window-controls[data-narrow-hidden] {
+  display: none;
+}
 
 .den-custom-chrome .den-shell-stage--pane[data-stage="files"]
   > .den-shell-header :is(button, [role="button"]) {

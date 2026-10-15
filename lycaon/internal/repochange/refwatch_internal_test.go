@@ -30,7 +30,7 @@ func TestScheduleHeadNotifyStaysSilentOnceClosed(t *testing.T) {
 	})
 
 	// Leave the timer running to exercise the callback fence.
-	w.refs.schedule(context.Background(), root)
+	w.refs.schedule(context.Background())
 	w.refs.mu.Lock()
 	w.refs.closed = true
 	w.refs.mu.Unlock()
@@ -40,7 +40,7 @@ func TestScheduleHeadNotifyStaysSilentOnceClosed(t *testing.T) {
 	}
 
 	// A ref event arriving after the close arms nothing at all.
-	w.refs.schedule(context.Background(), root)
+	w.refs.schedule(context.Background())
 	w.refs.mu.Lock()
 	armed := w.refs.timer != nil
 	w.refs.mu.Unlock()
@@ -49,8 +49,13 @@ func TestScheduleHeadNotifyStaysSilentOnceClosed(t *testing.T) {
 	}
 }
 
+// The root reaches its repository through a symlink, as macOS temp and home
+// paths do; ref surfaces must carry the root's names, not the resolved ones.
 func TestReferenceRemovalPreservesWorktreeCoverage(t *testing.T) {
-	root := t.TempDir()
+	root := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(t.TempDir(), root); err != nil {
+		t.Fatalf("create root alias: %v", err)
+	}
 	gitDir := filepath.Join(root, ".git")
 	if err := os.MkdirAll(filepath.Join(gitDir, "refs", "heads"), 0o755); err != nil {
 		t.Fatalf("create reference directory: %v", err)

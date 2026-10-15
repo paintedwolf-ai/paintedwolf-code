@@ -218,8 +218,8 @@ func TestBuildBoardSummary(t *testing.T) {
 	snap := api.BoardSnapshot{
 		Workers: &api.BoardWorkersSlice{
 			"tasks": []api.WorkerTask{
-				{ID: "a", Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending},
-				{ID: "b", Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending},
+				{ID: "a", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, MergeStatus: api.WorkerMergeStatusPending},
+				{ID: "b", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}, MergeStatus: api.WorkerMergeStatusPending},
 			},
 			"promote_paths": []api.WorkerPromoteJobPathStatus{{
 				WorkerID: "a",
