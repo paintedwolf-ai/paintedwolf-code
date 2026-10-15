@@ -1,6 +1,7 @@
 package vaultidentity
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -82,7 +83,8 @@ func (c *Client) Close() error {
 }
 
 func dial(path string) (net.Conn, error) {
-	conn, err := net.DialTimeout("unix", path, 5*time.Second)
+	dialer := net.Dialer{Timeout: 5 * time.Second}
+	conn, err := dialer.DialContext(context.Background(), "unix", path)
 	if err == nil {
 		return conn, nil
 	}

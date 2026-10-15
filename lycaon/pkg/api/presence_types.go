@@ -10,5 +10,5 @@ const (
 	PresenceAuthenticatorLinux   PresenceAuthenticator = "linux_user_presence"
 	// PresenceAuthenticatorLinuxAppPassword: the shell's native dialog
 	// re-verified the app password because no polkit agent could confirm.
-	PresenceAuthenticatorLinuxAppPassword PresenceAuthenticator = "linux_app_password"
+	PresenceAuthenticatorLinuxAppPassword PresenceAuthenticator = "linux_app_password" // #nosec G101 -- an authenticator name, not a credential
 )

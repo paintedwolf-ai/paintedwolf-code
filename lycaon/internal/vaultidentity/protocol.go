@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"regexp"
 )
 
@@ -117,11 +118,12 @@ func WriteFrame(w io.Writer, v any) error {
 	if err != nil {
 		return fmt.Errorf("encode frame: %w", err)
 	}
-	if len(body) > maxFrameBytes {
+	size := len(body)
+	if size > maxFrameBytes || uint64(size) > math.MaxUint32 {
 		return fmt.Errorf("frame exceeds %d bytes", maxFrameBytes)
 	}
-	frame := make([]byte, 4+len(body))
-	binary.BigEndian.PutUint32(frame, uint32(len(body)))
+	frame := make([]byte, 4+size)
+	binary.BigEndian.PutUint32(frame, uint32(size))
 	copy(frame[4:], body)
 	_, err = w.Write(frame)
 	return err

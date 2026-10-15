@@ -119,10 +119,10 @@ func (refusedIdentityProvider) Describe() string {
 }
 
 func (p refusedIdentityProvider) LoadOrCreate(bool) (identityDocument, error) {
-	return identityDocument{}, fmt.Errorf("%w: %v; start Painted Wolf Code from the installed desktop app, "+
+	return identityDocument{}, fmt.Errorf("%w: %w; start Painted Wolf Code from the installed desktop app, "+
 		"or disable the paintedwolf-vault-identity socket unit to use the app password instead", ErrLauncherRefused, p.refusal)
 }
 
 func (p refusedIdentityProvider) Purge() error {
-	return fmt.Errorf("%w: %v", ErrLauncherRefused, p.refusal)
+	return fmt.Errorf("%w: %w", ErrLauncherRefused, p.refusal)
 }

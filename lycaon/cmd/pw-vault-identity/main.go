@@ -51,11 +51,11 @@ func run(args []string) error {
 	if err := osprocess.DisableDumps(); err != nil {
 		return fmt.Errorf("disable dumps: %w", err)
 	}
-	listener, err := listen(*socket)
+	listener, err := listen(context.Background(), *socket)
 	if err != nil {
 		return err
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer stop()
 	server := &Server{
@@ -70,10 +70,11 @@ func run(args []string) error {
 }
 
 // listen takes the socket systemd activated, or binds path for a manual run.
-func listen(path string) (net.Listener, error) {
+func listen(ctx context.Context, path string) (net.Listener, error) {
 	if path != "" {
 		_ = os.Remove(path)
-		listener, err := net.Listen("unix", path)
+		var config net.ListenConfig
+		listener, err := config.Listen(ctx, "unix", path)
 		if err != nil {
 			return nil, err
 		}
@@ -94,7 +95,7 @@ func listen(path string) (net.Listener, error) {
 	if file == nil {
 		return nil, errors.New("the activated socket descriptor is not open")
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	listener, err := net.FileListener(file)
 	if err != nil {
 		return nil, fmt.Errorf("adopt activated socket: %w", err)

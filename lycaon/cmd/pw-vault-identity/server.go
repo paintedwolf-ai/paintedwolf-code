@@ -110,7 +110,7 @@ type connection struct {
 }
 
 func (s *Server) serveConn(conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	peer, err := s.PeerOf(conn)
 	if err != nil {
 		s.Log.Warn("vault identity peer credentials unavailable", "error", err)

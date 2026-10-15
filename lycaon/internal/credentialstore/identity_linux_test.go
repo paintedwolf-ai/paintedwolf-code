@@ -52,6 +52,7 @@ func (s *fakeService) serve(conn net.Conn) {
 		resp := s.probe
 		if resp.Status == vaultidentity.StatusOK {
 			switch req.Op {
+			case vaultidentity.OpProbe:
 			case vaultidentity.OpRead:
 				if value, ok := s.values[req.Account]; ok {
 					resp.Value = value

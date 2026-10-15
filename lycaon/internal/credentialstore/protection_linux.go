@@ -18,6 +18,7 @@ func VerifyIdentityProtection() (err error) {
 		return custody.refusal
 	case custodyPassword:
 		return fmt.Errorf("credential protection verification requires the vault identity service; this host is on the app-password path")
+	case custodyService:
 	}
 	a := custody.serviceHost("protection-probe/" + uuid.NewString()).service
 	b := custody.serviceHost("protection-probe/" + uuid.NewString()).service

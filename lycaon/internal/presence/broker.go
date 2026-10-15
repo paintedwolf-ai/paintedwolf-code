@@ -34,7 +34,7 @@ const (
 	AuthenticatorLinux   = "linux_user_presence"
 	// AuthenticatorLinuxAppPassword: the shell's native dialog re-verified
 	// the app password because no polkit agent could confirm the person.
-	AuthenticatorLinuxAppPassword = "linux_app_password"
+	AuthenticatorLinuxAppPassword = "linux_app_password" // #nosec G101 -- an authenticator name, not a credential
 
 	protocol = "painted-wolf-presence-v1"
 

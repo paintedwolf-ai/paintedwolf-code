@@ -83,7 +83,7 @@ func executableMappings(raw []byte) ([]mapping, error) {
 		path := ""
 		if len(fields) > 5 {
 			// The path is the rest of the line and may contain spaces.
-			path = strings.TrimLeft(line[strings.Index(line, fields[5]):], " ")
+			path = mapsPath(line)
 		}
 		switch {
 		case inode == 0 && (path == "" || strings.HasPrefix(path, "[")):
@@ -143,12 +143,28 @@ func rootOwned(path string, facts fileFacts) error {
 	return nil
 }
 
+// mapsPath is a maps line's pathname: everything after the fifth field,
+// which may itself contain spaces. Skipping fields by position keeps a path
+// that repeats an earlier field's text intact.
+func mapsPath(line string) string {
+	rest := line
+	for range 5 {
+		rest = strings.TrimLeft(rest, " \t")
+		end := strings.IndexAny(rest, " \t")
+		if end < 0 {
+			return ""
+		}
+		rest = rest[end:]
+	}
+	return strings.TrimLeft(rest, " \t")
+}
+
 func readBounded(path string, limit int64) ([]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(file, limit+1))
 	if err != nil {
 		return nil, err

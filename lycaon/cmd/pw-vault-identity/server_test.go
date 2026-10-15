@@ -280,18 +280,18 @@ func TestPeerCredentialsRequireAUnixSocket(t *testing.T) {
 func TestListenNeedsAnActivatedSocketOrAPath(t *testing.T) {
 	t.Setenv("LISTEN_PID", "")
 	t.Setenv("LISTEN_FDS", "")
-	if _, err := listen(""); err == nil {
+	if _, err := listen(t.Context(), ""); err == nil {
 		t.Fatal("listened without an activated socket")
 	}
 	t.Setenv("LISTEN_PID", strconv.Itoa(os.Getpid()))
 	t.Setenv("LISTEN_FDS", "2")
-	if _, err := listen(""); err == nil {
+	if _, err := listen(t.Context(), ""); err == nil {
 		t.Fatal("accepted two activated sockets")
 	}
 	dir, err := os.MkdirTemp("", "vi") //nolint:usetesting // Short socket path.
 	testutil.FailErr(t, "MkdirTemp", err)
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	listener, err := listen(filepath.Join(dir, "m.sock"))
+	listener, err := listen(t.Context(), filepath.Join(dir, "m.sock"))
 	testutil.FailErr(t, "listen on path", err)
 	defer listener.Close()
 	info, err := os.Stat(filepath.Join(dir, "m.sock"))

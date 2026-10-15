@@ -94,3 +94,16 @@ func TestRootOwnershipRules(t *testing.T) {
 		t.Fatal("missing path statted")
 	}
 }
+
+func TestMapsPathIsTheRestAfterTheFifthField(t *testing.T) {
+	for line, want := range map[string]string{
+		"7f1-7f2 r-xp 00000000 fd:01 1234      /opt/app/lib with space.so": "/opt/app/lib with space.so",
+		"7f1-7f2 r-xp 00000000 00:00 0 [vdso]":                             "[vdso]",
+		"7f1-7f2 r-xp 00000000 00:00 0":                                    "",
+		"7f1-7f2 r-xp":                                                     "",
+	} {
+		if got := mapsPath(line); got != want {
+			t.Errorf("mapsPath(%q) = %q, want %q", line, got, want)
+		}
+	}
+}

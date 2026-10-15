@@ -32,14 +32,15 @@ func (s *Store) path(uid int, account string) string {
 
 // Read returns the stored identity.
 func (s *Store) Read(uid int, account string) ([]byte, error) {
-	file, err := os.Open(s.path(uid, account))
+	// The account matched vaultidentity.ValidAccount, so the path stays in the uid's directory.
+	file, err := os.Open(s.path(uid, account)) // #nosec G304 -- validated account name under the service state directory
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, errNotFound
 		}
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	value, err := io.ReadAll(io.LimitReader(file, vaultidentity.MaxValueBytes+1))
 	if err != nil {
 		return nil, err
@@ -65,11 +66,12 @@ func (s *Store) Create(uid int, account string, value []byte) error {
 		return err
 	}
 	temp := filepath.Join(dir, "."+account+".tmp-"+hex.EncodeToString(nonce[:]))
-	file, err := os.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	file, err := os.OpenFile(temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- validated account name under the service state directory
 	if err != nil {
 		return err
 	}
-	defer os.Remove(temp)
+	// The link published the identity, or the attempt failed; the staging name goes either way.
+	defer func() { _ = os.Remove(temp) }()
 	_, err = file.Write(value)
 	if err == nil {
 		err = file.Sync()
@@ -98,14 +100,14 @@ func (s *Store) Remove(uid int, account string) error {
 }
 
 func syncDir(dir string) error {
-	handle, err := os.Open(dir)
+	handle, err := os.Open(dir) // #nosec G304 -- the uid's directory under the service state directory
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
 		}
 		return err
 	}
-	defer handle.Close()
+	defer func() { _ = handle.Close() }()
 	// Some filesystems refuse directory sync; the link itself is durable enough.
 	_ = handle.Sync()
 	return nil

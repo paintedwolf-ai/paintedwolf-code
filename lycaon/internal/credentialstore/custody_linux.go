@@ -73,6 +73,7 @@ func (c custody) report(path string) (CustodyReport, error) {
 		return CustodyReport{Mode: CustodyRefused, Detail: c.refusal.Error()}, nil
 	case custodyPassword:
 		return CustodyReport{Mode: CustodyAppPassword}, nil
+	case custodyService:
 	}
 	host := c.serviceHost(path)
 	active, err := host.resolve()
@@ -91,7 +92,7 @@ func (c custody) verifiedHost(path string) (*serviceHostProvider, error) {
 	case custodyService:
 		return c.serviceHost(path), nil
 	case custodyRefused:
-		return nil, fmt.Errorf("%w: %v", ErrLauncherRefused, c.refusal)
+		return nil, fmt.Errorf("%w: %w", ErrLauncherRefused, c.refusal)
 	default:
 		return nil, ErrServiceUnverified
 	}

@@ -148,7 +148,7 @@ func (v Verifier) VerifyExecutable(pid int, role string) error {
 	if err != nil {
 		return refuse(CodeExecutableUnreadable, role, pid, err.Error())
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	hash := sha256.New()
 	n, err := io.Copy(hash, file)
 	if err != nil {
