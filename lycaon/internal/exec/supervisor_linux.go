@@ -25,6 +25,10 @@ const supervisorCommand = "__command-supervisor"
 
 var supervisorStarts sync.Map // *exec.Cmd -> *os.File
 
+// beforeSupervisorSignals runs while a signal would still kill the supervisor
+// before it reports launch; tests hold that window open.
+var beforeSupervisorSignals = func() {}
+
 type supervisorLaunchResult struct {
 	Errno int `json:"errno"`
 }
@@ -186,6 +190,7 @@ func runCommandSupervisor(args []string) int {
 		return 125
 	}
 	_ = unix.Close(fd)
+	beforeSupervisorSignals()
 	events := make(chan os.Signal, 4)
 	signal.Notify(events, syscall.SIGTERM, syscall.SIGINT, syscall.SIGHUP, syscall.SIGUSR2)
 	defer signal.Stop(events)

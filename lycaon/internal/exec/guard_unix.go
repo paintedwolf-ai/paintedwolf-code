@@ -16,6 +16,11 @@ import (
 // DefaultBelowNormalNice is the nice value applied for ProcessPriorityBelowNormal.
 const DefaultBelowNormalNice = 5
 
+// supervisorLaunchGrace bounds how long a held termination waits for the
+// supervisor's launch report. It covers a slow re-exec on a loaded host, and it
+// keeps a supervisor that never reports from blocking a caller without a WaitDelay.
+const supervisorLaunchGrace = 10 * time.Second
+
 type unixGuard struct {
 	belowNormal bool
 	// pgid is captured before the leader can be reaped.
@@ -29,12 +34,21 @@ type unixGuard struct {
 	// terminated marks a tree that was asked to exit; release then sweeps
 	// whatever outlived the leader.
 	terminated bool
+	// awaitingLaunch holds termination until a supervised command reports its
+	// launch: before the supervisor installs its handlers a signal kills it,
+	// and the parent would see a failed start instead of a terminated command.
+	awaitingLaunch bool
+	// heldTerminate is a termination requested while awaitingLaunch.
+	heldTerminate bool
+	// launchGrace and launchTimer kill an unreported launch held too long.
+	launchGrace time.Duration
+	launchTimer *time.Timer
 	// killTimer is the SIGKILL fallback armed by terminate.
 	killTimer *time.Timer
 }
 
 func newRunGuard(priority ProcessPriority) (runGuard, error) {
-	return &unixGuard{belowNormal: priority == ProcessPriorityBelowNormal}, nil
+	return &unixGuard{belowNormal: priority == ProcessPriorityBelowNormal, launchGrace: supervisorLaunchGrace}, nil
 }
 
 func (g *unixGuard) configure(cmd *exec.Cmd) {
@@ -46,6 +60,7 @@ func (g *unixGuard) configure(cmd *exec.Cmd) {
 	// A session leader cannot also Setpgid.
 	cmd.SysProcAttr.Setsid = true
 	cmd.SysProcAttr.Setpgid = false
+	g.awaitingLaunch = commandSupervisor(cmd)
 	// Cancellation terminates the entire session the leader started.
 	cmd.Cancel = func() error {
 		g.terminate(cmd)
@@ -62,7 +77,7 @@ func (g *unixGuard) onStarted(cmd *exec.Cmd) error {
 		g.supervisorStart, _ = osprocess.StartTime(cmd.Process.Pid)
 	}
 	g.recordProcessGroup(cmd.Process.Pid)
-	if err := supervisorStartupError(cmd); err != nil {
+	if err := g.confirmLaunch(cmd); err != nil {
 		return err
 	}
 	if !g.belowNormal {
@@ -95,6 +110,24 @@ func (g *unixGuard) recordProcessGroup(pid int) {
 	}
 }
 
+// confirmLaunch reads the supervisor's launch report, then delivers a
+// termination requested while the launch was unconfirmed.
+func (g *unixGuard) confirmLaunch(cmd *exec.Cmd) error {
+	err := supervisorStartupError(cmd)
+	g.mu.Lock()
+	held := g.heldTerminate && err == nil
+	g.awaitingLaunch, g.heldTerminate = false, false
+	if g.launchTimer != nil {
+		g.launchTimer.Stop()
+		g.launchTimer = nil
+	}
+	g.mu.Unlock()
+	if held {
+		g.deliverTerminate(cmd)
+	}
+	return err
+}
+
 // terminate sends SIGTERM to the tree and arms a SIGKILL for whatever is still
 // running after TerminateGrace. A second call is a no-op.
 func (g *unixGuard) terminate(cmd *exec.Cmd) {
@@ -104,7 +137,32 @@ func (g *unixGuard) terminate(cmd *exec.Cmd) {
 		return
 	}
 	g.terminated = true
+	if g.awaitingLaunch {
+		g.heldTerminate = true
+		g.launchTimer = time.AfterFunc(g.launchGrace, func() { g.abandonLaunch(cmd) })
+		g.mu.Unlock()
+		return
+	}
 	g.mu.Unlock()
+	g.deliverTerminate(cmd)
+}
+
+// abandonLaunch SIGKILLs a supervisor that has not reported its launch; the
+// supervisor ignores SIGUSR2 until it installs handlers, so the hard path through
+// signalSupervisor cannot stop it. Its PID and session stay reserved until the
+// caller's Wait, and the startup report then reads EOF.
+func (g *unixGuard) abandonLaunch(cmd *exec.Cmd) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.awaitingLaunch || cmd.Process == nil {
+		return
+	}
+	g.launchTimer = nil
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	_ = cmd.Process.Kill()
+}
+
+func (g *unixGuard) deliverTerminate(cmd *exec.Cmd) {
 	if !g.signal(cmd, syscall.SIGTERM) {
 		return
 	}
