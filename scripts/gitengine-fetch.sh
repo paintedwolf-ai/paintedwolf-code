@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "${ROOT}/scripts/sha256.sh"
 PIN="${ROOT}/lycaon/config/gitengine/pin.yaml"
 # The Docker E2E tier stages a Linux toolchain outside the checkout.
 DEST="${GITENGINE_DEST:-${ROOT}/lycaon-den/src-tauri/engine-root/gitengine}"
@@ -322,7 +323,7 @@ mkdir -p "${EXTRACT}"
 echo "gitengine:fetch — downloading ${URL}" >&2
 curl -fsSL -o "${ARCHIVE}" "${URL}"
 
-ACTUAL_SHA="$(shasum -a 256 "${ARCHIVE}" | awk '{print tolower($1)}')"
+ACTUAL_SHA="$(sha256 "${ARCHIVE}" | awk '{print tolower($1)}')"
 if [[ "${ACTUAL_SHA}" != "$(printf '%s' "${EXPECTED_SHA}" | tr '[:upper:]' '[:lower:]')" ]]; then
   echo "error: gitengine sha256 mismatch — deleting download" >&2
   echo "  got:  ${ACTUAL_SHA}" >&2

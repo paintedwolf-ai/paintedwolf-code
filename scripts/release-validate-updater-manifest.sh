@@ -68,7 +68,7 @@ validate_binding(load_registry(), manifest)
 if not isinstance(manifest["notes"], str) or not manifest["notes"].strip():
     raise SystemExit("error: updater manifest notes are empty")
 rows = catalog.get("platforms")
-if catalog.get("schema_version") != 1 or not isinstance(rows, list) or not rows:
+if catalog.get("schema_version") != 2 or not isinstance(rows, list) or not rows:
     raise SystemExit("error: release platform catalog has an unsupported shape")
 all_platforms = {row["updater_key"]: row for row in rows}
 if len(all_platforms) != len(rows):

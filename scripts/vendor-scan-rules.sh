@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${ROOT}/scripts/sha256.sh"
 LYCAON="${ROOT}/lycaon"
 SCANNERS="${LYCAON}/config/runtime/scanners"
 VENDOR="${SCANNERS}/rules/vendor"
@@ -42,30 +43,6 @@ while [[ $# -gt 0 ]]; do
     *) echo "vendor-scan-rules: unknown argument $1" >&2; exit 2 ;;
   esac
 done
-
-sha() {
-  if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$1" | awk '{print $1}'
-  else
-    sha256sum "$1" | awk '{print $1}'
-  fi
-}
-
-sha_stdin() {
-  if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 | awk '{print $1}'
-  else
-    sha256sum | awk '{print $1}'
-  fi
-}
-
-sha_many() {
-  if command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$@"
-  else
-    sha256sum "$@"
-  fi
-}
 
 # US (0x1f) separators preserve empty digest fields that IFS whitespace collapses.
 #   id, upstream, ref, commit, license, tree_sha256, patch_sha256,
@@ -117,9 +94,9 @@ tree_digest() {
     local f
     while IFS= read -r f; do files+=("${f}"); done < <(find . -type f -print | LC_ALL=C sort)
     if [[ ${#files[@]} -gt 0 ]]; then
-      sha_many "${files[@]}"
+      sha256 "${files[@]}"
     fi
-  ) | sha_stdin
+  ) | sha256_hex
 }
 
 # An absent patch set has no digest.

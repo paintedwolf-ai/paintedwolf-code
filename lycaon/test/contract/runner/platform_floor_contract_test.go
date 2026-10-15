@@ -135,3 +135,76 @@ func TestReleaseMatrixMatchesDarwinArches(t *testing.T) {
 			"The arch set is one SSOT: adding or dropping a slice is one edit in platformfloor, and this test names every consumer that must follow.", got, want)
 	}
 }
+
+// The Linux floor is one SSOT: the package dependency catalog renders from it,
+// and the release catalog's Linux rows follow the shipped architectures.
+func TestLinuxFloorFeedsPackagingAndCatalog(t *testing.T) {
+	t.Parallel()
+	root := contractcheck.RepoRoot(t)
+	for name, value := range map[string]string{
+		"kernel":    platformfloor.LinuxKernelMin(),
+		"glibc":     platformfloor.LinuxGlibcMin(),
+		"webkitgtk": platformfloor.LinuxWebKitGTKMin(),
+		"gtk3":      platformfloor.LinuxGTK3Min(),
+	} {
+		if value == "" {
+			t.Fatalf("Linux %s floor is empty: lycaon/internal/platformfloor/linux_floor.txt must declare it", name)
+		}
+	}
+	dependencies := contractcheck.ReadRepoFile(t, root, "packaging/linux/dependencies.json")
+	var catalog struct {
+		FormatVersion int `json:"format_version"`
+		Deb           struct {
+			Depends []string `json:"depends"`
+		} `json:"deb"`
+		Rpm struct {
+			Depends []string `json:"depends"`
+		} `json:"rpm"`
+	}
+	testutil.FailErr(t, "parse packaging/linux/dependencies.json", json.Unmarshal([]byte(dependencies), &catalog))
+	if catalog.FormatVersion != 1 {
+		t.Fatalf("dependencies.json format_version = %d", catalog.FormatVersion)
+	}
+	for family, depends := range map[string][]string{"deb": catalog.Deb.Depends, "rpm": catalog.Rpm.Depends} {
+		joined := strings.Join(depends, "\n")
+		for _, placeholder := range []string{"{glibc}", "{webkitgtk}", "{gtk3}"} {
+			if !strings.Contains(joined, placeholder) {
+				t.Fatalf("%s dependencies never render the %s floor; constraints must come from linux_floor.txt, not literals", family, placeholder)
+			}
+		}
+	}
+	config := contractcheck.ReadRepoFile(t, root, "scripts/linux-package-config.py")
+	if !strings.Contains(config, "platformfloor\" / \"linux_floor.txt\"") || !strings.Contains(config, "dependencies.json") {
+		t.Fatal("scripts/linux-package-config.py must render package dependencies from the floor file and the dependency catalog")
+	}
+	var platforms struct {
+		Platforms []struct {
+			GOOS         string   `json:"goos"`
+			GOARCH       string   `json:"goarch"`
+			ArtifactArch string   `json:"artifact_arch"`
+			PackageExts  []string `json:"package_extensions"`
+		} `json:"platforms"`
+	}
+	testutil.FailErr(t, "parse release platform catalog", json.Unmarshal(
+		[]byte(contractcheck.ReadRepoFile(t, root, "packaging/release-platforms.json")), &platforms))
+	var got []string
+	for _, platform := range platforms.Platforms {
+		if platform.GOOS != "linux" {
+			continue
+		}
+		elf, ok := platformfloor.ELFArchForGoArch(platform.GOARCH)
+		if !ok || elf != platform.ArtifactArch {
+			t.Fatalf("Linux row %s/%s is not a shipped architecture (%v, %q)", platform.GOOS, platform.GOARCH, ok, elf)
+		}
+		if strings.Join(platform.PackageExts, ",") != "deb,rpm" {
+			t.Fatalf("Linux row %s ships %v, want both package families", platform.ArtifactArch, platform.PackageExts)
+		}
+		got = append(got, platform.ArtifactArch)
+	}
+	sort.Strings(got)
+	want := platformfloor.LinuxELFArches()
+	sort.Strings(want)
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("release catalog Linux arches = %v, want %v (derived from platformfloor.LinuxArches)", got, want)
+	}
+}

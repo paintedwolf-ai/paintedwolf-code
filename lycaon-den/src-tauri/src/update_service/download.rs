@@ -8,12 +8,12 @@ use std::{sync::atomic::Ordering, time::Duration};
 use tauri::{AppHandle, Manager};
 use tokio::io::AsyncWriteExt;
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 type PreparationPermit = (
     tokio::sync::OwnedMutexGuard<()>,
     super::installer::InstallationLease,
 );
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+#[cfg(not(target_os = "macos"))]
 type PreparationPermit = tokio::sync::OwnedMutexGuard<()>;
 
 pub fn start_automatic(app: AppHandle) {
@@ -96,7 +96,12 @@ async fn prepare(
             .state
             .refresh_capabilities(super::installer::supported());
         if !inner.state.capabilities.can_download {
-            return Err(Failure::UnsupportedInstallation.into());
+            return Err(match inner.state.install_source {
+                super::InstallSource::HomebrewCask | super::InstallSource::SystemPackage => {
+                    Failure::PackageManaged.into()
+                }
+                _ => Failure::UnsupportedInstallation.into(),
+            });
         }
         inner.manual_preparation = manual;
         inner.state.installation = Installation::Downloading;
@@ -177,7 +182,7 @@ async fn transfer(
 ) -> Result<(super::installer::PreparedIdentity, PreparationPermit), UpdateError> {
     let service = app.state::<UpdateService>();
     let permit = service.preparation.clone().lock_owned().await;
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[cfg(target_os = "macos")]
     let permit = {
         let lease = tauri::async_runtime::spawn_blocking(super::installer::acquire_preparation)
             .await

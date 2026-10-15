@@ -50,7 +50,7 @@ describe("PreflightNudge", () => {
 
   it("ignores a catastrophic probe entirely — that tier is CriticalStop's", async () => {
     setPreflightReport(
-      report({ id: "os_version", status: "blocked", tier: "catastrophic", code: "OS_BELOW_FLOOR", title: "Unsupported macOS", message: "m" }),
+      report({ id: "os_version", status: "blocked", tier: "catastrophic", code: "OS_BELOW_FLOOR", title: "Unsupported operating system", message: "m" }),
     );
 
     const { baseElement } = render(() => <PreflightNudge />);
@@ -61,7 +61,7 @@ describe("PreflightNudge", () => {
   it("shows a non-catastrophic probe even when another is catastrophic", async () => {
     setPreflightReport(
       report(
-        { id: "os_version", status: "blocked", tier: "catastrophic", code: "OS_BELOW_FLOOR", title: "Unsupported macOS", message: "m" },
+        { id: "os_version", status: "blocked", tier: "catastrophic", code: "OS_BELOW_FLOOR", title: "Unsupported operating system", message: "m" },
         { id: "disk_space", status: "degraded", tier: "non_catastrophic", code: "DISK_SPACE_LOW", title: "Low disk space", message: "Only 900 MB is free." },
       ),
     );

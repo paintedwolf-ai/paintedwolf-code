@@ -1,6 +1,6 @@
 //! Bundle exchange and recovery follow the installed bytes.
 use super::journal::{Phase, Transaction};
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 use super::{admission::Lease, journal::write};
 use crate::update_service::{
     installer::{self, executable, hash},
@@ -8,7 +8,7 @@ use crate::update_service::{
 };
 use std::path::Path;
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 pub(super) fn activate(t: &mut Transaction, lease: &mut Lease) -> Result<(), UpdateError> {
     let expected = t.next_hash.clone();
     let expected_bundle = t.next_bundle_hash.clone();
@@ -46,7 +46,7 @@ pub(super) fn activate(t: &mut Transaction, lease: &mut Lease) -> Result<(), Upd
         write,
     )
 }
-#[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
+#[cfg(target_os = "macos")]
 pub(super) fn activate_using(
     t: &mut Transaction,
     prepare: impl FnOnce(&Path, &Candidate) -> Result<(), UpdateError>,
@@ -73,7 +73,7 @@ pub(super) fn activate_using(
     record(t)
 }
 /// The recorded phase follows the installed bytes, even after an exchange error.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 pub(super) fn record_activation_failure(
     t: &mut Transaction,
     error: &UpdateError,
@@ -86,7 +86,7 @@ pub(super) fn record_activation_failure(
     t.error = Some(error.to_string());
     write(t)
 }
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 pub(super) fn installed_is_known(t: &Transaction) -> bool {
     hash(&executable(&t.target)).is_ok_and(|hash| {
         hash == t.previous_hash

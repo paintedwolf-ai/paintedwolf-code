@@ -6,6 +6,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "${ROOT}/scripts/sha256.sh"
 # shellcheck source=scripts/config-dir.sh
 source "${ROOT}/scripts/config-dir.sh"
 # shellcheck source=scripts/upgrade-store-contract.sh
@@ -304,9 +305,9 @@ run_self_test() {
   echo "self-test: equal-marker shape mismatch — ok" >&2
 
   local before after
-  before="$(shasum -a 256 "${base_fix}/store.db" | awk '{print $1}')"
+  before="$(sha256 "${base_fix}/store.db" | awk '{print $1}')"
   boot_one "${base_fix}" >/dev/null
-  after="$(shasum -a 256 "${base_fix}/store.db" | awk '{print $1}')"
+  after="$(sha256 "${base_fix}/store.db" | awk '{print $1}')"
   if [[ "${before}" != "${after}" ]]; then
     echo "error: boot mutated the source fixture" >&2
     return 1

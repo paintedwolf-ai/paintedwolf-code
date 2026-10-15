@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "${ROOT}/scripts/sha256.sh"
 cd "$ROOT"
 # shellcheck source=redocly-cli.sh
 source "$(dirname "$0")/redocly-cli.sh"
@@ -21,20 +22,20 @@ case "${1:-bundle}" in
     tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/openapi-bundle.XXXXXX")"
     tmp="$tmp_dir/openapi.yaml"
     trap 'rm -rf "$tmp_dir"; snapshot_publish_finish' EXIT
-    before="$(find docs/openapi -type f -print | LC_ALL=C sort | while IFS= read -r file; do shasum -a 256 "$file"; done | shasum -a 256 | awk '{print $1}')"
+    before="$(find docs/openapi -type f -print | LC_ALL=C sort | while IFS= read -r file; do sha256 "$file"; done | sha256 | awk '{print $1}')"
     if [[ -f "$OUT" ]]; then
-      output_before="$(shasum -a 256 "$OUT" | awk '{print $1}')"
+      output_before="$(sha256 "$OUT" | awk '{print $1}')"
     else
       output_before="missing"
     fi
     run_bundle "$tmp"
-    after="$(find docs/openapi -type f -print | LC_ALL=C sort | while IFS= read -r file; do shasum -a 256 "$file"; done | shasum -a 256 | awk '{print $1}')"
+    after="$(find docs/openapi -type f -print | LC_ALL=C sort | while IFS= read -r file; do sha256 "$file"; done | sha256 | awk '{print $1}')"
     if [[ "$before" != "$after" ]]; then
       echo "OpenAPI sources changed while bundling; nothing was published" >&2
       exit 1
     fi
     if [[ -f "$OUT" ]]; then
-      output_after="$(shasum -a 256 "$OUT" | awk '{print $1}')"
+      output_after="$(sha256 "$OUT" | awk '{print $1}')"
     else
       output_after="missing"
     fi

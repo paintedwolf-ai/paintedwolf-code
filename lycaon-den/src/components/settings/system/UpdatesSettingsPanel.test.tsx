@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UpdatesSettingsPanel } from "./UpdatesSettingsPanel.tsx";
-import { updateFixture, updateServiceFixture, stagedFixture } from "../../../settings/system/update-test-fixture.ts";
+import { packageFixture, updateFixture, updateServiceFixture, stagedFixture } from "../../../settings/system/update-test-fixture.ts";
 import { setConfirmDestructivePresenter } from "../../../platform/interaction/confirm-dialog.ts";
 
 afterEach(() => { cleanup(); setConfirmDestructivePresenter(null); });
@@ -44,6 +44,43 @@ describe("update settings", () => {
     const state = updateFixture({ install_source: "homebrew_cask", capabilities: { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "package_managed" } });
     render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
     expect((await screen.findByTestId("updates-brew-upgrade")).textContent).toContain("brew upgrade --cask painted-wolf-code");
+    expect(screen.queryByTestId("updates-install")).toBeNull();
+    expect(screen.queryByTestId("updates-package-identity")).toBeNull();
+    expect(screen.queryByText(/installs them when you quit/)).not.toBeNull();
+  });
+  it("attributes a package-managed refusal to the package manager, not Homebrew", async () => {
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => packageFixture({ last_error: { code: "package_managed" } }) })} />);
+    expect((await screen.findByRole("alert")).textContent).toBe("Your package manager manages this installation. Use its upgrade command to update.");
+  });
+  it("names the system package and its exact upgrade command without offering a download", async () => {
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => packageFixture() })} />);
+    expect((await screen.findByTestId("updates-package-identity")).textContent).toBe("Installed from the painted-wolf-code 1.0.2 package (deb). Your package manager owns this installation.");
+    const upgrade = screen.getByTestId("updates-package-upgrade");
+    expect(upgrade.textContent).toBe("Version 1.1.0 is available. Run sudo apt update && sudo apt install --only-upgrade painted-wolf-code to update.");
+    expect(upgrade.querySelector("code")?.textContent).toBe("sudo apt update && sudo apt install --only-upgrade painted-wolf-code");
+    expect(screen.getAllByText(/Version 1.1.0 is available/)).toHaveLength(1);
+    expect(screen.queryByTestId("updates-install")).toBeNull();
+    expect(screen.queryByTestId("updates-brew-upgrade")).toBeNull();
+    expect(screen.getByTestId("updates-package-hint").textContent).toContain("system package manager");
+    expect(screen.queryByText(/installs them when you quit/)).toBeNull();
+    expect(screen.getByTestId("updates-channel")).toHaveProperty("disabled", false);
+    expect(screen.getByTestId("updates-check-now")).toHaveProperty("disabled", false);
+  });
+  it("shows only the package identity when the package is current", async () => {
+    const state = packageFixture({ candidate: null, discovery: "up_to_date" });
+    state.package = { ...state.package!, family: "rpm", update_command: "sudo dnf upgrade painted-wolf-code" };
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
+    expect((await screen.findByTestId("updates-package-identity")).textContent).toContain("package (rpm)");
+    expect(screen.queryByTestId("updates-package-upgrade")).toBeNull();
+    expect(screen.queryByTestId("updates-unpackaged")).toBeNull();
+  });
+  it("explains an unpackaged Linux copy and its package-manager error", async () => {
+    const capabilities = { can_check: true, can_download: false, can_restart_to_update: false, can_install_automatically: false, blocked_reason: "unpackaged_installation" };
+    const state = updateFixture({ install_source: "unpackaged", candidate: null, discovery: "idle", capabilities, last_error: { code: "unpackaged_installation" } });
+    render(() => <UpdatesSettingsPanel updateService={updateServiceFixture({ getState: async () => state })} />);
+    expect((await screen.findByTestId("updates-unpackaged")).textContent).toContain("Install the .deb or .rpm package");
+    expect(screen.getByRole("alert").textContent).toContain("no update command is available");
+    expect(screen.queryByTestId("updates-package-identity")).toBeNull();
     expect(screen.queryByTestId("updates-install")).toBeNull();
   });
   it("retains the existing preference control and changes its native authority", async () => {

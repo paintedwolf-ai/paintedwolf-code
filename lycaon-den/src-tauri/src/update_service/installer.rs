@@ -14,13 +14,13 @@ pub struct PreparedIdentity {
     pub executable_hash: String,
     pub bundle_hash: String,
 }
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 mod coordination;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
+#[cfg(target_os = "macos")]
 pub use coordination::{
     acquire_gate, acquire_lease, acquire_preparation, downgrade, exchange_coordinated,
     try_activation, InstallationLease,
@@ -34,7 +34,7 @@ use macos as platform;
 mod unsupported;
 #[cfg(target_os = "macos")]
 pub use macos::PRODUCT_VERSION_RESOURCE;
-pub use platform::{bundle, product_version, supported, verify_bundle};
+pub use platform::{bundle, product_version, supported, verify_bundle, CHECK_ONLY};
 #[cfg(not(any(target_os = "macos", target_os = "linux")))]
 use unsupported as platform;
 pub fn prepared_path(target: &Path, candidate: &Candidate) -> Result<PathBuf, UpdateError> {

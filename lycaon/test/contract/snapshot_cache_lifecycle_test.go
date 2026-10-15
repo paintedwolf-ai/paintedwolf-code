@@ -11,7 +11,7 @@ const snapshotCacheFixture = `set -euo pipefail
 source_root="$1"
 fixture="$2/repo"
 mkdir -p "$fixture/scripts"
-for name in test-source-snapshot.sh checkout-cache-dir.sh test-run-isolation.sh test-run-lease.py digest-run-lock.sh artifact-paths.sh artifact_paths.py; do
+for name in test-source-snapshot.sh checkout-cache-dir.sh sha256.sh test-run-isolation.sh test-run-lease.py digest-run-lock.sh artifact-paths.sh artifact_paths.py; do
   cp "$source_root/scripts/$name" "$fixture/scripts/$name"
 done
 printf 'module example.invalid/cachefixture\n\ngo 1.26.6\n' > "$fixture/go.mod"

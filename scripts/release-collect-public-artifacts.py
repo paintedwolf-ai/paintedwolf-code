@@ -31,7 +31,7 @@ def main() -> int:
         ):
             raise ValueError("release platform catalog has an invalid publication state")
         public = [row for row in rows if row.get("publication") == "public"]
-        if catalog.get("schema_version") != 1 or not public:
+        if catalog.get("schema_version") != 2 or not public:
             raise ValueError("release platform catalog has no public platform")
         if args.output.exists() and any(args.output.iterdir()):
             raise ValueError("public release artifact output must be empty")
@@ -39,12 +39,15 @@ def main() -> int:
         copied: set[str] = set()
         for row in public:
             stem = f"painted-wolf-code_v{version}_{row['updater_key']}"
-            names = (
-                f"{stem}.{row['package_extension']}",
-                f"{stem}.{row['package_extension']}.sha256",
-                f"{stem}.{row['updater_extension']}",
-                f"{stem}.{row['updater_extension']}.sig",
-            )
+            extensions = row["package_extensions"]
+            if not isinstance(extensions, list) or not extensions:
+                raise ValueError(f"public release platform {row['updater_key']} lists no package")
+            names = [f"{stem}.{extension}{suffix}" for extension in extensions for suffix in ("", ".sha256")]
+            updater = row.get("updater_extension")
+            # A public platform updates through the signed updater artifact.
+            if not isinstance(updater, str) or not updater:
+                raise ValueError(f"public release platform {row['updater_key']} has no updater artifact")
+            names += [f"{stem}.{updater}", f"{stem}.{updater}.sig"]
             for name in dict.fromkeys(names):
                 source = args.input / name
                 if not source.is_file() or source.is_symlink():

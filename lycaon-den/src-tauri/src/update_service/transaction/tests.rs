@@ -1,4 +1,3 @@
-#[cfg(target_os = "macos")]
 use super::admission::require_running_version;
 use super::*;
 use super::{
@@ -12,11 +11,7 @@ pub(super) fn fixture(root: &Path) -> Transaction {
     let mut candidate = super::super::tests::candidate("1.1.0");
     candidate.platform = super::super::feed::target().into();
     candidate.release_id = candidate.identity();
-    let target = root.join(if cfg!(target_os = "linux") {
-        "Painted Wolf Code.AppImage"
-    } else {
-        "Painted Wolf Code.app"
-    });
+    let target = root.join("Painted Wolf Code.app");
     let staged = installer::prepared_path(&target, &candidate).unwrap();
     for (bundle, contents) in [(&target, "old engine"), (&staged, "new engine")] {
         let exe = executable(bundle);
@@ -253,7 +248,6 @@ fn swap_directories(left: &Path, right: &Path) -> Result<(), UpdateError> {
         .and_then(|_| fs::rename(&parked, right))
         .map_err(|e| UpdateError::new(Failure::ActivationFailed, e))
 }
-#[cfg(target_os = "macos")]
 #[test]
 fn launch_refuses_a_binary_whose_installed_bundle_has_changed() {
     let root = crate::test_support::TempDir::new("update-launch-version");
@@ -269,14 +263,6 @@ fn launch_refuses_a_binary_whose_installed_bundle_has_changed() {
 }
 
 fn change_resources(path: &Path) {
-    #[cfg(target_os = "linux")]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mut permissions = fs::metadata(path).unwrap().permissions();
-        permissions.set_mode(permissions.mode() ^ 0o100);
-        fs::set_permissions(path, permissions).unwrap();
-    }
-    #[cfg(not(target_os = "linux"))]
     fs::write(
         path.join("unexpected-resource"),
         "changed after preparation",

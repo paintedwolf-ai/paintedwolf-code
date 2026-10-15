@@ -54,11 +54,6 @@ pub fn acquire_lease(
     let layout = super::layout::Layout::native()?;
     let file = match layout {
         super::layout::Layout::AppBundle => directory(target)?,
-        super::layout::Layout::AppImage => fs::OpenOptions::new()
-            .read(true)
-            .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
-            .open(target)
-            .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?,
     };
     if !layout.accepts(
         &file
@@ -124,11 +119,7 @@ pub fn exchange_coordinated(
 mod tests {
     use super::*;
     fn seed_installation(path: &Path) {
-        if cfg!(target_os = "linux") {
-            fs::write(path, b"image").unwrap();
-        } else {
-            fs::create_dir(path).unwrap();
-        }
+        fs::create_dir(path).unwrap();
     }
     #[test]
     fn process_contender() {

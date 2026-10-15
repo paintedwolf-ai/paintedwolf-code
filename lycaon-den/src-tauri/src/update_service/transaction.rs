@@ -5,14 +5,14 @@ use super::{
 };
 use std::{path::Path, time::Duration};
 use tauri::{AppHandle, Manager};
-#[cfg(any(target_os = "macos", target_os = "linux", all(test, unix)))]
+#[cfg(target_os = "macos")]
 mod activation;
 mod admission;
 mod confirmation;
 mod handoff;
 mod journal;
 mod state;
-#[cfg(all(test, unix))]
+#[cfg(all(test, target_os = "macos"))]
 mod tests;
 
 pub use admission::{launch, run_helper, Launch, Lease};
@@ -28,11 +28,11 @@ const OFFER_FRESHNESS: Duration = Duration::from_secs(24 * 60 * 60);
 const RECHECK_DEADLINE: Duration = Duration::from_secs(3);
 
 fn require_direct_download() -> Result<(), UpdateError> {
-    let (source, _, error) = persistence::detect_install_source();
-    if let Some(error) = error {
+    let facts = persistence::detect_install_source();
+    if let Some(error) = facts.error {
         return Err(error);
     }
-    if source != super::InstallSource::DirectDownload {
+    if facts.source != super::InstallSource::DirectDownload {
         return Err(Failure::PackageManaged.into());
     }
     Ok(())

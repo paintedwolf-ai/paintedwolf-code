@@ -1,0 +1,10 @@
+# Lintian tags that do not apply to a vendor package of statically linked Go and
+# Rust executables with a bundled toolchain; errors outside this list fail staging.
+statically-linked-binary
+embedded-library
+unstripped-binary-or-object
+no-manual-page
+extended-description-is-probably-too-short
+no-changelog
+no-copyright-file
+dir-or-file-in-opt

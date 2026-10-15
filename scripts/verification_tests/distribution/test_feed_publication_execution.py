@@ -28,7 +28,7 @@ class FeedPublicationTests(unittest.TestCase):
             keys.update(signing_generation=1, embedded_generation=1)
             keys["generations"] = [{**keys["generations"][0], "successor": None, "bridge_version": None}]
             (packaging / "update-keys.json").write_text(json.dumps(keys))
-            (packaging / "release-platforms.json").write_text(json.dumps({"schema_version": 1, "platforms": [{"updater_key": "darwin-aarch64", "publication": "public", "updater_extension": "app.tar.gz"}]}))
+            (packaging / "release-platforms.json").write_text(json.dumps({"schema_version": 2, "platforms": [{"updater_key": "darwin-aarch64", "publication": "public", "package_extensions": ["dmg"], "updater_extension": "app.tar.gz"}]}))
             manifest = json.loads((root / "lycaon/testdata/release-halt/last-good.json").read_text())
             manifest["update_keys"] = release_binding(keys, "0.1.0")
             pointer = work / "latest-stable-key-1.json"

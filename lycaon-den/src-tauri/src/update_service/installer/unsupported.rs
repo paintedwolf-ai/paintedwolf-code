@@ -5,6 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub const CHECK_ONLY: bool = false;
 pub fn supported() -> bool {
     false
 }

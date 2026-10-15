@@ -1,5 +1,5 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "platforms": [
     {
       "updater_key": "darwin-aarch64",
@@ -8,28 +8,28 @@
       "goos": "darwin",
       "goarch": "arm64",
       "publication": "public",
-      "package_extension": "dmg",
+      "package_extensions": ["dmg"],
       "updater_extension": "app.tar.gz"
     },
     {
       "updater_key": "linux-x86_64",
-      "runner": "ubuntu-22.04",
+      "runner": "ubuntu-24.04",
       "artifact_arch": "x86_64",
       "goos": "linux",
       "goarch": "amd64",
       "publication": "candidate",
-      "package_extension": "AppImage",
-      "updater_extension": "AppImage"
+      "package_extensions": ["deb", "rpm"],
+      "updater_extension": null
     },
     {
       "updater_key": "linux-aarch64",
-      "runner": "ubuntu-22.04-arm",
+      "runner": "ubuntu-24.04-arm",
       "artifact_arch": "aarch64",
       "goos": "linux",
       "goarch": "arm64",
       "publication": "candidate",
-      "package_extension": "AppImage",
-      "updater_extension": "AppImage"
+      "package_extensions": ["deb", "rpm"],
+      "updater_extension": null
     },
     {
       "updater_key": "windows-x86_64",
@@ -38,7 +38,7 @@
       "goos": "windows",
       "goarch": "amd64",
       "publication": "candidate",
-      "package_extension": "exe",
+      "package_extensions": ["exe"],
       "updater_extension": "exe"
     }
   ]

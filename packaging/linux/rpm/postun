@@ -1,0 +1,19 @@
+# Refresh caches after the package files are gone; user data is never touched.
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload || :
+fi
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database -q /usr/share/applications || :
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1 && [ -f /usr/share/icons/hicolor/index.theme ]; then
+  gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || :
+fi
+if [ "$1" -eq 0 ]; then
+  if command -v semodule >/dev/null 2>&1 && semodule -l 2>/dev/null | grep -qx painted-wolf-code; then
+    semodule -n -r painted-wolf-code || :
+  fi
+  if [ -d /opt/painted-wolf-code ]; then
+    find /opt/painted-wolf-code -depth -type d -empty -delete 2>/dev/null || :
+  fi
+fi
+exit 0

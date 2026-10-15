@@ -54,7 +54,8 @@ func preflightDetailFixtures(t testingT) map[string]map[string]any {
 	}
 
 	belowFloor := base()
-	belowFloor.OSProductVer = func() (string, error) { return "10.15", nil }
+	// Below every host floor: the macOS release and the Linux kernel.
+	belowFloor.OSProductVer = func() (string, error) { return "1.0", nil }
 
 	unreadable := base()
 	unreadable.OSProductVer = func() (string, error) { return "", errFixtureProbeFailed }

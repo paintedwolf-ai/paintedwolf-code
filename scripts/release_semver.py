@@ -76,3 +76,10 @@ def windows_package_version(version: Version, release_build: int) -> str:
         raise ValueError("Windows package major and minor versions must not exceed 255")
     parse_release_build(str(release_build))
     return f"{version.major}.{version.minor}.{release_build}"
+
+
+def linux_package_version(version: Version) -> str:
+    """The .deb and .rpm version: a prerelease sorts before its release through a tilde."""
+    if version.prerelease is None:
+        return version.core
+    return f"{version.core}~{'.'.join(version.prerelease)}"

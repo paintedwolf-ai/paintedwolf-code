@@ -8,16 +8,13 @@ if [[ -n "${PW_TEST_CHECKOUT_CACHE:-}" ]]; then
 fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
+source "${ROOT}/scripts/sha256.sh"
 
 case "$(uname -s)" in
   Darwin) base="${HOME}/Library/Caches" ;;
   *) base="${XDG_CACHE_HOME:-${HOME}/.cache}" ;;
 esac
 
-if command -v shasum >/dev/null 2>&1; then
-  digest="$(printf '%s' "${ROOT}" | shasum -a 256 | cut -c1-12)"
-else
-  digest="$(printf '%s' "${ROOT}" | sha256sum | cut -c1-12)"
-fi
+digest="$(printf '%s' "${ROOT}" | sha256_hex | cut -c1-12)"
 
 printf '%s/painted-wolf-dev/checkouts/%s-%s\n' "${base}" "$(basename "${ROOT}")" "${digest}"

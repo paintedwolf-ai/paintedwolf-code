@@ -136,7 +136,9 @@ fi
 BUNDLE_KIND="dmg"
 BUILD_CONFIG=(--config "$(python3 "${ROOT}/scripts/update_keys.py")")
 if [[ "${HOST_KIND}" == "linux" ]]; then
-  BUNDLE_KIND="appimage"
+  # Tauri stages the package tree through its .deb target; linux-package-assemble.py
+  # finishes the .deb and .rpm from that tree. No updater artifact.
+  BUNDLE_KIND="deb"
 elif [[ "${HOST_KIND}" == "windows" ]]; then
   BUNDLE_KIND="nsis"
   if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
@@ -193,7 +195,7 @@ elif [[ "${HOST_KIND}" == "windows" ]]; then
       "${WINDOWS_BUNDLED_EXECUTABLES[@]}"
     BUILD_CONFIG+=(--config "${WINDOWS_CONFIG}")
   fi
-elif [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+elif [[ "${HOST_KIND}" == "darwin" && -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
   # Updater archives require the app bundle beside the disk image.
   BUNDLE_KIND="app,dmg"
 elif [[ "${HOST_KIND}" == "darwin" ]]; then
@@ -213,7 +215,20 @@ echo "den:bundle — tauri build (--bundles ${BUNDLE_KIND}, target ${TARGET})" >
     export IBToolNeverDeque=1
     export PATH="${ROOT}/scripts/macos-build-tools:${PATH}"
   fi
-  if (( ${#BUILD_CONFIG[@]} > 0 )); then
+  if [[ "${HOST_KIND}" == "linux" ]]; then
+    # Package files keep the staged modes, so every helper must be world-readable.
+    chmod 0755 "${BINARIES_DIR}"/*-"${TARGET}"
+    # The package manifest digests the compiled shell, so compile first and bundle second.
+    bun run tauri build --no-bundle --target "${TARGET}" "${BUILD_CONFIG[@]}"
+    LINUX_MANIFEST="${TAURI_DIR}/target/${TARGET}/release/linux-package/manifest.json"
+    python3 "${ROOT}/scripts/linux-package-manifest.py" generate \
+      --root "${ROOT}" --target "${TARGET}" --version "${PRODUCT_VERSION}" --output "${LINUX_MANIFEST}"
+    LINUX_CONFIG="$(python3 "${ROOT}/scripts/linux-package-config.py" --root "${ROOT}" --target "${TARGET}" --manifest "${LINUX_MANIFEST}")"
+    rm -rf "${TAURI_DIR}/target/${TARGET}/release/bundle/deb" "${TAURI_DIR}/target/${TARGET}/release/bundle/rpm"
+    bun run tauri bundle --bundles "${BUNDLE_KIND}" --target "${TARGET}" "${BUILD_CONFIG[@]}" --config "${LINUX_CONFIG}"
+    python3 "${ROOT}/scripts/linux-package-assemble.py" assemble --root "${ROOT}" \
+      --bundle-dir "${TAURI_DIR}/target/${TARGET}/release/bundle" --arch "${TARGET%%-*}" --version "${LINUX_PACKAGE_VERSION}"
+  elif (( ${#BUILD_CONFIG[@]} > 0 )); then
     bun run tauri build --bundles "${BUNDLE_KIND}" --target "${TARGET}" "${BUILD_CONFIG[@]}"
   else
     bun run tauri build --bundles "${BUNDLE_KIND}" --target "${TARGET}"
@@ -224,7 +239,7 @@ echo "den:bundle — tauri build (--bundles ${BUNDLE_KIND}, target ${TARGET})" >
 # its feed announces. `tauri build` signs with the bundle version, which drops
 # the prerelease, so each signature from this build is replaced by one bound to
 # the product version.
-if [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
+if [[ "${HOST_KIND}" != "linux" && -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]]; then
   UPDATER_SIGNATURES=()
   while IFS= read -r -d '' signature; do
     UPDATER_SIGNATURES+=("${signature}")
@@ -287,6 +302,12 @@ if [[ -n "${DMG_PATH}" ]]; then
   echo "  ${DMG_PATH}"
   echo ""
   echo "Verify: spctl --assess --type open --context context:primary-signature -vvv \"${DMG_PATH}\""
+elif [[ "${HOST_KIND}" == "linux" ]]; then
+  echo ""
+  echo "Linux packages:"
+  find "${BUNDLE_DIR}/deb" "${BUNDLE_DIR}/rpm" -maxdepth 1 -type f \( -name '*.deb' -o -name '*.rpm' \) -print | sed 's/^/  /'
+  echo ""
+  echo "Verify: bash scripts/release-stage-platform-artifacts.sh --platform linux-<arch> ... (see docs/dev-tasks.md)"
 else
   echo ""
   echo "Bundle output under:"

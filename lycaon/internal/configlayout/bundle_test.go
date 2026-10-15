@@ -97,3 +97,53 @@ func TestSiblingExecutableFollowsTheHostLayout(t *testing.T) {
 		t.Errorf("resolved a missing sibling: %q", got)
 	}
 }
+
+func TestLinuxPackagedHostFindsTheEngineRoot(t *testing.T) {
+	installRoot, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "canonicalize install root", err)
+	host := filepath.Join(installRoot, "bin", "pw")
+	testutil.FailErr(t, "create bin directory", os.MkdirAll(filepath.Dir(host), 0o755))
+	testutil.FailErr(t, "write host fixture", os.WriteFile(host, []byte("fixture"), 0o755))
+	paths := []string{host, filepath.Join(installRoot, "bin", "..", "bin", "pw")}
+	if runtime.GOOS != "windows" {
+		link := filepath.Join(t.TempDir(), "pw")
+		testutil.FailErr(t, "create PATH symlink", os.Symlink(host, link))
+		paths = append(paths, link)
+	}
+	want := filepath.Join(installRoot, LinuxEngineRootDirName)
+	for _, path := range paths {
+		if got := linuxEngineRootForExecutable(path, installRoot); got != want {
+			t.Errorf("engine root for %q = %q, want %q", path, got, want)
+		}
+	}
+}
+
+func TestLinuxHostOutsideTheInstallRootHasNoEngineRoot(t *testing.T) {
+	installRoot, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "canonicalize install root", err)
+	write := func(path string) {
+		testutil.FailErr(t, "create fixture directory", os.MkdirAll(filepath.Dir(path), 0o755))
+		testutil.FailErr(t, "write fixture", os.WriteFile(path, []byte("fixture"), 0o755))
+	}
+	elsewhere := filepath.Join(filepath.Dir(installRoot), filepath.Base(installRoot)+"-other", "bin", "pw")
+	write(elsewhere)
+	atRoot := filepath.Join(installRoot, "pw")
+	write(atRoot)
+	inPayload := filepath.Join(installRoot, LinuxEngineRootDirName, "pw")
+	write(inPayload)
+	for _, path := range []string{elsewhere, atRoot, inPayload, filepath.Join(installRoot, "bin", "missing")} {
+		if got := linuxEngineRootForExecutable(path, installRoot); got != "" {
+			t.Errorf("engine root for %q = %q, want none", path, got)
+		}
+	}
+	packaged := filepath.Join(installRoot, "bin", "pw")
+	write(packaged)
+	for _, goos := range []string{"darwin", "windows"} {
+		if got := engineRootForExecutable(packaged, goos); got != "" {
+			t.Errorf("%s interpreted a Linux package layout as its own install: %q", goos, got)
+		}
+	}
+	if got := engineRootForExecutable(packaged, "linux"); got != "" {
+		t.Errorf("a temp install root resolved against the fixed package root: %q", got)
+	}
+}

@@ -8,13 +8,11 @@ use std::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::update_service) enum Layout {
     AppBundle,
-    AppImage,
 }
 impl Layout {
     pub(in crate::update_service) fn for_platform(platform: &str) -> Result<Self, UpdateError> {
         match platform {
             "darwin-aarch64" | "darwin-x86_64" => Ok(Self::AppBundle),
-            "linux-aarch64" | "linux-x86_64" => Ok(Self::AppImage),
             _ => Err(Failure::UnsupportedInstallation.into()),
         }
     }
@@ -24,25 +22,21 @@ impl Layout {
     pub(in crate::update_service) fn extension(self) -> &'static str {
         match self {
             Self::AppBundle => "app",
-            Self::AppImage => "AppImage",
         }
     }
     pub(in crate::update_service) fn accepts(self, metadata: &fs::Metadata) -> bool {
         match self {
             Self::AppBundle => metadata.is_dir(),
-            Self::AppImage => metadata.is_file(),
         }
     }
     pub(in crate::update_service) fn executable(self, root: &Path) -> PathBuf {
         match self {
             Self::AppBundle => root.join("Contents/MacOS/painted-wolf-code"),
-            Self::AppImage => root.to_path_buf(),
         }
     }
     pub(in crate::update_service) fn remove(self, root: &Path) -> std::io::Result<()> {
         match self {
             Self::AppBundle => fs::remove_dir_all(root),
-            Self::AppImage => fs::remove_file(root),
         }
     }
     pub(in crate::update_service) fn matches_path(self, path: &Path) -> bool {
@@ -58,19 +52,19 @@ mod tests {
         for platform in ["darwin-aarch64", "darwin-x86_64"] {
             assert_eq!(Layout::for_platform(platform).unwrap(), Layout::AppBundle);
         }
-        for platform in ["linux-aarch64", "linux-x86_64"] {
-            assert_eq!(Layout::for_platform(platform).unwrap(), Layout::AppImage);
-        }
-        for platform in ["windows-x86_64", "linux-unknown", "freebsd-x86_64"] {
+        // Package-managed Linux has no native shape to prepare or exchange.
+        for platform in [
+            "linux-aarch64",
+            "linux-x86_64",
+            "windows-x86_64",
+            "linux-unknown",
+            "freebsd-x86_64",
+        ] {
             assert!(Layout::for_platform(platform).is_err());
         }
         assert_eq!(
             Layout::AppBundle.executable(Path::new("App.app")),
             Path::new("App.app/Contents/MacOS/painted-wolf-code")
-        );
-        assert_eq!(
-            Layout::AppImage.executable(Path::new("App.AppImage")),
-            Path::new("App.AppImage")
         );
     }
 }
