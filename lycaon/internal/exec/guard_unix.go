@@ -16,6 +16,11 @@ import (
 // DefaultBelowNormalNice is the nice value applied for ProcessPriorityBelowNormal.
 const DefaultBelowNormalNice = 5
 
+// supervisorLaunchGrace bounds how long a held termination waits for the
+// supervisor's launch report. It covers a slow re-exec on a loaded host, and it
+// keeps a supervisor that never reports from blocking a caller without a WaitDelay.
+const supervisorLaunchGrace = 10 * time.Second
+
 type unixGuard struct {
 	belowNormal bool
 	// pgid is captured before the leader can be reaped.
@@ -35,12 +40,15 @@ type unixGuard struct {
 	awaitingLaunch bool
 	// heldTerminate is a termination requested while awaitingLaunch.
 	heldTerminate bool
+	// launchGrace and launchTimer kill an unreported launch held too long.
+	launchGrace time.Duration
+	launchTimer *time.Timer
 	// killTimer is the SIGKILL fallback armed by terminate.
 	killTimer *time.Timer
 }
 
 func newRunGuard(priority ProcessPriority) (runGuard, error) {
-	return &unixGuard{belowNormal: priority == ProcessPriorityBelowNormal}, nil
+	return &unixGuard{belowNormal: priority == ProcessPriorityBelowNormal, launchGrace: supervisorLaunchGrace}, nil
 }
 
 func (g *unixGuard) configure(cmd *exec.Cmd) {
@@ -109,6 +117,10 @@ func (g *unixGuard) confirmLaunch(cmd *exec.Cmd) error {
 	g.mu.Lock()
 	held := g.heldTerminate && err == nil
 	g.awaitingLaunch, g.heldTerminate = false, false
+	if g.launchTimer != nil {
+		g.launchTimer.Stop()
+		g.launchTimer = nil
+	}
 	g.mu.Unlock()
 	if held {
 		g.deliverTerminate(cmd)
@@ -127,11 +139,27 @@ func (g *unixGuard) terminate(cmd *exec.Cmd) {
 	g.terminated = true
 	if g.awaitingLaunch {
 		g.heldTerminate = true
+		g.launchTimer = time.AfterFunc(g.launchGrace, func() { g.abandonLaunch(cmd) })
 		g.mu.Unlock()
 		return
 	}
 	g.mu.Unlock()
 	g.deliverTerminate(cmd)
+}
+
+// abandonLaunch SIGKILLs a supervisor that has not reported its launch; the
+// supervisor ignores SIGUSR2 until it installs handlers, so the hard path through
+// signalSupervisor cannot stop it. Its PID and session stay reserved until the
+// caller's Wait, and the startup report then reads EOF.
+func (g *unixGuard) abandonLaunch(cmd *exec.Cmd) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if !g.awaitingLaunch || cmd.Process == nil {
+		return
+	}
+	g.launchTimer = nil
+	_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	_ = cmd.Process.Kill()
 }
 
 func (g *unixGuard) deliverTerminate(cmd *exec.Cmd) {
