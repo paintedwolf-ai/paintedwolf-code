@@ -420,24 +420,30 @@ class ActivatedHistoryTests(unittest.TestCase):
         self.addCleanup(patched.stop)
 
     def test_activation_survives_a_missing_github_mirror_and_later_pointer(self):
+        for version in ("1.0.2-rc3", "1.0.2"):
+            with self.subTest(version=version):
+                self.check_activation(version)
+
+    def check_activation(self, version):
         from release_distribution import encoded
         from update_keys import release_binding
         registry = self.registry
-        version = "1.0.2-rc3"
         manifest = {"version": version, "pub_date": "2026-10-03T12:00:00Z",
                     "update_keys": release_binding(registry, version)}
         activation = {"version": version, "manifest_sha256": sha(encoded(manifest)),
                       "started_at": "2026-10-03T12:05:00Z"}
         def read(url):
-            if "/1.0.2-rc3/activation.json" in url:
+            if f"/{version}/activation.json" in url:
                 return json.dumps(activation).encode()
-            if url.endswith("/updates/releases/1.0.2-rc3.json"):
+            if url.endswith(f"/updates/releases/{version}.json"):
                 return encoded(manifest)
             return None
         with patch.object(release_baseline.subprocess, "check_output", return_value="v1.0.1\nv1.0.2-rc3\nv1.0.2\nv0.9.0\nvbad\n"), \
              patch.object(release_baseline, "read_public", side_effect=read):
             history = release_baseline.activated_history([PublishedStableBaselineTests.release], "https://downloads.example")
-            self.assertEqual([row["tag_name"] for row in history], ["v1.0.2-rc3"])
+            self.assertEqual([row["tag_name"] for row in history], ["v" + version])
+            selected = release_baseline.channel_mirror([PublishedStableBaselineTests.release] + history, "stable")
+            self.assertEqual(selected["tag_name"], "v1.0.2" if version == "1.0.2" else "v1.0.1")
             self.assertEqual(history[0]["published_at"], activation["started_at"])
             activation["manifest_sha256"] = "0" * 64
             with self.assertRaisesRegex(ValueError, "immutable release"):

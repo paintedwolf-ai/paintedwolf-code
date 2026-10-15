@@ -244,10 +244,11 @@ if __name__ == "__main__":
     try:
         candidate = check_source_versions(args.source_ref)
         release = published_stable(json.load(sys.stdin), args.base_url)
-        tag, sha = resolve(release, args.source_ref)
         pages = json.loads(args.releases_file.read_text())
         releases = [row for page in pages for row in page]
         releases += activated_history(releases, args.base_url)
+        release = channel_mirror(releases + [release], "stable")
+        tag, sha = resolve(release, args.source_ref)
         channel = parse(candidate).channel
         preview = published_feed(channel_mirror(releases, "preview"), args.base_url, "preview")
         latest = channel_mirror(releases + [release], "stable") if channel == "stable" else preview
@@ -261,5 +262,7 @@ if __name__ == "__main__":
     versions = sorted({row["tag_name"][1:] for row in history if row.get("draft") is False
                        and compare(parse(row["tag_name"][1:]), parse("1.0.0")) >= 0})
     print("published_versions=" + json.dumps(versions, separators=(",", ":")))
+    if "activation_sha256" in release:
+        print("baseline_activation_sha256=" + release["activation_sha256"])
     if "feed_manifest_sha256" in release:
         print("baseline_manifest_sha256=" + release["feed_manifest_sha256"])

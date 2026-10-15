@@ -137,8 +137,10 @@ Project overlays never hold device credentials or grants. `model-policy.yaml` ha
 
 ## Automated release compatibility
 
-Both preview and stable publication compare against the newest published stable release confirmed by the signed updater feed or
-GitHub mirror, pinned to its source commit. Drafts, previews, and unpublished tags
+Both preview and stable publication compare against the newest stable release
+recorded by the signed updater feed, GitHub mirror, or immutable activation
+receipt, pinned to its source commit. Activation starts a permanent publication
+boundary: a failed later step cannot make that version safe to redefine. Drafts, previews, and unpublished tags
 cannot reset that baseline. Missing release history, mismatched source identity,
 unchanged pack versions with changed bytes, workflow version or archive violations,
 insufficient extension API declarations, and corpus mismatches block publication.
