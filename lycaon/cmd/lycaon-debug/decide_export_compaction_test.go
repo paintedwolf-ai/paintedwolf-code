@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"database/sql"
 	"encoding/json"
 	"os/exec"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -112,3 +114,63 @@ func TestCompactionCandidatesBoundInlineFeaturesWithoutDroppingCanonicalIdentity
 		t.Fatal("opening identity was not exact")
 	}
 }
+
+func TestExportCompactionObservationsAndRequestUsage(t *testing.T) {
+	sqlDB := testdbfixture.OpenPath(t, filepath.Join(t.TempDir(), "store.db"))
+	_, err := sqlDB.ExecContext(t.Context(), `
+		INSERT INTO llm_calls (id, session_id, caller, status, prompt_tokens, completion_tokens, cache_read_tokens, started_at, usage_source)
+		VALUES
+			('c-before', 'sess-1', 'coordinator', 'reported', 100, 10, 0, '2026-10-14T00:00:00Z', 'provider'),
+			('c-active', 'sess-1', 'coordinator', 'reported', 1200, 150, 800, '2026-10-14T00:00:02Z', 'provider'),
+			('c-host', 'sess-1', 'coordinator', 'reported', 50, 5, 0, '2026-10-14T00:00:03Z', 'host')
+	`)
+	testutil.FailErr(t, "seed llm_calls", err)
+
+	m0 := compactionFixtureMessage(t, "u0", "user", "initial", nil, nil)
+	m0.Origin, m0.Ts = string(api.MessageOriginUser), "2026-10-14T00:00:00Z"
+	old := compactionFixtureMessage(t, "old", "tool", "", &api.ToolResult{Tool: "read", Content: "old bytes"}, nil)
+	old.Ord, old.Seq, old.Ts = 1, 1, "2026-10-14T00:00:00Z"
+	open := compactionFixtureMessage(t, "open", "user", "continue", nil, nil)
+	open.Origin, open.Ts = string(api.MessageOriginUser), "2026-10-14T00:00:01Z"
+	recallArgs := map[string]any{"history": map[string]any{"through_ord": 1, "message_id": "old"}}
+	call := compactionFixtureMessage(t, "call", "assistant", "checking", nil, []api.ToolCall{
+		{ID: "rc-1", Name: "recall", Args: recallArgs},
+		{ID: "rc-2", Name: "recall", Args: recallArgs},
+	})
+	call.Ts = "2026-10-14T00:00:02Z"
+	next := compactionFixtureMessage(t, "next", "user", "done", nil, nil)
+	next.Origin, next.Ts = string(api.MessageOriginUser), "2026-10-14T00:00:05Z"
+	msgs := []db.ListSessionMessagesRow{m0, old, open, call, next}
+
+	var retentionBuf, requestsBuf bytes.Buffer
+	exporter := rowExporter{
+		queries:   db.New(sqlDB),
+		retention: json.NewEncoder(&retentionBuf),
+		requests:  json.NewEncoder(&requestsBuf),
+	}
+	receipt := db.ListTurnReceiptContextsRow{
+		ID:               7,
+		SessionID:        "sess-1",
+		OpeningMessageID: sql.NullString{String: "open", Valid: true},
+		SurfaceID:        "implement",
+		CatalogRevision:  "rev-1",
+		ProjectName:      "demo",
+		Model:            "gemma4:e4b",
+		TurnStatus:       "complete",
+		StateJson:        `{"host":"linux","user":"continue"}`,
+	}
+	testutil.FailErr(t, "export observations and usage", exporter.exportCompactionObservations(t.Context(), receipt, "root-1", msgs))
+
+	var retRow retentionRow
+	testutil.FailErr(t, "decode retention row", json.Unmarshal(retentionBuf.Bytes(), &retRow))
+	if retRow.Schema != retentionRowSchema || len(retRow.Candidates) != 1 || retRow.Candidates[0].ID != "old" {
+		t.Fatalf("unexpected retention row: %+v", retRow)
+	}
+
+	var reqRow map[string]any
+	testutil.FailErr(t, "decode request usage row", json.Unmarshal(requestsBuf.Bytes(), &reqRow))
+	if reqRow["schema"] != "pw-request-row/1" || reqRow["prompt_tokens"] != float64(1200) || reqRow["cache_read_tokens"] != float64(800) || reqRow["recall_calls"] != float64(2) || reqRow["repeated_calls"] != float64(1) || reqRow["unavailable_usage_calls"] != float64(1) {
+		t.Fatalf("unexpected request usage row: %+v", reqRow)
+	}
+}
+
