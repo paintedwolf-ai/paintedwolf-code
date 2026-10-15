@@ -5,7 +5,8 @@ import "github.com/lycaon/lycaon/pkg/api"
 // Result is what one recall call states. An empty Hits list means whatever
 // Resolution says it means.
 type Result struct {
-	Resolution Resolution `json:"resolution"`
+	History    *HistoryPage `json:"history,omitempty"`
+	Resolution Resolution   `json:"resolution"`
 	// ScopeStated echoes the reach the host actually applied.
 	ScopeStated string `json:"scope_stated"`
 	// QueryStated echoes the compiler's reading of the query.
@@ -23,8 +24,9 @@ type Result struct {
 	Issues []string `json:"issues,omitempty"`
 	// NextAction names a reachable exit when the answer was not what the caller
 	// wanted.
-	NextAction string  `json:"next_action,omitempty"`
-	Receipt    Receipt `json:"receipt"`
+	NextAction  string               `json:"next_action,omitempty"`
+	Receipt     Receipt              `json:"receipt"`
+	NextRequest *HistoryContinuation `json:"next_request,omitempty"`
 }
 
 // Count carries an explicit relation so a capped generation is not presented as
@@ -43,7 +45,9 @@ const (
 
 // Hit is one recalled observation.
 type Hit struct {
-	SourceContext *api.SourceContext `json:"-"`
+	sourceMessageID string
+	Record          *HistoryRequest    `json:"record_request,omitempty"`
+	SourceContext   *api.SourceContext `json:"-"`
 	// Handle addresses the observation in the producing session's ledger.
 	Handle string `json:"handle,omitempty"`
 	// HitID is stable row identity across calls.

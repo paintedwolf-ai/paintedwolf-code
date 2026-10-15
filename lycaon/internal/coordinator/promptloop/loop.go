@@ -213,7 +213,7 @@ loop:
 		if sess.IsWorkerChild() {
 			var usage *api.WorkerContextUsage
 			if completion != nil {
-				usage = l.Nudges.workerContextUsage(turnCtx, sess, completion.Usage.PromptTokens)
+				usage = l.Nudges.workerContextUsage(turnCtx, sess, completion.ContextInputTokens())
 			}
 			l.Nudges.publishWorkerProgress(turnCtx, sess, st.workerJobID, st.progress().CompleteRound(completed, maxIter, usage), true)
 		}

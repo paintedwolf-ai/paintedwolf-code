@@ -16,6 +16,8 @@ import type { TranscriptDisclosureKey } from "../chat/transcript/presentation/tr
 type Props = {
   fold: FileEditFold;
   onNetStat?: (stat: FileEditLineStat) => void;
+  /** The net count a group measured for this fold; the row then measures only revisions. */
+  netStat?: () => FileEditLineStat | undefined;
   projectId?: string;
   sessionId?: string | null;
   /** Worker overlay; null selects the project tree. */
@@ -69,6 +71,7 @@ export function FileEditDiff(props: Props) {
     <SourceDiffRow
       source={source}
       onNetStat={props.onNetStat}
+      netStat={props.netStat}
       chrome={props.chrome}
       disclosureKey={props.disclosureKey}
     />

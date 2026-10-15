@@ -126,7 +126,10 @@ Selection budgets are 10 seconds for turn decisions, automatic skill ranking,
 tool requests, and skill lookups. Enabled retrieval rerank sites have their own
 deadlines in `decisions.yaml`. Caller cancellation still ends the operation; it
 does not trigger discovery. Startup separately warms the engine with its
-90-second handshake budget.
+90-second handshake budget. The shared subprocess admits one physical request
+at a time. A caller deadline stops waiting but keeps that request's slot occupied
+until its native response or process exit; canceled admission waiters send nothing.
+This bounds abandoned work without changing ranking inputs or deadlines.
 
 ## Release vocabulary and retrieval
 
