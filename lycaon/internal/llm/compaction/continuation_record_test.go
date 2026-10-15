@@ -41,6 +41,7 @@ func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 		"- config.toml (read#4) before editing the registry block",
 		"- `read#4` (read)",
 		"- command, message `t2`",
+		`recall(query="handle:read#4")`,
 		"### Constraints",
 		"- no pushes",
 	} {
@@ -78,7 +79,7 @@ func TestContinuationExplicitQuotaKeepsCanonicalRecovery(t *testing.T) {
 	}
 	text, err = RenderContinuation(t.Context(), record, true, 192)
 	testutil.FailErr(t, "render useful recovery addresses", err)
-	for _, want := range []string{"original-call", "original-result", "read#1", `format="record"`} {
+	for _, want := range []string{"original-call", `recall(query="handle:read#1")`, `format="record"`} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("references lost %s: %s", want, text)
 		}
@@ -350,5 +351,22 @@ func TestOptionalContinuationRankingCannotDropOrInventSources(t *testing.T) {
 	NewSimpleCompactor(testCompactionConfig(), nil).rankContinuation(t.Context(), SessionInfo{}, record)
 	if record.Sources[0].MessageID != "a" {
 		t.Fatal("absent ranking changed the baseline")
+	}
+}
+
+func TestContinuationSourcesProvideExecutableRecovery(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	record := &messageview.Continuation{ThroughOrd: 42, Window: 16384, Reason: "references_only", Sources: []messageview.ContinuationSource{
+		{MessageID: "first-call", Ord: 3, Tool: "read"},
+		{MessageID: "first-result", Ord: 4, Tool: "read", Handles: []string{"read#1"}},
+	}}
+	for _, quota := range []int{0, 192} {
+		text, err := RenderContinuation(t.Context(), record, true, quota)
+		testutil.FailErr(t, "render direct recovery", err)
+		for _, want := range []string{`recall(query="handle:read#1")`, `recall(history={"through_ord":42,"message_id":"first-call","format":"record"})`} {
+			if !strings.Contains(text, want) {
+				t.Fatalf("recovery address missing %q: %s", want, text)
+			}
+		}
 	}
 }
