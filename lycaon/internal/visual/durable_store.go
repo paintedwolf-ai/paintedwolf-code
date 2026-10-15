@@ -63,7 +63,7 @@ func NewDurableStore(cfg DurableConfig) *DurableStore {
 	if records == nil {
 		records = &Records{}
 	}
-	records.recordsCatalog.r = records
+	records.r = records
 	records.onHandleBound = func(ctx context.Context, artifactID, handle string) {
 		_ = hot.BindEvidenceHandle(ctx, artifactID, handle)
 	}
@@ -75,7 +75,7 @@ func NewDurableStore(cfg DurableConfig) *DurableStore {
 		activeRun:    cfg.ActiveRun,
 		records:      records,
 	}
-	s.durableBlobs.s = s
+	s.s = s
 	return s
 }
 

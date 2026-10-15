@@ -89,7 +89,7 @@ func NewRecords(sqlDB db.Handle, outbox *eventoutbox.Outbox, projection Artifact
 		return nil
 	}
 	r := &Records{sqlDB: sqlDB, queries: db.New(sqlDB), outbox: outbox, projection: projection}
-	r.recordsCatalog.r = r
+	r.r = r
 	return r
 }
 
