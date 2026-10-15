@@ -3,7 +3,6 @@ package visualscreen
 import (
 	"image"
 	"image/color"
-	"math"
 	"strconv"
 )
 
@@ -70,9 +69,5 @@ func grayOf(c color.Color) byte {
 		r, g, b = min(r, 0xffff), min(g, 0xffff), min(b, 0xffff)
 	}
 	// Rec. 601 luma on 16-bit channels, reduced to 8 bits.
-	luma := (299*r + 587*g + 114*b) / 1000 >> 8
-	if luma > math.MaxUint8 {
-		luma = math.MaxUint8
-	}
-	return byte(luma)
+	return byte((299*r + 587*g + 114*b) / 1000 >> 8) //nolint:gosec // G115 — RGBA channels are at most 0xffff, so the weighted mean shifted by 8 fits in a byte
 }
