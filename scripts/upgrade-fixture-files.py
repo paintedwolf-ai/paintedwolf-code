@@ -131,7 +131,7 @@ def check_inventory(root, version):
             raise ValueError("future-version corpus must be prepared after VERSION selects it: " + entry.name)
 
 
-def candidate(fixture, sidecar, version, inventory_root=None):
+def candidate_static(fixture, version, inventory_root=None, schema_lock=None):
     if inventory_root is not None:
         check_inventory(inventory_root, version)
         if fixture.resolve() != (inventory_root / version).resolve():
@@ -142,6 +142,15 @@ def candidate(fixture, sidecar, version, inventory_root=None):
         raise ValueError("candidate fixture project root missing or unsafe")
     if metadata["app_version"] != version:
         raise ValueError("fixture app version differs from candidate")
+    if schema_lock is not None:
+        expected = json.loads(schema_lock.read_text())["schema_version"]
+        if metadata["schema_version"] != expected:
+            raise ValueError("candidate corpus schema revision differs from source")
+    return metadata
+
+
+def candidate(fixture, sidecar, version, inventory_root=None):
+    metadata = candidate_static(fixture, version, inventory_root)
     def diagnostic(*arguments):
         return json.loads(subprocess.check_output([str(sidecar), "diagnostics", *map(str, arguments)], text=True))
     baseline = diagnostic("schema-baseline")
@@ -173,6 +182,11 @@ if __name__ == "__main__":
     validator.add_argument("--sidecar", type=Path, required=True)
     validator.add_argument("--version", required=True)
     validator.add_argument("--inventory-root", type=Path)
+    static = commands.add_parser("candidate-static")
+    static.add_argument("fixture", type=Path)
+    static.add_argument("--version", required=True)
+    static.add_argument("--inventory-root", type=Path, required=True)
+    static.add_argument("--schema-lock", type=Path, required=True)
     inventory = commands.add_parser("inventory")
     inventory.add_argument("root", type=Path)
     inventory.add_argument("--version", required=True)
@@ -180,6 +194,8 @@ if __name__ == "__main__":
     try:
         if args.command == "materialize":
             materialize(args.fixture, args.destination)
+        elif args.command == "candidate-static":
+            candidate_static(args.fixture, args.version, args.inventory_root, args.schema_lock)
         elif args.command == "inventory":
             check_inventory(args.root, args.version)
         else:

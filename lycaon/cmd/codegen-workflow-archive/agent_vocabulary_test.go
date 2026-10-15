@@ -9,8 +9,8 @@ import (
 
 func TestAgentVocabularyRequiresStableSignaturesAndRetirementSuccessors(t *testing.T) {
 	for _, tc := range []struct {
-		name, oldType, newType, want      string
-		removed, retired, reused, missing bool
+		name, oldType, newType, want string
+		removed, retired, missing    bool
 	}{
 		{name: "unchanged", oldType: "bool", newType: "bool"},
 		{name: "type change", oldType: "bool", newType: "string", want: "signature"},

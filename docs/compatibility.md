@@ -145,6 +145,13 @@ insufficient extension API declarations, and corpus mismatches block publication
 Published preview database revisions remain supported upgrade sources even though
 they do not become the stable compatibility baseline.
 
+The first release stages check channel progression, packaging versions, release notes,
+and static corpus integrity before native setup or application builds. The candidate
+must be newer than every publication in its channel, and `RELEASE_BUILD` must
+exceed every published build across both channels. Signed pointers and all published
+GitHub releases count; drafts do not. SemVer precedence applies to preview names.
+Full database shape and upgrade rehearsal checks follow with the built candidate.
+
 The release controller owns these checks and reads the selected candidate tree,
 so selecting an older qualified source cannot select an older compatibility gate.
 OAR fact signatures cannot change under a surviving name. Removed facts and

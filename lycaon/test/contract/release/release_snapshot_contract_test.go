@@ -157,21 +157,31 @@ func TestReleaseCompatibilityCannotBeSkippedForEitherChannel(t *testing.T) {
 			}
 		}
 	}
-	for _, step := range jobs["preflight"].Steps {
+	for _, step := range jobs["compatibility"].Steps {
 		if strings.Contains(step.Run, "--compatibility-only") {
 			guard = true
 			if step.If != "" || step.Continue || step.Env["BASELINE_SHA"] != "${{ needs.classify.outputs.baseline_sha }}" || !strings.Contains(step.Run, "--source-root") {
 				t.Fatal("compatibility enforcement can skip a release or inspect another source")
 			}
 		}
-		if strings.Contains(step.Run, "--require-corpus") {
-			corpus = true
-		}
 		if strings.Contains(step.Run, "./task openapi:diff") {
 			wire = true
 			if step.Continue || !strings.Contains(step.Run, "--baseline-ref") {
 				t.Fatal("OpenAPI report failures or its stable baseline are not enforced")
 			}
+		}
+	}
+	for _, step := range jobs["preflight"].Steps {
+		corpus = corpus || strings.Contains(step.Run, "--require-corpus")
+	}
+	for _, job := range []string{"preflight", "build-release"} {
+		if !slices.Contains(hostedNeeds(t, jobs[job]), "compatibility") {
+			t.Fatalf("%s can start before cheap compatibility checks", job)
+		}
+	}
+	for _, step := range jobs["compatibility"].Steps {
+		if strings.Contains(step.Uses, "setup-verification") || strings.Contains(step.Uses, "setup-bialy") || strings.Contains(step.Run, "setup-dev") || strings.Contains(step.Run, "build:lycaon") {
+			t.Fatal("compatibility gate provisions or builds the app")
 		}
 	}
 	if !stable || !guard || !corpus || !wire {

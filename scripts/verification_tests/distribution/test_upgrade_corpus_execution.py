@@ -58,6 +58,15 @@ class CorpusIntegrityTests(unittest.TestCase):
             return json.dumps(self.identity)
         return json.dumps({"compatible": Path(command[3]).read_bytes() == b"valid database"})
 
+    def test_static_gate_needs_no_engine_and_rejects_stale_schema_revision(self):
+        lock = self.root / "schema-lock.json"
+        lock.write_text('{"schema_version":1}')
+        with patch.object(fixture_files.subprocess, "check_output", side_effect=AssertionError("engine invoked")):
+            fixture_files.candidate_static(self.fixture, "1.0.0-rc.1", schema_lock=lock)
+            lock.write_text('{"schema_version":2}')
+            with self.assertRaisesRegex(ValueError, "revision differs"):
+                fixture_files.candidate_static(self.fixture, "1.0.0-rc.1", schema_lock=lock)
+
     def test_candidate_checks_independent_archive_store_and_preserves_inputs(self):
         before = {p: p.read_bytes() for p in self.fixture.rglob("*") if p.is_file()}
         with patch.object(fixture_files.subprocess, "check_output", side_effect=self.diagnostics) as run:
@@ -271,3 +280,71 @@ class StableFeedBaselineTests(unittest.TestCase):
                 else:
                     with self.assertRaises(release_baseline.urllib.error.HTTPError):
                         release_baseline.read_public("https://downloads.example")
+
+
+class ReleaseProgressionTests(unittest.TestCase):
+    def release(self, version):
+        return {**PublishedStableBaselineTests.release, "tag_name": "v" + version,
+                "prerelease": "-" in version}
+
+    def test_each_channel_must_advance_with_semver_precedence(self):
+        for candidate, previous, valid in (("1.0.2-rc10", "1.0.2-rc9", False),
+                                           ("1.0.2-rc.10", "1.0.2-rc.9", True),
+                                           ("1.0.2-rc3", "1.0.2-rc3", False),
+                                           ("1.0.2", "1.0.1", True),
+                                           ("1.0.1", "1.0.2", False)):
+            with self.subTest(candidate=candidate, previous=previous), \
+                 patch.object(release_baseline.subprocess, "check_output", return_value="20"):
+                if valid:
+                    release_baseline.check_progression(candidate, [], self.release(previous), "source")
+                else:
+                    with self.assertRaisesRegex(ValueError, "newer"):
+                        release_baseline.check_progression(candidate, [], self.release(previous), "source")
+
+    def test_native_build_advances_across_both_channels(self):
+        releases = [self.release("1.0.1"), self.release("1.0.2-rc3")]
+        for builds, valid in ((["22", "19", "21"], True), (["21", "19", "21"], False)):
+            with self.subTest(builds=builds), patch.object(release_baseline.subprocess, "check_output", side_effect=builds):
+                if valid:
+                    release_baseline.check_progression("1.0.2", releases, releases[0], "source")
+                else:
+                    with self.assertRaisesRegex(ValueError, "RELEASE_BUILD"):
+                        release_baseline.check_progression("1.0.2", releases, releases[0], "source")
+
+    def test_preview_history_does_not_replace_stable_history(self):
+        releases = [self.release("1.0.1"), self.release("1.1.0-rc.2"),
+                    {**self.release("2.0.0"), "draft": True}, self.release("1.1.0-rc.10")]
+        self.assertEqual(release_baseline.channel_mirror(releases, "stable")["tag_name"], "v1.0.1")
+        self.assertEqual(release_baseline.channel_mirror(releases, "preview")["tag_name"], "v1.1.0-rc.10")
+
+    def test_build_metadata_cannot_republish_a_version(self):
+        with self.assertRaisesRegex(ValueError, "without build metadata"):
+            release_baseline.check_progression("1.0.2+another", [], None, "source")
+
+
+class SourceVersionTests(unittest.TestCase):
+    def inputs(self):
+        return {"VERSION": "1.0.2-rc3", "RELEASE_BUILD": "20",
+                "lycaon-den/package.json": '{"version":"1.0.2-rc3"}',
+                "lycaon-den/src-tauri/tauri.conf.json": '{"version":"1.0.2","bundle":{"macOS":{"bundleVersion":"20"}}}',
+                "lycaon-den/src-tauri/Cargo.toml": '[package]\nversion="1.0.2"',
+                "lycaon-den/src-tauri/Cargo.lock": '[[package]]\nname="painted-wolf-code"\nversion="1.0.2"',
+                "CHANGELOG.md": '## [1.0.2-rc3]\nRelease notes.\n## [1.0.1]\nPrior notes.'}
+
+    def test_selected_source_packaging_versions_and_notes_are_checked_before_building(self):
+        source = self.inputs()
+        def read(command, **_):
+            self.assertEqual(command[:2], ["git", "show"])
+            self.assertTrue(command[2].startswith("selected:"))
+            return source[command[2].split(":", 1)[1]]
+        with patch.object(release_baseline.subprocess, "check_output", side_effect=read):
+            self.assertEqual(release_baseline.check_source_versions("selected"), "1.0.2-rc3")
+            for name, replacement in (("lycaon-den/package.json", '{"version":"1.0.1"}'),
+                                      ("lycaon-den/src-tauri/Cargo.toml", '[package]\nversion="1.0.1"'),
+                                      ("lycaon-den/src-tauri/Cargo.lock", '[[package]]\nname="painted-wolf-code"\nversion="1.0.1"'),
+                                      ("RELEASE_BUILD", "19"), ("CHANGELOG.md", '## [1.0.1]\nPrior notes.')):
+                original = source[name]
+                source[name] = replacement
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    release_baseline.check_source_versions("selected")
+                source[name] = original
