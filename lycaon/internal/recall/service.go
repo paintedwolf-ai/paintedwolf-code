@@ -50,16 +50,20 @@ func NewService(database db.Handle, dataDir string) *Service {
 
 // Request is one recall call.
 type Request struct {
-	Query  string
-	Widen  Widen
-	Limit  int
-	Caller Caller
+	History *HistoryRequest
+	Query   string
+	Widen   Widen
+	Limit   int
+	Caller  Caller
 }
 
 // Answer runs one recall and states a total resolution.
 func (s *Service) Answer(ctx context.Context, req Request) (*Result, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("recall: service unavailable")
+	}
+	if req.History != nil {
+		return s.history(ctx, req)
 	}
 	if err := validateQuery(req.Query); err != nil {
 		return nil, err

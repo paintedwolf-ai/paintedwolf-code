@@ -1,0 +1,15 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/extpacks/resolve.go",
+  "kind": "algorithm",
+  "workstream": "extension-resolution",
+  "disposition": "retain",
+  "reason": "Resolve owns one deterministic catalog calculation: enablement, dependency closure, unit selection, diagnostics, and revision identity. Keep its phases together within 680 code-bearing lines. Lock parsing owns installed graph structure; manifest ranges govern current bundled dependencies. Focused resolution and publication contracts cover compatibility, dependency isolation, current-version projections, and unchanged durable state.",
+  "reviewed_commit": "3ebca590a6dc0588d158ba815e564df0e2c949a5",
+  "ceiling": 680,
+  "boundaries": {
+    "lycaon/internal/extpacks/stock_catalog_test.go": "9254976152a130e93c86d6c13115eeabcfce31e8c43adab55fdcc8543aba2909",
+    "lycaon/internal/extensionstate/device_catalog_test.go": "0abf3adc363bcb0a9bc2e45c594e45720445df00a7a169b8c3c464bbbd3f15e4",
+    "lycaon/internal/extpacks/resolve_test.go": "b8d1d3934694c34d64b0f9f89f5b4b76ec0dd12cbb0fc509ae9df37b6052dbf1"
+  }
+}

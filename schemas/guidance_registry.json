@@ -507,7 +507,7 @@
       "summary": "{% if paintedwolf.path %}The confine helper resolved `{{ paintedwolf.path }}` but the kernel refused to execute it.{% else %}The confine helper resolved argv0 but the kernel refused to execute it.{% endif %}"
     },
     "COMMAND_FAILURE_LOOP": {
-      "branch_instruction": "Stop replaying the identical invocation; follow the preceding Code's Fix or change approach",
+      "branch_instruction": "Diagnose the failed outcome before retrying; changed source must be observed by the host.",
       "category": "recoverable",
       "emit": "guard:command_loop",
       "summary": "command `{{ paintedwolf.command }}` has failed {{ paintedwolf.count }} times in a row."
@@ -1813,6 +1813,12 @@
       "category": "recoverable",
       "emit": "guard:read",
       "summary": "{{ tool }} could not open {{ paintedwolf.path }} — path does not exist under the attached project roots."
+    },
+    "RECALL_HISTORY_INVALID": {
+      "branch_instruction": "Correct the history coordinates and retry",
+      "category": "recoverable",
+      "emit": "guard:recall",
+      "summary": "The history request was rejected: {{ paintedwolf.rejection_reason }}."
     },
     "RECALL_LIVE_CODE_NOT_IN_SCOPE": {
       "branch_instruction": "Use an offered current-source tool, or report the missing evidence",

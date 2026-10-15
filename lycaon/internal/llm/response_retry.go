@@ -27,16 +27,18 @@ func (p *responseRetryProvider) Profile() providerprofile.Profile { return p.inn
 func (p *responseRetryProvider) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
 	var usage responseRetryUsage
 	for attempt := 0; ; attempt++ {
+		usage.beginAttempt()
 		req.AttemptBudget = &modelcall.CompletionBudget{}
 		completion, err := p.inner.Complete(ctx, req)
 		noteResponseBudget(req, completion)
 		if completion != nil {
-			usage.observe(completion.Usage)
+			usage.observe(completion.Usage, completion.AttemptUsage)
 			copied := *completion
+			copied.AttemptUsage = usage.attemptUsage()
 			copied.Usage = usage.total()
 			completion = &copied
 		} else if usage.total().Reported() {
-			completion = &modelcall.Completion{Usage: usage.total()}
+			completion = &modelcall.Completion{Usage: usage.total(), AttemptUsage: usage.attemptUsage()}
 		}
 		usage.finishAttempt()
 		empty, retryable := p.emptyCompletion(req, completion, err)
@@ -100,7 +102,7 @@ func (p *responseRetryProvider) forwardStream(
 		if startErr != nil {
 			empty, retry = p.emptyCompletion(req, nil, startErr)
 			if empty == nil {
-				modelcall.SendChunk(ctx, out, modelcall.StreamChunk{Err: startErr, Usage: usage.total(), Done: true})
+				modelcall.SendChunk(ctx, out, modelcall.StreamChunk{Err: startErr, Usage: usage.total(), AttemptUsage: usage.attemptUsage(), Done: true})
 				return
 			}
 		} else {
@@ -112,19 +114,20 @@ func (p *responseRetryProvider) forwardStream(
 		}
 		retry, retryErr := p.prepareResponseRetry(ctx, &req, attempt, empty, retry)
 		if retryErr != nil {
-			modelcall.SendChunk(ctx, out, modelcall.StreamChunk{Err: retryErr, Usage: usage.total(), Done: true})
+			modelcall.SendChunk(ctx, out, modelcall.StreamChunk{Err: retryErr, Usage: usage.total(), AttemptUsage: usage.attemptUsage(), Done: true})
 			return
 		}
 		if !retry {
 			empty.Attempts = attempt + 1
 			empty.Retryable = false
-			modelcall.SendChunk(ctx, out, modelcall.StreamChunk{Err: empty, Usage: usage.total(), Done: true})
+			modelcall.SendChunk(ctx, out, modelcall.StreamChunk{Err: empty, Usage: usage.total(), AttemptUsage: usage.attemptUsage(), Done: true})
 			return
 		}
-		if !modelcall.SendChunk(ctx, out, modelcall.StreamChunk{ResetReasoning: true, Usage: usage.total()}) {
+		if !modelcall.SendChunk(ctx, out, modelcall.StreamChunk{ResetReasoning: true, Usage: usage.total(), AttemptUsage: &modelcall.TokenUsage{}}) {
 			return
 		}
 		attempt++
+		usage.beginAttempt()
 		attemptCtx, nextCancel := context.WithCancel(ctx)
 		req.AttemptBudget = &modelcall.CompletionBudget{}
 		stream, startErr = p.inner.Stream(attemptCtx, req)
@@ -160,7 +163,7 @@ func (p *responseRetryProvider) forwardAttempt(
 	hasText := false
 	hasToolCalls := false
 	for chunk := range stream {
-		usage.observe(chunk.Usage)
+		usage.observe(chunk.Usage, chunk.AttemptUsage)
 		if chunk.Usage.Reported() {
 			attemptCompletion.Usage = chunk.Usage
 		}
@@ -169,6 +172,7 @@ func (p *responseRetryProvider) forwardAttempt(
 			attemptCompletion.ToolCalls = chunk.ToolCalls
 		}
 		if chunk.Usage.Reported() || chunk.Done || chunk.Err != nil {
+			chunk.AttemptUsage = usage.attemptUsage()
 			chunk.Usage = usage.total()
 		}
 		hasText = hasText || chunk.Content != ""
