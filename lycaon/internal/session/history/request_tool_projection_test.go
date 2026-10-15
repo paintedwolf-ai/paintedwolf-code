@@ -155,3 +155,27 @@ func TestRecallSearchFitKeepsRecoverableHits(t *testing.T) {
 		t.Fatalf("partial search did not preserve endpoint addresses and truncation: %s", fitted)
 	}
 }
+
+func TestSmallObservationSurvivesModelFormattingOverhead(t *testing.T) {
+	raw, err := json.Marshal(map[string]any{"content": "   731: checksum=original-cypress-7826", "offset": 731, "end_line": 731, "mode": "content", "receipt": map[string]any{"tool": "read"}})
+	testutil.FailErr(t, "encode small observed row", err)
+	content := "[read#1]\n" + string(raw) + "\n>>> Tool feedback\n" + strings.Repeat("recorded feedback\n", 100)
+	original := api.Message{ID: "small-read", Ord: 3, Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted, Content: content, EvidenceHandles: []string{"read#1"}, ToolResult: &api.ToolResult{Tool: "read", Content: content, Outcome: api.ToolResultOutcomeCompleted}}
+	projected := transcript.Project([]api.Message{original})
+	var row api.Message
+	for _, m := range projected {
+		if m.ID == original.ID {
+			row = m
+		}
+	}
+	if len(content) > 2048 || len(row.Content) <= 2048 {
+		t.Fatalf("fixture missed the representation boundary: canonical=%d projected=%d", len(content), len(row.Content))
+	}
+	result := projectRecordedToolBodies(t.Context(), []api.Message{row})[0]
+	if result.Content != content || !strings.Contains(result.Content, "checksum=original-cypress-7826") {
+		t.Fatal("formatting overhead displaced a fitting observation")
+	}
+	if original.Content != content || original.ToolResult.Content != content {
+		t.Fatal("projection changed canonical observation bytes")
+	}
+}
