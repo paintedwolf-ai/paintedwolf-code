@@ -3,6 +3,7 @@ package history
 import (
 	"encoding/json"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -51,8 +52,12 @@ func projectRecordedToolBodies(rows []api.Message) []api.Message {
 }
 
 func projectRecallHistoryPage(raw string, maxBytes int) (string, bool, bool) {
+	prefix, body, suffix, ok := hostmarker.SplitToolJSONBody(raw)
+	if !ok {
+		return "", false, false
+	}
 	var root map[string]any
-	if err := json.Unmarshal([]byte(raw), &root); err != nil {
+	if err := json.Unmarshal([]byte(body), &root); err != nil {
 		return "", false, false
 	}
 	history, ok := root["history"].(map[string]any)
@@ -87,8 +92,8 @@ func projectRecallHistoryPage(raw string, maxBytes int) (string, bool, bool) {
 				receipt["bytes_returned"] = len(trimmed)
 				receipt["truncated"] = true
 			}
-			if encoded, err := json.Marshal(root); err == nil && len(encoded) <= maxBytes {
-				best, low = string(encoded), mid+1
+			if encoded, err := json.Marshal(root); err == nil && len(prefix)+len(encoded)+len(suffix) <= maxBytes {
+				best, low = prefix+string(encoded)+suffix, mid+1
 			} else {
 				high = mid - 1
 			}
@@ -105,8 +110,8 @@ func projectRecallHistoryPage(raw string, maxBytes int) (string, bool, bool) {
 			}
 			root["truncated"] = true
 		}
-		if encoded, err := json.Marshal(root); err == nil && len(encoded) <= maxBytes {
-			best, low = string(encoded), mid+1
+		if encoded, err := json.Marshal(root); err == nil && len(prefix)+len(encoded)+len(suffix) <= maxBytes {
+			best, low = prefix+string(encoded)+suffix, mid+1
 		} else {
 			high = mid - 1
 		}
