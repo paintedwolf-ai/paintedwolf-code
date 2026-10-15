@@ -341,11 +341,11 @@ func TestRequestFittingReservesObservedInputUsage(t *testing.T) {
 	service := &Service{}
 	sess := &api.Session{ID: "observed", Model: "small"}
 	estimate := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(rows))
-	service.ObserveTokens(sess.ID, estimate*2, estimate)
+	service.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, estimate*2, estimate)
 	fitted, err := service.FitRequest(t.Context(), sess, rows, req, budgets)
 	testutil.FailErr(t, "fit observed input usage", err)
 	budget := budgets.RequestBudget(t.Context(), "fixture", fitted)
-	observed := service.Calibration(sess.ID).ProjectBilled(compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(fitted.Messages)), 0)
+	observed := service.Calibration(t.Context(), sess).ProjectBilled(compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(fitted.Messages)), 0)
 	observed += (observed + 9) / 10
 	if max(observed, budget.Input)+budget.Output+budget.Headroom > budget.Window {
 		t.Fatalf("observed input exceeded fitted window: observed=%d budget=%+v", observed, budget)
@@ -378,5 +378,33 @@ func TestRequestFittingKeepsToolBodyWhenOutputCanYield(t *testing.T) {
 	budget := budgets.RequestBudget(t.Context(), "fixture", fitted)
 	if budget.Input+budget.Output+budget.Headroom > budget.Window {
 		t.Fatalf("unprojected observations exceeded fitted window: %+v", budget)
+	}
+}
+
+func TestRequestFittingDiscardsOtherReceiverCalibration(t *testing.T) {
+	rows := []api.Message{{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Continue the task"}}
+	req := modelcall.CompletionRequest{Model: "small", MaxTokens: 512, Messages: rows}
+	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 4096}})}
+	for _, receiver := range []struct{ name, providerID, model string }{
+		{"provider", "other", "small"}, {"model", "fixture", "large"},
+	} {
+		t.Run(receiver.name, func(t *testing.T) {
+			service := &Service{}
+			sess := &api.Session{ID: "switch", ProviderID: receiver.providerID, Model: receiver.model}
+			estimate := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(rows))
+			service.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, 100000, estimate)
+			if !service.Calibration(t.Context(), sess).Calibrated() {
+				t.Fatal("matching receiver lost its observation")
+			}
+			sess.ProviderID, sess.Model = "fixture", "small"
+			if service.Calibration(t.Context(), sess).Calibrated() {
+				t.Fatal("receiver switch reused incompatible input usage")
+			}
+			fitted, err := service.FitRequest(t.Context(), sess, rows, req, budgets)
+			testutil.FailErr(t, "fit new receiver without old token ratio", err)
+			if !reflect.DeepEqual(fitted.Messages, rows) || fitted.MaxTokens != 512 {
+				t.Fatal("receiver switch unnecessarily changed the request")
+			}
+		})
 	}
 }

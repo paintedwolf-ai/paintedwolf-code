@@ -30,7 +30,7 @@ func (m *Service) Assemble(ctx context.Context, sess *api.Session, history []api
 		deps.CompactionConfig = compaction.WorkerChildCompactionConfig(deps.CompactionConfig)
 	}
 	if sess != nil {
-		deps.TokenCalibration = m.Calibration(sess.ID)
+		deps.TokenCalibration = m.Calibration(ctx, sess)
 	}
 	deps.ColdStartOverhead = deps.CompactionConfig.ColdStartOverhead(compaction.ResolveColdStartOverhead(""))
 	if len(history) == 0 {

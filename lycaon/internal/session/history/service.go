@@ -37,7 +37,7 @@ type Service struct {
 	router          *llm.StaticModelRouter
 	progress        progress.RunScopedStore
 	dataDir         string
-	calibration     scopedstore.LRU[compaction.PromptTokenCalibration]
+	calibration     scopedstore.LRU[tokenCalibration]
 	recallAvailable func(context.Context, *api.Session) bool
 }
 

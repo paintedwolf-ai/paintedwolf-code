@@ -33,7 +33,7 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 		if budgets != nil {
 			budget = budgets.RequestBudget(ctx, provider, candidate)
 		}
-		if calibration := m.Calibration(sess.ID); calibration.Calibrated() {
+		if calibration := m.Calibration(ctx, sess); calibration.Calibrated() {
 			transcript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(candidate.Messages))
 			observed := calibration.ProjectBilled(transcript, 0)
 			// Composition changes need room beyond the last observed ratio.

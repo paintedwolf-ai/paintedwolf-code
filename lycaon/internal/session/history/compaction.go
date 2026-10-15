@@ -65,7 +65,7 @@ func (m *Service) Fit(ctx context.Context, sess *api.Session, history []api.Mess
 	if m.Compactor != nil {
 		cfg := m.Compactor.Config()
 		// Per-call fitting does not lower the durable retry threshold.
-		est := m.BudgetTokens(sess.ID, report.TokensBefore)
+		est := m.BudgetTokens(ctx, sess, report.TokensBefore)
 		if est >= cfg.HardCeilingTokens {
 			m.Schedule(ctx, sess)
 		} else if compaction.ShouldCompactSession(est, cfg.ModelContextWindow, cfg) {
@@ -160,7 +160,7 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 
 	// Full summaries run only above the session watermark.
 	cfg := sc.Config()
-	budgetEst := m.BudgetTokens(sessionID, compaction.EstimateMessagesTokens(working))
+	budgetEst := m.BudgetTokens(ctx, sess, compaction.EstimateMessagesTokens(working))
 	rowPressure := hasMore || len(working) > UncompactedLimit
 	if compaction.ShouldCompactSession(budgetEst, cfg.ModelContextWindow, cfg) || rowPressure {
 		maxTokens := cfg.TargetTokens
@@ -407,7 +407,7 @@ func (m *Service) SessionContext(ctx context.Context, sessionID string) (api.Ses
 		return api.SessionContextResponse{}, err
 	}
 	_, report := m.Assemble(ctx, sess, history, "")
-	est := m.BudgetTokens(sessionID, report.TokensAfter)
+	est := m.BudgetTokens(ctx, sess, report.TokensAfter)
 	remaining := 0
 	if m.Compactor != nil {
 		remaining, _ = m.Compactor.BudgetRemaining(ctx, sessionID, est)

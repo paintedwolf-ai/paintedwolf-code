@@ -31,9 +31,9 @@ func TestCompactionUsesObservedTokenOverhead(t *testing.T) {
 		t.Fatalf("transcript = %d must stay below hard ceiling %d for fixture", transcript, cfg.HardCeilingTokens)
 	}
 	overhead := cfg.HardCeilingTokens - transcript + 1000
-	mgr.Runner.History.ObserveTokens(sess.ID, transcript+overhead, transcript)
+	mgr.Runner.History.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, transcript+overhead, transcript)
 
-	got := mgr.Runner.History.BudgetTokens(sess.ID, transcript)
+	got := mgr.Runner.History.BudgetTokens(ctx, sess, transcript)
 	if got < cfg.HardCeilingTokens {
 		t.Fatalf("corrected budget = %d want >= hard ceiling %d", got, cfg.HardCeilingTokens)
 	}
@@ -55,7 +55,7 @@ func TestCompactionColdStartReservesStaticStack(t *testing.T) {
 
 	block := strings.Repeat("x ", 1000)
 	transcript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI([]api.Message{{Content: block}}))
-	got := mgr.Runner.History.BudgetTokens(sess.ID, transcript)
+	got := mgr.Runner.History.BudgetTokens(ctx, sess, transcript)
 	if got <= transcript {
 		t.Fatalf("cold-start budget = %d, want above the transcript estimate %d", got, transcript)
 	}
@@ -66,11 +66,11 @@ func TestCompactionColdStartReservesStaticStack(t *testing.T) {
 
 	// Once an observation exists the ratio supersedes the flat reserve, and it
 	// tracks growth instead of staying constant.
-	mgr.Runner.History.ObserveTokens(sess.ID, transcript*2, transcript)
-	if scaled := mgr.Runner.History.BudgetTokens(sess.ID, transcript); scaled != transcript*2 {
+	mgr.Runner.History.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, transcript*2, transcript)
+	if scaled := mgr.Runner.History.BudgetTokens(ctx, sess, transcript); scaled != transcript*2 {
 		t.Fatalf("calibrated budget = %d want %d", scaled, transcript*2)
 	}
-	if grown := mgr.Runner.History.BudgetTokens(sess.ID, transcript*2); grown != transcript*4 {
+	if grown := mgr.Runner.History.BudgetTokens(ctx, sess, transcript*2); grown != transcript*4 {
 		t.Fatalf("grown calibrated budget = %d want %d (scaled, not additive)", grown, transcript*4)
 	}
 }
@@ -94,7 +94,7 @@ func TestSessionContextUsesCorrectedEstimate(t *testing.T) {
 		t.Fatal(err)
 	}
 	transcript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI([]api.Message{{Content: block}}))
-	mgr.Runner.History.ObserveTokens(sess.ID, transcript+15000, transcript)
+	mgr.Runner.History.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, transcript+15000, transcript)
 
 	resp, err := mgr.Runner.History.SessionContext(ctx, sess.ID)
 	testutil.FailErr(t, "SessionContext", err)
@@ -129,7 +129,7 @@ func TestCompactionFitThenReplace(t *testing.T) {
 		t.Fatal(err)
 	}
 	transcript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI([]api.Message{{Content: log}, {Content: "seen"}}))
-	mgr.Runner.History.ObserveTokens(sess.ID, transcript+25000, transcript)
+	mgr.Runner.History.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, transcript+25000, transcript)
 
 	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "what failed?")
 	testutil.FailErr(t, "mgr.Submissions.Prompt", err)

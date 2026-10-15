@@ -322,7 +322,7 @@ func TestNoCompactionBetweenTargetAndTrigger(t *testing.T) {
 	}
 
 	// A ratio of one isolates the compaction trigger from cold-start reserves.
-	mgr.Runner.History.ObserveTokens(sess.ID, 1000, 1000)
+	mgr.Runner.History.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, 1000, 1000)
 
 	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "continue")
 	testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)

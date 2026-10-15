@@ -59,8 +59,7 @@ type ModelDeps struct {
 	LLMService                       *llm.Service
 	Cost                             cost.CostTracker
 	CompactionConfig                 func(ctx context.Context, sess *api.Session) compaction.CompactionConfig
-	RecordCompactionTokenObservation func(sessionID string, reportedPromptTokens, transcriptEstimate int)
-	CompactionTokenCalibration       func(sessionID string) compaction.PromptTokenCalibration
+	RecordCompactionTokenObservation func(sessionID, providerID, model string, reportedPromptTokens, transcriptEstimate int)
 }
 
 type ToolsDeps struct {
