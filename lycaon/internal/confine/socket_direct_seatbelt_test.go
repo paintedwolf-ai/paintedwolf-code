@@ -137,7 +137,7 @@ func TestSeatbeltDirectIPSeparationMatrix(t *testing.T) {
 	}
 
 	direct := confine.Confinement{Roots: []string{proj}, Network: confine.NetworkDirectIP}
-	profile, err := confine.BuildProfile(direct)
+	profile, err := confine.BuildSeatbeltProfile(direct)
 	testutil.FailErr(t, "BuildProfile direct", err)
 	assertDirectProfileHonest(t, profile)
 
@@ -324,7 +324,7 @@ func TestSeatbeltDirectIPNarrowing(t *testing.T) {
 	}
 
 	// Direct IP rules cannot narrow the peer host.
-	profile, err := confine.BuildProfile(narrowed)
+	profile, err := confine.BuildSeatbeltProfile(narrowed)
 	testutil.FailErr(t, "BuildProfile narrowed", err)
 	if !strings.Contains(profile, `(remote udp "*:123")`) {
 		t.Fatalf("narrowed profile must emit the declared transport: %s", profile)

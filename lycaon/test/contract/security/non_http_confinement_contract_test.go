@@ -131,7 +131,7 @@ func TestNonHTTPContractSocketEmitterLiteralOnlyAndDirectRemoteIP(t *testing.T) 
 		t.Fatal("direct profile must emit remote-IP outbound predicate")
 	}
 
-	profile, err := confine.BuildProfile(confine.Confinement{Roots: []string{"/proj"}, Network: confine.NetworkDirectIP})
+	profile, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}, Network: confine.NetworkDirectIP})
 	contractcheck.FailErr(t, "BuildProfile direct", err)
 	if !strings.Contains(profile, `(allow network-outbound (remote ip "*:*"))`) {
 		t.Fatalf("direct profile missing remote IP allow:\n%s", profile)

@@ -201,7 +201,7 @@ func TestProfileReadDeniesKeyMaterialWithGrantPunch(t *testing.T) {
 	}
 	key := filepath.Join(sshDir, "id_ed25519")
 
-	p, err := BuildProfile(Confinement{
+	p, err := BuildSeatbeltProfile(Confinement{
 		Roots:               []string{t.TempDir()},
 		ProtectedReadGrants: []ProtectedPathGrant{NewProtectedPathGrant(key)},
 	})

@@ -101,8 +101,8 @@ func confinedStdout(t *testing.T, self string, c confine.Confinement, name strin
 }
 
 func TestBuildProfileConfinesWritesAndDeniesNetwork(t *testing.T) {
-	p, err := confine.BuildProfile(confine.Confinement{Roots: []string{"/proj"}})
-	testutil.FailErr(t, "confine.BuildProfile failed", err)
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
+	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
 	for _, want := range []string{
 		"(version 1)", "(deny default)", "(allow file-read*)", "(allow file-write*",
 		`(subpath "/proj")`, `(literal "/dev/null")`,
@@ -127,8 +127,8 @@ func TestBuildProfileConfinesWritesAndDeniesNetwork(t *testing.T) {
 		}
 	}
 
-	pn, err := confine.BuildProfile(confine.Confinement{Roots: []string{"/proj"}, Network: confine.NetworkDirectIP})
-	testutil.FailErr(t, "confine.BuildProfile failed", err)
+	pn, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}, Network: confine.NetworkDirectIP})
+	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
 	if !strings.Contains(pn, `(allow network-outbound (remote ip "*:*"))`) {
 		t.Fatalf("NetworkDirectIP should allow remote IP outbound:\n%s", pn)
 	}
@@ -139,11 +139,11 @@ func TestBuildProfileConfinesWritesAndDeniesNetwork(t *testing.T) {
 		t.Fatalf("NetworkDirectIP must carry explicit listener authority:\n%s", pn)
 	}
 
-	pp, err := confine.BuildProfile(confine.Confinement{
+	pp, err := confine.BuildSeatbeltProfile(confine.Confinement{
 		Roots: []string{"/proj"}, Network: confine.NetworkProxyOnly,
 		ProxyAddr: "127.0.0.1:8472", SocksProxyAddr: "127.0.0.1:8473",
 	})
-	testutil.FailErr(t, "confine.BuildProfile failed", err)
+	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
 	for _, endpoint := range []string{"localhost:8472", "localhost:8473"} {
 		if !strings.Contains(pp, endpoint) {
 			t.Fatalf("NetworkProxyOnly missing private endpoint %s:\n%s", endpoint, pp)
@@ -158,7 +158,7 @@ func TestBuildProfileConfinesWritesAndDeniesNetwork(t *testing.T) {
 	if strings.Contains(pp, "(allow network-bind") || strings.Contains(pp, "(allow network-inbound") {
 		t.Fatalf("NetworkProxyOnly must not carry listener authority:\n%s", pp)
 	}
-	if _, err := confine.BuildProfile(confine.Confinement{
+	if _, err := confine.BuildSeatbeltProfile(confine.Confinement{
 		Roots: []string{"/proj"}, Network: confine.NetworkProxyOnly,
 	}); err == nil {
 		t.Fatal("unbound NetworkProxyOnly profile must fail closed")
@@ -239,8 +239,8 @@ func TestDefaultConfinementPolicy(t *testing.T) {
 
 func TestBuildProfileDeniesSecretReads(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX_DENY_READ", "/opt/secrets")
-	p, err := confine.BuildProfile(confine.Confinement{Roots: []string{"/proj"}})
-	testutil.FailErr(t, "confine.BuildProfile failed", err)
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
+	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
 	// Inspect only the read-deny block.
 	readDeny, _ := profileBlock(t, p, blockDenyRead, 0)
 	assertBlockCoversPath(t, readDeny, "/opt/secrets", "configured extra deny-read root")
@@ -258,7 +258,7 @@ func TestBuildProfileDeniesSecretReads(t *testing.T) {
 	// The switch disables configured control-plane denials; the key-material
 	// floor stays.
 	t.Setenv("LYCAON_SANDBOX_DENY_READ", "off")
-	p2, _ := confine.BuildProfile(confine.Confinement{Roots: []string{"/proj"}})
+	p2, _ := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
 	if strings.Contains(p2, "/opt/secrets") {
 		t.Fatalf("LYCAON_SANDBOX_DENY_READ=off should drop configured read-denies:\n%s", p2)
 	}
@@ -269,7 +269,7 @@ func TestBuildProfileDeniesPerActionSecretReads(t *testing.T) {
 	secret := filepath.Join(project, ".env.local")
 	testutil.FailErr(t, "create per-action secret fixture", os.WriteFile(secret, []byte("TOKEN=fixture\n"), 0o600))
 	c := confine.Confinement{ProjectID: "project", Roots: []string{project}, ReadDenyPaths: []string{secret}, Network: confine.NetworkDeny}
-	profile, err := confine.BuildProfile(c)
+	profile, err := confine.BuildSeatbeltProfile(c)
 	testutil.FailErr(t, "build per-action read-deny profile", err)
 	resolvedSecret := fspath.CanonicalPath(secret)
 	if !strings.Contains(profile, "(subpath \""+resolvedSecret+"\")") {
@@ -282,8 +282,8 @@ func TestBuildProfileDeniesReadingOwnConfigDir(t *testing.T) {
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 
-	p, err := confine.BuildProfile(confine.Confinement{Roots: []string{"/proj"}})
-	testutil.FailErr(t, "confine.BuildProfile failed", err)
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
+	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
 	// The assertion targets the governing read-deny block.
 	readDeny, _ := profileBlock(t, p, blockDenyRead, 0)
 	assertBlockCoversPath(t, readDeny, cfg, "read deny (product config dir)")
@@ -304,8 +304,8 @@ func TestBuildProfileAllowsReadingAgentWorkspaces(t *testing.T) {
 	}
 
 	// Isolate read allow-back from write-root coverage.
-	p, err := confine.BuildProfile(confine.Confinement{Roots: []string{t.TempDir()}})
-	testutil.FailErr(t, "confine.BuildProfile failed", err)
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{t.TempDir()}})
+	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
 	allowBack := readAllowBackBlock(t, p)
 	for _, root := range roots {
 		assertBlockCoversPath(t, allowBack, root, "read allow-back")
@@ -325,11 +325,11 @@ func TestBuildProfileDeniesWritingSecretStoresEvenWhenHomeIsGranted(t *testing.T
 	})
 	t.Cleanup(func() { confine.SetCredentialStorePathsSource(nil) })
 
-	p, err := confine.BuildProfile(confine.Confinement{
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{
 		Roots:             []string{t.TempDir()},
 		GrantedWriteRoots: []string{home},
 	})
-	testutil.FailErr(t, "confine.BuildProfile failed", err)
+	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
 	resolvedHome, err := filepath.EvalSymlinks(home)
 	if err != nil {
 		resolvedHome = home
@@ -567,8 +567,8 @@ func TestSeatbeltDraftWorkspaceVenvInterpreterExecutes(t *testing.T) {
 
 func TestBuildProfileIncludesStandardCacheRoots(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX_WRITE_ROOTS", "/opt/customcache")
-	p, err := confine.BuildProfile(confine.Confinement{Roots: []string{"/proj"}})
-	testutil.FailErr(t, "confine.BuildProfile failed", err)
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{"/proj"}})
+	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
 	// Explicit write roots extend the default filesystem scope.
 	allowWrite, _ := profileBlock(t, p, blockAllowWrite, 0)
 	if !strings.Contains(allowWrite, `(subpath "/opt/customcache")`) {
@@ -981,15 +981,15 @@ func TestBrowserConfinementIsLoopbackOnly(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
 
 	confine.TestingSetAutoConfine(t)
-	if runtime.GOOS != "darwin" || !confine.Available() {
+	if !confine.Available() {
 		if c, ok := confine.BrowserConfinement(confine.Request{Roots: []string{"/proj"}}); ok || c != nil {
-			t.Fatalf("expected nil when seatbelt unavailable; got ok=%v c=%v", ok, c)
+			t.Fatalf("expected nil when confinement is unavailable; got ok=%v c=%v", ok, c)
 		}
 		return
 	}
 	c, ok := confine.BrowserConfinement(confine.Request{Roots: []string{"/proj"}})
 	if !ok || c == nil {
-		t.Fatal("expected BrowserConfinement on darwin")
+		t.Fatal("expected BrowserConfinement where confinement is available")
 	}
 	if c.Network != confine.NetworkDeny {
 		t.Fatalf("Network = %v, want NetworkDeny", c.Network)
@@ -1006,8 +1006,8 @@ func TestBrowserConfinementIsLoopbackOnly(t *testing.T) {
 	if b := confine.BoundaryOf(c); !b.LoopbackConnect || b.Network != confine.NetworkDeny {
 		t.Fatalf("browser boundary = %+v", b)
 	}
-	p, err := confine.BuildProfile(*c)
-	testutil.FailErr(t, "confine.BuildProfile failed", err)
+	p, err := confine.BuildSeatbeltProfile(*c)
+	testutil.FailErr(t, "confine.BuildSeatbeltProfile failed", err)
 	for _, want := range []string{
 		"(allow process-info-pidinfo)",
 		"(allow iokit*)",
@@ -1053,7 +1053,7 @@ func TestDefaultConfinementEnabledForDraftScratchRoot(t *testing.T) {
 	lease, err := confine.BindAction(c, confine.EgressCommand{ToolCallID: "draft-scratch-test"})
 	testutil.FailErr(t, "bind draft scratch egress", err)
 	defer lease.Close(t.Context())
-	if _, err := confine.BuildProfile(*c); err != nil {
+	if _, err := confine.BuildSeatbeltProfile(*c); err != nil {
 		t.Fatalf("draft scratch confinement must render a profile: %v", err)
 	}
 }
