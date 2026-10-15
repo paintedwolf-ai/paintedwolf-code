@@ -125,8 +125,10 @@ An empty catalog offers no new capability; existing tools remain usable.
 Selection budgets are 10 seconds for turn decisions, automatic skill ranking,
 tool requests, and skill lookups. Enabled retrieval rerank sites have their own
 deadlines in `decisions.yaml`. Caller cancellation still ends the operation; it
-does not trigger discovery. Startup separately warms the engine with its
-90-second handshake budget.
+does not trigger discovery. Startup warms an installed engine before serving, with its 90-second handshake
+budget. Missing weights are provisioned and warmed in a background one-shot;
+serving does not wait for that download, and decisions abstain while the
+checkpoint is unavailable.
 
 ## Release vocabulary and retrieval
 

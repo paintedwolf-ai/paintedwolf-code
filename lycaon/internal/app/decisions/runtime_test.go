@@ -81,7 +81,7 @@ func TestDecisionRuntimeMissingCheckpointCanBootstrapWithoutClaimingAvailability
 		t.Fatal("incomplete provisioning reported ready")
 	}
 	result, err := client.Decide(t.Context(), decide.HeadTurnLoad, "fixture", nil)
-	if !errors.Is(err, decide.ErrUnavailable) || len(result.Answers) != 0 {
+	if len(result.Answers) != 0 || result.Engine.Name != "" {
 		t.Fatalf("incomplete provisioning invented decision: %+v, %v", result, err)
 	}
 }

@@ -50,7 +50,13 @@ func (b *Runtime) Warmer() (interface{ Warm(context.Context) error }, bool) {
 	return warmer, ok
 }
 
-// Warm prepares decision weights outside the startup path.
+// NeedsProvisioning distinguishes optional checkpoint download from installed-engine warming.
+func (b *Runtime) NeedsProvisioning() bool {
+	client, ok := b.Decider.(*bialy.Client)
+	return ok && client.Status() == bialy.ReasonModelMissing
+}
+
+// Warm provisions missing weights and prepares the decision engine.
 func (b *Runtime) Warm(ctx context.Context) error {
 	warmer, ok := b.Warmer()
 	if !ok {
