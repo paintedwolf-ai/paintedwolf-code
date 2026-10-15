@@ -73,6 +73,7 @@ func TestCheckAllDiscoversStableWorkflowBaselines(t *testing.T) {
 	repo := t.TempDir()
 	files := committedRelease(t)
 	files["VERSION"] = []byte("1.0.1\n")
+	files["lycaon/internal/extpacks/manifest.go"] = []byte(`package extpacks; const ExtensionAPIVersion="1.1.0"`)
 	files[capabilityPath] = []byte("host_facts: []\n")
 	files["schemas/guidance_registry.json"] = []byte(`{"hint_codes":{}}`)
 	files[securityPack+"/extension.yaml"] = []byte("manifest_version: 1\nid: painted-wolf/security-survey\nname: Security survey\nversion: 1.0.0\ncompatibility:\n  extension_api: '^1.1.0'\n")
@@ -122,7 +123,7 @@ func TestCheckBundledReleaseCompatibility(t *testing.T) {
 		t.Fatal("module root not found")
 	}
 	var report bytes.Buffer
-	testutil.FailErr(t, "check bundled release contracts", checkReleasedWorkflows(t.Context(), filepath.Dir(root), "", &report))
+	testutil.FailErr(t, "check bundled release contracts", checkReleaseCompatibility(t.Context(), filepath.Dir(root), "", &report))
 	if !strings.Contains(report.String(), "Stable baseline: v1.0.1 ") {
 		t.Fatalf("missing released baseline: %s", &report)
 	}

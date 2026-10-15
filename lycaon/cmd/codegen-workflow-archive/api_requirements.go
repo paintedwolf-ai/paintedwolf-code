@@ -2,10 +2,14 @@ package main
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -23,6 +27,10 @@ func checkPackAPIs(repoRoot string, out io.Writer) error {
 	if len(packs) == 0 {
 		return fmt.Errorf("no bundled extension manifests found")
 	}
+	host, err := sourceExtensionAPI(diskRelease{root: repoRoot})
+	if err != nil {
+		return err
+	}
 	for _, file := range packs {
 		raw, err := os.ReadFile(file)
 		if err != nil {
@@ -32,7 +40,11 @@ func checkPackAPIs(repoRoot string, out io.Writer) error {
 		if err != nil {
 			return err
 		}
-		if !extpacks.ManifestHostCompatible(manifest) {
+		constraint, err := semver.NewConstraint(manifest.Compatibility.ExtensionAPI)
+		if err != nil {
+			return err
+		}
+		if !constraint.Check(host) {
 			return fmt.Errorf("%s requires unavailable extension API %s", manifest.ID, manifest.Compatibility.ExtensionAPI)
 		}
 		if err := checkPackAPI(filepath.Dir(file), manifest); err != nil {
@@ -94,7 +106,13 @@ func requireAPIEpoch(constraint *semver.Constraints, required, source string) er
 	if err != nil {
 		return err
 	}
-	for _, epoch := range []string{"1.0.0", extpacks.ExtensionAPIVersion} {
+	epochs := map[string]bool{"1.0.0": true, extpacks.ExtensionAPIVersion: true}
+	for _, field := range workflowdef.ManifestFieldInventory() {
+		if field.ExtensionAPI != "" {
+			epochs[field.ExtensionAPI] = true
+		}
+	}
+	for epoch := range epochs {
 		version, err := semver.StrictNewVersion(epoch)
 		if err != nil {
 			return err
@@ -125,4 +143,47 @@ func yamlHasPath(node *yaml.Node, keys []string) bool {
 		}
 	}
 	return false
+}
+
+// The selected source supplies the API version, even when the controller advances.
+func sourceExtensionAPI(source releaseSource) (*semver.Version, error) {
+	const rel = "lycaon/internal/extpacks/manifest.go"
+	raw, err := source.show(rel)
+	if err != nil {
+		return nil, err
+	}
+	file, err := parser.ParseFile(token.NewFileSet(), rel, raw, 0)
+	if err != nil {
+		return nil, err
+	}
+	for _, declaration := range file.Decls {
+		group, ok := declaration.(*ast.GenDecl)
+		if !ok || group.Tok != token.CONST {
+			continue
+		}
+		for _, spec := range group.Specs {
+			value, ok := spec.(*ast.ValueSpec)
+			if !ok {
+				continue
+			}
+			for i, name := range value.Names {
+				if name.Name != "ExtensionAPIVersion" {
+					continue
+				}
+				if i >= len(value.Values) {
+					return nil, fmt.Errorf("extension API version has no literal value")
+				}
+				literal, ok := value.Values[i].(*ast.BasicLit)
+				if !ok || literal.Kind != token.STRING {
+					return nil, fmt.Errorf("extension API version must be a string literal")
+				}
+				version, err := strconv.Unquote(literal.Value)
+				if err != nil {
+					return nil, err
+				}
+				return semver.StrictNewVersion(version)
+			}
+		}
+	}
+	return nil, fmt.Errorf("candidate source has no extension API version")
 }

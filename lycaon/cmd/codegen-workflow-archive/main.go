@@ -1,7 +1,4 @@
-// Command codegen-workflow-archive seals a released workflow version: it copies
-// the manifest, the guidance its injects render, and its pack's gate feedback
-// from a release tag into archive/<workflow>/<version>/ with a SHA256SUMS
-// ledger. --check verifies an existing archive against the tag.
+// Command codegen-workflow-archive seals workflows and verifies release contracts.
 package main
 
 import (
@@ -38,21 +35,19 @@ func main() {
 	os.Exit(run(context.Background(), filepath.Dir(moduleRoot), os.Args[1:], os.Stdout, os.Stderr))
 }
 
-// run seals or checks one workflow version of the checkout at repoRoot and
-// returns the process exit code.
 func run(ctx context.Context, repoRoot string, argv []string, stdout, stderr io.Writer) int {
 	flags := flag.NewFlagSet("codegen-workflow-archive", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	checkOnly := flags.Bool("check", false, "verify the archive matches the tag without writing")
 	sourceRoot := flags.String("repo-root", repoRoot, "candidate checkout to inspect")
 	baseline := flags.String("baseline", "", "stable release commit to compare")
-	checkAll := flags.Bool("check-all", false, "check every stable released workflow and bundled API requirement")
+	checkAll := flags.Bool("check-all", false, "verify catalog contracts against a stable release")
 	if err := flags.Parse(argv); err != nil {
 		return 2
 	}
 	if *checkAll && !*checkOnly && flags.NArg() == 0 {
 		repoRoot = *sourceRoot
-		if err := checkReleasedWorkflows(ctx, repoRoot, *baseline, stdout); err != nil {
+		if err := checkReleaseCompatibility(ctx, repoRoot, *baseline, stdout); err != nil {
 			fmt.Fprintf(stderr, "release compatibility: %v\n", err)
 			return 1
 		}

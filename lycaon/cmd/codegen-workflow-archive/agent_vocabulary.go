@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -31,14 +32,33 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 	if err != nil {
 		return err
 	}
-	var retired vocabularyRetirements
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&retired); err != nil {
+	retired, err := parseRetirements(raw)
+	if err != nil {
 		return err
 	}
-	if retired.FormatVersion != 1 {
-		return fmt.Errorf("unsupported agent-public retirement format %d", retired.FormatVersion)
+	paths, err := release.paths("schemas")
+	if err != nil {
+		return err
+	}
+	for _, rel := range paths {
+		if rel != "schemas/agent-public-retirements.json" {
+			continue
+		}
+		raw, err := release.show(rel)
+		if err != nil {
+			return err
+		}
+		previous, err := parseRetirements(raw)
+		if err != nil {
+			return err
+		}
+		for _, pair := range [][2]map[string][]string{{previous.Facts, retired.Facts}, {previous.Codes, retired.Codes}} {
+			for name := range pair[0] {
+				if _, ok := pair[1][name]; !ok {
+					return fmt.Errorf("released retirement %s was removed", name)
+				}
+			}
+		}
 	}
 	before, err := factVocabulary(release)
 	if err != nil {
@@ -129,4 +149,21 @@ func checkVocabulary[T any](kind string, before, after map[string]T, retired map
 		}
 	}
 	return nil
+}
+
+func parseRetirements(raw []byte) (vocabularyRetirements, error) {
+	var retired vocabularyRetirements
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&retired); err != nil {
+		return retired, err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		return retired, fmt.Errorf("retirement catalog must contain one JSON document")
+	}
+	if retired.FormatVersion != 1 || retired.Facts == nil || retired.Codes == nil {
+		return retired, fmt.Errorf("unsupported or incomplete agent-public retirement catalog")
+	}
+	return retired, nil
 }

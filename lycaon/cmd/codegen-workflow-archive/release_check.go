@@ -17,7 +17,7 @@ import (
 
 const packsRoot = "lycaon/config/packs"
 
-func checkReleasedWorkflows(ctx context.Context, repoRoot, baseline string, out io.Writer) error {
+func checkReleaseCompatibility(ctx context.Context, repoRoot, baseline string, out io.Writer) error {
 	git := gitRelease{ctx: ctx, repoRoot: repoRoot}
 	source, err := git.run("rev-parse", "HEAD")
 	if err != nil {

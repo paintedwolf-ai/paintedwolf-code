@@ -56,7 +56,7 @@ func TestReleasePreflightVerifiesOnlyACompleteCorpus(t *testing.T) {
 			}
 			contractcheck.FailErr(t, "create corpus", os.MkdirAll(corpus, 0o700))
 			// Archive checks read the captured module and release refs; only corpus inputs are synthetic.
-			for _, rel := range []string{".git", "third_party", "lycaon/cmd", "lycaon/internal", "lycaon/pkg", "lycaon/config", "lycaon-den/src-tauri/engine-root"} {
+			for _, rel := range []string{".git", "schemas", "third_party", "lycaon/cmd", "lycaon/internal", "lycaon/pkg", "lycaon/config", "lycaon-den/src-tauri/engine-root"} {
 				contractcheck.FailErr(t, "link preflight archive dependency "+rel,
 					os.Symlink(filepath.Join(repo, rel), filepath.Join(root, rel)))
 			}

@@ -55,6 +55,9 @@ func TestPackAPICheckRefusesInvalidInputs(t *testing.T) {
 	}
 	pack := filepath.Join(root, filepath.FromSlash(packsRoot), "acme", "kit")
 	testutil.FailErr(t, "create pack", os.MkdirAll(pack, 0o750))
+	apiSource := filepath.Join(root, "lycaon", "internal", "extpacks", "manifest.go")
+	testutil.FailErr(t, "create API source", os.MkdirAll(filepath.Dir(apiSource), 0o750))
+	testutil.FailErr(t, "write API source", os.WriteFile(apiSource, []byte(`package extpacks; const ExtensionAPIVersion="1.1.0"`), 0o600))
 	manifest := "manifest_version: 1\nid: acme/kit\nname: Kit\nversion: 1.0.0\ncompatibility:\n  extension_api: '^99.0.0'\n"
 	file := filepath.Join(pack, "extension.yaml")
 	testutil.FailErr(t, "write incompatible manifest", os.WriteFile(file, []byte(manifest), 0o600))
@@ -66,5 +69,29 @@ func TestPackAPICheckRefusesInvalidInputs(t *testing.T) {
 	testutil.FailErr(t, "create pack symlink", os.Symlink(file, filepath.Join(pack, "alias.yaml")))
 	if err := checkPackAPIs(root, &report); err == nil || !strings.Contains(err.Error(), "symlink") {
 		t.Fatalf("symlink admitted: %v", err)
+	}
+}
+
+func TestCandidateExtensionAPIComesFromItsOwnSource(t *testing.T) {
+	const rel = "lycaon/internal/extpacks/manifest.go"
+	for _, tc := range []struct{ source, version string }{
+		{`package extpacks; const ExtensionAPIVersion="1.0.0"`, "1.0.0"},
+		{`package extpacks; const (Other="x"; ExtensionAPIVersion="2.0.0")`, "2.0.0"},
+		{`package extpacks`, ""},
+		{`package extpacks; const ExtensionAPIVersion=42`, ""},
+		{`package extpacks; const ExtensionAPIVersion=other`, ""},
+		{`invalid Go`, ""},
+	} {
+		version, err := sourceExtensionAPI(treeRelease{rel: []byte(tc.source)})
+		if tc.version == "" {
+			if err == nil {
+				t.Fatalf("invalid API source admitted: %s", tc.source)
+			}
+			continue
+		}
+		testutil.FailErr(t, "read candidate API", err)
+		if version.String() != tc.version {
+			t.Fatalf("API=%s, want %s", version, tc.version)
+		}
 	}
 }

@@ -196,3 +196,18 @@ func (r treeRelease) paths(dir string) ([]string, error) {
 	sort.Strings(files)
 	return files, nil
 }
+
+func TestVerifyArchiveRejectsExtraAndLinkedFiles(t *testing.T) {
+	for _, link := range []bool{false, true} {
+		root := t.TempDir()
+		target := filepath.Join(root, "extra.md")
+		if link {
+			testutil.FailErr(t, "create archive symlink", os.Symlink("missing.md", target))
+		} else {
+			testutil.FailErr(t, "create extra archive file", os.WriteFile(target, []byte("extra\n"), 0o600))
+		}
+		if err := verifyArchive(root, map[string][]byte{}); err == nil {
+			t.Fatal("unsealed archive content passed")
+		}
+	}
+}
