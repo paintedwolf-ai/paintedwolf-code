@@ -30,6 +30,7 @@ def published_version(release, channel):
     version = parse(tag[1:])
     if version.major < 1 or version.channel != channel:
         raise ValueError("release must be post-v1 and in the " + channel + " channel")
+    timestamp(release["published_at"])
     return version
 
 
@@ -89,7 +90,6 @@ def published_feed(mirror, base, channel):
         release = {"draft": False, "prerelease": channel == "preview", "tag_name": "v" + manifest["version"],
                    "published_at": manifest["pub_date"], "feed_manifest_sha256": hashlib.sha256(raw).hexdigest()}
         version = published_version(release, channel)
-        timestamp(manifest["pub_date"])
         with tempfile.TemporaryDirectory(prefix="release-stable-baseline-") as temporary:
             pointer = Path(temporary) / "latest.json"
             pointer.write_bytes(raw)
@@ -138,8 +138,8 @@ def check_source_versions(source_ref):
             or tauri["bundle"]["macOS"]["bundleVersion"] != build):
         raise ValueError("packaging versions or native build do not match VERSION and RELEASE_BUILD")
     changelog = read("CHANGELOG.md")
-    section = changelog.split("## [" + product + "]", 1)
-    if len(section) != 2 or not section[1].split("\n## [", 1)[0].strip():
+    headings = list(re.finditer(r"(?m)^## \[" + re.escape(product) + r"\][^\n]*\n", changelog))
+    if len(headings) != 1 or not changelog[headings[0].end():].split("\n## [", 1)[0].strip():
         raise ValueError("candidate has no release notes")
     return product
 

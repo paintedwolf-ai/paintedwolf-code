@@ -221,7 +221,7 @@ class PublishedStableBaselineTests(unittest.TestCase):
                     ancestry.assert_called_once_with(["git", "merge-base", "--is-ancestor", "a" * 40, "selected-source"], check=True)
 
     def test_drafts_previews_and_unpublished_tags_cannot_reset_the_baseline(self):
-        for changes in ({"draft": True}, {"prerelease": True}, {"published_at": None},
+        for changes in ({"draft": True}, {"prerelease": True}, {"published_at": None}, {"published_at": "yesterday"},
                         {"tag_name": "v1.0.2-rc3"}, {"tag_name": "v0.9.0"}, {"tag_name": "main"}):
             with self.subTest(changes=changes), self.assertRaises(ValueError):
                 release_baseline.resolve({**self.release, **changes})
@@ -366,7 +366,8 @@ class SourceVersionTests(unittest.TestCase):
             for name, replacement in (("lycaon-den/package.json", '{"version":"1.0.1"}'),
                                       ("lycaon-den/src-tauri/Cargo.toml", '[package]\nversion="1.0.1"'),
                                       ("lycaon-den/src-tauri/Cargo.lock", '[[package]]\nname="painted-wolf-code"\nversion="1.0.1"'),
-                                      ("RELEASE_BUILD", "19"), ("CHANGELOG.md", '## [1.0.1]\nPrior notes.')):
+                                      ("RELEASE_BUILD", "19"), ("CHANGELOG.md", '## [1.0.1]\nPrior notes.'),
+                                      ("CHANGELOG.md", '## [1.0.2-rc3] - 2026-10-15\n\n## [1.0.1]\nPrior notes.')):
                 original = source[name]
                 source[name] = replacement
                 with self.subTest(name=name), self.assertRaises(ValueError):
