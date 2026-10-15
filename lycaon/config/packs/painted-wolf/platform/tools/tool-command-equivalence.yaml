@@ -365,6 +365,18 @@ entries:
   command_grammar:
   - program: sleep
     grammar: sleep
+- native: write
+  replaces:
+  - habit: cat <<EOF > file / tee file
+    examples:
+    - cat <<'EOF' > index.html
+  args_hint: Pass path and full content (or append:true to append to an existing file); use edit for targeted
+    replacements.
+  redirect_code: USE_WRITE_NATIVE
+  profiles:
+  - coordinator
+  - implement
+  - plan_write_only
 - native: edit
   replaces:
   - habit: sed -i / perl -pi in-place edit

@@ -257,12 +257,10 @@ func coordinatorCitedEvidenceInputs(cited []CoordinatorCitedEvidence) []WorkerFi
 }
 
 func coordinatorFindingFromCitedEvidence(item CoordinatorCitedEvidence) WorkerFindingInput {
-	return WorkerFindingInput{
-		Evidence: item.Evidence,
-		Path:     item.Path,
-		Line:     item.Line,
-		Excerpt:  item.Excerpt,
+	if norm, ok := normalizeSingleCoordinatorCitedEvidence(item); ok {
+		item = norm
 	}
+	return WorkerFindingInput{Evidence: item.Evidence, Path: item.Path, Line: item.Line, Excerpt: item.Excerpt}
 }
 
 // ResolveCitedEvidenceForWire maps typed citations to host provenance.

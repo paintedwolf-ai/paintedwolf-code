@@ -110,6 +110,7 @@ func (m *Loop) Build() loopwake.LoopDeps {
 		},
 		ProcessRunning:   m.Processes.HandlesRunning,
 		ProcessState:     m.Processes.HandleState,
+		ProcessSubject:   m.Processes.HandleSubject,
 		ProcessReport:    m.Processes.Report,
 		PublishWaitLease: m.PublishWaitLease,
 		HostWakeActionable: loopwake.BuildHostWakeActionable(loopwake.HostWakeActionableDeps{
