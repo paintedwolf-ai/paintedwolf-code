@@ -9,10 +9,14 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
@@ -192,20 +196,67 @@ func TestLinuxLoopbackDatagramGrantReachesTheHost(t *testing.T) {
 	}
 }
 
-// hostAddress is an address of this host's own off loopback, which a datagram
-// can reach only by leaving the sandbox's namespace.
-func hostAddress(t *testing.T) netip.Addr {
+// farHostEnv marks the test binary re-executed inside its own network
+// namespace, where farHost is an address off loopback.
+const farHostEnv = "PW_CONFINE_FAR_HOST"
+
+// farHost is a documentation address (TEST-NET-1) the fixture namespace
+// assigns itself, so a datagram reaches it only by leaving the sandbox's
+// namespace through the gateway, with no network outside the test.
+var farHost = netip.MustParseAddr("192.0.2.1")
+
+// inFarHostNamespace runs the calling test again in a fresh user and network
+// namespace that holds farHost, and reports false there, where the test body
+// runs. The sandbox nests its own namespaces inside it as it would on a host.
+func inFarHostNamespace(t *testing.T, self string) bool {
 	t.Helper()
-	addrs, err := net.InterfaceAddrs()
-	testutil.FailErr(t, "interface addresses", err)
-	for _, a := range addrs {
-		prefix, err := netip.ParsePrefix(a.String())
-		if err == nil && prefix.Addr().Is4() && !prefix.Addr().IsLoopback() && !prefix.Addr().IsLinkLocalUnicast() {
-			return prefix.Addr()
-		}
+	if os.Getenv(farHostEnv) != "" {
+		testutil.FailErr(t, "assign the far host address", assignFarHost())
+		return false
 	}
-	t.Fatal("the host has no IPv4 address off loopback")
-	return netip.Addr{}
+	cmd := exec.Command(self, "-test.run=^"+t.Name()+"$", "-test.v", "-test.count=1", "-test.timeout=5m")
+	// The coverage helper is built once, outside, and shared.
+	cmd.Env = append(os.Environ(), farHostEnv+"=1", helperBinaryEnv+"="+helperBinary(t, self))
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Cloneflags:                 syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET,
+		UidMappings:                []syscall.SysProcIDMap{{ContainerID: os.Getuid(), HostID: os.Getuid(), Size: 1}},
+		GidMappings:                []syscall.SysProcIDMap{{ContainerID: os.Getgid(), HostID: os.Getgid(), Size: 1}},
+		GidMappingsEnableSetgroups: false,
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "--- PASS: "+t.Name()) {
+		t.Fatalf("in the far host namespace: %v\n%s", err, out)
+	}
+	return true
+}
+
+// assignFarHost brings this namespace's loopback up and adds farHost to it.
+func assignFarHost() error {
+	fd, err := unix.Socket(unix.AF_INET, unix.SOCK_DGRAM|unix.SOCK_CLOEXEC, 0)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = unix.Close(fd) }()
+	lo, err := unix.NewIfreq("lo")
+	if err != nil {
+		return err
+	}
+	if err := unix.IoctlIfreq(fd, unix.SIOCGIFFLAGS, lo); err != nil {
+		return err
+	}
+	lo.SetUint16(lo.Uint16() | unix.IFF_UP | unix.IFF_RUNNING)
+	if err := unix.IoctlIfreq(fd, unix.SIOCSIFFLAGS, lo); err != nil {
+		return err
+	}
+	// A labelled alias adds an address beside 127.0.0.1 rather than replacing it.
+	alias, err := unix.NewIfreq("lo:far")
+	if err != nil {
+		return err
+	}
+	if err := alias.SetInet4Addr(farHost.AsSlice()); err != nil {
+		return err
+	}
+	return unix.IoctlIfreq(fd, unix.SIOCSIFADDR, alias)
 }
 
 // A udp permit carries datagrams to its port through the gateway however the
@@ -214,7 +265,10 @@ func hostAddress(t *testing.T) netip.Addr {
 // refused, and an unconnected send is dropped.
 func TestLinuxDirectIPDatagramsCrossTheGateway(t *testing.T) {
 	self := requireLinuxSandbox(t)
-	host := hostAddress(t)
+	if inFarHostNamespace(t, self) {
+		return
+	}
+	host := farHost
 	permitted := datagramEcho(t, netip.AddrPortFrom(host, 0).String())
 	other := datagramEcho(t, netip.AddrPortFrom(host, 0).String())
 	closed := closedDatagramPort(t, host)

@@ -197,6 +197,10 @@ var helperBuild struct {
 	err  error
 }
 
+// helperBinaryEnv names, for a test re-executed in another namespace, the
+// helper its parent already chose.
+const helperBinaryEnv = "PW_CONFINE_TEST_HELPER"
+
 // childCoverDir is where a coverage run collects children's counters; empty in
 // every other run.
 func childCoverDir() string { return os.Getenv("PW_GO_CHILD_COVERDIR") }
@@ -206,6 +210,9 @@ func childCoverDir() string { return os.Getenv("PW_GO_CHILD_COVERDIR") }
 // test binary records nothing it runs as a child of itself.
 func helperBinary(t *testing.T, self string) string {
 	t.Helper()
+	if built := os.Getenv(helperBinaryEnv); built != "" {
+		return built
+	}
 	dir := childCoverDir()
 	if dir == "" {
 		return self
