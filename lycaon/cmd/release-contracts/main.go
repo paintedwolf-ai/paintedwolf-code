@@ -1,4 +1,4 @@
-// Command codegen-workflow-archive seals workflows and verifies release contracts.
+// Command release-contracts seals workflows and verifies release contracts.
 package main
 
 import (
@@ -29,14 +29,14 @@ const sumsFile = "SHA256SUMS"
 func main() {
 	moduleRoot := configlayout.FindModuleRoot()
 	if moduleRoot == "" {
-		fmt.Fprintln(os.Stderr, "codegen-workflow-archive: run inside a checkout")
+		fmt.Fprintln(os.Stderr, "release-contracts: run inside a checkout")
 		os.Exit(1)
 	}
 	os.Exit(run(context.Background(), filepath.Dir(moduleRoot), os.Args[1:], os.Stdout, os.Stderr))
 }
 
 func run(ctx context.Context, repoRoot string, argv []string, stdout, stderr io.Writer) int {
-	flags := flag.NewFlagSet("codegen-workflow-archive", flag.ContinueOnError)
+	flags := flag.NewFlagSet("release-contracts", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	checkOnly := flags.Bool("check", false, "verify the archive matches the tag without writing")
 	sourceRoot := flags.String("repo-root", repoRoot, "candidate checkout to inspect")
@@ -59,8 +59,8 @@ func run(ctx context.Context, repoRoot string, argv []string, stdout, stderr io.
 		return 0
 	}
 	if *checkAll || flags.NArg() != 3 {
-		fmt.Fprintln(stderr, "usage: codegen-workflow-archive --check-all | [--check] <pack> <workflow> <tag>")
-		fmt.Fprintln(stderr, "example: codegen-workflow-archive painted-wolf/security-survey security-survey v1.0.0")
+		fmt.Fprintln(stderr, "usage: release-contracts --check-all | [--check] <pack> <workflow> <tag>")
+		fmt.Fprintln(stderr, "example: release-contracts painted-wolf/security-survey security-survey v1.0.0")
 		return 2
 	}
 	args := flags.Args()
@@ -68,7 +68,7 @@ func run(ctx context.Context, repoRoot string, argv []string, stdout, stderr io.
 	packRel := path.Join("lycaon", "config", "packs", strings.Trim(args[0], "/"))
 	report, err := seal(release, packRel, strings.Trim(args[1], "/"), filepath.Join(repoRoot, filepath.FromSlash(packRel)), *checkOnly)
 	if err != nil {
-		fmt.Fprintf(stderr, "codegen-workflow-archive: %v\n", err)
+		fmt.Fprintf(stderr, "release-contracts: %v\n", err)
 		return 1
 	}
 	fmt.Fprintln(stdout, report)

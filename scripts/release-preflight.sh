@@ -39,7 +39,7 @@ done
 if [[ "${COMPATIBILITY_ONLY}" -eq 1 ]]; then
   [[ -n "${BASELINE_REF}" && -d "${SOURCE_ROOT}" ]] || usage
   (cd "${ROOT}/lycaon" && LYCAON_ENGINE_ROOT="${LYCAON_ENGINE_ROOT:-${ROOT}/lycaon-den/src-tauri/engine-root}" \
-    go run ./cmd/codegen-workflow-archive --check-all --baseline "${BASELINE_REF}" --repo-root "${SOURCE_ROOT}" --published-versions "${PUBLISHED_VERSIONS}")
+    go run ./cmd/release-contracts --check-all --baseline "${BASELINE_REF}" --repo-root "${SOURCE_ROOT}" --published-versions "${PUBLISHED_VERSIONS}")
   candidate_version="$(tr -d '[:space:]' < "${SOURCE_ROOT}/VERSION")"
   python3 "${ROOT}/scripts/upgrade-fixture-files.py" candidate-static \
     "${SOURCE_ROOT}/lycaon/testdata/upgrade-corpus/${candidate_version}" \
@@ -61,7 +61,7 @@ eval "$(python3 "${ROOT}/scripts/release-metadata.py" --root "${ROOT}" --format 
 VERSION="${PRODUCT_VERSION}"
 
 # Discover released workflow contracts and validate bundled API requirements.
-(cd "${ROOT}/lycaon" && LYCAON_ENGINE_ROOT="${LYCAON_ENGINE_ROOT:-${ROOT}/lycaon-den/src-tauri/engine-root}" go run ./cmd/codegen-workflow-archive --check-all --baseline "${BASELINE_REF}")
+(cd "${ROOT}/lycaon" && LYCAON_ENGINE_ROOT="${LYCAON_ENGINE_ROOT:-${ROOT}/lycaon-den/src-tauri/engine-root}" go run ./cmd/release-contracts --check-all --baseline "${BASELINE_REF}")
 
 fail=0
 check_equal() {
