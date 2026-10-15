@@ -209,3 +209,27 @@ func TestArgumentCheckFactsExcludeOperationalFailures(t *testing.T) {
 		t.Fatalf("lost operational diagnostics or typed cause: %v", err)
 	}
 }
+
+func TestRecallRejectionsRenderRecoveryForTheActualField(t *testing.T) {
+	bp := stockBlockPlane(t)
+	for _, tc := range []struct{ name, code, field, want, absent string }{
+		{"time", "RECALL_QUERY_INVALID", "after", "time filter", "Correct the reported field"},
+		{"unknown query", "RECALL_QUERY_INVALID", "mystery", "current filter fields", "is a time filter"},
+		{"history bounds", "RECALL_HISTORY_INVALID", "history.after_ord", "no ordinal bound is needed", "time filter"},
+		{"body identity", "RECALL_HISTORY_INVALID", "history.message_id", "returned message_id", "Use a positive through_ord"},
+		{"mixed scope", "RECALL_HISTORY_INVALID", "history", "omit query and widen", "widen: project"},
+		{"literal search", "RECALL_HISTORY_INVALID", "history.search", "at most eight literal terms", "time filter"},
+		{"fallback", "RECALL_HISTORY_INVALID", "", "rejected history arguments", "Correct  using"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reject := bp.RejectFromObservation(t.Context(), oar.AnchorToolRejected, "recall", "coordinator", nil, &toolrejection.ToolReject{Code: tc.code, Data: map[string]any{"field": tc.field, "reason": "invalid request", "recall_allowed_fields": []string{"after", "handle", "path"}}})
+			if reject == nil {
+				t.Fatal("recall rejection was lost")
+			}
+			text := reject.Error()
+			if !strings.Contains(text, tc.want) || strings.Contains(text, tc.absent) || !strings.Contains(text, "Code: "+tc.code) {
+				t.Fatalf("incorrect contextual recovery: %s", text)
+			}
+		})
+	}
+}

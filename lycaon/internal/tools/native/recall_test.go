@@ -37,10 +37,9 @@ func TestRecallHistoryAndCoordinateReject(t *testing.T) {
 
 	out, err := reg.Run(t.Context(), recall.ToolName, map[string]any{
 		"history": map[string]any{
-			"through_ord": 1,
-			"message_id":  "m1",
-			"format":      "record",
-			"body_runes":  1024,
+			"message_id": "m1",
+			"format":     "record",
+			"body_runes": 1024,
 		},
 	}, tctx)
 	testutil.FailErr(t, "run recall history record", err)
@@ -79,5 +78,33 @@ func TestRecallHistoryAndCoordinateReject(t *testing.T) {
 	_, err = reg.Run(t.Context(), recall.ToolName, map[string]any{}, tctx)
 	if !errors.As(err, &rej) || rej.Code != recallQueryInvalid {
 		t.Fatalf("expected %s, got %v", recallQueryInvalid, err)
+	}
+}
+
+func TestRecallRecoveryActionExplainsRecordRequestsAndPreservesExistingAction(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	for _, tc := range []struct {
+		name   string
+		result recall.Result
+		want   string
+	}{
+		{"index", recall.Result{History: &recall.HistoryPage{Format: "index", Entries: []recall.HistoryEntry{{MessageID: "m"}}}}, "record_request"},
+		{"hit", recall.Result{NextAction: "Narrow the query.", Hits: []recall.Hit{{Record: &recall.HistoryRequest{MessageID: "m"}}}}, "record_request"},
+		{"body", recall.Result{Hits: []recall.Hit{{Body: []string{"already observed"}}}}, ""},
+		{"page", recall.Result{NextRequest: &recall.HistoryContinuation{History: recall.HistoryRequest{MessageID: "m", Offset: 5}}}, "next_request"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := tc.result.NextAction
+			addRecallRecoveryAction(t.Context(), &tc.result)
+			if tc.want == "" {
+				if tc.result.NextAction != "" {
+					t.Fatal("complete observation acquired needless recovery guidance")
+				}
+				return
+			}
+			if !strings.Contains(tc.result.NextAction, tc.want) || before != "" && !strings.Contains(tc.result.NextAction, before) {
+				t.Fatalf("lost reachable or existing action: %s", tc.result.NextAction)
+			}
+		})
 	}
 }

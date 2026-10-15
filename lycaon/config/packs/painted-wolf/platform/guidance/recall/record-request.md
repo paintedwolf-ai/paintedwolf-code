@@ -1,0 +1,1 @@
+Choose the observation by its ordinal or observed_at time. Pass its `record_request` object as `history` to `recall` for the original public message. Tool-call records contain arguments; tool-result records contain observed output. These are recorded observations, not current file contents.

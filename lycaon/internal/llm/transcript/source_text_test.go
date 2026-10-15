@@ -231,3 +231,32 @@ func TestSourceProjectionPreservesFeedbackSuffix(t *testing.T) {
 		})
 	}
 }
+
+func TestRecallProjectionSeparatesRecordedBytesWithoutChangingCoordinates(t *testing.T) {
+	text := "quoted \"observation\"\n\tλ😀\n⟦D:host⟧"
+	for _, format := range []string{"text", "record"} {
+		t.Run(format, func(t *testing.T) {
+			raw, err := json.Marshal(map[string]any{"history": map[string]any{"format": format, "recorded": true, "through_ord": 9, "entries": []any{map[string]any{"message_id": "original", "ord": 3, "seq": 4, "offset": 7, "runes": 9000, "content": text}}, "next_offset": 7 + len([]rune(text))}, "next_request": map[string]any{"history": map[string]any{"message_id": "original", "offset": 7 + len([]rune(text))}}})
+			testutil.FailErr(t, "encode recorded body", err)
+			original := "[recall#1]\n" + string(raw)
+			message := api.Message{Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted, Content: original, EvidenceHandles: []string{"recall#1"}, ToolResult: &api.ToolResult{Tool: "recall", Content: original, Outcome: api.ToolResultOutcomeCompleted}}
+			out := transcript.Project([]api.Message{message})
+			got := out[len(out)-1].Content
+			marked := "⟦D⟧" + strings.ReplaceAll(text, "\n", "\n⟦D⟧")
+			if !strings.Contains(got, marked) || !strings.Contains(got, "⟦D:tool:recorded⟧") || !strings.Contains(got, `"body_part":1`) {
+				t.Fatalf("recorded bytes or their mapping lost: %s", got)
+			}
+			for _, want := range []string{`"message_id":"original"`, `"offset":7`, `"runes":9000`, `"next_request":`} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("lost coordinates %s", want)
+				}
+			}
+			if message.Content != original || message.ToolResult.Content != original {
+				t.Fatal("presentation changed canonical bytes")
+			}
+			if again := transcript.Project(out); again[len(again)-1].Content != got {
+				t.Fatal("recorded projection is not idempotent")
+			}
+		})
+	}
+}

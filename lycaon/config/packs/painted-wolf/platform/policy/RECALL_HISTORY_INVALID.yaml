@@ -5,7 +5,7 @@ anchor: tool.rejected
 selector:
   tool: [recall]
 requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason]
+  facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.rejection_field]
   profiles: [tool]
 when: paintedwolf.rejection_code == "RECALL_HISTORY_INVALID"
 effect: block
@@ -13,8 +13,20 @@ copy:
   what: 'The history request was rejected: {{ paintedwolf.rejection_reason }}.'
   cause: The canonical recovery coordinates or argument combination are invalid.
   why: History recovery addresses recorded rows in your own session.
-  fix: Use a positive through_ord, with 0 <= after_ord < through_ord and nonnegative offset and source_seq. Supply message_id for a body. Omit query and widen.
-  instead: Correct the history coordinates and retry
+  fix: >-
+    {% if paintedwolf.rejection_field == "history" %}
+    Use history on its own; omit query and widen. Canonical recovery stays in your session.
+    {% else %}{% if paintedwolf.rejection_field == "history.through_ord" or paintedwolf.rejection_field == "history.after_ord" %}
+    For an index, use the continuation's upper ordinal with 0 <= after_ord < through_ord.
+    For a known body, supply message_id; no ordinal bound is needed.
+    {% else %}{% if paintedwolf.rejection_field == "history.message_id" %}
+    Supply the returned message_id to read a body. Omit format to page the index.
+    {% else %}{% if paintedwolf.rejection_field == "history.search" %}
+    Search only the index with at most eight literal terms and 256 characters.
+    Omit search when supplying message_id.
+    {% else %}Correct {% if paintedwolf.rejection_field %}{{ paintedwolf.rejection_field }}{% else %}the rejected history arguments{% endif %} using the tool schema and retry the rejected call.
+    {% endif %}{% endif %}{% endif %}{% endif %}
+  instead: Pass a returned record_request as history, or a returned next_request as the complete recall arguments
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:recall
 x-paintedwolf-message: The history recovery coordinates are invalid.

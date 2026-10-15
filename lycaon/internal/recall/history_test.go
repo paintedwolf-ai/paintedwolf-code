@@ -234,3 +234,37 @@ func TestHistoryDoesNotExposeInternalOrUncommittedRows(t *testing.T) {
 		}
 	}
 }
+
+func TestHistoryKnownMessageNeedsNoOrdinalReconstruction(t *testing.T) {
+	f := newFixture(t)
+	body := strings.Repeat("λ😀 observed\n", 600)
+	for _, row := range []struct{ id, session, content string }{{"own-body", coordinatorSession, body}, {"peer-body", workerSession, "peer observation"}} {
+		testdbseed.InsertSessionEntry(t, f.db, row.id, row.session, "model_output", row.id, 1)
+		_, err := f.db.ExecContext(t.Context(), `INSERT INTO messages (entry_id,id,session_id,role,content,origin,authority,trust_tier,ord,seq,ts)
+  VALUES (?,?,?,'assistant',?,'model','none','untrusted',1,1,'2026-10-14T00:00:00Z')`, row.id, row.id, row.session, row.content)
+		testutil.FailErr(t, "seed known message", err)
+	}
+	original := recall.HistoryRequest{MessageID: "own-body", BodyRunes: 700}
+	req := recall.Request{Caller: coordinator(), History: &original}
+	var recovered strings.Builder
+	for {
+		result, err := f.svc.Answer(t.Context(), req)
+		testutil.FailErr(t, "recover by message ID", err)
+		if result.History.ThroughOrd != 1 || len(result.History.Entries) != 1 {
+			t.Fatal("known message did not resolve its own bound")
+		}
+		recovered.WriteString(result.History.Entries[0].Content)
+		if result.NextRequest == nil {
+			break
+		}
+		req.History = &result.NextRequest.History
+	}
+	if recovered.String() != body || original.ThroughOrd != 0 || original.Offset != 0 {
+		t.Fatal("paging changed canonical text or the original request")
+	}
+	result, err := f.svc.Answer(t.Context(), recall.Request{Caller: coordinator(), History: &recall.HistoryRequest{MessageID: "peer-body"}})
+	testutil.FailErr(t, "probe peer record without widening", err)
+	if len(result.History.Entries) != 0 {
+		t.Fatal("known message ID widened session access")
+	}
+}
