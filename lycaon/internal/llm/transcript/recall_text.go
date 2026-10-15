@@ -59,6 +59,7 @@ func projectRecallText(message api.Message, part api.MessageContentPart, parts [
 			return parts
 		}
 		for _, hit := range hits {
+			delete(hit, "hit_id")
 			raw, exists := hit["body"]
 			if !exists {
 				continue
@@ -73,9 +74,6 @@ func projectRecallText(message api.Message, part api.MessageContentPart, parts [
 			sources = append(sources, strings.Join(lines, "\n"))
 			hit["body_part"] = json.RawMessage(strconv.Itoa(len(sources)))
 			delete(hit, "body")
-		}
-		if len(sources) == 0 {
-			return parts
 		}
 		encoded, err := json.Marshal(hits)
 		if err != nil {

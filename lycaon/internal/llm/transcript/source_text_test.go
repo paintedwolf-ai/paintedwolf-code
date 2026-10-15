@@ -260,3 +260,35 @@ func TestRecallProjectionSeparatesRecordedBytesWithoutChangingCoordinates(t *tes
 		})
 	}
 }
+
+func TestRecallQueryProjectionKeepsActionableAddresses(t *testing.T) {
+	for _, withBody := range []bool{false, true} {
+		hit := map[string]any{"hit_id": "search-row-id", "handle": "read#1", "observed_at": "2026-10-14T00:00:00Z", "record_request": map[string]any{"message_id": "original-message", "format": "record"}, "untrusted": true, "currency": "changed"}
+		if withBody {
+			hit["body"] = []string{"recorded λ observation"}
+		}
+		raw, err := json.Marshal(map[string]any{"resolution": "matched", "hits": []any{hit}})
+		testutil.FailErr(t, "encode recall search", err)
+		original := "[recall#1]\n" + string(raw)
+		msg := api.Message{Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted, Content: original, EvidenceHandles: []string{"recall#1"}, ToolResult: &api.ToolResult{Tool: "recall", Content: original, Outcome: api.ToolResultOutcomeCompleted}}
+		projected := transcript.Project([]api.Message{msg})
+		got := projected[len(projected)-1].Content
+		if strings.Contains(got, "search-row-id") || strings.Contains(got, `"hit_id"`) {
+			t.Fatal("non-actionable search identity was presented as a recovery address")
+		}
+		for _, want := range []string{`"message_id":"original-message"`, `"handle":"read#1"`, `"currency":"changed"`, `"untrusted":true`, `"observed_at":"2026-10-14T00:00:00Z"`} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("projection lost %s", want)
+			}
+		}
+		if withBody && (!strings.Contains(got, "recorded λ observation") || !strings.Contains(got, `"body_part":1`)) {
+			t.Fatal("recorded body lost its mapping")
+		}
+		if msg.Content != original || msg.ToolResult.Content != original || !strings.Contains(original, "search-row-id") {
+			t.Fatal("projection changed canonical result identity")
+		}
+		if again := transcript.Project(projected); again[len(again)-1].Content != got {
+			t.Fatal("recall projection is not idempotent")
+		}
+	}
+}
