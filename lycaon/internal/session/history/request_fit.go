@@ -67,9 +67,9 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 	frame := req
 	frame.Messages = projection.frame
 	frameBudget := measure(frame)
-	if req.MaxTokens <= 0 && ceiling-frameBudget.Input < 2048 {
+	if req.MaxTokens <= 0 {
 		if availableAfterFrame := budget.Window - budget.Headroom - frameBudget.Input; availableAfterFrame > max(128, budget.MinimumOutput) {
-			reserve = max(max(128, budget.MinimumOutput), min(reserve, max(availableAfterFrame/4, min(512, availableAfterFrame/2))))
+			reserve = max(max(128, budget.MinimumOutput), min(reserve, availableAfterFrame/4))
 			ceiling = budget.Window - budget.Headroom - reserve
 		}
 		if budget.Input <= ceiling {
@@ -164,12 +164,20 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 	rows = promptassembly.MarkContextPins(sess, rows, min(8192, max(0, tokens/5)))
 	canShrinkTools := shrinkTools && m.store != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)
 	if canShrinkTools {
-		rows = projectRecordedToolBodies(ctx, rows, tokens)
+		toolTokens := tokens
+		if !found && text != "" {
+			toolTokens = max(1, tokens-compaction.EstimateMessagesTokens([]compaction.ContextMessage{{Role: "system", Content: text}}))
+		}
+		rows = projectRecordedToolBodies(ctx, rows, toolTokens)
+		if retained := retainedToolTailMessages(rows, toolTokens); retained > 0 {
+			cfg.KeepRecentMessages = retained
+		}
 	}
 	contexts := compaction.ContextMessagesFromAPI(rows)
 	fitted := compaction.DeterministicFit(cfg, contexts, tokens)
 	if canShrinkTools && compaction.EstimateMessagesTokens(fitted) > tokens {
 		rows = projectRecordedToolBodies(ctx, rows)
+		cfg.KeepRecentMessages = max(1, retainedToolTailMessages(rows, 0))
 		contexts = compaction.ContextMessagesFromAPI(rows)
 		fitted = compaction.DeterministicFit(cfg, contexts, tokens)
 	}

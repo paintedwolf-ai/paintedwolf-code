@@ -1,16 +1,23 @@
 package history
 
 import (
+	"context"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/recall"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -123,16 +130,17 @@ func TestProjectedRecallKeepsOriginalRecoveryTarget(t *testing.T) {
 }
 
 func TestRecallSearchFitKeepsRecoverableHits(t *testing.T) {
-	hits := []any{}
+	hits := []any{map[string]any{"kind": "tool", "snippet": "other session"}}
 	for _, id := range []string{"newest", "middle", "oldest"} {
 		hits = append(hits, map[string]any{"handle": id, "record_request": map[string]any{"message_id": id}, "snippet": strings.Repeat("recorded snippet ", 100), "body": []string{strings.Repeat("recorded observation ", 2000)}, "untrusted": true, "currency": "stale"})
 	}
-	raw, err := json.Marshal(map[string]any{"resolution": "matched", "count": map[string]any{"value": 3, "relation": "exact"}, "hits": hits})
+	raw, err := json.Marshal(map[string]any{"resolution": "matched", "count": map[string]any{"value": 4, "relation": "exact"}, "hits": hits, "wire_spill_path": "tool-output/spilled.txt"})
 	testutil.FailErr(t, "encode search observations", err)
-	row := api.Message{ID: "query-result", Ord: 8, Role: api.MessageRoleTool, Content: "[recall#4]\n" + string(raw), ToolResult: &api.ToolResult{Tool: "recall", Content: "[recall#4]\n" + string(raw)}}
+	content := "[recall#4]\n" + string(raw) + "\n>>> Tool feedback\n" + strings.Repeat("spill notice ", 60)
+	row := api.Message{ID: "query-result", Ord: 8, Role: api.MessageRoleTool, Content: content, ToolResult: &api.ToolResult{Tool: "recall", Content: content}}
 	result := projectRecordedToolBodies(t.Context(), []api.Message{row})[0]
 	_, body, _, ok := hostmarker.SplitToolJSONBody(result.Content)
-	if !ok || len(result.Content) > 2048 {
+	if !ok || len(result.Content) > 2048 || strings.Contains(result.Content, "tool-output/spilled.txt") {
 		t.Fatal("search projection lost its bounded envelope")
 	}
 	var page map[string]any
@@ -153,6 +161,11 @@ func TestRecallSearchFitKeepsRecoverableHits(t *testing.T) {
 	fitted, ok := projectRecallSearch(row.Content, 450)
 	if !ok || !strings.Contains(fitted, "oldest") || !strings.Contains(fitted, "newest") || !strings.Contains(fitted, `"hits_truncated":true`) {
 		t.Fatalf("partial search did not preserve endpoint addresses and truncation: %s", fitted)
+	}
+	handleOnly, err := json.Marshal(map[string]any{"hits": []any{map[string]any{"handle": "read#1", "body": []string{strings.Repeat("x", 3000)}}}})
+	testutil.FailErr(t, "encode handle-only search", err)
+	if fitted, ok := projectRecallSearch("[recall#5]\n"+string(handleOnly), 450); !ok || !strings.Contains(fitted, "read#1") {
+		t.Fatalf("handle-only search projection lost its handle: %s", fitted)
 	}
 }
 
@@ -177,5 +190,50 @@ func TestSmallObservationSurvivesModelFormattingOverhead(t *testing.T) {
 	}
 	if original.Content != content || original.ToolResult.Content != content {
 		t.Fatal("projection changed canonical observation bytes")
+	}
+}
+
+func TestFitRequestRetainsActiveTurnToolExchangesAcrossPriorTurns(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	mem := store.NewMemory()
+	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "small"}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	priorUser := strings.Repeat("Prior turn context. ", 250)
+	priorTool := strings.Repeat("Prior turn observation. ", 400)
+	activeRead := strings.Repeat("Active observation row. ", 90)
+	reasoning := &api.ModelReasoning{ProviderID: "fixture", Model: "small", Text: "Checking prior and current observations"}
+	testutil.FailErr(t, "append multi-turn history", mem.AppendMessages(t.Context(), sess.ID,
+		api.Message{ID: "u1", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: priorUser},
+		api.Message{ID: "a1", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "c1", Name: "read"}}},
+		api.Message{ID: "t1", Role: api.MessageRoleTool, Content: priorTool, ToolResult: &api.ToolResult{Tool: "read", ToolCallID: "c1", AssistantMessageID: "a1", Content: priorTool}},
+		api.Message{ID: "u2", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: priorUser},
+		api.Message{ID: "a2", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "c2", Name: "read"}}},
+		api.Message{ID: "t2", Role: api.MessageRoleTool, Content: priorTool, ToolResult: &api.ToolResult{Tool: "read", ToolCallID: "c2", AssistantMessageID: "a2", Content: priorTool}},
+		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Compare original and current checksums"},
+		api.Message{ID: "call-1", Role: api.MessageRoleAssistant, ModelReasoning: reasoning, ToolCalls: []api.ToolCall{{ID: "rc-1", Name: "recall"}}},
+		api.Message{ID: "result-1", Role: api.MessageRoleTool, Content: activeRead, ToolResult: &api.ToolResult{Tool: "recall", ToolCallID: "rc-1", AssistantMessageID: "call-1", Content: activeRead}},
+		api.Message{ID: "call-2", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "rd-2", Name: "read"}}},
+		api.Message{ID: "result-2", Role: api.MessageRoleTool, Content: activeRead, ToolResult: &api.ToolResult{Tool: "read", ToolCallID: "rd-2", AssistantMessageID: "call-2", Content: activeRead}}))
+	rows, err := mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "load session rows", err)
+	cfg := compaction.DefaultCompactionConfig()
+	cfg.KeepRecentMessages = 16
+	service := &Service{store: mem, Compactor: compaction.NewSimpleCompactor(cfg, nil), recallAvailable: func(context.Context, *api.Session) bool { return true }}
+	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: strings.Repeat("Standing instructions. ", 700)}
+	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 8192}})}
+	fitted, err := service.FitRequest(t.Context(), sess, rows, modelcall.CompletionRequest{Model: "small", Messages: append([]api.Message{standing}, rows...)}, budgets)
+	testutil.FailErr(t, "fit multi-exchange active turn", err)
+	seen := map[string]api.Message{}
+	for _, row := range fitted.Messages {
+		seen[row.ID] = row
+	}
+	if _, ok := seen["t1"]; ok {
+		t.Fatal("prior turn tool output was retained ahead of active turn exchanges")
+	}
+	if seen["result-1"].Content != activeRead || seen["result-2"].Content != activeRead || !reflect.DeepEqual(seen["call-1"].ModelReasoning, reasoning) {
+		t.Fatal("active turn tool exchanges or model reasoning were not preserved intact")
+	}
+	if got := retainedToolTailMessages(rows, 1); got != 2 {
+		t.Fatalf("heaviest load tail retention = %d, want 2", got)
 	}
 }

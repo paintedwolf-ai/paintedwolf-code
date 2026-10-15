@@ -20,6 +20,9 @@ func projectRecallSearch(raw string, maxBytes int) (string, bool) {
 	if !ok || len(hits) == 0 {
 		return "", false
 	}
+	originalHits := len(hits)
+	withRecord := make([]any, 0, len(hits))
+	withAddress := make([]any, 0, len(hits))
 	for _, rawHit := range hits {
 		hit, ok := rawHit.(map[string]any)
 		if !ok {
@@ -28,16 +31,31 @@ func projectRecallSearch(raw string, maxBytes int) (string, bool) {
 		handle, _ := hit["handle"].(string)
 		record, _ := hit["record_request"].(map[string]any)
 		messageID, _ := record["message_id"].(string)
-		if handle == "" && messageID == "" {
-			return "", false
-		}
 		delete(hit, "snippet")
 		if _, exists := hit["body"]; exists {
 			delete(hit, "body")
 			hit["body_truncated"] = true
 		}
+		if messageID != "" {
+			withRecord = append(withRecord, hit)
+		}
+		if handle != "" || messageID != "" {
+			withAddress = append(withAddress, hit)
+		}
 	}
-	total := max(int(jsonInt(root["hits_total"])), len(hits))
+	switch {
+	case len(withRecord) > 0:
+		hits = withRecord
+	case len(withAddress) > 0:
+		hits = withAddress
+	default:
+		return "", false
+	}
+	if _, spilled := root["wire_spill_path"]; spilled {
+		delete(root, "wire_spill_path")
+		suffix = ""
+	}
+	total := max(int(jsonInt(root["hits_total"])), originalHits)
 	previouslyTruncated, _ := root["hits_truncated"].(bool)
 	root["truncated"] = true
 	root["wire_compacted"] = true
@@ -49,7 +67,7 @@ func projectRecallSearch(raw string, maxBytes int) (string, bool) {
 		root["hits"] = shown
 		root["hits_shown"] = len(shown)
 		root["hits_total"] = total
-		root["hits_truncated"] = previouslyTruncated || count < len(hits)
+		root["hits_truncated"] = previouslyTruncated || len(hits) < originalHits || count < len(hits)
 		if receipt, ok := root["receipt"].(map[string]any); ok {
 			receipt["truncated"] = true
 		}

@@ -200,6 +200,41 @@ func isOversizedToolBody(row api.Message) bool {
 	return true
 }
 
+// trimNoticeTokenReserve reserves space for the synthetic trim notice inserted when older rows are dropped.
+const trimNoticeTokenReserve = 64
+
+// isCompactionCheckpointHead reports whether row i is part of the leading checkpoint-and-continuation pair.
+func isCompactionCheckpointHead(rows []api.Message, i int) bool {
+	return rows[i].CompactionCheckpoint || i == 1 && rows[0].CompactionCheckpoint
+}
+
+func retainedToolTailMessages(rows []api.Message, tokens int) int {
+	lastAssistant := -1
+	for i := api.UserIntentBoundary(rows); i < len(rows); i++ {
+		if isCompactionCheckpointHead(rows, i) || rows[i].Role != api.MessageRoleAssistant {
+			continue
+		}
+		lastAssistant = i
+		if retainedToolTailTokens(rows, i) <= tokens {
+			return nonSystemMessageCount(rows[i:])
+		}
+	}
+	if lastAssistant >= 0 {
+		return nonSystemMessageCount(rows[lastAssistant:])
+	}
+	return 0
+}
+
+func nonSystemMessageCount(rows []api.Message) int {
+	kept := 0
+	for _, row := range rows {
+		if row.Role != api.MessageRoleSystem {
+			kept++
+		}
+	}
+	return kept
+}
+
 func retainedToolTailTokens(rows []api.Message, idx int) int {
 	start := idx
 	for start > 0 && rows[start].Role == api.MessageRoleTool {
@@ -208,7 +243,7 @@ func retainedToolTailTokens(rows []api.Message, idx int) int {
 	kept := make([]api.Message, 0, len(rows))
 	dropped := false
 	for i, row := range rows {
-		if i >= start || row.ContextPinned || row.CompactionCheckpoint {
+		if i >= start || row.ContextPinned || isCompactionCheckpointHead(rows, i) {
 			kept = append(kept, row)
 		} else {
 			dropped = true
@@ -216,7 +251,7 @@ func retainedToolTailTokens(rows []api.Message, idx int) int {
 	}
 	tokens := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(kept))
 	if dropped {
-		tokens += 64
+		tokens += trimNoticeTokenReserve
 	}
 	return tokens
 }
