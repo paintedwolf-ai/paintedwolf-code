@@ -1,0 +1,35 @@
+surfaces: [preflight]
+notification: { tier: non_catastrophic, scope: app }
+title: Image text recognition unavailable
+message: >-
+  The app's bundled text recognizer did not resolve or does not match its
+  pinned payload. Images the model would view are not screened for credentials
+  on this device: each one asks before it is sent, and the redacted send is not
+  offered.
+suggested_action: >-
+  {% if reason == "digest_mismatch" -%}
+  A recognizer file differs from the one that shipped with the app. Reinstall
+  the app, then reopen it.
+  {%- elif reason == "unsupported_platform" -%}
+  This platform has no text recognizer. Images are sent only after you confirm
+  each one.
+  {%- else -%}
+  Reinstall the app (or restore the bundled recognizer), then reopen it.
+  {%- endif %}
+scenarios:
+  - id: missing
+    vars:
+      reason: missing
+    expect_contains:
+      - Reinstall
+  - id: digest_mismatch
+    vars:
+      reason: digest_mismatch
+    expect_contains:
+      - differs
+      - Reinstall
+  - id: unsupported_platform
+    vars:
+      reason: unsupported_platform
+    expect_contains:
+      - confirm

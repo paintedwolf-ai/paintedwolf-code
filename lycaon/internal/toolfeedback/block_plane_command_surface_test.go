@@ -6,6 +6,11 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
@@ -20,7 +25,7 @@ func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
 			reject: &toolrejection.ToolReject{Code: "COMMAND_FAILURE_LOOP", Data: map[string]any{
 				"command": "cargo test", "count": 3,
 			}},
-			want: []string{"cargo test", "failed 3 times", "change the command"},
+			want: []string{"cargo test", "failed 3 times", "Change the command"},
 		},
 		{
 			tool: "command",

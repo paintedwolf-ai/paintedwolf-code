@@ -150,7 +150,7 @@ func TestCadenceLongRunningGenerationCoalescesOneSuccessor(t *testing.T) {
 		}
 	}
 
-	clock.Advance(cadence.cadenceCfg().RefreshSettle())
+	clock.Advance(cadenceCfg(cadence).RefreshSettle())
 	cadence.Tick(context.Background())
 	all, err := store.ListByCanonicalPath(context.Background(), canonical)
 	testutil.FailErr(t, "list successor generation", err)

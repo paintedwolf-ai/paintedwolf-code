@@ -28,7 +28,7 @@ func TestCadenceRetirementPreservesAttachedOrUnknownRoots(t *testing.T) {
 			root, err := scanbase.CanonicalPath(t.TempDir())
 			testutil.FailErr(t, "canonical root", err)
 			testutil.FailErr(t, "baseline", cadence.BaselineRoot(t.Context(), root))
-			ctx, release, _ := cadence.beginRootDispatch(t.Context(), root, "pending")
+			ctx, release, _ := cadence.roots.beginDispatch(t.Context(), &cadence.mu, root, "pending")
 			defer release()
 			err = cadence.RetireRoot(t.Context(), root, func(context.Context, string) (bool, error) {
 				return tc.attached, tc.err
@@ -87,19 +87,19 @@ func TestCadenceRetirementCancelsOnlyItsDispatches(t *testing.T) {
 	root, err := scanbase.CanonicalPath(t.TempDir())
 	testutil.FailErr(t, "canonical root", err)
 	other := t.TempDir()
-	ctx, release, current := cadence.beginRootDispatch(t.Context(), root, "old")
+	ctx, release, current := cadence.roots.beginDispatch(t.Context(), &cadence.mu, root, "old")
 	if !current {
 		t.Fatal("initial dispatch was refused")
 	}
 	defer release()
-	otherCtx, releaseOther, _ := cadence.beginRootDispatch(t.Context(), other, "other")
+	otherCtx, releaseOther, _ := cadence.roots.beginDispatch(t.Context(), &cadence.mu, other, "other")
 	defer releaseOther()
 	testutil.FailErr(t, "remove root directory", os.Remove(root))
 	testutil.FailErr(t, "retire missing root", cadence.RetireRoot(t.Context(), root, nil))
 	if ctx.Err() != context.Canceled || otherCtx.Err() != nil {
 		t.Fatalf("dispatch contexts: retired=%v other=%v", ctx.Err(), otherCtx.Err())
 	}
-	if _, _, accepted := cadence.beginRootDispatch(t.Context(), root, "late"); accepted {
+	if _, _, accepted := cadence.roots.beginDispatch(t.Context(), &cadence.mu, root, "late"); accepted {
 		t.Fatal("retired root accepted another dispatch")
 	}
 }

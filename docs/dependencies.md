@@ -53,6 +53,26 @@ The app ships a **pinned** git + git-lfs binary tree rather than calling whateve
 
 When a CVE lands in git, git-lfs or a statically linked library, bump the pin to a fixed dugite-native release and a fixed paintedwolf-git release, and repeat.
 
+## Bundled OCR engine
+
+On Linux the visual screen reads image text with a **pinned** static Tesseract executable and its trained data, staged under the engine root like the git toolchain. macOS recognizes text in-process through Apple Vision and bundles nothing.
+
+| Item | Detail |
+|------|--------|
+| **Artifacts** | `ocr/bin/tesseract` (Tesseract 5.5.3 with Leptonica 1.87.0, statically linked against musl, no image codecs) plus `ocr/tessdata/eng.traineddata` and `osd.traineddata` from `tessdata_fast`, upstream license texts and notices, the producer's source lock, and a `provenance.json` naming every input |
+| **Pin** | [`lycaon/config/runtime/ocrengine/pin.yaml`](../lycaon/config/runtime/ocrengine/pin.yaml): engine version, producer repository, release tag and commit, trained-data digests and sizes, and each platform's release archive URL, digest, size, and executable digest |
+| **Build** | The [Painted Wolf Tesseract](https://github.com/paintedwolf-ai/paintedwolf-tesseract) producer owns the build recipe, its digest-pinned inputs, and the notices. Its release workflow builds and runs both architectures on GitHub-hosted runners and publishes immutable, attested releases. This repository never compiles the engine; a pin change needs a published release |
+| **Fetch** | `scripts/ocrengine-fetch.sh [--target TRIPLE] [--archive FILE]` downloads the pinned release archive (or imports a local one, such as a producer qualification build), checks its digest and size, checks every payload digest, and places the tree at `lycaon-den/src-tauri/engine-root/ocr/`. `scripts/stage-engine.sh` runs it on Linux; `./task setup-dev` runs it on a Linux checkout |
+| **Resolution** | `LYCAON_OCR_ROOT`, else `ocr/` under the launcher-provided `LYCAON_ENGINE_ROOT`, else `ocr/` beside the engine executable. Every root is verified against the pin (executable and trained-data digests and sizes) once per process; a present but altered payload is refused rather than skipped. No `PATH` lookup and no system-tesseract fallback. Preflight reports `OCR_ENGINE_UNAVAILABLE` with `reason` `missing`, `digest_mismatch`, or `unsupported_platform` |
+| **Run** | The host decodes the raster itself and hands the engine an 8-bit PGM on stdin (small rasters enlarged by a whole factor first), so the C side carries no image parser. One process per image through the host process seam: a private scratch directory as its only write root, no egress, reduced environment, `--psm 1` orientation detection with `min_orientation_margin` lowered from 7 to 1 so a capture of a few lines turned upside down is turned back, TSV on stdout, a 30 s deadline, and 8 MiB of output. Word rows are grouped into line spans with normalized boxes and mean confidence, the same shape the macOS recognizer returns |
+| **Verify** | `pw diagnostics ocr-engine` resolves the installed engine, reads a rendered fixture, and fails unless the words come back. Tests gate on `ocrtest.SkipIfNoEngine`; `LYCAON_OCR_REQUIRED=1` turns the skip into a failure |
+
+### Bump procedure
+
+1. Change the inputs in the producer repository and publish a new release there (its README has the release steps).
+2. Verify the release's `release.json` attestation (`gh attestation verify release.json --repo paintedwolf-ai/paintedwolf-tesseract --signer-workflow paintedwolf-ai/paintedwolf-tesseract/.github/workflows/release.yml`). Then set `engine_version`, `producer.tag`, and `producer.commit` (its `source_commit`) in `lycaon/config/runtime/ocrengine/pin.yaml`, and copy the trained-data digests and each platform's archive URL, digest, size, and executable digest from the release's `release.json`.
+3. Run `scripts/ocrengine-fetch.sh` and the engine-required recognizer suite (`LYCAON_OCR_REQUIRED=1 ./task test:digest -- ./internal/ocrengine/... ./internal/visualscreen/...`) on Linux.
+
 ## Managed headless browser
 
 Visual tools (capture, rasterize, measure, filmstrip, page sessions) run a **pinned** `chrome-headless-shell` from Chrome for Testing, with the same split as the git toolchain: [`browserengine`](../lycaon/internal/browserengine) resolves and provisions the pinned binary, [`browser`](../lycaon/internal/browser) launches and pools it. Hermetic-or-fail, never a browser the user installed.

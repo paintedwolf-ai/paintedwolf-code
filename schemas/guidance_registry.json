@@ -507,7 +507,7 @@
       "summary": "{% if paintedwolf.path %}The confine helper resolved `{{ paintedwolf.path }}` but the kernel refused to execute it.{% else %}The confine helper resolved argv0 but the kernel refused to execute it.{% endif %}"
     },
     "COMMAND_FAILURE_LOOP": {
-      "branch_instruction": "Stop replaying the identical invocation; follow the preceding Code's Fix or change approach",
+      "branch_instruction": "Diagnose the failed outcome before retrying; changed source must be observed by the host.",
       "category": "recoverable",
       "emit": "guard:command_loop",
       "summary": "command `{{ paintedwolf.command }}` has failed {{ paintedwolf.count }} times in a row."
