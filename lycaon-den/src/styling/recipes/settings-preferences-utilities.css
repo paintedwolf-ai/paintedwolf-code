@@ -154,7 +154,7 @@
 }
 
 @utility den-settings-pool-list {
-  & li {
+  & .den-settings-rules-row {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
   }

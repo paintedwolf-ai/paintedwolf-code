@@ -236,7 +236,7 @@ describe("scalable layout chrome", () => {
       /@container den-notice-rail \(max-width:\s*24rem\)\s*\{[\s\S]*?\.den-notice-toggle-label\s*\{[\s\S]*?clip-path:\s*inset\(50%\)/,
     );
     expect(chat).toMatch(
-      /@container den-notice-rail \(max-width:\s*24rem\)\s*\{[\s\S]*?\.den-notice-toggle-glyph\s*\{\s*display:\s*inline-flex/,
+      /@container den-notice-rail \(max-width:\s*24rem\)\s*\{[\s\S]*?\.den-notice-toggle-glyph\s*\{\s*position:\s*static;\s*visibility:\s*visible/,
     );
 
     // Nudge actions shrink and wrap their labels rather than spilling the card.

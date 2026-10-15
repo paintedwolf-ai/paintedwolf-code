@@ -1,20 +1,15 @@
 package toolexecution
 
 import (
-	"github.com/lycaon/lycaon/internal/toolsecrets"
-
-	"github.com/lycaon/lycaon/internal/capabilityrequest"
-
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolcommand"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/authzledger"
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/oar"
@@ -22,7 +17,11 @@ import (
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/toolcommand"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolsecrets"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -262,33 +261,26 @@ func commandFileWriteReject(
 	if !ok {
 		return nil
 	}
-	writeDecision, _ := tools.EvaluateListVisible(ctx, e.Metadata.policy, platform.PolicyContext{
-		ProfileID: profileID, ToolAccess: tc.Turn.ToolAccess, ToolName: "write",
-	})
-	writeAllowed := writeDecision != nil && writeDecision.Allowed
 	var canWrite, toolLoadable bool
-	if len(tc.Turn.TurnOfferedToolNames) > 0 {
-		for _, name := range tc.Turn.TurnOfferedToolNames {
-			if name == "write" {
-				canWrite = true
-			}
-			if name == "request_tools" && (tc.Turn.TurnToolPlan.Deferred("write") || writeAllowed) {
-				toolLoadable = true
-			}
+	for _, name := range tc.Turn.TurnOfferedToolNames {
+		if name == "write" {
+			canWrite = true
 		}
-		if canWrite {
-			toolLoadable = false
+		if name == "request_tools" && tc.Turn.TurnToolPlan.Deferred("write") {
+			toolLoadable = true
 		}
-	} else {
-		canWrite = writeAllowed
-		if canWrite {
-			tc.Turn.TurnOfferedToolNames = []string{toolName, "write"}
-		}
+	}
+	if canWrite {
+		toolLoadable = false
 	}
 	var calls []toolcommand.ReplacementCall
 	if canWrite && fw.Exact {
 		valid := true
 		for _, call := range fw.Calls {
+			if !slices.Contains(tc.Turn.TurnOfferedToolNames, call.Tool) {
+				valid = false
+				break
+			}
 			if _, callable := e.definitionFor(call.Tool); !callable {
 				valid = false
 				break
