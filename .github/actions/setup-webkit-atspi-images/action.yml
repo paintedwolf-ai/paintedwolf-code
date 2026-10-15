@@ -1,0 +1,60 @@
+name: Set up WebKitGTK accessibility images
+description: Restore, or build on a miss, the container image of each WebKitGTK release that den:webkit:atspi checks, so an offline lane finds every image it runs
+inputs:
+  save:
+    description: Publish images built on a miss (main only); every other run restores without saving
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Read image cache identity
+      id: identity
+      shell: bash
+      run: |
+        set -euo pipefail
+        printf 'archive=%s/webkit-atspi-images.tar\n' "${RUNNER_TEMP}" >> "${GITHUB_OUTPUT}"
+        printf 'prefix=webkit-atspi-images-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" >> "${GITHUB_OUTPUT}"
+
+    # Each image is tagged by its definition's digest, so an older set still supplies every
+    # release a change left alone. Main looks up only the exact set it would publish.
+    - name: Restore images
+      id: cache
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.identity.outputs.archive }}
+        key: ${{ steps.identity.outputs.prefix }}${{ hashFiles('scripts/harness/webkit-atspi/*.Containerfile') }}
+        restore-keys: ${{ inputs.save != 'true' && steps.identity.outputs.prefix || '' }}
+        lookup-only: ${{ inputs.save == 'true' }}
+
+    - name: Load restored images
+      if: inputs.save != 'true' && steps.cache.outputs.cache-matched-key != ''
+      shell: bash
+      env:
+        ARCHIVE: ${{ steps.identity.outputs.archive }}
+      run: |
+        set -euo pipefail
+        podman load --quiet --input "${ARCHIVE}"
+        rm -f "${ARCHIVE}"
+
+    # Builds only the releases whose images are missing, while the runner still has a network.
+    - name: Build missing images
+      if: inputs.save != 'true' || steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: ./task den:webkit:atspi -- --prepare
+
+    - name: Archive built images
+      if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        ARCHIVE: ${{ steps.identity.outputs.archive }}
+      run: |
+        set -euo pipefail
+        mapfile -t images < <(podman images --filter reference=localhost/paintedwolf-webkit-atspi --format '{{.Repository}}:{{.Tag}}')
+        podman save --quiet --multi-image-archive --output "${ARCHIVE}" "${images[@]}"
+
+    - name: Cache built images
+      if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.identity.outputs.archive }}
+        key: ${{ steps.identity.outputs.prefix }}${{ hashFiles('scripts/harness/webkit-atspi/*.Containerfile') }}

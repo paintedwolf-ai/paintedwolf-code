@@ -15,9 +15,11 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual(actual, expected)
         check = {row["lane"] for row in ci.matrix("check")["include"]}
         release = {row["lane"] for row in ci.matrix("release")["include"]}
+        platform = {name for name, lane in lanes.items() if "platform" in lane}
         # Releases gate on whether the product works; style, tooling, and the deep tiers run elsewhere.
-        self.assertLessEqual(release, check)
-        self.assertEqual(release, {"build", "contracts", "behavior", "frontend", "native", "vulnerabilities"})
+        self.assertLessEqual(release, check | platform)
+        self.assertEqual(release, {"build", "contracts", "behavior", "frontend", "native", "vulnerabilities",
+                                   "webkit-gtk"})
 
     def test_ready_tier_is_one_short_static_job_from_the_handoff_gate(self):
         handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
@@ -57,7 +59,8 @@ class HostedPlanTests(unittest.TestCase):
         nightly = {target for row in ci.matrix("nightly")["include"] for target in lanes[row["lane"]]["targets"]}
         self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "check:coverage",
                                    "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
-                                   "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll"})
+                                   "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll",
+                                   "den:webkit:atspi"})
         for suite in ci.SUITES - {"all"}:
             with self.subTest(suite=suite):
                 names = {row["lane"] for row in ci.matrix("nightly", suite)["include"]}
@@ -100,11 +103,40 @@ class HostedPlanTests(unittest.TestCase):
                 with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
                     ci.matrix("check")
 
-    def test_e2e_leaves_merge_admission_and_has_an_explicit_nightly_selection(self):
-        self.assertNotIn("den:webkit:scroll", [stage["name"] for stage in planning.expand(["check"])])
-        self.assertNotIn("webkit", {row["lane"] for row in ci.matrix("check")["include"]})
+    def test_e2e_leaves_the_check_gate_and_has_an_explicit_nightly_selection(self):
+        gate = [stage["name"] for stage in planning.expand(["check"])]
+        self.assertFalse({"den:webkit:scroll", "den:webkit:atspi"} & set(gate))
+        self.assertFalse({"webkit", "webkit-gtk"} & {row["lane"] for row in ci.matrix("check")["include"]})
         self.assertEqual({row["lane"] for row in ci.matrix("nightly", "e2e")["include"]},
-                         {"webkit", "vulnerability-freshness"})
+                         {"webkit", "webkit-gtk", "vulnerability-freshness"})
+        # Only a platform lane takes an end-to-end check into merge admission.
+        admitted = {row["lane"] for row in ci.matrix("integration")["include"]}
+        self.assertEqual({name for name in admitted if ci.lanes()[name]["suite"] == "e2e"}, {"webkit-gtk"})
+
+    def test_platform_lanes_run_beside_the_check_gate_and_never_inside_it(self):
+        lane = ci.lanes()["webkit-gtk"]
+        self.assertEqual(lane["platform"], "linux")
+        for mutation in ("unknown", "macos", "check", "fast", "repeats"):
+            with self.subTest(mutation=mutation):
+                data = copy.deepcopy(planning.catalog())
+                platform = data["ci"]["webkit-gtk"]
+                if mutation == "unknown":
+                    platform["platform"] = "windows"
+                elif mutation == "macos":
+                    platform["runner"] = "macos-15"
+                elif mutation in {"check", "fast"}:
+                    platform["profiles"].append(mutation)
+                else:
+                    platform["targets"].append("den:test")
+                with patch.object(ci, "catalog", return_value=data), self.assertRaises(ValueError):
+                    ci.lanes()
+
+    def test_offline_lanes_learn_which_container_images_they_need(self):
+        for profile in ci.PROFILES:
+            for row in ci.matrix(profile)["include"]:
+                with self.subTest(profile=profile, lane=row["lane"]):
+                    self.assertEqual(row["containers"], "den:webkit:atspi" in ci.lanes()[row["lane"]]["targets"])
+        self.assertTrue([row for row in ci.matrix("integration")["include"] if row["containers"]])
 
     def test_each_profile_caps_the_runners_its_matrix_holds(self):
         caps = planning.catalog()["capacity"]["max_parallel"]

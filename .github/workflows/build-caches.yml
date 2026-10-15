@@ -142,6 +142,13 @@ jobs:
           tools: all
           save: 'true'
 
+      # Offline merge-queue lanes restore these rather than build each WebKitGTK release's image.
+      - name: Publish WebKitGTK accessibility images
+        if: runner.os == 'Linux' && github.ref == 'refs/heads/main'
+        uses: ./.github/actions/setup-webkit-atspi-images
+        with:
+          save: 'true'
+
   usage:
     if: always()
     needs: [release, verification]

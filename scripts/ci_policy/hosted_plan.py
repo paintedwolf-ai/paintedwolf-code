@@ -11,6 +11,11 @@ GATE = "check"
 FAST_GATE = "check-fast"
 SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz", "e2e"}
 SETUPS = {"verification", "shell", "harness"}
+# A platform lane runs a check that only its platform can run, so the cross-platform check gate,
+# which every development host runs, leaves it out; the merge queue runs it beside that gate.
+PLATFORMS = {"linux"}
+# Runs its probe in container images that an offline lane must find already provisioned.
+CONTAINER_TARGET = "den:webkit:atspi"
 
 
 def lanes():
@@ -22,7 +27,8 @@ def lanes():
     for name, lane in values.items():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
-        if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "first"}:
+        if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "first",
+                        "platform"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         if lane.get("first", True) is not True:
             raise ValueError(f"CI lane {name} marks itself first or leaves the field out")
@@ -40,6 +46,9 @@ def lanes():
             raise ValueError(f"CI lane {name} workers must be an integer from 1 through 8")
         if "shards" in lane and (type(lane["shards"]) is not int or not 2 <= lane["shards"] <= 8):
             raise ValueError(f"CI lane {name} shards must be an integer from 2 through 8")
+        if "platform" in lane and (lane["platform"] not in PLATFORMS or lane.get("runner", "ubuntu-latest") != "ubuntu-latest"
+                                   or set(lane["profiles"]) & {"fast", GATE}):
+            raise ValueError(f"CI lane {name} is a Linux platform lane on Linux runners, outside the fast and {GATE} tiers")
     expected = Counter(stage["name"] for stage in expand([GATE]))
     actual = Counter(stage["name"] for lane in values.values() if GATE in lane["profiles"]
                      for stage in expand(lane["targets"]))
@@ -51,11 +60,15 @@ def lanes():
     extra = set(fast) - {stage["name"] for stage in expand([FAST_GATE])}
     if not fast or extra or max(fast.values()) > 1:
         raise ValueError(f"CI fast tier must run stages of {FAST_GATE} once each: extra={extra}, counts={dict(fast)}")
-    expected = Counter(stage["name"] for stage in expand(["check"]) if stage["name"] != "build:cross")
-    actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"]
+    expected = Counter(stage["name"] for stage in expand([GATE]) if stage["name"] != "build:cross")
+    actual = Counter(stage["name"] for lane in values.values() if "integration" in lane["profiles"] and "platform" not in lane
                      for stage in expand(lane["targets"]))
     if actual != expected:
         raise ValueError(f"integration partition differs from check minus cross compilation: {expected - actual}, {actual - expected}")
+    platform = {stage["name"] for lane in values.values() if "platform" in lane for stage in expand(lane["targets"])}
+    repeated = platform & {stage["name"] for stage in expand([GATE])}
+    if repeated:
+        raise ValueError(f"platform lanes repeat {GATE} stages: {sorted(repeated)}")
     return values
 
 
@@ -78,18 +91,19 @@ def analysis_set(targets):
 def matrix(profile, suite="all", scope=None):
     if profile not in PROFILES or suite not in SUITES or profile != "nightly" and suite != "all":
         raise ValueError(f"unsupported CI selection: {profile}/{suite}")
-    if profile == "integration" and scope is not None and scope["full"]:
-        profile = "check"
-    result = []
     values = lanes()
     selected = set(values)
-    if profile == "integration" and scope is not None:
+    # A broad change runs the whole check gate and every platform lane of the merge queue.
+    broad = profile == "integration" and scope is not None and scope["full"]
+    if profile == "integration" and scope is not None and not broad:
         from ci_policy.impact import selected_lanes
         selected = selected_lanes(scope, values)
+    result = []
     for name, lane in values.items():
         if name not in selected:
             continue
-        if profile not in lane["profiles"] or suite != "all" and lane["suite"] not in {"all", suite}:
+        tier = GATE if broad and "platform" not in lane else profile
+        if tier not in lane["profiles"] or suite != "all" and lane["suite"] not in {"all", suite}:
             continue
         count = lane.get("shards", 1)
         for index in range(1, count + 1):
@@ -97,6 +111,7 @@ def matrix(profile, suite="all", scope=None):
                            "minutes": lane["minutes"], "job_minutes": lane["minutes"] + 30,
                            "setup": lane["setup"],
                            "notices": "licenses:notices" in lane["targets"],
+                           "containers": CONTAINER_TARGET in lane["targets"],
                            "analysis": analysis_set(lane["targets"]),
                            "runner": lane.get("runner", "ubuntu-latest")})
     if not result:
