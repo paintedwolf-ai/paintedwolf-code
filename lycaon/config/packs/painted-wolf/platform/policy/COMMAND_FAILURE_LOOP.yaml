@@ -13,17 +13,18 @@ requires:
   - paintedwolf.rejection_code
   - paintedwolf.command
   - paintedwolf.count
+  - paintedwolf.failure_source_unchanged
 when: paintedwolf.rejection_code == "COMMAND_FAILURE_LOOP"
 effect: block
 copy:
   what: command `{{ paintedwolf.command }}` has failed {{ paintedwolf.count }} times in a row.
-  cause: Repeating the same confined invocation without changing the approach burns budget without new information.
-  why: The same command line, cwd, and capability keep returning a non-zero exit. Follow the Fix on the preceding
-    Code, or change the command; replaying the identical invocation is not a new approach.
-  fix: Inspect the preceding outcome and follow any structured refusal’s recovery fields. Resolve an observed
-    cause before retrying. Changing arguments, cwd, or capability declarations merely to evade this guard is
-    not progress; do not replay the unchanged failing invocation.
-  instead: Stop replaying the identical invocation; follow the preceding Code's Fix or change approach
+  cause: Repeating the same confined invocation without changed execution context spends budget without new information.
+  why: >-
+    {% if paintedwolf.failure_source_unchanged %}The admitted workspace source is unchanged since the last failed attempt.{% else %}The host could not establish a current source-content change against this failure streak. Missing or superseded captures cannot authorize a source-only retry.{% endif %}
+  fix: Inspect the preceding outcome and follow any structured refusal’s recovery fields. Correct the observed cause.
+    An observed workspace source change permits a bounded retry of the same invocation; it does not prove the cause is fixed.
+    Change the command only when its arguments are wrong. Do not alter cwd or capability declarations merely to evade this guard.
+  instead: Diagnose the failed outcome before retrying; changed source must be observed by the host.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_loop
 x-paintedwolf-message: command is stuck in a failure loop

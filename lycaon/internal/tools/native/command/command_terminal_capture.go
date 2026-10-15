@@ -13,7 +13,6 @@ import (
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
@@ -67,7 +66,9 @@ func runCommandTerminalCapture(
 	}
 	commandLine := canonicalCommandKey(tctx, args)
 	approach := commandFailureApproachKey(canonicalToolArgs(tctx, args))
-	if reject := tracker.rejectLoop(tctx.Identity.SessionID, approach, commandLine); reject != nil {
+	observeSource, verificationSource := commandSourceReaders(ctx, tctx, cwd)
+	failureAttempt, reject := tracker.begin(tctx.Identity.SessionID, approach, commandLine, observeSource)
+	if reject != nil {
 		return RunOutcome{}, reject
 	}
 	if err := runner.ValidateStages(ctx, stages); err != nil {
@@ -106,7 +107,8 @@ func runCommandTerminalCapture(
 	}
 	var sourceRevision, sourceRootDigest string
 	if tctx.Execution.VerificationCheck {
-		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.Source.Observations, tools.HostWriteRoot(tctx))
+		source := verificationSource()
+		sourceRevision, sourceRootDigest = source.Revision, source.Root
 	}
 	captured, runErr := registry.Terminal.RunPTYCapture(
 		ctx, tctx.Identity.SessionID, tctx.Identity.ParentSessionID, tctx.Identity.ProjectID, request, runner,
@@ -127,7 +129,7 @@ func runCommandTerminalCapture(
 	}
 	tools.CaptureExternalAccess(tctx, network, directIPApplied)
 	tail := terminalScreenText(captured.Screen)
-	tracker.record(tctx.Identity.SessionID, approach, captured.ExitCode == 0 && !captured.TimedOut)
+	tracker.record(failureAttempt, captured.ExitCode == 0 && !captured.TimedOut)
 	return RunOutcome{
 		IsCheck:        tctx.Execution.VerificationCheck,
 		SourceRevision: sourceRevision, SourceRootDigest: sourceRootDigest,
