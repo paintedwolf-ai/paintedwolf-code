@@ -1,5 +1,5 @@
 description: >-
-  Atomically promote a worker overlay (overlay_id=job_id), considering all observed changes. Conflicts return a menu without writes; resolve all via resolutions/drop.
+  Atomically promote all observed worker changes (overlay_id=job_id). Conflicts return a menu without writes; resolve all via resolutions/drop.
 schema:
   type: object
   properties:
@@ -8,12 +8,13 @@ schema:
       description: Worker job_id from task() or pack_board
     resolutions:
       type: array
-      description: One choice per conflicting path from the returned menu
+      description: One object per conflicting path; put action, content or hunks beside path
       items:
         type: object
+        additionalProperties: false
         properties:
           path:
-            description: "Repo-relative conflicting path from the promote menu."
+            description: "Repo-relative conflict path."
             type: string
           action:
             type: string
@@ -27,12 +28,13 @@ schema:
             description: Line-range patches on primary — overlapping_edit with low hunk_count; apply highest start_line first
             items:
               type: object
+              additionalProperties: false
               properties:
                 start_line:
-                  description: "1-based start line of the hunk on primary."
+                  description: "1-based start line on primary."
                   type: integer
                 end_line:
-                  description: "Optional 1-based end line of the hunk span."
+                  description: "Optional 1-based end line."
                   type: integer
                 content:
                   description: "Replacement text for the hunk range."
