@@ -12,10 +12,19 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func TestOllamaEstimatePromptTokensCountsImages(t *testing.T) {
+	base := estimatePromptTokens([]ollamaChatMessage{{Role: "user", Content: "Describe the image"}}, nil)
+	withImages := estimatePromptTokens([]ollamaChatMessage{{Role: "user", Content: "Describe the image", Images: []string{"img1", "img2"}}}, nil)
+	if want := base + 2*providerwire.UnsizedImageTokenEstimate; withImages != want {
+		t.Fatalf("estimatePromptTokens with 2 images = %d, want %d", withImages, want)
+	}
+}
 
 func TestOllamaReservesReasoningAndOutputWithinContext(t *testing.T) {
 	p := New("local-fixture", "http://unused", "", []modelinfo.Entry{{ID: "fixture", ContextLength: 8192, ThinkStyle: "boolean_think"}})

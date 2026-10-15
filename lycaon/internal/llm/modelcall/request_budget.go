@@ -42,7 +42,10 @@ func (c Catalog) RequestBudget(_ context.Context, req CompletionRequest) Request
 func EstimateRequestInput(req CompletionRequest) int {
 	tokens := 0
 	for _, row := range req.Messages {
-		tokens += tokenest.EstimateDefault(row.Content) + 16
+		tokens += tokenest.EstimateDefault(row.Content) + 16 + len(row.ArtifactIDs)*1600
+		if row.ToolResult != nil && row.ToolResult.Visual != nil && row.ToolResult.Visual.Perceive {
+			tokens += 1600
+		}
 		if row.ModelReasoning != nil {
 			tokens += tokenest.EstimateDefault(row.ModelReasoning.Text)
 			for _, detail := range row.ModelReasoning.Details {

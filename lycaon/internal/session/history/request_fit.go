@@ -29,15 +29,13 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 	req.Messages = projection.replace(projected)
 	projection = projectRequest(req.Messages, projected)
 	measure := func(candidate modelcall.CompletionRequest) modelcall.RequestBudget {
-		budget := modelcall.RequestBudget{Window: cfg.ModelContextWindow, Input: modelcall.EstimateRequestInput(candidate), Output: modelcall.OrchestrationMaxTokens, Headroom: 1024}
+		budget := modelcall.RequestBudget{Window: cfg.ModelContextWindow, Input: modelcall.EstimateRequestInput(candidate), Output: modelcall.OrchestrationMaxTokens, Headroom: min(1024, max(0, cfg.ModelContextWindow/8))}
 		if budgets != nil {
 			budget = budgets.RequestBudget(ctx, provider, candidate)
 		}
 		if budget.Window <= 0 {
 			budget.Window = cfg.ModelContextWindow
-		}
-		if budget.Window > 0 && budget.Headroom > budget.Window/8 {
-			budget.Headroom = budget.Window / 8
+			budget.Headroom = min(budget.Headroom, max(0, budget.Window/8))
 		}
 		return budget
 	}

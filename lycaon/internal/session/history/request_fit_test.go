@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -16,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providers/ollama"
+	"github.com/lycaon/lycaon/internal/llm/providerwire"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -248,3 +251,79 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 		t.Fatal("active projection changed canonical tool records")
 	}
 }
+
+func TestReviewRecallPageProjectionKeepsCursorContiguous(t *testing.T) {
+	body := strings.Repeat("😀", 4096)
+	raw, err := json.Marshal(map[string]any{"history": map[string]any{"format": "record", "entries": []any{map[string]any{"message_id": "original", "ord": 1, "content": body, "runes": 9000, "offset": 4096, "seq": 1}}, "next_offset": 8192, "through_ord": 1, "recorded": true}})
+	testutil.FailErr(t, "encode record page", err)
+	rows := projectRecordedToolBodies([]api.Message{{ID: "recall-result", Ord: 3, Role: api.MessageRoleTool, Content: string(raw), ToolResult: &api.ToolResult{Tool: "recall", Content: string(raw)}}})
+	var page struct {
+		History struct {
+			Entries []struct {
+				Content string `json:"content"`
+				Offset  int    `json:"offset"`
+			} `json:"entries"`
+			Next int `json:"next_offset"`
+		} `json:"history"`
+	}
+	testutil.FailErr(t, "decode projected page", json.Unmarshal([]byte(rows[0].Content), &page))
+	if len(page.History.Entries) == 0 {
+		t.Fatalf("projection discarded page entries: %s", rows[0].Content)
+	}
+	entry := page.History.Entries[0]
+	if got := entry.Offset + utf8.RuneCountInString(entry.Content); got != page.History.Next {
+		t.Fatalf("projected page has %d Unicode characters and offset %d but next_offset=%d; %d characters are skipped", utf8.RuneCountInString(entry.Content), entry.Offset, page.History.Next, page.History.Next-got)
+	}
+	indexRaw, err := json.Marshal(map[string]any{"history": map[string]any{"format": "index", "entries": []any{
+		map[string]any{"message_id": "m1", "ord": 1, "content": strings.Repeat("a", 800)},
+		map[string]any{"message_id": "m2", "ord": 2, "content": strings.Repeat("b", 800)},
+		map[string]any{"message_id": "m3", "ord": 3, "content": strings.Repeat("c", 800)},
+		map[string]any{"message_id": "m4", "ord": 4, "content": strings.Repeat("d", 15000)},
+	}, "through_ord": 4, "recorded": true}})
+	testutil.FailErr(t, "encode index page", err)
+	indexRows := projectRecordedToolBodies([]api.Message{{ID: "recall-index", Ord: 4, Role: api.MessageRoleTool, Content: string(indexRaw), ToolResult: &api.ToolResult{Tool: "recall", Content: string(indexRaw)}}})
+	var indexPage struct {
+		History struct {
+			Entries      []struct{ Ord int `json:"ord"` } `json:"entries"`
+			NextAfterOrd int                              `json:"next_after_ord"`
+		} `json:"history"`
+	}
+	testutil.FailErr(t, "decode projected index page", json.Unmarshal([]byte(indexRows[0].Content), &indexPage))
+	if len(indexPage.History.Entries) == 0 || indexPage.History.Entries[len(indexPage.History.Entries)-1].Ord != indexPage.History.NextAfterOrd {
+		t.Fatalf("projected index page lost contiguous next_after_ord: %+v", indexPage.History)
+	}
+}
+
+func TestReviewRequestBudgetCountsAttachedImages(t *testing.T) {
+	req := modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: "Describe the images"}}}
+	baseline := modelcall.EstimateRequestInput(req)
+	req.Messages[0].ArtifactIDs = []string{"image-1", "image-2", "image-3"}
+	got := modelcall.EstimateRequestInput(req)
+	want := baseline + 3*providerwire.UnsizedImageTokenEstimate
+	if got < want {
+		t.Fatalf("budget=%d without images=%d; expected at least %d with 3 attachments", got, baseline, want)
+	}
+	req.Messages = append(req.Messages,
+		api.Message{Role: api.MessageRoleAssistant, ModelReasoning: &api.ModelReasoning{Text: "inspecting", Details: []json.RawMessage{json.RawMessage(`"detail"`)}}},
+		api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Visual: &api.ToolVisualResult{Perceive: true}}},
+	)
+	if withToolVisual := modelcall.EstimateRequestInput(req); withToolVisual < got+providerwire.UnsizedImageTokenEstimate {
+		t.Fatalf("budget with perceived tool image = %d, want at least %d", withToolVisual, got+providerwire.UnsizedImageTokenEstimate)
+	}
+}
+
+func TestReviewFittingHonorsProviderHeadroom(t *testing.T) {
+	req := modelcall.CompletionRequest{Model: "small", MaxTokens: 512, Messages: []api.Message{{ID: "standing", Role: api.MessageRoleSystem, Content: strings.Repeat("frame ", 1800)}}}
+	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 4096}})}
+	svc := &Service{}
+	fitted, err := svc.FitRequest(t.Context(), &api.Session{ID: "s", Model: "small"}, nil, req, budgets)
+	if err != nil {
+		t.Logf("correctly refused required frame: %v", err)
+		return
+	}
+	actual := budgets.RequestBudget(t.Context(), "fixture", fitted)
+	if actual.Input+actual.Output+actual.Headroom > actual.Window {
+		t.Fatalf("fit admitted input=%d output=%d headroom=%d window=%d, exceeding provider contract by %d", actual.Input, actual.Output, actual.Headroom, actual.Window, actual.Input+actual.Output+actual.Headroom-actual.Window)
+	}
+}
+

@@ -163,7 +163,7 @@ func (p *Provider) resolveThink(req modelcall.CompletionRequest, model string) a
 func estimatePromptTokens(messages []ollamaChatMessage, toolMetas []ollamaTool) int {
 	total := 0
 	for _, m := range messages {
-		total += tokenest.EstimateDefault(m.Content) + tokenest.EstimateDefault(m.Thinking)
+		total += tokenest.EstimateDefault(m.Content) + tokenest.EstimateDefault(m.Thinking) + len(m.Images)*providerwire.UnsizedImageTokenEstimate
 		for _, tc := range m.ToolCalls {
 			total += tokenest.EstimateDefault(tc.Function.Name)
 			if raw, err := json.Marshal(tc.Function.Arguments); err == nil {
