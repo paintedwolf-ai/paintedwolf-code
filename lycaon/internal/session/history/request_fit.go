@@ -36,6 +36,9 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 		if budget.Window <= 0 {
 			budget.Window = cfg.ModelContextWindow
 		}
+		if budget.Window > 0 && budget.Headroom > budget.Window/8 {
+			budget.Headroom = budget.Window / 8
+		}
 		return budget
 	}
 	budget := measure(req)
