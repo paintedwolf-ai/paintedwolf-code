@@ -117,21 +117,14 @@ describe("ProjectFilesView stage chrome", () => {
     ));
     const boundary = screen.getByTestId("project-files-stage-boundary");
     const layer = required(boundary.querySelector<HTMLElement>(".project-files-stage-boundary__loading"));
-    layer.style.transitionDuration = "0.2s";
+    layer.style.transitionDuration = "0.1s, 0s";
+    layer.style.transitionDelay = "0s, 100ms";
 
     resolveWorkspace(sourceWorkspace("workspace-ready", []));
     await waitFor(() => expect(boundary.getAttribute("data-ready")).toBe("true"));
     expect(screen.getByTestId("project-loading-stage")).toBeTruthy();
 
-    const faded = (propertyName: string) => {
-      const event = new Event("transitionend", { bubbles: true });
-      Object.defineProperty(event, "propertyName", { value: propertyName });
-      layer.dispatchEvent(event);
-    };
-    faded("opacity");
-    expect(screen.getByTestId("project-loading-stage")).toBeTruthy();
-    faded("visibility");
-    expect(screen.queryByTestId("project-loading-stage")).toBeNull();
+    await waitFor(() => expect(screen.queryByTestId("project-loading-stage")).toBeNull());
   });
 
   it("confirms the physical workspace before browsing from cached state", async () => {

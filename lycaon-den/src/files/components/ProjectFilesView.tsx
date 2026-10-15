@@ -136,10 +136,16 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
       setLoadingMounted(true);
       return;
     }
-    const fades = loadingLayer
-      ? getComputedStyle(loadingLayer).transitionDuration.split(",").some((value) => Number.parseFloat(value) > 0)
-      : false;
-    if (!fades) setLoadingMounted(false);
+    const fadeMs = loadingLayer ? longestTransitionMs(getComputedStyle(loadingLayer)) : 0;
+    if (fadeMs <= 0) {
+      setLoadingMounted(false);
+      return;
+    }
+    // A timer, not transitionend: a layer that fades while its surface is retained raises no event.
+    const timer = setTimeout(() => {
+      if (stageReady()) setLoadingMounted(false);
+    }, fadeMs);
+    onCleanup(() => clearTimeout(timer));
   }));
   const [showLeadingFade, setShowLeadingFade] = createSignal(false);
   const [showTrailingFade, setShowTrailingFade] = createSignal(false);
@@ -332,11 +338,6 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
         }}
         aria-hidden={stageReady()}
         inert={stageReady() ? true : undefined}
-        onTransitionEnd={(event) => {
-          if (event.target === event.currentTarget && event.propertyName === "visibility" && stageReady()) {
-            setLoadingMounted(false);
-          }
-        }}
       >
         <Show when={loadingMounted()}>
           <ProjectLoadingStage
@@ -545,3 +546,16 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
   );
 }
 
+function durationMs(value: string): number {
+  const amount = Number.parseFloat(value);
+  if (!Number.isFinite(amount)) return 0;
+  return value.trim().endsWith("ms") ? amount : amount * 1000;
+}
+
+/** The longest duration plus delay among an element's transitions. */
+function longestTransitionMs(style: CSSStyleDeclaration): number {
+  const durations = style.transitionDuration.split(",");
+  const delays = style.transitionDelay.split(",");
+  return durations.reduce((longest, duration, index) =>
+    Math.max(longest, durationMs(duration) + durationMs(delays[index % delays.length] ?? "0s")), 0);
+}
