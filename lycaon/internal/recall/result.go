@@ -45,8 +45,9 @@ const (
 
 // Hit is one recalled observation.
 type Hit struct {
-	Record        *HistoryRequest    `json:"record_request,omitempty"`
-	SourceContext *api.SourceContext `json:"-"`
+	sourceMessageID string
+	Record          *HistoryRequest    `json:"record_request,omitempty"`
+	SourceContext   *api.SourceContext `json:"-"`
 	// Handle addresses the observation in the producing session's ledger.
 	Handle string `json:"handle,omitempty"`
 	// HitID is stable row identity across calls.

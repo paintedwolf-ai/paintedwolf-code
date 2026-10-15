@@ -13,8 +13,8 @@ type recordReference struct {
 	observedAt string
 }
 
-func (s *Service) recordCoordinates(ctx context.Context, caller Caller, hit search.Hit) (*recordReference, error) {
-	if hit.SessionID != caller.SessionID || hit.MessageID == "" {
+func (s *Service) recordCoordinates(ctx context.Context, hit search.Hit) (*recordReference, error) {
+	if hit.SessionID == "" || hit.MessageID == "" {
 		return nil, nil
 	}
 	var id, observedAt string
@@ -27,10 +27,10 @@ func (s *Service) recordCoordinates(ctx context.Context, caller Caller, hit sear
             AND id = (SELECT message_id FROM evidence_index
                 WHERE session_id = ? AND handle = ? AND source = 'tool' AND hit_kind = 'tool'
                 AND shape = 'raw' AND tombstoned = 0 LIMIT 1)`,
-			caller.SessionID, caller.SessionID, hit.Handle).Scan(&id, &ord, &seq, &observedAt)
+			hit.SessionID, hit.SessionID, hit.Handle).Scan(&id, &ord, &seq, &observedAt)
 	} else {
 		err = s.db.QueryRowContext(ctx, `SELECT id, ord, seq, ts FROM messages WHERE session_id = ? AND id = ? AND `+historyVisible,
-			caller.SessionID, hit.MessageID).Scan(&id, &ord, &seq, &observedAt)
+			hit.SessionID, hit.MessageID).Scan(&id, &ord, &seq, &observedAt)
 	}
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

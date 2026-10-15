@@ -38,11 +38,14 @@ func (s *Service) decorate(ctx context.Context, caller Caller, scope Scope, hits
 			Verified:  h.Verified,
 			Currency:  CurrencyUnknown,
 		})
-		record, err := s.recordCoordinates(ctx, caller, h)
+		record, err := s.recordCoordinates(ctx, h)
 		if err != nil {
 			issues = append(issues, fmt.Sprintf("%s: load canonical coordinates: %v", h.MessageID, err))
 		} else if record != nil {
-			out[len(out)-1].Record = record.request
+			out[len(out)-1].sourceMessageID = record.request.MessageID
+			if h.SessionID == caller.SessionID {
+				out[len(out)-1].Record = record.request
+			}
 			out[len(out)-1].TS = record.observedAt
 		}
 	}

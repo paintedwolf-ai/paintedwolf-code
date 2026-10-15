@@ -16,8 +16,8 @@ func (s *Service) attachSourceContexts(ctx context.Context, sources []search.Hit
 			continue
 		}
 		messageID := source.MessageID
-		if hits[i].Record != nil {
-			messageID = hits[i].Record.MessageID
+		if hits[i].sourceMessageID != "" {
+			messageID = hits[i].sourceMessageID
 		}
 		key := source.SessionID + "\x00" + messageID
 		sourceContext, loaded := contexts[key]
