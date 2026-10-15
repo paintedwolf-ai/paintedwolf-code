@@ -292,9 +292,9 @@ func (l *modelTurn) completeStream(
 				return
 			}
 			l.Projection.Deps.Events.PublishLLM(context.WithoutCancel(ctx), sessionProjectKey(sess), sessionID, api.LLMCallEvent{
-				CallID:   llmCallID,
-				Provider: callProvider,
-				Model:    callModel,
+				CallID:          llmCallID,
+				Provider:        callProvider,
+				Model:           callModel,
 				Status:          api.LLMCallStatusError,
 				CoordinatorLoop: coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish),
 			})
@@ -361,8 +361,8 @@ func (l *modelTurn) completeStream(
 		completion.Content = transformed
 		tokens = []string{transformed}
 	}
-	if l.Deps.RecordCompactionTokenObservation != nil && completion.Usage.PromptTokens > 0 {
-		l.Deps.RecordCompactionTokenObservation(sessionID, completion.Usage.PromptTokens, transcriptEstimate)
+	if input := completion.ContextInputTokens(); l.Deps.RecordCompactionTokenObservation != nil && input > 0 {
+		l.Deps.RecordCompactionTokenObservation(sessionID, input, transcriptEstimate)
 	}
 	if proseFinish {
 		kept := retainOfferedToolCalls(nil, "", completion.ToolCalls, workerProseOfferedTools(sess))

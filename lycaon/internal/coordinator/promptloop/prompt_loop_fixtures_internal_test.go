@@ -83,7 +83,8 @@ func promptLoopFixtureTools() []tools.ToolMeta {
 }
 
 type usageStreamLLM struct {
-	usage modelcall.TokenUsage
+	usage        modelcall.TokenUsage
+	attemptUsage *modelcall.TokenUsage
 }
 
 type immediateFailingStreamLLM struct {
@@ -120,14 +121,14 @@ func (t accountingFailureTracker) RecordUsage(context.Context, cost.UsageEvent) 
 }
 
 func (s *usageStreamLLM) Complete(context.Context, modelcall.CompletionRequest) (*modelcall.Completion, error) {
-	return &modelcall.Completion{Content: "ok", Usage: s.usage}, nil
+	return &modelcall.Completion{Content: "ok", Usage: s.usage, AttemptUsage: s.attemptUsage}, nil
 }
 
 func (s *usageStreamLLM) Stream(_ context.Context, _ modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
 	ch := make(chan modelcall.StreamChunk, 1)
 	go func() {
 		defer close(ch)
-		ch <- modelcall.StreamChunk{Content: "ok", Usage: s.usage, Done: true}
+		ch <- modelcall.StreamChunk{Content: "ok", Usage: s.usage, AttemptUsage: s.attemptUsage, Done: true}
 	}()
 	return ch, nil
 }

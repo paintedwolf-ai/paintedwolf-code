@@ -9,12 +9,27 @@ import (
 type responseRetryUsage struct {
 	completed modelcall.TokenUsage
 	current   modelcall.TokenUsage
+	attempt   modelcall.TokenUsage
 }
 
-func (u *responseRetryUsage) observe(usage modelcall.TokenUsage) {
+func (u *responseRetryUsage) beginAttempt() {
+	u.attempt = modelcall.TokenUsage{}
+}
+
+func (u *responseRetryUsage) observe(usage modelcall.TokenUsage, attempt *modelcall.TokenUsage) {
 	if usage.Reported() {
 		u.current = usage
 	}
+	if attempt != nil {
+		u.attempt = *attempt
+	} else if usage.Reported() {
+		u.attempt = usage
+	}
+}
+
+func (u *responseRetryUsage) attemptUsage() *modelcall.TokenUsage {
+	copied := u.attempt
+	return &copied
 }
 
 func (u *responseRetryUsage) total() modelcall.TokenUsage {

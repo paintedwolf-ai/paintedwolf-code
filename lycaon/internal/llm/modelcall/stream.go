@@ -18,12 +18,14 @@ func CollectStream(ch <-chan StreamChunk) (*Completion, []string, error) {
 	var toolCalls []api.ToolCall
 	var reasoningDetails []json.RawMessage
 	var usage TokenUsage
+	var attemptUsage *TokenUsage
 	var providerID, model string
 	var fallback, scripted bool
 	for chunk := range ch {
 		if chunk.ResetReasoning {
 			reasoning.Reset()
 			reasoningDetails = nil
+			attemptUsage = &TokenUsage{}
 		}
 		if chunk.ProviderID != "" {
 			providerID = chunk.ProviderID
@@ -47,6 +49,10 @@ func CollectStream(ch <-chan StreamChunk) (*Completion, []string, error) {
 		if chunk.Usage.Reported() {
 			usage = chunk.Usage
 		}
+		if chunk.AttemptUsage != nil {
+			copied := *chunk.AttemptUsage
+			attemptUsage = &copied
+		}
 		if chunk.Err != nil {
 			return &Completion{
 				Content:          content.String(),
@@ -54,6 +60,7 @@ func CollectStream(ch <-chan StreamChunk) (*Completion, []string, error) {
 				ReasoningDetails: reasoningDetails,
 				ToolCalls:        toolCalls,
 				Usage:            usage,
+				AttemptUsage:     attemptUsage,
 				ProviderID:       providerID,
 				Model:            model,
 				Fallback:         fallback,
@@ -70,6 +77,7 @@ func CollectStream(ch <-chan StreamChunk) (*Completion, []string, error) {
 		ReasoningDetails: reasoningDetails,
 		ToolCalls:        toolCalls,
 		Usage:            usage,
+		AttemptUsage:     attemptUsage,
 		ProviderID:       providerID,
 		Model:            model,
 		Fallback:         fallback,
@@ -85,6 +93,7 @@ func CollectStreamWithProgress(ch <-chan StreamChunk, onProgress func(*Completio
 	var toolCalls []api.ToolCall
 	var reasoningDetails []json.RawMessage
 	var usage TokenUsage
+	var attemptUsage *TokenUsage
 	var providerID, model string
 	var fallback, scripted bool
 	snapshot := func() *Completion {
@@ -94,6 +103,7 @@ func CollectStreamWithProgress(ch <-chan StreamChunk, onProgress func(*Completio
 			ReasoningDetails: reasoningDetails,
 			ToolCalls:        append([]api.ToolCall(nil), toolCalls...),
 			Usage:            usage,
+			AttemptUsage:     attemptUsage,
 			ProviderID:       providerID,
 			Model:            model,
 			Fallback:         fallback,
@@ -104,6 +114,7 @@ func CollectStreamWithProgress(ch <-chan StreamChunk, onProgress func(*Completio
 		if chunk.ResetReasoning {
 			reasoning.Reset()
 			reasoningDetails = nil
+			attemptUsage = &TokenUsage{}
 		}
 		if chunk.ProviderID != "" {
 			providerID = chunk.ProviderID
@@ -126,6 +137,10 @@ func CollectStreamWithProgress(ch <-chan StreamChunk, onProgress func(*Completio
 		}
 		if chunk.Usage.Reported() {
 			usage = chunk.Usage
+		}
+		if chunk.AttemptUsage != nil {
+			copied := *chunk.AttemptUsage
+			attemptUsage = &copied
 		}
 		if chunk.Err != nil {
 			return snapshot(), tokens, chunk.Err

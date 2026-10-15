@@ -69,6 +69,9 @@ func TestReasoningRecoveryKeepsRunAlive(t *testing.T) {
 			if got.Reasoning != "fresh reasoning" {
 				t.Fatalf("failed reasoning leaked into recovered completion: %q", got.Reasoning)
 			}
+			if got.ContextInputTokens() != 100 {
+				t.Fatalf("context calibration included earlier attempts: %d", got.ContextInputTokens())
+			}
 			if got.Usage.PromptTokens != 200 || got.Usage.CompletionTokens != 24596 {
 				t.Fatalf("lost billed attempts: %+v", got.Usage)
 			}

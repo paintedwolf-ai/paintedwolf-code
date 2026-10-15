@@ -106,7 +106,7 @@ func TestLoopPublishesWorkerProgress(t *testing.T) {
 	var published []publishedProgress
 	var lastCtx *api.WorkerContextUsage
 	deps := promptloop.StoreDeps(store)
-	deps.Model.LLM = usageReportingLLM{usage: modelcall.TokenUsage{PromptTokens: 1234, CompletionTokens: 10}}
+	deps.Model.LLM = usageReportingLLM{usage: modelcall.TokenUsage{PromptTokens: 2468, CompletionTokens: 10}, attemptUsage: &modelcall.TokenUsage{PromptTokens: 1234}}
 	deps.Context.Policy = &recordingToolPolicy{}
 	deps.Model.CompactionConfig = staticCompactionConfig
 	deps.Nudges.PublishWorkerProgress = func(_ context.Context, _ string, snap workerprogress.Snapshot, checkpoint bool) {
