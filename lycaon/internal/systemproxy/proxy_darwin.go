@@ -254,7 +254,7 @@ const pacResolutionTimeout = 5 * time.Second
 // Current returns the macOS system proxy configuration.
 func Current() (Configuration, error) {
 	var raw C.pw_proxy_settings
-	if C.pw_read_proxy_settings(&raw) == 0 {
+	if read := C.pw_read_proxy_settings(&raw); read == 0 {
 		return Configuration{Source: SourceMacOS, Mode: ModeNone}, nil
 	}
 	defer func() {
