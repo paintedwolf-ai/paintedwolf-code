@@ -17,6 +17,7 @@ import (
 func (s *Service) decorate(ctx context.Context, caller Caller, scope Scope, hits []search.Hit) ([]Hit, []string) {
 	out := make([]Hit, 0, len(hits))
 	inline := len(hits) <= BodyInlineMaxHits
+	var issues []string
 	for _, h := range hits {
 		out = append(out, Hit{
 			Handle:    h.Handle,
@@ -37,10 +38,19 @@ func (s *Service) decorate(ctx context.Context, caller Caller, scope Scope, hits
 			Verified:  h.Verified,
 			Currency:  CurrencyUnknown,
 		})
+		record, err := s.recordCoordinates(ctx, h)
+		if err != nil {
+			issues = append(issues, fmt.Sprintf("%s: load canonical coordinates: %v", h.MessageID, err))
+		} else if record != nil {
+			out[len(out)-1].sourceMessageID = record.request.MessageID
+			if h.SessionID == caller.SessionID {
+				out[len(out)-1].Record = record.request
+			}
+			out[len(out)-1].TS = record.observedAt
+		}
 	}
-	var issues []string
 	if inline {
-		issues = s.attachBodies(ctx, out)
+		issues = append(issues, s.attachBodies(ctx, out)...)
 	}
 	s.attachSourceContexts(ctx, hits, out)
 	s.attachCurrency(ctx, scope, out)

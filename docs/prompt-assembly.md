@@ -137,6 +137,10 @@ Every provider call has a hard ceiling. The synchronous path fits or exposes an 
 
 The same facts, frame, limits, and compaction revision produce the same fit. Latency never depends on an emergency summarizer call.
 
+## Canonical history recovery
+
+Compaction changes the model's view; canonical transcript rows remain addressable. A narrow `recall` query recovers an evidence handle. The `history` argument pages the caller's own transcript by immutable ordinal, then reads one indexed message body in Unicode windows. A source watermark reports corrections to the covered transcript. Recovery never widens a worker's scope and recorded source contents never claim to be the current working tree.
+
 ## Asynchronous compaction
 
 High-quality summarization runs outside the coordinator critical path.
@@ -190,3 +194,5 @@ The [`summarize`](summarize.md) tool returns a structured context pack as a dura
 - Background compaction has one writer and never blocks normal turns.
 - Compaction splices use indexed ordinal and mutation watermarks; a mismatch fails closed to canonical facts.
 - Templates explain typed facts; prose does not become host fact.
+
+The recovery watermark describes corrections to the returned rows. Recovery reads use ordinal seeks and bounded body windows; they do not scan the covered transcript to compute a global correction count.
