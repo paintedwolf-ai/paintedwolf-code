@@ -204,7 +204,7 @@ func fixtureApprovalOption(fixture *SandboxEvidence, checkpoint wire.CheckpointE
 	}
 	for _, option := range plan.Options {
 		if (fixture.Kind == "loopback" || fixture.Kind == sandboxWriteRoot) && fixture.PreparationCallID != "" {
-			if option.Kind == wire.ApprovalOptionKindLease && option.Scope == wire.ApprovalGrantScopeChat && option.Rung == wire.ApprovalOptionRungChat && option.DecisionAction == wire.ApprovalOptionDecisionApprove && !option.Disabled {
+			if option.Kind == wire.ApprovalOptionKindLease && option.Scope == wire.ApprovalGrantScopeChat && option.Rung == wire.ApprovalOptionRungChat && option.DecisionAction == wire.ApprovalOptionDecisionApprove && !option.Disabled && (fixture.Path == "" || option.DirectoryScope == "" || option.DirectoryScope == fixture.Path) {
 				return option.ID
 			}
 			continue

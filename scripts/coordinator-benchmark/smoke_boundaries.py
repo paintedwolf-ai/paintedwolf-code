@@ -65,7 +65,8 @@ def resolve(application,session,call,kind):
             options=payload['plan']['options']
             task_grant=kind in {'loopback','write_root'}
             rung='chat' if task_grant else 'once'
-            choices=[o for o in options if o['rung']==rung and o['decision_action']=='approve' and not o.get('disabled') and (o['kind']=='lease' and o.get('scope')=='chat' if task_grant else o['kind']=='current_action')]
+            scopes=payload['plan'].get('directory_scopes') or []
+            choices=[o for o in options if o['rung']==rung and o['decision_action']=='approve' and not o.get('disabled') and (o['kind']=='lease' and o.get('scope')=='chat' and (not scopes or o.get('directory_scope')==scopes[0]) if task_grant else o['kind']=='current_action')]
             if len(choices)!=1:
                 save(application.directory/'unexpected-approval.json',checkpoint)
                 raise RuntimeError('preparation has no unique host-authored authority option')

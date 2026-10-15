@@ -7,12 +7,13 @@ import (
 )
 
 func TestWriteRootPreparationApprovesOnlyTheOwnedReadLease(t *testing.T) {
-	fixture := &SandboxEvidence{Kind: sandboxWriteRoot, PreparationCallID: "folder-inspection"}
+	fixture := &SandboxEvidence{Kind: sandboxWriteRoot, Path: "/out/leaf", PreparationCallID: "folder-inspection"}
 	checkpoint := wire.CheckpointEvent{ToolApproval: &wire.ToolApprovalPayload{
 		ToolCallID: "folder-inspection",
 		Plan: wire.ApprovalPlan{Options: []wire.ApprovalOption{
 			{ID: "once", Kind: wire.ApprovalOptionKindCurrentAction, Rung: wire.ApprovalOptionRungOnce, DecisionAction: wire.ApprovalOptionDecisionApprove},
-			{ID: "read-lease", Kind: wire.ApprovalOptionKindLease, Scope: wire.ApprovalGrantScopeChat, Rung: wire.ApprovalOptionRungChat, DecisionAction: wire.ApprovalOptionDecisionApprove},
+			{ID: "parent-lease", Kind: wire.ApprovalOptionKindLease, Scope: wire.ApprovalGrantScopeChat, Rung: wire.ApprovalOptionRungChat, DirectoryScope: "/out", DecisionAction: wire.ApprovalOptionDecisionApprove},
+			{ID: "read-lease", Kind: wire.ApprovalOptionKindLease, Scope: wire.ApprovalGrantScopeChat, Rung: wire.ApprovalOptionRungChat, DirectoryScope: "/out/leaf", DecisionAction: wire.ApprovalOptionDecisionApprove},
 		}},
 	}}
 	if got := fixtureApprovalOption(fixture, checkpoint); got != "read-lease" {
