@@ -148,6 +148,7 @@ func TestInspectCommandFileWriteBuildsExactCalls(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got, ok := InspectCommandFileWrite(t.Context(), tc.tool, tc.args, t.TempDir())
 			if !ok {
 				t.Fatalf("InspectCommandFileWrite(%#v) did not match", tc.args)
@@ -204,6 +205,7 @@ func TestInspectCommandFileWriteDetectsInexactShellWrites(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			got, ok := InspectCommandFileWrite(t.Context(), tc.tool, tc.args, t.TempDir())
 			if !ok {
 				t.Fatalf("InspectCommandFileWrite(%#v) did not match", tc.args)
