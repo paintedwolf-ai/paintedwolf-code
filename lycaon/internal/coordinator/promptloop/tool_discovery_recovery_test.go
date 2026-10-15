@@ -75,7 +75,7 @@ func TestUnknownToolRecoveryPagesAndLoadsThroughProductionLoader(t *testing.T) {
 	}
 	beforeMetadata, err := json.Marshal(tr.Data)
 	testutil.FailErr(t, "encode complete diagnostics", err)
-	toolrejection.CompleteFailureMetadata(tr, "create_file", "")
+	tr = toolrejection.CompleteFailureMetadata(tr, "create_file", "")
 	afterMetadata, err := json.Marshal(tr.Data)
 	testutil.FailErr(t, "encode completed metadata", err)
 	if string(beforeMetadata) != string(afterMetadata) {
