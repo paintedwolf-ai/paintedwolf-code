@@ -3,7 +3,7 @@ package compaction
 func recentCompactionCount(cfg CompactionConfig, messages []ContextMessage, budget int) int {
 	recent := max(1, cfg.KeepRecentMessages)
 	if cfg.ModelContextWindow > 0 {
-		for recent > 1 && EstimateMessagesTokens(messages[recentCompactionStart(messages, recent):]) > max(1, budget/2) {
+		for recent > 1 && EstimateMessagesTokens(retainedCompactionMessages(messages, recent)) > max(1, budget) {
 			recent--
 		}
 	}

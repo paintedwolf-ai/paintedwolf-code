@@ -29,7 +29,7 @@ func DeterministicFit(cfg CompactionConfig, messages []ContextMessage, maxTokens
 	// Over budget here, so a notice is certain; reserve its cost before sizing.
 	budget := maxTokens - EstimateMessagesTokens(head) - EstimateMessagesTokens([]ContextMessage{contextTrimNotice()})
 	defaultFloor := len(body) - recentCompactionStart(body, max(1, cfg.KeepRecentMessages))
-	recent := recentCompactionCount(cfg, body, budget*2)
+	recent := recentCompactionCount(cfg, body, budget)
 	keepFloor := len(body) - recentCompactionStart(body, recent)
 	drop := fitFrontDropCount(body, keepFloor, defaultFloor, budget)
 
