@@ -15,8 +15,8 @@ effect: block
 copy:
   what: '**`{{ tool }}`** did not run: this session has no progress checklist yet.'
   cause: Edits and delegated work start only after the deliverables are recorded with update_progress.
-  why: Workers and the final report rely on the recorded deliverables.
-  fix: Call **`update_progress`** with a **`## Progress`** heading and one pending **`- [ ]`** row for each deliverable in the request (use **`- [>]`** for optional report-only rows). Then retry the rejected **`{{ tool }}`** call with its original arguments. Do not switch to a different edit or dispatch tool to avoid this step.
+  why: A checklist update does not run the rejected call.
+  fix: Call **`update_progress`** with a **`## Progress`** heading and one pending **`- [ ]`** row for each deliverable in the request (use **`- [>]`** for optional report-only rows). After that succeeds, retry the rejected **`{{ tool }}`** call with its original arguments. Do not switch to a different edit or dispatch tool to avoid this step.
   instead: Call **`update_progress`**, then retry the same rejected call
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator

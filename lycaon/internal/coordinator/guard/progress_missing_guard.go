@@ -2,8 +2,8 @@ package guard
 
 import (
 	"encoding/json"
-	"unicode/utf8"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/progress"
@@ -43,8 +43,8 @@ func rejectedProgressCall(tool string, args map[string]any) map[string]any {
 		return nil
 	}
 	call := map[string]any{"tool": tool, "argument_excerpt": map[string]any{"path": path}}
-	encoded, err := json.Marshal(call)
-	if err != nil || len(encoded) > 512 {
+	encoded, _ := json.Marshal(call)
+	if len(encoded) > 512 {
 		return nil
 	}
 	return call
