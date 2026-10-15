@@ -37,8 +37,12 @@ if [[ "${COMPATIBILITY_ONLY}" -eq 1 ]]; then
   [[ -n "${BASELINE_REF}" && -d "${SOURCE_ROOT}" ]] || usage
   (cd "${ROOT}/lycaon" && LYCAON_ENGINE_ROOT="${LYCAON_ENGINE_ROOT:-${SOURCE_ROOT}/lycaon-den/src-tauri/engine-root}" \
     go run ./cmd/codegen-workflow-archive --check-all --baseline "${BASELINE_REF}" --repo-root "${SOURCE_ROOT}")
-  python3 "${ROOT}/scripts/upgrade-fixture-files.py" inventory \
-    "${SOURCE_ROOT}/lycaon/testdata/upgrade-corpus" --version "$(tr -d '[:space:]' < "${SOURCE_ROOT}/VERSION")"
+  candidate_version="$(tr -d '[:space:]' < "${SOURCE_ROOT}/VERSION")"
+  candidate_build="$(python3 "${SOURCE_ROOT}/scripts/artifact_paths.py" build "${SOURCE_ROOT}")"
+  python3 "${ROOT}/scripts/upgrade-fixture-files.py" candidate \
+    "${SOURCE_ROOT}/lycaon/testdata/upgrade-corpus/${candidate_version}" \
+    --sidecar "${candidate_build}/lycaon-dev" --version "${candidate_version}" \
+    --inventory-root "${SOURCE_ROOT}/lycaon/testdata/upgrade-corpus"
   exit 0
 fi
 [[ -z "${SOURCE_ROOT}" ]] || usage

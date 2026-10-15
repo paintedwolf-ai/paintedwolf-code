@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -142,5 +143,41 @@ func TestSelectedReleaseControllerAdmission(t *testing.T) {
 				t.Fatalf("qualification checked %q instead of %s", checked, selected)
 			}
 		})
+	}
+}
+
+func TestReleaseCompatibilityCannotBeSkippedForEitherChannel(t *testing.T) {
+	jobs := hostedJobs(t, "release")
+	stable, guard, corpus, wire := false, false, false, false
+	for _, step := range jobs["classify"].Steps {
+		if strings.Contains(step.Run, "/releases/latest") {
+			stable = true
+			if step.If != "" || step.Continue || !strings.Contains(step.Run, "release-compatibility-baseline.py") || step.Env["SOURCE_SHA"] != "${{ steps.source.outputs.source_sha }}" {
+				t.Fatal("published stable baseline is not mandatory for the selected source")
+			}
+		}
+	}
+	for _, step := range jobs["preflight"].Steps {
+		if strings.Contains(step.Run, "--compatibility-only") {
+			guard = true
+			if step.If != "" || step.Continue || step.Env["BASELINE_SHA"] != "${{ needs.classify.outputs.baseline_sha }}" || !strings.Contains(step.Run, "--source-root") {
+				t.Fatal("compatibility enforcement can skip a release or inspect another source")
+			}
+		}
+		if strings.Contains(step.Run, "--require-corpus") {
+			corpus = true
+		}
+		if strings.Contains(step.Run, "./task openapi:diff") {
+			wire = true
+			if step.Continue || !strings.Contains(step.Run, "--baseline-ref") {
+				t.Fatal("OpenAPI report failures or its stable baseline are not enforced")
+			}
+		}
+	}
+	if !stable || !guard || !corpus || !wire {
+		t.Fatalf("release assurance missing: stable=%v guard=%v corpus=%v wire=%v", stable, guard, corpus, wire)
+	}
+	if !slices.Contains(hostedNeeds(t, jobs["upgrade"]), "preflight") {
+		t.Fatal("upgrade rehearsal bypasses compatibility preflight")
 	}
 }

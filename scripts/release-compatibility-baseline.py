@@ -12,7 +12,8 @@ def resolve(release, candidate_ref="HEAD"):
     if release.get("draft") is not False or release.get("prerelease") is not False:
         raise ValueError("compatibility baseline must be a published stable release")
     tag = release.get("tag_name", "")
-    if not tag.startswith("v") or release.get("published_at") is None:
+    if (not isinstance(tag, str) or not tag.startswith("v")
+            or not isinstance(release.get("published_at"), str) or not release["published_at"]):
         raise ValueError("published stable release identity is missing")
     version = parse(tag[1:])
     if version.major < 1 or version.prerelease is not None:
