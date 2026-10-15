@@ -2,6 +2,7 @@ package toolexecution
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -161,11 +162,18 @@ func TestLiteralOutputRecoveryRendersActualSurface(t *testing.T) {
 			if calls != 0 {
 				t.Fatalf("rejected command executed %d handlers", calls)
 			}
-			reject := commandFileWriteReject(t.Context(), executor, "command", "implement", args, &ctx)
+			if len(refusal.Facts.Feedback) != 1 {
+				t.Fatalf("missing delivered recovery facts: %#v", refusal.Facts)
+			}
+			details := refusal.Facts.Feedback[0].Details
 			if tc.loadable {
 				want := []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "write"}}}
-				if !reflect.DeepEqual(reject.Data["replacement_calls"], want) {
-					t.Fatalf("loader recovery=%#v", reject.Data)
+				actualJSON, err := json.Marshal(details["replacement_calls"])
+				testutil.FailErr(t, "encode delivered recovery", err)
+				wantJSON, err := json.Marshal(want)
+				testutil.FailErr(t, "encode expected recovery", err)
+				if string(actualJSON) != string(wantJSON) {
+					t.Fatalf("delivered loader recovery=%s, want %s", actualJSON, wantJSON)
 				}
 			}
 		})
