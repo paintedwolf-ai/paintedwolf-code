@@ -9,7 +9,7 @@ use super::linux::{startup_facts, GlibMainThread, NativeClipboard};
 use super::service::{ClipboardError, ClipboardService, DisplayProtocol, MainThread};
 use crate::test_support::TempDir;
 use gtk::prelude::*;
-use std::io::{BufRead, BufReader, Read, Write};
+use std::io::{BufReader, ErrorKind, Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::net::UnixStream;
 use std::path::Path;
@@ -18,6 +18,7 @@ use std::time::{Duration, Instant};
 
 const FIXTURE_DEADLINE: Duration = Duration::from_secs(60);
 const PEER_DEADLINE: Duration = Duration::from_secs(10);
+const SERVER_POLL: Duration = Duration::from_millis(50);
 
 struct OwnedChild(Child);
 
@@ -152,7 +153,12 @@ impl Peer {
 fn fixture_command(test: &str) -> Command {
     let mut command = Command::new(std::env::current_exe().unwrap());
     command.args(["--exact", test, "--nocapture"]);
-    for variable in ["DISPLAY", "WAYLAND_DISPLAY", "GDK_BACKEND", "XDG_RUNTIME_DIR"] {
+    for variable in [
+        "DISPLAY",
+        "WAYLAND_DISPLAY",
+        "GDK_BACKEND",
+        "XDG_RUNTIME_DIR",
+    ] {
         command.env_remove(variable);
     }
     command.stdout(Stdio::piped()).stderr(Stdio::piped());
@@ -201,11 +207,10 @@ fn owner_child(peer: &str) -> Command {
 }
 
 fn start_xvfb() -> (OwnedChild, String) {
-    let (reader, writer) = UnixStream::pair().unwrap();
-    reader
-        .set_read_timeout(Some(Duration::from_secs(5)))
-        .unwrap();
-    let server = OwnedChild(
+    let (mut reader, writer) = UnixStream::pair().unwrap();
+    // Short reads so a server that exits is noticed while it is awaited.
+    reader.set_read_timeout(Some(SERVER_POLL)).unwrap();
+    let mut server = OwnedChild(
         Command::new("Xvfb")
             .args(["-displayfd", "0", "-nolisten", "tcp", "-ac"])
             .stdin(Stdio::from(std::os::fd::OwnedFd::from(writer)))
@@ -214,12 +219,38 @@ fn start_xvfb() -> (OwnedChild, String) {
             .spawn()
             .expect("start private X11 clipboard server"),
     );
-    let mut display = String::new();
-    BufReader::new(reader.take(32))
-        .read_line(&mut display)
-        .unwrap();
-    let display: u16 = display.trim().parse().expect("private display number");
+    let deadline = Instant::now() + FIXTURE_DEADLINE;
+    let mut line = Vec::new();
+    let mut byte = [0u8; 1];
+    while !line.ends_with(b"\n") {
+        match reader.read(&mut byte) {
+            Ok(0) => panic!("X11 server closed its display descriptor without naming a display"),
+            Ok(_) => line.push(byte[0]),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted
+                ) =>
+            {
+                await_server(&mut server, deadline, "X11 server named no display");
+            }
+            Err(error) => panic!("read X11 display number: {error}"),
+        }
+        assert!(line.len() <= 32, "X11 display number is too long");
+    }
+    let display: u16 = String::from_utf8_lossy(&line)
+        .trim()
+        .parse()
+        .expect("private display number");
     (server, format!(":{display}"))
+}
+
+/// Fails the fixture when the server exited or the deadline passed.
+fn await_server(server: &mut OwnedChild, deadline: Instant, missing: &str) {
+    if let Some(status) = server.0.try_wait().unwrap() {
+        panic!("{missing}: server exited with {status}");
+    }
+    assert!(Instant::now() < deadline, "{missing}");
 }
 
 /// A headless sway with XWayland disabled, on a private runtime directory.
@@ -228,7 +259,7 @@ fn start_sway(runtime: &Path) -> (OwnedChild, String) {
     let config = runtime.join("sway.config");
     std::fs::write(&config, "xwayland disable\n").unwrap();
     let log = std::fs::File::create(runtime.join("sway.log")).unwrap();
-    let server = OwnedChild(
+    let mut server = OwnedChild(
         Command::new("sway")
             .arg("-c")
             .arg(&config)
@@ -244,7 +275,7 @@ fn start_sway(runtime: &Path) -> (OwnedChild, String) {
             .spawn()
             .expect("start private headless Wayland compositor"),
     );
-    let deadline = Instant::now() + Duration::from_secs(15);
+    let deadline = Instant::now() + FIXTURE_DEADLINE;
     loop {
         let socket = std::fs::read_dir(runtime)
             .unwrap()
@@ -254,12 +285,12 @@ fn start_sway(runtime: &Path) -> (OwnedChild, String) {
         if let Some(socket) = socket {
             return (server, socket);
         }
-        assert!(
-            Instant::now() < deadline,
+        let missing = format!(
             "compositor exposed no Wayland socket: {}",
             std::fs::read_to_string(runtime.join("sway.log")).unwrap_or_default()
         );
-        std::thread::sleep(Duration::from_millis(50));
+        await_server(&mut server, deadline, &missing);
+        std::thread::sleep(SERVER_POLL);
     }
 }
 
@@ -343,7 +374,10 @@ fn exercise_adapter(peer: Peer) {
         .unwrap();
         let facts = facts.await.unwrap().unwrap();
         assert_eq!(facts.protocol, peer.protocol());
-        assert!(!facts.persistence, "private displays have no clipboard manager");
+        assert!(
+            !facts.persistence,
+            "private displays have no clipboard manager"
+        );
         // A fresh private display has no selection to read.
         assert_eq!(service.read(&main).await.unwrap(), "");
         if peer == Peer::Wayland {
