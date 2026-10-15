@@ -141,7 +141,7 @@ func TestRepoLocalCredentialHelperReset(t *testing.T) {
 	initRepo(t, dir)
 	appendRepoConfig(t, dir, "\n[credential]\n\thelper = \"!repo-local-payload\"\n")
 
-	argv, err := buildArgv(t.Context(), dir, Opts{
+	argv, _, err := buildArgv(t.Context(), dir, Opts{
 		Profile:   ProfileNetwork,
 		RemoteURL: "https://example.com/r.git",
 	}, []string{"fetch"})
@@ -462,7 +462,8 @@ func TestRemoteURLResolvedForPushPull(t *testing.T) {
 
 func buildArgvForTest(t *testing.T, dir string, opts Opts, args []string) ([]string, error) {
 	t.Helper()
-	return buildArgv(t.Context(), dir, opts, args)
+	argv, _, err := buildArgv(t.Context(), dir, opts, args)
+	return argv, err
 }
 
 type recordingHostConfig struct {

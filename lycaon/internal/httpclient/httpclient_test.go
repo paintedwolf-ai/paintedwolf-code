@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/egressclass"
+	"github.com/lycaon/lycaon/internal/systemproxy"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -174,99 +176,129 @@ func TestProfilesPreserveProxySupport(t *testing.T) {
 	}
 }
 
-func TestSystemProxyUsedWithoutEnvironmentOverride(t *testing.T) {
-	clearProxyEnvironment(t)
-	want, err := url.Parse("http://system-proxy.example:8080")
+func useSystemProxy(t *testing.T, raw string) {
+	t.Helper()
+	proxy, err := url.Parse(raw)
 	testutil.FailErr(t, "parse proxy", err)
-	previous := systemProxyLookup
-	systemProxyLookup = func(*url.URL) (*url.URL, error) { return want, nil }
-	t.Cleanup(func() { systemProxyLookup = previous })
+	previous := systemProxyConfiguration
+	systemProxyConfiguration = func() (systemproxy.Configuration, error) {
+		return systemproxy.Configuration{Source: systemproxy.SourceGSettings, Mode: systemproxy.ModeManual, HTTP: proxy, HTTPS: proxy}, nil
+	}
+	t.Cleanup(func() { systemProxyConfiguration = previous })
+}
 
-	request, err := http.NewRequest(http.MethodGet, "https://api.example.com/v1", nil)
+func transportProxy(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	request, err := http.NewRequest(http.MethodGet, raw, nil)
 	testutil.FailErr(t, "new request", err)
 	transport := Bounded(egressclass.ProviderModelDiscovery, time.Second).Transport.(*http.Transport)
 	got, err := transport.Proxy(request)
 	testutil.FailErr(t, "resolve proxy", err)
-	if got == nil || got.String() != want.String() {
-		t.Fatalf("proxy = %v, want %v", got, want)
+	return got
+}
+
+func TestSystemProxyUsedWithoutEnvironmentOverride(t *testing.T) {
+	clearProxyEnvironment(t)
+	useSystemProxy(t, "http://system-proxy.example:8080")
+	if got := transportProxy(t, "https://api.example.com/v1"); got == nil || got.String() != "http://system-proxy.example:8080" {
+		t.Fatalf("proxy = %v", got)
 	}
 }
 
 func TestEnvironmentProxyOverridesSystemProxy(t *testing.T) {
 	clearProxyEnvironment(t)
 	t.Setenv("HTTPS_PROXY", "http://environment-proxy.example:9090")
-	called := false
-	previous := systemProxyLookup
-	systemProxyLookup = func(*url.URL) (*url.URL, error) {
-		called = true
-		return nil, nil
-	}
-	t.Cleanup(func() { systemProxyLookup = previous })
-
-	request, err := http.NewRequest(http.MethodGet, "https://api.example.com/v1", nil)
-	testutil.FailErr(t, "new request", err)
-	transport := Bounded(egressclass.ProviderModelDiscovery, time.Second).Transport.(*http.Transport)
-	got, err := transport.Proxy(request)
-	testutil.FailErr(t, "resolve proxy", err)
-	if got == nil || got.String() != "http://environment-proxy.example:9090" {
+	useSystemProxy(t, "http://system-proxy.example:8080")
+	if got := transportProxy(t, "https://api.example.com/v1"); got == nil || got.String() != "http://environment-proxy.example:9090" {
 		t.Fatalf("proxy = %v", got)
 	}
-	if called {
-		t.Fatal("system proxy was consulted despite explicit HTTPS_PROXY")
+	if got := transportProxy(t, "http://api.example.com/v1"); got == nil || got.String() != "http://system-proxy.example:8080" {
+		t.Fatalf("http proxy = %v, want the system proxy for a scheme without an environment proxy", got)
 	}
 }
 
 func TestNoProxyBypassesSystemProxy(t *testing.T) {
 	clearProxyEnvironment(t)
 	t.Setenv("NO_PROXY", ".example.com")
-	called := false
-	previous := systemProxyLookup
-	systemProxyLookup = func(*url.URL) (*url.URL, error) {
-		called = true
-		return url.Parse("http://system-proxy.example:8080")
+	useSystemProxy(t, "http://system-proxy.example:8080")
+	if got := transportProxy(t, "https://api.example.com/v1"); got != nil {
+		t.Fatalf("proxy = %v, want NO_PROXY bypass", got)
 	}
-	t.Cleanup(func() { systemProxyLookup = previous })
-
-	request, err := http.NewRequest(http.MethodGet, "https://api.example.com/v1", nil)
-	testutil.FailErr(t, "new request", err)
-	transport := Bounded(egressclass.ProviderModelDiscovery, time.Second).Transport.(*http.Transport)
-	proxy, err := transport.Proxy(request)
-	testutil.FailErr(t, "resolve proxy", err)
-	if proxy != nil {
-		t.Fatalf("proxy = %v, want NO_PROXY bypass", proxy)
-	}
-	if called {
-		t.Fatal("system proxy was consulted despite NO_PROXY match")
+	if got := transportProxy(t, "https://example.com/v1"); got == nil {
+		t.Fatal("a leading-dot NO_PROXY entry exempted the name itself")
 	}
 }
 
 func TestLoopbackNeverUsesSystemProxy(t *testing.T) {
 	clearProxyEnvironment(t)
-	called := false
-	previous := systemProxyLookup
-	systemProxyLookup = func(*url.URL) (*url.URL, error) {
-		called = true
-		return url.Parse("http://system-proxy.example:8080")
+	useSystemProxy(t, "http://system-proxy.example:8080")
+	if got := transportProxy(t, "http://127.0.0.1:8787/health"); got != nil {
+		t.Fatalf("proxy = %v, want direct loopback", got)
 	}
-	t.Cleanup(func() { systemProxyLookup = previous })
+}
 
-	request, err := http.NewRequest(http.MethodGet, "http://127.0.0.1:8787/health", nil)
-	testutil.FailErr(t, "new request", err)
-	transport := Bounded(egressclass.ProviderModelDiscovery, time.Second).Transport.(*http.Transport)
-	proxy, err := transport.Proxy(request)
-	testutil.FailErr(t, "resolve proxy", err)
-	if proxy != nil {
-		t.Fatalf("proxy = %v, want direct loopback", proxy)
+func TestUnreadableSystemConfigurationFailsOnlyResolutionsThatNeedIt(t *testing.T) {
+	clearProxyEnvironment(t)
+	t.Setenv("HTTPS_PROXY", "proxy.example:3128")
+	previous := systemProxyConfiguration
+	systemProxyConfiguration = func() (systemproxy.Configuration, error) {
+		return systemproxy.Configuration{}, errors.New("settings tool failed")
 	}
-	if called {
-		t.Fatal("system proxy was consulted for loopback")
+	t.Cleanup(func() { systemProxyConfiguration = previous })
+	config := CurrentProxyConfiguration()
+	if got, err := config.ProxyFor(mustURL(t, "https://api.example/")); err != nil || got == nil || got.String() != "http://proxy.example:3128" {
+		t.Fatalf("explicit environment proxy = %v, %v", got, err)
 	}
+	if _, err := config.ProxyFor(mustURL(t, "http://api.example/")); err == nil || !strings.Contains(err.Error(), "settings tool failed") {
+		t.Fatalf("system-dependent resolution = %v", err)
+	}
+}
+
+func TestEnvironmentExceptionGrammar(t *testing.T) {
+	for entry, cases := range map[string]map[string]bool{
+		"example.com":      {"example.com": true, "a.example.com": true, "notexample.com": false},
+		".example.com":     {"example.com": false, "a.example.com": true},
+		"*.example.com":    {"example.com": false, "a.example.com": true},
+		"example.com:8443": {"example.com:8443": true, "example.com": false},
+		"10.0.0.0/8":       {"10.2.3.4": true, "11.0.0.1": false},
+		"192.0.2.7":        {"192.0.2.7": true, "192.0.2.8": false},
+		"*":                {"anything.example": true},
+	} {
+		exception := parseEnvironmentException(entry)
+		for target, want := range cases {
+			host, port, err := net.SplitHostPort(target)
+			if err != nil {
+				host, port = target, "443"
+			}
+			if got := exception.Matches(host, port); got != want {
+				t.Fatalf("NO_PROXY %q on %s = %t, want %t (%+v)", entry, target, got, want, exception)
+			}
+		}
+	}
+	if got := parseEnvironmentProxy("proxy.example:3128"); got == nil || got.String() != "http://proxy.example:3128" {
+		t.Fatalf("bare environment proxy = %v", got)
+	}
+	if got := parseEnvironmentProxy("socks5://socks.example:1080"); got == nil || got.Scheme != "socks5" {
+		t.Fatalf("socks environment proxy = %v", got)
+	}
+	t.Setenv("REQUEST_METHOD", "GET")
+	t.Setenv("HTTP_PROXY", "http://cgi-injected.example:80")
+	if CurrentProxyConfiguration().EnvironmentHTTP != nil {
+		t.Fatal("HTTP_PROXY was honoured inside a CGI request")
+	}
+}
+
+func mustURL(t *testing.T, raw string) *url.URL {
+	t.Helper()
+	target, err := url.Parse(raw)
+	testutil.FailErr(t, "parse url", err)
+	return target
 }
 
 func clearProxyEnvironment(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{
-		"HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy",
+		"HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy", "REQUEST_METHOD",
 	} {
 		t.Setenv(key, "")
 	}

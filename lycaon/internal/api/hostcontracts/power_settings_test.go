@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -15,6 +17,13 @@ import (
 )
 
 func TestPowerSettingsDefaultOnAndApplyImmediately(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		// Availability checks never query the desktop session the test host runs.
+		missing := filepath.Join(t.TempDir(), "missing")
+		t.Setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path="+missing)
+		t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path="+missing)
+		t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	}
 	controller := hostpower.New(true)
 	defer func() { _ = controller.Close() }()
 	srv, _, _ := contractfixture.NewSettingsTestServer(t, func(d *hostapi.Dependencies) { d.Host.HostPower = controller })

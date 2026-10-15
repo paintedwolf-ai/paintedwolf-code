@@ -8,8 +8,8 @@ import (
 
 func TestPlatformInhibitorAcquireRelease(t *testing.T) {
 	inh := platformInhibitor{}
-	if !inh.Supported() {
-		t.Skip("platform inhibitor unsupported")
+	if err := inh.Availability(); err != nil {
+		t.Fatalf("platform inhibitor unavailable: %v", err)
 	}
 
 	lease, err := inh.Acquire()

@@ -17,10 +17,13 @@ type fakeInhibitor struct {
 	unsupported bool
 }
 
-func (f *fakeInhibitor) Supported() bool {
+func (f *fakeInhibitor) Availability() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return !f.unsupported
+	if f.unsupported {
+		return &UnavailableError{Reasons: []ProviderReason{{Provider: "fake", Reason: "service stopped"}}}
+	}
+	return nil
 }
 
 func (f *fakeInhibitor) Acquire() (lease, error) {
@@ -47,6 +50,7 @@ type fakeLease struct {
 }
 
 func (l *fakeLease) Done() <-chan error { return l.done }
+func (*fakeLease) Provider() string     { return "fake" }
 func (l *fakeLease) Release() error {
 	if !l.released {
 		l.released = true
@@ -207,7 +211,8 @@ func TestControllerReacquiresAfterPlatformServiceReturns(t *testing.T) {
 	controller.retryDelay = time.Millisecond
 	defer func() { _ = controller.Close() }()
 	controller.SetActive("turn:one", true)
-	if got := controller.Snapshot(); got.Supported || got.Inhibiting || got.ActiveWorkCount != 1 {
+	if got := controller.Snapshot(); got.Supported || got.Inhibiting || got.ActiveWorkCount != 1 ||
+		got.Unavailable != "no sleep inhibition provider is available (fake: service stopped)" {
 		t.Fatalf("unavailable platform status = %+v", got)
 	}
 	platform.mu.Lock()
@@ -217,6 +222,9 @@ func TestControllerReacquiresAfterPlatformServiceReturns(t *testing.T) {
 	for {
 		status := controller.Snapshot()
 		if status.Supported && status.Inhibiting {
+			if status.Unavailable != "" {
+				t.Fatalf("supported status kept a stale reason: %+v", status)
+			}
 			break
 		}
 		select {
@@ -225,5 +233,13 @@ func TestControllerReacquiresAfterPlatformServiceReturns(t *testing.T) {
 		default:
 			time.Sleep(time.Millisecond)
 		}
+	}
+}
+
+func TestControllerWithoutPlatformReportsUnavailable(t *testing.T) {
+	controller := newController(true, nil)
+	defer func() { _ = controller.Close() }()
+	if got := controller.Snapshot(); got.Supported || got.Unavailable != "sleep inhibition is unavailable on this platform" {
+		t.Fatalf("status without a platform inhibitor = %+v", got)
 	}
 }

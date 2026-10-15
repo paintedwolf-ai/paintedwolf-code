@@ -3,12 +3,18 @@ package main
 import (
 	"archive/zip"
 	"bytes"
+	"context"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/gitexec"
+	"github.com/lycaon/lycaon/internal/hostpower"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -83,5 +89,108 @@ func TestServeRejectsUnsupportedStartupProtocolBeforeOpeningStore(t *testing.T) 
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("protocol refusal touched store: %v", err)
+	}
+}
+
+func TestDescribeSystemProxyReportsTheHostDecision(t *testing.T) {
+	for _, key := range []string{"HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy", "NO_PROXY", "no_proxy"} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("HTTPS_PROXY", "http://alice:secret@proxy.example:3128")
+	var out bytes.Buffer
+	testutil.FailErr(t, "describe proxied target", describeSystemProxy("https://api.example/v1", &out))
+	if out.String() != "http://redacted@proxy.example:3128\n" {
+		t.Fatalf("proxied target = %q", out.String())
+	}
+	out.Reset()
+	testutil.FailErr(t, "describe loopback", describeSystemProxy("http://127.0.0.1:8787/health", &out))
+	if out.String() != "direct\n" {
+		t.Fatalf("loopback = %q", out.String())
+	}
+	for _, raw := range []string{"", "api.example", "://x", "https://"} {
+		if err := describeSystemProxy(raw, &out); err == nil {
+			t.Fatalf("%q was accepted as a target", raw)
+		}
+	}
+}
+
+func TestHoldPowerInhibitorReportsProviderOrUnavailability(t *testing.T) {
+	if runtime.GOOS == "linux" {
+		// Tests never reach the desktop session the test host is running.
+		missing := filepath.Join(t.TempDir(), "missing")
+		t.Setenv("DBUS_SYSTEM_BUS_ADDRESS", "unix:path="+missing)
+		t.Setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path="+missing)
+		t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+	}
+	var out bytes.Buffer
+	err := holdPowerInhibitor(t.Context(), hostpower.New(true), 0, &out)
+	line := out.String()
+	if !strings.HasPrefix(line, "supported=") || !strings.Contains(line, "provider=") || !strings.Contains(line, "unavailable=") {
+		t.Fatalf("status line = %q", line)
+	}
+	if strings.Contains(line, "inhibiting=true") != (err == nil) {
+		t.Fatalf("status %q with error %v", line, err)
+	}
+	if runtime.GOOS == "linux" && (err == nil || !strings.Contains(err.Error(), "login1: system bus unreachable") || !strings.Contains(err.Error(), "portal: session bus unreachable")) {
+		t.Fatalf("unreachable buses = %v", err)
+	}
+	canceled, cancel := context.WithCancel(t.Context())
+	cancel()
+	out.Reset()
+	if err := holdPowerInhibitor(canceled, hostpower.New(true), time.Hour, &out); err == nil || (!strings.Contains(out.String(), "inhibiting=false") && !errors.Is(err, context.Canceled)) {
+		t.Fatalf("canceled hold = %v with %q", err, out.String())
+	}
+}
+
+func TestProbeGitRemoteRunsThroughTheBundledToolchain(t *testing.T) {
+	var out bytes.Buffer
+	if err := probeGitRemote(t.Context(), "ext::sh -c touch%20/tmp/pwned", &out); err == nil {
+		t.Fatal("remote-helper transport was accepted")
+	}
+	// The bundled git resolves once per process, so one branch runs per test binary.
+	engineRoot := filepath.Join(testutil.CheckoutRoot(t), "lycaon-den", "src-tauri", "engine-root")
+	if _, err := os.Stat(filepath.Join(engineRoot, "gitengine", "bin", "git")); err != nil {
+		t.Setenv("LYCAON_ENGINE_ROOT", t.TempDir())
+		if err := probeGitRemote(t.Context(), "https://example.com/repo.git", &out); err == nil {
+			t.Fatal("missing bundled git did not fail the probe")
+		}
+		return
+	}
+	t.Setenv("LYCAON_ENGINE_ROOT", engineRoot)
+	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
+	remote := filepath.Join(t.TempDir(), "remote.git")
+	if output, err := exec.Command(filepath.Join(engineRoot, "gitengine", "bin", "git"), "init", "--bare", "--initial-branch=main", remote).CombinedOutput(); err != nil {
+		t.Fatalf("init bare remote: %v: %s", err, output)
+	}
+	testutil.FailErr(t, "probe local remote", probeGitRemote(t.Context(), "file://"+remote, &out))
+	if lines := strings.Split(strings.TrimSpace(out.String()), "\n"); len(lines) != 2 || !strings.HasPrefix(lines[0], "proxy_plan=") || lines[1] != "refs=0" {
+		t.Fatalf("empty remote probe = %q", out.String())
+	}
+	if err := probeGitRemote(t.Context(), "file://"+filepath.Join(t.TempDir(), "absent.git"), &out); err == nil || !strings.Contains(err.Error(), "exited") {
+		t.Fatalf("absent remote = %v", err)
+	}
+}
+
+func TestDescribeProxyPlanNamesTheModeAndItsReasons(t *testing.T) {
+	if got := describeProxyPlan(gitexec.ProxyPlan{Mode: gitexec.ProxyPlanPerHost}); got != "proxy_plan=per-host" {
+		t.Fatalf("empty plan = %q", got)
+	}
+	for _, name := range []string{"NO_PROXY", "no_proxy", "REQUEST_METHOD"} {
+		t.Setenv(name, "")
+	}
+	t.Setenv("HTTP_PROXY", "http://alice:secret@proxy.example:3128")
+	t.Setenv("HTTPS_PROXY", "http://alice:secret@proxy.example:3128")
+	explicit, err := gitexec.NetworkProxyPlan("https://example.com/r.git")
+	testutil.FailErr(t, "plan", err)
+	want := `proxy_plan=per-host http_proxy="http://redacted@proxy.example:3128" https_proxy="http://redacted@proxy.example:3128" no_proxy="localhost,127.0.0.0/8,::1"`
+	if got := describeProxyPlan(explicit); got != want {
+		t.Fatalf("explicit plan = %q, want %q", got, want)
+	}
+	plan := gitexec.ProxyPlan{Mode: gitexec.ProxyPlanPerRemote, Reasons: []gitexec.ProxyPlanReason{
+		{Kind: gitexec.ProxyReasonException, Detail: "build-*.example"},
+		{Kind: gitexec.ProxyReasonInverted, Detail: "kioslaverc"},
+	}}
+	if got := describeProxyPlan(plan); got != `proxy_plan=per-remote exception_not_expressible="build-*.example" exceptions_inverted="kioslaverc"` {
+		t.Fatalf("per-remote plan = %q", got)
 	}
 }

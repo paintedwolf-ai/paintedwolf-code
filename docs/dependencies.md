@@ -34,11 +34,12 @@ The app ships a **pinned** git + git-lfs binary tree rather than calling whateve
 
 | Item | Detail |
 |------|--------|
-| **Artifacts** | `git`, `git-lfs`, and a slim `libexec/git-core/` from [desktop/dugite-native](https://github.com/desktop/dugite-native) release tarballs |
+| **Artifacts** | `git`, `git-lfs`, and a slim `libexec/git-core/` from [desktop/dugite-native](https://github.com/desktop/dugite-native) release tarballs on macOS and Windows, and from [paintedwolf-git](https://github.com/paintedwolf-ai/paintedwolf-git) on Linux. The Linux build links curl, OpenSSL and zlib statically (only glibc and the loader are required), keeps their texts in its `licenses/` directory, and publishes the corresponding source archive on the same release |
 | **Pin** | `lycaon/config/gitengine/pin.yaml`: `git_version`, `lfs_version`, and each platform's URL template, build id, exact reported version, and SHA-256 |
 | **Fetch** | `./task gitengine:fetch` (`scripts/gitengine-fetch.sh`) downloads, verifies the hash, extracts into `lycaon-den/src-tauri/engine-root/gitengine/`, then prunes weight. A SHA-256 mismatch deletes the download and **fails the fetch** |
 | **Prune** | Unix drops Git Credential Manager, server and legacy helpers (`git-daemon`, `git-shell`, `git-http-backend`, `git-imap-send`, …), and dugite's `git-* → git` multi-call aliases: the host always runs `bin/git <subcommand>` with `GIT_EXEC_PATH` set, so those aliases are unused, and Tauri's resource bundler would otherwise dereference each symlink into a full copy of `git`. `git-remote-https` is a copy of `git-remote-http`; ftp/ftps helpers are removed. Windows keeps the `cmd` / `mingw64` / `usr` runtime topology and removes documentation and credential-manager entry points. Budgets: 40 MB Unix, 140 MB Windows |
 | **Resolution** | `LYCAON_GIT_BINARY` (honoured only when `LYCAON_TEST` is set), else the launcher-provided `LYCAON_ENGINE_ROOT`, else unavailable. No `PATH` lookup and no system-git fallback; preflight reports `GIT_ENGINE_UNAVAILABLE`. `scripts/gitengine-ensure.sh` stages the tree; `./task setup-dev`, `./task den:sidecar`, and the e2e harness provision it, so an offline host still gets a sidecar |
+| **Trust store** | The Linux build carries no CA bundle and its TLS library has no usable default, so `gitexec` sets `GIT_SSL_CAINFO` to the first readable file in Go's `crypto/x509` Linux order. A network invocation with none readable fails with `CABundleUnavailableError`; local invocations are unaffected |
 | **Test binaries** | A test binary has no engine beside it. Packages whose tests touch git call `gitengine.TestingEnableBundledBinary()` from a `TestMain`; it points `LYCAON_GIT_BINARY` at the checkout's staged tree and sets `LYCAON_TEST=1` |
 | **Packaging** | The tree is mapped under Tauri `bundle.resources` as `engine-root/`; it is **gitignored** and produced by the fetch/build step. `./task bundle:verify` (`internal/bundleverify`) rejects a shipped tree over the size budget or that still contains a materialized `git-status` alias |
 | **Signing** | Every Mach-O in the macOS tree is signed, not just `bin/git`: git executes its own helpers out of `libexec/git-core/`, and notarization rejects any nested binary without a Developer ID signature, hardened runtime, and secure timestamp. A Windows build, a candidate platform that is not published, signs the Git and Git LFS entry points through Azure Artifact Signing before packaging. `scripts/den-build-bundle.sh` refuses to bundle when the platform tree is missing |
@@ -50,7 +51,7 @@ The app ships a **pinned** git + git-lfs binary tree rather than calling whateve
 3. Run the git parity suite against a reference git (`LYCAON_GIT_REFERENCE` set; `lycaon/test/integration/git_parity_test.go`). It covers large-file storage driven from a path containing a space, which is what every installed path looks like.
 4. Commit the pin manifest. Do **not** commit the extracted `engine-root/gitengine/` tree.
 
-When a CVE lands in git or git-lfs, bump the pin to a fixed dugite-native release and repeat.
+When a CVE lands in git, git-lfs or a statically linked library, bump the pin to a fixed dugite-native release and a fixed paintedwolf-git release, and repeat.
 
 ## Managed headless browser
 

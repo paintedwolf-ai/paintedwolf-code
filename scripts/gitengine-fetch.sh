@@ -298,9 +298,14 @@ verify_gitengine_versions() {
   fi
 }
 
-if [[ -f "${DEST}/VERSION" ]]; then
+EXPECTED_SHA_LOWER="$(printf '%s' "${EXPECTED_SHA}" | tr '[:upper:]' '[:lower:]')"
+
+# A staged tree is current only when it came from the pinned archive itself;
+# a new build of the same Git version must replace it.
+if [[ -f "${DEST}/VERSION" && -f "${DEST}/ARCHIVE_SHA256" ]]; then
   CURRENT="$(tr -d '[:space:]' < "${DEST}/VERSION")"
-  if [[ "${CURRENT}" == "${GIT_VERSION}" && -e "$(git_path "${DEST}")" && -e "$(lfs_path "${DEST}")" ]]; then
+  CURRENT_SHA="$(tr -d '[:space:]' < "${DEST}/ARCHIVE_SHA256")"
+  if [[ "${CURRENT}" == "${GIT_VERSION}" && "${CURRENT_SHA}" == "${EXPECTED_SHA_LOWER}" && -e "$(git_path "${DEST}")" && -e "$(lfs_path "${DEST}")" ]]; then
     echo "gitengine:fetch — already at ${GIT_VERSION}; re-applying prune invariants" >&2
     SIZE_MB="$(finalize_gitengine_tree "${DEST}")"
     verify_gitengine_versions "${DEST}"
@@ -316,7 +321,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-ARCHIVE="${TMP_DIR}/dugite.tar.gz"
+ARCHIVE="${TMP_DIR}/gitengine.tar.gz"
 EXTRACT="${TMP_DIR}/extract"
 mkdir -p "${EXTRACT}"
 
@@ -324,7 +329,7 @@ echo "gitengine:fetch — downloading ${URL}" >&2
 curl -fsSL -o "${ARCHIVE}" "${URL}"
 
 ACTUAL_SHA="$(sha256 "${ARCHIVE}" | awk '{print tolower($1)}')"
-if [[ "${ACTUAL_SHA}" != "$(printf '%s' "${EXPECTED_SHA}" | tr '[:upper:]' '[:lower:]')" ]]; then
+if [[ "${ACTUAL_SHA}" != "${EXPECTED_SHA_LOWER}" ]]; then
   echo "error: gitengine sha256 mismatch — deleting download" >&2
   echo "  got:  ${ACTUAL_SHA}" >&2
   echo "  want: ${EXPECTED_SHA}" >&2
@@ -347,6 +352,7 @@ mkdir -p "${STAGE}"
 cp -a "${SRC}/." "${STAGE}/"
 
 printf '%s\n' "${GIT_VERSION}" > "${STAGE}/VERSION"
+printf '%s\n' "${ACTUAL_SHA}" > "${STAGE}/ARCHIVE_SHA256"
 SIZE_MB="$(finalize_gitengine_tree "${STAGE}")"
 verify_gitengine_versions "${STAGE}"
 

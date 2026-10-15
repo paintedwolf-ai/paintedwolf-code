@@ -32,7 +32,7 @@ import (
 
 type platformInhibitor struct{}
 
-func (platformInhibitor) Supported() bool { return true }
+func (platformInhibitor) Availability() error { return nil }
 
 func (platformInhibitor) Acquire() (lease, error) {
 	var assertionID C.IOPMAssertionID
@@ -53,6 +53,8 @@ type iokitLease struct {
 }
 
 func (l *iokitLease) Done() <-chan error { return l.done }
+
+func (*iokitLease) Provider() string { return "iokit" }
 
 func (l *iokitLease) Release() error {
 	var err error

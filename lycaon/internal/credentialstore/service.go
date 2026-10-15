@@ -26,6 +26,7 @@ const (
 	NamespaceMCPOAuth          = "mcp-oauth"
 	NamespaceSecretFingerprint = "secret-fingerprint"
 	NamespaceManagedSecrets    = "managed-secrets"
+	NamespaceGitCredentials    = "git-credentials"
 )
 
 // Slot declares one validated namespace inside the shared encrypted vault.
