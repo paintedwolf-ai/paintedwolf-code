@@ -17,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/indexwatch"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -195,7 +194,9 @@ func runCommandForeground(
 	}
 	cmdKey := canonicalCommandKey(tctx, args)
 	approach := commandFailureApproachKey(canonicalToolArgs(tctx, args))
-	if tr := ft.rejectLoop(tctx.Identity.SessionID, approach, cmdKey); tr != nil {
+	observeSource, verificationSource := commandSourceReaders(ctx, tctx, cwd)
+	failureAttempt, tr := ft.begin(tctx.Identity.SessionID, approach, cmdKey, observeSource)
+	if tr != nil {
 		return RunOutcome{}, tr
 	}
 	// Validate stages before acquiring confinement resources.
@@ -230,7 +231,8 @@ func runCommandForeground(
 	}
 	var sourceRevision, sourceRootDigest string
 	if tctx.Execution.VerificationCheck {
-		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.Source.Observations, tools.HostWriteRoot(tctx))
+		source := verificationSource()
+		sourceRevision, sourceRootDigest = source.Revision, source.Root
 	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
 		return RunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
@@ -286,7 +288,7 @@ func runCommandForeground(
 		out.Refusals = bound.lease.SettledRefusals(ctx)
 		out.LeftRunning = networkLife.leftBehind()
 		out.SpillPath = spillCommandOutput(tctx, snap)
-		ft.record(tctx.Identity.SessionID, approach, out.Snapshot.ExitCode == 0)
+		ft.record(failureAttempt, out.Snapshot.ExitCode == 0)
 		out.IndexWatch = registry.Lifecycle.TakeIndexWatch(tctx.Identity.SessionID, handle)
 		registry.Lifecycle.Discard(tctx.Identity.SessionID, handle)
 		recordContainerLaunch(tctx, snap)
