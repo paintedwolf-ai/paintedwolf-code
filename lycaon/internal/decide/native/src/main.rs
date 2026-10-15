@@ -2,11 +2,12 @@
 
 use std::path::PathBuf;
 use std::process::ExitCode;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
+use bialy::engine::{HEAD_CODE_RANK, HEAD_NAMES, REFERENCE_TASK, reference_candidates};
+use bialy::protocol::EXIT_NO_CAPABLE_DEVICE;
+use bialy::{DeviceChoice, Engine, EngineOptions, Error};
 use clap::{Parser, Subcommand};
-use bialy::engine::{HEAD_CODE_RANK, HEAD_NAMES};
-use bialy::{DeviceChoice, Engine, EngineOptions};
 
 #[derive(Parser)]
 #[command(name = "bialy", version, about = "Painted Wolf Code decision engine")]
@@ -25,9 +26,17 @@ struct LoadArgs {
     #[arg(long, default_value = "")]
     model_id: String,
 
-    /// Where to run: auto, cpu, cuda, cuda:N, metal, metal:N or mlx.
+    /// Where to run: auto, cpu, mlx, vulkan or vulkan:N.
     #[arg(long, default_value = "auto")]
     device: String,
+
+    /// Under auto, the slowest reference batch a device may take; 0 keeps the fastest device.
+    #[arg(long, default_value_t = 0)]
+    qualify_ms: u64,
+
+    /// Where device verdicts and compiled GPU kernels persist across launches.
+    #[arg(long, default_value = "")]
+    cache_dir: String,
 
     /// MLX's Metal library (mlx.metallib) when it is not beside this executable.
     #[arg(long, default_value = "")]
@@ -41,7 +50,7 @@ struct LoadArgs {
     #[arg(long, default_value_t = 0)]
     max_rows: usize,
 
-    /// Precision: f16 or f32. Defaults to f16 on an accelerator and f32 on the CPU.
+    /// Precision: f16 or f32. Defaults to the device's own.
     #[arg(long, default_value = "")]
     dtype: String,
 
@@ -69,6 +78,32 @@ enum Command {
     },
 }
 
+/// Why the engine stopped, and the exit status that tells the host.
+struct Failure {
+    message: String,
+    status: u8,
+}
+
+impl From<String> for Failure {
+    fn from(message: String) -> Self {
+        Failure { message, status: 1 }
+    }
+}
+
+impl From<Error> for Failure {
+    fn from(e: Error) -> Self {
+        let status = match e {
+            Error::NoCapableDevice(_) => EXIT_NO_CAPABLE_DEVICE,
+            _ => 1,
+        };
+        Failure { message: e.to_string(), status }
+    }
+}
+
+fn optional_path(s: &str) -> Option<PathBuf> {
+    (!s.is_empty()).then(|| PathBuf::from(s))
+}
+
 fn options(args: &LoadArgs) -> Result<EngineOptions, String> {
     let device: DeviceChoice = args.device.parse().map_err(|e| format!("{e}"))?;
     let mut heads = Vec::with_capacity(args.heads.len());
@@ -87,25 +122,24 @@ fn options(args: &LoadArgs) -> Result<EngineOptions, String> {
         heads,
         max_rows: args.max_rows,
         dtype: args.dtype.clone(),
-        metallib: if args.metallib.is_empty() {
-            None
-        } else {
-            Some(std::path::PathBuf::from(&args.metallib))
-        },
         head_max_len: args.head_max_len,
+        metallib: optional_path(&args.metallib),
+        qualify: (args.qualify_ms > 0).then(|| Duration::from_millis(args.qualify_ms)),
+        cache_dir: optional_path(&args.cache_dir),
     })
 }
 
-fn load(args: &LoadArgs) -> Result<Engine, String> {
+fn load(args: &LoadArgs) -> Result<Engine, Failure> {
     let opts = options(args)?;
     let started = Instant::now();
-    let engine = Engine::load(&opts).map_err(|e| e.to_string())?;
-    engine.warm().map_err(|e| e.to_string())?;
+    let engine = Engine::load(&opts)?;
+    engine.warm()?;
     let id = engine.identity();
     eprintln!(
-        "bialy: ready model={} device={} dtype={} head={} load={:.1}s",
+        "bialy: ready model={} device={}{} dtype={} head={} load={:.1}s",
         id.model,
         id.device,
+        if id.adapter.is_empty() { String::new() } else { format!(" ({})", id.adapter) },
         id.dtype,
         if id.head.is_empty() { "-" } else { &id.head },
         started.elapsed().as_secs_f64()
@@ -113,38 +147,29 @@ fn load(args: &LoadArgs) -> Result<Engine, String> {
     Ok(engine)
 }
 
-fn run(cli: Cli) -> Result<(), String> {
+fn run(cli: Cli) -> Result<(), Failure> {
     match cli.command {
         Command::Serve(args) => {
             let engine = load(&args)?;
             let stdin = std::io::stdin();
             let stdout = std::io::stdout();
             bialy::protocol::serve(&engine, stdin.lock(), stdout.lock())
-                .map_err(|e| e.to_string())
+                .map_err(|e| Failure::from(e.to_string()))
         }
         Command::Check(args) => {
             let engine = load(&args)?;
-            println!("{}", serde_json::to_string(engine.identity()).map_err(|e| e.to_string())?);
+            let identity = serde_json::to_string(engine.identity()).map_err(|e| e.to_string())?;
+            println!("{identity}");
             Ok(())
         }
         Command::Bench { load: args, candidates, runs } => {
             let engine = load(&args)?;
-            let batch: Vec<String> = (0..candidates)
-                .map(|i| {
-                    format!(
-                        "File: internal/search/code_executor_{i}.go (go)\nSymbol: rerankHits (function)\n\
-                         func (e *CodeExecutor) rerankHits(ctx context.Context, terms []string, hits []Hit) []Hit\n\
-                         Doc: rerankHits blends the engine's relevance into the lexical order of the top hits."
-                    )
-                })
-                .collect();
-            let task =
-                "Where does project search blend the decision engine's relevance into its hits?";
-            engine.rank(HEAD_CODE_RANK, task, &batch).map_err(|e| e.to_string())?;
+            let batch = reference_candidates(candidates);
+            engine.rank(HEAD_CODE_RANK, REFERENCE_TASK, &batch)?;
             let mut times = Vec::with_capacity(runs);
             for _ in 0..runs {
                 let started = Instant::now();
-                engine.rank(HEAD_CODE_RANK, task, &batch).map_err(|e| e.to_string())?;
+                engine.rank(HEAD_CODE_RANK, REFERENCE_TASK, &batch)?;
                 times.push(started.elapsed().as_secs_f64() * 1000.0);
             }
             times.sort_by(f64::total_cmp);
@@ -163,9 +188,9 @@ fn run(cli: Cli) -> Result<(), String> {
 fn main() -> ExitCode {
     match run(Cli::parse()) {
         Ok(()) => ExitCode::SUCCESS,
-        Err(message) => {
-            eprintln!("bialy: {message}");
-            ExitCode::FAILURE
+        Err(failure) => {
+            eprintln!("bialy: {}", failure.message);
+            ExitCode::from(failure.status)
         }
     }
 }

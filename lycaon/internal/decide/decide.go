@@ -110,6 +110,8 @@ type Engine struct {
 	Name   string `json:"name"`
 	Model  string `json:"model"`
 	Device string `json:"device"`
+	// Adapter is the GPU's own name when the device is one.
+	Adapter string `json:"adapter,omitempty"`
 	// Head lists the loaded heads as name=label pairs, or is empty for the
 	// base model alone.
 	Head string `json:"head,omitempty"`

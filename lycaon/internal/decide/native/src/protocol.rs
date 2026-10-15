@@ -12,6 +12,13 @@
 //! `{"id": 2, "answers": {qid: {...}}}`, `{"id": 3, "scores": [...]}`, or
 //! `{"id": n, "error": "..."}`. Questions arrive in the host's shape (`type`, `instructions`,
 //! `options` | `levels` | `true`/`false`) and are translated to the checkpoint's.
+//!
+//! An engine that cannot load exits before reading a request. Exit status
+//! [`EXIT_NO_CAPABLE_DEVICE`] means `auto` found no device fast enough; any other failure exits
+//! with status 1.
+
+/// The exit status for `auto` finding no device that meets the speed requirement.
+pub const EXIT_NO_CAPABLE_DEVICE: u8 = 3;
 
 use std::collections::{BTreeMap, HashMap};
 use std::io::{BufRead, Write};
@@ -228,11 +235,7 @@ mod tests {
             model_dir: dir.to_path_buf(),
             model_id: "tiny/model".into(),
             device: DeviceChoice::Cpu,
-            heads: Vec::new(),
-            max_rows: 0,
-            dtype: String::new(),
-            head_max_len: 0,
-            metallib: None,
+            ..Default::default()
         };
         let engine = Engine::load(&opts).unwrap();
         std::mem::forget(dir);

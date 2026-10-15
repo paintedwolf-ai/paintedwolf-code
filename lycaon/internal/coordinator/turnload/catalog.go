@@ -150,8 +150,9 @@ type Catalog struct {
 	Request   RequestSpec   `yaml:"request" json:"request"`
 	Lookup    LookupSpec    `yaml:"lookup" json:"lookup"`
 	ToolEvent ToolEventSpec `yaml:"tool_event" json:"tool_event"`
-	// Rerank belongs to internal/decide, which parses the same file; it is
-	// named here so a strict decode accepts it.
+	// Engine and Rerank belong to internal/decide, which parses the same file;
+	// they are named here so a strict decode accepts them.
+	Engine any `yaml:"engine" json:"-"`
 	Rerank any `yaml:"rerank" json:"-"`
 }
 

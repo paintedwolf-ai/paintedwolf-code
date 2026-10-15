@@ -90,12 +90,33 @@ type policyRow struct {
 	Weight        float64 `yaml:"weight"`
 }
 
+// ReferenceCandidates is the size of the engine's reference batch, which
+// REFERENCE_CANDIDATES in native/src/engine.rs defines.
+const ReferenceCandidates = 16
+
+// EngineRequirement is how fast a device must be for the engine to serve on it.
+type EngineRequirement struct {
+	// Reference bounds one reference batch of ReferenceCandidates candidates.
+	Reference time.Duration
+}
+
+// Catalog is the part of decisions.yaml this package owns.
+type Catalog struct {
+	Policies Policies
+	Engine   EngineRequirement
+}
+
 // catalogVersion is the decisions.yaml format this package and
 // internal/coordinator/turnload share.
 const catalogVersion = 2
 
+type engineRow struct {
+	ReferenceMS int `yaml:"reference_ms"`
+}
+
 type catalogFile struct {
 	Version int                  `yaml:"version"`
+	Engine  engineRow            `yaml:"engine"`
 	Rerank  map[string]policyRow `yaml:"rerank"`
 	// The turn-decision sections belong to internal/coordinator/turnload, which
 	// parses the same file; they are named here so a strict decode accepts them.
@@ -106,24 +127,28 @@ type catalogFile struct {
 	ToolEvent any `yaml:"tool_event"`
 }
 
-// LoadPolicies reads and validates the rerank section of decisions.yaml.
-func LoadPolicies() (Policies, error) {
+// LoadCatalog reads and validates the engine and rerank sections of decisions.yaml.
+func LoadCatalog() (Catalog, error) {
 	data, err := config.Read(config.Decisions)
 	if err != nil {
-		return nil, fmt.Errorf("read decisions: %w", err)
+		return Catalog{}, fmt.Errorf("read decisions: %w", err)
 	}
-	return ParsePolicies(data)
+	return ParseCatalog(data)
 }
 
-// ParsePolicies decodes and validates a decisions catalog.
-func ParsePolicies(data []byte) (Policies, error) {
+// ParseCatalog decodes and validates a decisions catalog.
+func ParseCatalog(data []byte) (Catalog, error) {
 	var file catalogFile
 	if err := config.DecodeYAML(data, &file); err != nil {
-		return nil, fmt.Errorf("parse decisions: %w", err)
+		return Catalog{}, fmt.Errorf("parse decisions: %w", err)
 	}
 	var faults []string
 	if file.Version != catalogVersion {
 		faults = append(faults, fmt.Sprintf("version %d is not %d", file.Version, catalogVersion))
+	}
+	engine := EngineRequirement{Reference: time.Duration(file.Engine.ReferenceMS) * time.Millisecond}
+	if engine.Reference <= 0 {
+		faults = append(faults, "engine.reference_ms must be positive")
 	}
 	out := make(Policies, len(sites))
 	for name, row := range file.Rerank {
@@ -132,13 +157,15 @@ func ParsePolicies(data []byte) (Policies, error) {
 			continue
 		}
 		faults = append(faults, row.validate(name)...)
-		out[Site(name)] = RerankPolicy{
+		policy := RerankPolicy{
 			Enabled:       row.Enabled,
 			Deadline:      time.Duration(row.DeadlineMS) * time.Millisecond,
 			MaxCandidates: row.MaxCandidates,
 			Chunk:         row.Chunk,
 			Weight:        row.Weight,
 		}
+		faults = append(faults, engine.fits(name, policy)...)
+		out[Site(name)] = policy
 	}
 	for _, site := range sites {
 		if _, ok := file.Rerank[string(site)]; !ok {
@@ -147,9 +174,23 @@ func ParsePolicies(data []byte) (Policies, error) {
 	}
 	if len(faults) > 0 {
 		sort.Strings(faults)
-		return nil, fmt.Errorf("decisions.yaml: %s", strings.Join(faults, "; "))
+		return Catalog{}, fmt.Errorf("decisions.yaml: %s", strings.Join(faults, "; "))
 	}
-	return out, nil
+	return Catalog{Policies: out, Engine: engine}, nil
+}
+
+// fits reports an enabled site the slowest qualifying device could not finish
+// within its deadline.
+func (e EngineRequirement) fits(name string, p RerankPolicy) []string {
+	if !p.Enabled || e.Reference <= 0 {
+		return nil
+	}
+	batches := (p.MaxCandidates + ReferenceCandidates - 1) / ReferenceCandidates
+	if worst := time.Duration(batches) * e.Reference; worst > p.Deadline {
+		return []string{fmt.Sprintf("rerank.%s.deadline_ms %d cannot fit %d reference batches of engine.reference_ms %d",
+			name, p.Deadline.Milliseconds(), batches, e.Reference.Milliseconds())}
+	}
+	return nil
 }
 
 func (r policyRow) validate(name string) []string {

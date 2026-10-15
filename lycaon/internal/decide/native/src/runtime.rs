@@ -40,6 +40,7 @@ pub(crate) struct LoadSpec<'a> {
     pub encoder: &'a modernbert::Config,
     /// `f16`, `f32`, or empty for the device's own precision.
     pub dtype: &'a str,
+    #[cfg(feature = "mlx")]
     pub metallib: Option<&'a Path>,
 }
 

@@ -11,7 +11,8 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 use std::sync::OnceLock;
 
-use burn::cubecl::config::{CacheConfig, CubeClRuntimeConfig, RuntimeConfig};
+use burn::cubecl::config::cache::CacheConfig;
+use burn::cubecl::config::{CubeClRuntimeConfig, RuntimeConfig};
 use burn::tensor::{
     Bool, DType, Device, DeviceType, Int, Tensor, TensorData, activation, module,
 };
@@ -52,15 +53,21 @@ pub(crate) fn configure_cache(dir: Option<&Path>) {
 /// and the CPU runtime serves a CPU better.
 pub(crate) fn gpus() -> &'static [Gpu] {
     static GPUS: OnceLock<Vec<Gpu>> = OnceLock::new();
-    GPUS.get_or_init(|| guard("enumerating Vulkan GPUs", enumerate).unwrap_or_default())
+    GPUS.get_or_init(|| guard("enumerating Vulkan GPUs", || enumerate(false)).unwrap_or_default())
 }
 
-fn enumerate() -> Result<Vec<Gpu>> {
+fn enumerate(include_software: bool) -> Result<Vec<Gpu>> {
     let mut gpus = Vec::new();
     for device in Device::enumerate(DeviceType::Vulkan) {
         let Some(identity) = device.identity() else { continue };
-        let Some(physical) = identity.physical else { continue };
-        let address = physical.pci_address.map(|a| format!("{a:?}")).unwrap_or_default();
+        if identity.physical.is_none() && !include_software {
+            continue;
+        }
+        let address = identity
+            .physical
+            .and_then(|p| p.pci_address)
+            .map(|a| format!("{a:?}"))
+            .unwrap_or_default();
         gpus.push(Gpu {
             index: gpus.len(),
             key: format!("{} {} {address}", identity.name, identity.fingerprint),
@@ -520,8 +527,85 @@ impl Model {
         let flat = logits
             .try_into_data()
             .map_err(|e| Error::Device(format!("vulkan: reading logits: {e:?}")))?
-            .to_vec::<f32>()
+            .try_to_vec::<f32>()
             .map_err(|e| Error::Device(format!("vulkan: reading logits: {e:?}")))?;
         Ok(flat.chunks(k).map(|row| row.to_vec()).collect())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::device::Selected;
+    use crate::engine::{Engine, EngineOptions, HEAD_CODE_RANK, Prepared};
+    use crate::testutil::{assert_agrees_with_cpu, scratch_dir, write_tiny_checkpoint, write_tiny_head};
+
+    /// The first GPU, else a software rasterizer, so parity runs wherever Mesa's lavapipe is
+    /// installed.
+    fn test_gpu() -> Gpu {
+        gpus().first().cloned().unwrap_or_else(|| {
+            enumerate(true)
+                .unwrap()
+                .into_iter()
+                .next()
+                .expect("no Vulkan device: install a GPU driver or Mesa's lavapipe")
+        })
+    }
+
+    fn engine_on_test_gpu(dir: &Path, head: &Path, dtype: &str) -> Engine {
+        let opts = EngineOptions {
+            model_dir: dir.to_path_buf(),
+            dtype: dtype.into(),
+            heads: vec![(HEAD_CODE_RANK.to_string(), head.to_path_buf())],
+            ..Default::default()
+        };
+        let prepared = Prepared::read(dir).unwrap();
+        Engine::on_selected(&prepared, Selected::Vulkan(test_gpu()), &opts).unwrap()
+    }
+
+    #[test]
+    fn vulkan_matches_the_cpu_on_the_same_checkpoint() {
+        let dir = scratch_dir("vulkan-parity");
+        write_tiny_checkpoint(&dir);
+        let head = write_tiny_head(&dir, "rank", "tiny");
+        let engine = engine_on_test_gpu(&dir, &head, "f32");
+        assert!(engine.identity().device.starts_with("vulkan:"), "{:?}", engine.identity());
+        assert!(!engine.identity().adapter.is_empty());
+        assert_eq!(engine.identity().dtype, "f32");
+        assert_agrees_with_cpu(&dir, &head, &engine, 2e-3);
+    }
+
+    #[test]
+    fn half_precision_stays_close_to_the_cpu() {
+        let gpu = test_gpu();
+        if !gpu.device.supports_dtype(DType::F16) {
+            assert!(dtype_for(&gpu, "f16").is_err());
+            assert_eq!(dtype_for(&gpu, "").unwrap(), DType::F32);
+            return;
+        }
+        let dir = scratch_dir("vulkan-f16");
+        write_tiny_checkpoint(&dir);
+        let head = write_tiny_head(&dir, "rank", "tiny");
+        let engine = engine_on_test_gpu(&dir, &head, "");
+        assert_eq!(engine.identity().dtype, "f16");
+        assert_agrees_with_cpu(&dir, &head, &engine, 3e-2);
+    }
+
+    #[test]
+    fn a_runtime_panic_becomes_a_device_error() {
+        let err = guard("probing", || -> Result<()> { panic!("device lost") }).unwrap_err();
+        assert!(
+            matches!(err, Error::Device(ref m) if m.contains("probing") && m.contains("device lost")),
+            "{err}"
+        );
+        assert_eq!(guard("probing", || Ok(7)).unwrap(), 7);
+    }
+
+    #[test]
+    fn every_gpu_is_keyed_by_its_part_and_slot() {
+        for (i, gpu) in gpus().iter().enumerate() {
+            assert_eq!(gpu.index, i);
+            assert!(gpu.key.starts_with(&gpu.name), "{}", gpu.key);
+        }
     }
 }
