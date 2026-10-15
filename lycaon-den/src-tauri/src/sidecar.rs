@@ -7,9 +7,9 @@ use self::startup::{await_child_ready, StartupProgress};
 use self::supervisor::{EngineState, ExitWatch};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use ed25519_dalek::{Signer, SigningKey};
-use rand::rngs::OsRng;
-use rand::TryRngCore;
-use rand::RngCore;
+use rand::rngs::SysRng;
+use rand::Rng;
+use rand::TryRng;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 use std::path::Path;
@@ -216,7 +216,7 @@ impl SidecarState {
 
 fn generate_presence_signing_key() -> SigningKey {
     let mut secret = [0u8; 32];
-    OsRng
+    SysRng
         .try_fill_bytes(&mut secret)
         .expect("operating system random source is unavailable");
     SigningKey::from_bytes(&secret)
