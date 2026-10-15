@@ -126,7 +126,7 @@ func TestRenderBoardOrientationInject_PartialIdentityWithinBudget(t *testing.T) 
 	now := time.Date(2026, 10, 15, 7, 1, 0, 0, time.FixedZone("PDT", -7*60*60))
 	partial := api.WorkerTask{
 		ID: "55504f06-30c7-4b18-b1e8-86a59fb5ffcf", ChildSessionID: "130fee5b-68a4-459d-a288-b0c8a636457b",
-		CreatedAt: now, Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending,
+		CreatedAt: now, CompletedAt: &now, Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending,
 		Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "partial"}},
 	}
 	snap := api.BoardSnapshot{
