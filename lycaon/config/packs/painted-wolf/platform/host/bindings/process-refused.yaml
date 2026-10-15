@@ -11,8 +11,6 @@ invariants:
   - wait() process_done condition — the kernel refused a running command/verify
     job an operation
   required:
-  - process_done
-  - command_output
-  - command_stop
+  - '{{ command_refusal }}'
   forbidden:
   - workflow_advance
