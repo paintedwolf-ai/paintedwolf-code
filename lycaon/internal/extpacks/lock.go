@@ -25,14 +25,14 @@ type LockFile struct {
 
 // LockedPackage records immutable package identity plus the graph edge selected for it.
 type LockedPackage struct {
-	ID           string            `yaml:"id" json:"id"`
-	Version      string            `yaml:"version" json:"version"`
-	Source       string            `yaml:"source" json:"source"`
-	Ref          string            `yaml:"ref,omitempty" json:"ref,omitempty"`
-	Subdir       string            `yaml:"subdir,omitempty" json:"subdir,omitempty"`
-	Revision     string            `yaml:"revision,omitempty" json:"revision,omitempty"`
-	Integrity    string            `yaml:"integrity" json:"integrity"`
-	Kind         PackKind          `yaml:"kind" json:"kind"`
+	ID        string   `yaml:"id" json:"id"`
+	Version   string   `yaml:"version" json:"version"`
+	Source    string   `yaml:"source" json:"source"`
+	Ref       string   `yaml:"ref,omitempty" json:"ref,omitempty"`
+	Subdir    string   `yaml:"subdir,omitempty" json:"subdir,omitempty"`
+	Revision  string   `yaml:"revision,omitempty" json:"revision,omitempty"`
+	Integrity string   `yaml:"integrity" json:"integrity"`
+	Kind      PackKind `yaml:"kind" json:"kind"`
 	// Stock versions record the solve; the bundled host supplies their runtime versions.
 	Dependencies map[string]string `yaml:"dependencies,omitempty" json:"dependencies,omitempty"`
 }
