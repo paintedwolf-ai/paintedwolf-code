@@ -285,7 +285,7 @@ func TestLinuxUnixSocketGrantConnectsOnlyItsPath(t *testing.T) {
 func TestLinuxLocalListenGrantIsReachableFromTheHost(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	for _, granted := range []bool{true, false} {
-		port := freePort(t)
+		port := servicePort(t)
 		c := confine.Confinement{Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
 		if granted {
 			c.LocalListen, c.LocalListenPorts = true, []uint16{port}
@@ -321,14 +321,6 @@ func TestLinuxLocalListenGrantIsReachableFromTheHost(t *testing.T) {
 			t.Fatalf("ungranted listener reachable from the host (got %q):\n%s", reached, out.String())
 		}
 	}
-}
-
-func freePort(t *testing.T) uint16 {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	testutil.FailErr(t, "free port", err)
-	defer ln.Close()
-	return portOfListener(ln)
 }
 
 // fakeResolver answers every A question with 192.0.2.7 until the test ends.
@@ -438,7 +430,7 @@ func TestLinuxConcurrentActionsKeepTheirOwnRefusals(t *testing.T) {
 		c, lease := boundConfinement(t, confine.Confinement{
 			Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride,
 		})
-		r := &run{lease: lease, target: net.JoinHostPort("127.0.0.1", strconv.Itoa(int(freePort(t))))}
+		r := &run{lease: lease, target: net.JoinHostPort("127.0.0.1", strconv.Itoa(int(servicePort(t))))}
 		runs[i] = r
 		// The connection is made by a grandchild of the helper.
 		cmd, cleanup, err := confine.Command(t.Context(), helperBinary(t, self), "/bin/sh", []string{"-c", self + " " + probeTestFlag}, *c)
