@@ -166,8 +166,11 @@ describe("DiffViewerDrawer", () => {
         rootRefs={[]}
       />
     ));
-    fireEvent.contextMenu(screen.getByTestId("diff-viewer-copy"));
+    const copy = screen.getByRole("button", { name: "Copy path" });
+    expect(copy.hasAttribute("aria-haspopup")).toBe(false);
+    fireEvent.contextMenu(copy);
     expect(await screen.findByTestId("diff-viewer-copy-path")).toBeTruthy();
+    expect(copy.hasAttribute("aria-expanded")).toBe(false);
     expect(screen.getByTestId("diff-viewer-copy-relative-path")).toBeTruthy();
     expect(screen.getByTestId("diff-viewer-copy-file-name")).toBeTruthy();
   });

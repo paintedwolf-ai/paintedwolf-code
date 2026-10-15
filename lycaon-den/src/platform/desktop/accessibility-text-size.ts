@@ -17,10 +17,14 @@ export type TextSizePayload = {
 /** Largest scale the host reports: the AX5 body size over the 17pt default. */
 export const MAX_TEXT_SCALE = 53 / 17;
 
+/** Reported while a Linux desktop exposes a text scaling factor the web view applies itself. */
+export const LINUX_TEXT_SCALING_CATEGORY = "linux-text-scaling-factor";
+
 let operatingSystemTextScale = 1;
 let productTextScale = 1;
 const [effectiveTextScale, setEffectiveTextScale] = createSignal(1);
-export { effectiveTextScale };
+const [hostTextSizeCategory, setHostTextSizeCategory] = createSignal("default");
+export { effectiveTextScale, hostTextSizeCategory };
 
 /** Apply the composed operating-system and product reading scale. */
 function applyEffectiveTextScale(): void {
@@ -50,12 +54,15 @@ export function applyProductTextScale(textScale: number): void {
 export function resetTextScaleForTests(): void {
   operatingSystemTextScale = 1;
   productTextScale = 1;
+  latestTextSizeRevision = -1;
+  setHostTextSizeCategory("default");
   applyEffectiveTextScale();
 }
 
 export function applyTextSizePayload(payload: TextSizePayload): void {
   if (payload.revision < latestTextSizeRevision) return;
   latestTextSizeRevision = payload.revision;
+  setHostTextSizeCategory(payload.category);
   applyTextScale(payload.textScale);
 }
 

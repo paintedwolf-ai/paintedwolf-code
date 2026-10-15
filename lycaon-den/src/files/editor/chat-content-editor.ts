@@ -44,7 +44,7 @@ export class ChatContentEditor {
       },
       content: () => access.text(0, access.reference.total_runes, this.abort.signal),
     };
-    this.reader = new ReaderEditor({ parent, surface: "diff-viewer", prefs, access: () => textAccess, fullSide: () => "after", changes: () => false,
+    this.reader = new ReaderEditor({ parent, surface: "diff-viewer", label: "Chat content", prefs, access: () => textAccess, fullSide: () => "after", changes: () => false,
       scrollPastEnd: false, commandBridge: true, facts: () => {}, hideFacts: () => {}, error,
       scroll: editor => {
         const top = editor.view.scrollDOM.getBoundingClientRect().top - editor.view.documentTop;

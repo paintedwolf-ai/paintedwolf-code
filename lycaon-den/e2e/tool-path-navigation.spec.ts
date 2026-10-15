@@ -33,10 +33,10 @@ for (const target of [".", "src", "@other/src"]) {
     const stream = liveChatStage(page);
     const activity = stream.getByTestId("activity-span-card").first();
     await expect(activity).toBeVisible();
-    if (await activity.getAttribute("open") === null) await activity.locator(":scope > summary").click();
+    if (await activity.getAttribute("data-expanded") !== "true") await activity.locator(":scope > .den-transcript-disclosure-header").click();
     const card = stream.locator(`[data-testid="tool-part-card"][data-tool-call-id="${callId}"]`);
     await expect(card).toBeVisible();
-    if (await card.getAttribute("open") === null) await card.locator(":scope > summary").click();
+    if (await card.getAttribute("data-expanded") !== "true") await card.locator(":scope > .den-transcript-disclosure-header").click();
     const link = card.getByTestId("source-path-link").first();
     await expect(link).toHaveText(target);
     await link.click();

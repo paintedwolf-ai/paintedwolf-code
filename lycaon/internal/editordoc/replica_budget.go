@@ -24,7 +24,8 @@ func isHistoryCapacity(err error) bool {
 // accountReplicaSnapshot keeps the serialized history inside its budget:
 // compaction spares retained undo first, gives it up second, and a history
 // that still does not fit is rejected so the document can start a new epoch.
-func (s *Service) accountReplicaSnapshot(ctx context.Context, entry *replicaEntry, snapshot *documentcore.Snapshot) error {
+func (m replicaManager) accountReplicaSnapshot(ctx context.Context, entry *replicaEntry, snapshot *documentcore.Snapshot) error {
+	s := m.s
 	size := entry.bytes + len(snapshot.Update)
 	if len(snapshot.Checkpoint) > 0 {
 		size = len(snapshot.Checkpoint)
@@ -59,7 +60,8 @@ func (s *Service) accountReplicaSnapshot(ctx context.Context, entry *replicaEntr
 	return nil
 }
 
-func (s *Service) retainedUndo(ctx context.Context, id string, pending *documentcore.Snapshot) ([][]byte, int64, error) {
+func (m replicaManager) retainedUndo(ctx context.Context, id string, pending *documentcore.Snapshot) ([][]byte, int64, error) {
+	s := m.s
 	const maxUndoBytes uint64 = 4 << 20
 	const maxUndoEntries = 256
 	retained := make([][]byte, 0, maxUndoEntries)

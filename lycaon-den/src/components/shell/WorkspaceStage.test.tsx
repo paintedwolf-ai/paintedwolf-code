@@ -42,6 +42,7 @@ function mountStage(surfaceKey: string) {
     openCloneDialog: vi.fn(), deleteProject: vi.fn(async () => undefined), setHomeSection: vi.fn(),
     selectContextSection: vi.fn(), selectSettingsSection: vi.fn(), openFileInNewWindow: vi.fn(),
     openFileWindow: vi.fn(), detachStageToWindow: vi.fn(async () => undefined), revealInTranscript: vi.fn(),
+    focusComposer: vi.fn(),
   };
   const project = { id: "project", name: "  Garden  ", roots: [{ id: "root", label: "Garden", path: "/garden" }], is_draft: false };
   const props = {
@@ -79,6 +80,8 @@ describe("workspace resident stage routing", () => {
     expect(shell.state.materializingDraft).toBe(true);
     seams.home.onOpenAttention?.({ project_id: "project", session_id: "other" } as never);
     expect(callbacks.navigateFromSearch).toHaveBeenCalledWith({ projectId: "project", sessionId: "other" });
+    expect(callbacks.focusComposer).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(callbacks.focusComposer).toHaveBeenCalledOnce());
   });
 
   it("uses the resident chat-list project for host archive, pin, and deletion", async () => {

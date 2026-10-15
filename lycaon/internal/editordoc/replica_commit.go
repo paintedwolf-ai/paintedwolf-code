@@ -38,12 +38,16 @@ type ReplicaResult struct {
 	AcceptedRevision int64
 }
 
+type replicaUndoCommit struct {
+	undoUnits uint64
+	undoFloor int64
+	undo      []byte
+	reverts   string
+}
+
 type replicaCommit struct {
+	replicaUndoCommit
 	contribution *sourceledger.TextContribution
-	undoUnits    uint64
-	undoFloor    int64
-	undo         []byte
-	reverts      string
 	revision     int64
 	epoch        int64
 	operationID  string
@@ -54,7 +58,8 @@ type replicaCommit struct {
 	inputDigest  string
 }
 
-func (s *Service) prepareTextTransition(ctx context.Context, next *Document, previous int64, actor textActor, operationID string) error {
+func (c replicaCommitter) prepareTextTransition(ctx context.Context, next *Document, previous int64, actor textActor, operationID string) error {
+	s := c.s
 	before, err := s.store.Get(ctx, next.ID)
 	if err != nil {
 		return err
@@ -95,7 +100,7 @@ func (s *Service) prepareTextTransition(ctx context.Context, next *Document, pre
 		s.replicas.evict(ctx, next.ID)
 		return err
 	}
-	next.replicaCommit = &replicaCommit{undoUnits: snapshot.UndoUnits, undoFloor: entry.undoFloor, undo: snapshot.Undo, revision: next.Revision, epoch: entry.head.Epoch, operationID: operationID,
+	next.replicaCommit = &replicaCommit{replicaUndoCommit: replicaUndoCommit{undoUnits: snapshot.UndoUnits, undoFloor: entry.undoFloor, undo: snapshot.Undo}, revision: next.Revision, epoch: entry.head.Epoch, operationID: operationID,
 		actor: actor, update: snapshot.Update, vector: snapshot.Vector, checkpoint: snapshot.Checkpoint}
 	next.Epoch, next.CRDTUpdate, next.StateVector = entry.head.Epoch, snapshot.Update, snapshot.Vector
 	next.replicaCommit.contribution = textContribution(next, &snapshot, actor, operationID)
@@ -108,7 +113,8 @@ func (s *Service) prepareTextTransition(ctx context.Context, next *Document, pre
 	return nil
 }
 
-func (s *Service) SubmitReplica(ctx context.Context, projectID, documentID string, in ReplicaSubmission) (*ReplicaResult, error) {
+func (c replicaCommitter) SubmitReplica(ctx context.Context, projectID, documentID string, in ReplicaSubmission) (*ReplicaResult, error) {
+	s := c.s
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	unlock := s.docLocks.lock(documentLockKey(documentID))
@@ -160,7 +166,8 @@ func (s *Service) SubmitReplica(ctx context.Context, projectID, documentID strin
 	return &ReplicaResult{Document: d, AcceptedRevision: d.Revision}, nil
 }
 
-func (s *Service) acceptReplica(ctx context.Context, d *Document, in ReplicaSubmission, inputDigest string) error {
+func (c replicaCommitter) acceptReplica(ctx context.Context, d *Document, in ReplicaSubmission, inputDigest string) error {
+	s := c.s
 	actor, err := s.personActor(ctx, actorUser, in.ClientID)
 	if err != nil {
 		return err
@@ -201,7 +208,7 @@ func (s *Service) acceptReplica(ctx context.Context, d *Document, in ReplicaSubm
 	d.Revision++
 	d.UpdatedAt = time.Now().UTC()
 	d.Epoch, d.CRDTUpdate, d.StateVector = entry.head.Epoch, in.Update, snapshot.Vector
-	d.replicaCommit = &replicaCommit{undoFloor: entry.undoFloor, revision: d.Revision, epoch: entry.head.Epoch, operationID: in.OperationID, actor: actor,
+	d.replicaCommit = &replicaCommit{replicaUndoCommit: replicaUndoCommit{undoFloor: entry.undoFloor}, revision: d.Revision, epoch: entry.head.Epoch, operationID: in.OperationID, actor: actor,
 		update: in.Update, vector: snapshot.Vector, checkpoint: snapshot.Checkpoint, inputDigest: inputDigest}
 	d.authorship = authorshipContext{sessionID: in.SessionID, turn: in.Turn}
 	d.replicaCommit.contribution = textContribution(d, &snapshot, actor, in.OperationID)

@@ -65,7 +65,8 @@ func (r *replicaRuntime) ensureEngine(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) loadReplica(ctx context.Context, d *Document) (*replicaEntry, error) {
+func (m replicaManager) loadReplica(ctx context.Context, d *Document) (*replicaEntry, error) {
+	s := m.s
 	r := &s.replicas
 	if err := r.ensureEngine(ctx); err != nil {
 		return nil, err
@@ -128,7 +129,8 @@ func (r *replicaRuntime) drop(ctx context.Context, handle uint32) {
 	}
 }
 
-func (s *Service) initializeReplica(ctx context.Context, d *Document) (*replicaEntry, error) {
+func (m replicaManager) initializeReplica(ctx context.Context, d *Document) (*replicaEntry, error) {
+	s := m.s
 	r := &s.replicas
 	client, err := randomReplicaID()
 	if err != nil {
@@ -174,12 +176,13 @@ func (s *Service) initializeReplica(ctx context.Context, d *Document) (*replicaE
 	return entry, nil
 }
 
-func (s *Service) replicaProjection(ctx context.Context, d *Document, vector []byte) error {
-	return s.projectReplica(ctx, d, func(*ReplicaHead) []byte { return vector })
+func (m replicaManager) replicaProjection(ctx context.Context, d *Document, vector []byte) error {
+	return m.projectReplica(ctx, d, func(*ReplicaHead) []byte { return vector })
 }
 
 // projectReplica chooses the client's vector once the replica head, which owns the epoch, is loaded.
-func (s *Service) projectReplica(ctx context.Context, d *Document, vectorFor func(head *ReplicaHead) []byte) error {
+func (m replicaManager) projectReplica(ctx context.Context, d *Document, vectorFor func(head *ReplicaHead) []byte) error {
+	s := m.s
 	s.projectWorkspacePresentation(ctx, d)
 
 	s.replicas.mu.Lock()
@@ -201,7 +204,8 @@ func (s *Service) projectReplica(ctx context.Context, d *Document, vectorFor fun
 	return nil
 }
 
-func (s *Service) Close(ctx context.Context) error {
+func (l *LifecycleService) Close(ctx context.Context) error {
+	s := l.s
 	s.ops.Lock()
 	defer s.ops.Unlock()
 	s.closePresence()

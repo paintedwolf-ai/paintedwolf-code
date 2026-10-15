@@ -8,7 +8,12 @@ import {
   createRowAccordion,
   RowAccordionProvider,
 } from "../../chat/transcript/presentation/row-accordion.ts";
-import { useTranscriptDisclosure } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
+import {
+  TranscriptDisclosurePanel,
+  TranscriptDisclosureShell,
+  TranscriptDisclosureToggle,
+  useTranscriptDisclosure,
+} from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import { useTranscriptDisclosureStore } from "../../chat/transcript/presentation/disclosure-state.tsx";
 import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
 import { useTranscriptViewport } from "../../chat/stream/transcript-viewport.tsx";
@@ -47,13 +52,8 @@ export function TranscriptDiffGroup(props: Props) {
     sessionId: props.sessionId ?? undefined,
     entryKey: props.entryKey,
   }));
-  const {
-    key: disclosureKey,
-    open,
-    onToggle,
-    onSummaryClick,
-    revealTemporarily,
-  } = useTranscriptDisclosure(() => transcriptDisclosureKey.diffGroup(props.entryKey));
+  const disclosure = useTranscriptDisclosure(() => transcriptDisclosureKey.diffGroup(props.entryKey));
+  const { open, onToggleClick, revealTemporarily } = disclosure;
   // Each file's choice lives in the transcript's open state, so it survives remounts.
   const localAccordion = createRowAccordion();
   const disclosures = useTranscriptDisclosureStore() ?? useTranscriptViewport()?.disclosures;
@@ -97,23 +97,21 @@ export function TranscriptDiffGroup(props: Props) {
     summary().files === 1 ? "1 file changed" : `${summary().files} files changed`;
   const writeLabel = () =>
     summary().writes === 1 ? "1 write" : `${summary().writes} writes`;
-  const handleSummaryClick: JSX.EventHandler<HTMLElement, MouseEvent> = (
+  const handleSummaryClick: JSX.EventHandler<HTMLButtonElement, MouseEvent> = (
     event,
   ) => {
-    const summary = event.currentTarget;
-    const details = summary.parentElement;
-    const expanding = details instanceof HTMLDetailsElement
-      ? heightToggleDirectionFor(details, details.open) === "open"
-      : !open();
+    const host = hostEl();
+    const expanding = host ? heightToggleDirectionFor(host, open()) === "open" : !open();
     const fold = props.folds[0];
     if (expanding && props.folds.length === 1 && fold) {
       accordion.open(fold.key);
     }
-    onSummaryClick(event);
+    onToggleClick(event);
   };
 
   return (
-    <details
+    <TranscriptDisclosureShell
+      disclosure={disclosure}
       ref={(el) => {
         bindTranscriptEntry(el);
         setHostEl(el);
@@ -122,11 +120,9 @@ export function TranscriptDiffGroup(props: Props) {
       data-testid="diff-group"
       data-files={summary().files}
       data-layout={props.layout}
-      data-disclosure-key={disclosureKey}
-      open={open()}
-      onToggle={onToggle}
     >
-      <summary
+      <TranscriptDisclosureToggle
+        disclosure={disclosure}
         onClick={handleSummaryClick}
         aria-label={`${fileLabel()}, ${summary().stat?.added ?? "pending"} added, ${
           summary().stat?.removed ?? "pending"
@@ -138,8 +134,8 @@ export function TranscriptDiffGroup(props: Props) {
           <span class="den-diff-group-writes">{writeLabel()}</span>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
         </span>
-      </summary>
-      <div class="den-diff-group-list">
+      </TranscriptDisclosureToggle>
+      <TranscriptDisclosurePanel disclosure={disclosure} class="den-diff-group-list">
         <RowAccordionProvider value={accordion}>
           <KeyedIndex each={props.folds} keyOf={(fold) => fold.key}>
             {(fold) => (
@@ -156,7 +152,7 @@ export function TranscriptDiffGroup(props: Props) {
             )}
           </KeyedIndex>
         </RowAccordionProvider>
-      </div>
-    </details>
+      </TranscriptDisclosurePanel>
+    </TranscriptDisclosureShell>
   );
 }
