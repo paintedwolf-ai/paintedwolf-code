@@ -40,15 +40,21 @@ type HistoryRequest struct {
 	Offset     int    `json:"offset,omitempty"`
 }
 
+type HistoryContinuation struct {
+	History HistoryRequest `json:"history"`
+	Limit   int            `json:"limit,omitempty"`
+}
+
 // HistoryPage is an ordinal index or a bounded recorded body.
 type HistoryPage struct {
-	Format        string         `json:"format,omitempty"`
-	Entries       []HistoryEntry `json:"entries"`
-	NextAfterOrd  int64          `json:"next_after_ord,omitempty"`
-	NextOffset    *int           `json:"next_offset,omitempty"`
-	ThroughOrd    int64          `json:"through_ord"`
-	SourceChanged bool           `json:"source_changed"`
-	Recorded      bool           `json:"recorded"`
+	NextRequest   *HistoryContinuation `json:"next_request,omitempty"`
+	Format        string               `json:"format,omitempty"`
+	Entries       []HistoryEntry       `json:"entries"`
+	NextAfterOrd  int64                `json:"next_after_ord,omitempty"`
+	NextOffset    *int                 `json:"next_offset,omitempty"`
+	ThroughOrd    int64                `json:"through_ord"`
+	SourceChanged bool                 `json:"source_changed"`
+	Recorded      bool                 `json:"recorded"`
 }
 
 // HistoryEntry retains observation coordinates without promoting their authority.
@@ -113,6 +119,7 @@ func (s *Service) history(ctx context.Context, req Request) (*Result, error) {
 			page.SourceChanged = true
 		}
 	}
+	page.NextRequest = historyContinuation(h, req.Limit, page)
 	out := &Result{Resolution: ResolutionMatched, ScopeStated: "this session only", History: page,
 		Count:     Count{Value: len(page.Entries), Relation: RelationExact},
 		Truncated: page.NextAfterOrd > 0 || page.NextOffset != nil}
@@ -134,6 +141,23 @@ func (s *Service) history(ctx context.Context, req Request) (*Result, error) {
 		out.Receipt.BytesReturned += len(entry.Content)
 	}
 	return out, nil
+}
+
+func historyContinuation(current *HistoryRequest, limit int, page *HistoryPage) *HistoryContinuation {
+	next := *current
+	switch {
+	case page.NextOffset != nil:
+		next.Offset = *page.NextOffset
+		next.Format = page.Format
+		if next.SourceSeq == 0 && len(page.Entries) == 1 {
+			next.SourceSeq = page.Entries[0].Seq
+		}
+	case page.NextAfterOrd > 0:
+		next.AfterOrd = page.NextAfterOrd
+	default:
+		return nil
+	}
+	return &HistoryContinuation{History: next, Limit: limit}
 }
 
 func historyIndex(ctx context.Context, tx *sql.Tx, session string, h *HistoryRequest, limit int, page *HistoryPage) error {

@@ -16,8 +16,8 @@ schema:
     history:
       type: object
       description: >-
-        Page transcript index or load a message body within through_ord. Cannot
-        combine with query or widen.
+        Page transcript index or load a message body within through_ord. Pass the
+        returned next_request to recall to continue. Cannot combine with query or widen.
       properties:
         search: {type: string, minLength: 1, maxLength: 256, description: "Up to eight literal terms, all required."}
         format: {type: string, enum: [text, record], description: "Body format. record includes original parts and arguments; concatenate pages before parsing."}

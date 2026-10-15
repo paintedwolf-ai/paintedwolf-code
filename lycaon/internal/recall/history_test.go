@@ -75,7 +75,10 @@ func TestHistoryPagesCanonicalRowsWithoutAnIndex(t *testing.T) {
 	if first.History.NextAfterOrd != 1 || first.History.Entries[0].MessageID != "old" {
 		t.Fatalf("wrong first page: %+v", first)
 	}
-	req.History.AfterOrd = first.History.NextAfterOrd
+	if first.History.NextRequest == nil || first.History.NextRequest.Limit != req.Limit {
+		t.Fatal("index page omitted its complete continuation request")
+	}
+	req.History = &first.History.NextRequest.History
 	next, err := f.svc.Answer(t.Context(), req)
 	testutil.FailErr(t, "continue index", err)
 	if next.History.Entries[0].MessageID != "large" || next.History.NextAfterOrd != 2 {
@@ -89,9 +92,15 @@ func TestHistoryPagesCanonicalRowsWithoutAnIndex(t *testing.T) {
 		testutil.FailErr(t, "recover body window", err)
 		recovered.WriteString(result.History.Entries[0].Content)
 		if result.History.NextOffset == nil {
+			if result.History.NextRequest != nil {
+				t.Fatal("complete body advertised another page")
+			}
 			break
 		}
-		req.History.Offset = *result.History.NextOffset
+		if result.History.NextRequest == nil || result.History.NextRequest.History.Offset != *result.History.NextOffset {
+			t.Fatal("body page omitted its exact continuation request")
+		}
+		req.History = &result.History.NextRequest.History
 	}
 	if recovered.String() != body {
 		t.Fatal("body windows changed recorded Unicode content")
