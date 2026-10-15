@@ -134,18 +134,18 @@ func TestOSVersionProbeComparesGlibcAfterTheOS(t *testing.T) {
 }
 
 func TestKernelReleaseKeepsLeadingNumericFields(t *testing.T) {
-	cases := map[string]string{
-		"6.2.0-39-generic":        "6.2.0",
-		"7.2.7-arch1-1":           "7.2.7",
-		"6.17.9-76061709-generic": "6.17.9",
-		" 5.15.0 ":                "5.15.0",
-		"6.1":                     "6.1",
+	cases := []struct{ raw, want string }{
+		{"6.2.0-39-generic", "6.2.0"},
+		{"7.2.7-arch1-1", "7.2.7"},
+		{"6.17.9-76061709-generic", "6.17.9"},
+		{" 5.15.0 ", "5.15.0"},
+		{"6.1", "6.1"},
 	}
-	for raw, want := range cases {
-		got, err := kernelRelease(raw)
-		testutil.FailErr(t, "normalise "+raw, err)
-		if got != want {
-			t.Fatalf("kernelRelease(%q) = %q, want %q", raw, got, want)
+	for _, c := range cases {
+		got, err := kernelRelease(c.raw)
+		testutil.FailErr(t, "normalise "+c.raw, err)
+		if got != c.want {
+			t.Fatalf("kernelRelease(%q) = %q, want %q", c.raw, got, c.want)
 		}
 	}
 	for _, raw := range []string{"garbage", "", "-generic", "."} {
