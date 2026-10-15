@@ -13,6 +13,53 @@ import (
 // MaxDeleteGroup bounds an atomic durable artifact deletion.
 const MaxDeleteGroup = 128
 
+// Delete tombstones the record and drops orphaned bytes.
+func (s *DurableStore) Delete(ctx context.Context, projectID, artifactID, reason string) (ArtifactDeleteResult, bool, error) {
+	if s == nil {
+		return ArtifactDeleteResult{}, false, fmt.Errorf("visual store not configured")
+	}
+	projectID = strings.TrimSpace(projectID)
+	artifactID = normalizeID(artifactID)
+	unlock := s.lockProjectStorage(projectID)
+	defer unlock()
+	rec, refs, err := s.records.SoftDelete(ctx, projectID, artifactID, reason)
+	if err != nil || rec.ID == "" {
+		return ArtifactDeleteResult{}, false, err
+	}
+	s.hot.forget(artifactID)
+	if dir, derr := s.artifactsDir(projectID); derr == nil {
+		s.removeBlobIfOrphan(ctx, projectID, dir, rec.ContentHash, rec.ID)
+	} else {
+		s.resetProjectStorageReconciliation(projectID)
+	}
+	deletedAt, _ := time.Parse(time.RFC3339Nano, rec.DeletedAt)
+	if refs == nil {
+		refs = []ArtifactReference{}
+	}
+	return ArtifactDeleteResult{ID: rec.ID, DeletedAt: deletedAt, References: refs}, true, nil
+}
+
+func (s *DurableStore) Discard(ctx context.Context, projectID, artifactID string) error {
+	if s == nil {
+		return fmt.Errorf("visual store not configured")
+	}
+	projectID = strings.TrimSpace(projectID)
+	artifactID = normalizeID(artifactID)
+	unlock := s.lockProjectStorage(projectID)
+	defer unlock()
+	rec, found, err := s.records.Discard(ctx, projectID, artifactID)
+	if err != nil || !found {
+		return err
+	}
+	s.hot.forget(artifactID)
+	if dir, derr := s.artifactsDir(projectID); derr == nil {
+		s.removeBlobIfOrphan(ctx, projectID, dir, rec.ContentHash, rec.ID)
+	} else {
+		s.resetProjectStorageReconciliation(projectID)
+	}
+	return nil
+}
+
 // DeleteGroup tombstones a reviewed group in one transaction, then reclaims unowned bodies.
 func (s *DurableStore) DeleteGroup(ctx context.Context, projectID string, artifactIDs []string, reason string) (int64, error) {
 	if s == nil {
@@ -40,7 +87,8 @@ func (s *DurableStore) DeleteGroup(ctx context.Context, projectID string, artifa
 	return int64(len(records)), nil
 }
 
-func (r *Records) softDeleteGroup(ctx context.Context, projectID string, ids []string, reason string) ([]ArtifactRecord, error) {
+func (c recordsCatalog) softDeleteGroup(ctx context.Context, projectID string, ids []string, reason string) ([]ArtifactRecord, error) {
+	r := c.r
 	if err := r.writable(); err != nil {
 		return nil, err
 	}
