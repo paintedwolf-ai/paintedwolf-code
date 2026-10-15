@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -117,6 +118,50 @@ func TestCommandFileWriteRecoveryUsesOnlyFrozenOfferedTools(t *testing.T) {
 			}
 			if !reflect.DeepEqual(ctx.Turn.TurnOfferedToolNames, tc.offered) {
 				t.Fatalf("offered snapshot mutated: %#v", ctx.Turn.TurnOfferedToolNames)
+			}
+		})
+	}
+}
+
+func TestExactReplacementUsesFrozenRecoverySurface(t *testing.T) {
+	wireFixtureGuidanceRenderer(t)
+	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
+	registry := tools.NewDefaultRegistry()
+	noop := func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil }
+	for _, name := range []string{"command", "wait", "request_tools"} {
+		testutil.FailErr(t, "register recovery fixture", registry.Register(name, noop))
+	}
+	executor := NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "implement")
+	for _, tc := range []struct {
+		name              string
+		offered, deferred []string
+		want              string
+	}{
+		{name: "offered", offered: []string{"command", "wait"}, want: "wait"},
+		{name: "deferred", offered: []string{"command", "request_tools"}, deferred: []string{"wait"}, want: "request_tools"},
+		{name: "unavailable", offered: []string{"command"}},
+		{name: "missing context"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := fixtureToolContext(t.TempDir())
+			ctx.Turn.TurnOfferedToolNames = tc.offered
+			ctx.Turn.TurnToolPlan = toolsurface.Compile(tc.offered, tc.deferred)
+			reject := executor.exactCommandReplacementReject(t.Context(), "command", "implement", map[string]any{"command": "sleep 2"}, ctx)
+			if tc.want == "" {
+				if reject != nil {
+					t.Fatalf("unreachable replacement: %#v", reject.Data)
+				}
+				return
+			}
+			if reject == nil {
+				t.Fatal("missing reachable recovery")
+			}
+			calls, _ := reject.Data["replacement_calls"].([]toolcommand.ReplacementCall)
+			if len(calls) != 1 || calls[0].Tool != tc.want {
+				t.Fatalf("recovery calls=%#v, want %s", calls, tc.want)
+			}
+			if tc.want == "request_tools" && calls[0].Args["need"] != "wait" {
+				t.Fatal("known deferred target lost exact loader need")
 			}
 		})
 	}
