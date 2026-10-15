@@ -116,3 +116,17 @@ func TestOllamaContextAdmissionCountsReplayedReasoning(t *testing.T) {
 		t.Fatal("foreign reasoning reached the provider")
 	}
 }
+
+func TestOllamaStrictBudgetRetryClampsFittedOutputAfterCalibration(t *testing.T) {
+	p := New("local", "http://unused.invalid", "", []modelinfo.Entry{{ID: "model", ContextLength: 16384}})
+	req := modelcall.CompletionRequest{Model: "model", MaxTokens: 2163, StrictBudget: true, Messages: []api.Message{
+		{Role: api.MessageRoleUser, Content: strings.Repeat("observation ", 3500)},
+	}}
+	p.observePromptTokens("model", 8000, 10000)
+	body, _, err := p.Prepare(t.Context(), req, true)
+	testutil.FailErr(t, "prepare strict retry after prompt calibration", err)
+	if body.Options.NumPredict <= 0 || body.Options.NumPredict >= req.MaxTokens {
+		t.Fatalf("strict retry num_predict = %d, want clamped below %d", body.Options.NumPredict, req.MaxTokens)
+	}
+}
+

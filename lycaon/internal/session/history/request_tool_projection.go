@@ -11,7 +11,7 @@ import (
 // projectRecordedToolBodies preserves active exchanges while moving large bodies behind recall.
 func projectRecordedToolBodies(rows []api.Message) []api.Message {
 	for i, row := range rows {
-		if row.Role != api.MessageRoleTool || row.ToolResult == nil || row.ID == "" || row.Ord <= 0 || len(row.Content) <= 2048 {
+		if !isOversizedToolBody(row) {
 			continue
 		}
 		content, fitted := tooloutput.FitWireJSON(row.Content, 2048)
@@ -21,7 +21,7 @@ func projectRecordedToolBodies(rows []api.Message) []api.Message {
 				Outcome   api.ToolResultOutcome `json:"outcome,omitempty"`
 				Record    recall.HistoryRequest `json:"record_request"`
 			}{true, row.ToolResult.Outcome, recall.HistoryRequest{ThroughOrd: row.Ord, MessageID: row.ID,
-				SourceSeq: row.Seq, Format: "record", BodyRunes: 1024}})
+				SourceSeq: row.Seq, Format: "record", BodyRunes: 2048}})
 			if err != nil {
 				continue
 			}
@@ -42,4 +42,23 @@ func projectRecordedToolBodies(rows []api.Message) []api.Message {
 		rows[i] = row
 	}
 	return rows
+}
+
+func hasOversizedToolBody(rows []api.Message) bool {
+	for _, row := range rows {
+		if isOversizedToolBody(row) {
+			return true
+		}
+	}
+	return false
+}
+
+func isOversizedToolBody(row api.Message) bool {
+	if row.Role != api.MessageRoleTool || row.ToolResult == nil || row.ID == "" || row.Ord <= 0 || len(row.Content) <= 2048 {
+		return false
+	}
+	if row.ToolResult.Tool == recall.ToolName && len(row.Content) <= 16384 {
+		return false
+	}
+	return true
 }

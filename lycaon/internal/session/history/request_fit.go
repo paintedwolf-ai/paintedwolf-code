@@ -54,6 +54,12 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 	frame := req
 	frame.Messages = projection.frame
 	frameBudget := measure(frame)
+	if req.MaxTokens <= 0 && ceiling-frameBudget.Input < 512 {
+		if availableAfterFrame := budget.Window - budget.Headroom - frameBudget.Input; availableAfterFrame > max(128, budget.MinimumOutput) {
+			reserve = max(max(128, budget.MinimumOutput), min(reserve, availableAfterFrame/2))
+			ceiling = budget.Window - budget.Headroom - reserve
+		}
+	}
 	fullHistory := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(projection.history))
 	capacity := max(1, (ceiling-frameBudget.Input)*fullHistory/max(1, budget.Input-frameBudget.Input))
 	record := m.requestContinuation(ctx, sess, projection.history)
@@ -61,7 +67,8 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 		if step == 11 {
 			capacity = 1
 		}
-		rows, err := m.fitRequestHistory(ctx, sess, projection.history, record, cfg, capacity, capacity <= 1)
+		shrinkTools := capacity <= 1 || hasOversizedToolBody(projection.history)
+		rows, err := m.fitRequestHistory(ctx, sess, projection.history, record, cfg, capacity, shrinkTools)
 		if err != nil {
 			return req, err
 		}
@@ -118,7 +125,7 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 		record.Window = cfg.ModelContextWindow
 		recall := m.recallAvailable != nil && m.recallAvailable(ctx, sess)
 		var err error
-		text, err = compaction.RenderContinuation(ctx, record, recall, max(1, tokens/3))
+		text, err = compaction.RenderContinuation(ctx, record, recall, max(192, tokens/3))
 		if err != nil {
 			return nil, err
 		}
@@ -148,6 +155,15 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 			Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted,
 			Content: text, ContextPinned: true}
 		fitted = compaction.DeterministicFit(cfg, append([]compaction.ContextMessage{reference}, contexts...), tokens)
+	}
+	if shrinkTools && text != "" {
+		kept := fitted[:0:0]
+		for _, row := range fitted {
+			if row.ID != "host-context-trim-notice" {
+				kept = append(kept, row)
+			}
+		}
+		fitted = kept
 	}
 	return compaction.ContextMessagesToAPI(fitted, rows), nil
 }

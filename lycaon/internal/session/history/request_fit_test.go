@@ -205,12 +205,16 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 	testutil.FailErr(t, "create active session", err)
 	args := map[string]any{"path": "observations.txt", "offset": float64(650), "limit": float64(151)}
 	body := strings.Repeat("Recorded observation. ", 6000)
+	recallBody := strings.Repeat("Recovered page. ", 200)
 	testutil.FailErr(t, "append active exchange", mem.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Read the observations"},
 		api.Message{ID: "call", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "read-call", Name: "read", Args: args}}},
 		api.Message{ID: "result", Role: api.MessageRoleTool, Content: body, TrustTier: api.ContentTrustTierTrusted,
 			ContentParts: []api.MessageContentPart{{Content: body, TrustTier: api.ContentTrustTierUntrusted}},
-			ToolResult:   &api.ToolResult{Tool: "read", ToolCallID: "read-call", AssistantMessageID: "call", ToolArgs: args, Content: body, Outcome: api.ToolResultOutcomeCompleted}}))
+			ToolResult:   &api.ToolResult{Tool: "read", ToolCallID: "read-call", AssistantMessageID: "call", ToolArgs: args, Content: body, Outcome: api.ToolResultOutcomeCompleted}},
+		api.Message{ID: "recall-call", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "rc-1", Name: "recall"}}},
+		api.Message{ID: "recall-result", Role: api.MessageRoleTool, Content: recallBody, TrustTier: api.ContentTrustTierUntrusted,
+			ToolResult: &api.ToolResult{Tool: "recall", ToolCallID: "rc-1", AssistantMessageID: "recall-call", Content: recallBody, Outcome: api.ToolResultOutcomeCompleted}}))
 	rows, err := mem.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "load active exchange", err)
 	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: strings.Repeat("Standing instructions. ", 850)}
@@ -220,7 +224,7 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 	testutil.FailErr(t, "fit active observation", err)
 	_, _, err = provider.Prepare(t.Context(), fitted, true)
 	testutil.FailErr(t, "prepare projected active observation", err)
-	call, result := false, false
+	call, result, recallKept := false, false, false
 	for _, row := range fitted.Messages {
 		if row.ID == "call" {
 			call = reflect.DeepEqual(row.ToolCalls, rows[1].ToolCalls)
@@ -231,9 +235,12 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 				t.Fatal("active projection lost recovery or promoted observation trust")
 			}
 		}
+		if row.ID == "recall-result" {
+			recallKept = row.Content == recallBody
+		}
 	}
-	if !call || !result {
-		t.Fatal("active projection changed call pairing, arguments, or outcome")
+	if !call || !result || !recallKept {
+		t.Fatal("active projection changed call pairing, arguments, outcome, or bounded recall result")
 	}
 	canonical, err := mem.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "reload original observation", err)

@@ -194,7 +194,7 @@ func (p *Provider) Prepare(ctx context.Context, req modelcall.CompletionRequest,
 	maxContext := p.ContextLimit(ctx, model)
 	// Keep automatic answer room inside the model's actual context window.
 	// An explicit request cap remains the caller's contract and must fit.
-	if req.MaxTokens == 0 && maxContext > 0 && numPredict > 0 {
+	if (req.MaxTokens == 0 || req.StrictBudget) && maxContext > 0 && numPredict > 0 {
 		available := maxContext - projectedPromptTokens - ollamaContextHeadroom
 		if available > 0 && numPredict > available {
 			numPredict = available
