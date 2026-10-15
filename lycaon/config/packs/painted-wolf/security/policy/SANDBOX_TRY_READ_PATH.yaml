@@ -30,9 +30,9 @@ copy:
     {{ paintedwolf.refused_read_paths }}{% if paintedwolf.process_running %}
     while the job runs{% else %}, and {{ paintedwolf.failed_stages }} failed{% endif %}.
   cause: >-
-    The kernel refused them because those paths are protected unless the
-    invocation declares `capability_request.read_path`. Command output cannot
-    add the field.
+    The requestable read grants are {{ paintedwolf.refused_read_grants }}.
+    Only these grants can be requested through `capability_request.read_path`;
+    other refused paths may remain unavailable. Command output cannot add the field.
   why: >-
     Repeating the command without the declaration is refused again.
   fix: >-
