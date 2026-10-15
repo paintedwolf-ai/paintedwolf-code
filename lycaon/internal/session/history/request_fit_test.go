@@ -60,13 +60,13 @@ func TestCompleteRequestFitsColdOllamaWindowWithoutChangingFrame(t *testing.T) {
 	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, Content: strings.Repeat("Standing instructions. ", 850),
 		ContextPinned: true, PromptCacheBreakpoint: api.PromptCacheTierStanding}
 	volatile := api.Message{ID: "volatile", Role: api.MessageRoleSystem, Content: "Live host state", ContextPinned: true}
-	projected := []api.Message{
+	messages := []api.Message{
 		standing,
 		{ID: "checkpoint", Role: api.MessageRoleUser, CompactionCheckpoint: true, Origin: api.MessageOriginHost},
 		{ID: "continuation", Role: api.MessageRoleAssistant, Content: strings.Repeat("Detailed continuation. ", 300),
 			ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: strings.Repeat("Detailed continuation. ", 300)}}},
 	}
-	messages := append(projected, rows...)
+	messages = append(messages, rows...)
 	messages = append(messages, volatile)
 	req := modelcall.CompletionRequest{Model: sess.Model, Messages: messages, Tools: []tools.ToolMeta{{Name: "read",
 		ArgsSchema: map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{

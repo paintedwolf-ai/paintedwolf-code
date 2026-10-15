@@ -10,8 +10,10 @@ import (
 
 // projectRecordedToolBodies preserves active exchanges while moving large bodies behind recall.
 func projectRecordedToolBodies(rows []api.Message) []api.Message {
-	for i, row := range rows {
+	out := make([]api.Message, 0, len(rows))
+	for _, row := range rows {
 		if !isOversizedToolBody(row) {
+			out = append(out, row)
 			continue
 		}
 		content, fitted, isHistory := projectRecallHistoryPage(row.Content, 2048)
@@ -26,6 +28,7 @@ func projectRecordedToolBodies(rows []api.Message) []api.Message {
 			}{true, row.ToolResult.Outcome, recall.HistoryRequest{ThroughOrd: row.Ord, MessageID: row.ID,
 				SourceSeq: row.Seq, Format: "record", BodyRunes: 2048}})
 			if err != nil {
+				out = append(out, row)
 				continue
 			}
 			content = string(raw)
@@ -42,9 +45,9 @@ func projectRecordedToolBodies(rows []api.Message) []api.Message {
 		result := *row.ToolResult
 		result.Content = content
 		row.ToolResult = &result
-		rows[i] = row
+		out = append(out, row)
 	}
-	return rows
+	return out
 }
 
 func projectRecallHistoryPage(raw string, maxBytes int) (string, bool, bool) {
