@@ -33,6 +33,8 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 		if budgets != nil {
 			budget = budgets.RequestBudget(ctx, provider, candidate)
 		}
+		transcript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(candidate.Messages))
+		budget.Input = max(budget.Input, m.Calibration(sess.ID).ProjectBilled(transcript, 0))
 		if budget.Window <= 0 {
 			budget.Window = cfg.ModelContextWindow
 			budget.Headroom = min(budget.Headroom, max(0, budget.Window/8))

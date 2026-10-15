@@ -327,3 +327,28 @@ func TestReviewFittingHonorsProviderHeadroom(t *testing.T) {
 	}
 }
 
+
+func TestRequestFittingReservesObservedInputUsage(t *testing.T) {
+	current := api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: strings.Repeat("Measured input. ", 600)}
+	rows := []api.Message{current}
+	req := modelcall.CompletionRequest{Model: "small", Messages: rows}
+	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 8192}})}
+	service := &Service{}
+	sess := &api.Session{ID: "observed", Model: "small"}
+	estimate := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(rows))
+	service.ObserveTokens(sess.ID, estimate*2, estimate)
+	fitted, err := service.FitRequest(t.Context(), sess, rows, req, budgets)
+	testutil.FailErr(t, "fit observed input usage", err)
+	budget := budgets.RequestBudget(t.Context(), "fixture", fitted)
+	observed := service.Calibration(sess.ID).ProjectBilled(compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(fitted.Messages)), 0)
+	if max(observed, budget.Input)+budget.Output+budget.Headroom > budget.Window {
+		t.Fatalf("observed input exceeded fitted window: observed=%d budget=%+v", observed, budget)
+	}
+	if !reflect.DeepEqual(rows, fitted.Messages) || fitted.MaxTokens <= 0 {
+		t.Fatal("output allocation changed the active instruction or was not bounded")
+	}
+	req.MaxTokens = 4096
+	if _, err := service.FitRequest(t.Context(), sess, rows, req, budgets); !errors.Is(err, failure.ErrProviderContextTooSmall) {
+		t.Fatalf("explicit output must not overcommit observed input: %v", err)
+	}
+}
