@@ -19,6 +19,7 @@ func TestRecordedRecallPageKeepsEnvelopeAndCursor(t *testing.T) {
 		Entries: []recall.HistoryEntry{{MessageID: "original", Ord: 1, Content: strings.Repeat("😀", 4096), Runes: 9000, Offset: 4096}}}
 	next := 8192
 	page.NextOffset = &next
+	page.NextRequest = &recall.HistoryContinuation{History: recall.HistoryRequest{Format: "record", ThroughOrd: 1, MessageID: "original", Offset: next}}
 	raw, err := json.Marshal(map[string]any{"history": page})
 	testutil.FailErr(t, "encode recall page", err)
 	content := "[recall#4]\n" + string(raw) + "\nrecorded suffix"
@@ -36,7 +37,7 @@ func TestRecordedRecallPageKeepsEnvelopeAndCursor(t *testing.T) {
 		t.Fatal("projection lost its recorded page")
 	}
 	entry := projected.History.Entries[0]
-	if *projected.History.NextOffset != entry.Offset+utf8.RuneCountInString(entry.Content) {
+	if projected.History.NextRequest == nil || projected.History.NextRequest.History.Offset != *projected.History.NextOffset || *projected.History.NextOffset != entry.Offset+utf8.RuneCountInString(entry.Content) {
 		t.Fatal("projection skipped recorded characters")
 	}
 }
@@ -58,10 +59,22 @@ func TestRecordedToolReferenceNamesRecoveryInvocation(t *testing.T) {
 	}
 	var history recall.HistoryRequest
 	testutil.FailErr(t, "decode model-facing recovery invocation", json.Unmarshal([]byte(encoded), &history))
-	if history.MessageID != row.ID || history.ThroughOrd != row.Ord || history.SourceSeq != row.Seq || history.Format != "record" || history.BodyRunes != 2048 {
+	if history.MessageID != row.ID || history.ThroughOrd != row.Ord || history.SourceSeq != row.Seq || history.Format != "text" || history.BodyRunes != 4096 {
 		t.Fatalf("recovery invocation lost canonical coordinates: %+v", history)
 	}
 	if len(projected.Content) > 2048 || row.Content != body || row.ToolResult.Content != body {
 		t.Fatal("recovery cue exceeded its projection budget or changed the original observation")
+	}
+}
+
+func TestStructuredToolProjectionKeepsItsRecoveryCue(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	raw, err := json.Marshal(map[string]any{"items": []any{strings.Repeat("observation ", 3000)}})
+	testutil.FailErr(t, "encode structured observation", err)
+	row := api.Message{ID: "original", Ord: 7, Role: api.MessageRoleTool, Content: string(raw),
+		ToolResult: &api.ToolResult{Tool: "inspect", Content: string(raw), Outcome: api.ToolResultOutcomeCompleted}}
+	content := projectRecordedToolBodies(t.Context(), []api.Message{row})[0].Content
+	if len(content) > 2048 || !strings.Contains(content, "recall(history=") || !strings.Contains(content, `"wire_compacted":true`) {
+		t.Fatalf("structured projection lost its cue, residue, or byte bound: %q", content)
 	}
 }

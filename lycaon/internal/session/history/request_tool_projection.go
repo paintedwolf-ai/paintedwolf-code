@@ -21,12 +21,9 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message) []api.Me
 			continue
 		}
 		content, fitted, isHistory := projectRecallHistoryPage(row.Content, 2048)
-		if !fitted && !isHistory {
-			content, fitted = tooloutput.FitWireJSON(row.Content, 2048)
-		}
 		if !fitted {
 			record := recall.HistoryRequest{ThroughOrd: row.Ord, MessageID: row.ID,
-				SourceSeq: row.Seq, Format: "record", BodyRunes: 2048}
+				SourceSeq: row.Seq, Format: "text", BodyRunes: 4096}
 			raw, err := json.Marshal(struct {
 				Compacted bool                  `json:"compacted"`
 				Outcome   api.ToolResultOutcome `json:"outcome,omitempty"`
@@ -44,6 +41,11 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message) []api.Me
 					"evidence_handles": row.EvidenceHandles, "history_json": string(historyJSON),
 				}); err == nil && rendered != "" && len(rendered) <= 2048 {
 					content = rendered
+				}
+			}
+			if !isHistory {
+				if partial, fitted := tooloutput.FitWireJSON(row.Content, 2048-len(content)-1); fitted {
+					content += "\n" + partial
 				}
 			}
 		}
@@ -99,6 +101,11 @@ func projectRecallHistoryPage(raw string, maxBytes int) (string, bool, bool) {
 			entry["content"] = trimmed
 			if next := offset + mid; mid < len(runes) || totalRunes > next || prevNext > next {
 				history["next_offset"] = next
+				if request, ok := history["next_request"].(map[string]any); ok {
+					if coordinates, ok := request["history"].(map[string]any); ok {
+						coordinates["offset"] = next
+					}
+				}
 				root["truncated"] = true
 			}
 			if receipt, ok := root["receipt"].(map[string]any); ok {
@@ -120,6 +127,11 @@ func projectRecallHistoryPage(raw string, maxBytes int) (string, bool, bool) {
 		if mid < len(entries) {
 			if last, ok := entries[mid-1].(map[string]any); ok {
 				history["next_after_ord"] = last["ord"]
+				if request, ok := history["next_request"].(map[string]any); ok {
+					if coordinates, ok := request["history"].(map[string]any); ok {
+						coordinates["after_ord"] = last["ord"]
+					}
+				}
 			}
 			root["truncated"] = true
 		}
