@@ -1814,6 +1814,12 @@
       "emit": "guard:read",
       "summary": "{{ tool }} could not open {{ paintedwolf.path }} — path does not exist under the attached project roots."
     },
+    "RECALL_HISTORY_INVALID": {
+      "branch_instruction": "Correct the history coordinates and retry",
+      "category": "recoverable",
+      "emit": "guard:recall",
+      "summary": "The history request was rejected: {{ paintedwolf.rejection_reason }}."
+    },
     "RECALL_LIVE_CODE_NOT_IN_SCOPE": {
       "branch_instruction": "Use an offered current-source tool, or report the missing evidence",
       "category": "recoverable",

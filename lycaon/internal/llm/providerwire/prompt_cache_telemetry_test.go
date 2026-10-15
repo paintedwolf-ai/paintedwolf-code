@@ -7,12 +7,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -255,5 +257,30 @@ func TestCacheIdentityIgnoresToolPresentationButTracksReplay(t *testing.T) {
 	f.req.Messages[2].ToolResult.Visual = &api.VisualArtifact{ID: "image", Mime: "image/png", Bytes: []byte{1}, Perceive: true}
 	if got := f.note(); got.Comparison != "history_changed" {
 		t.Fatalf("image was missed: %+v", got)
+	}
+}
+
+func TestCanonicalRecallKeepsStandingSchemaStableAcrossRecovery(t *testing.T) {
+	raw, err := config.Read(config.ToolSchemasDir + "/recall.yaml")
+	testutil.FailErr(t, "read shipped recall schema", err)
+	entry, err := toolschema.ParseEntry(raw)
+	testutil.FailErr(t, "parse shipped recall schema", err)
+	f := newCacheFixture()
+	f.req.Tools = []tools.ToolMeta{{Name: "recall", Description: entry.Description, ArgsSchema: entry.Schema}}
+	f.note()
+	before := cacheRequestIdentity(f.req, f.policy)
+	f.req.Messages = append(f.req.Messages,
+		api.Message{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "recovery", Name: "recall", Args: map[string]any{"history": map[string]any{"through_ord": 500, "message_id": "old"}}}}},
+		api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "recall", ToolCallID: "recovery", Content: `{"history":{"entries":[]}}`}, PromptCacheBreakpoint: api.PromptCacheTierHistory})
+	if got := f.note(); got.Comparison != "comparable" {
+		t.Fatalf("append-only recovery broke cache continuity: %+v", got)
+	}
+	after := cacheRequestIdentity(f.req, f.policy)
+	if !before.valid || !after.valid || before.tools != after.tools || before.standing != after.standing {
+		t.Fatal("recovery changed the standing schema or prompt")
+	}
+	f.req.Messages[len(f.req.Messages)-2].ToolCalls[0].Args["history"] = map[string]any{"through_ord": 500, "message_id": "corrected"}
+	if got := f.note(); got.Comparison != "history_changed" {
+		t.Fatalf("changed recovery coordinates were not tracked: %+v", got)
 	}
 }

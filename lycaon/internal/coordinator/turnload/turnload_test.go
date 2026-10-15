@@ -6,10 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestBundledCatalogValidates(t *testing.T) {
@@ -312,5 +314,24 @@ func TestBoundDescriptionAndUser(t *testing.T) {
 	}
 	if got := BoundUser("héllo wörld", 5); got != "héllo" {
 		t.Fatalf("BoundUser = %q", got)
+	}
+}
+
+func TestRecallGuideOmissionRetainsItsAuditedToolAttachment(t *testing.T) {
+	raw, err := config.Read(config.PlatformShared + "/units/native-recall-tool.md")
+	testutil.FailErr(t, "read recall unit", err)
+	unit, err := promptunit.Parse("native-recall-tool", raw)
+	testutil.FailErr(t, "parse recall unit", err)
+	catalog, err := LoadCatalog()
+	testutil.FailErr(t, "load turn policy", err)
+	fake := &decidetest.Fake{Answers: decide.Answers{"guides": {Kind: decide.KindMulti, Probabilities: map[string]float64{unit.ID: 0.01}, Confidence: 0.99}}}
+	candidates := GuideCandidates([]promptunit.Unit{unit})
+	decision := Decide(t.Context(), fake, catalog.Turn, State{User: "continue"}, candidates)
+	if _, ok := decision.Omitted[unit.ID]; !ok {
+		t.Fatal("recall guidance no longer follows its audited omission policy")
+	}
+	decision = Decide(t.Context(), fake, catalog.Turn, State{User: "continue", Loaded: []string{"recall"}}, candidates)
+	if _, ok := decision.Omitted[unit.ID]; ok {
+		t.Fatal("recall use did not restore its attached guidance")
 	}
 }
