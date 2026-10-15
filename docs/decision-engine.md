@@ -120,6 +120,10 @@ Cursors bind to the caller, request, and catalog. A changed catalog or invalid
 continuation requires repeating the original description. Tool catalogs contain
 only live, requestable entries on the current surface; skill catalogs use the
 caller's effective skills. Resource reads require an exact skill and cannot browse.
+An unknown tool-name rejection can supply the same bounded catalog from the
+current compiled surface. Exact selection and paging bypass ranking; a known
+deferred name instead receives the direct loading call. Recovery never claims
+a catalog is present when its complete feedback cannot fit provider projection.
 An empty catalog offers no new capability; existing tools remain usable.
 
 Selection budgets are 10 seconds for turn decisions, automatic skill ranking,
