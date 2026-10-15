@@ -35,7 +35,7 @@ jobs:
             --app "${RUNNER_TEMP}/staple-probe/mount/Painted Wolf Code.app" \
             --dmg "${RUNNER_TEMP}/staple-probe/rc1.dmg" --require-signed --json \
             > "${RUNNER_TEMP}/staple-probe/report.log" 2>&1
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
           name: release-staple-probe
