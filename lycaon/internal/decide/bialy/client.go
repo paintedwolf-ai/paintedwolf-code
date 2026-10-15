@@ -80,10 +80,10 @@ func (c *Client) Config() Config {
 }
 
 type process struct {
-	cmd     *exec.Cmd
-	cleanup func()
-	stdin   io.WriteCloser
-	writeMu sync.Mutex
+	cmd      *exec.Cmd
+	cleanup  func()
+	stdin    io.WriteCloser
+	admitted chan struct{}
 
 	pendingMu sync.Mutex
 	pending   map[int64]chan response
@@ -297,9 +297,10 @@ func startProcess(ctx context.Context, bin string, args []string) (*process, err
 			untrack()
 			cleanup()
 		},
-		stdin:   stdin,
-		pending: make(map[int64]chan response),
-		done:    make(chan struct{}),
+		stdin:    stdin,
+		admitted: make(chan struct{}, 1),
+		pending:  make(map[int64]chan response),
+		done:     make(chan struct{}),
 	}
 	go proc.read(stdout)
 	return proc, nil
@@ -325,6 +326,7 @@ func (p *process) read(stdout io.Reader) {
 		delete(p.pending, resp.ID)
 		p.pendingMu.Unlock()
 		if ch != nil {
+			<-p.admitted
 			ch <- resp
 		}
 	}
@@ -345,7 +347,20 @@ func (p *process) roundTrip(ctx context.Context, req request) (response, error) 
 		return response{}, err
 	}
 	select {
+	case p.admitted <- struct{}{}:
 	case <-p.done:
+		return response{}, p.exitErr
+	case <-ctx.Done():
+		return response{}, ctx.Err()
+	}
+	// Cancellation and process exit can race with admission.
+	if err := ctx.Err(); err != nil {
+		<-p.admitted
+		return response{}, err
+	}
+	select {
+	case <-p.done:
+		<-p.admitted
 		return response{}, p.exitErr
 	default:
 	}
@@ -359,9 +374,7 @@ func (p *process) roundTrip(ctx context.Context, req request) (response, error) 
 		return response{}, fmt.Errorf("decide: encode request: %w", err)
 	}
 	raw = append(raw, '\n')
-	p.writeMu.Lock()
 	_, err = p.stdin.Write(raw)
-	p.writeMu.Unlock()
 	if err != nil {
 		p.drop(req.ID)
 		return response{}, errors.Join(errEngineExited, err)
@@ -378,7 +391,7 @@ func (p *process) roundTrip(ctx context.Context, req request) (response, error) 
 	case <-p.done:
 		return response{}, p.exitErr
 	case <-ctx.Done():
-		p.drop(req.ID)
+		// Native work still owns admission until its matching response arrives.
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			return response{}, decide.ErrDeadline
 		}
@@ -388,7 +401,10 @@ func (p *process) roundTrip(ctx context.Context, req request) (response, error) 
 
 func (p *process) drop(id int64) {
 	p.pendingMu.Lock()
-	delete(p.pending, id)
+	if _, ok := p.pending[id]; ok {
+		delete(p.pending, id)
+		<-p.admitted
+	}
 	p.pendingMu.Unlock()
 }
 
