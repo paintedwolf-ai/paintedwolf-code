@@ -2,9 +2,14 @@ package toolfeedback
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
+	"encoding/json"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
@@ -19,7 +24,7 @@ func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
 			reject: &toolrejection.ToolReject{Code: "COMMAND_FAILURE_LOOP", Data: map[string]any{
 				"command": "cargo test", "count": 3,
 			}},
-			want: []string{"cargo test", "failed 3 times", "change the command"},
+			want: []string{"cargo test", "failed 3 times", "Change the command"},
 		},
 		{
 			tool: "command",
@@ -144,5 +149,37 @@ func TestSandboxCapabilityRejectsRenderGuidance(t *testing.T) {
 				t.Fatalf("%s left template syntax unrendered:\n%s", code, msg)
 			}
 		})
+	}
+}
+
+func TestCommandFailureSourceEvidenceIsConditional(t *testing.T) {
+	bp := stockBlockPlane(t)
+	for _, known := range []bool{false, true} {
+		err := bp.RejectObservation(t.Context(), "command", "coordinator", map[string]any{"command": "test -f ready.txt"}, &toolrejection.ToolReject{Code: "COMMAND_FAILURE_LOOP", Data: map[string]any{"command": "test -f ready.txt", "count": 3, "failure_source_unchanged": known}})
+		if err == nil {
+			t.Fatal("missing loop rejection")
+		}
+		refusal, ok := guidance.RefusalFromError(err)
+		if !ok {
+			t.Fatalf("not a structured refusal: %T", err)
+		}
+		result := guidance.ComposeToolResult(refusal.Body, refusal.Facts, nil)
+		result.Tool = "command"
+		result.ToolCallID = "failed-call"
+		projected := transcript.Project([]api.Message{{ID: "failure", Role: api.MessageRoleTool, Content: result.Content, ToolResult: result}})
+		wire, marshalErr := json.Marshal(projected)
+		if marshalErr != nil {
+			t.Fatalf("marshal provider projection: %v", marshalErr)
+		}
+		if !strings.Contains(string(wire), "failure_source_unchanged") {
+			t.Fatalf("provider lost source fact: %s", wire)
+		}
+		text := err.Error()
+		if strings.Contains(text, "workspace source is unchanged") != known || strings.Contains(text, "cannot authorize a source-only retry") == known {
+			t.Fatalf("known=%v: %s", known, text)
+		}
+		if !strings.Contains(text, "does not prove the cause is fixed") {
+			t.Fatalf("overstated source evidence: %s", text)
+		}
 	}
 }

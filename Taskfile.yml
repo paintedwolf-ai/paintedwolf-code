@@ -479,6 +479,18 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/den-webkit-scroll.sh
 
+  den:webkit:atspi:
+    desc: 'WebKitGTK accessibility text attributes: asks each supported WebKitGTK release for every text object''s attributes across the harness Den, as Orca does (Linux; optional releases, e.g. -- 2.54)'
+    preconditions:
+      - sh: command -v go
+        msg: Go required — see lycaon/go.mod
+      - sh: command -v bun
+        msg: bun required — https://bun.sh
+      - sh: command -v curl
+        msg: curl required for sidecar health wait
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/den-webkit-atspi.sh {{.CLI_ARGS}}
+
   den:harness:canary:
     desc: 'Minimal harness e2e slice (boot + driver chat + prompt) — the tier-is-alive check run by check:digest'
     preconditions:

@@ -1,4 +1,4 @@
-import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
+import { disclosureToggle, isDisclosureOpen, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { render, fireEvent } from "@solidjs/testing-library";
 import { ToolPartShell } from "./ToolPartShell.tsx";
@@ -130,5 +130,18 @@ describe("ToolPartShell open-state persistence", () => {
     expect(isDisclosureOpen(container.querySelector<HTMLElement>("[data-transcript-disclosure]"))).toBe(
       false,
     );
+  });
+});
+
+describe("ToolPartShell under the WebKitGTK AT-SPI workaround", () => {
+  it("shows the same collapsed card", async () => {
+    await expectSameCollapsedFace(() => {
+      const view = render(() => (
+        <TranscriptViewportProvider value={controller}>
+          <ToolPartShell part={part("tc-parity")} layout="chat" sessionId="s1">body</ToolPartShell>
+        </TranscriptViewportProvider>
+      ));
+      return { card: () => view.container.firstElementChild, unmount: view.unmount };
+    });
   });
 });

@@ -13,6 +13,7 @@ import {
   waitUntil,
 } from "../semantic-driver/core.ts";
 import { MAX_TEXT_SCALE, applyTextScale } from "../desktop/accessibility-text-size.ts";
+import { applyWebEngineFact, webkitAtspiWorkaroundActive } from "../desktop/webkit-atspi-workaround.ts";
 import {
   CHAT_STAGE_SELECTOR,
   LIVE_CHAT_STAGE_SELECTOR,
@@ -77,6 +78,8 @@ export interface HarnessApi {
   clickText(text: string): Promise<Json>;
   /** Inject OS text scale. Omit scale to use locked AccessibilityXXXL max. */
   setTextScale(scale?: number): Json;
+  /** Harness-only: stand in for the shell's web engine fact. */
+  setWebEngine(engine: string, version?: string | null): Json;
   /** Harness-only: push a user notice into the app store (e.g. spend-ceiling card). */
   publishNotice(input: NoticeInput, scope?: NoticeScope): Json;
   /** Harness-only: apply a preview SSE-shaped event into the live preview store. */
@@ -274,6 +277,7 @@ const HELP: Json = {
   a11y: [
     "setTextScale()                 // inject locked max AccessibilityXXXL scale",
     "setTextScale(1)                // restore Den baseline",
+    "setWebEngine(engine, version?) // stand in for the shell's web engine fact, e.g. 'webkitgtk'",
     "resize(720, 480)               // best-effort; dispatch resize epoch",
   ],
   playBothSides: {
@@ -490,6 +494,10 @@ export function installHarnessDriver(): void {
       return { ok: true, state: readState() };
     },
 
+    setWebEngine(engine, version = null) {
+      applyWebEngineFact({ engine, version });
+      return { ok: true, webkitAtspiWorkaround: webkitAtspiWorkaroundActive() };
+    },
     setTextScale(scale) {
       const next = typeof scale === "number" && Number.isFinite(scale) ? scale : MAX_TEXT_SCALE;
       applyTextScale(next);

@@ -128,7 +128,10 @@ deadlines in `decisions.yaml`. Caller cancellation still ends the operation; it
 does not trigger discovery. Startup warms an installed engine before serving, with its 90-second handshake
 budget. Missing weights are provisioned and warmed in a background one-shot;
 serving does not wait for that download, and decisions abstain while the
-checkpoint is unavailable.
+checkpoint is unavailable. The shared subprocess admits one physical request
+at a time. A caller deadline stops waiting but keeps that request's slot occupied
+until its native response or process exit; canceled admission waiters send nothing.
+This bounds abandoned work without changing ranking inputs or deadlines.
 
 ## Release vocabulary and retrieval
 
