@@ -94,6 +94,7 @@ func TestRecallRecoveryActionExplainsRecordRequestsAndPreservesExistingAction(t 
 		{"index", recall.Result{History: &recall.HistoryPage{Format: "index", Entries: []recall.HistoryEntry{{MessageID: "m"}}}}, "record_request"},
 		{"hit", recall.Result{NextAction: "Narrow the query.", Hits: []recall.Hit{{Record: &recall.HistoryRequest{MessageID: "m"}}}}, "record_request"},
 		{"body", recall.Result{Hits: []recall.Hit{{Body: []string{"already observed"}}}}, ""},
+		{"body with record", recall.Result{Hits: []recall.Hit{{Record: &recall.HistoryRequest{MessageID: "m"}, Body: []string{"already observed"}}}}, "record_request"},
 		{"page", recall.Result{NextRequest: &recall.HistoryContinuation{History: recall.HistoryRequest{MessageID: "m", Offset: 5}}}, "next_request"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

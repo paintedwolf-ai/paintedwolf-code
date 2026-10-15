@@ -19,7 +19,7 @@ func addRecallRecoveryAction(ctx context.Context, result *recall.Result) {
 		ref = "recall/record-request"
 	default:
 		for _, hit := range result.Hits {
-			if hit.Record != nil && len(hit.Body) == 0 {
+			if hit.Record != nil {
 				ref = "recall/record-request"
 				break
 			}
