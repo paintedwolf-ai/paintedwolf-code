@@ -341,6 +341,7 @@ func TestRequestFittingReservesObservedInputUsage(t *testing.T) {
 	testutil.FailErr(t, "fit observed input usage", err)
 	budget := budgets.RequestBudget(t.Context(), "fixture", fitted)
 	observed := service.Calibration(sess.ID).ProjectBilled(compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(fitted.Messages)), 0)
+	observed += (observed + 9) / 10
 	if max(observed, budget.Input)+budget.Output+budget.Headroom > budget.Window {
 		t.Fatalf("observed input exceeded fitted window: observed=%d budget=%+v", observed, budget)
 	}
