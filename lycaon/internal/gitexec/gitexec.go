@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 )
@@ -128,13 +129,28 @@ func run(ctx context.Context, projectDir string, args []string, opts Opts, stdou
 	if err := auditRepoConfig(ctx, cwd); err != nil {
 		return nil, -1, err
 	}
-	argv, err := buildArgv(ctx, cwd, opts, args)
+	argv, network, err := buildArgv(ctx, cwd, opts, args)
 	if err != nil {
 		return nil, -1, err
 	}
 	env, err := buildEnv(ctx, bin, opts)
 	if err != nil {
 		return nil, -1, err
+	}
+	if opts.Profile == ProfileNetwork {
+		plan, err := NetworkProxyPlan(network.remote)
+		if err != nil {
+			return nil, -1, err
+		}
+		env = append(env, plan.Environment()...)
+	}
+	if network.helper == hostHelperVault {
+		socket, stop, err := credentialServiceFn(ctx, bin)
+		if err != nil {
+			return nil, -1, fmt.Errorf("gitexec: start credential service: %w", err)
+		}
+		defer func() { _ = stop() }()
+		env = append(env, gitcredential.SocketEnv+"="+socket)
 	}
 
 	timeout := opts.Timeout
@@ -194,10 +210,18 @@ func validateProjectDir(projectDir string) (string, error) {
 	return root, nil
 }
 
-func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]string, error) {
+// networkFacts are what a network invocation needs beyond its argv.
+type networkFacts struct {
+	// remote is the URL the invocation contacts, when it can be determined.
+	remote string
+	helper hostHelper
+}
+
+func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]string, networkFacts, error) {
+	var network networkFacts
 	prefix, err := neutralizeArgs(resolveSSHCommand(ctx))
 	if err != nil {
-		return nil, err
+		return nil, network, err
 	}
 	// Override order is security-sensitive.
 	out := append([]string{}, prefix...)
@@ -210,21 +234,22 @@ func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]str
 		out = append(out, "-c", kv)
 	}
 	if opts.Profile == ProfileNetwork {
+		network.remote = strings.TrimSpace(opts.RemoteURL)
+		if network.remote == "" {
+			network.remote = remoteURLFor(ctx, cwd, args)
+		}
 		if h := getHostConfig(); h != nil {
-			remote := strings.TrimSpace(opts.RemoteURL)
-			if remote == "" {
-				remote = remoteURLFor(ctx, cwd, args)
+			resolved, selected, err := resolveCredentialHelper(h.HelperFor(ctx, network.remote))
+			if err != nil {
+				return nil, networkFacts{}, err
 			}
-			if helper := strings.TrimSpace(h.HelperFor(ctx, remote)); helper != "" {
-				resolved, err := resolveCredentialHelper(helper)
-				if err != nil {
-					return nil, err
-				}
+			if resolved != "" {
 				out = append(out, "-c", "credential.helper="+resolved)
+				network.helper = selected
 			}
 		}
 	}
-	return append(out, diffDriverFlagArgs(args)...), nil
+	return append(out, diffDriverFlagArgs(args)...), network, nil
 }
 
 func gitExecPath(bin string) string {

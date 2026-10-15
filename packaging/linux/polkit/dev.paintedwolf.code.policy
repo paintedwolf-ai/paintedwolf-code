@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+  <vendor>Painted Wolf Code</vendor>
+  <vendor_url>https://paintedwolf.ai</vendor_url>
+
+  <action id="dev.paintedwolf.code.confirm-presence">
+    <description>Confirm that you are at this computer</description>
+    <message>Painted Wolf Code needs to confirm it is you</message>
+    <defaults>
+      <allow_any>auth_self</allow_any>
+      <allow_inactive>auth_self</allow_inactive>
+      <allow_active>auth_self</allow_active>
+    </defaults>
+  </action>
+</policyconfig>
