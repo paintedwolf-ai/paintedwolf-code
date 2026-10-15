@@ -5,6 +5,7 @@ use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
 use gtk::gio;
+use gtk::gio::prelude::*;
 use gtk::glib::{self, ToVariant, Variant, VariantTy};
 use tauri::{AppHandle, Emitter};
 
