@@ -20,7 +20,7 @@ import (
 
 func runDiagnostics(ctx context.Context, args []string) error {
 	if len(args) == 3 && args[0] == "upgrade-fixture-verify" {
-		return upgradefixture.Verify(ctx, args[1], args[2])
+		return upgradefixture.Verify(ctx, args[1], args[2]) //nolint:gosec // G602 — guarded by len(args) == 3
 	}
 	if len(args) == 1 && args[0] == "schema-baseline" {
 		baseline, err := db.CurrentBaseline(ctx)

@@ -3,6 +3,7 @@ package visualscreen
 import (
 	"image"
 	"image/color"
+	"math"
 	"strconv"
 )
 
@@ -63,11 +64,15 @@ func grayOf(c color.Color) byte {
 		return 255
 	}
 	if a < 0xffff {
-		r = r + (0xffff - a)
-		g = g + (0xffff - a)
-		b = b + (0xffff - a)
+		r += 0xffff - a
+		g += 0xffff - a
+		b += 0xffff - a
 		r, g, b = min(r, 0xffff), min(g, 0xffff), min(b, 0xffff)
 	}
 	// Rec. 601 luma on 16-bit channels, reduced to 8 bits.
-	return byte((299*r + 587*g + 114*b) / 1000 >> 8)
+	luma := (299*r + 587*g + 114*b) / 1000 >> 8
+	if luma > math.MaxUint8 {
+		luma = math.MaxUint8
+	}
+	return byte(luma)
 }

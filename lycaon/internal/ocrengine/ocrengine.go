@@ -156,7 +156,7 @@ func verifyRoot(root string, pin *Pin, plat PlatformPin) (Engine, error) {
 }
 
 func verifyPayload(path string, payload Payload) error {
-	f, err := os.Open(path) //nolint:gosec // G304 — fixed payload name under a candidate root
+	f, err := os.Open(path)
 	if err != nil {
 		return &UnavailableError{Reason: ReasonMissing, Path: path}
 	}
