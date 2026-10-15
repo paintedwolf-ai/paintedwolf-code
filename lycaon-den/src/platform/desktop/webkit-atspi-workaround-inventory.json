@@ -3,23 +3,31 @@
   "mechanisms": {
     "content-hidden-until-shown-leaves-the-dom": {
       "summary": "Content hidden until a card opens or a row is hovered or focused is not rendered while hidden.",
-      "sites": ["chat/transcript/presentation/transcript-disclosure.tsx", "components/nav/FocusedSessionList.tsx", "styling/chrome/session-navigation.css"]
+      "sites": [
+        "chat/transcript/presentation/transcript-disclosure.tsx",
+        "components/nav/FocusedSessionList.tsx",
+        "styling/chrome/session-navigation.css"
+      ]
     },
     "drawn-input-hint": {
       "summary": "A textarea draws its hint while empty instead of carrying a placeholder.",
-      "sites": ["components/home/HomeView.tsx", "styling/chrome/home.css"]
+      "sites": [
+        "components/home/HomeView.tsx",
+        "styling/chrome/home.css"
+      ]
     },
     "loading-text-leaves-after-fade": {
       "summary": "A loading layer's text is removed once the layer has faded out.",
-      "sites": ["files/components/ProjectFilesView.tsx"]
+      "sites": [
+        "files/components/ProjectFilesView.tsx"
+      ]
     },
     "responsive-hide-keeps-a-box": {
       "summary": "Text hidden at a narrow width stays rendered in a visually hidden box.",
-      "sites": ["styling/search/detail-domain.css", "styling/tools/activity-utilities.css"]
-    },
-    "selectable-text": {
-      "summary": "All text stays selectable.",
-      "sites": ["styling/ui-chrome.css"]
+      "sites": [
+        "styling/search/detail-domain.css",
+        "styling/tools/activity-utilities.css"
+      ]
     }
   }
 }
