@@ -9,15 +9,15 @@ import (
 
 func TestAgentVocabularyRequiresStableSignaturesAndRetirementSuccessors(t *testing.T) {
 	for _, tc := range []struct {
-		name, kind, oldType, newType, want string
-		removed, retired, reused, missing  bool
+		name, oldType, newType, want      string
+		removed, retired, reused, missing bool
 	}{
 		{name: "unchanged", oldType: "bool", newType: "bool"},
 		{name: "type change", oldType: "bool", newType: "string", want: "signature"},
 		{name: "undeclared removal", oldType: "bool", removed: true, want: "without a named successor"},
 		{name: "named retirement", oldType: "bool", removed: true, retired: true},
 		{name: "missing successor", oldType: "bool", removed: true, retired: true, missing: true, want: "unavailable successor"},
-		{name: "reused name", oldType: "bool", newType: "bool", retired: true, reused: true, want: "was reused"},
+		{name: "reused name", oldType: "bool", newType: "bool", retired: true, want: "was reused"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			before := map[string]factSignature{"old": {Name: "old", Type: tc.oldType}}

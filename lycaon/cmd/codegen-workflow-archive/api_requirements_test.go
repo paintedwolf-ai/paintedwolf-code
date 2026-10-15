@@ -13,10 +13,11 @@ import (
 
 func TestWorkflowCapabilitiesRequireTheirAPIEpoch(t *testing.T) {
 	for _, tc := range []struct {
-		name, body string
-		archive    bool
+		name, body, path string
+		archive          bool
 	}{
 		{name: "archive", archive: true, body: "id: example\n"},
+		{name: "template report retries", body: "controls:\n  report:\n    retries: 4\n", path: "workflows/_templates/example.yaml"},
 		{name: "report retries", body: "controls:\n  report:\n    retries: 4\n"},
 		{name: "phase retries", body: "phases:\n  - controls:\n      retries: 4\n"},
 		{name: "task charter", body: "phases:\n  - fanout:\n      require_task_charter: false\n"},
@@ -28,7 +29,11 @@ func TestWorkflowCapabilitiesRequireTheirAPIEpoch(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root := t.TempDir()
-			file := filepath.Join(root, "workflows", "example", "workflow.yaml")
+			rel := tc.path
+			if rel == "" {
+				rel = "workflows/example/workflow.yaml"
+			}
+			file := filepath.Join(root, filepath.FromSlash(rel))
 			testutil.FailErr(t, "create workflow", os.MkdirAll(filepath.Dir(file), 0o750))
 			testutil.FailErr(t, "write workflow", os.WriteFile(file, []byte(tc.body), 0o600))
 			if tc.archive {

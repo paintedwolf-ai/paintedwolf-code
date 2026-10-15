@@ -78,7 +78,7 @@ func checkPackAPI(root string, manifest extpacks.Manifest) error {
 			}
 			return nil
 		}
-		if _, _, ok := workflowPath(packsRoot + "/" + manifest.ID + "/" + rel); !ok {
+		if !strings.HasPrefix(extpacks.UnitIDFor(manifest.ID, rel), extpacks.WorkflowUnitIDPrefix) {
 			return nil
 		}
 		raw, err := os.ReadFile(file)
