@@ -128,13 +128,16 @@ type supervisor struct {
 	// inner helper hands over before the target can run. Later handoffs are
 	// refused: only a process that took over the inner helper could send one.
 	setupDone bool
+	// refusals reports each refused call to the action's feed.
+	refusals *refusalLines
 }
 
-func newSupervisor(control *os.File, network Network) *supervisor {
+func newSupervisor(control *os.File, network Network, refusals io.Writer) *supervisor {
 	factory := newSocketFactory(control)
 	return &supervisor{
 		control: control, network: network, factory: factory,
 		relays: newDatagramRelays(network, factory), host: newHostSockets(),
+		refusals: &refusalLines{w: refusals},
 	}
 }
 
@@ -216,7 +219,7 @@ func (s *supervisor) accept(h handoff, fd int) {
 	case handoffGateway:
 		_ = unix.SetNonblock(fd, true)
 		tun := os.NewFile(uintptr(fd), "sandbox-gateway")
-		s.run(tun, func() { serveGateway(tun, s.network) })
+		s.run(tun, func() { serveGateway(tun, s.network, s.refusals) })
 	case handoffNotify:
 		s.setupDone = true
 		s.run(nil, func() { s.serveNotifications(fd) })
