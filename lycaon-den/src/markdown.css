@@ -34,6 +34,11 @@
   margin: 0 0 var(--transcript-paragraph-gap);
   padding-left: var(--transcript-list-indent);
 }
+/* The element reset strips list markers; prose lists keep them. */
+.markdown-body ul { list-style: disc; }
+.markdown-body ul ul { list-style-type: circle; }
+.markdown-body ol { list-style: decimal; }
+.markdown-body li:has(> input[type="checkbox"]) { list-style: none; }
 .markdown-body li { margin: var(--transcript-list-item-gap) 0; }
 .markdown-body li > p { margin: var(--transcript-list-item-gap) 0; }
 

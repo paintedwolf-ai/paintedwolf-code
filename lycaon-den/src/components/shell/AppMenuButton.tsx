@@ -14,20 +14,23 @@ import { bindChromeContextMenu } from "../context-menu-open.ts";
  */
 export function AppMenuButton(props: { side: WindowChromeSide }) {
   const [items, setItems] = createSignal<ContextMenuItem[] | null>(null);
+  const [fromKeyboard, setFromKeyboard] = createSignal(false);
   let trigger: HTMLButtonElement | undefined;
   const close = () => setItems(null);
-  const open = () => {
+  const open = (keyboard: boolean) => {
     trigger?.focus({ preventScroll: true });
+    setFromKeyboard(keyboard);
     // The spec is read as the menu opens, so enablement is current.
     setItems(inWindowAppMenuItems());
   };
-  const toggle = () => (items() ? close() : open());
-  const binding = bindChromeContextMenu(open);
+  const toggle = (keyboard: boolean) => (items() ? close() : open(keyboard));
+  const binding = bindChromeContextMenu(() => open(false));
   const menu = () => {
     const entries = items();
-    return trigger && entries ? { anchor: trigger, entries } : null;
+    return trigger && entries ? { anchor: trigger, entries, keyboard: fromKeyboard() } : null;
   };
-  createEffect(on(appMenuOpenRequests, toggle, { defer: true }));
+  // F10 opens the menu like a menu bar, with its first entry current.
+  createEffect(on(appMenuOpenRequests, () => toggle(true), { defer: true }));
 
   return (
     <>
@@ -42,11 +45,11 @@ export function AppMenuButton(props: { side: WindowChromeSide }) {
         ref={(el) => {
           trigger = el;
         }}
-        onClick={toggle}
+        onClick={() => toggle(false)}
         onKeyDown={binding.onKeyDown}
         onContextMenu={binding.onContextMenu}
       >
-        <ThemeIcon slot="app-menu" size={12} />
+        <ThemeIcon slot="app-menu" size={16} />
       </button>
       <Show when={menu()} keyed>
         {(menu) => (
@@ -54,6 +57,7 @@ export function AppMenuButton(props: { side: WindowChromeSide }) {
             anchor={menu.anchor}
             items={menu.entries}
             label="App menu"
+            keyboard={menu.keyboard}
             align={props.side === "left" ? "start" : "end"}
             gap={6}
             onDismiss={close}

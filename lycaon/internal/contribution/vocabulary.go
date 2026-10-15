@@ -289,6 +289,8 @@ var facts = map[string]FactSpec{
 	// Peer-window observables.
 	"peer_open_available": {Plane: PlaneShell},
 	"peer_views_present":  {Plane: PlaneShell},
+	// The system package installs and owns the pw command.
+	"shell_command_packaged": {Plane: PlaneShell},
 }
 
 // Facts returns the condition vocabulary sorted by fact id.
