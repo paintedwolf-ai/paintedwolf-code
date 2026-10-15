@@ -333,6 +333,9 @@ func summarizePacks(
 			sum.Integrity = pc.Locked.Integrity
 			sum.Dependencies = make(map[string]string, len(pc.Locked.Dependencies))
 			for dependencyID, version := range pc.Locked.Dependencies {
+				if IsStockPackID(dependencyID) {
+					version = versions[dependencyID]
+				}
 				sum.Dependencies[dependencyID] = version
 			}
 		}
