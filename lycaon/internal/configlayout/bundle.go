@@ -55,11 +55,34 @@ func MacOSAppContents(executable string) string {
 	return filepath.FromSlash(strings.TrimSuffix(real, suffix) + "/Contents")
 }
 
+// LinuxInstallRoot is where the native package installs the host.
+const LinuxInstallRoot = "/opt/painted-wolf-code"
+
+// LinuxEngineRootDirName is the payload directory under the install root.
+const LinuxEngineRootDirName = "engine-root"
+
 func engineRootForExecutable(executable, goos string) string {
-	if goos == "darwin" {
+	switch goos {
+	case "darwin":
 		if contents := MacOSAppContents(executable); contents != "" {
 			return filepath.Join(contents, "Resources", "engine-root")
 		}
+	case "linux":
+		return linuxEngineRootForExecutable(executable, LinuxInstallRoot)
 	}
 	return ""
+}
+
+// linuxEngineRootForExecutable recognises a host launched from the package's
+// bin directory, including through a symlink on PATH.
+func linuxEngineRootForExecutable(executable, installRoot string) string {
+	real, err := filepath.EvalSymlinks(executable)
+	if err != nil || !filepath.IsAbs(real) {
+		return ""
+	}
+	binDir := filepath.Join(filepath.Clean(installRoot), "bin") + string(filepath.Separator)
+	if !strings.HasPrefix(filepath.Clean(real), binDir) {
+		return ""
+	}
+	return filepath.Join(filepath.Clean(installRoot), LinuxEngineRootDirName)
 }

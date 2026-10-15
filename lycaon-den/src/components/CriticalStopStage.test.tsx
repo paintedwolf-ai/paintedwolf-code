@@ -89,7 +89,7 @@ const BLOCKED_REPORT: PreflightReport = {
       tier: "catastrophic",
       resolution: "below_floor",
       code: "OS_BELOW_FLOOR",
-      title: "Unsupported macOS",
+      title: "Unsupported operating system",
       message: "Needs macOS 14 or newer.",
       suggested_action: "Update macOS, then reopen the app.",
     },

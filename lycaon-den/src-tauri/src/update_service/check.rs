@@ -138,12 +138,13 @@ pub(super) async fn run_check(app: &AppHandle, automatic: bool) -> Result<Check,
         return Ok(Check::Skipped(inner.state.clone()));
     }
     let bucket = inner.preferences.rollout_bucket;
-    let (source, _, source_error) = super::persistence::detect_install_source();
-    inner.state.install_source = source;
+    let facts = super::persistence::detect_install_source();
+    inner.state.install_source = facts.source;
+    inner.state.package = facts.package;
     let now = super::now();
     apply_offer(&mut inner.state, checked, automatic, bucket, now);
-    if source_error.is_some() {
-        inner.state.last_error = source_error;
+    if facts.error.is_some() {
+        inner.state.last_error = facts.error;
     }
     if failure
         .as_ref()

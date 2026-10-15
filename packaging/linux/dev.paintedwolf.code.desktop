@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=1.4
+Name=Painted Wolf Code
+Comment=Agentic coding assistant with a local security engine
+Exec=/opt/painted-wolf-code/bin/painted-wolf-code %U
+TryExec=/opt/painted-wolf-code/bin/painted-wolf-code
+Icon=painted-wolf-code
+Terminal=false
+Categories=Development;IDE;
+Keywords=code;agent;review;security;
+StartupNotify=true
+StartupWMClass=dev.paintedwolf.code

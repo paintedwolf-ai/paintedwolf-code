@@ -11,6 +11,10 @@ pub const DOWNLOAD_ORIGIN: &str = "https://downloads.paintedwolf.dev";
 pub enum InstallSource {
     HomebrewCask,
     DirectDownload,
+    /// A Linux .deb or .rpm installation; the package manager owns updates.
+    SystemPackage,
+    /// A Linux build no package owns: a developer or scratch installation.
+    Unpackaged,
     Unknown,
 }
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -140,6 +144,8 @@ pub struct NativeUpdateState {
     #[serde(skip)]
     pub diagnostic_error: Option<UpdateError>,
     pub install_source: InstallSource,
+    /// The owning package when `install_source` is `SystemPackage`.
+    pub package: Option<crate::linux_install::InstalledPackage>,
     pub capabilities: Capabilities,
     pub discovery: Discovery,
     pub candidate: Option<Candidate>,
@@ -170,6 +176,7 @@ impl NativeUpdateState {
             development: false,
             diagnostic_error: None,
             install_source,
+            package: None,
             capabilities: Capabilities::default(),
             discovery: Discovery::Idle,
             candidate: None,
@@ -228,8 +235,13 @@ impl NativeUpdateState {
             blocked_reason: if !direct {
                 Some(
                     match self.install_source {
-                        InstallSource::HomebrewCask => "package_managed",
-                        _ => "install_source_unavailable",
+                        InstallSource::HomebrewCask | InstallSource::SystemPackage => {
+                            "package_managed"
+                        }
+                        InstallSource::Unpackaged => "unpackaged_installation",
+                        InstallSource::DirectDownload | InstallSource::Unknown => {
+                            "install_source_unavailable"
+                        }
                     }
                     .into(),
                 )
@@ -278,11 +290,42 @@ mod availability_tests {
         for source in [
             InstallSource::DirectDownload,
             InstallSource::HomebrewCask,
+            InstallSource::SystemPackage,
+            InstallSource::Unpackaged,
             InstallSource::Unknown,
         ] {
             let mut state = NativeUpdateState::new("1.0.2".into(), UpdateChannel::Stable, source);
             state.refresh_capabilities(false);
             assert!(state.capabilities.can_check);
         }
+    }
+
+    #[test]
+    fn system_packages_report_package_management_without_native_installation() {
+        let mut state = NativeUpdateState::new(
+            "1.0.2".into(),
+            UpdateChannel::Stable,
+            InstallSource::SystemPackage,
+        );
+        state.candidate = Some(super::super::tests::candidate("1.1.0"));
+        state.refresh_capabilities(true);
+        assert_eq!(
+            state.capabilities.blocked_reason.as_deref(),
+            Some("package_managed")
+        );
+        assert!(state.capabilities.can_check);
+        assert!(!state.capabilities.can_download);
+        assert!(!state.capabilities.can_restart_to_update);
+        assert!(!state.capabilities.can_install_automatically);
+        state.install_source = InstallSource::Unpackaged;
+        state.refresh_capabilities(true);
+        assert_eq!(
+            state.capabilities.blocked_reason.as_deref(),
+            Some("unpackaged_installation")
+        );
+        assert!(!state.capabilities.can_download);
+        let value = serde_json::to_value(&state).unwrap();
+        assert_eq!(value["install_source"], "unpackaged");
+        assert!(value["package"].is_null());
     }
 }

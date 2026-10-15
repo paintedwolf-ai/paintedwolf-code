@@ -9,7 +9,7 @@
 - **Security by construction** — attached roots define read/write scope, egress is mediated, approvals are requested when an effect needs authority. See [security](docs/security.md).
 - **Extensible** — first-party Go tools, confined MCP providers, detection packs, and extension packs; composition is data, not runtime branches. See [extend](docs/extend.md).
 
-The public release target is **macOS 13 (Ventura) or later on Apple Silicon**. The same release cadence also produces candidate Linux AppImages for **x86_64 and aarch64** on the Ubuntu 22.04 baseline and a signed Windows x86_64 NSIS installer; candidate artifacts are not linked or offered through the updater. Platform and publication-state SSOT: [`packaging/release-platforms.json`](packaging/release-platforms.json); release details: [`docs/dev-tasks.md`](docs/dev-tasks.md#release--versioning).
+The public release target is **macOS 13 (Ventura) or later on Apple Silicon**. The same release cadence also produces candidate Linux packages, a `.deb` and an `.rpm` for **x86_64 and aarch64**, and a signed Windows x86_64 NSIS installer; candidate artifacts are not linked or offered through the updater. Platform and publication-state SSOT: [`packaging/release-platforms.json`](packaging/release-platforms.json); release details: [`docs/dev-tasks.md`](docs/dev-tasks.md#release--versioning).
 
 ## Features
 
@@ -24,6 +24,15 @@ The public release target is **macOS 13 (Ventura) or later on Apple Silicon**. T
 ## Getting started
 
 Painted Wolf Code ships as a desktop app. Releases are published on the [Releases](https://github.com/paintedwolf-ai/paintedwolf-code/releases) page; candidates for Linux and Windows are built per release but not linked or offered through the updater.
+
+On Linux, install the package for your distribution family and update it through the package manager; the app checks for new releases and shows the exact `apt` or `dnf` command instead of installing anything itself:
+
+```sh
+sudo apt install ./painted-wolf-code_v<version>_linux-x86_64.deb   # Ubuntu 24.04+, Debian 13+
+sudo dnf install ./painted-wolf-code_v<version>_linux-x86_64.rpm   # Fedora 41+, RHEL 10+ compatibles
+```
+
+The package installs the engine under `/opt/painted-wolf-code`, the `pw` and `pw-logs` commands in `/usr/bin`, and a desktop entry; it needs kernel 6.2+, glibc 2.35+, and WebKitGTK 4.1 (2.44+). See [Linux packages](docs/dev-tasks.md#linux-packages).
 
 1. Download the release for your platform from the [Releases](https://github.com/paintedwolf-ai/paintedwolf-code/releases) page.
 2. Launch the app. The Go sidecar starts with it — no separate service to run.

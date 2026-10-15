@@ -6,10 +6,16 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// osComponent names the compared system version in floor verdicts.
+const osComponent = "macos"
+
 // osProductVersion reads the macOS marketing version from the kernel.
 var osProductVersion = func() (string, error) {
 	return unix.Sysctl("kern.osproductversion")
 }
+
+// Darwin has no glibc, so the version probe has no C library to compare.
+var libcVersion func() (string, error)
 
 // freeBytes reports space available to an unprivileged user on path's volume.
 // Bavail (not Bfree) is what the user can actually write.
