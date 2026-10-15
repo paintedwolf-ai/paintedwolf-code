@@ -2,80 +2,11 @@ package promptloop
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-func TestCloseoutFuseTrippedGuards(t *testing.T) {
-	tripped := true
-	l := NewPromptLoopForTest(PromptLoopDeps{
-		Closeout: CloseoutDeps{
-			NoteCoordinatorToolTurn: func(_ context.Context, _ string) bool { return tripped },
-		},
-	})
-	ctx := context.Background()
-
-	if !l.Closeout.closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement_investigate") {
-		t.Fatal("coordinator closeout surface with a tripped dep should trip")
-	}
-	if l.Closeout.closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement") {
-		t.Fatal("non-closeout surface must never trip the fuse")
-	}
-	worker := &api.Session{ID: "w1", ParentSessionID: "s1"}
-	if l.Closeout.closeoutFuseTripped(ctx, worker, "w1", "implement_investigate") {
-		t.Fatal("worker child must never trip the coordinator fuse")
-	}
-
-	nofuse := NewPromptLoopForTest(PromptLoopDeps{})
-	if nofuse.Closeout.closeoutFuseTripped(ctx, &api.Session{ID: "s1"}, "s1", "implement_investigate") {
-		t.Fatal("no fuse dep wired → must never trip")
-	}
-}
-
-func TestEmitStalledCloseoutUsesRetainedDraftAndClears(t *testing.T) {
-	var gotDrafted string
-	var gotForcedBy []string
-	var cleared bool
-	l := NewPromptLoopForTest(PromptLoopDeps{
-		Closeout: CloseoutDeps{
-			CloseoutStallState: func(_ context.Context, _ string) guidance.RetainedCloseout {
-				return guidance.RetainedCloseout{Active: true, Attempt: 3, PrevKey: guidance.InvestCitationsRequiredCode, Drafted: "Root cause: missing backoff in the cache warmer.", ForcedBy: []string{guidance.InvestCitationsRequiredCode}}
-			},
-			ClearCloseoutStall: func(_ context.Context, _ string) { cleared = true },
-			AssembleLedgerCloseout: func(_ context.Context, _, _ string, forcedBy []string, drafted string, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-				gotDrafted = drafted
-				gotForcedBy = forcedBy
-				return guidance.CoordinatorCompletionReport{Synthesis: drafted},
-					&api.CitationGrounding{HostAssembled: true, Traced: false, RetryCount: retryCount}
-			},
-		},
-	})
-	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true, closeoutRetry: closeoutRetryState{attempt: 3}}
-	history := []api.Message{{ID: "slot-1", Role: api.MessageRoleAssistant}}
-
-	out, err := l.Closeout.emitStalledCloseout(context.Background(), &api.Session{ID: "s1"}, "s1", "", "implement_investigate", st, history)
-	testutil.FailErr(t, "emitStalledCloseout", err)
-
-	if !out.committed {
-		t.Fatal("stall exit should commit the assembled closeout")
-	}
-	if gotDrafted != "Root cause: missing backoff in the cache warmer." {
-		t.Fatalf("assembler got drafted=%q, want the retained synthesis", gotDrafted)
-	}
-	if len(gotForcedBy) != 1 || gotForcedBy[0] != guidance.InvestCitationsRequiredCode {
-		t.Fatalf("assembler got forcedBy=%v, want the retained citation code", gotForcedBy)
-	}
-	if !cleared {
-		t.Fatal("committed stall exit must clear the stall record")
-	}
-	if !strings.Contains(out.assistantMsg.Content, "missing backoff") {
-		t.Fatalf("committed content must retain the model prose, got %q", out.assistantMsg.Content)
-	}
-}
 
 func TestCitationOnlyRetryStitchesPersistedCloseoutDraftBeforeGuard(t *testing.T) {
 	const pinned = "## Recon report\n\nThe backend manages session lifecycle."

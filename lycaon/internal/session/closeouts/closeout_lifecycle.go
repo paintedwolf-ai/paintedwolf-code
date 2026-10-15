@@ -33,7 +33,7 @@ type closeoutPromptState struct {
 
 type closeoutCycleState struct {
 	groundingRejects int
-	stall            closeoutStall
+	stall            guidance.RetainedCloseout
 }
 
 type DelayKind int

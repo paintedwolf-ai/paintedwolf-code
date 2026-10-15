@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -179,6 +180,11 @@ func (l *turnCloseout) rejectCloseoutGrounding(
 	exhausted := !retryEligible || stuck || budget.exhausted()
 	renderDecision := *decision
 	renderDecision.Data = budget.hintData(hintData, unread)
+	renderDecision.Data = maps.Clone(renderDecision.Data)
+	if renderDecision.Data == nil {
+		renderDecision.Data = map[string]any{}
+	}
+	renderDecision.Data["resume_work_allowed"] = !st.proseFinish && len(st.offeredToolNames) > 0 && !l.repairsReportDocument(ctx, sessionID)
 	decision = &renderDecision
 	nudge, err := guard.FormatCloseoutGroundingReject(
 		ctx,

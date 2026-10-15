@@ -6,6 +6,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -28,7 +29,6 @@ func seedCloseoutState(c *Service, sessionID, rootID string) {
 	}
 	c.recordFriction(sessionID, rootID)
 	c.noteGroundingReject(rootID, "citation", "offender", "retained draft", nil)
-	c.noteToolTurn(rootID)
 }
 
 func TestCloseoutPromptBoundary(t *testing.T) {
@@ -197,7 +197,7 @@ func TestClearStallPreservesBudgetsAndSnapshotIsolation(t *testing.T) {
 	}
 	m.ClearCloseoutStall(t.Context(), sess.ID)
 	p, c := closeoutState(m, sess.ID, sess.ID)
-	beforeCycle.stall = closeoutStall{}
+	beforeCycle.stall = guidance.RetainedCloseout{}
 	if p != beforePrompt || !reflect.DeepEqual(c, beforeCycle) {
 		t.Fatalf("commit changed budgets: %+v/%+v", p, c)
 	}

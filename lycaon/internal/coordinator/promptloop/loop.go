@@ -323,7 +323,8 @@ func (l *PromptLoop) preparePromptLoop(ctx context.Context, in PromptRunInput) (
 		},
 	}
 	if guard.IsCoordinatorProfile(setup.profileID) && l.Closeout.Deps.CloseoutStallState != nil {
-		if retained := l.Closeout.Deps.CloseoutStallState(ctx, setup.sessionID); retained.Active {
+		{
+			retained := l.Closeout.Deps.CloseoutStallState(ctx, setup.sessionID)
 			setup.state.closeoutRetry = closeoutRetryState{
 				attempt: retained.Attempt, documentAttempt: retained.DocumentAttempt, prevKey: retained.PrevKey, codes: retained.ForcedBy,
 			}
