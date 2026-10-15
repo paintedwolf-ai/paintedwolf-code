@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -21,10 +22,14 @@ type CommandFailureTracker struct {
 }
 
 type commandFailureState struct {
-	LastApproach string
-	Count        int
-	Token        uint64
-	Source       commandSourceIdentity
+	LastApproach       string
+	Count              int
+	Source             commandSourceIdentity
+	Version            uint64
+	Generation         uint64
+	ActiveApproach     string
+	ActiveSource       commandSourceIdentity
+	RecordedGeneration uint64
 }
 
 // NewCommandFailureTracker constructs a shared failure tracker for command/verify tools.
@@ -97,20 +102,19 @@ func commandFailureSourceRoot(tctx tools.ToolContext, cwd string) string {
 }
 
 type commandFailureAttempt struct {
-	Session  string
-	Approach string
-	Token    uint64
-	Count    int
-	Source   commandSourceIdentity
+	session    string
+	approach   string
+	generation uint64
+	source     commandSourceIdentity
+	completed  atomic.Bool
 }
 
 // begin compares source only when the next outcome can saturate the streak.
-// Snapshot I/O never holds the tracker lock. A concurrent admission invalidates
+// Snapshot I/O never holds the tracker lock. Concurrent state changes invalidate
 // the comparison rather than granting a retry from an obsolete baseline.
-func (ft *CommandFailureTracker) begin(sessionID, approach, command string, observe func() commandSourceIdentity) (commandFailureAttempt, *toolrejection.ToolReject) {
-	attempt := commandFailureAttempt{Session: sessionID, Approach: approach}
+func (ft *CommandFailureTracker) begin(sessionID, approach, command string, observe func() commandSourceIdentity) (*commandFailureAttempt, *toolrejection.ToolReject) {
 	if ft == nil || approach == "" {
-		return attempt, nil
+		return nil, nil
 	}
 	ft.mu.Lock()
 	before := ft.failures[sessionID]
@@ -122,47 +126,53 @@ func (ft *CommandFailureTracker) begin(sessionID, approach, command string, obse
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
 	state := ft.failures[sessionID]
-	if state.Token != before.Token {
+	if state.Version != before.Version {
 		current = commandSourceIdentity{}
 	}
-	if state.LastApproach == approach {
-		attempt.Count = state.Count
-		if state.Count >= 3 {
-			known := state.Source.known() && current.known()
-			if !known || state.Source == current {
-				return attempt, &toolrejection.ToolReject{Code: "COMMAND_FAILURE_LOOP", Data: map[string]any{
-					"command": command, "count": state.Count, "failure_source_unchanged": known,
-				}}
-			}
-			attempt.Count = 0
+	changed := false
+	if state.LastApproach == approach && state.Count >= 3 {
+		known := state.Source.known() && current.known()
+		if !known || state.Source == current {
+			return nil, &toolrejection.ToolReject{Code: "COMMAND_FAILURE_LOOP", Data: map[string]any{
+				"command": command, "count": state.Count, "failure_source_unchanged": known,
+			}}
 		}
+		changed = true
 	}
-	state.Token++
-	attempt.Token = state.Token
-	attempt.Source = current
+	if state.ActiveApproach != approach || (changed && state.ActiveSource != current) {
+		state.Generation++
+		state.ActiveApproach = approach
+		state.ActiveSource = current
+	}
+	state.Version++
 	ft.failures[sessionID] = state
-	return attempt, nil
+	return &commandFailureAttempt{session: sessionID, approach: approach, generation: state.Generation, source: current}, nil
 }
 
-// record ignores outcomes from an admission superseded by a later invocation.
-func (ft *CommandFailureTracker) record(attempt commandFailureAttempt, ok bool) {
-	if ft == nil || attempt.Token == 0 {
+// record aggregates one-shot outcomes in completion order within one context.
+// A superseded context cannot alter its successor; no completed-ID set is kept.
+func (ft *CommandFailureTracker) record(attempt *commandFailureAttempt, ok bool) {
+	if ft == nil || attempt == nil || !attempt.completed.CompareAndSwap(false, true) {
 		return
 	}
 	ft.mu.Lock()
 	defer ft.mu.Unlock()
-	state := ft.failures[attempt.Session]
-	if state.Token != attempt.Token {
+	state := ft.failures[attempt.session]
+	if state.Generation != attempt.generation {
 		return
 	}
-	state.Token++
-	state.LastApproach = attempt.Approach
-	state.Count = attempt.Count + 1
-	state.Source = attempt.Source
+	if state.RecordedGeneration != attempt.generation {
+		state.Count = 0
+		state.RecordedGeneration = attempt.generation
+	}
+	state.Version++
+	state.LastApproach = attempt.approach
+	state.Count++
+	state.Source = attempt.source
 	if ok {
 		state.LastApproach = ""
 		state.Count = 0
 		state.Source = commandSourceIdentity{}
 	}
-	ft.failures[attempt.Session] = state
+	ft.failures[attempt.session] = state
 }

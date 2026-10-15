@@ -177,3 +177,69 @@ func TestCommandSourceReadersRespectExecutionAndReceiptRoots(t *testing.T) {
 		t.Fatal("unrelated active-root mutation cleared attached-root streak")
 	}
 }
+
+func TestFailureStreakAggregatesConcurrentContextOutcomes(t *testing.T) {
+	for _, order := range []string{"all-fail", "success-then-failure", "failure-then-success"} {
+		t.Run(order, func(t *testing.T) {
+			tracker := NewCommandFailureTracker()
+			attempts := make([]*commandFailureAttempt, 3)
+			for i := range attempts {
+				attempts[i], _ = tracker.begin("s", "same", "same", nil)
+			}
+			switch order {
+			case "all-fail":
+				// Reverse completion order must still count all three distinct failures.
+				for i := 2; i >= 0; i-- {
+					tracker.record(attempts[i], false)
+				}
+				tracker.record(attempts[0], false)
+				if tracker.failures["s"].Count != 3 {
+					t.Fatalf("lost or duplicated concurrent failures: %+v", tracker.failures["s"])
+				}
+				if _, r := tracker.begin("s", "same", "same", nil); r == nil {
+					t.Fatal("concurrent failures bypassed finite guard")
+				}
+			case "success-then-failure":
+				tracker.record(attempts[0], false)
+				tracker.record(attempts[1], true)
+				tracker.record(attempts[2], false)
+				if tracker.failures["s"].Count != 1 {
+					t.Fatal("success did not separate completion streaks")
+				}
+			case "failure-then-success":
+				tracker.record(attempts[2], false)
+				tracker.record(attempts[1], false)
+				tracker.record(attempts[0], true)
+				if tracker.failures["s"].Count != 0 {
+					t.Fatal("same-context success did not clear prior completed failures")
+				}
+			}
+		})
+	}
+}
+
+func TestFailureStreakSourceGenerationRejectsDelayedOldOutcomes(t *testing.T) {
+	tracker := NewCommandFailureTracker()
+	source := commandSourceIdentity{"old", "root"}
+	observe := func() commandSourceIdentity { return source }
+	first, _ := tracker.begin("s", "same", "same", observe)
+	for i := 0; i < 3; i++ {
+		a, _ := tracker.begin("s", "same", "same", observe)
+		tracker.record(a, false)
+	}
+	source.Revision = "new"
+	a, r := tracker.begin("s", "same", "same", observe)
+	if r != nil {
+		t.Fatalf("changed source rejected: %+v", r)
+	}
+	b, r := tracker.begin("s", "same", "same", observe)
+	if r != nil {
+		t.Fatalf("concurrent changed source rejected: %+v", r)
+	}
+	tracker.record(a, false)
+	tracker.record(first, true)
+	tracker.record(b, false)
+	if tracker.failures["s"].Count != 2 {
+		t.Fatalf("source generations conflated: %+v", tracker.failures["s"])
+	}
+}
