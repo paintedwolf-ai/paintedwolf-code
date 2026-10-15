@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -43,8 +44,22 @@ func run(ctx context.Context, repoRoot string, argv []string, stdout, stderr io.
 	flags := flag.NewFlagSet("codegen-workflow-archive", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	checkOnly := flags.Bool("check", false, "verify the archive matches the tag without writing")
-	if err := flags.Parse(argv); err != nil || flags.NArg() != 3 {
-		fmt.Fprintln(stderr, "usage: codegen-workflow-archive [--check] <pack> <workflow> <tag>")
+	sourceRoot := flags.String("repo-root", repoRoot, "candidate checkout to inspect")
+	baseline := flags.String("baseline", "", "stable release commit to compare")
+	checkAll := flags.Bool("check-all", false, "check every stable released workflow and bundled API requirement")
+	if err := flags.Parse(argv); err != nil {
+		return 2
+	}
+	if *checkAll && !*checkOnly && flags.NArg() == 0 {
+		repoRoot = *sourceRoot
+		if err := checkReleasedWorkflows(ctx, repoRoot, *baseline, stdout); err != nil {
+			fmt.Fprintf(stderr, "release compatibility: %v\n", err)
+			return 1
+		}
+		return 0
+	}
+	if *checkAll || flags.NArg() != 3 {
+		fmt.Fprintln(stderr, "usage: codegen-workflow-archive --check-all | [--check] <pack> <workflow> <tag>")
 		fmt.Fprintln(stderr, "example: codegen-workflow-archive painted-wolf/security-survey security-survey v1.0.0")
 		return 2
 	}
@@ -64,6 +79,7 @@ func run(ctx context.Context, repoRoot string, argv []string, stdout, stderr io.
 type releaseSource interface {
 	show(rel string) ([]byte, error)
 	list(dir string) ([]string, error)
+	paths(dir string) ([]string, error)
 }
 
 // seal writes or verifies the archive of workflowID under packDir.
@@ -108,7 +124,7 @@ func sealedFiles(release releaseSource, packRel, workflowID string) (map[string]
 	for _, inject := range m.Injects {
 		if render := strings.TrimSpace(inject.Render); render != "" {
 			rel := path.Join("guidance", render+".md")
-			if files[rel], err = release.show(path.Join(packRel, rel)); err != nil {
+			if files[rel], err = releasedGuidance(release, rel); err != nil {
 				return nil, "", fmt.Errorf("inject %q: %w", render, err)
 			}
 		}
@@ -153,6 +169,23 @@ func verifyArchive(archiveDir string, files map[string][]byte) error {
 		return fmt.Errorf("archive %s: %w", archiveDir, err)
 	}
 	defer func() { _ = root.Close() }()
+	if err := fs.WalkDir(root.FS(), ".", func(rel string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		if !entry.Type().IsRegular() {
+			return fmt.Errorf("archive %s: %s is not a regular file", archiveDir, rel)
+		}
+		if _, ok := files[filepath.ToSlash(rel)]; !ok {
+			return fmt.Errorf("archive %s: unexpected file %s", archiveDir, rel)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
 	for rel, want := range files {
 		got, err := root.ReadFile(filepath.FromSlash(rel))
 		if err != nil {

@@ -1744,7 +1744,7 @@ tasks:
       - docs/openapi/baseline-bundle.yaml
       - '{{.SCRIPTS_DIR}}/diff-openapi.sh'
     cmds:
-      - bash {{.SCRIPTS_DIR}}/diff-openapi.sh
+      - bash {{.SCRIPTS_DIR}}/diff-openapi.sh {{.CLI_ARGS}}
 
   openapi:lint:
     desc: Validate modular OpenAPI sources with Redocly CLI

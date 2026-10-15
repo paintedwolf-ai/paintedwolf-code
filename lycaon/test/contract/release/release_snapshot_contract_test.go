@@ -27,6 +27,12 @@ func TestSelectedReleaseTagPinsEverySourceCheckout(t *testing.T) {
 			if !strings.HasPrefix(step.Uses, "actions/checkout@") || step.With["repository"] != "" {
 				continue
 			}
+			if step.With["path"] == ".release-controller" {
+				if step.With["ref"] != "${{ github.workflow_sha }}" {
+					t.Errorf("%s controller is not pinned to workflow source", name)
+				}
+				continue
+			}
 			count++
 			if name == "classify" && count == 1 {
 				continue

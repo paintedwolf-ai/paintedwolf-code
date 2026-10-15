@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
@@ -183,4 +184,15 @@ func TestRunSealsManifestOnlyReleaseWithoutFeedbackDirectory(t *testing.T) {
 	if code := run(t.Context(), repo, []string{"--check", "painted-wolf/bugbash", "bugbash", "missing-tag"}, &stdout, &stderr); code != 1 {
 		t.Fatalf("unknown release tag exit %d: %s", code, stderr.String())
 	}
+}
+
+func (r treeRelease) paths(dir string) ([]string, error) {
+	var files []string
+	for rel := range r {
+		if strings.HasPrefix(rel, dir+"/") {
+			files = append(files, rel)
+		}
+	}
+	sort.Strings(files)
+	return files, nil
 }

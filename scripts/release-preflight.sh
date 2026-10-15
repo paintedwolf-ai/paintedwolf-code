@@ -6,14 +6,18 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/artifact-paths.sh
 source "${ROOT}/scripts/artifact-paths.sh"
 REQUIRE_CORPUS=0
+BASELINE_REF=""
+COMPATIBILITY_ONLY=0
+SOURCE_ROOT=""
 
 usage() {
   cat >&2 <<'EOF'
-Usage: release-preflight.sh [--require-corpus]
+Usage: release-preflight.sh [--require-corpus] [--baseline-ref COMMIT]
 
   --require-corpus  Require lycaon/testdata/upgrade-corpus/<VERSION>/ and verify
                     its version, schema, stores, and archive integrity.
                     Publishing tags always use this mode.
+  --baseline-ref    Pinned published stable release commit supplied by release CI.
 EOF
   exit 2
 }
@@ -21,10 +25,23 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --require-corpus) REQUIRE_CORPUS=1; shift ;;
+    --baseline-ref) [[ $# -ge 2 && -n "$2" ]] || usage; BASELINE_REF="$2"; shift 2 ;;
+    --compatibility-only) COMPATIBILITY_ONLY=1; shift ;;
+    --source-root) [[ $# -ge 2 && -n "$2" ]] || usage; SOURCE_ROOT="$2"; shift 2 ;;
     -h|--help) usage ;;
     *) echo "error: unknown argument: $1" >&2; usage ;;
   esac
 done
+
+if [[ "${COMPATIBILITY_ONLY}" -eq 1 ]]; then
+  [[ -n "${BASELINE_REF}" && -d "${SOURCE_ROOT}" ]] || usage
+  (cd "${ROOT}/lycaon" && LYCAON_ENGINE_ROOT="${LYCAON_ENGINE_ROOT:-${SOURCE_ROOT}/lycaon-den/src-tauri/engine-root}" \
+    go run ./cmd/codegen-workflow-archive --check-all --baseline "${BASELINE_REF}" --repo-root "${SOURCE_ROOT}")
+  python3 "${ROOT}/scripts/upgrade-fixture-files.py" inventory \
+    "${SOURCE_ROOT}/lycaon/testdata/upgrade-corpus" --version "$(tr -d '[:space:]' < "${SOURCE_ROOT}/VERSION")"
+  exit 0
+fi
+[[ -z "${SOURCE_ROOT}" ]] || usage
 
 for need in jq awk python3 bun; do
   command -v "${need}" >/dev/null 2>&1 || {
@@ -36,11 +53,8 @@ done
 eval "$(python3 "${ROOT}/scripts/release-metadata.py" --root "${ROOT}" --format shell)"
 VERSION="${PRODUCT_VERSION}"
 
-# Pinned shipped workflows must match their released bytes before publication.
-for sealed in "painted-wolf/security-survey security-survey v1.0.1" "painted-wolf/bugbash bugbash v1.0.1"; do
-  read -r pack workflow tag <<<"${sealed}"
-  (cd "${ROOT}/lycaon" && LYCAON_ENGINE_ROOT="${LYCAON_ENGINE_ROOT:-${ROOT}/lycaon-den/src-tauri/engine-root}" go run ./cmd/codegen-workflow-archive --check "${pack}" "${workflow}" "${tag}")
-done
+# Discover released workflow contracts and validate bundled API requirements.
+(cd "${ROOT}/lycaon" && LYCAON_ENGINE_ROOT="${LYCAON_ENGINE_ROOT:-${ROOT}/lycaon-den/src-tauri/engine-root}" go run ./cmd/codegen-workflow-archive --check-all --baseline "${BASELINE_REF}")
 
 fail=0
 check_equal() {
@@ -151,7 +165,8 @@ if [[ "${REQUIRE_CORPUS}" -eq 1 ]]; then
     fail=1
   else
     python3 "${ROOT}/scripts/upgrade-fixture-files.py" candidate "${CORPUS}" \
-      --sidecar "${PW_BUILD_DIR}/lycaon-dev" --version "${VERSION}" || fail=1
+      --sidecar "${PW_BUILD_DIR}/lycaon-dev" --version "${VERSION}" \
+      --inventory-root "${ROOT}/lycaon/testdata/upgrade-corpus" || fail=1
   fi
 fi
 

@@ -32,6 +32,8 @@ jobs:
       actions: read
     outputs:
       source_sha: ${{ steps.source.outputs.source_sha }}
+      baseline_sha: ${{ steps.compatibility.outputs.baseline_sha }}
+      baseline_tag: ${{ steps.compatibility.outputs.baseline_tag }}
       publish: ${{ steps.source.outputs.publish }}
       version: ${{ steps.release.outputs.version }}
       channel: ${{ steps.release.outputs.channel }}
@@ -76,6 +78,16 @@ jobs:
           echo "source_sha=${source_sha}" >> "${GITHUB_OUTPUT}"
           echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
         # Admission uses the controller's qualification policy before selecting source.
+      - name: Pin the published stable compatibility baseline
+        id: compatibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/releases/latest" \
+            | python3 scripts/release-compatibility-baseline.py "${SOURCE_SHA}" >> "${GITHUB_OUTPUT}"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.source.outputs.source_sha }}
@@ -140,12 +152,36 @@ jobs:
         timeout-minutes: 60
         env:
           PUBLISH: ${{ needs.classify.outputs.publish }}
+          BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}
         run: |
           if [[ "${PUBLISH}" == true ]]; then
             ./task release:preflight -- --require-corpus
           else
             ./task release:preflight
           fi
+      - name: Check out the release controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .release-controller
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Enforce published stable compatibility
+        env:
+          BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}
+          LYCAON_ENGINE_ROOT: ${{ github.workspace }}/lycaon-den/src-tauri/engine-root
+        working-directory: .release-controller
+        run: |
+          export PW_ARTIFACT_ROOT="$(python3 "${GITHUB_WORKSPACE}/scripts/artifact_paths.py" artifacts "${GITHUB_WORKSPACE}")"
+          ./task release:preflight -- --compatibility-only --source-root "${GITHUB_WORKSPACE}" --baseline-ref "${BASELINE_SHA}"
+      - name: Report OpenAPI compatibility
+        if: ${{ !cancelled() }}
+        env:
+          BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}
+        working-directory: .release-controller
+        run: |
+          export PW_ARTIFACT_ROOT="$(python3 "${GITHUB_WORKSPACE}/scripts/artifact_paths.py" artifacts "${GITHUB_WORKSPACE}")"
+          ./task openapi:diff -- --source-root "${GITHUB_WORKSPACE}" --baseline-ref "${BASELINE_SHA}"
       - uses: ./.github/actions/verification-evidence
         if: always()
         timeout-minutes: 5

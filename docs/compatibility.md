@@ -135,6 +135,24 @@ Secret declarations are `user-repo` content governed by the project's existing `
 
 Project overlays never hold device credentials or grants. `model-policy.yaml` has two distinct artifacts: the device file is `device-config`; `{project}/.paintedwolf/model-policy.yaml` is `user-repo` content under the primary root's `overlay_format` contract.
 
+## Automated release compatibility
+
+Both preview and stable publication compare against the last published stable
+GitHub Release, pinned to its source commit. Drafts, previews, and unpublished tags
+cannot reset that baseline. Missing release history, mismatched source identity,
+unchanged pack versions with changed bytes, workflow version or archive violations,
+insufficient extension API declarations, and corpus mismatches block publication.
+Published preview database revisions remain supported upgrade sources even though
+they do not become the stable compatibility baseline.
+
+The release controller owns these checks and reads the selected candidate tree,
+so selecting an older qualified source cannot select an older compatibility gate.
+OAR fact signatures cannot change under a surviving name. Removed facts and
+rejection codes require named successors in
+[`agent-public-retirements.json`](../schemas/agent-public-retirements.json), and
+retired names cannot return. These checks validate structured contracts; they do
+not infer behavioral equivalence from display copy.
+
 ## Extension identities
 
 `extension_api` selects host interpretation and capabilities. A pack's `version`

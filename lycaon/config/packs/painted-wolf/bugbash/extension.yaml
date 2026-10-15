@@ -1,7 +1,7 @@
 manifest_version: 1
 id: painted-wolf/bugbash
 name: Bugbash
-version: 1.0.0
+version: 1.1.0
 compatibility:
   extension_api: "^1.1.0"
 dependencies:

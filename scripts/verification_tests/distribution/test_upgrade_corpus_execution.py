@@ -130,3 +130,78 @@ class CorpusIntegrityTests(unittest.TestCase):
         self.assertEqual((destination / "store.db").read_bytes(), b"valid database")
         with self.assertRaisesRegex(ValueError, "must be empty"):
             fixture_files.materialize(self.fixture, destination)
+
+
+class CorpusInventoryTests(unittest.TestCase):
+    def test_only_selected_and_older_versions_are_admitted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            for version in ("1.0.1", "1.0.2-rc.2", "1.0.2-rc.10", "scratch"):
+                (root / version).mkdir()
+            fixture_files.check_inventory(root, "1.0.2-rc.10")
+            with self.assertRaisesRegex(ValueError, "future-version corpus"):
+                fixture_files.check_inventory(root, "1.0.2-rc.2")
+            (root / "1.0.2").mkdir()
+            with self.assertRaisesRegex(ValueError, "future-version corpus"):
+                fixture_files.check_inventory(root, "1.0.2-rc.10")
+            fixture_files.check_inventory(root, "1.0.2")
+
+    def test_versioned_links_are_refused(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "1.0.1").symlink_to(root, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "regular directory"):
+                fixture_files.check_inventory(root, "1.0.2")
+
+    def test_inventory_cannot_validate_a_different_fixture(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with self.assertRaisesRegex(ValueError, "outside the selected"):
+                fixture_files.candidate(root / "elsewhere", Path("engine"), "1.0.2", root)
+
+
+BASELINE_SPEC = importlib.util.spec_from_file_location(
+    "release_compatibility_baseline", Path(__file__).resolve().parents[2].joinpath("release-compatibility-baseline.py"))
+release_baseline = importlib.util.module_from_spec(BASELINE_SPEC)
+BASELINE_SPEC.loader.exec_module(release_baseline)
+
+
+class PublishedStableBaselineTests(unittest.TestCase):
+    release = {"draft": False, "prerelease": False, "tag_name": "v1.0.1", "published_at": "2026-10-02T19:44:48Z"}
+
+    def git(self, command, **_):
+        if command[1:3] == ["rev-parse", "--verify"]:
+            return "a" * 40
+        if command[1:] == ["show", "a" * 40 + ":VERSION"]:
+            return "1.0.1\n"
+        if command[1] == "show":
+            return self.candidate
+        return "b" * 40
+
+    def test_published_stable_is_pinned_for_both_candidate_channels(self):
+        for candidate in ("1.0.2-rc3", "1.0.2"):
+            with self.subTest(candidate=candidate):
+                self.candidate = candidate
+                with patch.object(release_baseline.subprocess, "check_output", side_effect=self.git), \
+                     patch.object(release_baseline.subprocess, "run") as ancestry:
+                    self.assertEqual(release_baseline.resolve(self.release, "selected-source"), ("v1.0.1", "a" * 40))
+                    ancestry.assert_called_once_with(["git", "merge-base", "--is-ancestor", "a" * 40, "selected-source"], check=True)
+
+    def test_drafts_previews_and_unpublished_tags_cannot_reset_the_baseline(self):
+        for changes in ({"draft": True}, {"prerelease": True}, {"published_at": None},
+                        {"tag_name": "v1.0.2-rc3"}, {"tag_name": "v0.9.0"}, {"tag_name": "main"}):
+            with self.subTest(changes=changes), self.assertRaises(ValueError):
+                release_baseline.resolve({**self.release, **changes})
+
+    def test_product_downgrades_and_reused_release_versions_fail(self):
+        for candidate in ("1.0.0", "1.0.1"):
+            self.candidate = candidate
+            with self.subTest(candidate=candidate), \
+                 patch.object(release_baseline.subprocess, "check_output", side_effect=self.git), \
+                 patch.object(release_baseline.subprocess, "run"), self.assertRaises(ValueError):
+                release_baseline.resolve(self.release)
+
+    def test_tag_source_mismatch_fails(self):
+        with patch.object(release_baseline.subprocess, "check_output", side_effect=["a" * 40, "1.0.0"]), \
+             self.assertRaisesRegex(ValueError, "does not match"):
+            release_baseline.resolve(self.release)

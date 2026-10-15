@@ -12,6 +12,8 @@ import sys
 import tempfile
 import zipfile
 
+from release_semver import compare, parse
+
 
 def digest(path):
     value = hashlib.sha256()
@@ -116,7 +118,24 @@ def materialize(fixture, destination):
     shutil.copytree(fixture / "app-state-v1", destination / "app-state-v1", dirs_exist_ok=True)
 
 
-def candidate(fixture, sidecar, version):
+def check_inventory(root, version):
+    selected = parse(version)
+    for entry in sorted(root.iterdir()):
+        try:
+            candidate_version = parse(entry.name)
+        except ValueError:
+            continue
+        if entry.is_symlink() or not entry.is_dir():
+            raise ValueError("versioned corpus must be a regular directory: " + str(entry))
+        if compare(candidate_version, selected) > 0:
+            raise ValueError("future-version corpus must be prepared after VERSION selects it: " + entry.name)
+
+
+def candidate(fixture, sidecar, version, inventory_root=None):
+    if inventory_root is not None:
+        check_inventory(inventory_root, version)
+        if fixture.resolve() != (inventory_root / version).resolve():
+            raise ValueError("candidate fixture is outside the selected corpus inventory")
     metadata, _ = checked_archive(fixture)
     project = fixture / "project-root"
     if not project.is_dir() or project.is_symlink():
@@ -153,11 +172,17 @@ if __name__ == "__main__":
     validator.add_argument("fixture", type=Path)
     validator.add_argument("--sidecar", type=Path, required=True)
     validator.add_argument("--version", required=True)
+    validator.add_argument("--inventory-root", type=Path)
+    inventory = commands.add_parser("inventory")
+    inventory.add_argument("root", type=Path)
+    inventory.add_argument("--version", required=True)
     args = parser.parse_args()
     try:
         if args.command == "materialize":
             materialize(args.fixture, args.destination)
+        elif args.command == "inventory":
+            check_inventory(args.root, args.version)
         else:
-            candidate(args.fixture, args.sidecar, args.version)
+            candidate(args.fixture, args.sidecar, args.version, args.inventory_root)
     except (ValueError, KeyError, TypeError, OSError, zipfile.BadZipFile, subprocess.CalledProcessError) as error:
         sys.exit("error: " + str(error))
