@@ -25,6 +25,7 @@ func projectRecallSearch(raw string, maxBytes int) (string, bool) {
 		if !ok {
 			return "", false
 		}
+		delete(hit, "snippet")
 		if _, exists := hit["body"]; exists {
 			delete(hit, "body")
 			hit["body_truncated"] = true

@@ -125,7 +125,7 @@ func TestProjectedRecallKeepsOriginalRecoveryTarget(t *testing.T) {
 func TestRecallSearchFitKeepsRecoverableHits(t *testing.T) {
 	hits := []any{}
 	for _, id := range []string{"newest", "middle", "oldest"} {
-		hits = append(hits, map[string]any{"handle": id, "record_request": map[string]any{"message_id": id}, "body": []string{strings.Repeat("recorded observation ", 2000)}, "untrusted": true, "currency": "stale"})
+		hits = append(hits, map[string]any{"handle": id, "record_request": map[string]any{"message_id": id}, "snippet": strings.Repeat("recorded snippet ", 100), "body": []string{strings.Repeat("recorded observation ", 2000)}, "untrusted": true, "currency": "stale"})
 	}
 	raw, err := json.Marshal(map[string]any{"resolution": "matched", "count": map[string]any{"value": 3, "relation": "exact"}, "hits": hits})
 	testutil.FailErr(t, "encode search observations", err)
@@ -143,7 +143,7 @@ func TestRecallSearchFitKeepsRecoverableHits(t *testing.T) {
 	}
 	for _, item := range shown {
 		hit := item.(map[string]any)
-		if hit["record_request"] == nil || hit["untrusted"] != true || hit["currency"] != "stale" || hit["body"] != nil {
+		if hit["record_request"] == nil || hit["untrusted"] != true || hit["currency"] != "stale" || hit["body"] != nil || hit["snippet"] != nil {
 			t.Fatal("search projection lost identity or authority metadata")
 		}
 	}
