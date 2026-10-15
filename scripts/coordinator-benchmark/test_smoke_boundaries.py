@@ -70,3 +70,15 @@ class ApprovalBoundaryTests(unittest.TestCase):
                 app.request.side_effect=[{'checkpoints':[checkpoint]}]
                 with self.assertRaisesRegex(RuntimeError,'no unique host-authored authority option'):
                     resolve(app,'session','call','loopback')
+            checkpoint['tool_approval']['plan']={
+                'directory_scopes':['/out/leaf','/out','/'],
+                'options':[
+                    options[0],
+                    {'id':'leaf','rung':'chat','kind':'lease','scope':'chat','directory_scope':'/out/leaf','decision_action':'approve'},
+                    {'id':'parent','rung':'chat','kind':'lease','scope':'chat','directory_scope':'/out','decision_action':'approve'},
+                ],
+            }
+            app.request.side_effect=[{'checkpoints':[checkpoint]},{}]
+            resolve(app,'session','call','write_root')
+            app.request.assert_called_with('/v1/sessions/session/checkpoints/checkpoint',
+                {'kind':'tool_approval','action':'approve','option_id':'leaf'})

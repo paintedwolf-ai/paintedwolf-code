@@ -202,18 +202,28 @@ func fixtureApprovalOption(fixture *SandboxEvidence, checkpoint wire.CheckpointE
 	if !fixtureCheckpointMatches(fixture, checkpoint) {
 		return ""
 	}
+	taskGrant := fixture.Kind == "loopback" || fixture.Kind == sandboxWriteRoot
+	var matched string
 	for _, option := range plan.Options {
-		if (fixture.Kind == "loopback" || fixture.Kind == sandboxWriteRoot) && fixture.PreparationCallID != "" {
-			if option.Kind == wire.ApprovalOptionKindLease && option.Scope == wire.ApprovalGrantScopeChat && option.Rung == wire.ApprovalOptionRungChat && option.DecisionAction == wire.ApprovalOptionDecisionApprove && !option.Disabled {
-				return option.ID
-			}
+		if option.DecisionAction != wire.ApprovalOptionDecisionApprove || option.Disabled {
 			continue
 		}
-		if option.Kind == wire.ApprovalOptionKindCurrentAction && option.Rung == wire.ApprovalOptionRungOnce && option.DecisionAction == wire.ApprovalOptionDecisionApprove && !option.Disabled {
-			return option.ID
+		if taskGrant {
+			if option.Kind != wire.ApprovalOptionKindLease || option.Scope != wire.ApprovalGrantScopeChat || option.Rung != wire.ApprovalOptionRungChat {
+				continue
+			}
+			if len(plan.DirectoryScopes) > 0 && option.DirectoryScope != plan.DirectoryScopes[0] {
+				continue
+			}
+		} else if option.Kind != wire.ApprovalOptionKindCurrentAction || option.Rung != wire.ApprovalOptionRungOnce {
+			continue
 		}
+		if matched != "" {
+			return ""
+		}
+		matched = option.ID
 	}
-	return ""
+	return matched
 }
 
 func fixtureCheckpointMatches(fixture *SandboxEvidence, checkpoint wire.CheckpointEvent) bool {

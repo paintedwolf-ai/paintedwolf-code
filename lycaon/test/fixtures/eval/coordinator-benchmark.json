@@ -828,6 +828,14 @@
       },
       "prelude": [
         {
+          "id": "load-preparation-tool",
+          "tool": "request_tools",
+          "args": {
+            "need": "stat"
+          },
+          "outcome": "completed"
+        },
+        {
           "id": "output-inspection",
           "tool": "stat",
           "args": {
