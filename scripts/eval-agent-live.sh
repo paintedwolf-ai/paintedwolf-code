@@ -63,13 +63,7 @@ main() {
   EVAL_WORKER_PROVIDER="${EVAL_WORKER_PROVIDER:-$EVAL_PROVIDER}"
   EVAL_WORKER_MODEL="${EVAL_WORKER_MODEL:-$EVAL_MODEL}"
   [[ -f Taskfile.yml && -f lycaon/go.mod ]] || { echo 'Run from the repository root.'; exit 2; }
-  local prerequisite
-  for prerequisite in jq node; do
-    if ! command -v "$prerequisite" >/dev/null; then
-      echo "Missing evaluation prerequisite: $prerequisite" >&2
-      exit 1
-    fi
-  done
+  python3 scripts/coordinator-benchmark/application_environment.py --check-prerequisites
   # shellcheck source=scripts/artifact-paths.sh
   source "$PWD/scripts/artifact-paths.sh"
   source "$PWD/scripts/sha256.sh"

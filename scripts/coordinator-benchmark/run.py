@@ -19,6 +19,7 @@ import uuid
 import yaml
 import completion
 from capture import MODEL_CONTROLS, describe
+from application_environment import require_launcher_runtime
 from built_runtime import verify_application
 from episode import episode, reattachment_order
 from episode_runtime import assert_execution_quiescence
@@ -90,6 +91,7 @@ def configure(source, destination, roster):
 
 
 def model_configurations(source, private, roster, application):
+    require_launcher_runtime()
     policy = configure(private, private / 'resolved', roster)
     policy['agent_pool'] = {'selection': 'first', 'models': [{'provider_id': roster['worker']['provider'], 'model': roster['worker']['model']}]}
     models = []

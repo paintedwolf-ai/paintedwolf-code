@@ -6,6 +6,7 @@ import subprocess
 import tempfile
 from contextlib import contextmanager
 from progress import save, timestamp
+from application_environment import require_launcher_runtime
 from snapshot import freeze, read_source, file_hash, identity
 from built_runtime import seal_application, verify_application, require_unadmitted, build_manifest, application_identity
 from capture_storage import clone_file, RUNTIME_EXECUTABLES
@@ -78,6 +79,7 @@ def validate_bank(manifest, suite):
 
 
 def validate_runtime(run, source, cases=None):
+    require_launcher_runtime()
     manifest=json.loads((source/'scripts/coordinator-benchmark/benchmark.json').read_text())
     suite=json.loads((source/manifest['suite']).read_text())
     requested = set(cases) if cases is not None else {o['id'] for o in manifest['operations']}
