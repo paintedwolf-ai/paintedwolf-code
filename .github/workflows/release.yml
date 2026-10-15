@@ -162,6 +162,8 @@ jobs:
           go-version-file: .release-controller/lycaon/go.mod
           cache: false
       - name: Provision release controller inputs
+        env:
+          RUSTUP_TOOLCHAIN: stable
         working-directory: .release-controller
         run: |
           ./task gitengine:fetch

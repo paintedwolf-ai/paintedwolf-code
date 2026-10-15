@@ -6,7 +6,7 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
-import tomllib
+import re
 import urllib.error
 import urllib.request
 import urllib.parse
@@ -108,6 +108,21 @@ def published_stable(mirror, base):
     return published_feed(mirror, base, "stable")
 
 
+def package_versions(raw, repeated):
+    table = r"\[\[package\]\]" if repeated else r"\[package\]"
+    sections = re.findall(r"(?ms)^" + table + r"[^\S\n]*\n(.*?)(?=^\[|\Z)", raw)
+    versions = []
+    for section in sections:
+        def field(name):
+            values = re.findall(r"(?m)^" + name + r"\s*=\s*(\"[^\"\n]*\")[^\S\n]*(?:#.*)?$", section)
+            if len(values) != 1:
+                raise ValueError("release package requires one quoted " + name)
+            return json.loads(values[0])
+        if not repeated or field("name") == "painted-wolf-code":
+            versions.append(field("version"))
+    return versions
+
+
 def check_source_versions(source_ref):
     def read(path):
         return subprocess.check_output(["git", "show", source_ref + ":" + path], text=True).strip()
@@ -116,11 +131,10 @@ def check_source_versions(source_ref):
     build = str(parse_release_build(read("RELEASE_BUILD")))
     package = json.loads(read("lycaon-den/package.json"))
     tauri = json.loads(read("lycaon-den/src-tauri/tauri.conf.json"))
-    cargo = tomllib.loads(read("lycaon-den/src-tauri/Cargo.toml"))
-    lock = tomllib.loads(read("lycaon-den/src-tauri/Cargo.lock"))
-    locked = [item["version"] for item in lock["package"] if item["name"] == "painted-wolf-code"]
+    cargo = package_versions(read("lycaon-den/src-tauri/Cargo.toml"), repeated=False)
+    locked = package_versions(read("lycaon-den/src-tauri/Cargo.lock"), repeated=True)
     if (package["version"] != product or tauri["version"] != version.core
-            or cargo["package"]["version"] != version.core or locked != [version.core]
+            or cargo != [version.core] or locked != [version.core]
             or tauri["bundle"]["macOS"]["bundleVersion"] != build):
         raise ValueError("packaging versions or native build do not match VERSION and RELEASE_BUILD")
     changelog = read("CHANGELOG.md")
