@@ -37,18 +37,52 @@ pub(super) fn read_install_source(
     }
 }
 
-pub(super) fn detect_install_source() -> (InstallSource, Option<UpdateChannel>, Option<UpdateError>)
-{
+/// How this installation was put on the device and what that means for updates.
+pub(super) struct InstallFacts {
+    pub source: InstallSource,
+    pub channel: Option<UpdateChannel>,
+    pub package: Option<crate::linux_install::InstalledPackage>,
+    pub error: Option<UpdateError>,
+}
+
+pub(super) fn detect_install_source() -> InstallFacts {
+    if cfg!(target_os = "linux") {
+        return match crate::linux_install::installed() {
+            Some(package) => InstallFacts {
+                source: InstallSource::SystemPackage,
+                channel: None,
+                package: Some(package.clone()),
+                error: None,
+            },
+            None => InstallFacts {
+                source: InstallSource::Unpackaged,
+                channel: None,
+                package: None,
+                error: None,
+            },
+        };
+    }
     let Some(dir) = crate::config_dir::host_config_dir().ok() else {
-        return (
-            InstallSource::Unknown,
-            None,
-            Some(UpdateError::from(Failure::StateUnavailable)),
-        );
+        return InstallFacts {
+            source: InstallSource::Unknown,
+            channel: None,
+            package: None,
+            error: Some(UpdateError::from(Failure::StateUnavailable)),
+        };
     };
     match read_install_source(&dir) {
-        Ok((source, channel)) => (source, channel, None),
-        Err(err) => (InstallSource::Unknown, None, Some(err)),
+        Ok((source, channel)) => InstallFacts {
+            source,
+            channel,
+            package: None,
+            error: None,
+        },
+        Err(err) => InstallFacts {
+            source: InstallSource::Unknown,
+            channel: None,
+            package: None,
+            error: Some(err),
+        },
     }
 }
 

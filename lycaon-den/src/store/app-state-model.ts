@@ -4,7 +4,7 @@ import type { PendingCheckpoint } from "../chat/checkpoint/checkpoint-model.ts";
 import type { LoadState } from "./load-state.ts";
 import { type PendingSend } from "../chat/send/pending-sends.ts";
 import type { GitScope } from "../components/git-repo-scope.ts";
-import { type TranscriptPageRequest, type TranscriptWindow } from "../chat/transcript/layout/transcript-window.ts";
+import { type TranscriptOrdSpan, type TranscriptPageRequest, type TranscriptWindow } from "../chat/transcript/layout/transcript-window.ts";
 import type { WorkerTranscript } from "../chat/worker/worker-transcript.ts";
 import type { SessionChatSnapshot } from "../chat/session/session-chat-snapshot.ts";
 
@@ -190,12 +190,15 @@ export type AppStoreActions = {
     page?: {
       hasMoreBefore?: boolean;
       hasMoreAfter?: boolean;
+      bounds?: TranscriptOrdSpan;
       turnClocks?: readonly TurnClock[];
       turnLoads?: readonly TurnLoad[];
     },
   ) => void;
   /** Extend the resident range with a fetched page; false when the request is stale. */
   loadTranscriptPage: (request: TranscriptPageRequest, page: SessionTranscriptPage) => boolean;
+  /** Reclaim older pages above the budget once they leave the reader's reach. */
+  trimTranscriptPages: () => void;
   /** Records the seen stamp the host returned for the current session. */
   noteSessionSeen: (session: Session) => void;
   /** Drops older pages so the resident range reads contiguously from the live tail. */

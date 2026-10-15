@@ -111,6 +111,21 @@ describe("createSourceEditorState shared features", () => {
     }
   });
 
+  it("names the text area by its label rather than leaving the placeholder to name it", () => {
+    const parent = document.createElement("div");
+    document.body.appendChild(parent);
+    const labelled = new EditorView({ parent, state: createSourceEditorState({ surface: "files", doc: "x = 1\n", editable: true, label: "Contents of main.py" }) });
+    const unlabelled = new EditorView({ parent, state: createSourceEditorState({ surface: "files", doc: "", editable: true }) });
+    try {
+      expect(labelled.contentDOM.getAttribute("aria-label")).toBe("Contents of main.py");
+      expect(unlabelled.contentDOM.hasAttribute("aria-label")).toBe(false);
+    } finally {
+      labelled.destroy();
+      unlabelled.destroy();
+      parent.remove();
+    }
+  });
+
   it("offers buffer words in a buffer with no grammar", () => {
     const doc = "hello hello\nhel";
     const state = createSourceEditorState({ surface: "files", doc, editable: true });

@@ -6,6 +6,7 @@ import {
 } from "./session-chat-cache.ts";
 import type { SessionChatScope } from "./session-chat-snapshot.ts";
 import { isSessionNotFoundError } from "./session-not-found.ts";
+import { spanFromWireBounds } from "../transcript/layout/transcript-window.ts";
 
 export const PREFETCH_RECENT_PROJECTS = 4;
 
@@ -64,6 +65,7 @@ export async function warmSessionChatCache(
         hasTailGap: false,
         hasMoreBefore: Boolean(transcript.before_cursor),
         hasMoreAfter: Boolean(transcript.after_cursor),
+        bounds: spanFromWireBounds(transcript.ord_bounds),
       },
       messages: transcript.messages.slice(),
       transcriptWatermark: transcript.watermark,

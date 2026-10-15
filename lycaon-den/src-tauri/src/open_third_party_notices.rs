@@ -1,6 +1,7 @@
 //! Open the generated third-party notices file with the OS default app.
 //!
-//! Packaged: `Contents/Resources/THIRD-PARTY-NOTICES.md` via the app resource directory.
+//! Packaged: `Contents/Resources/THIRD-PARTY-NOTICES.md` via the app resource directory,
+//! or the Linux package install root.
 //! Dev: repo-root `THIRD-PARTY-NOTICES.md` (produced by `./task licenses:notices`).
 
 use std::path::{Path, PathBuf};
@@ -24,6 +25,12 @@ pub fn open_third_party_notices(app: AppHandle) -> Result<(), String> {
 }
 
 fn resolve_notices_path(app: &AppHandle) -> Result<PathBuf, String> {
+    if crate::linux_install::installed().is_some() {
+        let candidate = Path::new(crate::linux_install::INSTALL_ROOT).join(NOTICES_NAME);
+        if candidate.is_file() {
+            return Ok(candidate);
+        }
+    }
     // Packaged / resource-bundled copy first.
     if let Ok(resource_dir) = app.path().resource_dir() {
         let candidate = resource_dir.join(NOTICES_NAME);

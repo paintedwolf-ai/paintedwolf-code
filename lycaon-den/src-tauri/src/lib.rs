@@ -13,6 +13,7 @@ mod config_dir;
 mod detect_editors;
 mod http_transport;
 mod installation_mode;
+mod linux_install;
 mod open_external;
 mod open_third_party_notices;
 mod presence;
@@ -33,6 +34,11 @@ use tauri::{Manager, RunEvent};
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     harden_process();
+    let context = tauri::generate_context!();
+    // GTK 3 names the Wayland toplevel and the X11 window class after the program
+    // name, which must be the identifier the desktop entry is named after.
+    #[cfg(target_os = "linux")]
+    gtk::glib::set_prgname(Some(context.config().identifier.as_str()));
     // The launch guard runs before any window so an interrupted update finishes first.
     let launch = match update_service::transaction::launch() {
         Ok(launch) => launch,
@@ -82,6 +88,7 @@ pub fn run() {
             notifications::den_notify_cancel_sessions,
             notifications::den_set_badge_count,
             windows::accessibility_text_size::accessibility_preferred_text_size,
+            windows::accessibility_announce::den_announce,
             windows::system_appearance::system_appearance,
             clipboard::read_clipboard_text,
             clipboard::write_clipboard_text,
@@ -171,7 +178,7 @@ pub fn run() {
                 .map_err(|e| Box::<dyn std::error::Error>::from(e))?;
             Ok(())
         })
-        .build(tauri::generate_context!())
+        .build(context)
         .expect("error while running tauri application")
         .run(|app, event| match event {
             RunEvent::ExitRequested { api, code, .. } => {
