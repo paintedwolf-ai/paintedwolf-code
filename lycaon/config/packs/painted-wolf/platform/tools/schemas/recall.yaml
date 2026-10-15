@@ -25,7 +25,7 @@ schema:
         after_ord: {type: integer, minimum: 0, description: "Start index after this ordinal."}
         through_ord: {type: integer, minimum: 1, description: "Inclusive upper ordinal bound."}
         source_seq: {type: integer, minimum: 0, description: "Sequence stamp to detect row edits."}
-        message_id: {type: string, minLength: 1, description: "Known row ID; enough for body recovery."}
+        message_id: {type: string, minLength: 1, description: "Row ID from record_request; evidence handles use query."}
         offset: {type: integer, minimum: 0, description: "Unicode character offset for body paging."}
       anyOf:
         - required: [through_ord]

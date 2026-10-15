@@ -11,6 +11,8 @@ import (
 func addRecallRecoveryAction(ctx context.Context, result *recall.Result) {
 	ref := ""
 	switch {
+	case result.History != nil && len(result.History.Entries) == 0 && result.History.Format != "" && result.Resolution == recall.ResolutionNoMatchInScope:
+		ref = "recall/body-missing"
 	case result.NextRequest != nil:
 		ref = "recall/history-continuation"
 	case result.History != nil && result.History.Format == "index" && len(result.History.Entries) > 0:

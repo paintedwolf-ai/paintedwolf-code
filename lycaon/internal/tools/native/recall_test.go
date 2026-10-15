@@ -90,6 +90,7 @@ func TestRecallRecoveryActionExplainsRecordRequestsAndPreservesExistingAction(t 
 		result recall.Result
 		want   string
 	}{
+		{"missing body", recall.Result{Resolution: recall.ResolutionNoMatchInScope, History: &recall.HistoryPage{Format: "text"}}, "message_id"},
 		{"index", recall.Result{History: &recall.HistoryPage{Format: "index", Entries: []recall.HistoryEntry{{MessageID: "m"}}}}, "record_request"},
 		{"hit", recall.Result{NextAction: "Narrow the query.", Hits: []recall.Hit{{Record: &recall.HistoryRequest{MessageID: "m"}}}}, "record_request"},
 		{"body", recall.Result{Hits: []recall.Hit{{Body: []string{"already observed"}}}}, ""},
