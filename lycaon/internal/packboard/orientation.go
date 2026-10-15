@@ -95,25 +95,6 @@ func BuildOrientationLines(snapshot api.BoardSnapshot, opts OrientOpts) []string
 	return lines
 }
 
-// workerStateLines keeps completed execution distinct from pending integration.
-func workerStateLines(snapshot api.BoardSnapshot, now time.Time) []string {
-	tasks := WorkerTasksFromSnapshot(snapshot)
-	var lines []string
-	if work := FormatWorkLine(tasks, now); work != "" {
-		lines = append(lines, work)
-	}
-	if merge := FormatBranchMergeLine(tasks); merge != "" {
-		lines = append(lines, merge)
-	}
-	if planLine := FormatOverlayMergePlanLine(OverlayMergePlanFromSnapshot(snapshot)); planLine != "" {
-		lines = append(lines, planLine)
-	}
-	if pathLine := FormatPromotePathStatusLine(PromotePathsFromSnapshot(snapshot)); pathLine != "" {
-		lines = append(lines, pathLine)
-	}
-	return lines
-}
-
 // TruncateLinesBottomUp drops trailing lines until the joined body fits max.
 func TruncateLinesBottomUp(lines []string, max int, truncated *[]string) ([]string, bool) {
 	for len(lines) > 0 {
