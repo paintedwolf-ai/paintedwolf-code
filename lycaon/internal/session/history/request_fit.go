@@ -67,10 +67,14 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 	frame := req
 	frame.Messages = projection.frame
 	frameBudget := measure(frame)
-	if req.MaxTokens <= 0 && ceiling-frameBudget.Input < 512 {
+	if req.MaxTokens <= 0 && ceiling-frameBudget.Input < 2048 {
 		if availableAfterFrame := budget.Window - budget.Headroom - frameBudget.Input; availableAfterFrame > max(128, budget.MinimumOutput) {
-			reserve = max(max(128, budget.MinimumOutput), min(reserve, availableAfterFrame/2))
+			reserve = max(max(128, budget.MinimumOutput), min(reserve, max(availableAfterFrame/4, min(512, availableAfterFrame/2))))
 			ceiling = budget.Window - budget.Headroom - reserve
+		}
+		if budget.Input <= ceiling {
+			req.MaxTokens = budget.Window - budget.Headroom - budget.Input
+			return req, nil
 		}
 	}
 	fullHistory := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(projection.history))
@@ -129,9 +133,6 @@ func (m *Service) requestContinuation(ctx context.Context, sess *api.Session, ro
 
 func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, history []api.Message, record *messageview.Continuation, cfg compaction.CompactionConfig, tokens int, shrinkTools bool) ([]api.Message, error) {
 	rows := append([]api.Message(nil), history...)
-	if shrinkTools && m.store != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess) {
-		rows = projectRecordedToolBodies(ctx, rows, tokens)
-	}
 	found, text := false, ""
 	if record.ThroughOrd > 0 {
 		record = messageview.CloneContinuation(record)
@@ -161,8 +162,17 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 		rows = kept
 	}
 	rows = promptassembly.MarkContextPins(sess, rows, min(8192, max(0, tokens/5)))
+	canShrinkTools := shrinkTools && m.store != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)
+	if canShrinkTools {
+		rows = projectRecordedToolBodies(ctx, rows, tokens)
+	}
 	contexts := compaction.ContextMessagesFromAPI(rows)
 	fitted := compaction.DeterministicFit(cfg, contexts, tokens)
+	if canShrinkTools && compaction.EstimateMessagesTokens(fitted) > tokens {
+		rows = projectRecordedToolBodies(ctx, rows)
+		contexts = compaction.ContextMessagesFromAPI(rows)
+		fitted = compaction.DeterministicFit(cfg, contexts, tokens)
+	}
 	if !found && text != "" && requestHistoryDropped(rows, fitted) {
 		reference := compaction.ContextMessage{ID: "host-request-history-reference", Role: "system",
 			Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted,

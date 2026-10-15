@@ -20,7 +20,7 @@ func projectRecordedToolBodies(ctx context.Context, rows []api.Message, tokens .
 		if !isOversizedToolBody(row) {
 			continue
 		}
-		if len(tokens) > 0 && tokens[0] > 1 && compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(out)) <= tokens[0] {
+		if len(tokens) > 0 && tokens[0] > 1 && retainedToolTailTokens(out, i) <= tokens[0] {
 			break
 		}
 		raw := row.Content
@@ -198,4 +198,25 @@ func isOversizedToolBody(row api.Message) bool {
 		return false
 	}
 	return true
+}
+
+func retainedToolTailTokens(rows []api.Message, idx int) int {
+	start := idx
+	for start > 0 && rows[start].Role == api.MessageRoleTool {
+		start--
+	}
+	kept := make([]api.Message, 0, len(rows))
+	dropped := false
+	for i, row := range rows {
+		if i >= start || row.ContextPinned || row.CompactionCheckpoint {
+			kept = append(kept, row)
+		} else {
+			dropped = true
+		}
+	}
+	tokens := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(kept))
+	if dropped {
+		tokens += 64
+	}
+	return tokens
 }

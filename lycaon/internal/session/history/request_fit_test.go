@@ -211,6 +211,7 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 	body := strings.Repeat("Recorded observation. ", 6000)
 	recallBody := strings.Repeat("Recovered page. ", 200)
 	testutil.FailErr(t, "append active exchange", mem.AppendMessages(t.Context(), sess.ID,
+		api.Message{ID: "earlier", Role: api.MessageRoleAssistant, Content: strings.Repeat("Earlier work. ", 120)},
 		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Read the observations"},
 		api.Message{ID: "call", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "read-call", Name: "read", Args: args}}},
 		api.Message{ID: "result", Role: api.MessageRoleTool, Content: body, TrustTier: api.ContentTrustTierTrusted,
@@ -221,7 +222,7 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 			ToolResult: &api.ToolResult{Tool: "recall", ToolCallID: "rc-1", AssistantMessageID: "recall-call", Content: recallBody, Outcome: api.ToolResultOutcomeCompleted}}))
 	rows, err := mem.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "load active exchange", err)
-	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: strings.Repeat("Standing instructions. ", 850)}
+	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: strings.Repeat("Standing instructions. ", 1400)}
 	req := modelcall.CompletionRequest{Model: sess.Model, Messages: append([]api.Message{standing}, rows...)}
 	history := &Service{store: mem, recallAvailable: func(context.Context, *api.Session) bool { return true }}
 	fitted, err := history.FitRequest(t.Context(), sess, rows, req, nativeRequestBudgets{provider})
@@ -231,7 +232,7 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 	call, result, recallKept := false, false, false
 	for _, row := range fitted.Messages {
 		if row.ID == "call" {
-			call = reflect.DeepEqual(row.ToolCalls, rows[1].ToolCalls)
+			call = reflect.DeepEqual(row.ToolCalls, rows[2].ToolCalls)
 		}
 		if row.ID == "result" {
 			result = row.ToolResult != nil && row.ToolResult.ToolCallID == "read-call" && row.ToolResult.AssistantMessageID == "call" && row.ToolResult.Outcome == api.ToolResultOutcomeCompleted && reflect.DeepEqual(row.ToolResult.ToolArgs, args)
