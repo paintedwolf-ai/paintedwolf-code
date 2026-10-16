@@ -314,6 +314,7 @@ func TestNativeCommandCpHabitRedirectMatcher(t *testing.T) {
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
+		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"command", "copy"}},
 	})
 	assertStructuredRejectCode(t, err, "USE_COPY_NATIVE")
 }
@@ -371,6 +372,7 @@ func TestNativeCommandChownExactRedirect(t *testing.T) {
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
+		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"command", "chown"}},
 	})
 	assertStructuredRejectCode(t, err, "USE_CHOWN_NATIVE")
 }
@@ -383,6 +385,7 @@ func TestNativeCommandFindHabitRedirectE2E(t *testing.T) {
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
+		Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"find"}},
 	})
 	if err == nil || !strings.Contains(err.Error(), "USE_FIND_NOT_COMMAND") {
 		t.Fatalf("err = %v want USE_FIND_NOT_COMMAND redirect", err)

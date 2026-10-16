@@ -2,18 +2,21 @@ package toolexecution
 
 import (
 	"context"
-	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestExactReplacementRequiresCallableNativeHandler(t *testing.T) {
@@ -125,57 +128,174 @@ func TestCommandFileWriteRecoveryUsesOnlyFrozenOfferedTools(t *testing.T) {
 	}
 }
 
-func TestLiteralOutputRecoveryRendersActualSurface(t *testing.T) {
+func TestExactReplacementUsesFrozenRecoverySurface(t *testing.T) {
 	wireFixtureGuidanceRenderer(t)
 	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
 	registry := tools.NewDefaultRegistry()
-	calls := 0
-	noop := func(context.Context, map[string]any, tools.ToolContext) (string, error) {
-		calls++
-		return `{"ok":true}`, nil
-	}
-	for _, name := range []string{"command", "write", "request_tools"} {
-		testutil.FailErr(t, "register tool", registry.Register(name, noop))
+	noop := func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil }
+	for _, name := range []string{"command", "wait", "request_tools"} {
+		testutil.FailErr(t, "register recovery fixture", registry.Register(name, noop))
 	}
 	executor := NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "implement")
-	executor.Rejections.SetBlockPlane(stockBlockPlane(t))
 	for _, tc := range []struct {
 		name              string
 		offered, deferred []string
 		want              string
-		loadable          bool
+		uncompiled        bool
 	}{
-		{"offered", []string{"command", "write"}, nil, "Use the supplied", false},
-		{"deferred", []string{"command", "request_tools"}, []string{"write"}, "Call `request_tools`", true},
-		{"unavailable", []string{"command", "request_tools"}, nil, "cannot author", false},
+		{name: "offered", offered: []string{"command", "wait"}, want: "wait"},
+		{name: "deferred", offered: []string{"command", "request_tools"}, deferred: []string{"wait"}, want: "request_tools"},
+		{name: "unavailable", offered: []string{"command"}},
+		{name: "empty compiled context"},
+		{name: "missing context", uncompiled: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := fixtureToolContext(t.TempDir())
 			ctx.Turn.TurnOfferedToolNames = tc.offered
 			ctx.Turn.TurnToolPlan = toolsurface.Compile(tc.offered, tc.deferred)
-			args := map[string]any{"command": `echo built > out.log`}
-			_, err := executor.Invoke(t.Context(), "command", args, ctx)
-			refusal, ok := guidance.RefusalFromError(err)
-			if !ok || refusal.Code() != "USE_WRITE_NATIVE" || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("recovery=%v, want USE_WRITE_NATIVE with %q", err, tc.want)
+			if tc.uncompiled {
+				ctx.Turn.TurnToolPlan = toolsurface.Plan{}
 			}
-			if calls != 0 {
-				t.Fatalf("rejected command executed %d handlers", calls)
-			}
-			if len(refusal.Facts.Feedback) != 1 {
-				t.Fatalf("missing delivered recovery facts: %#v", refusal.Facts)
-			}
-			details := refusal.Facts.Feedback[0].Details
-			if tc.loadable {
-				want := []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "write"}}}
-				actualJSON, err := json.Marshal(details["replacement_calls"])
-				testutil.FailErr(t, "encode delivered recovery", err)
-				wantJSON, err := json.Marshal(want)
-				testutil.FailErr(t, "encode expected recovery", err)
-				if string(actualJSON) != string(wantJSON) {
-					t.Fatalf("delivered loader recovery=%s, want %s", actualJSON, wantJSON)
+			reject := executor.exactCommandReplacementReject(t.Context(), "command", "implement", map[string]any{"command": "sleep 2"}, ctx)
+			if tc.want == "" {
+				if reject != nil {
+					t.Fatalf("unreachable replacement: %#v", reject.Data)
 				}
+				return
+			}
+			if reject == nil {
+				t.Fatal("missing reachable recovery")
+			}
+			calls, _ := reject.Data["replacement_calls"].([]toolcommand.ReplacementCall)
+			if len(calls) != 1 || calls[0].Tool != tc.want {
+				t.Fatalf("recovery calls=%#v, want %s", calls, tc.want)
+			}
+			if tc.want == "request_tools" && calls[0].Args["need"] != "wait" {
+				t.Fatal("known deferred target lost exact loader need")
 			}
 		})
+	}
+}
+
+func TestNativeRecoverySequenceLoadsExactTargetsWithoutRanking(t *testing.T) {
+	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
+	registry := tools.NewDefaultRegistry()
+	noop := func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil }
+	for _, name := range []string{"command", "write", "mkdir", "request_tools"} {
+		testutil.FailErr(t, "register sequence target", registry.Register(name, noop))
+	}
+	activation := tools.NewMemoryActivation()
+	testutil.FailErr(t, "register actual loader", tools.RegisterRequestTools(registry, tools.RequestToolsDeps{Activation: activation, Boundary: fakeRequestBoundary{}, Resolve: func(context.Context, tools.ToolContext, string, []turnload.ToolCard) turnload.RequestOutcome {
+		t.Fatal("exact recovery invoked ranking")
+		return turnload.RequestOutcome{}
+	}}))
+	executor := NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "implement")
+	tc := fixtureToolContext(t.TempDir())
+	tc.Identity.SessionID = "recovery"
+	tc.Turn.TurnOfferedToolNames = []string{"command", "request_tools"}
+	tc.Turn.TurnToolPlan = toolsurface.Compile(tc.Turn.TurnOfferedToolNames, []string{"mkdir", "write"})
+	candidates := []toolcommand.ReplacementCall{{Tool: "mkdir", Args: map[string]any{"path": "sub"}}, {Tool: "write", Args: map[string]any{"path": "sub/out.txt", "content": "a"}}, {Tool: "write", Args: map[string]any{"path": "sub/out.txt", "content": "b", "append": true}}}
+	recovery := executor.classifyNativeRecovery(t.Context(), "implement", tc, candidates, true)
+	if len(recovery.calls) != 2 || !reflect.DeepEqual(recovery.loadTools, []string{"mkdir", "write"}) {
+		t.Fatalf("loading recipe=%+v", recovery)
+	}
+	for i, call := range recovery.calls {
+		if call.Tool != "request_tools" || call.Args["need"] != recovery.loadTools[i] {
+			t.Fatalf("not one exact target: %+v", call)
+		}
+		_, err := registry.Run(t.Context(), call.Tool, call.Args, tc)
+		testutil.FailErr(t, "load exact prerequisite", err)
+	}
+	if got := activation.Active("recovery"); len(got) != 2 || !got["mkdir"] || !got["write"] {
+		t.Fatalf("unexpected activation=%v", got)
+	}
+	tc.Turn.TurnOfferedToolNames = []string{"command", "mkdir", "write"}
+	direct := executor.classifyNativeRecovery(t.Context(), "implement", tc, candidates, true)
+	if !reflect.DeepEqual(direct.calls, candidates) || len(direct.loadTools) != 0 {
+		t.Fatal("ordered native recipe changed")
+	}
+	tc.Turn.TurnOfferedToolNames = []string{"command", "write"}
+	missing := executor.classifyNativeRecovery(t.Context(), "implement", tc, candidates, true)
+	if len(missing.calls) != 0 {
+		t.Fatal("missing prerequisite emitted partial recipe")
+	}
+	// Schema failure must suppress the entire recipe, including earlier valid calls.
+	meta, _ := registry.Meta("write")
+	meta.ArgsSchema = map[string]any{"type": "object", "required": []string{"unprovided"}}
+	testutil.FailErr(t, "replace current schema", registry.RegisterDerived(meta, noop))
+	tc.Turn.TurnOfferedToolNames = []string{"command", "mkdir", "write"}
+	if got := executor.classifyNativeRecovery(t.Context(), "implement", tc, candidates, true); len(got.calls) != 0 {
+		t.Fatal("invalid later call left an executable prefix")
+	}
+}
+
+func TestNativeRecoveryInvokeRendersCurrentFactsThroughProjection(t *testing.T) {
+	bp := stockBlockPlane(t)
+	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
+	registry := tools.NewDefaultRegistry()
+	invoked := 0
+	for _, name := range []string{"command", "write", "mkdir", "wait", "request_tools"} {
+		testutil.FailErr(t, "register invocation fixture", registry.Register(name, func(context.Context, map[string]any, tools.ToolContext) (string, error) { invoked++; return "", nil }))
+	}
+	executor := NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "implement")
+	executor.Rejections.SetBlockPlane(bp)
+	for _, fixture := range []struct {
+		name, command       string
+		offered, deferred   []string
+		load, omitted       bool
+		incomplete, inexact bool
+	}{
+		{name: "direct", command: "sleep 2", offered: []string{"command", "wait"}},
+		{name: "deferred", command: "sleep 2", offered: []string{"command", "request_tools"}, deferred: []string{"wait"}, load: true},
+		{name: "write deferred", command: "cat > out.txt <<'EOF'\nhello\nEOF", offered: []string{"command", "request_tools"}, deferred: []string{"write"}, load: true},
+		{name: "literal redirect", command: "echo built > out.log", offered: []string{"command", "write"}},
+		{name: "literal redirect deferred", command: "echo built > out.log", offered: []string{"command", "request_tools"}, deferred: []string{"write"}, load: true},
+		{name: "missing prerequisite", command: "mkdir -p sub && cat > sub/out.txt <<'EOF'\nhello\nEOF", offered: []string{"command", "write"}, incomplete: true},
+		{name: "inexact write", command: "cat << EOF > out.txt\nUSER=$USER\nEOF", offered: []string{"command", "write"}, inexact: true},
+		{name: "large exact write", command: "cat > out.txt <<'EOF'\n" + strings.Repeat("body", 12000) + "\nEOF", offered: []string{"command", "write"}, omitted: true},
+	} {
+		t.Run(fixture.name, func(t *testing.T) {
+			tc := fixtureToolContext(t.TempDir())
+			tc.Turn.TurnOfferedToolNames = fixture.offered
+			tc.Turn.TurnToolPlan = toolsurface.Compile(fixture.offered, fixture.deferred)
+			// Context supplied by an earlier caller must not override Invoke's frozen surface.
+			stale := tools.WithRecoveryTools(t.Context(), []string{"task", "write"})
+			_, err := executor.Invoke(stale, "command", map[string]any{"command": fixture.command}, tc)
+			refusal, ok := guidance.RefusalFromError(err)
+			if !ok {
+				t.Fatalf("missing rendered refusal: %v", err)
+			}
+			tr := toolrejection.AsToolReject(err)
+			if tr == nil || tr.Data["tool_loadable"] != fixture.load {
+				t.Fatalf("incorrect loading facts: %+v", tr)
+			}
+			fix, instead := refusal.Copy["fix"], refusal.Copy["instead"]
+			if fixture.load {
+				if !strings.Contains(fix, "containing only that name") || !strings.Contains(instead, "Load") {
+					t.Fatalf("missing exact load remedy: %v", refusal.Copy)
+				}
+			} else if fixture.incomplete {
+				if strings.Contains(fix, "Call `write`") || !strings.Contains(fix, "do not perform only part") || !strings.Contains(instead, "complete validated route") {
+					t.Fatalf("partial recipe remedy: %v", refusal.Copy)
+				}
+			} else if fixture.inexact {
+				if !strings.Contains(fix, "No complete replacement recipe was validated") || !strings.Contains(instead, "`write`") {
+					t.Fatalf("missing inexact recovery: %v", refusal.Copy)
+				}
+			} else if !strings.Contains(fix, "If `replacement_calls` are present") || !strings.Contains(instead, "when present") {
+				t.Fatalf("unconditional diagnostic promise: %v", refusal.Copy)
+			}
+			result := &api.ToolResult{Tool: "command", ToolCallID: "call", Feedback: refusal.Facts.Feedback}
+			var wire strings.Builder
+			for _, message := range transcript.Project([]api.Message{{ID: "result", Role: api.MessageRoleTool, Content: refusal.Body, ToolResult: result}}) {
+				wire.WriteString(message.Content)
+			}
+			if strings.Contains(wire.String(), "details_omitted") != fixture.omitted {
+				t.Fatalf("unexpected diagnostic projection omission=%t", fixture.omitted)
+			}
+		})
+	}
+	if invoked != 0 {
+		t.Fatalf("rejection executed %d handlers", invoked)
 	}
 }
