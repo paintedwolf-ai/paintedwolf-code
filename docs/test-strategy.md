@@ -697,7 +697,10 @@ The integration gate uses a conservative change planner. It always compiles
 the host and runs repository contracts and smoke tests. Go changes add integration-enabled reverse import
 closure, including test imports; Den changes run the complete frontend suite.
 Frontend execution deliberately stays broad because source-scanning tests and
-runtime discovery are not represented by static imports alone. Unknown paths,
+runtime discovery are not represented by static imports alone. Documentation prose,
+Markdown under `docs/` and the repository's policy and community files, adds
+nothing to that baseline; `CHANGELOG.md`, which Den embeds, and OpenAPI
+documentation are build inputs and widen the gate. Unknown paths,
 fixtures, dependencies, build inputs, generated contracts, and verification
 policy expand to the full `check` profile. A missing Git base fails planning;
 an unresolved Go graph runs the full Go recipe. An empty shard never passes as
