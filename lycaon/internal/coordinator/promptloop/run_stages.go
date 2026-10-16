@@ -274,6 +274,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			return l.Closeout.applyAcceptedCloseoutReport(ctx, sess, sessionID, userPrompt, surfaceID, st, assistantMsg, guidance.CloseoutRead{Report: report, Unread: unread})
 		}
 	} else {
+		l.Closeout.resumeWork(ctx, sessionID, st)
 		if st != nil && st.turnID != "" && st.attemptID != "" && l.Projection.Deps.CheckpointTurn != nil {
 			checkpoint := fmt.Sprintf(`{"model_output_id":%q,"assistant_message_id":%q}`, st.output.id, assistantMsg.ID)
 			if err := l.Projection.Deps.CheckpointTurn(ctx, st.turnID, st.attemptID, store.TurnPhaseTools, checkpoint); err != nil {
@@ -320,13 +321,6 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		if breakToolLoop {
 			out.breakLoop = true
 			out.exit = loopExitToolBoundary
-			return out, nil
-		}
-		if stalled, serr := l.Closeout.maybeEmitStalledCloseout(ctx, sess, sessionID, userPrompt, surfaceID, st); serr != nil {
-			return out, serr
-		} else if stalled {
-			out.breakLoop = true
-			out.exit = loopExitCompleted
 			return out, nil
 		}
 		st.history, err = l.Tools.reloadHistoryAfterToolCompaction(ctx, sessionID, sess, surfaceID, st.history, st)
@@ -425,28 +419,6 @@ func (l *turnCloseout) applyAcceptedCloseoutReport(
 	out.breakLoop = true
 	out.exit = loopExitCompleted
 	return out, nil
-}
-
-func (l *turnCloseout) maybeEmitStalledCloseout(
-	ctx context.Context,
-	sess *api.Session,
-	sessionID, userPrompt, surfaceID string,
-	st *promptLoopTurnState,
-) (committed bool, err error) {
-	if !l.closeoutFuseTripped(ctx, sess, sessionID, surfaceID) {
-		return false, nil
-	}
-	emitOut, eerr := l.emitStalledCloseout(ctx, sess, sessionID, userPrompt, surfaceID, st, st.history)
-	if eerr != nil {
-		return false, eerr
-	}
-	if !emitOut.committed {
-		return false, nil
-	}
-	st.history = emitOut.history
-	st.lastAssistantContent = emitOut.assistantMsg.Content
-	st.proseFinishDelivered = true
-	return true, nil
 }
 
 func workersIdleForSynthesis(l *promptContext, ctx context.Context, sess *api.Session) bool {

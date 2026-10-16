@@ -6,7 +6,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonshape"
-	"github.com/lycaon/lycaon/internal/limits"
 )
 
 func TestCloseoutStallSeedsAndPersists(t *testing.T) {
@@ -37,42 +36,27 @@ func TestCloseoutStallSeedsAndPersists(t *testing.T) {
 	}
 }
 
-func TestCloseoutStallFuseTrips(t *testing.T) {
+func TestCloseoutWorkRetiresDraftWithoutReplenishingBudgets(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
-	ctx := context.Background()
-
-	if mgr.NoteCoordinatorToolTurn(ctx, sess.ID) {
-		t.Fatal("fuse must not trip with no reject outstanding (disarmed)")
-	}
-
-	mgr.NoteCloseoutGroundingReject(ctx, sess.ID, guidance.InvestCitationsRequiredCode, guidance.InvestCitationsRequiredCode, "draft", nil)
-	budget := limits.DefaultCloseoutStallToolTurns
-	for i := 1; i < budget; i++ {
-		if mgr.NoteCoordinatorToolTurn(ctx, sess.ID) {
-			t.Fatalf("fuse tripped early at tool turn %d, budget %d", i, budget)
+	ctx := t.Context()
+	mgr.RecordGroundingFriction(ctx, sess.ID)
+	mgr.NoteCloseoutGroundingReject(ctx, sess.ID, guidance.InvestHandleNotObservedCode, "old", "old conclusion", nil)
+	mgr.NoteCloseoutGroundingReject(ctx, sess.ID, guidance.ReportClaimUnreportedCode, "document", "old conclusion", nil)
+	promptBefore, cycleBefore := closeoutState(mgr, sess.ID, sess.ID)
+	for i := 0; i < 7; i++ {
+		mgr.ResumeWork(ctx, sess.ID)
+		got := mgr.CloseoutStallState(ctx, sess.ID)
+		if got.Active || got.Drafted != "" || got.PrevKey != "" || len(got.ForcedBy) != 0 || len(got.Unread) != 0 {
+			t.Fatalf("tool turn %d retained old report eligibility: %+v", i, got)
+		}
+		promptAfter, cycleAfter := closeoutState(mgr, sess.ID, sess.ID)
+		if got.Attempt != 1 || got.DocumentAttempt != 1 || promptAfter != promptBefore || cycleAfter.groundingRejects != cycleBefore.groundingRejects {
+			t.Fatalf("tool turn %d replenished repair budgets: %+v", i, got)
 		}
 	}
-	if !mgr.NoteCoordinatorToolTurn(ctx, sess.ID) {
-		t.Fatalf("fuse did not trip at the budget of %d tool turns", budget)
-	}
-}
-
-func TestCloseoutStallRejectResetsToolTurns(t *testing.T) {
-	mgr, sess := newSynthesisDelayManager(t)
-	ctx := context.Background()
-
-	mgr.NoteCloseoutGroundingReject(ctx, sess.ID, guidance.InvestCitationsRequiredCode, guidance.InvestCitationsRequiredCode, "draft", nil)
-	mgr.NoteCoordinatorToolTurn(ctx, sess.ID)
-	mgr.NoteCloseoutGroundingReject(ctx, sess.ID, guidance.InvestCitationsRequiredCode, guidance.InvestCitationsRequiredCode, "draft", nil)
-
-	budget := limits.DefaultCloseoutStallToolTurns
-	for i := 1; i < budget; i++ {
-		if mgr.NoteCoordinatorToolTurn(ctx, sess.ID) {
-			t.Fatalf("fuse tripped early after reset at tool turn %d", i)
-		}
-	}
-	if !mgr.NoteCoordinatorToolTurn(ctx, sess.ID) {
-		t.Fatal("fuse did not trip at budget after a re-arming reject")
+	mgr.NoteCloseoutGroundingReject(ctx, sess.ID, guidance.InvestHandleNotObservedCode, "new", "fresh conclusion", nil)
+	if got := mgr.CloseoutStallState(ctx, sess.ID); !got.Active || got.Drafted != "fresh conclusion" || got.Attempt != 2 {
+		t.Fatalf("fresh conclusion did not replace retired draft: %+v", got)
 	}
 }
 

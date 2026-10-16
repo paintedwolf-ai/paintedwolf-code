@@ -16,7 +16,7 @@ copy:
   cause: 'cited_urls must reference URLs already recorded in the evidence union for this chat.'
   why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
   fix: 'Repair only the trailing citation metadata. Retain observed URLs that support the pinned report; remove unsupported URLs, using cited_urls [] if none remain.'
-  instead: 'The citation repair does not reopen research or worker dispatch. Keep unsupported claims explicitly untraced.'
+  instead: 'Keep unsupported claims explicitly untraced. Resuming work requires a fresh report.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator_synthesis
 x-paintedwolf-evidence:

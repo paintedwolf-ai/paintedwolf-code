@@ -1,6 +1,6 @@
 [host:coordinator-citation-grounding]
 
-Emit only the citations fence; the host keeps the pinned body. Attempt {{ attempt }}/{{ max_attempts }}.
+To repair citations, emit only the citations fence; the host keeps the pinned body. Attempt {{ attempt }}/{{ max_attempts }}.
 
 Rejected: {{ offenders_sample }}
 Observed handles: {{ observed_handles_sample }}
@@ -13,7 +13,7 @@ Keep accepted citations. Copy exact handles; do not construct a handle from a to
 Observed repair choices (not inferred support for your report):
 {{ repair_observations }}
 {% endif %}
-Tool calls are unavailable during this citation-only repair. Use the observations already provided; do not repeat an effect to obtain citations. For a file claim, include path, line, and excerpt from its observation. Remove citations you cannot support.
+{% if resume_work_allowed %}If the report needs more work, use an offered tool, then write a fresh report reflecting its results. This retires the pinned body. Otherwise repair citations using existing observations.{% else %}Repair citations using existing observations.{% endif %} For citation repair, do not repeat an effect to obtain citations. For a file claim, include path, line, and excerpt from its observation. Remove citations you cannot support.
 {% if drafted_synthesis %}
 Pinned body:
 ```

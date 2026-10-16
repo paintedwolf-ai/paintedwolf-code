@@ -75,7 +75,7 @@ func (m *Closeout) Build() promptloop.CloseoutDeps {
 	deps.BeginCloseoutIntent = m.Closeouts.BeginIntent
 	deps.RecordGroundingFriction = m.Closeouts.RecordGroundingFriction
 	deps.NoteCloseoutGroundingReject = m.Closeouts.NoteCloseoutGroundingReject
-	deps.NoteCoordinatorToolTurn = m.Closeouts.NoteCoordinatorToolTurn
+	deps.ResumeCloseoutWork = m.Closeouts.ResumeWork
 	deps.CloseoutStallState = m.Closeouts.CloseoutStallState
 
 	if m.Reports != nil {

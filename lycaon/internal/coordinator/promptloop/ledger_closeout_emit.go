@@ -6,36 +6,19 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 var errCloseoutAssemblerUnavailable = errors.New("closeout assembler unavailable")
 
-// The tool-turn fuse applies only to coordinator closeout surfaces.
-func (l *turnCloseout) closeoutFuseTripped(ctx context.Context, sess *api.Session, sessionID, surfaceID string) bool {
-	if l == nil || l.Deps.NoteCoordinatorToolTurn == nil {
-		return false
+// resumeWork ends report pinning before any selected tool can produce an outcome.
+func (l *turnCloseout) resumeWork(ctx context.Context, sessionID string, st *promptLoopTurnState) {
+	if l.Deps.ResumeCloseoutWork != nil {
+		l.Deps.ResumeCloseoutWork(ctx, sessionID)
 	}
-	if sess == nil || sess.IsWorkerChild() || !surface.SurfaceDeliversReport(surfaceID) {
-		return false
-	}
-	return l.Deps.NoteCoordinatorToolTurn(ctx, sessionID)
-}
-
-func (l *turnCloseout) emitStalledCloseout(
-	ctx context.Context,
-	sess *api.Session,
-	sessionID, userPrompt, surfaceID string,
-	st *promptLoopTurnState,
-	history []api.Message,
-) (closeoutCommitOutcome, error) {
-	var retained guidance.RetainedCloseout
-	if l.Deps.CloseoutStallState != nil {
-		retained = l.Deps.CloseoutStallState(ctx, sessionID)
-	}
-	return l.emitAssembledCloseout(ctx, sess, sessionID, userPrompt, surfaceID, retained.Drafted, retained.ForcedBy, st, history)
+	st.closeoutRetry.prevKey = ""
+	st.closeoutRetry.codes = nil
 }
 
 // storedReportIssues are the requirements a run report the host stores

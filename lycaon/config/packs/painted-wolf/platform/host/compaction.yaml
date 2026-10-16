@@ -46,9 +46,6 @@ max_worker_grounding_retries: 3
 max_grounding_rejects_per_turn: 8
 max_grounding_rejects_per_cycle: 4
 
-# Tool-turn limit before the host assembles a rejected closeout.
-max_tool_turns_after_citation_reject: 6
-
 # Repairs a run report may make to its document fields; separate from citation
 # friction, since a document repair adds conclusions rather than references.
 max_report_document_retries: 3
