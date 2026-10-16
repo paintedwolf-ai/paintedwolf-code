@@ -3008,6 +3008,12 @@
       "severity": "warning",
       "summary": "The `{{ tool }}` call did not run."
     },
+    "TOOL_CALL_UNPARSED": {
+      "branch_instruction": "Do not assume the dropped call ran.",
+      "category": "recoverable",
+      "emit": "guard:coordinator",
+      "summary": "No tool executed. The model provider could not parse the arguments of your last tool call as JSON and dropped the call."
+    },
     "TOOL_INVOKE_PROSE_TURN": {
       "branch_instruction": "Complete the current closeout without starting another execution arc",
       "category": "recoverable",

@@ -1,0 +1,25 @@
+oar: '1.0'
+id: TOOL_CALL_UNPARSED
+kind: invariant
+anchor: content.output
+requires:
+  facts:
+    - paintedwolf.reject_observation
+when: paintedwolf.reject_observation == "provider_tool_call_unparsed"
+effect: block
+copy:
+  what: No tool executed. The model provider could not parse the arguments of your last tool call as JSON and dropped the call.
+  cause: The tool call arguments were not valid JSON.
+  why: The host received no call to run.
+  fix: Submit the tool call again through the native tool channel with valid JSON arguments. Escape quotes, backslashes, and line breaks inside string values.
+  instead: Do not assume the dropped call ran.
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+x-paintedwolf-message: The provider dropped a tool call whose arguments were not valid JSON
+x-paintedwolf-scenarios:
+  - id: dropped_call
+    vars: {}
+    expect_contains:
+      - 'No tool executed.'
+      - valid JSON arguments
+      - 'Code: TOOL_CALL_UNPARSED'

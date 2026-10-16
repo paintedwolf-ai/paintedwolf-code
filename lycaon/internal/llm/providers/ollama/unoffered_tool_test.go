@@ -14,8 +14,11 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// The shipped tool_not_offered grammar is Ollama's exact rejection with a
+// function-name token.
 func TestUnofferedToolErrorGrammar(t *testing.T) {
-	offered := toolsToOllama([]tools.ToolMeta{{Name: "read"}, {Name: "ask_user"}})
+	policy := shippedToolCallRejections(t)
+	req := Request{Tools: toolsToOllama([]tools.ToolMeta{{Name: "read"}, {Name: "ask_user"}})}
 	for errText, want := range map[string]string{
 		"tool 'edit' not found":                                 "edit",
 		"tool 'mcp_git-hub_open_pr' not found":                  "mcp_git-hub_open_pr",
@@ -38,7 +41,7 @@ func TestUnofferedToolErrorGrammar(t *testing.T) {
 		"error parsing tool call: tool 'edit' not found":        "",
 		"tool 'edit' not found; tool 'surface_snapshot' exists": "",
 	} {
-		tc, ok := unofferedToolCall(errText, offered)
+		tc, ok, _ := req.toolCallRejection(policy, "desktop", errText)
 		if got := map[bool]string{true: tc.Name}[ok]; got != want {
 			t.Errorf("%q recovered %q, want %q", errText, got, want)
 		}
@@ -46,7 +49,7 @@ func TestUnofferedToolErrorGrammar(t *testing.T) {
 			t.Errorf("%q recovered call %+v, want a bare named call", errText, tc)
 		}
 	}
-	if _, ok := unofferedToolCall("tool 'edit' not found", nil); ok {
+	if _, ok, _ := (Request{}).toolCallRejection(policy, "desktop", "tool 'edit' not found"); ok {
 		t.Fatal("recovered without an offered set")
 	}
 }
@@ -89,7 +92,7 @@ func TestOllamaRecoversUnofferedToolRejection(t *testing.T) {
 						_ = json.NewEncoder(w).Encode(map[string]any{"error": tc.providerError})
 					}))
 					defer srv.Close()
-					p := New("desktop", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "ministral-3:3b", ContextLength: 32768}})
+					p := New("desktop", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "ministral-3:3b", ContextLength: 32768}}).WithToolCallRejections(shippedToolCallRejections(t))
 					req := modelcall.CompletionRequest{Model: "ministral-3:3b", Tools: tc.tools, Messages: []api.Message{{Role: api.MessageRoleUser, Content: "give me the gist"}}}
 					if tc.forbidden {
 						req.ToolUse = modelcall.ToolUseForbidden

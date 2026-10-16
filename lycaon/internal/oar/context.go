@@ -11,6 +11,8 @@ type ContentObservation struct {
 	Segments        []ContentSegment
 	TextActionTools []string
 	EmptyResponse   *EmptyResponseObservation
+	// ToolCallUnparsed records a native call the provider dropped as invalid JSON.
+	ToolCallUnparsed bool
 }
 
 // EmptyResponseObservation describes the frozen request for a terminal response without usable output.
@@ -25,6 +27,9 @@ func (gc *GuardContext) SetContentObservation(observation ContentObservation) {
 	if observation.EmptyResponse != nil {
 		gc.Rejection.RejectObservation = "terminal_empty_response"
 		gc.Response = *observation.EmptyResponse
+	}
+	if observation.ToolCallUnparsed {
+		gc.Rejection.RejectObservation = "provider_tool_call_unparsed"
 	}
 	if len(observation.TextActionTools) > 0 {
 		gc.Rejection.RejectObservation = "text_action_envelope"

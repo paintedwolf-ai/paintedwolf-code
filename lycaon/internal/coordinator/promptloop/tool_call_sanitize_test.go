@@ -2,15 +2,10 @@ package promptloop
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -205,13 +200,7 @@ func TestOfferedArgumentSchemasStayBoundToModelRequest(t *testing.T) {
 }
 
 func TestTextActionRecoveryThroughLoop(t *testing.T) {
-	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	root := testutil.CheckoutRoot(t)
-	testutil.FailErr(t, "install anchors", anchorcatalog.InstallFile(filepath.Join(root, "lycaon/config/packs/painted-wolf/platform/host/anchors/catalog.yaml")))
-	loader, err := oar.NewLoader(filepath.Join(root, "schemas"))
-	testutil.FailErr(t, "loader", err)
-	rules, err := loader.LoadEffectivePolicy()
-	testutil.FailErr(t, "policy", err)
+	newPipeline := outputPolicyPipeline(t)
 	for _, tc := range []struct {
 		name, text           string
 		repeats              int
@@ -229,8 +218,6 @@ func TestTextActionRecoveryThroughLoop(t *testing.T) {
 		{"bounded retry", `{"tool":"read","args":{}}`, 20, false, BlockedLoopRejectCap + 1, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			pipeline := oar.NewGuardPipeline(rules, loader, oar.NewCounterStore())
-			pipeline.EnableAnchor(oar.AnchorContentOutput)
 			reg := tools.NewStubRegistry()
 			executed, rejected, nudges := 0, 0, 0
 			testutil.FailErr(t, "register", reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
@@ -254,24 +241,8 @@ func TestTextActionRecoveryThroughLoop(t *testing.T) {
 				Context: ContextDeps{Tools: reg, Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() }, BuildMessages: func(_ context.Context, _ *api.Session, h []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 					return h, nil
 				}},
-				Model: ModelDeps{LLM: &textActionClient{responses: responses}},
-				Closeout: CloseoutDeps{EvaluateContentAnchor: func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, _ string, _ map[string]any) (*guidance.Refusal, bool, string, bool) {
-					if anchor != oar.AnchorContentOutput {
-						return nil, false, "", false
-					}
-					gc := oar.NewGuardContext()
-					gc.Session.SessionID = sess.ID
-					gc.SetContentObservation(observation)
-					result, err := pipeline.EvaluateBlock(ctx, anchor, gc)
-					testutil.FailErr(t, "output policy", err)
-					if result.Decision == nil {
-						return nil, false, "", false
-					}
-					decision := result.Decision
-					body, err := guidance.RenderPolicyCopy(ctx, decision.Code, string(decision.Effect), decision.Copy)
-					testutil.FailErr(t, "render output policy", err)
-					return guidance.NewRefusal(decision.Code, body).WithPolicyCopy(decision.Copy).WithDetails(decision.Data, nil), true, "", false
-				}},
+				Model:    ModelDeps{LLM: &textActionClient{responses: responses}},
+				Closeout: CloseoutDeps{EvaluateContentAnchor: outputPolicyEvaluator(t, newPipeline())},
 				Projection: ProjectionDeps{
 					AppendDraftVersion: func(_ context.Context, _, _, body, code string) (int, error) {
 						if code == "TOOL_ACTION_IN_TEXT" {
