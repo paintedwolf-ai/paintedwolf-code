@@ -116,7 +116,7 @@ var configRootRegistry = []ConfigRootEntry{
 
 	// Rebuildable caches cleared through local-data buckets
 	{Name: enginepaths.BrowserCacheDirName, IsDir: true, Class: ClassLocalDataBucket, Bucket: BucketBrowserCache, Reason: "rebuildable managed browser cache"},
-	{Name: enginepaths.CacheDirName, IsDir: true, Class: ClassLocalDataBucket, Bucket: BucketSourceCatalog, Reason: "rebuildable subtree grouping sourcecatalog caches"},
+	{Name: enginepaths.CacheDirName, IsDir: true, Class: ClassLocalDataBucket, Bucket: BucketSourceCatalog, Reason: "rebuildable subtree grouping source catalog, OSV, and decision engine caches"},
 	{Name: "debug", IsDir: true, Class: ClassLocalDataBucket, Bucket: BucketDebugLogs, Reason: "diagnostic debug traces and session captures"},
 	{Name: enginepaths.ExtensionsCacheDirName, IsDir: true, Class: ClassLocalDataBucket, Bucket: BucketExtensionCache, Reason: "content-addressed extension pack tarball cache"},
 	{Name: enginepaths.ExtensionsMetaDirName, IsDir: true, Class: ClassLocalDataBucket, Bucket: BucketExtensionCache, Reason: "community meta-pack index cache"},

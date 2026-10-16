@@ -4,6 +4,7 @@ package decidetest
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/decide"
 )
@@ -22,6 +23,8 @@ type Fake struct {
 	Unavailable bool
 	// Heads lists the heads Loaded reports; nil means every head loaded.
 	Heads []decide.Head
+	// ReferenceTime is what Speed reports.
+	ReferenceTime time.Duration
 
 	Decisions []DecideCall
 	Ranks     []RankCall
@@ -95,6 +98,14 @@ func (f *Fake) Rank(_ context.Context, head decide.Head, task string, candidates
 // Available reports the scripted availability.
 func (f *Fake) Available() bool { return f != nil && !f.Unavailable }
 
+// Speed reports the scripted reference batch time.
+func (f *Fake) Speed() time.Duration {
+	if f == nil {
+		return 0
+	}
+	return f.ReferenceTime
+}
+
 // LoadAll is the decider of a scripted run: every yes/no question and every
 // multi-question option is a confident yes, so each loadable unit a turn could
 // carry is loaded, and every choice and ranking abstains.
@@ -134,3 +145,6 @@ func (LoadAll) Available() bool { return true }
 
 // Loaded is true for every head.
 func (LoadAll) Loaded(decide.Head) bool { return true }
+
+// Speed is unmeasured.
+func (LoadAll) Speed() time.Duration { return 0 }

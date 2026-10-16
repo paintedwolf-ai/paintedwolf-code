@@ -16,7 +16,7 @@ type Runtime struct {
 
 // Load selects the configured decision engine and its ranking policies.
 func (b *Runtime) Load(override decide.Decider) error {
-	policies, err := decide.LoadPolicies()
+	catalog, err := decide.LoadCatalog()
 	if err != nil {
 		return fmt.Errorf("decision catalog: %w", err)
 	}
@@ -24,12 +24,13 @@ func (b *Runtime) Load(override decide.Decider) error {
 		b.Decider = override
 	} else {
 		cfg := bialy.ConfigFromEnvironment()
-		if catalog, err := turnload.LoadCatalog(); err == nil {
-			cfg.HeadMaxLen = catalog.State.HeadTokens
+		cfg.Qualify = catalog.Engine.Reference
+		if turns, err := turnload.LoadCatalog(); err == nil {
+			cfg.HeadMaxLen = turns.State.HeadTokens
 		}
 		b.Decider = bialy.New(cfg)
 	}
-	b.Rerank = decide.Reranker{Decider: b.Decider, Policies: policies}
+	b.Rerank = decide.Reranker{Decider: b.Decider, Policies: catalog.Policies}
 	return nil
 }
 

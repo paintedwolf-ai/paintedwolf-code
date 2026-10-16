@@ -112,6 +112,10 @@ type Engine struct {
 	Name   string `json:"name"`
 	Model  string `json:"model"`
 	Device string `json:"device"`
+	// Adapter is the GPU's own name when the device is one.
+	Adapter string `json:"adapter,omitempty"`
+	// ProbeMS is the reference batch time the engine measured on its device.
+	ProbeMS float64 `json:"probe_ms,omitempty"`
 	// Head lists the loaded heads as name=label pairs, or is empty for the
 	// base model alone.
 	Head string `json:"head,omitempty"`
@@ -145,6 +149,9 @@ type Decider interface {
 	Available() bool
 	// Loaded reports whether the engine serves head with trained weights.
 	Loaded(head Head) bool
+	// Speed is the engine's time for one reference batch of ReferenceCandidates
+	// candidates on its device, or zero before it has measured one.
+	Speed() time.Duration
 }
 
 var (
@@ -176,3 +183,6 @@ func (Absent) Available() bool { return false }
 
 // Loaded is false.
 func (Absent) Loaded(Head) bool { return false }
+
+// Speed is unmeasured.
+func (Absent) Speed() time.Duration { return 0 }

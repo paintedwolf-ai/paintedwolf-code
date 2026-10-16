@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
@@ -19,7 +20,8 @@ const (
 	EnvBinary = "LYCAON_DECIDE_BINARY"
 	// EnvDisabled switches the engine off; every decision then abstains.
 	EnvDisabled = "LYCAON_DECIDE_DISABLED"
-	// EnvDevice pins the inference device: auto, cpu, cuda, cuda:N, metal, metal:N.
+	// EnvDevice pins the inference device: auto, cpu, mlx, vulkan or vulkan:N. A pinned
+	// device serves whatever its speed.
 	EnvDevice = "LYCAON_DECIDE_DEVICE"
 	// EnvModelDir overrides the checkpoint directory.
 	EnvModelDir = "LYCAON_DECIDE_MODEL_DIR"
@@ -56,6 +58,11 @@ type Config struct {
 	// Metallib is MLX's Metal library, passed to the engine when set; the engine
 	// otherwise looks beside its own executable.
 	Metallib string
+	// Qualify is the slowest reference batch a device may take when the engine
+	// picks the device itself; zero accepts the fastest whatever its speed.
+	Qualify time.Duration
+	// CacheDir keeps the engine's device verdict and compiled GPU kernels.
+	CacheDir string
 	// Disabled abstains without resolving anything.
 	Disabled bool
 }
@@ -69,6 +76,7 @@ func ConfigFromEnvironment() Config {
 		Disabled: configdir.EnvTruthy(os.Getenv(EnvDisabled)),
 		Heads:    bundledHeads(),
 		Metallib: strings.TrimSpace(os.Getenv(EnvMetallib)),
+		CacheDir: ManagedCacheDir(),
 	}
 	if cfg.Metallib == "" {
 		cfg.Metallib = bundledMetallib()
@@ -172,6 +180,12 @@ func (c Config) Args() []string {
 	}
 	if c.Metallib != "" {
 		args = append(args, "--metallib", c.Metallib)
+	}
+	if c.Qualify > 0 {
+		args = append(args, "--qualify-ms", strconv.FormatInt(c.Qualify.Milliseconds(), 10))
+	}
+	if c.CacheDir != "" {
+		args = append(args, "--cache-dir", c.CacheDir)
 	}
 	for _, head := range decide.Heads() {
 		if path := c.Heads[head]; path != "" {

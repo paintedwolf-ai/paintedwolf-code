@@ -107,6 +107,9 @@ func (r Reranker) Rerank(ctx context.Context, site Site, task string, lexical []
 	case len(texts) < 2:
 		outcome.Reason = "nothing to rank"
 		return finish()
+	case !r.fits(policy, min(len(texts), policy.MaxCandidates)):
+		outcome.Reason = "engine too slow for the deadline"
+		return finish()
 	}
 	top := topIndices(lexical, policy.MaxCandidates)
 	scored := make([]string, len(top))
@@ -128,6 +131,20 @@ func (r Reranker) Rerank(ctx context.Context, site Site, task string, lexical []
 	outcome.Scored = len(top)
 	outcome.Abstained = false
 	return finish()
+}
+
+// fits reports whether the engine's measured speed scores n candidates in the
+// site's chunks within its deadline, so a site the device cannot serve in time
+// keeps its lexical order at once instead of after the deadline. An engine that
+// has not measured itself is given the chance.
+func (r Reranker) fits(policy RerankPolicy, n int) bool {
+	speed := r.Decider.Speed()
+	if speed <= 0 {
+		return true
+	}
+	chunks := (n + policy.Chunk - 1) / policy.Chunk
+	perChunk := time.Duration(float64(speed) * float64(policy.Chunk) / ReferenceCandidates)
+	return time.Duration(chunks)*perChunk <= policy.Deadline
 }
 
 // headForSite names the head a site ranks with: web pages have their own,

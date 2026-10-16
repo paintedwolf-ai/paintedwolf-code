@@ -86,10 +86,13 @@ Painted Wolf Code commit it trained against in turn, and Bialy's
 `docs/releases.md` lists every release with the Painted Wolf Code versions
 that ship it.
 
-On Apple silicon the engine runs the model on Apple's MLX (`--device mlx`,
-what `auto` picks there): candle's Metal backend costs about five times more
-per row, and the MLX port in `native/src/mlx.rs` mirrors the candle port op
-for op, which its parity test checks on a tiny checkpoint. MLX's kernels
+The engine has three runtimes for one model: candle on the CPU, MLX on Apple
+silicon, and Burn on any Vulkan GPU. The MLX port in `native/src/mlx.rs` and
+the Vulkan port in `native/src/vulkan.rs` mirror the candle port op for op,
+which their parity tests check on a tiny checkpoint; the Vulkan tests run on
+the first GPU, or on Mesa's lavapipe without one. `auto` measures every
+reachable device and keeps the fastest that meets `engine.reference_ms`
+([Where it runs](../../docs/decision-engine.md#where-it-runs)). MLX's kernels
 ship as `engine-root/decide/mlx.metallib` (about 136 MB, the framework's
 whole kernel library); the host passes that path as `--metallib`, and the
 engine also finds a copy beside its own executable. Building the engine on a
@@ -141,7 +144,7 @@ The backbone is one choice for every head: the heads share the encoder, so
 the replay eval here and the rerank eval must agree on it before either
 ships. The shipped backbone is `convaiinnovations/laya-multilingual`: on the
 same turn data it scored no worse than the English checkpoint and ran the
-turn set in 0.81 s against 1.32 s p50 on candle Metal. Changing it means
+turn set in 0.81 s against 1.32 s p50 on the same Apple GPU. Changing it means
 training the turn-load head and running the replay eval under each id on the
 held-out captures.
 

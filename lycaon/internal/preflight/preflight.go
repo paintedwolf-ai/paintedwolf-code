@@ -78,6 +78,8 @@ const (
 	ReasonDecisionBinaryMissing DecisionReason = "binary_missing"
 	// ReasonDecisionModelMissing: the checkpoint is not installed yet, or is still downloading.
 	ReasonDecisionModelMissing DecisionReason = "model_missing"
+	// ReasonDecisionNoCapableDevice: no device on this machine runs the engine fast enough.
+	ReasonDecisionNoCapableDevice DecisionReason = "no_capable_device"
 	// ReasonDecisionUnusable: the engine started but did not answer its handshake.
 	ReasonDecisionUnusable DecisionReason = "unusable"
 )

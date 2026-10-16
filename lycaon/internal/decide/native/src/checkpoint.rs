@@ -1,4 +1,4 @@
-//! Locating the five files a checkpoint is made of on disk.
+//! Locating the five files a checkpoint is made of on disk, and checking its tensors.
 
 use std::path::{Path, PathBuf};
 
@@ -79,10 +79,101 @@ impl Checkpoint {
     }
 }
 
+/// Tensor prefixes every decision checkpoint carries.
+const REQUIRED_PREFIXES: [&str; 4] = ["encoder.", "type_emb.", "scorer.", "act_head."];
+
+/// Top-level tensors a checkpoint may hold besides [`REQUIRED_PREFIXES`] and `head.layers.*`:
+/// the training-time temperature, which inference reads from the config instead.
+const OPTIONAL_KEYS: [&str; 1] = ["temperature"];
+
+/// Refuse a `model.safetensors` that is not a decision checkpoint, or whose layers do not match
+/// its config.
+pub(crate) fn verify_tensors<'a>(
+    keys: impl Iterator<Item = &'a String> + Clone,
+    label: &str,
+    head_layers: usize,
+    encoder_layers: usize,
+) -> Result<()> {
+    for prefix in REQUIRED_PREFIXES {
+        if !keys.clone().any(|k| k.starts_with(prefix)) {
+            return Err(Error::Checkpoint(format!(
+                "{label}: model.safetensors has no {prefix}* parameters, so it is not a supported \
+                 decision checkpoint (expected a ModernBERT encoder plus the typed decision head)."
+            )));
+        }
+    }
+    for (prefix, expected, source) in [
+        ("head.layers.", head_layers, "head_layers in rl_agent_config.json"),
+        ("encoder.layers.", encoder_layers, "num_hidden_layers in encoder/config.json"),
+    ] {
+        let found = crate::model::layer_indices(keys.clone(), prefix);
+        if found != (0..expected).collect::<Vec<_>>() {
+            return Err(Error::Checkpoint(format!(
+                "{label}: {source} says {expected} layers, but model.safetensors has {prefix}* \
+                 layers {found:?}"
+            )));
+        }
+    }
+    let known = |k: &str| {
+        OPTIONAL_KEYS.contains(&k)
+            || k.starts_with("head.layers.")
+            || REQUIRED_PREFIXES.iter().any(|p| k.starts_with(p))
+    };
+    let mut unexpected: Vec<_> = keys.filter(|k| !known(k)).collect();
+    if !unexpected.is_empty() {
+        unexpected.sort();
+        return Err(Error::Checkpoint(format!(
+            "{label}: model.safetensors holds tensors no part of the model reads: {unexpected:?}"
+        )));
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testutil::scratch_dir;
+
+    fn keys(names: &[&str]) -> Vec<String> {
+        names.iter().map(|k| k.to_string()).collect()
+    }
+
+    #[test]
+    fn a_file_without_the_decision_head_is_refused() {
+        let complete = keys(&[
+            "encoder.layers.0.attn.Wqkv.weight",
+            "type_emb.weight",
+            "scorer.1.weight",
+            "act_head.0.weight",
+        ]);
+        assert!(verify_tensors(complete.iter(), "cp", 0, 1).is_ok());
+        let err = verify_tensors(complete[..3].iter(), "cp", 0, 1).unwrap_err();
+        assert!(
+            matches!(err, Error::Checkpoint(ref m) if m.starts_with("cp:") && m.contains("act_head.")),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn layers_the_config_does_not_describe_are_refused() {
+        let mut names = keys(&[
+            "encoder.layers.0.attn.Wqkv.weight",
+            "encoder.layers.1.attn.Wqkv.weight",
+            "head.layers.0.linear1.weight",
+            "head.layers.1.linear1.weight",
+            "head.layers.2.linear1.weight",
+            "type_emb.weight",
+            "scorer.1.weight",
+            "act_head.0.weight",
+            "temperature",
+        ]);
+        assert!(verify_tensors(names.iter(), "cp", 3, 2).is_ok());
+        let err = verify_tensors(names.iter(), "cp", 2, 2).unwrap_err();
+        assert!(matches!(err, Error::Checkpoint(ref m) if m.contains("head_layers")), "{err}");
+        names.push("pooler.weight".into());
+        let err = verify_tensors(names.iter(), "cp", 3, 2).unwrap_err();
+        assert!(matches!(err, Error::Checkpoint(ref m) if m.contains("pooler.weight")), "{err}");
+    }
 
     fn touch(dir: &Path, name: &str) {
         let p = dir.join(name);

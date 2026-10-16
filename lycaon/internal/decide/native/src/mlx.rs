@@ -418,97 +418,24 @@ impl From<mlx_rs::error::Exception> for Error {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use crate::device::DeviceChoice;
-    use crate::engine::{Engine, EngineOptions, HEAD_TURN_LOAD};
-    use crate::question::Question;
-    use crate::testutil::{scratch_dir, write_tiny_checkpoint};
-    use indexmap::IndexMap;
-    use serde_json::Value;
-
-    fn options(dir: &Path, device: DeviceChoice) -> EngineOptions {
-        EngineOptions {
-            model_dir: dir.to_path_buf(),
-            device,
-            dtype: "f32".to_string(),
-            ..Default::default()
-        }
-    }
+    use crate::engine::{Engine, EngineOptions, HEAD_CODE_RANK};
+    use crate::testutil::{assert_agrees_with_cpu, scratch_dir, write_tiny_checkpoint, write_tiny_head};
 
     #[test]
-    fn mlx_matches_candle_on_the_same_checkpoint() {
+    fn mlx_matches_the_cpu_on_the_same_checkpoint() {
         let dir = scratch_dir("mlx-parity");
         write_tiny_checkpoint(&dir);
-        let candle = Engine::load(&options(&dir, DeviceChoice::Cpu)).unwrap();
-        let mlx = Engine::load(&options(&dir, DeviceChoice::Mlx)).unwrap();
+        let head = write_tiny_head(&dir, "rank", "tiny");
+        let mlx = Engine::load(&EngineOptions {
+            model_dir: dir.to_path_buf(),
+            device: DeviceChoice::Mlx,
+            dtype: "f32".into(),
+            heads: vec![(HEAD_CODE_RANK.to_string(), head.clone())],
+            ..Default::default()
+        })
+        .unwrap();
         assert_eq!(mlx.identity().device, "mlx");
-        let questions: IndexMap<String, Question> = [
-            (
-                "pick".to_string(),
-                Question::choice("pick one")
-                    .bare_option("alpha")
-                    .bare_option("beta")
-                    .bare_option("gamma")
-                    .into(),
-            ),
-            (
-                "tools".to_string(),
-                Question::multi("which?").bare_option("a").bare_option("b").into(),
-            ),
-            ("yes".to_string(), Question::noul("the statement holds").into()),
-        ]
-        .into_iter()
-        .collect();
-        let state = Value::String("hello world of tiny tokens".into());
-        let a = candle.decide(HEAD_TURN_LOAD, &state, &questions).unwrap();
-        let b = mlx.decide(HEAD_TURN_LOAD, &state, &questions).unwrap();
-        for (id, answer) in &a {
-            let other = &b[id];
-            let pa = answer
-                .probabilities
-                .clone()
-                .or_else(|| {
-                    answer.distribution.clone().map(|d| {
-                        d.into_iter().enumerate().map(|(i, p)| (i.to_string(), p)).collect()
-                    })
-                })
-                .unwrap_or_default();
-            let pb = other
-                .probabilities
-                .clone()
-                .or_else(|| {
-                    other.distribution.clone().map(|d| {
-                        d.into_iter().enumerate().map(|(i, p)| (i.to_string(), p)).collect()
-                    })
-                })
-                .unwrap_or_default();
-            for (label, p) in &pa {
-                assert!(
-                    (p - pb[label]).abs() < 2e-3,
-                    "{id}/{label}: candle {p} vs mlx {}",
-                    pb[label]
-                );
-            }
-            if let (Some(x), Some(y)) = (answer.noul, other.noul) {
-                assert!((x - y).abs() < 2e-3, "{id}: candle {x} vs mlx {y}");
-            }
-        }
-        let ranked_a = candle
-            .rank(
-                HEAD_TURN_LOAD,
-                "find the config loader",
-                &["config.go".into(), "README.md".into()],
-            )
-            .unwrap();
-        let ranked_b = mlx
-            .rank(
-                HEAD_TURN_LOAD,
-                "find the config loader",
-                &["config.go".into(), "README.md".into()],
-            )
-            .unwrap();
-        for (x, y) in ranked_a.iter().zip(&ranked_b) {
-            assert!((x - y).abs() < 2e-3, "rank: candle {x} vs mlx {y}");
-        }
+        assert_agrees_with_cpu(&dir, &head, &mlx, 2e-3);
     }
 }

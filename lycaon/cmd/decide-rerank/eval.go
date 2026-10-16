@@ -236,10 +236,11 @@ func evaluate(ctx context.Context, cfg evalConfig) (*report, []dumpRow, error) {
 // reranker builds the site's reranker from the shipped catalog, the command
 // line overrides, and a warmed engine.
 func reranker(ctx context.Context, cfg evalConfig) (decide.Reranker, decide.Engine, func(), error) {
-	policies, err := decide.LoadPolicies()
+	catalog, err := decide.LoadCatalog()
 	if err != nil {
 		return decide.Reranker{}, decide.Engine{}, nil, err
 	}
+	policies := catalog.Policies
 	policy := policies.For(cfg.site)
 	// The eval always asks; a site the catalog disables is still measured.
 	policy.Enabled = true

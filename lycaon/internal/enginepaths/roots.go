@@ -21,6 +21,7 @@ const (
 	RepoOrientationDirName   = "repo-orientation"
 	// CacheDirName groups rebuildable caches that have their own subtree.
 	CacheDirName              = "cache"
+	DecideCacheDirName        = "decide"
 	SourceCatalogDirName      = "sourcecatalog"
 	SessionWorktreesDirName   = "session-worktrees"
 	SessionCheckpointsDirName = "session-checkpoints"
@@ -57,6 +58,12 @@ func BrowserCacheRootUnder(stateRoot string) string {
 // DecideModelsRootUnder returns the decision engine's checkpoint cache.
 func DecideModelsRootUnder(stateRoot string) string {
 	return filepath.Join(strings.TrimSpace(stateRoot), DecideModelsDirName)
+}
+
+// DecideCacheRootUnder returns the decision engine's device verdict and
+// compiled GPU kernels, rebuilt by measuring again.
+func DecideCacheRootUnder(stateRoot string) string {
+	return filepath.Join(strings.TrimSpace(stateRoot), CacheDirName, DecideCacheDirName)
 }
 
 // ModelfeedRootUnder returns the model-feed cache directory.

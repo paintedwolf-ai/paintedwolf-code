@@ -1,9 +1,9 @@
-//! The inference runtime: one resident backbone, one head per method.
+//! The inference engine: one resident backbone, one head per method.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::time::{Duration, Instant};
 
-use candle_core::{DType, Device};
 use indexmap::IndexMap;
 use serde::Serialize;
 use serde_json::Value;
@@ -14,13 +14,12 @@ use crate::config::{AgentConfig, load_encoder_config};
 use crate::device::{DeviceChoice, Selected};
 use crate::error::{Error, Result};
 use crate::heads;
-use crate::model::{DecisionModel, Head};
+use crate::modernbert;
 use crate::pyjson;
 use crate::question::{QType, Question};
+use crate::runtime::{LoadSpec, Runtime, RuntimeHead};
 use crate::sequence::{Encoder, Item};
-
-/// Tensor prefixes required before checkpoint loading.
-const REQUIRED_PREFIXES: [&str; 4] = ["encoder.", "type_emb.", "scorer.", "act_head."];
+use crate::tokenizer::SpecialTokens;
 
 /// Default batch size, bounding padding across candidate rows.
 pub const DEFAULT_MAX_ROWS: usize = 32;
@@ -42,6 +41,14 @@ pub const HEAD_RETENTION: &str = "retention";
 
 /// Ranking text shared with the trainers under `scripts/bialy/`.
 const RANK_RUBRIC: &str = include_str!("../../../../../scripts/bialy/rank-rubric.json");
+
+/// Candidates in one reference batch: one rerank chunk.
+pub const REFERENCE_CANDIDATES: usize = 16;
+/// Timed runs of the reference batch; the median counts.
+const REFERENCE_RUNS: usize = 3;
+/// The task the reference batch ranks against.
+pub const REFERENCE_TASK: &str =
+    "Where does project search blend the decision engine's relevance into its hits?";
 
 #[derive(serde::Deserialize)]
 struct RankRubric {
@@ -65,6 +72,19 @@ pub fn rank_state(task: &str, candidate: &str) -> String {
     format!("Task: {task}\n\nCandidate:\n{candidate}")
 }
 
+/// Code-search candidates of the length real ranking sites send.
+pub fn reference_candidates(n: usize) -> Vec<String> {
+    (0..n)
+        .map(|i| {
+            format!(
+                "File: internal/search/code_executor_{i}.go (go)\nSymbol: rerankHits (function)\n\
+                 func (e *CodeExecutor) rerankHits(ctx context.Context, terms []string, hits []Hit) []Hit\n\
+                 Doc: rerankHits blends the engine's relevance into the lexical order of the top hits."
+            )
+        })
+        .collect()
+}
+
 /// How to load an engine.
 #[derive(Clone, Debug, Default)]
 pub struct EngineOptions {
@@ -77,7 +97,7 @@ pub struct EngineOptions {
     pub heads: Vec<(String, PathBuf)>,
     /// Rows per forward pass; `0` means [`DEFAULT_MAX_ROWS`].
     pub max_rows: usize,
-    /// Force a precision: `f16` or `f32`. Empty picks half on an accelerator, single on the CPU.
+    /// Force a precision: `f16` or `f32`. Empty picks the device's own.
     pub dtype: String,
     /// Token budget for a question head (instructions plus every option); `0` keeps the
     /// checkpoint's own. A multi question over dozens of options needs more than the
@@ -85,19 +105,33 @@ pub struct EngineOptions {
     pub head_max_len: usize,
     /// MLX's Metal library, when the runtime is MLX and the file is not beside the executable.
     pub metallib: Option<PathBuf>,
+    /// Under `auto`, the slowest reference batch a device may take; `None` keeps the fastest
+    /// device whatever its speed.
+    pub qualify: Option<Duration>,
+    /// Where device verdicts and compiled GPU kernels persist across launches.
+    pub cache_dir: Option<PathBuf>,
+    /// Under `auto`, measure each candidate in this executable's `probe` command, so a driver
+    /// that crashes costs the candidate, not the engine. `None` measures in this process.
+    pub probe_exe: Option<PathBuf>,
 }
 
 /// What the handshake reports about the loaded engine.
-#[derive(Clone, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, PartialEq)]
 pub struct Identity {
     pub name: String,
     pub model: String,
     pub device: String,
+    /// The GPU's own name, when the device is one.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub adapter: String,
     /// The loaded heads as `name=label` pairs; empty when only the checkpoint's own head
     /// loaded.
     pub head: String,
     /// The precision the model runs at: `f16` or `f32`.
     pub dtype: String,
+    /// The reference batch's time on this device, when `auto` measured it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub probe_ms: Option<f64>,
 }
 
 /// One typed answer, in the host's shape.
@@ -118,67 +152,28 @@ pub struct Answer {
     pub confidence: f32,
 }
 
-/// The runtime a checkpoint is resident on: candle on any device, or MLX on Apple silicon.
-enum Runtime {
-    Candle(DecisionModel),
-    #[cfg(feature = "mlx")]
-    Mlx(crate::mlx::Model),
+/// A checkpoint's files, read once and loadable onto any device.
+pub(crate) struct Prepared {
+    checkpoint: Checkpoint,
+    config: AgentConfig,
+    encoder: modernbert::Config,
+    tokenizer: tokenizers::Tokenizer,
+    special: SpecialTokens,
 }
 
-/// A head loaded for the runtime the engine runs.
-enum RuntimeHead {
-    Candle(Head),
-    #[cfg(feature = "mlx")]
-    Mlx(crate::mlx::Head),
-}
-
-impl Runtime {
-    fn dtype_name(&self) -> &'static str {
-        match self {
-            Runtime::Candle(m) => match m.dtype() {
-                DType::F16 => "f16",
-                _ => "f32",
-            },
-            #[cfg(feature = "mlx")]
-            Runtime::Mlx(m) => match m.dtype() {
-                mlx_rs::Dtype::Float16 => "f16",
-                _ => "f32",
-            },
-        }
+impl Prepared {
+    pub(crate) fn read(model_dir: &Path) -> Result<Self> {
+        let checkpoint = Checkpoint::from_dir(model_dir)?;
+        let config = AgentConfig::load(&checkpoint.agent_config)?;
+        let encoder = load_encoder_config(&checkpoint.encoder_config)?;
+        let (tokenizer, special) =
+            crate::tokenizer::load(&checkpoint.tokenizer, checkpoint.tokenizer_config.as_deref())?;
+        Ok(Self { checkpoint, config, encoder, tokenizer, special })
     }
 
-    /// Load a head file for this runtime.
-    fn load_head(&self, path: &Path, label: &str) -> Result<RuntimeHead> {
-        match self {
-            Runtime::Candle(m) => {
-                let file = heads::read(path)?;
-                Ok(RuntimeHead::Candle(Head::from_tensors(
-                    file.tensors,
-                    m.shape(),
-                    label,
-                    m.dtype(),
-                    m.device(),
-                )?))
-            }
-            #[cfg(feature = "mlx")]
-            Runtime::Mlx(m) => {
-                Ok(RuntimeHead::Mlx(crate::mlx::Head::from_file(path, m.shape(), m.dtype())?))
-            }
-        }
-    }
-
-    fn forward(
-        &self,
-        head: &RuntimeHead,
-        batch: &crate::sequence::Batch,
-    ) -> Result<crate::model::Forward> {
-        match (self, head) {
-            (Runtime::Candle(m), RuntimeHead::Candle(h)) => m.forward(h, batch),
-            #[cfg(feature = "mlx")]
-            (Runtime::Mlx(m), RuntimeHead::Mlx(h)) => m.forward(h, batch),
-            #[cfg(feature = "mlx")]
-            _ => Err(Error::Head("a head loaded for one runtime cannot run on another".into())),
-        }
+    /// The checkpoint's name in errors and cached verdicts.
+    pub(crate) fn label(&self) -> &str {
+        &self.checkpoint.label
     }
 }
 
@@ -205,84 +200,50 @@ impl std::fmt::Debug for Engine {
 }
 
 impl Engine {
-    /// Load the checkpoint, open the device, and load every head file.
+    /// Load the checkpoint and every head file onto the chosen device; `auto` measures the
+    /// candidates first.
     pub fn load(opts: &EngineOptions) -> Result<Self> {
-        let cp = Checkpoint::from_dir(&opts.model_dir)?;
-        let config = AgentConfig::load(&cp.agent_config)?;
-        let enc_cfg = load_encoder_config(&cp.encoder_config)?;
-        let (tokenizer, special) =
-            crate::tokenizer::load(&cp.tokenizer, cp.tokenizer_config.as_deref())?;
-        let selected = opts.device.select()?;
-        let (runtime, base) = match &selected {
-            Selected::Candle(device) => {
-                let dtype = match opts.dtype.as_str() {
-                    "" => crate::model::dtype_for(device),
-                    "f16" => DType::F16,
-                    "f32" => DType::F32,
-                    other => {
-                        return Err(Error::Device(format!(
-                            "unknown dtype {other:?}; choose f16 or f32"
-                        )));
-                    }
-                };
-                // Validate tensor names and layout on the CPU before device allocation.
-                let weights = candle_core::safetensors::load(&cp.weights, &Device::Cpu)?;
-                verify(weights.keys(), &cp.label)?;
-                verify_layout(
-                    weights.keys(),
-                    &cp.label,
-                    config.head_layers,
-                    enc_cfg.num_hidden_layers,
-                )?;
-                let model =
-                    DecisionModel::load(weights, &enc_cfg, config.head_layers, dtype, device)?;
-                let base = RuntimeHead::Candle(model.base_head().clone());
-                (Runtime::Candle(model), base)
-            }
-            #[cfg(feature = "mlx")]
-            Selected::Mlx => {
-                let dtype = match opts.dtype.as_str() {
-                    "" | "f16" => mlx_rs::Dtype::Float16,
-                    "f32" => mlx_rs::Dtype::Float32,
-                    other => {
-                        return Err(Error::Device(format!(
-                            "unknown dtype {other:?}; choose f16 or f32"
-                        )));
-                    }
-                };
-                if let Some(path) = &opts.metallib {
-                    crate::mlx::set_metallib(path)?;
-                }
-                let weights = mlx_rs::Array::load_safetensors(&cp.weights)
-                    .map_err(|e| Error::Checkpoint(format!("{}: {e}", cp.weights.display())))?;
-                verify(weights.keys(), &cp.label)?;
-                verify_layout(
-                    weights.keys(),
-                    &cp.label,
-                    config.head_layers,
-                    enc_cfg.num_hidden_layers,
-                )?;
-                let model = crate::mlx::Model::load(
-                    weights,
-                    &enc_cfg,
-                    config.head_layers,
-                    dtype,
-                    &cp.label,
-                )?;
-                let base = RuntimeHead::Mlx(model.base_head().clone());
-                (Runtime::Mlx(model), base)
-            }
-        };
-
-        let mut heads = HashMap::new();
-        let mut labels = HashMap::new();
-        let mut tool_encodings = HashMap::new();
-        for (name, path) in &opts.heads {
+        for (name, _) in &opts.heads {
             if !HEAD_NAMES.contains(&name.as_str()) {
                 return Err(Error::Head(format!(
                     "{name:?} is not a head this engine serves; choose one of {HEAD_NAMES:?}"
                 )));
             }
+        }
+        #[cfg(feature = "vulkan")]
+        crate::vulkan::configure_cache(opts.cache_dir.as_deref());
+        let prepared = Prepared::read(&opts.model_dir)?;
+        match opts.device {
+            DeviceChoice::Auto => crate::select::choose(&prepared, opts),
+            choice => Self::on(&prepared, choice, opts),
+        }
+    }
+
+    /// Load onto one explicit device.
+    pub(crate) fn on(prepared: &Prepared, choice: DeviceChoice, opts: &EngineOptions) -> Result<Self> {
+        Self::on_selected(prepared, choice.select()?, opts)
+    }
+
+    pub(crate) fn on_selected(
+        prepared: &Prepared,
+        selected: Selected,
+        opts: &EngineOptions,
+    ) -> Result<Self> {
+        let spec = LoadSpec {
+            checkpoint: &prepared.checkpoint,
+            config: &prepared.config,
+            encoder: &prepared.encoder,
+            dtype: &opts.dtype,
+            #[cfg(feature = "mlx")]
+            metallib: opts.metallib.as_deref(),
+        };
+        let (runtime, base) = Runtime::load(&selected, &spec)?;
+        let config = &prepared.config;
+
+        let mut heads = HashMap::new();
+        let mut labels = HashMap::new();
+        let mut tool_encodings = HashMap::new();
+        for (name, path) in &opts.heads {
             let (label, head) = load_head(&runtime, path, &config.encoder)?;
             let meta = heads::read_metadata_of(path)?;
             tool_encodings.insert(name.clone(), meta.tool_encoding.unwrap_or_else(|| "joint".into()));
@@ -290,15 +251,16 @@ impl Engine {
             heads.insert(name.clone(), head);
         }
 
-        let calibration = Calibration::from_config(&config);
         let model_id =
             if opts.model_id.is_empty() { config.encoder.clone() } else { opts.model_id.clone() };
         let identity = Identity {
             name: "Bialy".to_string(),
             model: model_id,
             device: crate::device::describe(&selected),
+            adapter: crate::device::adapter(&selected),
             head: head_label(&labels),
             dtype: runtime.dtype_name().to_string(),
+            probe_ms: None,
         };
         // State and framing tokens share the sequence budget with the head.
         let head_max_len = match opts.head_max_len {
@@ -311,8 +273,13 @@ impl Engine {
             heads,
             labels,
             tool_encodings,
-            encoder: Encoder::new(tokenizer, special, config.max_len, head_max_len),
-            calibration,
+            encoder: Encoder::new(
+                prepared.tokenizer.clone(),
+                prepared.special.clone(),
+                config.max_len,
+                head_max_len,
+            ),
+            calibration: Calibration::from_config(config),
             identity,
             max_rows: if opts.max_rows == 0 { DEFAULT_MAX_ROWS } else { opts.max_rows },
         })
@@ -320,6 +287,10 @@ impl Engine {
 
     pub fn identity(&self) -> &Identity {
         &self.identity
+    }
+
+    pub(crate) fn record_probe(&mut self, elapsed: Duration) {
+        self.identity.probe_ms = Some(millis(elapsed));
     }
 
     /// The head labels that loaded, by name.
@@ -363,6 +334,31 @@ impl Engine {
     pub fn warm(&self) -> Result<()> {
         let candidates = vec!["File: warm.go\nSymbol: Warm (function)".to_string(); 2];
         self.rank_with(&self.base, "warm", &candidates).map(|_| ())
+    }
+
+    /// The median time of the reference batch after one untimed run, which absorbs kernel
+    /// compilation.
+    pub fn probe(&self) -> Result<Duration> {
+        self.probe_within(None)
+    }
+
+    /// [`Engine::probe`], stopping at the first timed run slower than `ceiling`: a device
+    /// that cannot win is not worth the remaining runs. That run's time is returned.
+    pub fn probe_within(&self, ceiling: Option<Duration>) -> Result<Duration> {
+        let candidates = reference_candidates(REFERENCE_CANDIDATES);
+        self.rank_with(&self.base, REFERENCE_TASK, &candidates)?;
+        let mut times = Vec::with_capacity(REFERENCE_RUNS);
+        for _ in 0..REFERENCE_RUNS {
+            let started = Instant::now();
+            self.rank_with(&self.base, REFERENCE_TASK, &candidates)?;
+            let elapsed = started.elapsed();
+            if ceiling.is_some_and(|limit| elapsed > limit) {
+                return Ok(elapsed);
+            }
+            times.push(elapsed);
+        }
+        times.sort();
+        Ok(times[times.len() / 2])
     }
 
     /// Answer every question over one state in a single forward pass with the named head.
@@ -477,6 +473,11 @@ impl Engine {
     }
 }
 
+/// Milliseconds to one decimal place.
+pub(crate) fn millis(d: Duration) -> f64 {
+    (d.as_secs_f64() * 10_000.0).round() / 10.0
+}
+
 /// Load one head file, refusing one trained on another backbone.
 fn load_head(runtime: &Runtime, path: &Path, backbone: &str) -> Result<(String, RuntimeHead)> {
     let meta = heads::read_metadata_of(path)?;
@@ -500,68 +501,10 @@ fn head_label(labels: &HashMap<String, String>) -> String {
         .join(",")
 }
 
-/// Required tensor prefixes identify a supported decision checkpoint.
-fn verify<'a>(keys: impl Iterator<Item = &'a String> + Clone, label: &str) -> Result<()> {
-    for prefix in REQUIRED_PREFIXES {
-        if !keys.clone().any(|k| k.starts_with(prefix)) {
-            return Err(Error::Checkpoint(format!(
-                "{label}: model.safetensors has no {prefix}* parameters, so it is not a supported \
-                 decision checkpoint (expected a ModernBERT encoder plus the typed decision head)."
-            )));
-        }
-    }
-    Ok(())
-}
-
-/// Top-level tensors a checkpoint may hold besides [`REQUIRED_PREFIXES`] and `head.layers.*`:
-/// the training-time temperature parameter, which inference reads from the config instead.
-const OPTIONAL_KEYS: [&str; 1] = ["temperature"];
-
-/// Refuse a checkpoint whose tensors do not match its config.
-fn verify_layout<'a>(
-    keys: impl Iterator<Item = &'a String> + Clone,
-    label: &str,
-    head_layers: usize,
-    encoder_layers: usize,
-) -> Result<()> {
-    for (prefix, expected, source) in [
-        ("head.layers.", head_layers, "head_layers in rl_agent_config.json"),
-        ("encoder.layers.", encoder_layers, "num_hidden_layers in encoder/config.json"),
-    ] {
-        let found = crate::model::layer_indices(keys.clone(), prefix);
-        if found != (0..expected).collect::<Vec<_>>() {
-            return Err(Error::Checkpoint(format!(
-                "{label}: {source} says {expected} layers, but model.safetensors has {prefix}* \
-                 layers {found:?}"
-            )));
-        }
-    }
-    let known = |k: &str| {
-        OPTIONAL_KEYS.contains(&k)
-            || k.starts_with("head.layers.")
-            || REQUIRED_PREFIXES.iter().any(|p| k.starts_with(p))
-    };
-    let mut unexpected: Vec<_> = keys.filter(|k| !known(k)).collect();
-    if !unexpected.is_empty() {
-        unexpected.sort();
-        return Err(Error::Checkpoint(format!(
-            "{label}: model.safetensors holds tensors no part of the model reads: {unexpected:?}"
-        )));
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::testutil::{scratch_dir, write_tiny_checkpoint, write_tiny_head};
-    use candle_core::{DType, Tensor};
-
-    fn weights(keys: &[&str]) -> HashMap<String, Tensor> {
-        keys.iter()
-            .map(|k| (k.to_string(), Tensor::zeros(1, DType::F32, &Device::Cpu).unwrap()))
-            .collect()
-    }
 
     fn tiny_engine() -> (Engine, crate::testutil::ScratchDir) {
         let dir = scratch_dir("engine");
@@ -570,49 +513,10 @@ mod tests {
             model_dir: dir.to_path_buf(),
             model_id: "tiny/model".into(),
             device: DeviceChoice::Cpu,
-            heads: Vec::new(),
             max_rows: 2,
-            dtype: String::new(),
-            head_max_len: 0,
-            metallib: None,
+            ..Default::default()
         };
         (Engine::load(&opts).unwrap(), dir)
-    }
-
-    #[test]
-    fn a_file_without_the_decision_head_is_refused_at_load() {
-        let complete = [
-            "encoder.embeddings.weight",
-            "type_emb.weight",
-            "scorer.1.weight",
-            "act_head.0.weight",
-        ];
-        assert!(verify(weights(&complete).keys(), "cp").is_ok());
-        let err = verify(weights(&complete[..3]).keys(), "cp").unwrap_err();
-        assert!(
-            matches!(err, Error::Checkpoint(ref m) if m.starts_with("cp:") && m.contains("act_head.")),
-            "{err}"
-        );
-    }
-
-    #[test]
-    fn layers_the_config_does_not_describe_are_refused() {
-        let keys = [
-            "encoder.layers.0.attn.Wqkv.weight",
-            "encoder.layers.1.attn.Wqkv.weight",
-            "head.layers.0.linear1.weight",
-            "head.layers.1.linear1.weight",
-            "head.layers.2.linear1.weight",
-            "type_emb.weight",
-            "temperature",
-        ];
-        assert!(verify_layout(weights(&keys).keys(), "cp", 3, 2).is_ok());
-        let err = verify_layout(weights(&keys).keys(), "cp", 2, 2).unwrap_err();
-        assert!(matches!(err, Error::Checkpoint(ref m) if m.contains("head_layers")), "{err}");
-        let mut extra = keys.to_vec();
-        extra.push("pooler.weight");
-        let err = verify_layout(weights(&extra).keys(), "cp", 3, 2).unwrap_err();
-        assert!(matches!(err, Error::Checkpoint(ref m) if m.contains("pooler.weight")), "{err}");
     }
 
     #[test]
@@ -621,6 +525,8 @@ mod tests {
         assert_eq!(engine.identity().head, "");
         assert_eq!(engine.identity().model, "tiny/model");
         assert_eq!(engine.identity().dtype, "f32");
+        assert_eq!(engine.identity().device, "cpu");
+        assert!(engine.identity().adapter.is_empty());
 
         let questions: IndexMap<String, Question> = [
             (
@@ -676,19 +582,25 @@ mod tests {
     }
 
     #[test]
+    fn the_probe_times_the_reference_batch() {
+        let (mut engine, _dir) = tiny_engine();
+        let elapsed = engine.probe().unwrap();
+        assert!(elapsed > Duration::ZERO);
+        engine.record_probe(Duration::from_micros(12_345));
+        assert_eq!(engine.identity().probe_ms, Some(12.3));
+        assert_eq!(reference_candidates(REFERENCE_CANDIDATES).len(), REFERENCE_CANDIDATES);
+    }
+
+    #[test]
     fn a_head_file_serves_its_method_and_the_base_head_serves_the_rest() {
         let dir = scratch_dir("engine-heads");
         write_tiny_checkpoint(&dir);
         let rank = write_tiny_head(&dir, "rank-head", "tiny");
         let opts = EngineOptions {
             model_dir: dir.to_path_buf(),
-            model_id: String::new(),
             device: DeviceChoice::Cpu,
             heads: vec![(HEAD_CODE_RANK.to_string(), rank)],
-            max_rows: 0,
-            dtype: String::new(),
-            head_max_len: 0,
-            metallib: None,
+            ..Default::default()
         };
         let engine = Engine::load(&opts).unwrap();
         assert_eq!(engine.identity().head, "code-rank=rank-head");
@@ -714,13 +626,9 @@ mod tests {
         let other = write_tiny_head(&dir, "other", "answerdotai/ModernBERT-large");
         let opts = EngineOptions {
             model_dir: dir.to_path_buf(),
-            model_id: String::new(),
             device: DeviceChoice::Cpu,
             heads: vec![(HEAD_TURN_LOAD.to_string(), other)],
-            max_rows: 0,
-            dtype: String::new(),
-            head_max_len: 0,
-            metallib: None,
+            ..Default::default()
         };
         let err = match Engine::load(&opts) {
             Ok(_) => panic!("a head from another backbone loaded"),
@@ -745,9 +653,6 @@ mod tests {
             ..Default::default()
         };
         let err = Engine::load(&unknown).unwrap_err();
-        assert!(
-            matches!(err, Error::Head(ref m) | Error::Checkpoint(ref m) if !m.is_empty()),
-            "{err}"
-        );
+        assert!(matches!(err, Error::Head(ref m) if m.contains("bogus")), "{err}");
     }
 }

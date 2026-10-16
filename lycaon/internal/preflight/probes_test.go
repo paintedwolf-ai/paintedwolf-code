@@ -521,7 +521,7 @@ func TestDecisionEngineProbe(t *testing.T) {
 		}
 	})
 
-	for _, reason := range []DecisionReason{ReasonDecisionDisabled, ReasonDecisionBinaryMissing, ReasonDecisionModelMissing, ReasonDecisionUnusable} {
+	for _, reason := range []DecisionReason{ReasonDecisionDisabled, ReasonDecisionBinaryMissing, ReasonDecisionModelMissing, ReasonDecisionNoCapableDevice, ReasonDecisionUnusable} {
 		t.Run(string(reason), func(t *testing.T) {
 			got := run(t, decisionEngineProbe{}, Env{
 				CheckDecisionEngine: func(context.Context) DecisionReason { return reason },

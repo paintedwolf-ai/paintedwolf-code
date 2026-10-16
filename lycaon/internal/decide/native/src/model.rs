@@ -15,12 +15,6 @@ use candle_nn::{Embedding, LayerNorm, Linear, Module, VarBuilder};
 use crate::error::{Error, Result};
 use crate::question::QType;
 
-/// The precision a device runs at: half on an accelerator, single on the CPU, where half
-/// precision has no fast path.
-pub(crate) fn dtype_for(device: &Device) -> DType {
-    if device.is_cpu() { DType::F32 } else { DType::F16 }
-}
-
 /// Matches the layer-normalization epsilon used to train the heads.
 pub(crate) const HEAD_LN_EPS: f64 = 1e-5;
 /// Pad positions are pushed this far below the real scores before the softmax; finite so it
@@ -237,10 +231,6 @@ impl DecisionModel {
 
     pub(crate) fn dtype(&self) -> DType {
         self.dtype
-    }
-
-    pub(crate) fn device(&self) -> &Device {
-        &self.device
     }
 
     /// The head the checkpoint shipped.

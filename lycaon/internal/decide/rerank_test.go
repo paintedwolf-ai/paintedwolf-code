@@ -98,6 +98,34 @@ func (*stallFake) Rank(ctx context.Context, _ decide.Head, _ string, _ []string)
 	return nil, decide.Engine{}, ctx.Err()
 }
 
+func TestRerankSkipsASiteTheEngineCannotServeInTime(t *testing.T) {
+	t.Parallel()
+	texts := make([]string, 32)
+	lexical := make([]float64, 32)
+	for i := range texts {
+		texts[i] = string(rune('a' + i))
+		lexical[i] = float64(32 - i)
+	}
+	// Two chunks of 16 at 600 ms each cannot finish within the 1 s deadline.
+	slow := &decidetest.Fake{ReferenceTime: 600 * time.Millisecond}
+	rr := decide.Reranker{Decider: slow, Policies: enabled(32, 16, 1)}
+	out, outcome := rr.Rerank(context.Background(), decide.SiteRepomapTags, "t", lexical, texts)
+	if !outcome.Abstained || outcome.Reason != "engine too slow for the deadline" || !slices.Equal(out, lexical) {
+		t.Fatalf("outcome = %+v", outcome)
+	}
+	if len(slow.Ranks) != 0 {
+		t.Fatalf("a site the engine cannot serve in time still asked it: %d calls", len(slow.Ranks))
+	}
+	// One chunk fits, and so does an engine that has not measured itself.
+	if _, outcome := rr.Rerank(context.Background(), decide.SiteRepomapTags, "t", lexical[:16], texts[:16]); outcome.Abstained {
+		t.Fatalf("one chunk within the deadline abstained: %+v", outcome)
+	}
+	unmeasured := decide.Reranker{Decider: &decidetest.Fake{}, Policies: enabled(32, 16, 1)}
+	if _, outcome := unmeasured.Rerank(context.Background(), decide.SiteRepomapTags, "t", lexical, texts); outcome.Abstained {
+		t.Fatalf("an unmeasured engine abstained: %+v", outcome)
+	}
+}
+
 func TestRerankHonoursTheDeadline(t *testing.T) {
 	t.Parallel()
 	policies := decide.Policies{decide.SiteRepomapTags: decide.RerankPolicy{Enabled: true, Deadline: 30 * time.Millisecond, MaxCandidates: 4, Chunk: 4, Weight: 1}}

@@ -20,10 +20,14 @@ pub mod question;
 mod mlx;
 mod model;
 mod modernbert;
+mod runtime;
+mod select;
 mod sequence;
 #[cfg(test)]
 mod testutil;
 mod tokenizer;
+#[cfg(feature = "vulkan")]
+mod vulkan;
 
 pub use device::DeviceChoice;
 pub use engine::{Engine, EngineOptions, Identity};
