@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 from ci_policy import hosted_execution as ci
 from ci_policy import hosted_plan
-from verification_shards import shard_packages
+from verification_execute import shard_packages
 
 
 class HostedExecutionTests(unittest.TestCase):
