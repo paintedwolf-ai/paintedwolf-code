@@ -38,9 +38,12 @@ type SlotSnapshot struct {
 }
 
 type slotHealth struct {
-	mu       sync.Mutex
-	snap     SlotSnapshot
-	onChange func(SlotSnapshot)
+	mu              sync.Mutex
+	snap            SlotSnapshot
+	onChange        func(SlotSnapshot)
+	failureProvider string
+	failureCount    int
+	failureSince    time.Time
 }
 
 func newSlotHealth() *slotHealth {
@@ -81,6 +84,7 @@ func (h *slotHealth) success() {
 	}
 	h.mu.Lock()
 	prev := h.snap.State
+	h.failureProvider, h.failureCount, h.failureSince = "", 0, time.Time{}
 	h.snap = SlotSnapshot{State: SlotReady, Since: time.Now().UTC()}
 	fn := h.onChange
 	h.mu.Unlock()
@@ -89,11 +93,22 @@ func (h *slotHealth) success() {
 	}
 }
 
-func (h *slotHealth) failure(providerID, reason string) {
+func (h *slotHealth) failure(providerID, reason string) { h.failureAfter(providerID, reason, 1) }
+
+func (h *slotHealth) failureAfter(providerID, reason string, threshold int) {
 	if h == nil {
 		return
 	}
 	h.mu.Lock()
+	now := time.Now().UTC()
+	if h.failureProvider != providerID || now.Sub(h.failureSince) > LiteUnavailableCooldown {
+		h.failureProvider, h.failureCount, h.failureSince = providerID, 0, now
+	}
+	h.failureCount++
+	if h.failureCount < threshold {
+		h.mu.Unlock()
+		return
+	}
 	prev := h.snap.State
 	h.snap = SlotSnapshot{
 		State:      SlotUnavailable,
@@ -115,6 +130,7 @@ func (h *slotHealth) reset() {
 	}
 	h.mu.Lock()
 	prev := h.snap.State
+	h.failureProvider, h.failureCount, h.failureSince = "", 0, time.Time{}
 	h.snap = SlotSnapshot{State: SlotReady, Since: time.Now().UTC()}
 	fn := h.onChange
 	h.mu.Unlock()
@@ -130,6 +146,7 @@ func (h *slotHealth) maybeExpireLocked() bool {
 	if h.snap.Since.IsZero() || time.Since(h.snap.Since) < LiteUnavailableCooldown {
 		return false
 	}
+	h.failureProvider, h.failureCount, h.failureSince = "", 0, time.Time{}
 	h.snap = SlotSnapshot{State: SlotReady, Since: time.Now().UTC()}
 	return true
 }
