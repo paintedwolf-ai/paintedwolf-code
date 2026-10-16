@@ -29,6 +29,8 @@ the workspace's installed dependencies.
 Hosted shell preparation uses `./task setup-dev -- --shell-resources` to write
 qualified notices into the build checkout. `licenses:notices` is the isolated
 verification check; its snapshot outputs do not prepare a subsequent invocation.
+A lane that only runs that check prepares with `./task setup-dev -- --notices-tools`,
+which installs the pinned notices tools without generating notices.
 The workspace cache warmer also prepares missing notices before compiling.
 
 Use `./task` from the repository root. If direnv is installed, setup allows the

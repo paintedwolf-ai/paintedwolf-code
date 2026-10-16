@@ -49,3 +49,26 @@ class ShellResourcesTests(unittest.TestCase):
                 with self.subTest(failed=flag):
                     self.assertEqual(prepare(flag).returncode, 42)
                     self.assertFalse(notices.exists())
+
+    def test_notices_tools_provision_without_generating_notices(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            shutil.copyfile(Path(__file__).resolve().parents[2] / "setup-dev.sh", scripts / "setup-dev.sh")
+            (scripts / "licenses-notices.sh").write_text(
+                '#!/bin/bash\nset -eu\n'
+                'root="$(cd "$(dirname "$0")/.." && pwd)"\n'
+                'printf "%s" "$*" > "$root/arguments"\n')
+            result = subprocess.run(["bash", str(scripts / "setup-dev.sh"), "--notices-tools"],
+                                    text=True, capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((root / "arguments").read_text(), "--tools")
+
+    def test_tools_mode_stops_before_generation(self):
+        script = (Path(__file__).resolve().parents[2] / "licenses-notices.sh").read_text()
+        installed = max(script.index("install_go_licenses\nfi"), script.index("install_cargo_about\nfi"))
+        tools = script.index('if [[ "${1:-}" == "--tools" ]]; then\n  exit 0\nfi')
+        self.assertLess(installed, tools)
+        self.assertLess(tools, script.index("bun "))
+
