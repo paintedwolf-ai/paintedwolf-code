@@ -2,6 +2,7 @@ package extpacks
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -118,5 +119,31 @@ func TestEncodeLockDoesNotMutateInput(t *testing.T) {
 		if !reflect.DeepEqual(pkg, before[i]) {
 			t.Fatalf("EncodeLock mutated its input: package %d is %+v, want %+v (normalizeLock/sort leaked into the caller's slice)", i, pkg, before[i])
 		}
+	}
+}
+
+func TestStockDependencyVersionsDoNotPinTheHost(t *testing.T) {
+	for _, version := range []string{"0.9.0", "1.0.0", "2.0.0"} {
+		t.Run(version, func(t *testing.T) {
+			pkg := samplePackage("acme/kit", "1.0.0")
+			pkg.Dependencies = map[string]string{PlatformPackID: version}
+			lock := LockFile{LockFormat: LockFormat, Packages: []LockedPackage{pkg}}
+			encoded, err := EncodeLock(lock)
+			if err != nil {
+				t.Fatalf("encode stock selection: %v", err)
+			}
+			decoded, err := ParseLock("extensions.lock.yaml", encoded)
+			if err != nil {
+				t.Fatalf("read stock selection: %v", err)
+			}
+			if !reflect.DeepEqual(decoded, lock) {
+				t.Fatalf("lock changed: %+v", decoded)
+			}
+		})
+	}
+	pkg := samplePackage("acme/kit", "1.0.0")
+	pkg.Dependencies = map[string]string{PlatformPackID: "^1.0.0"}
+	if err := ValidateLock(LockFile{LockFormat: LockFormat, Packages: []LockedPackage{pkg}}); err == nil || !strings.Contains(err.Error(), "canonical SemVer") {
+		t.Fatalf("nonexact recorded selection: %v", err)
 	}
 }

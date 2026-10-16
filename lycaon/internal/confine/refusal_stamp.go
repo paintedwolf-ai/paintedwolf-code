@@ -18,6 +18,8 @@ type RefusalContext struct {
 	FailedStages []string
 	// Running reports an invocation observed before it ended.
 	Running bool
+	// TerminationReason is the executor-observed terminal state, if known.
+	TerminationReason string
 	// Refusals is what the kernel reported refusing the invocation.
 	Refusals SandboxRefusals
 }
@@ -38,6 +40,7 @@ func StampRefusal(tool, sessionID string, b Boundary, context RefusalContext) St
 	out.Observation.Network = b.Network.Name()
 	out.Observation.FailedStages = append([]string(nil), context.FailedStages...)
 	out.Observation.Running = context.Running
+	out.Observation.TerminationReason = context.TerminationReason
 	out.Observation.Refusals = context.Refusals
 	if len(context.Refusals.Refusals) > 0 {
 		logSandboxRefusals(tool, sessionID, context.Refusals)
