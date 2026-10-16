@@ -147,6 +147,12 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 	for _, msg := range history {
 		byID[msg.ID] = msg
 	}
+	viewByID := make(map[string]api.Message, len(view.Messages))
+	for _, msg := range view.Messages {
+		if msg.ID != "" {
+			viewByID[msg.ID] = msg
+		}
+	}
 	intent, _ := api.LastUserIntentMessage(history)
 	activeOrd := intent.Ord
 	out := make([]api.Message, 0, len(view.Messages)+8)
@@ -168,6 +174,9 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 	for _, msg := range history {
 		if msg.Ord <= view.CoveredThroughOrd && (activeOrd <= 0 || msg.Ord < activeOrd) {
 			continue
+		}
+		if viewMsg, ok := viewByID[msg.ID]; ok && viewMsg.CompactedChunk != nil {
+			msg = api.RehydrateTranscriptProjectionFields(viewMsg, msg)
 		}
 		out = append(out, msg)
 	}
