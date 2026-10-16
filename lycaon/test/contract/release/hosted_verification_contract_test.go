@@ -86,11 +86,13 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 
 func TestHostedVerificationAggregatesRequireEveryBlockingJob(t *testing.T) {
 	t.Parallel()
+	// A job that observes, or reports the gate's own result, is not a dependency.
 	for workflow, gate := range map[string]string{"ci": "check", "nightly": "nightly", "qualification": "qualification"} {
 		jobs := hostedJobs(t, workflow)
 		var dependencies []string
 		for name := range jobs {
-			if name != gate && !(workflow == "nightly" && name == "quarantine") {
+			if name != gate && !(workflow == "nightly" && name == "quarantine") &&
+				!(workflow == "ci" && name == "dispatched-check") {
 				dependencies = append(dependencies, name)
 			}
 		}

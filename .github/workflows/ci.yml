@@ -9,8 +9,8 @@ on:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
-  # The full tier on any branch, before queueing or to reproduce a queue failure;
-  # the fast tier for a pull request whose events start no CI.
+  # The full tier on any branch; the fast tier for a pull request whose events
+  # start no CI. Either reports the required check (see dispatched-check).
   workflow_dispatch:
     inputs:
       profile:
@@ -63,3 +63,23 @@ jobs:
           SKIPPED: ${{ inputs.profile == 'check' && 'fast' || format('{0},platform', github.event_name == 'merge_group' && 'fast' || 'integration') }}
           DRAFT: ${{ github.event.pull_request.draft == true }}
         run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED" --draft "$DRAFT"
+
+  dispatched-check:
+    # A pull request's checks leave out dispatch runs; report the required
+    # check as a commit status instead.
+    if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      statuses: write
+    steps:
+      - name: Report the check on the dispatched commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STATE: ${{ needs.check.result == 'success' && 'success' || 'failure' }}
+          PROFILE: ${{ inputs.profile }}
+        run: >-
+          gh api "repos/$GITHUB_REPOSITORY/statuses/$GITHUB_SHA"
+          -f state="$STATE" -f context=check -f description="Dispatched $PROFILE profile"
+          -f target_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"

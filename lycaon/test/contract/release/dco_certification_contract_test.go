@@ -4,6 +4,7 @@ import (
 	"maps"
 	"regexp"
 	"slices"
+	"strings"
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -53,7 +54,7 @@ func TestDCOCertificationUsesTrustedBoundedSerializedCaller(t *testing.T) {
 	}
 	guard := "(github.event_name != 'pull_request_target' || (github.event.pull_request.draft == false && github.actor != 'dependabot[bot]')) && (github.event_name != 'workflow_run' || github.event.workflow_run.event == 'pull_request')"
 	if job.If != guard {
-		t.Errorf("draft events and non-PR CI runs must not enter privileged certification: %q", job.If)
+		t.Errorf("draft and non-PR events must not enter privileged certification: %q", job.If)
 	}
 	if len(job.Steps) != 1 {
 		t.Fatalf("publisher must execute only the shared action, got %d steps", len(job.Steps))
@@ -88,7 +89,7 @@ func TestDCOCertificationRoutesReadyPRQueueFallbackAndManualEvents(t *testing.T)
 	}
 	var fallback struct{ Workflows []string }
 	node := workflow.On["workflow_run"]
-	contractcheck.FailErr(t, "decode trusted CI fallback", node.Decode(&fallback))
+	contractcheck.FailErr(t, "decode completed-run fallback", node.Decode(&fallback))
 	var ci struct{ Name string }
 	data = contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/ci.yml")
 	contractcheck.FailErr(t, "decode CI workflow identity", yaml.Unmarshal([]byte(data), &ci))
@@ -105,6 +106,12 @@ func TestDCOCertificationRoutesReadyPRQueueFallbackAndManualEvents(t *testing.T)
 	contractcheck.FailErr(t, "decode manual certification", node.Decode(&dispatch))
 	input, ok := dispatch.Inputs["pull_request"]
 	if !ok || len(dispatch.Inputs) != 1 || !input.Required || input.Type != "string" {
-		t.Errorf("manual retry requires exactly a PR number input, never caller-selected commit evidence: %+v", dispatch.Inputs)
+		t.Errorf("manual certification requires exactly a PR number input: %+v", dispatch.Inputs)
+	}
+	// A token-created pull request fires no events of its own.
+	maintenance := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "scripts/ci_policy/maintenance.py")
+	if !strings.Contains(maintenance, "workflows/dco.yml/dispatches") ||
+		!strings.Contains(maintenance, "'pull_request': str(pull['number'])") {
+		t.Error("automation must dispatch certification for the pull request it creates")
 	}
 }
