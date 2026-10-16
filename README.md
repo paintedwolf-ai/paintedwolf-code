@@ -9,7 +9,7 @@
 - **Security by construction** — attached roots define read/write scope, egress is mediated, approvals are requested when an effect needs authority. See [security](docs/security.md).
 - **Extensible** — first-party Go tools, confined MCP providers, detection packs, and extension packs; composition is data, not runtime branches. See [extend](docs/extend.md).
 
-The public release target is **macOS 13 (Ventura) or later on Apple Silicon**. The same release cadence also produces candidate Linux packages, a `.deb` and an `.rpm` for **x86_64 and aarch64**, and a signed Windows x86_64 NSIS installer; candidate artifacts are not linked or offered through the updater. Platform and publication-state SSOT: [`packaging/release-platforms.json`](packaging/release-platforms.json); release details: [`docs/dev-tasks.md`](docs/dev-tasks.md#release--versioning).
+The public release target is **macOS 14 (Sonoma) or later on Apple Silicon**. Each release run also builds candidate Linux packages, a `.deb` and an `.rpm` for **x86_64 and aarch64**, retained as workflow artifacts; they are not published, linked, or offered through the updater. Windows x86_64 is a candidate catalog entry that release runs do not build. Platform and publication-state SSOT: [`packaging/release-platforms.json`](packaging/release-platforms.json); release details: [`docs/dev-tasks.md`](docs/dev-tasks.md#release--versioning).
 
 ## Features
 
@@ -23,7 +23,7 @@ The public release target is **macOS 13 (Ventura) or later on Apple Silicon**. T
 
 ## Getting started
 
-Painted Wolf Code ships as a desktop app. Releases are published on the [Releases](https://github.com/paintedwolf-ai/paintedwolf-code/releases) page; candidates for Linux and Windows are built per release but not linked or offered through the updater.
+Painted Wolf Code ships as a desktop app. Releases are published on the [Releases](https://github.com/paintedwolf-ai/paintedwolf-code/releases) page; Linux candidates are built per release but not linked or offered through the updater.
 
 On Linux, install the package for your distribution family and update it through the package manager; the app checks for new releases and shows the exact `apt` or `dnf` command instead of installing anything itself:
 

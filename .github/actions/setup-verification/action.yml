@@ -89,6 +89,12 @@ runs:
           libjavascriptcoregtk-4.1-dev librsvg2-dev patchelf \
           sway wl-clipboard wtype xclip
 
+    # Lavapipe gives the decision engine's Vulkan parity tests a device on GPU-less runners.
+    - name: Install Mesa's Vulkan drivers
+      if: runner.os == 'Linux' && inputs.setup == 'shell'
+      shell: bash
+      run: sudo apt-get install -y --no-install-recommends mesa-vulkan-drivers libvulkan1
+
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       id: rust
       if: inputs.setup != 'verification'
@@ -99,7 +105,7 @@ runs:
 
     - name: Restore the decision engine build
       id: decide
-      if: runner.os == 'macOS' && inputs.setup == 'shell'
+      if: inputs.setup == 'shell'
       uses: ./.github/actions/cache-decide
 
     - name: Set up maintained OpenGrep
@@ -158,9 +164,15 @@ runs:
 
     # Preparation writes resources into this checkout; verification checks use isolated snapshots.
     - name: Prepare shell resource notices
-      if: inputs.setup == 'shell' || inputs.notices == 'true'
+      if: inputs.setup == 'shell'
       shell: bash
       run: ./task setup-dev -- --shell-resources
+
+    # The lane's own licenses:notices check generates them; an offline lane needs only the tools.
+    - name: Provision notices tools
+      if: inputs.setup != 'shell' && inputs.notices == 'true'
+      shell: bash
+      run: ./task setup-dev -- --notices-tools
 
     - name: Restore analysis tools
       if: inputs.analysis != 'none'

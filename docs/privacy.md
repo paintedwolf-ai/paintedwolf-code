@@ -42,7 +42,7 @@ The update server sees the connection's source IP. Gradual rollout of new releas
 | Sessions, transcripts, and history | `~/.config/paintedwolf/store.db` |
 | Uploaded attachment bodies | `~/.config/paintedwolf/projects/{project_id}/prompt-attachments/` |
 | Settings and preferences | `~/.config/paintedwolf` — the single config and data root |
-| API keys, web research credentials, MCP sign-in tokens, and managed-secret values | `{configdir}/credential-vault.age`, an age-encrypted `0600` vault. macOS keeps its random identity device-only in Keychain. Linux and Windows store a scrypt-wrapped identity in `credential-vault-identity.age` and unlock it with the app password. Value-free managed-secret metadata remains in `store.db`; use and reveal records never contain the value or proof. |
+| API keys, web research credentials, MCP sign-in tokens, and managed-secret values | `{configdir}/credential-vault.age`, an age-encrypted `0600` vault. macOS keeps its random identity device-only in the data protection Keychain. Linux packaged installs hold it in the `pw-vault-identity` system service, which releases it only to the verified installed engine. Without that service, and on Windows, a scrypt-wrapped identity in `credential-vault-identity.age` is unlocked with the app password ([secrets](secrets.md)). Value-free managed-secret metadata remains in `store.db`; use and reveal records never contain the value or proof. |
 | Local API token | `~/.config/paintedwolf/api.token`, `0600` |
 | Host identity key | `~/.config/paintedwolf/host-identity.pem`, `0600`. It never leaves the device; only its public key and derived host id are served to authenticated local clients. |
 | Per-project settings and overlays | `.paintedwolf/` inside each project folder |
