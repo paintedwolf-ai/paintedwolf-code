@@ -62,7 +62,7 @@ func projectSummarizeSource(message api.Message, part api.MessageContentPart, pa
 	if json.Unmarshal(pack["substance"], &windows) != nil || len(windows) == 0 {
 		return parts
 	}
-	sources := make([]string, 0, len(windows))
+	sources := make([]sourceText, 0, len(windows))
 	for _, window := range windows {
 		text, ok := numberedSourceBlock(window, "body")
 		if !ok {
@@ -105,7 +105,7 @@ func projectReadSource(message api.Message, part api.MessageContentPart, parts [
 	if json.Unmarshal(metadata["mode"], &mode) != nil {
 		return parts
 	}
-	var sources []string
+	var sources []sourceText
 	switch mode {
 	case "content", "symbol":
 		text, ok := readSourceBlock(metadata)
@@ -137,19 +137,44 @@ func projectReadSource(message api.Message, part api.MessageContentPart, parts [
 	if err != nil {
 		return parts
 	}
+	var path string
+	_ = json.Unmarshal(metadata["path"], &path)
+	for i := range sources {
+		if sources[i].path == "" {
+			sources[i].path = path
+		}
+		sources[i].handle = strings.Join(handles, " ")
+	}
 	return sourceParts(part, "read_metadata", handles, encoded, sources, suffix)
 }
 
+type sourceText struct {
+	text, path, handle string
+	start, end         int
+}
+
+func (s sourceText) label() string {
+	label := "File contents"
+	if s.path != "" {
+		label += fmt.Sprintf(" %q", s.path)
+	}
+	label += fmt.Sprintf(" (lines %d–%d)", s.start, s.end)
+	if s.handle != "" {
+		label += fmt.Sprintf("; evidence %q", s.handle)
+	}
+	return label + ":"
+}
+
 // sourceParts emits result metadata followed by one fenced part per source block, in metadata order.
-func sourceParts(part api.MessageContentPart, metadataSource string, handles []string, metadata []byte, sources []string, suffix string) []api.MessageContentPart {
+func sourceParts(part api.MessageContentPart, metadataSource string, handles []string, metadata []byte, sources []sourceText, suffix string) []api.MessageContentPart {
 	out := make([]api.MessageContentPart, 0, len(sources)+1)
 	part.Source = metadataSource
-	part.Content = strings.Join(append(handles, string(metadata)), "\n")
+	part.Content = "Tool result metadata:\n" + strings.Join(append(handles, string(metadata)), "\n")
 	out = append(out, part)
 	for _, source := range sources {
-		fence := sourceFence(source)
+		fence := sourceFence(source.text)
 		part.Source = "source"
-		part.Content = fence + "\n" + source + "\n" + fence
+		part.Content = source.label() + "\n" + fence + "\n" + source.text + "\n" + fence
 		out = append(out, part)
 	}
 	if strings.TrimSpace(suffix) != "" {
@@ -160,38 +185,41 @@ func sourceParts(part api.MessageContentPart, metadataSource string, handles []s
 	return out
 }
 
-func readSourceBlock(block map[string]json.RawMessage) (string, bool) {
+func readSourceBlock(block map[string]json.RawMessage) (sourceText, bool) {
 	return numberedSourceBlock(block, "content")
 }
 
 // numberedSourceBlock decodes the host's numbered-source format held under key and removes it from block.
-func numberedSourceBlock(block map[string]json.RawMessage, key string) (string, bool) {
+func numberedSourceBlock(block map[string]json.RawMessage, key string) (sourceText, bool) {
 	var content string
 	var start, end int
 	if json.Unmarshal(block[key], &content) != nil || json.Unmarshal(block["end_line"], &end) != nil {
-		return "", false
+		return sourceText{}, false
 	}
 	if json.Unmarshal(block["offset"], &start) != nil || start <= 0 {
 		if json.Unmarshal(block["start_line"], &start) != nil {
-			return "", false
+			return sourceText{}, false
 		}
 	}
 	if start <= 0 || end < start {
-		return "", false
+		return sourceText{}, false
 	}
 	lines := strings.Split(content, "\n")
 	if end-start+1 != len(lines) {
-		return "", false
+		return sourceText{}, false
 	}
 	for i, line := range lines {
 		prefix := fmt.Sprintf("%6d: ", start+i)
 		if !strings.HasPrefix(line, prefix) {
-			return "", false
+			return sourceText{}, false
 		}
 		lines[i] = strings.TrimPrefix(line, prefix)
 	}
 	delete(block, key)
-	return strings.Join(lines, "\n"), true
+	result := sourceText{text: strings.Join(lines, "\n"), start: start, end: end}
+	_ = json.Unmarshal(block["path"], &result.path)
+	_ = json.Unmarshal(block["handle"], &result.handle)
+	return result, true
 }
 
 func sourceFence(source string) string {

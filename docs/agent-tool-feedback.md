@@ -20,16 +20,24 @@ At rendering, [`oarcopy.FactsFromData`](../lycaon/internal/oarcopy/facts.go) pub
 
 On the wire, a tool result carries ordered `feedback` entries (`code`, typed `details`, optional `subject`), a producer-stated `dispatch` record for worker creation, and a producer-stated `completion` record for lifecycle work. `codes` is the compact ordered card-selection projection of `feedback`; it is never the only rejection data.
 
+Literal `echo` and `printf` output directed to a file uses `USE_WRITE_NATIVE`,
+including short log lines. The file-writing operation has the same recovery
+whether called directly or inside a shell wrapper. Ordinary stdout and arbitrary
+program output are unaffected. Exact replacement calls require representable
+paths and known output bytes; uncertain quoting, expansion, or output options
+retain recovery guidance without synthesized file content.
+
 ## Source text in model requests
 
 Successful native content, symbol, and range reads retain their structured result
 for history and evidence. The shared transcript projection sends each source
-block as unescaped text, with its line range and read receipt in separate
-metadata. Indentation and blank lines remain source bytes; display line labels
+block as unescaped text, labeled as file contents with its path, line range,
+and evidence handle beside that block. The read receipt remains in explicitly
+labeled tool result metadata. Indentation and blank lines remain source bytes; display line labels
 are not part of an edit string. Evidence handles and source coordinates remain
 available for citations. `summarize` source windows follow the same
 presentation: each window's text follows the result metadata in window order,
-and its path, line range, and handle stay in that metadata.
+and its path, line range, and handle also identify the corresponding source block.
 
 Projection accepts only complete host-written source blocks with consistent line
 coordinates. Unsupported or incomplete results keep their original presentation.

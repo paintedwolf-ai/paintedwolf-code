@@ -568,6 +568,15 @@ host_facts:
  - name: paintedwolf.process_running
    type: bool
    observation: True when the invocation's process was still running when observed.
+ - name: paintedwolf.process_timed_out
+   type: bool
+   observation: True when a terminal invocation reached its host deadline. False while running or when the terminal reason is unknown.
+ - name: paintedwolf.process_stopped
+   type: bool
+   observation: True when the host recorded a terminal invocation as stopped. False while running or when the terminal reason is unknown.
+ - name: paintedwolf.process_exited
+   type: bool
+   observation: True when the host recorded a terminal invocation as exited, independently of success. False while running or when the terminal reason is unknown.
  - name: paintedwolf.sandbox_refusals
    type: list<string>
    observation: Each operation the kernel reported refusing the invocation's processes, as operation, target, and process; empty when none was reported or the host cannot read the reports.
