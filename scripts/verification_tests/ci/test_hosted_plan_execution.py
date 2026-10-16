@@ -19,7 +19,9 @@ class HostedPlanTests(unittest.TestCase):
         # Releases gate on whether the product works; style, tooling, and the deep tiers run elsewhere.
         self.assertLessEqual(release, check | platform)
         self.assertEqual(release, {"build", "contracts", "behavior", "frontend", "native", "vulnerabilities",
-                                   "webkit-gtk"})
+                                   "webkit-gtk", "confinement-arm64"})
+        # Qualification runs the check gate, then release's platform lanes beside the platform gates.
+        self.assertEqual({row["lane"] for row in ci.matrix("release", platform=True)["include"]}, release & platform)
 
     def test_ready_tier_is_one_short_static_job_from_the_handoff_gate(self):
         handoff = {stage["name"] for stage in planning.expand(["check-fast"])}
@@ -60,7 +62,7 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "check:coverage",
                                    "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
                                    "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll",
-                                   "den:webkit:atspi"})
+                                   "den:webkit:atspi", "test:confine:linux"})
         for suite in ci.SUITES - {"all"}:
             with self.subTest(suite=suite):
                 names = {row["lane"] for row in ci.matrix("nightly", suite)["include"]}
@@ -78,8 +80,10 @@ class HostedPlanTests(unittest.TestCase):
                 with self.subTest(profile=profile, lane=row["lane"]):
                     self.assertEqual(row["job_minutes"] - row["minutes"], 30)
                     self.assertLess(row["job_minutes"], 360)
-                    # macOS hosts only the lanes that test macOS-specific behavior.
-                    self.assertEqual(row["runner"], "macos-15" if row["lane"] == "webkit" else "ubuntu-latest")
+                    # macOS hosts only the lanes that test macOS-specific behavior, and arm64 only
+                    # architecture-specific confinement.
+                    runner = {"webkit": "macos-15", "confinement-arm64": "ubuntu-24.04-arm"}.get(row["lane"], "ubuntu-latest")
+                    self.assertEqual(row["runner"], runner)
 
     def test_each_lane_installs_only_its_declared_setup(self):
         setups = {row["lane"]: row["setup"] for row in ci.matrix("check")["include"]}
@@ -114,9 +118,8 @@ class HostedPlanTests(unittest.TestCase):
         self.assertEqual({name for name in admitted if ci.lanes()[name]["suite"] == "e2e"}, {"webkit-gtk"})
 
     def test_platform_lanes_run_beside_the_check_gate_and_never_inside_it(self):
-        lane = ci.lanes()["webkit-gtk"]
-        self.assertEqual(lane["platform"], "linux")
-        for mutation in ("unknown", "macos", "check", "fast", "repeats"):
+        self.assertEqual({ci.lanes()[name]["platform"] for name in ("webkit-gtk", "confinement-arm64")}, {"linux"})
+        for mutation in ("unknown", "macos", "windows", "check", "fast", "repeats"):
             with self.subTest(mutation=mutation):
                 data = copy.deepcopy(planning.catalog())
                 platform = data["ci"]["webkit-gtk"]
@@ -124,6 +127,8 @@ class HostedPlanTests(unittest.TestCase):
                     platform["platform"] = "windows"
                 elif mutation == "macos":
                     platform["runner"] = "macos-15"
+                elif mutation == "windows":
+                    platform["runner"] = "windows-latest"
                 elif mutation in {"check", "fast"}:
                     platform["profiles"].append(mutation)
                 else:
@@ -137,6 +142,25 @@ class HostedPlanTests(unittest.TestCase):
                 with self.subTest(profile=profile, lane=row["lane"]):
                     self.assertEqual(row["containers"], "den:webkit:atspi" in ci.lanes()[row["lane"]]["targets"])
         self.assertTrue([row for row in ci.matrix("integration")["include"] if row["containers"]])
+
+    def test_offline_lanes_learn_whether_they_need_the_pinned_browser(self):
+        for profile in ci.PROFILES:
+            for row in ci.matrix(profile)["include"]:
+                with self.subTest(profile=profile, lane=row["lane"]):
+                    self.assertEqual(row["browser"], "test:confine:linux" in ci.lanes()[row["lane"]]["targets"])
+        self.assertEqual([row["lane"] for row in ci.matrix("integration")["include"] if row["browser"]], ["confinement-arm64"])
+
+    def test_platform_selection_keeps_only_platform_lanes(self):
+        for profile in ("integration", "nightly", "release"):
+            with self.subTest(profile=profile):
+                rows = ci.matrix(profile, platform=True)["include"]
+                self.assertTrue(rows)
+                self.assertTrue(all("platform" in ci.lanes()[row["lane"]] for row in rows))
+        scope = dict(full=False, paths=["lycaon/internal/confine/boundary_linux.go"])
+        self.assertEqual({row["lane"] for row in ci.matrix("integration", scope=scope, platform=True)["include"]},
+                         {"confinement-arm64"})
+        with self.assertRaises(ValueError):
+            ci.matrix("check", platform=True)
 
     def test_each_profile_caps_the_runners_its_matrix_holds(self):
         caps = planning.catalog()["capacity"]["max_parallel"]

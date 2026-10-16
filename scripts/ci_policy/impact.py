@@ -65,7 +65,18 @@ def selected_lanes(scope, lanes):
     if "den" in areas:
         # Any Den source can change the DOM that WebKitGTK answers screen reader queries about.
         chosen |= {"frontend", "webkit-gtk"}
+    if any(confinement_source(p) for p in paths):
+        # Seccomp filters, syscall numbers and argument layouts differ by architecture.
+        chosen.add("confinement-arm64")
     return chosen & set(lanes)
+
+
+def confinement_source(path):
+    """The sandbox, its helper, and the command supervisor's Linux process handling."""
+    if path.startswith("lycaon/internal/confine/"):
+        return True
+    name = path.removeprefix("lycaon/internal/exec/")
+    return name != path and "/" not in name and (name.startswith("supervisor") or "_linux" in name)
 
 
 def reverse_closure(graph, seeds):
