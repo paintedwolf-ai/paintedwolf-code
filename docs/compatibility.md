@@ -59,6 +59,8 @@ Durable identity and disposable bytes should be separate when content can be rea
 
 Compaction views are ephemeral prompt projections over retained canonical messages. Their versioned envelope may be rebuilt on format mismatch without modifying the transcript. Canonical recovery coordinates, source identities, and user records retain their durable meaning; projection invalidation does not delete them.
 
+The recorded-tool-result path migration repairs search projections from immutable tool argument snapshots. It preserves transcript bytes and evidence bodies, updates the full-text index through its existing triggers, and uses the registered upgrade and recovery-snapshot path.
+
 Deleting bytes must produce an explainable unavailable state, not make a durable id look as though it never existed.
 
 ## Workflow definitions
