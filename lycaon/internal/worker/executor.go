@@ -146,6 +146,7 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 	stopCancelWatch := watchWorkerPromptCancel(ctx, e.Cancellations, child.ID)
 	defer stopCancelWatch()
 
+	var turn *promptresult.Result
 	var waitLeaseID string
 	var condition awaitstore.Condition
 	var resumedWait bool
@@ -156,7 +157,7 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 		return api.WorkerResult{}, err
 	}
 	if resumedWait {
-		_, err = e.Prompts.PromptWorkerResume(ctx, child.ID, task.ID, waitLeaseID, condition, func() error {
+		turn, err = e.Prompts.PromptWorkerResume(ctx, child.ID, task.ID, waitLeaseID, condition, func() error {
 			return e.Waits.MarkResumeDelivered(ctx, waitLeaseID)
 		})
 	} else {
@@ -167,7 +168,7 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 				return api.WorkerResult{}, err
 			}
 		}
-		_, err = e.Prompts.PromptWorker(ctx, child.ID, task.ID, promptText)
+		turn, err = e.Prompts.PromptWorker(ctx, child.ID, task.ID, promptText)
 	}
 	if err != nil {
 		return api.WorkerResult{}, err
@@ -181,6 +182,7 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 	}
 
 	finalizeOpts := e.workerFinalizeOpts(ctx, task, child, run.ProjectDir)
+	finalizeOpts.OfferedTools = turn.OfferedToolNames()
 	if _, reason, pending := e.Graceful.Closeout(child.ID); pending {
 		result, finishErr := e.completeGracefulStop(ctx, task, child, reason, finalizeOpts)
 		e.Graceful.Finish(child.ID)
