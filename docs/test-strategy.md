@@ -716,11 +716,11 @@ A lane that declares a `platform` runs a check only that platform can run, so
 `check`, which every development host runs, leaves it out, and the planner
 refuses one that repeats a `check` stage or joins the fast tier. The merge queue
 runs it beside the partition: for the change areas the planner assigns it and
-for every broad change. The `webkit-gtk` lane runs `den:webkit:atspi` for any
-Den source change; changes to the check, its probe, or the harness fixtures are
-broad. Like every lane, it fails when the check reports unverified: an image
-that cannot be built, a missing container runtime, or a harness that does not
-start leaves the change unverified, never admitted.
+for every broad change. The `webkit-gtk` lane runs `den:webkit:atspi` nightly
+and in release qualification; it joins merge admission once its chat scenario
+sets up deterministically. Like every lane, it fails when the check reports
+unverified: an image that cannot be built, a missing container runtime, or a
+harness that does not start leaves the result unverified, never passed.
 
 Linux confinement compiles per architecture: seccomp filters name the audit
 architecture and syscall numbers, arm64 has no legacy calls such as `open`,

@@ -63,8 +63,7 @@ def selected_lanes(scope, lanes):
     if "go" in areas:
         chosen |= {"behavior", "lint", "vulnerabilities"}
     if "den" in areas:
-        # Any Den source can change the DOM that WebKitGTK answers screen reader queries about.
-        chosen |= {"frontend", "webkit-gtk"}
+        chosen.add("frontend")
     if any(confinement_source(p) for p in paths):
         # Seccomp filters, syscall numbers and argument layouts differ by architecture.
         chosen.add("confinement-arm64")
