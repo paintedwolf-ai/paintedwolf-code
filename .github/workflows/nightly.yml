@@ -31,6 +31,10 @@ env:
 jobs:
   verification:
     uses: ./.github/workflows/verification.yml
+    # Reads the measured durations that plan the matrix.
+    permissions:
+      contents: read
+      actions: read
     with:
       profile: nightly
       suite: ${{ github.event_name == 'schedule' && 'all' || inputs.suite }}

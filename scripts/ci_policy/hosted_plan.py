@@ -3,6 +3,7 @@ from collections import Counter
 from pathlib import Path
 import re
 
+from ci_policy.timings import row_key
 from verification_plan import catalog, expand
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -93,7 +94,7 @@ def analysis_set(targets):
     return "all" if lint and vulnerabilities else "lint" if lint else "vulnerabilities" if vulnerabilities else "none"
 
 
-def matrix(profile, suite="all", scope=None, platform=False):
+def matrix(profile, suite="all", scope=None, platform=False, timings=None):
     """A profile's lanes; `platform` keeps only its platform lanes, for a run whose other lanes another gate covers."""
     if profile not in PROFILES or suite not in SUITES or profile != "nightly" and suite != "all":
         raise ValueError(f"unsupported CI selection: {profile}/{suite}")
@@ -124,8 +125,14 @@ def matrix(profile, suite="all", scope=None, platform=False):
     if not result:
         raise ValueError("CI selection contains no verification")
     # A capped matrix starts jobs in order: the cheap lanes that fail most often come first, so a
-    # failing group stops early, then the longest lanes, so they don't finish last.
-    return {"include": sorted(result, key=lambda row: (not values[row["lane"]].get("first"), -row["minutes"]))}
+    # failing group stops early, then the longest lanes, so they don't finish last. A lane main's
+    # qualification has not measured is planned at its budget, so it starts early.
+    measured = (timings or {}).get("lanes", {})
+
+    def expected(row):
+        return measured.get(row_key(row["lane"], row["shard"]), row["minutes"] * 60)
+
+    return {"include": sorted(result, key=lambda row: (not values[row["lane"]].get("first"), -expected(row)))}
 
 
 def invocation(targets):

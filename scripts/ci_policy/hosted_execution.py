@@ -10,7 +10,7 @@ import time
 
 from artifact_paths import artifact_root
 from ci_policy.evidence import oom_events, classify
-from ci_policy import hosted_plan, verification_report
+from ci_policy import hosted_plan, timings, verification_report
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -85,9 +85,15 @@ def run_lane(name, shard=""):
     # A lane whose peak memory outgrows the runner caps its parallelism below the CPU count.
     if "workers" in lane:
         environment["PW_TEST_WORKERS"] = str(lane["workers"])
-    # Each shard of a split lane runs its slice of every Go stage's packages.
+    # Each shard of a split lane runs its slice of every Go stage's packages. The plan job resolved
+    # one set of measurements for the run, so the shards partition the selection the same way.
+    measured = environment.pop("PW_CI_PACKAGE_TIMINGS", "")
     if shard:
         environment["PW_GO_SHARD"] = shard
+        if measured:
+            weights = directory / "package-weights.json"
+            weights.write_text(measured)
+            environment["PW_GO_TIMINGS"] = str(weights)
     # A hosted runner that runs out of memory or disk vanishes without evidence; the live log keeps these lines.
     stop = threading.Event()
     if os.environ.get("PW_TEST_HOST") == "dedicated" and Path("/proc/meminfo").exists():
@@ -97,11 +103,6 @@ def run_lane(name, shard=""):
         from ci_policy.impact import go_scope
         packages = go_scope(scope)
         if packages:
-            # Deal after selection, so a small closure cannot produce an empty shard.
-            if shard:
-                index, total = map(int, shard.split("/"))
-                packages = packages[(index - 1) % len(packages)::min(total, len(packages))]
-                environment.pop("PW_GO_SHARD", None)
             command += ["--", *packages]
             record["packages"] = packages
     try:
@@ -113,4 +114,5 @@ def run_lane(name, shard=""):
                   status="passed" if code == 0 else "failed" if code == 1 else "unverified")
     record["classification"] = classify(record, verification_report.failures(artifact_root(ROOT)))
     path.write_text(json.dumps(record, indent=2) + "\n")
+    timings.record(artifact_root(ROOT), record)
     return code

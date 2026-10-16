@@ -91,8 +91,54 @@ class HostedExecutionTests(unittest.TestCase):
         for shard in ["0/3", "4/3", "x/3", "3", "2/1"]:
             with self.subTest(shard=shard), self.assertRaises(ValueError):
                 shard_packages(packages, shard)
-        with self.assertRaises(ValueError):
-            shard_packages(["only"], "2/2")
+        # A selection smaller than the split repeats packages rather than leave a shard empty.
+        self.assertEqual([shard_packages(["a", "b"], f"{k}/3") for k in range(1, 4)], [["a"], ["b"], ["a"]])
+
+    def test_measured_shards_finish_together(self):
+        durations = {"security": 640, "git": 270, "wiring": 260, "release": 200, "session": 150,
+                     "hostcontracts": 166, "sourcecontracts": 110, "small": 1, "tiny": 0}
+        packages = sorted([*durations, "unmeasured"])
+        slices = [shard_packages(packages, f"{k}/2", durations) for k in range(1, 3)]
+        self.assertEqual(sorted(p for part in slices for p in part), packages)
+        loads = [sum(durations.get(p, 166) for p in part) for part in slices]
+        self.assertLessEqual(max(loads) - min(loads), 200)
+        self.assertIn("security", slices[0])
+        # Every shard of a run computes the same partition from the same measurements.
+        self.assertEqual(slices, [shard_packages(list(reversed(packages)), f"{k}/2", dict(durations)) for k in range(1, 3)])
+
+    def test_unmeasured_shards_deal_the_sorted_selection_in_turn(self):
+        packages = [f"p{n:02d}" for n in range(7)]
+        for durations in (None, {}, {"other": 5}):
+            with self.subTest(durations=durations):
+                self.assertEqual([shard_packages(packages, f"{k}/3", durations) for k in range(1, 4)],
+                                 [packages[k::3] for k in range(3)])
+
+    def test_shards_receive_the_plans_measurements_and_tasks_do_not(self):
+        measured = '{"github.com/lycaon/lycaon/test/security": 640}'
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.dict(ci.os.environ, {"PW_CI_PACKAGE_TIMINGS": measured}), \
+                patch.object(ci.subprocess, "call", return_value=0) as run:
+            ci.run_lane("behavior", "2/2")
+            environment = run.call_args.kwargs["env"]
+            self.assertNotIn("PW_CI_PACKAGE_TIMINGS", environment)
+            self.assertEqual(Path(environment["PW_GO_TIMINGS"]).read_text(), measured)
+            ci.run_lane("frontend")
+            environment = run.call_args.kwargs["env"]
+            self.assertNotIn("PW_CI_PACKAGE_TIMINGS", environment)
+            self.assertNotIn("PW_GO_TIMINGS", environment)
+
+    def test_affected_behavior_shards_deal_the_closure_in_admission(self):
+        scope = {"base": "b" * 40, "head": "a" * 40, "paths": ["lycaon/internal/a/a.go"], "full": False, "reasons": []}
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.dict(ci.os.environ, {"PW_CI_AFFECTED": "1"}), \
+                patch("ci_policy.impact.change", return_value=scope), \
+                patch("ci_policy.impact.go_scope", return_value=["./internal/a", "./test/contract"]), \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.subprocess, "call", return_value=0) as run:
+            ci.run_lane("behavior", "1/2")
+        self.assertEqual(run.call_args.args[0], ["./task", "test:full", "--", "./internal/a", "./test/contract"])
+        self.assertEqual(run.call_args.kwargs["env"]["PW_GO_SHARD"], "1/2")
 
     def test_lane_budget_bounds_the_go_watchdog_unless_the_caller_sets_one(self):
         minutes = hosted_plan.lanes()["behavior"]["minutes"]
