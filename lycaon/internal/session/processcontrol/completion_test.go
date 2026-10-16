@@ -4,9 +4,13 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/heldcall"
+	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -78,5 +82,59 @@ func TestBackgroundPreviewPreservesUTF8AndMostRecentOutput(t *testing.T) {
 	capBackgroundOutput(output, 3)
 	if !output.Truncated || len(output.Chunks) != 1 || output.Chunks[0].Text != "éz" {
 		t.Fatalf("bounded screened output=%+v", output)
+	}
+}
+
+func TestHandleSubjectResolvesHeldAndUnknownHandles(t *testing.T) {
+	var nilSvc *Service
+	if got := nilSvc.HandleSubject("s", "h"); got != "" {
+		t.Fatalf("nil service = %q", got)
+	}
+	held := heldcall.New(nil, nil)
+	bg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
+	svc := &Service{Background: bg, Held: held}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatalf("executable: %v", err)
+	}
+	bgHandle, err := bg.StartPipeline(t.Context(), bgprocess.PipelineSpec{
+		SessionID: "s", ProjectID: "p", Mode: bgprocess.JobModeBackground, Runner: hostcmd.NewRunner(),
+		Request: hostcmd.Request{Launch: exec.HostLaunch("processcontrol test"), ProjectDir: t.TempDir(), Stages: []exec.Stage{{Name: exe, Args: []string{"-test.list=^$"}}}},
+	})
+	if err != nil {
+		t.Fatalf("start bg process: %v", err)
+	}
+	t.Cleanup(func() { _, _ = bg.Lifecycle.Stop("s", bgHandle) })
+	if got := svc.HandleSubject("s", bgHandle); !strings.Contains(got, "-test.list=^$") {
+		t.Fatalf("bg subject = %q", got)
+	}
+	release := make(chan struct{})
+	defer close(release)
+	outcome, err := held.Run(t.Context(), heldcall.Spec{
+		SessionID: "s", Tool: "fetch_url", ToolCallID: "c1", Budget: 10 * time.Millisecond, DisplayTitle: "fetch url · https://example.com",
+	}, func(ctx context.Context) heldcall.Settled {
+		<-release
+		return heldcall.Settled{Outcome: api.ToolResultOutcomeCompleted}
+	})
+	if err != nil || outcome.Handle == "" {
+		t.Fatalf("start held call: %v %+v", err, outcome)
+	}
+	if got := svc.HandleSubject("s", outcome.Handle); got != "fetch url · https://example.com" {
+		t.Fatalf("held subject = %q", got)
+	}
+	fallbackOut, err := held.Run(t.Context(), heldcall.Spec{
+		SessionID: "s", Tool: "survey_repo", ToolCallID: "c2", Budget: 10 * time.Millisecond,
+	}, func(ctx context.Context) heldcall.Settled {
+		<-release
+		return heldcall.Settled{Outcome: api.ToolResultOutcomeCompleted}
+	})
+	if err != nil || fallbackOut.Handle == "" {
+		t.Fatalf("start fallback held call: %v %+v", err, fallbackOut)
+	}
+	if got := svc.HandleSubject("s", fallbackOut.Handle); got != "survey repo" {
+		t.Fatalf("fallback held subject = %q", got)
+	}
+	if got := svc.HandleSubject("other", outcome.Handle); got != "" {
+		t.Fatalf("foreign session subject = %q", got)
 	}
 }

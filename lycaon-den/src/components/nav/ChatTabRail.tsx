@@ -25,7 +25,6 @@ import {
 import { ContextPaneToggle } from "./ContextPaneToggle.tsx";
 import { ConversationCollapseButton } from "./ConversationToggle.tsx";
 import { SplitFitRestoreButton } from "./SplitFitRestore.tsx";
-import { tabBarTrailingControls } from "../shell/WindowControls.tsx";
 import { ProgressStrip } from "../ProgressStrip.tsx";
 import { WorkflowsTab } from "../workflow/WorkflowsTab.tsx";
 import { GitStrip } from "../GitStrip.tsx";
@@ -63,6 +62,9 @@ export type ChatTabRailProps = {
   };
   /** Top chrome dock; the rail reserves space under the chips. */
   dock?: JSX.Element;
+  /** Drawn window controls when the conversation holds a window edge. */
+  windowControlsStart?: JSX.Element;
+  windowControlsEnd?: JSX.Element;
 };
 
 function blueprintsById(blueprints: readonly BlueprintSummary[]): Record<string, BlueprintSummary> {
@@ -128,8 +130,6 @@ export function ChatTabRail(props: ChatTabRailProps) {
     if (!client) return;
     void exportSessionTranscript(client, props.sessionId, format);
   };
-
-  const windowTrailing = () => tabBarTrailingControls();
 
   const progressPanel = () => (
     <ProgressStrip
@@ -350,6 +350,8 @@ export function ChatTabRail(props: ChatTabRailProps) {
       retracted={chrome.panelRetracted()}
       onPanelHeightChange={chrome.syncPanelHeight}
       dock={props.dock}
+      windowControlsStart={props.windowControlsStart}
+      windowControlsEnd={props.windowControlsEnd}
       leading={
         navLeads() || props.conversationSeam ? (
           <>
@@ -364,7 +366,6 @@ export function ChatTabRail(props: ChatTabRailProps) {
           <Show when={!seamAt("trailing")}>{exportMenu()}</Show>
           <Show when={seamAt("trailing")}>{seamControls()}</Show>
           <Show when={props.navCollapsed && navOnRight()}>{navExpand()}</Show>
-          {windowTrailing()}
         </>
       }
       tabs={tabs()}

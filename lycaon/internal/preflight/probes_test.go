@@ -4,13 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/ocrengine"
 	"github.com/lycaon/lycaon/internal/platformfloor"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/userpath"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"testing"
 )
@@ -54,12 +57,10 @@ func TestOSVersionProbe(t *testing.T) {
 		want     Status
 		wantCode string
 	}{
-		{name: "at the floor", version: platformfloor.MacOSMin(), want: StatusOK},
-		{name: "above the floor", version: "15.5", want: StatusOK},
-		{name: "far above the floor", version: "26.1", want: StatusOK},
-		{name: "below the floor", version: "13.9", want: StatusBlocked, wantCode: CodeOSBelowFloor},
-		{name: "single digit major", version: "9.0", want: StatusBlocked, wantCode: CodeOSBelowFloor},
-		{name: "sysctl unreadable", err: errors.New("sysctl failed"), want: StatusDegraded, wantCode: CodeOSBelowFloor},
+		{name: "at the floor", version: platformfloor.HostOSMin(), want: StatusOK},
+		{name: "far above the floor", version: "9999.1", want: StatusOK},
+		{name: "below the floor", version: "1.9", want: StatusBlocked, wantCode: CodeOSBelowFloor},
+		{name: "version unreadable", err: errors.New("uname failed"), want: StatusDegraded, wantCode: CodeOSBelowFloor},
 	}
 
 	for _, tc := range cases {
@@ -73,7 +74,97 @@ func TestOSVersionProbe(t *testing.T) {
 			if got.Code != tc.wantCode {
 				t.Fatalf("code = %q, want %q", got.Code, tc.wantCode)
 			}
+			if tc.want != StatusOK && got.Detail["component"] != osComponent {
+				t.Fatalf("detail = %v, want component %s", got.Detail, osComponent)
+			}
 		})
+	}
+}
+
+func TestOSVersionProbeComparesGlibcAfterTheOS(t *testing.T) {
+	osOK := func() (string, error) { return platformfloor.HostOSMin(), nil }
+	t.Run("at the glibc floor", func(t *testing.T) {
+		got := run(t, osVersionProbe{}, Env{
+			OSProductVer: osOK,
+			LibcVersion:  func() (string, error) { return platformfloor.LinuxGlibcMin(), nil },
+		})
+		if got.Status != StatusOK {
+			t.Fatalf("status = %q, want ok (%v)", got.Status, got.Detail)
+		}
+	})
+	t.Run("below the glibc floor", func(t *testing.T) {
+		got := run(t, osVersionProbe{}, Env{
+			OSProductVer: osOK,
+			LibcVersion:  func() (string, error) { return "2.17", nil },
+		})
+		if got.Status != StatusBlocked || got.Code != CodeOSBelowFloor {
+			t.Fatalf("got %q/%q, want blocked/%s", got.Status, got.Code, CodeOSBelowFloor)
+		}
+		want := map[string]string{"reason": ReasonOSBelowFloor, "component": "glibc", "want": platformfloor.LinuxGlibcMin(), "got": "2.17"}
+		if !maps.Equal(got.Detail, want) {
+			t.Fatalf("detail = %v, want %v", got.Detail, want)
+		}
+	})
+	t.Run("glibc unreadable", func(t *testing.T) {
+		got := run(t, osVersionProbe{}, Env{
+			OSProductVer: osOK,
+			LibcVersion:  func() (string, error) { return "", errors.New("no libc") },
+		})
+		if got.Status != StatusDegraded || got.Code != CodeOSBelowFloor {
+			t.Fatalf("got %q/%q, want degraded/%s", got.Status, got.Code, CodeOSBelowFloor)
+		}
+		want := map[string]string{"reason": ReasonOSUnreadable, "component": "glibc"}
+		if !maps.Equal(got.Detail, want) {
+			t.Fatalf("detail = %v, want %v", got.Detail, want)
+		}
+	})
+	t.Run("os verdict wins over glibc", func(t *testing.T) {
+		got := run(t, osVersionProbe{}, Env{
+			OSProductVer: func() (string, error) { return "1.0", nil },
+			LibcVersion:  func() (string, error) { return "2.17", nil },
+		})
+		if got.Status != StatusBlocked || got.Detail["component"] != osComponent {
+			t.Fatalf("got %q with detail %v, want the os verdict first", got.Status, got.Detail)
+		}
+	})
+	t.Run("no os reader still compares glibc", func(t *testing.T) {
+		got := run(t, osVersionProbe{}, Env{LibcVersion: func() (string, error) { return "2.17", nil }})
+		if got.Status != StatusBlocked || got.Detail["component"] != "glibc" {
+			t.Fatalf("got %q with detail %v, want a glibc verdict", got.Status, got.Detail)
+		}
+	})
+}
+
+func TestKernelReleaseKeepsLeadingNumericFields(t *testing.T) {
+	cases := []struct{ raw, want string }{
+		{"6.2.0-39-generic", "6.2.0"},
+		{"7.2.7-arch1-1", "7.2.7"},
+		{"6.17.9-76061709-generic", "6.17.9"},
+		{" 5.15.0 ", "5.15.0"},
+		{"6.1", "6.1"},
+	}
+	for _, c := range cases {
+		got, err := kernelRelease(c.raw)
+		testutil.FailErr(t, "normalise "+c.raw, err)
+		if got != c.want {
+			t.Fatalf("kernelRelease(%q) = %q, want %q", c.raw, got, c.want)
+		}
+	}
+	for _, raw := range []string{"garbage", "", "-generic", "."} {
+		if got, err := kernelRelease(raw); err == nil {
+			t.Fatalf("kernelRelease(%q) = %q, want an error", raw, got)
+		}
+	}
+}
+
+func TestGlibcVersionFromELFRejectsNonELFAndMissingFiles(t *testing.T) {
+	plain := filepath.Join(t.TempDir(), "libc.so.6")
+	testutil.FailErr(t, "write non-ELF fixture", os.WriteFile(plain, []byte("not an elf"), 0o644))
+	if got, err := glibcVersionFromELF(plain); err == nil {
+		t.Fatalf("glibcVersionFromELF(non-ELF) = %q, want an error", got)
+	}
+	if got, err := glibcVersionFromELF(filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Fatalf("glibcVersionFromELF(missing) = %q, want an error", got)
 	}
 }
 
@@ -340,7 +431,7 @@ func TestRegistryOverallIsWorstStatus(t *testing.T) {
 	env := Env{
 		ConfigDir:            filepath.Join(t.TempDir(), "lycaon"),
 		FreeBytes:            func(string) (uint64, error) { return 50 << 30, nil },
-		OSProductVer:         func() (string, error) { return "15.5", nil },
+		OSProductVer:         func() (string, error) { return platformfloor.HostOSMin(), nil },
 		ProviderCount:        func() int { return 0 },
 		MissingRoleProviders: func() map[string]string { return nil },
 		ResolveScanner:       func() (string, string, error) { return "/opt/opengrep", "", nil },
@@ -355,7 +446,7 @@ func TestRegistryOverallIsWorstStatus(t *testing.T) {
 	}
 
 	// A blocked probe must dominate a degraded one.
-	env.OSProductVer = func() (string, error) { return "12.0", nil }
+	env.OSProductVer = func() (string, error) { return "1.0", nil }
 	if _, overall = reg.Run(context.Background(), env); overall != StatusBlocked {
 		t.Fatalf("overall = %q, want blocked", overall)
 	}
@@ -364,7 +455,7 @@ func TestRegistryOverallIsWorstStatus(t *testing.T) {
 func TestRegistryPreservesWireOrder(t *testing.T) {
 	want := []string{
 		"os_version", "config_dir", "disk_space", "command_path", "git_engine",
-		"scanner_engine", "browser_engine", "decision_engine", "provider_configured", "lite_slot",
+		"scanner_engine", "browser_engine", "decision_engine", "ocr_engine", "provider_configured", "lite_slot",
 	}
 	got := Default().IDs()
 	if len(got) != len(want) {
@@ -381,7 +472,7 @@ func TestOKResultsCarryNoCode(t *testing.T) {
 	results, _ := Default().Run(context.Background(), Env{
 		ConfigDir:            filepath.Join(t.TempDir(), "lycaon"),
 		FreeBytes:            func(string) (uint64, error) { return 50 << 30, nil },
-		OSProductVer:         func() (string, error) { return "15.5", nil },
+		OSProductVer:         func() (string, error) { return platformfloor.HostOSMin(), nil },
 		ProviderCount:        func() int { return 2 },
 		MissingRoleProviders: func() map[string]string { return nil },
 		ResolveScanner:       func() (string, string, error) { return "/opt/opengrep", "", nil },
@@ -439,5 +530,65 @@ func TestDecisionEngineProbe(t *testing.T) {
 				t.Fatalf("got %q/%q/%v, want degraded/%s/%s", got.Status, got.Code, got.Detail, CodeDecisionEngineUnavailable, reason)
 			}
 		})
+	}
+}
+
+func TestOCREngineProbe(t *testing.T) {
+	t.Setenv(ocrengine.EnvRoot, t.TempDir())
+	t.Setenv("LYCAON_ENGINE_ROOT", t.TempDir())
+	got := run(t, ocrEngineProbe{available: ocrengine.Available}, Env{})
+	switch runtime.GOOS {
+	case "darwin":
+		if got.Status != StatusOK || got.Code != "" {
+			t.Fatalf("got %q/%q, want ok: macOS recognizes text in-process", got.Status, got.Code)
+		}
+	case "linux":
+		if got.Status != StatusDegraded || got.Code != CodeOCREngineUnavailable || got.Detail["reason"] != ocrengine.ReasonMissing {
+			t.Fatalf("got %q/%q/%v, want degraded/%s/missing without a staged engine", got.Status, got.Code, got.Detail, CodeOCREngineUnavailable)
+		}
+	default:
+		if got.Status != StatusDegraded || got.Detail["reason"] != ocrengine.ReasonUnsupportedPlatform {
+			t.Fatalf("got %q/%q/%v, want degraded/unsupported_platform", got.Status, got.Code, got.Detail)
+		}
+	}
+}
+
+func TestOCREngineProbeReportsTheUnavailableReason(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err    error
+		status Status
+		detail map[string]string
+	}{
+		"available": {nil, StatusOK, nil},
+		"altered payload": {
+			fmt.Errorf("resolve: %w", &ocrengine.UnavailableError{Reason: ocrengine.ReasonDigestMismatch, Path: "/opt/painted-wolf-code/ocr/tessdata/osd.traineddata"}),
+			StatusDegraded, map[string]string{"reason": ocrengine.ReasonDigestMismatch, "payload": "osd.traineddata"},
+		},
+		"unsupported platform": {
+			&ocrengine.UnavailableError{Reason: ocrengine.ReasonUnsupportedPlatform},
+			StatusDegraded, map[string]string{"reason": ocrengine.ReasonUnsupportedPlatform},
+		},
+		"unreadable pin": {errors.New("ocrengine: parse pin"), StatusDegraded, map[string]string{"reason": ocrengine.ReasonMissing}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := tc.err
+			got := run(t, ocrEngineProbe{available: func() error { return err }}, Env{})
+			if got.Status != tc.status || fmt.Sprint(got.Detail) != fmt.Sprint(tc.detail) {
+				t.Fatalf("got %q %v, want %q %v", got.Status, got.Detail, tc.status, tc.detail)
+			}
+			if tc.status == StatusDegraded && got.Code != CodeOCREngineUnavailable {
+				t.Fatalf("code = %q", got.Code)
+			}
+		})
+	}
+}
+
+func TestHighestGlibcVersionComparesNumerically(t *testing.T) {
+	got, ok := highestGlibcVersion([]string{"libc.so.6", "GLIBC_2.9", "GLIBC_PRIVATE", "GLIBC_2.35", "GLIBC_2.4", "GLIBC_ABI_DT_RELR"})
+	if !ok || got != "2.35" {
+		t.Fatalf("highestGlibcVersion = %q, %v; want 2.35", got, ok)
+	}
+	if got, ok := highestGlibcVersion([]string{"libc.so.6", "GLIBC_PRIVATE"}); ok {
+		t.Fatalf("highestGlibcVersion without numeric versions = %q, want none", got)
 	}
 }

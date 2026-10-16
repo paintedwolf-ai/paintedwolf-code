@@ -49,7 +49,7 @@ func Assemble(sess *api.Session, history []api.Message, deps Config) ([]api.Mess
 	out = api.FilterPromptHistory(out)
 	strategies = append(strategies, "filter:prompt_history")
 	// Pin before any stage that can drop rows, so they all see one protected set.
-	out = MarkContextPins(sess, out)
+	out = MarkContextPins(sess, out, min(8192, max(256, deps.CompactionConfig.HardCeilingTokens/5)))
 
 	report := Report{
 		TokensBefore: compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(out)),
@@ -83,21 +83,35 @@ func sessionID(sess *api.Session) string {
 	return sess.ID
 }
 
-// MarkContextPins preserves the current request and worker charter during fitting.
-func MarkContextPins(sess *api.Session, messages []api.Message) []api.Message {
+// MarkContextPins keeps current instructions and a bounded recent instruction window.
+func MarkContextPins(sess *api.Session, messages []api.Message, instructionTokens int) []api.Message {
 	if sess == nil || len(messages) == 0 {
 		return messages
 	}
-	latestIntent := api.UserIntentBoundary(messages) - 1
 	out := messages
 	copied := false
-	for i := range messages {
+	latestIntent := api.UserIntentBoundary(messages) - 1
+	remaining := instructionTokens
+	charterPinned := false
+	for i := len(messages) - 1; i >= 0; i-- {
 		if len(messages[i].ToolCalls) > 0 || messages[i].ToolResult != nil {
 			continue
 		}
-		if i != latestIntent && !(sess.IsWorkerChild() && pinnableCharterRow(messages[i])) {
+		if !api.IsUserInstructionMessage(api.NormalizeMessageProvenance(messages[i])) && !(sess.IsWorkerChild() && pinnableCharterRow(messages[i])) {
 			continue
 		}
+		cost := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(messages[i : i+1]))
+		charter := sess.IsWorkerChild() && pinnableCharterRow(messages[i])
+		if !copied {
+			out = append([]api.Message(nil), messages...)
+			copied = true
+		}
+		out[i].ContextPinned = false
+		if i != latestIntent && (!charter || charterPinned) && cost > remaining {
+			continue
+		}
+		remaining -= cost
+		charterPinned = charterPinned || charter
 		if !copied {
 			out = append([]api.Message(nil), messages...)
 			copied = true

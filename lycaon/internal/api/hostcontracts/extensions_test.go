@@ -129,6 +129,12 @@ func TestExtensionsInstallRemoveAndStockRemoveRejected(t *testing.T) {
 	rawBody := w.Body.Bytes()
 	var installed wire.ExtensionsCatalogView
 	testutil.FailErr(t, "decode installed list", json.Unmarshal(rawBody, &installed))
+	platformVersion := ""
+	for _, pack := range installed.Packs {
+		if pack.ID == "painted-wolf/platform" {
+			platformVersion = pack.Version
+		}
+	}
 	foundInstalled := false
 	for _, pack := range installed.Packs {
 		if pack.ID != "acme/wire-pack" {
@@ -136,7 +142,8 @@ func TestExtensionsInstallRemoveAndStockRemoveRejected(t *testing.T) {
 		}
 		foundInstalled = true
 		if pack.Version != "1.0.0" || pack.InstallationState != "development" ||
-			pack.InstallationScope != "device" || !pack.Removable || pack.Dependencies["painted-wolf/platform"] != "1.0.0" {
+			pack.InstallationScope != "device" || !pack.Removable ||
+			platformVersion == "" || pack.Dependencies["painted-wolf/platform"] != platformVersion {
 			t.Fatalf("installed versioning summary=%+v", pack)
 		}
 	}

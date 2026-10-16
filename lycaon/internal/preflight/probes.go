@@ -2,7 +2,9 @@ package preflight
 
 import (
 	"context"
+	"debug/elf"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/dotversion"
 	"github.com/lycaon/lycaon/internal/gitengine"
+	"github.com/lycaon/lycaon/internal/ocrengine"
 	"github.com/lycaon/lycaon/internal/platformfloor"
 	"github.com/lycaon/lycaon/internal/userpath"
 )
@@ -28,19 +31,30 @@ type osVersionProbe struct{}
 
 func (osVersionProbe) ID() string { return "os_version" }
 
+// Run compares the OS version with the host floor, then the C library on hosts
+// that have a glibc floor. The first non-ok verdict wins.
 func (osVersionProbe) Run(_ context.Context, env Env) Result {
-	if env.OSProductVer == nil {
-		return Result{Status: StatusOK}
+	if env.OSProductVer != nil {
+		if res := compareHostFloor(osComponent, env.OSProductVer, platformfloor.HostOSMin()); res.Status != StatusOK {
+			return res
+		}
 	}
-	got, err := env.OSProductVer()
+	if env.LibcVersion != nil {
+		return compareHostFloor("glibc", env.LibcVersion, platformfloor.LinuxGlibcMin())
+	}
+	return Result{Status: StatusOK}
+}
+
+// compareHostFloor turns one host version reading into a floor verdict.
+func compareHostFloor(component string, read func() (string, error), want string) Result {
+	got, err := read()
 	if err != nil || strings.TrimSpace(got) == "" {
-		// An unreadable sysctl is not evidence the OS is too old.
+		// An unreadable version is not evidence the host is too old.
 		return Result{Status: StatusDegraded, Code: CodeOSBelowFloor, Detail: map[string]string{
-			"reason": ReasonOSUnreadable,
+			"reason":    ReasonOSUnreadable,
+			"component": component,
 		}}
 	}
-
-	want := platformfloor.MacOSMin()
 	cmp, err := dotversion.Compare(got, want)
 	if err != nil {
 		return Result{Status: StatusOK}
@@ -49,12 +63,69 @@ func (osVersionProbe) Run(_ context.Context, env Env) Result {
 		// Stamped explicitly: the catalog resolves this code's tier by exact match
 		// on `reason`.
 		return Result{Status: StatusBlocked, Code: CodeOSBelowFloor, Detail: map[string]string{
-			"reason": ReasonOSBelowFloor,
-			"want":   want,
-			"got":    got,
+			"reason":    ReasonOSBelowFloor,
+			"component": component,
+			"want":      want,
+			"got":       got,
 		}}
 	}
 	return Result{Status: StatusOK}
+}
+
+// kernelRelease keeps the leading dotted numeric fields of a uname release, so
+// "6.2.0-39-generic" compares as "6.2.0".
+func kernelRelease(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	end := strings.IndexFunc(raw, func(r rune) bool { return r != '.' && (r < '0' || r > '9') })
+	if end >= 0 {
+		raw = raw[:end]
+	}
+	raw = strings.Trim(raw, ".")
+	if _, err := dotversion.Compare(raw, raw); err != nil {
+		return "", fmt.Errorf("kernel release %q has no numeric version: %w", raw, err)
+	}
+	return raw, nil
+}
+
+// glibcVersionFromELF reads the highest GLIBC_x.y symbol version the C library
+// defines. The ELF version table is a structured fact; no --version prose.
+func glibcVersionFromELF(path string) (string, error) {
+	f, err := elf.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	versions, err := f.DynamicVersions()
+	if err != nil {
+		return "", err
+	}
+	names := make([]string, 0, len(versions))
+	for _, v := range versions {
+		names = append(names, v.Name)
+	}
+	best, ok := highestGlibcVersion(names)
+	if !ok {
+		return "", fmt.Errorf("%s defines no GLIBC_ symbol version", path)
+	}
+	return best, nil
+}
+
+// highestGlibcVersion picks the highest numeric GLIBC_x.y among version names.
+func highestGlibcVersion(names []string) (string, bool) {
+	var best string
+	for _, name := range names {
+		candidate, ok := strings.CutPrefix(name, "GLIBC_")
+		if !ok {
+			continue
+		}
+		if _, err := dotversion.Compare(candidate, candidate); err != nil {
+			continue
+		}
+		if cmp, _ := dotversion.Compare(candidate, best); best == "" || cmp > 0 {
+			best = candidate
+		}
+	}
+	return best, best != ""
 }
 
 // ---------------------------------------------------------------------------
@@ -269,6 +340,37 @@ func (decisionEngineProbe) Run(ctx context.Context, env Env) Result {
 	return Result{Status: StatusDegraded, Code: CodeDecisionEngineUnavailable, Detail: map[string]string{
 		"reason": string(reason),
 	}}
+}
+
+// ---------------------------------------------------------------------------
+// ocr_engine
+// ---------------------------------------------------------------------------
+
+// ocrEngineProbe asks available whether this device can recognize text.
+type ocrEngineProbe struct {
+	available func() error
+}
+
+func (ocrEngineProbe) ID() string { return "ocr_engine" }
+
+// Run reports whether images can be read for credentials before a model sees
+// them. Without a recognizer every raster asks before it is sent, so the app
+// works; the probe degrades rather than blocks.
+func (p ocrEngineProbe) Run(context.Context, Env) Result {
+	err := p.available()
+	if err == nil {
+		return Result{Status: StatusOK}
+	}
+	detail := map[string]string{"reason": ocrengine.ReasonMissing}
+	var ue *ocrengine.UnavailableError
+	if errors.As(err, &ue) {
+		detail["reason"] = ue.Reason
+		if ue.Path != "" {
+			// The payload name identifies the file without exposing the install path.
+			detail["payload"] = filepath.Base(ue.Path)
+		}
+	}
+	return Result{Status: StatusDegraded, Code: CodeOCREngineUnavailable, Detail: detail}
 }
 
 // ---------------------------------------------------------------------------

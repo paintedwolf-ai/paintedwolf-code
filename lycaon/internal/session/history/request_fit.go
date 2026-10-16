@@ -114,7 +114,7 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 
 func (m *Service) requestContinuation(ctx context.Context, sess *api.Session, rows []api.Message) *messageview.Continuation {
 	record := &messageview.Continuation{Format: messageview.ContinuationFormat, Reason: "references_only"}
-	if m.store != nil {
+	if m != nil && m.store != nil && sess != nil {
 		view, ok, err := m.store.GetCompactionView(ctx, sess.ID)
 		if err == nil && ok && view.Continuation != nil {
 			if current, err := m.store.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq); err == nil && current {
@@ -137,7 +137,7 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 	if record.ThroughOrd > 0 {
 		record = messageview.CloneContinuation(record)
 		record.Window = cfg.ModelContextWindow
-		recall := m.recallAvailable != nil && m.recallAvailable(ctx, sess)
+		recall := m != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)
 		var err error
 		text, err = compaction.RenderContinuation(ctx, record, recall, max(192, tokens/3))
 		if err != nil {
@@ -162,7 +162,7 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 		rows = kept
 	}
 	rows = promptassembly.MarkContextPins(sess, rows, min(8192, max(0, tokens/5)))
-	canShrinkTools := shrinkTools && m.store != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)
+	canShrinkTools := shrinkTools && m != nil && m.store != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)
 	if canShrinkTools {
 		toolTokens := tokens
 		if !found && text != "" {

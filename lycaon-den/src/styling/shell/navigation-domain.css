@@ -33,13 +33,28 @@
   border-radius: var(--den-radius-sm);
 }
 
-/* macOS centers it on the window buttons, like the reopen controls. */
-.den-tauri-macos.den-custom-chrome
+/* It centers on the window buttons, like the reopen controls. */
+.den-custom-chrome
   .den-shell-aside-titlebar
   .den-shell-nav-sidebar-btn-collapse {
   top: calc(
     var(--den-pane-control-center) - var(--den-titlebar-edge-control) / 2
   );
+}
+
+/* Drawn window controls take the strip's far side from the collapse control. */
+.den-custom-chrome .den-shell-aside-titlebar .den-shell-window-controls {
+  position: absolute;
+  top: calc(var(--den-pane-control-center) - var(--den-window-control-size) / 2);
+  z-index: 1;
+}
+
+.den-custom-chrome .den-shell-aside-titlebar .den-shell-window-controls[data-side="left"] {
+  left: var(--den-window-controls-inset);
+}
+
+.den-custom-chrome .den-shell-aside-titlebar .den-shell-window-controls[data-side="right"] {
+  right: var(--den-window-controls-inset);
 }
 
 .den-custom-chrome

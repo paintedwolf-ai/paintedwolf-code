@@ -1,3 +1,4 @@
+import { disclosureToggle, isDisclosureOpen, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
 import { fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
 import { createSignal, type ComponentProps } from "solid-js";
 import { afterEach, describe, expect, it } from "vitest";
@@ -82,8 +83,8 @@ describe("ActivitySpanCard live layout", () => {
       <ActivitySpanCard label="read" entries={current()} layout="chat" />
     ));
     const composition = container.querySelector(".den-activity-span-cmd");
-    fireEvent.click(container.querySelector(".den-activity-span > summary")!);
-    fireEvent.click(container.querySelector(".den-tool-part > summary")!);
+    fireEvent.click(container.querySelector(".den-activity-span > .den-transcript-disclosure-header")!);
+    fireEvent.click(container.querySelector(".den-tool-part > .den-transcript-disclosure-header")!);
     const output = container.querySelector('[data-testid="tool-content-link"]');
     expect(composition).not.toBeNull();
     expect(output).not.toBeNull();
@@ -139,7 +140,7 @@ describe("ActivitySpanCard status and failures", () => {
     expect(
       container.querySelector('[data-testid="activity-span-failed"]')?.textContent,
     ).toBe("1 failed");
-    expect(span?.querySelector("summary")?.getAttribute("aria-label")).toBe(
+    expect(disclosureToggle(span).getAttribute("aria-label")).toBe(
       "Read, done, 2 actions, 1 failed",
     );
   });
@@ -198,7 +199,7 @@ describe("ActivitySpanCard", () => {
     ));
     const span = container.querySelector('[data-testid="activity-span-card"]');
     expect(span?.getAttribute("data-count")).toBe("1");
-    expect(span?.querySelector("summary")?.getAttribute("aria-label")).toBe(
+    expect(disclosureToggle(span).getAttribute("aria-label")).toBe(
       "Investigating, done, 1 action",
     );
     expect(span?.querySelector(".den-activity-span-count")).toBeNull();
@@ -214,14 +215,14 @@ describe("ActivitySpanCard", () => {
     ));
     const span = container.querySelector(
       '[data-testid="activity-span-card"]',
-    ) as HTMLDetailsElement;
+    ) as HTMLElement;
     const tool = container.querySelector(
       ".den-activity-span-items .den-tool-part",
-    ) as HTMLDetailsElement;
+    ) as HTMLElement;
 
-    fireEvent.click(span.querySelector(":scope > summary")!);
-    expect(span.open).toBe(true);
-    await waitFor(() => expect(tool.open).toBe(true));
+    fireEvent.click(disclosureToggle(span));
+    expect(isDisclosureOpen(span)).toBe(true);
+    await waitFor(() => expect(isDisclosureOpen(tool)).toBe(true));
   });
 
   it("renders an activity card for mixed investigation", () => {
@@ -375,13 +376,13 @@ describe("ActivitySpanCard", () => {
     ));
     const span = container.querySelector(
       '[data-testid="activity-span-card"]',
-    ) as HTMLDetailsElement;
-    fireEvent.click(span.querySelector(":scope > summary")!);
-    expect(span.open).toBe(true);
+    ) as HTMLElement;
+    fireEvent.click(disclosureToggle(span));
+    expect(isDisclosureOpen(span)).toBe(true);
     const firstChild = container.querySelector(
       '.den-activity-span-items .den-tool-part',
-    ) as HTMLDetailsElement;
-    expect(firstChild.open).toBe(false);
+    ) as HTMLElement;
+    expect(isDisclosureOpen(firstChild)).toBe(false);
   });
 
   it("keeps nested tool rows mounted across streaming entry patches", () => {
@@ -624,7 +625,7 @@ describe("ActivitySpanCard", () => {
       />
     ));
     const caret = container.querySelector(
-      ".den-activity-span > summary .den-tool-chicklet-caret",
+      ".den-activity-span > .den-transcript-disclosure-header .den-tool-chicklet-caret",
     );
     expect(caret).toBeTruthy();
     expect(caret?.parentElement?.className).toBe("den-activity-span-chicklet");
@@ -648,20 +649,20 @@ describe("ActivitySpanCard", () => {
     ));
     const rows = [
       ...container.querySelectorAll(".den-activity-span-items .den-tool-part"),
-    ] as HTMLDetailsElement[];
+    ] as HTMLElement[];
     expect(rows).toHaveLength(2);
-    expect(rows.filter((r) => r.open)).toHaveLength(0);
+    expect(rows.filter((r) => isDisclosureOpen(r))).toHaveLength(0);
 
-    fireEvent.click(rows[0]!.querySelector("summary")!);
-    expect(rows[0]!.open).toBe(true);
-    expect(rows[1]!.open).toBe(false);
+    fireEvent.click(disclosureToggle(rows[0]!));
+    expect(isDisclosureOpen(rows[0]!)).toBe(true);
+    expect(isDisclosureOpen(rows[1]!)).toBe(false);
 
-    fireEvent.click(rows[1]!.querySelector("summary")!);
-    expect(rows[0]!.open).toBe(false);
-    expect(rows[1]!.open).toBe(true);
+    fireEvent.click(disclosureToggle(rows[1]!));
+    expect(isDisclosureOpen(rows[0]!)).toBe(false);
+    expect(isDisclosureOpen(rows[1]!)).toBe(true);
 
-    fireEvent.click(rows[1]!.querySelector("summary")!);
-    expect(rows.filter((r) => r.open)).toHaveLength(0);
+    fireEvent.click(disclosureToggle(rows[1]!));
+    expect(rows.filter((r) => isDisclosureOpen(r))).toHaveLength(0);
   });
 
   it("renders a mixed investigating span as flat rows", () => {
@@ -818,11 +819,11 @@ describe("ActivitySpanCard", () => {
         />
       </TranscriptDisclosureProvider>
     ));
-    fireEvent.click(container.querySelector(".den-activity-span > summary")!);
-    fireEvent.click(container.querySelector(".den-diff-group > summary")!);
-    const row = container.querySelector('.den-tool-part[data-tool-call-id="w0"]') as HTMLDetailsElement;
-    fireEvent.click(row.querySelector("summary")!);
-    await waitFor(() => expect(row.open).toBe(true));
+    fireEvent.click(container.querySelector(".den-activity-span > .den-transcript-disclosure-header")!);
+    fireEvent.click(container.querySelector(".den-diff-group > .den-transcript-disclosure-header")!);
+    const row = container.querySelector('.den-tool-part[data-tool-call-id="w0"]') as HTMLElement;
+    fireEvent.click(disclosureToggle(row));
+    await waitFor(() => expect(isDisclosureOpen(row)).toBe(true));
     expect(store.isOpen(transcriptDisclosureKey.tool(writes[0]!.id))).toBe(true);
   });
 
@@ -854,7 +855,7 @@ describe("ActivitySpanCard", () => {
 
     const span = container.querySelector(
       '[data-testid="activity-span-card"]',
-    ) as HTMLDetailsElement;
+    ) as HTMLElement;
     expect(span.getAttribute("data-count")).toBe("16");
     span.setAttribute("open", "open");
 
@@ -863,5 +864,14 @@ describe("ActivitySpanCard", () => {
     );
     expect(renderedParts).toHaveLength(16);
     expect(container.querySelector('[data-testid="virtual-card-list"]')).toBeNull();
+  });
+});
+
+describe("ActivitySpanCard under the WebKitGTK AT-SPI workaround", () => {
+  it("shows the same collapsed span", async () => {
+    await expectSameCollapsedFace(() => {
+      const view = render(() => <ActivitySpanCard label="read" entries={entries} layout="chat" />);
+      return { card: () => view.container.querySelector('[data-testid="activity-span-card"]'), unmount: view.unmount };
+    });
   });
 });

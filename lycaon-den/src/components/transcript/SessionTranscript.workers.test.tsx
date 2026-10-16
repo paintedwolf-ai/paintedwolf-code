@@ -1,3 +1,4 @@
+import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
 import { fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
 import {
   resetSessionTranscriptChatTest,
@@ -10,7 +11,7 @@ import {
 } from "../../platform/navigation/open-source.ts";
 import { createSignal } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@solidjs/testing-library";
+import { render, screen, fireEvent } from "@solidjs/testing-library";
 import { SessionTranscript } from "./transcript-viewport-test-harness.tsx";
 import { messagesToTranscriptItems } from "../../chat/transcript/projection/transcript-items.ts";
 import type { Message, WorkerTask } from "../../api/types.ts";
@@ -381,9 +382,9 @@ describe("SessionTranscript workers and synthesis", () => {
     ));
     const chicklet = container.querySelector(
       '[data-testid="citation-evidence-chicklet"]',
-    ) as HTMLDetailsElement;
+    ) as HTMLElement;
     expect(chicklet).toBeTruthy();
-    expect(chicklet.open).toBe(false);
+    expect(isDisclosureOpen(chicklet)).toBe(false);
     expect(chicklet.querySelector(".den-citation-grounding-chicklet--traced")).toBeTruthy();
     expect(
       container.querySelector('[data-testid="synthesis-evidence-section"]'),
@@ -392,10 +393,10 @@ describe("SessionTranscript workers and synthesis", () => {
     expect(panel).toBeTruthy();
     expect(panel!.closest(".den-citation-evidence-chicklet-body")).toBeTruthy();
 
-    chicklet.querySelector("summary")!.dispatchEvent(
+    disclosureToggle(chicklet).dispatchEvent(
       new MouseEvent("click", { bubbles: true }),
     );
-    expect(chicklet.open).toBe(true);
+    expect(isDisclosureOpen(chicklet)).toBe(true);
     expect(container.querySelector('[data-testid="citation-grounding-panel"]')).toBeTruthy();
     expect(container.querySelector('[data-testid="citation-grounding-check"]')).toBeTruthy();
     expect(container.textContent).toContain("Path citations");
@@ -537,8 +538,8 @@ describe("SessionTranscript workers and synthesis", () => {
     ));
     const chicklet = container.querySelector(
       '[data-testid="citation-evidence-chicklet"]',
-    ) as HTMLDetailsElement;
-    expect(chicklet.open).toBe(false);
+    ) as HTMLElement;
+    expect(isDisclosureOpen(chicklet)).toBe(false);
     expect(
       container.querySelector('[data-testid="synthesis-evidence-section"]'),
     ).toBeNull();
@@ -547,7 +548,7 @@ describe("SessionTranscript workers and synthesis", () => {
         ".den-citation-evidence-chicklet-body",
       ),
     ).toBeTruthy();
-    chicklet.open = true;
+    fireEvent.click(disclosureToggle(chicklet));
     expect(container.textContent).toContain("Leg evidence handles");
     const citations = chicklet.querySelector(".den-citation-grounding-citations");
     expect(citations).toBeTruthy();

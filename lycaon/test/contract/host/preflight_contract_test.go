@@ -28,6 +28,7 @@ var preflightProbeCodes = []string{
 	preflight.CodeScannerEngineUnavailable,
 	preflight.CodeBrowserEngineUnavailable,
 	preflight.CodeDecisionEngineUnavailable,
+	preflight.CodeOCREngineUnavailable,
 	preflight.CodeNoProviderConfigured,
 	preflight.CodeLiteUnavailable,
 }
@@ -110,7 +111,7 @@ func TestPreflightProbeIDsAreStableAndOrdered(t *testing.T) {
 	t.Parallel()
 	want := []string{
 		"os_version", "config_dir", "disk_space", "command_path", "git_engine",
-		"scanner_engine", "browser_engine", "decision_engine", "provider_configured", "lite_slot",
+		"scanner_engine", "browser_engine", "decision_engine", "ocr_engine", "provider_configured", "lite_slot",
 	}
 
 	got := preflight.Default().IDs()
@@ -132,7 +133,7 @@ func TestPreflightNeverLeaksHomePath(t *testing.T) {
 	env := preflight.Env{
 		ConfigDir:     configDir,
 		FreeBytes:     func(string) (uint64, error) { return 1 << 20, nil },
-		OSProductVer:  func() (string, error) { return "10.15", nil },
+		OSProductVer:  func() (string, error) { return "1.0", nil },
 		ProviderCount: func() int { return 0 },
 		ResolveGitEngine: func() error {
 			return &gitengine.UnavailableError{Reason: "missing"}

@@ -4,7 +4,7 @@ import { createShellWorkerDrawer } from "./shell-worker-drawer.ts";
 import { createShellPaneVisibility } from "./shell-pane-visibility.ts";
 import { type ShellScope } from "./shell-scope.ts";
 import { type LycaonClient } from "../../api/client.ts";
-import { Show, createSignal, type JSX } from "solid-js";
+import { For, Show, createSignal, type JSX } from "solid-js";
 import { ChatTabChromeProvider } from "../../chat/composer/chat-tab-chrome.tsx";
 import { coordinatorModelVisionSupport } from "../../chat/composer/composer-vision.ts";
 import { hasSpendRecoveryDraft } from "../../chat/recovery/spend-ceiling-recovery.ts";
@@ -35,6 +35,7 @@ import {
 } from "../SpendCeilingReachedNudge.tsx";
 import { VerifyTestNudge } from "../VerifyTestNudge.tsx";
 import { ChromeDragSurface } from "./ChromeDragSurface.tsx";
+import { WindowControls } from "./WindowControls.tsx";
 import { ContextDrawerHost } from "./ContextDrawer.tsx";
 import {
   SessionProtectionBanners,
@@ -70,6 +71,7 @@ type Props = Pick<ShellScope, "shell" | "appStore" | "recents" | "projects"> & {
     | "navSide"
     | "showWindowNav"
     | "conversationSeam"
+    | "windowEdgeClaims"
   >;
   actions: ShellChatActions;
   onboarding: Pick<ReturnType<typeof createShellOnboarding>, "showNoProviderBanner" | "providerGap">;
@@ -119,7 +121,14 @@ export function ChatWorkspace(props: Props) {
     navSide,
     showWindowNav,
     conversationSeam,
+    windowEdgeClaims,
   } = props.panes;
+  /** The conversation's claim on one window edge's drawn controls, inside its tab rail. */
+  const chatWindowControls = (side: "left" | "right") => (
+    <For each={windowEdgeClaims("chat").filter((claim) => claim.side === side)}>
+      {(claim) => <WindowControls {...claim} />}
+    </For>
+  );
   const { sendPrompt, stopChat, resumeSpendLimitedChat } = props.actions;
   const { showNoProviderBanner, providerGap } = props.onboarding;
   const noticeIndex = () => props.notices.index();
@@ -355,6 +364,8 @@ export function ChatWorkspace(props: Props) {
               onNavExpand={() => void showWindowNav()}
               conversationSeam={conversationSeam()}
               dock={dock}
+              windowControlsStart={chatWindowControls("left")}
+              windowControlsEnd={chatWindowControls("right")}
             />
           </header>
           <main class="den-shell-main" aria-label="Chat">

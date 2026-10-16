@@ -830,3 +830,34 @@ func TestCompileAcceptsConfigurationOnForItsOwnProperty(t *testing.T) {
 		t.Fatalf("Len = %d want 2", set.Len())
 	}
 }
+
+func TestKeybindingLeavesAPlatformToTheSystemMenu(t *testing.T) {
+	withBinding := func(body string) []Input {
+		units := validReviewerUnits()
+		for i, unit := range units {
+			if unit.Kind == KindKeybinding {
+				units[i] = input(KindKeybinding, "acme/reviewer", "explain-binding",
+					"id: acme/reviewer:explain-binding\ncommand: acme/reviewer:explain-selection\nscope: files\n"+body)
+			}
+		}
+		return units
+	}
+
+	set := compileWith(t, CompileInput{Units: withBinding(
+		"bindings:\n  windows: [Mod+Shift+E]\n  linux: [Mod+Shift+E]\nsystem_menu: [macos]\n")})
+	keybindings := set.Keybindings()
+	if len(keybindings) != 1 || len(keybindings[0].SystemMenu) != 1 || keybindings[0].SystemMenu[0] != "macos" {
+		t.Fatalf("keybindings = %+v", keybindings)
+	}
+
+	for body, want := range map[string]string{
+		"bindings:\n  linux: [Mod+Shift+E]\nsystem_menu: [beos]\n":                          "unknown system_menu platform",
+		"bindings:\n  linux: [Mod+Shift+E]\nsystem_menu: [macos, macos]\n":                  "twice",
+		"bindings:\n  macos: [Mod+Shift+E]\n  linux: [Mod+Shift+E]\nsystem_menu: [macos]\n": "leaves them to the system menu",
+	} {
+		fault := singleFault(t, CompileInput{Units: withBinding(body)}, FaultSchema)
+		if !strings.Contains(fault.Message, want) {
+			t.Errorf("%q: fault = %+v, want %q", body, fault, want)
+		}
+	}
+}

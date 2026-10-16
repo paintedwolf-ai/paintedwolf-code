@@ -85,6 +85,7 @@ type Props = Pick<ShellScope, "shell" | "appStore" | "projects" | "recents" | "a
   workspaceContext: Pick<ReturnType<typeof createShellWorkspaceContext>, "backFor" | "stageBack">;
   providerGap: ReturnType<typeof createShellOnboarding>["providerGap"];
   showConversation: () => Promise<unknown>;
+  focusComposer: () => void;
   startOpenFolder: () => Promise<unknown>;
   openCloneDialog: () => void;
   deleteProject: ReturnType<typeof createProjectRemoval>;
@@ -277,7 +278,7 @@ export function WorkspaceStage(props: Props) {
           void navigateFromSearch({
             projectId: row.project_id,
             sessionId: row.session_id,
-          })
+          }).then(() => props.focusComposer())
         }
       />
     );

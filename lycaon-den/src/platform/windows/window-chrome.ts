@@ -2,6 +2,9 @@ import { createSignal } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { reconcileOsColorScheme, osColorSchemeIsDark } from "../../theme.ts";
 import { isTauriRuntime, tauriPlatform } from "../runtime.ts";
+import { drawsWindowControls, trackWindowChromeLayout } from "./window-chrome-layout.ts";
+import { readWindowFrame, trackWindowFrame } from "./window-frame.ts";
+import { trackWindowMaximized } from "./window-maximized.ts";
 
 function tauriThemeIsDark(theme: string | null | undefined): boolean {
   if (theme === "dark") return true;
@@ -104,14 +107,19 @@ async function growWindowBy(deltaPx: number): Promise<WidenOutcome> {
   ]);
   // Fullscreen and maximized windows have no horizontal room.
   if (fullscreen || maximized) return "no-room";
-  const [innerSize, outerSize, originPoint, monitor] = await Promise.all([
+  const [innerSize, outerSize, originPoint, monitor, linuxFrame] = await Promise.all([
     win.innerSize(),
     win.outerSize(),
     win.outerPosition(),
     currentMonitor(),
+    readWindowFrame(),
   ]);
-  const inner = innerSize.toLogical(scale);
-  const outer = outerSize.toLogical(scale);
+  // A Linux window's reported sizes include its frame's shadow, which takes
+  // no room on the desktop; the bounds take the content size.
+  const inner = linuxFrame
+    ? { width: linuxFrame.content_width, height: linuxFrame.content_height }
+    : innerSize.toLogical(scale);
+  const outer = linuxFrame ? inner : outerSize.toLogical(scale);
   const origin = originPoint.toLogical(scale);
   const area = monitor
     ? {
@@ -143,11 +151,19 @@ async function growWindowBy(deltaPx: number): Promise<WidenOutcome> {
 export async function setupWindowChrome(): Promise<void> {
   if (!isTauriRuntime()) return;
   tagTauriPlatformClasses();
+  if (drawsWindowControls()) {
+    // Drawn controls need the desktop's layout, the maximized state, and the frame.
+    void trackWindowChromeLayout();
+    void trackWindowMaximized();
+    void trackWindowFrame();
+  }
   const { getCurrentWindow } = await import("@tauri-apps/api/window");
   const win = getCurrentWindow();
 
-  // A null theme follows system appearance.
-  await win.setTheme(null);
+  // A null theme follows system appearance. On Linux the window already
+  // reports the Settings portal's color scheme, and setting a theme resets
+  // GTK's dark preference, which flashes a light frame.
+  if (tauriPlatform() !== "linux") await win.setTheme(null);
 
   const initial = await win.theme();
   reconcileOsColorScheme(tauriThemeIsDark(initial));

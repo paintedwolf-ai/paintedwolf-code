@@ -98,7 +98,7 @@ export function installWalkTranscriptMark(): () => void {
           element: () => {
             const currentRoot = walkTranscriptStreamForSession(sessionId);
             const target = currentRoot ? visibleTranscriptToolTarget(currentRoot, toolCallId) : null;
-            return target?.querySelector<HTMLElement>(":scope > summary") ?? target;
+            return target?.querySelector<HTMLElement>(":scope > .den-transcript-disclosure-header") ?? target;
           },
         },
       ).then((revealed) => {
@@ -122,7 +122,7 @@ export function installWalkTranscriptMark(): () => void {
         childList: true,
         subtree: true,
         attributes: true,
-        attributeFilter: ["open", "data-animating", "data-closing"],
+        attributeFilter: ["data-expanded", "data-animating", "data-closing"],
       });
     }
     reveal();

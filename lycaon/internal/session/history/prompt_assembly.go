@@ -22,7 +22,7 @@ func (m *Service) Assemble(ctx context.Context, sess *api.Session, history []api
 		SurfaceID: surfaceID,
 	}
 	if m != nil {
-		deps.CompactionConfig = m.Limits.Compaction(ctx, sess)
+		deps.CompactionConfig = m.compactionConfig(ctx, sess)
 	} else {
 		deps.CompactionConfig = compaction.DefaultCompactionConfig()
 	}

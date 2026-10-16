@@ -19,6 +19,7 @@ usage() {
   echo "usage: $0 run -- command [args...]" >&2
   echo "       $0 run-commit COMMIT -- command [args...]" >&2
   echo "       $0 capture" >&2
+  echo "       $0 diagnostics-cache" >&2
   echo "       $0 holding" >&2
   exit 2
 }
@@ -103,6 +104,20 @@ prepare_runtime() {
     rm -rf "$engine_root/gitengine"
     mv "$staged" "$engine_root/gitengine"
   fi
+  # The staged text recognizer is gitignored; tests resolve it from the snapshot.
+  if [[ -d "$ROOT/lycaon-den/src-tauri/engine-root/ocr" ]]; then
+    local ocr_root="$SNAPSHOT_DIR/lycaon-den/src-tauri/engine-root" staged_ocr
+    mkdir -p "$ocr_root"
+    staged_ocr="$(mktemp -d "$ocr_root/.ocr.XXXXXX")"
+    if [[ "$(uname -s)" == Darwin ]]; then
+      cp -cpR "$ROOT/lycaon-den/src-tauri/engine-root/ocr/." "$staged_ocr/"
+    else
+      cp -a --reflink=auto "$ROOT/lycaon-den/src-tauri/engine-root/ocr/." "$staged_ocr/" 2>/dev/null ||
+        cp -a "$ROOT/lycaon-den/src-tauri/engine-root/ocr/." "$staged_ocr/"
+    fi
+    rm -rf "$ocr_root/ocr"
+    mv "$staged_ocr" "$ocr_root/ocr"
+  fi
 }
 
 preserve_fuzz_failures() {
@@ -157,13 +172,19 @@ preserve_fixture_refreshes() {
   done
 }
 
-acquire_snapshot_slot() {
-  local common key slot=0 status
+# Slots are keyed by the repository, so every worktree of one repository shares them.
+slot_path() {
+  local common key
   common="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir)"
   key="$(python3 "$TEST_RUN_LEASE_HELPER" path-key "$common")"
+  printf '%s/%s-%s\n' "$SNAPSHOT_PARENT" "$key" "$1"
+}
+
+acquire_snapshot_slot() {
+  local slot=0 status
   mkdir -p "$SNAPSHOT_PARENT"
   while :; do
-    SNAPSHOT_DIR="$SNAPSHOT_PARENT/${key}-${slot}"
+    SNAPSHOT_DIR="$(slot_path "$slot")"
     SNAPSHOT_LEASE="${SNAPSHOT_DIR}.lock"
     exec 7>"$SNAPSHOT_LEASE"
     if python3 "$TEST_RUN_LEASE_HELPER" try-lock 7; then
@@ -206,8 +227,10 @@ run_commit() {
   trap 'exit 143' TERM
   git -C "$ROOT" worktree add --quiet --detach --force "$SNAPSHOT_DIR" "$commit"
   test_run_create_isolation "snapshot-cache"
-  export PW_TEST_CHECKOUT_CACHE="${TEST_RUN_DIR}/cache"
-  # Compiled artifacts survive snapshots; diagnostic paths remain isolated.
+  # Lint diagnostics record absolute positions, so they belong to the slot and outlive the run.
+  PW_TEST_CHECKOUT_CACHE="$(bash "$ROOT/scripts/checkout-cache-dir.sh" "$SNAPSHOT_DIR")"
+  export PW_TEST_CHECKOUT_CACHE
+  # Compiled artifacts survive snapshots.
   export GOCACHE="${GOCACHE:-$(go env GOCACHE)}"
   prepare_runtime
   export PW_SOURCE_ROOT_ORIGINAL="${PW_SOURCE_ROOT_ORIGINAL:-$ROOT}"
@@ -242,6 +265,11 @@ case "$mode" in
     ;;
   capture)
     capture_commit
+    ;;
+  diagnostics-cache)
+    # A host that runs one batch at a time always verifies in the first slot.
+    mkdir -p "$SNAPSHOT_PARENT"
+    bash "$ROOT/scripts/checkout-cache-dir.sh" "$(slot_path 0)"
     ;;
   run)
     [[ "${1:-}" == "--" ]] || usage

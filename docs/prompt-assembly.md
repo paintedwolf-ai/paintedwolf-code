@@ -141,6 +141,16 @@ The final request fitter preserves frame order and cache tiers, and reduces only
 
 When an active tool exchange still exceeds the window, a recorded result can use a bounded structured projection or a canonical record request. The original arguments, call/result pairing, outcome, trust floor, and canonical bytes remain intact. This fallback requires recall and performs no summarizer work.
 
+## Continuation retention contract
+
+The host preserves the current user instruction, a bounded window of earlier original instructions, and the active worker assignment, and renders operational state from its owning subsystems. Supporting narrative may be summarized, but a model summary never establishes permissions, verification, or workflow completion. Older instructions stay addressable through canonical recall; a follow-up does not delete them or authorize their replacement. Session length never forces an unbounded instruction bundle into the prompt.
+
+Compaction covers the exchanges removed from the prompt. Each source range remains represented by retained text, source-linked summary entries, or a recoverable index. The prior continuation is an input to every subsequent generation. Coordinator and summarizer budgets are resolved independently; changing the receiving model rebuilds its projection from canonical history. Optional local ranking affects supporting detail only, and unavailable or untrained ranking retains the deterministic baseline.
+
+## Canonical history recovery
+
+Compaction changes the model's view; canonical transcript rows remain addressable. A narrow `recall` query recovers an evidence handle. The `history` argument pages the caller's own transcript by immutable ordinal, then reads one indexed message body in Unicode windows. A source watermark reports corrections to the covered transcript; recovery reads use ordinal seeks and bounded body windows rather than scanning the covered transcript for a global correction count. Recovery never widens a worker's scope and recorded source contents never claim to be the current working tree.
+
 ## Asynchronous compaction
 
 High-quality summarization runs outside the coordinator critical path.
@@ -194,3 +204,13 @@ The [`summarize`](summarize.md) tool returns a structured context pack as a dura
 - Background compaction has one writer and never blocks normal turns.
 - Compaction splices use indexed ordinal and mutation watermarks; a mismatch fails closed to canonical facts.
 - Templates explain typed facts; prose does not become host fact.
+
+## Context-scaled history representations
+
+History has four representations: original exchanges, detailed continuation blocks, a compact continuation, and recovery references. A receiver receives one representation of each covered range. Context allocation reserves the active request and host instructions first, then allocates recent exchanges and continuation detail from the remaining budget. Small windows may omit detailed blocks.
+
+Unprojected fallback and post-view suffix reads scale with the receiver window and are bounded by rows, estimated tokens, and payload bytes, paging backward from the latest turn in fixed database windows while preserving complete tool batches and the active user request. Switching a compacted session to a larger receiver window restores canonical tail exchanges that now fit the receiver's target budget and shrinks or omits the continuation prefix to cover only the remaining prefix.
+
+The reference representation records canonical ordinal boundaries and bounded recovery coordinates. Its size stays bounded as the session grows. Compaction does not remove canonical records. Receiver context size determines presentation; summarizer context size determines bounded synthesis batches.
+
+Bialy may rank eligible continuation detail when a trained head is available. It does not determine transcript deletion, coverage, authority, or the fallback representation. The deterministic policy remains complete without Bialy.

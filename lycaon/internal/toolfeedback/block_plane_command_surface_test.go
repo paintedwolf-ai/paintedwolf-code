@@ -2,9 +2,11 @@ package toolfeedback
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
@@ -19,7 +21,7 @@ func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
 			reject: &toolrejection.ToolReject{Code: "COMMAND_FAILURE_LOOP", Data: map[string]any{
 				"command": "cargo test", "count": 3,
 			}},
-			want: []string{"cargo test", "failed 3 times", "change the command"},
+			want: []string{"cargo test", "failed 3 times", "Change the command"},
 		},
 		{
 			tool: "command",
@@ -47,7 +49,7 @@ func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
 			reject: &toolrejection.ToolReject{Code: "COMMAND_DUPLICATE_RUNNING", Data: map[string]any{
 				"handles": []string{"command-1"}, "handles_text": "command-1",
 			}},
-			want: []string{"command-1", "command_output"},
+			want: []string{"command-1", "observed exit"},
 		},
 		{
 			tool:   "command",
@@ -144,5 +146,38 @@ func TestSandboxCapabilityRejectsRenderGuidance(t *testing.T) {
 				t.Fatalf("%s left template syntax unrendered:\n%s", code, msg)
 			}
 		})
+	}
+}
+
+func TestDuplicateCommandRecoveryRequiresOfferedControlsAndObservedExit(t *testing.T) {
+	bp := stockBlockPlane(t)
+	for _, tool := range []string{"command", "verify"} {
+		for offered := 0; offered < 4; offered++ {
+			names := []string{}
+			if offered&1 != 0 {
+				names = append(names, "command_output")
+			}
+			if offered&2 != 0 {
+				names = append(names, "command_stop")
+			}
+			ctx := tools.WithRecoveryTools(t.Context(), names)
+			err := bp.RejectObservation(ctx, tool, "implement", nil, &toolrejection.ToolReject{
+				Code: "COMMAND_DUPLICATE_RUNNING", Data: map[string]any{"handles_text": "command-1", "can_command_output": true, "can_command_stop": true},
+			})
+			if err == nil {
+				t.Fatal("duplicate command was not rejected")
+			}
+			text := err.Error()
+			for i, name := range []string{"command_output", "command_stop"} {
+				if strings.Contains(text, "`"+name+"`") != (offered&(1<<i) != 0) {
+					t.Errorf("%s offered=%v: %s", name, names, text)
+				}
+			}
+			for _, required := range []string{"command-1", "A stop request alone does not establish exit", "Do not reissue while the job is running", "preserve completed effects"} {
+				if !strings.Contains(text, required) {
+					t.Errorf("missing %q: %s", required, text)
+				}
+			}
+		}
 	}
 }

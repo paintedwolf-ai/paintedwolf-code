@@ -24,7 +24,7 @@ rows:
       The macOS bundle Developer ID–signs the tree.
 
   - id: git-engine
-    name: Dugite Git and Git LFS
+    name: Git and Git LFS (dugite-native, paintedwolf-git on Linux)
     pins:
       - label: Git
         from: yaml lycaon/config/gitengine/pin.yaml git_version
@@ -32,6 +32,8 @@ rows:
         from: yaml lycaon/config/gitengine/pin.yaml lfs_version
       - label: dugite build
         from: yaml lycaon/config/gitengine/pin.yaml platforms.darwin-arm64.build
+      - label: paintedwolf-git build
+        from: yaml lycaon/config/gitengine/pin.yaml platforms.linux-amd64.build
     upstream:
       - label: Git
         from: 'github-tag git/git ^v\d+\.\d+\.\d+$'
@@ -39,13 +41,16 @@ rows:
         from: github-release git-lfs/git-lfs
       - label: dugite
         from: github-release desktop/dugite-native
+      - label: paintedwolf-git
+        from: github-release paintedwolf-ai/paintedwolf-git
     urgency: critical
     urgency_reason: |
       Git runs against untrusted repositories and remotes on the workstation.
     friction: high
     friction_reason: |
       Pinned per platform in `lycaon/config/gitengine/pin.yaml`. Dugite trails upstream Git, so
-      a newer Git is usable only once a dugite release ships it. Follow the
+      a newer Git is usable only once a dugite release ships it; Linux needs a matching
+      paintedwolf-git release. Follow the
       [bump procedure](../dependencies.md#bump-procedure), including the parity suite. The fetch fails
       closed on a hash mismatch, prunes to a 40 MB Unix and 140 MB Windows budget, and the macOS
       bundle signs every Mach-O with Developer ID and hardened runtime.
@@ -68,6 +73,26 @@ rows:
       `bundled-manifest.yaml`, which ships a darwin-arm64 artifact only. Authenticate a release
       with `./task scan:opengrep:select -- --tag <tag> --expected-commit <sha> <release.json>`,
       then run `./task test:scanners` so first-party and vendored rules still load.
+
+  - id: ocr-engine
+    name: Tesseract OCR engine (Linux)
+    pins:
+      - yaml lycaon/config/runtime/ocrengine/pin.yaml engine_version
+    upstream:
+      - label: Tesseract
+        from: github-release tesseract-ocr/tesseract
+      - label: producer
+        from: github-release paintedwolf-ai/paintedwolf-tesseract
+    urgency: high
+    urgency_reason: |
+      Reads untrusted screen captures so the redaction gate can locate credentials before an
+      image reaches a model.
+    friction: moderate
+    friction_reason: |
+      Built statically by `paintedwolf-ai/paintedwolf-tesseract` and pinned in
+      `lycaon/config/runtime/ocrengine/pin.yaml`. Follow the
+      [OCR engine bump procedure](../dependencies.md#bundled-ocr-engine), then run the
+      engine-required Linux digest.
 
   - id: document-core
     name: Document core

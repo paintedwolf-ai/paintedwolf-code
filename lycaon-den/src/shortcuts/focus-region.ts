@@ -37,6 +37,11 @@ function bumpFocusRegions(): void {
   setFocusRegionsVersion((n) => n + 1);
 }
 
+/** A surface holding claimed regions became reachable or unreachable; pending region focus re-checks. */
+export function noteFocusRegionReachability(): void {
+  bumpFocusRegions();
+}
+
 /** Reactive focus-claim version. */
 export { focusRegionsVersion };
 

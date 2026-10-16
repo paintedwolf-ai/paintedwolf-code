@@ -13,7 +13,8 @@ import (
 )
 
 // Recover completes pending save intents.
-func (s *Service) Recover(ctx context.Context) error {
+func (c saveCommitter) Recover(ctx context.Context) error {
+	s := c.s
 	s.ops.Lock()
 	defer s.ops.Unlock()
 	mutations, err := s.store.PendingMutations(ctx)
@@ -46,7 +47,8 @@ func (s *Service) Recover(ctx context.Context) error {
 	return errors.Join(failures...)
 }
 
-func (s *Service) recoverMutation(ctx context.Context, p *project.Project, mutation *Mutation) error {
+func (c saveCommitter) recoverMutation(ctx context.Context, p *project.Project, mutation *Mutation) error {
+	s := c.s
 	document, err := s.store.Get(ctx, mutation.DocumentID)
 	if err != nil {
 		return err
@@ -94,12 +96,12 @@ func (s *Service) recoverMutation(ctx context.Context, p *project.Project, mutat
 }
 
 // An unavailable or changed target ends the intent, not the durable draft.
-func (s *Service) abandonRecovery(ctx context.Context, d *Document, m *Mutation, cause error) error {
-	return s.settlePublicationFailure(ctx, d, m, "conflict", cause)
+func (c saveCommitter) abandonRecovery(ctx context.Context, d *Document, m *Mutation, cause error) error {
+	return c.s.settlePublicationFailure(ctx, d, m, "conflict", cause)
 }
 
-func (s *Service) mutationMatchesDisk(ctx context.Context, m *Mutation) bool {
-	root, err := s.liveRootPath(ctx, m.ProjectID, m.BranchID, m.RootID)
+func (c saveCommitter) mutationMatchesDisk(ctx context.Context, m *Mutation) bool {
+	root, err := c.s.liveRootPath(ctx, m.ProjectID, m.BranchID, m.RootID)
 	if err != nil {
 		return false
 	}

@@ -361,8 +361,8 @@ func (l *modelTurn) completeStream(
 		completion.Content = transformed
 		tokens = []string{transformed}
 	}
-	if l.Deps.RecordCompactionTokenObservation != nil && completion.ContextInputTokens() > 0 {
-		l.Deps.RecordCompactionTokenObservation(sessionID, callProvider, callModel, completion.ContextInputTokens(), transcriptEstimate)
+	if input := completion.ContextInputTokens(); l.Deps.RecordCompactionTokenObservation != nil && input > 0 {
+		l.Deps.RecordCompactionTokenObservation(sessionID, callProvider, callModel, input, transcriptEstimate)
 	}
 	if proseFinish {
 		kept := retainOfferedToolCalls(nil, "", completion.ToolCalls, workerProseOfferedTools(sess))

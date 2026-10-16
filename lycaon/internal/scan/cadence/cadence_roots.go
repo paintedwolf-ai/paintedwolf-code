@@ -3,9 +3,59 @@ package cadence
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/fspath"
 )
+
+type rootTracker struct {
+	retired    map[string]struct{}
+	dispatches map[string]map[string]context.CancelFunc
+}
+
+func (r *rootTracker) isRetired(canonical string) bool {
+	_, ok := r.retired[canonical]
+	return ok
+}
+
+func (r *rootTracker) attach(canonical string) {
+	delete(r.retired, canonical)
+}
+
+func (r *rootTracker) retire(canonical string) {
+	if r.retired == nil {
+		r.retired = make(map[string]struct{})
+	}
+	r.retired[canonical] = struct{}{}
+	for _, cancel := range r.dispatches[canonical] {
+		cancel()
+	}
+}
+
+func (r *rootTracker) beginDispatch(ctx context.Context, mu *sync.Mutex, canonical, token string) (context.Context, func(), bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	if r.isRetired(canonical) {
+		return ctx, nil, false
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	if r.dispatches == nil {
+		r.dispatches = make(map[string]map[string]context.CancelFunc)
+	}
+	if r.dispatches[canonical] == nil {
+		r.dispatches[canonical] = make(map[string]context.CancelFunc)
+	}
+	r.dispatches[canonical][token] = cancel
+	return ctx, func() {
+		cancel()
+		mu.Lock()
+		defer mu.Unlock()
+		delete(r.dispatches[canonical], token)
+		if len(r.dispatches[canonical]) == 0 {
+			delete(r.dispatches, canonical)
+		}
+	}, true
+}
 
 // RootAttached admits a new registry attachment before background warming starts.
 func (c *Service) RootAttached(root string) {
@@ -14,7 +64,7 @@ func (c *Service) RootAttached(root string) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	delete(c.retiredRoots, fspath.CanonicalPath(root))
+	c.roots.attach(fspath.CanonicalPath(root))
 }
 
 // RetireRoot cancels dispatch and forgets demand after the last project detaches.
@@ -33,13 +83,7 @@ func (c *Service) RetireRoot(ctx context.Context, root string, attached func(con
 			return err
 		}
 	}
-	if c.retiredRoots == nil {
-		c.retiredRoots = make(map[string]struct{})
-	}
-	c.retiredRoots[canonical] = struct{}{}
-	for _, cancel := range c.rootDispatches[canonical] {
-		cancel()
-	}
+	c.roots.retire(canonical)
 	rows, err := c.Store.ListSeriesForPath(ctx, canonical)
 	if err != nil {
 		return err
@@ -50,29 +94,4 @@ func (c *Service) RetireRoot(ctx context.Context, root string, attached func(con
 		}
 	}
 	return nil
-}
-
-func (c *Service) beginRootDispatch(ctx context.Context, canonical, token string) (context.Context, func(), bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, retired := c.retiredRoots[canonical]; retired {
-		return ctx, nil, false
-	}
-	ctx, cancel := context.WithCancel(ctx)
-	if c.rootDispatches == nil {
-		c.rootDispatches = make(map[string]map[string]context.CancelFunc)
-	}
-	if c.rootDispatches[canonical] == nil {
-		c.rootDispatches[canonical] = make(map[string]context.CancelFunc)
-	}
-	c.rootDispatches[canonical][token] = cancel
-	return ctx, func() {
-		cancel()
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		delete(c.rootDispatches[canonical], token)
-		if len(c.rootDispatches[canonical]) == 0 {
-			delete(c.rootDispatches, canonical)
-		}
-	}, true
 }

@@ -8,18 +8,18 @@ platforms:
     build: "f49d009"
     reported_version: "2.53.0"
     sha256: "e561cfc80c755e6f3e938653e81efcd025c9827a5b76dd42778b1159b3fab437"
+  # Linux uses the portable paintedwolf-git build: curl, OpenSSL and zlib are
+  # linked statically and no CA bundle ships (gitexec selects the host's).
   linux-amd64:
-    url: "https://github.com/desktop/dugite-native/releases/download/v2.53.0-3/dugite-native-v{git_version}-{build}-ubuntu-x64.tar.gz"
-    build: "f49d009"
+    url: "https://github.com/paintedwolf-ai/paintedwolf-git/releases/download/v{git_version}+{build}/paintedwolf-git-{git_version}+{build}-linux-amd64.tar.gz"
+    build: "paintedwolf.1"
     reported_version: "2.53.0"
-    sha256: "b3a85433c8dfde76d21b90938ad2f971653deff4340b1b4d347258c63250eafc"
+    sha256: "58ce0d7b5bbbf869f9047442ddd6d76d279ee35eb95fe1e658c956f645cf05b3"
   linux-arm64:
-    url: "https://github.com/desktop/dugite-native/releases/download/v2.53.0-3/dugite-native-v{git_version}-{build}-ubuntu-arm64.tar.gz"
-    build: "f49d009"
-    # Dugite's cross-compile rewrites STRIP in Git's tracked Makefile before
-    # building, so GIT-VERSION-GEN stamps every ubuntu-arm64 release dirty.
-    reported_version: "2.53.0.dirty"
-    sha256: "d562ad433ed0dc1907f44a92fc701597bc577c48d07fe69ee7adddfee836ef4c"
+    url: "https://github.com/paintedwolf-ai/paintedwolf-git/releases/download/v{git_version}+{build}/paintedwolf-git-{git_version}+{build}-linux-arm64.tar.gz"
+    build: "paintedwolf.1"
+    reported_version: "2.53.0"
+    sha256: "c6afbebef764cee6f429ebf8902d465de40f12a7bcb40b95c6081a1f7221b6d6"
   windows-amd64:
     url: "https://github.com/desktop/dugite-native/releases/download/v2.53.0-3/dugite-native-v{git_version}-{build}-windows-x64.tar.gz"
     build: "f49d009"

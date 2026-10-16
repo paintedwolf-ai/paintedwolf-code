@@ -24,6 +24,7 @@ import { ModelSlotPicker } from "./ModelSlotPicker.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
 import { DenCheckbox } from "../primitives/DenCheckbox.tsx";
 import { DenField } from "../primitives/DenField.tsx";
+import { SummarizerModelHint } from "./SummarizerModelHint.tsx";
 import { DenSelect } from "../primitives/DenSelect.tsx";
 
 type Props = {
@@ -100,7 +101,7 @@ export function ModelPolicyPanel(props: Props) {
  disabled={props.saving}
             label={MODELS_SETTINGS_COPY.liteSlotLabel}
             hint={
-              projectLocal() ? undefined : MODELS_SETTINGS_COPY.summarizerModelHint
+              projectLocal() ? undefined : <SummarizerModelHint />
             }
             providers={props.providers}
             roleSlot="lite"
@@ -159,33 +160,37 @@ export function ModelPolicyPanel(props: Props) {
               </Show>
               <ul class="den-settings-rules den-settings-pool-list">
                 <li class="den-settings-rules-head" aria-hidden="true">
-                  <span>{MODELS_SETTINGS_COPY.workerPoolListHeader}</span>
-                  <span />
+                  <div class="den-settings-rules-row">
+                    <span>{MODELS_SETTINGS_COPY.workerPoolListHeader}</span>
+                    <span />
+                  </div>
                 </li>
                 <Index each={props.policy.agent_pool.models}>
                   {(ref, index) => (
                     <li>
-                      <ModelSlotPicker
+                      <div class="den-settings-rules-row">
+                        <ModelSlotPicker
  disabled={props.saving}
-                        compact
-                        label={`${MODELS_SETTINGS_COPY.workerPoolListHeader} ${index + 1}`}
-                        providers={props.providers}
-                        roleSlot="agent_pool"
-                        showAllModels={showAll()}
-                        value={ref()}
-                        onChange={(r) => setPoolRow(index, r)}
-                        data-testid={`pool-model-${index}`}
-                      />
-                      <DenButton
-                        variant="danger"
-                        disabled={props.saving || props.policy.agent_pool.models.length <= 1}
-                        data-testid={`pool-remove-${index}`}
-                        onClick={() =>
-                          props.onChange(removePoolRow(props.policy, index))
-                        }
-                      >
-                        Remove
-                      </DenButton>
+                          compact
+                          label={`${MODELS_SETTINGS_COPY.workerPoolListHeader} ${index + 1}`}
+                          providers={props.providers}
+                          roleSlot="agent_pool"
+                          showAllModels={showAll()}
+                          value={ref()}
+                          onChange={(r) => setPoolRow(index, r)}
+                          data-testid={`pool-model-${index}`}
+                        />
+                        <DenButton
+                          variant="danger"
+                          disabled={props.saving || props.policy.agent_pool.models.length <= 1}
+                          data-testid={`pool-remove-${index}`}
+                          onClick={() =>
+                            props.onChange(removePoolRow(props.policy, index))
+                          }
+                        >
+                          Remove
+                        </DenButton>
+                      </div>
                     </li>
                   )}
                 </Index>

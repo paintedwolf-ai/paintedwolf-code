@@ -13,8 +13,11 @@ import (
 
 func (b *Runtime) BuildPresence(authority interface{ SetVaultUnlocks(*presence.Unlocks) }) error {
 	broker := presence.NewBroker()
+	evidence := presence.LauncherEvidence{
+		BundleID: version.BundleID, CustodianVerifiedParentPID: credentialstore.VerifiedLauncherPID(),
+	}
 	key, err := presence.TrustedKey(os.Getenv(presence.PublicKeyEnv), credentialstore.UnlocksUnattended(),
-		func() error { return presence.VerifyLauncher(version.BundleID) })
+		func() error { return presence.VerifyLauncher(evidence) })
 	if err != nil {
 		slog.Warn("presence verification is unavailable", "component", "presence", "error", err)
 	}

@@ -176,9 +176,9 @@ func TestEmitAssembledRunReportRecordsItsUnreadFence(t *testing.T) {
 		},
 	})
 	st := &promptLoopTurnState{draftSlotID: "slot-1", draftSlotAppended: true, coordinatorFrame: testReportFrame()}
-	out, err := l.Closeout.emitStalledCloseout(t.Context(), &api.Session{ID: "s1"}, "s1", "", "coordinator_security_synthesis", st,
+	out, err := l.Closeout.emitAssembledCloseout(t.Context(), &api.Session{ID: "s1"}, "s1", "", "coordinator_security_synthesis", drafted, []string{guidance.ReportFenceUnreadableCode}, st,
 		[]api.Message{{ID: "slot-1", Role: api.MessageRoleAssistant}})
-	testutil.FailErr(t, "emitStalledCloseout", err)
+	testutil.FailErr(t, "emitAssembledCloseout", err)
 	meta := committed.CompletionReport
 	if !out.committed || meta == nil || len(meta.Findings) != 1 {
 		t.Fatalf("meta = %+v, want the finding the host read", meta)
