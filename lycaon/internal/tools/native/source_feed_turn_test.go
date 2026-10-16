@@ -2,17 +2,25 @@ package native
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -73,5 +81,56 @@ func TestAgentWriteStampsUserTurnOnLedgerRow(t *testing.T) {
 	testutil.FailErr(t, "turn lens query failed", err)
 	if len(other.Files) != 0 {
 		t.Fatalf("turn 2 lens = %+v, want empty", other.Files)
+	}
+}
+
+// A source-only repair must not require changing the command or its permissions.
+func TestCommandFailureLoopAdmitsRecordedSourceRepair(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX test command fixture")
+	}
+	for _, mode := range []string{"foreground", "verification", "terminal"} {
+		t.Run(mode, func(t *testing.T) {
+			dir := t.TempDir()
+			ledger := bindLedgerForWrites(t, dir)
+			tctx := nativefixture.Context(dir)
+			tctx.Identity.ProjectID = "p1"
+			tctx.Source.SourceLedger = ledger
+			tctx.Source.Observations = ledger.Inventory
+			boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{{ID: tctx.Identity.Agent, Tools: map[string]bool{"command": true}}})
+			runner := &command.CommandTool{Runner: hostcmd.NewRunner(), Boundary: boundary, Background: newTestBackgroundRegistry(t)}
+			args := map[string]any{"command": "test -f ready.txt"}
+			if mode == "terminal" {
+				args["terminal_capture"] = map[string]any{}
+			}
+			if mode == "verification" {
+				args["verification"] = true
+			}
+			for i := 0; i < 3; i++ {
+				raw, err := runner.Run(t.Context(), args, tctx)
+				testutil.FailErr(t, "failing process", err)
+				var out map[string]any
+				testutil.FailErr(t, "process result", json.Unmarshal([]byte(raw), &out))
+				if out["ok"] != false {
+					t.Fatalf("expected real failure: %s", raw)
+				}
+			}
+			repochange.Advance(dir)
+			_, err := runner.Run(t.Context(), args, tctx)
+			var reject *toolrejection.ToolReject
+			if !errors.As(err, &reject) || reject.Code != "COMMAND_FAILURE_LOOP" || reject.Data["failure_source_unchanged"] != true {
+				t.Fatalf("watcher noise bypassed loop: %v", err)
+			}
+			write := &WriteTool{Boundary: nativefixture.Boundary(t)}
+			_, err = write.Run(t.Context(), map[string]any{"path": "ready.txt", "content": "ready\n"}, tctx)
+			testutil.FailErr(t, "recorded source repair", err)
+			raw, err := runner.Run(t.Context(), args, tctx)
+			testutil.FailErr(t, "unchanged command after repair", err)
+			var out map[string]any
+			testutil.FailErr(t, "repaired process result", json.Unmarshal([]byte(raw), &out))
+			if out["ok"] != true {
+				t.Fatalf("repaired process failed: %s", raw)
+			}
+		})
 	}
 }

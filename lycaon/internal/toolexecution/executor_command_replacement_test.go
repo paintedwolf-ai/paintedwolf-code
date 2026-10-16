@@ -2,21 +2,21 @@ package toolexecution
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/coordinator/turnload"
-	"github.com/lycaon/lycaon/internal/llm/transcript"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/pkg/api"
 	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestExactReplacementRequiresCallableNativeHandler(t *testing.T) {
@@ -248,6 +248,8 @@ func TestNativeRecoveryInvokeRendersCurrentFactsThroughProjection(t *testing.T) 
 		{name: "direct", command: "sleep 2", offered: []string{"command", "wait"}},
 		{name: "deferred", command: "sleep 2", offered: []string{"command", "request_tools"}, deferred: []string{"wait"}, load: true},
 		{name: "write deferred", command: "cat > out.txt <<'EOF'\nhello\nEOF", offered: []string{"command", "request_tools"}, deferred: []string{"write"}, load: true},
+		{name: "literal redirect", command: "echo built > out.log", offered: []string{"command", "write"}},
+		{name: "literal redirect deferred", command: "echo built > out.log", offered: []string{"command", "request_tools"}, deferred: []string{"write"}, load: true},
 		{name: "missing prerequisite", command: "mkdir -p sub && cat > sub/out.txt <<'EOF'\nhello\nEOF", offered: []string{"command", "write"}, incomplete: true},
 		{name: "inexact write", command: "cat << EOF > out.txt\nUSER=$USER\nEOF", offered: []string{"command", "write"}, inexact: true},
 		{name: "large exact write", command: "cat > out.txt <<'EOF'\n" + strings.Repeat("body", 12000) + "\nEOF", offered: []string{"command", "write"}, omitted: true},

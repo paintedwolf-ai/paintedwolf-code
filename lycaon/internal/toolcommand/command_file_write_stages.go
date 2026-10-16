@@ -72,9 +72,10 @@ func analyzeSingleStageFileWrite(
 		}
 	}
 
-	if depth > 0 && !hasStream && outPath != "" && !outConflicts && !hasInputOrStderrRedirect(st.redirects) {
+	if !hasStream && outPath != "" && !outConflicts && !hasInputOrStderrRedirect(st.redirects) {
 		if body, bodyLit, ok := literalEchoOrPrintf(st.argv); ok {
-			if len(st.env) == 0 && outLiteral && bodyLit && isRepresentableWriteTarget(outPath) {
+			if len(st.env) == 0 && outLiteral && bodyLit && isRepresentableWriteTarget(outPath) &&
+				(depth > 0 || literalOutputArgvExact(st)) {
 				return true, outPath, outAppend, []ReplacementCall{buildWriteCall(outPath, body, outAppend)}, true
 			}
 			return true, outPath, outAppend, nil, false
@@ -121,13 +122,14 @@ func analyzeTwoStagePipelineFileWrite(
 		if len(producer.redirects) == 0 {
 			producerPassThrough, producerExact = isPassThroughProducer(producer)
 		}
-	} else if depth > 0 {
+	} else {
 		if body, lit, ok := literalEchoOrPrintf(producer.argv); ok && len(producer.redirects) == 0 {
 			hasStream = true
 			streamBody = body
 			streamLiteral = lit
 			producerPassThrough = true
-			producerExact = lit && len(producer.env) == 0
+			producerExact = lit && len(producer.env) == 0 &&
+				(depth > 0 || (literalOutputArgvExact(producer) && literalOutputArgvExact(consumer)))
 		}
 	}
 
