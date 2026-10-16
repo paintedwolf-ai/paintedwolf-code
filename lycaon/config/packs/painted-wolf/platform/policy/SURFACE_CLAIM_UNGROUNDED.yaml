@@ -8,13 +8,14 @@ requires:
     - paintedwolf.offenders_sample
     - paintedwolf.profile
     - paintedwolf.surface_claim_ungrounded
+    - paintedwolf.can_recall
 when: paintedwolf.profile == "worker" && paintedwolf.surface_claim_ungrounded
 effect: block
 copy:
   what: 'A claim about how a running UI or app behaves has no surface_snapshot evidence (page capture for DOM; sealed terminal_capture or held terminal_snapshot for terminal screens). Cited instead: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
   cause: 'Authored render mockups establish design intent, and flat command stdout establishes output; neither establishes a running screen state.'
   why: Structural snapshot + console/log from a surface capture are the groundable floor for running-app claims.
-  fix: 'Cite an existing page# or tui# surface_snapshot that supports the finding. If absent, obtain the observation with the capture or terminal controls offered on this turn, or remove the unsupported runtime claim before calling complete_leg.'
+  fix: 'Cite an existing page# or tui# surface_snapshot that supports the finding. {% if paintedwolf.can_recall %}If its tag is no longer in context, recover it with `recall(query="handle:page#3")`, passing its exact handle, or `recall(query="tool:capture_page")`, and cite the handle it returns. {% endif %}If absent, obtain the observation with the capture or terminal controls offered on this turn, or remove the unsupported runtime claim before calling complete_leg.'
   instead: 'Return partial through complete_leg and name the missing runtime observation in remaining_risk when capture is unavailable. Preserve completed work; do not replay a mutating command merely to add a screenshot.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:worker_summary
@@ -22,6 +23,24 @@ x-paintedwolf-evidence:
   in_session_retry: true
 x-paintedwolf-message: Observed-runtime claim lacks a surface_snapshot
 x-paintedwolf-scenarios:
+  - id: recall_callable
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: render#1
+      can_recall: true
+    expect_contains:
+      - 'Code: SURFACE_CLAIM_UNGROUNDED'
+      - 'recall(query='
+  - id: recall_not_callable
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: render#1
+      can_recall: false
+    expect_contains:
+      - 'Code: SURFACE_CLAIM_UNGROUNDED'
+      - 'obtain the observation with the capture or terminal controls'
   - id: page_claim_without_snapshot
     vars:
       offender_count: 1

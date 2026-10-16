@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -45,6 +46,9 @@ type WorkerSummaryEvalInput struct {
 	Hints *guidance.HintConfig
 	// Pipeline is required for blocking Decisions (worker.report_check EvaluateBlock).
 	Pipeline *oar.GuardPipeline
+	// OfferedTools are the tools the worker's latest turn could call. Absent
+	// evidence leaves every paintedwolf.can_* fact false.
+	OfferedTools []string
 }
 
 // WorkerSummaryEvalResult is the outcome of summary validation.
@@ -195,6 +199,7 @@ func decideWorkerSummary(
 	gc := oar.NewGuardContext()
 	gc.Session.SessionID = in.ChildSessionID
 	gc.Session.Profile = "worker"
+	tools.RegisterRecoveryFacts(tools.WithRecoveryTools(ctx, in.OfferedTools), gc)
 	publishWorkerSummaryFacts(gc, in.AgentType, obs)
 	putWorkerRejectData(gc, obs, data)
 	var code string
