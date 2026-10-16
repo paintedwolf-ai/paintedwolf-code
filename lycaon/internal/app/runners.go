@@ -16,10 +16,18 @@ import (
 // cannot push the engine past the shell's graceful-stop wait.
 var serveRunnerDrainTimeout = serveDrainTimeout
 
+type runnerMode uint8
+
+const (
+	runnerSupervised runnerMode = iota
+	runnerStartupOnce
+	runnerBackgroundOnce
+)
+
 type backgroundRunner struct {
 	name       string
 	run        func(context.Context) error
-	oneShot    bool
+	mode       runnerMode
 	retryDelay func(attempt int) time.Duration
 	// done identifies runners still active at the drain deadline.
 	done chan struct{}
@@ -58,7 +66,11 @@ func (a *ServeApp) registerRunner(name string, run func(context.Context) error) 
 }
 
 func (a *ServeApp) registerOneShotRunner(name string, run func(context.Context) error) {
-	a.runners.runners = append(a.runners.runners, backgroundRunner{name: name, run: run, oneShot: true})
+	a.runners.runners = append(a.runners.runners, backgroundRunner{name: name, run: run, mode: runnerStartupOnce})
+}
+
+func (a *ServeApp) registerBackgroundOneShotRunner(name string, run func(context.Context) error) {
+	a.runners.runners = append(a.runners.runners, backgroundRunner{name: name, run: run, mode: runnerBackgroundOnce})
 }
 
 func (a *ServeApp) startRunners(ctx context.Context) error {
@@ -71,7 +83,10 @@ func (a *ServeApp) startRunners(ctx context.Context) error {
 		if name == "" || a.runners.runners[i].run == nil {
 			return fmt.Errorf("background runner %d requires a name and function", i)
 		}
-		if !a.runners.runners[i].oneShot && a.runners.runners[i].retryDelay == nil {
+		if a.runners.runners[i].mode > runnerBackgroundOnce {
+			return fmt.Errorf("background runner %q has invalid mode", name)
+		}
+		if a.runners.runners[i].mode == runnerSupervised && a.runners.runners[i].retryDelay == nil {
 			return fmt.Errorf("background runner %q requires a retry policy", name)
 		}
 		if _, duplicate := names[name]; duplicate {
@@ -84,7 +99,7 @@ func (a *ServeApp) startRunners(ctx context.Context) error {
 	a.runners.active = true
 	for i := range a.runners.runners {
 		r := &a.runners.runners[i]
-		if !r.oneShot {
+		if r.mode != runnerStartupOnce {
 			continue
 		}
 		r.done = make(chan struct{})
@@ -103,7 +118,7 @@ func (a *ServeApp) startRunners(ctx context.Context) error {
 		return fmt.Errorf("background startup runner %s: %w", r.name, err)
 	}
 	for i := range a.runners.runners {
-		if a.runners.runners[i].oneShot {
+		if a.runners.runners[i].mode == runnerStartupOnce {
 			continue
 		}
 		a.runners.runners[i].done = make(chan struct{})
@@ -113,6 +128,12 @@ func (a *ServeApp) startRunners(ctx context.Context) error {
 			// Accounting remains outside panic recovery.
 			defer a.runners.runnersWG.Done()
 			defer close(r.done)
+			if r.mode == runnerBackgroundOnce {
+				if err := runBackgroundRunnerAttempt(runnerCtx, r); err != nil && runnerCtx.Err() == nil {
+					slog.ErrorContext(runnerCtx, "background one-shot runner failed", "runner", r.name, "error", err)
+				}
+				return
+			}
 			a.superviseRunner(runnerCtx, r)
 		}()
 	}
@@ -154,7 +175,7 @@ func runBackgroundRunnerAttempt(ctx context.Context, runner *backgroundRunner) (
 		}
 	}()
 	err = runner.run(ctx)
-	if err == nil && ctx.Err() == nil && !runner.oneShot {
+	if err == nil && ctx.Err() == nil && runner.mode == runnerSupervised {
 		return errors.New("runner exited without cancellation")
 	}
 	return err
