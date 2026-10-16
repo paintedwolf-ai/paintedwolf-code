@@ -45,6 +45,10 @@ fi
 if [[ ! -x "${CARGO_ABOUT}" ]]; then
   install_cargo_about
 fi
+# --tools provisions the pinned tools for a later offline run without generating notices.
+if [[ "${1:-}" == "--tools" ]]; then
+  exit 0
+fi
 
 if ! command -v bun >/dev/null 2>&1; then
   echo "error: bun required for licenses:notices" >&2
