@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"slices"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // A durable result replayed after a restart carries no offered tools.
@@ -13,16 +15,12 @@ func TestOfferedToolsAreNotPersisted(t *testing.T) {
 		t.Fatalf("live offered tools = %v", live.OfferedToolNames())
 	}
 	raw, err := json.Marshal(live)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "encode live result", err)
 	if string(raw) != `{"MessageID":"m1"}` {
 		t.Fatalf("durable result = %s", raw)
 	}
 	var replayed *Result
-	if err := json.Unmarshal(raw, &replayed); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "decode durable result", json.Unmarshal(raw, &replayed))
 	if replayed.OfferedToolNames() != nil {
 		t.Fatalf("replayed offered tools = %v", replayed.OfferedToolNames())
 	}
