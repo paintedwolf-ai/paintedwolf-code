@@ -1,8 +1,9 @@
 """Conservative change scope shared by pull requests and merge groups.
 
-Only ordinary source files are narrowed. Embedded data, generated contracts,
-configuration, deleted packages, and unknown paths widen the gate. Test imports
-participate in reverse reachability; contracts and smoke tests run unconditionally.
+Only ordinary source files and documentation prose are narrowed. Embedded data,
+generated contracts, configuration, deleted packages, and unknown paths widen the
+gate. Test imports participate in reverse reachability; contracts and smoke tests
+run unconditionally.
 """
 
 import json
@@ -13,6 +14,10 @@ import subprocess
 ROOT = Path(__file__).resolve().parents[2]
 SHARED = (".github/", "scripts/", "dependencies/", "schemas/", "docs/openapi",
           "lycaon/config/", "lycaon/pkg/", "lycaon/test/contract/", "lycaon/vulndb")
+# Prose that no build, fixture, or prompt reads; the repository contracts every scope runs check it.
+# CHANGELOG.md is not among them: Den embeds it.
+PROSE = {"AGENTS.md", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "README.md", "REPORTING.md", "SECURITY.md",
+         "lycaon/AGENTS.md", "lycaon-den/AGENTS.md"}
 
 
 def git(*args):
@@ -43,11 +48,16 @@ def change():
     return {"base": base, "head": head, "paths": paths, "full": full, "reasons": reasons}
 
 
+def prose(path):
+    return path in PROSE or path.startswith("docs/") and path.endswith(".md") and not path.startswith(SHARED)
+
+
 def broad_scope(paths):
     reasons = []
     for path in paths:
         ordinary = (path.startswith("lycaon/internal/") and path.endswith(".go")
-                    or path.startswith("lycaon-den/src/") and path.endswith((".ts", ".tsx", ".css")))
+                    or path.startswith("lycaon-den/src/") and path.endswith((".ts", ".tsx", ".css"))
+                    or prose(path))
         if path.startswith(SHARED) or not ordinary:
             reasons.append(path)
     return bool(reasons), reasons
@@ -56,7 +66,7 @@ def broad_scope(paths):
 def selected_lanes(scope, lanes):
     if scope["full"]:
         return set(lanes)
-    paths = scope["paths"]
+    paths = [path for path in scope["paths"] if not prose(path)]
     areas = {"go" if p.startswith("lycaon/") else "den" for p in paths}
     # Repository contracts read source outside the package/import graph.
     chosen = {"limits", "contracts", "integration-build", "behavior"}
@@ -95,7 +105,7 @@ def go_scope(scope):
     directories = {Path(r["Dir"]).relative_to(ROOT).as_posix(): r["ImportPath"] for r in records}
     seeds = set()
     for path in scope["paths"]:
-        if not path.startswith("lycaon/"):
+        if not path.startswith("lycaon/") or prose(path):
             continue
         package = directories.get(str(Path(path).parent))
         if package is None:
