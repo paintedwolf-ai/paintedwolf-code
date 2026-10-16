@@ -59,6 +59,31 @@ func TestReadyPullRequestsRunTheFastTierAndMergeGroupsTheGate(t *testing.T) {
 	}
 }
 
+// A pull request's checks leave out workflow_dispatch runs, so a dispatch reports its
+// gate as the required check's commit status. No other event may write statuses.
+func TestDispatchedRunsReportTheRequiredCheck(t *testing.T) {
+	t.Parallel()
+	jobs := hostedWorkflowFile(t, "ci").Jobs
+	report := jobs["dispatched-check"]
+	if needs := hostedNeeds(t, report); !slices.Equal(needs, []string{"check"}) ||
+		report.If != "${{ !cancelled() && github.event_name == 'workflow_dispatch' }}" {
+		t.Errorf("only a dispatch reports its check job's result, got needs %v if %q", needs, report.If)
+	}
+	if want := map[string]string{"statuses": "write"}; !maps.Equal(report.Permissions, want) {
+		t.Errorf("the dispatched check needs exactly %v, got %v", want, report.Permissions)
+	}
+	if len(report.Steps) != 1 || strings.Contains(report.Steps[0].Uses, "checkout") ||
+		report.Steps[0].Env["STATE"] != "${{ needs.check.result == 'success' && 'success' || 'failure' }}" ||
+		!strings.Contains(report.Steps[0].Run, "statuses/$GITHUB_SHA") || !strings.Contains(report.Steps[0].Run, "context=check") {
+		t.Error("the dispatched check must report the check job's result as the check status on the dispatched commit, without running branch code")
+	}
+	for name, job := range jobs {
+		if name != "dispatched-check" && job.Permissions["statuses"] != "" {
+			t.Errorf("%s runs branch code and must not write commit statuses", name)
+		}
+	}
+}
+
 // Drafts spend no verification runners, never pass the required check, and get
 // the fast tier once marked ready.
 func TestDraftPullRequestsWaitForReadyForReview(t *testing.T) {
