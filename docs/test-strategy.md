@@ -749,7 +749,9 @@ provisions the pinned browser before the lane goes offline.
 Drafts spend no verification runners and cannot pass `check`. Manual dispatch
 runs the complete check and platform tier, or with `profile: fast` the fast
 tier for a pull request whose events start no CI, such as the dependency
-inventory's. [`qualification.yml`](../.github/workflows/qualification.yml)
+inventory's. A pull request's checks leave out dispatch runs, so the
+dispatch's `dispatched-check` job reports its gate as the required `check`
+commit status on the dispatched commit. [`qualification.yml`](../.github/workflows/qualification.yml)
 runs the complete check, then platform confinement and upgrade corpus beside
 the `release` profile's platform lanes, then browser and desktop journeys on
 main. One qualification runs at a time: it does
