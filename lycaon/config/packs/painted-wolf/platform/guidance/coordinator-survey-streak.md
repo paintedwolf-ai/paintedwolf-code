@@ -1,3 +1,3 @@
 [host:coordinator-survey-streak]
 
-**{{ batches }} consecutive tool batches this turn were read-only** ({% for t in tools %}`{{ t }}`{% if not forloop.Last %}, {% endif %}{% endfor %}); nothing has been changed, committed, dispatched, or reported. Another page of the same survey is not progress; act on what you have: state what you now know and take the first action it supports, or name the one fact that blocks it and get that fact by the shortest route (`ask_user` when only the user holds it).
+**{{ batches }} consecutive tool batches this turn were read-only** ({% for t in tools %}`{{ t }}`{% if not forloop.Last %}, {% endif %}{% endfor %}). Continue required paging and canonical recovery. When the needed evidence is complete, report what it establishes or take the next supported action. If a required fact is still missing, name it and retrieve it by the shortest route; use `ask_user` when only the user holds it.

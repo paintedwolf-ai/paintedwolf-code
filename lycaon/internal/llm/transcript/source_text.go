@@ -20,6 +20,8 @@ func projectSourceText(message api.Message, parts []api.MessageContentPart) []ap
 		return parts
 	}
 	switch message.ToolResult.Tool {
+	case "recall":
+		return projectRecallText(message, part, parts)
 	case "read":
 		return projectReadSource(message, part, parts)
 	case "summarize":
