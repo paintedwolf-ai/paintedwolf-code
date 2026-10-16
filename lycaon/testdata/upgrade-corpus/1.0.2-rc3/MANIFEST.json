@@ -1,7 +1,7 @@
 {
   "app_version": "1.0.2-rc3",
   "artifact_id": "c64e099f-ec52-4b02-9f0f-7f2a03dd42d4",
-  "backup_sha256": "639c8fa6235b27e75c04e90dabb89d42310e9b5b3c4099fd811e31c318c15c12",
+  "backup_sha256": "c742d1345309b7d2a6072a690b833e4cb570720047c325757e91f032c830fc42",
   "created_at": "2026-10-14T20:24:18Z",
   "editor_history": {
     "accepted_operation_id": "650d8f90-ca2d-4cb9-959e-2fc7b3ead99d",
@@ -24,10 +24,10 @@
   "project_id": "50ba2c6c-8e00-4a45-9800-3d54c15b1207",
   "recipe": "retained-history-v1",
   "schema_identity": {
-    "revision": 3,
+    "revision": 4,
     "shape": "c0280798481d97c01e3ddf30812db8b6c28db69520cd8b33b88642ddb03d18a2"
   },
-  "schema_version": 3,
+  "schema_version": 4,
   "seeded_secondary": "tool_result",
   "semantics_sha256": "2bf9e774ba2bb7d34bbb8ec2de97da205fe7bcf05523a8e903a9df2f3d4b85ef",
   "session_id": "2c133843-491c-4096-92b6-a6e6dc417e6e",
@@ -39,7 +39,7 @@
     "source_file_id": "b033e58a-5754-49ff-9911-a2790cca6ffd",
     "source_version_id": "eec0f267-60b3-4cda-88ec-d7778bfd21a4"
   },
-  "store_sha256": "7592bd231e2371eb5dc284c7f59b50fc8178503ee850099bca4939d9b5b16f35",
+  "store_sha256": "2c313fa1ab6f3e83bffaf2ded83f4d5f524a023b7230197b0bfbbe0e0d04ef5d",
   "tool_result_message_id": "5777b5f9-d6c5-4438-ad06-9e14dd3d9744",
   "worker_history": {
     "baseline": {

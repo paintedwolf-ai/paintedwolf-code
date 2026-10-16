@@ -1,0 +1,36 @@
+oar: '1.0'
+id: RECALL_HISTORY_INVALID
+kind: schema
+anchor: tool.rejected
+selector:
+  tool: [recall]
+requires:
+  facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.rejection_field, paintedwolf.recall_history_mode_invalid, paintedwolf.recall_history_bounds_invalid, paintedwolf.recall_history_body_missing, paintedwolf.recall_history_search_invalid]
+  profiles: [tool]
+when: paintedwolf.rejection_code == "RECALL_HISTORY_INVALID"
+effect: block
+copy:
+  what: 'The history request was rejected: {{ paintedwolf.rejection_reason }}.'
+  cause: The canonical recovery coordinates or argument combination are invalid.
+  why: History recovery addresses recorded rows in your own session.
+  fix: >-
+    {% if paintedwolf.recall_history_mode_invalid %}
+    Use history on its own; omit query and widen. Canonical recovery stays in your session.
+    {% else %}{% if paintedwolf.recall_history_bounds_invalid %}
+    For an index, use the continuation's upper ordinal with 0 <= after_ord < through_ord.
+    For a known body, supply message_id; no ordinal bound is needed.
+    {% else %}{% if paintedwolf.recall_history_body_missing %}
+    Supply the returned message_id to read a body. Omit format to page the index.
+    {% else %}{% if paintedwolf.recall_history_search_invalid %}
+    Search only the index with at most eight literal terms and 256 characters.
+    Omit search when supplying message_id.
+    {% else %}Correct {% if paintedwolf.rejection_field %}{{ paintedwolf.rejection_field }}{% else %}the rejected history arguments{% endif %} using the tool schema and retry the rejected call.
+    {% endif %}{% endif %}{% endif %}{% endif %}
+  instead: Pass a returned record_request as history, or a returned next_request as the complete recall arguments
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:recall
+x-paintedwolf-message: The history recovery coordinates are invalid.
+x-paintedwolf-scenarios:
+- id: default
+  vars: {profile: coordinator, tool: recall}
+  expect_contains: ['Rejected:', 'Code: RECALL_HISTORY_INVALID']

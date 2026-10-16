@@ -1,18 +1,7 @@
 description: >-
-  Look up what was already observed instead of observing it again. Reach for
-  it when a finished worker leg's envelope omits a detail the leg saw, when a
-  continuation record or a `[compacted …]` banner names a handle whose body is
-  gone from context, or — from a root session — when an earlier session on
-  this project may already have looked (`widen`). It reads the recorded index,
-  not the working tree: use grep or read for files as they are now. Branch on
-  the result's `resolution`, never on the row count: `no_match_in_scope` means
-  this scope contains records, but none matched this query; `scope_empty` means nothing here
-  has been observed yet (dispatch or observe it yourself; do not search again),
-  `record_deleted` means it existed and is gone, `executor_degraded` is never
-  evidence of absence. Do what `next_action` says. Each hit states
-  `observed_at` and `currency` — a `changed` hit describes the file as it was,
-  not as it is. An unchanged query searches the same recorded scope; fewer
-  terms or corrected filters can recover missed matches.
+  Recover recorded observations or original messages. Use query or own-session
+  history coordinates. Branch on resolution and next_action; check source currency.
+
 schema:
   type: object
   properties:
@@ -20,23 +9,35 @@ schema:
       type: string
       minLength: 1
       description: >-
-        Search terms plus optional filters. Adjacent terms are ANDed;
-        AND / OR / NOT and parentheses are supported.
-        Addressing beats searching: handle:read#3 returns that one
-        observation, which is the surest lookup when a leg, a continuation
-        record, or a compaction banner named its handle. handle: matches an
-        exact identifier; use tool:find for find results. Otherwise narrow with
-        agent:scout, leg:<id>, session:<id>, tool:read, after:2026-08-01 before
-        free text. Also available — kind:evidence, path:src/*.go, url:<url>,
-        untrusted:true, verified:false, run:<id>.
+        Exact handle lookup: handle:read#3. Free terms are ANDed; AND, OR, NOT and
+        parentheses are supported. Filters: agent:scout, leg:<id>, session:<id>,
+        tool:read, after:2026-08-01, before:2026-08-02, kind:evidence, path:src/*.go,
+        url:<url>, untrusted:true, verified:false, run:<id>.
+    history:
+      type: object
+      description: >-
+        Use message_id for a body or through_ord for the index. Pass record_request
+        as history or next_request as recall arguments; omit query and widen.
+      properties:
+        search: {type: string, minLength: 1, maxLength: 256, description: "Up to eight literal terms, all required."}
+        format: {type: string, enum: [text, record], description: "Body format. record includes original parts and arguments; concatenate pages before parsing."}
+        body_runes: {type: integer, minimum: 1, maximum: 4096, description: "Unicode characters per body page."}
+        after_ord: {type: integer, minimum: 0, description: "Start index after this ordinal."}
+        through_ord: {type: integer, minimum: 1, description: "Inclusive upper ordinal bound."}
+        source_seq: {type: integer, minimum: 0, description: "Sequence stamp to detect row edits."}
+        message_id: {type: string, minLength: 1, description: "Row ID from record_request; evidence handles use query."}
+        offset: {type: integer, minimum: 0, description: "Unicode character offset for body paging."}
+      anyOf:
+        - required: [through_ord]
+        - required: [message_id]
+      additionalProperties: false
     widen:
       type: string
       enum: [subtree, project, all]
       description: >-
-        Scope beyond the default. Omit for the default — your own session and
-        its worker legs. project searches every session in this project, which
-        is how an earlier session's observations are reached; all searches
-        every attached project. Worker legs may not widen.
+        Default: your session and worker legs. subtree keeps that scope; project
+        searches this project's sessions; all searches attached projects. Workers
+        cannot widen. History recovery always stays in your own session.
     limit:
       type: integer
       minimum: 1
@@ -44,5 +45,7 @@ schema:
       description: >-
         Maximum rows to return (default 20). A broad answer returns snippets and
         facets instead of bodies; narrow the query to get bodies back.
-  required: [query]
+  oneOf:
+    - required: [query]
+    - required: [history]
   additionalProperties: false

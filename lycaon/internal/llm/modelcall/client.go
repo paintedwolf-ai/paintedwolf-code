@@ -129,6 +129,7 @@ type StreamChunk struct {
 	ReasoningDetails []json.RawMessage
 	ToolCalls        []api.ToolCall
 	Usage            TokenUsage
+	AttemptUsage     *TokenUsage `json:"-" yaml:"-"`
 	Done             bool
 	// Progress marks an intermediate tool-call snapshot (args may be partial).
 	Progress bool
@@ -148,9 +149,11 @@ type Completion struct {
 	ReasoningDetails []json.RawMessage
 	ToolCalls        []api.ToolCall
 	Usage            TokenUsage
-	ProviderID       string
-	Model            string
-	Fallback         bool
+	// A nil AttemptUsage uses Usage; an empty value means unreported.
+	AttemptUsage *TokenUsage `json:"-" yaml:"-"`
+	ProviderID   string
+	Model        string
+	Fallback     bool
 }
 
 // ModelReasoning projects replayable reasoning onto the transcript.
@@ -164,6 +167,17 @@ func (c *Completion) ModelReasoning() *api.ModelReasoning {
 		Text:       c.Reasoning,
 		Details:    c.ReasoningDetails,
 	}
+}
+
+// ContextInputTokens excludes billable input from earlier attempts.
+func (c *Completion) ContextInputTokens() int {
+	if c == nil {
+		return 0
+	}
+	if c.AttemptUsage != nil {
+		return c.AttemptUsage.PromptTokens
+	}
+	return c.Usage.PromptTokens
 }
 
 // TokenUsage stores normalized inclusive input counts.

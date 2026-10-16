@@ -22,17 +22,13 @@ func (m *Service) Assemble(ctx context.Context, sess *api.Session, history []api
 		SurfaceID: surfaceID,
 	}
 	if m != nil {
-		deps.CompactionConfig = m.Limits.Compaction(ctx, sess)
+		deps.CompactionConfig = m.compactionConfig(ctx, sess)
 	} else {
 		deps.CompactionConfig = compaction.DefaultCompactionConfig()
 	}
 	if sess != nil && sess.IsWorkerChild() {
 		deps.CompactionConfig = compaction.WorkerChildCompactionConfig(deps.CompactionConfig)
 	}
-	if sess != nil {
-		deps.TokenCalibration = m.Calibration(sess.ID)
-	}
-	deps.ColdStartOverhead = deps.CompactionConfig.ColdStartOverhead(compaction.ResolveColdStartOverhead(""))
 	if len(history) == 0 {
 		return history, promptassembly.Report{}
 	}

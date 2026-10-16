@@ -175,31 +175,33 @@ export function ProjectFolderZone(props: Props) {
               {(root) => {
                 return (
                   <li
-                    class="project-folders__row den-list-row--nav den-list-row"
+                    class="project-folders__item"
                     data-testid={`project-folder-row-${root.id}`}
                     onContextMenu={(e) => openMenu(e, root)}
                   >
-                    <span class="project-folders__icon" aria-hidden="true">
-                      <FolderIcon />
-                    </span>
-                    <span
-                      class="project-folders__path"
-                      data-tip={root.path}
-                      data-testid={`project-folder-label-${root.id}`}
-                    >
-                      {root.label}
-                    </span>
-                    <div class="den-list-row__actions">
-                      <button
-                        type="button"
-                        class="den-row-action den-row-action--danger den-inset-icon-btn"
-                        aria-label={`Remove ${root.path} from project`}
-                        data-tip="Remove folder from project"
-                        data-testid={`project-folder-remove-${root.id}`}
-                        onClick={() => props.onDetach(root.id)}
+                    <div class="project-folders__row den-list-row--nav den-list-row">
+                      <span class="project-folders__icon" aria-hidden="true">
+                        <FolderIcon />
+                      </span>
+                      <span
+                        class="project-folders__path"
+                        data-tip={root.path}
+                        data-testid={`project-folder-label-${root.id}`}
                       >
-                        <ThemeIcon slot="dismiss" size={14} />
-                      </button>
+                        {root.label}
+                      </span>
+                      <div class="den-list-row__actions">
+                        <button
+                          type="button"
+                          class="den-row-action den-row-action--danger den-inset-icon-btn"
+                          aria-label={`Remove ${root.path} from project`}
+                          data-tip="Remove folder from project"
+                          data-testid={`project-folder-remove-${root.id}`}
+                          onClick={() => props.onDetach(root.id)}
+                        >
+                          <ThemeIcon slot="dismiss" size={14} />
+                        </button>
+                      </div>
                     </div>
                   </li>
                 );

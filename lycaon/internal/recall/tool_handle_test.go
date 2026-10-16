@@ -13,9 +13,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// A compaction banner points at `recall handle:command#2`. That handle is the
-// one the tool result minted, so the projected tool row must carry it and the
-// recorded body must load behind it.
+// Recalled handles resolve to the body recorded by their producing result.
 func TestToolResultRecallByLedgerHandle(t *testing.T) {
 	f := newFixture(t)
 	st := store.NewSQL(f.db)
@@ -49,5 +47,19 @@ func TestToolResultRecallByLedgerHandle(t *testing.T) {
 	byTool := f.answer(t, coordinator(), "tool:command", recall.WidenDefault)
 	if byTool.Resolution != recall.ResolutionMatched || len(byTool.Hits) != 1 || byTool.Facets.ByTool["command"] != 1 {
 		t.Fatalf("tool filter: %+v", byTool)
+	}
+}
+
+func TestToolAndPathRecallIncludesTheOriginalObservation(t *testing.T) {
+	f := newFixture(t)
+	st := store.NewSQL(f.db)
+	st.SetDataDir(f.dataDir)
+	body := []string{"row 731 checksum=original-cypress"}
+	testutil.FailErr(t, "store original observation", st.UpsertEvidenceRecord(t.Context(), coordinatorSession, evidence.Record{Handle: "read#1", Kind: "read", Path: "observations.txt", Body: body}))
+	msg := api.Message{ID: "original-result", Role: api.MessageRoleTool, Content: "[read#1]\nobserved", EvidenceHandles: []string{"read#1"}, ToolResult: &api.ToolResult{Tool: "read", ToolCallID: "first-read", ToolArgs: map[string]any{"path": "observations.txt", "offset": 700, "limit": 60}}, CreatedAt: time.Now().UTC()}
+	f.seed(t, search.ProjectToolMessage(projectID, coordinatorSession, msg, "read")...)
+	result := f.answer(t, coordinator(), "tool:read path:observations.txt", recall.WidenDefault)
+	if result.Resolution != recall.ResolutionMatched || len(result.Hits) != 1 || result.Hits[0].Handle != "read#1" || !reflect.DeepEqual(result.Hits[0].Body, body) {
+		t.Fatalf("recommended query excluded the observation: %+v", result)
 	}
 }

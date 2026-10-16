@@ -52,33 +52,6 @@ func (s *SQL) GetWorkerJobMessages(ctx context.Context, sessionID, workerJobID s
 	return out, nil
 }
 
-// GetMessagesAfterOrd seeks through the immutable transcript order.
-func (s *SQL) GetMessagesAfterOrd(ctx context.Context, sessionID string, afterOrd int64, limit int) ([]api.Message, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if limit <= 0 {
-		return []api.Message{}, nil
-	}
-	rows, err := s.queries.ListSessionMessagesAfterOrd(ctx, db.ListSessionMessagesAfterOrdParams{
-		SessionID: sessionID,
-		Ord:       afterOrd,
-		Limit:     int64(limit),
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := make([]api.Message, 0, len(rows))
-	for _, row := range rows {
-		message, mapErr := messageFromRow(db.ListSessionMessagesRow(row))
-		if mapErr != nil {
-			return nil, mapErr
-		}
-		out = append(out, message)
-	}
-	return out, nil
-}
-
 // GetMessage reads one transcript projection.
 func (s *SQL) GetMessage(ctx context.Context, sessionID, messageID string) (api.Message, error) {
 	if err := ctx.Err(); err != nil {

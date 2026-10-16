@@ -4,17 +4,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/search"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
 // Structured reject codes for recall.
 const (
+	recallHistoryInvalid     = "RECALL_HISTORY_INVALID"
 	recallQueryInvalid       = "RECALL_QUERY_INVALID"
 	recallScopeNotPermitted  = "RECALL_SCOPE_NOT_PERMITTED"
 	recallLiveCodeNotInScope = "RECALL_LIVE_CODE_NOT_IN_SCOPE"
@@ -23,7 +24,7 @@ const (
 
 func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext, svc *recall.Service) (string, error) {
 	query, _ := args["query"].(string)
-	if strings.TrimSpace(query) == "" {
+	if strings.TrimSpace(query) == "" && args["history"] == nil {
 		return "", &toolrejection.ToolReject{
 			Code:      recallQueryInvalid,
 			Retryable: true,
@@ -39,10 +40,17 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 		}
 	}
 
+	var history *recall.HistoryRequest
+	if fields, ok := args["history"].(map[string]any); ok {
+		history = &recall.HistoryRequest{Format: stringArgOrEmpty(fields, "format"), BodyRunes: intArgOrZero(fields, "body_runes"), Search: stringArgOrEmpty(fields, "search"), AfterOrd: int64(intArgOrZero(fields, "after_ord")),
+			ThroughOrd: int64(intArgOrZero(fields, "through_ord")), SourceSeq: int64(intArgOrZero(fields, "source_seq")),
+			MessageID: stringArgOrEmpty(fields, "message_id"), Offset: intArgOrZero(fields, "offset")}
+	}
 	result, err := svc.Answer(ctx, recall.Request{
-		Query: query,
-		Widen: widen,
-		Limit: intArgOrZero(args, "limit"),
+		History: history,
+		Query:   query,
+		Widen:   widen,
+		Limit:   intArgOrZero(args, "limit"),
 		Caller: recall.Caller{
 			SessionID:       tctx.Identity.SessionID,
 			ParentSessionID: tctx.Identity.ParentSessionID,
@@ -53,6 +61,7 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 		return "", recallReject(err)
 	}
 
+	addRecallRecoveryAction(ctx, result)
 	for _, hit := range result.Hits {
 		tctx.RecordSourceContext(hit.SourceContext)
 	}
@@ -63,9 +72,12 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 	return string(raw), nil
 }
 
-// recallReject gives every reachable failure its own code so a caller can
-// branch on it.
+// recallReject preserves structured recovery failures.
 func recallReject(err error) error {
+	var coordinates *recall.ErrHistoryCoordinates
+	if errors.As(err, &coordinates) {
+		return &toolrejection.ToolReject{Code: recallHistoryInvalid, Retryable: true, Data: recallCoordinateRejectFacts(coordinates)}
+	}
 	var denied *recall.ErrScopeDenied
 	if asScopeDenied(err, &denied) {
 		return &toolrejection.ToolReject{
@@ -88,10 +100,9 @@ func recallReject(err error) error {
 			Code:      recallQueryInvalid,
 			Retryable: true,
 			Data: map[string]any{
-				"field":                 parseErr.Field,
-				"recall_allowed_fields": search.DSLFieldAllowlist(),
-				"offset":                parseErr.Offset,
-				"reason":                parseErr.Message,
+				"field": parseErr.Field, "recall_allowed_fields": search.DSLFieldAllowlist(),
+				"offset": parseErr.Offset, "reason": parseErr.Message,
+				"recall_query_time_invalid": parseErr.Field == "after" || parseErr.Field == "before",
 			},
 		}
 	}

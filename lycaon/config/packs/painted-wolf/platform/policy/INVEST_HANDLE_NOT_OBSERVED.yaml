@@ -16,7 +16,7 @@ copy:
   cause: An evidence handle or path did not match the evidence ledger for this chat
   why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
   fix: 'Repair only the trailing citation metadata. Copy an exact observed handle into evidence, or an observed path, line and verbatim excerpt. Move observed URL citations to cited_urls; omit entries with no matching receipt.'
-  instead: 'Use existing coordinator or worker observations that support the pinned report; citation repair does not reopen tool calls.'
+  instead: 'Use existing coordinator or worker observations that support the pinned report. Resuming work requires a fresh report.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator_investigate
 x-paintedwolf-evidence:

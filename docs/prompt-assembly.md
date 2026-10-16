@@ -24,7 +24,7 @@ No consumer treats another consumer's lossy view as canonical state. Model conte
 
 Completion assembly captures one immutable host wiring snapshot per request. `coordinator/assembly` keeps the engine's turn lifecycle and cache separate from `promptSurface`, which resolves catalogs, capabilities, profiles, and stable rendering, and `turnContextAssembler`, which projects guidance, source briefs, worker context, boards, and workflow orientation around history. The composition root projects that snapshot into separate typed dependencies. Turn context uses a narrow catalog/profile/roster port and its own guidance, board, and worker sources; neither domain retains the engine or its full wiring record. Both use explicit turn scratch state, and a dependency update applies to the next completion.
 
-Initial fitting runs over history alone. History assembly (compaction view, surface diet, deterministic fit) returns fitted history; completion assembly then appends the system prompt, current turn frame, and tail injects. A final provider-boundary pass adds procedures for the tools actually offered and refits the assembled messages. The rendered system instructions and current user request stay pinned through both passes.
+Initial fitting runs over history alone. History assembly (compaction view, surface diet, deterministic fit) returns fitted history; completion assembly then appends the system prompt, current turn frame, and tail injects. The final pass measures that complete request, including the offered tool schemas, through the provider adapter's budget calculator. It reserves the standing frame and output before fitting history into the remaining input allowance. The rendered system instructions and current user request stay pinned through both passes.
 
 ```mermaid
 flowchart LR
@@ -137,6 +137,20 @@ Every provider call has a hard ceiling. The synchronous path fits or exposes an 
 
 The same facts, frame, limits, and compaction revision produce the same fit. Latency never depends on an emergency summarizer call.
 
+The final request fitter preserves frame order and cache tiers, and reduces only the history projection. Continuation detail scales down to recovery references when necessary. Automatic output allocation may shrink to fit the model window; explicit output caps and fixed thinking budgets remain caller requirements. Requests that already fit retain their original messages and output controls. If the required instructions, current request, recovery references, and requested output cannot fit, the host reports the irreducible context limit.
+
+When an active tool exchange still exceeds the window, a recorded result can use a bounded structured projection or a canonical record request. The original arguments, call/result pairing, outcome, trust floor, and canonical bytes remain intact. This fallback requires recall and performs no summarizer work.
+
+## Continuation retention contract
+
+The host preserves the current user instruction, a bounded window of earlier original instructions, and the active worker assignment, and renders operational state from its owning subsystems. Supporting narrative may be summarized, but a model summary never establishes permissions, verification, or workflow completion. Older instructions stay addressable through canonical recall; a follow-up does not delete them or authorize their replacement. Session length never forces an unbounded instruction bundle into the prompt.
+
+Compaction covers the exchanges removed from the prompt. Each source range remains represented by retained text, source-linked summary entries, or a recoverable index. The prior continuation is an input to every subsequent generation. Coordinator and summarizer budgets are resolved independently; changing the receiving model rebuilds its projection from canonical history. Optional local ranking affects supporting detail only, and unavailable or untrained ranking retains the deterministic baseline.
+
+## Canonical history recovery
+
+Compaction changes the model's view; canonical transcript rows remain addressable. A narrow `recall` query recovers an evidence handle. The `history` argument pages the caller's own transcript by immutable ordinal, then reads one indexed message body in Unicode windows. A source watermark reports corrections to the covered transcript; recovery reads use ordinal seeks and bounded body windows rather than scanning the covered transcript for a global correction count. Recovery never widens a worker's scope and recorded source contents never claim to be the current working tree.
+
 ## Asynchronous compaction
 
 High-quality summarization runs outside the coordinator critical path.
@@ -153,15 +167,15 @@ flowchart LR
 
 The soft watermark creates runway; the hard ceiling still uses deterministic fit. A per-session writer serializes background and manual compaction of `compaction_views`, binding each view to a constant-size `covered_through_ord`, boundary-message identity, and source mutation sequence. It folds canonical ordinal pages into the prior bounded view instead of loading an old session at once. The next turn validates that the boundary is live and no covered row changed, then seeks only the appended ordinal suffix. It never materializes a growing covered-id set.
 
-Only a complete summary that satisfies the closed continuation-record parser and host bounds becomes a compaction view. Timeout, output truncation, malformed JSON, or an empty completion writes no session summary. A failed summary never advances the compaction generation on its own; independently accepted background chunk reductions may still publish a view. Prompt fitting for that call stays ephemeral, and the next turn measures history before that fit, so a failed background attempt stays eligible for retry.
+The host publishes a deterministic, recoverable baseline independently of summary availability. Only complete JSON records satisfying the continuation parser become prose enrichment. Timeout, malformed output, and provider failure preserve the baseline; a bounded synthesis pass may retain previously accepted source pages while leaving the remainder referenced. Publication validates source identity and fences competing generations.
 
-The summarizer receives a rendered prompt with a fixed token ceiling and per-message ceiling, preserving the newest rows first. A malformed or output-limited first answer gets one retry with a smaller input ceiling. Output arrays and item lengths are bounded in the provider schema and by host parsing. The current user request is excluded from model-generated fields and pinned verbatim in its original canonical row, including its authority and attachment boundaries. The host checkpoint carries only host context and progress.
+The summarizer receives the current request as relevance context, the prior continuation, and bounded source pages in canonical order. Its own model window sets the input and output budgets. Whole observations are segmented into recoverable windows; host framing is included in each page budget. A malformed or output-limited first answer gets one retry with a smaller input ceiling. Output arrays and item lengths are bounded in the provider schema and by host parsing. The current user request is excluded from model-generated fields and pinned verbatim in its original canonical row, including its authority and attachment boundaries. The checkpoint records the compaction event. Operational progress comes from its live owner; an old checklist is never pinned into future prompts.
 
 Compaction summaries are untrusted data projections. They cannot carry user authority, invent host state, erase secret-redaction provenance, or replace evidence that must be reacquired.
 
 The continuation record the model reads is host-composed from the summarizer's lines plus the rows compaction removed or shrank, each named by its evidence handle when it minted one. When the session's profile carries `recall`, the record says that `recall` by handle returns the observation as it was; a tool result shrunk in place carries the same pointer in its `[compacted …]` banner. Compaction moves detail out of context, not out of reach; see [Tools § Recall](tools.md#recall).
 
-An explicit operator/debug force-compaction path may run synchronously; normal turns never do.
+Explicit force-compaction also publishes the deterministic baseline immediately. Optional synthesis enriches it asynchronously.
 
 Acceptance compares the entire replacement: continuation record, checkpoint, retained rows, trust markers, and tool arguments. Both the shared transcript estimate and the model-facing text must save at least the configured absolute minimum and relative margin (`session_min_savings_tokens`, default 256; `min_savings_pct`, default 10). Declared encodings use embedded ordinary-text tokenizers; an unknown encoding is labeled `estimated` and requires at least 25% savings. Text fields over 1 MiB or uninterrupted whitespace/non-whitespace runs over 4 KiB also fall back to that labeled estimate on both sides, bounding the tokenizer's worst-case merge cost. Tokenized text excludes provider transport framing and images, so it is not a billing count. A useful partial reduction may be published above the target; the compact API reports `target_met` separately from the change, alongside method, measurements, reason, and persisted generation.
 
@@ -173,7 +187,7 @@ Compaction is independent of pricing: the session trigger selects when to compac
 
 Before the provider has reported usage, budget estimates use a character-based approximation and a cold-start reserve. The approximation can undercount or overcount; the separate compaction acceptance measurement uses the declared tokenizer when available. After a completion, assembly records observed prompt overhead so later budget decisions include static system and schema material, not only transcript text.
 
-Token observations are advisory measurements. A bad estimate may cause earlier fitting; it cannot cause the host to skip a gate.
+Token observations use the final provider attempt and are scoped to its provider and model. Billing retains usage across all attempts. A receiver switch discards the previous receiver’s calibration. The final fit uses observed input with a composition margin beside the native request estimate. A bad estimate may cause earlier fitting; it cannot cause the host to skip a gate.
 
 ## Summarize tool
 
@@ -190,3 +204,21 @@ The [`summarize`](summarize.md) tool returns a structured context pack as a dura
 - Background compaction has one writer and never blocks normal turns.
 - Compaction splices use indexed ordinal and mutation watermarks; a mismatch fails closed to canonical facts.
 - Templates explain typed facts; prose does not become host fact.
+
+## Context-scaled history representations
+
+History has four representations: original exchanges, detailed continuation blocks, a compact continuation, and recovery references. A receiver receives one representation of each covered range. Context allocation reserves the active request and host instructions first, then allocates recent exchanges and continuation detail from the remaining budget. Small windows may omit detailed blocks.
+
+Unprojected fallback and post-view suffix reads scale with the receiver window and are bounded by rows, estimated tokens, and payload bytes, paging backward from the latest turn in fixed database windows while preserving complete tool batches and the active user request. Switching a compacted session to a larger receiver window restores canonical tail exchanges that now fit the receiver's target budget and shrinks or omits the continuation prefix to cover only the remaining prefix.
+
+The reference representation records canonical ordinal boundaries and bounded recovery coordinates. Its size stays bounded as the session grows. Compaction does not remove canonical records. Receiver context size determines presentation; summarizer context size determines bounded synthesis batches.
+
+Bialy may rank eligible continuation detail when a trained head is available. It does not determine transcript deletion, coverage, authority, or the fallback representation. The deterministic policy remains complete without Bialy.
+
+## Asynchronous continuation synthesis
+
+The host publishes a bounded deterministic history representation before requesting summary enrichment. Request assembly never waits for the summarizer. A pending, slow, failed, or absent summary leaves canonical recovery available and does not stop chat.
+
+Summary completions are accepted only for their captured source identity and coverage boundary. A stale completion cannot replace a newer projection. Concurrent requests share bounded synthesis work rather than creating an unbounded backlog. On a local provider shared with the coordinator, foreground admission cancels background synthesis and takes the lane; late completion cannot release the foreground lease.
+
+Provider health distinguishes explicit failures from slow or pending work. Individual failures are quiet. A sustained sequence of provider failures can report that the summarizer is unavailable; chat continues using the deterministic representation. A successful response clears the outage state.

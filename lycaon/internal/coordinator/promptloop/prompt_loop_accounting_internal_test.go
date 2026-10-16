@@ -72,14 +72,22 @@ func TestCompleteStreamDoesNotFailWhenAccountingIsUnavailable(t *testing.T) {
 }
 
 func TestCompleteStreamRecordsUsage(t *testing.T) {
+	observed := 0
 	projectID := eventFixtureProject(t)
 	tracker := costtest.NewTracker(t, nil)
 	hub := events.NewMemoryHub()
 	pub := &events.Publisher{Hub: hub}
 	loop := NewPromptLoop(PromptLoopDeps{
 		Model: ModelDeps{
-			LLM:  &usageStreamLLM{usage: modelcall.TokenUsage{PromptTokens: 3, CompletionTokens: 2}},
+			LLM: &usageStreamLLM{usage: modelcall.TokenUsage{PromptTokens: 6, CompletionTokens: 2},
+				attemptUsage: &modelcall.TokenUsage{PromptTokens: 3}},
 			Cost: tracker,
+			RecordCompactionTokenObservation: func(_, _, _ string, input, estimate int) {
+				observed = input
+				if estimate <= 0 {
+					t.Error("context observation omitted its transcript estimate")
+				}
+			},
 		},
 		Projection: ProjectionDeps{
 			Events: pub,
@@ -97,8 +105,8 @@ func TestCompleteStreamRecordsUsage(t *testing.T) {
 	}
 	summary, err := tracker.Summary(context.Background(), api.CostScopeSession, "s1", "")
 	testutil.FailErr(t, "tracker.Summary failed", err)
-	if summary.Coordinator.TokenTotals.Prompt != 3 {
-		t.Fatalf("prompt tokens = %d want 3", summary.Coordinator.TokenTotals.Prompt)
+	if summary.Coordinator.TokenTotals.Prompt != 6 || observed != 3 {
+		t.Fatalf("billed prompt tokens = %d, observed context = %d; want 6 and 3", summary.Coordinator.TokenTotals.Prompt, observed)
 	}
 }
 

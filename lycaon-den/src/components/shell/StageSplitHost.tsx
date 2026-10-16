@@ -92,13 +92,15 @@ export function StageSplitHost(props: StageSplitHostProps) {
   // Mounted but out of reach, like the collapsed sidebar.
   const chatColOut = () => conversationHidden() === "hidden";
 
+  // The column stays an unnamed generic container; the transcript log inside names the
+  // conversation. WebKitGTK aborts a screen reader's text query on this column when it
+  // is exposed as its own named object.
   const chatCol = () => (
     <div
       ref={(el) => bindLayoutBand(el, LAYOUT_BAND_SCALES.chatColumn)}
       class="den-split-col den-split-col--chat"
       classList={{ "den-split-col--dual": props.chatColDual }}
       data-testid="split-col-chat"
-      aria-label="Conversation"
       aria-hidden={chatColOut() ? true : undefined}
       inert={chatColOut() ? true : undefined}
       onFocusIn={props.onChatEnter}

@@ -1,7 +1,7 @@
 name: Platform verification
 
-# The merge queue's platform gates: the retained upgrade corpus and macOS
-# confinement, browser-boundary, and Git engine checks.
+# The platform gates: the retained upgrade corpus with applied Linux
+# confinement, and macOS confinement, browser-boundary, and Git engine checks.
 # The free plan runs five macOS jobs at once, so only what needs macOS runs there.
 on:
   workflow_call:
@@ -14,11 +14,17 @@ env:
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
 jobs:
-  # Boot the retained upgrade-corpus fixtures with HEAD. Booting stored databases
-  # is platform-neutral, so it stays off the scarce macOS runners.
+  # Boot the retained upgrade-corpus fixtures with HEAD, then apply Linux
+  # confinement on the same runner. Booting stored databases is
+  # platform-neutral, so it stays off the scarce macOS runners; the Linux
+  # boundary needs a Linux runner, and sharing this one keeps the stage at two.
+  # The confine live suites (namespaces, mounts, Landlock, seccomp, the
+  # supervisor's network grants and refusal reports, toolchains) fail rather
+  # than skip when the host cannot confine; setup-verification loads the
+  # profile that lets test binaries create user namespaces on Ubuntu.
   upgrade-corpus:
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 255
     env:
       PW_TEST_HOST: dedicated
     steps:
@@ -35,6 +41,12 @@ jobs:
       - name: Boot upgrade corpus fixtures
         timeout-minutes: 90
         run: ./task upgrade:corpus:boot
+
+      # The same target the arm64 lane runs, so both architectures cover one set.
+      - name: Applied Linux confinement
+        if: ${{ !cancelled() }}
+        timeout-minutes: 90
+        run: ./task test:confine:linux
 
       - uses: ./.github/actions/verification-evidence
         if: always()
