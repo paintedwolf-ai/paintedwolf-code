@@ -20,11 +20,11 @@ import (
 
 func registerBackgroundRunners(b *serveBuilder, app *ServeApp) {
 	type registration struct {
-		run     func(context.Context) error
-		oneShot bool
+		run  func(context.Context) error
+		mode runnerMode
 	}
 	byName := make(map[string]registration, len(serveRunnerOrder))
-	byName["boot-recovery"] = registration{run: b.runServeRecovery, oneShot: true}
+	byName["boot-recovery"] = registration{run: b.runServeRecovery, mode: runnerStartupOnce}
 	if b.storage.Projects != nil && b.storage.Directory != "" {
 		byName["store-coupled-reconcile"] = registration{run: func(ctx context.Context) error {
 			if err := reconcileStoreCoupledStorage(b, ctx); err != nil {
@@ -78,7 +78,11 @@ func registerBackgroundRunners(b *serveBuilder, app *ServeApp) {
 		byName["warm-runner"] = registration{run: b.boards.WarmRunner.Run}
 	}
 	if _, ok := b.decisions.Warmer(); ok {
-		byName["decision-engine-warm"] = registration{run: b.decisions.Warm, oneShot: true}
+		mode := runnerStartupOnce
+		if b.decisions.NeedsProvisioning() {
+			mode = runnerBackgroundOnce
+		}
+		byName["decision-engine-warm"] = registration{run: b.decisions.Warm, mode: mode}
 	}
 	if b.storage.SourceLedger != nil {
 		byName["source-blob-gc"] = registration{run: func(ctx context.Context) error {
@@ -111,11 +115,14 @@ func registerBackgroundRunners(b *serveBuilder, app *ServeApp) {
 		if !ok {
 			continue
 		}
-		if entry.oneShot {
+		switch entry.mode {
+		case runnerStartupOnce:
 			app.registerOneShotRunner(name, entry.run)
-			continue
+		case runnerBackgroundOnce:
+			app.registerBackgroundOneShotRunner(name, entry.run)
+		default:
+			app.registerRunner(name, entry.run)
 		}
-		app.registerRunner(name, entry.run)
 	}
 }
 
