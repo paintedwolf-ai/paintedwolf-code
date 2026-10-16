@@ -85,11 +85,24 @@ func projectRecallText(message api.Message, part api.MessageContentPart, parts [
 	if err != nil {
 		return parts
 	}
-	out := sourceParts(part, "recall_metadata", handles, encoded, sources, suffix)
-	for i := 1; i < len(out); i++ {
-		if out[i].Source == "source" {
-			out[i].Source = "recorded"
-		}
+	return recallParts(part, handles, encoded, sources, suffix)
+}
+
+func recallParts(part api.MessageContentPart, handles []string, metadata []byte, sources []string, suffix string) []api.MessageContentPart {
+	out := make([]api.MessageContentPart, 0, len(sources)+1)
+	part.Source = "recall_metadata"
+	part.Content = strings.Join(append(handles, string(metadata)), "\n")
+	out = append(out, part)
+	for _, source := range sources {
+		fence := sourceFence(source)
+		part.Source = "recorded"
+		part.Content = fence + "\n" + source + "\n" + fence
+		out = append(out, part)
+	}
+	if strings.TrimSpace(suffix) != "" {
+		part.Source = "result_suffix"
+		part.Content = suffix
+		out = append(out, part)
 	}
 	return out
 }
