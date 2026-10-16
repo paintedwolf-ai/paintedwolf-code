@@ -29,9 +29,11 @@ x-paintedwolf-scenarios:
     vars:
       response_tools_callable: true
     expect_contains:
+      - 'Code: MODEL_RESPONSE_EMPTY'
       - native call
   - id: structured
     vars:
       response_structured_output: true
     expect_contains:
+      - 'Code: MODEL_RESPONSE_EMPTY'
       - structured answer
