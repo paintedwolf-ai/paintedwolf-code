@@ -13,4 +13,5 @@ invariants:
     streak cap
   required:
   - read-only
-  - act on what you have
+  - required paging and canonical recovery
+  - needed evidence is complete

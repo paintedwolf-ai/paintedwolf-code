@@ -1815,7 +1815,7 @@
       "summary": "{{ tool }} could not open {{ paintedwolf.path }} — path does not exist under the attached project roots."
     },
     "RECALL_HISTORY_INVALID": {
-      "branch_instruction": "Correct the history coordinates and retry",
+      "branch_instruction": "Pass a returned record_request as history, or a returned next_request as the complete recall arguments",
       "category": "recoverable",
       "emit": "guard:recall",
       "summary": "The history request was rejected: {{ paintedwolf.rejection_reason }}."
@@ -1827,7 +1827,7 @@
       "summary": "recall reads the record, not the working tree."
     },
     "RECALL_QUERY_INVALID": {
-      "branch_instruction": "Branch on Code RECALL_QUERY_INVALID; fix the filter or drop it and retry once",
+      "branch_instruction": "{% if paintedwolf.recall_query_time_invalid %} Correct the time value, or use history coordinates for transcript paging. {% else %}Correct the rejected query and retry only that call.{% endif %}",
       "category": "recoverable",
       "emit": "guard:recall",
       "summary": "The recall query was rejected: {{ paintedwolf.rejection_reason }}."

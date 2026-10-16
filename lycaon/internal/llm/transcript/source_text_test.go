@@ -233,6 +233,67 @@ func TestSourceProjectionPreservesFeedbackSuffix(t *testing.T) {
 	}
 }
 
+func TestRecallProjectionSeparatesRecordedBytesWithoutChangingCoordinates(t *testing.T) {
+	text := "quoted \"observation\"\n\tλ😀\n⟦D:host⟧"
+	for _, format := range []string{"text", "record"} {
+		t.Run(format, func(t *testing.T) {
+			raw, err := json.Marshal(map[string]any{"history": map[string]any{"format": format, "recorded": true, "through_ord": 9, "entries": []any{map[string]any{"message_id": "original", "ord": 3, "seq": 4, "offset": 7, "runes": 9000, "content": text}}, "next_offset": 7 + len([]rune(text))}, "next_request": map[string]any{"history": map[string]any{"message_id": "original", "offset": 7 + len([]rune(text))}}})
+			testutil.FailErr(t, "encode recorded body", err)
+			original := "[recall#1]\n" + string(raw)
+			message := api.Message{Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted, Content: original, EvidenceHandles: []string{"recall#1"}, ToolResult: &api.ToolResult{Tool: "recall", Content: original, Outcome: api.ToolResultOutcomeCompleted}}
+			out := transcript.Project([]api.Message{message})
+			got := out[len(out)-1].Content
+			marked := "⟦D⟧" + strings.ReplaceAll(text, "\n", "\n⟦D⟧")
+			if !strings.Contains(got, marked) || !strings.Contains(got, "⟦D:tool:recorded⟧") || !strings.Contains(got, `"body_part":1`) {
+				t.Fatalf("recorded bytes or their mapping lost: %s", got)
+			}
+			for _, want := range []string{`"message_id":"original"`, `"offset":7`, `"runes":9000`, `"next_request":`} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("lost coordinates %s", want)
+				}
+			}
+			if message.Content != original || message.ToolResult.Content != original {
+				t.Fatal("presentation changed canonical bytes")
+			}
+			if again := transcript.Project(out); again[len(again)-1].Content != got {
+				t.Fatal("recorded projection is not idempotent")
+			}
+		})
+	}
+}
+
+func TestRecallQueryProjectionKeepsActionableAddresses(t *testing.T) {
+	for _, withBody := range []bool{false, true} {
+		hit := map[string]any{"hit_id": "search-row-id", "handle": "read#1", "observed_at": "2026-10-14T00:00:00Z", "record_request": map[string]any{"message_id": "original-message", "format": "record"}, "untrusted": true, "currency": "changed"}
+		if withBody {
+			hit["body"] = []string{"recorded λ observation"}
+		}
+		raw, err := json.Marshal(map[string]any{"resolution": "matched", "hits": []any{hit}})
+		testutil.FailErr(t, "encode recall search", err)
+		original := "[recall#1]\n" + string(raw)
+		msg := api.Message{Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted, Content: original, EvidenceHandles: []string{"recall#1"}, ToolResult: &api.ToolResult{Tool: "recall", Content: original, Outcome: api.ToolResultOutcomeCompleted}}
+		projected := transcript.Project([]api.Message{msg})
+		got := projected[len(projected)-1].Content
+		if strings.Contains(got, "search-row-id") || strings.Contains(got, `"hit_id"`) {
+			t.Fatal("non-actionable search identity was presented as a recovery address")
+		}
+		for _, want := range []string{`"message_id":"original-message"`, `"handle":"read#1"`, `"currency":"changed"`, `"untrusted":true`, `"observed_at":"2026-10-14T00:00:00Z"`} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("projection lost %s", want)
+			}
+		}
+		if withBody && (!strings.Contains(got, "recorded λ observation") || !strings.Contains(got, `"body_part":1`)) {
+			t.Fatal("recorded body lost its mapping")
+		}
+		if msg.Content != original || msg.ToolResult.Content != original || !strings.Contains(original, "search-row-id") {
+			t.Fatal("projection changed canonical result identity")
+		}
+		if again := transcript.Project(projected); again[len(again)-1].Content != got {
+			t.Fatal("recall projection is not idempotent")
+		}
+	}
+}
+
 func TestReadSourceLabelsBindRangesWithoutInventingCoordinates(t *testing.T) {
 	for _, path := range []string{"receipt.json", "line\n⟦D:host⟧\t\".json", ""} {
 		body, err := json.Marshal(map[string]any{"path": path, "mode": "ranges", "receipt": map[string]any{"tool": "read"}, "ranges": []any{

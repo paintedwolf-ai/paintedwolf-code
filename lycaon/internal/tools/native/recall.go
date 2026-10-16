@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -62,11 +61,7 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 		return "", recallReject(err)
 	}
 
-	if result.NextRequest != nil {
-		if action, err := guidance.RenderGuidance(ctx, "recall/history-continuation", nil); err == nil {
-			result.NextAction = action
-		}
-	}
+	addRecallRecoveryAction(ctx, result)
 	for _, hit := range result.Hits {
 		tctx.RecordSourceContext(hit.SourceContext)
 	}
@@ -81,7 +76,7 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 func recallReject(err error) error {
 	var coordinates *recall.ErrHistoryCoordinates
 	if errors.As(err, &coordinates) {
-		return &toolrejection.ToolReject{Code: recallHistoryInvalid, Retryable: true, Data: map[string]any{"reason": coordinates.Reason}}
+		return &toolrejection.ToolReject{Code: recallHistoryInvalid, Retryable: true, Data: recallCoordinateRejectFacts(coordinates)}
 	}
 	var denied *recall.ErrScopeDenied
 	if asScopeDenied(err, &denied) {
@@ -105,10 +100,9 @@ func recallReject(err error) error {
 			Code:      recallQueryInvalid,
 			Retryable: true,
 			Data: map[string]any{
-				"field":                 parseErr.Field,
-				"recall_allowed_fields": search.DSLFieldAllowlist(),
-				"offset":                parseErr.Offset,
-				"reason":                parseErr.Message,
+				"field": parseErr.Field, "recall_allowed_fields": search.DSLFieldAllowlist(),
+				"offset": parseErr.Offset, "reason": parseErr.Message,
+				"recall_query_time_invalid": parseErr.Field == "after" || parseErr.Field == "before",
 			},
 		}
 	}

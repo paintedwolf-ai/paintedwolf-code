@@ -16,8 +16,8 @@ schema:
     history:
       type: object
       description: >-
-        Page transcript index or load a message body within through_ord. Pass the
-        returned next_request to recall to continue. Cannot combine with query or widen.
+        Use message_id for a body or through_ord for the index. Pass record_request
+        as history or next_request as recall arguments; omit query and widen.
       properties:
         search: {type: string, minLength: 1, maxLength: 256, description: "Up to eight literal terms, all required."}
         format: {type: string, enum: [text, record], description: "Body format. record includes original parts and arguments; concatenate pages before parsing."}
@@ -25,9 +25,11 @@ schema:
         after_ord: {type: integer, minimum: 0, description: "Start index after this ordinal."}
         through_ord: {type: integer, minimum: 1, description: "Inclusive upper ordinal bound."}
         source_seq: {type: integer, minimum: 0, description: "Sequence stamp to detect row edits."}
-        message_id: {type: string, minLength: 1, description: "Row ID to read in full pages."}
+        message_id: {type: string, minLength: 1, description: "Row ID from record_request; evidence handles use query."}
         offset: {type: integer, minimum: 0, description: "Unicode character offset for body paging."}
-      required: [through_ord]
+      anyOf:
+        - required: [through_ord]
+        - required: [message_id]
       additionalProperties: false
     widen:
       type: string
