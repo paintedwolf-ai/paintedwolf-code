@@ -338,7 +338,7 @@ func (l *modelTurn) completeStream(
 		return recovered, nil, nil
 	}
 	if st != nil {
-		st.toolCallUnparsedStreak = 0
+		st.output.droppedToolCallStreak = 0
 	}
 	completion, tokens := collected.completion, collected.tokens
 	providerID, model := collected.providerID, collected.model

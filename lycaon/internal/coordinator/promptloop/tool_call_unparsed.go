@@ -29,7 +29,7 @@ func (l *modelTurn) recoverUnparsedToolCall(
 	unparsed, ok := failure.AsProviderToolCallUnparsed(cause)
 	if !ok || st == nil || proseFinish || req.ToolProtocol != modelcall.ToolProtocolNative ||
 		!req.ToolsCallable() || req.ResponseFormat != nil ||
-		st.toolCallUnparsedStreak >= maxToolCallUnparsedRecoveries {
+		st.output.droppedToolCallStreak >= maxToolCallUnparsedRecoveries {
 		return nil, cause
 	}
 	completion := &modelcall.Completion{ProviderID: unparsed.ProviderID, Model: unparsed.Model}
@@ -46,7 +46,7 @@ func (l *modelTurn) recoverUnparsedToolCall(
 	if reject.Code() != "TOOL_CALL_UNPARSED" {
 		return nil, reject
 	}
-	st.toolCallUnparsedStreak++
+	st.output.droppedToolCallStreak++
 	st.output.rejection = reject
 	return completion, nil
 }
