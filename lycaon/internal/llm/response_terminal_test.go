@@ -64,12 +64,23 @@ func TestResponseRetryDistinguishesTerminalEmptyFromClosedStream(t *testing.T) {
 func TestTerminalEmptyRecoverySharesRetryAllowance(t *testing.T) {
 	for _, streaming := range []bool{false, true} {
 		for _, tc := range []struct {
-			name                                         string
-			terminal, payload, native, disabled, unwired bool
-			reason                                       string
-			wantCalls, wantRecovery                      int
+			name                                                       string
+			terminal, payload, native, disabled, unwired, wantAdmitted bool
+			reason                                                     string
+			budget                                                     func(modelcall.CompletionRequest) modelcall.RequestBudget
+			wantCalls, wantRecovery                                    int
 		}{
-			{name: "terminal", terminal: true, wantCalls: 2, wantRecovery: 1},
+			{name: "terminal", terminal: true, wantCalls: 2, wantRecovery: 1, wantAdmitted: true},
+			{name: "unknown_window", terminal: true, budget: func(r modelcall.CompletionRequest) modelcall.RequestBudget {
+				return modelcall.RequestBudget{Input: modelcall.EstimateRequestInput(r), Output: 1024, Headroom: 256}
+			}, wantCalls: 2, wantRecovery: 1},
+			{name: "insufficient_room", terminal: true, budget: func(r modelcall.CompletionRequest) modelcall.RequestBudget {
+				in := modelcall.EstimateRequestInput(r)
+				return modelcall.RequestBudget{Window: in + 1024 + 255, Input: in, Output: 1024, Headroom: 256}
+			}, wantCalls: 2, wantRecovery: 1},
+			{name: "below_minimum_output", terminal: true, budget: func(r modelcall.CompletionRequest) modelcall.RequestBudget {
+				return modelcall.RequestBudget{Window: 8192, Input: modelcall.EstimateRequestInput(r), Output: 128, Headroom: 256, MinimumOutput: 256}
+			}, wantCalls: 2, wantRecovery: 1},
 			{name: "nonterminal", wantCalls: 2},
 			{name: "partial", terminal: true, payload: true, wantCalls: 1},
 			{name: "native", terminal: true, native: true, wantCalls: 1},
@@ -91,7 +102,7 @@ func TestTerminalEmptyRecoverySharesRetryAllowance(t *testing.T) {
 					req.Composition = modelcall.CompositionHostUtility
 				}
 				var requests [][]api.Message
-				inner := &responseRetryStub{observeRequest: func(r modelcall.CompletionRequest) {
+				inner := &responseRetryStub{budget: tc.budget, observeRequest: func(r modelcall.CompletionRequest) {
 					requests = append(requests, append([]api.Message(nil), r.Messages...))
 				}}
 				empty := func() *failure.ProviderEmptyCompletionError {
@@ -121,7 +132,7 @@ func TestTerminalEmptyRecoverySharesRetryAllowance(t *testing.T) {
 				if tc.disabled {
 					policy.Transport.MaxRetries = 0
 				}
-				provider := &responseRetryProvider{inner: inner, policy: policy}
+				provider := &responseRetryProvider{inner: &rejectionReasonProvider{inner: inner}, policy: policy}
 				var got *modelcall.Completion
 				var err error
 				if streaming {
@@ -149,7 +160,7 @@ func TestTerminalEmptyRecoverySharesRetryAllowance(t *testing.T) {
 						t.Fatal("stable prefix changed")
 					}
 					want := 2
-					if i > 0 && tc.wantRecovery > 0 {
+					if i > 0 && tc.wantAdmitted {
 						want = 3
 					}
 					if len(messages) != want {
