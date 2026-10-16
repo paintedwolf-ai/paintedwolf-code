@@ -76,3 +76,10 @@ func (c *loggingClient) Stream(ctx context.Context, req modelcall.CompletionRequ
 }
 
 var _ modelcall.LLMClient = (*loggingClient)(nil)
+
+func (p *loggingProvider) RequestBudget(ctx context.Context, req modelcall.CompletionRequest) modelcall.RequestBudget {
+	if reporter, ok := p.inner.(modelcall.RequestBudgetReporter); ok {
+		return reporter.RequestBudget(ctx, req)
+	}
+	return modelcall.RequestBudget{Input: modelcall.EstimateRequestInput(req), Output: modelcall.CompletionTokenLimit(req, 0, modelcall.OrchestrationMaxTokens, req.Think, false), Headroom: 1024}
+}

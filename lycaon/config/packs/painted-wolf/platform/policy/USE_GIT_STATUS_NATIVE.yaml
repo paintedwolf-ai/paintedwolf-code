@@ -11,6 +11,9 @@ requires:
   - tool
   facts:
   - paintedwolf.rejection_code
+  - paintedwolf.tool_loadable
+  - paintedwolf.can_request_tools
+  - paintedwolf.native_replacement_tools
   - paintedwolf.command
   - paintedwolf.example
   - paintedwolf.habit_redirect_match
@@ -19,14 +22,12 @@ effect: block
 x-paintedwolf-audience:
 - coordinator
 copy:
-  what: The parsed command can be represented by the supplied git_status call.
-  cause: The host parsed the supported command shape and validated the replacement against the tool currently
-    offered.
+  what: 'The parsed command has a validated native representation.'
+  cause: '{% if paintedwolf.tool_loadable %}{% if paintedwolf.can_request_tools %}Required native schemas are not offered on this call; the compiled tool plan permits loading them{% else %}No validated loading route is available from this call; use an appropriate offered capability or report the missing recovery context.{% endif %}{% else %}The host validated the complete replacement against registered, permitted tools offered on this call{% endif %}.'
   why: The native result pages files; follow next_offset with offset until absent. paths narrows the intended
     repository-relative prefixes, and untracked files are listed individually.
-  fix: Use the supplied replacement_calls entries exactly and in order. Account for each result before continuing;
-    native limits and partial-result receipts still apply.
-  instead: Use the validated git_status replacement and preserve the intended operation
+  fix: '{% if paintedwolf.tool_loadable %}{% if paintedwolf.can_request_tools %}For each of these exact tool names: {{ paintedwolf.native_replacement_tools }}, call `request_tools` separately with `need` containing only that name. Its schemas arrive on the next model call; then perform the original operation using those native schemas. Loading grants no additional permissions.{% else %}No validated loading route is available from this call; use an appropriate offered capability or report the missing recovery context.{% endif %}{% else %}If `replacement_calls` are present, use every entry exactly and in order. If details were omitted, reconstruct the original operation using the offered native schemas; do not execute a partial recipe. Account for each result before continuing.{% endif %}'
+  instead: '{% if paintedwolf.tool_loadable %}{% if paintedwolf.can_request_tools %}Load `{{ paintedwolf.native_replacement_tools }}` before performing the native operation{% else %}No validated loading route is available from this call; use an appropriate offered capability or report the missing recovery context.{% endif %}{% else %}Use the complete replacement when present, or reconstruct the operation using the current native schemas{% endif %}'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_habit_redirect
 x-paintedwolf-message: Use native git_status instead of command git status

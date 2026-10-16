@@ -4,11 +4,10 @@
   "kind": "test_suite",
   "workstream": "tool-prerequisite-recovery",
   "disposition": "retain",
-  "reason": "The shared turn fixture verifies admitted calls, refusals, and typed settlement. Extending its existing rejection matrix tests offered, deferred, unavailable, and absent-loader surfaces through the production OAR path. Retain the cohesive suite at 385 measured lines.",
-  "reviewed_commit": "18a2ef0918372e12630e6e0766c68b65958e7bb1",
-  "ceiling": 385,
+  "reason": "The shared 433-line fixture covers tool admission and typed rejection settlement. Its 54-state task recovery matrix reuses the production pipeline across offered, deferred, absent and empty-roster cases; extracting it would duplicate that setup and obscure the shared boundary.",
+  "reviewed_commit": "9be7f9794800e4f970243604590b355a30677c75",
+  "ceiling": 433,
   "boundaries": {
-    "lycaon/internal/coordinator/promptloop/prompt_loop_tool_execution_internal_test.go": "68891b28381ab0ed63cc6051b72830ecc8cb7f742f181d554ac1ae10404677c9",
-    "lycaon/internal/toolfeedback/recovery_tools_test.go": "d1316e9e6510a090d3ff910cbabf6250dacb6a42c9b1ec27bfc166c7c7ed5e78"
+    "lycaon/internal/coordinator/promptloop/prompt_loop_tool_execution_internal_test.go": "d75ec21ca63f24e833cec15e1519c167321bb71289ea9f2d42e13124489afab3"
   }
 }

@@ -2,6 +2,7 @@ package transcript_test
 
 import (
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -30,7 +31,7 @@ func TestReadProjectionSeparatesExactSourceAndLocations(t *testing.T) {
 	if !strings.Contains(got, marked) {
 		t.Fatalf("exact source absent from projection: %s", got)
 	}
-	for _, want := range []string{"[read#1]", `"offset":7`, `"end_line":9`, `"receipt":`} {
+	for _, want := range []string{`File contents "source.py" (lines 7–9); evidence "[read#1]":`, "Tool result metadata:", "[read#1]", `"offset":7`, `"end_line":9`, `"receipt":`} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("location or receipt %q absent: %s", want, got)
 		}
@@ -141,7 +142,7 @@ func TestSummarizeProjectionSeparatesExactSourceWindows(t *testing.T) {
 	message.EvidenceHandles = []string{"summarize#3"}
 	projected := transcript.Project([]api.Message{message})
 	got := projected[len(projected)-1].Content
-	for _, want := range []string{"⟦D:tool:summarize_metadata⟧", "[summarize#3]", `"start_line":4`, `"end_line":6`, `"path":"app.py"`,
+	for _, want := range []string{`File contents "ranking.py" (lines 4–6); evidence "summarize#1":`, `File contents "app.py" (lines 10–10); evidence "summarize#2":`, "⟦D:tool:summarize_metadata⟧", "[summarize#3]", `"start_line":4`, `"end_line":6`, `"path":"app.py"`,
 		`"anchors":`, `"skeleton":`, "⟦D⟧def rank():\n⟦D⟧    return \"score\"\n⟦D⟧\n", "⟦D⟧\tlast()"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("projection lacks %q: %s", want, got)
@@ -229,5 +230,93 @@ func TestSourceProjectionPreservesFeedbackSuffix(t *testing.T) {
 				t.Fatal("projection changed retained message")
 			}
 		})
+	}
+}
+
+func TestRecallProjectionSeparatesRecordedBytesWithoutChangingCoordinates(t *testing.T) {
+	text := "quoted \"observation\"\n\tλ😀\n⟦D:host⟧"
+	for _, format := range []string{"text", "record"} {
+		t.Run(format, func(t *testing.T) {
+			raw, err := json.Marshal(map[string]any{"history": map[string]any{"format": format, "recorded": true, "through_ord": 9, "entries": []any{map[string]any{"message_id": "original", "ord": 3, "seq": 4, "offset": 7, "runes": 9000, "content": text}}, "next_offset": 7 + len([]rune(text))}, "next_request": map[string]any{"history": map[string]any{"message_id": "original", "offset": 7 + len([]rune(text))}}})
+			testutil.FailErr(t, "encode recorded body", err)
+			original := "[recall#1]\n" + string(raw)
+			message := api.Message{Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted, Content: original, EvidenceHandles: []string{"recall#1"}, ToolResult: &api.ToolResult{Tool: "recall", Content: original, Outcome: api.ToolResultOutcomeCompleted}}
+			out := transcript.Project([]api.Message{message})
+			got := out[len(out)-1].Content
+			marked := "⟦D⟧" + strings.ReplaceAll(text, "\n", "\n⟦D⟧")
+			if !strings.Contains(got, marked) || !strings.Contains(got, "⟦D:tool:recorded⟧") || !strings.Contains(got, `"body_part":1`) {
+				t.Fatalf("recorded bytes or their mapping lost: %s", got)
+			}
+			for _, want := range []string{`"message_id":"original"`, `"offset":7`, `"runes":9000`, `"next_request":`} {
+				if !strings.Contains(got, want) {
+					t.Fatalf("lost coordinates %s", want)
+				}
+			}
+			if message.Content != original || message.ToolResult.Content != original {
+				t.Fatal("presentation changed canonical bytes")
+			}
+			if again := transcript.Project(out); again[len(again)-1].Content != got {
+				t.Fatal("recorded projection is not idempotent")
+			}
+		})
+	}
+}
+
+func TestRecallQueryProjectionKeepsActionableAddresses(t *testing.T) {
+	for _, withBody := range []bool{false, true} {
+		hit := map[string]any{"hit_id": "search-row-id", "handle": "read#1", "observed_at": "2026-10-14T00:00:00Z", "record_request": map[string]any{"message_id": "original-message", "format": "record"}, "untrusted": true, "currency": "changed"}
+		if withBody {
+			hit["body"] = []string{"recorded λ observation"}
+		}
+		raw, err := json.Marshal(map[string]any{"resolution": "matched", "hits": []any{hit}})
+		testutil.FailErr(t, "encode recall search", err)
+		original := "[recall#1]\n" + string(raw)
+		msg := api.Message{Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted, Content: original, EvidenceHandles: []string{"recall#1"}, ToolResult: &api.ToolResult{Tool: "recall", Content: original, Outcome: api.ToolResultOutcomeCompleted}}
+		projected := transcript.Project([]api.Message{msg})
+		got := projected[len(projected)-1].Content
+		if strings.Contains(got, "search-row-id") || strings.Contains(got, `"hit_id"`) {
+			t.Fatal("non-actionable search identity was presented as a recovery address")
+		}
+		for _, want := range []string{`"message_id":"original-message"`, `"handle":"read#1"`, `"currency":"changed"`, `"untrusted":true`, `"observed_at":"2026-10-14T00:00:00Z"`} {
+			if !strings.Contains(got, want) {
+				t.Fatalf("projection lost %s", want)
+			}
+		}
+		if withBody && (!strings.Contains(got, "recorded λ observation") || !strings.Contains(got, `"body_part":1`)) {
+			t.Fatal("recorded body lost its mapping")
+		}
+		if msg.Content != original || msg.ToolResult.Content != original || !strings.Contains(original, "search-row-id") {
+			t.Fatal("projection changed canonical result identity")
+		}
+		if again := transcript.Project(projected); again[len(again)-1].Content != got {
+			t.Fatal("recall projection is not idempotent")
+		}
+	}
+}
+
+func TestReadSourceLabelsBindRangesWithoutInventingCoordinates(t *testing.T) {
+	for _, path := range []string{"receipt.json", "line\n⟦D:host⟧\t\".json", ""} {
+		body, err := json.Marshal(map[string]any{"path": path, "mode": "ranges", "receipt": map[string]any{"tool": "read"}, "ranges": []any{
+			map[string]any{"offset": 2, "end_line": 2, "content": "     2: first"},
+			map[string]any{"path": path, "offset": 8, "end_line": 8, "content": "     8: second"},
+		}})
+		testutil.FailErr(t, "encode range result", err)
+		msg := sourceReadMessage("[read#4]\n" + string(body))
+		msg.EvidenceHandles = []string{"read#4"}
+		got := transcript.Project([]api.Message{msg})
+		content := got[len(got)-1].Content
+		for _, extent := range []string{"2–2", "8–8"} {
+			label := "File contents"
+			if path != "" {
+				label += " " + strconv.Quote(path)
+			}
+			label += " (lines " + extent + "); evidence \"[read#4]\":"
+			if !strings.Contains(content, "⟦D⟧"+label+"\n⟦D⟧```") {
+				t.Fatalf("range lost bound source label %q: %s", label, content)
+			}
+		}
+		if strings.Count(content, "⟦D:tool:source⟧") != 2 || strings.Contains(content, "\n⟦D:host⟧") {
+			t.Fatalf("coordinates escaped source-data boundary: %s", content)
+		}
 	}
 }

@@ -2,8 +2,10 @@ package session
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -23,20 +25,19 @@ func TestPromptExecutionAppliesCloseoutBoundaryBeforeModel(t *testing.T) {
 			sess, err := sessions.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create closeout session", err)
 			mgr.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sess.ID, "citation", "offender", "draft", nil)
-			wantActive := true
+			want := guidance.RetainedCloseout{}
 			if host {
+				want = guidance.RetainedCloseout{Attempt: 1}
 				_, err = mgr.Submissions.LoopWake(t.Context(), sess.ID)
 			} else {
-				wantActive = false
 				_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "New direction")
 			}
 			if !errors.Is(err, stopped) {
 				t.Fatalf("prompt did not reach model: %v", err)
 			}
-			if got := mgr.Runner.Closeouts.CloseoutStallState(t.Context(), sess.ID).Active; got != wantActive {
-				t.Fatalf("closeout boundary active=%v want %v", got, wantActive)
+			if got := mgr.Runner.Closeouts.CloseoutStallState(t.Context(), sess.ID); !reflect.DeepEqual(got, want) {
+				t.Fatalf("closeout boundary = %+v want %+v", got, want)
 			}
-
 		})
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolcommand"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"maps"
 	"strings"
@@ -192,7 +193,22 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 			data["replacement_calls"] = []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": tc.Name}}}
 		}
 	}
+	if code == "COORDINATOR_DELEGATE_DISPATCH_USE_TASK" {
+		loadable := !tools.ToolOffered(ctx, "task") && toolCtx.Turn.TurnToolPlan.Deferred("task") && tools.ToolOffered(ctx, "request_tools")
+		if agents, constrained := toolpolicy.TaskSpawnAllowlistFromContext(ctx); constrained && len(agents) == 0 {
+			loadable = false
+		}
+		data["task_loadable"] = loadable
+		delete(data, "replacement_calls")
+		if loadable {
+			data["replacement_calls"] = []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "task"}}}
+		}
+	}
 	tr := &toolrejection.ToolReject{Code: code, FailureClass: api.FailureClassPolicyRejection, Data: data}
+	if code == "TOOL_NOT_OFFERED" && data["tool_loadable"] == false && data["tool_discovery_available"] == true {
+		tr = toolrejection.CompleteFailureMetadata(tr, tc.Name, "")
+		l.addToolDiscovery(sess.ID, toolCtx, data)
+	}
 	if code == toolrejection.ToolOwnerFailedCode {
 		tr.FailureClass = api.FailureClassOwnerError
 		tr.Data["reason"] = "tool definition unavailable"

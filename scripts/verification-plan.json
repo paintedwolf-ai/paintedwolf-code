@@ -338,6 +338,9 @@
     "den:webkit:atspi": [
       "den:webkit:atspi"
     ],
+    "test:confine:linux": [
+      "test:confine:linux"
+    ],
     "decide:test": [
       "decide:test"
     ],
@@ -365,7 +368,8 @@
     "lint:fast": "passthrough",
     "lint:full": "passthrough",
     "oar:conformance": "passthrough",
-    "den:webkit:atspi": "passthrough"
+    "den:webkit:atspi": "passthrough",
+    "test:confine:linux": "passthrough"
   },
   "resources": {
     "den:harness:test": {
@@ -652,6 +656,15 @@
       ],
       "workers": 1
     },
+    "test:confine:linux": {
+      "locks": [
+        "go"
+      ],
+      "workers": "shared",
+      "shared_locks": [
+        "go"
+      ]
+    },
     "build:decide": {
       "locks": [
         "rust"
@@ -882,6 +895,35 @@
       "setup": "harness",
       "runner": "macos-15"
     },
+    "webkit-gtk": {
+      "targets": [
+        "den:webkit:atspi"
+      ],
+      "minutes": 30,
+      "profiles": [
+        "integration",
+        "nightly",
+        "release"
+      ],
+      "suite": "e2e",
+      "setup": "harness",
+      "platform": "linux"
+    },
+    "confinement-arm64": {
+      "targets": [
+        "test:confine:linux"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "integration",
+        "nightly",
+        "release"
+      ],
+      "suite": "behavior",
+      "setup": "verification",
+      "runner": "ubuntu-24.04-arm",
+      "platform": "linux"
+    },
     "race": {
       "targets": [
         "test:race"
@@ -1014,7 +1056,7 @@
       "integration": 4,
       "check": 3,
       "nightly": 2,
-      "release": 3
+      "release": 1
     },
     "footprints": {
       "ci.yml": 1,

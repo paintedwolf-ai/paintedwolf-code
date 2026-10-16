@@ -3,6 +3,8 @@ package toolcommand
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/argv"
 )
 
 func isPassThroughProducer(st bashStage) (passThrough, exact bool) {
@@ -190,9 +192,10 @@ func literalEchoOrPrintf(argv []bashWord) (body string, literal, ok bool) {
 			idx++
 		}
 		var parts []string
-		lit := !interpretEscapes
+		// Echo option and backslash behavior differs between external programs and shells.
+		lit := !interpretEscapes && idx == 1 && (len(argv) < 2 || !strings.HasPrefix(argv[1].value, "-"))
 		for ; idx < len(argv); idx++ {
-			if !argv[idx].literal {
+			if !argv[idx].literal || strings.Contains(argv[idx].value, `\`) {
 				lit = false
 			}
 			parts = append(parts, argv[idx].value)
@@ -216,4 +219,27 @@ func literalEchoOrPrintf(argv []bashWord) (body string, literal, ok bool) {
 	default:
 		return "", false, false
 	}
+}
+
+// Direct commands use the host argv grammar; wrappers use shell quote removal.
+// Only claim byte equivalence when both interpretations agree, including paths.
+func literalOutputArgvExact(st bashStage) bool {
+	words := append([]bashWord(nil), st.argv...)
+	for _, redirect := range st.redirects {
+		words = append(words, redirect.target)
+	}
+	raw := []string{"echo"}
+	for _, word := range words {
+		raw = append(raw, word.raw)
+	}
+	parsed, err := argv.SplitElement(strings.Join(raw, " "))
+	if err != nil || len(parsed.Args) != len(words) || len(parsed.Globs) != 0 || len(parsed.Addressed) != 0 {
+		return false
+	}
+	for i, word := range words {
+		if parsed.Args[i] != word.value {
+			return false
+		}
+	}
+	return true
 }
