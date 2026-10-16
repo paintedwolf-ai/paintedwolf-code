@@ -565,6 +565,12 @@ host_facts:
  - name: paintedwolf.failed_stages
    type: list<string>
    observation: Command lines of the finished invocation's failed stages; empty when all succeeded, while it runs, or when the invocation spawned no process.
+ - name: paintedwolf.response_tools_callable
+   type: bool
+   observation: True when terminal-empty recovery may request an offered native tool on the frozen request.
+ - name: paintedwolf.response_structured_output
+   type: bool
+   observation: True when the terminal-empty request requires structured output.
  - name: paintedwolf.process_running
    type: bool
    observation: True when the invocation's process was still running when observed.

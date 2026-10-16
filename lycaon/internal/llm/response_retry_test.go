@@ -16,6 +16,7 @@ import (
 
 type responseRetryStub struct {
 	observeRequest func(modelcall.CompletionRequest)
+	budget         func(modelcall.CompletionRequest) modelcall.RequestBudget
 	completeCalls  int
 	streamCalls    int
 	complete       func(int) (*modelcall.Completion, error)
@@ -28,6 +29,18 @@ func (p *responseRetryStub) Models() []modelcall.ModelInfo {
 }
 func (p *responseRetryStub) Profile() providerprofile.Profile {
 	return providerprofile.Default()
+}
+func (p *responseRetryStub) RequestBudget(_ context.Context, req modelcall.CompletionRequest) modelcall.RequestBudget {
+	if p.budget != nil {
+		return p.budget(req)
+	}
+	return modelcall.RequestBudget{
+		Window:        8192,
+		Input:         modelcall.EstimateRequestInput(req),
+		Output:        1024,
+		Headroom:      256,
+		MinimumOutput: modelcall.MinimumCompletionOutput(req),
+	}
 }
 func (p *responseRetryStub) Complete(_ context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
 	if p.observeRequest != nil {

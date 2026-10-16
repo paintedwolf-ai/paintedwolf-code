@@ -59,6 +59,8 @@ var factDecls = []factDecl{
 
 	{"tool", oarcore.TypeString, FactTierStandard, ProfileTool},
 	{"tool_args", oarcore.TypeMap, FactTierStandard, ProfileTool},
+	{"response_tools_callable", oarcore.TypeBool, FactTierHost, ""},
+	{"response_structured_output", oarcore.TypeBool, FactTierHost, ""},
 	{"last_assistant", oarcore.TypeString, FactTierHost, ""},
 	{"turn_tools", oarcore.TypeListString, FactTierHost, ""},
 	{"session_posture", oarcore.TypeString, FactTierStandard, ProfileSession},
