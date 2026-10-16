@@ -101,7 +101,7 @@ func TestCompactionPreflightAvoidsPaidCallForProtectedHistory(t *testing.T) {
 }
 
 func TestCompactionMemoInvalidatesOnSourceModelAndPolicy(t *testing.T) {
-	raw, err := mockCompactionSummary(strings.Repeat("A long retained fact. ", 20))
+	raw, err := mockCompactionSummary(strings.Repeat("A long retained fact. ", 5))
 	testutil.FailErr(t, "summary fixture", err)
 	summary := &chunkSummaryFixture{text: raw}
 	c := savingsCompactor(t, summary)

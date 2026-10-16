@@ -2,12 +2,12 @@ package compaction
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
-	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -15,6 +15,7 @@ import (
 type CompactionInput struct {
 	Text     string
 	Messages []api.Message
+	Consumed int
 }
 
 // BuildCompactionInput fits the prompt and its source provenance together.
@@ -28,28 +29,43 @@ func BuildCompactionInput(
 	if maxTokens <= 0 || maxMessageTokens <= 0 {
 		return CompactionInput{}, fmt.Errorf("compaction resume prompt requires positive token budgets")
 	}
-	rows, messages := compactionRecentMessages(sliced, maxMessageTokens)
+	limit := min(len(sliced), max(1, min(128, maxTokens/maxMessageTokens)))
+	rows, messages := compactionRecentMessages(sliced[:limit])
 	for {
 		block, err := renderCompactionUserPrompt(ctx, info, rows)
 		if err != nil {
 			return CompactionInput{}, err
 		}
 		if tokenest.EstimateDefault(block) <= maxTokens {
-			return CompactionInput{Text: block, Messages: messages}, nil
+			return CompactionInput{Text: block, Messages: messages, Consumed: len(rows)}, nil
 		}
 		if len(rows) <= 1 {
 			return CompactionInput{}, fmt.Errorf("compaction resume prompt fixed envelope exceeds %d tokens", maxTokens)
 		}
-		rows = rows[1:]
-		messages = messages[1:]
+		rows = rows[:len(rows)-1]
+		messages = messages[:len(messages)-1]
 	}
 }
 
 func renderCompactionUserPrompt(ctx context.Context, info SessionInfo, rows []map[string]any) (string, error) {
+	prior := "No prior continuation."
+	if info.PriorContinuation != nil {
+		raw, err := json.Marshal(info.PriorContinuation.Summary)
+		if err != nil {
+			return "", err
+		}
+		prior = string(raw)
+	}
+	current := ""
+	if info.CurrentRequest != nil {
+		rows := ContextMessagesFromAPI([]api.Message{*info.CurrentRequest})
+		content, _, _, _ := projectCompactionMessage(rows[0])
+		current = content
+	}
 	data := map[string]any{
-		"session_id":      strings.TrimSpace(info.ID),
-		"posture":         info.Posture,
-		"recent_messages": rows,
+		"current_request":    current,
+		"prior_continuation": prior,
+		"recent_messages":    rows,
 	}
 	block, err := guidance.RenderGuidance(ctx, "compaction/resume-user", data)
 	if err != nil {
@@ -62,13 +78,11 @@ func renderCompactionUserPrompt(ctx context.Context, info SessionInfo, rows []ma
 	return block, nil
 }
 
-func compactionRecentMessages(sliced []ContextMessage, maxMessageTokens int) ([]map[string]any, []api.Message) {
+func compactionRecentMessages(sliced []ContextMessage) ([]map[string]any, []api.Message) {
 	out := make([]map[string]any, 0, len(sliced))
 	messages := make([]api.Message, 0, len(sliced))
-	maxRunes := maxMessageTokens * tokenest.DefaultDivisor
 	for _, msg := range sliced {
 		content, origin, authority, trustTier := projectCompactionMessage(msg)
-		content = runeclamp.Fit(content, maxRunes)
 		messages = append(messages, api.Message{Content: content, SourceContext: msg.SourceContext})
 		out = append(out, map[string]any{
 			"role":                   msg.Role,
@@ -114,16 +128,4 @@ func projectCompactionMessage(msg ContextMessage) (string, string, string, strin
 		}
 	}
 	return transcript.ProjectContentParts(canonical.Role, canonical.ContentParts), origin, authority, trustTier
-}
-
-// SliceMessages returns the last n messages.
-func SliceMessages(messages []ContextMessage, n int) []ContextMessage {
-	if n <= 0 || len(messages) <= n {
-		out := make([]ContextMessage, len(messages))
-		copy(out, messages)
-		return out
-	}
-	out := make([]ContextMessage, n)
-	copy(out, messages[len(messages)-n:])
-	return out
 }

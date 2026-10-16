@@ -70,9 +70,9 @@ func TestCompactionInputDropsSourceContextWithRows(t *testing.T) {
 	var messages []compaction.ContextMessage
 	for i := 0; i < 60; i++ {
 		target := api.NavigationTarget{ProjectID: "p", RootID: "r", Path: fmt.Sprintf("module%d/a.go", i), EntryKind: api.NavigationEntryKindFile}
-		messages = append(messages, compaction.ContextMessage{Role: string(api.MessageRoleTool), Content: target.Path + " " + strings.Repeat("padding ", 500), SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{target}}})
+		messages = append(messages, compaction.ContextMessage{Role: string(api.MessageRoleTool), Content: target.Path + " " + strings.Repeat("padding ", 20), SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{target}}})
 	}
-	input, err := compaction.BuildCompactionInput(t.Context(), compaction.SessionInfo{ID: "s"}, messages, 512, 64)
+	input, err := compaction.BuildCompactionInput(t.Context(), compaction.SessionInfo{ID: "s"}, messages, 1024, 64)
 	testutil.FailErr(t, "fit compaction input", err)
 	if len(input.Messages) >= len(messages) {
 		t.Fatal("fixture did not drop input rows")
@@ -84,7 +84,7 @@ func TestCompactionInputDropsSourceContextWithRows(t *testing.T) {
 		t.Fatalf("context locations=%d retained rows=%d", len(got.Locations), len(input.Messages))
 	}
 	for _, target := range got.Locations {
-		if target.Path == "module0/a.go" {
+		if target.Path == "module59/a.go" {
 			t.Fatal("dropped compaction row supplied a source")
 		}
 	}

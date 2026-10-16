@@ -2,6 +2,7 @@ package projectcontrol
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/messageview"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/project"
@@ -14,7 +15,7 @@ type Sessions interface {
 	List(context.Context) ([]*api.Session, error)
 	ReassignSessionsWorkspaceRoot(context.Context, string, string, string) error
 	UpdateSession(context.Context, string, func(*api.Session)) error
-	UserTurnOrdinal(context.Context, string) (int, error)
+	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
 }
 type Projects interface {
 	Get(context.Context, string) (*project.Project, error)

@@ -2,6 +2,7 @@ package instructions
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/messageview"
 
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/progress"
@@ -13,7 +14,7 @@ import (
 
 type Store interface {
 	Get(context.Context, string) (*api.Session, error)
-	UserTurnOrdinal(context.Context, string) (int, error)
+	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
 }
 type WorkflowDomains struct {
 	Batch    WorkflowBatch

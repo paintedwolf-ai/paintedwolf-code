@@ -5,16 +5,12 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
-	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestCompactionSessionInfoPinsLatestVisibleUserRequestAndProgress(t *testing.T) {
+func TestCompactionSessionInfoUsesOriginalCurrentRequestForRelevance(t *testing.T) {
 	mgr, _ := newCompactionManager(t, compaction.DefaultCompactionConfig())
-	prog := progress.NewMemoryStore()
-	mgr.SetProgress(prog)
-	prog.Set("s1", "## Progress\n- [x] inspect\n- [ ] report")
 
 	sess := &api.Session{
 		ID:        "s1",
@@ -37,7 +33,7 @@ func TestCompactionSessionInfoPinsLatestVisibleUserRequestAndProgress(t *testing
 	if info.LatestUserRequestID != "request" {
 		t.Fatalf("latest request = %q", info.LatestUserRequestID)
 	}
-	if info.ProgressMarkdown != "## Progress\n- [x] inspect\n- [ ] report" {
-		t.Fatalf("progress = %q", info.ProgressMarkdown)
+	if info.CurrentRequest == nil || info.CurrentRequest.Content != originals[1].Content || len(info.CurrentRequest.ContentParts) != 2 {
+		t.Fatal("summary relevance frame lost original instruction or attachment boundaries")
 	}
 }

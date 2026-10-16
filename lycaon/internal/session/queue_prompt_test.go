@@ -320,7 +320,8 @@ func TestTakeQueuedSendPersistsContinuationWithoutOpeningNewTurn(t *testing.T) {
 	if api.IsUserIntentMessage(messages[0]) || !api.IsUserInstructionMessage(messages[0]) {
 		t.Fatalf("continuation boundary classification is wrong: %+v", messages[0])
 	}
-	turn, err := st.UserTurnOrdinal(ctx, sess.ID)
+	turnSource, err := st.ReadSourceTurn(ctx, sess.ID, 0)
+	turn := turnSource.Number
 	testutil.FailErr(t, "read user turn ordinal", err)
 	if turn != 1 {
 		t.Fatalf("user turn ordinal = %d want 1", turn)
@@ -380,7 +381,8 @@ func TestQueueSendWithoutActivePromptLoopStartsContinuationCycle(t *testing.T) {
 	if !found {
 		t.Fatalf("continuation row %s missing from transcript", row.ID)
 	}
-	turn, err := st.UserTurnOrdinal(ctx, sess.ID)
+	turnSource, err := st.ReadSourceTurn(ctx, sess.ID, 0)
+	turn := turnSource.Number
 	testutil.FailErr(t, "read user turn ordinal", err)
 	if turn != 1 {
 		t.Fatalf("user turn ordinal = %d want 1", turn)

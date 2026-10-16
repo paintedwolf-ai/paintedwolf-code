@@ -4,13 +4,11 @@ package compaction
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/curationctx"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/sourceref"
@@ -20,6 +18,7 @@ import (
 
 // CompactionReport describes what compaction changed.
 type CompactionReport struct {
+	Continuation         *messageview.Continuation
 	TokensBefore         int
 	TokensAfter          int
 	ChunksCompacted      int
@@ -36,7 +35,8 @@ type CompactionReport struct {
 
 // SessionInfo supplies session metadata for compaction snapshots.
 type SessionInfo struct {
-	ID string
+	ID                string
+	PriorContinuation *messageview.Continuation
 	// AgentType and ParentSessionID attribute worker summaries to their chat.
 	AgentType            string
 	ParentSessionID      string
@@ -49,8 +49,8 @@ type SessionInfo struct {
 	Model                string
 	ProviderID           string
 	LatestUserRequestID  string
+	CurrentRequest       *api.Message
 	Attempts             messageview.CompactionAttemptStore
-	ProgressMarkdown     string
 	// RecallAvailable permits recall instructions in the continuation record.
 	RecallAvailable  bool
 	ChunkProjections messageview.ChunkProjectionStore
@@ -61,6 +61,7 @@ type SimpleCompactor struct {
 	cfg     CompactionConfig
 	chunks  *ChunkCompactor
 	summary Summarizer
+	ranker  ContinuationRanker
 }
 
 // NewSimpleCompactor constructs a production compactor.
@@ -121,7 +122,7 @@ func (c *SimpleCompactor) Compact(ctx context.Context, info SessionInfo, message
 		return
 	}
 	var compact []ContextMessage
-	compact, report.Reason, report.CacheHit, err = c.compactSession(ctx, info, out, maxTokens)
+	compact, report.Continuation, report.Reason, report.CacheHit, err = c.compactSession(ctx, info, out, maxTokens)
 	if err != nil {
 		return
 	}
@@ -132,69 +133,15 @@ func (c *SimpleCompactor) Compact(ctx context.Context, info SessionInfo, message
 	return
 }
 
-func (c *SimpleCompactor) compactSession(ctx context.Context, info SessionInfo, messages []ContextMessage, maxTokens int) ([]ContextMessage, string, bool, error) {
-	tail := retainedCompactionMessages(messages, c.cfg.KeepRecentMessages)
-	if len(tail) == len(messages) {
-		return nil, "protected_history", false, nil
-	}
-	// Even an empty summary cannot recover enough space from protected history.
-	possible, err := c.usefulCompaction(info, messages, compactionReplacement(info, messages, tail, compactionSummary{}, ""), c.cfg.SessionMinSavingsTokens)
-	if err != nil {
-		return nil, "failed", false, err
-	}
-	if !possible {
-		return nil, "insufficient_reclaimable_space", false, nil
-	}
-	revision, err := c.sessionRevision(ctx, info, messages, maxTokens)
-	if err != nil {
-		return nil, "failed", false, err
-	}
-	if info.Attempts != nil {
-		prior, found, readErr := info.Attempts.GetCompactionAttempt(ctx, info.ID)
-		if readErr != nil {
-			return nil, "failed", false, readErr
-		}
-		if found && prior.Revision == revision {
-			return nil, prior.Reason, true, nil
-		}
-	}
-	structured, err := c.summarizeSession(ctx, info, SliceMessages(messages, c.cfg.MessageSlice))
-	if err != nil {
-		return nil, "failed", false, err
-	}
-	summary, err := renderContinuationRecord(ctx, structured, compactedSources(messages, tail), info.RecallAvailable)
-	if err != nil {
-		return nil, "failed", false, err
-	}
-	candidate := compactionReplacement(info, messages, tail, structured, summary)
-	useful, err := c.usefulCompaction(info, messages, candidate, c.cfg.SessionMinSavingsTokens)
-	if err != nil {
-		return nil, "failed", false, err
-	}
-	if !useful {
-		if info.Attempts != nil {
-			if err := info.Attempts.PutCompactionAttempt(ctx, info.ID, messageview.CompactionAttempt{Revision: revision, Reason: "insufficient_savings"}); err != nil {
-				return nil, "failed", false, err
-			}
-		}
-		return nil, "insufficient_savings", false, nil
-	}
-	reason := "partial_reduction"
-	if EstimateMessagesTokens(candidate) <= maxTokens {
-		reason = "target_reached"
-	}
-	return candidate, reason, false, nil
-}
-
 func compactionReplacement(info SessionInfo, out, tail []ContextMessage, structured compactionSummary, summary string) []ContextMessage {
 	checkpoint := ContextMessage{
 		ID:                   uuid.NewString(),
 		Role:                 string(api.MessageRoleUser),
-		Content:              compactionCheckpointContent(info),
+		Content:              compactionCheckpointContent(),
 		Origin:               api.MessageOriginHost,
 		Authority:            api.ContentAuthorityNone,
 		TrustTier:            api.ContentTrustTierTrusted,
-		ContentParts:         compactionCheckpointParts(info),
+		ContentParts:         compactionCheckpointParts(),
 		CompactionCheckpoint: true,
 		HostSecretRedaction:  compactedHostSecretRedaction(out, tail),
 	}
@@ -250,34 +197,13 @@ func compactedHostSecretRedaction(all, tail []ContextMessage) *api.HostSecretRed
 	return api.NewHostSecretRedactionMeta(spans)
 }
 
-func compactionCheckpointContent(info SessionInfo) string {
-	var b strings.Builder
-	b.WriteString("Prior conversation compacted. Continuation context follows.")
-	if progress := strings.TrimSpace(info.ProgressMarkdown); progress != "" {
-		b.WriteString("\n\n## Current progress checklist\n")
-		b.WriteString(info.ProgressMarkdown)
-	}
-	return b.String()
+func compactionCheckpointContent() string {
+	return "Prior conversation compacted. Continuation context follows."
 }
 
-func compactionCheckpointParts(info SessionInfo) []api.MessageContentPart {
-	parts := []api.MessageContentPart{{
-		Content:   "Prior conversation compacted. Continuation context follows.",
-		Origin:    api.MessageOriginHost,
-		Authority: api.ContentAuthorityNone,
-		TrustTier: api.ContentTrustTierTrusted,
-		Source:    "compaction",
-	}}
-	if progress := strings.TrimSpace(info.ProgressMarkdown); progress != "" {
-		parts = append(parts, api.MessageContentPart{
-			Content:   progress,
-			Origin:    api.MessageOriginHost,
-			Authority: api.ContentAuthorityNone,
-			TrustTier: api.ContentTrustTierTrusted,
-			Source:    "progress",
-		})
-	}
-	return parts
+func compactionCheckpointParts() []api.MessageContentPart {
+	return []api.MessageContentPart{{Content: compactionCheckpointContent(), Origin: api.MessageOriginHost,
+		Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted, Source: "compaction"}}
 }
 
 func withCompactionSession(ctx context.Context, info SessionInfo) context.Context {
@@ -333,41 +259,6 @@ func (c *SimpleCompactor) CompactOversizedChunksOnly(ctx context.Context, info S
 	ctx = withCompactionSession(ctx, info)
 	out := append([]ContextMessage(nil), messages...)
 	return c.compactOversizedChunks(ctx, info, out, -1)
-}
-
-func (c *SimpleCompactor) summarizeSession(ctx context.Context, info SessionInfo, sliced []ContextMessage) (compactionSummary, error) {
-	if c.summary == nil {
-		return compactionSummary{}, fmt.Errorf("summarizer not configured")
-	}
-	systemPrompt, err := guidance.RenderCompactionSystemPrompt(ctx, guidance.CompactionSessionSummarySystemRef)
-	if err != nil {
-		return compactionSummary{}, err
-	}
-	budgets := []int{c.cfg.SummaryInputTokens, c.cfg.SummaryRetryInputTokens}
-	var lastErr error
-	for attempt, inputTokens := range budgets {
-		input, buildErr := BuildCompactionInput(ctx, info, sliced, inputTokens, c.cfg.SummaryMessageTokens)
-		if buildErr != nil {
-			return compactionSummary{}, buildErr
-		}
-		raw, summarizeErr := c.summary.Summarize(
-			WithSummaryFormat(ctx), systemPrompt, input.Text, c.cfg.SummaryOutputTokens)
-		if summarizeErr != nil {
-			lastErr = summarizeErr
-			if attempt == 0 && retryCompactionProviderError(summarizeErr) {
-				continue
-			}
-			return compactionSummary{}, summarizeErr
-		}
-		structured, parseErr := parseCompactionSummary(raw)
-		if parseErr != nil {
-			lastErr = parseErr
-			continue
-		}
-		structured.SourceContext = sourceref.ForResponse(input.Messages, raw)
-		return structured, nil
-	}
-	return compactionSummary{}, lastErr
 }
 
 func retryCompactionProviderError(err error) bool {
@@ -512,4 +403,11 @@ type ContextCompactor interface {
 	EstimateTokens(ctx context.Context, text string) (int, error)
 	BudgetRemaining(ctx context.Context, sessionID string, used int) (int, error)
 	Config() CompactionConfig
+}
+
+// WithConfig binds one attempt to the receiving session's budget.
+func (c *SimpleCompactor) WithConfig(cfg CompactionConfig) *SimpleCompactor {
+	out := NewSimpleCompactor(cfg, c.summary)
+	out.ranker = c.ranker
+	return out
 }

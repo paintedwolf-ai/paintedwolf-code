@@ -32,8 +32,8 @@ func (m *Service) PromoteOverlay(ctx context.Context, sessionID, overlayID strin
 	}
 	// Attribute host-initiated promotions to the active user turn.
 	if in.UserTurn == 0 {
-		if turn, err := m.store.UserTurnOrdinal(ctx, sessionID); err == nil {
-			in.UserTurn = turn
+		if turnSource, err := m.store.ReadSourceTurn(ctx, sessionID, 0); err == nil {
+			in.UserTurn = turnSource.Number
 		}
 	}
 	m.batch.Reconcile(ctx, sessionID)

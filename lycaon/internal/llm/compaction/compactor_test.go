@@ -264,20 +264,11 @@ func TestCompactionRecentMessagesTotalBudget(t *testing.T) {
 	}
 	msgs[len(msgs)-1].Content = "newest-marker " + msgs[len(msgs)-1].Content
 	const messageTokens = 64
-	rows, _ := compactionRecentMessages(msgs, messageTokens)
-	for _, row := range rows {
-		if got := len([]rune(row["content"].(string))); got > messageTokens*tokenest.DefaultDivisor {
-			t.Fatalf("message excerpt = %d runes", got)
-		}
-	}
-	input, err := BuildCompactionInput(context.Background(), SessionInfo{ID: "s1"}, msgs, 512, messageTokens)
-	testutil.FailErr(t, "build bounded prompt", err)
-	prompt := input.Text
-	if got := tokenest.EstimateDefault(prompt); got > 512 {
-		t.Fatalf("rendered prompt = %d tokens, want <= 512", got)
-	}
-	if !strings.Contains(prompt, "newest-marker") {
-		t.Fatal("recency-first fit dropped the newest message")
+	_, segments := continuationSegments(msgs, messageTokens)
+	input, err := BuildCompactionInput(context.Background(), SessionInfo{ID: "s1"}, segments, 1024, messageTokens)
+	testutil.FailErr(t, "build bounded source page", err)
+	if tokenest.EstimateDefault(input.Text) > 1024 || input.Consumed <= 0 || !strings.Contains(input.Messages[0].Content, segments[0].Content) {
+		t.Fatal("source page lost its bounded oldest-prefix coverage")
 	}
 }
 
@@ -388,7 +379,7 @@ func TestCompactSessionSummaryAlignsToolBoundary(t *testing.T) {
 	}
 }
 
-func TestCompactFailureDoesNotCreateDurableSummary(t *testing.T) {
+func TestSummaryFailurePublishesRecoverableReferences(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	cfg := testCompactionConfig()
 	cfg.KeepRecentMessages = 2
@@ -400,29 +391,23 @@ func TestCompactFailureDoesNotCreateDurableSummary(t *testing.T) {
 		{ID: "3", Role: string(api.MessageRoleUser), Content: "recent"},
 	}
 	c := NewSimpleCompactor(cfg, failSessionSummarizer{})
-	out, report, err := c.Compact(context.Background(), SessionInfo{ID: "s1"}, msgs, cfg.TargetTokens)
-	if err == nil {
-		t.Fatal("failed session summary must be surfaced to the durable writer")
-	}
-	if report.SessionCompacted {
-		t.Fatal("failed summary must not be reported as durable compaction")
-	}
-	if len(out) != len(msgs) || out[0].Content != msgs[0].Content {
-		t.Fatalf("failed summary changed canonical projection: %+v", out)
-	}
-}
-
-func TestMessageSlice(t *testing.T) {
-	msgs := make([]ContextMessage, 200)
 	for i := range msgs {
-		msgs[i] = ContextMessage{ID: "m", Content: "x"}
+		msgs[i].Ord = int64(i + 1)
 	}
-	sliced := SliceMessages(msgs, 80)
-	if len(sliced) != 80 {
-		t.Fatalf("slice len = %d, want 80", len(sliced))
+	out, report, err := c.Compact(context.Background(), SessionInfo{ID: "s1", RecallAvailable: true}, msgs, cfg.TargetTokens)
+	testutil.FailErr(t, "compact with failed summarizer", err)
+	if !report.SessionCompacted || report.Continuation == nil || report.Continuation.Reason != "references_only" {
+		t.Fatalf("failed summary did not preserve recoverable coverage: %+v", report)
 	}
-	if sliced[0].ID != msgs[120].ID {
-		t.Fatal("expected last 80 messages")
+	if len(report.Continuation.Summary.Facts) != 0 || report.Continuation.ThroughOrd != 2 {
+		t.Fatal("failed synthesis invented a summary or changed coverage")
+	}
+	recoverable := false
+	for _, row := range out {
+		recoverable = recoverable || strings.Contains(row.Content, `"through_ord":2`)
+	}
+	if !recoverable || msgs[0].Content != strings.Repeat("old observation ", 200) {
+		t.Fatalf("fallback lost recovery coordinates or changed original content: %+v", out)
 	}
 }
 
@@ -479,12 +464,11 @@ func TestDeterministicFitPreservesCheckpoint(t *testing.T) {
 	}
 }
 
-func TestCompactionCheckpointCarriesHostProgressOnly(t *testing.T) {
+func TestCompactionCheckpointKeepsCurrentRequestCanonical(t *testing.T) {
 	info := SessionInfo{
 		LatestUserRequestID: "request-1",
-		ProgressMarkdown:    "## Progress\n- [x] inspect\n- [ ] report",
 	}
-	got := compactionCheckpointContent(info)
+	got := compactionCheckpointContent()
 	if strings.Contains(got, "## Current user request") {
 		t.Fatalf("checkpoint duplicated the pinned user request: %q", got)
 	}
@@ -494,11 +478,8 @@ func TestCompactionCheckpointCarriesHostProgressOnly(t *testing.T) {
 	if len(compacted) != 1 || !compacted[0].ContextPinned || compacted[0].Content != messages[0].Content || messages[0].ContextPinned {
 		t.Fatalf("request pin changed transcript content or input: %+v / %+v", compacted, messages)
 	}
-	if !strings.Contains(got, "## Current progress checklist\n## Progress\n- [x] inspect\n- [ ] report") {
-		t.Fatalf("checkpoint missing progress: %q", got)
-	}
-	parts := compactionCheckpointParts(info)
-	if len(parts) != 2 || parts[0].Authority != api.ContentAuthorityNone || parts[1].Authority != api.ContentAuthorityNone {
+	parts := compactionCheckpointParts()
+	if len(parts) != 1 || parts[0].Authority != api.ContentAuthorityNone {
 		t.Fatalf("checkpoint parts = %+v", parts)
 	}
 }

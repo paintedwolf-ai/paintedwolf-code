@@ -26,7 +26,7 @@ func (failedCompactionSummarizer) Summarize(context.Context, string, string, int
 	return "", errors.New("local summarizer unavailable")
 }
 
-func TestFailedCompactionPersistsNothingAndRetriesFromCanonicalHistory(t *testing.T) {
+func TestFailedSynthesisKeepsPublishedRecoveryAndCanonicalHistory(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	cfg := compaction.DefaultCompactionConfig()
 	cfg.Enabled = true
@@ -61,11 +61,11 @@ func TestFailedCompactionPersistsNothingAndRetriesFromCanonicalHistory(t *testin
 	mgr.Runner.History.Wait()
 	got, err := mem.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "get session after failure", err)
-	if got.CompactionGeneration != 0 {
-		t.Fatalf("failed compaction advanced generation to %d", got.CompactionGeneration)
+	if got.CompactionGeneration == 0 {
+		t.Fatalf("failed synthesis lost its independent baseline: generation %d", got.CompactionGeneration)
 	}
-	if _, ok, viewErr := mem.GetCompactionView(t.Context(), sess.ID); viewErr != nil || ok {
-		t.Fatalf("failed compaction persisted a view: ok=%v err=%v", ok, viewErr)
+	if _, ok, viewErr := mem.GetCompactionView(t.Context(), sess.ID); viewErr != nil || !ok {
+		t.Fatalf("failed synthesis did not retain a view: ok=%v err=%v", ok, viewErr)
 	}
 
 	// Prompt fitting does not lower the durable retry threshold.

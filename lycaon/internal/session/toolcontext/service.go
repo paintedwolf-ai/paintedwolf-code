@@ -2,6 +2,7 @@ package toolcontext
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/project"
@@ -19,7 +20,7 @@ import (
 
 type Store interface {
 	Get(context.Context, string) (*api.Session, error)
-	UserTurnOrdinal(context.Context, string) (int, error)
+	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
 }
 type Projects interface {
 	Get(context.Context, string) (*project.Project, error)

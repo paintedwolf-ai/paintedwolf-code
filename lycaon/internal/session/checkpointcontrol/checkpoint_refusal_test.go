@@ -30,7 +30,8 @@ func TestPromptRewindReplaysReceiptWithoutReplacingLaterWork(t *testing.T) {
 	testutil.FailErr(t, "write result", os.WriteFile(path, []byte("after"), 0o640))
 	project, err := r.rewindProject(ctx, id)
 	testutil.FailErr(t, "resolve project", err)
-	turn, err := repository.UserTurnOrdinal(ctx, id)
+	turnSource, err := repository.ReadSourceTurn(ctx, id, 0)
+	turn := turnSource.Number
 	testutil.FailErr(t, "turn ordinal", err)
 	testutil.FailErr(t, "record effect", ledger.Record(ctx, sourceledger.RecordInput{ProjectID: project.ID, RecordLocation: sourceledger.RecordLocation{RootID: project.Roots[0].ID, Path: "file.txt"}, Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, SessionID: id, Turn: turn, Before: []byte("before"), After: []byte("after")}))
 	resets := 0

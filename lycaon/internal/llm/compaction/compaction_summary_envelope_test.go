@@ -102,28 +102,22 @@ func TestCompactionSummarySchemaFloorsContentFields(t *testing.T) {
 	}
 }
 
-func TestCompactionSummaryHostBoundsIgnoredProviderSchema(t *testing.T) {
-	facts := make([]string, 10)
-	for i := range facts {
-		facts[i] = strings.Repeat("detail", 80)
-	}
-	raw, err := json.Marshal(map[string]any{
-		"facts": facts, "completed": []string{}, "pending": []string{},
-		"reacquire": []string{}, "constraints": []string{},
-	})
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	got, err := parseCompactionSummary(string(raw))
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if len(got.Facts) != 8 {
-		t.Fatalf("facts = %d want 8", len(got.Facts))
-	}
-	for _, fact := range got.Facts {
-		if len([]rune(fact)) > 160 {
-			t.Fatalf("fact length = %d", len([]rune(fact)))
+func TestCompactionSummaryRejectsOversizedItemsWithoutChangingMeaning(t *testing.T) {
+	for _, facts := range [][]string{make([]string, 10), {strings.Repeat("detail", 80)}} {
+		for i := range facts {
+			if facts[i] == "" {
+				facts[i] = "supported fact"
+			}
+		}
+		raw, err := json.Marshal(map[string]any{
+			"facts": facts, "completed": []string{}, "pending": []string{},
+			"reacquire": []string{}, "constraints": []string{},
+		})
+		if err != nil {
+			t.Fatalf("marshal fixture: %v", err)
+		}
+		if _, err := parseCompactionSummary(string(raw)); err == nil {
+			t.Fatal("accepted output that requires destructive truncation")
 		}
 	}
 }

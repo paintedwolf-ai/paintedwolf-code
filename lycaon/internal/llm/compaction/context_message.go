@@ -9,6 +9,8 @@ import (
 
 // ContextMessage is a session message used by the compactor.
 type ContextMessage struct {
+	Ord                int64
+	Seq                int64
 	ID                 string
 	Role               string
 	Content            string
@@ -51,6 +53,8 @@ type ContextMessage struct {
 func ContextMessageFromAPI(m api.Message) ContextMessage {
 	m = api.NormalizeMessageProvenance(m)
 	out := ContextMessage{
+		Ord:                   m.Ord,
+		Seq:                   m.Seq,
 		ID:                    m.ID,
 		Role:                  string(m.Role),
 		Content:               m.Content,
@@ -104,6 +108,8 @@ func ContextMessageFromAPI(m api.Message) ContextMessage {
 // ContextMessageToAPI converts compactor messages back to wire DTOs.
 func ContextMessageToAPI(m ContextMessage) api.Message {
 	out := api.Message{
+		Ord:                   m.Ord,
+		Seq:                   m.Seq,
 		ID:                    m.ID,
 		Role:                  api.MessageRole(m.Role),
 		Content:               m.Content,

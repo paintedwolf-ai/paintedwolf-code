@@ -3,6 +3,7 @@ package events
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"log/slog"
 	"strings"
 	"sync"
@@ -38,7 +39,7 @@ type UntrustedContentSource interface {
 
 // UserTurnSource reports the newest host user-turn ordinal.
 type UserTurnSource interface {
-	UserTurnOrdinal(ctx context.Context, sessionID string) (int, error)
+	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
 }
 
 // SessionStateSource reads a session's status and prompt_pending.
@@ -137,8 +138,8 @@ func (p *Publisher) sessionKey(ctx context.Context, sessionID string) PublishKey
 func (p *Publisher) sessionEventFields(ctx context.Context, ev *api.SessionEvent) (revision uint64) {
 	revision = p.NextSessionRevision()
 	if p.UserTurns != nil {
-		if turn, err := p.UserTurns.UserTurnOrdinal(ctx, ev.ID); err == nil {
-			ev.CurrentTurn = turn
+		if turnSource, err := p.UserTurns.ReadSourceTurn(ctx, ev.ID, 0); err == nil {
+			ev.CurrentTurn = turnSource.Number
 		}
 	}
 	if p.SessionState != nil {

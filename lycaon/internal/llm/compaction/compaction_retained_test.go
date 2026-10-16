@@ -2,6 +2,7 @@ package compaction
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/pkg/api"
@@ -33,5 +34,30 @@ func TestContextRetentionKeepsRecentToolBatchBeforeSystemTail(t *testing.T) {
 				t.Fatal("retention did not remove old history")
 			}
 		})
+	}
+}
+
+func TestRecentRetentionUsesAvailableWorkingBudget(t *testing.T) {
+	rows := []ContextMessage{
+		{ID: "request", Role: "user", Content: "Compare the original observation to the current source", ContextPinned: true},
+		{ID: "recover", Role: "assistant", ToolCalls: []api.ToolCall{{ID: "r", Name: "recall"}}, ModelReasoning: &api.ModelReasoning{Text: strings.Repeat("recover recorded evidence ", 20)}},
+		{ID: "observation", Role: "tool", ToolCallID: "r", Content: strings.Repeat("original checksum cypress ", 40)},
+		{ID: "read", Role: "assistant", ToolCalls: []api.ToolCall{{ID: "f", Name: "read"}}},
+		{ID: "rejection", Role: "tool", ToolCallID: "f", Content: "Rejected: correct the argument type and retry"},
+	}
+	cfg := CompactionConfig{ModelContextWindow: 16384, KeepRecentMessages: 4}
+	budget := EstimateMessagesTokens(rows)
+	count := recentCompactionCount(cfg, rows, budget)
+	kept := retainedCompactionMessages(rows, count)
+	if len(kept) != len(rows) {
+		t.Fatalf("working exchanges fit %d tokens but retained %d of %d rows", budget, len(kept), len(rows))
+	}
+	tight := EstimateMessagesTokens([]ContextMessage{rows[0], rows[3], rows[4]})
+	kept = retainedCompactionMessages(rows, recentCompactionCount(cfg, rows, tight))
+	if len(kept) != 3 || kept[0].ID != "request" || kept[1].ID != "read" || kept[2].ID != "rejection" {
+		t.Fatalf("tight budget did not preserve the complete latest exchange and pinned request: %+v", kept)
+	}
+	if EstimateMessagesTokens(kept) > tight {
+		t.Fatal("retention exceeded the available working budget")
 	}
 }

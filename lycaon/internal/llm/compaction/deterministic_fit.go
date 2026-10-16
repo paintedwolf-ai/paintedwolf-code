@@ -26,10 +26,12 @@ func DeterministicFit(cfg CompactionConfig, messages []ContextMessage, maxTokens
 		return assembleFit(head, body, trimmed)
 	}
 
-	keepFloor := len(body) - recentCompactionStart(body, max(1, cfg.KeepRecentMessages))
 	// Over budget here, so a notice is certain; reserve its cost before sizing.
 	budget := maxTokens - EstimateMessagesTokens(head) - EstimateMessagesTokens([]ContextMessage{contextTrimNotice()})
-	drop := fitFrontDropCount(body, keepFloor, budget)
+	defaultFloor := len(body) - recentCompactionStart(body, max(1, cfg.KeepRecentMessages))
+	recent := recentCompactionCount(cfg, body, budget)
+	keepFloor := len(body) - recentCompactionStart(body, recent)
+	drop := fitFrontDropCount(body, keepFloor, defaultFloor, budget)
 
 	pinned := pinnedRows(body[:drop])
 	kept := alignCompactionTail(body[drop:])
@@ -79,7 +81,7 @@ func pinnedRows(messages []ContextMessage) []ContextMessage {
 
 // fitFrontDropCount rounds drops to block boundaries within the retention limit.
 // Pinned rows remain in the budget on both sides of the cut.
-func fitFrontDropCount(body []ContextMessage, keepFloor, budget int) int {
+func fitFrontDropCount(body []ContextMessage, keepFloor, defaultFloor, budget int) int {
 	if len(body) <= keepFloor {
 		return 0
 	}
@@ -97,14 +99,18 @@ func fitFrontDropCount(body []ContextMessage, keepFloor, budget int) int {
 		}
 	}
 	maxDrop := len(body) - keepFloor
+	blockCap := min(maxDrop, max(0, len(body)-defaultFloor))
 	for drop := 0; drop < maxDrop; drop++ {
 		if pinnedPrefix[drop]+remaining[drop] > budget {
 			continue
 		}
-		// Round up to the next block boundary, but never past the keep floor.
+		if drop >= blockCap {
+			return drop
+		}
+		// Round up to the next block boundary, but never past the recent window floor.
 		blocked := (drop + fitDropBlockMessages - 1) / fitDropBlockMessages * fitDropBlockMessages
-		if blocked > maxDrop {
-			return maxDrop
+		if blocked > blockCap {
+			return blockCap
 		}
 		return blocked
 	}

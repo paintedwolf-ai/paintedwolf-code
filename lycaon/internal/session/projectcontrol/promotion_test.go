@@ -2,6 +2,7 @@ package projectcontrol
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"testing"
@@ -9,7 +10,9 @@ import (
 
 type promotionSessions struct{ Sessions }
 
-func (promotionSessions) UserTurnOrdinal(context.Context, string) (int, error) { return 7, nil }
+func (promotionSessions) ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error) {
+	return messageview.SourceTurn{Number: 7}, nil
+}
 
 type promotionFixture struct {
 	input                api.PromoteOverlayInput

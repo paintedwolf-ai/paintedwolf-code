@@ -12,7 +12,7 @@ import (
 )
 
 // compactionRevision keys memoized attempts and projections to the current summary and projection semantics.
-const compactionRevision = 2
+const compactionRevision = 3
 
 func (c *SimpleCompactor) summaryRevision() (string, error) {
 	if revision, ok := c.summary.(interface{ SummaryRevision() (string, error) }); ok {
@@ -34,10 +34,6 @@ func (c *SimpleCompactor) sessionRevision(ctx context.Context, info SessionInfo,
 	if err != nil {
 		return "", err
 	}
-	input, err := BuildCompactionInput(ctx, info, SliceMessages(messages, c.cfg.MessageSlice), c.cfg.SummaryInputTokens, c.cfg.SummaryMessageTokens)
-	if err != nil {
-		return "", err
-	}
 	info.Attempts, info.ChunkProjections = nil, nil
 	info.CompactionGeneration = 0
 	return RevisionDigest(struct {
@@ -47,7 +43,7 @@ func (c *SimpleCompactor) sessionRevision(ctx context.Context, info SessionInfo,
 		Info                                                           SessionInfo
 		Target                                                         int
 		Prompt, Record, SummaryModel, Input, Encoding, AuthorityNotice string
-	}{compactionRevision, messages, c.cfg, info, target, prompt, record, model, input.Text, modelinfo.DefaultModelContextWindows().TextEncoding(info.Model), transcript.ContentAuthorityNotice()})
+	}{compactionRevision, messages, c.cfg, info, target, prompt, record, model, "covered_prefix", modelinfo.DefaultModelContextWindows().TextEncoding(info.Model), transcript.ContentAuthorityNotice()})
 }
 
 // RevisionDigest hashes the JSON form of a revision identity.
