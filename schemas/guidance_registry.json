@@ -1505,6 +1505,12 @@
       "emit": "guard:mkdir",
       "summary": "Directory creation is denied at {{ paintedwolf.path }}."
     },
+    "MODEL_RESPONSE_EMPTY": {
+      "branch_instruction": "Do not infer that this attempt performed work.",
+      "category": "recoverable",
+      "emit": "guard:coordinator",
+      "summary": "The response ended without an answer or a tool call."
+    },
     "MOVE_BULK_DENIED": {
       "branch_instruction": "Keep each batch bounded and account for prior moves",
       "category": "recoverable",

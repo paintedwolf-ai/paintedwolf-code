@@ -172,6 +172,20 @@ recovery adds no standing instruction or Bialy instruction unit. A requested raw
 JSON answer with the reserved action shape can also trigger repair; use a fenced
 example to present that shape as content.
 
+Terminal responses without usable assistant content or native calls may use an
+already-admitted provider retry for `MODEL_RESPONSE_EMPTY` feedback at
+`model.output`. Native coordinator and worker requests supply the request-scoped
+OAR evaluation. Copy reflects the frozen request's callable tools and structured
+output requirement. Reasoning is never parsed or copied into this feedback.
+The repair consumes the existing retry allowance and deadline; it does not add a
+model turn or replenish workflow budgets. Each physical request retains its own
+capture, and source attribution uses the latest dispatched request. A bounded
+host message is appended without changing the caller's transcript or stable
+prompt prefix. Provider context admission still applies to the amended request.
+Utility calls and explicitly selected alternate text protocols retain their
+existing empty-response behavior. Nonterminal stream loss, partial output, and
+output-limit recovery remain distinct paths.
+
 ## Coordinator nudges
 
 Post-turn nudges carry OAR or grounding decisions that could not reject an already-finished generation. All matched advisories are retained in evaluation order; the envelope identifies the primary code.

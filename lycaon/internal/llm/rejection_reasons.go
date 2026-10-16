@@ -93,6 +93,13 @@ func (p *rejectionReasonProvider) ID() string                       { return p.i
 func (p *rejectionReasonProvider) Models() []modelcall.ModelInfo    { return p.inner.Models() }
 func (p *rejectionReasonProvider) Profile() providerprofile.Profile { return p.inner.Profile() }
 
+func (p *rejectionReasonProvider) RequestBudget(ctx context.Context, req modelcall.CompletionRequest) (budget modelcall.RequestBudget) {
+	if reporter, ok := p.inner.(modelcall.RequestBudgetReporter); ok {
+		budget = reporter.RequestBudget(ctx, req)
+	}
+	return budget
+}
+
 func (p *rejectionReasonProvider) Complete(ctx context.Context, req modelcall.CompletionRequest) (*modelcall.Completion, error) {
 	completion, err := p.inner.Complete(ctx, req)
 	return completion, rejectionReason(err, p.rules)

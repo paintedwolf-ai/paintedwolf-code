@@ -320,6 +320,7 @@ func (l *modelTurn) completeStream(
 		})
 	})
 
+	req.EmptyResponseRecovery = l.emptyResponseRecovery(sess, req)
 	req, sourceRequest := modelcall.CaptureSourceRequest(req)
 	collected, collectErr := l.collectPromptStream(ctx, sess, client, req, onProgress, llmCallID, callProvider, callModel)
 	callProvider, callModel = collected.providerID, collected.model

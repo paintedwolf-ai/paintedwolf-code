@@ -107,6 +107,8 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"denial_subject":                  gc.Execution.DenialSubject,
 		"confine_signals":                 strList(gc.Execution.ConfineSignals),
 		"failed_stages":                   strList(gc.Execution.FailedStages),
+		"response_tools_callable":         gc.Response.ToolsCallable,
+		"response_structured_output":      gc.Response.StructuredOutput,
 		"process_running":                 gc.Execution.ProcessRunning,
 		"process_timed_out":               gc.Execution.ProcessTimedOut,
 		"process_stopped":                 gc.Execution.ProcessStopped,

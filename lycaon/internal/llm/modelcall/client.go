@@ -55,12 +55,14 @@ const (
 
 // CompletionRequest is a chat completion request to a provider.
 type CompletionRequest struct {
-	ToolProtocol          ToolCallProtocol       `json:"-" yaml:"-"`
-	StrictBudget          bool                   `json:"-" yaml:"-"`
-	AttemptBudget         *CompletionBudget      `json:"-" yaml:"-"`
-	ThinkingOverride      *ThinkingOverride      `json:"-" yaml:"-"`
-	ThinkingOverrideStyle modelinfo.ThinkStyle   `json:"-" yaml:"-"`
-	ControlCapture        *RequestControlCapture `json:"-" yaml:"-"`
+	// EmptyResponseRecovery renders host policy only for an admitted terminal-empty retry.
+	EmptyResponseRecovery func(context.Context) (string, error) `json:"-" yaml:"-"`
+	ToolProtocol          ToolCallProtocol                      `json:"-" yaml:"-"`
+	StrictBudget          bool                                  `json:"-" yaml:"-"`
+	AttemptBudget         *CompletionBudget                     `json:"-" yaml:"-"`
+	ThinkingOverride      *ThinkingOverride                     `json:"-" yaml:"-"`
+	ThinkingOverrideStyle modelinfo.ThinkStyle                  `json:"-" yaml:"-"`
+	ControlCapture        *RequestControlCapture                `json:"-" yaml:"-"`
 	sourceCapture         *SourceRequestCapture
 	Model                 string
 	Messages              []api.Message
