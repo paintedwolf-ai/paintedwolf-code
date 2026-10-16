@@ -80,6 +80,8 @@ func (s *Activity) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 	heartbeat := events.HeartbeatTicker()
 	defer heartbeat.Stop()
+	burst := events.NewBurstEnd()
+	defer burst.Stop()
 
 	shuttingDown := s.ShuttingDown()
 
@@ -99,6 +101,13 @@ func (s *Activity) handleEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			flusher.Flush()
+			burst.Wrote()
+		case <-burst.C():
+			if _, err := fmt.Fprint(w, events.BurstEndComment); err != nil {
+				return
+			}
+			flusher.Flush()
+			burst.Ended()
 		case <-heartbeat.C:
 			if _, err := fmt.Fprintf(w, ": ping\n\n"); err != nil {
 				return

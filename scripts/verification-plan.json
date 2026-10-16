@@ -903,6 +903,7 @@
       ],
       "minutes": 30,
       "profiles": [
+        "integration",
         "nightly",
         "release"
       ],

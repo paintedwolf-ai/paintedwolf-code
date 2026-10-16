@@ -21,7 +21,8 @@ class AdmissionTests(unittest.TestCase):
     def test_frontend_change_preserves_contracts_and_build(self):
         scope = dict(full=False, paths=['lycaon-den/src/a.ts'])
         lanes = {row['lane'] for row in ci.matrix('integration', scope=scope)['include']}
-        self.assertEqual(lanes, {'limits', 'contracts', 'integration-build', 'frontend', 'behavior'})
+        # Any Den source can change the DOM a screen reader queries.
+        self.assertEqual(lanes, {'limits', 'contracts', 'integration-build', 'frontend', 'behavior', 'webkit-gtk'})
         full = {row['lane'] for row in ci.matrix('integration', scope=dict(full=True))['include']}
         self.assertIn('behavior', full)
         self.assertIn('runner', full)
@@ -29,7 +30,7 @@ class AdmissionTests(unittest.TestCase):
 
     def test_broad_changes_run_the_whole_gate_and_every_platform_lane(self):
         full = {row['lane'] for row in ci.matrix('integration', scope=dict(full=True))['include']}
-        self.assertEqual(full, {row['lane'] for row in ci.matrix('check')['include']} | {'confinement-arm64'})
+        self.assertEqual(full, {row['lane'] for row in ci.matrix('check')['include']} | {'webkit-gtk', 'confinement-arm64'})
         # The check itself, its probe, and the harness fixtures widen the scope.
         for path in ['scripts/den-webkit-atspi.sh', 'scripts/harness/webkit_atspi_text_attributes.py',
                      'scripts/harness/webkit-atspi/2.54.Containerfile', 'lycaon/test/fixtures/e2e/minimal-go-project/go.mod',
