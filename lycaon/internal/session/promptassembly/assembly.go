@@ -17,12 +17,7 @@ var assemblyLog = observability.LazyComponent("prompt_assembly")
 type Config struct {
 	CompactionViewApplied bool
 	CompactionConfig      compaction.CompactionConfig
-	// TokenCalibration maps provider token counts to host estimates.
-	// A zero value uses ColdStartOverhead as an additive reserve.
-	TokenCalibration compaction.PromptTokenCalibration
-	// ColdStartOverhead is the additive reserve used until the first observation.
-	ColdStartOverhead int
-	SurfaceID         string
+	SurfaceID             string
 }
 
 // Report describes prompt-history assembly steps applied for operator debug.
@@ -40,7 +35,7 @@ func (r Report) CompactionReport() compaction.CompactionReport {
 	}
 }
 
-// Assemble filters, seals, and fits a prepared transcript without storing it.
+// Assemble prepares transcript history for complete-request budgeting.
 func Assemble(sess *api.Session, history []api.Message, deps Config) ([]api.Message, Report) {
 	if len(history) == 0 && !deps.CompactionViewApplied {
 		return history, Report{}
@@ -54,7 +49,7 @@ func Assemble(sess *api.Session, history []api.Message, deps Config) ([]api.Mess
 	out = api.FilterPromptHistory(out)
 	strategies = append(strategies, "filter:prompt_history")
 	// Pin before any stage that can drop rows, so they all see one protected set.
-	out = MarkContextPins(sess, out)
+	out = MarkContextPins(sess, out, min(8192, max(256, deps.CompactionConfig.HardCeilingTokens/5)))
 
 	report := Report{
 		TokensBefore: compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(out)),
@@ -66,13 +61,6 @@ func Assemble(sess *api.Session, history []api.Message, deps Config) ([]api.Mess
 	}
 	sealed := sealToolRoleBodies(out)
 	report.Strategies = append(report.Strategies, "seal:tool_bodies")
-	if deps.CompactionConfig.Enabled && deps.CompactionConfig.HardCeilingTokens > 0 {
-		ctxMsgs := compaction.ContextMessagesFromAPI(out)
-		maxTokens := compaction.FitMaxTokens(deps.CompactionConfig, deps.TokenCalibration, deps.ColdStartOverhead)
-		fitted := compaction.DeterministicFit(deps.CompactionConfig, ctxMsgs, maxTokens)
-		out = compaction.ContextMessagesToAPI(fitted, out)
-		report.Strategies = append(report.Strategies, "fit:hard_ceiling")
-	}
 	out = restoreSealedToolBodies(out, sealed)
 	// Filter again: membership restore can reattach chrome Kind from a stale view.
 	out = api.FilterPromptHistory(out)
@@ -95,21 +83,35 @@ func sessionID(sess *api.Session) string {
 	return sess.ID
 }
 
-// MarkContextPins preserves the current request and worker charter during fitting.
-func MarkContextPins(sess *api.Session, messages []api.Message) []api.Message {
+// MarkContextPins keeps current instructions and a bounded recent instruction window.
+func MarkContextPins(sess *api.Session, messages []api.Message, instructionTokens int) []api.Message {
 	if sess == nil || len(messages) == 0 {
 		return messages
 	}
-	latestIntent := api.UserIntentBoundary(messages) - 1
 	out := messages
 	copied := false
-	for i := range messages {
+	latestIntent := api.UserIntentBoundary(messages) - 1
+	remaining := instructionTokens
+	charterPinned := false
+	for i := len(messages) - 1; i >= 0; i-- {
 		if len(messages[i].ToolCalls) > 0 || messages[i].ToolResult != nil {
 			continue
 		}
-		if i != latestIntent && !(sess.IsWorkerChild() && pinnableCharterRow(messages[i])) {
+		if !api.IsUserInstructionMessage(api.NormalizeMessageProvenance(messages[i])) && !(sess.IsWorkerChild() && pinnableCharterRow(messages[i])) {
 			continue
 		}
+		cost := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(messages[i : i+1]))
+		charter := sess.IsWorkerChild() && pinnableCharterRow(messages[i])
+		if !copied {
+			out = append([]api.Message(nil), messages...)
+			copied = true
+		}
+		out[i].ContextPinned = false
+		if i != latestIntent && (!charter || charterPinned) && cost > remaining {
+			continue
+		}
+		remaining -= cost
+		charterPinned = charterPinned || charter
 		if !copied {
 			out = append([]api.Message(nil), messages...)
 			copied = true

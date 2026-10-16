@@ -25,7 +25,8 @@ func (m *Service) ReviewCheckpoint(ctx context.Context, sessionID string, msg ap
 	if err != nil || sess == nil {
 		return
 	}
-	turn, err := m.store.UserTurnOrdinal(ctx, sessionID)
+	turnSource, err := m.store.ReadSourceTurn(ctx, sessionID, 0)
+	turn := turnSource.Number
 	if err != nil {
 		return
 	}

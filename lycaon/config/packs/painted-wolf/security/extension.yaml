@@ -1,10 +1,10 @@
 manifest_version: 1
 id: painted-wolf/security
 name: Security
-version: 1.0.0
+version: 1.1.0
 compatibility:
-  extension_api: "^1.0.0"
+  extension_api: "^1.1.0"
 dependencies:
   painted-wolf/platform:
-    version: "^1.0.0"
+    version: "^1.1.0"
 feature: security

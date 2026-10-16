@@ -17,7 +17,7 @@ dependencies:
     version: "^1.0.0"
 ```
 
-- `manifest_version`, `id`, `name`, canonical SemVer `version`, and `compatibility.extension_api` are required. The document version is currently `1`; the host extension API is currently `1.0.0` and must satisfy the declared range.
+- `manifest_version`, `id`, `name`, canonical SemVer `version`, and `compatibility.extension_api` are required. The document version is currently `1`; the host extension API is currently `1.1.0` and must satisfy the declared range.
 - Optional: `compatibility.requires_capabilities`, `dependencies`, `requires_scanners`, and `feature`. Use capability `approvals` when the pack relies on approval-rule support. A non-stock dependency also requires a `source`; unmet dependencies or host-resource requirements mean the pack does not contribute.
 - Pack ids use plain segments only — `.`, `..`, and dot-prefixed segments are rejected.
 

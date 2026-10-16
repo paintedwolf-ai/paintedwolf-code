@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/coordinator/promptloop/reject.go",
+  "kind": "projection",
+  "workstream": "tool-prerequisite-recovery",
+  "disposition": "retain",
+  "reason": "Rejection identity, frozen offered tools and task roster are projected together at the pre-invocation boundary. Retain the cohesive 302-line projection; the production OAR matrix covers direct, deferred and unavailable recovery without moving admission authority.",
+  "reviewed_commit": "9be7f9794800e4f970243604590b355a30677c75",
+  "ceiling": 302,
+  "boundaries": {
+    "lycaon/internal/coordinator/promptloop/prompt_loop_tool_execution_internal_test.go": "d75ec21ca63f24e833cec15e1519c167321bb71289ea9f2d42e13124489afab3"
+  }
+}

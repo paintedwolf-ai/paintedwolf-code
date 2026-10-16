@@ -10,11 +10,12 @@ import (
 
 // Runner coalesces background compaction by session.
 type Runner struct {
-	mu      sync.Mutex
-	running map[string]*compactionRun
-	pending map[string]bool
-	active  map[string]*compactionRun
-	work    workscope.Group
+	mu        sync.Mutex
+	running   map[string]*compactionRun
+	pending   map[string]bool
+	active    map[string]*compactionRun
+	work      workscope.Group
+	Synthesis *SynthesisRunner
 }
 
 type compactionRun struct {
@@ -26,9 +27,10 @@ type compactionRun struct {
 // NewRunner constructs a background compaction scheduler.
 func NewRunner() *Runner {
 	return &Runner{
-		running: make(map[string]*compactionRun),
-		pending: make(map[string]bool),
-		active:  make(map[string]*compactionRun),
+		Synthesis: NewSynthesisRunner(),
+		running:   make(map[string]*compactionRun),
+		pending:   make(map[string]bool),
+		active:    make(map[string]*compactionRun),
 	}
 }
 
@@ -85,6 +87,7 @@ func (r *Runner) CancelSession(sessionID string) {
 	if r == nil || sessionID == "" {
 		return
 	}
+	r.Synthesis.Cancel(sessionID)
 	r.mu.Lock()
 	work := r.running[sessionID]
 	active := r.active[sessionID]
@@ -162,6 +165,7 @@ func (r *Runner) admit(ctx context.Context, sessionID string) (*compactionRun, c
 // Stop seals admission and cancels all scheduled and manual passes.
 func (r *Runner) Stop() {
 	if r != nil {
+		r.Synthesis.Stop()
 		r.work.Stop()
 	}
 }
@@ -171,5 +175,8 @@ func (r *Runner) WaitContext(ctx context.Context) error {
 	if r == nil {
 		return nil
 	}
-	return r.work.Wait(ctx)
+	if err := r.work.Wait(ctx); err != nil {
+		return err
+	}
+	return r.Synthesis.WaitContext(ctx)
 }

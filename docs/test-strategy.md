@@ -725,12 +725,24 @@ broad. Like every lane, it fails when the check reports unverified: an image
 that cannot be built, a missing container runtime, or a harness that does not
 start leaves the change unverified, never admitted.
 
+Linux confinement compiles per architecture: seccomp filters name the audit
+architecture and syscall numbers, arm64 has no legacy calls such as `open`,
+`stat`, or `socketcall`, and the network supervisor reads syscall arguments in
+each architecture's layout. Packages ship for amd64 and arm64, so
+`test:confine:linux` (the confine live suites, the command supervisor, and the
+pinned browser under confinement) runs on both. Platform qualification's
+`upgrade-corpus` job runs it on amd64; the `confinement-arm64` lane runs it on
+`ubuntu-24.04-arm` nightly, in qualification, and in the merge queue when the
+sandbox, its helper, or the command supervisor's Linux files change. Setup
+provisions the pinned browser before the lane goes offline.
+
 Drafts spend no verification runners and cannot pass `check`. Manual dispatch
 runs the complete check and platform tier, or with `profile: fast` the fast
 tier for a pull request whose events start no CI, such as the dependency
 inventory's. [`qualification.yml`](../.github/workflows/qualification.yml)
-runs the complete check, then platform confinement and upgrade corpus, then
-browser and desktop journeys on main. One qualification runs at a time: it does
+runs the complete check, then platform confinement and upgrade corpus beside
+the `release` profile's platform lanes, then browser and desktop journeys on
+main. One qualification runs at a time: it does
 not cancel an in-progress run for a newer push, and a newer push replaces a
 pending one, so a busy main qualifies its newest commit rather than every
 commit. Nightly retains race, fuzz, WebKit, stress, and performance
@@ -838,7 +850,7 @@ Release builds restore the shared Go cache; their separate cache retains only
 Tauri release builds. The cache actions enforce the main-ref write boundary
 themselves. Pinned Go analyzers have separate lint and vulnerability caches; their module versions
 and compiler identity are checked before use, including after a cache restore.
-A missing or mismatched binary is rebuilt before analysis. Cache warming enters
+A missing or mismatched binary is rebuilt before analysis. Lint diagnostics are keyed by commit instead: the Linux warmer runs `lint:full` and saves its golangci-lint results for each main commit, deleting the entries they replace, and lint lanes restore the newest, so they reanalyze only the packages that changed since and their dependents. Cache warming enters
 through `./task setup-dev`; workspace verification enters through its ordinary
 managed targets.
 
@@ -875,7 +887,7 @@ cheap failure.
 
 | Class | Workflows | One run at a time | Runners (macOS) |
 |---|---|---|---|
-| Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs, then two browser shards beside the desktop journey |
+| Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, macOS, then the release compile |
 | Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build |

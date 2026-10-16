@@ -134,6 +134,16 @@ host_facts:
    type: bool
  - name: paintedwolf.recall_allowed_fields
    type: list<string>
+ - name: paintedwolf.recall_query_time_invalid
+   type: bool
+ - name: paintedwolf.recall_history_mode_invalid
+   type: bool
+ - name: paintedwolf.recall_history_bounds_invalid
+   type: bool
+ - name: paintedwolf.recall_history_body_missing
+   type: bool
+ - name: paintedwolf.recall_history_search_invalid
+   type: bool
  - name: paintedwolf.render_total_exceeded
    type: bool
  - name: paintedwolf.render_viewport_exceeded
@@ -742,7 +752,17 @@ host_facts:
    type: string
  - name: paintedwolf.tool_discovery_has_more
    type: bool
+ - name: paintedwolf.task_loadable
+   type: bool
  - name: paintedwolf.tool_loadable
+   type: bool
+ - name: paintedwolf.native_replacement_tools
+   type: list<string>
+ - name: paintedwolf.native_replacement_exact
+   type: bool
+ - name: paintedwolf.native_replacement_manual
+   type: bool
+ - name: paintedwolf.replacement_calls_available
    type: bool
  - name: paintedwolf.tool_discovery_available
    type: bool

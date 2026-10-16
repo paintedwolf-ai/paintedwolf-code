@@ -595,7 +595,7 @@ Gate composition lives in `scripts/verification-plan.json`.
 | `bundle:smoke` | Launches the app through LaunchServices, then authenticates, resolves catalogs, opens and edits a document, and checks the engine survived. Ad-hoc-signed builds are **rejected**: they cannot exercise the release Keychain path without an authorization dialog, so a pass on one would prove nothing about the shipped app |
 | `release:preflight` | Read-only validation of version, updater, and brand inputs. `-- --require-corpus` additionally demands the committed upgrade fixture, which is what the tag gate wants |
 | `upgrade:corpus:prepare` / `upgrade:corpus:boot` | `prepare` writes an immutable fixture under `lycaon/testdata/upgrade-corpus/<VERSION>/` that you **review and commit with the candidate**; the release workflow uploads that reviewed tree rather than minting evidence after the tag. `boot` proves the committed fixtures locally |
-| `openapi:diff` | Optional breaking-change report against the committed release-review baseline. Differences succeed; input and tool errors fail. It is not in `check`, `check:drift`, or any workflow |
+| `openapi:diff` | Report wire differences against the committed baseline, or `-- --baseline-ref <commit>` for a pinned stable release. Release CI retains the report automatically; permitted bundle differences succeed and tool failures block release |
 
 ### OpenAPI release review
 
@@ -603,7 +603,11 @@ Gate composition lives in `scripts/verification-plan.json`.
 `docs/openapi/baseline-bundle.yaml` and leaves both files unchanged. Run it when
 reviewing a release candidate. Breaking changes are informational because Den
 and the host ship together. The report shows oasdiff's error-level changes;
-warning-level advisories such as added response enum values are excluded.
+warning-level advisories such as added response enum values are excluded. Release
+CI runs the report against the same published stable commit as its blocking
+compatibility gate and retains both input hashes and the report. The report does
+not require a human acknowledgement; incorrect versioning is enforced separately
+by the release compatibility gate.
 
 After reviewing the differences and updating the co-shipped consumers, advance
 the baseline from the repository root and commit it with the reviewed candidate:
@@ -783,7 +787,7 @@ UPDATE_REPORT_GOLDEN=1 ./task test:digest -- ./internal/report/...
 
 The second run, without the variable, is the one that proves the goldens match. Set a refresh variable only when the fixture change is deliberate — it is the review boundary, and the resulting diff is reviewed with the change that caused it. The schema lock's own boundary is described in [SQL persistence](sql-persistence.md).
 
-Go compilation artifacts retain the normal persistent `GOCACHE`, selected before home isolation. Source snapshots reuse leased directory slots keyed by the Git repository, so unchanged packages retain their absolute compilation paths. Concurrent snapshots use separate slots; live descendants retain their source slot until they exit. Snapshot lint diagnostic caches live outside the source tree in leased temporary directories under `/tmp/paintedwolf-snapshot-caches-$UID`, selected through `PW_TEST_CHECKOUT_CACHE`. Snapshot exit releases its lease and collects unused directories; descendants holding a lease keep their cache until they exit, and the next snapshot collects abandoned caches. Persistent checkouts retain their separate OS-cache directories. The cache lease is independent of the digest's isolated home, so changing `HOME` does not create another snapshot cache.
+Go compilation artifacts retain the normal persistent `GOCACHE`, selected before home isolation. Source snapshots reuse leased directory slots keyed by the Git repository, so unchanged packages retain their absolute compilation paths. Concurrent snapshots use separate slots; live descendants retain their source slot until they exit. Lint diagnostics record absolute positions, so each slot keeps its own diagnostic cache in the OS cache directory, keyed by the slot's path and selected through `PW_TEST_CHECKOUT_CACHE`; the slot's lease covers it, and it persists across runs, so a later lint reanalyzes only changed packages and their dependents. golangci-lint removes entries unused for five days. Persistent checkouts keep their own directories the same way. The cache is resolved before the digest isolates its home, so changing `HOME` does not create another snapshot cache. `test-source-snapshot.sh diagnostics-cache` prints the first slot's cache, which hosted runners restore and main's cache warmer publishes.
 
 Go's built-in eviction is age-based, so verification also checks the active
 `GOCACHE` before a batch and after completed stages, or before an exclusive run.
@@ -896,7 +900,7 @@ Linux ships as native packages only: a `.deb` for Debian and Ubuntu families and
 | `/opt/painted-wolf-code/release-version`, `THIRD-PARTY-NOTICES.md` | release resources |
 | `/usr/share/applications/dev.paintedwolf.code.desktop`, `/usr/share/icons/hicolor/` | the desktop entry named by the bundle identifier and icons. The shell sets its GTK program name to that identifier, which GTK 3 uses as the Wayland app id and the X11 window class (`StartupWMClass=dev.paintedwolf.code`), and `enableGTKAppId` registers it as the GTK application id, so a second launch activates the running instance and exits. It is the only desktop entry; the assembler drops the product-named one Tauri always writes |
 
-`lycaon-den/src-tauri/tauri.linux.conf.json` restricts the bundle target to the `.deb` stage, disables updater artifacts, and drops Tauri's `externalBin` and `resources` placement so nothing lands in `/usr/lib`; `scripts/linux-package-config.py` renders the `files` map and the dependency constraints from [`packaging/linux/dependencies.json`](../packaging/linux/dependencies.json) and the measured floor in `lycaon/internal/platformfloor/linux_floor.txt` (kernel 6.2, glibc 2.35, WebKitGTK 2.44, GTK 3.24.41 for Wayland activation). GTK, WebKitGTK, libsoup and the C library are distribution dependencies; staging refuses a package that bundles them. Optional fragments other subsystems ship are wired when present: `packaging/linux/polkit/*.policy`, `systemd/*.{service,socket}`, `apparmor/*` (deb only), `selinux/*.pp` (rpm only). Maintainer scripts in `packaging/linux/{deb,rpm}/` do exactly: enable `paintedwolf-vault-identity.socket` when it is packaged and restart its service on upgrade, refresh desktop and icon caches, load the AppArmor profile or SELinux module when shipped; on removal they stop the unit and remove empty package directories. They never touch user files or add repositories. Package versions follow each family's grammar through `release-metadata.py`'s `linux_package_version` (`1.0.2-rc.1` becomes `1.0.2~rc.1`).
+`lycaon-den/src-tauri/tauri.linux.conf.json` restricts the bundle target to the `.deb` stage, disables updater artifacts, and drops Tauri's `externalBin` and `resources` placement so nothing lands in `/usr/lib`; `scripts/linux-package-config.py` renders the `files` map and the dependency constraints from [`packaging/linux/dependencies.json`](../packaging/linux/dependencies.json) and the measured floor in `lycaon/internal/platformfloor/linux_floor.txt` (kernel 6.2, glibc 2.35, WebKitGTK 2.44, GTK 3.24.41 for Wayland activation). GTK, WebKitGTK, libsoup and the C library are distribution dependencies; staging refuses a package that bundles them. Optional fragments other subsystems ship are wired when present: `packaging/linux/polkit/*.policy`, `systemd/*.{service,socket}`, `apparmor/*` (deb only), `selinux/*.pp` (rpm only). Maintainer scripts in `packaging/linux/{deb,rpm}/` do exactly: enable `paintedwolf-vault-identity.socket` when it is packaged and restart its service on upgrade, refresh desktop and icon caches, load the AppArmor profile or SELinux module when shipped; on removal they stop the unit and remove empty package directories. They never touch user files or add repositories. No SELinux module ships, so the rpm loads none. The app runs as an ordinary user program, which the targeted policy leaves unconfined. The vault identity service runs under a systemd `DynamicUser` rather than an account the package creates. A Fedora install with SELinux enforcing showed no denials from the app or the service. Installed-package qualification keeps an enforcing Fedora run so a denial introduced by a later change fails release rather than reaching users ([#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)). Package versions follow each family's grammar through `release-metadata.py`'s `linux_package_version` (`1.0.2-rc.1` becomes `1.0.2~rc.1`).
 
 The staging script extracts both packages, verifies the manifest against the extracted bytes, checks every ELF payload is native, compares metadata and dependencies with the catalog, requires the maintainer scripts and that they enable every packaged socket, requires every packaged service to run a manifest-listed helper under `/opt/painted-wolf-code/bin/`, runs `lintian --fail-on error` and `rpmlint` when installed, and refuses anything other than exactly `deb,rpm`. The Linux updater adapter is check-only (see [Updates](#updates)).
 
@@ -1019,6 +1023,12 @@ xattr -w com.apple.quarantine "0083;00000000;Chrome;|com.google.Chrome" ~/Downlo
 5. **Readiness is clean or explained.** `GET /v1/preflight` returns `overall: ok`, or every non-ok probe is one the tester deliberately caused. A clean Mac without a host git install is the *expected* first-run environment — the golden path **passes** when the bundled engine is present (or the app surfaces `GIT_ENGINE_UNAVAILABLE` if it is not), and **fails** if the app is silent about a missing engine.
 
 ### Tag gate
+
+Both preview and stable publication run the controller's compatibility check
+against the newest published stable release confirmed by the signed updater feed or GitHub mirror. The controller pins that
+release's commit once and uses it for catalog and OpenAPI comparisons. An
+unpublished tag or a preview cannot replace the baseline. Missing or inconsistent
+evidence fails closed; there is no additional approval record to maintain.
 
 Every release tag clears the same gate:
 

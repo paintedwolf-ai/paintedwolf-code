@@ -82,7 +82,7 @@ func TestCompleteStreamRecordsUsage(t *testing.T) {
 			LLM: &usageStreamLLM{usage: modelcall.TokenUsage{PromptTokens: 6, CompletionTokens: 2},
 				attemptUsage: &modelcall.TokenUsage{PromptTokens: 3}},
 			Cost: tracker,
-			RecordCompactionTokenObservation: func(_ string, input, estimate int) {
+			RecordCompactionTokenObservation: func(_, _, _ string, input, estimate int) {
 				observed = input
 				if estimate <= 0 {
 					t.Error("context observation omitted its transcript estimate")
