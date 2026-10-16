@@ -59,8 +59,8 @@ func TestReadyPullRequestsRunTheFastTierAndMergeGroupsTheGate(t *testing.T) {
 	}
 }
 
-// A pull request's checks leave out workflow_dispatch runs, so a dispatch reports its
-// gate as the required check's commit status. No other event may write statuses.
+// A pull request's checks leave out dispatch runs; a dispatch reports the
+// required check as a commit status. No other event may write statuses.
 func TestDispatchedRunsReportTheRequiredCheck(t *testing.T) {
 	t.Parallel()
 	jobs := hostedWorkflowFile(t, "ci").Jobs

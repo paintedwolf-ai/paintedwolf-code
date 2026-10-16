@@ -9,9 +9,8 @@ on:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
   merge_group:
-  # The full tier on any branch, before queueing or to reproduce a queue failure;
-  # the fast tier for a pull request whose events start no CI. Either reports the
-  # required check on the dispatched commit (see dispatched-check).
+  # The full tier on any branch; the fast tier for a pull request whose events
+  # start no CI. Either reports the required check (see dispatched-check).
   workflow_dispatch:
     inputs:
       profile:
@@ -66,9 +65,8 @@ jobs:
         run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED" --draft "$DRAFT"
 
   dispatched-check:
-    # A pull request's checks leave out workflow_dispatch runs, so the check job
-    # alone cannot admit it. Its result becomes the required check as a commit
-    # status, which the GitHub Actions app may report as DCO-owned does.
+    # A pull request's checks leave out dispatch runs; report the required
+    # check as a commit status instead.
     if: ${{ !cancelled() && github.event_name == 'workflow_dispatch' }}
     needs: check
     runs-on: ubuntu-latest

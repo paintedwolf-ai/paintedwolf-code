@@ -86,9 +86,7 @@ func requireHostedGate(t *testing.T, jobs map[string]hostedJob, gate string, dep
 
 func TestHostedVerificationAggregatesRequireEveryBlockingJob(t *testing.T) {
 	t.Parallel()
-	// Nightly's quarantine observes without blocking. A dispatch's
-	// dispatched-check reports the ci gate's own result, so neither may be a
-	// gate dependency.
+	// A job that observes, or reports the gate's own result, is not a dependency.
 	for workflow, gate := range map[string]string{"ci": "check", "nightly": "nightly", "qualification": "qualification"} {
 		jobs := hostedJobs(t, workflow)
 		var dependencies []string
