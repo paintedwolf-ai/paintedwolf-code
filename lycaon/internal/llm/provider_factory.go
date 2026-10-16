@@ -107,7 +107,19 @@ func newProviderForEntry(ctx context.Context, entry CatalogEntry, apiKey string,
 	if err := configureReasoningWire(p, entry.ReasoningWire); err != nil {
 		return nil, fmt.Errorf("provider %q: %w", entry.ID, err)
 	}
-	return attachHTTPRetry(attachPromptCache(p, entry.PromptCache), retry), nil
+	return attachToolCallRejections(attachHTTPRetry(attachPromptCache(p, entry.PromptCache), retry), entry.ToolCallRejections), nil
+}
+
+// attachToolCallRejections gives drivers whose parser drops calls the kind's
+// declared rejection grammars.
+func attachToolCallRejections(p modelcall.Provider, policy providerprofile.ToolCallRejectionPolicy) modelcall.Provider {
+	if policy.IsZero() {
+		return p
+	}
+	if t, ok := p.(*ollamaprovider.Provider); ok {
+		return t.WithToolCallRejections(policy)
+	}
+	return p
 }
 
 // attachPromptCache gives a driver its provider kind's prompt-cache policy.

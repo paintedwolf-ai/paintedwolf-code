@@ -31,11 +31,13 @@ const (
 )
 
 // modelOutputState keeps a response's durable identity, source provenance, and
-// policy refusal together until that response is settled.
+// policy refusal together until that response is settled, and counts the
+// consecutive responses whose native call the provider dropped as invalid JSON.
 type modelOutputState struct {
-	id            string
-	sourceContext *api.SourceContext
-	rejection     *guidance.Refusal
+	id                    string
+	sourceContext         *api.SourceContext
+	rejection             *guidance.Refusal
+	droppedToolCallStreak int
 }
 
 type promptLoopTurnState struct {

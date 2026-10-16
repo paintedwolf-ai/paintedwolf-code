@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
+	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providers/ollama"
@@ -70,7 +71,9 @@ func TestLoopRefusesOllamaUnofferedToolRejection(t *testing.T) {
 			testutil.FailErr(t, "create session", err)
 			sess.ParentSessionID = "parent-1"
 			sess.AgentType = orchestration.ProfileImplementer
-			client := &recordingLLM{LLMClient: ollama.New("desktop", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "ministral-3:3b", ContextLength: 32768}})}
+			catalog, err := llm.LoadProviderConfig()
+			testutil.FailErr(t, "load provider catalog", err)
+			client := &recordingLLM{LLMClient: ollama.New("desktop", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "ministral-3:3b", ContextLength: 32768}}).WithToolCallRejections(catalog.ToolCallRejectionProfiles["ollama"])}
 			deps := promptloop.StoreDeps(mem)
 			deps.Model.LLM = client
 			deps.Context.Policy = &fixedToolPolicy{metas: []tools.ToolMeta{{Name: "read"}}}

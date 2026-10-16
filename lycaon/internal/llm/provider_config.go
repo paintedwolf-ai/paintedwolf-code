@@ -30,6 +30,9 @@ type ProviderConfig struct {
 	ModelPromptCache []providerprofile.PromptCacheRule `yaml:"model_prompt_cache,omitempty"`
 	// Capacity is the turn-level hold and provider-slot cooldown.
 	Capacity ProviderCapacityConfig `yaml:"provider_capacity,omitempty"`
+	// ToolCallRejectionProfiles are named ship-catalog grammars for errors a
+	// provider's tool-call parser reports after dropping a model's call.
+	ToolCallRejectionProfiles map[string]providerprofile.ToolCallRejectionPolicy `yaml:"tool_call_rejection_profiles,omitempty"`
 }
 
 // ProviderEntry describes one configured provider instance.
@@ -73,6 +76,11 @@ type ProviderEntry struct {
 	PromptCacheProfile string `yaml:"prompt_cache_profile,omitempty"`
 	// PromptCache is the resolved policy. It is never serialized.
 	PromptCache providerprofile.PromptCachePolicy `yaml:"-"`
+	// ToolCallRejectionProfile names a ship-catalog parser rejection policy.
+	// Local instances omit it and inherit the policy of their provider kind.
+	ToolCallRejectionProfile string `yaml:"tool_call_rejection_profile,omitempty"`
+	// ToolCallRejections is the resolved policy. It is never serialized.
+	ToolCallRejections providerprofile.ToolCallRejectionPolicy `yaml:"-"`
 }
 
 // RequiresKey resolves the instance authentication mode.
@@ -99,7 +107,32 @@ func LoadProviderConfig() (*ProviderConfig, error) {
 	if err := resolveProviderPromptCacheProfiles(&cfg); err != nil {
 		return nil, fmt.Errorf("resolve provider prompt-cache profiles: %w", err)
 	}
+	if err := resolveProviderToolCallRejectionProfiles(&cfg); err != nil {
+		return nil, fmt.Errorf("resolve provider tool-call rejection profiles: %w", err)
+	}
 	return &cfg, nil
+}
+
+// resolveProviderToolCallRejectionProfiles compiles the named parser
+// rejection grammars and projects each kind's policy onto its entry.
+func resolveProviderToolCallRejectionProfiles(cfg *ProviderConfig) error {
+	if err := providerprofile.ResolveToolCallRejectionProfiles(cfg.ToolCallRejectionProfiles); err != nil {
+		return err
+	}
+	for i := range cfg.Providers {
+		entry := &cfg.Providers[i]
+		name := strings.TrimSpace(entry.ToolCallRejectionProfile)
+		if name == "" {
+			continue
+		}
+		policy, ok := cfg.ToolCallRejectionProfiles[name]
+		if !ok {
+			return fmt.Errorf("provider %q references unknown tool_call_rejection_profile %q", entry.ID, name)
+		}
+		entry.ToolCallRejectionProfile = name
+		entry.ToolCallRejections = policy
+	}
+	return nil
 }
 
 // resolveProviderPromptCacheProfiles validates the named prompt-cache

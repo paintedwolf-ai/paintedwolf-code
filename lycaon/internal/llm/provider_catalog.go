@@ -53,6 +53,8 @@ type CatalogEntry struct {
 	RejectionReasonsOverride bool
 	// PromptCache is the provider kind's prompt-cache policy.
 	PromptCache providerprofile.PromptCachePolicy
+	// ToolCallRejections is the provider kind's parser rejection policy.
+	ToolCallRejections providerprofile.ToolCallRejectionPolicy
 }
 
 // SecretDestinationID is the resolved transport identity outbound secret
@@ -186,6 +188,9 @@ func (c *ProviderCatalog) Reload() error {
 	if len(local.PromptCacheProfiles) > 0 {
 		return fmt.Errorf("local providers: prompt_cache_profiles belong to the provider kind catalog")
 	}
+	if len(local.ToolCallRejectionProfiles) > 0 {
+		return fmt.Errorf("local providers: tool_call_rejection_profiles belong to the provider kind catalog")
+	}
 	promptCacheRules := append(append([]providerprofile.PromptCacheRule(nil), local.ModelPromptCache...), ship.ModelPromptCache...)
 	if err := providerprofile.ValidatePromptCache(ship.PromptCacheProfiles, promptCacheRules); err != nil {
 		return fmt.Errorf("local providers: %w", err)
@@ -286,10 +291,22 @@ func resolveLocalEntry(p ProviderEntry, shipByKind map[string]ProviderEntry) (Ca
 			)
 		}
 		entry.PromptCache = ship.PromptCache
+		if name := strings.TrimSpace(p.ToolCallRejectionProfile); name != "" && name != ship.ToolCallRejectionProfile {
+			return CatalogEntry{}, fmt.Errorf(
+				"local providers: %q: tool_call_rejection_profile %q does not match provider kind %q profile %q",
+				p.ID, name, entry.Kind, ship.ToolCallRejectionProfile,
+			)
+		}
+		entry.ToolCallRejections = ship.ToolCallRejections
 	} else if profileName != "" {
 		return CatalogEntry{}, fmt.Errorf(
 			"local providers: %q: http_retry_profile %q has no provider kind template",
 			p.ID, profileName,
+		)
+	} else if name := strings.TrimSpace(p.ToolCallRejectionProfile); name != "" {
+		return CatalogEntry{}, fmt.Errorf(
+			"local providers: %q: tool_call_rejection_profile %q has no provider kind template",
+			p.ID, name,
 		)
 	}
 	if p.HTTPRetryOverride != nil || !entry.HTTPRetry.IsZero() {
@@ -400,6 +417,7 @@ func catalogFromEntry(p ProviderEntry) CatalogEntry {
 		RejectionReasons:           append([]ProviderRejectionRule(nil), p.RejectionReasons...),
 		RejectionReasonsOverride:   len(p.RejectionReasons) > 0,
 		PromptCache:                p.PromptCache,
+		ToolCallRejections:         p.ToolCallRejections,
 	}
 }
 
