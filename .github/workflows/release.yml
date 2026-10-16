@@ -32,6 +32,9 @@ jobs:
       actions: read
     outputs:
       source_sha: ${{ steps.source.outputs.source_sha }}
+      baseline_sha: ${{ steps.compatibility.outputs.baseline_sha }}
+      baseline_tag: ${{ steps.compatibility.outputs.baseline_tag }}
+      published_versions: ${{ steps.compatibility.outputs.published_versions }}
       publish: ${{ steps.source.outputs.publish }}
       version: ${{ steps.release.outputs.version }}
       channel: ${{ steps.release.outputs.channel }}
@@ -41,6 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: refs/heads/main
           fetch-depth: 0
 
       - name: Validate release tag and source
@@ -76,6 +80,21 @@ jobs:
           echo "source_sha=${source_sha}" >> "${GITHUB_OUTPUT}"
           echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
         # Admission uses the controller's qualification policy before selecting source.
+      - name: Install the stable feed verifier
+        run: sudo apt-get update && sudo apt-get install -y minisign
+      - name: Pin the published stable compatibility baseline
+        id: compatibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          PUBLISH: ${{ steps.source.outputs.publish }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" > "${RUNNER_TEMP}/published-releases.json"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/latest" \
+            | python3 scripts/release-compatibility-baseline.py "${SOURCE_SHA}" --base-url "${DOWNLOAD_BASE_URL}" --releases-file "${RUNNER_TEMP}/published-releases.json" --publish "${PUBLISH}" >> "${GITHUB_OUTPUT}"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.source.outputs.source_sha }}
@@ -125,8 +144,57 @@ jobs:
           FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
         run: python3 scripts/feed_signing.py --check-credentials
 
-  preflight:
+  compatibility:
     needs: classify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.classify.outputs.source_sha }}
+          fetch-depth: 0
+      - name: Check out the release controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/heads/main
+          path: .release-controller
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: .release-controller/lycaon/go.mod
+          cache: false
+      - name: Provision release controller inputs
+        env:
+          RUSTUP_TOOLCHAIN: stable
+        working-directory: .release-controller
+        run: |
+          ./task gitengine:fetch
+      - name: Enforce published stable compatibility
+        env:
+          BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}
+          PUBLISHED_VERSIONS: ${{ needs.classify.outputs.published_versions }}
+        working-directory: .release-controller
+        run: |
+          PW_ARTIFACT_ROOT="$(python3 "${GITHUB_WORKSPACE}/scripts/artifact_paths.py" artifacts "${GITHUB_WORKSPACE}")"
+          export PW_ARTIFACT_ROOT
+          ./task release:preflight -- --compatibility-only --source-root "${GITHUB_WORKSPACE}" --baseline-ref "${BASELINE_SHA}" --published-versions "${PUBLISHED_VERSIONS}"
+      - name: Report OpenAPI compatibility
+        env:
+          BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}
+        working-directory: .release-controller
+        run: |
+          PW_ARTIFACT_ROOT="$(python3 "${GITHUB_WORKSPACE}/scripts/artifact_paths.py" artifacts "${GITHUB_WORKSPACE}")"
+          export PW_ARTIFACT_ROOT
+          ./task openapi:diff -- --source-root "${GITHUB_WORKSPACE}" --baseline-ref "${BASELINE_SHA}"
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        with:
+          name: release-compatibility-${{ github.run_attempt }}
+          status: ${{ job.status }}
+
+  preflight:
+    needs: [classify, compatibility]
     runs-on: macos-15
     timeout-minutes: 90
     steps:
@@ -140,11 +208,12 @@ jobs:
         timeout-minutes: 60
         env:
           PUBLISH: ${{ needs.classify.outputs.publish }}
+          BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}
         run: |
           if [[ "${PUBLISH}" == true ]]; then
-            ./task release:preflight -- --require-corpus
+            ./task release:preflight -- --require-corpus --baseline-ref "${BASELINE_SHA}"
           else
-            ./task release:preflight
+            ./task release:preflight -- --baseline-ref "${BASELINE_SHA}"
           fi
       - uses: ./.github/actions/verification-evidence
         if: always()
@@ -195,10 +264,9 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: python3 scripts/ci_verification.py gate
 
-  # The merge queue verified this commit; the signed build starts with preflight, and
-  # nothing leaves the run until ship-gates passes.
+  # Packaging follows static compatibility; publication requires ship-gates.
   build-release:
-    needs: [classify]
+    needs: [classify, compatibility]
     strategy:
       fail-fast: false
       # Beside preflight and the upgrade rehearsal, a release holds two macOS runners.
@@ -216,7 +284,7 @@ jobs:
           ref: ${{ needs.classify.outputs.source_sha }}
           fetch-depth: 0
 
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
         with:
           go-version-file: lycaon/go.mod
           cache: false
@@ -250,8 +318,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev \
-            patchelf xdg-utils libfuse2
+            libwebkit2gtk-4.1-dev librsvg2-dev xdg-utils \
+            rpm rpmlint lintian cpio
 
       - name: Import signing certificate and notary key
         if: ${{ matrix.goos == 'darwin' }}
@@ -345,7 +413,7 @@ jobs:
           PLATFORM: ${{ matrix.updater_key }}
           GOOS: ${{ matrix.goos }}
           ARCH: ${{ matrix.artifact_arch }}
-          PACKAGE_EXTENSION: ${{ matrix.package_extension }}
+          PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}
           UPDATER_EXTENSION: ${{ matrix.updater_extension }}
           DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
         run: |
@@ -353,11 +421,11 @@ jobs:
           [[ "${DOWNLOAD_BASE_URL}" == https://downloads.paintedwolf.dev ]]
           bash scripts/release-stage-platform-artifacts.sh \
             --platform "${PLATFORM}" --goos "${GOOS}" --arch "${ARCH}" \
-            --version "${VERSION}" --package-extension "${PACKAGE_EXTENSION}" \
+            --version "${VERSION}" --package-extensions "${PACKAGE_EXTENSIONS}" \
             --updater-extension "${UPDATER_EXTENSION}" --output "${RUNNER_TEMP}/release"
 
       - name: Upload signed platform result
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: platform-release-${{ matrix.updater_key }}
           path: ${{ runner.temp }}/release/*
@@ -370,6 +438,121 @@ jobs:
           security delete-keychain "${RUNNER_TEMP}/app-signing.keychain-db" 2>/dev/null || true
           rm -f "${RUNNER_TEMP}/AuthKey.p8"
 
+  # Linux candidates exercise the production packaging path without publication:
+  # no signing environment, no feed, no distribution state. Both package
+  # families per architecture are built, audited, and retained with checksums.
+  # They follow the gates and the macOS build so the release holds its declared
+  # runners, and run whatever those jobs concluded so their own result stays visible.
+  linux-candidates:
+    needs: [classify, ship-gates, aggregate-release]
+    if: ${{ !cancelled() }}
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - updater_key: linux-x86_64
+            runner: ubuntu-24.04
+            artifact_arch: x86_64
+            goos: linux
+            goarch: amd64
+          - updater_key: linux-aarch64
+            runner: ubuntu-24.04-arm
+            artifact_arch: aarch64
+            goos: linux
+            goarch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.classify.outputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+
+      - name: Verify native candidate runner
+        env:
+          EXPECTED_GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          [[ "$(go env GOOS)" == linux && "$(go env GOARCH)" == "${EXPECTED_GOARCH}" ]]
+          case "${EXPECTED_GOARCH}" in
+            amd64) [[ "$(rustc --print host-tuple)" == x86_64-unknown-linux-gnu ]] ;;
+            arm64) [[ "$(rustc --print host-tuple)" == aarch64-unknown-linux-gnu ]] ;;
+          esac
+
+      # rpm provides rpmbuild, which assembles the .rpm from the staged tree.
+      - name: Install Linux bundle and audit dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev librsvg2-dev xdg-utils \
+            rpm rpmlint lintian cpio
+
+      - name: Verify the catalog row for this candidate
+        env:
+          PLATFORM: ${{ matrix.updater_key }}
+          RUNNER_NAME: ${{ matrix.runner }}
+        run: |
+          set -euo pipefail
+          row="$(jq -c --arg key "${PLATFORM}" '.platforms[] | select(.updater_key == $key)' packaging/release-platforms.json)"
+          [[ "$(jq -r .publication <<<"${row}")" == candidate ]]
+          [[ "$(jq -r .runner <<<"${row}")" == "${RUNNER_NAME}" ]]
+          [[ "$(jq -c .package_extensions <<<"${row}")" == '["deb","rpm"]' ]]
+          [[ "$(jq -r .updater_extension <<<"${row}")" == null ]]
+
+      - name: Download or restore qualified maintained engine
+        uses: ./.github/actions/setup-opengrep
+
+      - name: Download pinned Bialy heads
+        uses: ./.github/actions/setup-bialy
+
+      - name: Install frontend dependencies
+        working-directory: lycaon-den
+        run: bun install --frozen-lockfile
+
+      - name: Build the Linux packages
+        run: ./task den:bundle
+
+      - name: Verify and stage platform artifacts
+        env:
+          VERSION: ${{ needs.classify.outputs.version }}
+          PLATFORM: ${{ matrix.updater_key }}
+          ARCH: ${{ matrix.artifact_arch }}
+        run: |
+          set -euo pipefail
+          bash scripts/release-stage-platform-artifacts.sh \
+            --platform "${PLATFORM}" --goos linux --arch "${ARCH}" \
+            --version "${VERSION}" --package-extensions deb,rpm \
+            --output "${RUNNER_TEMP}/candidate"
+          ls -l "${RUNNER_TEMP}/candidate"
+
+      - name: Retain candidate packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-candidate-${{ matrix.updater_key }}
+          path: ${{ runner.temp }}/candidate/*
+          if-no-files-found: error
+          retention-days: 90
+
   aggregate-release:
     needs: [classify, build-release]
     runs-on: ubuntu-latest
@@ -379,7 +562,7 @@ jobs:
           ref: ${{ needs.classify.outputs.source_sha }}
 
       - name: Download every signed platform result
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: platform-release-*
           path: release-artifacts
@@ -431,7 +614,7 @@ jobs:
           fi
 
       - name: Upload aggregate release metadata
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-metadata
           path: aggregate/*
@@ -439,7 +622,7 @@ jobs:
           retention-days: 14
 
       - name: Upload public release artifacts
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-public-artifacts
           path: public-artifacts/*
@@ -461,12 +644,12 @@ jobs:
           bun-version-file: .bun-version
           no-cache: true
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-public-artifacts
           path: release-artifacts
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-metadata
           path: release-metadata
@@ -560,7 +743,7 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: tap
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-metadata
           path: release-metadata
@@ -594,7 +777,7 @@ jobs:
         with:
           ref: ${{ needs.classify.outputs.source_sha }}
           persist-credentials: false
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-metadata
           path: release-metadata
@@ -639,7 +822,7 @@ jobs:
       - name: Install minisign for cryptographic feed verification
         run: sudo apt-get update && sudo apt-get install -y minisign
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-metadata
           path: release-metadata
@@ -673,7 +856,7 @@ jobs:
         with:
           ref: ${{ needs.classify.outputs.source_sha }}
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-public-artifacts
           path: release-artifacts

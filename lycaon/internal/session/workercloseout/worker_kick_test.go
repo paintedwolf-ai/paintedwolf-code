@@ -156,7 +156,7 @@ func TestWorkerKickRenderedCoordinatorCitationGrounding(t *testing.T) {
 	}
 	for _, want := range []string{
 		"[host:coordinator-citation-grounding]",
-		"Emit only the citations fence",
+		"To repair citations, emit only the citations fence",
 		"Attempt 2/3",
 		draft,
 		"Pinned body:",

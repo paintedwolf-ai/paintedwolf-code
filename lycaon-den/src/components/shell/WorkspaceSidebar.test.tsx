@@ -41,7 +41,7 @@ function mountSidebar() {
     projectSessions: { state: { sort: "activity", rowsSort: "activity", total: 1 }, refresh: vi.fn(async () => undefined) },
     activeProject: () => ({ is_draft: true, promotion: { phase: "copying" } }), activeChat: () => row, readyChat: () => row,
     nav, setNav, stageAvailable: () => true, splitLive: () => true, dockTray: tray, settingsSection: () => "general",
-    windowNavCollapsed: collapsed, navSlotWidthCss: () => "240px", contextHidden: () => false,
+    windowNavCollapsed: collapsed, navSlotWidthCss: () => "240px", contextHidden: () => false, windowEdgeClaims: () => [],
     sessionRetirementDeps: () => ({ host: "host" }), sidebarRowAsRecent: () => row, projectLifecycle, peerWindows, search,
     settingsStore: {}, costStore: {}, notices: { index: () => new Map() }, homeSection: () => "recents", homeSummaries: () => [],
     sidebarSections: () => [], sidebarChatsPublished: () => true, attentionIndex: () => new Map(), identityReady: () => true,

@@ -197,7 +197,8 @@ func recordRewindTestEffect(t *testing.T, mgr *Host, sessionID, path string, bef
 	ctx := t.Context()
 	p, err := rewindFixtureProject(t, mgr, ctx, sessionID)
 	testutil.FailErr(t, "resolve project", err)
-	turn, err := mgr.Coordinator.Context.Sessions.(Store).UserTurnOrdinal(ctx, sessionID)
+	turnSource, err := mgr.Coordinator.Context.Sessions.(Store).ReadSourceTurn(ctx, sessionID, 0)
+	turn := turnSource.Number
 	testutil.FailErr(t, "resolve turn", err)
 	testutil.FailErr(t, "record source effect", mgr.ToolContext.SourceLedger.Record(ctx, sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: p.Roots[0].ID, Path: path}, ProjectID: p.ID, Op: op,

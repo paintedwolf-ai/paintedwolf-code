@@ -1,3 +1,4 @@
+import { expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { describe, expect, it, vi } from "vitest";
 import { render } from "@solidjs/testing-library";
@@ -71,5 +72,15 @@ describe("WorkflowFeedbackCard", () => {
     ));
     expect(queryByTestId("workflow-feedback-open-marker")).toBeNull();
     expect(getByTestId("workflow-feedback-chicklet")).toBeTruthy();
+  });
+});
+
+describe("WorkflowFeedbackCard under the WebKitGTK AT-SPI workaround", () => {
+  it("shows the same collapsed chicklet", async () => {
+    await expectSameCollapsedFace(() => {
+      const meta: WorkflowFeedbackMeta = { phase_id: "pick", prompt: "Pick one", response_type: "single_choice", options: ["red", "blue"], answer: "blue" };
+      const view = render(() => <WorkflowFeedbackCard meta={meta} client={client()} {...base} />);
+      return { card: () => view.container.querySelector('[data-testid="workflow-feedback-chicklet"]'), unmount: view.unmount };
+    });
   });
 });

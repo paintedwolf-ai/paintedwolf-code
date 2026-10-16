@@ -33,6 +33,14 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 		if budgets != nil {
 			budget = budgets.RequestBudget(ctx, provider, candidate)
 		}
+		if calibration := m.Calibration(ctx, sess); calibration.Calibrated() {
+			tools := modelcall.EstimateRequestInput(modelcall.CompletionRequest{Tools: candidate.Tools})
+			transcript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(candidate.Messages))
+			calibration.TranscriptEstimate += tools
+			observed := calibration.ProjectBilled(transcript+tools, 0)
+			// Composition changes need room beyond the last observed ratio.
+			budget.Input = max(budget.Input, observed+(observed+9)/10)
+		}
 		if budget.Window <= 0 {
 			budget.Window = cfg.ModelContextWindow
 			budget.Headroom = min(budget.Headroom, max(0, budget.Window/8))
@@ -52,13 +60,21 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 		reserve = max(reserve, budget.MinimumOutput)
 	}
 	ceiling := budget.Window - budget.Headroom - reserve
+	if req.MaxTokens <= 0 && budget.Input <= ceiling {
+		req.MaxTokens = budget.Window - budget.Headroom - budget.Input
+		return req, nil
+	}
 	frame := req
 	frame.Messages = projection.frame
 	frameBudget := measure(frame)
-	if req.MaxTokens <= 0 && ceiling-frameBudget.Input < 512 {
+	if req.MaxTokens <= 0 {
 		if availableAfterFrame := budget.Window - budget.Headroom - frameBudget.Input; availableAfterFrame > max(128, budget.MinimumOutput) {
-			reserve = max(max(128, budget.MinimumOutput), min(reserve, availableAfterFrame/2))
+			reserve = max(max(128, budget.MinimumOutput), min(reserve, availableAfterFrame/4))
 			ceiling = budget.Window - budget.Headroom - reserve
+		}
+		if budget.Input <= ceiling {
+			req.MaxTokens = budget.Window - budget.Headroom - budget.Input
+			return req, nil
 		}
 	}
 	fullHistory := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(projection.history))
@@ -98,7 +114,7 @@ func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []a
 
 func (m *Service) requestContinuation(ctx context.Context, sess *api.Session, rows []api.Message) *messageview.Continuation {
 	record := &messageview.Continuation{Format: messageview.ContinuationFormat, Reason: "references_only"}
-	if m.store != nil {
+	if m != nil && m.store != nil && sess != nil {
 		view, ok, err := m.store.GetCompactionView(ctx, sess.ID)
 		if err == nil && ok && view.Continuation != nil {
 			if current, err := m.store.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq); err == nil && current {
@@ -117,14 +133,11 @@ func (m *Service) requestContinuation(ctx context.Context, sess *api.Session, ro
 
 func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, history []api.Message, record *messageview.Continuation, cfg compaction.CompactionConfig, tokens int, shrinkTools bool) ([]api.Message, error) {
 	rows := append([]api.Message(nil), history...)
-	if shrinkTools && m.store != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess) {
-		rows = projectRecordedToolBodies(rows)
-	}
 	found, text := false, ""
 	if record.ThroughOrd > 0 {
 		record = messageview.CloneContinuation(record)
 		record.Window = cfg.ModelContextWindow
-		recall := m.recallAvailable != nil && m.recallAvailable(ctx, sess)
+		recall := m != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)
 		var err error
 		text, err = compaction.RenderContinuation(ctx, record, recall, max(192, tokens/3))
 		if err != nil {
@@ -149,8 +162,25 @@ func (m *Service) fitRequestHistory(ctx context.Context, sess *api.Session, hist
 		rows = kept
 	}
 	rows = promptassembly.MarkContextPins(sess, rows, min(8192, max(0, tokens/5)))
+	canShrinkTools := shrinkTools && m != nil && m.store != nil && m.recallAvailable != nil && m.recallAvailable(ctx, sess)
+	if canShrinkTools {
+		toolTokens := tokens
+		if !found && text != "" {
+			toolTokens = max(1, tokens-compaction.EstimateMessagesTokens([]compaction.ContextMessage{{Role: "system", Content: text}}))
+		}
+		rows = projectRecordedToolBodies(ctx, rows, toolTokens)
+		if retained := retainedToolTailMessages(rows, toolTokens); retained > 0 {
+			cfg.KeepRecentMessages = retained
+		}
+	}
 	contexts := compaction.ContextMessagesFromAPI(rows)
 	fitted := compaction.DeterministicFit(cfg, contexts, tokens)
+	if canShrinkTools && compaction.EstimateMessagesTokens(fitted) > tokens {
+		rows = projectRecordedToolBodies(ctx, rows)
+		cfg.KeepRecentMessages = max(1, retainedToolTailMessages(rows, 0))
+		contexts = compaction.ContextMessagesFromAPI(rows)
+		fitted = compaction.DeterministicFit(cfg, contexts, tokens)
+	}
 	if !found && text != "" && requestHistoryDropped(rows, fitted) {
 		reference := compaction.ContextMessage{ID: "host-request-history-reference", Role: "system",
 			Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted,

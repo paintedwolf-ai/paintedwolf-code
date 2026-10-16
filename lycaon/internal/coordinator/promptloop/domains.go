@@ -59,8 +59,7 @@ type ModelDeps struct {
 	LLMService                       *llm.Service
 	Cost                             cost.CostTracker
 	CompactionConfig                 func(ctx context.Context, sess *api.Session) compaction.CompactionConfig
-	RecordCompactionTokenObservation func(sessionID string, reportedPromptTokens, transcriptEstimate int)
-	CompactionTokenCalibration       func(sessionID string) compaction.PromptTokenCalibration
+	RecordCompactionTokenObservation func(sessionID, providerID, model string, reportedPromptTokens, transcriptEstimate int)
 }
 
 type ToolsDeps struct {
@@ -102,7 +101,7 @@ type CloseoutDeps struct {
 	BeginCloseoutIntent                 func(ctx context.Context, sessionID string)
 	RecordGroundingFriction             func(ctx context.Context, sessionID string) guidance.GroundingFriction
 	NoteCloseoutGroundingReject         func(ctx context.Context, sessionID, code, offenderKey, draftedContent string, unread []jsonshape.Issue) (attempt int, prevKey string)
-	NoteCoordinatorToolTurn             func(ctx context.Context, sessionID string) (tripped bool)
+	ResumeCloseoutWork                  func(ctx context.Context, sessionID string)
 	CloseoutStallState                  func(ctx context.Context, sessionID string) guidance.RetainedCloseout
 	ClearCloseoutStall                  func(ctx context.Context, sessionID string)
 	AssembleLedgerCloseout              func(ctx context.Context, sessionID, surfaceID string, forcedBy []string, draftedContent string, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding)

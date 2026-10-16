@@ -7,16 +7,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonshape"
-	"github.com/lycaon/lycaon/internal/limits"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 )
-
-// closeoutStall keeps one closeout cycle's repair state and the tool turns
-// taken since its latest refusal.
-type closeoutStall struct {
-	guidance.RetainedCloseout
-	toolTurnsSince int
-}
 
 // NoteCloseoutGroundingReject records a refused closeout draft and the
 // members of it the report did not take.
@@ -40,7 +32,6 @@ func (c *Service) noteGroundingReject(rootID, code, offenderKey, draftedContent 
 		entry.Attempt++
 	}
 	entry.PrevKey = offenderKey
-	entry.toolTurnsSince = 0
 	if code = strings.TrimSpace(code); code != "" {
 		entry.ForcedBy = appendDistinctCode(entry.ForcedBy, code)
 	}
@@ -52,25 +43,27 @@ func (c *Service) noteGroundingReject(rootID, code, offenderKey, draftedContent 
 	return entry.Attempt + entry.DocumentAttempt, prevKey
 }
 
-// NoteCoordinatorToolTurn counts tool turns only while citation recovery is active.
-func (m *Service) NoteCoordinatorToolTurn(ctx context.Context, sessionID string) (tripped bool) {
+// ResumeWork retires the pinned report without replenishing repair budgets.
+// A tool attempt can change the conclusion even when it fails or is rejected.
+func (m *Service) ResumeWork(ctx context.Context, sessionID string) {
 	if m == nil {
-		return false
+		return
 	}
-	return m.noteToolTurn(sessiontree.RootID(ctx, m.store, sessionID))
+	m.resumeWork(sessiontree.RootID(ctx, m.store, sessionID))
 }
 
-func (c *Service) noteToolTurn(rootID string) bool {
+func (c *Service) resumeWork(rootID string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	cycle, _ := c.cycles.Load(rootID)
-	entry := &cycle.stall
-	if !entry.Active {
-		return false
+	cycle, ok := c.cycles.Load(rootID)
+	if !ok {
+		return
 	}
-	entry.toolTurnsSince++
+	previous := cycle.stall
+	cycle.stall = guidance.RetainedCloseout{
+		Attempt: previous.Attempt, DocumentAttempt: previous.DocumentAttempt,
+	}
 	c.cycles.Store(rootID, cycle)
-	return entry.toolTurnsSince >= limits.DefaultCloseoutStallToolTurns
 }
 
 // CloseoutStallState returns a copy of the root's retained closeout repair.
@@ -85,7 +78,7 @@ func (c *Service) stallState(rootID string) guidance.RetainedCloseout {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	cycle, _ := c.cycles.Load(rootID)
-	state := cycle.stall.RetainedCloseout
+	state := cycle.stall
 	state.ForcedBy = slices.Clone(state.ForcedBy)
 	state.Unread = slices.Clone(state.Unread)
 	return state
@@ -106,7 +99,7 @@ func (c *Service) clearStall(rootID string) {
 	if !ok {
 		return
 	}
-	cycle.stall = closeoutStall{}
+	cycle.stall = guidance.RetainedCloseout{}
 	c.cycles.Store(rootID, cycle)
 }
 

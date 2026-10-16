@@ -24,9 +24,7 @@ func TestReviewAssignmentMigrationPreservesBaseline(t *testing.T) {
 	defer source.Close()
 	baseline, err := inspectSchema(t.Context(), source)
 	testutil.FailErr(t, "read released baseline", err)
-	target, err := CurrentBaseline(t.Context())
-	testutil.FailErr(t, "read current baseline", err)
-	step := migrations.SourceNamespace(target)
+	step := migrations.SourceNamespace()
 	if baseline != step.From {
 		t.Fatalf("released baseline is %+v; registered %+v", baseline, step.From)
 	}
@@ -36,8 +34,8 @@ func TestReviewAssignmentMigrationPreservesBaseline(t *testing.T) {
 	testutil.FailErr(t, "validate migration", step.Validate(t.Context(), tx))
 	shape, err := ShapeDigest(t.Context(), tx)
 	testutil.FailErr(t, "read migrated shape", err)
-	if shape != target.Shape {
-		t.Fatalf("migration shape %s, want %s", shape, target.Shape)
+	if shape != step.To.Shape {
+		t.Fatalf("migration shape %s, want %s", shape, step.To.Shape)
 	}
 	testutil.FailErr(t, "rollback migration", tx.Rollback())
 	restored, err := inspectSchema(t.Context(), source)
@@ -90,8 +88,8 @@ func TestReleasedCorpusUpgradesWithoutChangingRetainedRows(t *testing.T) {
 	}
 	var applied int
 	testutil.FailErr(t, "read migration ledger", reader.QueryRowContext(t.Context(), "SELECT count(*) FROM schema_migrations").Scan(&applied))
-	if applied != 1 {
-		t.Fatalf("migration applied %d times", applied)
+	if applied != 3 {
+		t.Fatalf("migration ledger has %d steps, want 3", applied)
 	}
 }
 

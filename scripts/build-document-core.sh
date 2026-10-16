@@ -5,6 +5,7 @@
 # stages a copy there.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "${ROOT}/scripts/sha256.sh"
 CACHE_ROOT="$(python3 "${ROOT}/scripts/artifact_paths.py" cache)/document-core"
 CRATE="${ROOT}/lycaon/internal/documentcore/native"
 NAME="pw-document-core"
@@ -38,9 +39,9 @@ identity() {
     (cd "${ROOT}" && LC_ALL=C find rust-toolchain.toml scripts/build-document-core.sh \
       lycaon/internal/documentcore/native/Cargo.toml lycaon/internal/documentcore/native/Cargo.lock \
       lycaon/internal/documentcore/native/src -type f -print | LC_ALL=C sort | while IFS= read -r file; do
-        printf '%s %s\n' "$(shasum -a 256 "${file}" | cut -d' ' -f1)" "${file}"
+        printf '%s %s\n' "$(sha256 "${file}" | cut -d' ' -f1)" "${file}"
       done)
-  } | shasum -a 256 | cut -c1-24
+  } | sha256 | cut -c1-24
 }
 
 DIGEST="$(identity)"

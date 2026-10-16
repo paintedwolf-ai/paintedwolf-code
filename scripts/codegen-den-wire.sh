@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "${ROOT}/scripts/sha256.sh"
 # shellcheck source=snapshot-publish.sh
 source "$(dirname "$0")/snapshot-publish.sh"
 MODE="${1:-generate}"
@@ -27,12 +28,12 @@ output_digest() {
     cd "$ROOT"
     for rel in "${outputs[@]}"; do
       if [[ -f "$rel" ]]; then
-        shasum -a 256 "$rel"
+        sha256 "$rel"
       else
         printf 'missing  %s\n' "$rel"
       fi
     done
-  ) | shasum -a 256 | awk '{print $1}'
+  ) | sha256 | awk '{print $1}'
 }
 
 cleanup() {
@@ -61,8 +62,8 @@ source_digest() {
     cd "$ROOT"
     find docs/openapi.yaml lycaon-den/package.json lycaon/cmd/codegen-operations \
       scripts/codegen-den-types.sh \
-      -type f -print | LC_ALL=C sort | while IFS= read -r file; do shasum -a 256 "$file"; done
-  ) | shasum -a 256 | awk '{print $1}'
+      -type f -print | LC_ALL=C sort | while IFS= read -r file; do sha256 "$file"; done
+  ) | sha256 | awk '{print $1}'
 }
 
 before="$(source_digest)"

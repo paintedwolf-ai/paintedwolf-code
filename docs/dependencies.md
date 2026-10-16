@@ -34,11 +34,12 @@ The app ships a **pinned** git + git-lfs binary tree rather than calling whateve
 
 | Item | Detail |
 |------|--------|
-| **Artifacts** | `git`, `git-lfs`, and a slim `libexec/git-core/` from [desktop/dugite-native](https://github.com/desktop/dugite-native) release tarballs |
+| **Artifacts** | `git`, `git-lfs`, and a slim `libexec/git-core/` from [desktop/dugite-native](https://github.com/desktop/dugite-native) release tarballs on macOS and Windows, and from [paintedwolf-git](https://github.com/paintedwolf-ai/paintedwolf-git) on Linux. The Linux build links curl, OpenSSL and zlib statically (only glibc and the loader are required), keeps their texts in its `licenses/` directory, and publishes the corresponding source archive on the same release |
 | **Pin** | `lycaon/config/gitengine/pin.yaml`: `git_version`, `lfs_version`, and each platform's URL template, build id, exact reported version, and SHA-256 |
 | **Fetch** | `./task gitengine:fetch` (`scripts/gitengine-fetch.sh`) downloads, verifies the hash, extracts into `lycaon-den/src-tauri/engine-root/gitengine/`, then prunes weight. A SHA-256 mismatch deletes the download and **fails the fetch** |
 | **Prune** | Unix drops Git Credential Manager, server and legacy helpers (`git-daemon`, `git-shell`, `git-http-backend`, `git-imap-send`, …), and dugite's `git-* → git` multi-call aliases: the host always runs `bin/git <subcommand>` with `GIT_EXEC_PATH` set, so those aliases are unused, and Tauri's resource bundler would otherwise dereference each symlink into a full copy of `git`. `git-remote-https` is a copy of `git-remote-http`; ftp/ftps helpers are removed. Windows keeps the `cmd` / `mingw64` / `usr` runtime topology and removes documentation and credential-manager entry points. Budgets: 40 MB Unix, 140 MB Windows |
 | **Resolution** | `LYCAON_GIT_BINARY` (honoured only when `LYCAON_TEST` is set), else the launcher-provided `LYCAON_ENGINE_ROOT`, else unavailable. No `PATH` lookup and no system-git fallback; preflight reports `GIT_ENGINE_UNAVAILABLE`. `scripts/gitengine-ensure.sh` stages the tree; `./task setup-dev`, `./task den:sidecar`, and the e2e harness provision it, so an offline host still gets a sidecar |
+| **Trust store** | The Linux build carries no CA bundle and its TLS library has no usable default, so `gitexec` sets `GIT_SSL_CAINFO` to the first readable file in Go's `crypto/x509` Linux order. A network invocation with none readable fails with `CABundleUnavailableError`; local invocations are unaffected |
 | **Test binaries** | A test binary has no engine beside it. Packages whose tests touch git call `gitengine.TestingEnableBundledBinary()` from a `TestMain`; it points `LYCAON_GIT_BINARY` at the checkout's staged tree and sets `LYCAON_TEST=1` |
 | **Packaging** | The tree is mapped under Tauri `bundle.resources` as `engine-root/`; it is **gitignored** and produced by the fetch/build step. `./task bundle:verify` (`internal/bundleverify`) rejects a shipped tree over the size budget or that still contains a materialized `git-status` alias |
 | **Signing** | Every Mach-O in the macOS tree is signed, not just `bin/git`: git executes its own helpers out of `libexec/git-core/`, and notarization rejects any nested binary without a Developer ID signature, hardened runtime, and secure timestamp. A Windows build, a candidate platform that is not published, signs the Git and Git LFS entry points through Azure Artifact Signing before packaging. `scripts/den-build-bundle.sh` refuses to bundle when the platform tree is missing |
@@ -50,7 +51,27 @@ The app ships a **pinned** git + git-lfs binary tree rather than calling whateve
 3. Run the git parity suite against a reference git (`LYCAON_GIT_REFERENCE` set; `lycaon/test/integration/git_parity_test.go`). It covers large-file storage driven from a path containing a space, which is what every installed path looks like.
 4. Commit the pin manifest. Do **not** commit the extracted `engine-root/gitengine/` tree.
 
-When a CVE lands in git or git-lfs, bump the pin to a fixed dugite-native release and repeat.
+When a CVE lands in git, git-lfs or a statically linked library, bump the pin to a fixed dugite-native release and a fixed paintedwolf-git release, and repeat.
+
+## Bundled OCR engine
+
+On Linux the visual screen reads image text with a **pinned** static Tesseract executable and its trained data, staged under the engine root like the git toolchain. macOS recognizes text in-process through Apple Vision and bundles nothing.
+
+| Item | Detail |
+|------|--------|
+| **Artifacts** | `ocr/bin/tesseract` (Tesseract 5.5.3 with Leptonica 1.87.0, statically linked against musl, no image codecs) plus `ocr/tessdata/eng.traineddata` and `osd.traineddata` from `tessdata_fast`, upstream license texts and notices, the producer's source lock, and a `provenance.json` naming every input |
+| **Pin** | [`lycaon/config/runtime/ocrengine/pin.yaml`](../lycaon/config/runtime/ocrengine/pin.yaml): engine version, producer repository, release tag and commit, trained-data digests and sizes, and each platform's release archive URL, digest, size, and executable digest |
+| **Build** | The [Painted Wolf Tesseract](https://github.com/paintedwolf-ai/paintedwolf-tesseract) producer owns the build recipe, its digest-pinned inputs, and the notices. Its release workflow builds and runs both architectures on GitHub-hosted runners and publishes immutable, attested releases. This repository never compiles the engine; a pin change needs a published release |
+| **Fetch** | `scripts/ocrengine-fetch.sh [--target TRIPLE] [--archive FILE]` downloads the pinned release archive (or imports a local one, such as a producer qualification build), checks its digest and size, checks every payload digest, and places the tree at `lycaon-den/src-tauri/engine-root/ocr/`. `scripts/stage-engine.sh` runs it on Linux; `./task setup-dev` runs it on a Linux checkout |
+| **Resolution** | `LYCAON_OCR_ROOT`, else `ocr/` under the launcher-provided `LYCAON_ENGINE_ROOT`, else `ocr/` beside the engine executable. Every root is verified against the pin (executable and trained-data digests and sizes) once per process; a present but altered payload is refused rather than skipped. No `PATH` lookup and no system-tesseract fallback. Preflight reports `OCR_ENGINE_UNAVAILABLE` with `reason` `missing`, `digest_mismatch`, or `unsupported_platform` |
+| **Run** | The host decodes the raster itself and hands the engine an 8-bit PGM on stdin (small rasters enlarged by a whole factor first), so the C side carries no image parser. One process per image through the host process seam: a private scratch directory as its only write root, no egress, reduced environment, `--psm 1` orientation detection with `min_orientation_margin` lowered from 7 to 1 so a capture of a few lines turned upside down is turned back, TSV on stdout, a 30 s deadline, and 8 MiB of output. Word rows are grouped into line spans with normalized boxes and mean confidence, the same shape the macOS recognizer returns |
+| **Verify** | `pw diagnostics ocr-engine` resolves the installed engine, reads a rendered fixture, and fails unless the words come back. Tests gate on `ocrtest.SkipIfNoEngine`; `LYCAON_OCR_REQUIRED=1` turns the skip into a failure |
+
+### Bump procedure
+
+1. Change the inputs in the producer repository and publish a new release there (its README has the release steps).
+2. Verify the release's `release.json` attestation (`gh attestation verify release.json --repo paintedwolf-ai/paintedwolf-tesseract --signer-workflow paintedwolf-ai/paintedwolf-tesseract/.github/workflows/release.yml`). Then set `engine_version`, `producer.tag`, and `producer.commit` (its `source_commit`) in `lycaon/config/runtime/ocrengine/pin.yaml`, and copy the trained-data digests and each platform's archive URL, digest, size, and executable digest from the release's `release.json`.
+3. Run `scripts/ocrengine-fetch.sh` and the engine-required recognizer suite (`LYCAON_OCR_REQUIRED=1 ./task test:digest -- ./internal/ocrengine/... ./internal/visualscreen/...`) on Linux.
 
 ## Managed headless browser
 

@@ -14,8 +14,13 @@ import {
   materializeTranscriptWindow,
   patchRowInWindow,
   precedesLiveTail,
+  presentedOrdSpan,
   refreshTailWindow,
+  transcriptPageQuery,
   transcriptPageRequest,
+  transcriptSeekRequest,
+  trimOldestPages,
+  unloadedTranscriptOrds,
   type TranscriptWindow,
   type TranscriptWindowPage,
 } from "./transcript-window.ts";
@@ -300,5 +305,52 @@ describe("refreshTailWindow", () => {
     const tw = appendToTail(emptyTranscriptWindow(), msg("live", 1));
     expect(refreshTailWindow(tw, page([]))).toBe(tw);
   });
+
+  it("tracks session ordinal bounds, unloaded spans, and ordinal seeks", () => {
+    let tw = installTailWindow(
+      emptyTranscriptWindow(),
+      {
+        messages: rows(401, 500),
+        hasMoreBefore: true,
+        hasMoreAfter: false,
+        bounds: { firstOrd: 1, lastOrd: 500 },
+      },
+      { resetPages: true },
+    );
+    expect(presentedOrdSpan(tw)).toEqual({ firstOrd: 401, lastOrd: 500 });
+    expect(unloadedTranscriptOrds(tw)).toEqual({ before: 400, after: 0 });
+
+    const seek = transcriptSeekRequest(tw, 200, 100)!;
+    expect(seek).toEqual({ edge: "seek", afterOrd: 149 });
+    expect(transcriptPageQuery(seek)).toEqual({ afterOrd: 149 });
+
+    tw = applyTranscriptPage(tw, seek, {
+      messages: rows(150, 249),
+      hasMoreBefore: true,
+      hasMoreAfter: true,
+      bounds: { firstOrd: 1, lastOrd: 500 },
+    })!;
+    expect(tw.hasTailGap).toBe(true);
+    expect(presentedOrdSpan(tw)).toEqual({ firstOrd: 150, lastOrd: 249 });
+    expect(unloadedTranscriptOrds(tw)).toEqual({ before: 149, after: 251 });
+  });
+
+  it("retains the reader's page during tail overflow until the reader moves away", () => {
+    let tw = emptyTranscriptWindow();
+    const rolls = TRANSCRIPT_PAGE_BUDGET + 2;
+    const total = TRANSCRIPT_TAIL_BUDGET + rolls * DEFAULT_TRANSCRIPT_PAGE_LIMIT;
+    const keepOrds = { firstOrd: 10, lastOrd: 20 };
+    for (let i = 1; i <= total; i++) {
+      tw = appendToTail(tw, msg(`m${i}`, i), { keepOrds });
+    }
+    const residentBeforeTrim = materializeTranscriptWindow(tw);
+    expect(residentBeforeTrim.some((m) => m.ord === 15)).toBe(true);
+
+    // Once the reader moves away from the oldest page, trimming reclaims it.
+    const trimmed = trimOldestPages(tw);
+    expect(Object.keys(trimmed.pages).length).toBe(TRANSCRIPT_PAGE_BUDGET);
+    expect(materializeTranscriptWindow(trimmed).some((m) => m.ord === 15)).toBe(false);
+  });
 });
+
 

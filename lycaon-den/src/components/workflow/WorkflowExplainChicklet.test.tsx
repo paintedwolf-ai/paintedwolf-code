@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
+import { disclosureToggle, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
+import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createStore } from "solid-js/store";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SecurityFullPass, SecurityOverview, WorkflowExplainMeta, WorkflowRun } from "../../api/types.ts";
@@ -57,7 +58,7 @@ describe("WorkflowExplainChicklet", () => {
     const { client } = mount("ingest", overview({ running: runningPass }));
     const chicklet = screen.getByTestId("workflow-explain-chicklet");
     expect(chicklet.classList.contains("den-tool-part")).toBe(true);
-    expect(chicklet.hasAttribute("open")).toBe(false);
+    expect(chicklet.getAttribute("data-expanded") === "true").toBe(false);
     expect(chicklet.querySelector(".den-tool-part-name")?.textContent).toBe(WORKFLOW_EXPLAIN_NAME);
     expect(chicklet.querySelector(".den-tool-part-status-dot")?.getAttribute("data-status")).toBe("running");
     await waitFor(() => expect(screen.getByTestId("workflow-explain-state").textContent).toBe("1 of 2 scanners done"));
@@ -66,7 +67,7 @@ describe("WorkflowExplainChicklet", () => {
 
   it("expands to the note and the Security page's progress rows", async () => {
     mount("ingest", overview({ running: runningPass }));
-    fireEvent.click(screen.getByTestId("workflow-explain-chicklet").querySelector("summary")!);
+    fireEvent.click(disclosureToggle(screen.getByTestId("workflow-explain-chicklet")));
     await waitFor(() => expect(screen.getByTestId("workflow-explain-progress")).toBeTruthy());
     expect(screen.getByTestId("workflow-explain-body").textContent).toContain(meta.body);
     const readouts = screen.getAllByTestId("scans-full-scan-readout").map((node) => node.textContent);
@@ -105,7 +106,7 @@ describe("WorkflowExplainChicklet", () => {
       />
     ));
     expect(screen.getByTestId("workflow-explain-state").textContent).toBe("1 of 2 workers done");
-    fireEvent.click(screen.getByTestId("workflow-explain-chicklet").querySelector("summary")!);
+    fireEvent.click(disclosureToggle(screen.getByTestId("workflow-explain-chicklet")));
     await waitFor(() => expect(screen.getByTestId("workflow-explain-legs")).toBeTruthy());
     expect(screen.getByTestId("workflow-explain-legs").textContent).toContain("Edge case hunt");
     expect(client.getProjectSecurity).not.toHaveBeenCalled();
@@ -113,8 +114,18 @@ describe("WorkflowExplainChicklet", () => {
 
   it("drops the bars once a newer pass replaced the one it names", async () => {
     mount("plan", overview({ last_full: { ...runningPass, assessment_id: "pass-2" } }));
-    fireEvent.click(screen.getByTestId("workflow-explain-chicklet").querySelector("summary")!);
+    fireEvent.click(disclosureToggle(screen.getByTestId("workflow-explain-chicklet")));
     await waitFor(() => expect(screen.getByTestId("workflow-explain-body").textContent).toContain(meta.body));
     expect(screen.queryByTestId("workflow-explain-progress")).toBeNull();
+  });
+});
+
+describe("WorkflowExplainChicklet under the WebKitGTK AT-SPI workaround", () => {
+  it("shows the same collapsed chicklet", async () => {
+    await expectSameCollapsedFace(() => {
+      resetSurfaceQueriesForTests();
+      mount("ingest", overview({ running: runningPass }));
+      return { card: () => screen.queryByTestId("workflow-explain-chicklet"), unmount: cleanup };
+    }, (face) => face.includes("scanners"));
   });
 });

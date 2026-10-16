@@ -26,6 +26,7 @@ PRAGMA user_version=1;`
 func TestCurrentBaselineRequiresNoUpgrade(t *testing.T) {
 	baseline, err := CurrentBaseline(t.Context())
 	testutil.FailErr(t, "inspect current baseline", err)
+	t.Logf("current schema baseline: revision=%d shape=%s", baseline.Revision, baseline.Shape)
 	plan, err := PlanSchemaUpgrade(t.Context(), baseline)
 	testutil.FailErr(t, "plan current baseline", err)
 	if plan.Required() || plan.Source != baseline || plan.Target != baseline {

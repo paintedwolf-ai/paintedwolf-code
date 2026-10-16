@@ -1,7 +1,7 @@
 import { NoticeReporterProvider } from "../../notices/notice-reporter.tsx";
 import type { NoticeReporter } from "../../notices/notice-store.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@solidjs/testing-library";
+import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createAppStore } from "../../store/app-state.ts";
 import type { PendingCheckpoint } from "../../chat/checkpoint/checkpoint-model.ts";
 import { pendingCheckpointsForSession } from "../../chat/actions/chat-actions.ts";
@@ -217,5 +217,39 @@ describe("CheckpointCards dock exit", () => {
     expect(card.getAttribute("data-checkpoint-id")).toBe("cp-2");
     expect(card.hasAttribute("inert")).toBe(false);
     expect((screen.getByTestId("approval-approve-primary") as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it.each([
+    { moved: false, returned: 1 },
+    { moved: true, returned: 0 },
+  ])("returns focus to the composer when the resolved card retires (moved away: $moved)", async ({ moved, returned }) => {
+    const appStore = createAppStore();
+    appStore.actions.setCurrentSession(session);
+    const setPending = (checkpoints: PendingCheckpoint[]) =>
+      appStore.actions.setPendingCheckpoints("parent-1", appStore.state.sessionViewEpoch, appStore.state.checkpointEventEpoch, checkpoints);
+    setPending([toolApproval("cp-1")]);
+    const resolveCheckpoint = vi.fn(async () => undefined);
+    const composer = document.createElement("textarea");
+    const onFocusReturn = vi.fn(() => composer.focus());
+    const elsewhere = document.createElement("button");
+    document.body.append(composer, elsewhere);
+    render(() => (
+      <ComposerChromeSlot slot="checkpoint" present={pendingCheckpointsForSession(appStore, "parent-1").length > 0}>
+        <NoticeReporterProvider reporter={testReporter}>
+          <CheckpointCards appStore={appStore} client={stubClient({ resolveCheckpoint })} sessionId="parent-1"
+            projectDir="/tmp/p" projects={mockProjectsStore()} onFocusReturn={onFocusReturn} />
+        </NoticeReporterProvider>
+      </ComposerChromeSlot>
+    ));
+    await flushRaf();
+    const allow = screen.getByTestId("approval-approve-primary");
+    allow.focus();
+    fireEvent.click(allow);
+    await waitFor(() => expect(resolveCheckpoint).toHaveBeenCalled());
+    if (moved) elsewhere.focus();
+    setPending([]);
+    await flushRaf();
+    expect(onFocusReturn).toHaveBeenCalledTimes(returned);
+    expect(document.activeElement).toBe(moved ? elsewhere : composer);
   });
 });

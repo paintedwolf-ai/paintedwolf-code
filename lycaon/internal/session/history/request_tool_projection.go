@@ -1,37 +1,65 @@
 package history
 
 import (
+	"context"
 	"encoding/json"
+	"maps"
 
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/recall"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // projectRecordedToolBodies preserves active exchanges while moving large bodies behind recall.
-func projectRecordedToolBodies(rows []api.Message) []api.Message {
-	out := make([]api.Message, 0, len(rows))
-	for _, row := range rows {
+func projectRecordedToolBodies(ctx context.Context, rows []api.Message, tokens ...int) []api.Message {
+	out := append([]api.Message(nil), rows...)
+	for i, row := range out {
 		if !isOversizedToolBody(row) {
-			out = append(out, row)
 			continue
 		}
-		content, fitted, isHistory := projectRecallHistoryPage(row.Content, 2048)
-		if !fitted && !isHistory {
-			content, fitted = tooloutput.FitWireJSON(row.Content, 2048)
+		if len(tokens) > 0 && tokens[0] > 1 && retainedToolTailTokens(out, i) <= tokens[0] {
+			break
+		}
+		raw := row.Content
+		if row.ModelProjected {
+			raw = row.ToolResult.Content
+		}
+		content, fitted, isHistory := raw, len(raw) <= 2048, false
+		if !fitted {
+			content, fitted, isHistory = projectRecallHistoryPage(ctx, raw, 2048, row.ToolResult.ToolArgs)
+			if !fitted && !isHistory && row.ToolResult.Tool == "recall" {
+				content, fitted = projectRecallSearch(raw, 2048)
+			}
 		}
 		if !fitted {
-			raw, err := json.Marshal(struct {
+			record := recall.HistoryRequest{ThroughOrd: row.Ord, MessageID: row.ID,
+				SourceSeq: row.Seq, Format: "text", BodyRunes: 4096}
+			envelope, err := json.Marshal(struct {
 				Compacted bool                  `json:"compacted"`
 				Outcome   api.ToolResultOutcome `json:"outcome,omitempty"`
 				Record    recall.HistoryRequest `json:"record_request"`
-			}{true, row.ToolResult.Outcome, recall.HistoryRequest{ThroughOrd: row.Ord, MessageID: row.ID,
-				SourceSeq: row.Seq, Format: "record", BodyRunes: 2048}})
+			}{true, row.ToolResult.Outcome, record})
 			if err != nil {
-				out = append(out, row)
 				continue
 			}
-			content = string(raw)
+			content = string(envelope)
+			historyJSON, err := json.Marshal(record)
+			if err == nil {
+				if rendered, err := guidance.RenderGuidance(ctx, "compaction/tool-result-reference", map[string]any{
+					"tool": row.ToolResult.Tool, "outcome": row.ToolResult.Outcome,
+					"evidence_handles": row.EvidenceHandles, "history_json": string(historyJSON),
+				}); err == nil && rendered != "" && len(rendered) <= 2048 {
+					content = rendered
+				}
+			}
+			if !isHistory {
+				if partial, fitted := tooloutput.FitWireJSON(raw, 2048-len(content)-1); fitted {
+					content += "\n" + partial
+				}
+			}
 		}
 		tiers := []api.ContentTrustTier{row.TrustTier}
 		for _, part := range api.MessageTextParts(row) {
@@ -45,14 +73,18 @@ func projectRecordedToolBodies(rows []api.Message) []api.Message {
 		result := *row.ToolResult
 		result.Content = content
 		row.ToolResult = &result
-		out = append(out, row)
+		out[i] = row
 	}
 	return out
 }
 
-func projectRecallHistoryPage(raw string, maxBytes int) (string, bool, bool) {
+func projectRecallHistoryPage(ctx context.Context, raw string, maxBytes int, originalArgs map[string]any) (string, bool, bool) {
+	prefix, body, suffix, ok := hostmarker.SplitToolJSONBody(raw)
+	if !ok {
+		return "", false, false
+	}
 	var root map[string]any
-	if err := json.Unmarshal([]byte(raw), &root); err != nil {
+	if err := json.Unmarshal([]byte(body), &root); err != nil {
 		return "", false, false
 	}
 	history, ok := root["history"].(map[string]any)
@@ -62,6 +94,9 @@ func projectRecallHistoryPage(raw string, maxBytes int) (string, bool, bool) {
 	entries, ok := history["entries"].([]any)
 	if !ok || len(entries) == 0 {
 		return "", false, true
+	}
+	if action, err := guidance.RenderGuidance(ctx, "recall/history-continuation", nil); err == nil {
+		root["next_action"] = action
 	}
 	if format, _ := history["format"].(string); len(entries) == 1 && format != "index" {
 		entry, ok := entries[0].(map[string]any)
@@ -81,14 +116,22 @@ func projectRecallHistoryPage(raw string, maxBytes int) (string, bool, bool) {
 			entry["content"] = trimmed
 			if next := offset + mid; mid < len(runes) || totalRunes > next || prevNext > next {
 				history["next_offset"] = next
+				if coordinates := recallContinuationCoordinates(root, originalArgs); coordinates != nil {
+					coordinates["offset"] = next
+					if _, present := coordinates["source_seq"]; !present {
+						if seq, present := entry["seq"]; present {
+							coordinates["source_seq"] = seq
+						}
+					}
+				}
 				root["truncated"] = true
 			}
 			if receipt, ok := root["receipt"].(map[string]any); ok {
 				receipt["bytes_returned"] = len(trimmed)
 				receipt["truncated"] = true
 			}
-			if encoded, err := json.Marshal(root); err == nil && len(encoded) <= maxBytes {
-				best, low = string(encoded), mid+1
+			if encoded, err := json.Marshal(root); err == nil && len(prefix)+len(encoded)+len(suffix) <= maxBytes {
+				best, low = prefix+string(encoded)+suffix, mid+1
 			} else {
 				high = mid - 1
 			}
@@ -102,16 +145,36 @@ func projectRecallHistoryPage(raw string, maxBytes int) (string, bool, bool) {
 		if mid < len(entries) {
 			if last, ok := entries[mid-1].(map[string]any); ok {
 				history["next_after_ord"] = last["ord"]
+				if coordinates := recallContinuationCoordinates(root, originalArgs); coordinates != nil {
+					coordinates["after_ord"] = last["ord"]
+				}
 			}
 			root["truncated"] = true
 		}
-		if encoded, err := json.Marshal(root); err == nil && len(encoded) <= maxBytes {
-			best, low = string(encoded), mid+1
+		if encoded, err := json.Marshal(root); err == nil && len(prefix)+len(encoded)+len(suffix) <= maxBytes {
+			best, low = prefix+string(encoded)+suffix, mid+1
 		} else {
 			high = mid - 1
 		}
 	}
 	return best, best != "", true
+}
+
+func recallContinuationCoordinates(root, originalArgs map[string]any) map[string]any {
+	request, ok := root["next_request"].(map[string]any)
+	if !ok {
+		coordinates, ok := originalArgs["history"].(map[string]any)
+		if !ok {
+			return nil
+		}
+		request = map[string]any{"history": maps.Clone(coordinates)}
+		if limit, ok := originalArgs["limit"]; ok {
+			request["limit"] = limit
+		}
+		root["next_request"] = request
+	}
+	coordinates, _ := request["history"].(map[string]any)
+	return coordinates
 }
 
 func jsonInt(v any) int64 {
@@ -134,8 +197,61 @@ func isOversizedToolBody(row api.Message) bool {
 	if row.Role != api.MessageRoleTool || row.ToolResult == nil || row.ID == "" || row.Ord <= 0 || len(row.Content) <= 2048 {
 		return false
 	}
-	if row.ToolResult.Tool == recall.ToolName && len(row.Content) <= 16384 {
-		return false
-	}
 	return true
+}
+
+// trimNoticeTokenReserve reserves space for the synthetic trim notice inserted when older rows are dropped.
+const trimNoticeTokenReserve = 64
+
+// isCompactionCheckpointHead reports whether row i is part of the leading checkpoint-and-continuation pair.
+func isCompactionCheckpointHead(rows []api.Message, i int) bool {
+	return rows[i].CompactionCheckpoint || i == 1 && rows[0].CompactionCheckpoint
+}
+
+func retainedToolTailMessages(rows []api.Message, tokens int) int {
+	lastAssistant := -1
+	for i := api.UserIntentBoundary(rows); i < len(rows); i++ {
+		if isCompactionCheckpointHead(rows, i) || rows[i].Role != api.MessageRoleAssistant {
+			continue
+		}
+		lastAssistant = i
+		if retainedToolTailTokens(rows, i) <= tokens {
+			return nonSystemMessageCount(rows[i:])
+		}
+	}
+	if lastAssistant >= 0 {
+		return nonSystemMessageCount(rows[lastAssistant:])
+	}
+	return 0
+}
+
+func nonSystemMessageCount(rows []api.Message) int {
+	kept := 0
+	for _, row := range rows {
+		if row.Role != api.MessageRoleSystem {
+			kept++
+		}
+	}
+	return kept
+}
+
+func retainedToolTailTokens(rows []api.Message, idx int) int {
+	start := idx
+	for start > 0 && rows[start].Role == api.MessageRoleTool {
+		start--
+	}
+	kept := make([]api.Message, 0, len(rows))
+	dropped := false
+	for i, row := range rows {
+		if i >= start || row.ContextPinned || isCompactionCheckpointHead(rows, i) {
+			kept = append(kept, row)
+		} else {
+			dropped = true
+		}
+	}
+	tokens := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(kept))
+	if dropped {
+		tokens += trimNoticeTokenReserve
+	}
+	return tokens
 }

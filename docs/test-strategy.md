@@ -388,8 +388,11 @@ touch never fails it, and floors live in
 
 - **Go** measures each changed package with its own short tests, then measures
   a package that falls short again with the tests of the packages that import
-  it, crediting coverage across packages. Changed functions in a package no
-  test reaches fail. Packages in `lycaon/coverage-exempt.txt` and generated
+  it, crediting coverage across packages. A test binary records nothing its
+  children run, so a test that needs a child counted runs a coverage build of
+  it with `GOCOVERDIR` set to `PW_GO_CHILD_COVERDIR`; the run joins those
+  counters to the profile and runs tests uncached. A confined child needs a
+  write root for that directory. Changed functions in a package no test reaches fail. Packages in `lycaon/coverage-exempt.txt` and generated
   files are skipped, and a touched package below the package floor is noted.
 - **Den** runs the Vitest tests related to the changed files and measures
   coverage of those files. Tests, mocks, declarations, and generated files are
@@ -709,12 +712,34 @@ cross compilation; broad changes include that too. Ordinary source changes
 select only relevant lanes. Each lane still enters through `./task`, capturing
 source and producing normal receipts.
 
+A lane that declares a `platform` runs a check only that platform can run, so
+`check`, which every development host runs, leaves it out, and the planner
+refuses one that repeats a `check` stage or joins the fast tier. The merge queue
+runs it beside the partition: for the change areas the planner assigns it and
+for every broad change. The `webkit-gtk` lane runs `den:webkit:atspi` for any
+Den source change; changes to the check, its probe, or the harness fixtures are
+broad. Like every lane, it fails when the check reports unverified: an image
+that cannot be built, a missing container runtime, or a harness that does not
+start leaves the change unverified, never admitted.
+
+Linux confinement compiles per architecture: seccomp filters name the audit
+architecture and syscall numbers, arm64 has no legacy calls such as `open`,
+`stat`, or `socketcall`, and the network supervisor reads syscall arguments in
+each architecture's layout. Packages ship for amd64 and arm64, so
+`test:confine:linux` (the confine live suites, the command supervisor, and the
+pinned browser under confinement) runs on both. Platform qualification's
+`upgrade-corpus` job runs it on amd64; the `confinement-arm64` lane runs it on
+`ubuntu-24.04-arm` nightly, in qualification, and in the merge queue when the
+sandbox, its helper, or the command supervisor's Linux files change. Setup
+provisions the pinned browser before the lane goes offline.
+
 Drafts spend no verification runners and cannot pass `check`. Manual dispatch
 runs the complete check and platform tier, or with `profile: fast` the fast
 tier for a pull request whose events start no CI, such as the dependency
 inventory's. [`qualification.yml`](../.github/workflows/qualification.yml)
-runs the complete check, then platform confinement and upgrade corpus, then
-browser and desktop journeys on main. One qualification runs at a time: it does
+runs the complete check, then platform confinement and upgrade corpus beside
+the `release` profile's platform lanes, then browser and desktop journeys on
+main. One qualification runs at a time: it does
 not cancel an in-progress run for a newer push, and a newer push replaces a
 pending one, so a busy main qualifies its newest commit rather than every
 commit. Nightly retains race, fuzz, WebKit, stress, and performance
@@ -737,6 +762,16 @@ refreshes that snapshot and the informational inventory through a signed-off PR;
 feature PRs do not regenerate either. The bot explicitly dispatches CI because
 PRs created using `GITHUB_TOKEN` do not trigger another workflow automatically.
 Nightly additionally checks fresh upstream advisories.
+
+`den:webkit:atspi` runs its probe in one container image per WebKitGTK release.
+An offline lane cannot build them, so setup provisions them first: the images
+main's cache warmer built, keyed by the definitions in
+`scripts/harness/webkit-atspi/`, are restored and only a missing or changed
+release is built. Rootless Podman runs in the caller's namespaces, so the
+containers share the lane's loopback-only network and reach the harness Den
+there. Nightly and release lanes build every image from its distribution as
+it ships that day, so a release that moves is reported there rather than in
+the merge queue.
 
 The reviewed queue parameters are in
 [`queue-settings.json`](../scripts/ci_policy/queue-settings.json): two groups
@@ -812,7 +847,7 @@ Release builds restore the shared Go cache; their separate cache retains only
 Tauri release builds. The cache actions enforce the main-ref write boundary
 themselves. Pinned Go analyzers have separate lint and vulnerability caches; their module versions
 and compiler identity are checked before use, including after a cache restore.
-A missing or mismatched binary is rebuilt before analysis. Cache warming enters
+A missing or mismatched binary is rebuilt before analysis. Lint diagnostics are keyed by commit instead: the Linux warmer runs `lint:full` and saves its golangci-lint results for each main commit, deleting the entries they replace, and lint lanes restore the newest, so they reanalyze only the packages that changed since and their dependents. Cache warming enters
 through `./task setup-dev`; workspace verification enters through its ordinary
 managed targets.
 
@@ -849,7 +884,7 @@ cheap failure.
 
 | Class | Workflows | One run at a time | Runners (macOS) |
 |---|---|---|---|
-| Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs, then two browser shards beside the desktop journey |
+| Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, macOS, then the release compile |
 | Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): preflight or the upgrade rehearsal beside one signed build |

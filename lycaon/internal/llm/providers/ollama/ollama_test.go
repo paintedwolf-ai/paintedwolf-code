@@ -441,6 +441,63 @@ func TestDecodeOllamaStreamRejectsMissingDone(t *testing.T) {
 	}
 }
 
+func TestOllamaErrorsDoNotManufactureToolCalls(t *testing.T) {
+	ask := tools.ToolMeta{Name: "ask_user", ArgsSchema: map[string]any{"type": "object"}}
+	write := tools.ToolMeta{Name: "write", ArgsSchema: map[string]any{"type": "object"}}
+	cases := []struct {
+		name      string
+		tools     []tools.ToolMeta
+		forbidden bool
+		format    bool
+	}{
+		{name: "no tools"},
+		{name: "forbidden", tools: []tools.ToolMeta{ask}, forbidden: true},
+		{name: "structured", tools: []tools.ToolMeta{ask}, format: true},
+		{name: "missing offered name", tools: []tools.ToolMeta{write}},
+		{name: "ask first", tools: []tools.ToolMeta{ask, write}},
+		{name: "write first", tools: []tools.ToolMeta{write, ask}},
+	}
+	for _, tc := range cases {
+		for _, providerError := range []string{"tool 'write' not found", "unexpected end of JSON input", "invalid character in string escape code", "model not found"} {
+			t.Run(tc.name+"/"+providerError, func(t *testing.T) {
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					var payload Request
+					_ = json.NewDecoder(r.Body).Decode(&payload)
+					if payload.Stream {
+						w.Header().Set("Content-Type", "application/x-ndjson")
+						_, _ = io.WriteString(w, `{"message":{"content":"Preparing the file.","tool_calls":[{"function":{"name":"write","arguments":{"path":"out.txt","content":"hello"}}}]},"done":false}`+"\n")
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{"error": providerError})
+				}))
+				defer srv.Close()
+				p := New("desktop", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "ministral-3:3b", ContextLength: 32768}})
+				req := modelcall.CompletionRequest{Model: "ministral-3:3b", Tools: tc.tools, Messages: []api.Message{{Role: api.MessageRoleUser, Content: "write a file"}}}
+				if tc.forbidden {
+					req.ToolUse = modelcall.ToolUseForbidden
+				}
+				if tc.format {
+					req.ResponseFormat = &modelcall.ResponseFormat{Type: "json_object"}
+				}
+				for _, stream := range []bool{false, true} {
+					var out *modelcall.Completion
+					var err error
+					if stream {
+						out, _, err = modelcall.CollectStream(mustStream(t, p, req))
+					} else {
+						out, err = p.Complete(t.Context(), req)
+					}
+					if err == nil || !strings.Contains(err.Error(), providerError) {
+						t.Fatalf("stream=%v error=%v, want original provider error %q", stream, err, providerError)
+					}
+					if out != nil && len(out.ToolCalls) != 0 {
+						t.Fatalf("stream=%v failed response exposed executable calls: %+v", stream, out.ToolCalls)
+					}
+				}
+			})
+		}
+	}
+}
+
 func mustStream(t *testing.T, p *Provider, req modelcall.CompletionRequest) <-chan modelcall.StreamChunk {
 	t.Helper()
 	ch, err := p.Stream(context.Background(), req)

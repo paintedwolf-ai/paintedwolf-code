@@ -123,7 +123,7 @@ func TestAgentPolicyResolvesForReview(t *testing.T) {
 	}
 }
 
-func TestHardDenyWriteSpecsConsumedByBuildProfile(t *testing.T) {
+func TestHardDenyWriteSpecsConsumedByBuildSeatbeltProfile(t *testing.T) {
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 	proj := t.TempDir()
@@ -132,8 +132,8 @@ func TestHardDenyWriteSpecsConsumedByBuildProfile(t *testing.T) {
 	if len(specs) == 0 {
 		t.Fatal("HardDenyWriteSpecs empty")
 	}
-	profile, err := confine.BuildProfile(confine.Confinement{Roots: []string{proj}})
-	testutil.FailErr(t, "BuildProfile", err)
+	profile, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: []string{proj}})
+	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 	// Match the sink within the write-deny block.
 	sinkAt := strings.Index(profile, settingsoverlay.BasenameApprovals)
 	if sinkAt < 0 {

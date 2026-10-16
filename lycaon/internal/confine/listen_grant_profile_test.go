@@ -12,7 +12,7 @@ import (
 func TestListenGrantProfileRules(t *testing.T) {
 	t.Parallel()
 	// Unnarrowed grant under proxy-only: full local listener scope.
-	p, err := confine.BuildProfile(confine.Confinement{
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{
 		Roots: []string{"/proj"}, Network: confine.NetworkProxyOnly,
 		ProxyAddr: "127.0.0.1:8472", SocksProxyAddr: "127.0.0.1:8473",
 		LocalListen: true,
@@ -31,7 +31,7 @@ func TestListenGrantProfileRules(t *testing.T) {
 	}
 
 	// Port-narrowed grant: exact ports only, no wildcard listener scope.
-	pn, err := confine.BuildProfile(confine.Confinement{
+	pn, err := confine.BuildSeatbeltProfile(confine.Confinement{
 		Roots: []string{"/proj"}, Network: confine.NetworkProxyOnly,
 		ProxyAddr: "127.0.0.1:8472", SocksProxyAddr: "127.0.0.1:8473",
 		LocalListen: true, LocalListenPorts: []uint16{8000, 9000},
@@ -51,7 +51,7 @@ func TestListenGrantProfileRules(t *testing.T) {
 	}
 
 	// Without the grant, mediated profiles stay listener-free.
-	pu, err := confine.BuildProfile(confine.Confinement{
+	pu, err := confine.BuildSeatbeltProfile(confine.Confinement{
 		Roots: []string{"/proj"}, Network: confine.NetworkProxyOnly,
 		ProxyAddr: "127.0.0.1:8472", SocksProxyAddr: "127.0.0.1:8473",
 	})

@@ -33,7 +33,7 @@ Deliver the requested result. {% if execution_mode == "orchestrate" %}Coordinate
 {% if can_orient or has_file_tools %}
 ## Board and scans
 
-No repo/task signal → plain text first. {% if can_orient %}A board line reading **`Scan: complete`** at the current head is already done — do not run it again; only `failed` or `stale` needs a fresh scan.{% if profile_has_scan_drilldown %} Read the finished one with `scan_summary`.{% endif %} **Findings are scan evidence — triage noise yourself; never ask the user to triage the scanner.**{% endif %}
+{% if can_orient %}A board line reading **`Scan: complete`** at the current head is already done — do not run it again; only `failed` or `stale` needs a fresh scan.{% if profile_has_scan_drilldown %} Read the finished one with `scan_summary`.{% endif %} **Findings are scan evidence — triage noise yourself; never ask the user to triage the scanner.**{% endif %}
 {% endif %}
 
 {% if execution_mode == "orchestrate" %}{% if has_file_tools %}{% include "partials/coordination-loop.md" %}

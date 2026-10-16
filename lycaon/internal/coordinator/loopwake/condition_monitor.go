@@ -23,7 +23,7 @@ const (
 )
 
 func startConditionMonitor(ctx context.Context, loop *WaitSubscriptions, store *awaitstore.Store, lease awaitstore.Lease) {
-	if loop == nil || store == nil || !hasActiveCondition(lease.Conditions) && !lease.Deadline.IsZero() {
+	if loop == nil || store == nil || (!hasActiveCondition(lease.Conditions) && !lease.UntilComplete) {
 		return
 	}
 	go monitorConditions(ctx, loop, store, lease)
@@ -45,7 +45,7 @@ func monitorConditions(ctx context.Context, loop *WaitSubscriptions, store *awai
 		if reconcileWaitConditions(ctx, loop, store, lease) {
 			return
 		}
-		if lease.Deadline.IsZero() {
+		if !hasActiveCondition(lease.Conditions) {
 			delay = 30 * time.Second
 		}
 		timer := time.NewTimer(delay)
@@ -79,7 +79,7 @@ func reconcileWaitConditions(ctx context.Context, loop *WaitSubscriptions, store
 	}
 	for _, condition := range lease.Conditions {
 		winner, terminal := conditionOutcome(ctx, lease, condition)
-		if lease.Deadline.IsZero() && condition.Kind == "process_done" {
+		if lease.UntilComplete && condition.Kind == "process_done" {
 			winner, terminal = loop.processConditionOutcome(lease.SessionID, condition)
 		}
 		if !terminal {

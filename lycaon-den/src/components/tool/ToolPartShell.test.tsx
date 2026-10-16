@@ -1,5 +1,6 @@
+import { disclosureToggle, isDisclosureOpen, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { render } from "@solidjs/testing-library";
+import { render, fireEvent } from "@solidjs/testing-library";
 import { ToolPartShell } from "./ToolPartShell.tsx";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import {
@@ -55,7 +56,7 @@ describe("ToolPartShell open-state persistence", () => {
         </ToolPartShell>
       </TranscriptViewportProvider>
     ));
-    expect((container.querySelector("details") as HTMLDetailsElement).open).toBe(
+    expect(isDisclosureOpen(container.querySelector<HTMLElement>("[data-transcript-disclosure]"))).toBe(
       false,
     );
   });
@@ -85,7 +86,7 @@ describe("ToolPartShell open-state persistence", () => {
         </ToolPartShell>
       </TranscriptViewportProvider>
     ));
-    const card = container.querySelector("details");
+    const card = container.querySelector<HTMLElement>("[data-transcript-disclosure]");
     expect(card?.getAttribute("data-invocation-owner")).toBe("filesystem");
     expect(card?.getAttribute("data-invocation-lifecycle")).toBe("read_only");
     expect(card?.getAttribute("data-invocation-status")).toBe("completed");
@@ -99,12 +100,9 @@ describe("ToolPartShell open-state persistence", () => {
         </ToolPartShell>
       </TranscriptViewportProvider>
     ));
-    const firstDetails = first.container.querySelector(
-      "details",
-    ) as HTMLDetailsElement;
-    firstDetails.setAttribute("open", "");
-    firstDetails.dispatchEvent(new Event("toggle"));
-    expect(firstDetails.open).toBe(true);
+    const firstDetails = first.container.querySelector<HTMLElement>("[data-transcript-disclosure]")!;
+    fireEvent.click(disclosureToggle(firstDetails));
+    expect(isDisclosureOpen(firstDetails)).toBe(true);
     expect(controller.disclosures.isOpen(transcriptDisclosureKey.tool("a1:tc-recover"))).toBe(true);
 
     // Open state follows the stable key across remounts.
@@ -116,7 +114,7 @@ describe("ToolPartShell open-state persistence", () => {
       </TranscriptViewportProvider>
     ));
     expect(
-      (second.container.querySelector("details") as HTMLDetailsElement).open,
+      isDisclosureOpen(second.container.querySelector<HTMLElement>("[data-transcript-disclosure]")),
     ).toBe(true);
   });
 
@@ -129,8 +127,21 @@ describe("ToolPartShell open-state persistence", () => {
         </ToolPartShell>
       </TranscriptViewportProvider>
     ));
-    expect((container.querySelector("details") as HTMLDetailsElement).open).toBe(
+    expect(isDisclosureOpen(container.querySelector<HTMLElement>("[data-transcript-disclosure]"))).toBe(
       false,
     );
+  });
+});
+
+describe("ToolPartShell under the WebKitGTK AT-SPI workaround", () => {
+  it("shows the same collapsed card", async () => {
+    await expectSameCollapsedFace(() => {
+      const view = render(() => (
+        <TranscriptViewportProvider value={controller}>
+          <ToolPartShell part={part("tc-parity")} layout="chat" sessionId="s1">body</ToolPartShell>
+        </TranscriptViewportProvider>
+      ));
+      return { card: () => view.container.firstElementChild, unmount: view.unmount };
+    });
   });
 });

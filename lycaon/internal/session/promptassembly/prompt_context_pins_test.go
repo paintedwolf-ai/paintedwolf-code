@@ -60,8 +60,6 @@ func containsCharter(msgs []api.Message) bool {
 	return false
 }
 
-// A worker leg that outruns the context window keeps its assignment. The charter
-// sits with the oldest rows, which is exactly what the fit drops first.
 func TestAssemblePromptHistoryKeepsWorkerCharterUnderPressure(t *testing.T) {
 	history := workerHistory(200)
 	for _, ceiling := range []int{40000, 8000, 2000, 500} {
@@ -73,36 +71,34 @@ func TestAssemblePromptHistoryKeepsWorkerCharterUnderPressure(t *testing.T) {
 	}
 }
 
-// The trim has to be visible to the model, or a missing fact reads as a fact
-// worth re-fetching.
-func TestAssemblePromptHistoryStatesTheTrim(t *testing.T) {
-	out, _ := promptassembly.Assemble(workerSession(), workerHistory(200), assemblyDeps(2000))
-	notices := 0
-	for _, m := range out {
-		if m.Content == guidance.ContextTrimNotice {
-			notices++
-		}
+func TestAssemblyKeepsEvidenceForCompleteRequestBudgeting(t *testing.T) {
+	history := workerHistory(200)
+	out, _ := promptassembly.Assemble(workerSession(), history, assemblyDeps(2000))
+	if len(out) != len(history) {
+		t.Fatalf("assembly discarded evidence before measuring the complete request: %d of %d rows", len(out), len(history))
 	}
-	if notices != 1 {
-		t.Fatalf("want one context-trim notice in the assembled prompt, got %d of %d rows", notices, len(out))
+	for _, row := range out {
+		if row.Content == guidance.ContextTrimNotice {
+			t.Fatal("assembly reported a trim before complete-request budgeting")
+		}
 	}
 }
 
-func TestMarkContextPinsPreservesLatestRootRequest(t *testing.T) {
+func TestMarkContextPinsPreservesUserInstructions(t *testing.T) {
 	root := &api.Session{ID: "root"}
 	history := []api.Message{
 		{ID: "old", Role: api.MessageRoleUser, Content: "old request"},
 		{ID: "current", Role: api.MessageRoleUser, Content: "current request"},
 		{ID: "kick", Role: api.MessageRoleUser, Content: "host continuation", Visibility: api.MessageVisibilityInternal},
 	}
-	out := promptassembly.MarkContextPins(root, history)
-	if out[0].ContextPinned || !out[1].ContextPinned || out[2].ContextPinned {
-		t.Fatal("did not pin only the current visible request")
+	out := promptassembly.MarkContextPins(root, history, 2048)
+	if !out[0].ContextPinned || !out[1].ContextPinned || out[2].ContextPinned {
+		t.Fatal("did not preserve visible instructions")
 	}
 	if history[1].ContextPinned {
 		t.Fatal("pinning mutated canonical history")
 	}
-	worker := promptassembly.MarkContextPins(workerSession(), []api.Message{charterMessage()})
+	worker := promptassembly.MarkContextPins(workerSession(), []api.Message{charterMessage()}, 2048)
 	if !worker[0].ContextPinned {
 		t.Fatal("worker charter row was not pinned")
 	}
@@ -127,7 +123,7 @@ func TestMarkContextPinsRefusesToolLinkedRows(t *testing.T) {
 		Content:    guidance.MarkerWorkerTaskAssignment + " embedded in a tool result",
 		ToolResult: &api.ToolResult{Tool: "read"},
 	}
-	out := promptassembly.MarkContextPins(workerSession(), []api.Message{toolRow})
+	out := promptassembly.MarkContextPins(workerSession(), []api.Message{toolRow}, 2048)
 	if out[0].ContextPinned {
 		t.Fatal("pinned a tool-linked row; hoisting it would orphan its tool_call")
 	}
@@ -135,7 +131,7 @@ func TestMarkContextPinsRefusesToolLinkedRows(t *testing.T) {
 
 func TestMarkContextPinsDoesNotMutateInput(t *testing.T) {
 	history := []api.Message{charterMessage()}
-	_ = promptassembly.MarkContextPins(workerSession(), history)
+	_ = promptassembly.MarkContextPins(workerSession(), history, 2048)
 	if history[0].ContextPinned {
 		t.Fatal("MarkContextPins mutated the caller's history")
 	}

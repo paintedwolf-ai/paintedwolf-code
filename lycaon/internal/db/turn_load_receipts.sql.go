@@ -113,6 +113,56 @@ func (q *Queries) LatestTurnLoadReceiptForSession(ctx context.Context, sessionID
 	return items, nil
 }
 
+const listSessionProviderCalls = `-- name: ListSessionProviderCalls :many
+SELECT id, caller, started_at, prompt_tokens, completion_tokens, cache_read_tokens, usage_source
+FROM llm_calls
+WHERE session_id = ?1 AND status = 'reported'
+  AND caller IN ('', 'coordinator', 'worker')
+ORDER BY started_at, id
+`
+
+type ListSessionProviderCallsRow struct {
+	ID               string `json:"id"`
+	Caller           string `json:"caller"`
+	StartedAt        string `json:"started_at"`
+	PromptTokens     int64  `json:"prompt_tokens"`
+	CompletionTokens int64  `json:"completion_tokens"`
+	CacheReadTokens  int64  `json:"cache_read_tokens"`
+	UsageSource      string `json:"usage_source"`
+}
+
+// Reported conversation usage for offline request comparisons.
+func (q *Queries) ListSessionProviderCalls(ctx context.Context, sessionID string) ([]ListSessionProviderCallsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSessionProviderCalls, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSessionProviderCallsRow
+	for rows.Next() {
+		var i ListSessionProviderCallsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Caller,
+			&i.StartedAt,
+			&i.PromptTokens,
+			&i.CompletionTokens,
+			&i.CacheReadTokens,
+			&i.UsageSource,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTurnLoadReceiptsAfter = `-- name: ListTurnLoadReceiptsAfter :many
 SELECT id, session_id, opening_message_id, tool_call_id, trigger, surface_id, engine, catalog_revision,
        state_json, decisions_json, standing_json, elapsed_ms, abstained, reason, created_at

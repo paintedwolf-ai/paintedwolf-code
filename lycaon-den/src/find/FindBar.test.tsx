@@ -5,6 +5,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { search } from "@codemirror/search";
 import { FindBar } from "./FindBar.tsx";
+import { FIND_BAR_ID } from "./command-bar-disclosure.ts";
 import {
   findController,
   openFind,
@@ -178,6 +179,7 @@ describe("FindBar", () => {
     const bar = await screen.findByTestId("find-bar");
     expect(bar.getAttribute("aria-label")).toBe("Find in view");
     expect(bar.getAttribute("role")).toBe("search");
+    expect(bar.id).toBe(FIND_BAR_ID);
     expect(bar.classList.contains("den-editor-command-bar")).toBe(true);
 
     const input = screen.getByTestId("find-bar-input");

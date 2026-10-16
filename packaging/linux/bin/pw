@@ -1,0 +1,3 @@
+#!/bin/sh
+# Package-owned entry point for the Painted Wolf Code engine.
+exec /opt/painted-wolf-code/bin/pw "$@"

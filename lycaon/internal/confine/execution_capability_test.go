@@ -14,10 +14,10 @@ import (
 
 func TestProcessControlOnlyWidensSignals(t *testing.T) {
 	base := confine.Confinement{Roots: []string{t.TempDir()}, Network: confine.NetworkDeny}
-	ordinary, err := confine.BuildProfile(base)
+	ordinary, err := confine.BuildSeatbeltProfile(base)
 	testutil.FailErr(t, "ordinary profile", err)
 	base.ProcessControl = true
-	widened, err := confine.BuildProfile(base)
+	widened, err := confine.BuildSeatbeltProfile(base)
 	testutil.FailErr(t, "process-control profile", err)
 	if widened != strings.Replace(ordinary, "(allow signal (target same-sandbox))", "(allow signal)", 1) {
 		t.Fatal("process control changed something other than signal authority")
@@ -46,7 +46,7 @@ func TestHostExecutionSelectsExplicitUnconfinedCommand(t *testing.T) {
 	if command.Path != "/usr/bin/true" {
 		t.Fatalf("wrapped host executable: %s", command.Path)
 	}
-	if _, err := confine.BuildProfile(*c); err == nil {
+	if _, err := confine.BuildSeatbeltProfile(*c); err == nil {
 		t.Fatal("host execution produced sandbox profile")
 	}
 }

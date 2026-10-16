@@ -4,10 +4,14 @@ import type { LycaonClient } from "../../api/client.ts";
 import { createChatContentAccess } from "../../chat/transcript/content/chat-content-reader.ts";
 import { bindChatContentFind } from "../../chat/transcript/content/chat-content-find.ts";
 import { ToolContentProvider } from "../../chat/tool/tool-content.tsx";
-import { TOOL_CONTENT_REVEAL_EVENT } from "../../chat/tool/tool-part-find.ts";
+import { TOOL_CONTENT_REVEAL_EVENT, toolPartFindCorpus } from "../../chat/tool/tool-part-find.ts";
 import { findController } from "../../find/find-controller.ts";
 import { useTranscriptEntry } from "../../chat/transcript/presentation/transcript-entry.ts";
-import { useTranscriptDisclosure } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
+import {
+  TranscriptDisclosurePanel,
+  TranscriptDisclosureShell,
+  useTranscriptDisclosure,
+} from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
 import { prepareBackgroundProcessOutput, subscribeBackgroundProcessStore } from "../../chat/tool/background-process-store.ts";
 import { useActivitySpanAccordion } from "../../chat/tool/activity-span-accordion.ts";
@@ -64,14 +68,8 @@ export function ToolPartShell(props: Props) {
     sessionId: props.sessionId,
     entryKey: props.part.id,
   }));
-  const {
-    key: disclosureKey,
-    open,
-    onToggle,
-    onSummaryClick,
-    applyOpen,
-    revealTemporarily,
-  } = useTranscriptDisclosure(() => transcriptDisclosureKey.tool(props.part.id));
+  const disclosure = useTranscriptDisclosure(() => transcriptDisclosureKey.tool(props.part.id));
+  const { open, onToggleClick, applyOpen, revealTemporarily } = disclosure;
   // Process-exit SSE updates the mirror without rewriting the tool_result row.
   const [processRevision, setProcessRevision] = createSignal(0);
   onCleanup(
@@ -105,11 +103,8 @@ export function ToolPartShell(props: Props) {
       accordion.register({
         key: props.part.id,
         disclosureKey: transcriptDisclosureKey.tool(props.part.id),
-        details: () => {
-          const el = hostEl();
-          return el instanceof HTMLDetailsElement ? el : null;
-        },
-        summary: summaryEl,
+        shell: hostEl,
+        header: summaryEl,
         applyOpen,
       }),
     );
@@ -163,24 +158,21 @@ export function ToolPartShell(props: Props) {
     hostEl,
     isCollapsed: () => !open(),
     revealForFind: revealTemporarily,
-    collapsedCorpus: () => [props.part.title, props.part.displaySubject, props.part.argsReference ? "" : JSON.stringify(props.part.args), props.part.outputReference ? "" : props.part.output].filter(Boolean).join("\n"),
+    collapsedCorpus: () => toolPartFindCorpus(props.part),
     collapsedCorpusAnchor: summaryEl,
   });
 
-  const handleSummaryClick: JSX.EventHandler<HTMLElement, MouseEvent> = (
+  const handleSummaryClick: JSX.EventHandler<HTMLButtonElement, MouseEvent> = (
     event,
   ) => {
-    if (!accordion) {
-      onSummaryClick(event);
-      return;
-    }
     // The accordion controls the paired row transition.
-    event.preventDefault();
-    accordion.toggle(props.part.id);
+    if (accordion) accordion.toggle(props.part.id);
+    else onToggleClick(event);
   };
 
   return (
-    <details
+    <TranscriptDisclosureShell
+      disclosure={disclosure}
       ref={(el) => {
         bindTranscriptEntry(el);
         setHostEl(el);
@@ -194,12 +186,10 @@ export function ToolPartShell(props: Props) {
       data-invocation-status={props.part.invocation?.status}
       data-layout={props.layout}
       data-status={statusDot(summary().status)}
-      data-disclosure-key={disclosureKey}
       data-accordion-row={accordion ? "" : undefined}
-      open={open()}
-      onToggle={onToggle}
     >
       <TranscriptChickletSummary
+        disclosure={disclosure}
         ref={setSummaryEl}
         onClick={handleSummaryClick}
         label={accessibleSummary()}
@@ -224,7 +214,8 @@ export function ToolPartShell(props: Props) {
           {(label) => <span class="den-tool-part-title">{label()}</span>}
         </Show>
       </TranscriptChickletSummary>
-      <div
+      <TranscriptDisclosurePanel
+        disclosure={disclosure}
         class="den-tool-part-card-body den-tool-part-body"
         data-testid="tool-part-body"
       >
@@ -234,7 +225,7 @@ export function ToolPartShell(props: Props) {
         }}>
           <Show when={open()}>{props.children}</Show>
         </ToolContentProvider>
-      </div>
-    </details>
+      </TranscriptDisclosurePanel>
+    </TranscriptDisclosureShell>
   );
 }

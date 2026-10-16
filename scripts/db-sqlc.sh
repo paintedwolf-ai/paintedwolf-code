@@ -3,6 +3,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+source "${ROOT}/scripts/sha256.sh"
 DB_DIR="$ROOT/lycaon/internal/db"
 # shellcheck source=artifact-paths.sh
 source "$(dirname "$0")/artifact-paths.sh"
@@ -50,8 +51,8 @@ db_source_digest() {
     cd "$ROOT"
     find lycaon/internal/db/schema.sql lycaon/internal/db/sqlc.yaml \
       lycaon/internal/db/queries scripts/db-sqlc.sh scripts/sqlc-version.sh \
-      -type f -print | LC_ALL=C sort | while IFS= read -r file; do shasum -a 256 "$file"; done
-  ) | shasum -a 256 | awk '{print $1}'
+      -type f -print | LC_ALL=C sort | while IFS= read -r file; do sha256 "$file"; done
+  ) | sha256 | awk '{print $1}'
 }
 
 generated_files() {

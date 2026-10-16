@@ -49,3 +49,21 @@ func TestEstimateRequestInputAndCatalogRequestBudget(t *testing.T) {
 	}
 }
 
+func TestContextInputTokensSeparatesRetryBilling(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		completion *Completion
+		want       int
+	}{
+		{"absent", nil, 0},
+		{"single attempt", &Completion{Usage: TokenUsage{PromptTokens: 7000}}, 7000},
+		{"retried", &Completion{Usage: TokenUsage{PromptTokens: 14000}, AttemptUsage: &TokenUsage{PromptTokens: 7000}}, 7000},
+		{"unreported final attempt", &Completion{Usage: TokenUsage{PromptTokens: 7000}, AttemptUsage: &TokenUsage{}}, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.completion.ContextInputTokens(); got != tc.want {
+				t.Fatalf("context input = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}

@@ -41,6 +41,28 @@ func countTrimNotices(msgs []ContextMessage) int {
 	return n
 }
 
+func TestDeterministicFitRelaxesRecentRowsAcrossHostFeedback(t *testing.T) {
+	var rows []ContextMessage
+	for i := 0; i < 8; i++ {
+		rows = append(rows, ContextMessage{Role: "assistant", Content: "Ready"},
+			ContextMessage{Role: "system", Content: strings.Repeat("Recorded feedback. ", 200)})
+	}
+	rows = append(rows, ContextMessage{ID: "current", Role: "user", Content: "Recover the original observation", ContextPinned: true})
+	cfg := fitCfg()
+	cfg.ModelContextWindow = 4096
+	out := DeterministicFit(cfg, rows, 800)
+	if cost := EstimateMessagesTokens(out); cost > 800 {
+		t.Fatalf("historical feedback kept %d tokens above the receiving budget", cost)
+	}
+	current := false
+	for _, row := range out {
+		current = current || row.ID == "current"
+	}
+	if !current || countTrimNotices(out) != 1 {
+		t.Fatal("fitting lost the active request or recovery notice")
+	}
+}
+
 // Pinned instructions survive budgets smaller than the protected tail.
 func TestDeterministicFitNeverEvictsPinnedCharter(t *testing.T) {
 	msgs := withCharter(fitRows(400))

@@ -54,18 +54,31 @@ pub(super) fn bundled_engine_layout_from(
     })
 }
 
+/// The engine the Linux package installed under its root.
+pub(super) fn linux_package_engine_layout(install_root: &Path) -> Option<BundledEngineLayout> {
+    let layout = crate::linux_install::package_layout(install_root)?;
+    Some(BundledEngineLayout {
+        binary: layout.engine,
+        engine_root: layout.engine_root,
+    })
+}
+
 pub(crate) fn setup_bundled_engine_layout(app: &tauri::AppHandle) {
-    let layout = std::env::current_exe()
-        .ok()
-        .and_then(|exe| {
-            app.path()
-                .resource_dir()
-                .ok()
-                .map(|resources| (exe, resources))
-        })
-        .and_then(|(exe, resources)| {
-            bundled_engine_layout_from(&exe, &resources, std::env::consts::OS)
-        });
+    let layout = if crate::linux_install::installed().is_some() {
+        linux_package_engine_layout(Path::new(crate::linux_install::INSTALL_ROOT))
+    } else {
+        std::env::current_exe()
+            .ok()
+            .and_then(|exe| {
+                app.path()
+                    .resource_dir()
+                    .ok()
+                    .map(|resources| (exe, resources))
+            })
+            .and_then(|(exe, resources)| {
+                bundled_engine_layout_from(&exe, &resources, std::env::consts::OS)
+            })
+    };
     let _ = BUNDLED_ENGINE_LAYOUT.set(layout);
 }
 

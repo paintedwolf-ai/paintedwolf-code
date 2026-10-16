@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { isDisclosureOpen } from "../test/transcript-disclosure-fixture.ts";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { applyWebEngineFact } from "../platform/desktop/webkit-atspi-workaround.ts";
 import { render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal, type JSX } from "solid-js";
 import {
@@ -63,14 +65,14 @@ describe("tool body find + collapsed reveal", () => {
     ));
 
     const card = await screen.findByTestId("tool-part-card");
-    expect((card as HTMLDetailsElement).open).toBe(false);
+    expect(isDisclosureOpen(card)).toBe(false);
     card.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
 
     openFind();
     setFindQuery("TOOL_BODY_FIND_NEEDLE");
     expect(findController.matches().length).toBeGreaterThanOrEqual(1);
     expect(findController.collapsedCount()).toBeGreaterThanOrEqual(1);
-    expect((card as HTMLDetailsElement).open).toBe(false);
+    expect(isDisclosureOpen(card)).toBe(false);
   });
 
   it("expands on first next, restores on close", async () => {
@@ -82,24 +84,31 @@ describe("tool body find + collapsed reveal", () => {
 
     const card = (await screen.findByTestId(
       "tool-part-card",
-    )) as HTMLDetailsElement;
+    )) as HTMLElement;
     card.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
     openFind();
     setFindQuery("TOOL_BODY_FIND_NEEDLE");
     expect(findController.collapsedCount()).toBeGreaterThanOrEqual(1);
 
     findNext();
-    expect(card.open).toBe(true);
+    expect(isDisclosureOpen(card)).toBe(true);
     expect(findController.collapsedCount()).toBe(0);
     expect(
       document.querySelectorAll(`span[${FIND_MARK_ATTR}="1"]`).length,
     ).toBeGreaterThanOrEqual(1);
 
     closeFind();
-    expect(card.open).toBe(false);
+    expect(isDisclosureOpen(card)).toBe(false);
   });
 
-  it("drills a collapsed activity span and nested disclosure through temporary leases", async () => {
+  it.each([
+    ["by default", false],
+    ["under the WebKitGTK AT-SPI workaround", true],
+  ])("drills a collapsed activity span and nested disclosure through temporary leases %s", async (_mode, workaround) => {
+    if (workaround) {
+      applyWebEngineFact({ engine: "webkitgtk", version: "2.50.4" });
+      onTestFinished(() => applyWebEngineFact(null));
+    }
     const parts: ToolPartView[] = [
       {
         id: "r1",
@@ -148,29 +157,29 @@ describe("tool body find + collapsed reveal", () => {
 
     const span = (await screen.findByTestId(
       "activity-span-card",
-    )) as HTMLDetailsElement;
-    const cards = (await screen.findAllByTestId(
-      "tool-part-card",
-    )) as HTMLDetailsElement[];
-    expect(span.open).toBe(false);
-    expect(cards.every((c) => !c.open)).toBe(true);
+    )) as HTMLElement;
+    const cards = () => screen.queryAllByTestId("tool-part-card");
+    expect(isDisclosureOpen(span)).toBe(false);
+    // The workaround mounts a closed span's cards only once it opens.
+    expect(cards()).toHaveLength(workaround ? 0 : 2);
+    expect(cards().every((c) => !isDisclosureOpen(c))).toBe(true);
 
     openFind();
     setFindQuery("GROUP_NESTED_FIND_NEEDLE");
     expect(findController.collapsedCount()).toBeGreaterThanOrEqual(1);
-    expect(span.open).toBe(false);
+    expect(isDisclosureOpen(span)).toBe(false);
 
     findNext();
-    expect(span.open).toBe(true);
-    const nested = cards.find(
+    expect(isDisclosureOpen(span)).toBe(true);
+    const nested = cards().find(
       (c) => c.getAttribute("data-tool-call-id") === "r2",
     );
-    expect(nested?.open).toBe(true);
+    expect(isDisclosureOpen(nested)).toBe(true);
     expect(findController.collapsedCount()).toBe(0);
 
     closeFind();
-    expect(span.open).toBe(false);
-    expect(nested?.open).toBe(false);
+    expect(isDisclosureOpen(span)).toBe(false);
+    expect(isDisclosureOpen(cards().find((c) => c.getAttribute("data-tool-call-id") === "r2"))).toBe(false);
   });
 
   it("opens linked inline output from a collapsed production tool card", async () => {

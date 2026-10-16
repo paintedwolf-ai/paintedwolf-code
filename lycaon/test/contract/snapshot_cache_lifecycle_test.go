@@ -11,7 +11,7 @@ const snapshotCacheFixture = `set -euo pipefail
 source_root="$1"
 fixture="$2/repo"
 mkdir -p "$fixture/scripts"
-for name in test-source-snapshot.sh checkout-cache-dir.sh test-run-isolation.sh test-run-lease.py digest-run-lock.sh artifact-paths.sh artifact_paths.py; do
+for name in test-source-snapshot.sh checkout-cache-dir.sh sha256.sh test-run-isolation.sh test-run-lease.py digest-run-lock.sh artifact-paths.sh artifact_paths.py; do
   cp "$source_root/scripts/$name" "$fixture/scripts/$name"
 done
 printf 'module example.invalid/cachefixture\n\ngo 1.26.6\n' > "$fixture/go.mod"
@@ -27,7 +27,8 @@ unset OPENGREP_STAGE_DIR
 `
 
 func TestSnapshotLintCacheLifecycle(t *testing.T) {
-	script := snapshotCacheFixture + `export PW_TEST_CHECKOUT_CACHE="$2/parent-cache"
+	script := snapshotCacheFixture + `export HOME="$2/home" XDG_CACHE_HOME="$2/os-cache"
+export PW_TEST_CHECKOUT_CACHE="$2/parent-cache"
 export GOCACHE="$2/compiled-cache"
 mkdir -p "$GOCACHE"
 touch "$GOCACHE/object"
@@ -41,6 +42,10 @@ for status in 0 7; do
     [[ "$cache" != "$1/parent-cache" ]]
     [[ "$cache" != "$PWD"/* ]]
     [[ "$(HOME="$PWD" bash scripts/checkout-cache-dir.sh)" == "$cache" ]]
+    [[ "$(bash scripts/checkout-cache-dir.sh "$PWD")" == "$cache" ]]
+    if [[ -f "$1/cache-path" ]]; then
+      [[ "$(cat "$1/cache-path")" == "$cache" && -f "$cache/golangci-cache-test/diagnostic" ]]
+    fi
     [[ "$GOCACHE" == "$1/compiled-cache" ]]
     [[ -f "$GOCACHE/object" ]]
     [[ ! -e previous-run ]]
@@ -64,11 +69,12 @@ for status in 0 7; do
     exit "$2"
   ' cache-test "$2" "$status" || rc=$?
   [[ "$rc" == "$status" ]]
-  [[ ! -e "$(cat "$2/cache-path")" ]]
+  [[ -f "$(cat "$2/cache-path")/golangci-cache-test/diagnostic" ]]
   [[ ! -e "$(cat "$2/build-path")" && ! -e "$2/build/lycaon-dev" ]]
   [[ -f "$PW_TEST_CHECKOUT_CACHE/keep" ]]
   [[ -f "$GOCACHE/object" ]]
 done
+[[ "$(bash "$fixture/scripts/test-source-snapshot.sh" diagnostics-cache)" == "$(cat "$2/cache-path")" ]]
 `
 	cmd := exec.CommandContext(t.Context(), "bash", "-c", script, "cache-test", contractcheck.RepoRoot(t), t.TempDir())
 	if out, err := cmd.CombinedOutput(); err != nil {

@@ -19,7 +19,7 @@ func TestSurveyStreakNudgeNamesTheStreakForTheCoordinatorOnly(t *testing.T) {
 	if nudge.Empty() {
 		t.Fatal("coordinator survey streak rendered empty")
 	}
-	for _, want := range []string{"6 consecutive", "`git_diff`", "`read`", "act on what you have"} {
+	for _, want := range []string{"6 consecutive", "`git_diff`", "`read`", "required paging and canonical recovery"} {
 		if !strings.Contains(nudge.Content, want) {
 			t.Fatalf("nudge missing %q:\n%s", want, nudge.Content)
 		}

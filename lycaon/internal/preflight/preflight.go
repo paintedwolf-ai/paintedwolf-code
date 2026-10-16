@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/ocrengine"
 	"github.com/lycaon/lycaon/internal/userpath"
 )
 
@@ -43,6 +44,7 @@ const (
 	CodeScannerEngineUnavailable  = "SCANNER_ENGINE_UNAVAILABLE"
 	CodeBrowserEngineUnavailable  = "BROWSER_ENGINE_UNAVAILABLE"
 	CodeDecisionEngineUnavailable = "DECISION_ENGINE_UNAVAILABLE"
+	CodeOCREngineUnavailable      = "OCR_ENGINE_UNAVAILABLE"
 	CodeNoProviderConfigured      = "NO_PROVIDER_CONFIGURED"
 	CodeLiteUnavailable           = "LITE_UNAVAILABLE"
 	CodeCommandPathLimited        = "COMMAND_PATH_LIMITED"
@@ -110,8 +112,10 @@ type Env struct {
 	UserPathSource  userpath.Source
 	UserPathFailure userpath.Failure
 
-	FreeBytes     func(path string) (uint64, error)
-	OSProductVer  func() (string, error)
+	FreeBytes    func(path string) (uint64, error)
+	OSProductVer func() (string, error)
+	// LibcVersion reports the C library version on hosts with a glibc floor; nil elsewhere.
+	LibcVersion   func() (string, error)
 	ProviderCount func() int
 	// MissingRoleProviders maps roles to unavailable provider ids.
 	MissingRoleProviders func() map[string]string
@@ -184,6 +188,7 @@ func Default() *Registry {
 		scannerEngineProbe{},
 		browserEngineProbe{},
 		decisionEngineProbe{},
+		ocrEngineProbe{available: ocrengine.Available},
 		providerConfiguredProbe{},
 		liteSlotProbe{},
 	)

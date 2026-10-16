@@ -8,10 +8,30 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
+
+func TestFallbackBudgetKeepsOverridesAndDerivesWorkerLimit(t *testing.T) {
+	cfg, derived := fallbackBudget(nil)
+	if cfg.MaxWorkerSummaryChars <= 0 || cfg.MaxWorkerSummaryChars != derived.MaxWorkerSummaryChars {
+		t.Fatalf("worker limit = %d, derived = %d", cfg.MaxWorkerSummaryChars, derived.MaxWorkerSummaryChars)
+	}
+	custom := compaction.DefaultCompactionConfig()
+	custom.TargetTokens = 321
+	custom.MaxWorkerSummaryChars = 123
+	got, _ := fallbackBudget(fixedConfig{custom})
+	if got.TargetTokens != 321 || got.MaxWorkerSummaryChars != 123 {
+		t.Fatalf("fallback discarded explicit limits: %+v", got)
+	}
+}
+
+type fixedConfig struct{ cfg compaction.CompactionConfig }
+
+func (f fixedConfig) Config() compaction.CompactionConfig { return f.cfg }
 
 func TestCompactionConfigFuncReapplies(t *testing.T) {
 	tmp := t.TempDir()
@@ -91,5 +111,11 @@ agent_pool:
 	projectCfg, _ := mgr.ResolveRoots([]string{projectDir})
 	if projectCfg.ModelContextWindow != 196608 {
 		t.Fatalf("project live = %d want 196608", projectCfg.ModelContextWindow)
+	}
+	if got := mgr.Compaction(t.Context(), nil); got.ModelContextWindow != 96000 {
+		t.Fatalf("nil session compaction window = %d want 96000", got.ModelContextWindow)
+	}
+	if got := mgr.Compaction(t.Context(), &api.Session{ProviderID: "fw", Model: "accounts/fireworks/models/kimi-k2p7-code"}); got.ModelContextWindow != 196608 {
+		t.Fatalf("session model compaction window = %d want 196608", got.ModelContextWindow)
 	}
 }

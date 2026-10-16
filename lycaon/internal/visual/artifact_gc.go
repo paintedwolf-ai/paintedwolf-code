@@ -43,8 +43,8 @@ func (s *DurableStore) CollectGarbage(ctx context.Context) error {
 	return failures
 }
 
-func (s *DurableStore) artifactRemovalPage(ctx context.Context, after artifactGCReceipt) ([]artifactGCReceipt, error) {
-	rows, err := s.records.sqlDB.QueryContext(ctx, `SELECT project_id,content_hash FROM artifact_gc_queue
+func (b durableBlobs) artifactRemovalPage(ctx context.Context, after artifactGCReceipt) ([]artifactGCReceipt, error) {
+	rows, err := b.s.records.sqlDB.QueryContext(ctx, `SELECT project_id,content_hash FROM artifact_gc_queue
  WHERE project_id > ? OR (project_id = ? AND content_hash > ?)
  ORDER BY project_id,content_hash LIMIT ?`, after.projectID, after.projectID, after.hash, artifactPruneBatchSize)
 	if err != nil {
@@ -62,7 +62,8 @@ func (s *DurableStore) artifactRemovalPage(ctx context.Context, after artifactGC
 	return receipts, rows.Err()
 }
 
-func (s *DurableStore) collectArtifact(ctx context.Context, item artifactGCReceipt) error {
+func (b durableBlobs) collectArtifact(ctx context.Context, item artifactGCReceipt) error {
+	s := b.s
 	unlock := s.lockProjectStorage(item.projectID)
 	defer unlock()
 	if !s.lifecycle.TryLock() {

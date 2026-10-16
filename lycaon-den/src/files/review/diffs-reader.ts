@@ -375,6 +375,7 @@ export function createDiffsReader(args: DiffsReaderArgs) {
     mount(parent: HTMLElement, facts: ReaderFactsHandlers): ReaderEditor {
       editor = new ReaderEditor({
         parent,
+        label: "Changes",
         surface: "diffs",
         prefs: displayPrefs,
         scrollPastEnd: false,
