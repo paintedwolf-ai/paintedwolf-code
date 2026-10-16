@@ -2,12 +2,12 @@ package policyfacts
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"maps"
 	"slices"
 	"strconv"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretharvest"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -39,6 +40,9 @@ func ObserveConfine(gc *oar.GuardContext, obs confine.Observation) {
 	gc.Execution.ConfineSignals = append([]string(nil), obs.Signals...)
 	gc.Execution.FailedStages = append([]string(nil), obs.FailedStages...)
 	gc.Execution.ProcessRunning = obs.Running
+	gc.Execution.ProcessTimedOut = !obs.Running && obs.TerminationReason == string(bgprocess.TerminationTimedOut)
+	gc.Execution.ProcessStopped = !obs.Running && obs.TerminationReason == string(bgprocess.TerminationStopped)
+	gc.Execution.ProcessExited = !obs.Running && obs.TerminationReason == string(bgprocess.TerminationExited)
 	observeSandboxRefusals(gc, obs.Refusals)
 	data := map[string]any{"tool": gc.Invocation.Tool}
 	if dest := obs.Destination; dest != "" {

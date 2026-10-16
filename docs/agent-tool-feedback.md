@@ -20,16 +20,24 @@ At rendering, [`oarcopy.FactsFromData`](../lycaon/internal/oarcopy/facts.go) pub
 
 On the wire, a tool result carries ordered `feedback` entries (`code`, typed `details`, optional `subject`), a producer-stated `dispatch` record for worker creation, and a producer-stated `completion` record for lifecycle work. `codes` is the compact ordered card-selection projection of `feedback`; it is never the only rejection data.
 
+Literal `echo` and `printf` output directed to a file uses `USE_WRITE_NATIVE`,
+including short log lines. The file-writing operation has the same recovery
+whether called directly or inside a shell wrapper. Ordinary stdout and arbitrary
+program output are unaffected. Exact replacement calls require representable
+paths and known output bytes; uncertain quoting, expansion, or output options
+retain recovery guidance without synthesized file content.
+
 ## Source text in model requests
 
 Successful native content, symbol, and range reads retain their structured result
 for history and evidence. The shared transcript projection sends each source
-block as unescaped text, with its line range and read receipt in separate
-metadata. Indentation and blank lines remain source bytes; display line labels
+block as unescaped text, labeled as file contents with its path, line range,
+and evidence handle beside that block. The read receipt remains in explicitly
+labeled tool result metadata. Indentation and blank lines remain source bytes; display line labels
 are not part of an edit string. Evidence handles and source coordinates remain
 available for citations. `summarize` source windows follow the same
 presentation: each window's text follows the result metadata in window order,
-and its path, line range, and handle stay in that metadata.
+and its path, line range, and handle also identify the corresponding source block.
 
 Projection accepts only complete host-written source blocks with consistent line
 coordinates. Unsupported or incomplete results keep their original presentation.
@@ -82,6 +90,8 @@ An argument validator can also report `inapplicable_fields` when named fields do
 ## Reachable-remedy rule
 
 Feedback must not tell an agent to call a tool it does not have, approve its own request, write outside its scope, or bypass a workflow gate. Remedy rendering receives the current tool/worker surface and selects only reachable paths. If no direct remedy exists, the feedback names which party must act (coordinator, user, or a device setting) and the agent returns that dependency rather than looping.
+
+Native command recovery separates parser equivalence from tool availability. The executor validates the complete ordered replacement against registration, current schemas, and the frozen offered surface. Missing targets may receive separate exact-name `request_tools` calls only when the compiled plan permits loading them; loading is never a partial execution recipe. Inexact file-write observations carry no fabricated contents. Copy distinguishes validated replacements from missing prerequisites and refers conditionally to diagnostics that provider projection may omit. Loading schemas grants no additional execution permission.
 
 A named **field** is reachable on the same terms as a named tool. In card copy, an unqualified backticked field name refers to an argument accepted by the receiving tool; name the owning tool when referring to another tool's field. Three things hold this together:
 
@@ -185,6 +195,12 @@ Worker artifact checks and parent completion receipts share the same host inspec
 ## Tool-output steering
 
 Some successful tool results include structured state updates such as queue position, active task, new revision, or no-op reason. Prompt steering consumes those fields directly. A no-op remains a result; if the agent must branch, the result needs a structured discriminator, not a parse of “nothing changed.”
+
+### Recall recovery
+
+Recall separates recorded observations from current files. A known message ID is sufficient for body recovery; ordinal bounds remain available for index paging and bounded reads. The host resolves a body’s ordinal and returns complete continuation arguments. `record_request` is the value of the next call’s `history` argument; `next_request` is the complete argument object.
+
+Matched results explain how to recover their public records when no body is present. Recorded text is projected beside its metadata, preserving cursor coordinates, authority, and canonical bytes. Query time-filter failures and history-coordinate failures carry separate typed facts into OAR copy. A read-only streak never establishes that evidence is complete or that another required recovery page is unnecessary.
 
 ### Progress reconciliation
 

@@ -134,6 +134,16 @@ host_facts:
    type: bool
  - name: paintedwolf.recall_allowed_fields
    type: list<string>
+ - name: paintedwolf.recall_query_time_invalid
+   type: bool
+ - name: paintedwolf.recall_history_mode_invalid
+   type: bool
+ - name: paintedwolf.recall_history_bounds_invalid
+   type: bool
+ - name: paintedwolf.recall_history_body_missing
+   type: bool
+ - name: paintedwolf.recall_history_search_invalid
+   type: bool
  - name: paintedwolf.render_total_exceeded
    type: bool
  - name: paintedwolf.render_viewport_exceeded
@@ -558,6 +568,15 @@ host_facts:
  - name: paintedwolf.process_running
    type: bool
    observation: True when the invocation's process was still running when observed.
+ - name: paintedwolf.process_timed_out
+   type: bool
+   observation: True when a terminal invocation reached its host deadline. False while running or when the terminal reason is unknown.
+ - name: paintedwolf.process_stopped
+   type: bool
+   observation: True when the host recorded a terminal invocation as stopped. False while running or when the terminal reason is unknown.
+ - name: paintedwolf.process_exited
+   type: bool
+   observation: True when the host recorded a terminal invocation as exited, independently of success. False while running or when the terminal reason is unknown.
  - name: paintedwolf.sandbox_refusals
    type: list<string>
    observation: Each operation the kernel reported refusing the invocation's processes, as operation, target, and process; empty when none was reported or the host cannot read the reports.
@@ -733,7 +752,17 @@ host_facts:
    type: string
  - name: paintedwolf.tool_discovery_has_more
    type: bool
+ - name: paintedwolf.task_loadable
+   type: bool
  - name: paintedwolf.tool_loadable
+   type: bool
+ - name: paintedwolf.native_replacement_tools
+   type: list<string>
+ - name: paintedwolf.native_replacement_exact
+   type: bool
+ - name: paintedwolf.native_replacement_manual
+   type: bool
+ - name: paintedwolf.replacement_calls_available
    type: bool
  - name: paintedwolf.tool_discovery_available
    type: bool

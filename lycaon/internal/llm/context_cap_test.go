@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
+	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/modelfeed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -73,5 +74,26 @@ func TestOllamaContextCapSurvivesRuntimeRefresh(t *testing.T) {
 		if !errors.As(err, &tooSmall) || tooSmall.MaxContext != 32768 {
 			t.Fatalf("oversize request = %v, want capped-context refusal", err)
 		}
+	}
+}
+
+func TestRegistryRequestBudgetUsesNativeAdapter(t *testing.T) {
+	p := ollamaprovider.New("local", "http://unused.invalid", "", []modelinfo.Entry{{ID: "model", ContextLength: 16384}})
+	r := &Registry{}
+	r.snapshot.Store(&providerRegistrySnapshot{providers: map[string]modelcall.Provider{"local": p}})
+	req := modelcall.CompletionRequest{Model: "model", Messages: []api.Message{{Role: api.MessageRoleUser, Content: strings.Repeat("detail ", 2000)}}}
+	projected := req
+	projected.Messages = transcript.Project(req.Messages)
+	want := p.RequestBudget(t.Context(), projected)
+	if got := r.RequestBudget(t.Context(), "local", req); got != want {
+		t.Fatalf("registry budget = %+v, adapter = %+v", got, want)
+	}
+	if want.Input <= modelcall.EstimateRequestInput(req) {
+		t.Fatal("fixture must exercise native cold calibration")
+	}
+	r.snapshot.Store(&providerRegistrySnapshot{providers: map[string]modelcall.Provider{"local": p},
+		entries: map[string]CatalogEntry{"local": {Kind: "ollama", Models: []modelinfo.Entry{{ID: "model", ContextLength: 8192}}}}})
+	if got := r.RequestBudget(t.Context(), "local", req); got.Window != 8192 || got.Input != want.Input {
+		t.Fatalf("configured request cap did not constrain adapter metadata: %+v", got)
 	}
 }

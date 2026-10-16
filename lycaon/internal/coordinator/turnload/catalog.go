@@ -142,6 +142,11 @@ type LookupSpec struct {
 // Deadline returns the engine budget for a skill lookup.
 func (s LookupSpec) Deadline() time.Duration { return time.Duration(s.DeadlineMS) * time.Millisecond }
 
+// RetentionSpec declares the optional continuation detail question.
+type RetentionSpec struct {
+	Question string `yaml:"question" json:"question"`
+}
+
 // Catalog is the validated decision catalog.
 type Catalog struct {
 	Version   int           `yaml:"version" json:"version"`
@@ -149,6 +154,7 @@ type Catalog struct {
 	Turn      TurnSpec      `yaml:"turn" json:"turn"`
 	Request   RequestSpec   `yaml:"request" json:"request"`
 	Lookup    LookupSpec    `yaml:"lookup" json:"lookup"`
+	Retention RetentionSpec `yaml:"retention" json:"retention"`
 	ToolEvent ToolEventSpec `yaml:"tool_event" json:"tool_event"`
 	// Engine and Rerank belong to internal/decide, which parses the same file;
 	// they are named here so a strict decode accepts them.

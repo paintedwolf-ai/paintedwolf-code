@@ -231,7 +231,7 @@ func TestUtilityLaneAllowsConcurrentHosted(t *testing.T) {
 	release2()
 }
 
-func TestBackgroundSummarizeNeverSpendsCoordinator(t *testing.T) {
+func TestBackgroundSummarizeIgnoresLatencyAndNeverSpendsCoordinator(t *testing.T) {
 	lite := &namedStubProvider{id: "lite", err: silentLite()}
 	coord := &namedStubProvider{id: "coord", content: "coordinator summary"}
 	r := newFallbackTestSummarizer(t, lite, coord)
@@ -249,11 +249,14 @@ func TestBackgroundSummarizeNeverSpendsCoordinator(t *testing.T) {
 	coord.calls = 0
 	lite.calls = 0
 	_, err = r.Summarize(context.Background(), "sys", "user", 32)
-	if !errors.Is(err, ErrLiteUnavailable) {
+	if _, ok := failure.AsProviderSilent(err); !ok {
 		t.Fatalf("second error = %v", err)
 	}
-	if lite.calls != 0 {
-		t.Fatalf("open circuit still called lite (%d)", lite.calls)
+	if lite.calls != 1 {
+		t.Fatalf("quiet latency failure did not retry lite (%d)", lite.calls)
+	}
+	if r.Plane.Snapshot().State != SlotReady {
+		t.Fatal("latency alone announced a summarizer outage")
 	}
 	if coord.calls != 0 {
 		t.Fatalf("background compaction spent coordinator (%d)", coord.calls)
@@ -502,5 +505,40 @@ func TestOverlayLaneWaitDefaultHolds(t *testing.T) {
 	}
 	if got := newUtilityLanes().overlayWaitOrDefault(); got != OverlayLaneWait {
 		t.Fatalf("default overlay wait = %v want %v", got, OverlayLaneWait)
+	}
+}
+
+func TestCompactionHealthRequiresRepeatedEndpointFailures(t *testing.T) {
+	plane := NewUtilityPlane()
+	var changes []SlotState
+	plane.SetOnChange(func(s SlotSnapshot) { changes = append(changes, s.State) })
+	fault := &failure.ProviderUnreachableError{ProviderID: "p", Model: "m", Attempts: 1, Cause: syscall.ECONNREFUSED}
+	for range 2 {
+		plane.noteCompactionOutcome("p", fault)
+	}
+	if plane.Snapshot().State != SlotReady || len(changes) != 0 {
+		t.Fatal("isolated failures reported an outage")
+	}
+	plane.noteCompactionOutcome("p", nil)
+	for range 2 {
+		plane.noteCompactionOutcome("p", fault)
+	}
+	if plane.Snapshot().State != SlotReady {
+		t.Fatal("success did not clear the failure streak")
+	}
+	plane.noteCompactionOutcome("p", fault)
+	if plane.Snapshot().State != SlotUnavailable || len(changes) != 1 {
+		t.Fatal("sustained failures did not report an outage")
+	}
+	plane.noteCompactionOutcome("p", nil)
+	if plane.Snapshot().State != SlotReady || len(changes) != 2 {
+		t.Fatal("recovery did not clear the outage")
+	}
+	for range 10 {
+		plane.noteCompactionOutcome("p", silentLite())
+		plane.noteCompactionOutcome("p", context.DeadlineExceeded)
+	}
+	if plane.Snapshot().State != SlotReady || len(changes) != 2 {
+		t.Fatal("latency reported an outage")
 	}
 }

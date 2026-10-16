@@ -81,7 +81,12 @@ func TestDispatchRejectWhenNoDelegation(t *testing.T) {
 	if !strings.Contains(block, "Code: COORDINATOR_DELEGATE_DISPATCH_USE_TASK") {
 		t.Fatalf("missing reject code in block: %q", block)
 	}
-	if !strings.Contains(block, "task(") {
-		t.Fatalf("missing task() guidance in block: %q", block)
+	if !strings.Contains(block, "no available worker-dispatch path") {
+		t.Fatalf("missing unavailable-dispatch guidance without recovery facts: %q", block)
+	}
+	for _, unavailable := range []string{"`task`", "`request_tools`"} {
+		if strings.Contains(block, unavailable) {
+			t.Errorf("guidance recommends %s without recovery facts: %q", unavailable, block)
+		}
 	}
 }

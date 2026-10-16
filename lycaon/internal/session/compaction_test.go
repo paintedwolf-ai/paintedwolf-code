@@ -274,21 +274,32 @@ func (p *promptHistoryReadProbe) GetMessages(context.Context, string) ([]api.Mes
 	return nil, fmt.Errorf("unbounded read must not run")
 }
 
-func (p *promptHistoryReadProbe) GetMessagesAfterOrd(context.Context, string, int64, int) ([]api.Message, error) {
-	return make([]api.Message, history.UncompactedLimit+1), nil
-}
-
-func TestPromptHistoryOverflowFailsWithoutUnboundedRead(t *testing.T) {
+func TestPromptHistoryOverflowNeverLoadsFullTranscript(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	mem := store.NewMemory()
+	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create long session", err)
+	rows := make([]api.Message, 1200)
+	for i := range rows {
+		rows[i] = api.Message{ID: fmt.Sprintf("row-%d", i), Role: api.MessageRoleAssistant, Content: "recorded observation"}
+	}
+	rows[17] = api.Message{ID: "active-request", Role: api.MessageRoleUser, Content: "Keep the active human instruction verbatim"}
+	testutil.FailErr(t, "append long history", mem.AppendMessages(t.Context(), sess.ID, rows...))
+	sess, err = mem.Get(t.Context(), sess.ID)
+	testutil.FailErr(t, "read active turn identity", err)
 	probe := &promptHistoryReadProbe{Store: mem}
 	mgr := NewHost(probe, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	oartest.InstallCloseoutPolicy(t, mgr)
-	_, err := mgr.Runner.History.Load(t.Context(), &api.Session{ID: "large-session"})
-	if err == nil || !strings.Contains(err.Error(), "unprojected rows") {
-		t.Fatalf("loadPromptHistory error = %v, want bounded projection lag", err)
+	loaded, err := mgr.Runner.History.Load(t.Context(), sess)
+	testutil.FailErr(t, "load bounded history", err)
+	if len(loaded) > history.UncompactedLimit+2 || probe.fullReads != 0 {
+		t.Fatalf("unbounded prompt load: rows=%d full reads=%d", len(loaded), probe.fullReads)
 	}
-	if probe.fullReads != 0 {
-		t.Fatalf("full transcript reads = %d, want 0", probe.fullReads)
+	if loaded[1].ID != "active-request" || loaded[1].Content != rows[17].Content || loaded[len(loaded)-1].ID != rows[len(rows)-1].ID {
+		t.Fatal("bounded history lost the active request or newest canonical row")
+	}
+	if !strings.Contains(loaded[0].Content, "[host:compacted history through ordinal ") {
+		t.Fatal("bounded fallback lost its recovery coordinates")
 	}
 }
 
@@ -322,7 +333,7 @@ func TestNoCompactionBetweenTargetAndTrigger(t *testing.T) {
 	}
 
 	// A ratio of one isolates the compaction trigger from cold-start reserves.
-	mgr.Runner.History.ObserveTokens(sess.ID, 1000, 1000)
+	mgr.Runner.History.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, 1000, 1000)
 
 	_, err = mgr.Submissions.Prompt(ctx, sess.ID, "continue")
 	testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
@@ -416,7 +427,7 @@ func TestForceCompactHTTP(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 	content := strings.Repeat("x\n", 4000)
 	testutil.FailErr(t, "append historical detail and current request", store.AppendMessages(ctx, sess.ID,
-		api.Message{ID: "big", Role: api.MessageRoleUser, Content: content},
+		api.Message{ID: "big", Role: api.MessageRoleAssistant, Content: content},
 		api.Message{ID: "current", Role: api.MessageRoleUser, Content: "Continue the task"},
 	))
 

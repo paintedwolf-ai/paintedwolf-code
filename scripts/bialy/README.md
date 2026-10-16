@@ -442,3 +442,11 @@ watch, split by section: the capability map replaced an 18K-character tool
 listing, the guide head removes about 2K more on an orientation prompt, and
 the floor schemas are the rest. A retrain that improves preload recall is what
 shrinks the request round trips; nothing in the catalog does.
+
+## Compaction observation contract
+
+The optional retention head ranks inline detail within a host-owned context budget. It does not delete canonical observations, widen recall scope, establish authority, or decide whether chat can continue. Missing heads use the deterministic compaction policy.
+
+Compaction rows retain the captured request, receiver and summarizer budgets, source identities, selected representations, and recovery outcomes. A later successful canonical recovery is positive observational evidence of need. An unreferenced observation has unknown need; repeated calls and path mutations do not establish a negative label or justify omission. Training negatives require explicit scenario truth or an independent judge with recorded provenance.
+
+Qualification compares against the deterministic policy across context windows, repeated compactions, slow and failed summaries, and recovery of necessary material. Every held-out label must have verified provenance. Successful recall is part of the design and its cost belongs in the evaluation objective.

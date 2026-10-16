@@ -2,8 +2,14 @@ package history
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -11,14 +17,105 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+func TestSynthesisKeepsRecoveryAddressesOutsideItsCapturedPage(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	record := &messageview.Continuation{Format: 1, ThroughOrd: 11, SummaryThroughOrd: 1,
+		Sources: []messageview.ContinuationSource{
+			{MessageID: "original-result", Ord: 1, Tool: "read", Handles: []string{"read#1"}, Disposition: "summary_and_reference"},
+			{MessageID: "new-observation", Ord: 11, Disposition: "reference"},
+		}}
+	sc := compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), compaction.MockSummarizer{Text: "New observation"})
+	enriched, err := sc.EnrichContinuation(t.Context(), compaction.SessionInfo{PriorContinuation: record},
+		[]api.Message{{ID: "new-observation", Ord: 11, Role: api.MessageRoleAssistant, Content: "New observation"}}, record)
+	testutil.FailErr(t, "enrich captured page", err)
+	if len(enriched.Sources) != 2 || enriched.Sources[0].MessageID != "original-result" || len(enriched.Sources[0].Handles) != 1 || enriched.SummaryThroughOrd != 11 {
+		t.Fatal("summary enrichment displaced an earlier canonical recovery address")
+	}
+}
+
+func TestDelayedSynthesisPreservesNewerCoverage(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	for _, newerSummary := range []bool{false, true} {
+		t.Run(fmt.Sprint(newerSummary), func(t *testing.T) {
+			mem := store.NewMemory()
+			sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+			testutil.FailErr(t, "create session", err)
+			testutil.FailErr(t, "append sources", mem.AppendMessages(t.Context(), sess.ID,
+				api.Message{ID: "one", Role: api.MessageRoleTool, Content: "first observation"},
+				api.Message{ID: "two", Role: api.MessageRoleTool, Content: "second observation"}))
+			rows, err := mem.GetMessages(t.Context(), sess.ID)
+			testutil.FailErr(t, "read sources", err)
+			snapshot := store.CompactionView{CoveredThroughOrd: rows[0].Ord, CoveredThroughID: rows[0].ID, SourceSeq: rows[0].Seq}
+			record := &messageview.Continuation{Format: messageview.ContinuationFormat, ThroughOrd: rows[1].Ord, Window: 8192,
+				Sources: []messageview.ContinuationSource{{MessageID: "two", Ord: rows[1].Ord, Disposition: "reference"}}}
+			if newerSummary {
+				record.SummaryThroughOrd = rows[1].Ord
+				record.Summary.Facts = []string{"newer accepted clue"}
+			}
+			testutil.FailErr(t, "publish newer baseline", mem.PutCompactionView(t.Context(), sess.ID, store.CompactionView{
+				Generation: 1, CoveredThroughOrd: rows[1].Ord, CoveredThroughID: rows[1].ID, SourceSeq: rows[1].Seq, Continuation: record,
+				Messages: []api.Message{{ID: "summary", Role: api.MessageRoleAssistant, ContentParts: []api.MessageContentPart{{Source: "compaction_summary"}}}},
+			}))
+			enriched := &messageview.Continuation{ThroughOrd: rows[0].Ord, SummaryThroughOrd: rows[0].Ord,
+				Summary: messageview.ContinuationSummary{Facts: []string{"delayed clue"}}}
+			history := &Service{store: mem}
+			testutil.FailErr(t, "publish delayed synthesis", history.publishSynthesis(t.Context(), compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
+			view, _, err := mem.GetCompactionView(t.Context(), sess.ID)
+			testutil.FailErr(t, "read enriched view", err)
+			if view.CoveredThroughOrd != rows[1].Ord || view.Continuation.Sources[0].MessageID != "two" {
+				t.Fatal("delayed synthesis replaced newer recovery coordinates")
+			}
+			want, generation := "delayed clue", 2
+			if newerSummary {
+				want, generation = "newer accepted clue", 1
+			}
+			if view.Generation != generation || view.Continuation.Summary.Facts[0] != want {
+				t.Fatalf("accepted summary = %+v, generation = %d", view.Continuation, view.Generation)
+			}
+		})
+	}
+}
+
+func TestDelayedSynthesisRejectsChangedCanonicalSource(t *testing.T) {
+	mem := store.NewMemory()
+	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "append source", mem.AppendMessages(t.Context(), sess.ID,
+		api.Message{ID: "source", Role: api.MessageRoleAssistant, Content: "original fact"}))
+	rows, err := mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "read source", err)
+	source := rows[0]
+	snapshot := store.CompactionView{Generation: 1, CoveredThroughOrd: source.Ord,
+		CoveredThroughID: source.ID, SourceSeq: source.Seq,
+		Continuation: &messageview.Continuation{ThroughOrd: source.Ord}}
+	testutil.FailErr(t, "publish baseline", mem.PutCompactionView(t.Context(), sess.ID, snapshot))
+	source.Content = "corrected fact"
+	_, err = mem.UpdateMessage(t.Context(), sess.ID, source.ID, source)
+	testutil.FailErr(t, "correct source", err)
+	enriched := &messageview.Continuation{ThroughOrd: source.Ord, SummaryThroughOrd: source.Ord,
+		Summary: messageview.ContinuationSummary{Facts: []string{"original fact"}}}
+	testutil.FailErr(t, "reject stale synthesis", (&Service{store: mem}).publishSynthesis(t.Context(),
+		compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
+	current, err := mem.Get(t.Context(), sess.ID)
+	testutil.FailErr(t, "read generation", err)
+	if current.CompactionGeneration != 1 {
+		t.Fatal("stale synthesis published after canonical correction")
+	}
+	canonical, err := mem.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "read correction", err)
+	if canonical[0].Content != "corrected fact" {
+		t.Fatal("synthesis replaced the canonical correction")
+	}
+}
+
 type compactionInterleavedStore struct {
 	Store
 	beforeSuffix func()
 }
 
-func (s *compactionInterleavedStore) GetMessagesAfterOrd(ctx context.Context, id string, after int64, limit int) ([]api.Message, error) {
+func (s *compactionInterleavedStore) ReadMessageWindow(ctx context.Context, id string, window messageview.MessageWindow) ([]api.Message, error) {
 	s.beforeSuffix()
-	return s.Store.GetMessagesAfterOrd(ctx, id, after, limit)
+	return s.Store.ReadMessageWindow(ctx, id, window)
 }
 
 func TestCompactionSuffixCannotMaskConcurrentPrefixEdit(t *testing.T) {
@@ -74,8 +171,115 @@ func TestPersistedCompactionViewRestoresRetainedReasoning(t *testing.T) {
 	}
 	sess, err = st.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "reload generation", err)
-	out := (&Service{store: st}).ApplyView(t.Context(), sess, canonical)
+	history := &Service{store: st}
+	sess.CompactionGeneration = 0
+	loaded, err := history.Load(t.Context(), sess)
+	testutil.FailErr(t, "load retained canonical replay", err)
+	if sess.CompactionGeneration != view.Generation {
+		t.Fatal("bounded load did not adopt the published generation")
+	}
+	out := history.ApplyView(t.Context(), sess, loaded)
 	if len(out) != 2 || out[0].ModelReasoning == nil || out[0].ModelReasoning.Text != "private" {
 		t.Fatal("request view lost canonical continuation")
+	}
+}
+
+func TestContextScaledCanonicalPagingAndTokenBounds(t *testing.T) {
+	largeCfg := compaction.DefaultCompactionConfig()
+	largeCfg.ModelContextWindow = 512 * 600 // maxRows = 600 (> UncompactedLimit = 256)
+	largeCfg.HardCeilingTokens = 200000
+	largeCfg.TargetTokens = 100000
+	svc, mem := newCompactionManager(t, largeCfg)
+	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	rows := make([]api.Message, 320)
+	for i := range rows {
+		role := api.MessageRoleUser
+		if i%2 == 1 {
+			role = api.MessageRoleAssistant
+		}
+		rows[i] = api.Message{ID: fmt.Sprintf("msg-%d", i), Role: role, Content: "short observation"}
+	}
+	testutil.FailErr(t, "append 320 rows", mem.AppendMessages(t.Context(), sess.ID, rows...))
+	sess, err = mem.Get(t.Context(), sess.ID)
+	testutil.FailErr(t, "get session", err)
+	loaded, err := svc.Load(t.Context(), sess)
+	testutil.FailErr(t, "load 320 rows on large receiver", err)
+	if len(loaded) != 320 || loaded[0].Ord != 1 || loaded[len(loaded)-1].Ord != 320 {
+		t.Fatalf("expected all 320 rows via paged backward windows, got len=%d firstOrd=%d", len(loaded), loaded[0].Ord)
+	}
+
+	tightCfg := compaction.DefaultCompactionConfig()
+	tightCfg.ModelContextWindow = 16384
+	tightCfg.HardCeilingTokens = 600
+	tightCfg.TargetTokens = 400
+	svc.SetCompactor(compaction.NewSimpleCompactor(tightCfg, compaction.MockSummarizer{Text: "summary"}))
+	bounded, err := svc.Load(t.Context(), sess)
+	testutil.FailErr(t, "load token-bounded tail on small receiver", err)
+	if len(bounded) >= 320 || len(bounded) == 0 || bounded[0].ID != "host-history-coverage" {
+		t.Fatalf("expected token-bounded tail with coverage notice, got len=%d", len(bounded))
+	}
+}
+
+func TestSmallToLargeReceiverRestoresCanonicalHistory(t *testing.T) {
+	smallCfg := compaction.DefaultCompactionConfig()
+	smallCfg.Enabled = true
+	smallCfg.ModelContextWindow = 4000
+	smallCfg.HardCeilingTokens = 2000
+	smallCfg.TargetTokens = 900
+	smallCfg.KeepRecentMessages = 2
+	smallCfg.ChunkTokenThreshold = 100000
+	svc, mem := newCompactionManager(t, smallCfg)
+
+	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	block := strings.Repeat("word ", 120) // ~150 tokens each
+	var seed []api.Message
+	for i := 1; i <= 20; i++ {
+		role := api.MessageRoleUser
+		if i%2 == 0 {
+			role = api.MessageRoleAssistant
+		}
+		seed = append(seed, api.Message{
+			ID:      fmt.Sprintf("m-%d", i),
+			Role:    role,
+			Content: fmt.Sprintf("canonical message %d: %s", i, block),
+		})
+	}
+	testutil.FailErr(t, "append seed", mem.AppendMessages(t.Context(), sess.ID, seed...))
+	_, err = svc.ForceCompact(t.Context(), sess.ID)
+	testutil.FailErr(t, "force compact on small receiver", err)
+
+	sess, err = mem.Get(t.Context(), sess.ID)
+	testutil.FailErr(t, "get compacted session", err)
+	smallView := appliedView(t, svc, mem, sess.ID)
+	if len(smallView) >= len(seed) {
+		t.Fatalf("expected small receiver view to be compacted, got %d rows", len(smallView))
+	}
+
+	// Switch to a medium receiver whose TargetTokens fits a larger suffix (partial restoration).
+	midCfg := smallCfg
+	midCfg.ModelContextWindow = 32000
+	midCfg.HardCeilingTokens = 16000
+	midCfg.TargetTokens = 1800
+	svc.SetCompactor(compaction.NewSimpleCompactor(midCfg, compaction.MockSummarizer{Text: "summary"}))
+	midLoaded, err := svc.Load(t.Context(), sess)
+	testutil.FailErr(t, "load on medium receiver", err)
+	midView := svc.ApplyView(t.Context(), sess, midLoaded)
+	if len(midView) <= len(smallView) || len(midView) >= len(seed) {
+		t.Fatalf("expected partial canonical restoration on medium receiver: small=%d mid=%d full=%d", len(smallView), len(midView), len(seed))
+	}
+
+	// Switch to a large receiver whose TargetTokens fits all 20 canonical messages (full restoration).
+	largeCfg := smallCfg
+	largeCfg.ModelContextWindow = 200000
+	largeCfg.HardCeilingTokens = 150000
+	largeCfg.TargetTokens = 50000
+	svc.SetCompactor(compaction.NewSimpleCompactor(largeCfg, compaction.MockSummarizer{Text: "summary"}))
+	largeLoaded, err := svc.Load(t.Context(), sess)
+	testutil.FailErr(t, "load on large receiver", err)
+	largeView := svc.ApplyView(t.Context(), sess, largeLoaded)
+	if len(largeView) != len(seed) || largeView[0].ID != "m-1" || largeView[len(largeView)-1].ID != "m-20" {
+		t.Fatalf("expected full canonical restoration on large receiver, got len=%d first=%s", len(largeView), largeView[0].ID)
 	}
 }

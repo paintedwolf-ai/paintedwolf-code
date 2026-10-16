@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 	"unicode/utf8"
 
@@ -16,7 +15,10 @@ import (
 const historyBodyRunes = 4096
 
 // ErrHistoryCoordinates identifies an invalid recovery request.
-type ErrHistoryCoordinates struct{ Reason string }
+type ErrHistoryCoordinates struct {
+	Field  string
+	Reason string
+}
 
 func (e *ErrHistoryCoordinates) Error() string { return "recall: " + e.Reason }
 
@@ -70,19 +72,11 @@ type HistoryEntry struct {
 }
 
 func (s *Service) history(ctx context.Context, req Request) (*Result, error) {
-	h := req.History
-	if (h.Format != "" && h.Format != "text" && h.Format != "record") || (h.Format == "record" && h.MessageID == "") || h.BodyRunes < 0 || h.BodyRunes > historyBodyRunes || h.Offset == math.MaxInt {
-		return nil, &ErrHistoryCoordinates{Reason: "invalid history body format or window"}
+	if err := validateHistoryRequest(req); err != nil {
+		return nil, err
 	}
-	if len([]rune(h.Search)) > 256 || len(strings.Fields(h.Search)) > 8 || (h.MessageID != "" && strings.TrimSpace(h.Search) != "") {
-		return nil, &ErrHistoryCoordinates{Reason: "history search must be bounded and separate from a body request"}
-	}
-	if h.ThroughOrd <= 0 || h.AfterOrd < 0 || h.AfterOrd >= h.ThroughOrd || h.Offset < 0 || h.SourceSeq < 0 || strings.TrimSpace(req.Caller.SessionID) == "" {
-		return nil, &ErrHistoryCoordinates{Reason: "invalid history coordinates"}
-	}
-	if req.Widen != WidenDefault || strings.TrimSpace(req.Query) != "" {
-		return nil, &ErrHistoryCoordinates{Reason: "history cannot be combined with query or widen"}
-	}
+	coordinates := *req.History
+	h := &coordinates
 	var tx *sql.Tx
 	var err error
 	if reader, ok := s.db.(db.ReadHandle); ok {
@@ -112,6 +106,10 @@ func (s *Service) history(ctx context.Context, req Request) (*Result, error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+	if h.ThroughOrd == 0 && len(page.Entries) == 1 {
+		h.ThroughOrd = page.Entries[0].Ord
+		page.ThroughOrd = h.ThroughOrd
 	}
 	for _, entry := range page.Entries {
 		if h.SourceSeq > 0 && entry.Seq > h.SourceSeq {
@@ -217,7 +215,7 @@ func historyBody(ctx context.Context, tx *sql.Tx, session string, h *HistoryRequ
 		width = h.BodyRunes
 	}
 	row := tx.QueryRowContext(ctx, `SELECT id, ord, role, substr(`+text+`,?,?), length(`+text+`), COALESCE(evidence_handles_json,'[]'), seq
-  FROM messages WHERE session_id = ? AND id = ? AND ord > ? AND ord <= ? AND `+historyVisible, h.Offset+1, width, session, h.MessageID, h.AfterOrd, h.ThroughOrd)
+  FROM messages WHERE session_id = ? AND id = ? AND ord > ? AND (? = 0 OR ord <= ?) AND `+historyVisible, h.Offset+1, width, session, h.MessageID, h.AfterOrd, h.ThroughOrd, h.ThroughOrd)
 	entry, err := scanHistoryEntry(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil

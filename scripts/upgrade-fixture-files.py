@@ -12,6 +12,8 @@ import sys
 import tempfile
 import zipfile
 
+from release_semver import compare, parse
+
 
 def digest(path):
     value = hashlib.sha256()
@@ -116,13 +118,73 @@ def materialize(fixture, destination):
     shutil.copytree(fixture / "app-state-v1", destination / "app-state-v1", dirs_exist_ok=True)
 
 
-def candidate(fixture, sidecar, version):
+def check_inventory(root, version):
+    selected = parse(version)
+    for entry in sorted(root.iterdir()):
+        try:
+            candidate_version = parse(entry.name)
+        except ValueError:
+            continue
+        if entry.is_symlink() or not entry.is_dir():
+            raise ValueError("versioned corpus must be a regular directory: " + str(entry))
+        if compare(candidate_version, selected) > 0:
+            raise ValueError("future-version corpus must be prepared after VERSION selects it: " + entry.name)
+
+
+def released_corpus(root, versions, source_root=None, baselines=None):
+    if not isinstance(versions, list) or any(not isinstance(version, str) for version in versions):
+        raise ValueError("published corpus inventory must be a list of versions")
+    for version in versions:
+        if compare(parse(version), parse("1.0.0")) < 0:
+            raise ValueError("published corpus inventory must start at 1.0.0")
+        fixture = root / version
+        if fixture.is_symlink() or not fixture.is_dir():
+            raise ValueError("published release corpus is missing or unsafe: " + version)
+        metadata, _ = checked_archive(fixture)
+        if metadata["app_version"] != version:
+            raise ValueError("published corpus version differs: " + version)
+        if baselines is not None and metadata["schema_identity"] not in baselines:
+            raise ValueError("published corpus schema has no retained baseline: " + version)
+        if source_root is not None:
+            rel = "lycaon/testdata/upgrade-corpus/" + version
+            tag = "refs/tags/v" + version
+            def git(*arguments):
+                return subprocess.check_output(["git", "-C", str(source_root), *arguments])
+            paths = git("ls-tree", "-r", "--name-only", "-z", tag, "--", rel + "/").decode().split("\0")
+            expected = {name for name in paths if name}
+            actual = set()
+            for file in fixture.rglob("*"):
+                if file.is_symlink():
+                    raise ValueError("published corpus contains a symlink: " + str(file))
+                if file.is_file():
+                    actual.add(file.relative_to(source_root).as_posix())
+            if not expected or expected != actual:
+                raise ValueError("published corpus inventory differs from its release: " + version)
+            for name in sorted(expected):
+                if (source_root / name).read_bytes() != git("show", tag + ":" + name):
+                    raise ValueError("published corpus bytes differ from its release: " + name)
+
+
+def candidate_static(fixture, version, inventory_root=None, schema_lock=None):
+    if inventory_root is not None:
+        check_inventory(inventory_root, version)
+        if fixture.resolve() != (inventory_root / version).resolve():
+            raise ValueError("candidate fixture is outside the selected corpus inventory")
     metadata, _ = checked_archive(fixture)
     project = fixture / "project-root"
     if not project.is_dir() or project.is_symlink():
         raise ValueError("candidate fixture project root missing or unsafe")
     if metadata["app_version"] != version:
         raise ValueError("fixture app version differs from candidate")
+    if schema_lock is not None:
+        expected = json.loads(schema_lock.read_text())["schema_version"]
+        if metadata["schema_version"] != expected:
+            raise ValueError("candidate corpus schema revision differs from source")
+    return metadata
+
+
+def candidate(fixture, sidecar, version, inventory_root=None):
+    metadata = candidate_static(fixture, version, inventory_root)
     def diagnostic(*arguments):
         return json.loads(subprocess.check_output([str(sidecar), "diagnostics", *map(str, arguments)], text=True))
     baseline = diagnostic("schema-baseline")
@@ -153,11 +215,29 @@ if __name__ == "__main__":
     validator.add_argument("fixture", type=Path)
     validator.add_argument("--sidecar", type=Path, required=True)
     validator.add_argument("--version", required=True)
+    validator.add_argument("--inventory-root", type=Path)
+    static = commands.add_parser("candidate-static")
+    static.add_argument("fixture", type=Path)
+    static.add_argument("--version", required=True)
+    static.add_argument("--inventory-root", type=Path, required=True)
+    static.add_argument("--schema-lock", type=Path, required=True)
+    static.add_argument("--published-versions", default="[]")
+    inventory = commands.add_parser("inventory")
+    inventory.add_argument("root", type=Path)
+    inventory.add_argument("--version", required=True)
     args = parser.parse_args()
     try:
         if args.command == "materialize":
             materialize(args.fixture, args.destination)
+        elif args.command == "candidate-static":
+            metadata = candidate_static(args.fixture, args.version, args.inventory_root, args.schema_lock)
+            source_root = args.inventory_root.parents[2]
+            baselines = json.loads((source_root / "lycaon/internal/db/released-baselines.json").read_text())
+            released_corpus(args.inventory_root, json.loads(args.published_versions), source_root,
+                            baselines + [metadata["schema_identity"]])
+        elif args.command == "inventory":
+            check_inventory(args.root, args.version)
         else:
-            candidate(args.fixture, args.sidecar, args.version)
+            candidate(args.fixture, args.sidecar, args.version, args.inventory_root)
     except (ValueError, KeyError, TypeError, OSError, zipfile.BadZipFile, subprocess.CalledProcessError) as error:
         sys.exit("error: " + str(error))

@@ -27,6 +27,32 @@ class AdmissionTests(unittest.TestCase):
         self.assertIn('runner', full)
         self.assertIn('native', full)
 
+    def test_broad_changes_run_the_whole_gate_and_every_platform_lane(self):
+        full = {row['lane'] for row in ci.matrix('integration', scope=dict(full=True))['include']}
+        self.assertEqual(full, {row['lane'] for row in ci.matrix('check')['include']} | {'confinement-arm64'})
+        # The check itself, its probe, and the harness fixtures widen the scope.
+        for path in ['scripts/den-webkit-atspi.sh', 'scripts/harness/webkit_atspi_text_attributes.py',
+                     'scripts/harness/webkit-atspi/2.54.Containerfile', 'lycaon/test/fixtures/e2e/minimal-go-project/go.mod',
+                     'lycaon-den/src/assets/icon.svg']:
+            self.assertTrue(impact.broad_scope([path])[0], path)
+        backend = dict(full=False, paths=['lycaon/internal/a/a.go'])
+        self.assertNotIn('webkit-gtk', {row['lane'] for row in ci.matrix('integration', scope=backend)['include']})
+
+    def test_confinement_changes_admit_the_other_architecture(self):
+        for path in ['lycaon/internal/confine/boundary_linux.go', 'lycaon/internal/confine/linuxsandbox/seccomp_linux_arm64.go',
+                     'lycaon/internal/confine/helper_main.go', 'lycaon/internal/exec/supervisor_tree_linux.go',
+                     'lycaon/internal/exec/nice_linux.go', 'lycaon/internal/exec/supervisor_other.go']:
+            lanes = {row['lane'] for row in ci.matrix('integration', scope=dict(full=False, paths=[path]))['include']}
+            self.assertIn('confinement-arm64', lanes, path)
+        for path in ['lycaon/internal/exec/runner.go', 'lycaon/internal/exec/sub/supervisor.go',
+                     'lycaon/internal/execution/supervisor_linux.go', 'lycaon-den/src/a.ts']:
+            lanes = {row['lane'] for row in ci.matrix('integration', scope=dict(full=False, paths=[path]))['include']}
+            self.assertNotIn('confinement-arm64', lanes, path)
+        # The lane, its target, and confinement data outside Go source run every platform lane.
+        for path in ['scripts/test-confine-linux.sh', 'scripts/verification-plan.json',
+                     'lycaon/internal/confine/testdata/fixture.json']:
+            self.assertTrue(impact.broad_scope([path])[0], path)
+
     def test_reverse_graph_reaches_test_importers_and_cycles(self):
         graph = {'a': [], 'b': ['a', 'c'], 'c': ['b'], 'test': ['c'], 'unrelated': []}
         self.assertEqual(impact.reverse_closure(graph, {'a'}), {'a', 'b', 'c', 'test'})

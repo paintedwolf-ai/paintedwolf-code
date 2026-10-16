@@ -14,6 +14,12 @@ inputs:
   analysis:
     description: Pinned Go analysis tools needed by the lane (none, lint, vulnerabilities, all)
     default: none
+  containers:
+    description: Provision the WebKitGTK accessibility images before an offline lane runs den:webkit:atspi
+    default: 'false'
+  browser:
+    description: Provision the pinned browser before an offline lane runs test:confine:linux
+    default: 'false'
   save-caches:
     description: Save the toolchain and build caches (main's warm job only); every other run restores without saving
     default: 'false'
@@ -175,6 +181,19 @@ runs:
       env:
         TOOLS: ${{ inputs.analysis }}
       run: python3 scripts/analysis_tools.py ensure "$TOOLS"
+
+    - name: Restore lint diagnostics
+      if: runner.os == 'Linux' && (inputs.analysis == 'lint' || inputs.analysis == 'all')
+      uses: ./.github/actions/cache-lint-diagnostics
+
+    - name: Set up WebKitGTK accessibility images
+      if: inputs.containers == 'true'
+      uses: ./.github/actions/setup-webkit-atspi-images
+
+    - name: Provision pinned browser
+      if: inputs.browser == 'true'
+      shell: bash
+      run: ./task test:confine:linux -- --prepare
 
     - name: Save pinned frontend packages
       if: inputs.save-caches == 'true' && github.ref == 'refs/heads/main'
