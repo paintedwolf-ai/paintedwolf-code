@@ -129,7 +129,7 @@ func TestCadenceGenerationSelectionIsPerScanner(t *testing.T) {
 				{ScannerID: "second", LastCoveredSnapshotID: scenario.secondSnapshot, LastCoveredExecutionFingerprint: scenario.secondFingerprint, DispatchPassID: scenario.secondPass},
 			}
 			executions := map[string]dispatchExecution{"first": {Fingerprint: "current"}, "second": {Fingerprint: "current"}}
-			selections, err := cadence.dispatchTargetSelections(t.Context(), rows, snapshot, executions)
+			selections, err := (rootDispatcher{c: cadence}).dispatchTargetSelections(t.Context(), rows, snapshot, executions)
 			testutil.FailErr(t, "select generation scope", err)
 			if first := selections["first"]; first.target != nil || first.baseline {
 				t.Fatalf("first scanner already covers this generation, got %#v", first)

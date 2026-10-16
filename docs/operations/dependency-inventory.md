@@ -23,17 +23,9 @@ Critical- and high-urgency entries whose pinned version trails the upstream snap
 
 * **Chrome headless shell (Chrome for Testing)** (critical): `154.0.8037.92` → `155.0.8059.39`
 * **Git and Git LFS (dugite-native, paintedwolf-git on Linux)** (critical): `2.53.0` → `2.56.0`; `3.7.1` → `3.8.0`
-* **`isomorphic-dompurify`** (critical): `4.4.0` → `4.5.0`
 * **Opengrep** (high): `1.30.0+paintedwolf.40` → `1.30.1`
 * **Document core** (high): `0.27.4` → `0.28.0`
-* **`marked`** (high): `18.0.14` → `18.1.0`
 * **`yjs`** (high): `13.6.32` → `13.6.33`
-* **`github.com/aws/aws-sdk-go-v2/config`** (high): `v1.33.6` → `v1.33.7`
-* **`github.com/aws/aws-sdk-go-v2/credentials`** (high): `v1.20.6` → `v1.20.7`
-* **`github.com/aws/aws-sdk-go-v2/service/bedrock`** (high): `v1.73.1` → `v1.73.2`
-* **`github.com/aws/aws-sdk-go-v2/service/bedrockruntime`** (high): `v1.63.1` → `v1.63.2`
-* **`github.com/aws/smithy-go`** (high): `v1.28.2` → `v1.28.3`
-* **`rand`** (high): `0.9.5` → `0.10.3`
 * **`yrs`** (high): `0.27.4` → `0.28.0`
 
 ---
@@ -73,7 +65,7 @@ An entry counts as high urgency when rated Critical or High, and as high frictio
 | Quadrant | Stance | Entries |
 |---|---|---|
 | **High urgency, high friction** | Planned precision updates. Watch upstream advisories continuously. Run each update as an isolated task with full cross-platform regression testing. | 7 |
-| **High urgency, low or moderate friction** | Fast-follow. The nightly `lint:vuln:fresh` run, Dependabot, and the behind-upstream list surface these; take patches promptly. | 42 |
+| **High urgency, low or moderate friction** | Fast-follow. The nightly `lint:vuln:fresh` run, Dependabot, and the behind-upstream list surface these; take patches promptly. | 43 |
 | **Low or moderate urgency, high friction** | Deliberate upgrades only. Do not chase releases. Upgrade when a defect, required feature, or security fix calls for it. | 15 |
 | **Low or moderate urgency, low or moderate friction** | Opportunistic maintenance during routine windows. | 62 |
 
@@ -96,7 +88,7 @@ Held packages, restricted update policies, and high-friction upgrades, even when
 | `typescript` · dev | `6.0.3` | `7.0.2` | **Moderate** | **High** | No majors | TypeScript 7 is the native compiler port. `typescript-eslint` and the Solid toolchain must support it first; plan it as dedicated work. |
 | `yjs` | `13.6.32` | `13.6.33` | **High** | **High** | Held | Den's replica of the editor document. Must stay update-compatible with the host's `yrs`; bump both together and test end to end against the WASM core. |
 | Charm v2 (`charm.land/bubbletea/v2`, `charm.land/bubbles/v2`) | — | bubbletea `v2.0.10`<br>bubbles `v2.2.1` | **Low** | **High** | — | New import paths and a breaking redesign. Migrate the whole log browser at once, and only when it is scheduled. |
-| `objc2` · macOS | `0.6.4` | `0.6.5` | **Moderate** | **High** |  | Cocoa, WebKit, LocalAuthentication, and notification bindings. Treat 0.x minor bumps as breaking. |
+| `objc2` · macOS | `0.6.5` | current | **Moderate** | **High** |  | Cocoa, WebKit, LocalAuthentication, and notification bindings. Treat 0.x minor bumps as breaking. |
 | `objc2-app-kit` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `objc2-foundation` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
 | `objc2-local-authentication` · macOS | `0.3.2` | current | **Moderate** | **High** |  |  |
@@ -116,12 +108,12 @@ Policy files retain every declared entry, package rating, rationale, and verific
 | Area | Entries | Policy | Manifest and lockfile |
 |---|---|---|---|
 | Languages, runtimes, and platform floor | 6 | [Policy](../../dependencies/sections/runtimes.yaml) | Declared pin sources in policy |
-| Bundled engines and hermetic binaries | 4 | [Policy](../../dependencies/sections/engines.yaml) | Declared pin sources in policy |
+| Bundled engines and hermetic binaries | 5 | [Policy](../../dependencies/sections/engines.yaml) | Declared pin sources in policy |
 | Development, build, and verification tools | 7 | [Policy](../../dependencies/sections/tools.yaml) | Declared pin sources in policy |
 | Vendored catalogs, datasets, and specifications | 5 | [Policy](../../dependencies/sections/vendored.yaml) | Declared pin sources in policy |
 | Frontend packages (`lycaon-den`) | 67 | [Policy](../../dependencies/sections/frontend.yaml) | [Manifest](../../lycaon-den/package.json) · [Lockfile](../../lycaon-den/bun.lock) |
 | Backend Go modules (`lycaon`) | 73 | [Policy](../../dependencies/sections/backend-go.yaml) | [Manifest](../../lycaon/go.mod) |
-| Tauri shell crates (`lycaon-den/src-tauri`) | 37 | [Policy](../../dependencies/sections/tauri.yaml) | [Manifest](../../lycaon-den/src-tauri/Cargo.toml) · [Lockfile](../../lycaon-den/src-tauri/Cargo.lock) |
+| Tauri shell crates (`lycaon-den/src-tauri`) | 39 | [Policy](../../dependencies/sections/tauri.yaml) | [Manifest](../../lycaon-den/src-tauri/Cargo.toml) · [Lockfile](../../lycaon-den/src-tauri/Cargo.lock) |
 | Bialy decision engine crates (`lycaon/internal/decide/native`) | 9 | [Policy](../../dependencies/sections/decision-engine.yaml) | [Manifest](../../lycaon/internal/decide/native/Cargo.toml) · [Lockfile](../../lycaon/internal/decide/native/Cargo.lock) |
 | Document core crates (`lycaon/internal/documentcore/native`) | 4 | [Policy](../../dependencies/sections/document-core.yaml) | [Manifest](../../lycaon/internal/documentcore/native/Cargo.toml) · [Lockfile](../../lycaon/internal/documentcore/native/Cargo.lock) |
 | Comment linter module (`scripts/commentlint`) | 1 | [Policy](../../dependencies/sections/commentlint.yaml) | [Manifest](../../scripts/commentlint/go.mod) |

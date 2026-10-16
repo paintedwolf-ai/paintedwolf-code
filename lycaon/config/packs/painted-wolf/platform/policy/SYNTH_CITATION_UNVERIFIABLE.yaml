@@ -16,7 +16,7 @@ copy:
   cause: 'The citation metadata does not resolve to the claimed recorded passage.'
   why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
   fix: 'Repair only the trailing citation metadata using the exact observed evidence handle or path, line and verbatim excerpt. Preserve the pinned report and omit any citation that cannot be supported.'
-  instead: 'Use existing coordinator or worker observations; citation repair does not reopen tool calls.'
+  instead: 'Use existing coordinator or worker observations. Resuming work requires a fresh report.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator_synthesis
 x-paintedwolf-evidence:

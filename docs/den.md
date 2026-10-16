@@ -33,63 +33,80 @@ compatibility uses shared workflows and protocol-based native effects; a named
 adapter owns an environment-specific effect when standards or toolkit behavior
 do not preserve the required outcome.
 
-The table identifies current owners and required native evidence. “Shared” means
-the same implementation owns the workflow; it does not claim that an installed
-Linux artifact has passed the desktop matrix. Linked issues own unresolved
-implementation and qualification. The support contract and complete inventory
-remain open under [#444](https://github.com/paintedwolf-ai/paintedwolf-code/issues/444).
+The table maps each user outcome to its shared owner, the Linux adapter, its
+verification, and the issue that owns what remains. “Shared” means one
+implementation owns the workflow on every platform. Verification has three tiers:
 
-Clipboard commands ([`src-tauri/src/clipboard/`](../lycaon-den/src-tauri/src/clipboard.rs))
-run through one serialized service per shell with bounded operations and a
-terminal shutdown. Linux uses the GTK display connection the shell already
-holds, so copy and paste work on native Wayland and X11 without XWayland or
-compositor extensions; macOS and Windows use the OS pasteboard. Startup logs the
-observed display protocol and whether copied text persists beyond the process.
-Private Xvfb and headless sway fixtures drive the adapter against
-`xclip` and `wl-clipboard` peers in `den:test:rust`.
+- **CI:** Ubuntu runners run `test:full` and `den:test:rust` with Xvfb and
+  headless sway fixtures. `test:confine:linux`
+  runs applied confinement on amd64 and arm64. `den:webkit:atspi` checks
+  WebKitGTK accessibility text attributes in the merge queue, nightly, and at
+  release.
+- **Candidate:** the `linux-candidates` release job builds, stages, and audits
+  both package families for both architectures without publishing.
+- **Installed:** installed-package qualification of a candidate on the
+  [native qualification matrix](#native-qualification-matrix) (row checklist in
+  [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)).
+  A row is release evidence only from this tier. The support contract stays open
+  under [#444](https://github.com/paintedwolf-ai/paintedwolf-code/issues/444)
+  until every row has passed.
 
-| User outcome | Shared owner and native boundary | Linux release evidence and tracking |
-|--------------|----------------------------------|-------------------------------------|
-| Chats, workflows, approvals, provider setup, and MCP | Host `internal/session`, `internal/workflow`, `internal/llm`, `internal/mcp`; Den stores and feature surfaces consume the same API | Shared workflows require installed WebKitGTK journeys, including reconnect, cancellation, tool refusal, and provider authentication: [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456) |
-| Files, editor, search, review, and watching | Host `internal/editordoc`, `internal/projectsource`, `internal/search`, `internal/repochange`; Den `files/`; filesystem identity and watchers use native adapters | Qualify outside edits, atomic save, rename, watch overflow, permissions, and recovery: [#452](https://github.com/paintedwolf-ai/paintedwolf-code/issues/452), [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456) |
-| Command, terminal, background work, and authenticated Git | Host `internal/exec`, `internal/userpath`, `internal/gitexec`, `internal/gitcredential`; shell lookup and SSH-agent discovery have OS boundaries | Native shell and agent adapters require desktop-launched PATH, login-shell, session-service, agent-lifetime, credential, and cancellation evidence: [#47](https://github.com/paintedwolf-ai/paintedwolf-code/issues/47), [#733](https://github.com/paintedwolf-ai/paintedwolf-code/issues/733) |
-| Stored credentials survive restart and recovery | Host `internal/credentialstore`; Darwin selects Keychain, other release platforms select the app-password identity provider; Den private startup pipe supplies the password | Linux-native alternative exists; qualify onboarding, wrong password, restart, backup/restore, wipe boundaries, and no credential exposure: [#448](https://github.com/paintedwolf-ai/paintedwolf-code/issues/448) |
-| Confirm the person before reveal or unlock | Den `src-tauri/src/presence.rs` validates and signs host challenges; native verification is selected at the effect | Linux verification is unavailable; macOS LocalAuthentication and Windows Hello have distinct implementations. Preserve purpose, subject, window binding, cancellation, and lock invalidation: [#449](https://github.com/paintedwolf-ai/paintedwolf-code/issues/449) |
-| End unlocks when the person steps away | Host vault owns unlock lifetime; Den `src-tauri/src/vault_lock.rs` reports native lock/sleep/quit reasons | Linux has no lock/sleep observer; current-session resolution, initial lock state, reconnection, and suspend require evidence: [#45](https://github.com/paintedwolf-ai/paintedwolf-code/issues/45) |
-| Contain tools and their descendants | Host `internal/confine`, `internal/toolexecution`, `internal/isolation`; native adapter applies host policy | Linux has no enforcement adapter; approval for unconfined actions is not confinement parity. Admission, filesystem/process/network policy, restricted hosts, and refusal recovery: [#445](https://github.com/paintedwolf-ai/paintedwolf-code/issues/445), [#191](https://github.com/paintedwolf-ai/paintedwolf-code/issues/191), [#192](https://github.com/paintedwolf-ai/paintedwolf-code/issues/192), [#193](https://github.com/paintedwolf-ai/paintedwolf-code/issues/193), [#194](https://github.com/paintedwolf-ai/paintedwolf-code/issues/194), [#196](https://github.com/paintedwolf-ai/paintedwolf-code/issues/196) |
-| Browse, capture, and analyze documents | Host browser, capture, visual/document extraction, and scan owners retain their contracts; OCR and browser launch have native effects | Qualify managed-browser confinement and functionality, native OCR, and complete document/scanner artifacts: [#43](https://github.com/paintedwolf-ai/paintedwolf-code/issues/43), [#454](https://github.com/paintedwolf-ai/paintedwolf-code/issues/454), [#49](https://github.com/paintedwolf-ai/paintedwolf-code/issues/49) |
-| Route host and desktop networking through system configuration | Host `internal/systemproxy` resolves macOS CFNetwork, GNOME `org.gnome.system.proxy` and KDE `kioslaverc` behind explicit `HTTPS_PROXY`/`NO_PROXY`; bundled Git and Git LFS receive the same policy per host ([Git](git.md)); desktop networking has its own native client boundary | Linux auto-configuration (PAC, WPAD) is refused with explicit-configuration guidance rather than executed; `pw diagnostics system-proxy <url>` shows the resolution. The desktop shell's update feed transport does not use a proxy. Qualify authentication, failures, and configuration changes across clients: [#453](https://github.com/paintedwolf-ai/paintedwolf-code/issues/453) |
-| Notify and open the correct chat | Den `platform/desktop/notifications.ts` owns client delivery decisions; `src-tauri/src/notifications` owns native adapters and identity | macOS uses UserNotifications; Linux uses a bounded session-bus adapter with service-owned replacement, clearing and optional actions/activation tokens; Windows uses plugin delivery. Qualify provider capabilities and installed delivery/activation: [#451](https://github.com/paintedwolf-ai/paintedwolf-code/issues/451) |
-| Keep active work awake | Host `internal/hostpower` owns the shared work lifetime and availability; native inhibitors own leases. Linux tries the login manager (systemd-logind or elogind), then the desktop portal, then the session power-management service; the portal is used only when it attributes the caller to `dev.paintedwolf.code`: by registration with the portal's host registry, which needs the installed desktop entry, or on portals without the registry by the app's own systemd application unit. Each unusable provider reports a typed reason | Native inhibitors have different explicit-suspend semantics. Qualify automatic suspend, OS overrides for explicit suspend, screen lock, service loss/recovery, and overlapping work: [#46](https://github.com/paintedwolf-ai/paintedwolf-code/issues/46) |
-| Use native window chrome and multiple windows | Den layout/window preferences; `src-tauri/src/windows/` owns native placement and decorations. Linux draws client-side decorations: `linux_decorations.rs` reads the desktop's button layout through the Settings portal and follows its changes, `WindowControls` places the buttons and the app menu per edge at one inset from the window edge, and `linux_frame.rs` keeps GTK's frame (shadow, outline, rounded corners, resize border) around a transparent web view that rounds the page to the same radius while the window floats | Qualify multi-monitor placement, restored geometry, and KDE/X11 sessions: [#446](https://github.com/paintedwolf-ai/paintedwolf-code/issues/446) |
-| Use keyboard, menus, pointer, clipboard, and text input | Den shortcut/keymap and interaction owners; native `app_menu.rs` projects the macOS bar, and `in-window-app-menu.ts` projects the same sections into the Linux title bar menu ([keyboard shortcuts](keyboard-shortcuts.md#linux-conventions)) | Qualify pointer selection, clipboard, drag/drop, dead keys, and non-US layouts on installed desktops: [#447](https://github.com/paintedwolf-ai/paintedwolf-code/issues/447) |
-| Follow appearance and accessibility preferences | Den `platform/desktop/{system-appearance,accessibility-text-size}.ts`; native `windows/{system_appearance,accessibility_text_size}.rs` | Non-macOS bridges currently return defaults and register no observers. Qualify GNOME/KDE text scale, contrast, transparency, accent, theme, screen reader, focus, and reduced motion: [#48](https://github.com/paintedwolf-ai/paintedwolf-code/issues/48) |
-| Open files, reveal locations, launch editors, and restore trash | Den `platform/files/`; host `internal/desktoptrash`; Linux trash uses same-volume files and `.trashinfo` metadata | Qualify external opening, editor discovery, inaccessible paths, cross-volume trash, collisions, restore, and concurrent outside edits: [#452](https://github.com/paintedwolf-ai/paintedwolf-code/issues/452) |
-| Back up, upgrade, and restore durable state | Host `internal/backup`, `internal/db`, `internal/sourceblob`; filesystem clone/link/copy adapters retain archive ownership | Verify integrity before restore, immutable body sharing on filesystems without reflink, volume boundaries, low space, migrations, and recovery retention: [#41](https://github.com/paintedwolf-ai/paintedwolf-code/issues/41), [#50](https://github.com/paintedwolf-ai/paintedwolf-code/issues/50), [#457](https://github.com/paintedwolf-ai/paintedwolf-code/issues/457) |
-| Update a direct-download installation | Den `src-tauri/src/update_service/` owns signed feed admission and transaction recovery; native installer owns activation effects | Qualify Linux package upgrade notices and `apt`/`dnf` upgrades of a running app, quit/restart, running-instance exclusion, interrupted activation, health confirmation, tampering, and unwritable installations: [#42](https://github.com/paintedwolf-ai/paintedwolf-code/issues/42), [#450](https://github.com/paintedwolf-ai/paintedwolf-code/issues/450) |
-| Start the packaged engine and detect unsupported hosts | Den `src-tauri/src/sidecar/`; host `internal/preflight`; resource layout, CPU, libraries and OS checks are native facts | Linux disk availability uses `statfs`; there is no Linux OS-version floor. Qualify missing resources/libraries, config permissions, low space, startup failure/recovery, FUSE and extracted layouts: [#444](https://github.com/paintedwolf-ai/paintedwolf-code/issues/444), [#51](https://github.com/paintedwolf-ai/paintedwolf-code/issues/51), [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456) |
-| Run local decision, scanning, and document helpers | Host `internal/decide`, `internal/scan`, `internal/documentcore`; pinned native executables preserve helper contracts | Qualify native architecture, complete tool payloads, confinement, helper restart and performance. Linux arm64 OpenGrep still requires producer artifacts: [#49](https://github.com/paintedwolf-ai/paintedwolf-code/issues/49), [#454](https://github.com/paintedwolf-ai/paintedwolf-code/issues/454), [#455](https://github.com/paintedwolf-ai/paintedwolf-code/issues/455) |
-| Install and consume a complete release | Target catalog, signed manifests, immutable artifacts and publication scripts own distribution identity | Verify both architectures, checksums/signatures, installer/updater names, bundled dependencies, release URLs, and installed journeys on exact artifacts: [#50](https://github.com/paintedwolf-ai/paintedwolf-code/issues/50), [#51](https://github.com/paintedwolf-ai/paintedwolf-code/issues/51), [#457](https://github.com/paintedwolf-ai/paintedwolf-code/issues/457) |
+| User outcome | Shared owner and Linux adapter | Verification | Issue |
+|--------------|--------------------------------|--------------|-------|
+| Chats, workflows, approvals, provider setup, and MCP | Host `internal/session`, `internal/workflow`, `internal/llm`, `internal/mcp`; Den stores and feature surfaces render in WebKitGTK; engine-keyed crash avoidance in `platform/desktop/webkit-atspi-workaround.ts` ([Accessibility](accessibility.md#webkitgtk-at-spi-workaround)) | CI: `test:full`, `den:test`, `den:webkit:atspi`. Installed: reconnect, cancellation, tool refusal, and provider authentication journeys | [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456) |
+| Files, editor, search, review, and watching | Host `internal/editordoc`, `internal/projectsource`, `internal/search`, `internal/repochange`; Den `files/`; inotify watching reports `watch_limit_reached` on the wire, but Den does not show it yet | CI: `test:full`. Installed: outside edits, atomic save, rename, watch overflow, permissions, recovery | [#452](https://github.com/paintedwolf-ai/paintedwolf-code/issues/452) |
+| Command, terminal, background work, and authenticated Git | Host `internal/exec`, `internal/userpath`, `internal/gitexec`, `internal/gitcredential`; the desktop launch resolves the account's login shell; SSH-agent discovery; bundled static Git with `GIT_SSL_CAINFO` and a per-host proxy ([Git](git.md)) | CI: `test:full`. Installed: desktop-launched PATH, SSH and signing, HTTPS and LFS, on KDE and arm64 | [#47](https://github.com/paintedwolf-ai/paintedwolf-code/issues/47), [#733](https://github.com/paintedwolf-ai/paintedwolf-code/issues/733) |
+| Stored credentials survive restart and recovery | Host `internal/credentialstore`; on packaged installs the `pw-vault-identity` system service holds the identity, with the app-password identity as the fallback ([Secrets § Credential vault](secrets.md#credential-vault)); launcher verification and non-dumpable processes protect it | CI: `test:full` (`vaultidentity`, `launchverify`, custody). Installed: fresh, existing, and damaged vaults; wrong password; backup and restore; moves both ways; refused launchers; ptrace denial | [#448](https://github.com/paintedwolf-ai/paintedwolf-code/issues/448), [#756](https://github.com/paintedwolf-ai/paintedwolf-code/issues/756), [#754](https://github.com/paintedwolf-ai/paintedwolf-code/issues/754) |
+| Confirm the person before reveal or unlock | Den `src-tauri/src/presence/linux.rs`: polkit `CheckAuthorization` on `dev.paintedwolf.code.confirm-presence` (`linux_user_presence`); on the app-password path a native GTK dialog re-verifies the app password (`linux_app_password`) ([Secrets § Unlocking a chat](secrets.md#unlocking-a-chat-and-revealing-a-value)) | CI: `den:test:rust`, `test:full`. Installed: a typed-password reveal and unlock, the KDE agent, cancel, expiry, wrong window, and lock during the prompt | [#755](https://github.com/paintedwolf-ai/paintedwolf-code/issues/755) |
+| End unlocks when the person steps away | Host vault owns unlock lifetime; Den `src-tauri/src/vault_lock/linux.rs` follows logind `PrepareForSleep`, `Lock`, and `LockedHint`, with `org.freedesktop.ScreenSaver` as the fallback | CI: `den:test:rust`. Installed: real suspend, GNOME and KDE lock, lock during a presence prompt | [#45](https://github.com/paintedwolf-ai/paintedwolf-code/issues/45) |
+| Contain tools and their descendants | Host `internal/confine`, `internal/toolexecution`, `internal/isolation`; `confine/linuxsandbox` applies the same policy with namespaces, Landlock, and seccomp, fails closed with a typed `confine.LinuxCapabilities` reason, and the package's AppArmor profile admits it under restricted user namespaces ([Security § Platform coverage](security.md#platform-coverage)). Den does not show the capability or the unavailable reason yet | CI: `test:confine:linux` (amd64, arm64), release `platform-lanes`. Installed: helpers inside the boundary on the oldest supported kernel, default-policy Ubuntu with and without the profile, Fedora with SELinux enforcing | [#445](https://github.com/paintedwolf-ai/paintedwolf-code/issues/445), [#194](https://github.com/paintedwolf-ai/paintedwolf-code/issues/194), [#196](https://github.com/paintedwolf-ai/paintedwolf-code/issues/196) |
+| Browse, capture, and analyze documents | Host browser, capture, visual/document extraction, and scan owners; the managed browser runs inside the boundary; OCR runs the bundled Tesseract confined (`visualscreen/ocr_linux.go`) | CI: `test:confine:linux` browser leg, `test:full`. Installed: browser workflows, OCR, redacted send, and capture on both architectures | [#43](https://github.com/paintedwolf-ai/paintedwolf-code/issues/43), [#454](https://github.com/paintedwolf-ai/paintedwolf-code/issues/454) |
+| Route host and desktop networking through system configuration | Host `internal/systemproxy` resolves GNOME `org.gnome.system.proxy` and KDE `kioslaverc` behind explicit `HTTPS_PROXY`/`NO_PROXY`; bundled Git and Git LFS receive the same policy per host; PAC and WPAD are refused with explicit-configuration guidance; `pw diagnostics system-proxy <url>` shows the resolution. The update feed transport uses no proxy | CI: `test:full`. Installed: KDE auto-detect refusal, an authenticated proxy, configuration changes | [#453](https://github.com/paintedwolf-ai/paintedwolf-code/issues/453) |
+| Notify and open the correct chat | Den `platform/desktop/notifications.ts` owns delivery decisions; `src-tauri/src/notifications/linux` is a bounded session-bus adapter with service-owned replacement, clearing, and optional actions and activation tokens | CI: `den:test:rust`, `den:test`. Installed: GNOME, KDE, dunst, and X11 daemons; click-through activation; background chats | [#451](https://github.com/paintedwolf-ai/paintedwolf-code/issues/451) |
+| Keep active work awake | Host `internal/hostpower`: the login manager (systemd-logind or elogind), then the desktop portal attributed to `dev.paintedwolf.code`, then the session power-management service; each unusable provider reports a typed reason | CI: `test:full`. Installed: automatic suspend, explicit-suspend overrides, service loss, and an elogind host | [#46](https://github.com/paintedwolf-ai/paintedwolf-code/issues/46), [#733](https://github.com/paintedwolf-ai/paintedwolf-code/issues/733) |
+| Use native window chrome and multiple windows | `src-tauri/src/windows/`: client-side decorations; `linux_decorations.rs` follows the Settings portal button layout; `WindowControls` places the buttons and app menu; `linux_frame.rs` keeps GTK's frame. Under server-side decorations the shell still draws its own strip | CI: `den:test:rust`, `den:test`. Installed: KDE, X11, sway tiling, 150% and 200% scaling, multi-monitor, restored geometry | [#446](https://github.com/paintedwolf-ai/paintedwolf-code/issues/446) |
+| Use keyboard, menus, pointer, clipboard, and text input | Den shortcut and keymap owners; `in-window-app-menu.ts` carries every app menu action, with F10 and Ctrl chords ([keyboard shortcuts](keyboard-shortcuts.md#linux-conventions)); clipboard through the GTK display connection (above) | CI: `den:test`, `den:test:rust` clipboard fixtures. Installed: IME, dead keys, non-US layouts, primary selection, drag and drop, Plasma Wayland clipboard, a window manager without a clipboard manager | [#447](https://github.com/paintedwolf-ai/paintedwolf-code/issues/447), [#751](https://github.com/paintedwolf-ai/paintedwolf-code/issues/751) |
+| Follow appearance and accessibility preferences | Den `platform/desktop/{system-appearance,accessibility-text-size}.ts`; `windows/linux_desktop_settings` reads color scheme, contrast, accent, reduced motion, and text scale from `org.freedesktop.portal.Settings` and follows changes ([Accessibility § Linux desktop preferences](accessibility.md#linux-desktop-preferences)) | CI: `den:test:rust`, `den:webkit:atspi`. Installed: Orca workflows, a KDE portal backend | [#48](https://github.com/paintedwolf-ai/paintedwolf-code/issues/48) |
+| Open files, reveal locations, launch editors, pick folders, and restore trash | Den `platform/files/`; desktop opening and editor discovery through desktop entries; host `internal/desktoptrash` with same-volume files and `.trashinfo` metadata. The GTK folder picker has no parent window and no size bound yet | CI: `test:full`, `den:test:rust`. Installed: external opening, cross-volume trash, restore, multi-window quit with no orphaned engine, small resolutions | [#452](https://github.com/paintedwolf-ai/paintedwolf-code/issues/452), [#790](https://github.com/paintedwolf-ai/paintedwolf-code/issues/790) |
+| Back up, upgrade, and restore durable state | Host `internal/backup`, `internal/db`, `internal/sourceblob`; recovery points share source bodies by hard link where the filesystem has no reflink | CI: `test:full` (ext4 fixtures). Installed: disk use and restore after a package upgrade on ext4 and Btrfs | [#41](https://github.com/paintedwolf-ai/paintedwolf-code/issues/41) |
+| Learn about and apply updates | Den `src-tauri/src/update_service/`; the Linux adapter is check-only: `linux_install.rs` finds the owning package, and Settings shows the exact `apt` or `dnf` command ([Updates](dev-tasks.md#updates)). There is no repository-configured fact yet | CI: `den:test:rust`. Installed: the notice after publication, withdrawal, and upgrade from a rehearsal repository | [#450](https://github.com/paintedwolf-ai/paintedwolf-code/issues/450), [#759](https://github.com/paintedwolf-ai/paintedwolf-code/issues/759) |
+| Launch from the desktop and the command line | The package installs `/usr/bin/pw`, `/usr/bin/pw-logs`, and `dev.paintedwolf.code.desktop`; a second launch activates the running instance ([Linux packages](dev-tasks.md#linux-packages)) | Candidate: staging audit. Installed: KDE and window-manager launchers, upgrade while running, Unicode and encoded-URI arguments | [#736](https://github.com/paintedwolf-ai/paintedwolf-code/issues/736) |
+| Start the packaged engine and detect unsupported hosts | Den `src-tauri/src/sidecar/`; host `internal/preflight` compares the kernel and glibc with `internal/platformfloor/linux_floor.txt`; package dependencies carry the WebKitGTK and GTK floors; disk availability uses `statfs` | CI: `test:full`. Candidate: staging audit. Installed: missing libraries, low space, startup failure and recovery on each family's floor release | [#731](https://github.com/paintedwolf-ai/paintedwolf-code/issues/731), [#51](https://github.com/paintedwolf-ai/paintedwolf-code/issues/51) |
+| Run local decision, scanning, and document helpers | Host `internal/decide`, `internal/scan`, `internal/documentcore`; pinned native executables for both architectures, including OpenGrep | CI: `test:full`, `test:confine:linux`. Candidate: arm64 staging. Installed: scans and documents on both architectures; performance against declared thresholds | [#49](https://github.com/paintedwolf-ai/paintedwolf-code/issues/49), [#455](https://github.com/paintedwolf-ai/paintedwolf-code/issues/455) |
+| Install and consume a complete release | `packaging/release-platforms.json`, the package manifest, signed packages and repositories, and the publication scripts | Candidate: `linux-candidates`. Installed: install, upgrade, removal, and downgrade refusal on every family and architecture; download authenticity | [#758](https://github.com/paintedwolf-ai/paintedwolf-code/issues/758), [#759](https://github.com/paintedwolf-ai/paintedwolf-code/issues/759), [#50](https://github.com/paintedwolf-ai/paintedwolf-code/issues/50), [#457](https://github.com/paintedwolf-ai/paintedwolf-code/issues/457) |
 
 ### Native qualification matrix
 
-The qualification scope covers Linux amd64 and arm64 across maintained
-Red Hat/RPM-family, Debian/Ubuntu, and Arch-style environments. Runtime and
-protocol compatibility determine admission; distro and desktop names identify
-qualification environments, not runtime feature switches.
+The qualification scope covers Linux amd64 and arm64 on the supported families:
+Ubuntu 24.04 and later, Debian 13 and later, Fedora 41 and later, RHEL 10
+compatibles, and Arch. Runtime and protocol compatibility determine admission.
+Distro and desktop names identify qualification environments, not runtime
+feature switches.
 
-Desktop evidence covers GNOME/Plasma, GTK/Xapp desktops such as
-Xfce/Cinnamon/MATE, LXQt, COSMIC, wlroots/Sway, Hyprland, and other commonly used
-portal/compositor families. Standalone X11 WMs include i3, Awesome, bspwm, and
-Openbox. New environments using the same native protocols should use existing
-adapters without feature-specific name registration. Required differences have
-named effect owners and qualification cases.
+Desktop evidence covers:
 
-Cases distinguish native Wayland, XWayland, and X11; service and portal versions;
-standard and fractional scaling; FUSE-mounted, extract-and-run, persistent
-extracted, and installer-managed modes; and writable user versus read-only
-locations. Passing on one environment does not qualify another architecture,
-desktop, display server, service provider, or installation mode.
+- GNOME and Plasma;
+- GTK/Xapp desktops such as Xfce, Cinnamon, and MATE;
+- LXQt and COSMIC;
+- wlroots/Sway and Hyprland;
+- other commonly used portal and compositor families;
+- standalone X11 window managers such as i3, Awesome, bspwm, and Openbox.
+
+New environments that use the same native protocols should work through the
+existing adapters, without feature-specific name registration. Each required
+difference has a named effect owner and a qualification case.
+
+Cases distinguish:
+
+- native Wayland, XWayland, and X11;
+- service and portal versions;
+- standard and fractional scaling;
+- default security policy: AppArmor-restricted user namespaces on Ubuntu, and
+  SELinux enforcing on Fedora and RHEL.
+
+The installation mode is always the installed `.deb` or `.rpm` package. Passing
+on one environment does not qualify another architecture, desktop, display
+server, or service provider.
 
 | Compatibility concern | Contract owner |
 |-----------------------|----------------|
@@ -97,18 +114,27 @@ desktop, display server, service provider, or installation mode.
 | Native capability facts and adapter selection | [#732](https://github.com/paintedwolf-ai/paintedwolf-code/issues/732) |
 | Session services and equivalent providers without a systemd requirement | [#733](https://github.com/paintedwolf-ai/paintedwolf-code/issues/733) |
 | Portal and compositor interoperability | [#734](https://github.com/paintedwolf-ai/paintedwolf-code/issues/734) |
-| FUSE-free installation and update ownership | [#735](https://github.com/paintedwolf-ai/paintedwolf-code/issues/735) |
-| Durable user-owned CLI and desktop launchers | [#736](https://github.com/paintedwolf-ai/paintedwolf-code/issues/736) |
+| Package installation identity and signing | [#758](https://github.com/paintedwolf-ai/paintedwolf-code/issues/758) |
+| Package repositories and update notices | [#759](https://github.com/paintedwolf-ai/paintedwolf-code/issues/759) |
+| Package-installed CLI and desktop launchers | [#736](https://github.com/paintedwolf-ai/paintedwolf-code/issues/736) |
 
-The current catalog selects Ubuntu 22.04 runners for both candidate architectures.
-It does not declare a supported kernel, libc, WebKitGTK, or CPU floor. Those floors
-must come from measured native artifacts under #444 and #456. Linux preflight's
-absence of an OS-version comparison is not evidence that every Linux host is
-supported. Unresolved required capability rows block public release under
-[#52](https://github.com/paintedwolf-ai/paintedwolf-code/issues/52).
+Candidates build on `ubuntu-24.04` and `ubuntu-24.04-arm`. The floors in
+[`linux_floor.txt`](../lycaon/internal/platformfloor/linux_floor.txt) are:
+
+- kernel 6.2, which provides Landlock ABI 3;
+- glibc 2.35;
+- WebKitGTK 2.44;
+- GTK 3.24.41.
+
+Preflight reads the kernel and glibc floors; the package dependencies carry the
+toolkit floors. These are declared floors. The shipped binaries' symbol-version
+requirements must be audited against them (#731), and each family's floor
+release must pass installed qualification. A host that passes preflight is not
+thereby supported. Required rows without that evidence block public release
+under [#52](https://github.com/paintedwolf-ai/paintedwolf-code/issues/52).
 
 Each qualification result binds the source commit, artifact digest, architecture,
-OS and library versions, desktop/display server, installation mode, and scenario
+OS and library versions, desktop/display server, security policy state, and scenario
 to its evidence. Unit fixtures establish adapter contracts; native WebKitGTK
 journeys establish desktop behavior; installed signed artifacts establish the
 release result. A source build or cross-compile cannot substitute for the latter.

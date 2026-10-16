@@ -150,7 +150,8 @@ func TestRewindRestoresFilesAndTruncatesTranscript(t *testing.T) {
 	testutil.FailErr(t, "resolve source storage", f.h.DB.QueryRowContext(ctx, `SELECT file FROM pragma_database_list WHERE name='main'`).Scan(&dbPath))
 	testutil.FailErr(t, "resolve project root", f.h.DB.QueryRowContext(ctx, `SELECT id FROM project_roots WHERE project_id=? AND is_primary=1`, f.projectID).Scan(&rootID))
 	ledger := sourceledger.New(f.h.DB, filepath.Join(filepath.Dir(dbPath), enginepaths.SourceContentDirName))
-	turn, err := f.h.Store.UserTurnOrdinal(ctx, f.sessionID)
+	turnSource, err := f.h.Store.ReadSourceTurn(ctx, f.sessionID, 0)
+	turn := turnSource.Number
 	testutil.FailErr(t, "resolve source turn", err)
 	testutil.FailErr(t, "record agent effect", ledger.Record(ctx, sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: rootID, Path: "note.txt"}, ProjectID: f.projectID, Origin: wire.SourceChangeOriginAgent, Op: wire.SourceChangeOpWrite, SessionID: f.sessionID, Turn: turn, Before: []byte("before"), After: []byte("after")}))

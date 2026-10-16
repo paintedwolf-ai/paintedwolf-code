@@ -1,6 +1,7 @@
 package extensionstate_test
 
 import (
+	"bytes"
 	"io"
 	"log/slog"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extensionstate"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"gopkg.in/yaml.v3"
 )
 
 func deviceCatalogFixture(t *testing.T) *catalogview.Cache {
@@ -103,5 +105,57 @@ func TestPublishDeviceCatalogServesCommittedStateWithDisabledToolSchema(t *testi
 	}
 	if extpacks.Active() != eff {
 		t.Fatal("expected the committed catalog to be active")
+	}
+}
+
+func TestPublishDeviceCatalogChecksStockRangesWithoutRewritingLocks(t *testing.T) {
+	for _, tc := range []struct {
+		name, dependency, constraint string
+		want                         bool
+	}{
+		{"compatible", extpacks.PlatformPackID, "^1.0.0", true},
+		{"incompatible", extpacks.PlatformPackID, "^99.0.0", false},
+		{"missing", "painted-wolf/missing", "^1.0.0", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cache := deviceCatalogFixture(t)
+			author := t.TempDir()
+			manifest := extpacks.Manifest{ManifestVersion: extpacks.ManifestVersion, ID: "acme/upgrade", Name: "Upgrade fixture", Version: "1.0.0", Compatibility: extpacks.ManifestCompatibility{ExtensionAPI: "^1.0.0"}, Dependencies: map[string]extpacks.DependencyRequest{tc.dependency: {Version: tc.constraint}}}
+			raw, err := yaml.Marshal(manifest)
+			testutil.FailErr(t, "encode manifest", err)
+			testutil.FailErr(t, "write manifest", os.WriteFile(filepath.Join(author, "extension.yaml"), raw, 0o600))
+			integrity, err := extpacks.PackTreeIntegrity(author)
+			testutil.FailErr(t, "hash author pack", err)
+			desired := extpacks.EmptyDesired()
+			desired.Packs = []extpacks.DesiredPack{{ID: manifest.ID, Source: "path:" + author, Development: true}}
+			desiredBytes, err := extpacks.EncodeDesired(desired)
+			testutil.FailErr(t, "encode device intent", err)
+			writeDeviceDesired(t, string(desiredBytes))
+			lock := extpacks.EmptyLock()
+			lock.Packages = []extpacks.LockedPackage{{ID: manifest.ID, Version: manifest.Version, Source: author, Integrity: integrity, Kind: extpacks.PackKindPath, Dependencies: map[string]string{tc.dependency: "0.9.0"}}}
+			lockBytes, err := extpacks.EncodeLock(lock)
+			testutil.FailErr(t, "encode prior stock selection", err)
+			lockPath, err := extpacks.DeviceLockPath()
+			testutil.FailErr(t, "device lock path", err)
+			testutil.FailErr(t, "write lock", os.WriteFile(lockPath, lockBytes, 0o600))
+			eff, view, err := extensionstate.PublishDeviceCatalog(t.Context(), cache, nil, nil)
+			testutil.FailErr(t, "publish catalog after host update", err)
+			if view == nil || floorDiag(eff) {
+				t.Fatal("stock dependency replaced committed state with the stock floor")
+			}
+			if eff.PackContributed(manifest.ID) != tc.want {
+				t.Fatalf("extension contribution: %+v", eff.Packs)
+			}
+			if !eff.PackContributed(extpacks.PlatformPackID) {
+				t.Fatal("platform did not contribute")
+			}
+			for path, want := range map[string][]byte{lockPath: lockBytes, filepath.Join(author, "extension.yaml"): raw} {
+				got, err := os.ReadFile(path)
+				testutil.FailErr(t, "read unchanged artifact", err)
+				if !bytes.Equal(got, want) {
+					t.Fatalf("catalog publication rewrote %s", path)
+				}
+			}
+		})
 	}
 }

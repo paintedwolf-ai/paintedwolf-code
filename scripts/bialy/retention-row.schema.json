@@ -1,0 +1,210 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://paintedwolf.ai/schemas/pw-retention-row/1",
+  "title": "pw-retention-row/1",
+  "description": "Compaction observation candidates with unknown need unless verified by recovery, scenario truth, or an independent judge.",
+  "type": "object",
+  "required": [
+    "schema",
+    "receipt",
+    "session",
+    "root_session",
+    "opening_message_id",
+    "host",
+    "surface",
+    "catalog_revision",
+    "project",
+    "model",
+    "partial",
+    "lang",
+    "watermark",
+    "tokens",
+    "reconstructed",
+    "engine",
+    "state",
+    "candidates",
+    "labels"
+  ],
+  "properties": {
+    "schema": {
+      "const": "pw-retention-row/1"
+    },
+    "partial": {
+      "type": "boolean"
+    },
+    "reconstructed": {
+      "type": "boolean"
+    },
+    "candidates": {
+      "type": "array",
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "ref",
+          "tool",
+          "ord",
+          "seq",
+          "tokens",
+          "age",
+          "handles",
+          "option"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "option": {
+            "type": "string"
+          },
+          "ord": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "seq": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "tokens": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "age": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "handles": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "labels": {
+      "type": "object",
+      "required": [
+        "needed",
+        "later",
+        "by",
+        "provenance",
+        "calls_after"
+      ],
+      "properties": {
+        "needed": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "later": {
+          "type": "object",
+          "additionalProperties": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": {
+            "enum": [
+              "canonical_recovery",
+              "scenario",
+              "judge"
+            ]
+          }
+        },
+        "by": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "recall"
+              ]
+            }
+          }
+        },
+        "calls_after": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "session": {
+      "type": "string"
+    },
+    "root_session": {
+      "type": "string"
+    },
+    "opening_message_id": {
+      "type": "string"
+    },
+    "surface": {
+      "type": "string"
+    },
+    "catalog_revision": {
+      "type": "string"
+    },
+    "project": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "receipt": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "host": {
+      "enum": [
+        "coordinator",
+        "worker"
+      ]
+    },
+    "lang": {
+      "enum": [
+        "en",
+        "other"
+      ]
+    },
+    "watermark": {
+      "type": "boolean"
+    },
+    "tokens": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Estimated canonical text tokens, not provider prompt usage."
+    },
+    "engine": {
+      "type": "object",
+      "required": [
+        "state",
+        "reason",
+        "dropped"
+      ]
+    },
+    "state": {
+      "type": "object"
+    },
+    "meta": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

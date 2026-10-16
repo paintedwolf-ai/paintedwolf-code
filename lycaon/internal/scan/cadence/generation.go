@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	scanbase "github.com/lycaon/lycaon/internal/scan"
-	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -18,23 +17,12 @@ type dispatchExecution struct {
 	Fingerprint string
 }
 
-func (c *Service) resolveExecution(ctx context.Context, canonical string, row scanbase.SeriesRow) (dispatchExecution, error) {
-	contract, err := scanbase.SelectedScannerContract(ctx, c.Registry, canonical, row.ScannerID, row.Categories...)
-	if err != nil {
-		return dispatchExecution{}, err
-	}
-	manifest, fingerprint, err := scancatalog.ExecutionManifest(contract)
-	if err != nil {
-		return dispatchExecution{}, err
-	}
-	return dispatchExecution{Manifest: manifest, Fingerprint: fingerprint}, nil
-}
-
-func (c *Service) dispatchExecutions(ctx context.Context, canonical string, claimed []scanbase.SeriesRow) (map[string]dispatchExecution, map[string]error) {
+func (d rootDispatcher) dispatchExecutions(ctx context.Context, canonical string, claimed []scanbase.SeriesRow) (map[string]dispatchExecution, map[string]error) {
 	executions := make(map[string]dispatchExecution, len(claimed))
 	failures := make(map[string]error)
+	admission := fullPassAdmission(d)
 	for _, row := range claimed {
-		execution, err := c.resolveExecution(ctx, canonical, row)
+		execution, err := admission.resolveExecution(ctx, canonical, row)
 		if err != nil {
 			failures[row.ScannerID] = err
 			continue
@@ -46,9 +34,9 @@ func (c *Service) dispatchExecutions(ctx context.Context, canonical string, clai
 
 // dispatchTargetSelections chooses full scans for pass members and deltas
 // for automatic scans. Scanners without a base record one without scanning.
-func (c *Service) dispatchTargetSelections(ctx context.Context, claimed []scanbase.SeriesRow, snapshot sourcesnapshot.Snapshot, executions map[string]dispatchExecution) (map[string]dispatchSelection, error) {
+func (d rootDispatcher) dispatchTargetSelections(ctx context.Context, claimed []scanbase.SeriesRow, snapshot sourcesnapshot.Snapshot, executions map[string]dispatchExecution) (map[string]dispatchSelection, error) {
 	out := make(map[string]dispatchSelection, len(claimed))
-	store := c.Coordinator.SnapshotStore()
+	store := d.c.Coordinator.SnapshotStore()
 	generations := make(map[string]scanbase.SourceGeneration)
 	for _, row := range claimed {
 		if _, captured := executions[row.ScannerID]; !captured {
@@ -114,11 +102,13 @@ func splitSelections(claimed []scanbase.SeriesRow, selections map[string]dispatc
 	return unchanged, baselined, dispatching
 }
 
-func (c *Service) finishBaselineDispatches(ctx context.Context, rows []scanbase.SeriesRow, snapshot sourcesnapshot.Snapshot, executions map[string]dispatchExecution) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (b claimBook) finishBaselineDispatches(ctx context.Context, rows []scanbase.SeriesRow, snapshot sourcesnapshot.Snapshot, executions map[string]dispatchExecution) {
+	b.c.mu.Lock()
+	defer b.c.mu.Unlock()
+	planner := seriesPlanner(b)
+	now := nowUTC(b.c)
 	for _, frozen := range rows {
-		row, err := c.Store.GetSeries(ctx, frozen.CanonicalPath, frozen.ScannerID)
+		row, err := b.c.Store.GetSeries(ctx, frozen.CanonicalPath, frozen.ScannerID)
 		if err != nil || row == nil || row.DispatchToken != frozen.DispatchToken {
 			continue
 		}
@@ -126,9 +116,9 @@ func (c *Service) finishBaselineDispatches(ctx context.Context, rows []scanbase.
 		row.LastCoveredSnapshotID = snapshot.ID
 		row.LastCoveredExecutionFingerprint = executions[row.ScannerID].Fingerprint
 		row.LastFileCount = snapshot.FileCount
-		c.rearmHeldDesireLocked(row)
-		row.UpdatedAt = c.now()
-		if err := c.Store.UpsertSeries(ctx, *row); err != nil {
+		planner.rearmHeldDesireLocked(row)
+		row.UpdatedAt = now
+		if err := b.c.Store.UpsertSeries(ctx, *row); err != nil {
 			slog.WarnContext(ctx, "record scan series base", "scanner_id", row.ScannerID, "error", err)
 		}
 	}
@@ -165,18 +155,20 @@ func targetSummary(claimed []scanbase.SeriesRow, selections map[string]dispatchS
 	return strings.Join(parts, ",")
 }
 
-func (c *Service) finishNoopDispatches(ctx context.Context, claimed []scanbase.SeriesRow) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+func (b claimBook) finishNoopDispatches(ctx context.Context, claimed []scanbase.SeriesRow) {
+	b.c.mu.Lock()
+	defer b.c.mu.Unlock()
+	planner := seriesPlanner(b)
+	now := nowUTC(b.c)
 	for _, frozen := range claimed {
-		row, err := c.Store.GetSeries(ctx, frozen.CanonicalPath, frozen.ScannerID)
+		row, err := b.c.Store.GetSeries(ctx, frozen.CanonicalPath, frozen.ScannerID)
 		if err != nil || row == nil || row.DispatchToken != frozen.DispatchToken {
 			continue
 		}
 		releaseClaim(row)
-		c.rearmHeldDesireLocked(row)
-		row.UpdatedAt = c.now()
-		if err := c.Store.UpsertSeries(ctx, *row); err != nil {
+		planner.rearmHeldDesireLocked(row)
+		row.UpdatedAt = now
+		if err := b.c.Store.UpsertSeries(ctx, *row); err != nil {
 			slog.WarnContext(ctx, "settle unchanged scan generation", "scanner_id", row.ScannerID, "error", err)
 		}
 	}

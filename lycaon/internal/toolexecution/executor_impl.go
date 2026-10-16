@@ -1,28 +1,25 @@
 package toolexecution
 
 import (
-	"github.com/lycaon/lycaon/internal/toolsecrets"
-
-	"github.com/lycaon/lycaon/internal/capabilityrequest"
-
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolcommand"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/authzledger"
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/people"
-	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/toolcommand"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolsecrets"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -205,114 +202,6 @@ func (e *Executor) validateInvocation(
 		return reject
 	}
 	return tools.ValidateCapabilityPathAuthority(args, tc.Host.SessionScratchDir)
-}
-
-func (e *Executor) exactCommandReplacementReject(
-	ctx context.Context,
-	toolName, profileID string,
-	args map[string]any,
-	tc tools.ToolContext,
-) *toolrejection.ToolReject {
-	if !toolcommand.IsCommandEquivalenceRunner(toolName) {
-		return nil
-	}
-	schema := e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, toolName)
-	envelope, ok := toolcommand.ParseEnvelope(toolcommand.ArgsWithoutDefaults(args, schema))
-	if !ok {
-		return nil
-	}
-	calls, ok := envelope.Replacements(ctx, tc.ActiveRootPath(), tc.Host.SessionScratchDir)
-	if !ok {
-		return nil
-	}
-	for _, call := range calls {
-		if _, callable := e.definitionFor(call.Tool); !callable {
-			return nil
-		}
-		decision, _ := tools.EvaluateListVisible(ctx, e.Metadata.policy, platform.PolicyContext{
-			ProfileID: profileID, ToolAccess: tc.Turn.ToolAccess, ToolName: call.Tool,
-		})
-		if decision == nil || !decision.Allowed {
-			return nil
-		}
-		schema := e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, call.Tool)
-		if schema == nil {
-			return nil
-		}
-		argsValid := tools.ValidateToolArgs(schema, call.Args) == nil
-		if !argsValid {
-			return nil
-		}
-	}
-	return toolcommand.ReplacementReject(envelope.Command, profileID, calls)
-}
-
-func commandFileWriteReject(
-	ctx context.Context,
-	e *Executor,
-	toolName, profileID string,
-	args map[string]any,
-	tc *tools.ToolContext,
-) *toolrejection.ToolReject {
-	if _, callable := e.definitionFor("write"); !callable {
-		return nil
-	}
-	schema := e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, toolName)
-	fw, ok := toolcommand.InspectCommandFileWrite(ctx, toolName, toolcommand.ArgsWithoutDefaults(args, schema), tc.ActiveRootPath())
-	if !ok {
-		return nil
-	}
-	writeDecision, _ := tools.EvaluateListVisible(ctx, e.Metadata.policy, platform.PolicyContext{
-		ProfileID: profileID, ToolAccess: tc.Turn.ToolAccess, ToolName: "write",
-	})
-	writeAllowed := writeDecision != nil && writeDecision.Allowed
-	var canWrite, toolLoadable bool
-	if len(tc.Turn.TurnOfferedToolNames) > 0 {
-		for _, name := range tc.Turn.TurnOfferedToolNames {
-			if name == "write" {
-				canWrite = true
-			}
-			if name == "request_tools" && (tc.Turn.TurnToolPlan.Deferred("write") || writeAllowed) {
-				toolLoadable = true
-			}
-		}
-		if canWrite {
-			toolLoadable = false
-		}
-	} else {
-		canWrite = writeAllowed
-		if canWrite {
-			tc.Turn.TurnOfferedToolNames = []string{toolName, "write"}
-		}
-	}
-	var calls []toolcommand.ReplacementCall
-	if canWrite && fw.Exact {
-		valid := true
-		for _, call := range fw.Calls {
-			if _, callable := e.definitionFor(call.Tool); !callable {
-				valid = false
-				break
-			}
-			decision, _ := tools.EvaluateListVisible(ctx, e.Metadata.policy, platform.PolicyContext{
-				ProfileID: profileID, ToolAccess: tc.Turn.ToolAccess, ToolName: call.Tool,
-			})
-			if decision == nil || !decision.Allowed {
-				valid = false
-				break
-			}
-			callSchema := e.Metadata.argsSchemaFor(ctx, tc.Identity.SessionID, call.Tool)
-			if callSchema == nil || tools.ValidateToolArgs(callSchema, call.Args) != nil {
-				valid = false
-				break
-			}
-		}
-		if valid {
-			calls = fw.Calls
-		}
-	} else if !canWrite && toolLoadable {
-		calls = []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "write"}}}
-	}
-	return toolcommand.FileWriteReject(fw, profileID, calls, toolLoadable)
 }
 
 // definitionFor reads the registry snapshot dispatch will run.

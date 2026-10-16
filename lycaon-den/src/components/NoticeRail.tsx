@@ -159,85 +159,88 @@ export function NoticeRail(props: Props) {
               // Rows are not alerts — the rail's polite region controls announcements.
               <li
                 ref={row}
-                class="den-notice"
-                classList={{
-                  "den-notice--error": notice.severity === "error",
-                  "den-notice--warning": notice.severity === "warning",
-                  "den-notice--info": notice.severity === "info",
-                }}
                 data-testid="notice"
                 data-notice-id={notice.id}
                 data-notice-code={notice.code}
               >
-                {/* Header chrome would block selecting the notice text. */}
-                <div class="den-notice-body" {...proseProps()}>
-                  <div class="den-notice-summary">
-                    <p class="den-notice-title">
-                      <Show when={severityLabel(notice.severity)} keyed>
-                        {(label) => <span class="den-notice-kind">{label}</span>}
+                <div
+                  class="den-notice"
+                  classList={{
+                    "den-notice--error": notice.severity === "error",
+                    "den-notice--warning": notice.severity === "warning",
+                    "den-notice--info": notice.severity === "info",
+                  }}
+                >
+                  {/* Header chrome would block selecting the notice text. */}
+                  <div class="den-notice-body" {...proseProps()}>
+                    <div class="den-notice-summary">
+                      <p class="den-notice-title">
+                        <Show when={severityLabel(notice.severity)} keyed>
+                          {(label) => <span class="den-notice-kind">{label}</span>}
+                        </Show>
+                        {notice.title}
+                      </p>
+                      <Show when={!isExpanded(notice.id)}>
+                        <p class="den-notice-teaser">{summaryLine(notice)}</p>
                       </Show>
-                      {notice.title}
-                    </p>
-                    <Show when={!isExpanded(notice.id)}>
-                      <p class="den-notice-teaser">{summaryLine(notice)}</p>
+                    </div>
+                    <Show when={isExpanded(notice.id)}>
+                      <p class="den-notice-message">{notice.message}</p>
+                      <Show when={notice.suggestedAction} keyed>
+                        {(action) => (
+                          <p class="den-notice-action">{action}</p>
+                        )}
+                      </Show>
+                      <Show when={actionsFor(notice).length > 0}>
+                        <div class="den-notice-actions">
+                          <For each={actionsFor(notice)}>
+                            {(action) => (
+                              <DenButton
+                                variant={action.variant ?? "secondary"}
+                                compact
+                                data-testid="notice-action"
+                                {...chromeProps()}
+                                onClick={() => {
+                                  action.run?.();
+                                  if (action.dismiss !== false) props.onDismiss(notice.id);
+                                }}
+                              >
+                                {action.label}
+                              </DenButton>
+                            )}
+                          </For>
+                        </div>
+                      </Show>
                     </Show>
                   </div>
-                  <Show when={isExpanded(notice.id)}>
-                    <p class="den-notice-message">{notice.message}</p>
-                    <Show when={notice.suggestedAction} keyed>
-                      {(action) => (
-                        <p class="den-notice-action">{action}</p>
-                      )}
-                    </Show>
-                    <Show when={actionsFor(notice).length > 0}>
-                      <div class="den-notice-actions">
-                        <For each={actionsFor(notice)}>
-                          {(action) => (
-                            <DenButton
-                              variant={action.variant ?? "secondary"}
-                              compact
-                              data-testid="notice-action"
-                              {...chromeProps()}
-                              onClick={() => {
-                                action.run?.();
-                                if (action.dismiss !== false) props.onDismiss(notice.id);
-                              }}
-                            >
-                              {action.label}
-                            </DenButton>
-                          )}
-                        </For>
-                      </div>
-                    </Show>
-                  </Show>
-                </div>
-                <div class="den-notice-controls">
-                  <button
-                    type="button"
-                    class="den-notice-toggle"
-                    aria-expanded={isExpanded(notice.id)}
-                    aria-label={
-                      isExpanded(notice.id) ? "Hide details" : "Show details"
-                    }
-                    onClick={() => toggleExpanded(notice.id, row)}
-                  >
-                    {/* A narrow rail swaps the word for the caret. */}
-                    <span class="den-notice-toggle-label">
-                      {isExpanded(notice.id) ? "Less" : "Details"}
-                    </span>
-                    <span
-                      class="den-notice-toggle-glyph den-tool-chicklet-caret"
-                      aria-hidden="true"
-                    />
-                  </button>
-                  <button
-                    type="button"
-                    class="den-notice-dismiss den-inset-icon-btn"
-                    aria-label="Dismiss"
-                    onClick={() => props.onDismiss(notice.id)}
-                  >
-                    ×
-                  </button>
+                  <div class="den-notice-controls">
+                    <button
+                      type="button"
+                      class="den-notice-toggle"
+                      aria-expanded={isExpanded(notice.id)}
+                      aria-label={
+                        isExpanded(notice.id) ? "Hide details" : "Show details"
+                      }
+                      onClick={() => toggleExpanded(notice.id, row)}
+                    >
+                      {/* A narrow rail swaps the word for the caret. */}
+                      <span class="den-notice-toggle-label">
+                        {isExpanded(notice.id) ? "Less" : "Details"}
+                      </span>
+                      <span
+                        class="den-notice-toggle-glyph den-tool-chicklet-caret"
+                        aria-hidden="true"
+                      />
+                    </button>
+                    <button
+                      type="button"
+                      class="den-notice-dismiss den-inset-icon-btn"
+                      aria-label="Dismiss"
+                      onClick={() => props.onDismiss(notice.id)}
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
               </li>
               );

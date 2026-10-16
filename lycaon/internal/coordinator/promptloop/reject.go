@@ -205,6 +205,10 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 		}
 	}
 	tr := &toolrejection.ToolReject{Code: code, FailureClass: api.FailureClassPolicyRejection, Data: data}
+	if code == "TOOL_NOT_OFFERED" && data["tool_loadable"] == false && data["tool_discovery_available"] == true {
+		tr = toolrejection.CompleteFailureMetadata(tr, tc.Name, "")
+		l.addToolDiscovery(sess.ID, toolCtx, data)
+	}
 	if code == toolrejection.ToolOwnerFailedCode {
 		tr.FailureClass = api.FailureClassOwnerError
 		tr.Data["reason"] = "tool definition unavailable"

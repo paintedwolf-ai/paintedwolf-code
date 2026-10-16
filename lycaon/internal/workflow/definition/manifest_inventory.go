@@ -12,10 +12,11 @@ import (
 // flattens list and map levels; Section is the containing block's path, so two
 // blocks of one type in different places stay separate sections.
 type ManifestField struct {
-	Section string
-	Key     string
-	Path    string
-	Type    string
+	Section      string
+	Key          string
+	Path         string
+	Type         string
+	ExtensionAPI string
 }
 
 // manifestRootSection is the section name for top-level manifest keys.
@@ -55,10 +56,11 @@ func walkManifestType(t reflect.Type, prefix, section string, visiting map[refle
 			path = prefix + "." + key
 		}
 		*out = append(*out, ManifestField{
-			Section: section,
-			Key:     key,
-			Path:    path,
-			Type:    manifestFieldType(field.Type),
+			Section:      section,
+			Key:          key,
+			Path:         path,
+			Type:         manifestFieldType(field.Type),
+			ExtensionAPI: field.Tag.Get("extension_api"),
 		})
 		if nested := manifestNestedStruct(field.Type); nested != nil {
 			walkManifestType(nested, path, path, visiting, out)

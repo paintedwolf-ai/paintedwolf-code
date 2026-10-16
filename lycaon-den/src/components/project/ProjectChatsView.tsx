@@ -374,71 +374,74 @@ export function ProjectChatsView(props: Props) {
             <For each={rows()}>
               {(row) => (
                 <li
-                  class="chat-list-row"
-                  classList={{ "chat-list-row--selected": selected().has(row.id) }}
                   data-testid={`chat-list-row-${row.id}`}
                   onClick={() => props.onOpenSession(row.id)}
                   onContextMenu={(e) => openMenu(e, row)}
                 >
-                  <label
-                    class="project-list-check"
-                    onClick={(e) => e.stopPropagation()}
+                  <div
+                    class="chat-list-row"
+                    classList={{ "chat-list-row--selected": selected().has(row.id) }}
                   >
-                    <DenCheckboxControl
-                      checked={selected().has(row.id)}
-                      aria-label={`Select ${rowTitle(row)}`}
-                      data-testid={`chat-list-select-${row.id}`}
-                      onChange={(e) => toggleSelect(row.id, e.currentTarget.checked)}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    class="chat-list-row__title"
-                    data-testid={`chat-list-open-${row.id}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      props.onOpenSession(row.id);
-                    }}
-                  >
-                    <Show when={props.attention?.get(row.id)} keyed>
-                      {(att) => (
+                    <label
+                      class="project-list-check"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <DenCheckboxControl
+                        checked={selected().has(row.id)}
+                        aria-label={`Select ${rowTitle(row)}`}
+                        data-testid={`chat-list-select-${row.id}`}
+                        onChange={(e) => toggleSelect(row.id, e.currentTarget.checked)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      class="chat-list-row__title"
+                      data-testid={`chat-list-open-${row.id}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        props.onOpenSession(row.id);
+                      }}
+                    >
+                      <Show when={props.attention?.get(row.id)} keyed>
+                        {(att) => (
+                          <span
+                            class="focused-session-list__dot"
+                            data-attention-class={att.class}
+                            role="img"
+                            aria-label={attentionReasonLabel(att)}
+                            data-tip={attentionReasonLabel(att)}
+                          />
+                        )}
+                      </Show>
+                      <span class="chat-list-row__name">{rowTitle(row)}</span>
+                      <Show when={row.pin_rank != null}>
                         <span
-                          class="focused-session-list__dot"
-                          data-attention-class={att.class}
+                          class="chat-list-row__pin"
+                          aria-label="Pinned"
                           role="img"
-                          aria-label={attentionReasonLabel(att)}
-                          data-tip={attentionReasonLabel(att)}
-                        />
-                      )}
-                    </Show>
-                    <span class="chat-list-row__name">{rowTitle(row)}</span>
-                    <Show when={row.pin_rank != null}>
-                      <span
-                        class="chat-list-row__pin"
-                        aria-label="Pinned"
-                        role="img"
-                      >
-                        <PinIcon size={10} />
-                      </span>
-                    </Show>
-                  </button>
-                  <span class="chat-list-row__count">{row.message_count}</span>
-                  <span class="chat-list-row__activity">{timeLabel(row.created_at)}</span>
-                  <span class="chat-list-row__activity">{timeLabel(row.activity_at)}</span>
-                  <button
-                    type="button"
-                    class="chat-list-row__menu-btn den-inset-icon-btn"
-                    aria-label="Chat actions"
-                    aria-haspopup="menu"
-                    aria-expanded={menu()?.row.id === row.id}
-                    data-testid={`chat-list-menu-${row.id}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openMenu(e, row);
-                    }}
-                  >
-                    <ThemeIcon slot="more" size={15} />
-                  </button>
+                        >
+                          <PinIcon size={10} />
+                        </span>
+                      </Show>
+                    </button>
+                    <span class="chat-list-row__count">{row.message_count}</span>
+                    <span class="chat-list-row__activity">{timeLabel(row.created_at)}</span>
+                    <span class="chat-list-row__activity">{timeLabel(row.activity_at)}</span>
+                    <button
+                      type="button"
+                      class="chat-list-row__menu-btn den-inset-icon-btn"
+                      aria-label="Chat actions"
+                      aria-haspopup="menu"
+                      aria-expanded={menu()?.row.id === row.id}
+                      data-testid={`chat-list-menu-${row.id}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openMenu(e, row);
+                      }}
+                    >
+                      <ThemeIcon slot="more" size={15} />
+                    </button>
+                  </div>
                 </li>
               )}
             </For>

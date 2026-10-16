@@ -370,6 +370,14 @@ tasks:
         bash {{.SCRIPTS_DIR}}/with-bundled-scanners.sh -- \
           bash {{.SCRIPTS_DIR}}/go-test-digest.sh --full --tags scanstress --name test:seatbelt-scanstress -- ./test/scanstress/...
 
+  test:confine:linux:
+    desc: 'Applied Linux confinement on this architecture: confine live suites, command supervisor, confined pinned browser (--full, linux; optional legs, e.g. -- browser)'
+    preconditions:
+      - sh: command -v go
+        msg: Go required — see lycaon/go.mod
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/test-confine-linux.sh {{.CLI_ARGS}}
+
   test:fuzz:
     desc: 'Run Go native fuzz targets briefly (FUZZTIME=20s default; e.g. task test:fuzz -- ./internal/parse/...)'
     dir: '{{.GO_DIR}}'
@@ -478,6 +486,18 @@ tasks:
         msg: curl required for sidecar health wait
     cmds:
       - bash {{.SCRIPTS_DIR}}/den-webkit-scroll.sh
+
+  den:webkit:atspi:
+    desc: 'WebKitGTK accessibility text attributes: asks each supported WebKitGTK release for every text object''s attributes across the harness Den, as Orca does (Linux; optional releases, e.g. -- 2.54)'
+    preconditions:
+      - sh: command -v go
+        msg: Go required — see lycaon/go.mod
+      - sh: command -v bun
+        msg: bun required — https://bun.sh
+      - sh: command -v curl
+        msg: curl required for sidecar health wait
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/den-webkit-atspi.sh {{.CLI_ARGS}}
 
   den:harness:canary:
     desc: 'Minimal harness e2e slice (boot + driver chat + prompt) — the tier-is-alive check run by check:digest'
@@ -1708,8 +1728,6 @@ tasks:
 
   release:preflight:
     desc: 'Validate version, updater, brand, and optional corpus identity and integrity against the current engine'
-    deps:
-      - build:lycaon-dev
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-preflight.sh {{.CLI_ARGS}}
 
@@ -1739,12 +1757,8 @@ tasks:
 
   openapi:diff:
     desc: 'Report OpenAPI breaking changes against the release-review baseline'
-    sources:
-      - docs/openapi.yaml
-      - docs/openapi/baseline-bundle.yaml
-      - '{{.SCRIPTS_DIR}}/diff-openapi.sh'
     cmds:
-      - bash {{.SCRIPTS_DIR}}/diff-openapi.sh
+      - bash {{.SCRIPTS_DIR}}/diff-openapi.sh {{.CLI_ARGS}}
 
   openapi:lint:
     desc: Validate modular OpenAPI sources with Redocly CLI

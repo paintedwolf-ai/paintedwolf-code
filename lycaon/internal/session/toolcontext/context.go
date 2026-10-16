@@ -32,8 +32,8 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 		tctx.Source.ActiveRootID = sess.WorkspaceRootID
 		// Context rebuilds read the same turn ordinal the ledger records.
 		if m != nil && m.store != nil {
-			if turn, err := m.store.UserTurnOrdinal(ctx, sess.ID); err == nil {
-				tctx.Identity.UserTurn = turn
+			if turnSource, err := m.store.ReadSourceTurn(ctx, sess.ID, 0); err == nil {
+				tctx.Identity.UserTurn = turnSource.Number
 			}
 		}
 	}
