@@ -10,6 +10,7 @@ requires:
   - paintedwolf.unobserved_cited_handles
   - paintedwolf.unobserved_cited_urls
   - paintedwolf.missing_summary_job_ids
+  - paintedwolf.can_recall
 when: paintedwolf.last_audit_ungrounded && size(paintedwolf.unobserved_cited_handles) == 0 && size(paintedwolf.unobserved_cited_urls)
   == 0 && !paintedwolf.citation_unverifiable && !paintedwolf.grounding_escalated
 effect: nudge
@@ -23,7 +24,8 @@ copy:
   fix: '{% if paintedwolf.missing_summary_job_ids %}Inspect the named jobs and their delivery state. Await
     their completion envelopes without redispatching completed work.{% else %}Check the retained audit and
     the cited references. Correct unsupported claims or acquire the specific missing evidence through an available
-    tool.{% endif %}'
+    tool.{% if paintedwolf.can_recall %} Recover an observation the audit could not trace with `recall(query="handle:read#3")`
+    before re-running its tool.{% endif %}{% endif %}'
   instead: Keep working from observed evidence; this post-turn feedback does not retract the delivered turn.
   what: '{% if paintedwolf.missing_summary_job_ids %}Completed jobs lack a parent-session summary: {{ paintedwolf.missing_summary_job_ids
     }}.{% else %}The last citation audit did not trace every cited reference to observed evidence.{% endif
@@ -32,6 +34,18 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:ambient_grounding
 x-paintedwolf-message: Worker completion criteria not satisfied on parent session
 x-paintedwolf-scenarios:
+- id: recall_callable
+  vars:
+    can_recall: true
+  expect_contains:
+  - 'Code: AMBIENT_UNGROUNDED_COMPLETION'
+  - 'recall(query='
+- id: recall_not_callable
+  vars:
+    can_recall: false
+  expect_contains:
+  - 'Code: AMBIENT_UNGROUNDED_COMPLETION'
+  - 'through an available'
 - id: default
   vars:
     detail: bad args

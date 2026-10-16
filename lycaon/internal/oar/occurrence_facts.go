@@ -229,6 +229,7 @@ var occurrenceFactDecls = []factDecl{
 	{"can_list_dir", oarcore.TypeBool, FactTierHost, ""},
 	{"can_find", oarcore.TypeBool, FactTierHost, ""},
 	{"can_grep", oarcore.TypeBool, FactTierHost, ""},
+	{"can_recall", oarcore.TypeBool, FactTierHost, ""},
 	{"entries", oarcore.TypeString, FactTierHost, ""},
 	{"entry", oarcore.TypeString, FactTierHost, ""},
 	{"env_assignment", oarcore.TypeBool, FactTierHost, ""},

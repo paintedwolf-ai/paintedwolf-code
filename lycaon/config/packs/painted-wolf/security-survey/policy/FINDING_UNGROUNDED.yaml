@@ -14,6 +14,7 @@ requires:
   - paintedwolf.observed_handles_sample
   - paintedwolf.reference_required
   - paintedwolf.grounding_escalated
+  - paintedwolf.can_recall
 when: paintedwolf.rejection_code == "FINDING_UNGROUNDED"
 effect: block
 copy:
@@ -29,13 +30,29 @@ copy:
   fix: '{% if paintedwolf.grounding_escalated %}Resolve the outstanding grounding failure before retrying;
     changing the reference alone may not clear the host state.{% else %}Supply the note’s actual path,
     page, or observed evidence handle in ref. For a typed citation, use the matching read/grep result
-    or observed URL; acquire missing evidence through an available tool before citing it.{% if paintedwolf.observed_handles_sample
+    or observed URL; acquire missing evidence through an available tool before citing it.{% if paintedwolf.can_recall
+    %} To recover a result no longer in context, call `recall(query="handle:grep#3")` with its exact handle,
+    or `recall(query="path:src/a.go")`, and cite the handle it returns.{% endif %}{% if paintedwolf.observed_handles_sample
     %} Observed handles: {{ paintedwolf.observed_handles_sample }}.{% endif %}{% endif %}'
   instead: Preserve the finding’s intent and correct its evidence reference; do not invent a handle or
     re-record an already accepted note.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:record_finding
 x-paintedwolf-scenarios:
+- id: recall_callable
+  vars:
+    offenders_sample: grep#99
+    can_recall: true
+  expect_contains:
+  - 'Code: FINDING_UNGROUNDED'
+  - 'recall(query='
+- id: recall_not_callable
+  vars:
+    offenders_sample: grep#99
+    can_recall: false
+  expect_contains:
+  - 'Code: FINDING_UNGROUNDED'
+  - 'acquire missing evidence through an available tool'
 - id: ungrounded_handle
   vars:
     offenders_sample: grep#99

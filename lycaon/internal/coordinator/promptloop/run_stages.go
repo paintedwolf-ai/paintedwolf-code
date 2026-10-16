@@ -522,6 +522,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		}
 		return &PromptRunResult{
 			TurnTools:            st.turnTools,
+			OfferedTools:         st.offeredToolNames,
 			TasksDispatchedCount: st.tasksDispatchedCount,
 		}, nil
 	}
@@ -530,6 +531,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		LastOutputID:         st.output.id,
 		LastAssistantContent: st.lastAssistantContent,
 		TurnTools:            st.turnTools,
+		OfferedTools:         st.offeredToolNames,
 		TasksDispatchedCount: st.tasksDispatchedCount,
 	}, nil
 }

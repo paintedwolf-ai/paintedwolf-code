@@ -6,5 +6,5 @@ compatibility:
   extension_api: "^1.1.0"
 dependencies:
   painted-wolf/platform:
-    version: "^1.0.0"
+    version: "^1.1.0"
 feature: security-survey

@@ -16,19 +16,48 @@ requires:
     - paintedwolf.offender_count
     - paintedwolf.offenders_omitted
     - paintedwolf.offenders_sample
+    - paintedwolf.can_recall
 when: paintedwolf.rejection_code == "SURFACE_NOTE_HANDLE_UNGROUND"
 effect: block
 copy:
   what: '{{ paintedwolf.offender_count }} citation(s) did not bind to observed evidence: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
   cause: A note citation must resolve to evidence observed in this session. An unseen handle ordinal, a line range, a bare path, and a survey-grade digest span all fail to bind.
   why: Every note citation resolves to something observed in this session, so the user can check it.
-  fix: 'Replace the offending token only. Keep cited_evidence. Use a handle exactly as printed in a [kind#ordinal] tag you have already seen, or path:line with a single line number. Observed paths ({{ paintedwolf.observed_paths_count }}): {{ paintedwolf.observed_paths_sample }}{% if paintedwolf.observed_paths_omitted %} +{{ paintedwolf.observed_paths_omitted }} more{% endif %}'
+  fix: 'Replace the offending token only. Keep cited_evidence. Use a handle exactly as printed in a [kind#ordinal] tag you have already seen, or path:line with a single line number. {% if paintedwolf.can_recall %}Find the right handle with `recall(query="path:src/a.go")` for an observed path, or confirm one with `recall(query="handle:read#3")`, and cite the handle it returns. {% else %}If the observation is no longer in context, re-read the path and cite the new tag. {% endif %}Observed paths ({{ paintedwolf.observed_paths_count }}): {{ paintedwolf.observed_paths_sample }}{% if paintedwolf.observed_paths_omitted %} +{{ paintedwolf.observed_paths_omitted }} more{% endif %}'
   instead: Branch on Code SURFACE_NOTE_HANDLE_UNGROUND; correct the named token and retry — do not drop cited_evidence, and do not resend the same summary uncited
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:surface_note
 # Note retries use the shared grounding friction budget.
 x-paintedwolf-message: A note citation did not bind to observed evidence.
 x-paintedwolf-scenarios:
+  - id: recall_callable
+    vars:
+      profile: coordinator
+      tool: surface_note
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: read#9
+      observed_paths_count: 1
+      observed_paths_omitted: 0
+      observed_paths_sample: src/a.go
+      can_recall: true
+    expect_contains:
+      - 'Code: SURFACE_NOTE_HANDLE_UNGROUND'
+      - 'recall(query='
+  - id: recall_not_callable
+    vars:
+      profile: coordinator
+      tool: surface_note
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: read#9
+      observed_paths_count: 1
+      observed_paths_omitted: 0
+      observed_paths_sample: src/a.go
+      can_recall: false
+    expect_contains:
+      - 'Code: SURFACE_NOTE_HANDLE_UNGROUND'
+      - 're-read the path'
   - id: default
     vars:
       profile: coordinator

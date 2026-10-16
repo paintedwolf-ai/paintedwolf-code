@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -12,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -78,7 +80,7 @@ func (l *turnCloseout) handleAcceptedCloseoutReport(
 	if l.Deps.EvaluateCloseoutBlock == nil {
 		return out, fmt.Errorf("closeout OAR not configured")
 	}
-	decision, err := l.Deps.EvaluateCloseoutBlock(ctx, sess, observation.facts)
+	decision, err := l.Deps.EvaluateCloseoutBlock(tools.WithRecoveryTools(ctx, l.repairOfferedTools(ctx, sessionID, st)), sess, observation.facts)
 	if err != nil {
 		return out, err
 	}
@@ -188,6 +190,7 @@ func (l *turnCloseout) rejectCloseoutGrounding(
 		renderDecision.Data = map[string]any{}
 	}
 	renderDecision.Data["resume_work_allowed"] = !st.proseFinish && len(st.offeredToolNames) > 0 && !l.repairsReportDocument(ctx, sessionID)
+	renderDecision.Data["can_recall"] = slices.Contains(l.repairOfferedTools(ctx, sessionID, st), "recall")
 	decision = &renderDecision
 	nudge, err := guard.FormatCloseoutGroundingReject(
 		ctx,
@@ -255,6 +258,15 @@ func (l *turnCloseout) pinnedCloseoutSynthesis(ctx context.Context, sessionID st
 		return ""
 	}
 	return guidance.UsableCloseoutSynthesis(retained.Drafted)
+}
+
+// repairOfferedTools is the closed turn's offered tool set, or none when the
+// repair turn forbids tool calls.
+func (l *turnCloseout) repairOfferedTools(ctx context.Context, sessionID string, st *promptLoopTurnState) []string {
+	if st == nil || l.repairsReportDocument(ctx, sessionID) {
+		return nil
+	}
+	return st.offeredToolNames
 }
 
 // repairsReportDocument reports whether the session's closeout is in a report

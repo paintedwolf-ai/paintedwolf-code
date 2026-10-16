@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/grounding"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -208,6 +209,7 @@ func (g *AmbientGroundingCoordinator) applyOARAmbientGrounding(ctx context.Conte
 	gc := oar.NewGuardContext()
 	gc.Session.SessionID = sessionID
 	gc.Session.Profile = "coordinator"
+	tools.RegisterRecoveryFacts(ctx, gc)
 	ObserveDelegationGroundingVerdict(gc, verdict)
 	gc.Grounding.GroundingEscalated = groundingFlagged(g.State.Get(key), g.Config)
 	missing := []string{}

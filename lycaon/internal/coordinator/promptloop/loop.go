@@ -67,6 +67,8 @@ type PromptRunResult struct {
 	LastOutputID         string
 	LastAssistantContent string
 	TurnTools            []string
+	// OfferedTools are the tools the final model request could call.
+	OfferedTools         []string
 	TasksDispatchedCount int
 }
 
