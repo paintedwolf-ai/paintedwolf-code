@@ -109,6 +109,9 @@ var factDecls = []factDecl{
 	{"confine_signals", oarcore.TypeListString, FactTierHost, ""},
 	{"failed_stages", oarcore.TypeListString, FactTierHost, ""},
 	{"process_running", oarcore.TypeBool, FactTierHost, ""},
+	{"process_timed_out", oarcore.TypeBool, FactTierHost, ""},
+	{"process_stopped", oarcore.TypeBool, FactTierHost, ""},
+	{"process_exited", oarcore.TypeBool, FactTierHost, ""},
 	{"sandbox_refusals", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_write_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_write_grants", oarcore.TypeListString, FactTierHost, ""},
@@ -420,10 +423,10 @@ var standardProfileFacts = map[string][]string{
 // factTiers indexes every declared fact and function by tier, so the published
 // name and the portability verdict are both computable from one table.
 func factTiers() map[string]FactTier {
-	out := make(map[string]FactTier, len(factDecls)+len(observationFns))
-	for _, d := range factDecls {
+	out := make(map[string]FactTier, len(factDecls)+len(occurrenceFactDecls)+len(observationFns))
+	eachDeclaredFact(func(d factDecl) {
 		out[d.name] = d.tier
-	}
+	})
 	for _, f := range observationFns {
 		out[f.name] = f.tier
 	}

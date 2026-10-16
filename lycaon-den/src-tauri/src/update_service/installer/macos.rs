@@ -11,6 +11,8 @@ use std::{
 };
 
 pub const PRODUCT_VERSION_RESOURCE: &str = "Contents/Resources/release-version";
+/// macOS downloads, stages, and exchanges the signed bundle itself.
+pub const CHECK_ONLY: bool = false;
 const PRODUCT_VERSION_LIMIT: u64 = 128;
 pub fn bundle() -> Result<PathBuf, UpdateError> {
     let exe = std::env::current_exe()

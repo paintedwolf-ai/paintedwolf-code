@@ -17,11 +17,11 @@ func TestBuildProfileReadRootsAllowBackNotWritable(t *testing.T) {
 	testutil.FailErr(t, "mkdir skill", os.MkdirAll(skillDir, 0o700))
 	proj := t.TempDir()
 
-	p, err := confine.BuildProfile(confine.Confinement{
+	p, err := confine.BuildSeatbeltProfile(confine.Confinement{
 		Roots:     []string{proj},
 		ReadRoots: []string{skillDir},
 	})
-	testutil.FailErr(t, "BuildProfile", err)
+	testutil.FailErr(t, "BuildSeatbeltProfile", err)
 
 	allowBack := readAllowBackBlock(t, p)
 	assertBlockCoversPath(t, allowBack, skillDir, "skill read allow-back")

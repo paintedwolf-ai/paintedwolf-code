@@ -7,7 +7,7 @@
   box-shadow: inset 0 0 0 1px var(--den-line);
   overflow: visible;
   min-width: 0;
-  &[open] > summary {
+  &[data-expanded="true"] > .den-transcript-disclosure-header {
     width: 100%;
     padding: 0;
     border-bottom: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
@@ -169,10 +169,20 @@ font-weight: 600;
 }
 
 
-/* Hide the count before either line truncates. */
+/* Hide the count before either line truncates; under the WebKitGTK AT-SPI workaround
+   it keeps its box. */
 @container den-activity-span (max-width: 15rem) {
-  .den-activity-span-count {
+  :root:not([data-den-webkit-atspi-workaround]) .den-activity-span-count {
     display: none;
+  }
+  :root[data-den-webkit-atspi-workaround] .den-activity-span-count {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }
 

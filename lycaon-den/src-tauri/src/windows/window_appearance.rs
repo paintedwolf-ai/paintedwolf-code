@@ -65,6 +65,8 @@ pub fn restore_main_workspace(app: &AppHandle) {
 
 /// Applies the backdrop and starts the reveal fallback.
 pub fn prepare(window: &WebviewWindow) {
+    #[cfg(target_os = "linux")]
+    crate::windows::linux_frame::install(window);
     apply_backdrop(
         window,
         window_backdrop::backdrop_for_os_theme(resolved_theme(window)),

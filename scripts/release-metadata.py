@@ -9,7 +9,7 @@ from pathlib import Path
 import shlex
 import sys
 
-from release_semver import parse, parse_release_build, windows_package_version
+from release_semver import linux_package_version, parse, parse_release_build, windows_package_version
 from update_keys import load_registry, release_binding
 
 
@@ -34,6 +34,7 @@ def main() -> int:
             "release_build": release_build,
             "macos_bundle_version": str(release_build),
             "windows_package_version": windows_package_version(version, release_build),
+            "linux_package_version": linux_package_version(version),
             "github_prerelease": version.channel == "preview",
             "homebrew_token": (
                 "painted-wolf-code@preview"

@@ -7,4 +7,4 @@ bindings:
   windows:
     - "Mod+Alt+ArrowUp"
   linux:
-    - "Mod+Alt+ArrowUp"
+    - "Mod+Alt+PageUp"

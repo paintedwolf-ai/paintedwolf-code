@@ -74,10 +74,15 @@ type promotedDocumentHold struct {
 // paths before any bytes land, so external observation cannot import the
 // promoted bytes without their promotion attribution.
 func (s *Service) HoldPromotedDocuments(ctx context.Context, p *project.Project, refs []PathRef) (PromotedDocumentHold, error) {
-	hold := &promotedDocumentHold{service: s, project: p}
 	if s == nil || s.store == nil || p == nil {
-		return hold, nil
+		return &promotedDocumentHold{service: s, project: p}, nil
 	}
+	return s.holdPromotedDocuments(ctx, p, refs)
+}
+
+func (f filesystemSynchronizer) holdPromotedDocuments(ctx context.Context, p *project.Project, refs []PathRef) (PromotedDocumentHold, error) {
+	s := f.s
+	hold := &promotedDocumentHold{service: s, project: p}
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	seen := make(map[PathRef]struct{}, len(refs))
@@ -217,7 +222,8 @@ func (h *promotedDocumentHold) releaseSources() {
 }
 
 // stagePromotedDocument prepares one held document's import under its document lock.
-func (s *Service) stagePromotedDocument(ctx context.Context, p *project.Project, id string, req PromotedDocumentSync) (*stagedPromotedDocument, PromotedDocumentResult, error) {
+func (f filesystemSynchronizer) stagePromotedDocument(ctx context.Context, p *project.Project, id string, req PromotedDocumentSync) (*stagedPromotedDocument, PromotedDocumentResult, error) {
+	s := f.s
 	d, err := s.store.Get(ctx, id)
 	if errors.Is(err, ErrNotFound) {
 		return nil, PromotedDocumentResult{}, nil
@@ -275,7 +281,8 @@ func (s *Service) stagePromotedDocument(ctx context.Context, p *project.Project,
 }
 
 // stagedCheckpoint reads the checkpoint of a staged, not yet durable replica.
-func (s *Service) stagedCheckpoint(ctx context.Context, staged *stagedReplica) ([]byte, error) {
+func (f filesystemSynchronizer) stagedCheckpoint(ctx context.Context, staged *stagedReplica) ([]byte, error) {
+	s := f.s
 	s.replicas.mu.Lock()
 	defer s.replicas.mu.Unlock()
 	if s.replicas.entries[staged.next.ID] != staged.entry {

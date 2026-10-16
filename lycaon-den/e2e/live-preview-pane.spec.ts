@@ -84,12 +84,12 @@ webE2e("den:harness — live preview pane attach / drive / end", async ({
   });
 
   const activity = liveChatStage(page).getByTestId("activity-span-card");
-  if (!await activity.evaluate((element) => element.hasAttribute("open"))) {
-    await activity.locator(":scope > summary").click();
+  if (!await activity.evaluate((element) => element.getAttribute("data-expanded") === "true")) {
+    await activity.locator(":scope > .den-transcript-disclosure-header").click();
   }
   const tool = liveChatStage(page).locator('[data-tool="capture_page"]');
-  if (!await tool.evaluate((element) => element.hasAttribute("open"))) {
-    await tool.locator(":scope > summary").click();
+  if (!await tool.evaluate((element) => element.getAttribute("data-expanded") === "true")) {
+    await tool.locator(":scope > .den-transcript-disclosure-header").click();
   }
 
   for (const event of [

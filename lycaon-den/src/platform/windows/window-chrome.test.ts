@@ -29,6 +29,7 @@ const physicalPosition = (x: number, y: number) => ({
 
 const isFullscreen = vi.fn(async () => false);
 const isMaximized = vi.fn(async () => false);
+const onResized = vi.fn(async (_handler: () => void) => () => undefined);
 const scaleFactor = vi.fn(async () => 1);
 const innerSize = vi.fn(async () => physicalSize(800, 600));
 const outerSize = vi.fn(async () => physicalSize(812, 640));
@@ -38,13 +39,17 @@ const currentMonitor = vi.fn(async () => ({
   workArea: { position: physicalPosition(0, 0), size: physicalSize(1440, 900) },
 }));
 type Bounds = { x: number; y: number; width: number; height: number };
-const invoke = vi.fn(async (_command: string, _args?: Bounds) => undefined);
+const invoke = vi.fn(async (_command: string, _args?: Bounds): Promise<unknown> => undefined);
 /** Bounds written so far, newest last. */
 const writtenBounds = () =>
   invoke.mock.calls.filter(([command]) => command === "den_set_window_bounds").map(([, args]) => args as Bounds);
 
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: [string, Bounds?]) => invoke(...args),
+}));
+
+vi.mock("@tauri-apps/api/event", () => ({
+  listen: vi.fn(async () => () => undefined),
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({
@@ -56,6 +61,7 @@ vi.mock("@tauri-apps/api/window", () => ({
     onFocusChanged,
     isFullscreen,
     isMaximized,
+    onResized,
     scaleFactor,
     innerSize,
     outerSize,
@@ -64,9 +70,10 @@ vi.mock("@tauri-apps/api/window", () => ({
   currentMonitor: () => currentMonitor(),
 }));
 
+let platform: "macos" | "linux" = "macos";
 vi.mock("../runtime.ts", () => ({
   isTauriRuntime: () => true,
-  tauriPlatform: () => "macos" as const,
+  tauriPlatform: () => platform,
 }));
 
 describe("setupWindowChrome", () => {
@@ -76,6 +83,7 @@ describe("setupWindowChrome", () => {
     isFocused.mockClear();
     onThemeChanged.mockClear();
     onFocusChanged.mockClear();
+    onResized.mockClear();
     onThemeChangedHandler = undefined;
     onFocusChangedHandler = undefined;
     isFocused.mockResolvedValue(false);
@@ -105,6 +113,26 @@ describe("setupWindowChrome", () => {
     onThemeChangedHandler?.({ payload: "light" });
     expect(osColorSchemeIsDark()).toBe(false);
     expect(document.documentElement.style.colorScheme).toBe("");
+  });
+
+  it("leaves the toolkit theme preference alone on Linux and still follows the window's scheme", async () => {
+    platform = "linux";
+    try {
+      const { setupWindowChrome } = await import("./window-chrome.ts");
+      const { osColorSchemeIsDark, resetOsColorSchemeWatchForTests } = await import("../../theme.ts");
+      resetOsColorSchemeWatchForTests();
+      await setupWindowChrome();
+      expect(setTheme).not.toHaveBeenCalled();
+      // Drawn controls read the desktop's layout, the maximized state, and the frame.
+      await vi.waitFor(() => expect(onResized).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(invoke).toHaveBeenCalledWith("linux_decoration_layout"));
+      expect(invoke).toHaveBeenCalledWith("linux_window_frame");
+      expect(osColorSchemeIsDark()).toBe(true);
+      onThemeChangedHandler?.({ payload: "light" });
+      expect(osColorSchemeIsDark()).toBe(false);
+    } finally {
+      platform = "macos";
+    }
   });
 
   it("seeds windowFocused from isFocused and updates on onFocusChanged", async () => {
@@ -158,6 +186,26 @@ describe("widenWindowBy", () => {
     await widenWindowBy(900);
 
     expect(writtenBounds()[0]).toMatchObject({ width: 1428 });
+  });
+
+  it("sizes a Linux window by its content, not the frame's shadow", async () => {
+    platform = "linux";
+    try {
+      // The shell reports 26 px of shadow on each side around 800 x 600 content.
+      innerSize.mockResolvedValue(physicalSize(852, 652));
+      outerSize.mockResolvedValue(physicalSize(852, 652));
+      invoke.mockImplementation(async (command: string) =>
+        command === "linux_window_frame" ? { floating: true, content_width: 800, content_height: 600 } : undefined,
+      );
+      const { widenWindowBy } = await import("./window-chrome.ts");
+
+      await widenWindowBy(61);
+
+      expect(writtenBounds()).toEqual([{ x: 100, y: 80, width: 861, height: 600 }]);
+    } finally {
+      platform = "macos";
+      invoke.mockReset();
+    }
   });
 
   it("leaves a maximized or fullscreen window alone — it is already that wide", async () => {

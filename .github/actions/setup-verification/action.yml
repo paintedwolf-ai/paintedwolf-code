@@ -14,6 +14,12 @@ inputs:
   analysis:
     description: Pinned Go analysis tools needed by the lane (none, lint, vulnerabilities, all)
     default: none
+  containers:
+    description: Provision the WebKitGTK accessibility images before an offline lane runs den:webkit:atspi
+    default: 'false'
+  browser:
+    description: Provision the pinned browser before an offline lane runs test:confine:linux
+    default: 'false'
   save-caches:
     description: Save the toolchain and build caches (main's warm job only); every other run restores without saving
     default: 'false'
@@ -39,7 +45,7 @@ runs:
       shell: bash
       run: echo "artifact-root=$(python3 scripts/artifact_paths.py artifacts "$GITHUB_WORKSPACE")" >> "$GITHUB_OUTPUT"
 
-    - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+    - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
       with:
         go-version-file: lycaon/go.mod
         cache: false
@@ -56,13 +62,22 @@ runs:
         bun-version-file: .bun-version
         no-cache: true
 
-    - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+    - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
       with:
         node-version-file: .node-version
 
     - name: Install the pinned Rust toolchain
       shell: bash
       run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+
+    - name: Allow Go test binaries to create user namespaces
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        if [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" == 1 ]]; then
+          sudo install -m 0644 "$GITHUB_ACTION_PATH/apparmor-go-test-userns" /etc/apparmor.d/paintedwolf-go-test
+          sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-go-test
+        fi
 
     - name: Install Tauri Linux build dependencies
       if: runner.os == 'Linux' && inputs.setup == 'shell'
@@ -71,7 +86,8 @@ runs:
         sudo apt-get update
         sudo apt-get install -y --no-install-recommends \
           libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev xvfb \
-          libjavascriptcoregtk-4.1-dev librsvg2-dev patchelf
+          libjavascriptcoregtk-4.1-dev librsvg2-dev patchelf \
+          sway wl-clipboard wtype xclip
 
     - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
       id: rust
@@ -108,6 +124,12 @@ runs:
     - name: Fetch pinned git engine
       shell: bash
       run: ./task gitengine:fetch
+
+    # Text recognition tests resolve the pinned engine from engine-root on Linux.
+    - name: Fetch pinned text recognition engine
+      if: runner.os == 'Linux'
+      shell: bash
+      run: bash scripts/ocrengine-fetch.sh
 
     - name: Restore pinned frontend packages
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -153,6 +175,19 @@ runs:
       env:
         TOOLS: ${{ inputs.analysis }}
       run: python3 scripts/analysis_tools.py ensure "$TOOLS"
+
+    - name: Restore lint diagnostics
+      if: runner.os == 'Linux' && (inputs.analysis == 'lint' || inputs.analysis == 'all')
+      uses: ./.github/actions/cache-lint-diagnostics
+
+    - name: Set up WebKitGTK accessibility images
+      if: inputs.containers == 'true'
+      uses: ./.github/actions/setup-webkit-atspi-images
+
+    - name: Provision pinned browser
+      if: inputs.browser == 'true'
+      shell: bash
+      run: ./task test:confine:linux -- --prepare
 
     - name: Save pinned frontend packages
       if: inputs.save-caches == 'true' && github.ref == 'refs/heads/main'

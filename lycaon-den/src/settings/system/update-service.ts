@@ -2,7 +2,9 @@ import type { UpdateError } from "./update-error.ts";
 import { invoke } from "@tauri-apps/api/core";
 import { listenHostEvent } from "../../platform/windows/window-channel.ts";
 const UPDATE_STATE_EVENT = "update-state-changed";
-type InstallSource = "homebrew_cask" | "direct_download" | "unknown";
+type InstallSource = "homebrew_cask" | "direct_download" | "system_package" | "unpackaged" | "unknown";
+/** Package identity for a .deb or .rpm installation; the host owns the exact upgrade command. */
+export type InstalledPackage = { family: "deb" | "rpm"; name: string; version: string; update_command: string };
 type UpdateChannel = "stable" | "preview";
 type UpdateCandidate = {
   release_id: string; version: string; channel: UpdateChannel; platform: string;
@@ -15,6 +17,7 @@ type UpdateInstallation =
 export type NativeUpdateState = {
   service_instance_id: string; revision: number; running_version: string; channel: UpdateChannel;
   startup_pending: boolean; automatic_updates_enabled: boolean; install_source: InstallSource;
+  package: InstalledPackage | null;
   capabilities: { can_check: boolean; can_download: boolean; can_restart_to_update: boolean; can_install_automatically: boolean; blocked_reason: string | null };
   discovery: "idle" | "checking" | "up_to_date" | "available" | "held_back" | "failed";
   candidate: UpdateCandidate | null;

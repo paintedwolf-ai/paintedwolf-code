@@ -17,14 +17,25 @@ import (
 )
 
 type releasePlatform struct {
-	UpdaterKey   string `json:"updater_key"`
-	Runner       string `json:"runner"`
-	ArtifactArch string `json:"artifact_arch"`
-	GOOS         string `json:"goos"`
-	GOARCH       string `json:"goarch"`
-	Publication  string `json:"publication"`
-	PackageExt   string `json:"package_extension"`
-	UpdaterExt   string `json:"updater_extension"`
+	UpdaterKey   string   `json:"updater_key"`
+	Runner       string   `json:"runner"`
+	ArtifactArch string   `json:"artifact_arch"`
+	GOOS         string   `json:"goos"`
+	GOARCH       string   `json:"goarch"`
+	Publication  string   `json:"publication"`
+	PackageExts  []string `json:"package_extensions"`
+	// UpdaterExt is nil for package-managed platforms, which publish no updater artifact.
+	UpdaterExt *string `json:"updater_extension"`
+}
+
+func stringPtr(value string) *string { return &value }
+
+func (p releasePlatform) equal(other releasePlatform) bool {
+	return p.UpdaterKey == other.UpdaterKey && p.Runner == other.Runner && p.ArtifactArch == other.ArtifactArch &&
+		p.GOOS == other.GOOS && p.GOARCH == other.GOARCH && p.Publication == other.Publication &&
+		strings.Join(p.PackageExts, ",") == strings.Join(other.PackageExts, ",") &&
+		(p.UpdaterExt == nil) == (other.UpdaterExt == nil) &&
+		(p.UpdaterExt == nil || *p.UpdaterExt == *other.UpdaterExt)
 }
 
 type releasePlatformCatalog struct {
@@ -42,30 +53,32 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 		"darwin-aarch64": {
 			UpdaterKey: "darwin-aarch64", Runner: "macos-15", ArtifactArch: "aarch64",
 			GOOS: "darwin", GOARCH: "arm64", Publication: "public",
-			PackageExt: "dmg", UpdaterExt: "app.tar.gz",
+			PackageExts: []string{"dmg"}, UpdaterExt: stringPtr("app.tar.gz"),
 		},
+		// Linux installs through the package manager: one .deb and one .rpm per
+		// architecture, and no Tauri updater artifact.
 		"linux-x86_64": {
-			UpdaterKey: "linux-x86_64", Runner: "ubuntu-22.04", ArtifactArch: "x86_64",
+			UpdaterKey: "linux-x86_64", Runner: "ubuntu-24.04", ArtifactArch: "x86_64",
 			GOOS: "linux", GOARCH: "amd64", Publication: "candidate",
-			PackageExt: "AppImage", UpdaterExt: "AppImage",
+			PackageExts: []string{"deb", "rpm"}, UpdaterExt: nil,
 		},
 		"linux-aarch64": {
-			UpdaterKey: "linux-aarch64", Runner: "ubuntu-22.04-arm", ArtifactArch: "aarch64",
+			UpdaterKey: "linux-aarch64", Runner: "ubuntu-24.04-arm", ArtifactArch: "aarch64",
 			GOOS: "linux", GOARCH: "arm64", Publication: "candidate",
-			PackageExt: "AppImage", UpdaterExt: "AppImage",
+			PackageExts: []string{"deb", "rpm"}, UpdaterExt: nil,
 		},
 		"windows-x86_64": {
 			UpdaterKey: "windows-x86_64", Runner: "windows-2025", ArtifactArch: "x86_64",
 			GOOS: "windows", GOARCH: "amd64", Publication: "candidate",
-			PackageExt: "exe", UpdaterExt: "exe",
+			PackageExts: []string{"exe"}, UpdaterExt: stringPtr("exe"),
 		},
 	}
-	if catalog.SchemaVersion != 1 || len(catalog.Platforms) != len(want) {
+	if catalog.SchemaVersion != 2 || len(catalog.Platforms) != len(want) {
 		t.Fatalf("release platform catalog = %+v", catalog)
 	}
 	for _, platform := range catalog.Platforms {
 		expected, ok := want[platform.UpdaterKey]
-		if !ok || platform != expected {
+		if !ok || !platform.equal(expected) {
 			t.Fatalf("release platform is unsupported or incomplete: %+v", platform)
 		}
 		delete(want, platform.UpdaterKey)
@@ -84,10 +97,30 @@ func TestReleasePlatformCatalogIsClosedAndComplete(t *testing.T) {
 		"Verify native release runner",
 		"release-public-artifacts",
 		"cargo install artifact-signing-cli --locked --version 0.11.0",
+		"PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}",
 	} {
 		if !strings.Contains(workflow, needle) {
 			t.Fatalf("release workflow bypasses platform catalog invariant %q", needle)
 		}
+	}
+	// Linux candidates build both package families natively without publication authority.
+	candidates := extractYAMLJob(workflow, "linux-candidates")
+	for _, needle := range []string{
+		"runner: ubuntu-24.04\n", "runner: ubuntu-24.04-arm\n", "./task den:bundle",
+		"--package-extensions deb,rpm", "name: linux-candidate-${{ matrix.updater_key }}",
+		"retention-days: 90", "Verify the catalog row for this candidate",
+	} {
+		if !strings.Contains(candidates, needle) {
+			t.Fatalf("linux-candidates job is missing %q", needle)
+		}
+	}
+	for _, forbidden := range []string{"environment:", "secrets.", "release-r2", "platform-release-"} {
+		if strings.Contains(candidates, forbidden) {
+			t.Fatalf("linux-candidates job must not carry publication authority (%q)", forbidden)
+		}
+	}
+	if !strings.Contains(extractYAMLJob(workflow, "aggregate-release"), "pattern: platform-release-*") {
+		t.Fatal("aggregate-release must collect only signed platform results, never Linux candidates")
 	}
 }
 
@@ -95,11 +128,11 @@ func TestUpdaterManifestAssemblerRequiresPublicBuildsAndExcludesCandidatePlatfor
 	root := contractcheck.RepoRoot(t)
 	dir := t.TempDir()
 	catalogPath := filepath.Join(dir, "platforms.json")
-	catalog := `{"schema_version":1,"platforms":[` +
-		`{"updater_key":"darwin-aarch64","artifact_arch":"aarch64","publication":"public","updater_extension":"app.tar.gz"},` +
-		`{"updater_key":"linux-x86_64","artifact_arch":"x86_64","publication":"candidate","updater_extension":"AppImage"},` +
-		`{"updater_key":"linux-aarch64","artifact_arch":"aarch64","publication":"candidate","updater_extension":"AppImage"},` +
-		`{"updater_key":"windows-x86_64","artifact_arch":"x86_64","publication":"candidate","updater_extension":"exe"}]}`
+	catalog := `{"schema_version":2,"platforms":[` +
+		`{"updater_key":"darwin-aarch64","artifact_arch":"aarch64","publication":"public","package_extensions":["dmg"],"updater_extension":"app.tar.gz"},` +
+		`{"updater_key":"linux-x86_64","artifact_arch":"x86_64","publication":"candidate","package_extensions":["deb","rpm"],"updater_extension":null},` +
+		`{"updater_key":"linux-aarch64","artifact_arch":"aarch64","publication":"candidate","package_extensions":["deb","rpm"],"updater_extension":null},` +
+		`{"updater_key":"windows-x86_64","artifact_arch":"x86_64","publication":"candidate","package_extensions":["exe"],"updater_extension":"exe"}]}`
 	contractcheck.FailErr(t, "write platform catalog", os.WriteFile(catalogPath, []byte(catalog), 0o644))
 	notes := filepath.Join(dir, "notes.md")
 	contractcheck.FailErr(t, "write notes", os.WriteFile(notes, []byte("Ready to test.\n"), 0o644))
@@ -140,11 +173,12 @@ func TestUpdaterManifestAssemblerRequiresPublicBuildsAndExcludesCandidatePlatfor
 		}
 	}
 	run(true)
-	writeFragment("linux-x86_64", "AppImage")
-	run(true)
-	writeFragment("linux-aarch64", "AppImage")
-	run(true)
 	writeFragment("windows-x86_64", "exe")
+	run(true)
+	// A package-managed platform never contributes an updater fragment.
+	linux := writeFragment("linux-x86_64", "deb")
+	run(false)
+	contractcheck.FailErr(t, "remove linux fragment", os.Remove(linux))
 	run(true)
 	var manifest struct {
 		Platforms map[string]json.RawMessage `json:"platforms"`
@@ -211,7 +245,7 @@ func TestReleasePublicationBoundaryExcludesCandidateBytes(t *testing.T) {
 	for _, suffix := range []string{"dmg", "dmg.sha256", "app.tar.gz", "app.tar.gz.sig"} {
 		contractcheck.FailErr(t, "write public artifact", os.WriteFile(filepath.Join(input, publicStem+"."+suffix), []byte(suffix), 0o644))
 	}
-	candidate := "painted-wolf-code_v" + version + "_linux-aarch64.AppImage"
+	candidate := "painted-wolf-code_v" + version + "_linux-aarch64.deb"
 	contractcheck.FailErr(t, "write candidate artifact", os.WriteFile(filepath.Join(input, candidate), []byte("candidate"), 0o644))
 	cmd := exec.Command(
 		"python3", filepath.Join(root, "scripts", "release-collect-public-artifacts.py"),
@@ -243,7 +277,7 @@ func TestReleasePublicationBoundaryExcludesCandidateBytes(t *testing.T) {
 
 func TestReleasePublicationCollectsSharedInstallerUpdaterOnce(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
-	for _, extension := range []string{"AppImage", "exe"} {
+	for _, extension := range []string{"exe"} {
 		t.Run(extension, func(t *testing.T) {
 			dir := t.TempDir()
 			input, output := filepath.Join(dir, "input"), filepath.Join(dir, "output")
@@ -254,14 +288,14 @@ func TestReleasePublicationCollectsSharedInstallerUpdaterOnce(t *testing.T) {
 			}
 			contractcheck.FailErr(t, "write audit", os.WriteFile(filepath.Join(input, "opengrep", stem+".json"), []byte(`{}`), 0o644))
 			catalog := filepath.Join(dir, "catalog.json")
-			row := map[string]string{"updater_key": "linux-x86_64", "publication": "public", "package_extension": extension, "updater_extension": extension}
-			writeCatalog := func(rows []map[string]string) {
+			row := map[string]any{"updater_key": "linux-x86_64", "publication": "public", "package_extensions": []string{extension}, "updater_extension": extension}
+			writeCatalog := func(rows []map[string]any) {
 				t.Helper()
-				raw, err := json.Marshal(map[string]any{"schema_version": 1, "platforms": rows})
+				raw, err := json.Marshal(map[string]any{"schema_version": 2, "platforms": rows})
 				contractcheck.FailErr(t, "encode catalog", err)
 				contractcheck.FailErr(t, "write catalog", os.WriteFile(catalog, raw, 0o644))
 			}
-			writeCatalog([]map[string]string{row})
+			writeCatalog([]map[string]any{row})
 			run := func(destination string, wantSuccess bool) {
 				t.Helper()
 				cmd := exec.Command("python3", filepath.Join(root, "scripts", "release-collect-public-artifacts.py"), "--catalog", catalog, "--input", input, "--output", destination, "--version", "1.0.0")
@@ -276,9 +310,9 @@ func TestReleasePublicationCollectsSharedInstallerUpdaterOnce(t *testing.T) {
 			if len(entries) != 4 {
 				t.Fatalf("shared artifact count=%d, want 4", len(entries))
 			}
-			writeCatalog([]map[string]string{row, row})
+			writeCatalog([]map[string]any{row, row})
 			run(filepath.Join(dir, "repeated"), false)
-			writeCatalog([]map[string]string{row})
+			writeCatalog([]map[string]any{row})
 			contractcheck.FailErr(t, "remove signature", os.Remove(filepath.Join(input, stem+"."+extension+".sig")))
 			run(filepath.Join(dir, "unsigned"), false)
 		})
@@ -425,11 +459,19 @@ func TestCandidatePlatformsCarryPinnedGitAndOpenGrep(t *testing.T) {
 	if gitPin.GitVersion == "" || gitPin.LFSVersion == "" {
 		t.Fatal("Git and Git LFS versions must both be pinned")
 	}
-	for _, key := range []string{"darwin-arm64", "linux-amd64", "linux-arm64", "windows-amd64"} {
+	const (
+		dugite         = "https://github.com/desktop/dugite-native/releases/download/"
+		paintedwolfGit = "https://github.com/paintedwolf-ai/paintedwolf-git/releases/download/"
+	)
+	for key, producer := range map[string]string{
+		"darwin-arm64":  dugite,
+		"linux-amd64":   paintedwolfGit,
+		"linux-arm64":   paintedwolfGit,
+		"windows-amd64": dugite,
+	} {
 		pin, ok := gitPin.Platforms[key]
 		sha, shaErr := hex.DecodeString(pin.SHA256)
-		if !ok || pin.ReportedVersion == "" ||
-			!strings.HasPrefix(pin.URL, "https://github.com/desktop/dugite-native/releases/download/") || shaErr != nil || len(sha) != 32 {
+		if !ok || pin.ReportedVersion == "" || !strings.HasPrefix(pin.URL, producer) || shaErr != nil || len(sha) != 32 {
 			t.Fatalf("Git engine platform %q is absent or not immutable: %+v", key, pin)
 		}
 	}

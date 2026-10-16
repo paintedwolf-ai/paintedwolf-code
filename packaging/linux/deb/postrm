@@ -1,0 +1,20 @@
+#!/bin/sh
+set -e
+# Refresh caches after the package files are gone; user data is never touched.
+if [ -d /run/systemd/system ]; then
+  systemctl daemon-reload || true
+fi
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database -q /usr/share/applications || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1 && [ -f /usr/share/icons/hicolor/index.theme ]; then
+  gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
+fi
+case "$1" in
+  remove|purge)
+    if [ -d /opt/painted-wolf-code ]; then
+      find /opt/painted-wolf-code -depth -type d -empty -delete 2>/dev/null || true
+    fi
+    ;;
+esac
+exit 0

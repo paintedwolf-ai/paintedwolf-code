@@ -213,7 +213,7 @@ loop:
 		if sess.IsWorkerChild() {
 			var usage *api.WorkerContextUsage
 			if completion != nil {
-				usage = l.Nudges.workerContextUsage(turnCtx, sess, completion.Usage.PromptTokens)
+				usage = l.Nudges.workerContextUsage(turnCtx, sess, completion.ContextInputTokens())
 			}
 			l.Nudges.publishWorkerProgress(turnCtx, sess, st.workerJobID, st.progress().CompleteRound(completed, maxIter, usage), true)
 		}
@@ -323,10 +323,9 @@ func (l *PromptLoop) preparePromptLoop(ctx context.Context, in PromptRunInput) (
 		},
 	}
 	if guard.IsCoordinatorProfile(setup.profileID) && l.Closeout.Deps.CloseoutStallState != nil {
-		if retained := l.Closeout.Deps.CloseoutStallState(ctx, setup.sessionID); retained.Active {
-			setup.state.closeoutRetry = closeoutRetryState{
-				attempt: retained.Attempt, documentAttempt: retained.DocumentAttempt, prevKey: retained.PrevKey, codes: retained.ForcedBy,
-			}
+		retained := l.Closeout.Deps.CloseoutStallState(ctx, setup.sessionID)
+		setup.state.closeoutRetry = closeoutRetryState{
+			attempt: retained.Attempt, documentAttempt: retained.DocumentAttempt, prevKey: retained.PrevKey, codes: retained.ForcedBy,
 		}
 	}
 	setup.limits = settings.DefaultSessionLimits()

@@ -5,6 +5,8 @@ export type TranscriptDisclosureStore = {
   isOpen: (key: TranscriptDisclosureKey) => boolean;
   setUserOpen: (key: TranscriptDisclosureKey, open: boolean) => void;
   acquire: (key: TranscriptDisclosureKey, lease?: symbol) => () => void;
+  /** A surface whose key changed keeps its open state and leases under the new key. */
+  rename: (from: TranscriptDisclosureKey, to: TranscriptDisclosureKey) => void;
   userOpenKeys: () => TranscriptDisclosureKey[];
   restoreUserOpenKeys: (keys: readonly TranscriptDisclosureKey[]) => void;
 };
@@ -12,6 +14,7 @@ export type TranscriptDisclosureStore = {
 /** Disclosure intent belongs to the transcript, independently of mounted rows. */
 export function createTranscriptDisclosureStore(onUserChange?: () => void): TranscriptDisclosureStore {
   const rows = new Map<TranscriptDisclosureKey, { userOpen: boolean; leases: Set<symbol> }>();
+  const acquisitions = new Set<{ key: TranscriptDisclosureKey }>();
   const [version, setVersion] = createSignal(0);
   const changed = () => setVersion(value=>value+1);
   const ensure = (key: TranscriptDisclosureKey) => {
@@ -27,9 +30,27 @@ export function createTranscriptDisclosureStore(onUserChange?: () => void): Tran
     },
     acquire: (key,requestedLease) => {
       const lease=requestedLease ?? Symbol("disclosure");
+      // A rename moves the acquisition, so its release finds the key it holds now.
+      const held={ key };
+      acquisitions.add(held);
       ensure(key).leases.add(lease); changed();
-      let released=false;
-      return ()=>{ if (released) return; released=true; if (!rows.get(key)?.leases.delete(lease)) return; prune(key); changed(); };
+      return ()=>{
+        if (!acquisitions.delete(held)) return;
+        if (!rows.get(held.key)?.leases.delete(lease)) return;
+        prune(held.key); changed();
+      };
+    },
+    rename: (from,to) => {
+      if (from===to) return;
+      const row=rows.get(from);
+      if (!row) return;
+      rows.delete(from);
+      const target=ensure(to);
+      target.userOpen=target.userOpen||row.userOpen;
+      for (const lease of row.leases) target.leases.add(lease);
+      for (const held of acquisitions) if (held.key===from) held.key=to;
+      prune(to); changed();
+      if (row.userOpen) onUserChange?.();
     },
     userOpenKeys: ()=>{ version(); return [...rows].filter(([,row])=>row.userOpen).map(([key])=>key); },
     restoreUserOpenKeys: keys=>{ rows.clear(); for (const key of keys) rows.set(key,{ userOpen:true,leases:new Set() }); changed(); },

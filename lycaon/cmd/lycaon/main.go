@@ -12,12 +12,14 @@ import (
 
 	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/app/configuration"
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/hostlock"
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/scan/scanworker"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
 )
@@ -79,6 +81,11 @@ func run(ctx context.Context, args []string) error {
 			return errors.New("usage: pw git-credential-osxkeychain {get|store|erase}")
 		}
 		return gitcredential.Run(rest[0], os.Stdin, os.Stdout)
+	case "git-credential-vault":
+		if len(rest) != 1 {
+			return errors.New("usage: pw git-credential-vault {get|store|erase}")
+		}
+		return gitcredential.Forward(rest[0], os.Getenv(gitcredential.SocketEnv), os.Stdin, os.Stdout)
 	case "scan":
 		if len(rest) < 1 || rest[0] != "engines" {
 			return fmt.Errorf("usage: pw scan engines {list|check|validate} [--project DIR]")
@@ -127,6 +134,13 @@ func parseServeDBFlag(args []string) (string, error) {
 // in-flight children and stops between steps; once serving, Run drains.
 func runServe(signals context.Context, dbPath string) error {
 	defer observability.FlushConsole() //nolint:contextcheck // flushing must outlive the serve context
+	// The serving engine holds the decrypted vault; development builds stay
+	// debuggable.
+	if !configdir.IsDevelopmentBuild() {
+		if err := osprocess.DisableDumps(); err != nil {
+			return fmt.Errorf("disable process dumps: %w", err)
+		}
+	}
 	ctx, cancel := context.WithCancel(signals)
 	defer cancel()
 	startReaper() //nolint:contextcheck // the reaper outlives the serve context

@@ -1,0 +1,11 @@
+id: painted-wolf/platform:key-app-menu-open
+command: painted-wolf/platform:app-menu-open
+scope: "global"
+allow_in_input: true
+bindings:
+  windows:
+    - "F10"
+  linux:
+    - "F10"
+system_menu:
+  - macos

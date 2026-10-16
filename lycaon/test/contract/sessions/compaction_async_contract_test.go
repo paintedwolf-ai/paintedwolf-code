@@ -112,10 +112,10 @@ func TestCompactionSyncPathAvoidsSummarizerContract(t *testing.T) {
 			}
 		}
 	}
-	forbidden, err := compactionSyncPathForbiddenCalls(filepath.Join(root, "lycaon/internal/session/history/compaction.go"))
-	contractcheck.FailErr(t, "scan compaction.go sync paths", err)
+	forbidden, err := compactionSyncPathForbiddenCalls(filepath.Join(root, "lycaon/internal/session/history/projection.go"))
+	contractcheck.FailErr(t, "scan projection.go sync paths", err)
 	if len(forbidden) > 0 {
-		t.Fatalf("compaction.go sync paths must not call compaction LLM APIs: %v", forbidden)
+		t.Fatalf("projection.go sync paths must not call compaction LLM APIs: %v", forbidden)
 	}
 }
 

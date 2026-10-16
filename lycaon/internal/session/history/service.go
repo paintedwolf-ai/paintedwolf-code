@@ -6,7 +6,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/messageview"
-	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/limits"
@@ -20,7 +19,9 @@ type Store interface {
 	messageview.CompactionAttemptStore
 	Get(context.Context, string) (*api.Session, error)
 	GetMessages(context.Context, string) ([]api.Message, error)
-	GetMessagesAfterOrd(context.Context, string, int64, int) ([]api.Message, error)
+	GetMessage(context.Context, string, string) (api.Message, error)
+	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
+	ReadMessageWindow(context.Context, string, messageview.MessageWindow) ([]api.Message, error)
 	GetCompactionView(context.Context, string) (*store.CompactionView, bool, error)
 	CompactionViewCurrent(context.Context, string, int64, string, int64) (bool, error)
 	PutCompactionView(context.Context, string, store.CompactionView) error
@@ -35,7 +36,6 @@ type Service struct {
 	Compactor       compaction.ContextCompactor
 	Runner          *Runner
 	router          *llm.StaticModelRouter
-	progress        progress.RunScopedStore
 	dataDir         string
 	calibration     scopedstore.LRU[compaction.PromptTokenCalibration]
 	recallAvailable func(context.Context, *api.Session) bool
@@ -48,6 +48,5 @@ func (m *Service) SetCompactor(compactor compaction.ContextCompactor) {
 	m.Compactor = compactor
 	m.Limits.SetFallback(compactor)
 }
-func (m *Service) SetProgress(progress progress.RunScopedStore) { m.progress = progress }
-func (m *Service) SetDataDir(dir string)                        { m.dataDir = dir }
-func (m *Service) ForgetCalibration(sessionID string)           { m.calibration.Delete(sessionID) }
+func (m *Service) SetDataDir(dir string)              { m.dataDir = dir }
+func (m *Service) ForgetCalibration(sessionID string) { m.calibration.Delete(sessionID) }

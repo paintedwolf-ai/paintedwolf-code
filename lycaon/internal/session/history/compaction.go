@@ -10,104 +10,10 @@ import (
 	"github.com/lycaon/lycaon/internal/session/lifecycle"
 	"github.com/lycaon/lycaon/internal/session/promptassembly"
 	"github.com/lycaon/lycaon/internal/session/store"
-	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-const UncompactedLimit = 8192
-
-// Load rejects suffixes too large to assemble without gaps.
-func (m *Service) Load(ctx context.Context, sess *api.Session) ([]api.Message, error) {
-	if m == nil || m.store == nil || sess == nil {
-		return nil, fmt.Errorf("session store and session are required")
-	}
-	view, ok, err := m.store.GetCompactionView(ctx, sess.ID)
-	if err != nil {
-		return nil, err
-	}
-	if !ok || view.Generation != sess.CompactionGeneration {
-		return m.loadBoundedCanonicalPromptHistory(ctx, sess)
-	}
-	current, err := m.store.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq)
-	if err != nil {
-		return nil, err
-	}
-	if !current {
-		m.Schedule(ctx, sess)
-		return m.loadBoundedCanonicalPromptHistory(ctx, sess)
-	}
-	suffix, err := m.store.GetMessagesAfterOrd(ctx, sess.ID, view.CoveredThroughOrd, UncompactedLimit+1)
-	if err != nil {
-		return nil, err
-	}
-	if len(suffix) > UncompactedLimit {
-		m.Schedule(ctx, sess)
-		return nil, fmt.Errorf("prompt history projection is more than %d rows behind; compaction scheduled", UncompactedLimit)
-	}
-	return suffix, nil
-}
-
-func (m *Service) loadBoundedCanonicalPromptHistory(ctx context.Context, sess *api.Session) ([]api.Message, error) {
-	history, err := m.store.GetMessagesAfterOrd(ctx, sess.ID, 0, UncompactedLimit+1)
-	if err != nil {
-		return nil, err
-	}
-	if len(history) > UncompactedLimit {
-		m.Schedule(ctx, sess)
-		return nil, fmt.Errorf("prompt history has more than %d unprojected rows; compaction scheduled", UncompactedLimit)
-	}
-	return history, nil
-}
-
-// Fit assembles prompt history and schedules durable compaction.
-func (m *Service) Fit(ctx context.Context, sess *api.Session, history []api.Message, surfaceID string) ([]api.Message, compaction.CompactionReport, error) {
-	assembled, report := m.Assemble(ctx, sess, history, surfaceID)
-	if m.Compactor != nil {
-		cfg := m.Compactor.Config()
-		// Per-call fitting does not lower the durable retry threshold.
-		est := m.BudgetTokens(sess.ID, report.TokensBefore)
-		if est >= cfg.HardCeilingTokens {
-			m.Schedule(ctx, sess)
-		} else if compaction.ShouldCompactSession(est, cfg.ModelContextWindow, cfg) {
-			m.Schedule(ctx, sess)
-		}
-	}
-	return assembled, report.CompactionReport(), nil
-}
-
-// ApplyView appends rows beyond the view's ordinal watermark.
-func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []api.Message) []api.Message {
-	if m == nil || m.store == nil || sess == nil {
-		return history
-	}
-	view, ok, err := m.store.GetCompactionView(ctx, sess.ID)
-	if err != nil || !ok || view.Generation != sess.CompactionGeneration {
-		return history
-	}
-	current, currentErr := m.store.CompactionViewCurrent(ctx, sess.ID, view.CoveredThroughOrd, view.CoveredThroughID, view.SourceSeq)
-	if currentErr != nil || !current {
-		return history
-	}
-	byID := make(map[string]api.Message, len(history))
-	for _, msg := range history {
-		byID[msg.ID] = msg
-	}
-	out := make([]api.Message, 0, len(view.Messages)+8)
-	for _, msg := range view.Messages {
-		if canonical, ok := byID[msg.ID]; ok {
-			// Canonical rows restore fields excluded from prompt projections.
-			msg = api.RehydrateTranscriptProjectionFields(msg, canonical)
-		}
-		out = append(out, msg)
-	}
-	for _, msg := range history {
-		if msg.Ord <= view.CoveredThroughOrd {
-			continue
-		}
-		out = append(out, msg)
-	}
-	return out
-}
+const UncompactedLimit = 256
 
 func (m *Service) Schedule(ctx context.Context, sess *api.Session) {
 	if m == nil || sess == nil || m.Runner == nil || m.Compactor == nil {
@@ -131,7 +37,7 @@ func (m *Service) runBackgroundCompaction(ctx context.Context, sessionID string)
 	if !ok {
 		return
 	}
-	for ctx.Err() == nil {
+	for pass := 0; pass < 8 && ctx.Err() == nil; pass++ {
 		hasMore, wrote := m.runBackgroundCompactionPage(ctx, sessionID, sc)
 		if !hasMore || !wrote {
 			return
@@ -149,7 +55,8 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 		return false, false
 	}
 	info := m.sessionInfo(ctx, sess, originals)
-	base := api.FilterPromptHistory(promptassembly.MarkContextPins(sess, originals))
+	sc = sc.WithConfig(m.compactionConfig(ctx, sess))
+	base := api.FilterPromptHistory(promptassembly.MarkContextPins(sess, originals, min(8192, max(256, sc.Config().HardCeilingTokens/5))))
 	ctxMsgs := compaction.ContextMessagesFromAPI(base)
 	report := compaction.CompactionReport{TokensBefore: compaction.EstimateMessagesTokens(ctxMsgs)}
 
@@ -161,8 +68,9 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 
 	// Full summaries run only above the session watermark.
 	cfg := sc.Config()
+	bounds := m.canonicalTailBounds(cfg)
 	budgetEst := m.BudgetTokens(sessionID, compaction.EstimateMessagesTokens(working))
-	rowPressure := hasMore || len(working) > UncompactedLimit
+	rowPressure := hasMore || len(working) > bounds.maxRows
 	if compaction.ShouldCompactSession(budgetEst, cfg.ModelContextWindow, cfg) || rowPressure {
 		maxTokens := cfg.TargetTokens
 		if rowPressure && compaction.EstimateMessagesTokens(working) <= maxTokens {
@@ -196,7 +104,7 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 	}
 	m.scheduleSynthesis(ctx, sc, info, originals, store.CompactionView{Generation: sess.CompactionGeneration + 1, Continuation: report.Continuation,
 		CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq})
-	return hasMore, true
+	return hasMore || (report.SessionCompacted && report.TokensAfter > cfg.TargetTokens), true
 }
 
 func (m *Service) loadCompactionPage(ctx context.Context, sess *api.Session) ([]api.Message, int64, string, int64, bool, error) {
@@ -219,7 +127,8 @@ func (m *Service) loadCompactionPage(ctx context.Context, sess *api.Session) ([]
 			sourceSeq = view.SourceSeq
 		}
 	}
-	suffix, err := m.store.GetMessagesAfterOrd(ctx, sess.ID, coveredThroughOrd, UncompactedLimit+1)
+	bounds := m.canonicalTailBounds(m.compactionConfig(ctx, sess))
+	suffix, hasMore, err := m.readBoundedSuffix(ctx, sess.ID, coveredThroughOrd, bounds)
 	if err != nil {
 		return nil, 0, "", 0, false, err
 	}
@@ -233,10 +142,6 @@ func (m *Service) loadCompactionPage(ctx context.Context, sess *api.Session) ([]
 		if !current {
 			return nil, 0, "", 0, false, fmt.Errorf("compaction source changed while reading history")
 		}
-	}
-	hasMore := len(suffix) > UncompactedLimit
-	if hasMore {
-		suffix = suffix[:UncompactedLimit]
 	}
 	for _, msg := range suffix {
 		if msg.Ord > coveredThroughOrd {
@@ -254,6 +159,7 @@ func (m *Service) loadCompactionPage(ctx context.Context, sess *api.Session) ([]
 func (m *Service) writeCompactionView(ctx context.Context, sess *api.Session, originals []api.Message, compact []compaction.ContextMessage, report compaction.CompactionReport, coveredThroughOrd int64, coveredThroughID string, sourceSeq int64) error {
 	generation := sess.CompactionGeneration + 1
 	view := store.CompactionView{
+		Continuation:      report.Continuation,
 		Generation:        generation,
 		Messages:          compaction.ContextMessagesToAPI(compact, originals),
 		CoveredThroughOrd: coveredThroughOrd,
@@ -261,6 +167,12 @@ func (m *Service) writeCompactionView(ctx context.Context, sess *api.Session, or
 		SourceSeq:         sourceSeq,
 		TokensBefore:      report.TokensBefore,
 		TokensAfter:       report.TokensAfter,
+	}
+
+	if view.Continuation == nil {
+		if prior, ok, err := m.store.GetCompactionView(ctx, sess.ID); err == nil && ok {
+			view.Continuation = prior.Continuation
+		}
 	}
 
 	if err := m.store.PutCompactionView(ctx, sess.ID, view); err != nil {
@@ -317,20 +229,22 @@ func (m *Service) forceCompact(ctx context.Context, sessionID string) (compactio
 	if err != nil {
 		return compaction.CompactionReport{}, err
 	}
-	originals, err := m.store.GetMessages(ctx, sessionID)
+	originals, coveredThroughOrd, coveredThroughID, sourceSeq, _, err := m.loadCompactionPage(ctx, sess)
 	if err != nil {
 		return compaction.CompactionReport{}, err
 	}
 	if m.Compactor == nil {
 		return compaction.CompactionReport{TokensBefore: compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(originals))}, fmt.Errorf("compactor not configured")
 	}
-	cfg := m.Compactor.Config()
-	base := api.FilterPromptHistory(promptassembly.MarkContextPins(sess, m.ApplyView(ctx, sess, originals)))
+	cfg := m.compactionConfig(ctx, sess)
+	base := api.FilterPromptHistory(promptassembly.MarkContextPins(sess, m.ApplyView(ctx, sess, originals), min(8192, max(256, cfg.HardCeilingTokens/5))))
 	ctxMsgs := compaction.ContextMessagesFromAPI(base)
 	info := m.sessionInfo(ctx, sess, originals)
 	compactor := m.Compactor
+	var synth *compaction.SimpleCompactor
 	if sc, ok := compactor.(*compaction.SimpleCompactor); ok {
-		compactor = sc.Baseline()
+		synth = sc.WithConfig(cfg)
+		compactor = synth.Baseline()
 	}
 	compact, report, err := compactor.Compact(ctx, info, ctxMsgs, cfg.TargetTokens)
 	report.CompactionGeneration = sess.CompactionGeneration
@@ -340,29 +254,15 @@ func (m *Service) forceCompact(ctx context.Context, sessionID string) (compactio
 	if !report.SessionCompacted && report.ChunksCompacted == 0 {
 		return report, nil
 	}
-	coveredThroughOrd, coveredThroughID, sourceSeq := messageWatermarks(originals)
 	if err := m.writeCompactionView(ctx, sess, originals, compact, report, coveredThroughOrd, coveredThroughID, sourceSeq); err != nil {
 		return report, err
 	}
 	report.CompactionGeneration = sess.CompactionGeneration + 1
-	if sc, ok := m.Compactor.(*compaction.SimpleCompactor); ok {
-		m.scheduleSynthesis(ctx, sc, info, originals, store.CompactionView{Generation: report.CompactionGeneration, Continuation: report.Continuation,
+	if synth != nil {
+		m.scheduleSynthesis(ctx, synth, info, originals, store.CompactionView{Generation: report.CompactionGeneration, Continuation: report.Continuation,
 			CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq})
 	}
 	return report, nil
-}
-
-func messageWatermarks(messages []api.Message) (coveredThroughOrd int64, coveredThroughID string, sourceSeq int64) {
-	for _, msg := range messages {
-		if msg.Ord > coveredThroughOrd {
-			coveredThroughOrd = msg.Ord
-			coveredThroughID = msg.ID
-		}
-		if msg.Seq > sourceSeq {
-			sourceSeq = msg.Seq
-		}
-	}
-	return coveredThroughOrd, coveredThroughID, sourceSeq
 }
 
 func (m *Service) sessionInfo(ctx context.Context, sess *api.Session, originals []api.Message) compaction.SessionInfo {
@@ -384,15 +284,16 @@ func (m *Service) sessionInfo(ctx context.Context, sess *api.Session, originals 
 		ProviderID:           sess.ProviderID,
 	}
 	info.ProviderID, info.Model = m.Model(ctx, sess)
-	if boundary := api.UserIntentBoundary(originals); boundary > 0 {
-		info.LatestUserRequestID = originals[boundary-1].ID //nolint:gosec // UserIntentBoundary returns zero or an index within originals.
-	}
-	if m.progress != nil {
-		rootID := sess.ID
-		if sess.IsWorkerChild() {
-			rootID = sessiontree.RootID(ctx, m.store, sess.ID)
+	if prior, ok, err := m.store.GetCompactionView(ctx, sess.ID); err == nil && ok {
+		current, err := m.store.CompactionViewCurrent(ctx, sess.ID, prior.CoveredThroughOrd, prior.CoveredThroughID, prior.SourceSeq)
+		if err == nil && current {
+			info.PriorContinuation = prior.Continuation
 		}
-		info.ProgressMarkdown = m.progress.Get(ctx, rootID)
+	}
+	if boundary := api.UserIntentBoundary(originals); boundary > 0 {
+		request := originals[boundary-1] //nolint:gosec // UserIntentBoundary returns an index within originals.
+		info.CurrentRequest = &request
+		info.LatestUserRequestID = request.ID
 	}
 	return info
 }
@@ -415,7 +316,7 @@ func (m *Service) SessionContext(ctx context.Context, sessionID string) (api.Ses
 	if err != nil {
 		return api.SessionContextResponse{}, err
 	}
-	history, err := m.store.GetMessages(ctx, sessionID)
+	history, err := m.Load(ctx, sess)
 	if err != nil {
 		return api.SessionContextResponse{}, err
 	}
@@ -435,4 +336,20 @@ func (m *Service) SessionContext(ctx context.Context, sessionID string) (api.Ses
 		CompactionGeneration: sess.CompactionGeneration,
 		OversizedChunks:      len(compaction.FindOversizedChunks(compaction.ContextMessagesFromAPI(history), cfg, nil)),
 	}, nil
+}
+
+func (m *Service) compactionConfig(ctx context.Context, sess *api.Session) compaction.CompactionConfig {
+	if m.Limits == nil {
+		if m.Compactor == nil {
+			return compaction.DefaultCompactionConfig()
+		}
+		return m.Compactor.Config()
+	}
+	resolved := *sess
+	resolved.ProviderID, resolved.Model = m.Model(ctx, sess)
+	cfg := m.Limits.Compaction(ctx, &resolved)
+	if sess.IsWorkerChild() {
+		cfg = compaction.WorkerChildCompactionConfig(cfg)
+	}
+	return cfg
 }

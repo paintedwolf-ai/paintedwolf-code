@@ -1,3 +1,4 @@
+import { disclosureToggle, isDisclosureOpen, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
 import { stubFilesClient } from "../../test/source-client-fixture.ts";
 import { fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -60,13 +61,13 @@ describe("TranscriptDiffGroup", () => {
       <TranscriptDiffGroup folds={folds} layout="chat" entryKey="held-group" />
     </TranscriptDisclosureProvider>);
     let view = mount();
-    screen.getByTestId("diff-group").querySelector<HTMLElement>(":scope > summary")!.click();
+    disclosureToggle(screen.getByTestId("diff-group")).click();
     const chosen = folds.at(-1)!;
     if (count > 1) screen.getByLabelText(`Show diff for ${chosen.path}`).click();
     expect(store.isOpen(transcriptDisclosureKey.diffFile(chosen.key))).toBe(true);
     view.unmount();
     view = mount();
-    expect((screen.getByTestId("diff-group") as HTMLDetailsElement).open).toBe(true);
+    expect(isDisclosureOpen(screen.getByTestId("diff-group"))).toBe(true);
     expect(screen.getByLabelText(`Collapse diff for ${chosen.path}`)).toBeTruthy();
     screen.getByLabelText(`Collapse diff for ${chosen.path}`).click();
     view.unmount();
@@ -81,7 +82,7 @@ describe("TranscriptDiffGroup", () => {
     render(() => <TranscriptDisclosureProvider value={store}>
       <TranscriptDiffGroup folds={folds} layout="chat" entryKey="shared-group" />
     </TranscriptDisclosureProvider>);
-    screen.getByTestId("diff-group").querySelector<HTMLElement>(":scope > summary")!.click();
+    disclosureToggle(screen.getByTestId("diff-group")).click();
     // A fold is keyed by the first write to its file, which is also that write's tool row.
     const writer = transcriptDisclosureKey.tool(folds[0]!.key);
     store.setUserOpen(writer, true);
@@ -99,16 +100,16 @@ describe("TranscriptDiffGroup", () => {
       />
     ));
 
-    const group = screen.getByTestId("diff-group") as HTMLDetailsElement;
-    expect(group.open).toBe(false);
+    const group = screen.getByTestId("diff-group") as HTMLElement;
+    expect(isDisclosureOpen(group)).toBe(false);
     expect(group.getAttribute("data-files")).toBe("1");
-    expect(group.querySelector("summary")?.getAttribute("aria-label")).toBe(
+    expect(disclosureToggle(group)?.getAttribute("aria-label")).toBe(
       "1 file changed, 1 added, 1 removed, 1 write",
     );
     expect(screen.getAllByTestId("file-edit-diff")).toHaveLength(1);
 
-    group.querySelector<HTMLElement>(":scope > summary")!.click();
-    expect(group.open).toBe(true);
+    disclosureToggle(group).click();
+    expect(isDisclosureOpen(group)).toBe(true);
     expect(screen.getByTestId("file-edit-diff").getAttribute("data-expanded")).toBe(
       "true",
     );
@@ -127,19 +128,19 @@ describe("TranscriptDiffGroup", () => {
 
   it("loads net totals while collapsed", async () => {
     renderGroup();
-    const group = screen.getByTestId("diff-group") as HTMLDetailsElement;
-    expect(group.open).toBe(false);
-    await waitFor(() => expect(group.querySelector("summary")?.getAttribute("aria-label")).toBe(
+    const group = screen.getByTestId("diff-group") as HTMLElement;
+    expect(isDisclosureOpen(group)).toBe(false);
+    await waitFor(() => expect(disclosureToggle(group)?.getAttribute("aria-label")).toBe(
       "3 files changed, 7 added, 2 removed, 4 writes",
     ));
   });
 
   it("leaves rows collapsed when a group has multiple diffs", () => {
     renderGroup();
-    const group = screen.getByTestId("diff-group") as HTMLDetailsElement;
+    const group = screen.getByTestId("diff-group") as HTMLElement;
 
-    group.querySelector<HTMLElement>(":scope > summary")!.click();
-    expect(group.open).toBe(true);
+    disclosureToggle(group).click();
+    expect(isDisclosureOpen(group)).toBe(true);
     expect(
       screen
         .getAllByTestId("file-edit-diff")
@@ -247,18 +248,27 @@ describe("TranscriptDiffGroup", () => {
       />
     ));
 
-    const group = screen.getByTestId("diff-group") as HTMLDetailsElement;
-    const summary = group.querySelector<HTMLElement>(":scope > summary")!;
+    const group = screen.getByTestId("diff-group") as HTMLElement;
+    const summary = disclosureToggle(group);
 
     summary.click();
-    expect(group.open).toBe(true);
+    expect(isDisclosureOpen(group)).toBe(true);
     expect(screen.getByTestId("file-edit-diff").getAttribute("data-expanded")).toBe("true");
 
     summary.click();
-    expect(group.open).toBe(false);
+    expect(isDisclosureOpen(group)).toBe(false);
 
     summary.click();
-    expect(group.open).toBe(true);
+    expect(isDisclosureOpen(group)).toBe(true);
     expect(screen.getByTestId("file-edit-diff").getAttribute("data-expanded")).toBe("true");
+  });
+});
+
+describe("TranscriptDiffGroup under the WebKitGTK AT-SPI workaround", () => {
+  it("shows the same collapsed summary, net totals included", async () => {
+    await expectSameCollapsedFace(() => {
+      const view = renderGroup();
+      return { card: () => view.container.querySelector('[data-testid="diff-group"]'), unmount: view.unmount };
+    }, (face) => !face.includes("pending"));
   });
 });

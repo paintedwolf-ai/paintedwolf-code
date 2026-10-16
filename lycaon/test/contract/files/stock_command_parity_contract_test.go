@@ -2,6 +2,7 @@ package contract
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -76,7 +77,8 @@ func TestStockKeybindingScopesMatchTheirCommands(t *testing.T) {
 	}
 }
 
-// Stock keybindings cover every supported platform.
+// Stock keybindings cover every supported platform, with a chord or by
+// leaving it to that platform's system menu bar.
 func TestStockKeybindingsCoverEveryPlatform(t *testing.T) {
 	t.Parallel()
 	platforms := []string{"macos", "windows", "linux"}
@@ -86,7 +88,7 @@ func TestStockKeybindingsCoverEveryPlatform(t *testing.T) {
 			continue
 		}
 		for _, platform := range platforms {
-			if len(keybinding.Bindings[platform]) == 0 {
+			if len(keybinding.Bindings[platform]) == 0 && !slices.Contains(keybinding.SystemMenu, platform) {
 				t.Errorf("keybinding %s declares no %s chord", keybinding.ID, platform)
 			}
 		}

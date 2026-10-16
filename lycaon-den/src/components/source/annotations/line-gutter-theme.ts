@@ -37,6 +37,11 @@ export function lineGutterThemeRules(
       font: "inherit",
       lineHeight: "inherit",
     },
+    // Five digits wide without holding the digits.
+    [`.${CELL}__number--spacer`]: {
+      display: "inline-block",
+      width: "5ch",
+    },
     [`.${CELL}__number--foldable`]: {
       pointerEvents: "auto",
       cursor: "pointer",

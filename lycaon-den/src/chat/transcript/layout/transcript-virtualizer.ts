@@ -1,5 +1,10 @@
 import { createTranscriptRowMeasurements, type RowSize } from "./transcript-row-measurements.ts";
 import {
+  createTranscriptRunwayBudget,
+  type TranscriptRunwayState,
+  type TranscriptUnloadedOrds,
+} from "../history/transcript-runway.ts";
+import {
   createVirtualizer,
   type Range,
   type VirtualItem,
@@ -142,23 +147,31 @@ export type MeasuredTranscriptVirtualizer = TranscriptVirtualizer & {
   forgetMeasurement: (element: Element) => void;
   remeasureMounted: () => void;
   resizeItems: (sizes: readonly RowSize[]) => void;
+  runway: () => TranscriptRunwayState;
+  prepareLanding: (targetOffsetPx: number) => void;
+  residentExtent: () => { startPx: number; endPx: number };
+  rowRangeWithin: (
+    topPx: number,
+    bottomPx: number,
+  ) => { firstIndex: number; lastIndex: number } | null;
 };
 
-export type TranscriptVirtualRunway = {
+export type TranscriptUnmountedSpace = {
   beforePx: number;
   afterPx: number;
 };
+export type TranscriptVirtualRunway = TranscriptUnmountedSpace;
 
 function nonNegativeFinite(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
 }
 
 /** Unmounted space keeps the end sentinel at the full transcript height. */
-export function transcriptVirtualRunway(
+export function transcriptUnmountedSpace(
   rows: readonly Pick<VirtualItem, "start" | "end">[],
   totalSize: number,
   originPx = 0,
-): TranscriptVirtualRunway {
+): TranscriptUnmountedSpace {
   const total = nonNegativeFinite(totalSize);
   const first = rows[0];
   const last = rows[rows.length - 1];
@@ -168,6 +181,7 @@ export function transcriptVirtualRunway(
     afterPx: nonNegativeFinite(total - nonNegativeFinite(last.end - originPx)),
   };
 }
+export const transcriptVirtualRunway = transcriptUnmountedSpace;
 
 /** Initial tail offset in the shared scrollport. */
 export function transcriptInitialEndOffset(
@@ -263,7 +277,14 @@ function measureTranscriptRow(
 /** The row under the scrollport top and how far the top sits into it. */
 export type TranscriptReadingPosition = { rowKey: string; rowOffsetPx: number };
 
-type ReadingAnchor = { index: number; key: VirtualItem["key"]; start: number };
+/** Where a vanished row's content landed after a regrouping, and its offset within that row. */
+export type TranscriptAnchorResolution = {
+  rowKey: string;
+  offsetPx: number;
+  measureOffsetPx?: () => number | undefined;
+};
+
+type ReadingAnchor = { index: number; key: VirtualItem["key"]; start: number; offsetInRow: number };
 
 /** Row under the reading offset in the current layout. */
 function readingAnchor(instance: TranscriptVirtualizer, offset = instance.scrollOffset): ReadingAnchor | null {
@@ -272,7 +293,16 @@ function readingAnchor(instance: TranscriptVirtualizer, offset = instance.scroll
   if (instance.options.count === 0) return null;
   let row = instance.getVirtualItemForOffset(offset);
   if (row && row.end <= offset) row = instance.measurementsCache[row.index + 1] ?? row;
-  return row ? { index: row.index, key: row.key, start: row.start } : null;
+  return row ? { index: row.index, key: row.key, start: row.start, offsetInRow: Math.max(0, offset - row.start) } : null;
+}
+
+function indexOfKey(instance: TranscriptVirtualizer, key: VirtualItem["key"], hint: number): number {
+  const { count, getItemKey } = instance.options;
+  if (hint >= 0 && hint < count && getItemKey(hint) === key) return hint;
+  for (let candidate = 0; candidate < count; candidate += 1) {
+    if (getItemKey(candidate) === key) return candidate;
+  }
+  return -1;
 }
 
 /** How far the anchored row moved between two layouts. */
@@ -280,20 +310,26 @@ function readingAnchorDrift(
   instance: TranscriptVirtualizer,
   anchor: ReadingAnchor,
   originDelta = 0,
+  resolveLostAnchor?: (rowKey: string) => TranscriptAnchorResolution | undefined,
+  onResolvedMeasure?: (measure: { appliedOffsetPx: number; measureOffsetPx: () => number | undefined }) => void,
 ): number {
-  const { count, getItemKey } = instance.options;
-  let index =
-    anchor.index < count && getItemKey(anchor.index) === anchor.key
-      ? anchor.index
-      : -1;
-  for (let candidate = 0; index < 0 && candidate < count; candidate += 1) {
-    if (getItemKey(candidate) === anchor.key) index = candidate;
+  let index = indexOfKey(instance, anchor.key, anchor.index);
+  let offsetPx = 0;
+  if (index < 0 && resolveLostAnchor) {
+    const resolved = resolveLostAnchor(String(anchor.key));
+    if (resolved) {
+      index = indexOfKey(instance, resolved.rowKey, anchor.index);
+      offsetPx = Math.max(-anchor.offsetInRow, resolved.offsetPx);
+      if (index >= 0 && resolved.measureOffsetPx) {
+        onResolvedMeasure?.({ appliedOffsetPx: offsetPx, measureOffsetPx: resolved.measureOffsetPx });
+      }
+    }
   }
   if (index < 0) return 0;
   // Rebuild measurements for the anchored offset.
   instance.getVirtualItemForOffset(anchor.start);
   const row = instance.measurementsCache[index];
-  return row ? row.start - anchor.start - originDelta : 0;
+  return row ? row.start + offsetPx - anchor.start - originDelta : 0;
 }
 
 /** Skipped chrome anchors to the next accepted row with a negative offset. */
@@ -320,16 +356,22 @@ export function transcriptReadingPosition(
 export function transcriptOffsetForPosition(
   instance: TranscriptVirtualizer,
   position: TranscriptReadingPosition,
+  resolveLostAnchor?: (rowKey: string) => TranscriptAnchorResolution | undefined,
 ): number | null {
-  const { count, getItemKey } = instance.options;
-  for (let index = 0; index < count; index += 1) {
-    if (String(getItemKey(index)) !== position.rowKey) continue;
-    // Any offset lookup rebuilds measurements for the current options.
-    instance.getVirtualItemForOffset(0);
-    const row = instance.measurementsCache[index];
-    return row ? Math.max(0, row.start + position.rowOffsetPx) : null;
+  let index = indexOfKey(instance, position.rowKey, -1);
+  let rowOffset = position.rowOffsetPx;
+  if (index < 0 && resolveLostAnchor) {
+    const resolved = resolveLostAnchor(position.rowKey);
+    if (resolved) {
+      index = indexOfKey(instance, resolved.rowKey, -1);
+      rowOffset = Math.max(0, resolved.offsetPx + position.rowOffsetPx);
+    }
   }
-  return null;
+  if (index < 0) return null;
+  // Any offset lookup rebuilds measurements for the current options.
+  instance.getVirtualItemForOffset(0);
+  const row = instance.measurementsCache[index];
+  return row ? Math.max(0, row.start + rowOffset) : null;
 }
 
 type TranscriptRowMeasurement = {
@@ -355,7 +397,13 @@ export type CreateTranscriptVirtualizerOptions<
   placementBasis?: () => unknown;
   /** Content revision per row; unmounted rows re-estimate when their content changes. */
   contentRevision?: (item: T) => string;
+  /** Finds the row that now carries a vanished anchor's content, such as a regrouped span. */
+  resolveLostAnchor?: (rowKey: string) => TranscriptAnchorResolution | undefined;
   originPx?: () => number;
+  /** Unloaded message ordinals on each side of the resident window. */
+  unloadedOrds?: () => TranscriptUnloadedOrds;
+  /** Message-backed resident row count and ordinal span, for sizing unloaded runways. */
+  residentRowSpan?: () => { count: number; ordSpan: number };
   minimumBufferRows?: number;
   bufferViewports?: number;
   observeElementRect?: VirtualizerOptions<
@@ -390,14 +438,49 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
     if (!item) return 72;
     return opts.rowSizeHint?.(item) ?? transcriptRowEstimatedHeight(item);
   };
+  const [measurementEpoch, setMeasurementEpoch] = createSignal(0);
+  const virtualizerRef: { current?: TranscriptVirtualizer } = {};
+  const residentHeight = (): number => {
+    const count = opts.items().length;
+    if (count === 0) return 0;
+    let total = 0;
+    for (let index = 0; index < count; index += 1) {
+      const item = opts.items()[index];
+      const cached = item ? virtualizerRef.current?.itemSizeCache.get(item.key) : undefined;
+      total += cached ?? estimatedSize(index);
+    }
+    return total;
+  };
+  const runwayBudget = createTranscriptRunwayBudget();
+  const runway = createMemo<TranscriptRunwayState>(() => {
+    measurementEpoch();
+    const items = opts.items();
+    const unloaded = opts.unloadedOrds?.() ?? { before: 0, after: 0 };
+    const span = opts.residentRowSpan?.() ?? { count: items.length, ordSpan: items.length };
+    const heightPx = residentHeight();
+    const viewport = opts.scrollElement();
+    const viewportHeightPx =
+      virtualizerRef.current?.scrollRect?.height ||
+      viewport?.clientHeight ||
+      TRANSCRIPT_VIRTUAL_INITIAL_VIEWPORT_HEIGHT_PX;
+    const scrollOffsetPx =
+      virtualizerRef.current?.scrollOffset ??
+      viewport?.scrollTop ??
+      0;
+    return runwayBudget.observe({
+      unloaded,
+      residentRowCount: span.count,
+      residentOrdSpan: span.ordSpan,
+      residentHeightPx: heightPx,
+      scrollOffsetPx,
+      viewportHeightPx,
+      following: unloaded.after === 0,
+    });
+  });
   const initialEndOffset = (): number => {
     const count = opts.items().length;
     if (count === 0) return 0;
-    // Seams live inside each row's box, so the extent is the sum of row sizes.
-    let total = 0;
-    for (let index = 0; index < count; index += 1) {
-      total += estimatedSize(index);
-    }
+    const total = runway().beforePx + residentHeight() + runway().afterPx;
     const viewportHeight =
       opts.scrollElement()?.clientHeight ||
       TRANSCRIPT_VIRTUAL_INITIAL_VIEWPORT_HEIGHT_PX;
@@ -406,7 +489,6 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
       total - viewportHeight,
     );
   };
-  const [measurementEpoch, setMeasurementEpoch] = createSignal(0);
   let disposed = false;
   onCleanup(() => { disposed = true; });
   let measurementRefreshQueued = false;
@@ -453,7 +535,6 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
     }
     return size;
   };
-  const virtualizerRef: { current?: TranscriptVirtualizer } = {};
   const viewportBufferPx = (): number => {
     const viewportHeight =
       virtualizerRef.current?.scrollRect?.height ||
@@ -505,6 +586,8 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
       return rangeExtractor();
     },
     get scrollMargin() { return opts.originPx?.() ?? 0; },
+    get paddingStart() { return runway().beforePx; },
+    get paddingEnd() { return runway().afterPx; },
     measureElement: measureAndRefreshRange,
     // Each adjustment is relative to the current virtual offset.
     scrollToFn: (offset, { adjustments, behavior }, instance) => {
@@ -535,6 +618,36 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
       opts.observeElementOffset ?? observeTranscriptScrollOffset,
     onChange: opts.onChange,
   }) as MeasuredTranscriptVirtualizer;
+  virtualizer.runway = runway;
+  virtualizer.prepareLanding = (targetOffsetPx: number) => {
+    runwayBudget.prepareLanding(
+      targetOffsetPx,
+      opts.originPx?.() ?? 0,
+      residentHeight(),
+    );
+  };
+  virtualizer.residentExtent = () => {
+    virtualizer.getVirtualItemForOffset(0);
+    const cache = virtualizer.measurementsCache;
+    if (cache.length === 0) {
+      const start = (opts.originPx?.() ?? 0) + runway().beforePx;
+      return { startPx: start, endPx: start };
+    }
+    return {
+      startPx: cache[0]!.start,
+      endPx: cache[cache.length - 1]!.end,
+    };
+  };
+  virtualizer.rowRangeWithin = (topPx: number, bottomPx: number) => {
+    if (virtualizer.options.count === 0) return null;
+    const first = virtualizer.getVirtualItemForOffset(Math.max(0, topPx));
+    const last = virtualizer.getVirtualItemForOffset(Math.max(0, bottomPx));
+    if (!first || !last) return null;
+    return {
+      firstIndex: Math.min(first.index, last.index),
+      lastIndex: Math.max(first.index, last.index),
+    };
+  };
   const synchronizeScrollOffset = () => {
     const viewport = opts.scrollElement();
     const captured = viewport && scrollportMotionForViewport(viewport)?.offsetY();
@@ -621,8 +734,22 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
     return adjust;
   };
   virtualizerRef.current = virtualizer;
+  let pendingAnchorMeasure: { appliedOffsetPx: number; measureOffsetPx: () => number | undefined } | undefined;
+  let rowDriftQueued = false;
   // Carry the reading offset immediately; shift the DOM after rows mount.
   const carryRowDrift = () => {
+    rowDriftQueued = false;
+    const anchorMeasure = pendingAnchorMeasure;
+    pendingAnchorMeasure = undefined;
+    // Reading DOM offsets forces layout once after newly regrouped span entries mount.
+    const measured = anchorMeasure?.measureOffsetPx();
+    if (anchorMeasure && measured !== undefined) {
+      const correction = measured - anchorMeasure.appliedOffsetPx;
+      if (correction !== 0 && virtualizer.scrollOffset !== null) {
+        virtualizer.scrollOffset = Math.max(0, virtualizer.scrollOffset + correction);
+        pendingRowDrift += correction;
+      }
+    }
     const drift = pendingRowDrift;
     pendingRowDrift = 0;
     if (disposed || drift === 0) return;
@@ -668,9 +795,18 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
   untrack(collectRevisionChanges);
   const carryRowChanges = (anchor: ReadingAnchor | null, countBefore: number, originBefore: number) => {
     if (!anchor) return;
+    pendingAnchorMeasure = undefined;
     // Carry changes within the transcript; outer chrome moves the origin separately.
-    const drift = readingAnchorDrift(virtualizer, anchor, virtualizer.options.scrollMargin - originBefore);
-    if (drift === 0 || virtualizer.scrollOffset === null) return;
+    const drift = readingAnchorDrift(
+      virtualizer,
+      anchor,
+      virtualizer.options.scrollMargin - originBefore,
+      opts.resolveLostAnchor,
+      (measure) => {
+        pendingAnchorMeasure = measure;
+      },
+    );
+    if ((drift === 0 && !pendingAnchorMeasure) || virtualizer.scrollOffset === null) return;
     if (Math.abs(drift) >= VIRTUAL_SHIFT_REPORT_PX) {
       denScrollDebugLog("scroll", "virtual-shift", {
         cause: "rows",
@@ -683,7 +819,10 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
       });
     }
     virtualizer.scrollOffset = Math.max(0, virtualizer.scrollOffset + drift);
-    if (pendingRowDrift === 0) queueMicrotask(carryRowDrift);
+    if (!rowDriftQueued) {
+      rowDriftQueued = true;
+      queueMicrotask(carryRowDrift);
+    }
     pendingRowDrift += drift;
   };
   const setOptions = virtualizer.setOptions;

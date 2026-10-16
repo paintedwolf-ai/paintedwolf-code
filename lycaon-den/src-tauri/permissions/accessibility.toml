@@ -2,3 +2,13 @@
 identifier = "allow-accessibility-preferred-text-size"
 description = "Read the macOS Accessibility text-size category once at boot; later changes arrive on the accessibility://text-size-changed event."
 commands.allow = ["accessibility_preferred_text_size"]
+
+[[permission]]
+identifier = "allow-den-web-engine"
+description = "Read the web engine and version the shell renders the app with."
+commands.allow = ["den_web_engine"]
+
+[[permission]]
+identifier = "allow-den-announce"
+description = "Speak a transcript announcement through the window's accessibility object where the web view's live regions cannot reach the screen reader."
+commands.allow = ["den_announce"]

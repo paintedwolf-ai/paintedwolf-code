@@ -250,8 +250,8 @@ func TestFormatCloseoutGroundingReject_rendersFullCitationKick(t *testing.T) {
 	testutil.FailErr(t, "guard.FormatCloseoutGroundingReject failed", err)
 	for _, want := range []string{
 		"[host:coordinator-citation-grounding]",
-		"Emit only the citations fence",
-		"Tool calls are unavailable during this citation-only repair",
+		"emit only the citations fence",
+		"Repair citations using existing observations.",
 		"Attempt 1/3",
 		draft,
 		"Pinned body:",

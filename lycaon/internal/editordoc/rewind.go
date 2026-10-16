@@ -13,21 +13,22 @@ import (
 )
 
 // WithSourceRewind excludes document commands from preflight through publication.
-func (s *Service) WithSourceRewind(ctx context.Context, p *project.Project, files []sourceledger.RewindFile, apply func() error) error {
-	return s.sourceRewindDocuments(ctx, p, files, "apply", apply)
+func (r *RewindService) WithSourceRewind(ctx context.Context, p *project.Project, files []sourceledger.RewindFile, apply func() error) error {
+	return r.sourceRewindDocuments(ctx, p, files, "apply", apply)
 }
 
 // RecoverSourceRewind reconciles an already applied source transaction. Later
 // document edits are preserved through the published replica when it rejoins.
-func (s *Service) RecoverSourceRewind(ctx context.Context, p *project.Project, files []sourceledger.RewindFile, apply func() error) error {
-	return s.sourceRewindDocuments(ctx, p, files, "recover", apply)
+func (r *RewindService) RecoverSourceRewind(ctx context.Context, p *project.Project, files []sourceledger.RewindFile, apply func() error) error {
+	return r.sourceRewindDocuments(ctx, p, files, "recover", apply)
 }
 
-func (s *Service) RollbackSourceRewind(ctx context.Context, p *project.Project, files []sourceledger.RewindFile, apply func() error) error {
-	return s.sourceRewindDocuments(ctx, p, files, "rollback", apply)
+func (r *RewindService) RollbackSourceRewind(ctx context.Context, p *project.Project, files []sourceledger.RewindFile, apply func() error) error {
+	return r.sourceRewindDocuments(ctx, p, files, "rollback", apply)
 }
 
-func (s *Service) sourceRewindDocuments(ctx context.Context, p *project.Project, files []sourceledger.RewindFile, mode string, apply func() error) error {
+func (r *RewindService) sourceRewindDocuments(ctx context.Context, p *project.Project, files []sourceledger.RewindFile, mode string, apply func() error) error {
+	s := r.s
 	s.ops.Lock()
 	defer s.ops.Unlock()
 	docs, err := s.store.ListProject(ctx, p.ID, "")
@@ -109,7 +110,8 @@ func rewindDocumentIssues(docs []*Document, selected map[string]sourceledger.Rew
 	return issues
 }
 
-func (s *Service) CheckSourceRewind(ctx context.Context, p *project.Project, files []sourceledger.RewindFile) ([]sourceledger.RewindIssue, error) {
+func (r *RewindService) CheckSourceRewind(ctx context.Context, p *project.Project, files []sourceledger.RewindFile) ([]sourceledger.RewindIssue, error) {
+	s := r.s
 	s.ops.RLock()
 	defer s.ops.RUnlock()
 	docs, err := s.store.ListProject(ctx, p.ID, "")
@@ -119,7 +121,8 @@ func (s *Service) CheckSourceRewind(ctx context.Context, p *project.Project, fil
 	return rewindDocumentIssues(docs, rewindDocuments(docs, files)), nil
 }
 
-func (s *Service) reconcileRewoundDocument(ctx context.Context, p *project.Project, id, expectedSHA, personID string, checkpoint []byte) error {
+func (w semanticRewinder) reconcileRewoundDocument(ctx context.Context, p *project.Project, id, expectedSHA, personID string, checkpoint []byte) error {
+	s := w.s
 	unlock := s.docLocks.lock(documentLockKey(id))
 	defer unlock()
 	d, err := s.store.Get(ctx, id)

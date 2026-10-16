@@ -558,6 +558,15 @@ host_facts:
  - name: paintedwolf.process_running
    type: bool
    observation: True when the invocation's process was still running when observed.
+ - name: paintedwolf.process_timed_out
+   type: bool
+   observation: True when a terminal invocation reached its host deadline. False while running or when the terminal reason is unknown.
+ - name: paintedwolf.process_stopped
+   type: bool
+   observation: True when the host recorded a terminal invocation as stopped. False while running or when the terminal reason is unknown.
+ - name: paintedwolf.process_exited
+   type: bool
+   observation: True when the host recorded a terminal invocation as exited, independently of success. False while running or when the terminal reason is unknown.
  - name: paintedwolf.sandbox_refusals
    type: list<string>
    observation: Each operation the kernel reported refusing the invocation's processes, as operation, target, and process; empty when none was reported or the host cannot read the reports.
@@ -735,6 +744,14 @@ host_facts:
    type: bool
  - name: paintedwolf.tool_loadable
    type: bool
+ - name: paintedwolf.native_replacement_tools
+   type: list<string>
+ - name: paintedwolf.native_replacement_exact
+   type: bool
+ - name: paintedwolf.native_replacement_manual
+   type: bool
+ - name: paintedwolf.replacement_calls_available
+   type: bool
  - name: paintedwolf.tool_discovery_available
    type: bool
  - name: paintedwolf.offered_tools
@@ -802,6 +819,10 @@ host_facts:
  - name: paintedwolf.spill_readable
    type: bool
  - name: paintedwolf.can_read
+   type: bool
+ - name: paintedwolf.can_write
+   type: bool
+ - name: paintedwolf.can_edit
    type: bool
  - name: paintedwolf.can_list_dir
    type: bool
@@ -1025,6 +1046,8 @@ host_facts:
    type: bool
  - name: paintedwolf.size
    type: string
+ - name: paintedwolf.failure_source_unchanged
+   type: bool
  - name: paintedwolf.source_revision
    type: string
  - name: paintedwolf.spill_bytes
