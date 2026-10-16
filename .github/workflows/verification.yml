@@ -17,7 +17,8 @@ on:
         type: string
 
 # The caller's token permissions apply: only merge-group CI grants actions write,
-# so a removed group's jobs can cancel their own run.
+# so a removed group's jobs can cancel their own run. Actions read lets the plan
+# order lanes and balance shards by main's measured durations.
 
 env:
   # MLX 0.32 Metal kernels need the Xcode 26 toolchain; Linux runners ignore it.
@@ -30,6 +31,7 @@ jobs:
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
       max-parallel: ${{ steps.plan.outputs.max-parallel }}
+      package-timings: ${{ steps.plan.outputs.package-timings }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -40,9 +42,17 @@ jobs:
           PROFILE: ${{ inputs.profile }}
           SUITE: ${{ inputs.suite }}
           AFFECTED: ${{ inputs.affected }}
+          # Reads main's qualification receipts; without actions read access the plan uses lane budgets.
+          GH_TOKEN: ${{ github.token }}
         run: |
           args=()
           if [[ "$AFFECTED" == true ]]; then args+=(--affected); fi
+          # The fast tier is one unsharded job, which measurements would not change.
+          if [[ "$PROFILE" != fast ]]; then
+            python3 scripts/ci_verification.py timings > "$RUNNER_TEMP/timings.json"
+            args+=(--timings "$RUNNER_TEMP/timings.json")
+            echo "package-timings=$(jq -c '.packages // {}' "$RUNNER_TEMP/timings.json")" >> "$GITHUB_OUTPUT"
+          fi
           matrix="$(python3 scripts/ci_verification.py matrix "$PROFILE" --suite "$SUITE" "${args[@]}")"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "max-parallel=$(python3 scripts/ci_verification.py max-parallel "$PROFILE")" >> "$GITHUB_OUTPUT"
@@ -93,6 +103,7 @@ jobs:
           SHARD: ${{ matrix.shard }}
           # Admission runs with loopback networking only.
           OFFLINE: ${{ inputs.profile == 'fast' || inputs.profile == 'integration' }}
+          PW_CI_PACKAGE_TIMINGS: ${{ needs.plan.outputs.package-timings }}
           PYTHONPATH: scripts
         run: |
           if [[ "$OFFLINE" == true ]]; then

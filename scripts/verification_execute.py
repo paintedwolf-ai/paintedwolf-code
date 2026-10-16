@@ -18,6 +18,7 @@ from verification_resources import (Reservation, blocked_reason, bounded_environ
                                     order_of, profile)
 from verification_health import identity
 from verification_cache import Maintenance
+from verification_shards import measured_durations, shard_packages
 from verification_state import read_json, read_state, write_json
 
 MAX_ADDED_PACKAGES = 16
@@ -100,19 +101,6 @@ def constraint_tags(path):
     except OSError:
         pass
     return set()
-
-
-def shard_packages(packages, shard):
-    """A hosted lane split into shards (k/N) verifies every Nth package of the sorted selection."""
-    if not shard:
-        return packages
-    index, separator, count = shard.partition("/")
-    if not (separator and index.isdigit() and count.isdigit() and 1 <= int(index) <= int(count)):
-        raise ValueError(f"PW_GO_SHARD must be k/N with 1 <= k <= N, not {shard!r}")
-    selected = packages[int(index) - 1::int(count)]
-    if not selected:
-        raise ValueError(f"Shard {shard} selects none of {len(packages)} packages")
-    return selected
 
 
 def excluded_tier_tests(records, tiers, enabled):
@@ -235,6 +223,7 @@ class Executor:
         self.progress = {}
         self.catalog = catalog()
         self.history = read_history(queue)
+        self.measured = measured_durations()
         self.cache_maintenance = Maintenance(queue, dict(os.environ))
         self.store = reuse.default_store()
         # Every member shares one declared environment; the requester recorded its identity.
@@ -320,7 +309,7 @@ class Executor:
                 raise ValueError(f"Invalid package selection; {log}: {error}") from error
             if not packages:
                 raise ValueError(f"Package selection matched no packages; {log}")
-            packages = shard_packages(packages, os.environ.get("PW_GO_SHARD", ""))
+            packages = shard_packages(packages, os.environ.get("PW_GO_SHARD", ""), self.measured)
             self.selections[key] = packages
             excluded = excluded_tier_tests(records, tier_tags(self.catalog),
                                            flag_tags(stage["options"], stage["flags"]))
@@ -412,8 +401,9 @@ class Executor:
                 "workers": demand(spec, self.plan["batch"]["workers"]), "order": order_of(request)}
 
     def ordered_packages(self, stage, packages):
-        """Longest packages start first, so the package that finishes last is not also the longest."""
-        durations = reuse.package_durations(self.queue, stage_key(stage))
+        """Longest packages start first, so the package that finishes last is not also the longest. This host's
+        own history takes precedence over the hosted plan's measurements."""
+        durations = {**self.measured, **reuse.package_durations(self.queue, stage_key(stage))}
         return sorted(packages, key=lambda p: (-durations.get(p, float("inf")), p))
 
     def start_stage(self, peers, stage_id, pool):

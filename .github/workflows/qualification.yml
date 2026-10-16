@@ -17,6 +17,10 @@ concurrency:
 jobs:
   verification:
     uses: ./.github/workflows/verification.yml
+    # Reads the measured durations that plan the matrix.
+    permissions:
+      contents: read
+      actions: read
     with:
       profile: check
 
