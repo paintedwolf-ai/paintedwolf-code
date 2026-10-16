@@ -42,13 +42,14 @@ func rejectedProgressCall(tool string, args map[string]any) map[string]any {
 	if !ok || path == "" || !utf8.ValidString(path) {
 		return nil
 	}
-	encoded, _ := json.Marshal(struct {
-		Tool            string            `json:"tool"`
-		ArgumentExcerpt map[string]string `json:"argument_excerpt"`
-	}{
-		Tool:            tool,
-		ArgumentExcerpt: map[string]string{"path": path},
-	})
+	type pathExcerpt struct {
+		Path string `json:"path"`
+	}
+	type callExcerpt struct {
+		Tool            string      `json:"tool"`
+		ArgumentExcerpt pathExcerpt `json:"argument_excerpt"`
+	}
+	encoded, _ := json.Marshal(callExcerpt{Tool: tool, ArgumentExcerpt: pathExcerpt{Path: path}}) //nolint:errchkjson // String-only excerpt always encodes.
 	if len(encoded) > 512 {
 		return nil
 	}
