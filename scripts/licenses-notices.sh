@@ -45,6 +45,10 @@ fi
 if [[ ! -x "${CARGO_ABOUT}" ]]; then
   install_cargo_about
 fi
+# --tools provisions the pinned tools for a later offline run without generating notices.
+if [[ "${1:-}" == "--tools" ]]; then
+  exit 0
+fi
 
 if ! command -v bun >/dev/null 2>&1; then
   echo "error: bun required for licenses:notices" >&2
@@ -119,13 +123,15 @@ echo "licenses:notices — embedded document core crates" >&2
 )
 
 echo "licenses:notices — decision engine crates" >&2
-# Apple silicon ships the widest feature set. MLX's C++ is outside cargo's view;
-# bundled-binaries.yaml carries it.
-DECIDE_FEATURES="$(BIALY_FEATURES="" bash "${ROOT}/scripts/decide-features.sh" Darwin/arm64)"
-if [[ ",${DECIDE_FEATURES}," != *",mlx,"* ]]; then
-  echo "error: decision engine notice features (${DECIDE_FEATURES:-none}) omit mlx" >&2
-  exit 1
-fi
+# The notices cover every shipped engine: MLX on Apple silicon, Vulkan on Linux.
+# MLX's C++ is outside cargo's view; bundled-binaries.yaml carries it.
+DECIDE_FEATURES="$(BIALY_FEATURES="" bash "${ROOT}/scripts/decide-features.sh" Darwin/arm64),$(BIALY_FEATURES="" bash "${ROOT}/scripts/decide-features.sh" Linux/x86_64)"
+for feature in mlx vulkan; do
+  if [[ ",${DECIDE_FEATURES}," != *",${feature},"* ]]; then
+    echo "error: decision engine notice features (${DECIDE_FEATURES}) omit ${feature}" >&2
+    exit 1
+  fi
+done
 (
   cd "${GO_DIR}/internal/decide/native"
   "${CARGO_ABOUT}" generate --fail --format json --config "${TAURI_DIR}/about.toml" \

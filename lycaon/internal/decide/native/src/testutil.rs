@@ -197,3 +197,65 @@ pub(crate) fn write_tiny_head(dir: &Path, label: &str, backbone: &str) -> PathBu
     write_safetensors(&path, &tensors, Some(&meta));
     path
 }
+
+/// Assert `other` answers what the CPU reference answers, within `tolerance`, on every question
+/// type and on ranking with a loaded head file. Both engines load the tiny checkpoint in `dir`
+/// and the head file `head` as `code-rank`.
+pub(crate) fn assert_agrees_with_cpu(
+    dir: &Path,
+    head: &Path,
+    other: &crate::engine::Engine,
+    tolerance: f32,
+) {
+    use crate::engine::{Answer, Engine, EngineOptions, HEAD_CODE_RANK, HEAD_TURN_LOAD};
+    use crate::question::Question;
+    use indexmap::IndexMap;
+
+    let reference = Engine::load(&EngineOptions {
+        model_dir: dir.to_path_buf(),
+        device: crate::device::DeviceChoice::Cpu,
+        dtype: "f32".into(),
+        heads: vec![(HEAD_CODE_RANK.to_string(), head.to_path_buf())],
+        ..Default::default()
+    })
+    .expect("loading the CPU reference");
+    let questions: IndexMap<String, Question> = [
+        (
+            "pick".to_string(),
+            Question::choice("pick one")
+                .bare_option("alpha")
+                .bare_option("beta")
+                .bare_option("gamma")
+                .into(),
+        ),
+        ("tools".to_string(), Question::multi("which?").bare_option("a").bare_option("b").into()),
+        ("level".to_string(), Question::score("how much").level("a").level("b").level("c").into()),
+        ("yes".to_string(), Question::noul("the statement holds").into()),
+    ]
+    .into_iter()
+    .collect();
+    let values = |answer: &Answer| -> Vec<f32> {
+        let mut v: Vec<f32> = answer.probabilities.iter().flatten().map(|(_, p)| *p).collect();
+        v.extend(answer.distribution.iter().flatten());
+        v.extend(answer.noul);
+        v.extend(answer.score);
+        v
+    };
+    let device = &other.identity().device;
+    let state = serde_json::Value::String("hello world of tiny tokens".into());
+    let a = reference.decide(HEAD_CODE_RANK, &state, &questions).unwrap();
+    let b = other.decide(HEAD_CODE_RANK, &state, &questions).unwrap();
+    for (id, x) in &a {
+        for (p, q) in values(x).iter().zip(values(&b[id])) {
+            assert!((p - q).abs() < tolerance, "{id}: cpu {p} vs {device} {q}");
+        }
+    }
+    let candidates = ["config.go".to_string(), "README.md".to_string(), "hello world".to_string()];
+    let ra = reference.rank(HEAD_CODE_RANK, "find the config loader", &candidates).unwrap();
+    let rb = other.rank(HEAD_CODE_RANK, "find the config loader", &candidates).unwrap();
+    assert_eq!(ra.len(), rb.len());
+    for (x, y) in ra.iter().zip(&rb) {
+        assert!((x - y).abs() < tolerance, "rank: cpu {x} vs {device} {y}");
+    }
+    assert!(other.decide(HEAD_TURN_LOAD, &state, &questions).is_err(), "unloaded head answered");
+}

@@ -113,8 +113,9 @@ class HostedPlanTests(unittest.TestCase):
         self.assertFalse({"webkit", "webkit-gtk"} & {row["lane"] for row in ci.matrix("check")["include"]})
         self.assertEqual({row["lane"] for row in ci.matrix("nightly", "e2e")["include"]},
                          {"webkit", "webkit-gtk", "vulnerability-freshness"})
+        # Only a platform lane takes an end-to-end check into merge admission.
         admitted = {row["lane"] for row in ci.matrix("integration")["include"]}
-        self.assertEqual({name for name in admitted if ci.lanes()[name]["suite"] == "e2e"}, set())
+        self.assertEqual({name for name in admitted if ci.lanes()[name]["suite"] == "e2e"}, {"webkit-gtk"})
 
     def test_platform_lanes_run_beside_the_check_gate_and_never_inside_it(self):
         self.assertEqual({ci.lanes()[name]["platform"] for name in ("webkit-gtk", "confinement-arm64")}, {"linux"})
@@ -140,7 +141,7 @@ class HostedPlanTests(unittest.TestCase):
             for row in ci.matrix(profile)["include"]:
                 with self.subTest(profile=profile, lane=row["lane"]):
                     self.assertEqual(row["containers"], "den:webkit:atspi" in ci.lanes()[row["lane"]]["targets"])
-        self.assertTrue([row for row in ci.matrix("nightly")["include"] if row["containers"]])
+        self.assertTrue([row for row in ci.matrix("integration")["include"] if row["containers"]])
 
     def test_offline_lanes_learn_whether_they_need_the_pinned_browser(self):
         for profile in ci.PROFILES:

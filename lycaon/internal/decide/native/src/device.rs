@@ -1,36 +1,34 @@
 //! Choosing where to run.
 //!
-//! A device is named `auto`, `cpu`, `cuda`, `cuda:N`, `metal`, `metal:N` or `mlx`; the CLI's
-//! `--device` takes that spelling. `mlx` is Apple's runtime for the same model (the `mlx`
-//! feature, Apple silicon only); `auto` prefers it where it is compiled in.
+//! A device is named `auto`, `cpu`, `mlx`, `vulkan` or `vulkan:N`; the CLI's `--device` takes
+//! that spelling. `mlx` needs the `mlx` feature (Apple silicon) and `vulkan` the `vulkan`
+//! feature, where `N` indexes the GPUs Vulkan reports. `auto` measures every candidate this
+//! build can reach and keeps the fastest; see [`crate::select`].
 
 use std::str::FromStr;
 
-use candle_core::Device;
-
 use crate::error::{Error, Result};
 
-/// Where the model should run, before it is resolved into a candle [`Device`].
+/// Where the model should run.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum DeviceChoice {
-    /// The best accelerator this build can reach, else the CPU.
+    /// The fastest candidate that meets the speed requirement.
     #[default]
     Auto,
     Cpu,
-    /// An NVIDIA GPU, by index. Needs the `cuda` feature.
-    Cuda(usize),
-    /// An Apple GPU, by index, through candle. Needs the `metal` feature.
-    Metal(usize),
     /// Apple's MLX runtime. Needs the `mlx` feature.
     Mlx,
+    /// A Vulkan GPU, by its index among the GPUs Vulkan reports. Needs the `vulkan` feature.
+    Vulkan(usize),
 }
 
-/// A resolved choice: a candle device, or the MLX runtime.
-#[derive(Clone, Debug)]
+/// A resolved choice, ready to load a model onto.
 pub(crate) enum Selected {
-    Candle(Device),
+    Cpu,
     #[cfg(feature = "mlx")]
     Mlx,
+    #[cfg(feature = "vulkan")]
+    Vulkan(crate::vulkan::Gpu),
 }
 
 impl FromStr for DeviceChoice {
@@ -50,11 +48,10 @@ impl FromStr for DeviceChoice {
         match (kind, index) {
             ("auto", None) => Ok(DeviceChoice::Auto),
             ("cpu", None) => Ok(DeviceChoice::Cpu),
-            ("cuda" | "gpu", n) => Ok(DeviceChoice::Cuda(n.unwrap_or(0))),
-            ("metal" | "mps", n) => Ok(DeviceChoice::Metal(n.unwrap_or(0))),
             ("mlx", None) => Ok(DeviceChoice::Mlx),
+            ("vulkan", n) => Ok(DeviceChoice::Vulkan(n.unwrap_or(0))),
             _ => Err(Error::Device(format!(
-                "unknown device {s:?}; choose auto, cpu, cuda, cuda:N, metal, metal:N or mlx"
+                "unknown device {s:?}; choose auto, cpu, mlx, vulkan or vulkan:N"
             ))),
         }
     }
@@ -65,25 +62,47 @@ impl std::fmt::Display for DeviceChoice {
         match self {
             DeviceChoice::Auto => f.write_str("auto"),
             DeviceChoice::Cpu => f.write_str("cpu"),
-            DeviceChoice::Cuda(n) => write!(f, "cuda:{n}"),
-            DeviceChoice::Metal(n) => write!(f, "metal:{n}"),
             DeviceChoice::Mlx => f.write_str("mlx"),
+            DeviceChoice::Vulkan(n) => write!(f, "vulkan:{n}"),
         }
     }
 }
 
 impl DeviceChoice {
-    /// Open the device.
-    ///
-    /// `auto` takes MLX where it is compiled in, else the first accelerator that opens, else
-    /// the CPU; an explicit accelerator that is not compiled in or does not open is an error.
+    /// Open an explicit device. An accelerator that is not compiled in or does not open is an
+    /// error, never a quiet CPU run.
     pub(crate) fn select(self) -> Result<Selected> {
         match self {
-            DeviceChoice::Cpu => Ok(Selected::Candle(Device::Cpu)),
-            DeviceChoice::Cuda(n) => open_cuda(n).map(Selected::Candle),
-            DeviceChoice::Metal(n) => open_metal(n).map(Selected::Candle),
+            DeviceChoice::Auto => {
+                Err(Error::Device("auto is resolved by measuring candidates, not opened".into()))
+            }
+            DeviceChoice::Cpu => Ok(Selected::Cpu),
             DeviceChoice::Mlx => open_mlx(),
-            DeviceChoice::Auto => Ok(auto()),
+            DeviceChoice::Vulkan(n) => open_vulkan(n),
+        }
+    }
+
+    /// Every device this build can reach, in the order `auto` measures them.
+    pub(crate) fn candidates() -> Vec<DeviceChoice> {
+        let mut out = Vec::new();
+        if cfg!(feature = "mlx") {
+            out.push(DeviceChoice::Mlx);
+        }
+        #[cfg(feature = "vulkan")]
+        out.extend((0..crate::vulkan::gpus().len()).map(DeviceChoice::Vulkan));
+        out.push(DeviceChoice::Cpu);
+        out
+    }
+
+    /// What identifies this device's hardware across launches, for the cached verdict.
+    pub(crate) fn hardware_key(self) -> String {
+        match self {
+            #[cfg(feature = "vulkan")]
+            DeviceChoice::Vulkan(n) => match crate::vulkan::gpus().get(n) {
+                Some(gpu) => format!("{self} {}", gpu.key),
+                None => self.to_string(),
+            },
+            _ => self.to_string(),
         }
     }
 }
@@ -95,75 +114,45 @@ fn open_mlx() -> Result<Selected> {
 
 #[cfg(not(feature = "mlx"))]
 fn open_mlx() -> Result<Selected> {
-    Err(Error::Device("mlx was asked for, but this build has the `mlx` feature off; rebuild with `--features mlx`".into()))
+    Err(Error::Device("mlx was asked for, but this build has the `mlx` feature off".into()))
 }
 
-#[cfg(feature = "cuda")]
-fn open_cuda(n: usize) -> Result<Device> {
-    Device::new_cuda(n).map_err(|e| Error::Device(format!("cannot open cuda:{n}: {e}")))
+#[cfg(feature = "vulkan")]
+fn open_vulkan(n: usize) -> Result<Selected> {
+    let gpus = crate::vulkan::gpus();
+    match gpus.get(n) {
+        Some(gpu) => Ok(Selected::Vulkan(gpu.clone())),
+        None => Err(Error::Device(format!(
+            "vulkan:{n} was asked for, but Vulkan reports {} GPU(s)",
+            gpus.len()
+        ))),
+    }
 }
 
-#[cfg(not(feature = "cuda"))]
-fn open_cuda(n: usize) -> Result<Device> {
+#[cfg(not(feature = "vulkan"))]
+fn open_vulkan(n: usize) -> Result<Selected> {
     Err(Error::Device(format!(
-        "cuda:{n} was asked for, but this build has the `cuda` feature off; rebuild with \
-         `--features cuda`"
+        "vulkan:{n} was asked for, but this build has the `vulkan` feature off"
     )))
 }
 
-#[cfg(feature = "metal")]
-fn open_metal(n: usize) -> Result<Device> {
-    Device::new_metal(n).map_err(|e| Error::Device(format!("cannot open metal:{n}: {e}")))
-}
-
-#[cfg(not(feature = "metal"))]
-fn open_metal(n: usize) -> Result<Device> {
-    Err(Error::Device(format!(
-        "metal:{n} was asked for, but this build has the `metal` feature off; rebuild with \
-         `--features metal`"
-    )))
-}
-
-/// MLX where compiled in, then CUDA, then Metal, then the CPU, warning about any compiled-in
-/// accelerator that failed.
-fn auto() -> Selected {
-    #[cfg(feature = "mlx")]
-    return Selected::Mlx;
-    #[cfg(not(feature = "mlx"))]
-    Selected::Candle(auto_candle())
-}
-
-#[cfg(not(feature = "mlx"))]
-fn auto_candle() -> Device {
-    #[cfg(feature = "cuda")]
-    match Device::new_cuda(0) {
-        Ok(d) => return d,
-        Err(e) => {
-            eprintln!("bialy: built with `cuda` but cuda:0 did not open ({e}); trying next")
-        }
-    }
-    #[cfg(feature = "metal")]
-    match Device::new_metal(0) {
-        Ok(d) => return d,
-        Err(e) => {
-            eprintln!("bialy: built with `metal` but metal:0 did not open ({e}); trying next")
-        }
-    }
-    #[cfg(any(feature = "cuda", feature = "metal"))]
-    eprintln!("bialy: no accelerator available; running on the CPU");
-    Device::Cpu
-}
-
-/// A short name for a device, for logs and the CLI.
+/// A short name for a resolved device, for logs and the handshake.
 pub(crate) fn describe(selected: &Selected) -> String {
     match selected {
-        Selected::Candle(device) => match device.location() {
-            candle_core::DeviceLocation::Cpu => "cpu".to_string(),
-            candle_core::DeviceLocation::Cuda { gpu_id } => format!("cuda:{gpu_id}"),
-            candle_core::DeviceLocation::Metal { .. } => "metal".to_string(),
-        },
+        Selected::Cpu => "cpu".to_string(),
         #[cfg(feature = "mlx")]
         Selected::Mlx => "mlx".to_string(),
+        #[cfg(feature = "vulkan")]
+        Selected::Vulkan(gpu) => format!("vulkan:{}", gpu.index),
+    }
+}
+
+/// The hardware's own name, when it has one worth reporting.
+pub(crate) fn adapter(selected: &Selected) -> String {
+    match selected {
+        #[cfg(feature = "vulkan")]
+        Selected::Vulkan(gpu) => gpu.name.clone(),
+        _ => String::new(),
     }
 }
 
@@ -176,30 +165,28 @@ mod tests {
         for (s, want) in [
             ("auto", DeviceChoice::Auto),
             ("CPU", DeviceChoice::Cpu),
-            ("cuda", DeviceChoice::Cuda(0)),
-            ("cuda:1", DeviceChoice::Cuda(1)),
-            ("gpu", DeviceChoice::Cuda(0)),
-            ("metal", DeviceChoice::Metal(0)),
-            ("mps:2", DeviceChoice::Metal(2)),
             ("mlx", DeviceChoice::Mlx),
+            ("vulkan", DeviceChoice::Vulkan(0)),
+            ("vulkan:1", DeviceChoice::Vulkan(1)),
         ] {
             assert_eq!(s.parse::<DeviceChoice>().unwrap(), want, "{s}");
         }
-        for bad in ["tpu", "cuda:x", "cpu:1", "mlx:1", ""] {
+        for bad in ["tpu", "cuda", "metal", "vulkan:x", "cpu:1", "mlx:1", ""] {
             assert!(bad.parse::<DeviceChoice>().is_err(), "{bad}");
         }
-        assert_eq!(DeviceChoice::Cuda(1).to_string(), "cuda:1");
+        assert_eq!(DeviceChoice::Vulkan(1).to_string(), "vulkan:1");
     }
 
     #[test]
-    fn the_cpu_always_resolves() {
-        assert!(matches!(DeviceChoice::Cpu.select().unwrap(), Selected::Candle(d) if d.is_cpu()));
+    fn the_cpu_always_resolves_and_is_always_a_candidate() {
+        assert!(matches!(DeviceChoice::Cpu.select().unwrap(), Selected::Cpu));
+        assert_eq!(DeviceChoice::candidates().last(), Some(&DeviceChoice::Cpu));
     }
 
-    #[cfg(not(feature = "cuda"))]
+    #[cfg(not(feature = "vulkan"))]
     #[test]
     fn an_explicit_gpu_without_its_feature_is_an_error_not_a_cpu_run() {
-        let err = DeviceChoice::Cuda(0).select().unwrap_err();
-        assert!(matches!(err, Error::Device(ref m) if m.contains("--features cuda")), "{err}");
+        let err = DeviceChoice::Vulkan(0).select().err().unwrap();
+        assert!(matches!(err, Error::Device(ref m) if m.contains("`vulkan` feature")), "{err}");
     }
 }

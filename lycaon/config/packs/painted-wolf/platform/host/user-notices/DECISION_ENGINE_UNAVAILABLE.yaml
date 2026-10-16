@@ -9,6 +9,10 @@ suggested_action: >-
   {% if reason == "model_missing" -%}
   The model that ships with the app is missing or incomplete. Reinstall the
   app, then reopen it.
+  {%- elif reason == "no_capable_device" -%}
+  This computer has no graphics hardware that runs the model fast enough. A
+  current graphics driver with Vulkan support may help; reopen the app after
+  installing one.
   {%- elif reason == "disabled" -%}
   The engine is switched off by configuration. Remove the override to turn it
   back on.
@@ -24,6 +28,11 @@ scenarios:
       reason: model_missing
     expect_contains:
       - Reinstall
+  - id: no_capable_device
+    vars:
+      reason: no_capable_device
+    expect_contains:
+      - Vulkan
   - id: disabled
     vars:
       reason: disabled

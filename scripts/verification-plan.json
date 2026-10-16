@@ -43,7 +43,8 @@
       "den:typecheck",
       "den:lint",
       "den:test",
-      "den:test:rust"
+      "den:test:rust",
+      "decide:test"
     ],
     "check:drift": [
       "codegen:wire-enums:check",
@@ -872,7 +873,8 @@
     },
     "native": {
       "targets": [
-        "den:test:rust"
+        "den:test:rust",
+        "decide:test"
       ],
       "minutes": 90,
       "profiles": [
@@ -901,6 +903,7 @@
       ],
       "minutes": 30,
       "profiles": [
+        "integration",
         "nightly",
         "release"
       ],
