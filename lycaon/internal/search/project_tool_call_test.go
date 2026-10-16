@@ -236,3 +236,16 @@ func TestProjectToolMessageDoesNotSubstituteRevealIdentity(t *testing.T) {
 		t.Fatalf("rows = %+v", rows)
 	}
 }
+
+func TestToolResultPathUsesTheRecordedArgumentSnapshot(t *testing.T) {
+	msg := api.Message{ID: "result", Role: api.MessageRoleTool, Content: `{"path":"other.go","content":"observed"}`, EvidenceHandles: []string{"read#1"}, ToolResult: &api.ToolResult{Tool: "read", ToolCallID: "call", ToolArgs: map[string]any{"path": "original.go"}}}
+	rows := ProjectToolMessage("project", "session", msg, "read")
+	if len(rows) != 1 || rows[0].Path != "original.go" || rows[0].Handle != "read#1" {
+		t.Fatalf("recorded target missing: %+v", rows)
+	}
+	msg.ToolResult.ToolArgs = nil
+	rows = ProjectToolMessage("project", "session", msg, "read")
+	if len(rows) != 1 || rows[0].Path != "" {
+		t.Fatal("result text became path authority")
+	}
+}

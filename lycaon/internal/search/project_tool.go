@@ -84,6 +84,10 @@ func rawToolResultRows(projectID, sessionID string, msg api.Message, toolName, r
 	if len(handles) == 0 {
 		handles = append(handles, "")
 	}
+	path := ""
+	if msg.ToolResult != nil {
+		path = toolCallPath(msg.ToolResult.ToolArgs)
+	}
 	rows := make([]IndexRow, 0, len(handles))
 	for _, handle := range handles {
 		suffix := "result"
@@ -99,6 +103,7 @@ func rawToolResultRows(projectID, sessionID string, msg api.Message, toolName, r
 			MessageID: msg.ID,
 			SourceRef: revealRef,
 			Handle:    handle,
+			Path:      path,
 			Tool:      toolName,
 			Shape:     "raw",
 			Role:      string(api.MessageRoleTool),
