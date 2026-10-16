@@ -2,7 +2,6 @@ package session
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -56,12 +55,12 @@ func TestManualCompactionDoesNotHoldSessionStopAdmission(t *testing.T) {
 		mgr.Chats.Gate.Finish(sess.ID, flight, nil)
 		t.Fatal("manual compaction blocked stop admission")
 	}
-	if err := <-done; !errors.Is(err, context.Canceled) {
+	if err := <-done; err != nil {
 		t.Fatalf("compaction cancellation: %v", err)
 	}
 	current, err := st.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read generation", err)
-	if current.CompactionGeneration != 0 {
-		t.Fatal("canceled compaction published a view")
+	if current.CompactionGeneration != 1 {
+		t.Fatal("cancellation lost the independent baseline")
 	}
 }

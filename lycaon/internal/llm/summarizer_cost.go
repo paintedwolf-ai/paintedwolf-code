@@ -78,16 +78,26 @@ func (r *RegistrySummarizer) completeUtility(ctx context.Context, p modelcall.Pr
 	if observe && r != nil && r.Plane != nil && !r.Plane.allowLite() {
 		return nil, ErrLiteUnavailable
 	}
-	release, laneErr := r.planeAcquire(ctx, p, class)
+	callCtx := ctx
+	var release func()
+	var laneErr error
+	if class == UtilityClassBackground && r.Plane != nil {
+		callCtx, release, laneErr = r.Plane.lanes.acquireBackground(ctx, p.ID(), p.Profile().UtilitySingleFlight)
+	} else {
+		release, laneErr = r.planeAcquire(ctx, p, class)
+	}
 	if laneErr != nil {
 		return nil, laneErr
 	}
 	defer release()
-	attempt := r.beginUtilityCall(ctx, p, model)
+	attempt := r.beginUtilityCall(callCtx, p, model)
 	defer attempt.close()
 	callID, occupy := r.beginLaneCall(ctx, attempt.callID, attempt.provider, model)
 	defer r.endLaneCall(ctx, occupy, callID, attempt.provider, model, &err)
-	resp, err = p.Complete(attempt.ctx, req) //nolint:contextcheck // attempt.ctx is ctx plus this call's budget
+	resp, err = p.Complete(attempt.ctx, req) //nolint:contextcheck // attempt.ctx carries admission cancellation and the call budget.
+	if callCtx.Err() != nil {
+		err = callCtx.Err()
+	}
 	if err != nil && attempt.budget.Expired() && ctx.Err() == nil {
 		err = &utilityBudgetExceededError{cause: err}
 	}
@@ -105,7 +115,7 @@ func (r *RegistrySummarizer) completeUtility(ctx context.Context, p modelcall.Pr
 }
 
 func (r *RegistrySummarizer) occupyLane(ctx context.Context) bool {
-	if r == nil || r.Lifecycle == nil {
+	if r == nil || r.Lifecycle == nil || r.utilityClass() == UtilityClassBackground {
 		return false
 	}
 	if !curationctx.LaneOccupied(ctx) {

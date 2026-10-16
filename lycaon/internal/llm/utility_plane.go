@@ -80,7 +80,11 @@ func (r *RegistrySummarizer) noteCallOutcome(observe bool, providerID, model str
 	}
 	r.Refusals.Note(providerID, model, err)
 	if observe && r.Plane != nil {
-		r.Plane.noteOutcome(providerID, err)
+		if r.Purpose == "compaction" {
+			r.Plane.noteCompactionOutcome(providerID, err)
+		} else {
+			r.Plane.noteOutcome(providerID, err)
+		}
 	}
 }
 
@@ -109,4 +113,16 @@ func resolveUtilityAttemptTimeout(p modelcall.Provider, class UtilityClass) time
 
 func skipLiteError(err error) bool {
 	return errors.Is(err, ErrLiteUnavailable) || errors.Is(err, ErrLiteBusy)
+}
+
+// noteCompactionOutcome reports sustained endpoint failures, excluding latency.
+func (p *UtilityPlane) noteCompactionOutcome(providerID string, err error) {
+	if err == nil {
+		p.health.success()
+		return
+	}
+	reason, down := liteSlotDown(err)
+	if down && reason != "silent" {
+		p.health.failureAfter(providerID, reason, 3)
+	}
 }

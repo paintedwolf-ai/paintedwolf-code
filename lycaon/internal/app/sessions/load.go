@@ -35,12 +35,12 @@ func loadCompactor(svc *llm.Service, configRoot string, tracker cost.CostTracker
 	}
 	cfg = applied
 
-	summarizer := compaction.Summarizer(compaction.TruncateSummarizer{})
+	var summarizer compaction.Summarizer
 	if svc != nil && svc.Registry != nil && svc.Policy != nil && llm.ProviderUtilityCallsEnabled() {
 		summarizer = svc.BindSummarizer(&llm.RegistrySummarizer{
-			Fallback: compaction.TruncateSummarizer{},
-			Cost:     tracker,
-			Purpose:  "compaction",
+			Cost:    tracker,
+			Purpose: "compaction",
+			Class:   llm.UtilityClassBackground,
 		})
 	}
 	return compaction.NewSimpleCompactor(cfg, summarizer), nil

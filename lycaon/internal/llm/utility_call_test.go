@@ -21,6 +21,38 @@ func TestResolveUtilityCallTimeout(t *testing.T) {
 	}
 }
 
+func TestForegroundPreemptsBackgroundWithoutReleasingItsOwnLease(t *testing.T) {
+	lanes := newUtilityLanes()
+	work, lateRelease, err := lanes.acquireBackground(t.Context(), "local", true)
+	testutil.FailErr(t, "admit background", err)
+	foreground, err := lanes.acquireForeground(t.Context(), "local", true)
+	testutil.FailErr(t, "admit foreground", err)
+	defer foreground()
+	if !errors.Is(work.Err(), context.Canceled) {
+		t.Fatal("foreground did not cancel background synthesis")
+	}
+	lateRelease()
+	lanes.mu.Lock()
+	busy := lanes.lanes["local"].busy
+	lanes.mu.Unlock()
+	if !busy {
+		t.Fatal("late synthesis released the foreground lease")
+	}
+}
+
+func TestCanceledForegroundDoesNotPreemptSynthesis(t *testing.T) {
+	lanes := newUtilityLanes()
+	work, release, err := lanes.acquireBackground(t.Context(), "local", true)
+	testutil.FailErr(t, "admit background", err)
+	defer release()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	_, err = lanes.acquireForeground(ctx, "local", true)
+	if !errors.Is(err, context.Canceled) || work.Err() != nil {
+		t.Fatal("canceled foreground changed admitted synthesis")
+	}
+}
+
 func TestLocalInferenceDriversDeclareTheColdStartBudget(t *testing.T) {
 	for name, profile := range map[string]providerprofile.Profile{
 		"ollama":            providerprofile.Ollama(),
@@ -216,4 +248,31 @@ func TestAdmissionIsolationAndOptionalPlane(t *testing.T) {
 	other, err := lanes.acquire(t.Context(), "local-b", true, UtilityClassQuality)
 	testutil.FailErr(t, "independent provider", err)
 	other()
+}
+
+func TestBackgroundSynthesisWaitsForLocalForegroundIdle(t *testing.T) {
+	lanes := newUtilityLanes()
+	foreground, err := lanes.acquireForeground(t.Context(), "local", true)
+	testutil.FailErr(t, "admit foreground", err)
+	foreground()
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
+	defer cancel()
+	_, _, err = lanes.acquireBackground(ctx, "local", true)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("background bypassed idle wait: %v", err)
+	}
+	_, release, err := lanes.acquireBackground(t.Context(), "hosted", false)
+	testutil.FailErr(t, "hosted background", err)
+	release()
+}
+
+func TestBackgroundSynthesisDoesNotPublishTurnErrors(t *testing.T) {
+	life := &recordingLifecycle{}
+	sum := &RegistrySummarizer{Class: UtilityClassBackground, Lifecycle: life}
+	id, occupied := sum.beginLaneCall(occupiedSessionCtx(), "synthesis", "local", "model")
+	failure := errors.New("isolated synthesis failure")
+	sum.endLaneCall(occupiedSessionCtx(), occupied, id, "local", "model", &failure)
+	if occupied || len(life.evs) != 0 {
+		t.Fatal("background synthesis changed foreground activity")
+	}
 }

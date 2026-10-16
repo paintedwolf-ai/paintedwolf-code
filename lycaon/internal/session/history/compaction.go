@@ -60,8 +60,9 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 	ctxMsgs := compaction.ContextMessagesFromAPI(base)
 	report := compaction.CompactionReport{TokensBefore: compaction.EstimateMessagesTokens(ctxMsgs)}
 
-	// Oversized messages compact independently of the session watermark.
-	working, chunks := sc.CompactOversizedChunksOnly(ctx, info, ctxMsgs)
+	// Baseline publication does not wait for optional provider work.
+	baseline := sc.Baseline()
+	working, chunks := baseline.CompactOversizedChunksOnly(ctx, info, ctxMsgs)
 	report.ChunksCompacted = chunks
 	changed := chunks > 0
 
@@ -78,7 +79,7 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 				maxTokens = 1
 			}
 		}
-		summarized, sessionReport, cerr := sc.Compact(ctx, info, working, maxTokens)
+		summarized, sessionReport, cerr := baseline.Compact(ctx, info, working, maxTokens)
 		if cerr != nil {
 			slog.WarnContext(ctx, "background session compaction failed",
 				"session_id", sessionID, "error", cerr)
@@ -101,6 +102,8 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 	if err := m.writeCompactionView(ctx, sess, originals, working, report, coveredThroughOrd, coveredThroughID, sourceSeq); err != nil {
 		return false, false
 	}
+	m.scheduleSynthesis(ctx, sc, info, originals, store.CompactionView{Generation: sess.CompactionGeneration + 1, Continuation: report.Continuation,
+		CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq})
 	return hasMore || (report.SessionCompacted && report.TokensAfter > cfg.TargetTokens), true
 }
 
@@ -236,11 +239,14 @@ func (m *Service) forceCompact(ctx context.Context, sessionID string) (compactio
 	cfg := m.compactionConfig(ctx, sess)
 	base := api.FilterPromptHistory(promptassembly.MarkContextPins(sess, m.ApplyView(ctx, sess, originals), min(8192, max(256, cfg.HardCeilingTokens/5))))
 	ctxMsgs := compaction.ContextMessagesFromAPI(base)
+	info := m.sessionInfo(ctx, sess, originals)
 	compactor := m.Compactor
+	var synth *compaction.SimpleCompactor
 	if sc, ok := compactor.(*compaction.SimpleCompactor); ok {
-		compactor = sc.WithConfig(cfg)
+		synth = sc.WithConfig(cfg)
+		compactor = synth.Baseline()
 	}
-	compact, report, err := compactor.Compact(ctx, m.sessionInfo(ctx, sess, originals), ctxMsgs, cfg.TargetTokens)
+	compact, report, err := compactor.Compact(ctx, info, ctxMsgs, cfg.TargetTokens)
 	report.CompactionGeneration = sess.CompactionGeneration
 	if err != nil {
 		return report, err
@@ -252,6 +258,10 @@ func (m *Service) forceCompact(ctx context.Context, sessionID string) (compactio
 		return report, err
 	}
 	report.CompactionGeneration = sess.CompactionGeneration + 1
+	if synth != nil {
+		m.scheduleSynthesis(ctx, synth, info, originals, store.CompactionView{Generation: report.CompactionGeneration, Continuation: report.Continuation,
+			CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq})
+	}
 	return report, nil
 }
 
