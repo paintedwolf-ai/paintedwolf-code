@@ -6,7 +6,7 @@ var toolResultPathsSource = Baseline{Revision: 3, Shape: "c0280798481d97c01e3ddf
 func ToolResultPaths(target Baseline) Step {
 	return Step{
 		ID: "recorded-tool-result-paths", Source: toolResultPathsImplementation,
-		Checksum: "82e7d68c1666f746a134fa00da43e5130b5dc7ff98b1e72b33cd082664c2b178",
+		Checksum: "7d6a151e39425186d68ebc7677aec8a15c1458136317ce508a7509a81d376c28",
 		From:     toolResultPathsSource, To: target, Apply: migrateToolResultPaths,
 	}
 }
