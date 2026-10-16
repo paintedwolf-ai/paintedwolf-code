@@ -14,6 +14,7 @@ def main():
     plan.add_argument("profile", choices=sorted(hosted_plan.PROFILES))
     plan.add_argument("--affected", action="store_true")
     plan.add_argument("--suite", default="all", choices=sorted(hosted_plan.SUITES))
+    plan.add_argument("--platform", action="store_true", help="only the profile's platform lanes")
     plan.add_argument("--timings", type=Path, help="measured timings that order the matrix")
     commands.add_parser("timings", help="main's latest measured lane and package durations")
     parallel = commands.add_parser("max-parallel", help="jobs a profile's matrix runs at once")
@@ -40,7 +41,8 @@ def main():
             with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a") as summary:
                 summary.write("### Change scope\n\n```json\n" + json.dumps(scope, indent=2) + "\n```\n")
         measured = json.loads(args.timings.read_text()) if args.timings else None
-        print(json.dumps(hosted_plan.matrix(args.profile, args.suite, scope, measured), separators=(",", ":")))
+        print(json.dumps(hosted_plan.matrix(args.profile, args.suite, scope, args.platform, measured),
+                         separators=(",", ":")))
     elif args.command == "timings":
         from ci_policy import timings
         print(json.dumps(timings.resolve(os.environ["GITHUB_REPOSITORY"]), separators=(",", ":")))

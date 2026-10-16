@@ -80,13 +80,15 @@ func TestUserTurnOrdinalSQLMatchesGoPredicate(t *testing.T) {
 		t.Fatalf("fixture drifted: api.UserTurnOrdinal = %d, want 3 user turns", want)
 	}
 
-	gotSQL, err := sqlStore.UserTurnOrdinal(ctx, sqlSess.ID)
+	gotSQLSource, err := sqlStore.ReadSourceTurn(ctx, sqlSess.ID, 0)
+	gotSQL := gotSQLSource.Number
 	contractcheck.FailErr(t, "sql user turn ordinal", err)
 	if gotSQL != want {
 		t.Fatalf("SQL CountSessionUserTurns = %d, api.UserTurnOrdinal = %d", gotSQL, want)
 	}
 
-	gotMem, err := memStore.UserTurnOrdinal(ctx, memSess.ID)
+	gotMemSource, err := memStore.ReadSourceTurn(ctx, memSess.ID, 0)
+	gotMem := gotMemSource.Number
 	contractcheck.FailErr(t, "memory user turn ordinal", err)
 	if gotMem != want {
 		t.Fatalf("memory UserTurnOrdinal = %d, api.UserTurnOrdinal = %d", gotMem, want)

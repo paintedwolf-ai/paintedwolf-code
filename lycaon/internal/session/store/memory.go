@@ -419,32 +419,6 @@ func (s *Memory) GetMessage(ctx context.Context, sessionID, messageID string) (a
 	return api.Message{}, ErrMessageNotFound
 }
 
-// GetMessagesAfterOrd seeks through the immutable transcript order.
-func (s *Memory) GetMessagesAfterOrd(ctx context.Context, sessionID string, afterOrd int64, limit int) ([]api.Message, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	if limit <= 0 {
-		return []api.Message{}, nil
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if _, ok := s.sessions[sessionID]; !ok {
-		return nil, ErrSessionNotFound
-	}
-	out := make([]api.Message, 0, limit)
-	for _, message := range s.messages[sessionID] {
-		if message.Ord <= afterOrd {
-			continue
-		}
-		out = append(out, message)
-		if len(out) == limit {
-			break
-		}
-	}
-	return out, nil
-}
-
 // GetTranscriptPage returns one Ord window plus the session's transcript watermark.
 func (s *Memory) GetTranscriptPage(ctx context.Context, id string, q api.TranscriptPageQuery) (api.SessionTranscriptPage, error) {
 	if err := ctx.Err(); err != nil {
@@ -578,6 +552,9 @@ func (s *Memory) AppendMessages(ctx context.Context, id string, msgs ...api.Mess
 
 // PutCompactionView atomically publishes a fresh view and its next generation.
 func (s *Memory) PutCompactionView(ctx context.Context, sessionID string, view CompactionView) error {
+	if len(view.Messages) > messageview.MaxCompactionRows {
+		return fmt.Errorf("compaction projection exceeds its row budget")
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -589,20 +566,12 @@ func (s *Memory) PutCompactionView(ctx context.Context, sessionID string, view C
 	if view.Generation != s.sessions[sessionID].CompactionGeneration+1 {
 		return fmt.Errorf("compaction generation changed")
 	}
-	boundaryFound := view.CoveredThroughOrd == 0 && strings.TrimSpace(view.CoveredThroughID) == ""
-	for _, message := range s.messages[sessionID] {
-		if message.Ord <= view.CoveredThroughOrd && message.Seq > view.SourceSeq {
-			return fmt.Errorf("compaction source changed")
-		}
-		if message.Ord == view.CoveredThroughOrd && message.ID == view.CoveredThroughID {
-			boundaryFound = true
-		}
-	}
-	if !boundaryFound {
-		return fmt.Errorf("compaction boundary is not a live session message")
+	if err := validateMemoryCompactionSource(s.messages[sessionID], s.transcriptSeq[sessionID], view); err != nil {
+		return err
 	}
 	cp := view
 	cp.Messages = append([]api.Message(nil), view.Messages...)
+	cp.Continuation = messageview.CloneContinuation(view.Continuation)
 	cp.CreatedAt = time.Now().UTC()
 	s.compactionViews[sessionID] = cp
 	s.sessions[sessionID].CompactionGeneration = view.Generation
@@ -623,6 +592,7 @@ func (s *Memory) GetCompactionView(ctx context.Context, sessionID string) (*Comp
 	}
 	cp := v
 	cp.Messages = append([]api.Message(nil), v.Messages...)
+	cp.Continuation = messageview.CloneContinuation(v.Continuation)
 	return &cp, true, nil
 }
 
@@ -636,16 +606,8 @@ func (s *Memory) CompactionViewCurrent(ctx context.Context, sessionID string, co
 	if _, ok := s.sessions[sessionID]; !ok {
 		return false, ErrSessionNotFound
 	}
-	boundaryFound := coveredThroughOrd == 0
-	for _, message := range s.messages[sessionID] {
-		if message.Ord == coveredThroughOrd && message.ID == coveredThroughID {
-			boundaryFound = true
-		}
-		if message.Ord <= coveredThroughOrd && message.Seq > sourceSeq {
-			return false, nil
-		}
-	}
-	return boundaryFound, nil
+	view := CompactionView{CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq}
+	return validateMemoryCompactionSource(s.messages[sessionID], s.transcriptSeq[sessionID], view) == nil, nil
 }
 
 // UpdateMessage replaces one message by ID.

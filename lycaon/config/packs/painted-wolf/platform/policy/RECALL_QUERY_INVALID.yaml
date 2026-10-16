@@ -10,6 +10,8 @@ requires:
   - paintedwolf.rejection_code
   - paintedwolf.recall_allowed_fields
   - paintedwolf.rejection_reason
+  - paintedwolf.rejection_field
+  - paintedwolf.recall_query_time_invalid
   profiles:
   - tool
 when: paintedwolf.rejection_code == "RECALL_QUERY_INVALID"
@@ -18,11 +20,20 @@ copy:
   what: 'The recall query was rejected: {{ paintedwolf.rejection_reason }}.'
   cause: A filter field, a value, or the boolean grouping is not part of the query language.
   why: The query compiles to a bounded lookup over the recorded index; an unparsed query has no safe reading.
-  fix: Use free text plus the current filter fields {{ paintedwolf.recall_allowed_fields }} (field:value). Combine
-    with uppercase AND / OR / NOT and parentheses; lowercase and, or, not are ordinary words. Quote a phrase to
-    match it exactly or when it contains a colon. Correct the reported filter/value/grouping while retaining intended
-    scope.
-  instead: Branch on Code RECALL_QUERY_INVALID; fix the filter or drop it and retry once
+  fix: >-
+    {% if paintedwolf.recall_query_time_invalid %}
+    `{{ paintedwolf.rejection_field }}` is a time filter. Use an RFC 3339 timestamp
+    such as 2026-09-01T00:00:00Z or a duration such as 7d. Transcript ordinals belong
+    in history.after_ord and history.through_ord, not query time filters.
+    {% else %}
+    Use free text plus the current filter fields {{ paintedwolf.recall_allowed_fields }}
+    (field:value). Combine with uppercase AND / OR / NOT and parentheses. Quote
+    phrases containing a colon. Correct the reported field or grouping while retaining scope.
+    {% endif %}
+  instead: >-
+    {% if paintedwolf.recall_query_time_invalid %}
+    Correct the time value, or use history coordinates for transcript paging.
+    {% else %}Correct the rejected query and retry only that call.{% endif %}
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:recall
 x-paintedwolf-message: That recall query did not parse.
