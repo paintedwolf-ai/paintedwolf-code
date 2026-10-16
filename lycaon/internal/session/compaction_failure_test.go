@@ -54,7 +54,7 @@ func TestFailedSynthesisKeepsPublishedRecoveryAndCanonicalHistory(t *testing.T) 
 		seed = append(seed, api.Message{ID: fmt.Sprintf("seed-%d", i), Role: role, Content: block})
 	}
 	testutil.FailErr(t, "append canonical history", mem.AppendMessages(t.Context(), sess.ID, seed...))
-	mgr.Runner.History.ObserveTokens(sess.ID, 1000, 1000)
+	mgr.Runner.History.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, 1000, 1000)
 
 	_, err = mgr.Submissions.Prompt(t.Context(), sess.ID, "first attempt")
 	testutil.FailErr(t, "first prompt", err)

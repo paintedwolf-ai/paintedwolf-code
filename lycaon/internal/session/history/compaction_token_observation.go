@@ -1,36 +1,49 @@
 package history
 
 import (
+	"context"
+
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ObserveTokens pairs reported input usage with its host estimate.
-func (m *Service) ObserveTokens(sessionID string, reportedPromptTokens, transcriptEstimate int) {
+type tokenCalibration struct {
+	providerID string
+	model      string
+	tokens     compaction.PromptTokenCalibration
+}
+
+// ObserveTokens pairs one receiver's input usage with its host estimate.
+func (m *Service) ObserveTokens(sessionID, providerID, model string, reportedPromptTokens, transcriptEstimate int) {
 	if m == nil || sessionID == "" || reportedPromptTokens <= 0 || transcriptEstimate <= 0 {
 		return
 	}
-	m.calibration.Store(sessionID, compaction.PromptTokenCalibration{
-		ReportedPromptTokens: reportedPromptTokens,
-		TranscriptEstimate:   transcriptEstimate,
+	m.calibration.Store(sessionID, tokenCalibration{
+		providerID: providerID, model: model,
+		tokens: compaction.PromptTokenCalibration{
+			ReportedPromptTokens: reportedPromptTokens,
+			TranscriptEstimate:   transcriptEstimate,
+		},
 	})
 }
 
-// Calibration returns the last estimate-to-reported ratio, or zero when uncalibrated.
-func (m *Service) Calibration(sessionID string) compaction.PromptTokenCalibration {
-	if m == nil || sessionID == "" {
+// Calibration only reuses observations from the selected receiver.
+func (m *Service) Calibration(ctx context.Context, sess *api.Session) compaction.PromptTokenCalibration {
+	if m == nil || sess == nil || sess.ID == "" {
 		return compaction.PromptTokenCalibration{}
 	}
-	cal, ok := m.calibration.Load(sessionID)
-	if !ok {
+	providerID, model := m.Model(ctx, sess)
+	cal, ok := m.calibration.Load(sess.ID)
+	if !ok || cal.providerID != providerID || cal.model != model {
 		return compaction.PromptTokenCalibration{}
 	}
-	return cal
+	return cal.tokens
 }
 
-func (m *Service) BudgetTokens(sessionID string, transcriptEstimate int) int {
+func (m *Service) BudgetTokens(ctx context.Context, sess *api.Session, transcriptEstimate int) int {
 	cold := compaction.ResolveColdStartOverhead("")
 	if m != nil && m.Compactor != nil {
 		cold = m.Compactor.Config().ColdStartOverhead(cold)
 	}
-	return m.Calibration(sessionID).ProjectBilled(transcriptEstimate, cold)
+	return m.Calibration(ctx, sess).ProjectBilled(transcriptEstimate, cold)
 }

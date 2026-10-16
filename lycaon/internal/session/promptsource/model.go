@@ -6,7 +6,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/session/history"
 	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
@@ -30,16 +29,19 @@ func (m *Model) Build() promptloop.ModelDeps {
 		Cost:       m.Cost,
 	}
 	deps.CompactionConfig = m.Limits.Compaction
-	deps.RecordCompactionTokenObservation = func(sessionID string, reportedPromptTokens, transcriptEstimate int) {
-		if m != nil {
-			m.History.ObserveTokens(sessionID, reportedPromptTokens, transcriptEstimate)
+	if m.History != nil {
+		deps.FitRequest = func(ctx context.Context, sess *api.Session, rows []api.Message, req modelcall.CompletionRequest) (modelcall.CompletionRequest, error) {
+			var budgets history.RequestBudgets
+			if m.LLMService != nil && m.LLMService.Registry != nil {
+				budgets = m.LLMService.Registry
+			}
+			return m.History.FitRequest(ctx, sess, rows, req, budgets)
 		}
 	}
-	deps.CompactionTokenCalibration = func(sessionID string) compaction.PromptTokenCalibration {
-		if m == nil {
-			return compaction.PromptTokenCalibration{}
+	deps.RecordCompactionTokenObservation = func(sessionID, providerID, model string, reportedPromptTokens, transcriptEstimate int) {
+		if m != nil {
+			m.History.ObserveTokens(sessionID, providerID, model, reportedPromptTokens, transcriptEstimate)
 		}
-		return m.History.Calibration(sessionID)
 	}
 
 	return deps

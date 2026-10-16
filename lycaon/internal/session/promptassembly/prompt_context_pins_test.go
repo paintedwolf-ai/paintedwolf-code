@@ -60,8 +60,6 @@ func containsCharter(msgs []api.Message) bool {
 	return false
 }
 
-// A worker leg that outruns the context window keeps its assignment. The charter
-// sits with the oldest rows, which is exactly what the fit drops first.
 func TestAssemblePromptHistoryKeepsWorkerCharterUnderPressure(t *testing.T) {
 	history := workerHistory(200)
 	for _, ceiling := range []int{40000, 8000, 2000, 500} {
@@ -73,18 +71,16 @@ func TestAssemblePromptHistoryKeepsWorkerCharterUnderPressure(t *testing.T) {
 	}
 }
 
-// The trim has to be visible to the model, or a missing fact reads as a fact
-// worth re-fetching.
-func TestAssemblePromptHistoryStatesTheTrim(t *testing.T) {
-	out, _ := promptassembly.Assemble(workerSession(), workerHistory(200), assemblyDeps(2000))
-	notices := 0
-	for _, m := range out {
-		if m.Content == guidance.ContextTrimNotice {
-			notices++
-		}
+func TestAssemblyKeepsEvidenceForCompleteRequestBudgeting(t *testing.T) {
+	history := workerHistory(200)
+	out, _ := promptassembly.Assemble(workerSession(), history, assemblyDeps(2000))
+	if len(out) != len(history) {
+		t.Fatalf("assembly discarded evidence before measuring the complete request: %d of %d rows", len(out), len(history))
 	}
-	if notices != 1 {
-		t.Fatalf("want one context-trim notice in the assembled prompt, got %d of %d rows", notices, len(out))
+	for _, row := range out {
+		if row.Content == guidance.ContextTrimNotice {
+			t.Fatal("assembly reported a trim before complete-request budgeting")
+		}
 	}
 }
 

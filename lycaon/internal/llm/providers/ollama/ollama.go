@@ -163,7 +163,7 @@ func (p *Provider) resolveThink(req modelcall.CompletionRequest, model string) a
 func estimatePromptTokens(messages []ollamaChatMessage, toolMetas []ollamaTool) int {
 	total := 0
 	for _, m := range messages {
-		total += tokenest.EstimateDefault(m.Content) + tokenest.EstimateDefault(m.Thinking)
+		total += tokenest.EstimateDefault(m.Content) + tokenest.EstimateDefault(m.Thinking) + len(m.Images)*providerwire.UnsizedImageTokenEstimate
 		for _, tc := range m.ToolCalls {
 			total += tokenest.EstimateDefault(tc.Function.Name)
 			if raw, err := json.Marshal(tc.Function.Arguments); err == nil {
@@ -194,7 +194,7 @@ func (p *Provider) Prepare(ctx context.Context, req modelcall.CompletionRequest,
 	maxContext := p.ContextLimit(ctx, model)
 	// Keep automatic answer room inside the model's actual context window.
 	// An explicit request cap remains the caller's contract and must fit.
-	if req.MaxTokens == 0 && maxContext > 0 && numPredict > 0 {
+	if (req.MaxTokens == 0 || req.StrictBudget) && maxContext > 0 && numPredict > 0 {
 		available := maxContext - projectedPromptTokens - ollamaContextHeadroom
 		if available > 0 && numPredict > available {
 			numPredict = available

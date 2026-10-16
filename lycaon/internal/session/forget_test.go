@@ -39,7 +39,12 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	checkpoints := sessioncheckpoint.New(t.TempDir(), t.TempDir(), sessionstore.NewMemory())
 	testutil.FailErr(t, "open checkpoint capture", m.Chats.Captures.Capture.Open(t.Context(), checkpoints, sid, "anchor"))
 	m.Promotion.SetMergeReconcilePaths(sid, []string{"a.go"})
-	m.Runner.History.ObserveTokens(sid, 150, 100)
+	calibrationSession := &api.Session{ID: sid}
+	providerID, model := m.Runner.History.Model(t.Context(), calibrationSession)
+	m.Runner.History.ObserveTokens(sid, providerID, model, 150, 100)
+	if !m.Runner.History.Calibration(t.Context(), calibrationSession).Calibrated() {
+		t.Fatal("missing calibration before disposal")
+	}
 	m.Promotion.RecordPromotePathStatus(sid, "job", []api.WorkerPromotePathStatus{{Path: "a.go"}})
 	writeRootRuntime := approvalstate.NewSandboxPathGrantRuntime()
 	m.Resources.Authority.Writes = writeRootRuntime
@@ -63,7 +68,7 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 		"coordinatorBatchTurn":  func() bool { return m.Coordinator.Batch.TurnGuard(sid).SynthesisAcceptedThisTurn },
 		"mergeReconcile":        func() bool { return m.Promotion.Allowed(sid, "a.go") },
 		"compactionTokenCalibration": func() bool {
-			return m.Runner.History.Calibration(sid) != (compaction.PromptTokenCalibration{})
+			return m.Runner.History.Calibration(t.Context(), calibrationSession) != (compaction.PromptTokenCalibration{})
 		},
 		"promotePathStatus": func() bool { return len(m.Promotion.PromotePathBoardLines(sid)) > 0 },
 	}

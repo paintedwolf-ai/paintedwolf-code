@@ -103,7 +103,7 @@ func (m *Service) Fit(ctx context.Context, sess *api.Session, history []api.Mess
 	if m.Compactor != nil {
 		cfg := m.compactionConfig(ctx, sess)
 		// Per-call fitting does not lower the durable retry threshold.
-		est := m.BudgetTokens(sess.ID, report.TokensBefore)
+		est := m.BudgetTokens(ctx, sess, report.TokensBefore)
 		if est >= cfg.HardCeilingTokens {
 			m.Schedule(ctx, sess)
 		} else if compaction.ShouldCompactSession(est, cfg.ModelContextWindow, cfg) {

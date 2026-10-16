@@ -17,12 +17,7 @@ var assemblyLog = observability.LazyComponent("prompt_assembly")
 type Config struct {
 	CompactionViewApplied bool
 	CompactionConfig      compaction.CompactionConfig
-	// TokenCalibration maps provider token counts to host estimates.
-	// A zero value uses ColdStartOverhead as an additive reserve.
-	TokenCalibration compaction.PromptTokenCalibration
-	// ColdStartOverhead is the additive reserve used until the first observation.
-	ColdStartOverhead int
-	SurfaceID         string
+	SurfaceID             string
 }
 
 // Report describes prompt-history assembly steps applied for operator debug.
@@ -40,7 +35,7 @@ func (r Report) CompactionReport() compaction.CompactionReport {
 	}
 }
 
-// Assemble filters, seals, and fits a prepared transcript without storing it.
+// Assemble prepares transcript history for complete-request budgeting.
 func Assemble(sess *api.Session, history []api.Message, deps Config) ([]api.Message, Report) {
 	if len(history) == 0 && !deps.CompactionViewApplied {
 		return history, Report{}
@@ -66,13 +61,6 @@ func Assemble(sess *api.Session, history []api.Message, deps Config) ([]api.Mess
 	}
 	sealed := sealToolRoleBodies(out)
 	report.Strategies = append(report.Strategies, "seal:tool_bodies")
-	if deps.CompactionConfig.Enabled && deps.CompactionConfig.HardCeilingTokens > 0 {
-		ctxMsgs := compaction.ContextMessagesFromAPI(out)
-		maxTokens := compaction.FitMaxTokens(deps.CompactionConfig, deps.TokenCalibration, deps.ColdStartOverhead)
-		fitted := compaction.DeterministicFit(deps.CompactionConfig, ctxMsgs, maxTokens)
-		out = compaction.ContextMessagesToAPI(fitted, out)
-		report.Strategies = append(report.Strategies, "fit:hard_ceiling")
-	}
 	out = restoreSealedToolBodies(out, sealed)
 	// Filter again: membership restore can reattach chrome Kind from a stale view.
 	out = api.FilterPromptHistory(out)
