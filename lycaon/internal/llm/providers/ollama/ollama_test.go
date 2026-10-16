@@ -435,7 +435,7 @@ func TestOllamaReasoningCapturedNotInContent(t *testing.T) {
 func TestDecodeOllamaStreamRejectsMissingDone(t *testing.T) {
 	ch := decodeOllamaStream(t.Context(), strings.NewReader(
 		`{"message":{"content":"partial"},"done":false}`+"\n",
-	), "desktop", "model", 8192, nil)
+	), "desktop", "model", 8192, nil, nil)
 	if _, _, err := modelcall.CollectStream(ch); err == nil || !strings.Contains(err.Error(), "before done") {
 		t.Fatalf("error = %v, want missing done", err)
 	}

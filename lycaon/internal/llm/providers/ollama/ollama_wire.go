@@ -180,7 +180,8 @@ func ollamaToolCallsToAPI(calls []ollamaToolCall) []api.ToolCall {
 }
 
 // Tool calls accumulate across events and join usage on the terminal chunk.
-func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model string, contextTokens int, onDone func(promptTokens int, promptEvalDuration int64)) <-chan modelcall.StreamChunk {
+// offered enables unoffered-tool recovery; nil keeps every error terminal.
+func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model string, contextTokens int, onDone func(promptTokens int, promptEvalDuration int64), offered []ollamaTool) <-chan modelcall.StreamChunk {
 	ch := make(chan modelcall.StreamChunk)
 	go func() {
 		defer close(ch)
@@ -205,6 +206,10 @@ func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model s
 				return
 			}
 			if resp.Error != "" {
+				if tc, ok := unofferedToolCall(resp.Error, offered); ok {
+					modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{ToolCalls: append(ollamaToolCallsToAPI(rawToolCalls), tc), Done: true})
+					return
+				}
 				modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: fmt.Errorf("ollama: %s", resp.Error), Done: true})
 				return
 			}
