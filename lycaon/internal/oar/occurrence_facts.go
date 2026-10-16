@@ -157,6 +157,7 @@ var occurrenceFactDecls = []factDecl{
 	{"missing_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"can_request_tools", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_loadable", oarcore.TypeBool, FactTierHost, ""},
+	{"task_loadable", oarcore.TypeBool, FactTierHost, ""},
 	{"native_replacement_tools", oarcore.TypeListString, FactTierHost, ""},
 	{"native_replacement_exact", oarcore.TypeBool, FactTierHost, ""},
 	{"native_replacement_manual", oarcore.TypeBool, FactTierHost, ""},
