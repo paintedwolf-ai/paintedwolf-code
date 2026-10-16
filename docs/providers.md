@@ -462,13 +462,16 @@ This is protocol parsing inside a declared grammar, not intent classification ([
 
 ### Parser-dropped tool calls
 
-Some servers parse the model's native call themselves and, when the arguments are not valid JSON, drop the call and report only an error message. Ollama's tool-call parsers do this: the message is Go's `encoding/json` syntax error, with no tool name or arguments. The ship catalog declares each such parser's error grammar under `tool_call_rejection_profiles`, and a provider kind selects one with `tool_call_rejection_profile`:
+Some servers parse the model's native call themselves and, when it names an unoffered tool or its arguments are not valid JSON, drop the call and report only an error message. Ollama's tool-call parsers do both: `tool '<name>' not found`, or Go's `encoding/json` syntax error with no tool name or arguments. The ship catalog declares each such parser's error grammars under `tool_call_rejection_profiles`, and a provider kind selects one with `tool_call_rejection_profile`:
 
 ```yaml
 tool_call_rejection_profiles:
   ollama:
     status_before_output: 500   # the same error before any output; 0 = always in-band
     rules:
+      - kind: tool_not_offered
+        source: ollama/ollama model/parsers/ministral.go (toolByName)
+        grammar: 'tool ''([a-zA-Z0-9_-]{1,64})'' not found'
       - kind: arguments_unparsed
         source: ollama/ollama model/parsers/ministral.go (Add); Go encoding/json scanner.go
         grammar: 'unexpected end of JSON input'
@@ -479,11 +482,12 @@ providers:
 ```
 
 - **Ship catalog only.** Local instances inherit their kind's profile; they cannot define profiles or select a different one.
-- **Exact grammars.** Each `grammar` must span the whole message, every rule cites its `source`, and a grammar may not capture: `arguments_unparsed` carries no call identity. `kind` is a closed set with host handling behind each value.
+- **Exact grammars.** Each `grammar` must span the whole message and every rule cites its `source`. `kind` is a closed set with host handling behind each value, and fixes how many names its grammar captures.
 - **Only when a call is possible.** The request must offer callable tools and set no structured output. Anything else, including unmatched text, keeps the provider's original error.
-- **Never a call.** A match becomes `ProviderToolCallUnparsedError`, which keeps the original message. The prompt loop answers it with `TOOL_CALL_UNPARSED` repair feedback ([tool feedback](agent-tool-feedback.md#model-response-repair)) for at most two consecutive responses, then fails with that error.
+- **`tool_not_offered`** captures exactly one name, which must be a function-name token outside the offered set; an offered name stays an error. The adapter restores a bare call with that name, and the prompt loop refuses it with `TOOL_NOT_OFFERED` before any definition lookup, so it never executes.
+- **`arguments_unparsed`** captures nothing and never becomes a call. A match becomes `ProviderToolCallUnparsedError`, which keeps the original message. The prompt loop answers it with `TOOL_CALL_UNPARSED` repair feedback ([tool feedback](agent-tool-feedback.md#model-response-repair)) for at most two consecutive responses, then fails with that error.
 
-A driver opts in by extracting its error message and calling the profile's `Classify`; the Ollama adapter also re-reads a matching `status_before_output` body as the in-band error.
+A driver opts in by extracting its error message and asking the profile for an `UnofferedTool` name or a `Classify`d error; the Ollama adapter also re-reads a recognized `status_before_output` body as the in-band error.
 
 ### Completion recovery
 

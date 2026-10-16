@@ -264,14 +264,18 @@ model_prompt_cache:
 # bounded transient set; a provider selects a longer schedule or extra statuses
 # only where its service contract documents them.
 tool_call_rejection_profiles:
-  # Ollama's tool-call parsers resolve the offered tool and then json.Unmarshal
-  # its arguments. A failure drops the call and reports only Go's
+  # Ollama's tool-call parsers resolve the named tool and then json.Unmarshal
+  # its arguments. An unoffered name drops the call with
+  # fmt.Errorf("tool '%s' not found", n); invalid arguments drop it with Go's
   # encoding/json SyntaxError text: "invalid character " + quoteChar(c) + " "
   # + a scanner context, or the end-of-input error. Before any output the
   # same error arrives as the whole HTTP 500 body.
   ollama:
     status_before_output: 500
     rules:
+      - kind: tool_not_offered
+        source: ollama/ollama model/parsers/ministral.go (toolByName)
+        grammar: 'tool ''([a-zA-Z0-9_-]{1,64})'' not found'
       - kind: arguments_unparsed
         source: ollama/ollama model/parsers/ministral.go (Add); Go encoding/json scanner.go
         grammar: 'unexpected end of JSON input'

@@ -87,8 +87,8 @@ func TestToolCallSyntaxErrorGrammar(t *testing.T) {
 		"model not found",
 		"model runner has unexpectedly stopped",
 	} {
-		if _, ok := policy.Match(text); ok {
-			t.Errorf("grammar accepts %q", text)
+		if rejection, ok := policy.Match(text); ok && rejection.Kind == providerprofile.ToolCallArgumentsUnparsed {
+			t.Errorf("syntax grammar accepts %q", text)
 		}
 	}
 }
