@@ -6,19 +6,34 @@ requires:
   facts:
   - paintedwolf.claims_completion
   - paintedwolf.grounding_escalated
+  - paintedwolf.can_recall
 when: paintedwolf.grounding_escalated && !paintedwolf.claims_completion
 effect: nudge
 copy:
   cause: Several turns closed with citations or worker_summary tags that did not trace
   why: Session keeps running; ground completion claims in observed evidence
   fix: Ground further claims in observed evidence and any required worker summaries. Inspect the actual missing
-    references or delivery state; do not spawn redundant work to clear an advisory.
+    references or delivery state; do not spawn redundant work to clear an advisory.{% if paintedwolf.can_recall %} Recover an earlier
+    observation with `recall(query="handle:read#3")` instead of restating it from memory.{% else %} Re-observe
+    a source before citing it again.{% endif %}
   instead: Keep going; ground claims in observed evidence or worker_summary tags
   what: Repeated grounding gaps flagged — advisory, not blocked
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:ambient_grounding
 x-paintedwolf-message: Repeated grounding gaps flagged — advisory, not blocked
 x-paintedwolf-scenarios:
+- id: recall_callable
+  vars:
+    can_recall: true
+  expect_contains:
+  - 'Code: AMBIENT_GROUNDING_ESCALATED'
+  - 'recall(query='
+- id: recall_not_callable
+  vars:
+    can_recall: false
+  expect_contains:
+  - 'Code: AMBIENT_GROUNDING_ESCALATED'
+  - 'Re-observe'
 - id: default
   vars:
     detail: bad args
