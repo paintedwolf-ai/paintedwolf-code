@@ -37,6 +37,10 @@ pub enum Error {
     #[error("mlx: {0}")]
     Mlx(String),
 
+    /// Under `auto`, every candidate was slower than the requirement or failed to load.
+    #[error("no device meets the speed requirement: {0}")]
+    NoCapableDevice(String),
+
     /// A prediction was asked for with an empty question set.
     #[error("no questions to answer")]
     NoQuestions,

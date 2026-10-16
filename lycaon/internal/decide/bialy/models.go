@@ -59,3 +59,13 @@ func ManagedModelDir() string {
 	}
 	return filepath.Join(enginepaths.DecideModelsRootUnder(base), ShippedModel.DirName())
 }
+
+// ManagedCacheDir is where the engine keeps its device verdict and compiled GPU
+// kernels, or "" without a config dir.
+func ManagedCacheDir() string {
+	base, err := configdir.UserConfigDir()
+	if err != nil || base == "" {
+		return ""
+	}
+	return enginepaths.DecideCacheRootUnder(base)
+}
