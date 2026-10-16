@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
@@ -82,6 +83,9 @@ func (r *unparsedRequestRecorder) Stream(ctx context.Context, req modelcall.Comp
 // third consecutive drop fails with the provider's original error.
 func TestLoopRecoversOllamaDroppedToolCall(t *testing.T) {
 	newPipeline := outputPolicyPipeline(t)
+	catalog, err := llm.LoadProviderConfig()
+	testutil.FailErr(t, "load provider catalog", err)
+	rejections := catalog.ToolCallRejectionProfiles["ollama"]
 	for _, tc := range []struct {
 		name         string
 		beforeOutput bool
@@ -120,7 +124,7 @@ func TestLoopRecoversOllamaDroppedToolCall(t *testing.T) {
 				executed++
 				return "file-body", nil
 			}))
-			client := &unparsedRequestRecorder{LLMClient: ollama.New("desktop", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "ministral-3:3b", ContextLength: 32768}})}
+			client := &unparsedRequestRecorder{LLMClient: ollama.New("desktop", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "ministral-3:3b", ContextLength: 32768}}).WithToolCallRejections(rejections)}
 			var drafts []string
 			deps := PromptLoopDeps{
 				Context: ContextDeps{Tools: reg, Limits: func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() }, BuildMessages: func(_ context.Context, _ *api.Session, h []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
@@ -251,7 +255,7 @@ func TestDroppedToolCallNeedsItsPolicyDecision(t *testing.T) {
 			return tc.decision, tc.decision != nil, "", false
 		}}}}
 		st := &promptLoopTurnState{}
-		got, err := turn.recoverUnparsedToolCall(t.Context(), &api.Session{ID: "s"}, st, req, &modelcall.Completion{Content: "partial"}, cause, false)
+		got, err := turn.recoverUnparsedToolCall(t.Context(), &api.Session{ID: "s"}, st, req, nil, &modelcall.Completion{Content: "partial"}, cause, false)
 		if got != nil || err != tc.want || st.output.rejection != nil || st.output.droppedToolCallStreak != 0 {
 			t.Fatalf("decision %v: recovered=%v err=%v state=%+v", tc.decision, got, err, st.output)
 		}

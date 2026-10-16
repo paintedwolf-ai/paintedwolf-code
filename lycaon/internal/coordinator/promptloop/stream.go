@@ -285,22 +285,15 @@ func (l *modelTurn) completeStream(
 			CoordinatorLoop: loop,
 		})
 	})
-	publishCallError := func() {
-		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
-			return
+	callFailed := func() {
+		if isCoordinatorTurn {
+			l.publishLLMCallError(ctx, sess, sessionID, llmCallID, callProvider, callModel, coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish))
 		}
-		l.Projection.Deps.Events.PublishLLM(context.WithoutCancel(ctx), sessionProjectKey(sess), sessionID, api.LLMCallEvent{
-			CallID:          llmCallID,
-			Provider:        callProvider,
-			Model:           callModel,
-			Status:          api.LLMCallStatusError,
-			CoordinatorLoop: coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish),
-		})
 	}
 	// Publish one terminal event even after cancellation.
 	defer func() {
 		if err != nil {
-			publishCallError()
+			callFailed()
 		}
 	}()
 
@@ -327,18 +320,11 @@ func (l *modelTurn) completeStream(
 	collected, collectErr := l.collectPromptStream(ctx, sess, client, req, onProgress, llmCallID, callProvider, callModel)
 	callProvider, callModel = collected.providerID, collected.model
 	if collectErr != nil {
-		recovered, recoverErr := l.recoverUnparsedToolCall(ctx, sess, st, req, collected.completion, collectErr, proseFinish)
-		if recovered == nil {
-			err = recoverErr
-			return nil, nil, err
+		var recovered *modelcall.Completion
+		if recovered, err = l.recoverUnparsedToolCall(ctx, sess, st, req, sourceRequest, collected.completion, collectErr, proseFinish); err == nil {
+			callFailed()
 		}
-		publishCallError()
-		recovered.SourceContext = sourceRequest.ForCompletion(recovered)
-		st.output.sourceContext = recovered.SourceContext
-		return recovered, nil, nil
-	}
-	if st != nil {
-		st.output.droppedToolCallStreak = 0
+		return recovered, nil, err
 	}
 	completion, tokens := collected.completion, collected.tokens
 	providerID, model := collected.providerID, collected.model
@@ -363,7 +349,7 @@ func (l *modelTurn) completeStream(
 	reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{Segments: oarModelOutputSegments(completion.Content), TextActionTools: response.TextActionTools}, "", nil)
 	slog.InfoContext(ctx, "model output gate", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(outputGateStarted).Milliseconds(), "blocked", blocked, "selected_text_protocol", req.ToolProtocol, "text_action_tools", response.TextActionTools)
 	if st != nil {
-		st.output.rejection = nil
+		st.output.rejection, st.output.droppedToolCallStreak = nil, 0
 	}
 	if blocked {
 		if st == nil || len(response.TextActionTools) == 0 || reject == nil || reject.Code() != "TOOL_ACTION_IN_TEXT" {

@@ -460,6 +460,31 @@ This is protocol parsing inside a declared grammar, not intent classification ([
 - **Only when a call is allowed.** With no tools on the request, or a request that forbids tool use, the content stands as text.
 - **Only against the offered schemas.** A recovered call must name an offered tool and validate against its argument schema. A recovery that fails either check is neither downgraded to text nor executed; the attempt fails as a structured provider error.
 
+### Parser-dropped tool calls
+
+Some servers parse the model's native call themselves and, when the arguments are not valid JSON, drop the call and report only an error message. Ollama's tool-call parsers do this: the message is Go's `encoding/json` syntax error, with no tool name or arguments. The ship catalog declares each such parser's error grammar under `tool_call_rejection_profiles`, and a provider kind selects one with `tool_call_rejection_profile`:
+
+```yaml
+tool_call_rejection_profiles:
+  ollama:
+    status_before_output: 500   # the same error before any output; 0 = always in-band
+    rules:
+      - kind: arguments_unparsed
+        source: ollama/ollama model/parsers/ministral.go (Add); Go encoding/json scanner.go
+        grammar: 'unexpected end of JSON input'
+
+providers:
+  - id: ollama
+    tool_call_rejection_profile: ollama
+```
+
+- **Ship catalog only.** Local instances inherit their kind's profile; they cannot define profiles or select a different one.
+- **Exact grammars.** Each `grammar` must span the whole message, every rule cites its `source`, and a grammar may not capture: `arguments_unparsed` carries no call identity. `kind` is a closed set with host handling behind each value.
+- **Only when a call is possible.** The request must offer callable tools and set no structured output. Anything else, including unmatched text, keeps the provider's original error.
+- **Never a call.** A match becomes `ProviderToolCallUnparsedError`, which keeps the original message. The prompt loop answers it with `TOOL_CALL_UNPARSED` repair feedback ([tool feedback](agent-tool-feedback.md#model-response-repair)) for at most two consecutive responses, then fails with that error.
+
+A driver opts in by extracting its error message and calling the profile's `Classify`; the Ollama adapter also re-reads a matching `status_before_output` body as the in-band error.
+
 ### Completion recovery
 
 Streaming completion is committed in recoverable stages:

@@ -263,6 +263,22 @@ model_prompt_cache:
 # Retry profiles are service-class policy. Every hosted profile retries the
 # bounded transient set; a provider selects a longer schedule or extra statuses
 # only where its service contract documents them.
+tool_call_rejection_profiles:
+  # Ollama's tool-call parsers resolve the offered tool and then json.Unmarshal
+  # its arguments. A failure drops the call and reports only Go's
+  # encoding/json SyntaxError text: "invalid character " + quoteChar(c) + " "
+  # + a scanner context, or the end-of-input error. Before any output the
+  # same error arrives as the whole HTTP 500 body.
+  ollama:
+    status_before_output: 500
+    rules:
+      - kind: arguments_unparsed
+        source: ollama/ollama model/parsers/ministral.go (Add); Go encoding/json scanner.go
+        grammar: 'unexpected end of JSON input'
+      - kind: arguments_unparsed
+        source: ollama/ollama model/parsers/ministral.go (Add); Go encoding/json scanner.go
+        grammar: 'invalid character ''(?:[^''\\]|\\[''\\abfnrtv]|\\x[0-9a-f]{2}|\\u[0-9a-f]{4})'' (?:looking for beginning of value|looking for beginning of object key string|after object key|after object key:value pair|after array element|after top-level value|in string literal|in string escape code|in \\u hexadecimal character escape|in numeric literal|after decimal point in numeric literal|in exponent of numeric literal|in literal (?:true|false|null) \(expecting ''[a-z]''\))'
+
 http_retry_profiles:
   hosted-standard:
     service_class: hosted
@@ -452,6 +468,7 @@ providers:
     models: []
     http_retry_profile: local-runtime
     prompt_cache_profile: ollama
+    tool_call_rejection_profile: ollama
 
   - id: lmstudio
     kind: lmstudio

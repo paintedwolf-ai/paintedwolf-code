@@ -9,16 +9,37 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/llm/providerprofile"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
+	"gopkg.in/yaml.v3"
 )
 
-// The grammar accepts every SyntaxError encoding/json produces for broken
-// arguments, so it tracks the error Ollama's parser actually reports.
+// shippedToolCallRejections is the provider catalog's Ollama policy.
+func shippedToolCallRejections(t *testing.T) providerprofile.ToolCallRejectionPolicy {
+	t.Helper()
+	data, err := config.Read(config.Providers)
+	testutil.FailErr(t, "read provider catalog", err)
+	var catalog struct {
+		Profiles map[string]providerprofile.ToolCallRejectionPolicy `yaml:"tool_call_rejection_profiles"`
+	}
+	testutil.FailErr(t, "decode provider catalog", yaml.Unmarshal(data, &catalog))
+	testutil.FailErr(t, "resolve rejection profiles", providerprofile.ResolveToolCallRejectionProfiles(catalog.Profiles))
+	return catalog.Profiles["ollama"]
+}
+
+// The shipped grammar accepts every SyntaxError encoding/json produces for
+// broken arguments, so it tracks the error Ollama's parser actually reports.
 func TestToolCallSyntaxErrorGrammar(t *testing.T) {
+	policy := shippedToolCallRejections(t)
+	if policy.StatusBeforeOutput != http.StatusInternalServerError {
+		t.Fatalf("status before output = %d, want Ollama's HTTP 500", policy.StatusBeforeOutput)
+	}
 	for _, raw := range []string{
 		`{"path":"a.html","content":"<b>"$}`,
 		`{"content":"say "hi""}`,
@@ -48,7 +69,7 @@ func TestToolCallSyntaxErrorGrammar(t *testing.T) {
 		if !errors.As(err, &syntax) {
 			t.Fatalf("%q: fixture is not a syntax error: %v", raw, err)
 		}
-		if !toolCallSyntaxError.MatchString(err.Error()) {
+		if kind, ok := policy.Match(err.Error()); !ok || kind != providerprofile.ToolCallArgumentsUnparsed {
 			t.Errorf("%q: grammar rejects encoding/json error %q", raw, err.Error())
 		}
 	}
@@ -66,7 +87,7 @@ func TestToolCallSyntaxErrorGrammar(t *testing.T) {
 		"model not found",
 		"model runner has unexpectedly stopped",
 	} {
-		if toolCallSyntaxError.MatchString(text) {
+		if _, ok := policy.Match(text); ok {
 			t.Errorf("grammar accepts %q", text)
 		}
 	}
@@ -74,6 +95,7 @@ func TestToolCallSyntaxErrorGrammar(t *testing.T) {
 
 func TestOllamaTypesDroppedToolCall(t *testing.T) {
 	write := tools.ToolMeta{Name: "write", ArgsSchema: map[string]any{"type": "object"}}
+	policy := shippedToolCallRejections(t)
 	const syntaxError = "invalid character '$' after object key:value pair"
 	cases := []struct {
 		name          string
@@ -110,7 +132,7 @@ func TestOllamaTypesDroppedToolCall(t *testing.T) {
 						_ = json.NewEncoder(w).Encode(map[string]any{"error": tc.providerError})
 					}))
 					defer srv.Close()
-					p := New("desktop", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "ministral-3:3b", ContextLength: 32768}})
+					p := New("desktop", srv.URL+"/v1", "", []modelinfo.Entry{{ID: "ministral-3:3b", ContextLength: 32768}}).WithToolCallRejections(policy)
 					req := modelcall.CompletionRequest{Model: "ministral-3:3b", Tools: tc.tools, Messages: []api.Message{{Role: api.MessageRoleUser, Content: "build a page"}}}
 					if tc.forbidden {
 						req.ToolUse = modelcall.ToolUseForbidden

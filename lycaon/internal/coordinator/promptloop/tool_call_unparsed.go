@@ -22,6 +22,7 @@ func (l *modelTurn) recoverUnparsedToolCall(
 	sess *api.Session,
 	st *promptLoopTurnState,
 	req modelcall.CompletionRequest,
+	source *modelcall.SourceRequestCapture,
 	partial *modelcall.Completion,
 	cause error,
 	proseFinish bool,
@@ -48,5 +49,7 @@ func (l *modelTurn) recoverUnparsedToolCall(
 	}
 	st.output.droppedToolCallStreak++
 	st.output.rejection = reject
+	completion.SourceContext = source.ForCompletion(completion)
+	st.output.sourceContext = completion.SourceContext
 	return completion, nil
 }

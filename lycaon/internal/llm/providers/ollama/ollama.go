@@ -75,6 +75,12 @@ func (p *Provider) WithPromptCache(policy providerprofile.PromptCachePolicy) *Pr
 	return p
 }
 
+// WithToolCallRejections sets the parser rejection grammars of the provider kind.
+func (p *Provider) WithToolCallRejections(policy providerprofile.ToolCallRejectionPolicy) *Provider {
+	p.profile.ToolCallRejections = policy
+	return p
+}
+
 func (p *Provider) ID() string { return p.id }
 
 func (p *Provider) Profile() providerprofile.Profile { return p.profile }
@@ -274,7 +280,8 @@ func (p *Provider) postWithHTTPRetry(ctx context.Context, client *http.Client, p
 		RefusalCodes: providerprofile.ModelRefusalCodesFor(p.Profile()),
 		Policy:       p.httpRetry,
 		Send: func(attemptCtx context.Context) (*http.Response, error) {
-			return payload.admitToolCallSyntaxError(p.post(attemptCtx, client, payload))
+			resp, err := p.post(attemptCtx, client, payload)
+			return p.admitToolCallRejection(payload, resp, err)
 		},
 		Describe: func(status int, body []byte) error {
 			return fmt.Errorf("ollama: chat HTTP %d: %s", status, strings.TrimSpace(string(body)))
@@ -308,7 +315,7 @@ func (p *Provider) Complete(ctx context.Context, req modelcall.CompletionRequest
 		return nil, fmt.Errorf("ollama: decode response: %w", err)
 	}
 	if decoded.Error != "" {
-		return nil, payload.providerError(p.id, decoded.Error)
+		return nil, p.providerError(payload, decoded.Error)
 	}
 	p.warnIfTruncated(payload, promptEst, decoded.PromptEvalCount)
 	p.observePromptTokens(payload.Model, promptEst, decoded.PromptEvalCount)
@@ -348,7 +355,7 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 		p.warnIfTruncated(payload, promptEst, promptTokens)
 		p.observePromptTokens(payload.Model, promptEst, promptTokens)
 		providerwire.NoteOllamaPromptEvalDuration(providerwire.PromptCacheScope(p.id, payload.Model, req.Debug), promptEvalDuration)
-	}, func(message string) error { return payload.providerError(p.id, message) })
+	}, func(message string) error { return p.providerError(payload, message) })
 	out := make(chan modelcall.StreamChunk)
 	go func() {
 		defer close(out)
