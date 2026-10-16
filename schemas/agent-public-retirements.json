@@ -1,0 +1,32 @@
+{
+  "format_version": 1,
+  "vocabularies": {
+    "host_facts": {
+      "paintedwolf.high_risk_tool": [
+        "paintedwolf.tool_is_state",
+        "paintedwolf.tool_is_delegation",
+        "paintedwolf.tool_is_handoff",
+        "paintedwolf.tool_is_task"
+      ],
+      "paintedwolf.relocated_field": [
+        "paintedwolf.misplaced_fields",
+        "paintedwolf.found_under",
+        "paintedwolf.belongs_under"
+      ],
+      "paintedwolf.nested_under": [
+        "paintedwolf.misplaced_fields",
+        "paintedwolf.found_under",
+        "paintedwolf.belongs_under"
+      ],
+      "paintedwolf.unparsed_json": [
+        "paintedwolf.json_encoded",
+        "paintedwolf.json_malformed"
+      ]
+    },
+    "rejection_codes": {},
+    "tools": {},
+    "workflow_terms": {},
+    "anchors": {},
+    "themes": {}
+  }
+}

@@ -46,7 +46,7 @@ The stock **suite** membership manifest is `packs/painted-wolf/meta.yaml` (id `p
 | | `painted-wolf/browser` | Browser tools |
 | | `painted-wolf/hitl` | HITL surfaces |
 
-Each pack has strict `extension.yaml` format **1**, a canonical SemVer `version`, and a `compatibility.extension_api` range over host API **1.0.0**. Feature/capability packs depend on `painted-wolf/platform` with a SemVer range. Every file under `packs/` belongs to the one pack leaf its path names.
+Each pack has strict `extension.yaml` format **1**, a canonical SemVer `version`, and a `compatibility.extension_api` range over host API **1.1.0**. Feature/capability packs depend on `painted-wolf/platform` with a SemVer range. Every file under `packs/` belongs to the one pack leaf its path names.
 
 ---
 

@@ -18,6 +18,7 @@ lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md
 /*.db-shm
 
 # Local task output and environment
+/.release-controller/
 .direnv/
 .task/
 

@@ -8,6 +8,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
@@ -131,6 +132,11 @@ func TestRunSealsATaggedReleaseFromGit(t *testing.T) {
 	args := []string{"painted-wolf/security-survey", "security-survey", "v1.0.0"}
 
 	var stdout, stderr bytes.Buffer
+	outRepo := t.TempDir()
+	gittest.Run(t, repo, "clone", repo, outRepo)
+	if code := run(t.Context(), t.TempDir(), append([]string{"--repo-root", outRepo}, args...), &stdout, &stderr); code != 0 {
+		t.Fatalf("seal with --repo-root exit %d: %s", code, stderr.String())
+	}
 	if code := run(t.Context(), repo, args, &stdout, &stderr); code != 0 {
 		t.Fatalf("seal exit %d: %s", code, stderr.String())
 	}
@@ -183,4 +189,33 @@ func TestRunSealsManifestOnlyReleaseWithoutFeedbackDirectory(t *testing.T) {
 	if code := run(t.Context(), repo, []string{"--check", "painted-wolf/bugbash", "bugbash", "missing-tag"}, &stdout, &stderr); code != 1 {
 		t.Fatalf("unknown release tag exit %d: %s", code, stderr.String())
 	}
+}
+
+func (r treeRelease) paths(dir string) ([]string, error) {
+	var files []string
+	for rel := range r {
+		if strings.HasPrefix(rel, dir+"/") {
+			files = append(files, rel)
+		}
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
+func TestVerifyArchiveRejectsExtraAndLinkedFiles(t *testing.T) {
+	for _, link := range []bool{false, true} {
+		root := t.TempDir()
+		target := filepath.Join(root, "extra.md")
+		if link {
+			testutil.FailErr(t, "create archive symlink", os.Symlink("missing.md", target))
+		} else {
+			testutil.FailErr(t, "create extra archive file", os.WriteFile(target, []byte("extra\n"), 0o600))
+		}
+		if err := verifyArchive(root, map[string][]byte{}); err == nil {
+			t.Fatal("unsealed archive content passed")
+		}
+	}
+	root := t.TempDir()
+	testutil.FailErr(t, "create OS metadata in archive", os.WriteFile(filepath.Join(root, ".DS_Store"), []byte("ignored\n"), 0o600))
+	testutil.FailErr(t, "ignore OS metadata in archive", verifyArchive(root, map[string][]byte{}))
 }

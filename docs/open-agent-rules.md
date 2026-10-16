@@ -89,6 +89,10 @@ Intrinsic tool failures publish `paintedwolf.rejection_code` at `tool.rejected`;
 
 ## Fact catalogue
 
+The release gate checks fact signatures and retirement successors against the
+published stable baseline. The structured retirement catalog is
+[`agent-public-retirements.json`](../schemas/agent-public-retirements.json).
+
 `paintedwolf.high_risk_tool` is deprecated and retired because its provider combined policy categories, contrary to OAR-FACT-7. Its named successor is the explicit rule expression `(paintedwolf.tool_is_state || paintedwolf.tool_is_delegation || paintedwolf.tool_is_handoff || paintedwolf.tool_is_task)`. The capability catalog no longer advertises the retired name; a rule naming it fails load with the undeclared identifier before evaluation. This is the published retirement rule for that agent-public fact; the name must never be reused. The independent host posture-condition vocabulary retains its existing authorization behavior.
 
 `paintedwolf.relocated_field` and `paintedwolf.nested_under` are retired. Their successors are the explicit field list `paintedwolf.misplaced_fields` and the structural locations `paintedwolf.found_under` and `paintedwolf.belongs_under`. `paintedwolf.unparsed_json` is retired; use `paintedwolf.json_encoded` for a JSON string where a structured value belongs and `paintedwolf.json_malformed` for invalid JSON syntax. The retired identifiers are no longer advertised, fail rule loading, and must never be reused.

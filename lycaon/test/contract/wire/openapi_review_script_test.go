@@ -2,6 +2,9 @@ package contract
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"os"
 	"os/exec"
@@ -58,6 +61,30 @@ func TestOpenAPIReviewReport(t *testing.T) {
 			if stamped := !os.IsNotExist(err); stamped != (tc.missing == "" && tc.installStatus == 0) {
 				t.Errorf("installation stamp present=%v after preparation: %v", stamped, err)
 			}
+			if tc.missing == "" && tc.installStatus == 0 {
+				reportDir := filepath.Join(paths.Artifacts, "ci", "compatibility")
+				report, err := os.ReadFile(filepath.Join(reportDir, "openapi-changelog.txt"))
+				contractcheck.FailErr(t, "read retained OpenAPI report", err)
+				if string(report) != tc.stdout {
+					t.Fatalf("retained report=%q, want %q", report, tc.stdout)
+				}
+				identity, err := os.ReadFile(filepath.Join(reportDir, "openapi-inputs.json"))
+				contractcheck.FailErr(t, "read report identity", err)
+				var record struct {
+					SourceCommit string            `json:"source_commit"`
+					Inputs       map[string]string `json:"inputs"`
+				}
+				contractcheck.FailErr(t, "decode report identity", json.Unmarshal(identity, &record))
+				if record.SourceCommit != strings.Repeat("a", 40) {
+					t.Fatalf("source identity=%+v", record)
+				}
+				for path, body := range inputs {
+					sum := sha256.Sum256([]byte(body))
+					if record.Inputs[path] != hex.EncodeToString(sum[:]) {
+						t.Fatalf("input identity for %s=%+v", path, record)
+					}
+				}
+			}
 			for path, want := range inputs {
 				got, err := os.ReadFile(filepath.Join(root, path))
 				if path == tc.missing {
@@ -98,6 +125,13 @@ func openAPIReviewFixture(t *testing.T) (string, contractcheck.ArtifactPaths, ma
 	files := map[string]string{
 		"scripts/diff-openapi.sh": contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "scripts/diff-openapi.sh"),
 		"lycaon/go.mod":           "module fixture\n\ngo 1.26.0\n",
+		"bin/git": `#!/bin/sh
+case "$*" in
+  'rev-parse HEAD') printf '%040d\n' 0 | tr 0 a ;;
+  'show stable:docs/openapi.yaml') printf 'published stable bundle\n' ;;
+  *) exit 2 ;;
+esac
+`,
 		"bin/go": `#!/usr/bin/env bash
 set -euo pipefail
 if [[ "${INSTALL_STATUS:-0}" != 0 ]]; then
@@ -109,7 +143,8 @@ cp ../fixture-oasdiff "$GOBIN/oasdiff"
 `,
 		"fixture-oasdiff": `#!/usr/bin/env bash
 set -euo pipefail
-[[ "$#" == 5 && "$1" == changelog && "$2" == --level && "$3" == ERR && "$4" == docs/openapi/baseline-bundle.yaml && "$5" == docs/openapi.yaml ]]
+[[ "$#" == 5 && "$1" == changelog && "$2" == --level && "$3" == ERR && "$5" == docs/openapi.yaml ]]
+[[ "$4" == docs/openapi/baseline-bundle.yaml || "$4" == "$PW_ARTIFACT_ROOT/ci/compatibility/openapi-baseline.yaml" ]]
 printf '%s' "${REPORT_STDOUT:-}"
 printf '%s' "${REPORT_STDERR:-}" >&2
 exit "${REPORT_STATUS:-0}"
@@ -140,4 +175,35 @@ func runOpenAPIReview(t *testing.T, root string, paths contractcheck.ArtifactPat
 		contractcheck.FailErr(t, "run review script", err)
 	}
 	return stdout.String(), stderr.String(), cmd.ProcessState.ExitCode()
+}
+
+func TestOpenAPIReviewUsesPinnedStableSource(t *testing.T) {
+	root, paths, inputs := openAPIReviewFixture(t)
+	for _, ref := range []string{"stable", "missing"} {
+		cmd := exec.CommandContext(t.Context(), "bash", filepath.Join(root, "scripts", "diff-openapi.sh"), "--baseline-ref", ref)
+		cmd.Env = append(os.Environ(), "PATH="+filepath.Join(root, "bin")+string(os.PathListSeparator)+os.Getenv("PATH"))
+		cmd.Env = append(cmd.Env, paths.Env()...)
+		out, err := cmd.CombinedOutput()
+		if ref == "missing" {
+			if err == nil {
+				t.Fatalf("missing baseline passed: %s", out)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("pinned baseline: %v\n%s", err, out)
+		}
+		raw, err := os.ReadFile(filepath.Join(paths.Artifacts, "ci", "compatibility", "openapi-baseline.yaml"))
+		contractcheck.FailErr(t, "read stable specification", err)
+		if string(raw) != "published stable bundle\n" {
+			t.Fatalf("baseline=%q", raw)
+		}
+		for rel, want := range inputs {
+			got, err := os.ReadFile(filepath.Join(root, rel))
+			contractcheck.FailErr(t, "read preserved input", err)
+			if string(got) != want {
+				t.Fatalf("changed %s", rel)
+			}
+		}
+	}
 }
