@@ -69,7 +69,7 @@ func TestToolCallSyntaxErrorGrammar(t *testing.T) {
 		if !errors.As(err, &syntax) {
 			t.Fatalf("%q: fixture is not a syntax error: %v", raw, err)
 		}
-		if kind, ok := policy.Match(err.Error()); !ok || kind != providerprofile.ToolCallArgumentsUnparsed {
+		if rejection, ok := policy.Match(err.Error()); !ok || rejection.Kind != providerprofile.ToolCallArgumentsUnparsed {
 			t.Errorf("%q: grammar rejects encoding/json error %q", raw, err.Error())
 		}
 	}

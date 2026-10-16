@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -17,11 +18,25 @@ const (
 	// ToolCallArgumentsUnparsed: the parser dropped the call because its
 	// arguments were not valid JSON, and named neither tool nor arguments.
 	ToolCallArgumentsUnparsed ToolCallRejectionKind = "arguments_unparsed"
+	// ToolCallNotOffered: the parser dropped a call to a tool the request did
+	// not offer. The grammar captures the name; the host refuses that name
+	// with TOOL_NOT_OFFERED and never executes it.
+	ToolCallNotOffered ToolCallRejectionKind = "tool_not_offered"
 )
+
+// toolNameToken is the provider function-name token a captured name must be.
+var toolNameToken = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+
+// toolCallRejectionCaptures is how many names each kind's grammar captures.
+var toolCallRejectionCaptures = map[ToolCallRejectionKind]int{
+	ToolCallArgumentsUnparsed: 0,
+	ToolCallNotOffered:        1,
+}
 
 // ToolCallRejectionPolicy declares the errors a provider's native tool-call
 // parser reports after dropping a model's call. Ship-catalog profiles only;
-// a matched error becomes a typed failure and never a call.
+// a matched error becomes a typed failure or a host refusal, never an
+// executable call.
 type ToolCallRejectionPolicy struct {
 	// Profile names the tool_call_rejection_profiles entry the policy came from.
 	Profile string `yaml:"-"`
@@ -56,7 +71,8 @@ func (p *ToolCallRejectionPolicy) Compile() error {
 	}
 	for i := range p.Rules {
 		rule := &p.Rules[i]
-		if rule.Kind != ToolCallArgumentsUnparsed {
+		captures, known := toolCallRejectionCaptures[rule.Kind]
+		if !known {
 			return fmt.Errorf("rule %d has unsupported kind %q", i, rule.Kind)
 		}
 		if strings.TrimSpace(rule.Source) == "" {
@@ -66,23 +82,63 @@ func (p *ToolCallRejectionPolicy) Compile() error {
 		if err != nil {
 			return fmt.Errorf("rule %d grammar: %w", i, err)
 		}
-		if re.NumSubexp() > 0 {
-			return fmt.Errorf("rule %d grammar captures; %s carries no call identity", i, rule.Kind)
+		if re.NumSubexp() != captures {
+			return fmt.Errorf("rule %d grammar captures %d groups; %s captures %d", i, re.NumSubexp(), rule.Kind, captures)
 		}
 		rule.compiled = re
 	}
 	return nil
 }
 
-// Match returns the kind of the first rule whose grammar spans message.
-// Uncompiled rules never match.
-func (p ToolCallRejectionPolicy) Match(message string) (ToolCallRejectionKind, bool) {
+// ToolCallRejection is a matched parser error. Tool is the captured name for
+// kinds that capture one.
+type ToolCallRejection struct {
+	Kind ToolCallRejectionKind
+	Tool string
+}
+
+// Match returns the first rule whose grammar spans message. A captured name
+// must be a function-name token. Uncompiled rules never match.
+func (p ToolCallRejectionPolicy) Match(message string) (ToolCallRejection, bool) {
 	for _, rule := range p.Rules {
-		if rule.compiled != nil && rule.compiled.MatchString(message) {
-			return rule.Kind, true
+		if rule.compiled == nil {
+			continue
 		}
+		groups := rule.compiled.FindStringSubmatch(message)
+		if groups == nil {
+			continue
+		}
+		rejection := ToolCallRejection{Kind: rule.Kind}
+		if len(groups) > 1 {
+			if !toolNameToken.MatchString(groups[1]) {
+				continue
+			}
+			rejection.Tool = groups[1]
+		}
+		return rejection, true
 	}
-	return "", false
+	return ToolCallRejection{}, false
+}
+
+// UnofferedTool returns the name a tool_not_offered rejection reports when it
+// lies outside a non-empty offered set. An offered name in this error is a
+// provider fault, so it stays an error.
+func (p ToolCallRejectionPolicy) UnofferedTool(message string, offered []string) (string, bool) {
+	rejection, ok := p.Match(message)
+	if !ok || rejection.Kind != ToolCallNotOffered || len(offered) == 0 || slices.Contains(offered, rejection.Tool) {
+		return "", false
+	}
+	return rejection.Tool, true
+}
+
+// Recognizes reports whether an eligible request's message is a declared
+// rejection the host handles in-turn.
+func (p ToolCallRejectionPolicy) Recognizes(message string, offered []string) bool {
+	if _, ok := p.UnofferedTool(message, offered); ok {
+		return true
+	}
+	rejection, ok := p.Match(message)
+	return ok && rejection.Kind == ToolCallArgumentsUnparsed
 }
 
 // Classify types a provider error message. Only a request that offered
@@ -92,7 +148,7 @@ func (p ToolCallRejectionPolicy) Classify(providerID, model, message string, eli
 	if !eligible {
 		return cause
 	}
-	if kind, ok := p.Match(message); ok && kind == ToolCallArgumentsUnparsed {
+	if rejection, ok := p.Match(message); ok && rejection.Kind == ToolCallArgumentsUnparsed {
 		return &failure.ProviderToolCallUnparsedError{ProviderID: providerID, Model: model, Cause: cause}
 	}
 	return cause
