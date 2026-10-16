@@ -2,6 +2,18 @@
 # Evaluator: lycaon/internal/coordinator/turnload
 version: 2
 
+# The engine serves on a device only when it ranks its reference batch of 16
+# code candidates within reference_ms; the fastest such device serves. A turn
+# decision takes about 2 reference batches at p50 and 4 at p95, so at this
+# limit turns finish well within turn.deadline_ms. An Apple M1 Pro takes
+# 265 ms on MLX and a fast desktop CPU about 4 s; on a machine where no device
+# qualifies, every decision falls back at once instead of answering late. A
+# rerank site the serving device cannot finish within its own deadline keeps
+# its lexical order.
+# Evaluator: lycaon/internal/decide
+engine:
+  reference_ms: 1000
+
 # The state every decision reads: the request in the user's words plus host
 # facts. The engine reads a bounded window, so the text is cut at the end.
 state:

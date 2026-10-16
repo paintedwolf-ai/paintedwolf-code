@@ -706,6 +706,16 @@ policy expand to the full `check` profile. A missing Git base fails planning;
 an unresolved Go graph runs the full Go recipe. An empty shard never passes as
 an empty test run. Selection and source identities travel with each lane receipt.
 
+Lanes and shards are planned from measured durations. Each lane of main's
+qualification records its elapsed time beside its receipts in `ci/timings.json`;
+a sharded lane also records its packages' durations. The plan job reads the
+newest qualification that recorded them and hands every shard of the run the
+same package durations, so the shards partition the selection identically:
+packages go longest first to the least loaded shard, so the longest package
+starts first and the shards finish together. A selection smaller than the split
+repeats packages rather than leave a shard empty. Without measurements, such as
+for a token that cannot read Actions, shards deal the sorted selection in turn.
+
 The planner in [`scripts/ci_policy/impact.py`](../scripts/ci_policy/impact.py)
 uses the pull request merge base or the merge group's explicit `base_sha`, not
 the moving `origin/main` tip. That same base reaches changed coverage and budget
@@ -719,11 +729,11 @@ A lane that declares a `platform` runs a check only that platform can run, so
 `check`, which every development host runs, leaves it out, and the planner
 refuses one that repeats a `check` stage or joins the fast tier. The merge queue
 runs it beside the partition: for the change areas the planner assigns it and
-for every broad change. The `webkit-gtk` lane runs `den:webkit:atspi` nightly
-and in release qualification; it joins merge admission once its chat scenario
-sets up deterministically. Like every lane, it fails when the check reports
-unverified: an image that cannot be built, a missing container runtime, or a
-harness that does not start leaves the result unverified, never passed.
+for every broad change. The `webkit-gtk` lane runs `den:webkit:atspi` for any
+Den source change; changes to the check, its probe, or the harness fixtures are
+broad. Like every lane, it fails when the check reports unverified: an image
+that cannot be built, a missing container runtime, or a harness that does not
+start leaves the change unverified, never admitted.
 
 Linux confinement compiles per architecture: seccomp filters name the audit
 architecture and syscall numbers, arm64 has no legacy calls such as `open`,
@@ -881,9 +891,10 @@ gate's cap. The `capacity` table in
 triggered workflow's footprint and each verification profile's
 `max_parallel`. The reusable verification workflow's plan job reads that cap
 from the catalog and orders the matrix: lanes the catalog marks `first`, the
-cheap ones that fail most often, then the rest longest budget first, so a
-capped matrix neither finishes on its slowest lane nor runs long before a
-cheap failure.
+cheap ones that fail most often, then the rest longest first by the durations
+main's qualification measured, so a capped matrix neither finishes on its
+slowest lane nor runs long before a cheap failure. A lane qualification does
+not run is planned at its budget, so it starts early.
 
 | Class | Workflows | One run at a time | Runners (macOS) |
 |---|---|---|---|

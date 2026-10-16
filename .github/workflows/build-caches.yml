@@ -116,6 +116,10 @@ jobs:
         if: runner.os == 'macOS' && (steps.setup.outputs.go-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true')
         run: ./task build:lycaon-dev
 
+      - name: Build the decision engine
+        if: runner.os == 'Linux' && steps.setup.outputs.decide-cache-hit != 'true'
+        run: ./task build:decide
+
       - name: Warm desktop workspace builds
         if: steps.setup.outputs.rust-cache-hit != 'true'
         run: ./task setup-dev -- --workspace-cache
@@ -134,7 +138,7 @@ jobs:
           save: 'true'
 
       - name: Publish prepared decision engine
-        if: runner.os == 'macOS' && github.ref == 'refs/heads/main' && steps.setup.outputs.decide-cache-hit != 'true'
+        if: github.ref == 'refs/heads/main' && steps.setup.outputs.decide-cache-hit != 'true'
         uses: ./.github/actions/cache-decide
         with:
           save: 'true'

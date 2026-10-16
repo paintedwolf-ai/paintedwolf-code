@@ -17,6 +17,10 @@ if [[ "${1:-}" == "--shell-resources" ]]; then
   exec bash "${ROOT}/scripts/licenses-notices.sh"
 fi
 
+if [[ "${1:-}" == "--notices-tools" ]]; then
+  exec bash "${ROOT}/scripts/licenses-notices.sh" --tools
+fi
+
 if [[ "${1:-}" == "--workspace-cache" ]]; then
   exec bash "${ROOT}/scripts/warm-workspace-build.sh"
 fi
@@ -24,7 +28,7 @@ if [[ "${1:-}" == "--release-cache" ]]; then
   exec bash "${ROOT}/scripts/warm-release-build.sh"
 fi
 if [[ $# != 0 ]]; then
-  echo "usage: ./task setup-dev [-- --ci-inputs|--frontend|--shell-resources|--workspace-cache|--release-cache]" >&2
+  echo "usage: ./task setup-dev [-- --ci-inputs|--frontend|--shell-resources|--notices-tools|--workspace-cache|--release-cache]" >&2
   exit 2
 fi
 
