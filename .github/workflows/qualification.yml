@@ -24,15 +24,24 @@ jobs:
     needs: verification
     uses: ./.github/workflows/platform-verification.yml
 
+  # Release's platform lanes, such as arm64 confinement, one at a time beside the platform gates;
+  # the check run above covers the rest of release.
+  platform-lanes:
+    needs: verification
+    uses: ./.github/workflows/verification.yml
+    with:
+      profile: release
+      platform: true
+
   e2e:
-    needs: platform
+    needs: [platform, platform-lanes]
     uses: ./.github/workflows/e2e-verification.yml
     with:
       web-parallel: 2
 
   qualification:
     if: ${{ !cancelled() }}
-    needs: [verification, platform, e2e]
+    needs: [verification, platform, platform-lanes, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
