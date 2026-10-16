@@ -71,14 +71,23 @@ func (r Request) admitToolCallRejection(rejections providerprofile.ToolCallRejec
 		io.Reader
 		io.Closer
 	}{io.MultiReader(bytes.NewReader(peek), resp.Body), resp.Body}
-	var decoded struct {
-		Error string `json:"error"`
-	}
-	if len(peek) > maxToolCallErrorBody || json.Unmarshal(peek, &decoded) != nil {
-		return resp, nil
-	}
-	if rejections.Recognizes(decoded.Error, offered) {
+	if text, ok := boundedErrorText(peek); ok && rejections.Recognizes(text, offered) {
 		resp.StatusCode, resp.Status = http.StatusOK, "200 OK"
 	}
 	return resp, nil
+}
+
+// boundedErrorText reads the error field of a whole JSON error body; a body
+// past the bound or not JSON is passed through unchanged.
+func boundedErrorText(peek []byte) (string, bool) {
+	if len(peek) > maxToolCallErrorBody {
+		return "", false
+	}
+	var decoded struct {
+		Error string `json:"error"`
+	}
+	if json.Unmarshal(peek, &decoded) != nil {
+		return "", false
+	}
+	return decoded.Error, true
 }

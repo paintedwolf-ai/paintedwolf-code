@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -256,7 +257,7 @@ func TestDroppedToolCallNeedsItsPolicyDecision(t *testing.T) {
 		}}}}
 		st := &promptLoopTurnState{}
 		got, err := turn.recoverUnparsedToolCall(t.Context(), &api.Session{ID: "s"}, st, req, nil, &modelcall.Completion{Content: "partial"}, cause, false)
-		if got != nil || err != tc.want || st.output.rejection != nil || st.output.droppedToolCallStreak != 0 {
+		if got != nil || !errors.Is(err, tc.want) || st.output.rejection != nil || st.output.droppedToolCallStreak != 0 {
 			t.Fatalf("decision %v: recovered=%v err=%v state=%+v", tc.decision, got, err, st.output)
 		}
 	}

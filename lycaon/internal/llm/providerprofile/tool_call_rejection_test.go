@@ -53,10 +53,10 @@ func TestToolCallRejectionPolicyMatchesWholeMessages(t *testing.T) {
 		}
 	}
 	cause := errors.New("provider: a")
-	if got := policy.Classify("p", "m", "a", false, cause); got != cause {
+	if got := policy.Classify("p", "m", "a", false, cause); got != cause { //nolint:errorlint // identity: an unclassified cause is returned itself
 		t.Fatal("ineligible request was typed")
 	}
-	if got := policy.Classify("p", "m", "c", true, cause); got != cause {
+	if got := policy.Classify("p", "m", "c", true, cause); got != cause { //nolint:errorlint // identity: an unclassified cause is returned itself
 		t.Fatal("unmatched message was typed")
 	}
 	typed, ok := failure.AsProviderToolCallUnparsed(policy.Classify("p", "m", "a", true, cause))

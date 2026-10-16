@@ -59,7 +59,7 @@ func TestOllamaKindAttachesShippedToolCallRejections(t *testing.T) {
 	p, err := newProviderForEntry(context.Background(), entry, "", entry.HTTPRetry, nil, nil)
 	testutil.FailErr(t, "build ollama driver", err)
 	cause := failure.ErrProviderToolCallUnparsed
-	if typed := p.Profile().ToolCallRejections.Classify("desktop", "m", "unexpected end of JSON input", true, cause); typed == cause {
+	if typed := p.Profile().ToolCallRejections.Classify("desktop", "m", "unexpected end of JSON input", true, cause); typed == cause { //nolint:errorlint // identity: an unclassified cause is returned itself
 		t.Fatal("driver lacks the kind's parser rejection grammar")
 	}
 }
