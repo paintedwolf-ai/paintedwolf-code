@@ -1737,7 +1737,7 @@
       "summary": "Worker output completed while {{ paintedwolf.pending }} progress step(s) were open, and you called **`{{ tool }}`** before recording it{% if paintedwolf.settled_work %}: {{ paintedwolf.settled_work }}{% endif %}."
     },
     "PROGRESS_MISSING": {
-      "branch_instruction": "Call **`update_progress`**, then retry **`{{ tool }}`**",
+      "branch_instruction": "Call **`update_progress`**, then retry the same rejected call",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "**`{{ tool }}`** did not run: this session has no progress checklist yet."

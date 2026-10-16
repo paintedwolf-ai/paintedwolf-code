@@ -12,7 +12,7 @@ type workflowFile struct {
 	Request            *requestYAML                     `yaml:"request"`
 	Extends            string                           `yaml:"extends"`
 	Name               string                           `yaml:"name"`
-	Retired            bool                             `yaml:"retired,omitempty"`
+	Retired            bool                             `yaml:"retired,omitempty" extension_api:"1.1.0"`
 	Description        string                           `yaml:"description"`
 	Trigger            string                           `yaml:"trigger"`
 	InitialPosture     string                           `yaml:"initial_posture"`
@@ -66,11 +66,11 @@ type humanApprovalYAML struct {
 }
 
 type reviewLoopYAML struct {
-	AssignmentBinding         string            `yaml:"assignment_binding,omitempty"`
-	CoverageReviewers         []string          `yaml:"coverage_reviewers,omitempty"`
-	FollowupAttempts          int               `yaml:"followup_attempts,omitempty"`
+	AssignmentBinding         string            `yaml:"assignment_binding,omitempty" extension_api:"1.1.0"`
+	CoverageReviewers         []string          `yaml:"coverage_reviewers,omitempty" extension_api:"1.1.0"`
+	FollowupAttempts          int               `yaml:"followup_attempts,omitempty" extension_api:"1.1.0"`
 	ReconcilesPhase           string            `yaml:"reconciles_phase,omitempty"`
-	RequireInventoryAccounted bool              `yaml:"require_inventory_accounted,omitempty"`
+	RequireInventoryAccounted bool              `yaml:"require_inventory_accounted,omitempty" extension_api:"1.1.0"`
 	IncludeScanInventory      bool              `yaml:"include_scan_inventory,omitempty"`
 	EvidenceKey               string            `yaml:"evidence_key"`
 	IterationCap              int               `yaml:"iteration_cap"`
@@ -95,7 +95,7 @@ type reportControlsYAML struct {
 	Enabled       bool       `yaml:"enabled"`
 	FindingsLabel string     `yaml:"findings_label"`
 	Brief         *briefYAML `yaml:"brief,omitempty"`
-	Retries       *int       `yaml:"retries,omitempty"`
+	Retries       *int       `yaml:"retries,omitempty" extension_api:"1.1.0"`
 }
 
 type attachYAML struct {
@@ -194,7 +194,7 @@ type parallelTaskYAML struct {
 
 type fanoutYAML struct {
 	RequireThreatModel bool `yaml:"require_threat_model"`
-	RequireTaskCharter bool `yaml:"require_task_charter"`
+	RequireTaskCharter bool `yaml:"require_task_charter" extension_api:"1.1.0"`
 	MaxAttempts        int  `yaml:"max_attempts,omitempty"`
 }
 
@@ -230,7 +230,7 @@ type userFeedbackYAML struct {
 type phaseControlsYAML struct {
 	ContentReview *contentReviewYAML `yaml:"content_review"`
 	Closeout      string             `yaml:"closeout"`
-	Retries       *int               `yaml:"retries,omitempty"`
+	Retries       *int               `yaml:"retries,omitempty" extension_api:"1.1.0"`
 }
 
 type contentReviewYAML struct {

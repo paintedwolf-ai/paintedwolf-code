@@ -595,7 +595,7 @@ Gate composition lives in `scripts/verification-plan.json`.
 | `bundle:smoke` | Launches the app through LaunchServices, then authenticates, resolves catalogs, opens and edits a document, and checks the engine survived. Ad-hoc-signed builds are **rejected**: they cannot exercise the release Keychain path without an authorization dialog, so a pass on one would prove nothing about the shipped app |
 | `release:preflight` | Read-only validation of version, updater, and brand inputs. `-- --require-corpus` additionally demands the committed upgrade fixture, which is what the tag gate wants |
 | `upgrade:corpus:prepare` / `upgrade:corpus:boot` | `prepare` writes an immutable fixture under `lycaon/testdata/upgrade-corpus/<VERSION>/` that you **review and commit with the candidate**; the release workflow uploads that reviewed tree rather than minting evidence after the tag. `boot` proves the committed fixtures locally |
-| `openapi:diff` | Optional breaking-change report against the committed release-review baseline. Differences succeed; input and tool errors fail. It is not in `check`, `check:drift`, or any workflow |
+| `openapi:diff` | Report wire differences against the committed baseline, or `-- --baseline-ref <commit>` for a pinned stable release. Release CI retains the report automatically; permitted bundle differences succeed and tool failures block release |
 
 ### OpenAPI release review
 
@@ -603,7 +603,11 @@ Gate composition lives in `scripts/verification-plan.json`.
 `docs/openapi/baseline-bundle.yaml` and leaves both files unchanged. Run it when
 reviewing a release candidate. Breaking changes are informational because Den
 and the host ship together. The report shows oasdiff's error-level changes;
-warning-level advisories such as added response enum values are excluded.
+warning-level advisories such as added response enum values are excluded. Release
+CI runs the report against the same published stable commit as its blocking
+compatibility gate and retains both input hashes and the report. The report does
+not require a human acknowledgement; incorrect versioning is enforced separately
+by the release compatibility gate.
 
 After reviewing the differences and updating the co-shipped consumers, advance
 the baseline from the repository root and commit it with the reviewed candidate:
@@ -1019,6 +1023,12 @@ xattr -w com.apple.quarantine "0083;00000000;Chrome;|com.google.Chrome" ~/Downlo
 5. **Readiness is clean or explained.** `GET /v1/preflight` returns `overall: ok`, or every non-ok probe is one the tester deliberately caused. A clean Mac without a host git install is the *expected* first-run environment — the golden path **passes** when the bundled engine is present (or the app surfaces `GIT_ENGINE_UNAVAILABLE` if it is not), and **fails** if the app is silent about a missing engine.
 
 ### Tag gate
+
+Both preview and stable publication run the controller's compatibility check
+against the newest published stable release confirmed by the signed updater feed or GitHub mirror. The controller pins that
+release's commit once and uses it for catalog and OpenAPI comparisons. An
+unpublished tag or a preview cannot replace the baseline. Missing or inconsistent
+evidence fails closed; there is no additional approval record to maintain.
 
 Every release tag clears the same gate:
 
