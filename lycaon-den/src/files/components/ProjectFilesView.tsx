@@ -21,9 +21,10 @@ import { createFileConfirmations } from "../commands/file-confirmations.ts";
 import { createBufferLoading } from "../documents/files-buffer-loading.ts";
 import { createFileMergeCommands } from "../documents/file-merge-commands.ts";
 import { FilesNavigationPane } from "./FilesNavigationPane.tsx";
-import { Show, createEffect, createMemo, createSignal, onCleanup, onMount, untrack } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from "solid-js";
 import { registerEscapeLadderLayer } from "../../find/escape-ladder.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
+import { webkitAtspiWorkaroundActive } from "../../platform/desktop/webkit-atspi-workaround.ts";
 import { isBackendReachable } from "../../platform/connection/sidecar-status.ts";
 import { useResidentLive } from "../../ui/resident-activity.ts";
 import { BrowseStagePanel } from "../../components/browse/BrowseStagePanel.tsx";
@@ -127,6 +128,25 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
   });
   const { filesOpenListOpen, setRovingTabKey, closeBuffers, requestCloseFamily, openFilesList, closeBuffer } = tabCommands;
   const [hiddenTabCount, setHiddenTabCount] = createSignal(0);
+  // Under the WebKitGTK AT-SPI workaround the loading text leaves the DOM once its layer has faded.
+  const [loadingMounted, setLoadingMounted] = createSignal(true);
+  let loadingLayer: HTMLDivElement | undefined;
+  createEffect(on(stageReady, (ready) => {
+    if (!ready) {
+      setLoadingMounted(true);
+      return;
+    }
+    const fadeMs = loadingLayer ? longestTransitionMs(getComputedStyle(loadingLayer)) : 0;
+    if (fadeMs <= 0) {
+      setLoadingMounted(false);
+      return;
+    }
+    // A timer, not transitionend: a layer that fades while its surface is retained raises no event.
+    const timer = setTimeout(() => {
+      if (stageReady()) setLoadingMounted(false);
+    }, fadeMs);
+    onCleanup(() => clearTimeout(timer));
+  }));
   const [showLeadingFade, setShowLeadingFade] = createSignal(false);
   const [showTrailingFade, setShowTrailingFade] = createSignal(false);
   const treeInteraction = createFilesTreeInteraction({
@@ -309,6 +329,9 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
       aria-busy={retainedWorkspacePending()}
     >
       <div
+        ref={(element) => {
+          loadingLayer = element;
+        }}
         class="project-files-stage-boundary__loading"
         classList={{
           "project-files-stage-boundary__loading--ready": stageReady(),
@@ -316,11 +339,13 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
         aria-hidden={stageReady()}
         inert={stageReady() ? true : undefined}
       >
-        <ProjectLoadingStage
-          label={holdLabel()}
-          hint={holdHint()}
-          tone={holdTone()}
-        />
+        <Show when={!webkitAtspiWorkaroundActive() || loadingMounted()}>
+          <ProjectLoadingStage
+            label={holdLabel()}
+            hint={holdHint()}
+            tone={holdTone()}
+          />
+        </Show>
       </div>
       <div
         class="project-files-stage-boundary__content den-retained-presentation"
@@ -521,3 +546,16 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
   );
 }
 
+function durationMs(value: string): number {
+  const amount = Number.parseFloat(value);
+  if (!Number.isFinite(amount)) return 0;
+  return value.trim().endsWith("ms") ? amount : amount * 1000;
+}
+
+/** The longest duration plus delay among an element's transitions. */
+function longestTransitionMs(style: CSSStyleDeclaration): number {
+  const durations = style.transitionDuration.split(",");
+  const delays = style.transitionDelay.split(",");
+  return durations.reduce((longest, duration, index) =>
+    Math.max(longest, durationMs(duration) + durationMs(delays[index % delays.length] ?? "0s")), 0);
+}

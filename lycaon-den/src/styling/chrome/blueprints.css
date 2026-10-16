@@ -19,7 +19,7 @@
   padding: 8px 14px;
   border-bottom: 1px solid var(--den-line);
 }
-.den-blueprints-row:last-child {
+li:last-child > .den-blueprints-row {
   border-bottom: none;
 }
 .den-blueprints-row:hover {

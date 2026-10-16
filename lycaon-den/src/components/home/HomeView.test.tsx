@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi, onTestFinished } from "vitest";
+import { applyWebEngineFact } from "../../platform/desktop/webkit-atspi-workaround.ts";
 import { loadFailed, loaded } from "../../store/load-state.ts";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
@@ -85,6 +86,26 @@ describe("HomeView missing provider config", () => {
 });
 
 describe("HomeView draft materialization", () => {
+  it("shows the idea hint as the field's placeholder without the WebKitGTK workaround", () => {
+    render(() => <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} onSubmitIdea={vi.fn()} />);
+    const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
+    expect(input.getAttribute("placeholder")).toBe("Describe your idea…");
+    expect(input.hasAttribute("aria-label")).toBe(false);
+    expect(document.querySelector(".home-view__idea-hint")).toBeNull();
+  });
+
+  it("draws the idea hint while the field is empty under the WebKitGTK workaround", () => {
+    applyWebEngineFact({ engine: "webkitgtk", version: "2.54.1" });
+    onTestFinished(() => applyWebEngineFact(null));
+    render(() => <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} onSubmitIdea={vi.fn()} />);
+    const input = screen.getByTestId("home-idea-input") as HTMLTextAreaElement;
+    expect(input.hasAttribute("placeholder")).toBe(false);
+    expect(input.getAttribute("aria-label")).toBe("Describe your idea");
+    expect(document.querySelector(".home-view__idea-hint")?.textContent).toBe("Describe your idea…");
+    fireEvent.input(input, { target: { value: "An orchard notebook" } });
+    expect(document.querySelector(".home-view__idea-hint")).toBeNull();
+  });
+
   it.each([true, false])("clears only accepted Home drafts (accepted=%s)", async (accepted) => {
     let settle!: (accepted: boolean) => void;
     const result = new Promise<boolean>((resolve) => { settle = resolve; });

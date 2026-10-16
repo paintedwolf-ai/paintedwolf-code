@@ -59,7 +59,7 @@ OAR policy units use `policy/<namespace>/<id>`, or `policy/<id>` when the docume
 
 Desired state records direct intent; the lock records the complete solved graph. A dependency without its own desired-state row is enabled while an enabled root requires it, and loses reachability on the next solve after the last such root is disabled.
 
-One package id resolves to one version. Cycles, conflicting sources, unsatisfied ranges, and invalid package identities reject the candidate graph. The lock binds versions, sources, integrity, and transitive reachability so boot does not depend on a live registry or repository.
+One package id resolves to one version. Cycles, conflicting sources, unsatisfied ranges, and invalid package identities reject the candidate graph. The lock binds installed versions, sources, integrity, and transitive reachability so boot does not depend on a live registry or repository. Stock packs ship with the host and cannot be installed or pinned independently. Their locked dependency versions record the solve that installed the package; Resolve checks the current bundled versions against the captured package manifest's SemVer ranges. A compatible host update does not require a lock rewrite. A missing, disabled, or incompatible stock dependency blocks its dependents and leaves unrelated packs available. Invalid lock structure still rejects the desired state and uses the stock fallback.
 
 ## Contribution language
 

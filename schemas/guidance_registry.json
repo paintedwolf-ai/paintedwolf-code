@@ -1814,6 +1814,12 @@
       "emit": "guard:read",
       "summary": "{{ tool }} could not open {{ paintedwolf.path }} — path does not exist under the attached project roots."
     },
+    "RECALL_HISTORY_INVALID": {
+      "branch_instruction": "Correct the history coordinates and retry",
+      "category": "recoverable",
+      "emit": "guard:recall",
+      "summary": "The history request was rejected: {{ paintedwolf.rejection_reason }}."
+    },
     "RECALL_LIVE_CODE_NOT_IN_SCOPE": {
       "branch_instruction": "Use an offered current-source tool, or report the missing evidence",
       "category": "recoverable",
@@ -2150,7 +2156,7 @@
       "branch_instruction": "Diagnose the failed command; keep the current sandbox boundary",
       "category": "recoverable",
       "emit": "guard:sandbox",
-      "summary": "The command exited unsuccessfully; no kernel refusal was reported."
+      "summary": "{% if paintedwolf.process_timed_out %}The command reached its host deadline; no kernel refusal was reported.{% else %}{% if paintedwolf.process_stopped %}The command was stopped; no kernel refusal was reported.{% else %}{% if paintedwolf.process_exited %}The command exited unsuccessfully; no kernel refusal was reported.{% else %}The invocation did not finish successfully; no kernel refusal was reported.{% endif %}{% endif %}{% endif %}"
     },
     "SANDBOX_SOCKET_PATH_CHANGED": {
       "branch_instruction": "Branch on Code; re-request after the socket path is stable",
@@ -3003,7 +3009,7 @@
       "summary": "This tool cannot run during closeout"
     },
     "TOOL_NOT_OFFERED": {
-      "branch_instruction": "{% if paintedwolf.tool_loadable %}Load `{{ tool }}` with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.tool_discovery_available %}Use a suitable offered tool, or describe the missing operation and target to `request_tools`{% else %}Use an available capability or report the constraint{% endif %}{% endif %}",
+      "branch_instruction": "{% if paintedwolf.tool_loadable %}Load `{{ tool }}` with `request_tools`, then retry on the next model call{% else %}{% if paintedwolf.tool_discovery_status %}Select an exact catalog name{% if paintedwolf.tool_discovery_has_more %}, or continue with next_need{% endif %}; do not repeat an unavailable name{% else %}{% if paintedwolf.tool_discovery_available %}Use a suitable offered tool, or describe the missing operation and target to `request_tools`{% else %}Use an available capability or report the constraint{% endif %}{% endif %}{% endif %}",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "{% if paintedwolf.tool_loadable %}`{{ tool }}` is available but its schema is not loaded{% else %}`{{ tool }}` is unavailable on this model call{% endif %}"
