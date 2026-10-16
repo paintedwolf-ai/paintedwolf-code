@@ -847,7 +847,7 @@ Release builds restore the shared Go cache; their separate cache retains only
 Tauri release builds. The cache actions enforce the main-ref write boundary
 themselves. Pinned Go analyzers have separate lint and vulnerability caches; their module versions
 and compiler identity are checked before use, including after a cache restore.
-A missing or mismatched binary is rebuilt before analysis. Cache warming enters
+A missing or mismatched binary is rebuilt before analysis. Lint diagnostics are keyed by commit instead: the Linux warmer runs `lint:full` and saves its golangci-lint results for each main commit, deleting the entries they replace, and lint lanes restore the newest, so they reanalyze only the packages that changed since and their dependents. Cache warming enters
 through `./task setup-dev`; workspace verification enters through its ordinary
 managed targets.
 

@@ -84,7 +84,7 @@ func TestAssemblePromptHistoryEntryPoints(t *testing.T) {
 		path string
 		want string
 	}{
-		{filepath.Join(root, "lycaon", "internal", "session", "history", "compaction.go"), "m.Assemble(ctx, sess, history, surfaceID)"},
+		{filepath.Join(root, "lycaon", "internal", "session", "history", "projection.go"), "m.Assemble(ctx, sess, history, surfaceID)"},
 		{filepath.Join(root, "lycaon", "internal", "session", "history", "prompt_assembly.go"), "promptassembly.Assemble("},
 		{filepath.Join(root, "lycaon", "internal", "session", "promptassembly", "assembly.go"), "FilterPromptHistory"},
 		{filepath.Join(root, "lycaon", "internal", "session", "promptassembly", "assembly.go"), "restoreSealedToolBodies"},
