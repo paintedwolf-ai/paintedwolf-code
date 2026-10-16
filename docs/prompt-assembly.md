@@ -24,7 +24,7 @@ No consumer treats another consumer's lossy view as canonical state. Model conte
 
 Completion assembly captures one immutable host wiring snapshot per request. `coordinator/assembly` keeps the engine's turn lifecycle and cache separate from `promptSurface`, which resolves catalogs, capabilities, profiles, and stable rendering, and `turnContextAssembler`, which projects guidance, source briefs, worker context, boards, and workflow orientation around history. The composition root projects that snapshot into separate typed dependencies. Turn context uses a narrow catalog/profile/roster port and its own guidance, board, and worker sources; neither domain retains the engine or its full wiring record. Both use explicit turn scratch state, and a dependency update applies to the next completion.
 
-Initial fitting runs over history alone. History assembly (compaction view, surface diet, deterministic fit) returns fitted history; completion assembly then appends the system prompt, current turn frame, and tail injects. A final provider-boundary pass adds procedures for the tools actually offered and refits the assembled messages. The rendered system instructions and current user request stay pinned through both passes.
+Initial fitting runs over history alone. History assembly (compaction view, surface diet, deterministic fit) returns fitted history; completion assembly then appends the system prompt, current turn frame, and tail injects. The final pass measures that complete request, including the offered tool schemas, through the provider adapter's budget calculator. It reserves the standing frame and output before fitting history into the remaining input allowance. The rendered system instructions and current user request stay pinned through both passes.
 
 ```mermaid
 flowchart LR
@@ -137,6 +137,10 @@ Every provider call has a hard ceiling. The synchronous path fits or exposes an 
 
 The same facts, frame, limits, and compaction revision produce the same fit. Latency never depends on an emergency summarizer call.
 
+The final request fitter preserves frame order and cache tiers, and reduces only the history projection. Continuation detail scales down to recovery references when necessary. Automatic output allocation may shrink to fit the model window; explicit output caps and fixed thinking budgets remain caller requirements. Requests that already fit retain their original messages and output controls. If the required instructions, current request, recovery references, and requested output cannot fit, the host reports the irreducible context limit.
+
+When an active tool exchange still exceeds the window, a recorded result can use a bounded structured projection or a canonical record request. The original arguments, call/result pairing, outcome, trust floor, and canonical bytes remain intact. This fallback requires recall and performs no summarizer work.
+
 ## Continuation retention contract
 
 The host preserves the current user instruction, a bounded window of earlier original instructions, and the active worker assignment, and renders operational state from its owning subsystems. Supporting narrative may be summarized, but a model summary never establishes permissions, verification, or workflow completion. Older instructions stay addressable through canonical recall; a follow-up does not delete them or authorize their replacement. Session length never forces an unbounded instruction bundle into the prompt.
@@ -183,7 +187,7 @@ Compaction is independent of pricing: the session trigger selects when to compac
 
 Before the provider has reported usage, budget estimates use a character-based approximation and a cold-start reserve. The approximation can undercount or overcount; the separate compaction acceptance measurement uses the declared tokenizer when available. After a completion, assembly records observed prompt overhead so later budget decisions include static system and schema material, not only transcript text.
 
-Token observations are advisory measurements. A bad estimate may cause earlier fitting; it cannot cause the host to skip a gate.
+Token observations use the final provider attempt and are scoped to its provider and model. Billing retains usage across all attempts. A receiver switch discards the previous receiver’s calibration. The final fit uses observed input with a composition margin beside the native request estimate. A bad estimate may cause earlier fitting; it cannot cause the host to skip a gate.
 
 ## Summarize tool
 

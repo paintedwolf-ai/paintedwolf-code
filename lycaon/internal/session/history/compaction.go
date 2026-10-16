@@ -69,7 +69,7 @@ func (m *Service) runBackgroundCompactionPage(ctx context.Context, sessionID str
 	// Full summaries run only above the session watermark.
 	cfg := sc.Config()
 	bounds := m.canonicalTailBounds(cfg)
-	budgetEst := m.BudgetTokens(sessionID, compaction.EstimateMessagesTokens(working))
+	budgetEst := m.BudgetTokens(ctx, sess, compaction.EstimateMessagesTokens(working))
 	rowPressure := hasMore || len(working) > bounds.maxRows
 	if compaction.ShouldCompactSession(budgetEst, cfg.ModelContextWindow, cfg) || rowPressure {
 		maxTokens := cfg.TargetTokens
@@ -300,8 +300,15 @@ func (m *Service) sessionInfo(ctx context.Context, sess *api.Session, originals 
 
 // model uses the same routed selection as the receiving coordinator.
 func (m *Service) Model(ctx context.Context, sess *api.Session) (string, string) {
+	if m == nil || sess == nil {
+		return "", ""
+	}
 	if m.router != nil {
-		selection, err := m.router.WithOverlayRoots(m.Workspace.SettingsRoots(ctx, sess)).ResolveSession(ctx, sess)
+		var roots []string
+		if m.Workspace != nil {
+			roots = m.Workspace.SettingsRoots(ctx, sess)
+		}
+		selection, err := m.router.WithOverlayRoots(roots).ResolveSession(ctx, sess)
 		if err == nil && selection != nil {
 			return selection.ProviderID, selection.Model
 		}
@@ -321,7 +328,7 @@ func (m *Service) SessionContext(ctx context.Context, sessionID string) (api.Ses
 		return api.SessionContextResponse{}, err
 	}
 	_, report := m.Assemble(ctx, sess, history, "")
-	est := m.BudgetTokens(sessionID, report.TokensAfter)
+	est := m.BudgetTokens(ctx, sess, report.TokensAfter)
 	remaining := 0
 	if m.Compactor != nil {
 		remaining, _ = m.Compactor.BudgetRemaining(ctx, sessionID, est)
@@ -339,11 +346,18 @@ func (m *Service) SessionContext(ctx context.Context, sessionID string) (api.Ses
 }
 
 func (m *Service) compactionConfig(ctx context.Context, sess *api.Session) compaction.CompactionConfig {
-	if m.Limits == nil {
-		if m.Compactor == nil {
-			return compaction.DefaultCompactionConfig()
+	if m == nil {
+		return compaction.DefaultCompactionConfig()
+	}
+	if m.Limits == nil || sess == nil {
+		cfg := compaction.DefaultCompactionConfig()
+		if m.Compactor != nil {
+			cfg = m.Compactor.Config()
 		}
-		return m.Compactor.Config()
+		if sess != nil && sess.IsWorkerChild() {
+			cfg = compaction.WorkerChildCompactionConfig(cfg)
+		}
+		return cfg
 	}
 	resolved := *sess
 	resolved.ProviderID, resolved.Model = m.Model(ctx, sess)
