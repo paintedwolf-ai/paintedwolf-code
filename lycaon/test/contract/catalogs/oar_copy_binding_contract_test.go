@@ -92,8 +92,10 @@ var groundingRepairRecallCodes = []string{
 	"AMBIENT_UNGROUNDED_COMPLETION",
 	"FINDING_UNGROUNDED",
 	"INVEST_CITATION_UNVERIFIABLE",
+	"PAGE_MEASURE_UNGROUNDED",
 	"SUBMIT_VERDICT_CITATION_UNGROUNDED",
 	"SUBMIT_VERDICT_CITATIONS_REQUIRED",
+	"SURFACE_CLAIM_UNGROUNDED",
 	"SURFACE_NOTE_HANDLE_UNGROUND",
 	"SURFACE_NOTE_UNGROUNDED",
 	"SYNTH_CITATION_UNVERIFIABLE",
@@ -154,13 +156,18 @@ func TestRecallStickyOnEveryProfileAndSurface(t *testing.T) {
 func TestCitationGroundingKickNamesRecallOnlyWhenCallable(t *testing.T) {
 	t.Parallel()
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	for _, callable := range []bool{true, false} {
-		out, err := engine.RenderKick(context.Background(), "coordinator-citation-grounding", map[string]any{
-			"attempt": 1, "max_attempts": 3, "can_recall": callable,
-		})
-		contractcheck.FailErr(t, "render coordinator-citation-grounding", err)
-		if got := strings.Contains(out, `recall(query="handle:`); got != callable {
-			t.Errorf("can_recall=%v: names recall = %v:\n%s", callable, got, out)
+	for _, kick := range []string{"coordinator-citation-grounding", "worker-citation-grounding"} {
+		for _, callable := range []bool{true, false} {
+			out, err := engine.RenderKick(context.Background(), kick, map[string]any{
+				"attempt": 1, "max_attempts": 3, "worker_summary_max_chars": 600, "can_recall": callable,
+			})
+			contractcheck.FailErr(t, "render "+kick, err)
+			if got := strings.Contains(out, `recall(query="handle:`); got != callable {
+				t.Errorf("%s can_recall=%v: names recall = %v:\n%s", kick, callable, got, out)
+			}
+			if !callable && strings.Contains(out, "recall") {
+				t.Errorf("%s names recall while it is not callable:\n%s", kick, out)
+			}
 		}
 	}
 }

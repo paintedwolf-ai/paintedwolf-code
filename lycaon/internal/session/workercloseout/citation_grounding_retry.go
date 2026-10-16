@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
@@ -51,6 +52,7 @@ func boundCitationGroundingReport(
 		Hints:          opts.WorkflowHints,
 		Ledger:         opts.Ledger,
 		Pipeline:       opts.Pipeline,
+		OfferedTools:   opts.OfferedTools,
 	}
 	eval, err := workercompletion.EvaluateWorkerSummary(ctx, evalInput)
 	if err != nil {
@@ -85,6 +87,7 @@ func boundCitationGroundingReport(
 			"attempt":                  attempt,
 			"max_attempts":             maxRetries,
 			"worker_summary_max_chars": workerSummaryMaxChars(opts),
+			"can_recall":               slices.Contains(evalInput.OfferedTools, "recall"),
 		}
 		header := RenderWorkerKick(ctx, opts.RenderWorkerKick, anchor.InformRenderFor(ctx, anchor.WorkerCitationGrounding, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), kickData)
 		if header == "" {
@@ -95,9 +98,11 @@ func boundCitationGroundingReport(
 			return report, "", workercompletion.WorkerSummaryEvalResult{}, err
 		}
 		retryStart := len(msgs)
-		if _, err := opts.hostTurns.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginGroundingRetry, prompt); err != nil {
+		result, err := opts.hostTurns.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginGroundingRetry, prompt)
+		if err != nil {
 			return hostAssembleWorkerExit(ctx, report, opts, childSessionID, eval)
 		}
+		evalInput.OfferedTools = result.OfferedToolNames()
 
 		msgs, err = loadChildMessages(ctx, resolver, childSessionID)
 		if err != nil {

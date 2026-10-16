@@ -263,7 +263,8 @@ func (m *Service) executePromptRun(
 	_ = m.History.ScheduleChunks(ctx, sess)
 	m.Status.PublishAssistant(ctx, sessionID, result.LastAssistantContent)
 	execution.Response = &promptresult.Result{
-		MessageID: result.LastAssistantID,
+		MessageID:    result.LastAssistantID,
+		OfferedTools: result.OfferedTools,
 	}
 	return execution, nil
 }

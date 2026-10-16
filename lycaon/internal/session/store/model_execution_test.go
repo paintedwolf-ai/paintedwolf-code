@@ -190,7 +190,7 @@ func TestSealedCloseoutRecoversWithoutRequeueingTheModel(t *testing.T) {
 			}
 			var got promptresult.Result
 			testutil.FailErr(t, "read recovered handoff", json.Unmarshal([]byte(submission.ResultJSON), &got))
-			if got != response {
+			if got.MessageID != response.MessageID {
 				t.Fatalf("recovered response=%+v want=%+v", got, response)
 			}
 			queued, err := st.RecoverPromptSubmissions(ctx)

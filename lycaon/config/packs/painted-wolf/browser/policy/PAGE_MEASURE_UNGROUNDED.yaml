@@ -6,13 +6,14 @@ requires:
   facts:
     - paintedwolf.page_measure_ungrounded
     - paintedwolf.profile
+    - paintedwolf.can_recall
 when: paintedwolf.profile == "worker" && paintedwolf.page_measure_ungrounded
 effect: block
 copy:
   what: 'A quantitative layout or style finding lacks matching page_geometry evidence.'
   cause: 'The cited evidence does not establish the asserted measurement.'
   why: A page capture grounds qualitative observed-runtime claims; quantitative layout/style facts require a page_geometry measurement report.
-  fix: 'Cite an existing page_geometry evidence handle with its verbatim measurement excerpt. If the needed observation is absent, remove the unsupported quantitative claim or obtain it using an offered measurement tool before calling complete_leg.'
+  fix: 'Cite an existing page_geometry evidence handle with its verbatim measurement excerpt. {% if paintedwolf.can_recall %}If the measurement is no longer in context, recover it with `recall(query="handle:page_geometry#3")`, passing its exact handle, or `recall(query="tool:measure_page")`, and copy the excerpt from the returned body, not from memory. {% endif %}If the needed observation is absent, remove the unsupported quantitative claim or obtain it using an offered measurement tool before calling complete_leg.'
   instead: 'Return partial through complete_leg and name the missing measurement in remaining_risk when observation is unavailable; do not estimate it from a raster.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:worker_summary
@@ -20,6 +21,24 @@ x-paintedwolf-evidence:
   in_session_retry: true
 x-paintedwolf-message: Quantitative layout claim lacks page_geometry evidence
 x-paintedwolf-scenarios:
+  - id: recall_callable
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: page#1
+      can_recall: true
+    expect_contains:
+      - 'Code: PAGE_MEASURE_UNGROUNDED'
+      - 'recall(query='
+  - id: recall_not_callable
+    vars:
+      offender_count: 1
+      offenders_omitted: 0
+      offenders_sample: page#1
+      can_recall: false
+    expect_contains:
+      - 'Code: PAGE_MEASURE_UNGROUNDED'
+      - 'obtain it using an offered measurement tool'
   - id: px_claim_without_geometry
     vars:
       offender_count: 1
