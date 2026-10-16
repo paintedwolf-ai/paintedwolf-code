@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 )
 
 // The JSON error body carries one short parser error.
@@ -20,17 +22,16 @@ func (r Request) toolCallRejectable() bool {
 
 // providerError types an Ollama error message through the kind's declared
 // tool-call rejection grammars. The message is never parsed into a call.
-func (p *Provider) providerError(payload Request, message string) error {
-	return p.profile.ToolCallRejections.Classify(p.id, payload.Model, message, payload.toolCallRejectable(), fmt.Errorf("ollama: %s", message))
+func (r Request) providerError(rejections providerprofile.ToolCallRejectionPolicy, providerID, message string) error {
+	return rejections.Classify(providerID, r.Model, message, r.toolCallRejectable(), fmt.Errorf("ollama: %s", message))
 }
 
 // admitToolCallRejection reads a declared rejection sent before any output as
 // the in-band error line it is after output: Ollama's streamResponse and
 // waitForStream (server/routes.go) pick the error status only because nothing
 // had been written yet.
-func (p *Provider) admitToolCallRejection(payload Request, resp *http.Response, err error) (*http.Response, error) {
-	policy := p.profile.ToolCallRejections
-	if err != nil || resp == nil || policy.StatusBeforeOutput == 0 || resp.StatusCode != policy.StatusBeforeOutput || !payload.toolCallRejectable() {
+func (r Request) admitToolCallRejection(rejections providerprofile.ToolCallRejectionPolicy, resp *http.Response, err error) (*http.Response, error) {
+	if err != nil || resp == nil || rejections.StatusBeforeOutput == 0 || resp.StatusCode != rejections.StatusBeforeOutput || !r.toolCallRejectable() {
 		return resp, err
 	}
 	peek, _ := io.ReadAll(io.LimitReader(resp.Body, maxToolCallErrorBody+1))
@@ -44,7 +45,7 @@ func (p *Provider) admitToolCallRejection(payload Request, resp *http.Response, 
 	if len(peek) > maxToolCallErrorBody || json.Unmarshal(peek, &decoded) != nil {
 		return resp, nil
 	}
-	if _, ok := policy.Match(decoded.Error); ok {
+	if _, ok := rejections.Match(decoded.Error); ok {
 		resp.StatusCode, resp.Status = http.StatusOK, "200 OK"
 	}
 	return resp, nil
