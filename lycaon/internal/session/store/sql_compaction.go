@@ -4,16 +4,27 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+type compactionProjection struct {
+	Format       int                       `json:"format"`
+	Messages     []api.Message             `json:"messages"`
+	Continuation *messageview.Continuation `json:"continuation,omitempty"`
+}
+
 // PutCompactionView atomically publishes a fresh view and its next generation.
 func (s *SQL) PutCompactionView(ctx context.Context, sessionID string, view CompactionView) error {
-	viewJSON, err := json.Marshal(view.Messages)
+	if len(view.Messages) > messageview.MaxCompactionRows {
+		return fmt.Errorf("compaction projection exceeds its row budget")
+	}
+	viewJSON, err := json.Marshal(compactionProjection{Format: 1, Messages: view.Messages, Continuation: view.Continuation})
 	if err != nil {
 		return err
 	}
@@ -68,13 +79,23 @@ func (s *SQL) PutCompactionView(ctx context.Context, sessionID string, view Comp
 }
 
 func validateCompactionSource(ctx context.Context, queries *db.Queries, sessionID string, view CompactionView) error {
+	clock, err := queries.GetSessionTranscriptSeq(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if clock < view.SourceSeq || clock-view.SourceSeq > messageview.MaxCompactionRevisionLag {
+		return errCompactionSourceChanged
+	}
 	if view.CoveredThroughOrd > 0 {
 		boundary, err := queries.GetMessageOrdAndTS(ctx, db.GetMessageOrdAndTSParams{SessionID: sessionID, ID: view.CoveredThroughID})
+		if db.IsNoRows(err) {
+			return errCompactionSourceChanged
+		}
 		if err != nil {
 			return err
 		}
 		if boundary.Ord != view.CoveredThroughOrd {
-			return fmt.Errorf("compaction boundary changed")
+			return errCompactionSourceChanged
 		}
 	}
 	mutations, err := queries.CountCompactionSourceMutations(ctx, db.CountCompactionSourceMutationsParams{SessionID: sessionID, Ord: view.CoveredThroughOrd, Seq: view.SourceSeq})
@@ -82,7 +103,7 @@ func validateCompactionSource(ctx context.Context, queries *db.Queries, sessionI
 		return err
 	}
 	if mutations != 0 {
-		return fmt.Errorf("compaction source changed")
+		return errCompactionSourceChanged
 	}
 	return nil
 }
@@ -107,9 +128,18 @@ func (s *SQL) GetCompactionView(ctx context.Context, sessionID string) (*Compact
 		TokensBefore:      int(row.TokensBefore),
 		TokensAfter:       int(row.TokensAfter),
 	}
-	if err := json.Unmarshal([]byte(row.ViewJson), &view.Messages); err != nil {
+	var projection compactionProjection
+	if len(row.ViewJson) > 0 && row.ViewJson[0] == '[' {
+		// Canonical history rebuilds projections without a continuation contract.
+		return nil, false, nil
+	}
+	if err := json.Unmarshal([]byte(row.ViewJson), &projection); err != nil {
 		return nil, false, err
 	}
+	if projection.Format != 1 {
+		return nil, false, nil
+	}
+	view.Messages, view.Continuation = projection.Messages, projection.Continuation
 	if t, perr := db.ParseTime(row.CreatedAt); perr == nil {
 		view.CreatedAt = t
 	}
@@ -118,25 +148,11 @@ func (s *SQL) GetCompactionView(ctx context.Context, sessionID string) (*Compact
 
 // CompactionViewCurrent detects mutations at or below the view watermark.
 func (s *SQL) CompactionViewCurrent(ctx context.Context, sessionID string, coveredThroughOrd int64, coveredThroughID string, sourceSeq int64) (bool, error) {
-	if coveredThroughOrd > 0 {
-		boundary, err := s.queries.GetMessageOrdAndTS(ctx, db.GetMessageOrdAndTSParams{
-			SessionID: sessionID,
-			ID:        coveredThroughID,
-		})
-		if db.IsNoRows(err) {
-			return false, nil
-		}
-		if err != nil {
-			return false, err
-		}
-		if boundary.Ord != coveredThroughOrd {
-			return false, nil
-		}
-	}
-	mutations, err := s.queries.CountCompactionSourceMutations(ctx, db.CountCompactionSourceMutationsParams{
-		SessionID: sessionID,
-		Ord:       coveredThroughOrd,
-		Seq:       sourceSeq,
+	err := validateCompactionSource(ctx, s.queries, sessionID, CompactionView{
+		CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq,
 	})
-	return mutations == 0, err
+	if errors.Is(err, errCompactionSourceChanged) {
+		return false, nil
+	}
+	return err == nil, err
 }

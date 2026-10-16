@@ -222,3 +222,17 @@ func (r *RegistrySummarizer) SummaryRevision() (string, error) {
 		Purpose string
 	}{policy, r.utilityClass(), r.Purpose})
 }
+
+// SummaryBudget reserves utility output and framing inside the selected window.
+func (r *RegistrySummarizer) SummaryBudget() compaction.SummaryBudget {
+	provider, model, err := r.liteProvider()
+	if err != nil || provider == nil {
+		return compaction.SummaryBudget{}
+	}
+	window := r.Registry.ContextLength(provider.ID(), model)
+	if window <= 0 {
+		return compaction.SummaryBudget{}
+	}
+	output := min(1536, max(1, window/8))
+	return compaction.SummaryBudget{Input: max(1, window*3/4-output-1024), Output: output}
+}

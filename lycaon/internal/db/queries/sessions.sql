@@ -91,9 +91,12 @@ WHERE id = ? AND (title IS NULL OR TRIM(title) = '');
 
 -- Permanent opener identities survive earlier rewinds.
 -- name: GetSessionUserTurnOrdinal :one
-SELECT CAST(COALESCE(MAX(t.turn), 0) AS INTEGER) FROM session_source_turns t
+SELECT CAST(COALESCE((SELECT t.turn FROM session_source_turns t
 JOIN messages m ON m.id = t.opening_message_id
-WHERE t.session_id = ?;
+WHERE t.session_id = ? ORDER BY t.turn DESC LIMIT 1), 0) AS INTEGER);
+
+-- name: GetUserTurnOpeningMessageID :one
+SELECT opening_message_id FROM session_source_turns WHERE session_id = ? AND turn = ?;
 
 -- A turn's source-change brief is written once, when the turn opens.
 -- name: SetSessionSourceTurnBrief :exec
@@ -318,8 +321,8 @@ WHERE session_id = ?;
 -- Covered-row mutations invalidate the view; appends remain a suffix.
 -- name: CountCompactionSourceMutations :one
 SELECT COUNT(*)
-FROM messages
-WHERE session_id = ? AND ord <= ? AND seq > ?;
+FROM messages INDEXED BY idx_messages_session_seq_unique
+WHERE session_id = ? AND ord <= ? AND seq > ? AND seq > 0;
 
 -- Rewind removes transcript rows after explicit confirmation.
 -- name: GetSessionMessageOrd :one

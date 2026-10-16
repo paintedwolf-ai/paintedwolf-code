@@ -94,7 +94,18 @@ func (m *Service) Compaction(ctx context.Context, sess *api.Session) compaction.
 		paths = m.roots.SettingsRoots(ctx, sess)
 	}
 	cfg, _ := m.ResolveRoots(paths)
-	return cfg
+	if sess == nil || sess.Model == "" {
+		return cfg
+	}
+	m.mu.RLock()
+	lookup := m.windows
+	m.mu.RUnlock()
+	policy := llm.ModelPolicy{Coordinator: llm.ModelRef{ProviderID: sess.ProviderID, Model: sess.Model}}
+	resolved, _, err := llm.ApplyLiveBudget(cfg, policy, lookup, modelinfo.DefaultModelContextWindows())
+	if err != nil {
+		return cfg
+	}
+	return resolved
 }
 
 func (m *Service) ResolveRoots(projectDirs []string) (compaction.CompactionConfig, llm.SessionLimitFields) {
@@ -106,13 +117,12 @@ func (m *Service) ResolveRoots(projectDirs []string) (compaction.CompactionConfi
 		policySource, lookup, fallbackConfig = m.policy, m.windows, m.fallback
 		m.mu.RUnlock()
 	}
-	var policy llm.ModelPolicy
-	if policySource != nil {
-		var err error
-		policy, err = policySource.GetForProjectRoots(projectDirs)
-		if err != nil {
-			return fallbackBudget(fallbackConfig)
-		}
+	if policySource == nil {
+		return fallbackBudget(fallbackConfig)
+	}
+	policy, err := policySource.GetForProjectRoots(projectDirs)
+	if err != nil {
+		return fallbackBudget(fallbackConfig)
 	}
 	cfg, derived, err := llm.ApplyLiveBudget(compaction.DefaultCompactionConfig(), policy, lookup, modelinfo.DefaultModelContextWindows())
 	if err != nil {
@@ -126,5 +136,9 @@ func fallbackBudget(source ConfigSource) (compaction.CompactionConfig, llm.Sessi
 	if source != nil {
 		cfg = source.Config()
 	}
-	return cfg, llm.ScaleLimitsFromTrueWindow(modelinfo.DefaultFallbackTrueWindow)
+	derived := llm.ScaleLimitsFromTrueWindow(modelinfo.DefaultFallbackTrueWindow)
+	if cfg.MaxWorkerSummaryChars <= 0 {
+		cfg.MaxWorkerSummaryChars = derived.MaxWorkerSummaryChars
+	}
+	return cfg, derived
 }

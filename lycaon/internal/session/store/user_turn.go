@@ -2,41 +2,11 @@ package store
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// UserTurnOrdinal returns the newest live opener's permanent source identity.
-func (s *Memory) UserTurnOrdinal(ctx context.Context, sessionID string) (int, error) {
-	if err := ctx.Err(); err != nil {
-		return 0, err
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return 0, nil
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.currentUserTurnLocked(sessionID), nil
-}
-
-func (s *SQL) UserTurnOrdinal(ctx context.Context, sessionID string) (int, error) {
-	if err := ctx.Err(); err != nil {
-		return 0, err
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return 0, nil
-	}
-	n, err := s.queries.GetSessionUserTurnOrdinal(ctx, sessionID)
-	if err != nil {
-		return 0, err
-	}
-	return int(n), nil
-}
 
 func (s *Memory) currentUserTurnLocked(sessionID string) int {
 	for i := len(s.messages[sessionID]) - 1; i >= 0; i-- {
