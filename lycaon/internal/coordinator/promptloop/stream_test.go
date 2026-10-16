@@ -236,3 +236,24 @@ func boolInt(b bool) int {
 	}
 	return 0
 }
+
+// Recovery needs the stock policy decision; a missing or different decision
+// leaves the dropped call terminal.
+func TestDroppedToolCallNeedsItsPolicyDecision(t *testing.T) {
+	cause := &failure.ProviderToolCallUnparsedError{ProviderID: "desktop", Model: "m", Cause: io.ErrUnexpectedEOF}
+	req := modelcall.CompletionRequest{Tools: []tools.ToolMeta{{Name: "read"}}}
+	other := guidance.NewRefusal("SECRET_IN_OUTPUT", "withheld")
+	for _, tc := range []struct {
+		decision *guidance.Refusal
+		want     error
+	}{{nil, cause}, {other, other}} {
+		turn := &modelTurn{Closeout: &turnCloseout{Deps: CloseoutDeps{EvaluateContentAnchor: func(context.Context, *api.Session, string, oar.ContentObservation, string, map[string]any) (*guidance.Refusal, bool, string, bool) {
+			return tc.decision, tc.decision != nil, "", false
+		}}}}
+		st := &promptLoopTurnState{}
+		got, err := turn.recoverUnparsedToolCall(t.Context(), &api.Session{ID: "s"}, st, req, &modelcall.Completion{Content: "partial"}, cause, false)
+		if got != nil || err != tc.want || st.output.rejection != nil || st.output.droppedToolCallStreak != 0 {
+			t.Fatalf("decision %v: recovered=%v err=%v state=%+v", tc.decision, got, err, st.output)
+		}
+	}
+}
