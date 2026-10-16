@@ -285,21 +285,24 @@ func (l *modelTurn) completeStream(
 			CoordinatorLoop: loop,
 		})
 	})
-	if l.Projection.Deps.Events != nil && isCoordinatorTurn {
-		// Publish one terminal event even after cancellation.
-		defer func() {
-			if err == nil {
-				return
-			}
-			l.Projection.Deps.Events.PublishLLM(context.WithoutCancel(ctx), sessionProjectKey(sess), sessionID, api.LLMCallEvent{
-				CallID:          llmCallID,
-				Provider:        callProvider,
-				Model:           callModel,
-				Status:          api.LLMCallStatusError,
-				CoordinatorLoop: coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish),
-			})
-		}()
+	publishCallError := func() {
+		if l.Projection.Deps.Events == nil || !isCoordinatorTurn {
+			return
+		}
+		l.Projection.Deps.Events.PublishLLM(context.WithoutCancel(ctx), sessionProjectKey(sess), sessionID, api.LLMCallEvent{
+			CallID:          llmCallID,
+			Provider:        callProvider,
+			Model:           callModel,
+			Status:          api.LLMCallStatusError,
+			CoordinatorLoop: coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, iterIndex, maxIter, proseFinish),
+		})
 	}
+	// Publish one terminal event even after cancellation.
+	defer func() {
+		if err != nil {
+			publishCallError()
+		}
+	}()
 
 	// Retry updates reuse the call id.
 	ctx = providerretry.WithRetryObserver(ctx, func(a providerretry.RetryAttempt) {
@@ -324,8 +327,18 @@ func (l *modelTurn) completeStream(
 	collected, collectErr := l.collectPromptStream(ctx, sess, client, req, onProgress, llmCallID, callProvider, callModel)
 	callProvider, callModel = collected.providerID, collected.model
 	if collectErr != nil {
-		err = collectErr
-		return nil, nil, err
+		recovered, recoverErr := l.recoverUnparsedToolCall(ctx, sess, st, req, collected.completion, collectErr, proseFinish)
+		if recovered == nil {
+			err = recoverErr
+			return nil, nil, err
+		}
+		publishCallError()
+		recovered.SourceContext = sourceRequest.ForCompletion(recovered)
+		st.output.sourceContext = recovered.SourceContext
+		return recovered, nil, nil
+	}
+	if st != nil {
+		st.toolCallUnparsedStreak = 0
 	}
 	completion, tokens := collected.completion, collected.tokens
 	providerID, model := collected.providerID, collected.model

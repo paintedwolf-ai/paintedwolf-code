@@ -10,11 +10,16 @@ import (
 type ContentObservation struct {
 	Segments        []ContentSegment
 	TextActionTools []string
+	// ToolCallUnparsed records a native call the provider dropped as invalid JSON.
+	ToolCallUnparsed bool
 }
 
 // SetContentObservation records response classification without parsing prose.
 func (gc *GuardContext) SetContentObservation(observation ContentObservation) {
 	gc.SetContentSegments(observation.Segments)
+	if observation.ToolCallUnparsed {
+		gc.Rejection.RejectObservation = "provider_tool_call_unparsed"
+	}
 	if len(observation.TextActionTools) > 0 {
 		gc.Rejection.RejectObservation = "text_action_envelope"
 		gc.ObservationData = map[string]any{"offenders_sample": strings.Join(observation.TextActionTools, ", ")}

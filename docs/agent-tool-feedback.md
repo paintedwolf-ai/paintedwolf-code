@@ -170,6 +170,16 @@ recovery adds no standing instruction or Bialy instruction unit. A requested raw
 JSON answer with the reserved action shape can also trigger repair; use a fenced
 example to present that shape as content.
 
+A provider can also drop a native call itself. When Ollama's tool-call parser
+rejects a call's arguments as invalid JSON, it reports only the syntax error,
+without the tool name or arguments. On a callable-tool request without
+structured output, the adapter types that error as a dropped call. The prompt
+loop settles the prose the model streamed before it, and `TOOL_CALL_UNPARSED`
+enters the same `content.output` occurrence and rejected-draft lifecycle. The
+feedback asks the model to resubmit the call with valid JSON arguments. No call
+is reconstructed, so nothing executes. A third consecutive drop ends the turn
+with the provider's original error.
+
 ## Coordinator nudges
 
 Post-turn nudges carry OAR or grounding decisions that could not reject an already-finished generation. All matched advisories are retained in evaluation order; the envelope identifies the primary code.

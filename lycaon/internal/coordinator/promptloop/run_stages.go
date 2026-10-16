@@ -94,6 +94,10 @@ type promptLoopTurnState struct {
 	coordinatorFrameReady bool
 	machine               inject.Machine
 	turnToolPlan          toolsurface.Plan
+
+	// toolCallUnparsedStreak counts consecutive responses whose native call the
+	// provider dropped as invalid JSON.
+	toolCallUnparsedStreak int
 }
 
 func (st *promptLoopTurnState) progress() *workerprogress.Tracker {

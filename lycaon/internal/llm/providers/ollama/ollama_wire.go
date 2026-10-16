@@ -180,7 +180,8 @@ func ollamaToolCallsToAPI(calls []ollamaToolCall) []api.ToolCall {
 }
 
 // Tool calls accumulate across events and join usage on the terminal chunk.
-func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model string, contextTokens int, onDone func(promptTokens int, promptEvalDuration int64)) <-chan modelcall.StreamChunk {
+// errorFor types an in-band error message; nil keeps every message untyped.
+func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model string, contextTokens int, onDone func(promptTokens int, promptEvalDuration int64), errorFor func(message string) error) <-chan modelcall.StreamChunk {
 	ch := make(chan modelcall.StreamChunk)
 	go func() {
 		defer close(ch)
@@ -205,7 +206,11 @@ func decodeOllamaStream(ctx context.Context, body io.Reader, providerID, model s
 				return
 			}
 			if resp.Error != "" {
-				modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: fmt.Errorf("ollama: %s", resp.Error), Done: true})
+				err := fmt.Errorf("ollama: %s", resp.Error)
+				if errorFor != nil {
+					err = errorFor(resp.Error)
+				}
+				modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: err, Done: true})
 				return
 			}
 			if resp.Message.Content != "" {
