@@ -80,14 +80,25 @@ func (r Request) admitUnofferedToolRejection(resp *http.Response, err error) (*h
 		io.Reader
 		io.Closer
 	}{io.MultiReader(bytes.NewReader(peek), resp.Body), resp.Body}
+	if text, ok := boundedErrorText(peek); ok {
+		if _, ok := unofferedToolCall(text, offered); ok {
+			resp.StatusCode, resp.Status = http.StatusOK, "200 OK"
+		}
+	}
+	return resp, nil
+}
+
+// boundedErrorText reads the error field of a whole JSON error body; a body
+// past the bound or not JSON is passed through unchanged.
+func boundedErrorText(peek []byte) (string, bool) {
+	if len(peek) > maxUnofferedToolErrorBody {
+		return "", false
+	}
 	var decoded struct {
 		Error string `json:"error"`
 	}
-	if len(peek) > maxUnofferedToolErrorBody || json.Unmarshal(peek, &decoded) != nil {
-		return resp, nil
+	if json.Unmarshal(peek, &decoded) != nil {
+		return "", false
 	}
-	if _, ok := unofferedToolCall(decoded.Error, offered); ok {
-		resp.StatusCode, resp.Status = http.StatusOK, "200 OK"
-	}
-	return resp, nil
+	return decoded.Error, true
 }
