@@ -60,7 +60,7 @@ func TestToolCallRejectionPolicyMatchesWholeMessages(t *testing.T) {
 		t.Fatal("unmatched message was typed")
 	}
 	typed, ok := failure.AsProviderToolCallUnparsed(policy.Classify("p", "m", "a", true, cause))
-	if !ok || typed.ProviderID != "p" || typed.Model != "m" || typed.Cause != cause {
+	if !ok || typed.ProviderID != "p" || typed.Model != "m" || !errors.Is(typed.Cause, cause) {
 		t.Fatalf("typed = %+v", typed)
 	}
 }
