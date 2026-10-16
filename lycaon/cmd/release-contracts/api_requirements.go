@@ -27,12 +27,17 @@ func checkPackAPIs(repoRoot string, out io.Writer) error {
 	if len(packs) == 0 {
 		return fmt.Errorf("no bundled extension manifests found")
 	}
-	host, err := sourceExtensionAPI(diskRelease{root: repoRoot})
+	current := diskRelease{root: repoRoot}
+	host, err := sourceExtensionAPI(current)
 	if err != nil {
 		return err
 	}
 	for _, file := range packs {
-		raw, err := os.ReadFile(file)
+		rel, err := filepath.Rel(repoRoot, file)
+		if err != nil {
+			return err
+		}
+		raw, err := current.show(filepath.ToSlash(rel))
 		if err != nil {
 			return err
 		}
@@ -60,6 +65,11 @@ func checkPackAPI(root string, manifest extpacks.Manifest) error {
 	if err != nil {
 		return err
 	}
+	packRoot, err := os.OpenRoot(root)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = packRoot.Close() }()
 	return filepath.WalkDir(root, func(file string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -84,7 +94,7 @@ func checkPackAPI(root string, manifest extpacks.Manifest) error {
 		if !strings.HasPrefix(extpacks.UnitIDFor(manifest.ID, rel), extpacks.WorkflowUnitIDPrefix) {
 			return nil
 		}
-		raw, err := os.ReadFile(file)
+		raw, err := packRoot.ReadFile(filepath.FromSlash(rel))
 		if err != nil {
 			return err
 		}
@@ -144,6 +154,7 @@ func yamlHasPath(node *yaml.Node, keys []string) bool {
 				return true
 			}
 		}
+	case yaml.ScalarNode, yaml.AliasNode:
 	}
 	return false
 }
