@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -12,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/tokenest"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // responseRetryProvider retries empty responses within the caller's time budget.
@@ -29,6 +31,7 @@ func (p *responseRetryProvider) Complete(ctx context.Context, req modelcall.Comp
 	for attempt := 0; ; attempt++ {
 		usage.beginAttempt()
 		req.AttemptBudget = &modelcall.CompletionBudget{}
+		req.CaptureSources()
 		completion, err := p.inner.Complete(ctx, req)
 		noteResponseBudget(req, completion)
 		if completion != nil {
@@ -61,6 +64,7 @@ func (p *responseRetryProvider) Stream(ctx context.Context, req modelcall.Comple
 	for attempt := 0; ; attempt++ {
 		attemptCtx, cancel := context.WithCancel(ctx)
 		req.AttemptBudget = &modelcall.CompletionBudget{}
+		req.CaptureSources()
 		first, err := p.inner.Stream(attemptCtx, req)
 		if err == nil {
 			out := make(chan modelcall.StreamChunk)
@@ -84,16 +88,8 @@ func (p *responseRetryProvider) Stream(ctx context.Context, req modelcall.Comple
 	}
 }
 
-func (p *responseRetryProvider) forwardStream(
-	ctx context.Context,
-	req modelcall.CompletionRequest,
-	attempt int,
-	stream <-chan modelcall.StreamChunk,
-	cancel context.CancelFunc,
-	out chan<- modelcall.StreamChunk,
-) {
+func (p *responseRetryProvider) forwardStream(ctx context.Context, req modelcall.CompletionRequest, attempt int, stream <-chan modelcall.StreamChunk, cancel context.CancelFunc, out chan<- modelcall.StreamChunk) {
 	defer close(out)
-
 	var usage responseRetryUsage
 	var startErr error
 	for {
@@ -130,6 +126,7 @@ func (p *responseRetryProvider) forwardStream(
 		usage.beginAttempt()
 		attemptCtx, nextCancel := context.WithCancel(ctx)
 		req.AttemptBudget = &modelcall.CompletionBudget{}
+		req.CaptureSources()
 		stream, startErr = p.inner.Stream(attemptCtx, req)
 		cancel = nextCancel
 		if startErr != nil {
@@ -140,13 +137,7 @@ func (p *responseRetryProvider) forwardStream(
 
 // forwardAttempt returns a typed empty completion only when replay is safe:
 // no visible content or tool call from this attempt reached the consumer.
-func (p *responseRetryProvider) forwardAttempt(
-	ctx context.Context,
-	req modelcall.CompletionRequest,
-	stream <-chan modelcall.StreamChunk,
-	out chan<- modelcall.StreamChunk,
-	usage *responseRetryUsage,
-) (*failure.ProviderEmptyCompletionError, bool) {
+func (p *responseRetryProvider) forwardAttempt(ctx context.Context, req modelcall.CompletionRequest, stream <-chan modelcall.StreamChunk, out chan<- modelcall.StreamChunk, usage *responseRetryUsage) (*failure.ProviderEmptyCompletionError, bool) {
 	defer usage.finishAttempt()
 	var attemptCompletion modelcall.Completion
 	var content strings.Builder
@@ -160,8 +151,7 @@ func (p *responseRetryProvider) forwardAttempt(
 		noteResponseBudget(req, &attemptCompletion)
 	}
 	defer noteBudget()
-	hasText := false
-	hasToolCalls := false
+	hasText, hasToolCalls := false, false
 	for chunk := range stream {
 		usage.observe(chunk.Usage, chunk.AttemptUsage)
 		if chunk.Usage.Reported() {
@@ -202,21 +192,13 @@ func (p *responseRetryProvider) forwardAttempt(
 		}
 	}
 	if !hasText && !hasToolCalls {
-		empty, retryable := p.emptyCompletion(req, nil, nil)
-		return empty, retryable
+		return p.emptyCompletion(req, nil, nil)
 	}
-	modelcall.SendChunk(ctx, out, modelcall.StreamChunk{
-		Err:  fmt.Errorf("provider %s/%s stream closed before a terminal event", p.ID(), req.Model),
-		Done: true,
-	})
+	modelcall.SendChunk(ctx, out, modelcall.StreamChunk{Err: fmt.Errorf("provider %s/%s stream closed before a terminal event", p.ID(), req.Model), Done: true})
 	return nil, false
 }
 
-func (p *responseRetryProvider) emptyCompletion(
-	req modelcall.CompletionRequest,
-	completion *modelcall.Completion,
-	err error,
-) (*failure.ProviderEmptyCompletionError, bool) {
+func (p *responseRetryProvider) emptyCompletion(req modelcall.CompletionRequest, completion *modelcall.Completion, err error) (*failure.ProviderEmptyCompletionError, bool) {
 	if err != nil {
 		if modelcall.CompletionHasPayload(completion) {
 			return nil, false
@@ -241,12 +223,7 @@ func (p *responseRetryProvider) emptyCompletion(
 	if modelcall.CompletionHasPayload(completion) {
 		return nil, false
 	}
-	return &failure.ProviderEmptyCompletionError{
-		ProviderID: p.ID(),
-		Model:      req.Model,
-		Retryable:  true,
-		Terminal:   completion != nil,
-	}, true
+	return &failure.ProviderEmptyCompletionError{ProviderID: p.ID(), Model: req.Model, Retryable: true, Terminal: completion != nil}, true
 }
 
 func emptyCompletionFault(err error) providerretry.Fault {
@@ -277,7 +254,15 @@ func (p *responseRetryProvider) prepareResponseRetry(ctx context.Context, req *m
 	if !retryable || !providerretry.ShouldRetryFault(p.policy, attempt, emptyCompletionFault(empty)) {
 		return false, nil
 	}
-	return true, providerretry.AwaitFaultRetry(ctx, p.policy, attempt, emptyCompletionFault(empty))
+	if err := providerretry.AwaitFaultRetry(ctx, p.policy, attempt, emptyCompletionFault(empty)); err != nil {
+		return false, err
+	}
+	if empty.Terminal {
+		if err := p.appendEmptyResponseRecovery(ctx, req); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 func noteResponseBudget(req modelcall.CompletionRequest, completion *modelcall.Completion) {
@@ -295,4 +280,38 @@ func noteResponseBudget(req modelcall.CompletionRequest, completion *modelcall.C
 	}
 	visible := tokenest.FromUnitCount(visibleBytes, tokenest.DefaultDivisor)
 	modelcall.NoteCompletionTurnBudget(req.Debug.SessionID, req.AttemptBudget.MaxTokens, completion.Usage.CompletionTokens, visible)
+}
+
+// Recovery changes only the suffix of the already admitted request. It never
+// creates an additional retry allowance or includes provider output.
+func (p *responseRetryProvider) appendEmptyResponseRecovery(ctx context.Context, req *modelcall.CompletionRequest) error {
+	render := req.EmptyResponseRecovery
+	req.EmptyResponseRecovery = nil
+	if render == nil {
+		return nil
+	}
+	body, err := render(ctx)
+	if err != nil || strings.TrimSpace(body) == "" {
+		return err
+	}
+	if len(body) > 4096 {
+		return fmt.Errorf("empty response recovery exceeds 4096 bytes")
+	}
+	candidate := *req
+	candidate.Messages = append(slices.Clone(req.Messages), api.Message{Role: api.MessageRoleUser, Content: body, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted, Visibility: api.MessageVisibilityInternal})
+	if p.admitEmptyResponseRecovery(ctx, candidate) {
+		req.Messages = candidate.Messages
+	}
+	return nil
+}
+
+func (p *responseRetryProvider) admitEmptyResponseRecovery(ctx context.Context, req modelcall.CompletionRequest) bool {
+	var budget modelcall.RequestBudget
+	if reporter, ok := p.inner.(modelcall.RequestBudgetReporter); ok {
+		budget = reporter.RequestBudget(ctx, req)
+	}
+	budget.MinimumOutput = max(budget.MinimumOutput, modelcall.MinimumCompletionOutput(req))
+	reserve := max(budget.Output, budget.MinimumOutput)
+	return budget.Window > 0 && budget.Input > 0 && reserve > 0 && budget.Headroom >= 0 &&
+		budget.Output >= budget.MinimumOutput && budget.Input+reserve+budget.Headroom <= budget.Window
 }
