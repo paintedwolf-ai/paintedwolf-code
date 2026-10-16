@@ -53,7 +53,6 @@ type CompactionConfig struct {
 	MaxWorkerGroundingRetries        int    `yaml:"max_worker_grounding_retries"`
 	MaxGroundingRejectsPerTurn       int    `yaml:"max_grounding_rejects_per_turn"`
 	MaxGroundingRejectsPerCycle      int    `yaml:"max_grounding_rejects_per_cycle"`
-	MaxToolTurnsAfterCitationReject  int    `yaml:"max_tool_turns_after_citation_reject"`
 	MaxReportDocumentRetries         int    `yaml:"max_report_document_retries"`
 }
 

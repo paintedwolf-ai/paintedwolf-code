@@ -136,7 +136,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	m.Verification = sessionverification.New(store, m.Workspace, turnTranscript)
 	m.Verification.Evidence = closeoutevidence.New(store)
 	workerCancel := workerresults.NewGracefulCancel()
-	workerCards := workerresults.NewCards(store, turnTranscript, nil)
+	workerCards := workerresults.NewCards(store, turnTranscript, nil, turnCloseouts)
 	research := researchwarm.New(store, gate, turnTranscript.Append)
 	turnCuration := curation.New(store, m.Workspace, gate, namingService, research)
 	if svc != nil {
