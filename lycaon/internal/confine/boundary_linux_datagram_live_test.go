@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
@@ -41,7 +42,11 @@ func datagramProbe(mode string) int {
 			fmt.Printf("udp %s: %v\n", target, err)
 			continue
 		}
-		for _, how := range datagramSends {
+		sends := datagramSends
+		if mode == "udpsendto" {
+			sends = []string{"sendto"}
+		}
+		for _, how := range sends {
 			fmt.Printf("udp %s %s: %s\n", how, target, sendDatagram(how, dst))
 		}
 	}
@@ -128,16 +133,37 @@ func datagramEcho(t *testing.T, addr string) netip.AddrPort {
 // range, where the host's datagram services live.
 func serviceEcho(t *testing.T) netip.AddrPort {
 	t.Helper()
-	for port := 20000 + os.Getpid()%5000; port < 32000; port += 7 {
-		conn, err := net.ListenPacket("udp", "127.0.0.1:"+strconv.Itoa(port))
+	return datagramEcho(t, net.JoinHostPort("127.0.0.1", strconv.Itoa(int(servicePort(t)))))
+}
+
+// nextServicePort is where servicePort looks next, so no two callers in one
+// test process get the same port.
+var nextServicePort atomic.Int32
+
+// servicePort is a loopback port below the ephemeral range, free for both
+// streams and datagrams. A client's source port comes from the ephemeral
+// range, so a datagram client can never be connected to itself there.
+func servicePort(t *testing.T) uint16 {
+	t.Helper()
+	nextServicePort.CompareAndSwap(0, int32(20000+os.Getpid()%5000))
+	for {
+		port := int(nextServicePort.Add(7))
+		if port >= 32000 {
+			t.Fatal("no free port below the ephemeral range")
+		}
+		addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+		pc, err := net.ListenPacket("udp", addr)
 		if err != nil {
 			continue
 		}
-		_ = conn.Close()
-		return datagramEcho(t, conn.LocalAddr().String())
+		ln, err := net.Listen("tcp", addr)
+		_ = pc.Close()
+		if err != nil {
+			continue
+		}
+		_ = ln.Close()
+		return uint16(port)
 	}
-	t.Fatal("no free datagram port below the ephemeral range")
-	return netip.AddrPort{}
 }
 
 func probeDatagrams(t *testing.T, self string, plan linuxsandbox.Plan, targets ...netip.AddrPort) string {
@@ -300,6 +326,21 @@ func TestLinuxDirectIPDatagramsCrossTheGateway(t *testing.T) {
 	if strings.Contains(out, ": ok") {
 		t.Fatalf("a datagram left the sandbox without a udp permit:\n%s", out)
 	}
+
+	// The gateway reports the unconnected send it dropped to the action.
+	c, lease := boundConfinement(t, confine.Confinement{
+		Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDirectIP, EgressOff: confine.EgressOffOverride,
+		DirectIPPermits: []confine.DirectIPPermit{{Protocol: "udp", Port: permitted.Port()}},
+	})
+	env := append(probeEnv("udpsendto"), linuxProbePathsEnv+"="+other.String())
+	status, out := linuxConfinedRun(t, self, *c, env, self, probeTestFlag)
+	if status.ExitStatus() != 0 || !strings.Contains(out, fmt.Sprintf("udp sendto %s: no reply", other)) {
+		t.Fatalf("unconnected send to an unpermitted port: exit %d:\n%s", status.ExitStatus(), out)
+	}
+	refusals := lease.SettledRefusals(context.Background())
+	if _, reported := refusalTargets(refusals)["network-outbound remote:"+other.String()]; !reported {
+		t.Fatalf("refusals = %+v, want the dropped datagram to %s", refusals, other)
+	}
 }
 
 // probeLine is the probe's output line that starts with prefix.
@@ -327,7 +368,9 @@ func closedDatagramPort(t *testing.T, addr netip.Addr) netip.AddrPort {
 func TestLinuxLocalListenDatagramGrantIsReachableFromTheHost(t *testing.T) {
 	self := requireLinuxSandbox(t)
 	for _, granted := range []bool{true, false} {
-		port := freePort(t)
+		// A free ephemeral port would let the host's client be connected to
+		// itself and read back its own datagram.
+		port := servicePort(t)
 		c := confine.Confinement{Roots: sandboxRoots(t.TempDir()), Network: confine.NetworkDeny, EgressOff: confine.EgressOffOverride}
 		if granted {
 			c.LocalListen, c.LocalListenPorts = true, []uint16{port}
@@ -358,6 +401,9 @@ func TestLinuxLocalListenDatagramGrantIsReachableFromTheHost(t *testing.T) {
 	}
 }
 
+// askDatagram sends one datagram to addr and returns the reply. A client the
+// kernel connected to itself would read back its own datagram, so that
+// attempt gets no reply.
 func askDatagram(addr string) string {
 	conn, err := net.Dial("udp", addr)
 	if err != nil {
@@ -365,6 +411,9 @@ func askDatagram(addr string) string {
 		return ""
 	}
 	defer conn.Close()
+	if conn.LocalAddr().String() == conn.RemoteAddr().String() {
+		return ""
+	}
 	_, _ = conn.Write([]byte("ping"))
 	_ = conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
 	buf := make([]byte, 64)

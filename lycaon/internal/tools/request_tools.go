@@ -80,14 +80,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 	plan := tctx.Turn.TurnToolPlan
 	constrained := strings.TrimSpace(tctx.Turn.TurnSurfaceID) != "" || plan.Compiled()
 	requestable := liveRequestableMetas(t.deps, t.reg, profileID, tctx.Turn.ToolAccess, plan, constrained)
-	cards := make([]turnload.ToolCard, 0, len(requestable))
-	active := t.deps.Activation.Active(tctx.Identity.SessionID)
-	for _, meta := range requestable {
-		if active[meta.Name] {
-			continue
-		}
-		cards = append(cards, turnload.ToolCard{Name: meta.Name, Description: meta.Description})
-	}
+	cards := unloadedToolCards(requestable, t.deps.Activation.Active(tctx.Identity.SessionID))
 	outcome := turnload.RequestOutcome{Need: need, Abstained: browsing}
 	if browsing {
 		outcome.Reason = "catalog browsing"
@@ -231,16 +224,13 @@ func liveRequestableMetas(deps RequestToolsDeps, reg *DefaultRegistry, profileID
 	if reg == nil {
 		return nil
 	}
+	if plan.Compiled() {
+		return deferredToolMetas(reg, plan)
+	}
 	out := make([]ToolMeta, 0)
 	for _, meta := range reg.List() {
 		name := strings.TrimSpace(meta.Name)
 		if name == "" {
-			continue
-		}
-		if plan.Compiled() {
-			if plan.Deferred(name) {
-				out = append(out, meta)
-			}
 			continue
 		}
 		if constrained && toolcontract.IsCatalog(name) {

@@ -23,6 +23,8 @@ type Observation struct {
 	FailedStages []string
 	// Running reports an invocation observed before it ended.
 	Running bool
+	// TerminationReason is the executor-observed terminal state, if known.
+	TerminationReason string
 	// Refusals is what the kernel reported refusing the invocation.
 	Refusals SandboxRefusals
 }

@@ -712,6 +712,16 @@ cross compilation; broad changes include that too. Ordinary source changes
 select only relevant lanes. Each lane still enters through `./task`, capturing
 source and producing normal receipts.
 
+A lane that declares a `platform` runs a check only that platform can run, so
+`check`, which every development host runs, leaves it out, and the planner
+refuses one that repeats a `check` stage or joins the fast tier. The merge queue
+runs it beside the partition: for the change areas the planner assigns it and
+for every broad change. The `webkit-gtk` lane runs `den:webkit:atspi` for any
+Den source change; changes to the check, its probe, or the harness fixtures are
+broad. Like every lane, it fails when the check reports unverified: an image
+that cannot be built, a missing container runtime, or a harness that does not
+start leaves the change unverified, never admitted.
+
 Drafts spend no verification runners and cannot pass `check`. Manual dispatch
 runs the complete check and platform tier, or with `profile: fast` the fast
 tier for a pull request whose events start no CI, such as the dependency
@@ -740,6 +750,16 @@ refreshes that snapshot and the informational inventory through a signed-off PR;
 feature PRs do not regenerate either. The bot explicitly dispatches CI because
 PRs created using `GITHUB_TOKEN` do not trigger another workflow automatically.
 Nightly additionally checks fresh upstream advisories.
+
+`den:webkit:atspi` runs its probe in one container image per WebKitGTK release.
+An offline lane cannot build them, so setup provisions them first: the images
+main's cache warmer built, keyed by the definitions in
+`scripts/harness/webkit-atspi/`, are restored and only a missing or changed
+release is built. Rootless Podman runs in the caller's namespaces, so the
+containers share the lane's loopback-only network and reach the harness Den
+there. Nightly and release lanes build every image from its distribution as
+it ships that day, so a release that moves is reported there rather than in
+the merge queue.
 
 The reviewed queue parameters are in
 [`queue-settings.json`](../scripts/ci_policy/queue-settings.json): two groups

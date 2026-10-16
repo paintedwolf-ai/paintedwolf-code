@@ -52,7 +52,7 @@ func analyzeSingleStageFileWrite(
 	if innerScript, isShell := unwrapShellCommand(st); isShell {
 		m, p, a, c, ex := analyzeScriptFileWrites(ctx, innerScript, streamBody, hasStream, outPath, outAppend, depth+1)
 		if m {
-			if outConflicts || len(st.env) > 0 || hasInputOrStderrRedirect(st.redirects) {
+			if outConflicts || len(st.env) > 0 || hasInputOrStderrRedirect(st.redirects) || !isShellProgram(st.argv) {
 				return true, p, a, nil, false
 			}
 			return true, p, a, c, ex
@@ -72,9 +72,10 @@ func analyzeSingleStageFileWrite(
 		}
 	}
 
-	if depth > 0 && !hasStream && outPath != "" && !outConflicts && !hasInputOrStderrRedirect(st.redirects) {
+	if !hasStream && outPath != "" && !outConflicts && !hasInputOrStderrRedirect(st.redirects) {
 		if body, bodyLit, ok := literalEchoOrPrintf(st.argv); ok {
-			if len(st.env) == 0 && outLiteral && bodyLit && isRepresentableWriteTarget(outPath) {
+			if len(st.env) == 0 && outLiteral && bodyLit && isRepresentableWriteTarget(outPath) &&
+				(depth > 0 || literalOutputArgvExact(st)) {
 				return true, outPath, outAppend, []ReplacementCall{buildWriteCall(outPath, body, outAppend)}, true
 			}
 			return true, outPath, outAppend, nil, false
@@ -118,17 +119,17 @@ func analyzeTwoStagePipelineFileWrite(
 	producerExact := false
 
 	if hasStream {
-		outPath, _, _, outConflicts := stageStdoutRedirect(producer.redirects, "", false)
-		if outPath == "" && !outConflicts {
+		if len(producer.redirects) == 0 {
 			producerPassThrough, producerExact = isPassThroughProducer(producer)
 		}
-	} else if depth > 0 {
+	} else {
 		if body, lit, ok := literalEchoOrPrintf(producer.argv); ok && len(producer.redirects) == 0 {
 			hasStream = true
 			streamBody = body
 			streamLiteral = lit
 			producerPassThrough = true
-			producerExact = lit && len(producer.env) == 0
+			producerExact = lit && len(producer.env) == 0 &&
+				(depth > 0 || (literalOutputArgvExact(producer) && literalOutputArgvExact(consumer)))
 		}
 	}
 
@@ -186,7 +187,9 @@ func stageStdoutRedirect(redirects []bashRedirect, stdoutTo string, appendFlag b
 				continue
 			}
 			if !isStdoutFileTarget(r.target.value) {
-				if r.target.value != "/dev/null" {
+				if r.target.value == "/dev/null" {
+					count++
+				} else {
 					conflicts = true
 				}
 				continue
@@ -197,7 +200,9 @@ func stageStdoutRedirect(redirects []bashRedirect, stdoutTo string, appendFlag b
 			appendMode = false
 		case ">>", "1>>", "&>>":
 			if !isStdoutFileTarget(r.target.value) {
-				if r.target.value != "/dev/null" {
+				if r.target.value == "/dev/null" {
+					count++
+				} else {
 					conflicts = true
 				}
 				continue
@@ -251,7 +256,10 @@ func consumerSinkStage(st bashStage, stdoutTo string, appendFlag bool) (path str
 	if len(st.heredocs) > 0 || len(st.herestrings) > 0 {
 		return "", false, false, false
 	}
-	return stageOutputSink(st, stdoutTo, appendFlag)
+	path, appendMode, exact, ok = stageOutputSink(st, stdoutTo, appendFlag)
+	outPath, _, _, _ := stageStdoutRedirect(st.redirects, stdoutTo, appendFlag)
+	passThrough, passExact := isPassThroughWriterStage(st, outPath != "")
+	return path, appendMode, exact && passThrough && passExact, ok
 }
 
 func hasInputOrStderrRedirect(redirects []bashRedirect) bool {

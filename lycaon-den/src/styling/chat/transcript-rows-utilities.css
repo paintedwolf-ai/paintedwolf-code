@@ -92,7 +92,8 @@
   }
 
   .den-notice-toggle-glyph {
-    display: inline-flex;
+    position: static;
+    visibility: visible;
   }
 
   .den-notice-toggle[aria-expanded="true"] .den-notice-toggle-glyph {

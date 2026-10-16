@@ -136,91 +136,92 @@ export function WorkspaceFoldersPanel(props: WorkspaceFoldersPanelProps) {
           <For each={props.roots}>
             {(root) => (
               <li
-                class="workspace-folders-panel__row"
                 data-testid={`workspace-folder-row-${root.id}`}
                 onContextMenu={(e) => openMenu(e, root)}
               >
-                <div class="workspace-folders-panel__path">
-                  <Show
-                    when={renamingRootId() !== root.id}
-                    fallback={
-                      <InlineRenameInput
-                        class="workspace-folders-panel__rename-input"
-                        testId="project-root-rename-input"
-                        initialValue={root.label}
-                        maxLength={ROOT_LABEL_MAX}
-                        ariaLabel="Rename folder label"
-                        onCommit={(next) => {
-                          setRenamingRootId(null);
-                          void renameLabel(root.id, next);
-                        }}
-                        onCancel={() => setRenamingRootId(null)}
-                      />
-                    }
-                  >
-                    <button
-                      type="button"
-                      class="workspace-folders-panel__label"
-                      data-testid={`project-root-rename-trigger-${root.id}`}
-                      aria-label="Rename folder label"
-                      data-tip="Rename"
-                      disabled={busy()}
-                      onClick={() => setRenamingRootId(root.id)}
+                <div class="workspace-folders-panel__row">
+                  <div class="workspace-folders-panel__path">
+                    <Show
+                      when={renamingRootId() !== root.id}
+                      fallback={
+                        <InlineRenameInput
+                          class="workspace-folders-panel__rename-input"
+                          testId="project-root-rename-input"
+                          initialValue={root.label}
+                          maxLength={ROOT_LABEL_MAX}
+                          ariaLabel="Rename folder label"
+                          onCommit={(next) => {
+                            setRenamingRootId(null);
+                            void renameLabel(root.id, next);
+                          }}
+                          onCancel={() => setRenamingRootId(null)}
+                        />
+                      }
                     >
-                      {root.label}
-                    </button>
-                  </Show>
-                  <span class="workspace-folders-panel__full">{root.path}</span>
-                  <Show when={root.is_primary}>
-                    <span class="workspace-folders-panel__badge">Main folder</span>
-                  </Show>
-                </div>
-                <div class="workspace-folders-panel__actions">
-                  <Show when={!root.is_primary}>
-                    <DenButton
-                      variant="secondary"
-                      compact
-                      disabled={busy()}
-                      data-testid={`workspace-folder-set-main-${root.id}`}
-                      onClick={() => void setPrimary(root.id)}
+                      <button
+                        type="button"
+                        class="workspace-folders-panel__label"
+                        data-testid={`project-root-rename-trigger-${root.id}`}
+                        aria-label="Rename folder label"
+                        data-tip="Rename"
+                        disabled={busy()}
+                        onClick={() => setRenamingRootId(root.id)}
+                      >
+                        {root.label}
+                      </button>
+                    </Show>
+                    <span class="workspace-folders-panel__full">{root.path}</span>
+                    <Show when={root.is_primary}>
+                      <span class="workspace-folders-panel__badge">Main folder</span>
+                    </Show>
+                  </div>
+                  <div class="workspace-folders-panel__actions">
+                    <Show when={!root.is_primary}>
+                      <DenButton
+                        variant="secondary"
+                        compact
+                        disabled={busy()}
+                        data-testid={`workspace-folder-set-main-${root.id}`}
+                        onClick={() => void setPrimary(root.id)}
+                      >
+                        Set as main folder
+                      </DenButton>
+                    </Show>
+                    <Show
+                      when={confirmRemoveId() === root.id}
+                      fallback={
+                        <DenButton
+                          variant="danger"
+                          compact
+                          disabled={busy()}
+                          data-testid={`workspace-folder-remove-${root.id}`}
+                          onClick={() => setConfirmRemoveId(root.id)}
+                        >
+                          Remove
+                        </DenButton>
+                      }
                     >
-                      Set as main folder
-                    </DenButton>
-                  </Show>
-                  <Show
-                    when={confirmRemoveId() === root.id}
-                    fallback={
+                      <span class="workspace-folders-panel__confirm-text">
+                        Remove this folder from the project?
+                      </span>
                       <DenButton
                         variant="danger"
                         compact
                         disabled={busy()}
-                        data-testid={`workspace-folder-remove-${root.id}`}
-                        onClick={() => setConfirmRemoveId(root.id)}
+                        data-testid={`workspace-folder-remove-confirm-${root.id}`}
+                        onClick={() => void removeRoot(root.id)}
                       >
-                        Remove
+                        Confirm remove
                       </DenButton>
-                    }
-                  >
-                    <span class="workspace-folders-panel__confirm-text">
-                      Remove this folder from the project?
-                    </span>
-                    <DenButton
-                      variant="danger"
-                      compact
-                      disabled={busy()}
-                      data-testid={`workspace-folder-remove-confirm-${root.id}`}
-                      onClick={() => void removeRoot(root.id)}
-                    >
-                      Confirm remove
-                    </DenButton>
-                    <DenButton
-                      variant="ghost"
-                      disabled={busy()}
-                      onClick={() => setConfirmRemoveId(null)}
-                    >
-                      Cancel
-                    </DenButton>
-                  </Show>
+                      <DenButton
+                        variant="ghost"
+                        disabled={busy()}
+                        onClick={() => setConfirmRemoveId(null)}
+                      >
+                        Cancel
+                      </DenButton>
+                    </Show>
+                  </div>
                 </div>
               </li>
             )}

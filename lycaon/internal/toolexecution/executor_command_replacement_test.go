@@ -2,11 +2,15 @@ package toolexecution
 
 import (
 	"context"
+	"encoding/json"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -45,7 +49,7 @@ func TestCommandFileWriteRejectRedirectsToWriteOrRequestTools(t *testing.T) {
 		t.Fatalf("unexpected reject for non-write command: %+v", rej)
 	}
 
-	// Empty TurnOfferedToolNames populates command+write and emits write replacement call.
+	// Missing offered context must still reject without inventing available tools.
 	_, err := executor.Invoke(context.Background(), "command", heredocArgs, fixtureToolContext(root))
 	refusal, ok := guidance.RefusalFromError(err)
 	if err == nil || !ok || refusal.Code() != "USE_WRITE_NATIVE" {
@@ -67,5 +71,111 @@ func TestCommandFileWriteRejectRedirectsToWriteOrRequestTools(t *testing.T) {
 	rejDeferred := commandFileWriteReject(context.Background(), executor, "command", "implement", heredocArgs, &deferredWriteTC)
 	if rejDeferred == nil || rejDeferred.Code != "USE_WRITE_NATIVE" || rejDeferred.Data["tool_loadable"] != true {
 		t.Fatalf("expected loadable write reject, got %+v", rejDeferred)
+	}
+}
+
+func TestCommandFileWriteRecoveryUsesOnlyFrozenOfferedTools(t *testing.T) {
+	wireFixtureGuidanceRenderer(t)
+	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
+	registry := tools.NewDefaultRegistry()
+	noop := func(context.Context, map[string]any, tools.ToolContext) (string, error) { return `{"ok":true}`, nil }
+	for _, name := range []string{"command", "write", "mkdir", "request_tools"} {
+		testutil.FailErr(t, "register recovery tool", registry.Register(name, noop))
+	}
+	executor := NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "implement")
+	for _, tc := range []struct {
+		name      string
+		offered   []string
+		deferred  []string
+		command   string
+		wantCalls bool
+		loadable  bool
+	}{
+		{name: "absent snapshot"},
+		{name: "empty snapshot", offered: []string{}},
+		{name: "policy visibility is not loadability", offered: []string{"command", "request_tools"}},
+		{name: "plan alone is not offered", deferred: []string{"write"}},
+		{name: "offered write", offered: []string{"command", "write"}, wantCalls: true},
+		{name: "deferred write", offered: []string{"command", "request_tools"}, deferred: []string{"write"}, wantCalls: true, loadable: true},
+		{name: "unoffered mkdir", offered: []string{"command", "write"}, deferred: []string{"mkdir"}, command: "mkdir -p sub && cat > sub/out.txt"},
+		{name: "offered mkdir", offered: []string{"command", "write", "mkdir"}, command: "mkdir -p sub && cat > sub/out.txt", wantCalls: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := fixtureToolContext(t.TempDir())
+			ctx.Turn.TurnOfferedToolNames = tc.offered
+			ctx.Turn.TurnToolPlan = toolsurface.Compile(tc.offered, tc.deferred)
+			command := tc.command
+			if command == "" {
+				command = "cat > out.txt"
+			}
+			// Put the literal body on the writer, not on a multi-statement stdin stream.
+			command += " <<'EOF'\nhello\nEOF"
+			reject := commandFileWriteReject(t.Context(), executor, "command", "implement", map[string]any{"command": command}, &ctx)
+			if reject == nil {
+				t.Fatal("missing file-write rejection")
+			}
+			_, hasCalls := reject.Data["replacement_calls"]
+			if hasCalls != tc.wantCalls || reject.Data["tool_loadable"] != tc.loadable {
+				t.Fatalf("recovery=%#v, want calls=%t loadable=%t", reject.Data, tc.wantCalls, tc.loadable)
+			}
+			if !reflect.DeepEqual(ctx.Turn.TurnOfferedToolNames, tc.offered) {
+				t.Fatalf("offered snapshot mutated: %#v", ctx.Turn.TurnOfferedToolNames)
+			}
+		})
+	}
+}
+
+func TestLiteralOutputRecoveryRendersActualSurface(t *testing.T) {
+	wireFixtureGuidanceRenderer(t)
+	boundary := sandbox.NewBoundary(fixtureSandboxConfig(), fixtureToolProfiles(t))
+	registry := tools.NewDefaultRegistry()
+	calls := 0
+	noop := func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		calls++
+		return `{"ok":true}`, nil
+	}
+	for _, name := range []string{"command", "write", "request_tools"} {
+		testutil.FailErr(t, "register tool", registry.Register(name, noop))
+	}
+	executor := NewExecutor(toolprofiles.NewProfilePolicyEngine(boundary), registry, "implement")
+	executor.Rejections.SetBlockPlane(stockBlockPlane(t))
+	for _, tc := range []struct {
+		name              string
+		offered, deferred []string
+		want              string
+		loadable          bool
+	}{
+		{"offered", []string{"command", "write"}, nil, "Use the supplied", false},
+		{"deferred", []string{"command", "request_tools"}, []string{"write"}, "Call `request_tools`", true},
+		{"unavailable", []string{"command", "request_tools"}, nil, "cannot author", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := fixtureToolContext(t.TempDir())
+			ctx.Turn.TurnOfferedToolNames = tc.offered
+			ctx.Turn.TurnToolPlan = toolsurface.Compile(tc.offered, tc.deferred)
+			args := map[string]any{"command": `echo built > out.log`}
+			_, err := executor.Invoke(t.Context(), "command", args, ctx)
+			refusal, ok := guidance.RefusalFromError(err)
+			if !ok || refusal.Code() != "USE_WRITE_NATIVE" || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("recovery=%v, want USE_WRITE_NATIVE with %q", err, tc.want)
+			}
+			if calls != 0 {
+				t.Fatalf("rejected command executed %d handlers", calls)
+			}
+			if len(refusal.Facts.Feedback) != 1 {
+				t.Fatalf("missing delivered recovery facts: %#v", refusal.Facts)
+			}
+			details := refusal.Facts.Feedback[0].Details
+			if tc.loadable {
+				want := []toolcommand.ReplacementCall{{Tool: "request_tools", Args: map[string]any{"need": "write"}}}
+				actualJSON, err := json.Marshal(details["replacement_calls"])
+				testutil.FailErr(t, "encode delivered recovery", err)
+				wantJSON, err := json.Marshal(want)
+				testutil.FailErr(t, "encode expected recovery", err)
+				if string(actualJSON) != string(wantJSON) {
+					t.Fatalf("delivered loader recovery=%s, want %s", actualJSON, wantJSON)
+				}
+			}
+		})
 	}
 }
