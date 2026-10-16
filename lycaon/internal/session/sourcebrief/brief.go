@@ -3,6 +3,7 @@ package sourcebrief
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"log/slog"
 	"strings"
 
@@ -18,7 +19,7 @@ import (
 type Store interface {
 	PutTurnSourceBrief(context.Context, string, string, string) error
 	TurnSourceBriefs(context.Context, string) (map[string]string, error)
-	UserTurnOrdinal(context.Context, string) (int, error)
+	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
 	LoadLedger(context.Context, string) (evidence.Ledger, error)
 }
 
@@ -102,7 +103,8 @@ func (m *Service) Build(ctx context.Context, sess *api.Session) inject.SourceCha
 	if reader.Files == nil || reader.Git == nil || reader.Authorship == nil || m.checkpoints == nil || m.store == nil {
 		return inject.SourceChangeBrief{}
 	}
-	turn, err := m.store.UserTurnOrdinal(ctx, sess.ID)
+	turnSource, err := m.store.ReadSourceTurn(ctx, sess.ID, 0)
+	turn := turnSource.Number
 	if err != nil || turn < 2 {
 		return inject.SourceChangeBrief{}
 	}

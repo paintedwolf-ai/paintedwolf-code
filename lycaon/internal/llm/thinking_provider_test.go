@@ -16,6 +16,35 @@ type thinkingCaptureProvider struct {
 	calls []modelcall.CompletionRequest
 }
 
+type budgetThinkingProvider struct{ thinkingCaptureProvider }
+
+func (p *budgetThinkingProvider) Profile() providerprofile.Profile {
+	profile := providerprofile.Anthropic()
+	profile.Discovery = providerprofile.DiscoveryNone
+	return profile
+}
+
+func TestRequestPlanningPreservesFrozenThinkingBudget(t *testing.T) {
+	capture := &budgetThinkingProvider{}
+	model := modelinfo.Entry{ID: "m", MaxTokens: 16384, ContextLength: 32768, ThinkStyle: "budget_tokens",
+		Thinking: &modelinfo.ThinkingCapabilities{State: "supported", Budget: &modelinfo.ThinkingBudgetRange{Min: 1024}}}
+	reg := newEmptyRegistry()
+	reg.discovery = discovery.NewCache(nil)
+	reg.discovery.Put(discoveryCacheKey("p", capture.Profile(), "", ""), []modelinfo.Entry{{ID: "m", Untyped: true}}, nil)
+	reg.snapshot.Store(newProviderRegistrySnapshot(providerRegistrySnapshotInput{
+		Providers:  map[string]modelcall.Provider{"p": capture},
+		Entries:    map[string]CatalogEntry{"p": {ID: "p", Kind: "openai-compatible", Models: []modelinfo.Entry{model}}},
+		Configured: map[string]bool{"p": true},
+	}))
+	ctx := WithThinkingPolicy(t.Context(), ModelPolicy{ThinkingOverrides: []modelcall.ThinkingOverride{{ProviderID: "p", Model: "m", Mode: "fixed", BudgetTokens: new(4096)}}})
+	_, err := (&thinkingPolicyProvider{Provider: capture, registry: reg}).prepare(ctx, modelcall.CompletionRequest{Model: "m"})
+	testutil.FailErr(t, "resolve frozen thinking allocation", err)
+	budget := reg.RequestBudget(ctx, "p", modelcall.CompletionRequest{Model: "m"})
+	if budget.MinimumOutput != 4097 || len(capture.calls) != 0 {
+		t.Fatalf("planning changed the frozen thinking allocation or dispatched inference: %+v", budget)
+	}
+}
+
 func (p *thinkingCaptureProvider) ID() string { return "p" }
 func (p *thinkingCaptureProvider) Models() []modelcall.ModelInfo {
 	return []modelcall.ModelInfo{{ID: "m"}}

@@ -91,6 +91,8 @@ An argument validator can also report `inapplicable_fields` when named fields do
 
 Feedback must not tell an agent to call a tool it does not have, approve its own request, write outside its scope, or bypass a workflow gate. Remedy rendering receives the current tool/worker surface and selects only reachable paths. If no direct remedy exists, the feedback names which party must act (coordinator, user, or a device setting) and the agent returns that dependency rather than looping.
 
+Native command recovery separates parser equivalence from tool availability. The executor validates the complete ordered replacement against registration, current schemas, and the frozen offered surface. Missing targets may receive separate exact-name `request_tools` calls only when the compiled plan permits loading them; loading is never a partial execution recipe. Inexact file-write observations carry no fabricated contents. Copy distinguishes validated replacements from missing prerequisites and refers conditionally to diagnostics that provider projection may omit. Loading schemas grants no additional execution permission.
+
 A named **field** is reachable on the same terms as a named tool. In card copy, an unqualified backticked field name refers to an argument accepted by the receiving tool; name the owning tool when referring to another tool's field. Three things hold this together:
 
 - The reject formatter refuses to render a card for a tool its `selector.tool` excludes, so a remedy authored against one tool's fields cannot reach another.
@@ -204,6 +206,12 @@ Worker artifact checks and parent completion receipts share the same host inspec
 ## Tool-output steering
 
 Some successful tool results include structured state updates such as queue position, active task, new revision, or no-op reason. Prompt steering consumes those fields directly. A no-op remains a result; if the agent must branch, the result needs a structured discriminator, not a parse of “nothing changed.”
+
+### Recall recovery
+
+Recall separates recorded observations from current files. A known message ID is sufficient for body recovery; ordinal bounds remain available for index paging and bounded reads. The host resolves a body’s ordinal and returns complete continuation arguments. `record_request` is the value of the next call’s `history` argument; `next_request` is the complete argument object.
+
+Matched results explain how to recover their public records when no body is present. Recorded text is projected beside its metadata, preserving cursor coordinates, authority, and canonical bytes. Query time-filter failures and history-coordinate failures carry separate typed facts into OAR copy. A read-only streak never establishes that evidence is complete or that another required recovery page is unnecessary.
 
 ### Progress reconciliation
 

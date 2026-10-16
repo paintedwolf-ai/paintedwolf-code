@@ -258,7 +258,7 @@ Physical source identity is derived once from project identity plus the canonica
 
 Live assistant tokens are a projection of an unsettled message. They may be coalesced for display, but searchable transcript state, evidence references, and durable message events wait for settlement.
 
-Startup recovery is a serve gate for structural state. It drains indexed, bounded pages of interrupted turns, missing projections, receipts, worker deliveries, and busy session heads; it does not enumerate project history to discover work. Long-lived runners are supervised independently so one failed background loop does not redefine the state of the host.
+Startup recovery is a serve gate for structural state. It drains indexed, bounded pages of interrupted turns, missing projections, receipts, worker deliveries, and busy session heads; it does not enumerate project history to discover work. Long-lived runners are supervised independently so one failed background loop does not redefine the state of the host. Optional bootstrap work, such as missing decision checkpoint provisioning, runs once in the background without gating serving. It shares runner cancellation, panic handling, completion accounting, and bounded shutdown joins; failures are reported without automatic restart. Warming an already installed decision checkpoint remains a startup gate so the first request does not race cold model loading.
 
 ---
 

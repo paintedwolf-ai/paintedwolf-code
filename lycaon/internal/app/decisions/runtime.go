@@ -34,14 +34,30 @@ func (b *Runtime) Load(override decide.Decider) error {
 }
 
 func (b *Runtime) Warmer() (interface{ Warm(context.Context) error }, bool) {
-	if b.Decider == nil || !b.Decider.Available() {
+	if b.Decider == nil {
+		return nil, false
+	}
+	if client, ok := b.Decider.(*bialy.Client); ok {
+		// A missing checkpoint is provisioned by Warm; inference remains unavailable.
+		switch client.Status() {
+		case bialy.ReasonDisabled, bialy.ReasonBinaryMissing:
+			return nil, false
+		default:
+		}
+	} else if !b.Decider.Available() {
 		return nil, false
 	}
 	warmer, ok := b.Decider.(interface{ Warm(context.Context) error })
 	return warmer, ok
 }
 
-// Warm prepares decision weights outside the startup path.
+// NeedsProvisioning distinguishes optional checkpoint download from installed-engine warming.
+func (b *Runtime) NeedsProvisioning() bool {
+	client, ok := b.Decider.(*bialy.Client)
+	return ok && client.Status() == bialy.ReasonModelMissing
+}
+
+// Warm provisions missing weights and prepares the decision engine.
 func (b *Runtime) Warm(ctx context.Context) error {
 	warmer, ok := b.Warmer()
 	if !ok {

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"testing"
 
@@ -21,7 +22,8 @@ func TestUserContinuationKeepsCurrentTurnInMemoryAndSQL(t *testing.T) {
 		store interface {
 			Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
 			AppendMessages(ctx context.Context, id string, msgs ...api.Message) error
-			UserTurnOrdinal(ctx context.Context, sessionID string) (int, error)
+			ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
+			GetMessage(context.Context, string, string) (api.Message, error)
 		}
 	}{
 		{name: "memory", store: NewMemory()},
@@ -35,10 +37,29 @@ func TestUserContinuationKeepsCurrentTurnInMemoryAndSQL(t *testing.T) {
 				api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "start"},
 				api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Kind: api.MessageKindUserContinuation, Content: "adjust"},
 			))
-			turn, err := test.store.UserTurnOrdinal(ctx, sess.ID)
+			turnSource, err := test.store.ReadSourceTurn(ctx, sess.ID, 0)
+			turn := turnSource.Number
 			testutil.FailErr(t, "read user turn ordinal", err)
 			if turn != 1 {
 				t.Fatalf("user turn ordinal = %d want 1", turn)
+			}
+			testutil.FailErr(t, "append assistant observation", test.store.AppendMessages(ctx, sess.ID,
+				api.Message{ID: uuid.NewString(), Role: api.MessageRoleAssistant, Content: "observed"},
+				api.Message{ID: uuid.NewString(), Role: api.MessageRoleUser, Content: "second instruction"}))
+			second, err := test.store.ReadSourceTurn(ctx, sess.ID, 2)
+			testutil.FailErr(t, "resolve source turn identity", err)
+			opener, err := test.store.GetMessage(ctx, sess.ID, second.OpeningMessageID)
+			testutil.FailErr(t, "resolve source turn opener", err)
+			if opener.Content != "second instruction" || opener.Ord != 4 {
+				t.Fatal("source turn identity was treated as a transcript ordinal")
+			}
+			if _, err := test.store.ReadSourceTurn(ctx, sess.ID, -1); err == nil {
+				t.Fatal("negative source turn accepted")
+			}
+			missing, err := test.store.ReadSourceTurn(ctx, sess.ID, 999)
+			testutil.FailErr(t, "read absent source turn", err)
+			if missing.OpeningMessageID != "" {
+				t.Fatal("absent source turn returned an opener")
 			}
 		})
 	}
@@ -51,7 +72,7 @@ func TestTurnNumbersAreNotReusedAfterTranscriptTruncation(t *testing.T) {
 		Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
 		AppendMessages(context.Context, string, ...api.Message) error
 		TruncateMessagesFrom(context.Context, string, string) (int, error)
-		UserTurnOrdinal(context.Context, string) (int, error)
+		ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
 		Get(context.Context, string) (*api.Session, error)
 	}{"memory": NewMemory(), "sql": NewSQL(database)} {
 		t.Run(name, func(t *testing.T) {
@@ -72,7 +93,8 @@ func TestTurnNumbersAreNotReusedAfterTranscriptTruncation(t *testing.T) {
 			next := first
 			next.ID = uuid.NewString()
 			testutil.FailErr(t, "append next turn", st.AppendMessages(ctx, sess.ID, next))
-			current, err := st.UserTurnOrdinal(ctx, sess.ID)
+			currentSource, err := st.ReadSourceTurn(ctx, sess.ID, 0)
+			current := currentSource.Number
 			testutil.FailErr(t, "read permanent turn", err)
 			if current != 3 {
 				t.Fatalf("next turn=%d, want 3", current)

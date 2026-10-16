@@ -15,6 +15,10 @@ on:
         description: Nightly suite selection
         default: all
         type: string
+      platform:
+        description: Run only the profile's platform lanes, beside a gate that covers the others
+        default: false
+        type: boolean
 
 # The caller's token permissions apply: only merge-group CI grants actions write,
 # so a removed group's jobs can cancel their own run.
@@ -40,9 +44,11 @@ jobs:
           PROFILE: ${{ inputs.profile }}
           SUITE: ${{ inputs.suite }}
           AFFECTED: ${{ inputs.affected }}
+          PLATFORM: ${{ inputs.platform }}
         run: |
           args=()
           if [[ "$AFFECTED" == true ]]; then args+=(--affected); fi
+          if [[ "$PLATFORM" == true ]]; then args+=(--platform); fi
           matrix="$(python3 scripts/ci_verification.py matrix "$PROFILE" --suite "$SUITE" "${args[@]}")"
           echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
           echo "max-parallel=$(python3 scripts/ci_verification.py max-parallel "$PROFILE")" >> "$GITHUB_OUTPUT"
@@ -81,6 +87,7 @@ jobs:
           # An admission lane runs offline, so it cannot fetch its container images; other lanes
           # build them from each distribution as it ships that day.
           containers: ${{ matrix.containers && (inputs.profile == 'fast' || inputs.profile == 'integration') }}
+          browser: ${{ matrix.browser }}
 
       # Shell lanes stage the engine, including the decision engine heads.
       - uses: ./.github/actions/setup-bialy

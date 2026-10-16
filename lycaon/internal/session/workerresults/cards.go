@@ -23,14 +23,19 @@ type TranscriptWriter interface {
 type TaskLookup interface {
 	Get(string) (*api.WorkerTask, bool)
 }
+type CloseoutRecovery interface {
+	ResumeWork(context.Context, string)
+}
+
 type Cards struct {
+	closeouts  CloseoutRecovery
 	messages   MessageReader
 	transcript TranscriptWriter
 	queue      TaskLookup
 }
 
-func NewCards(messages MessageReader, transcript TranscriptWriter, queue TaskLookup) *Cards {
-	return &Cards{messages: messages, transcript: transcript, queue: queue}
+func NewCards(messages MessageReader, transcript TranscriptWriter, queue TaskLookup, closeouts CloseoutRecovery) *Cards {
+	return &Cards{messages: messages, transcript: transcript, queue: queue, closeouts: closeouts}
 }
 func (m *Cards) SetQueue(queue TaskLookup) { m.queue = queue }
 
@@ -192,6 +197,10 @@ func (m *Cards) Project(ctx context.Context, parentID, jobID string, ws *api.Wor
 	toolMsg, ok := EnqueuedTaskToolMessageForJob(msgs, jobID)
 	if !ok {
 		return fmt.Errorf("worker card projection missing for job %s", jobID)
+	}
+	// A terminal observation invalidates earlier conclusions even if publication fails.
+	if m.closeouts != nil {
+		m.closeouts.ResumeWork(ctx, parentID)
 	}
 	toolMsg.WorkerSummary = ws
 	toolMsg.SourceContext = ws.SourceContext

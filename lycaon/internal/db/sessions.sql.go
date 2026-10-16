@@ -118,8 +118,8 @@ func (q *Queries) CommitRewindOperation(ctx context.Context, arg CommitRewindOpe
 
 const countCompactionSourceMutations = `-- name: CountCompactionSourceMutations :one
 SELECT COUNT(*)
-FROM messages
-WHERE session_id = ? AND ord <= ? AND seq > ?
+FROM messages INDEXED BY idx_messages_session_seq_unique
+WHERE session_id = ? AND ord <= ? AND seq > ? AND seq > 0
 `
 
 type CountCompactionSourceMutationsParams struct {
@@ -667,9 +667,9 @@ func (q *Queries) GetSessionTranscriptSeq(ctx context.Context, id string) (int64
 }
 
 const getSessionUserTurnOrdinal = `-- name: GetSessionUserTurnOrdinal :one
-SELECT CAST(COALESCE(MAX(t.turn), 0) AS INTEGER) FROM session_source_turns t
+SELECT CAST(COALESCE((SELECT t.turn FROM session_source_turns t
 JOIN messages m ON m.id = t.opening_message_id
-WHERE t.session_id = ?
+WHERE t.session_id = ? ORDER BY t.turn DESC LIMIT 1), 0) AS INTEGER)
 `
 
 // Permanent opener identities survive earlier rewinds.
@@ -678,6 +678,22 @@ func (q *Queries) GetSessionUserTurnOrdinal(ctx context.Context, sessionID strin
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const getUserTurnOpeningMessageID = `-- name: GetUserTurnOpeningMessageID :one
+SELECT opening_message_id FROM session_source_turns WHERE session_id = ? AND turn = ?
+`
+
+type GetUserTurnOpeningMessageIDParams struct {
+	SessionID string `json:"session_id"`
+	Turn      int64  `json:"turn"`
+}
+
+func (q *Queries) GetUserTurnOpeningMessageID(ctx context.Context, arg GetUserTurnOpeningMessageIDParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getUserTurnOpeningMessageID, arg.SessionID, arg.Turn)
+	var opening_message_id string
+	err := row.Scan(&opening_message_id)
+	return opening_message_id, err
 }
 
 const getWorkerJobMessageOrdBounds = `-- name: GetWorkerJobMessageOrdBounds :one

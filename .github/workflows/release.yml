@@ -32,6 +32,9 @@ jobs:
       actions: read
     outputs:
       source_sha: ${{ steps.source.outputs.source_sha }}
+      baseline_sha: ${{ steps.compatibility.outputs.baseline_sha }}
+      baseline_tag: ${{ steps.compatibility.outputs.baseline_tag }}
+      published_versions: ${{ steps.compatibility.outputs.published_versions }}
       publish: ${{ steps.source.outputs.publish }}
       version: ${{ steps.release.outputs.version }}
       channel: ${{ steps.release.outputs.channel }}
@@ -41,6 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: refs/heads/main
           fetch-depth: 0
 
       - name: Validate release tag and source
@@ -76,6 +80,21 @@ jobs:
           echo "source_sha=${source_sha}" >> "${GITHUB_OUTPUT}"
           echo "publish=${publish}" >> "${GITHUB_OUTPUT}"
         # Admission uses the controller's qualification policy before selecting source.
+      - name: Install the stable feed verifier
+        run: sudo apt-get update && sudo apt-get install -y minisign
+      - name: Pin the published stable compatibility baseline
+        id: compatibility
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
+          PUBLISH: ${{ steps.source.outputs.publish }}
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+        run: |
+          set -euo pipefail
+          gh api --paginate --slurp "repos/${GITHUB_REPOSITORY}/releases?per_page=100" > "${RUNNER_TEMP}/published-releases.json"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/latest" \
+            | python3 scripts/release-compatibility-baseline.py "${SOURCE_SHA}" --base-url "${DOWNLOAD_BASE_URL}" --releases-file "${RUNNER_TEMP}/published-releases.json" --publish "${PUBLISH}" >> "${GITHUB_OUTPUT}"
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ steps.source.outputs.source_sha }}
@@ -125,8 +144,57 @@ jobs:
           FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
         run: python3 scripts/feed_signing.py --check-credentials
 
-  preflight:
+  compatibility:
     needs: classify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.classify.outputs.source_sha }}
+          fetch-depth: 0
+      - name: Check out the release controller
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/heads/main
+          path: .release-controller
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: .release-controller/lycaon/go.mod
+          cache: false
+      - name: Provision release controller inputs
+        env:
+          RUSTUP_TOOLCHAIN: stable
+        working-directory: .release-controller
+        run: |
+          ./task gitengine:fetch
+      - name: Enforce published stable compatibility
+        env:
+          BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}
+          PUBLISHED_VERSIONS: ${{ needs.classify.outputs.published_versions }}
+        working-directory: .release-controller
+        run: |
+          PW_ARTIFACT_ROOT="$(python3 "${GITHUB_WORKSPACE}/scripts/artifact_paths.py" artifacts "${GITHUB_WORKSPACE}")"
+          export PW_ARTIFACT_ROOT
+          ./task release:preflight -- --compatibility-only --source-root "${GITHUB_WORKSPACE}" --baseline-ref "${BASELINE_SHA}" --published-versions "${PUBLISHED_VERSIONS}"
+      - name: Report OpenAPI compatibility
+        env:
+          BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}
+        working-directory: .release-controller
+        run: |
+          PW_ARTIFACT_ROOT="$(python3 "${GITHUB_WORKSPACE}/scripts/artifact_paths.py" artifacts "${GITHUB_WORKSPACE}")"
+          export PW_ARTIFACT_ROOT
+          ./task openapi:diff -- --source-root "${GITHUB_WORKSPACE}" --baseline-ref "${BASELINE_SHA}"
+      - uses: ./.github/actions/verification-evidence
+        if: always()
+        with:
+          name: release-compatibility-${{ github.run_attempt }}
+          status: ${{ job.status }}
+
+  preflight:
+    needs: [classify, compatibility]
     runs-on: macos-15
     timeout-minutes: 90
     steps:
@@ -140,11 +208,12 @@ jobs:
         timeout-minutes: 60
         env:
           PUBLISH: ${{ needs.classify.outputs.publish }}
+          BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}
         run: |
           if [[ "${PUBLISH}" == true ]]; then
-            ./task release:preflight -- --require-corpus
+            ./task release:preflight -- --require-corpus --baseline-ref "${BASELINE_SHA}"
           else
-            ./task release:preflight
+            ./task release:preflight -- --baseline-ref "${BASELINE_SHA}"
           fi
       - uses: ./.github/actions/verification-evidence
         if: always()
@@ -195,10 +264,9 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: python3 scripts/ci_verification.py gate
 
-  # The merge queue verified this commit; the signed build starts with preflight, and
-  # nothing leaves the run until ship-gates passes.
+  # Packaging follows static compatibility; publication requires ship-gates.
   build-release:
-    needs: [classify]
+    needs: [classify, compatibility]
     strategy:
       fail-fast: false
       # Beside preflight and the upgrade rehearsal, a release holds two macOS runners.

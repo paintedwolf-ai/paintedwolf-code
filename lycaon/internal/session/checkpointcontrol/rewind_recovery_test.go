@@ -46,7 +46,8 @@ func TestSweepCommittedRewindsReclaimsOrphanedAnchor(t *testing.T) {
 	testutil.FailErr(t, "turn writes", os.WriteFile(path, []byte("after"), 0o640))
 	project, err := rewinds.rewindProject(ctx, sessionID)
 	testutil.FailErr(t, "resolve project", err)
-	turn, err := repository.UserTurnOrdinal(ctx, sessionID)
+	turnSource, err := repository.ReadSourceTurn(ctx, sessionID, 0)
+	turn := turnSource.Number
 	testutil.FailErr(t, "resolve turn", err)
 	testutil.FailErr(t, "record effect", ledger.Record(ctx, sourceledger.RecordInput{
 		RecordLocation: sourceledger.RecordLocation{RootID: project.Roots[0].ID, Path: "file.txt"}, ProjectID: project.ID, Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, SessionID: sessionID, Turn: turn, Before: []byte("before"), After: []byte("after")}))

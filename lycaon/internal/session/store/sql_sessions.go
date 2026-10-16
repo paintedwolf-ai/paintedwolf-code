@@ -184,8 +184,8 @@ func (s *SQL) Get(ctx context.Context, id string) (*api.Session, error) {
 		return nil, err
 	}
 	sess.UntrustedContent = untrusted
-	if turn, err := s.UserTurnOrdinal(ctx, sess.ID); err == nil {
-		sess.CurrentTurn = turn
+	if turnSource, err := s.ReadSourceTurn(ctx, sess.ID, 0); err == nil {
+		sess.CurrentTurn = turnSource.Number
 	}
 	s.reconcileProjectSpills(ctx, sess.ProjectID)
 	return sess, nil
@@ -214,8 +214,8 @@ func (s *SQL) List(ctx context.Context) ([]*api.Session, error) {
 			return nil, err
 		}
 		sess.UntrustedContent = untrusted
-		if turn, err := s.UserTurnOrdinal(ctx, sess.ID); err == nil {
-			sess.CurrentTurn = turn
+		if turnSource, err := s.ReadSourceTurn(ctx, sess.ID, 0); err == nil {
+			sess.CurrentTurn = turnSource.Number
 		}
 		out = append(out, sess)
 	}
