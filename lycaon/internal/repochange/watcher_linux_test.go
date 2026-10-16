@@ -193,3 +193,40 @@ func TestInotifyCoversALargeSeededTreeCompletely(t *testing.T) {
 	testutil.FailErr(t, "relative deepest path", err)
 	fixture.waitFor(filepath.ToSlash(rel), WorktreeChangeUnknown)
 }
+
+// inotifyInstances counts the inotify instances this process holds.
+func inotifyInstances(t *testing.T) int {
+	t.Helper()
+	entries, err := os.ReadDir("/proc/self/fd")
+	testutil.FailErr(t, "list descriptors", err)
+	count := 0
+	for _, entry := range entries {
+		target, err := os.Readlink(filepath.Join("/proc/self/fd", entry.Name()))
+		if err == nil && target == "anon_inode:inotify" {
+			count++
+		}
+	}
+	return count
+}
+
+// Instances are capped per user across every process (max_user_instances is
+// commonly 128), so roots share one stream however many the engine watches.
+func TestInotifyRootsShareOneInstance(t *testing.T) {
+	const roots = 16
+	fixtures := make([]*inotifyRoot, 0, roots)
+	for range roots {
+		fixtures = append(fixtures, newInotifyRoot(t, 64))
+	}
+	if got := inotifyInstances(t); got != 1 {
+		t.Fatalf("%d watched roots hold %d inotify instances, want 1", roots, got)
+	}
+	for _, fixture := range fixtures {
+		testutil.FailErr(t, "write", os.WriteFile(filepath.Join(fixture.root, "edit.txt"), []byte("x"), 0o644))
+	}
+	for _, fixture := range fixtures {
+		fixture.waitFor("edit.txt", WorktreeChangeUnknown)
+		if coverage := fixture.registry.Coverage(fixture.root); !coverage.Watching || !coverage.Complete {
+			t.Fatalf("root coverage = %+v", coverage)
+		}
+	}
+}
