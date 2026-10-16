@@ -4,12 +4,13 @@
   "kind": "runtime_service",
   "workstream": "project-reasoning-retention",
   "disposition": "retain",
-  "reason": "The native provider owns request preparation, admission, and stream lifetime. Request projection is computed once for both context estimation and transport serialization; shared replay policy and wire mapping remain separate domain boundaries.",
-  "reviewed_commit": "f3941b0da321257f3a73bef42b041f61f30feaac",
-  "ceiling": 21,
+  "reason": "The native provider owns request preparation, admission, and stream lifetime. Request projection is computed once for both context estimation and transport serialization; shared replay policy and wire mapping remain separate domain boundaries. Catalog policies (HTTP retry, prompt cache, tool-call parser rejections) attach through setters; parser rejection grammars and their classification live in providerprofile, so the driver only extracts its error message.",
+  "reviewed_commit": "92183efb36b227c72091485110e2315cbaa66750",
+  "ceiling": 22,
   "boundaries": {
     "lycaon/internal/llm/providers/ollama/reasoning_recovery_test.go": "c18d5c4e7f7fef019d9407a286b9d47fcb909fc5c7eb9d7eff52081f203d83b7",
-    "lycaon/internal/llm/providers/ollama/context_cap_test.go": "761f807bacd5b77441f933cb84a612a37cd0bed9a62c477a9d7afe42fcacaa72"
+    "lycaon/internal/llm/providers/ollama/context_cap_test.go": "761f807bacd5b77441f933cb84a612a37cd0bed9a62c477a9d7afe42fcacaa72",
+    "lycaon/internal/llm/providerprofile/tool_call_rejection_test.go": "24fbcb8ae54b24f5b4d82847dfe49eecb5270e7d754f65405f7d1538c64f601f"
   },
-  "reviewed_shape": "9086898830de94a1fb74684e2ba612f97e63c8c0e8b33c1662e0e2a82346e0e8"
+  "reviewed_shape": "d3d919343016ae956043c524131f7e6c25c33f09b95e619bb4d6b0bba8e91a2c"
 }
