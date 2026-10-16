@@ -35,7 +35,7 @@ class BatchFixture(unittest.TestCase):
             shutil.copy2(path, self.scripts / path.name)
         for name in ["test-execution.py", "test-source-snapshot.sh", "test-run-isolation.sh", "test-run-lease.py",
                      "digest-run-lock.sh", "repo-snapshot-lock.sh", "snapshot-publish.sh",
-                     "artifact-paths.sh", "artifact_paths.py"]:
+                     "artifact-paths.sh", "artifact_paths.py", "checkout-cache-dir.sh", "sha256.sh"]:
             shutil.copy2(SCRIPT.with_name(name), self.scripts / name)
         self.catalog = {"resources": {}, "private": [], "ci": {}, "capacity": {},
             "environment": {"names": ["PATH", "HOME", "TMPDIR", "USER", "LANG"],
