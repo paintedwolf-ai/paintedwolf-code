@@ -18,6 +18,7 @@ func appendBoundaryNotes(toolName, sessionID string, outcome RunOutcome, res *ho
 			MediatedNetwork:        res.Network,
 			RemotePackageExecution: res.RemotePackageExecution,
 			FailedStages:           hostcmd.FailedStages(res.Stages, res.ExitCode),
+			TerminationReason:      res.TerminationReason,
 			Refusals:               outcome.Refusals,
 		},
 	)
