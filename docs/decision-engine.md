@@ -120,13 +120,20 @@ Cursors bind to the caller, request, and catalog. A changed catalog or invalid
 continuation requires repeating the original description. Tool catalogs contain
 only live, requestable entries on the current surface; skill catalogs use the
 caller's effective skills. Resource reads require an exact skill and cannot browse.
+An unknown tool-name rejection can supply the same bounded catalog from the
+current compiled surface. Exact selection and paging bypass ranking; a known
+deferred name instead receives the direct loading call. Recovery never claims
+a catalog is present when its complete feedback cannot fit provider projection.
 An empty catalog offers no new capability; existing tools remain usable.
 
 Selection budgets are 10 seconds for turn decisions, automatic skill ranking,
 tool requests, and skill lookups. Enabled retrieval rerank sites have their own
 deadlines in `decisions.yaml`. Caller cancellation still ends the operation; it
 does not trigger discovery. Startup separately warms the engine with its
-90-second handshake budget.
+90-second handshake budget. The shared subprocess admits one physical request
+at a time. A caller deadline stops waiting but keeps that request's slot occupied
+until its native response or process exit; canceled admission waiters send nothing.
+This bounds abandoned work without changing ranking inputs or deadlines.
 
 ## Release vocabulary and retrieval
 

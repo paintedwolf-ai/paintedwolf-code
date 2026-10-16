@@ -11,7 +11,7 @@ import (
 func TestHostedCacheWritesRequireTheTrustedMainRef(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-release-build", "cache-analysis-tools", "setup-opengrep", "setup-verification"} {
+	for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-release-build", "cache-analysis-tools", "setup-opengrep", "setup-verification", "setup-webkit-atspi-images"} {
 		var action struct {
 			Runs struct {
 				Steps []struct {
@@ -66,7 +66,7 @@ func TestMainCacheWarmingCompletesBeforeTheNextPush(t *testing.T) {
 func TestNestedCachePublicationRunsAfterPreparation(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-analysis-tools"} {
+	for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-analysis-tools", "setup-webkit-atspi-images"} {
 		data := contractcheck.ReadRepoFile(t, root, ".github/actions/"+name+"/action.yml")
 		if strings.Contains(data, "uses: actions/cache@") || !strings.Contains(data, "uses: actions/cache/save@") {
 			t.Errorf("%s must publish in its current action scope, not a nested post-job hook", name)
@@ -96,7 +96,7 @@ func TestNestedCachePublicationRunsAfterPreparation(t *testing.T) {
 			published[step.Uses] = true
 		}
 	}
-	for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-analysis-tools"} {
+	for _, name := range []string{"cache-go", "cache-decide", "cache-notices-tools", "cache-analysis-tools", "setup-webkit-atspi-images"} {
 		if !published["./.github/actions/"+name] {
 			t.Errorf("prepared %s has no publication stage", name)
 		}

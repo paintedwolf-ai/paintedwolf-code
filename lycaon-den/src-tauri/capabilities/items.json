@@ -48,6 +48,7 @@
     "allow-linux-decoration-layout",
     "allow-linux-window-frame",
     "allow-accessibility-preferred-text-size",
+    "allow-den-web-engine",
     "allow-den-announce",
     "allow-system-appearance",
     "allow-shell-command-status"
