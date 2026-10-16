@@ -882,6 +882,20 @@
       "setup": "harness",
       "runner": "macos-15"
     },
+    "webkit-gtk": {
+      "targets": [
+        "den:webkit:atspi"
+      ],
+      "minutes": 30,
+      "profiles": [
+        "integration",
+        "nightly",
+        "release"
+      ],
+      "suite": "e2e",
+      "setup": "harness",
+      "platform": "linux"
+    },
     "race": {
       "targets": [
         "test:race"
