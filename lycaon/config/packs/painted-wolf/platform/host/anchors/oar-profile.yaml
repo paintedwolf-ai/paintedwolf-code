@@ -848,6 +848,8 @@ host_facts:
    type: bool
  - name: paintedwolf.can_grep
    type: bool
+ - name: paintedwolf.can_recall
+   type: bool
  - name: paintedwolf.entries
    type: string
  - name: paintedwolf.entry

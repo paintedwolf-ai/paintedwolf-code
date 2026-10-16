@@ -9,6 +9,7 @@ Observed URLs: {{ observed_urls_sample }}
 URLs printed by commands are output, not observed web pages. Cite the command handle for its recorded outcome; do not put output URLs in `cited_urls`.
 
 Keep accepted citations. Copy exact handles; do not construct a handle from a tool name or call count. An explicit handle cites the captured observation, even when `superseded_by` names newer file evidence. Use the newer observation for current file contents. Git and command receipts remain evidence of their recorded outcomes after files change.
+{% if can_recall %}When an observation is no longer in context, recover it with `recall(query="handle:read#3")`, passing its exact handle alone, or a `path:` query, then copy the line and excerpt from the returned body, not from memory.{% endif %}
 {% if repair_observations %}
 Observed repair choices (not inferred support for your report):
 {{ repair_observations }}
