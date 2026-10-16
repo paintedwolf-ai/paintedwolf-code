@@ -63,7 +63,7 @@ The repository ships no pre-commit hook. **Closeout:** a change pushed for a pul
 
 Every credential value lives in `{configdir}/credential-vault.age`, one age-encrypted document shared by provider keys, web-research keys, MCP OAuth tokens, the secret fingerprint key, and managed secrets. Development builds keep the matching age identity in `{configdir}/.credential-vault-development-identity` at `0600`; tests use the same isolated path and never touch Keychain or ask for a password.
 
-Release macOS builds store only the random age identity in the device-only login Keychain; the vault ciphertext stays in the config directory. Release Linux and Windows builds wrap the identity in `{configdir}/credential-vault-identity.age` with the app password, which the desktop sends to the engine over a private startup pipe, never argv or the environment.
+Release macOS builds store only the random age identity, device-only, in the data protection Keychain; the vault ciphertext stays in the config directory. Linux packaged installs keep the identity in the `pw-vault-identity` system service. Without that service, and on Windows, the identity is wrapped in `{configdir}/credential-vault-identity.age` with the app password, which the desktop sends to the engine over a private startup pipe, never argv or the environment. Custody details: [secrets](secrets.md).
 
 ```bash
 LYCAON_DEV=1 "$BUILD_DIR/lycaon-dev" credentials where        # report the vault and identity provider
