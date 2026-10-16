@@ -1,0 +1,50 @@
+name: Cache lint diagnostics
+description: Restore the golangci-lint results that main's newest warm run recorded
+inputs:
+  save:
+    description: Publish this run's diagnostics (main only) and delete the entries it replaces
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    # Diagnostics record absolute paths, so they are cached for the source slot a lane verifies in.
+    - name: Resolve lint diagnostics cache
+      id: paths
+      shell: bash
+      run: |
+        set -euo pipefail
+        printf 'cache=%s\n' "$(bash scripts/test-source-snapshot.sh diagnostics-cache)" >> "${GITHUB_OUTPUT}"
+        printf 'prefix=lint-diagnostics-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "$(python3 scripts/analysis_tools.py key lint)" >> "${GITHUB_OUTPUT}"
+
+    # Each main commit saves its own entry; a prefix restore takes the newest.
+    - if: ${{ inputs.save != 'true' }}
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.paths.outputs.cache }}
+        key: ${{ steps.paths.outputs.prefix }}${{ github.sha }}
+        restore-keys: ${{ steps.paths.outputs.prefix }}
+
+    - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.paths.outputs.cache }}
+        key: ${{ steps.paths.outputs.prefix }}${{ github.sha }}
+
+    - name: Delete superseded lint diagnostics
+      if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PREFIX: lint-diagnostics-
+        CURRENT: ${{ steps.paths.outputs.prefix }}${{ github.sha }}
+      run: |
+        set -euo pipefail
+        keys="$(gh cache list --repo "${GITHUB_REPOSITORY}" --ref refs/heads/main --key "${PREFIX}" --limit 100 --json key --jq '.[].key')"
+        # A save that did not land leaves the previous entry as the newest.
+        if ! grep -qxF "${CURRENT}" <<<"${keys}"; then
+          echo "::warning::${CURRENT} was not saved; keeping earlier lint diagnostics"
+          exit 0
+        fi
+        grep -vxF "${CURRENT}" <<<"${keys}" | while read -r key; do
+          gh cache delete --repo "${GITHUB_REPOSITORY}" "${key}"
+        done

@@ -173,6 +173,10 @@ runs:
         TOOLS: ${{ inputs.analysis }}
       run: python3 scripts/analysis_tools.py ensure "$TOOLS"
 
+    - name: Restore lint diagnostics
+      if: runner.os == 'Linux' && (inputs.analysis == 'lint' || inputs.analysis == 'all')
+      uses: ./.github/actions/cache-lint-diagnostics
+
     - name: Set up WebKitGTK accessibility images
       if: inputs.containers == 'true'
       uses: ./.github/actions/setup-webkit-atspi-images
