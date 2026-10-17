@@ -103,9 +103,9 @@ def published_feed(mirror, base, channel):
                    "published_at": manifest["pub_date"], "feed_manifest_sha256": hashlib.sha256(raw).hexdigest()}
         version = published_version(release, channel)
         with tempfile.TemporaryDirectory(prefix="release-stable-baseline-") as temporary:
-            pointer = Path(temporary) / "latest.json"
+            pointer = Path(temporary) / f"latest-{channel}-key-{row['generation']}.json"
             pointer.write_bytes(raw)
-            feed_signature.check(signature.decode("utf-8"), file="latest.json", version=manifest["version"],
+            feed_signature.check(signature.decode("utf-8"), file=pointer.name, version=manifest["version"],
                                  number=row["generation"], registry=registry)
             feed_signing.verify(pointer, signature.decode("utf-8"), row["feed_public_key"])
         confirmed = True
