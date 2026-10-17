@@ -242,9 +242,9 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
   await bootstrapChatSession(page);
   const sessionId = await settledChatSessionId(page);
 
-  // Build 260 messages so the 200-message resident tail starts inside a 4-call activity run
-  // (indices 56..63, where index 60 is the first resident message in the 200-row tail).
-  const base = steps(260);
+  // Build 160 messages so the 100-message resident tail starts inside a 4-call activity run
+  // (indices 56..63, where index 60 is the first resident message in the 100-row tail).
+  const base = steps(160);
   const boundaryCalls = [
     { at: 56, id: "call-boundary-0" },
     { at: 58, id: "call-boundary-1" },
@@ -279,15 +279,14 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
 
   await apiSeedSessionTranscript(page.request, sessionId, rows);
   await page.reload();
-  await expect(liveChatStage(page).getByText("Step 260.", { exact: true })).toBeVisible({ timeout: 30_000 });
-
-  await expect(async () => {
-    await wheel(page, -3_000);
-    expect(olderHeld).toBe(true);
-  }).toPass({ timeout: 60_000 });
+  await expect(liveChatStage(page).getByText("Step 160.", { exact: true })).toBeVisible({ timeout: 30_000 });
 
   const spanRow = scroller(page).locator('.transcript-viewport-row[data-msg-id="call-boundary-2"]');
-  await expect(spanRow).toBeVisible();
+  await expect(async () => {
+    if (!(await spanRow.isVisible())) await wheel(page, -1_500);
+    expect(olderHeld).toBe(true);
+    await expect(spanRow).toBeVisible({ timeout: 500 });
+  }).toPass({ timeout: 60_000 });
   await spanRow.locator('[data-testid="activity-span-card"] > summary').click();
   const entry = scroller(page).locator('[data-activity-entry-key="call-boundary-2"]');
   await expect(entry).toBeVisible();
