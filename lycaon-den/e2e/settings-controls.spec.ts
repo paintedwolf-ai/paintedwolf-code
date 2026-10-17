@@ -334,8 +334,8 @@ webE2e("every settings shortcut can be rebound and reset without losing its iden
       const record = page.getByTestId(`keyboard-record-${id}`);
       await record.click();
       await expect(record).toHaveAttribute("aria-pressed", "true");
-      await page.keyboard.press("ControlOrMeta+Shift+F8");
-      await expect.poll(() => stored(id), id).toContain("F8");
+      await page.keyboard.press("ControlOrMeta+Shift+F9");
+      await expect.poll(() => stored(id), id).toContain("F9");
       await page.getByTestId(`keyboard-reset-${id}`).click();
       await expect.poll(() => stored(id), id).toBeUndefined();
       await expect(page.getByTestId(`keyboard-reset-${id}`)).toBeDisabled();
@@ -345,13 +345,13 @@ webE2e("every settings shortcut can be rebound and reset without losing its iden
   expect(checked.map((row) => row.id).sort()).toEqual(expectedIds);
   await page.getByTestId("keyboard-tab-global").click();
   await page.getByTestId("keyboard-record-nav.leader").click();
-  await page.keyboard.press("ControlOrMeta+Shift+F8");
-  await expect.poll(() => stored("nav.leader")).toContain("F8");
+  await page.keyboard.press("ControlOrMeta+Shift+F9");
+  await expect.poll(() => stored("nav.leader")).toContain("F9");
   await page.reload();
   await expectShellReady(page);
   await openSettings(page);
   await page.getByTestId("general-tab-keyboard").click();
-  await expect(page.getByTestId("keyboard-chord-nav.leader")).toHaveAttribute("data-binding", /F8/);
+  await expect(page.getByTestId("keyboard-chord-nav.leader")).toHaveAttribute("data-binding", /F9/);
   await page.getByTestId("keyboard-reset-all").click();
   await expect.poll(() => stored("nav.leader")).toBeUndefined();
   await expect(page.getByTestId("keyboard-reset-all")).toHaveCount(0);
