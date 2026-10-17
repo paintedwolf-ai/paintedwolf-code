@@ -849,10 +849,10 @@ webE2e.describe("transcript scale den", () => {
       await loaded;
       await page.unroute(isOlderPage);
       await expect
-        .poll(async () => (await transcriptScrollSample(page)).scrollTop, {
+        .poll(async () => (await transcriptScrollSample(page)).index, {
           timeout: 10_000,
         })
-        .toBeGreaterThan(before.scrollTop);
+        .toBeGreaterThan(before.index ?? 0);
       await settleTranscriptLayout(page);
       const after = await transcriptScrollSample(page);
 

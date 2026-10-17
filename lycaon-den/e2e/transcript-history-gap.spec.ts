@@ -278,6 +278,7 @@ modelIndependentWebE2e("prepending an older page into an expanded activity span 
   });
 
   await apiSeedSessionTranscript(page.request, sessionId, rows);
+  await page.reload();
   await expect(liveChatStage(page).getByText("Step 260.", { exact: true })).toBeVisible({ timeout: 30_000 });
 
   await expect(async () => {

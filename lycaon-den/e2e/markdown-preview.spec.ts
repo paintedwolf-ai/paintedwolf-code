@@ -95,7 +95,7 @@ modelIndependentWebE2e("large Markdown preview keeps the app responsive and boun
   await expect(preview).toHaveCount(0);
   await expect(page.getByTestId("files-editor-host").locator(".cm-content")).toBeVisible();
   await page.getByTestId("files-tree-file").filter({ hasText: "small.md" }).click();
-  await expect(page.getByRole("textbox", { name: "", exact: true })).toContainText("Small preview");
+  await expect(page.getByRole("textbox", { name: "Contents of small.md", exact: true })).toContainText("Small preview");
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(preview).toContainText("Small preview");
   const smallWidth = await preview.locator(".den-files-editor__preview-body").evaluate((element) => element.getBoundingClientRect().width);

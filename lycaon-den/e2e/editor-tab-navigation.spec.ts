@@ -16,7 +16,7 @@ modelIndependentWebE2e("file tab clicks preserve drafts and dragging reorders ta
   });
   const first = page.getByTestId("files-tab").filter({ hasText: "first" });
   const second = page.getByTestId("files-tab").filter({ hasText: "second" });
-  const editor = page.getByRole("textbox", { name: "", exact: true });
+  const editor = page.getByRole("textbox", { name: /^Contents of / });
   await page.getByTestId("files-tree-file").filter({ hasText: "first.md" }).dblclick();
   await expect(editor).toContainText("First document");
   await expect(editor).toBeEditable();
