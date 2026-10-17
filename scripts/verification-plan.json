@@ -1069,6 +1069,7 @@
       "release-halt.yml": 1,
       "release-secrets-check.yml": 1,
       "release-staple-probe.yml": 1,
+      "release-feed-signature-backfill.yml": 1,
       "dependency-inventory.yml": 1,
       "release-system-live-test.yml": 1,
       "queue-health.yml": 1,
