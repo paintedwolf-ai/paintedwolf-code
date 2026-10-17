@@ -83,10 +83,14 @@ func TestE2EComposeStagesSchemasAlongsideModule(t *testing.T) {
 	for _, marker := range []string{
 		"source: ${LYCAON_REPO_ROOT}/schemas",
 		"target: /workspace/schemas",
+		"source: ${LYCAON_REPO_ROOT}/scripts/gitengine-fetch.sh",
+		"target: /workspace/scripts/gitengine-fetch.sh",
+		"source: ${LYCAON_REPO_ROOT}/scripts/sha256.sh",
+		"target: /workspace/scripts/sha256.sh",
 		"read_only: true",
 	} {
 		if !strings.Contains(compose, marker) {
-			t.Fatalf("docker-compose.e2e.yml must stage the schema tree beside the Go module: missing %q", marker)
+			t.Fatalf("docker-compose.e2e.yml must stage required read-only inputs: missing %q", marker)
 		}
 	}
 }
