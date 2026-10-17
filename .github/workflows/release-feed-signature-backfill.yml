@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-feed-signature-backfill
+  group: maintenance
   cancel-in-progress: false
 
 jobs:
