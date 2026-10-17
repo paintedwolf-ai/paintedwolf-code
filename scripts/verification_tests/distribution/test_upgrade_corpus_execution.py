@@ -264,7 +264,7 @@ class StableFeedBaselineTests(unittest.TestCase):
             selected = release_baseline.published_stable(self.mirror, "https://downloads.example")
             self.assertEqual(selected["tag_name"], "v1.0.2")
             self.assertEqual(selected["feed_manifest_sha256"], sha(raw))
-            binding.assert_called_once()
+            self.assertEqual(binding.call_args.kwargs["file"], "latest-stable-key-1.json")
             crypto.assert_called_once()
 
     def test_a_newer_published_mirror_is_not_lost_to_an_older_feed(self):
