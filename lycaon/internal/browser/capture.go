@@ -366,6 +366,7 @@ func resolveCaptureTarget(req CaptureRequest) (captureTarget, error) {
 		if err != nil {
 			return captureTarget{}, err
 		}
+		entry = normalizeStaticEntry(dir, abs, entry)
 		nav, err := JoinStaticEntry(entry)
 		if err != nil {
 			return captureTarget{}, err

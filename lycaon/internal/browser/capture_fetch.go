@@ -300,6 +300,55 @@ func PrepareStaticRoot(root string) (string, error) {
 	return abs, nil
 }
 
+// normalizeStaticEntry strips the project_dir filesystem prefix when a caller
+// passes an in-root filesystem path (such as /workspace/app/index.html) as path.
+func normalizeStaticEntry(rawDir, absRoot, entry string) string {
+	trimmed := strings.TrimSpace(entry)
+	if trimmed == "" || !filepath.IsAbs(trimmed) {
+		return entry
+	}
+	if _, ok := resolveStaticFile(absRoot, trimmed); ok {
+		return entry
+	}
+	keepSlash := strings.HasSuffix(trimmed, "/")
+	candidates := []string{filepath.Clean(trimmed)}
+	if canon, err := evalSymlinksAllowMissingLeaf(trimmed); err == nil && canon != candidates[0] {
+		candidates = append(candidates, canon)
+	}
+	roots := []string{absRoot}
+	if rawAbs, err := filepath.Abs(strings.TrimSpace(rawDir)); err == nil && rawAbs != absRoot {
+		roots = append(roots, rawAbs)
+	}
+	for _, r := range roots {
+		for _, c := range candidates {
+			rel, err := filepath.Rel(r, c)
+			if err != nil || pathEscapesRoot(rel) {
+				continue
+			}
+			if rel == "." {
+				return ""
+			}
+			out := filepath.ToSlash(rel)
+			if keepSlash && !strings.HasSuffix(out, "/") {
+				out += "/"
+			}
+			return out
+		}
+	}
+	return entry
+}
+
+func evalSymlinksAllowMissingLeaf(p string) (string, error) {
+	if canon, err := filepath.EvalSymlinks(p); err == nil {
+		return canon, nil
+	}
+	parent, err := filepath.EvalSymlinks(filepath.Dir(p))
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(parent, filepath.Base(p)), nil
+}
+
 // requireStaticEntry ensures the initial navigation URL for a project_dir capture
 // resolves to a regular file under root or is answered by an active GET route fixture.
 func requireStaticEntry(root, entry, navURL string, routes []RouteRule) error {

@@ -66,6 +66,14 @@ func TestResolveCaptureTarget_projectDirPath(t *testing.T) {
 	if target.Origin != StaticOrigin || target.RootDir == "" {
 		t.Fatalf("got %#v", target)
 	}
+	absEntryTarget, err := resolveCaptureTarget(CaptureRequest{
+		ProjectDir: dir,
+		Path:       filepath.Join(dir, "talks", "index.html"),
+	})
+	testutil.FailErr(t, "resolveCaptureTarget with in-root absolute file path failed", err)
+	if absEntryTarget.URL != "http://lycaon.capture/talks/index.html" {
+		t.Fatalf("abs entry url=%q", absEntryTarget.URL)
+	}
 }
 
 func TestResolveCaptureTarget_rejectsMissingStaticEntry(t *testing.T) {
