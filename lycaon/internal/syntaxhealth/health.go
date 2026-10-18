@@ -74,6 +74,9 @@ func Analyze(ctx context.Context, langName, filename string, src []byte, purpose
 		return Report{Language: failure.Language, Status: StatusIncomplete, Failure: failure}
 	}
 	entry := resolveEntry(ctx, langName, filename, src)
+	if entry != nil && entry.Name == "css" {
+		return cssMarkupHealth(src)
+	}
 	if entry == nil || entry.Language == nil || !supported(entry.Name) {
 		return Report{Status: StatusUnsupported}
 	}
@@ -166,9 +169,6 @@ func resolveEntry(ctx context.Context, langName, filename string, src []byte) *g
 }
 
 func supported(name string) bool {
-	if name == "css" {
-		return true
-	}
 	for _, candidate := range filekind.SupportedLanguages() {
 		if candidate == name {
 			return true

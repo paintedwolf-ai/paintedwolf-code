@@ -10,10 +10,10 @@ func TestCSSSourceHealth(t *testing.T) {
 		name, source string
 		want         Status
 	}{
-		{"stylesheet", "body { color: red; }", StatusClean},
-		{"custom property", ":root { --accent: #aabbcc; } .card { color: var(--accent); }", StatusClean},
-		{"media", "@media (width >= 600px) { .card { display: grid; } }", StatusClean},
-		{"missing brace", "body { color: red;", StatusBroken},
+		{"stylesheet", "body { color: red; }", StatusUnsupported},
+		{"custom property", ":root { --accent: #aabbcc; } .card { color: var(--accent); }", StatusUnsupported},
+		{"media", "@media (width >= 600px) { .card { display: grid; } }", StatusUnsupported},
+		{"missing brace", "body { color: red;", StatusUnsupported},
 		{"html wrapper", "<css>\nbody { color: red; }\n</css>", StatusBroken},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -27,9 +27,22 @@ func TestCSSSourceHealth(t *testing.T) {
 
 func TestCSSMutationMustPreserveSyntax(t *testing.T) {
 	before := []byte("body { color: red; }")
-	after := []byte("body { color: red;")
-	change := Evaluate(t.Context(), "style.css", before, true, after)
-	if change.Transition != TransitionBrokeClean {
+	after := []byte("<css>body { color: red; }</css>")
+	change := Evaluate(t.Context(), "style.css", before, false, after)
+	if change.Transition != TransitionNewFileBroken {
 		t.Fatalf("change = %+v", change)
+	}
+}
+
+func TestCSSMarkupBoundary(t *testing.T) {
+	for _, source := range []string{"<!-- body { color: red; } -->", "/* <css> */ body {}", "body::before { content: '<css>'; }"} {
+		report := Analyze(t.Context(), "", "style.css", []byte(source), tsparse.Validation)
+		if report.Status != StatusUnsupported {
+			t.Fatalf("valid CSS classified as broken: %+v", report)
+		}
+	}
+	report := Analyze(t.Context(), "", "style.css", []byte("\n  <style>body {}</style>"), tsparse.Validation)
+	if report.Status != StatusBroken || report.Diagnostics[0].Row != 2 || report.Diagnostics[0].Col != 3 {
+		t.Fatalf("wrapper diagnostic = %+v", report)
 	}
 }
