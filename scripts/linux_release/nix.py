@@ -17,9 +17,10 @@ from ..artifact_paths import artifact_root
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
 NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
+COMPONENTS = ("default", "bun-lock", "frontend", "engine", "bialy", "document-core", "resources")
 
 
-def command(operation: str, root: Path) -> list[str]:
+def command(operation: str, root: Path, component: str = "default") -> list[str]:
     source = "git+file://" + str(root)
     if operation == "check":
         return NIX + ["flake", "check", "--no-build", "--all-systems", "--no-write-lock-file", source]
@@ -28,20 +29,20 @@ def command(operation: str, root: Path) -> list[str]:
     system = SYSTEMS[platform.machine()]
     return NIX + ["build", "--json", "--no-link", "--no-write-lock-file",
                   "--option", "sandbox", "true", "--max-jobs", "1", "--cores", "1",
-                  source + "#packages." + system + ".default"]
+                  source + "#packages." + system + "." + component]
 
 
-def execute(operation: str, root: Path = ROOT) -> int:
+def execute(operation: str, root: Path = ROOT, component: str = "default") -> int:
     lock = root / "flake.lock"
     if not lock.is_file():
         raise ValueError("flake.lock is required; evaluation/build must not create or update it")
-    invocation = command(operation, root)
+    invocation = command(operation, root, component)
     environment = dict(os.environ)
     for name in ("GH_TOKEN", "GITHUB_TOKEN", "LINUX_PACKAGE_SIGNING_KEY",
                  "FEED_SIGNING_KEYS_JSON", "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"):
         environment.pop(name, None)
     report = {
-        "format_version": 1, "operation": operation,
+        "format_version": 1, "operation": operation, "component": component,
         "lock_sha256": hashlib.sha256(lock.read_bytes()).hexdigest(),
         "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
         "source_tree": subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=root, text=True).strip(),
@@ -71,9 +72,10 @@ def execute(operation: str, root: Path = ROOT) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operation", choices=("check", "build"))
+    parser.add_argument("--component", choices=COMPONENTS, default="default")
     args = parser.parse_args()
     try:
-        return execute(args.operation)
+        return execute(args.operation, component=args.component)
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

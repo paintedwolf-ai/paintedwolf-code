@@ -1021,7 +1021,7 @@ tasks:
   nix:build:
     desc: Build the native Linux Nix closure from pinned inputs
     cmds:
-      - python3 -m scripts.linux_release.nix build
+      - python3 -m scripts.linux_release.nix build {{.CLI_ARGS}}
 
   den:bundle:
     desc: 'Build desktop bundle (.dmg on macOS; .deb and .rpm on Linux) with embedded engine sidecar; signs + notarizes when APPLE_SIGNING_IDENTITY is a Developer ID'

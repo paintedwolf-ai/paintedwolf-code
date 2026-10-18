@@ -7,9 +7,13 @@
       url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    bun2nix = {
+      url = "github:nix-community/bun2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, rust-overlay }:
+  outputs = { self, nixpkgs, rust-overlay, bun2nix }:
     let
       systems = [ "x86_64-linux" "aarch64-linux" ];
       eachSystem = nixpkgs.lib.genAttrs systems;
@@ -18,6 +22,16 @@
         overlays = [ rust-overlay.overlays.default ];
       };
     in {
+      packages = eachSystem (system:
+        let
+          pkgs = packagesFor system;
+          converter = bun2nix.packages.${system}.default;
+        in {
+          bun-lock = pkgs.runCommand "painted-wolf-bun-lock" { nativeBuildInputs = [ converter ]; } ''
+            cp ${self}/lycaon-den/bun.lock bun.lock
+            bun2nix -o "$out"
+          '';
+        });
       devShells = eachSystem (system:
         let pkgs = packagesFor system;
         in {
