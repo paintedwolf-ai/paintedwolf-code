@@ -67,8 +67,7 @@ implement_overlay_promote:
   # Visual and browser checks load when the landed change needs them.
   loadable: [render_view, view_image, view_video, capture_page, measure_page, page_open, page_act, page_snapshot, page_close]
 
-# The open-intent surface: read the project on the floor, load everything
-# else per turn.
+# The open-intent surface offers reads and file creation; load other tools per turn.
 implement_investigate:
   activity_label: Exploring the project
   mode_ref: implement-investigate
@@ -80,6 +79,7 @@ implement_investigate:
   floor:
     - recall
     - read
+    - write
     - grep
     - summarize
     - skills_read
@@ -96,7 +96,6 @@ implement_investigate:
     - stat
     - wc
     # edit
-    - write
     - edit
     - replace_lines
     - restore_version
