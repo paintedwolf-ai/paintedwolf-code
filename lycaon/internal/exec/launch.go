@@ -112,8 +112,8 @@ func (p LaunchPlan) validate() error {
 		}
 		return nil
 	case LaunchAgentCommand, LaunchBundledScanner, LaunchManagedBrowser, LaunchLocalMCP, LaunchDocumentCore, LaunchOCREngine:
-		if p.Confinement == nil && confine.Enforcing() {
-			return confine.ErrNotConfined
+		if err := confine.RequireApplied(p.Confinement != nil); err != nil {
+			return err
 		}
 		if p.Confinement != nil && p.Confinement.Network == confine.NetworkProxyOnly && !confine.EgressBound(p.Confinement) {
 			return fmt.Errorf("proxy confinement requires a live action lease")
