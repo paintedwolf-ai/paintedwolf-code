@@ -22,16 +22,16 @@ const portalRegistry = "org.freedesktop.host.portal.Registry"
 // portal call on the connection and succeeds only for an installed desktop
 // entry. An older portal derives it from the caller's systemd application
 // unit, which a desktop-entry launch creates and the engine inherits.
-func (p portalProvider) attribute(ctx context.Context, bus *dbus.Conn) error {
+func (p portalProvider) attribute(ctx context.Context, bus *dbus.Conn, owner string) error {
 	if p.appID == "" {
 		return unavailable(ReasonNoApplicationID, "no application id to present to the desktop portal")
 	}
-	registry, err := portalHasRegistry(ctx, bus)
+	registry, err := portalHasRegistry(ctx, bus, owner)
 	if err != nil {
 		return unavailable(ReasonQueryFailed, "inspect the desktop portal: %w", err)
 	}
 	if registry {
-		if err := bus.Object(portalName, portalPath).CallWithContext(ctx, portalRegistry+".Register", 0, p.appID, map[string]dbus.Variant{}).Err; err != nil {
+		if err := bus.Object(owner, portalPath).CallWithContext(ctx, portalRegistry+".Register", 0, p.appID, map[string]dbus.Variant{}).Err; err != nil {
 			return unavailable(ReasonNoApplicationID, "the desktop portal refused application id %s: %w", p.appID, err)
 		}
 		return nil
@@ -50,9 +50,9 @@ func (p portalProvider) attribute(ctx context.Context, bus *dbus.Conn) error {
 }
 
 // portalHasRegistry reports whether the portal object implements the host registry.
-func portalHasRegistry(ctx context.Context, bus *dbus.Conn) (bool, error) {
+func portalHasRegistry(ctx context.Context, bus *dbus.Conn, owner string) (bool, error) {
 	var document string
-	if err := bus.Object(portalName, portalPath).CallWithContext(ctx, "org.freedesktop.DBus.Introspectable.Introspect", 0).Store(&document); err != nil {
+	if err := bus.Object(owner, portalPath).CallWithContext(ctx, "org.freedesktop.DBus.Introspectable.Introspect", 0).Store(&document); err != nil {
 		return false, err
 	}
 	var node introspect.Node

@@ -271,6 +271,9 @@ func (c *Controller) watch(lease lease) {
 	if !ok {
 		err = nil
 	}
+	if releaseErr := lease.Release(); err == nil {
+		err = releaseErr
+	}
 	c.mu.Lock()
 	if c.lease == lease {
 		c.lease = nil
