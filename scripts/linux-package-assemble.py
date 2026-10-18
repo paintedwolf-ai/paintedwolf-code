@@ -117,12 +117,19 @@ def write_deb(root: Path, staged: Path, workdir: Path, version: str, arch: str, 
     for script in DEB_SCRIPTS:
         shutil.copyfile(root / "packaging" / "linux" / "deb" / script, control / script)
         (control / script).chmod(0o755)
+    conffiles = []
     sums = []
     for path in tree_files(data):
         if path.is_symlink():
             continue
+        rel = path.relative_to(data).as_posix()
+        if rel.startswith("etc/"):
+            conffiles.append(f"/{rel}")
+            continue
         digest = hashlib.md5(path.read_bytes(), usedforsecurity=False).hexdigest()
-        sums.append(f"{digest}  {path.relative_to(data).as_posix()}")
+        sums.append(f"{digest}  {rel}")
+    if conffiles:
+        (control / "conffiles").write_text("\n".join(conffiles) + "\n", encoding="utf-8")
     (control / "md5sums").write_text("\n".join(sums) + "\n", encoding="utf-8")
     for path in control.iterdir():
         if path.name not in DEB_SCRIPTS:

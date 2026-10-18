@@ -42,11 +42,15 @@ func TestArtifactGateRunsBeforeAnyPublish(t *testing.T) {
 	for _, linuxProof := range []string{
 		"dpkg-deb -x", "rpm2cpio", "linux-package-manifest.py\" verify-tree",
 		"bundled engine sidecar", "audit_linux_tree \".deb\"", "audit_linux_tree \".rpm\"",
-		"Linux stages exactly deb,rpm with no updater artifact",
+		"deb-control/conffiles", "Linux stages exactly deb,rpm with no updater artifact",
 	} {
 		if !strings.Contains(stageScript, linuxProof) {
 			t.Fatalf("the platform artifact gate lacks Linux structural proof %q", linuxProof)
 		}
+	}
+	assembleScript := contractcheck.ReadRepoFile(t, root, "scripts/linux-package-assemble.py")
+	if !strings.Contains(assembleScript, `control / "conffiles"`) {
+		t.Fatal("scripts/linux-package-assemble.py must declare /etc files in DEBIAN/conffiles")
 	}
 
 	bundleScript := contractcheck.ReadRepoFile(t, root, "scripts/den-build-bundle.sh")

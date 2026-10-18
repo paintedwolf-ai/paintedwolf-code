@@ -261,6 +261,17 @@ case "${GOOS}" in
     for script in preinst postinst prerm postrm; do
       [[ -x "${EXTRACT}/deb-control/${script}" ]] || { echo "error: .deb has no ${script} maintainer script" >&2; exit 1; }
     done
+    while IFS= read -r -d '' etc_file; do
+      rel="${etc_file#"${DEB_TREE}/"}"
+      grep -Fxq "/${rel}" "${EXTRACT}/deb-control/conffiles" 2>/dev/null || {
+        echo "error: .deb omits /${rel} from DEBIAN/conffiles" >&2
+        exit 1
+      }
+      ! grep -Fq "  ${rel}" "${EXTRACT}/deb-control/md5sums" 2>/dev/null || {
+        echo "error: .deb includes conffile ${rel} in DEBIAN/md5sums" >&2
+        exit 1
+      }
+    done < <(find "${DEB_TREE}/etc" -type f -print0 2>/dev/null)
     audit_linux_tree ".deb" "${DEB_TREE}"
     assert_sockets_enabled ".deb" "${DEB_TREE}" "$(cat "${EXTRACT}/deb-control/postinst")"
     if command -v lintian >/dev/null 2>&1; then
