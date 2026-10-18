@@ -78,6 +78,7 @@
     "allow-engine-state",
     "allow-reveal-managed-secret",
     "allow-resolve-checkpoint-with-presence",
+    "allow-vault-lock-status",
     "allow-den-reveal-window",
     "allow-den-set-window-bounds",
     "allow-den-set-window-backdrop",
