@@ -103,7 +103,11 @@ impl Fixture {
                                 let sender =
                                     sender.unwrap().trim_start_matches(':').replace('.', "_");
                                 let alternate = matches!(behavior, Behavior::Respond(_, _, true));
-                                let token = if alternate { "alternate" } else { &token };
+                                let token = if alternate {
+                                    format!("alternate_{}", uuid::Uuid::new_v4().simple())
+                                } else {
+                                    token
+                                };
                                 let path = format!(
                                     "/org/freedesktop/portal/desktop/request/{sender}/{token}"
                                 );
