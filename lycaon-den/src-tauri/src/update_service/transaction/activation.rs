@@ -78,13 +78,20 @@ pub(super) fn record_activation_failure(
     t: &mut Transaction,
     error: &UpdateError,
 ) -> Result<(), UpdateError> {
-    t.phase = if hash(&executable(&t.target)).is_ok_and(|installed| installed == t.next_hash) {
+    t.phase = activation_failure_phase(t);
+    t.error = Some(error.to_string());
+    write(t)
+}
+pub(super) fn installed_candidate_matches(t: &Transaction) -> Result<bool, UpdateError> {
+    Ok(hash(&executable(&t.target))? == t.next_hash
+        && installer::bundle_hash(&t.target)? == t.next_bundle_hash)
+}
+fn activation_failure_phase(t: &Transaction) -> Phase {
+    if installed_candidate_matches(t).unwrap_or(false) {
         Phase::Activated
     } else {
         Phase::Failed
-    };
-    t.error = Some(error.to_string());
-    write(t)
+    }
 }
 #[cfg(target_os = "macos")]
 pub(super) fn installed_is_known(t: &Transaction) -> bool {
@@ -94,4 +101,35 @@ pub(super) fn installed_is_known(t: &Transaction) -> bool {
                 && installer::bundle_hash(&t.target)
                     .is_ok_and(|digest| digest == t.next_bundle_hash))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn failed_activation_requires_the_complete_candidate_before_recording_activation() {
+        let root = crate::test_support::TempDir::new("update-failure-identity");
+        let t = super::super::tests::fixture(&root);
+        assert_eq!(activation_failure_phase(&t), Phase::Failed);
+        installer::exchange_coordinated(
+            &mut installer::try_activation(&t.target).unwrap().unwrap(),
+            &t.target,
+            &t.prepared_bundle,
+        )
+        .unwrap();
+        assert!(installed_candidate_matches(&t).unwrap());
+        assert_eq!(activation_failure_phase(&t), Phase::Activated);
+
+        let previous = installer::bundle_hash(&t.prepared_bundle).unwrap();
+        fs::write(t.target.join("changed-resource"), "corrupted").unwrap();
+        assert_eq!(hash(&executable(&t.target)).unwrap(), t.next_hash);
+        assert!(!installed_candidate_matches(&t).unwrap());
+        assert_eq!(activation_failure_phase(&t), Phase::Failed);
+        assert_eq!(installer::bundle_hash(&t.prepared_bundle).unwrap(), previous);
+        fs::remove_dir_all(&t.target).unwrap();
+        assert!(installed_candidate_matches(&t).is_err());
+        assert_eq!(activation_failure_phase(&t), Phase::Failed);
+    }
 }
