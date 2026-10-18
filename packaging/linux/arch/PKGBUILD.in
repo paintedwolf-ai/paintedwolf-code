@@ -9,6 +9,7 @@ license=('Apache-2.0')
 depends=(@DEPENDS@)
 optdepends=(@OPTDEPENDS@)
 options=('!strip' '!debug' '!lto')
+@INSTALL@
 source=(@PAYLOAD@)
 sha256sums=(@SHA256@)
 

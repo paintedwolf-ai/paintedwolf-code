@@ -366,6 +366,10 @@ def assemble(args: argparse.Namespace) -> int:
             )
             if args.pacman:
                 tree = rpm_tree(root, staged / "data", Path(workdir) / "pacman-tree")
+                for installed, source in load_package_config(root).optional_files(root, "pacman").items():
+                    destination = tree / installed.lstrip("/")
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, destination)
                 package = build_arch(root, tree, args.arch, bundle_dir / "pacman")
                 print(f"linux-package-assemble: {package}", file=sys.stderr)
     except (OSError, ValueError, KeyError, json.JSONDecodeError, subprocess.CalledProcessError) as exc:

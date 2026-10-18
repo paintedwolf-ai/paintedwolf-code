@@ -66,8 +66,10 @@ def write_payload(tree: Path, output: Path, epoch: int) -> None:
     with tarfile.open(output, "w:xz") as archive:
         for path in sorted(tree.rglob("*")):
             relative = path.relative_to(tree)
-            if relative.parts[0] not in {"opt", "usr"}:
+            if relative.parts[0] not in {"opt", "usr", "etc"}:
                 raise ValueError(f"unexpected pacman payload root: {relative}")
+            if relative.parts[0] == "etc" and len(relative.parts) > 1 and relative.parts[1] != "init.d":
+                raise ValueError(f"unexpected pacman configuration path: {relative}")
             if path.is_symlink():
                 target = os.readlink(path)
                 resolved = ((tree / target.lstrip("/")) if target.startswith("/") else
@@ -93,14 +95,21 @@ def recipe(root: Path, payload: Path, architecture: str, product: str) -> str:
     floors = dict(line.split(maxsplit=1) for line in
                   (root / "lycaon/internal/platformfloor/linux_floor.txt").read_text().splitlines() if line.strip())
     catalog = json.loads((root / "packaging/linux/dependencies.json").read_text())["pacman"]
+    install = root / "packaging/linux/arch/painted-wolf-code.install"
+    sources = [shlex.quote(payload.name)]
+    hashes = [shlex.quote(stream_digest(payload))]
+    if install.is_file():
+        sources.append(shlex.quote(install.name))
+        hashes.append(shlex.quote(stream_digest(install)))
     replacements = {
         "PKGVER": package_version(product),
         "PKGREL": str(parse_release_build((root / "RELEASE_BUILD").read_text().strip())),
         "ARCH": shlex.quote(architecture),
         "DEPENDS": " ".join(shlex.quote(row.format(**floors)) for row in catalog["depends"]),
         "OPTDEPENDS": " ".join(shlex.quote(row.format(**floors)) for row in catalog["recommends"]),
-        "PAYLOAD": shlex.quote(payload.name),
-        "SHA256": shlex.quote(stream_digest(payload)),
+        "INSTALL": "install=" + shlex.quote(install.name) if install.is_file() else "",
+        "PAYLOAD": " ".join(sources),
+        "SHA256": " ".join(hashes),
     }
     text = (root / "packaging/linux/arch/PKGBUILD.in").read_text()
     for key, value in replacements.items():
@@ -127,6 +136,9 @@ def build(root: Path, tree: Path, architecture: str, output: Path) -> Path:
     epoch = int(subprocess.check_output(["git", "show", "-s", "--format=%ct", "HEAD"], cwd=root, text=True))
     write_payload(tree, payload, epoch)
     (work / "PKGBUILD").write_text(recipe(root, payload, architecture, product))
+    install = root / "packaging/linux/arch/painted-wolf-code.install"
+    if install.is_file():
+        shutil.copyfile(install, work / install.name)
     env = dict(os.environ, SOURCE_DATE_EPOCH=str(epoch), PKGDEST=str(work.resolve()),
                CARCH=architecture, PKGEXT=".pkg.tar.zst")
     info = subprocess.check_output(["makepkg", "--printsrcinfo"], cwd=work, env=env, text=True)
