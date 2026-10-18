@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
+## [1.0.2-rc4]
+
+Fourth release candidate for 1.0.2, published on the preview channel for upgrade
+testing. Replaces 1.0.2-rc1 and 1.0.2-rc3 on preview.
+
+### Fixed
+
+- macOS in-app update verification passes its code-signing requirement as an
+  inline `codesign` expression rather than a file path, so staged updates verify
+  and install cleanly. Existing 1.0.2-rc1 and 1.0.2-rc3 preview installations
+  must upgrade once via the disk image or Homebrew cask.
+
 ## [1.0.2-rc3]
 
 Third release candidate for 1.0.2, prepared for preview upgrade testing.
