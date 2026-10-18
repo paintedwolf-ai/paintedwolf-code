@@ -5,6 +5,9 @@ use crate::files::reveal_in_file_manager::path_under_roots;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[cfg(target_os = "linux")]
+mod linux_editor;
+
 /// Open `abs_path` in an external editor at optional `line`.
 /// The root check catches caller mistakes; configured launch arguments provide authority.
 #[tauri::command]
@@ -64,11 +67,9 @@ pub async fn open_in_browser(
         return Err("url scheme is not allowed".to_string());
     }
     let url = url.to_string();
-    tauri::async_runtime::spawn_blocking(move || {
-        spawn_browser(&url, &preset, custom_template, &window)
-    })
-    .await
-    .map_err(|error| error.to_string())?
+    tauri::async_runtime::spawn_blocking(move || spawn_browser(&url, &preset, custom_template, &window))
+        .await
+        .map_err(|error| error.to_string())?
 }
 
 pub(crate) fn spawn_browser(
@@ -160,13 +161,11 @@ fn spawn_preset_editor(preset: &str, path: &str, line: &str) -> Result<(), Strin
         .iter()
         .find(|e| e.id == preset)
         .ok_or_else(|| format!("unknown editor preset: {preset}"))?;
+    #[cfg(not(target_os = "linux"))]
     let folder = Path::new(path).is_dir();
+    #[cfg(not(target_os = "linux"))]
     let cli_args = substitute_tokens(
-        if folder {
-            entry.folder_cli_args
-        } else {
-            entry.cli_args
-        },
+        if folder { entry.folder_cli_args } else { entry.cli_args },
         path,
         line,
     );
@@ -196,11 +195,7 @@ fn spawn_preset_editor(preset: &str, path: &str, line: &str) -> Result<(), Strin
             None => entry.display_name.to_string(),
         };
         let open_args = substitute_tokens(
-            if folder {
-                entry.folder_macos_open_args
-            } else {
-                entry.macos_open_args
-            },
+            if folder { entry.folder_macos_open_args } else { entry.macos_open_args },
             path,
             line,
         );
@@ -210,43 +205,7 @@ fn spawn_preset_editor(preset: &str, path: &str, line: &str) -> Result<(), Strin
     }
     #[cfg(target_os = "linux")]
     {
-        use crate::detect_editors::linux_desktop;
-        if !entry.linux_cli.is_empty() && which::which(entry.linux_cli).is_ok() {
-            return spawn_argv_owned(entry.linux_cli, &cli_args);
-        }
-        let desktop = linux_desktop::find_entry(
-            entry.linux_desktop_ids,
-            &linux_desktop::system_application_directories(),
-            &linux_desktop::program_runnable,
-        )
-        .ok_or_else(|| format!("{} is not installed", entry.display_name))?;
-        let document = desktop
-            .command
-            .flatpak_app()?
-            .map(|app| linux_desktop::documents::export(Path::new(path), &app))
-            .transpose()?;
-        let selected_path = document
-            .as_ref()
-            .map(|document| document.path.as_path())
-            .unwrap_or_else(|| Path::new(path));
-        let selected_path = selected_path
-            .to_str()
-            .ok_or("The editor path is not valid UTF-8.")?;
-        let args = substitute_tokens(
-            if folder {
-                entry.folder_cli_args
-            } else {
-                entry.cli_args
-            },
-            selected_path,
-            line,
-        );
-        let argv = desktop.command.arguments(&args, document.is_some())?;
-        spawn_argv_owned(&desktop.command.program, &argv)?;
-        if let Some(document) = document {
-            document.retain();
-        }
-        Ok(())
+        linux_editor::spawn(entry, path, line)
     }
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     {
@@ -378,32 +337,18 @@ mod tests {
     #[test]
     fn filenames_with_placeholders_remain_literal() {
         let path = "/repo/{line}/file {path}.ts";
-        assert_eq!(
-            substitute_tokens(&["-g", "{path}:{line}"], path, "9"),
-            vec!["-g", "/repo/{line}/file {path}.ts:9"]
-        );
-        assert_eq!(
-            tokenize_template("editor {path}:{line}", &[("{path}", path), ("{line}", "9")])
-                .unwrap(),
-            vec!["editor", "/repo/{line}/file {path}.ts:9"]
-        );
+        assert_eq!(substitute_tokens(&["-g", "{path}:{line}"], path, "9"),
+            vec!["-g", "/repo/{line}/file {path}.ts:9"]);
+        assert_eq!(tokenize_template("editor {path}:{line}", &[("{path}", path), ("{line}", "9")]).unwrap(),
+            vec!["editor", "/repo/{line}/file {path}.ts:9"]);
     }
 
     #[test]
     fn custom_folder_commands_do_not_inherit_line_arguments() {
-        assert_eq!(
-            editor_template("editor {path}:{line}", "editor {path}", true).unwrap(),
-            "editor {path}"
-        );
+        assert_eq!(editor_template("editor {path}:{line}", "editor {path}", true).unwrap(), "editor {path}");
         assert!(editor_template("editor {path}:{line}", "", true).is_err());
-        assert_eq!(
-            editor_template("editor {path}", "", true).unwrap(),
-            "editor {path}"
-        );
-        assert_eq!(
-            editor_template("editor {path}:{line}", "folder {path}", false).unwrap(),
-            "editor {path}:{line}"
-        );
+        assert_eq!(editor_template("editor {path}", "", true).unwrap(), "editor {path}");
+        assert_eq!(editor_template("editor {path}:{line}", "folder {path}", false).unwrap(), "editor {path}:{line}");
     }
 
     #[test]

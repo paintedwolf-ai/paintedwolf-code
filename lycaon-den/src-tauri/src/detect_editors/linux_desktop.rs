@@ -7,9 +7,9 @@
 
 use std::path::{Path, PathBuf};
 
+mod exec;
 #[cfg(target_os = "linux")]
 pub(crate) mod documents;
-mod exec;
 
 /// A desktop entry that resolved to a runnable program.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,19 +70,12 @@ pub(crate) fn find_entry(
             };
             // A file at this precedence decides for the id, even when it hides it.
             return parse_entry(&text).and_then(|parsed| {
-                if parsed
-                    .try_exec
-                    .as_deref()
-                    .is_some_and(|program| !runnable(program))
-                {
+                if parsed.try_exec.as_deref().is_some_and(|program| !runnable(program)) {
                     return None;
                 }
                 let command = exec::parse(&parsed.exec)?;
                 if runnable(&command.program) {
-                    Some(DesktopEntry {
-                        path: path.clone(),
-                        command,
-                    })
+                    Some(DesktopEntry { path: path.clone(), command })
                 } else {
                     None
                 }
@@ -127,10 +120,7 @@ fn parse_entry(text: &str) -> Option<ParsedEntry> {
     if kind.is_some_and(|kind| kind != "Application") {
         return None;
     }
-    Some(ParsedEntry {
-        exec: exec?,
-        try_exec,
-    })
+    Some(ParsedEntry { exec: exec?, try_exec })
 }
 
 /// Whether `program` names something this process could execute.
@@ -148,11 +138,7 @@ mod tests {
 
     #[test]
     fn application_directories_follow_xdg_precedence() {
-        let dirs = application_directories(
-            Some("/home/me/.data"),
-            Some("/opt/share:/usr/share:relative:/usr/share"),
-            Some("/home/me"),
-        );
+        let dirs = application_directories(Some("/home/me/.data"), Some("/opt/share:/usr/share:relative:/usr/share"), Some("/home/me"));
         assert_eq!(
             dirs,
             vec![
@@ -170,10 +156,7 @@ mod tests {
                 PathBuf::from("/usr/share/applications"),
             ]
         );
-        assert_eq!(
-            application_directories(Some("relative"), Some(""), None).len(),
-            2
-        );
+        assert_eq!(application_directories(Some("relative"), Some(""), None).len(), 2);
     }
 
     fn write_entry(dir: &Path, id: &str, body: &str) {
@@ -187,51 +170,23 @@ mod tests {
         let user = root.path().join("user");
         let system = root.path().join("system");
         write_entry(&system, "code.desktop", "[Desktop Entry]\nType=Application\nName=Code\nExec=/usr/share/code/code --unity-launch %F\n");
-        write_entry(
-            &system,
-            "dev.zed.Zed.desktop",
-            "[Desktop Entry]\nType=Application\nExec=zed %U\nTryExec=zed\n",
-        );
-        write_entry(
-            &user,
-            "code.desktop",
-            "[Desktop Entry]\nType=Application\nExec=flatpak run com.visualstudio.code @@u %U @@\n",
-        );
-        write_entry(
-            &user,
-            "hidden.desktop",
-            "[Desktop Entry]\nType=Application\nHidden=true\nExec=hidden\n",
-        );
-        write_entry(
-            &user,
-            "link.desktop",
-            "[Desktop Entry]\nType=Link\nURL=https://example.com\nExec=ignored\n",
-        );
+        write_entry(&system, "dev.zed.Zed.desktop", "[Desktop Entry]\nType=Application\nExec=zed %U\nTryExec=zed\n");
+        write_entry(&user, "code.desktop", "[Desktop Entry]\nType=Application\nExec=flatpak run com.visualstudio.code @@u %U @@\n");
+        write_entry(&user, "hidden.desktop", "[Desktop Entry]\nType=Application\nHidden=true\nExec=hidden\n");
+        write_entry(&user, "link.desktop", "[Desktop Entry]\nType=Link\nURL=https://example.com\nExec=ignored\n");
         let dirs = vec![user.clone(), system.clone()];
         let runnable = |program: &str| matches!(program, "flatpak" | "/usr/share/code/code");
         let entry = find_entry(&["code.desktop"], &dirs, &runnable).unwrap();
         assert_eq!(entry.path, user.join("code.desktop"));
         assert_eq!(entry.command.program, "flatpak");
-        assert_eq!(
-            entry.command.flatpak_app().unwrap(),
-            Some("com.visualstudio.code".into())
-        );
-        assert!(
-            find_entry(&["dev.zed.Zed.desktop"], &dirs, &runnable).is_none(),
-            "TryExec names a missing program"
-        );
+        assert_eq!(entry.command.flatpak_app().unwrap(), Some("com.visualstudio.code".into()));
+        assert!(find_entry(&["dev.zed.Zed.desktop"], &dirs, &runnable).is_none(), "TryExec names a missing program");
         assert!(find_entry(&["hidden.desktop"], &dirs, &runnable).is_none());
         assert!(find_entry(&["link.desktop"], &dirs, &runnable).is_none());
         assert!(find_entry(&["missing.desktop"], &dirs, &runnable).is_none());
         let user_only = find_entry(&["code.desktop"], &[system.clone()], &runnable).unwrap();
         assert_eq!(user_only.command.program, "/usr/share/code/code");
-        assert_eq!(
-            user_only
-                .command
-                .arguments(&["/requested file".into()], false)
-                .unwrap(),
-            ["--unity-launch", "/requested file"]
-        );
+        assert_eq!(user_only.command.arguments(&["/requested file".into()], false).unwrap(), ["--unity-launch", "/requested file"]);
     }
 
     #[test]
@@ -239,16 +194,8 @@ mod tests {
         let root = TempDir::new("desktop-shadow");
         let user = root.path().join("user");
         let system = root.path().join("system");
-        write_entry(
-            &user,
-            "code.desktop",
-            "[Desktop Entry]\nType=Application\nHidden=true\nExec=code\n",
-        );
-        write_entry(
-            &system,
-            "code.desktop",
-            "[Desktop Entry]\nType=Application\nExec=code %F\n",
-        );
+        write_entry(&user, "code.desktop", "[Desktop Entry]\nType=Application\nHidden=true\nExec=code\n");
+        write_entry(&system, "code.desktop", "[Desktop Entry]\nType=Application\nExec=code %F\n");
         assert!(find_entry(&["code.desktop"], &[user, system], &|_| true).is_none());
     }
 
