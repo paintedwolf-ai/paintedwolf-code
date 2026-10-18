@@ -23,9 +23,9 @@ copy:
     For example, `{"content":"first line\nsecond line\n"}` decodes to two lines.
     Preserve the intended content after decoding; do not remove its line breaks.
     {% endif %}{% if paintedwolf.json_unexpected_end %}Resubmit the complete argument object; check that string values and containers are closed.
-    {% endif %}{% if paintedwolf.json_invalid_escape %}Encode a literal backslash as `\\`; JSON escapes are `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, and `\u` followed by four hexadecimal digits.
+    {% endif %}{% if paintedwolf.json_invalid_escape %}Encode a literal backslash as `\\`; JSON escapes are `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, and `\u` followed by four hexadecimal digits. Apostrophes need no JSON escape.
     {% endif %}Submit the tool call again through the native tool channel with valid JSON arguments.
-    Escape quotes, backslashes, and line breaks inside string values.
+    Escape double quotes, backslashes, and line breaks inside string values.
   instead: Do not assume the dropped call ran.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
