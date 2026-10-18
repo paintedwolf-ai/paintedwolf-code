@@ -205,7 +205,7 @@ func TestLinuxIPCIsolatesHostAndSiblingActions(t *testing.T) {
 	owner, cleanup, err := confine.Command(ctx, helperBinary(t, self), self, []string{ipcTestFlag}, c)
 	testutil.FailErr(t, "build sibling owner command", err)
 	defer cleanup()
-	owner.Env = ipcEnv("owner", 0)
+	owner.Env = ipcEnv("owner", nil)
 	input, err := owner.StdinPipe()
 	testutil.FailErr(t, "owner stdin", err)
 	defer func() { _ = input.Close() }()
