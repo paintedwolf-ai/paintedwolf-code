@@ -166,6 +166,9 @@ func resolveEntry(ctx context.Context, langName, filename string, src []byte) *g
 }
 
 func supported(name string) bool {
+	if name == "css" {
+		return true
+	}
 	for _, candidate := range filekind.SupportedLanguages() {
 		if candidate == name {
 			return true
