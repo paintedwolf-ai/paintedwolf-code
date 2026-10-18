@@ -118,3 +118,57 @@ func TestTerminalSnapshotAltScreenGrid(t *testing.T) {
 	}, tctx)
 	testutil.FailErr(t, "terminal_read after snapshot", err)
 }
+
+func TestTerminalScreenReportsObservedExitStatus(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix openpty")
+	}
+	for _, tc := range []struct {
+		name, script string
+		running      bool
+		code         int
+	}{
+		{"success", "exit 0", false, 0},
+		{"failure", "exit 7", false, 7},
+		{"running", "printf ready; IFS= read -r value", true, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bg := newTestBackgroundRegistry(t)
+			reg := tools.NewDefaultRegistry()
+			testutil.FailErr(t, "register terminal tools", RegisterTerminalSessionTools(reg, bg))
+			dir := t.TempDir()
+			script := filepath.Join(dir, "status.sh")
+			testutil.FailErr(t, "write status script", os.WriteFile(script, []byte("#!/bin/sh\n"+tc.script+"\n"), 0700))
+			tctx := tools.ToolContext{
+				Identity: tools.InvocationIdentity{SessionID: "status", ProjectID: "project"},
+				Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "main", Path: dir, IsPrimary: true}}},
+				Effects:  tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+			}
+			raw, err := reg.Run(t.Context(), terminal.OpenToolName, map[string]any{"command": script}, tctx)
+			testutil.FailErr(t, "open status terminal", err)
+			var result struct {
+				ID    string `json:"id"`
+				State struct {
+					Running  bool `json:"running"`
+					ExitCode *int `json:"exit_code"`
+				} `json:"state"`
+			}
+			check := func(raw string) {
+				t.Helper()
+				testutil.FailErr(t, "decode terminal state", json.Unmarshal([]byte(raw), &result))
+				if result.State.Running != tc.running || (tc.running && result.State.ExitCode != nil) || (!tc.running && (result.State.ExitCode == nil || *result.State.ExitCode != tc.code)) {
+					t.Fatalf("terminal state = %+v, want running=%v exit=%d", result.State, tc.running, tc.code)
+				}
+			}
+			// Decode the handle before assertions so even a failing test closes its process.
+			testutil.FailErr(t, "decode terminal handle", json.Unmarshal([]byte(raw), &result))
+			defer func() {
+				_, _ = reg.Run(context.Background(), terminal.CloseToolName, map[string]any{"id": result.ID}, tctx)
+			}()
+			check(raw)
+			raw, err = reg.Run(t.Context(), terminal.SnapshotToolName, map[string]any{"id": result.ID}, tctx)
+			testutil.FailErr(t, "snapshot status terminal", err)
+			check(raw)
+		})
+	}
+}
