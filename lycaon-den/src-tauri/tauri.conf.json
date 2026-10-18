@@ -60,7 +60,7 @@
       "icons/icon.ico"
     ],
     "macOS": {
-      "bundleVersion": "12",
+      "bundleVersion": "13",
       "minimumSystemVersion": "14.0",
       "entitlements": "entitlements.plist",
       "dmg": {

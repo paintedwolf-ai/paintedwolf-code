@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 for the host/desktop stream (`VERSION` + `v*` git tags). See
 [`docs/dev-tasks.md`](docs/dev-tasks.md) § Release & versioning.
 
+## [1.0.2-rc5]
+
+Fifth release candidate for 1.0.2, published on the preview channel to verify
+in-app upgrades from 1.0.2-rc4 and complete Linux candidate package verification.
+
+### Fixed
+
+- Debian package assembly records `/etc` paths in `DEBIAN/conffiles` and omits
+  them from `DEBIAN/md5sums` so `lintian` verification succeeds during release
+  staging.
+
 ## [1.0.2-rc4]
 
 Fourth release candidate for 1.0.2, published on the preview channel for upgrade
