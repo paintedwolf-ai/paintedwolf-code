@@ -80,7 +80,6 @@ impl Fixture {
                 .with_thread_default(|| {
                     let bus = connect(&context, &server_address);
                     let node = gio::DBusNodeInfo::for_xml(INTERFACES).unwrap();
-                    let request_interface = node.lookup_interface(REQUEST_INTERFACE).unwrap();
                     let registration = bus
                         .register_object(
                             PORTAL_OBJECT_PATH,
@@ -110,6 +109,10 @@ impl Fixture {
                                 let path = format!(
                                     "/org/freedesktop/portal/desktop/request/{sender}/{token}"
                                 );
+                                let request_interface = gio::DBusNodeInfo::for_xml(INTERFACES)
+                                    .unwrap()
+                                    .lookup_interface(REQUEST_INTERFACE)
+                                    .unwrap();
                                 let closed = closes.clone();
                                 connection
                                     .register_object(
