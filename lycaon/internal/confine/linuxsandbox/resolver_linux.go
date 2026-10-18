@@ -73,7 +73,7 @@ func overlayFile(path, content string) error {
 	if err != nil {
 		return err
 	}
-	tmpfs, err := newTmpfs("0755")
+	tmpfs, err := newTmpfs("0755", maskTmpfsSize)
 	if err != nil {
 		return err
 	}
