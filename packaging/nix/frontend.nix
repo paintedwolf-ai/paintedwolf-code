@@ -1,0 +1,50 @@
+{ lib, stdenv, callPackage, autoPatchelfHook, bun2nix, source }:
+let
+  tools = callPackage ./toolchains.nix { inherit source; };
+  package = lib.importJSON (source + "/lycaon-den/package.json");
+  identity = lib.importJSON ./bun-lock.json;
+  patchFiles = lib.mapAttrs (_: path: source + "/lycaon-den/${path}")
+    package.patchedDependencies;
+in
+assert lib.assertMsg
+  (builtins.hashFile "sha256" (source + "/lycaon-den/bun.lock") == identity.source_sha256
+   && builtins.hashFile "sha256" ./bun.nix == identity.expression_sha256)
+  "Regenerate and review the Nix Bun dependency expression after changing bun.lock";
+stdenv.mkDerivation {
+  pname = "painted-wolf-code-frontend";
+  version = lib.strings.trim (builtins.readFile (source + "/VERSION"));
+  src = source;
+  nativeBuildInputs = [ tools.bun tools.nodejs bun2nix.hook autoPatchelfHook ];
+  buildInputs = [ stdenv.cc.cc.lib ];
+  bunRoot = "lycaon-den";
+  bunDeps = bun2nix.fetchBunDeps {
+    bunNix = ./bun.nix;
+    patchShebangs = false;
+    overrides = bun2nix.patchedDependenciesToOverrides { patchedDependencies = patchFiles; };
+  };
+  bunInstallFlags = [ "--frozen-lockfile" "--linker=hoisted" ];
+  dontRunLifecycleScripts = true;
+  dontUseBunCheck = true;
+  dontConfigure = true;
+  buildPhase = ''
+    runHook preBuild
+    test "$(bun --version)" = "${tools.bun.version}"
+    test "$(node --version)" = "v${tools.nodejs.version}"
+    autoPatchelf lycaon-den/node_modules
+    cd lycaon-den
+    bun run build
+    cd ..
+    runHook postBuild
+  '';
+  installPhase = ''
+    runHook preInstall
+    mkdir -p "$out"
+    cp -r lycaon-den/dist/. "$out/"
+    runHook postInstall
+  '';
+  meta = {
+    description = "Locked frontend assets for Painted Wolf Code";
+    license = lib.licenses.asl20;
+    platforms = [ "x86_64-linux" "aarch64-linux" ];
+  };
+}

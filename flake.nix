@@ -27,6 +27,10 @@
           pkgs = packagesFor system;
           converter = bun2nix.packages.${system}.default;
         in {
+          frontend = pkgs.callPackage ./packaging/nix/frontend.nix {
+            source = self;
+            bun2nix = converter;
+          };
           bun-lock = pkgs.runCommand "painted-wolf-bun-lock" { nativeBuildInputs = [ converter ]; } ''
             cp ${self}/lycaon-den/bun.lock bun.lock
             bun2nix -o "$out"
