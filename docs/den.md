@@ -83,7 +83,7 @@ The authoritative scope is
 [`packaging/linux/support-matrix.json`](../packaging/linux/support-matrix.json).
 It combines user capabilities, installation modes, architectures and named
 representative environments. Its expansion in
-[`scripts/linux_support_matrix.py`](../scripts/linux_support_matrix.py) assigns
+[`scripts/linux_release/support_matrix.py`](../scripts/linux_release/support_matrix.py) assigns
 each required row a stable identity, scenarios, implementing issues and required
 execution tier. Qualification and release admission must consume these same rows;
 they must not maintain independent workflow inventories.
