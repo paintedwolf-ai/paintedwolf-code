@@ -457,8 +457,9 @@ fn reset_credential_vault(state: &SidecarState) -> Result<(), String> {
     }
     installation::ensure_current().map_err(|reason| reason.guidance())?;
     let bin = resolve_lycaon_binary()?;
+    let image = crate::linux_generation::capture_helper(&bin)?;
     let config_dir = crate::config_dir::host_config_dir()?;
-    let status = Command::new(&bin)
+    let status = Command::new(&image.path)
         .args(["credentials", "purge", "--yes"])
         .env("LYCAON_CONFIG_DIR", config_dir)
         .stdin(Stdio::null())

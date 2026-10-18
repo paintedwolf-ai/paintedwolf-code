@@ -14,6 +14,7 @@ mod detect_editors;
 mod http_transport;
 mod installation_mode;
 mod linux_install;
+mod linux_generation;
 mod open_external;
 mod open_third_party_notices;
 mod presence;
@@ -34,6 +35,14 @@ use tauri::{Manager, RunEvent};
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     harden_process();
+    let _generation_root = match linux_generation::retain() {
+        Ok(root) => root,
+        Err(error) => {
+            rfd::MessageDialog::new().set_title("Package resources unavailable")
+                .set_description(error).set_level(rfd::MessageLevel::Error).show();
+            return;
+        }
+    };
     let context = tauri::generate_context!();
     // GTK 3 names the Wayland toplevel and the X11 window class after the program
     // name, which must be the identifier the desktop entry is named after.

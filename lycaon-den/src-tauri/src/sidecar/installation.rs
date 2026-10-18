@@ -45,6 +45,11 @@ struct Executable {
 /// This is an admission refusal for mutable native packages, never launcher trust.
 /// Nix closures need their resolved generation facts rather than this native root.
 pub(super) fn ensure_current() -> Result<(), RestartReason> {
+    match crate::linux_generation::running() {
+        Ok(Some(_)) => return Ok(()),
+        Err(_) => return Err(RestartReason::RunningImageUnavailable),
+        Ok(None) => {}
+    }
     if cfg!(target_os = "linux") && crate::linux_install::installed().is_some() {
         let root = Path::new(crate::linux_install::INSTALL_ROOT);
         let manifest = std::fs::File::open(root.join("manifest.json"))
@@ -91,7 +96,7 @@ fn verify_current(
         }
         digest.update(&buffer[..count]);
     }
-    if size != expected.size || format!("{:x}", digest.finalize()) != expected.sha256 {
+    if size != expected.size || hex::encode(digest.finalize()) != expected.sha256 {
         return Err(RestartReason::DesktopIdentityChanged);
     }
     Ok(())
@@ -105,7 +110,7 @@ mod tests {
         serde_json::to_vec(&serde_json::json!({
             "format_version": 1,
             "install_root": "/opt/painted-wolf-code",
-            "executables": [{"path": "/opt/painted-wolf-code/bin/painted-wolf-code", "sha256": format!("{:x}", Sha256::digest(image)), "size": image.len()}]
+            "executables": [{"path": "/opt/painted-wolf-code/bin/painted-wolf-code", "sha256": hex::encode(Sha256::digest(image)), "size": image.len()}]
         })).unwrap()
     }
 
