@@ -1431,6 +1431,16 @@ tasks:
         --out-reserved-ts ../lycaon-den/src/shortcuts/reserved-chords.generated.ts
         --check
 
+  codegen:browser-driver:
+    desc: Regenerate the browser page driver embedded by the host
+    sources:
+      - scripts/codegen-browser-driver.sh
+      - lycaon-den/src/platform/semantic-driver/**/*.ts
+    generates:
+      - lycaon/internal/browser/embed/semantic_driver.js
+    cmds:
+      - bash scripts/repo-snapshot-lock.sh generate -- bash scripts/codegen-browser-driver.sh
+
   codegen:theme-tokens:
     desc: >-
       Derive the baked token stylesheet, CodeMirror highlight style, theme
