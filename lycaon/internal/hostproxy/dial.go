@@ -7,7 +7,6 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
-	"io"
 	"net"
 	"net/http"
 	"net/netip"
@@ -36,7 +35,7 @@ func DialPinned(ctx context.Context, target *url.URL, network string, address ne
 	if target == nil || target.Hostname() == "" || !address.IsValid() || address.Port() == 0 || network != "tcp" && network != "tcp4" && network != "tcp6" {
 		return nil, EndpointInvalid
 	}
-	selected, err := Resolve(target)
+	selected, err := ResolveContext(ctx, target)
 	if err != nil {
 		return nil, PolicyUnavailable
 	}
@@ -142,7 +141,7 @@ func connect(connection net.Conn, credentials *url.Userinfo, address netip.AddrP
 		token := base64.StdEncoding.EncodeToString([]byte(credentials.Username() + ":" + password))
 		request += "Proxy-Authorization: Basic " + token + "\r\n"
 	}
-	if _, err := io.WriteString(connection, request+"\r\n"); err != nil {
+	if err := writePacket(connection, []byte(request+"\r\n")); err != nil {
 		return nil, ProxyUnavailable
 	}
 	reader := bufio.NewReaderSize(connection, 4096)
@@ -171,4 +170,15 @@ func connect(connection net.Conn, credentials *url.Userinfo, address netip.AddrP
 		return nil, ProxyRejected
 	}
 	return &bufferedConnection{Conn: connection, reader: reader}, nil
+}
+
+func writePacket(connection net.Conn, value []byte) error {
+	for len(value) > 0 {
+		count, err := connection.Write(value)
+		if err != nil || count <= 0 || count > len(value) {
+			return ProxyUnavailable
+		}
+		value = value[count:]
+	}
+	return nil
 }

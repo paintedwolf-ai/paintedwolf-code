@@ -18,8 +18,14 @@ import (
 func PinnedTransport(target *url.URL, ips []netip.Addr, targetPort uint16) *http.Transport {
 	t := http.DefaultTransport.(*http.Transport).Clone()
 	t.Proxy = nil
-	host := target.Hostname()
+	host := ""
+	if target != nil {
+		host = target.Hostname()
+	}
 	t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		if host == "" || len(ips) == 0 {
+			return nil, &DestinationDeniedError{Reason: "blocked: destination has no authorized addresses"}
+		}
 		reqHost, port, err := net.SplitHostPort(addr)
 		if err != nil {
 			return nil, err

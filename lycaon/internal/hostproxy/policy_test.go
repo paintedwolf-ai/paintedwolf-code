@@ -1,6 +1,7 @@
 package hostproxy
 
 import (
+	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/systemproxy"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -15,11 +16,11 @@ func useSystemProxy(t *testing.T, raw string) {
 	t.Helper()
 	proxy, err := url.Parse(raw)
 	testutil.FailErr(t, "parse proxy", err)
-	previous := systemProxyConfiguration
-	systemProxyConfiguration = func() (systemproxy.Configuration, error) {
+	previous := systemConfiguration
+	systemConfiguration = func(context.Context) (systemproxy.Configuration, error) {
 		return systemproxy.Configuration{Source: systemproxy.SourceGSettings, Mode: systemproxy.ModeManual, HTTP: proxy, HTTPS: proxy}, nil
 	}
-	t.Cleanup(func() { systemProxyConfiguration = previous })
+	t.Cleanup(func() { systemConfiguration = previous })
 }
 
 func transportProxy(t *testing.T, raw string) *url.URL {
@@ -74,11 +75,11 @@ func TestLoopbackNeverUsesSystemProxy(t *testing.T) {
 func TestUnreadableSystemConfigurationFailsOnlyResolutionsThatNeedIt(t *testing.T) {
 	clearProxyEnvironment(t)
 	t.Setenv("HTTPS_PROXY", "proxy.example:3128")
-	previous := systemProxyConfiguration
-	systemProxyConfiguration = func() (systemproxy.Configuration, error) {
+	previous := systemConfiguration
+	systemConfiguration = func(context.Context) (systemproxy.Configuration, error) {
 		return systemproxy.Configuration{}, errors.New("settings tool failed")
 	}
-	t.Cleanup(func() { systemProxyConfiguration = previous })
+	t.Cleanup(func() { systemConfiguration = previous })
 	config := Current()
 	if got, err := config.ProxyFor(mustURL(t, "https://api.example/")); err != nil || got == nil || got.String() != "http://proxy.example:3128" {
 		t.Fatalf("explicit environment proxy = %v, %v", got, err)

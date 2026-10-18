@@ -10,18 +10,28 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"syscall"
 	"time"
 )
 
 const outputLimit = 64 << 10
 
+// Nix builds bind this reader to their retained GLib tool closure.
+var gsettingsExecutable string
+
 var errOutputLimit = errors.New("desktop proxy settings exceed their output limit")
 
 // DesktopProxySettings reads only the GNOME proxy schema through its supported
 // reader. This closed operation cannot launch an agent-selected command.
 func DesktopProxySettings(ctx context.Context) ([]byte, int, error) {
-	for _, program := range []string{"/usr/bin/gsettings", "/bin/gsettings"} {
+	if gsettingsExecutable != "" {
+		if !filepath.IsAbs(gsettingsExecutable) {
+			return nil, -1, errors.New("the packaged desktop settings reader is invalid")
+		}
+		return read(ctx, gsettingsExecutable)
+	}
+	for _, program := range []string{"/usr/bin/gsettings", "/bin/gsettings", "/run/current-system/sw/bin/gsettings"} {
 		info, err := os.Stat(program)
 		if err == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0 {
 			return read(ctx, program)

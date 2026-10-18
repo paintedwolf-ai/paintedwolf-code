@@ -38,7 +38,12 @@ var cache desktopCache
 
 // Current returns the desktop's proxy configuration.
 func Current() (Configuration, error) {
-	return cache.current(context.Background())
+	return CurrentContext(context.Background())
+}
+
+// CurrentContext bounds native discovery by the caller's lifetime.
+func CurrentContext(ctx context.Context) (Configuration, error) {
+	return cache.current(ctx)
 }
 
 // Lookup resolves the desktop-configured proxy for target.
@@ -56,10 +61,17 @@ func Lookup(target *url.URL) (*url.URL, error) {
 func (c *desktopCache) current(ctx context.Context) (Configuration, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if err := ctx.Err(); err != nil {
+		return Configuration{}, err
+	}
 	if !c.at.IsZero() && time.Since(c.at) < desktopSettingsTTL {
 		return c.config, c.err
 	}
-	c.config, c.err = resolveDesktopConfiguration(ctx, desktopSources)
+	config, err := resolveDesktopConfiguration(ctx, desktopSources)
+	if ctx.Err() != nil {
+		return Configuration{}, ctx.Err()
+	}
+	c.config, c.err = config, err
 	c.at = time.Now()
 	return c.config, c.err
 }

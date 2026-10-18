@@ -2,6 +2,7 @@
 package hostproxy
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -12,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/systemproxy"
 )
 
-var systemConfiguration = systemproxy.Current
+var systemConfiguration = systemproxy.CurrentContext
 
 // Configuration is the proxy policy every host client applies: loopback
 // is always direct, NO_PROXY exempts destinations, an explicit environment
@@ -31,8 +32,7 @@ type Configuration struct {
 	SystemErr error
 }
 
-// Current reads the environment and system proxy policy.
-func Current() Configuration {
+func environmentConfiguration() Configuration {
 	config := Configuration{
 		EnvironmentExceptions: parseEnvironmentExceptions(environmentValue("NO_PROXY", "no_proxy")),
 	}
@@ -41,7 +41,13 @@ func Current() Configuration {
 	if os.Getenv("REQUEST_METHOD") == "" {
 		config.EnvironmentHTTP, config.EnvironmentHTTPErr = parseEnvironmentProxy(environmentValue("HTTP_PROXY", "http_proxy"))
 	}
-	config.System, config.SystemErr = systemConfiguration()
+	return config
+}
+
+// Current reads both sources when exporting policy for multiple schemes.
+func Current() Configuration {
+	config := environmentConfiguration()
+	config.System, config.SystemErr = systemConfiguration(context.Background())
 	return config
 }
 
@@ -70,23 +76,29 @@ func (p Configuration) ExplicitProxyError(scheme string) error {
 	}
 }
 
-// ProxyFor returns the proxy for target, nil for a direct connection, or why
-// the system configuration cannot be honoured.
-func (p Configuration) ProxyFor(target *url.URL) (*url.URL, error) {
+func (p Configuration) explicit(target *url.URL) (*url.URL, bool, error) {
 	if loopbackDestination(target) {
-		return nil, nil
+		return nil, true, nil
 	}
 	host, port := systemproxy.TargetHostPort(target)
 	for _, exception := range p.EnvironmentExceptions {
 		if exception.Matches(host, port) {
-			return nil, nil
+			return nil, true, nil
 		}
 	}
 	if err := p.ExplicitProxyError(target.Scheme); err != nil {
-		return nil, err
+		return nil, true, err
 	}
 	if proxy := p.ExplicitProxy(target.Scheme); proxy != nil {
-		return proxy, nil
+		return proxy, true, nil
+	}
+	return nil, false, nil
+}
+
+// ProxyFor applies policy to the original destination.
+func (p Configuration) ProxyFor(target *url.URL) (*url.URL, error) {
+	if proxy, decided, err := p.explicit(target); decided {
+		return proxy, err
 	}
 	if p.SystemErr != nil {
 		return nil, fmt.Errorf("resolve system proxy: %w", p.SystemErr)
@@ -103,15 +115,28 @@ func ForRequest(request *http.Request) (*url.URL, error) {
 	if request == nil || request.URL == nil {
 		return nil, nil
 	}
-	return Current().ProxyFor(request.URL)
+	return ResolveContext(request.Context(), request.URL)
 }
 
 // Resolve reports the proxy every host client would use for target.
 func Resolve(target *url.URL) (*url.URL, error) {
+	return ResolveContext(context.Background(), target)
+}
+
+// ResolveContext reads desktop state only when environment policy needs it.
+func ResolveContext(ctx context.Context, target *url.URL) (*url.URL, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if target == nil {
 		return nil, fmt.Errorf("proxy resolution requires a target")
 	}
-	return Current().ProxyFor(target)
+	config := environmentConfiguration()
+	if proxy, decided, err := config.explicit(target); decided {
+		return proxy, err
+	}
+	config.System, config.SystemErr = systemConfiguration(ctx)
+	return config.ProxyFor(target)
 }
 
 // loopbackDestination reports loopback literals and reserved local names.

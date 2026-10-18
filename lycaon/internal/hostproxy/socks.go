@@ -15,7 +15,7 @@ func socks(connection net.Conn, credentials *url.Userinfo, address netip.AddrPor
 	if credentials != nil {
 		method = 2
 	}
-	if _, err := connection.Write([]byte{5, 1, method}); err != nil {
+	if err := writePacket(connection, []byte{5, 1, method}); err != nil {
 		return ProxyUnavailable
 	}
 	var choice [2]byte
@@ -34,7 +34,7 @@ func socks(connection net.Conn, credentials *url.Userinfo, address netip.AddrPor
 		auth := append([]byte{1, byte(len(user))}, user...)
 		auth = append(auth, byte(len(password)))
 		auth = append(auth, password...)
-		if _, err := connection.Write(auth); err != nil {
+		if err := writePacket(connection, auth); err != nil {
 			return ProxyUnavailable
 		}
 		if _, err := io.ReadFull(connection, choice[:]); err != nil {
@@ -51,7 +51,7 @@ func socks(connection net.Conn, credentials *url.Userinfo, address netip.AddrPor
 	}
 	request := append([]byte{5, 1, 0, kind}, ip.AsSlice()...)
 	request = binary.BigEndian.AppendUint16(request, address.Port())
-	if _, err := connection.Write(request); err != nil {
+	if err := writePacket(connection, request); err != nil {
 		return ProxyUnavailable
 	}
 	var reply [4]byte
