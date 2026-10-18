@@ -68,11 +68,12 @@ Keep the previous bundle while confirmation fails. Recovery must not launch an
 older binary against a migrated database. A halt prevents further distribution;
 it does not repair clients that already installed the withdrawn release.
 
-When startup recovery exchanges the application beneath the launching process,
-LaunchServices must start a new instance with `open -n` before the old process
-exits. Plain `open` can report success by reopening the still-running old process
-without launching its replacement. Exercise this separately from a helper's
-ordinary relaunch after the parent has exited.
+An explicit update restart must start a new instance with `open -n`, both from
+the helper and when startup recovery exchanges the application beneath its
+launching process. Releasing the installation lease does not guarantee that
+LaunchServices has retired the old process. Plain `open` can report success by
+reopening that process without launching its replacement. A helper that times
+out waiting for a still-running copy only activates that existing copy.
 
 The updater shipped in 1.0.2-rc1 and 1.0.2-rc3 passes its inline `codesign`
 requirement without the required `=` prefix. Those clients cannot prepare an

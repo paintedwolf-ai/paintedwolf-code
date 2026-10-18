@@ -37,6 +37,27 @@ pub struct Launch {
 pub(super) fn should_reopen_after_wait(t: &Transaction, id: &str) -> bool {
     t.id == id && t.phase == Phase::Committed && t.relaunch
 }
+#[cfg(target_os = "macos")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Reopen {
+    Existing,
+    NewInstance,
+}
+#[cfg(target_os = "macos")]
+pub(super) fn relaunch_activated(
+    t: &mut Transaction,
+    record: impl FnOnce(&Transaction) -> Result<(), UpdateError>,
+    launch: impl FnOnce(&Path, Reopen) -> Result<(), UpdateError>,
+) -> Result<(), UpdateError> {
+    if t.phase != Phase::Activated || !t.relaunch {
+        return Ok(());
+    }
+    t.relaunch = false;
+    let recorded = record(t);
+    // A receipt failure must not strand the person after a successful exchange.
+    launch(&t.target, Reopen::NewInstance)?;
+    recorded
+}
 pub fn run_helper(id: &str) -> Result<(), UpdateError> {
     #[cfg(target_os = "macos")]
     {
@@ -54,7 +75,7 @@ pub fn run_helper(id: &str) -> Result<(), UpdateError> {
         let Some(mut lease) = helper_admission(&t.target)? else {
             // A later quit can revoke the restart while this helper waits.
             if let Some(current) = read()?.filter(|current| should_reopen_after_wait(current, id)) {
-                reopen(&current.target, false)?;
+                reopen(&current.target, Reopen::Existing)?;
             }
             return Ok(());
         };
@@ -68,7 +89,7 @@ pub fn run_helper(id: &str) -> Result<(), UpdateError> {
                 let recorded = record_activation_failure(&mut t, &error);
                 drop(lease);
                 if t.relaunch && installed_is_known(&t) {
-                    reopen(&t.target, false)?;
+                    reopen(&t.target, Reopen::NewInstance)?;
                 }
                 return Err(match recorded {
                     Ok(()) => error,
@@ -76,14 +97,10 @@ pub fn run_helper(id: &str) -> Result<(), UpdateError> {
                 });
             }
         }
-        if t.phase == Phase::Activated && t.relaunch {
-            t.relaunch = false;
-            // The application reopens even when its receipt cannot be updated.
-            let recorded = write(&t);
+        relaunch_activated(&mut t, write, |target, mode| {
             drop(lease);
-            reopen(&t.target, false)?;
-            recorded?;
-        }
+            reopen(target, mode)
+        })?;
         Ok(())
     }
     #[cfg(not(target_os = "macos"))]
@@ -93,11 +110,11 @@ pub fn run_helper(id: &str) -> Result<(), UpdateError> {
     }
 }
 #[cfg(target_os = "macos")]
-fn reopen(target: &Path, replacing_running_process: bool) -> Result<(), UpdateError> {
+fn reopen(target: &Path, mode: Reopen) -> Result<(), UpdateError> {
     installer::verify_bundle(target)?;
     let mut command = std::process::Command::new("/usr/bin/open");
-    if replacing_running_process {
-        // LaunchServices would otherwise reopen this still-running old process.
+    if mode == Reopen::NewInstance {
+        // Releasing a bundle lease does not retire its process from LaunchServices.
         command.arg("-n");
     }
     let status = command
@@ -177,7 +194,7 @@ pub fn launch() -> Result<Launch, UpdateError> {
             if !t.recovery_relaunch_attempted {
                 t.recovery_relaunch_attempted = true;
                 let _ = write(&t);
-                reopen(&target, true)?;
+                reopen(&target, Reopen::NewInstance)?;
                 std::process::exit(0);
             }
         }
