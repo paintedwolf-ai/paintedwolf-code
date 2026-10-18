@@ -51,3 +51,21 @@ func TestFixedReaderCancellationAndStartFailureAreBoundedAndPrivate(t *testing.T
 		t.Fatalf("reader error leaked its launch input: %v", err)
 	}
 }
+
+func TestPackagedReaderUsesOnlyItsBuildBoundPath(t *testing.T) {
+	previous := gsettingsExecutable
+	t.Cleanup(func() { gsettingsExecutable = previous })
+	gsettingsExecutable = fixture(t, "printf packaged\n")
+	raw, code, err := DesktopProxySettings(t.Context())
+	testutil.FailErr(t, "read packaged settings", err)
+	if code != 0 || string(raw) != "packaged" {
+		t.Fatalf("packaged reader = %q, %d", raw, code)
+	}
+	for _, path := range []string{"relative-reader", "/nonexistent/private-reader-secret"} {
+		gsettingsExecutable = path
+		_, _, err := DesktopProxySettings(t.Context())
+		if err == nil || strings.Contains(err.Error(), "secret") {
+			t.Fatalf("invalid packaged reader = %v", err)
+		}
+	}
+}
